@@ -1,3 +1,0 @@
-﻿<Project>
-  <Import Project="../build/ExistingDb.Api.props" />
-</Project>
