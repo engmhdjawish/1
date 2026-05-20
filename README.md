@@ -108,8 +108,36 @@ GET  /api/admin/resources
 
 GET  /api/audit
 GET  /api/health
+
+GET  /api/customers
+GET  /api/customers/{guid}
 ```
 
 ## قرار التصميم
 
-لا ينشئ المشروع Stored Procedures جديدة. قاعدة `ApiManagementDb` تدار عبر EF Core migrations، أما قاعدة النظام الحالية فستستخدم لاحقاً للقراءة أو لاستدعاء Stored Procedures الموجودة فقط عند الحاجة.
+لا ينشئ المشروع Stored Procedures جديدة. قاعدة `ApiManagementDb` تدار عبر EF Core migrations، أما قاعدة النظام الحالية فتستخدم للقراءة أو لاستدعاء Stored Procedures الموجودة فقط عند الحاجة.
+
+## Customers Read API
+
+أول تكامل مع قاعدة النظام الحالية هو جدول العملاء:
+
+```text
+cu000 -> GET /api/customers
+cu000 -> GET /api/customers/{guid}
+```
+
+يتطلب:
+
+```text
+customers.read
+```
+
+وتطبق صلاحيات الحقول على:
+
+```text
+Phone1
+Phone2
+Mobile
+EMail
+AccountGUID
+```

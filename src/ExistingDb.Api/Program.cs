@@ -16,9 +16,13 @@ builder.Services.Configure<SeedAdminOptions>(builder.Configuration.GetSection(Se
 
 var apiManagementConnection = builder.Configuration.GetConnectionString("ApiManagementDb")
     ?? throw new InvalidOperationException("ConnectionStrings:ApiManagementDb is required.");
+var mainDbConnection = builder.Configuration.GetConnectionString("MainDb")
+    ?? throw new InvalidOperationException("ConnectionStrings:MainDb is required.");
 
 builder.Services.AddDbContext<ApiManagementDbContext>(options =>
     options.UseSqlServer(apiManagementConnection));
+builder.Services.AddDbContext<MainDbContext>(options =>
+    options.UseSqlServer(mainDbConnection));
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
