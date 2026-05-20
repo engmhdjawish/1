@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "Tbxa1bSjtu/IdGJIMVqmvFGixWQas8Pu2eiHxTPzrY0=",
+  "Source": "ExistingDb.Api",
+  "BasePath": "_content/ExistingDb.Api",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
