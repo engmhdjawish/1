@@ -111,6 +111,9 @@ GET  /api/health
 
 GET  /api/customers
 GET  /api/customers/{guid}
+
+GET  /api/materials
+GET  /api/materials/{guid}
 ```
 
 ## قرار التصميم
@@ -141,3 +144,37 @@ Mobile
 EMail
 AccountGUID
 ```
+
+## Materials Read API
+
+تكامل المواد يقرأ من جدول:
+
+```text
+mt000 -> GET /api/materials
+mt000 -> GET /api/materials/{guid}
+```
+
+يدعم البحث:
+
+```text
+GET /api/materials?search=اسم-او-كود-او-باركود
+```
+
+ويرجع الوحدة الأولى فقط مع معامل التحويل:
+
+```text
+primaryUnit                -> Unity
+secondUnitConversionFactor -> Unit2Fact
+```
+
+لا يرجع اسم الوحدة الثانية؛ يمكن استنتاج التعامل معها من معامل التحويل حسب طلب التصميم.
+
+خريطة الأسعار الحالية:
+
+```text
+wholesaleSypPrice -> Whole   سعر جملة سوري
+wholesaleUsdPrice -> Half    سعر جملة دولار
+purchaseUsdPrice  -> Retail  سعر شراء دولار
+```
+
+سعر شراء الدولار `purchaseUsdPrice` حقل حساس مرتبط بصلاحية الحقل `Retail`، وافتراضياً لا يظهر إلا لمن يملك صلاحية حقلية مناسبة أو دور Admin.
