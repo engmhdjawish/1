@@ -1,4 +1,3 @@
-using ExistingDb.Api.Data.Entities;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -100,12 +99,12 @@ public sealed class ImageStorageService(IImageSettingsService settingsService) :
         };
     }
 
-    public void DeleteFiles(ApiMaterialImage image)
+    public void DeleteFiles(string imagePath, string? thumbnailPath)
     {
-        TryDelete(image.Name);
-        if (!string.IsNullOrWhiteSpace(image.ThumbnailName))
+        TryDelete(imagePath);
+        if (!string.IsNullOrWhiteSpace(thumbnailPath))
         {
-            TryDelete(image.ThumbnailName);
+            TryDelete(thumbnailPath);
         }
     }
 

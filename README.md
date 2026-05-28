@@ -163,18 +163,21 @@ POST /api/admin/users/{userId}/reset-password
 
 ## قرار التصميم
 
-لا ينشئ المشروع Stored Procedures جديدة. قاعدة `ApiManagementDb` تدار عبر EF Core migrations، أما قاعدة النظام الحالية فتستخدم للقراءة أو لاستدعاء Stored Procedures الموجودة فقط عند الحاجة.
+لا ينشئ المشروع Stored Procedures جديدة. قاعدة `ApiManagementDb` تدار عبر EF Core migrations. قاعدة النظام الحالية تستخدم أساسًا للقراءة، مع تحديثات صور المواد فقط (`bm000` و`mt000.PictureGUID`) عند استخدام واجهات الصور.
 
 ## Material Images API
 
-إدارة الصور تتم في `ApiManagementDb` ولا تعدل قاعدة النظام الرئيسية.
+إدارة الصور تعتمد على جداول قاعدة النظام الرئيسية:
+
+- `bm000` لسجل الصورة (الاسم + GUID)
+- `mt000.PictureGUID` لربط الصورة مع المادة
+
+قاعدة `ApiManagementDb` تحتفظ فقط بجدول الإعدادات `ApiSettings` لمسارات الملفات.
 
 الجداول:
 
 ```text
 ApiSettings
-ApiMaterialImages
-ApiMaterialImageLinks
 ```
 
 الإعدادات الافتراضية:
@@ -220,8 +223,8 @@ isPrimary     true/false
 - تحفظ في مجلد الصور من الإعدادات.
 - إذا كان الاسم موجوداً، يتم تعديل الاسم تلقائياً مثل `image_1.jpg`.
 - يتم توليد thumbnail داخل مجلد الثامبنيل.
-- حقل `Name` في `ApiMaterialImages` يحتوي المسار الكامل للصورة الأصلية.
-- حقل `ThumbnailName` يحتوي المسار الكامل للثامبنيل.
+- يُنشأ سجل في `bm000` (GUID جديد + اسم الملف).
+- الربط مع المادة يتم بتحديث `mt000.PictureGUID`.
 
 إدارة الربط:
 
@@ -265,7 +268,7 @@ GET /api/material-images/{id}/thumbnail
 DELETE /api/material-images/{id}
 ```
 
-يحذف السجل والروابط ويحاول حذف ملف الصورة والثامبنيل من السيرفر.
+يحذف السجل من `bm000`، يفك الربط عبر `mt000.PictureGUID`، ويحاول حذف ملف الصورة والثامبنيل من السيرفر.
 
 ## Customers Read API
 

@@ -129,94 +129,6 @@ namespace ExistingDb.Api.Data.Migrations
                     b.ToTable("ApiFieldPermissions", (string)null);
                 });
 
-            modelBuilder.Entity("ExistingDb.Api.Data.Entities.ApiMaterialImage", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int?>("Height")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<string>("OriginalFileName")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<long>("SizeBytes")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("StoredFileName")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<int?>("ThumbnailHeight")
-                        .HasColumnType("int");
-
-                    b.Property<string>("ThumbnailName")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<int?>("ThumbnailWidth")
-                        .HasColumnType("int");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<int?>("Width")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedAt");
-
-                    b.HasIndex("Name")
-                        .IsUnique();
-
-                    b.ToTable("ApiMaterialImages", (string)null);
-                });
-
-            modelBuilder.Entity("ExistingDb.Api.Data.Entities.ApiMaterialImageLink", b =>
-                {
-                    b.Property<Guid>("ImageId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("MaterialGuid")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<bool>("IsPrimary")
-                        .HasColumnType("bit");
-
-                    b.HasKey("ImageId", "MaterialGuid");
-
-                    b.HasIndex("MaterialGuid");
-
-                    b.ToTable("ApiMaterialImageLinks", (string)null);
-                });
-
             modelBuilder.Entity("ExistingDb.Api.Data.Entities.ApiPermission", b =>
                 {
                     b.Property<int>("Id")
@@ -1190,17 +1102,6 @@ namespace ExistingDb.Api.Data.Migrations
                     b.Navigation("Role");
                 });
 
-            modelBuilder.Entity("ExistingDb.Api.Data.Entities.ApiMaterialImageLink", b =>
-                {
-                    b.HasOne("ExistingDb.Api.Data.Entities.ApiMaterialImage", "Image")
-                        .WithMany("MaterialLinks")
-                        .HasForeignKey("ImageId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Image");
-                });
-
             modelBuilder.Entity("ExistingDb.Api.Data.Entities.ApiRefreshToken", b =>
                 {
                     b.HasOne("ExistingDb.Api.Data.Entities.ApiUser", "User")
@@ -1259,11 +1160,6 @@ namespace ExistingDb.Api.Data.Migrations
                     b.Navigation("Role");
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("ExistingDb.Api.Data.Entities.ApiMaterialImage", b =>
-                {
-                    b.Navigation("MaterialLinks");
                 });
 
             modelBuilder.Entity("ExistingDb.Api.Data.Entities.ApiPermission", b =>

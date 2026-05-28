@@ -1,11 +1,9 @@
-using ExistingDb.Api.Data.Entities;
-
 namespace ExistingDb.Api.Images;
 
 public interface IImageStorageService
 {
     Task<StoredImageFile> SaveAsync(IFormFile file, CancellationToken cancellationToken = default);
-    void DeleteFiles(ApiMaterialImage image);
+    void DeleteFiles(string imagePath, string? thumbnailPath);
 }
 
 public sealed record StoredImageFile(

@@ -18,8 +18,6 @@ public sealed class ApiManagementDbContext(DbContextOptions<ApiManagementDbConte
     public DbSet<ApiRefreshToken> RefreshTokens => Set<ApiRefreshToken>();
     public DbSet<ApiAuditLog> AuditLogs => Set<ApiAuditLog>();
     public DbSet<ApiSetting> Settings => Set<ApiSetting>();
-    public DbSet<ApiMaterialImage> MaterialImages => Set<ApiMaterialImage>();
-    public DbSet<ApiMaterialImageLink> MaterialImageLinks => Set<ApiMaterialImageLink>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -166,30 +164,6 @@ public sealed class ApiManagementDbContext(DbContextOptions<ApiManagementDbConte
             entity.Property(setting => setting.Key).HasMaxLength(150).IsRequired();
             entity.Property(setting => setting.Value).HasMaxLength(1000);
             entity.Property(setting => setting.Description).HasMaxLength(500);
-        });
-
-        modelBuilder.Entity<ApiMaterialImage>(entity =>
-        {
-            entity.ToTable("ApiMaterialImages");
-            entity.HasKey(image => image.Id);
-            entity.Property(image => image.Name).HasMaxLength(1000).IsRequired();
-            entity.Property(image => image.ThumbnailName).HasMaxLength(1000);
-            entity.Property(image => image.OriginalFileName).HasMaxLength(255).IsRequired();
-            entity.Property(image => image.StoredFileName).HasMaxLength(255).IsRequired();
-            entity.Property(image => image.ContentType).HasMaxLength(100).IsRequired();
-            entity.HasIndex(image => image.Name).IsUnique();
-            entity.HasIndex(image => image.CreatedAt);
-        });
-
-        modelBuilder.Entity<ApiMaterialImageLink>(entity =>
-        {
-            entity.ToTable("ApiMaterialImageLinks");
-            entity.HasKey(link => new { link.ImageId, link.MaterialGuid });
-            entity.HasIndex(link => link.MaterialGuid);
-            entity.HasOne(link => link.Image)
-                .WithMany(image => image.MaterialLinks)
-                .HasForeignKey(link => link.ImageId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
         SeedAuthorizationData(modelBuilder);

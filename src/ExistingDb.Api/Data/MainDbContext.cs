@@ -7,6 +7,7 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
 {
     public DbSet<CustomerRecord> Customers => Set<CustomerRecord>();
     public DbSet<MaterialRecord> Materials => Set<MaterialRecord>();
+    public DbSet<MaterialImageRecord> MaterialImages => Set<MaterialImageRecord>();
     public DbSet<MaterialInventoryRecord> MaterialInventory => Set<MaterialInventoryRecord>();
     public DbSet<MaterialGroupRecord> MaterialGroups => Set<MaterialGroupRecord>();
     public DbSet<StoreRecord> Stores => Set<StoreRecord>();
@@ -71,6 +72,15 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
             entity.Property(material => material.Security).HasColumnName("Security");
             entity.Property(material => material.UseFlag).HasColumnName("UseFlag");
             entity.Property(material => material.IsHidden).HasColumnName("bHide");
+        });
+
+        modelBuilder.Entity<MaterialImageRecord>(entity =>
+        {
+            entity.ToTable("bm000");
+            entity.HasKey(image => image.Guid);
+
+            entity.Property(image => image.Guid).HasColumnName("GUID");
+            entity.Property(image => image.Name).HasColumnName("Name").HasMaxLength(260);
         });
 
         modelBuilder.Entity<MaterialInventoryRecord>(entity =>
