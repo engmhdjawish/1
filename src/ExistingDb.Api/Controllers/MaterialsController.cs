@@ -23,6 +23,8 @@ public sealed class MaterialsController(
     [HttpGet]
     public async Task<ActionResult<PagedResponse<MaterialResponse>>> GetMaterials(
         [FromQuery] string? search = null,
+        [FromQuery] Guid? storeGuid = null,
+        [FromQuery] string? storeGuids = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
@@ -30,17 +32,31 @@ public sealed class MaterialsController(
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 200);
 
+        var selectedStoreGuids = ParseStoreGuids(storeGuid, storeGuids);
         var query = mainDbContext.Materials.AsNoTracking();
+
+        if (selectedStoreGuids.Count > 0)
+        {
+            query = query.Where(material => mainDbContext.MaterialInventory.Any(inventory =>
+                inventory.MaterialGuid == material.Guid &&
+                inventory.StoreGuid.HasValue &&
+                selectedStoreGuids.Contains(inventory.StoreGuid.Value)));
+        }
+
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();
-            query = query.Where(material =>
-                (material.Name != null && material.Name.Contains(term)) ||
-                (material.LatinName != null && material.LatinName.Contains(term)) ||
-                (material.Code != null && material.Code.Contains(term)) ||
-                (material.BarCode != null && material.BarCode.Contains(term)) ||
-                (material.BarCode2 != null && material.BarCode2.Contains(term)) ||
-                (material.BarCode3 != null && material.BarCode3.Contains(term)));
+            var exactCodeQuery = query.Where(material => material.Code == term);
+
+            query = await exactCodeQuery.AnyAsync(cancellationToken)
+                ? exactCodeQuery
+                : query.Where(material =>
+                    (material.Name != null && material.Name.Contains(term)) ||
+                    (material.LatinName != null && material.LatinName.Contains(term)) ||
+                    (material.Code != null && material.Code.Contains(term)) ||
+                    (material.BarCode != null && material.BarCode.Contains(term)) ||
+                    (material.BarCode2 != null && material.BarCode2.Contains(term)) ||
+                    (material.BarCode3 != null && material.BarCode3.Contains(term)));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -51,14 +67,21 @@ public sealed class MaterialsController(
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
+        var quantityByMaterial = await GetQuantityByMaterialAsync(materials, selectedStoreGuids, cancellationToken);
         var fieldAccess = await permissionService.GetFieldAccessAsync(User, ResourceCode, cancellationToken);
-        var response = materials.Select(material => ToResponse(material, fieldAccess)).ToArray();
+        var response = materials
+            .Select(material => ToResponse(material, fieldAccess, quantityByMaterial.GetValueOrDefault(material.Guid, material.Qty)))
+            .ToArray();
 
         return Ok(new PagedResponse<MaterialResponse>(response, page, pageSize, totalCount));
     }
 
     [HttpGet("{guid:guid}")]
-    public async Task<ActionResult<MaterialResponse>> GetMaterial(Guid guid, CancellationToken cancellationToken)
+    public async Task<ActionResult<MaterialResponse>> GetMaterial(
+        Guid guid,
+        [FromQuery] Guid? storeGuid = null,
+        [FromQuery] string? storeGuids = null,
+        CancellationToken cancellationToken = default)
     {
         var material = await mainDbContext.Materials
             .AsNoTracking()
@@ -69,13 +92,16 @@ public sealed class MaterialsController(
             return NotFound();
         }
 
+        var selectedStoreGuids = ParseStoreGuids(storeGuid, storeGuids);
+        var quantityByMaterial = await GetQuantityByMaterialAsync([material], selectedStoreGuids, cancellationToken);
         var fieldAccess = await permissionService.GetFieldAccessAsync(User, ResourceCode, cancellationToken);
-        return Ok(ToResponse(material, fieldAccess));
+        return Ok(ToResponse(material, fieldAccess, quantityByMaterial.GetValueOrDefault(material.Guid, material.Qty)));
     }
 
     private MaterialResponse ToResponse(
         MaterialRecord material,
-        IReadOnlyDictionary<string, FieldAccessDecision> fieldAccess) =>
+        IReadOnlyDictionary<string, FieldAccessDecision> fieldAccess,
+        double? warehouseQuantity) =>
         new(
             material.Guid,
             material.Number,
@@ -87,7 +113,7 @@ public sealed class MaterialsController(
             material.Unit2,
             material.Unit2Fact,
             material.Unit2FactFlag,
-            material.Qty,
+            warehouseQuantity,
             ResolveNumber(fieldAccess, "Whole", material.Whole),
             ResolveNumber(fieldAccess, "Half", material.Half),
             ResolveNumber(fieldAccess, "EndUser", material.EndUser),
@@ -106,6 +132,54 @@ public sealed class MaterialsController(
             material.Security,
             material.UseFlag,
             material.IsHidden);
+
+    private async Task<Dictionary<Guid, double?>> GetQuantityByMaterialAsync(
+        IReadOnlyCollection<MaterialRecord> materials,
+        IReadOnlyCollection<Guid> selectedStoreGuids,
+        CancellationToken cancellationToken)
+    {
+        if (selectedStoreGuids.Count == 0 || materials.Count == 0)
+        {
+            return [];
+        }
+
+        var materialGuids = materials.Select(material => material.Guid).ToArray();
+
+        return await mainDbContext.MaterialInventory
+            .AsNoTracking()
+            .Where(inventory => inventory.MaterialGuid.HasValue)
+            .Where(inventory => materialGuids.Contains(inventory.MaterialGuid!.Value))
+            .Where(inventory => inventory.StoreGuid.HasValue && selectedStoreGuids.Contains(inventory.StoreGuid.Value))
+            .GroupBy(inventory => inventory.MaterialGuid!.Value)
+            .Select(group => new
+            {
+                MaterialGuid = group.Key,
+                Quantity = group.Sum(inventory => inventory.Qty ?? 0)
+            })
+            .ToDictionaryAsync(row => row.MaterialGuid, row => (double?)row.Quantity, cancellationToken);
+    }
+
+    private static IReadOnlyCollection<Guid> ParseStoreGuids(Guid? storeGuid, string? storeGuids)
+    {
+        var parsed = new HashSet<Guid>();
+        if (storeGuid is not null)
+        {
+            parsed.Add(storeGuid.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(storeGuids))
+        {
+            foreach (var value in storeGuids.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (Guid.TryParse(value, out var parsedGuid))
+                {
+                    parsed.Add(parsedGuid);
+                }
+            }
+        }
+
+        return parsed.ToArray();
+    }
 
     private object? ResolveNumber(
         IReadOnlyDictionary<string, FieldAccessDecision> fieldAccess,

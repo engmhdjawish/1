@@ -191,6 +191,30 @@ mt000 -> GET /api/materials/{guid}
 GET /api/materials?search=اسم-او-كود-او-باركود
 ```
 
+إذا كانت قيمة البحث تطابق `Code` بشكل كامل، يعيد الـ API المادة المطابقة فقط. مثال: البحث عن `100` لا يعيد المادة ذات الكود `1000` إذا كان هناك كود مطابق تماماً `100`.
+
+ويدعم فلترة الكمية حسب مستودع واحد أو عدة مستودعات:
+
+```text
+GET /api/materials?storeGuid=STORE_GUID
+GET /api/materials?storeGuids=STORE_GUID_1,STORE_GUID_2
+GET /api/materials/{guid}?storeGuid=STORE_GUID
+```
+
+عند استخدام فلتر المستودعات تصبح:
+
+```text
+warehouseQuantity
+```
+
+هي مجموع كمية المادة في المستودع أو المستودعات المحددة، اعتماداً على:
+
+```text
+vwMaterialInventory -> MaterialGuid, StoreGuid, Qty
+```
+
+بدون فلتر مستودعات، تبقى `warehouseQuantity` قادمة من `mt000.Qty`، وهي كمية المادة في جميع المستودعات.
+
 خريطة الحقول التجارية:
 
 ```text

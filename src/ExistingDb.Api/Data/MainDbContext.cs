@@ -7,6 +7,7 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
 {
     public DbSet<CustomerRecord> Customers => Set<CustomerRecord>();
     public DbSet<MaterialRecord> Materials => Set<MaterialRecord>();
+    public DbSet<MaterialInventoryRecord> MaterialInventory => Set<MaterialInventoryRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -68,6 +69,16 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
             entity.Property(material => material.Security).HasColumnName("Security");
             entity.Property(material => material.UseFlag).HasColumnName("UseFlag");
             entity.Property(material => material.IsHidden).HasColumnName("bHide");
+        });
+
+        modelBuilder.Entity<MaterialInventoryRecord>(entity =>
+        {
+            entity.ToView("vwMaterialInventory");
+            entity.HasNoKey();
+
+            entity.Property(inventory => inventory.MaterialGuid).HasColumnName("MaterialGuid");
+            entity.Property(inventory => inventory.StoreGuid).HasColumnName("StoreGuid");
+            entity.Property(inventory => inventory.Qty).HasColumnName("Qty");
         });
     }
 }
