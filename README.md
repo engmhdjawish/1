@@ -201,6 +201,46 @@ GET /api/materials?storeGuids=STORE_GUID_1,STORE_GUID_2
 GET /api/materials/{guid}?storeGuid=STORE_GUID
 ```
 
+كما يدعم فلاتر وصفية:
+
+```text
+GET /api/materials?countryOfOrigin=صيني
+GET /api/materials?manufacturer=اسم-الشركة
+GET /api/materials?sizeRange=نمر-كبار
+GET /api/materials?materialType=PVC
+GET /api/materials?ageCategory=رجالي
+GET /api/materials?groupGuid=GROUP_GUID
+GET /api/materials?groupGuids=GROUP_GUID_1,GROUP_GUID_2
+```
+
+وفلاتر كمية وتوفر:
+
+```text
+GET /api/materials?isAvailable=true
+GET /api/materials?isAvailable=false
+GET /api/materials?minWarehouseQuantity=1
+GET /api/materials?maxWarehouseQuantity=10
+```
+
+قاعدة التوفر:
+
+```text
+available     = warehouseQuantity > 0
+not available = warehouseQuantity <= 0
+```
+
+أي كمية سالبة تعتبر غير متوفرة لأنها غالباً ناتجة عن خطأ جرد.
+
+وفلاتر أسعار:
+
+```text
+GET /api/materials?minUnitSalePriceSyp=100000&maxUnitSalePriceSyp=200000
+GET /api/materials?minUnitSalePriceUsd=10&maxUnitSalePriceUsd=20
+GET /api/materials?minUnitPurchasePriceUsd=5&maxUnitPurchasePriceUsd=9
+```
+
+فلاتر الأسعار تخضع لصلاحيات الحقول. مثلاً فلتر `unitPurchasePriceUsd` يتطلب صلاحية قراءة حقل `EndUser`.
+
 عند استخدام فلتر المستودعات تصبح:
 
 ```text

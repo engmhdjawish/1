@@ -25,6 +25,22 @@ public sealed class MaterialsController(
         [FromQuery] string? search = null,
         [FromQuery] Guid? storeGuid = null,
         [FromQuery] string? storeGuids = null,
+        [FromQuery] string? countryOfOrigin = null,
+        [FromQuery] string? manufacturer = null,
+        [FromQuery] string? sizeRange = null,
+        [FromQuery] string? materialType = null,
+        [FromQuery] string? ageCategory = null,
+        [FromQuery] Guid? groupGuid = null,
+        [FromQuery] string? groupGuids = null,
+        [FromQuery] double? minWarehouseQuantity = null,
+        [FromQuery] double? maxWarehouseQuantity = null,
+        [FromQuery] bool? isAvailable = null,
+        [FromQuery] double? minUnitSalePriceSyp = null,
+        [FromQuery] double? maxUnitSalePriceSyp = null,
+        [FromQuery] double? minUnitSalePriceUsd = null,
+        [FromQuery] double? maxUnitSalePriceUsd = null,
+        [FromQuery] double? minUnitPurchasePriceUsd = null,
+        [FromQuery] double? maxUnitPurchasePriceUsd = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
@@ -33,23 +49,51 @@ public sealed class MaterialsController(
         pageSize = Math.Clamp(pageSize, 1, 200);
 
         var selectedStoreGuids = ParseStoreGuids(storeGuid, storeGuids);
+        var selectedGroupGuids = ParseGuids(groupGuid, groupGuids);
+        var fieldAccess = await permissionService.GetFieldAccessAsync(User, ResourceCode, cancellationToken);
+        var priceFilterAccessResult = ValidatePriceFilterAccess(
+            fieldAccess,
+            minUnitSalePriceSyp,
+            maxUnitSalePriceSyp,
+            minUnitSalePriceUsd,
+            maxUnitSalePriceUsd,
+            minUnitPurchasePriceUsd,
+            maxUnitPurchasePriceUsd);
+
+        if (priceFilterAccessResult is not null)
+        {
+            return priceFilterAccessResult;
+        }
+
         var query = mainDbContext.Materials.AsNoTracking();
 
-        if (selectedStoreGuids.Count > 0)
-        {
-            query = query.Where(material => mainDbContext.MaterialInventory.Any(inventory =>
-                inventory.MaterialGuid == material.Guid &&
-                inventory.StoreGuid.HasValue &&
-                selectedStoreGuids.Contains(inventory.StoreGuid.Value)));
-        }
+        query = ApplyStoreAndQuantityFilters(
+            query,
+            selectedStoreGuids,
+            minWarehouseQuantity,
+            maxWarehouseQuantity,
+            isAvailable);
+
+        query = ApplyTextFilters(query, countryOfOrigin, manufacturer, sizeRange, materialType, ageCategory);
+        query = ApplyGroupFilter(query, selectedGroupGuids);
+        query = ApplyPriceFilters(
+            query,
+            minUnitSalePriceSyp,
+            maxUnitSalePriceSyp,
+            minUnitSalePriceUsd,
+            maxUnitSalePriceUsd,
+            minUnitPurchasePriceUsd,
+            maxUnitPurchasePriceUsd);
 
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();
-            var exactCodeQuery = query.Where(material => material.Code == term);
+            var exactCodeExists = await mainDbContext.Materials
+                .AsNoTracking()
+                .AnyAsync(material => material.Code == term, cancellationToken);
 
-            query = await exactCodeQuery.AnyAsync(cancellationToken)
-                ? exactCodeQuery
+            query = exactCodeExists
+                ? query.Where(material => material.Code == term)
                 : query.Where(material =>
                     (material.Name != null && material.Name.Contains(term)) ||
                     (material.LatinName != null && material.LatinName.Contains(term)) ||
@@ -68,7 +112,6 @@ public sealed class MaterialsController(
             .ToListAsync(cancellationToken);
 
         var quantityByMaterial = await GetQuantityByMaterialAsync(materials, selectedStoreGuids, cancellationToken);
-        var fieldAccess = await permissionService.GetFieldAccessAsync(User, ResourceCode, cancellationToken);
         var response = materials
             .Select(material => ToResponse(material, fieldAccess, quantityByMaterial.GetValueOrDefault(material.Guid, material.Qty)))
             .ToArray();
@@ -159,17 +202,227 @@ public sealed class MaterialsController(
             .ToDictionaryAsync(row => row.MaterialGuid, row => (double?)row.Quantity, cancellationToken);
     }
 
-    private static IReadOnlyCollection<Guid> ParseStoreGuids(Guid? storeGuid, string? storeGuids)
+    private IQueryable<MaterialRecord> ApplyStoreAndQuantityFilters(
+        IQueryable<MaterialRecord> query,
+        IReadOnlyCollection<Guid> selectedStoreGuids,
+        double? minWarehouseQuantity,
+        double? maxWarehouseQuantity,
+        bool? isAvailable)
     {
-        var parsed = new HashSet<Guid>();
-        if (storeGuid is not null)
+        if (selectedStoreGuids.Count == 0)
         {
-            parsed.Add(storeGuid.Value);
+            if (isAvailable is true)
+            {
+                query = query.Where(material => (material.Qty ?? 0) > 0);
+            }
+            else if (isAvailable is false)
+            {
+                query = query.Where(material => (material.Qty ?? 0) <= 0);
+            }
+
+            if (minWarehouseQuantity is not null)
+            {
+                query = query.Where(material => (material.Qty ?? 0) >= minWarehouseQuantity.Value);
+            }
+
+            if (maxWarehouseQuantity is not null)
+            {
+                query = query.Where(material => (material.Qty ?? 0) <= maxWarehouseQuantity.Value);
+            }
+
+            return query;
         }
 
-        if (!string.IsNullOrWhiteSpace(storeGuids))
+        var storeQuantities = mainDbContext.MaterialInventory
+            .AsNoTracking()
+            .Where(inventory => inventory.MaterialGuid.HasValue)
+            .Where(inventory => inventory.StoreGuid.HasValue && selectedStoreGuids.Contains(inventory.StoreGuid.Value))
+            .GroupBy(inventory => inventory.MaterialGuid!.Value)
+            .Select(group => new
+            {
+                MaterialGuid = group.Key,
+                Quantity = group.Sum(inventory => inventory.Qty ?? 0)
+            });
+
+        if (isAvailable is true)
         {
-            foreach (var value in storeGuids.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            query = query.Where(material => storeQuantities.Any(quantity =>
+                quantity.MaterialGuid == material.Guid &&
+                quantity.Quantity > 0));
+        }
+        else if (isAvailable is false)
+        {
+            query = query.Where(material => !storeQuantities.Any(quantity =>
+                quantity.MaterialGuid == material.Guid &&
+                quantity.Quantity > 0));
+        }
+        else
+        {
+            query = query.Where(material => storeQuantities.Any(quantity => quantity.MaterialGuid == material.Guid));
+        }
+
+        if (minWarehouseQuantity is not null)
+        {
+            query = query.Where(material => storeQuantities.Any(quantity =>
+                quantity.MaterialGuid == material.Guid &&
+                quantity.Quantity >= minWarehouseQuantity.Value));
+        }
+
+        if (maxWarehouseQuantity is not null)
+        {
+            query = query.Where(material => storeQuantities.Any(quantity =>
+                quantity.MaterialGuid == material.Guid &&
+                quantity.Quantity <= maxWarehouseQuantity.Value));
+        }
+
+        return query;
+    }
+
+    private static IQueryable<MaterialRecord> ApplyTextFilters(
+        IQueryable<MaterialRecord> query,
+        string? countryOfOrigin,
+        string? manufacturer,
+        string? sizeRange,
+        string? materialType,
+        string? ageCategory)
+    {
+        if (!string.IsNullOrWhiteSpace(countryOfOrigin))
+        {
+            var value = countryOfOrigin.Trim();
+            query = query.Where(material => material.Origin != null && material.Origin.Contains(value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(manufacturer))
+        {
+            var value = manufacturer.Trim();
+            query = query.Where(material => material.Company != null && material.Company.Contains(value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(sizeRange))
+        {
+            var value = sizeRange.Trim();
+            query = query.Where(material => material.Dim != null && material.Dim.Contains(value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(materialType))
+        {
+            var value = materialType.Trim();
+            query = query.Where(material => material.Color != null && material.Color.Contains(value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(ageCategory))
+        {
+            var value = ageCategory.Trim();
+            query = query.Where(material => material.Provenance != null && material.Provenance.Contains(value));
+        }
+
+        return query;
+    }
+
+    private static IQueryable<MaterialRecord> ApplyGroupFilter(
+        IQueryable<MaterialRecord> query,
+        IReadOnlyCollection<Guid> selectedGroupGuids)
+    {
+        return selectedGroupGuids.Count == 0
+            ? query
+            : query.Where(material => material.GroupGuid.HasValue && selectedGroupGuids.Contains(material.GroupGuid.Value));
+    }
+
+    private ActionResult? ValidatePriceFilterAccess(
+        IReadOnlyDictionary<string, FieldAccessDecision> fieldAccess,
+        double? minUnitSalePriceSyp,
+        double? maxUnitSalePriceSyp,
+        double? minUnitSalePriceUsd,
+        double? maxUnitSalePriceUsd,
+        double? minUnitPurchasePriceUsd,
+        double? maxUnitPurchasePriceUsd)
+    {
+        if ((minUnitSalePriceSyp is not null || maxUnitSalePriceSyp is not null) &&
+            IsFieldDenied(fieldAccess, "Whole"))
+        {
+            return Forbid();
+        }
+
+        if ((minUnitSalePriceUsd is not null || maxUnitSalePriceUsd is not null) &&
+            IsFieldDenied(fieldAccess, "Half"))
+        {
+            return Forbid();
+        }
+
+        if ((minUnitPurchasePriceUsd is not null || maxUnitPurchasePriceUsd is not null) &&
+            IsFieldDenied(fieldAccess, "EndUser"))
+        {
+            return Forbid();
+        }
+
+        return null;
+    }
+
+    private IQueryable<MaterialRecord> ApplyPriceFilters(
+        IQueryable<MaterialRecord> query,
+        double? minUnitSalePriceSyp,
+        double? maxUnitSalePriceSyp,
+        double? minUnitSalePriceUsd,
+        double? maxUnitSalePriceUsd,
+        double? minUnitPurchasePriceUsd,
+        double? maxUnitPurchasePriceUsd)
+    {
+        if (minUnitSalePriceSyp is not null)
+        {
+            query = query.Where(material => material.Whole >= minUnitSalePriceSyp.Value);
+        }
+
+        if (maxUnitSalePriceSyp is not null)
+        {
+            query = query.Where(material => material.Whole <= maxUnitSalePriceSyp.Value);
+        }
+
+        if (minUnitSalePriceUsd is not null)
+        {
+            query = query.Where(material => material.Half >= minUnitSalePriceUsd.Value);
+        }
+
+        if (maxUnitSalePriceUsd is not null)
+        {
+            query = query.Where(material => material.Half <= maxUnitSalePriceUsd.Value);
+        }
+
+        if (minUnitPurchasePriceUsd is not null)
+        {
+            query = query.Where(material => material.EndUser >= minUnitPurchasePriceUsd.Value);
+        }
+
+        if (maxUnitPurchasePriceUsd is not null)
+        {
+            query = query.Where(material => material.EndUser <= maxUnitPurchasePriceUsd.Value);
+        }
+
+        return query;
+    }
+
+    private static bool IsFieldDenied(
+        IReadOnlyDictionary<string, FieldAccessDecision> fieldAccess,
+        string fieldName)
+    {
+        return fieldAccess.TryGetValue(fieldName, out var decision) && decision.ReadMode == FieldAccessMode.Deny;
+    }
+
+    private static IReadOnlyCollection<Guid> ParseStoreGuids(Guid? storeGuid, string? storeGuids)
+    {
+        return ParseGuids(storeGuid, storeGuids);
+    }
+
+    private static IReadOnlyCollection<Guid> ParseGuids(Guid? singleGuid, string? commaSeparatedGuids)
+    {
+        var parsed = new HashSet<Guid>();
+        if (singleGuid is not null)
+        {
+            parsed.Add(singleGuid.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(commaSeparatedGuids))
+        {
+            foreach (var value in commaSeparatedGuids.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
             {
                 if (Guid.TryParse(value, out var parsedGuid))
                 {
