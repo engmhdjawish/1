@@ -34,7 +34,7 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
 
         modelBuilder.Entity<MaterialRecord>(entity =>
         {
-            entity.ToView("JocVwMaterialsWithAlternatives");
+            entity.ToTable("mt000");
             entity.HasKey(material => material.Guid);
 
             entity.Property(material => material.Guid).HasColumnName("GUID");
@@ -46,16 +46,23 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
             entity.Property(material => material.BarCode2).HasColumnName("BarCode2").HasMaxLength(100);
             entity.Property(material => material.BarCode3).HasColumnName("BarCode3").HasMaxLength(100);
             entity.Property(material => material.Unity).HasColumnName("Unity").HasMaxLength(100);
+            entity.Property(material => material.Unit2).HasColumnName("Unit2").HasMaxLength(100);
             entity.Property(material => material.Unit2Fact).HasColumnName("Unit2Fact");
             entity.Property(material => material.Unit2FactFlag).HasColumnName("Unit2FactFlag");
             entity.Property(material => material.Qty).HasColumnName("Qty");
             entity.Property(material => material.Whole).HasColumnName("Whole");
             entity.Property(material => material.Half).HasColumnName("Half");
-            entity.Property(material => material.Retail).HasColumnName("Retail");
+            entity.Property(material => material.EndUser).HasColumnName("EndUser");
             entity.Property(material => material.AvgPrice).HasColumnName("AvgPrice");
             entity.Property(material => material.LastPrice).HasColumnName("LastPrice");
             entity.Property(material => material.CurrencyVal).HasColumnName("CurrencyVal");
+            entity.Property(material => material.Origin).HasColumnName("Origin").HasMaxLength(250);
+            entity.Property(material => material.Company).HasColumnName("Company").HasMaxLength(250);
+            entity.Property(material => material.Dim).HasColumnName("Dim").HasMaxLength(250);
+            entity.Property(material => material.Color).HasColumnName("Color").HasMaxLength(250);
+            entity.Property(material => material.Provenance).HasColumnName("Provenance").HasMaxLength(250);
             entity.Property(material => material.GroupGuid).HasColumnName("GroupGUID");
+            entity.Property(material => material.PictureGuid).HasColumnName("PictureGUID");
             entity.Property(material => material.CurrencyGuid).HasColumnName("CurrencyGUID");
             entity.Property(material => material.Type).HasColumnName("Type");
             entity.Property(material => material.Security).HasColumnName("Security");

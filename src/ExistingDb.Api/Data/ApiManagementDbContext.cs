@@ -232,7 +232,7 @@ public sealed class ApiManagementDbContext(DbContextOptions<ApiManagementDbConte
             Field(6, 2, "AvgPrice", "Average price", true, FieldAccessMode.Deny, MaskingStrategy.Full),
             Field(7, 2, "LastPrice", "Last price", true, FieldAccessMode.Deny, MaskingStrategy.Full),
             Field(8, 2, "Whole", "Wholesale SYP price", true, FieldAccessMode.Mask, MaskingStrategy.Full),
-            Field(9, 2, "Retail", "Purchase USD price", true, FieldAccessMode.Deny, MaskingStrategy.Full),
+            Field(9, 2, "EndUser", "Purchase USD price", true, FieldAccessMode.Deny, MaskingStrategy.Full),
             Field(10, 3, "Total", "Bill total", true, FieldAccessMode.Allow, MaskingStrategy.Full),
             Field(11, 3, "TotalDisc", "Total discount", true, FieldAccessMode.Mask, MaskingStrategy.Full),
             Field(12, 3, "Profits", "Profits", true, FieldAccessMode.Deny, MaskingStrategy.Full),

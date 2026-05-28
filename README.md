@@ -160,21 +160,29 @@ mt000 -> GET /api/materials/{guid}
 GET /api/materials?search=اسم-او-كود-او-باركود
 ```
 
-ويرجع الوحدة الأولى فقط مع معامل التحويل:
+خريطة الحقول التجارية:
 
 ```text
-primaryUnit                -> Unity
-secondUnitConversionFactor -> Unit2Fact
+code                       -> Code        رقم المادة ورمز الباركود
+primaryUnit                -> Unity       وحدة القطعة، غالباً زوج
+secondaryUnit              -> Unit2       الوحدة الثانية، غالباً طرد
+secondUnitConversionFactor -> Unit2Fact   تعبئة الطرد / معامل التحويل
+qty                        -> Qty         الكمية الموجودة في المستودعات
+origin                     -> Origin      بلد المنشأ
+company                    -> Company     الشركة المصنعة
+dim                        -> Dim         المقاسات
+color                      -> Color       الصنف، مثل PVC / EVA
+provenance                 -> Provenance  الفئة العمرية
+groupGuid                  -> GroupGUID   مجموعة المادة
+pictureGuid                -> PictureGUID صورة المنتج
 ```
-
-لا يرجع اسم الوحدة الثانية؛ يمكن استنتاج التعامل معها من معامل التحويل حسب طلب التصميم.
 
 خريطة الأسعار الحالية:
 
 ```text
-wholesaleSypPrice -> Whole   سعر جملة سوري
-wholesaleUsdPrice -> Half    سعر جملة دولار
-purchaseUsdPrice  -> Retail  سعر شراء دولار
+wholesaleSypPrice -> Whole    سعر مبيع الوحدة بالليرة السورية الجديدة
+wholesaleUsdPrice -> Half     سعر مبيع الوحدة بالدولار
+purchaseUsdPrice  -> EndUser  سعر شراء الوحدة بالدولار
 ```
 
-سعر شراء الدولار `purchaseUsdPrice` حقل حساس مرتبط بصلاحية الحقل `Retail`، وافتراضياً لا يظهر إلا لمن يملك صلاحية حقلية مناسبة أو دور Admin.
+سعر شراء الدولار `purchaseUsdPrice` حقل حساس مرتبط بصلاحية الحقل `EndUser`، وافتراضياً لا يظهر إلا لمن يملك صلاحية حقلية مناسبة أو دور Admin.
