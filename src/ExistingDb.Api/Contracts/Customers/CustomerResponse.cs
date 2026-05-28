@@ -2,7 +2,7 @@ namespace ExistingDb.Api.Contracts.Customers;
 
 public sealed record CustomerResponse(
     Guid Guid,
-    int? Number,
+    double? Number,
     string? CustomerName,
     string? LatinName,
     string? Phone1,
@@ -13,7 +13,7 @@ public sealed record CustomerResponse(
     string? BarCode,
     int? Type,
     int? State,
-    int? UseFlag,
+    double? UseFlag,
     int? Security,
     string? Notes);
 

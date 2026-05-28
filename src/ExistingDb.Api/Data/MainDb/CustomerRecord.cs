@@ -3,7 +3,7 @@ namespace ExistingDb.Api.Data.MainDb;
 public sealed class CustomerRecord
 {
     public Guid Guid { get; set; }
-    public int? Number { get; set; }
+    public double? Number { get; set; }
     public string? CustomerName { get; set; }
     public string? LatinName { get; set; }
     public string? Phone1 { get; set; }
@@ -14,7 +14,7 @@ public sealed class CustomerRecord
     public string? BarCode { get; set; }
     public int? Type { get; set; }
     public int? State { get; set; }
-    public int? UseFlag { get; set; }
+    public double? UseFlag { get; set; }
     public int? Security { get; set; }
     public string? Notes { get; set; }
 }

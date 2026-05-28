@@ -34,7 +34,7 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
 
         modelBuilder.Entity<MaterialRecord>(entity =>
         {
-            entity.ToTable("mt000");
+            entity.ToView("JocVwMaterialsWithAlternatives");
             entity.HasKey(material => material.Guid);
 
             entity.Property(material => material.Guid).HasColumnName("GUID");
