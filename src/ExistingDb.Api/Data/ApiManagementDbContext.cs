@@ -1,5 +1,6 @@
 using ExistingDb.Api.Authorization;
 using ExistingDb.Api.Data.Entities;
+using ExistingDb.Api.Images;
 using Microsoft.EntityFrameworkCore;
 
 namespace ExistingDb.Api.Data;
@@ -16,6 +17,9 @@ public sealed class ApiManagementDbContext(DbContextOptions<ApiManagementDbConte
     public DbSet<ApiFieldPermission> FieldPermissions => Set<ApiFieldPermission>();
     public DbSet<ApiRefreshToken> RefreshTokens => Set<ApiRefreshToken>();
     public DbSet<ApiAuditLog> AuditLogs => Set<ApiAuditLog>();
+    public DbSet<ApiSetting> Settings => Set<ApiSetting>();
+    public DbSet<ApiMaterialImage> MaterialImages => Set<ApiMaterialImage>();
+    public DbSet<ApiMaterialImageLink> MaterialImageLinks => Set<ApiMaterialImageLink>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -155,7 +159,41 @@ public sealed class ApiManagementDbContext(DbContextOptions<ApiManagementDbConte
             entity.HasIndex(audit => audit.Action);
         });
 
+        modelBuilder.Entity<ApiSetting>(entity =>
+        {
+            entity.ToTable("ApiSettings");
+            entity.HasKey(setting => setting.Key);
+            entity.Property(setting => setting.Key).HasMaxLength(150).IsRequired();
+            entity.Property(setting => setting.Value).HasMaxLength(1000);
+            entity.Property(setting => setting.Description).HasMaxLength(500);
+        });
+
+        modelBuilder.Entity<ApiMaterialImage>(entity =>
+        {
+            entity.ToTable("ApiMaterialImages");
+            entity.HasKey(image => image.Id);
+            entity.Property(image => image.Name).HasMaxLength(1000).IsRequired();
+            entity.Property(image => image.ThumbnailName).HasMaxLength(1000);
+            entity.Property(image => image.OriginalFileName).HasMaxLength(255).IsRequired();
+            entity.Property(image => image.StoredFileName).HasMaxLength(255).IsRequired();
+            entity.Property(image => image.ContentType).HasMaxLength(100).IsRequired();
+            entity.HasIndex(image => image.Name).IsUnique();
+            entity.HasIndex(image => image.CreatedAt);
+        });
+
+        modelBuilder.Entity<ApiMaterialImageLink>(entity =>
+        {
+            entity.ToTable("ApiMaterialImageLinks");
+            entity.HasKey(link => new { link.ImageId, link.MaterialGuid });
+            entity.HasIndex(link => link.MaterialGuid);
+            entity.HasOne(link => link.Image)
+                .WithMany(image => image.MaterialLinks)
+                .HasForeignKey(link => link.ImageId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         SeedAuthorizationData(modelBuilder);
+        SeedImageSettings(modelBuilder);
     }
 
     private static void SeedAuthorizationData(ModelBuilder modelBuilder)
@@ -274,5 +312,25 @@ public sealed class ApiManagementDbContext(DbContextOptions<ApiManagementDbConte
             DefaultCanUpdate = defaultReadMode == FieldAccessMode.Allow,
             MaskingStrategy = maskingStrategy
         };
+
+    private static void SeedImageSettings(ModelBuilder modelBuilder)
+    {
+        var seedDate = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        modelBuilder.Entity<ApiSetting>().HasData(
+            new ApiSetting
+            {
+                Key = ImageSettingsKeys.ImagesDirectory,
+                Value = @"C:\images",
+                Description = "Directory where original material image files are uploaded.",
+                CreatedAt = seedDate
+            },
+            new ApiSetting
+            {
+                Key = ImageSettingsKeys.ThumbnailsDirectory,
+                Value = @"C:\images\thumbnails",
+                Description = "Directory where generated material image thumbnails are saved.",
+                CreatedAt = seedDate
+            });
+    }
 }
 

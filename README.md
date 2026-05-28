@@ -117,6 +117,19 @@ GET  /api/customers/{guid}
 GET  /api/materials
 GET  /api/materials/{guid}
 GET  /api/materials/filter-options
+
+GET    /api/material-images/settings
+PUT    /api/material-images/settings
+GET    /api/material-images
+POST   /api/material-images
+GET    /api/material-images/{id}
+GET    /api/material-images/{id}/file
+GET    /api/material-images/{id}/thumbnail
+POST   /api/material-images/{id}/materials
+PUT    /api/material-images/{id}/materials
+DELETE /api/material-images/{id}/materials
+DELETE /api/material-images/{id}
+GET    /api/materials/{materialGuid}/images
 ```
 
 ## إدارة كلمات المرور
@@ -151,6 +164,108 @@ POST /api/admin/users/{userId}/reset-password
 ## قرار التصميم
 
 لا ينشئ المشروع Stored Procedures جديدة. قاعدة `ApiManagementDb` تدار عبر EF Core migrations، أما قاعدة النظام الحالية فتستخدم للقراءة أو لاستدعاء Stored Procedures الموجودة فقط عند الحاجة.
+
+## Material Images API
+
+إدارة الصور تتم في `ApiManagementDb` ولا تعدل قاعدة النظام الرئيسية.
+
+الجداول:
+
+```text
+ApiSettings
+ApiMaterialImages
+ApiMaterialImageLinks
+```
+
+الإعدادات الافتراضية:
+
+```text
+Images:Directory           = C:\images
+Images:ThumbnailsDirectory = C:\images\thumbnails
+```
+
+يمكن قراءة وتعديل الإعدادات:
+
+```http
+GET /api/material-images/settings
+PUT /api/material-images/settings
+```
+
+Body:
+
+```json
+{
+  "imagesDirectory": "C:\\images",
+  "thumbnailsDirectory": "C:\\images\\thumbnails"
+}
+```
+
+رفع صورة:
+
+```http
+POST /api/material-images
+Content-Type: multipart/form-data
+```
+
+Form fields:
+
+```text
+file          الصورة
+materialGuids GUID1,GUID2 اختياري للربط مباشرة
+isPrimary     true/false
+```
+
+عند رفع صورة:
+
+- تحفظ في مجلد الصور من الإعدادات.
+- إذا كان الاسم موجوداً، يتم تعديل الاسم تلقائياً مثل `image_1.jpg`.
+- يتم توليد thumbnail داخل مجلد الثامبنيل.
+- حقل `Name` في `ApiMaterialImages` يحتوي المسار الكامل للصورة الأصلية.
+- حقل `ThumbnailName` يحتوي المسار الكامل للثامبنيل.
+
+إدارة الربط:
+
+```http
+POST   /api/material-images/{id}/materials
+PUT    /api/material-images/{id}/materials
+DELETE /api/material-images/{id}/materials
+```
+
+Body:
+
+```json
+{
+  "materialGuids": [
+    "00000000-0000-0000-0000-000000000000"
+  ],
+  "isPrimary": false
+}
+```
+
+الاستعلام:
+
+```http
+GET /api/material-images
+GET /api/material-images?linked=true
+GET /api/material-images?linked=false
+GET /api/material-images?materialGuid=MATERIAL_GUID
+GET /api/materials/{materialGuid}/images
+```
+
+جلب الملف:
+
+```http
+GET /api/material-images/{id}/file
+GET /api/material-images/{id}/thumbnail
+```
+
+حذف الصورة:
+
+```http
+DELETE /api/material-images/{id}
+```
+
+يحذف السجل والروابط ويحاول حذف ملف الصورة والثامبنيل من السيرفر.
 
 ## Customers Read API
 

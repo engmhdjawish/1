@@ -2,6 +2,7 @@ using System.Text;
 using ExistingDb.Api.Auth;
 using ExistingDb.Api.Authorization;
 using ExistingDb.Api.Data;
+using ExistingDb.Api.Images;
 using ExistingDb.Api.Middleware;
 using ExistingDb.Api.Options;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -56,6 +57,8 @@ builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddSingleton<IFieldMasker, FieldMasker>();
+builder.Services.AddScoped<IImageSettingsService, ImageSettingsService>();
+builder.Services.AddScoped<IImageStorageService, ImageStorageService>();
 builder.Services.AddHostedService<ApiManagementDbInitializer>();
 
 builder.Services.AddControllers();
