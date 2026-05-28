@@ -44,6 +44,25 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword(ChangePasswordRequest request, CancellationToken cancellationToken)
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdValue, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var changed = await authService.ChangePasswordAsync(userId, request.CurrentPassword, request.NewPassword, cancellationToken);
+        if (!changed)
+        {
+            return BadRequest(new { message = "Current password is invalid." });
+        }
+
+        return NoContent();
+    }
+
     [HttpGet("me")]
     [Authorize]
     public ActionResult<CurrentUserResponse> Me()

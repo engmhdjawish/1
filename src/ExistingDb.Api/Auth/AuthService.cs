@@ -66,6 +66,26 @@ public sealed class AuthService(
         return true;
     }
 
+    public async Task<bool> ChangePasswordAsync(
+        Guid userId,
+        string currentPassword,
+        string newPassword,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await dbContext.Users.SingleOrDefaultAsync(apiUser => apiUser.Id == userId, cancellationToken);
+        if (user is null || !user.IsActive || !passwordHasher.VerifyPassword(currentPassword, user.PasswordHash))
+        {
+            return false;
+        }
+
+        user.PasswordHash = passwordHasher.HashPassword(newPassword);
+        user.UpdatedAt = DateTimeOffset.UtcNow;
+        await RevokeActiveRefreshTokensAsync(user.Id, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return true;
+    }
+
     private static AuthResult ToAuthResult(Data.Entities.ApiUser user, TokenPair tokens)
     {
         var roles = user.UserRoles
@@ -83,6 +103,20 @@ public sealed class AuthService(
             tokens.RefreshToken,
             tokens.RefreshTokenExpiresAt,
             roles);
+    }
+
+    private async Task RevokeActiveRefreshTokensAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var activeTokens = await dbContext.RefreshTokens
+            .Where(token => token.UserId == userId)
+            .Where(token => token.RevokedAt == null && token.ExpiresAt > now)
+            .ToListAsync(cancellationToken);
+
+        foreach (var token in activeTokens)
+        {
+            token.RevokedAt = now;
+        }
     }
 
     private static string Normalize(string value) => value.Trim().ToUpperInvariant();

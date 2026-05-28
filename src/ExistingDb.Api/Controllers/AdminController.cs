@@ -76,6 +76,34 @@ public sealed class AdminController(
         return CreatedAtAction(nameof(GetUsers), new { id = user.Id }, ToUserResponse(createdUser));
     }
 
+    [HttpPost("users/{userId:guid}/reset-password")]
+    [RequirePermission("admin.users.manage")]
+    public async Task<IActionResult> ResetPassword(Guid userId, ResetPasswordRequest request, CancellationToken cancellationToken)
+    {
+        var user = await dbContext.Users.SingleOrDefaultAsync(apiUser => apiUser.Id == userId, cancellationToken);
+        if (user is null)
+        {
+            return NotFound();
+        }
+
+        user.PasswordHash = passwordHasher.HashPassword(request.NewPassword);
+        user.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var now = DateTimeOffset.UtcNow;
+        var activeTokens = await dbContext.RefreshTokens
+            .Where(token => token.UserId == userId)
+            .Where(token => token.RevokedAt == null && token.ExpiresAt > now)
+            .ToListAsync(cancellationToken);
+
+        foreach (var token in activeTokens)
+        {
+            token.RevokedAt = now;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
     [HttpGet("roles")]
     [RequirePermission("admin.permissions.read")]
     public async Task<ActionResult<IReadOnlyCollection<RoleResponse>>> GetRoles(CancellationToken cancellationToken)

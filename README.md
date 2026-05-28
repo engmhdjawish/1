@@ -96,10 +96,12 @@ http://localhost:5249/swagger
 POST /api/auth/login
 POST /api/auth/refresh
 POST /api/auth/logout
+POST /api/auth/change-password
 GET  /api/auth/me
 
 GET  /api/admin/users
 POST /api/admin/users
+POST /api/admin/users/{userId}/reset-password
 GET  /api/admin/roles
 PUT  /api/admin/roles/{roleId}/permissions
 PUT  /api/admin/roles/{roleId}/field-permissions/{resourceFieldId}
@@ -115,6 +117,35 @@ GET  /api/customers/{guid}
 GET  /api/materials
 GET  /api/materials/{guid}
 ```
+
+## إدارة كلمات المرور
+
+المستخدم يستطيع تغيير كلمة سره بعد تسجيل الدخول:
+
+```http
+POST /api/auth/change-password
+```
+
+```json
+{
+  "currentPassword": "OldPassword123!",
+  "newPassword": "NewPassword123!"
+}
+```
+
+الأدمن يستطيع إعادة تعيين كلمة سر مستخدم:
+
+```http
+POST /api/admin/users/{userId}/reset-password
+```
+
+```json
+{
+  "newPassword": "NewPassword123!"
+}
+```
+
+عند تغيير أو إعادة تعيين كلمة السر، يتم إلغاء refresh tokens النشطة لذلك المستخدم.
 
 ## قرار التصميم
 
