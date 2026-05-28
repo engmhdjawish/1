@@ -8,6 +8,8 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
     public DbSet<CustomerRecord> Customers => Set<CustomerRecord>();
     public DbSet<MaterialRecord> Materials => Set<MaterialRecord>();
     public DbSet<MaterialInventoryRecord> MaterialInventory => Set<MaterialInventoryRecord>();
+    public DbSet<MaterialGroupRecord> MaterialGroups => Set<MaterialGroupRecord>();
+    public DbSet<StoreRecord> Stores => Set<StoreRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -79,6 +81,32 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
             entity.Property(inventory => inventory.MaterialGuid).HasColumnName("MaterialGuid");
             entity.Property(inventory => inventory.StoreGuid).HasColumnName("StoreGuid");
             entity.Property(inventory => inventory.Qty).HasColumnName("Qty");
+        });
+
+        modelBuilder.Entity<MaterialGroupRecord>(entity =>
+        {
+            entity.ToTable("gr000");
+            entity.HasKey(group => group.Guid);
+
+            entity.Property(group => group.Guid).HasColumnName("GUID");
+            entity.Property(group => group.Number).HasColumnName("Number");
+            entity.Property(group => group.Code).HasColumnName("Code").HasMaxLength(250);
+            entity.Property(group => group.Name).HasColumnName("Name").HasMaxLength(250);
+            entity.Property(group => group.LatinName).HasColumnName("LatinName").HasMaxLength(250);
+            entity.Property(group => group.ParentGuid).HasColumnName("ParentGUID");
+        });
+
+        modelBuilder.Entity<StoreRecord>(entity =>
+        {
+            entity.ToTable("st000");
+            entity.HasKey(store => store.Guid);
+
+            entity.Property(store => store.Guid).HasColumnName("GUID");
+            entity.Property(store => store.Number).HasColumnName("Number");
+            entity.Property(store => store.Code).HasColumnName("Code").HasMaxLength(100);
+            entity.Property(store => store.Name).HasColumnName("Name").HasMaxLength(250);
+            entity.Property(store => store.LatinName).HasColumnName("LatinName").HasMaxLength(250);
+            entity.Property(store => store.IsActive).HasColumnName("IsActive");
         });
     }
 }

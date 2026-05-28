@@ -116,6 +116,7 @@ GET  /api/customers/{guid}
 
 GET  /api/materials
 GET  /api/materials/{guid}
+GET  /api/materials/filter-options
 ```
 
 ## إدارة كلمات المرور
@@ -189,6 +190,57 @@ mt000 -> GET /api/materials/{guid}
 
 ```text
 GET /api/materials?search=اسم-او-كود-او-باركود
+```
+
+ولبناء واجهة فلاتر في موقع أو تطبيق، استخدم:
+
+```text
+GET /api/materials/filter-options
+```
+
+يرجع خيارات جاهزة للقوائم مثل:
+
+```json
+{
+  "countryOfOrigins": ["صيني", "وطني"],
+  "manufacturers": ["شركة1", "شركة2"],
+  "sizeRanges": ["سيري", "نمر كبار"],
+  "materialTypes": ["PVC", "EVA"],
+  "ageCategories": ["رجالي", "نسواني"],
+  "groups": [
+    {
+      "guid": "00000000-0000-0000-0000-000000000000",
+      "code": "SUMMER",
+      "name": "صيفي",
+      "latinName": "Summer"
+    }
+  ],
+  "stores": [
+    {
+      "guid": "00000000-0000-0000-0000-000000000000",
+      "code": "MAIN",
+      "name": "المستودع الرئيسي",
+      "latinName": "Main Store"
+    }
+  ],
+  "priceRanges": {
+    "unitSalePriceSyp": {
+      "min": 100000,
+      "max": 500000
+    },
+    "unitSalePriceUsd": {
+      "min": 5,
+      "max": 30
+    },
+    "unitPurchasePriceUsd": null
+  }
+}
+```
+
+نطاقات الأسعار تراعي الصلاحيات. إذا لم يكن المستخدم يملك صلاحية قراءة سعر الشراء `EndUser`، يرجع:
+
+```json
+"unitPurchasePriceUsd": null
 ```
 
 إذا كانت قيمة البحث تطابق `Code` بشكل كامل، يعيد الـ API المادة المطابقة فقط. مثال: البحث عن `100` لا يعيد المادة ذات الكود `1000` إذا كان هناك كود مطابق تماماً `100`.

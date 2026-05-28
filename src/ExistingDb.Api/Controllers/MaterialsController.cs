@@ -20,6 +20,7 @@ public sealed class MaterialsController(
     IFieldMasker fieldMasker) : ControllerBase
 {
     private const string ResourceCode = "materials";
+    private const int MaxFilterOptions = 500;
 
     [HttpGet]
     public async Task<ActionResult<PagedResponse<MaterialResponse>>> GetMaterials(
@@ -136,6 +137,32 @@ public sealed class MaterialsController(
         return Ok(new PagedResponse<MaterialResponse>(response, page, pageSize, totalCount));
     }
 
+    [HttpGet("filter-options")]
+    public async Task<ActionResult<MaterialFilterOptionsResponse>> GetFilterOptions(CancellationToken cancellationToken)
+    {
+        var fieldAccess = await permissionService.GetFieldAccessAsync(User, ResourceCode, cancellationToken);
+        var response = new MaterialFilterOptionsResponse(
+            await GetDistinctOptionsAsync(mainDbContext.Materials.Select(material => material.Origin), cancellationToken),
+            await GetDistinctOptionsAsync(mainDbContext.Materials.Select(material => material.Company), cancellationToken),
+            await GetDistinctOptionsAsync(mainDbContext.Materials.Select(material => material.Dim), cancellationToken),
+            await GetDistinctOptionsAsync(mainDbContext.Materials.Select(material => material.Color), cancellationToken),
+            await GetDistinctOptionsAsync(mainDbContext.Materials.Select(material => material.Provenance), cancellationToken),
+            await GetGroupsAsync(cancellationToken),
+            await GetStoresAsync(cancellationToken),
+            new MaterialPriceRangesResponse(
+                IsFieldDenied(fieldAccess, "Whole")
+                    ? null
+                    : await GetPriceRangeAsync(mainDbContext.Materials.Select(material => material.Whole), cancellationToken),
+                IsFieldDenied(fieldAccess, "Half")
+                    ? null
+                    : await GetPriceRangeAsync(mainDbContext.Materials.Select(material => material.Half), cancellationToken),
+                IsFieldDenied(fieldAccess, "EndUser")
+                    ? null
+                    : await GetPriceRangeAsync(mainDbContext.Materials.Select(material => material.EndUser), cancellationToken)));
+
+        return Ok(response);
+    }
+
     [HttpGet("{guid:guid}")]
     public async Task<ActionResult<MaterialResponse>> GetMaterial(
         Guid guid,
@@ -217,6 +244,57 @@ public sealed class MaterialsController(
                 Quantity = group.Sum(inventory => inventory.Qty ?? 0)
             })
             .ToDictionaryAsync(row => row.MaterialGuid, row => (double?)row.Quantity, cancellationToken);
+    }
+
+    private async Task<IReadOnlyCollection<string>> GetDistinctOptionsAsync(
+        IQueryable<string?> values,
+        CancellationToken cancellationToken)
+    {
+        return await values
+            .Where(value => value != null && value != string.Empty)
+            .Select(value => value!)
+            .Distinct()
+            .OrderBy(value => value)
+            .Take(MaxFilterOptions)
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<IReadOnlyCollection<LookupOptionResponse>> GetGroupsAsync(CancellationToken cancellationToken)
+    {
+        return await mainDbContext.MaterialGroups
+            .AsNoTracking()
+            .OrderBy(group => group.Number)
+            .ThenBy(group => group.Name)
+            .Take(MaxFilterOptions)
+            .Select(group => new LookupOptionResponse(group.Guid, group.Code, group.Name, group.LatinName))
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<IReadOnlyCollection<LookupOptionResponse>> GetStoresAsync(CancellationToken cancellationToken)
+    {
+        return await mainDbContext.Stores
+            .AsNoTracking()
+            .Where(store => store.IsActive != false)
+            .OrderBy(store => store.Number)
+            .ThenBy(store => store.Name)
+            .Take(MaxFilterOptions)
+            .Select(store => new LookupOptionResponse(store.Guid, store.Code, store.Name, store.LatinName))
+            .ToListAsync(cancellationToken);
+    }
+
+    private static async Task<PriceRangeResponse?> GetPriceRangeAsync(
+        IQueryable<double?> values,
+        CancellationToken cancellationToken)
+    {
+        var nonEmptyValues = values.Where(value => value.HasValue);
+        if (!await nonEmptyValues.AnyAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new PriceRangeResponse(
+            await nonEmptyValues.MinAsync(cancellationToken),
+            await nonEmptyValues.MaxAsync(cancellationToken));
     }
 
     private IQueryable<MaterialRecord> ApplyStoreAndQuantityFilters(
