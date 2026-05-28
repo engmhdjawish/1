@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using ExistingDb.Api.Authorization;
 using ExistingDb.Api.Contracts.Common;
 using ExistingDb.Api.Contracts.Materials;
@@ -26,10 +27,15 @@ public sealed class MaterialsController(
         [FromQuery] Guid? storeGuid = null,
         [FromQuery] string? storeGuids = null,
         [FromQuery] string? countryOfOrigin = null,
+        [FromQuery] string? countryOfOrigins = null,
         [FromQuery] string? manufacturer = null,
+        [FromQuery] string? manufacturers = null,
         [FromQuery] string? sizeRange = null,
+        [FromQuery] string? sizeRanges = null,
         [FromQuery] string? materialType = null,
+        [FromQuery] string? materialTypes = null,
         [FromQuery] string? ageCategory = null,
+        [FromQuery] string? ageCategories = null,
         [FromQuery] Guid? groupGuid = null,
         [FromQuery] string? groupGuids = null,
         [FromQuery] double? minWarehouseQuantity = null,
@@ -74,7 +80,18 @@ public sealed class MaterialsController(
             maxWarehouseQuantity,
             isAvailable);
 
-        query = ApplyTextFilters(query, countryOfOrigin, manufacturer, sizeRange, materialType, ageCategory);
+        query = ApplyTextFilters(
+            query,
+            countryOfOrigin,
+            countryOfOrigins,
+            manufacturer,
+            manufacturers,
+            sizeRange,
+            sizeRanges,
+            materialType,
+            materialTypes,
+            ageCategory,
+            ageCategories);
         query = ApplyGroupFilter(query, selectedGroupGuids);
         query = ApplyPriceFilters(
             query,
@@ -281,42 +298,51 @@ public sealed class MaterialsController(
     private static IQueryable<MaterialRecord> ApplyTextFilters(
         IQueryable<MaterialRecord> query,
         string? countryOfOrigin,
+        string? countryOfOrigins,
         string? manufacturer,
+        string? manufacturers,
         string? sizeRange,
+        string? sizeRanges,
         string? materialType,
-        string? ageCategory)
+        string? materialTypes,
+        string? ageCategory,
+        string? ageCategories)
     {
-        if (!string.IsNullOrWhiteSpace(countryOfOrigin))
-        {
-            var value = countryOfOrigin.Trim();
-            query = query.Where(material => material.Origin != null && material.Origin.Contains(value));
-        }
-
-        if (!string.IsNullOrWhiteSpace(manufacturer))
-        {
-            var value = manufacturer.Trim();
-            query = query.Where(material => material.Company != null && material.Company.Contains(value));
-        }
-
-        if (!string.IsNullOrWhiteSpace(sizeRange))
-        {
-            var value = sizeRange.Trim();
-            query = query.Where(material => material.Dim != null && material.Dim.Contains(value));
-        }
-
-        if (!string.IsNullOrWhiteSpace(materialType))
-        {
-            var value = materialType.Trim();
-            query = query.Where(material => material.Color != null && material.Color.Contains(value));
-        }
-
-        if (!string.IsNullOrWhiteSpace(ageCategory))
-        {
-            var value = ageCategory.Trim();
-            query = query.Where(material => material.Provenance != null && material.Provenance.Contains(value));
-        }
+        query = ApplyContainsAny(query, material => material.Origin, countryOfOrigin, countryOfOrigins);
+        query = ApplyContainsAny(query, material => material.Company, manufacturer, manufacturers);
+        query = ApplyContainsAny(query, material => material.Dim, sizeRange, sizeRanges);
+        query = ApplyContainsAny(query, material => material.Color, materialType, materialTypes);
+        query = ApplyContainsAny(query, material => material.Provenance, ageCategory, ageCategories);
 
         return query;
+    }
+
+    private static IQueryable<MaterialRecord> ApplyContainsAny(
+        IQueryable<MaterialRecord> query,
+        Expression<Func<MaterialRecord, string?>> selector,
+        params string?[] inputs)
+    {
+        var values = ParseTextValues(inputs);
+        if (values.Count == 0)
+        {
+            return query;
+        }
+
+        var parameter = selector.Parameters[0];
+        var property = selector.Body;
+        var containsMethod = typeof(string).GetMethod(nameof(string.Contains), [typeof(string)])
+            ?? throw new InvalidOperationException("string.Contains(string) method was not found.");
+        var notNull = Expression.NotEqual(property, Expression.Constant(null, typeof(string)));
+        Expression? body = null;
+
+        foreach (var value in values)
+        {
+            var contains = Expression.Call(property, containsMethod, Expression.Constant(value));
+            var clause = Expression.AndAlso(notNull, contains);
+            body = body is null ? clause : Expression.OrElse(body, clause);
+        }
+
+        return query.Where(Expression.Lambda<Func<MaterialRecord, bool>>(body!, parameter));
     }
 
     private static IQueryable<MaterialRecord> ApplyGroupFilter(
@@ -432,6 +458,16 @@ public sealed class MaterialsController(
         }
 
         return parsed.ToArray();
+    }
+
+    private static IReadOnlyCollection<string> ParseTextValues(params string?[] inputs)
+    {
+        return inputs
+            .Where(input => !string.IsNullOrWhiteSpace(input))
+            .SelectMany(input => input!.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private object? ResolveNumber(

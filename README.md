@@ -205,12 +205,31 @@ GET /api/materials/{guid}?storeGuid=STORE_GUID
 
 ```text
 GET /api/materials?countryOfOrigin=صيني
+GET /api/materials?countryOfOrigins=صيني,وطني
 GET /api/materials?manufacturer=اسم-الشركة
+GET /api/materials?manufacturers=شركة1,شركة2
 GET /api/materials?sizeRange=نمر-كبار
+GET /api/materials?sizeRanges=سيري,نمر-كبار
 GET /api/materials?materialType=PVC
+GET /api/materials?materialTypes=PVC,EVA
 GET /api/materials?ageCategory=رجالي
+GET /api/materials?ageCategories=رجالي,نسواني
 GET /api/materials?groupGuid=GROUP_GUID
 GET /api/materials?groupGuids=GROUP_GUID_1,GROUP_GUID_2
+```
+
+القيم المفصولة بفواصل داخل نفس الفلتر تعمل كـ OR. مثال:
+
+```text
+GET /api/materials?materialTypes=PVC,EVA&ageCategories=رجالي,نسواني
+```
+
+يعني:
+
+```text
+(materialType contains PVC OR EVA)
+AND
+(ageCategory contains رجالي OR نسواني)
 ```
 
 وفلاتر كمية وتوفر:
