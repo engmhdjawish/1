@@ -194,26 +194,26 @@ GET /api/materials?search=اسم-او-كود-او-باركود
 خريطة الحقول التجارية:
 
 ```text
-code                       -> Code        رقم المادة ورمز الباركود
-primaryUnit                -> Unity       وحدة القطعة، غالباً زوج
-secondaryUnit              -> Unit2       الوحدة الثانية، غالباً طرد
-secondUnitConversionFactor -> Unit2Fact   تعبئة الطرد / معامل التحويل
-qty                        -> Qty         الكمية الموجودة في المستودعات
-origin                     -> Origin      بلد المنشأ
-company                    -> Company     الشركة المصنعة
-dim                        -> Dim         المقاسات
-color                      -> Color       الصنف، مثل PVC / EVA
-provenance                 -> Provenance  الفئة العمرية
-groupGuid                  -> GroupGUID   مجموعة المادة
-pictureGuid                -> PictureGUID صورة المنتج
+materialCode             -> Code        رقم المادة ورمز الباركود
+primaryUnit              -> Unity       وحدة القطعة، غالباً زوج
+packageUnit              -> Unit2       الوحدة الثانية، غالباً طرد
+packageConversionFactor  -> Unit2Fact   تعبئة الطرد / معامل التحويل
+warehouseQuantity        -> Qty         الكمية الموجودة في المستودعات
+countryOfOrigin          -> Origin      بلد المنشأ
+manufacturer             -> Company     الشركة المصنعة
+sizeRange                -> Dim         المقاسات
+materialType             -> Color       الصنف، مثل PVC / EVA
+ageCategory              -> Provenance  الفئة العمرية
+groupGuid                -> GroupGUID   مجموعة المادة
+productImageGuid         -> PictureGUID صورة المنتج
 ```
 
 خريطة الأسعار الحالية:
 
 ```text
-wholesaleSypPrice -> Whole    سعر مبيع الوحدة بالليرة السورية الجديدة
-wholesaleUsdPrice -> Half     سعر مبيع الوحدة بالدولار
-purchaseUsdPrice  -> EndUser  سعر شراء الوحدة بالدولار
+unitSalePriceSyp     -> Whole    سعر مبيع الوحدة بالليرة السورية الجديدة
+unitSalePriceUsd     -> Half     سعر مبيع الوحدة بالدولار
+unitPurchasePriceUsd -> EndUser  سعر شراء الوحدة بالدولار
 ```
 
-سعر شراء الدولار `purchaseUsdPrice` حقل حساس مرتبط بصلاحية الحقل `EndUser`، وافتراضياً لا يظهر إلا لمن يملك صلاحية حقلية مناسبة أو دور Admin.
+سعر شراء الدولار `unitPurchasePriceUsd` حقل حساس مرتبط بصلاحية الحقل `EndUser`، وافتراضياً لا يظهر إلا لمن يملك صلاحية حقلية مناسبة أو دور Admin.
