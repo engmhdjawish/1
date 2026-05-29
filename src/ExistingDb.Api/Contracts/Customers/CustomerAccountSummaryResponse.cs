@@ -1,7 +1,7 @@
 namespace ExistingDb.Api.Contracts.Customers;
 
 public sealed record CustomerAccountSummaryResponse(
-    Guid CustomerGuid,
+    Guid? CustomerGuid,
     string? CustomerName,
     Guid AccountGuid,
     int? AccountNumber,

@@ -316,8 +316,14 @@ AccountGUID
 ملخص حساب العميل:
 
 ```http
+GET /api/accounts/summary?accountGuid={accountGuid}
+GET /api/accounts/summary?customerGuid={customerGuid}
+GET /api/accounts/summary?accountGuid={accountGuid}&customerGuid={customerGuid}
 GET /api/customers/{guid}/account/summary
 ```
+
+> المسار تحت `/api/accounts` هو المسار المرن الأساسي الجديد.
+> المسار `/api/customers/{guid}/account/*` بقي مدعومًا للتوافق الخلفي.
 
 الاستجابة تعرض (بعملة الحساب):
 
@@ -341,9 +347,19 @@ GET /api/customers/{guid}/account/summary
 كشف حساب تفصيلي:
 
 ```http
+GET /api/accounts/statement?accountGuid={accountGuid}
+GET /api/accounts/statement?customerGuid={customerGuid}
+GET /api/accounts/statement?accountGuid={accountGuid}&customerGuid={customerGuid}
+GET /api/accounts/statement?accountGuid={accountGuid}&fromDate=2026-01-01&toDate=2026-01-31&page=1&pageSize=100
 GET /api/customers/{guid}/account/statement
 GET /api/customers/{guid}/account/statement?fromDate=2026-01-01&toDate=2026-01-31&page=1&pageSize=100
 ```
+
+ملاحظة مهمة:
+
+- يجب تمرير `accountGuid` أو `customerGuid` (يكفي أحدهما).
+- إذا كان `customerGuid` غير مرتبط بحساب في بطاقة العميل، يجب تمرير `accountGuid` صراحة.
+- عند تمرير الحقلين معًا، يتم تطبيق الفلترة على القيود بكليهما (حساب + زبون).
 
 يتطلب:
 

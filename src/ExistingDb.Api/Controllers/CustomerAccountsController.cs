@@ -10,39 +10,44 @@ namespace ExistingDb.Api.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/customers/{customerGuid:guid}/account")]
+[Route("api/accounts")]
 [RequirePermission("customers.read")]
 [RequirePermission("accounts.read")]
 public sealed class CustomerAccountsController(MainDbContext mainDbContext) : ControllerBase
 {
-    [HttpGet("summary")]
-    public async Task<ActionResult<CustomerAccountSummaryResponse>> GetSummary(Guid customerGuid, CancellationToken cancellationToken)
+    [HttpGet("~/api/customers/{customerGuid:guid}/account/summary")]
+    public Task<ActionResult<CustomerAccountSummaryResponse>> GetSummaryByCustomer(Guid customerGuid, CancellationToken cancellationToken)
     {
-        var (customer, account) = await ResolveCustomerAccountAsync(customerGuid, cancellationToken);
-        if (customer is null)
+        return GetSummary(null, customerGuid, cancellationToken);
+    }
+
+    [HttpGet("summary")]
+    public async Task<ActionResult<CustomerAccountSummaryResponse>> GetSummary(
+        [FromQuery] Guid? accountGuid = null,
+        [FromQuery] Guid? customerGuid = null,
+        CancellationToken cancellationToken = default)
+    {
+        var (target, errorResult) = await ResolveAccountScopeAsync(accountGuid, customerGuid, cancellationToken);
+        if (errorResult is not null)
         {
-            return NotFound(new { message = "Customer was not found.", customerGuid });
+            return errorResult;
         }
 
-        if (account is null)
-        {
-            return NotFound(new { message = "Customer account was not found.", customerGuid });
-        }
+        var customer = target!.Customer;
+        var account = target.Account;
+        var customerGuidFilter = target.CustomerGuidFilter;
+        var summaryEntriesQuery = BuildEntriesQuery(account.Guid, customerGuidFilter);
 
         var accountCurrencyRate = GetAccountCurrencyRate(account);
         var defaultRate = accountCurrencyRate > 0 ? accountCurrencyRate : 1d;
         var initDebitInAccountCurrency = ConvertMainToAccountCurrency(account.InitDebit ?? 0, accountCurrencyRate);
         var initCreditInAccountCurrency = ConvertMainToAccountCurrency(account.InitCredit ?? 0, accountCurrencyRate);
-        var debitFromEntriesInAccountCurrency = await mainDbContext.Entries
-            .AsNoTracking()
-            .Where(entry => entry.AccountGuid == account.Guid)
+        var debitFromEntriesInAccountCurrency = await summaryEntriesQuery
             .Select(entry => (double?)((entry.Debit ?? 0) / (entry.CurrencyVal.HasValue && entry.CurrencyVal.Value > 0
                 ? entry.CurrencyVal.Value
                 : defaultRate)))
             .SumAsync(cancellationToken) ?? 0;
-        var creditFromEntriesInAccountCurrency = await mainDbContext.Entries
-            .AsNoTracking()
-            .Where(entry => entry.AccountGuid == account.Guid)
+        var creditFromEntriesInAccountCurrency = await summaryEntriesQuery
             .Select(entry => (double?)((entry.Credit ?? 0) / (entry.CurrencyVal.HasValue && entry.CurrencyVal.Value > 0
                 ? entry.CurrencyVal.Value
                 : defaultRate)))
@@ -50,17 +55,15 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         var currentDebit = initDebitInAccountCurrency + debitFromEntriesInAccountCurrency;
         var currentCredit = initCreditInAccountCurrency + creditFromEntriesInAccountCurrency;
 
-        var lastCreditorEntry = await mainDbContext.Entries
-            .AsNoTracking()
-            .Where(entry => entry.AccountGuid == account.Guid && (entry.Credit ?? 0) > 0)
+        var lastCreditorEntry = await summaryEntriesQuery
+            .Where(entry => (entry.Credit ?? 0) > 0)
             .OrderByDescending(entry => entry.Date)
             .ThenByDescending(entry => entry.Number)
             .ThenByDescending(entry => entry.Guid)
             .FirstOrDefaultAsync(cancellationToken);
 
-        var lastDebtorEntry = await mainDbContext.Entries
-            .AsNoTracking()
-            .Where(entry => entry.AccountGuid == account.Guid && (entry.Debit ?? 0) > 0)
+        var lastDebtorEntry = await summaryEntriesQuery
+            .Where(entry => (entry.Debit ?? 0) > 0)
             .OrderByDescending(entry => entry.Date)
             .ThenByDescending(entry => entry.Number)
             .ThenByDescending(entry => entry.Guid)
@@ -74,8 +77,8 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         var references = await ResolveEntryReferencesAsync(entryGuids, cancellationToken);
 
         return Ok(new CustomerAccountSummaryResponse(
-            customer.Guid,
-            customer.CustomerName,
+            customer?.Guid,
+            customer?.CustomerName,
             account.Guid,
             account.Number,
             account.Code,
@@ -93,10 +96,24 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
                 : ToMovement(lastDebtorEntry, references.GetValueOrDefault(lastDebtorEntry.Guid), accountCurrencyRate)));
     }
 
+    [HttpGet("~/api/customers/{customerGuid:guid}/account/statement")]
+    [RequirePermission("entries.read")]
+    public Task<ActionResult<CustomerAccountStatementResponse>> GetStatementByCustomer(
+        Guid customerGuid,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 100,
+        CancellationToken cancellationToken = default)
+    {
+        return GetStatement(null, customerGuid, fromDate, toDate, page, pageSize, cancellationToken);
+    }
+
     [HttpGet("statement")]
     [RequirePermission("entries.read")]
     public async Task<ActionResult<CustomerAccountStatementResponse>> GetStatement(
-        Guid customerGuid,
+        [FromQuery] Guid? accountGuid = null,
+        [FromQuery] Guid? customerGuid = null,
         [FromQuery] DateTime? fromDate = null,
         [FromQuery] DateTime? toDate = null,
         [FromQuery] int page = 1,
@@ -106,16 +123,15 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 500);
 
-        var (customer, account) = await ResolveCustomerAccountAsync(customerGuid, cancellationToken);
-        if (customer is null)
+        var (target, errorResult) = await ResolveAccountScopeAsync(accountGuid, customerGuid, cancellationToken);
+        if (errorResult is not null)
         {
-            return NotFound(new { message = "Customer was not found.", customerGuid });
+            return errorResult;
         }
 
-        if (account is null)
-        {
-            return NotFound(new { message = "Customer account was not found.", customerGuid });
-        }
+        var customer = target!.Customer;
+        var account = target.Account;
+        var customerGuidFilter = target.CustomerGuidFilter;
 
         var accountCurrencyRate = GetAccountCurrencyRate(account);
         var defaultRate = accountCurrencyRate > 0 ? accountCurrencyRate : 1d;
@@ -130,9 +146,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
 
         var fromDateOnly = fromDate?.Date;
         var toExclusive = toDate?.Date.AddDays(1);
-        var entriesQuery = mainDbContext.Entries
-            .AsNoTracking()
-            .Where(entry => entry.AccountGuid == account.Guid);
+        var entriesQuery = BuildEntriesQuery(account.Guid, customerGuidFilter);
 
         if (fromDateOnly.HasValue)
         {
@@ -153,9 +167,8 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         var offset = (page - 1) * pageSize;
 
         var openingBalance = fromDateOnly.HasValue
-            ? await mainDbContext.Entries
-                .AsNoTracking()
-                .Where(entry => entry.AccountGuid == account.Guid && entry.Date < fromDateOnly.Value)
+            ? await BuildEntriesQuery(account.Guid, customerGuidFilter)
+                .Where(entry => entry.Date < fromDateOnly.Value)
                 .Select(entry => (double?)(((entry.Debit ?? 0) - (entry.Credit ?? 0)) / (entry.CurrencyVal.HasValue && entry.CurrencyVal.Value > 0
                     ? entry.CurrencyVal.Value
                     : defaultRate)))
@@ -216,8 +229,8 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         }
 
         return Ok(new CustomerAccountStatementResponse(
-            customer.Guid,
-            customer.CustomerName,
+            customer?.Guid,
+            customer?.CustomerName,
             account.Guid,
             account.CurrencyGuid,
             accountCurrencyRate,
@@ -230,20 +243,70 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             totalCount));
     }
 
-    private async Task<(CustomerRecord? Customer, AccountRecord? Account)> ResolveCustomerAccountAsync(Guid customerGuid, CancellationToken cancellationToken)
+    private IQueryable<EntryRecord> BuildEntriesQuery(Guid accountGuid, Guid? customerGuid)
     {
-        var customer = await mainDbContext.Customers
+        var query = mainDbContext.Entries
             .AsNoTracking()
-            .SingleOrDefaultAsync(record => record.Guid == customerGuid, cancellationToken);
-        if (customer?.AccountGuid is null || customer.AccountGuid == Guid.Empty)
+            .Where(entry => entry.AccountGuid == accountGuid);
+
+        if (customerGuid.HasValue)
         {
-            return (customer, null);
+            query = query.Where(entry => entry.CustomerGuid == customerGuid.Value);
+        }
+
+        return query;
+    }
+
+    private async Task<(AccountQueryTarget? Target, IActionResult? ErrorResult)> ResolveAccountScopeAsync(
+        Guid? accountGuid,
+        Guid? customerGuid,
+        CancellationToken cancellationToken)
+    {
+        if (!accountGuid.HasValue && !customerGuid.HasValue)
+        {
+            return (null, BadRequest(new
+            {
+                message = "Either accountGuid or customerGuid must be provided.",
+                accountGuid,
+                customerGuid
+            }));
+        }
+
+        CustomerRecord? customer = null;
+        if (customerGuid.HasValue)
+        {
+            customer = await mainDbContext.Customers
+                .AsNoTracking()
+                .SingleOrDefaultAsync(record => record.Guid == customerGuid.Value, cancellationToken);
+            if (customer is null)
+            {
+                return (null, NotFound(new { message = "Customer was not found.", customerGuid }));
+            }
+        }
+
+        var resolvedAccountGuid = accountGuid
+            ?? (customer?.AccountGuid is { } linkedAccountGuid && linkedAccountGuid != Guid.Empty
+                ? linkedAccountGuid
+                : null);
+        if (!resolvedAccountGuid.HasValue)
+        {
+            return (null, BadRequest(new
+            {
+                message = "No account could be resolved. Provide accountGuid explicitly when the customer has no linked account.",
+                accountGuid,
+                customerGuid
+            }));
         }
 
         var account = await mainDbContext.Accounts
             .AsNoTracking()
-            .SingleOrDefaultAsync(record => record.Guid == customer.AccountGuid.Value, cancellationToken);
-        return (customer, account);
+            .SingleOrDefaultAsync(record => record.Guid == resolvedAccountGuid.Value, cancellationToken);
+        if (account is null)
+        {
+            return (null, NotFound(new { message = "Account was not found.", accountGuid = resolvedAccountGuid }));
+        }
+
+        return (new AccountQueryTarget(customer, account, customerGuid), null);
     }
 
     private async Task<Dictionary<Guid, EntryReferenceInfo>> ResolveEntryReferencesAsync(
@@ -586,4 +649,9 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
     {
         public static readonly EntryReferenceInfo Unknown = new("unknown", null, null, null, null, null);
     }
+
+    private sealed record AccountQueryTarget(
+        CustomerRecord? Customer,
+        AccountRecord Account,
+        Guid? CustomerGuidFilter);
 }
