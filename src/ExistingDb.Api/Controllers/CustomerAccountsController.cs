@@ -257,7 +257,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         return query;
     }
 
-    private async Task<(AccountQueryTarget? Target, IActionResult? ErrorResult)> ResolveAccountScopeAsync(
+    private async Task<(AccountQueryTarget? Target, ActionResult? ErrorResult)> ResolveAccountScopeAsync(
         Guid? accountGuid,
         Guid? customerGuid,
         CancellationToken cancellationToken)
