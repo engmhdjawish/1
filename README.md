@@ -338,6 +338,7 @@ GET /api/customers/{guid}/account/summary
 - `invoice` = فاتورة
 - `payment` = دفعة
 - `discount` = حسم/إشعار
+- `entry` = قيد يومية (fallback عند غياب ربط السند ووجود حساب مقابل)
 - `unknown` = غير مصنف
 
 ونوع السند النصي يعاد في الحقل:
@@ -376,6 +377,7 @@ entries.read   (لكشف الحساب التفصيلي)
 - الإشارة الصافية للحركة (`signedAmount`)
 - الرصيد التراكمي (`runningBalance`)
 - نوع المرجع (فاتورة/دفعة/حسم) مع نوع السند الفعلي (`reasonDocumentType`) ورقم/تاريخ المرجع عند توفرها
+- تفاصيل الحساب المقابل لكل سطر: `contraAccountGuid`, `contraAccountNumber`, `contraAccountCode`, `contraAccountName`
 
 ## Materials Read API
 

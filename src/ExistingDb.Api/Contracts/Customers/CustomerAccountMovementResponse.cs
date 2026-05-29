@@ -16,4 +16,8 @@ public sealed record CustomerAccountMovementResponse(
     int? ReferenceNumber,
     DateTime? ReferenceDate,
     string? ReferenceNotes,
+    Guid? ContraAccountGuid,
+    int? ContraAccountNumber,
+    string? ContraAccountCode,
+    string? ContraAccountName,
     string? Notes);

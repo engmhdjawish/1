@@ -17,4 +17,8 @@ public sealed record CustomerAccountStatementEntryResponse(
     int? ReferenceNumber,
     DateTime? ReferenceDate,
     string? ReferenceNotes,
+    Guid? ContraAccountGuid,
+    int? ContraAccountNumber,
+    string? ContraAccountCode,
+    string? ContraAccountName,
     string? Notes);

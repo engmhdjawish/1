@@ -75,6 +75,9 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             .Distinct()
             .ToArray();
         var references = await ResolveEntryReferencesAsync(entryGuids, cancellationToken);
+        var summaryContraAccounts = await ResolveContraAccountsAsync(
+            new[] { lastCreditorEntry, lastDebtorEntry }.Where(entry => entry is not null).Select(entry => entry!).ToArray(),
+            cancellationToken);
 
         return Ok(new CustomerAccountSummaryResponse(
             customer?.Guid,
@@ -90,10 +93,18 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             currentDebit - currentCredit,
             lastCreditorEntry is null
                 ? null
-                : ToMovement(lastCreditorEntry, references.GetValueOrDefault(lastCreditorEntry.Guid), accountCurrencyRate),
+                : ToMovement(
+                    lastCreditorEntry,
+                    references.GetValueOrDefault(lastCreditorEntry.Guid),
+                    summaryContraAccounts.GetValueOrDefault(lastCreditorEntry.Guid),
+                    accountCurrencyRate),
             lastDebtorEntry is null
                 ? null
-                : ToMovement(lastDebtorEntry, references.GetValueOrDefault(lastDebtorEntry.Guid), accountCurrencyRate)));
+                : ToMovement(
+                    lastDebtorEntry,
+                    references.GetValueOrDefault(lastDebtorEntry.Guid),
+                    summaryContraAccounts.GetValueOrDefault(lastDebtorEntry.Guid),
+                    accountCurrencyRate)));
     }
 
     [HttpGet("~/api/customers/{customerGuid:guid}/account/statement")]
@@ -194,6 +205,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             .ToListAsync(cancellationToken);
 
         var references = await ResolveEntryReferencesAsync(pageEntries.Select(entry => entry.Guid).ToArray(), cancellationToken);
+        var contraAccounts = await ResolveContraAccountsAsync(pageEntries, cancellationToken);
 
         var runningBalance = balanceBeforePage;
         var statementEntries = new List<CustomerAccountStatementEntryResponse>(pageEntries.Count);
@@ -208,6 +220,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             runningBalance += signedAmount;
 
             var reference = references.GetValueOrDefault(entry.Guid) ?? EntryReferenceInfo.Unknown;
+            var contraAccount = contraAccounts.GetValueOrDefault(entry.Guid);
             statementEntries.Add(new CustomerAccountStatementEntryResponse(
                 entry.Guid,
                 entry.Date,
@@ -225,6 +238,10 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
                 reference.ReferenceNumber,
                 reference.ReferenceDate,
                 reference.ReferenceNotes,
+                contraAccount?.Guid,
+                contraAccount?.Number,
+                contraAccount?.Code,
+                contraAccount?.Name,
                 entry.Notes));
         }
 
@@ -322,6 +339,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             .AsNoTracking()
             .Where(entry => entryGuids.Contains(entry.Guid))
             .ToListAsync(cancellationToken);
+        var entryByGuid = entries.ToDictionary(entry => entry.Guid);
 
         var entryParentByGuid = entries.ToDictionary(entry => entry.Guid, entry => entry.ParentGuid);
         var baseRelations = await mainDbContext.EntryRelations
@@ -557,6 +575,19 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             }
 
             var unknownRelation = baseRelationByEntry.GetValueOrDefault(entryGuid);
+            var entry = entryByGuid.GetValueOrDefault(entryGuid);
+            if (entry?.ContraAccountGuid is { } contraGuid && contraGuid != Guid.Empty)
+            {
+                result[entryGuid] = new EntryReferenceInfo(
+                    "entry",
+                    "journal-entry",
+                    unknownRelation?.ParentGuid,
+                    unknownRelation?.ParentNumber,
+                    null,
+                    null);
+                continue;
+            }
+
             result[entryGuid] = new EntryReferenceInfo(
                 "unknown",
                 unknownRelation?.ParentType is null ? null : $"parent-type-{unknownRelation.ParentType}",
@@ -572,6 +603,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
     private static CustomerAccountMovementResponse ToMovement(
         EntryRecord entry,
         EntryReferenceInfo? reference,
+        ContraAccountInfo? contraAccount,
         double accountCurrencyRate)
     {
         var debitMain = entry.Debit ?? 0;
@@ -596,7 +628,61 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             effectiveReference.ReferenceNumber,
             effectiveReference.ReferenceDate,
             effectiveReference.ReferenceNotes,
+            contraAccount?.Guid,
+            contraAccount?.Number,
+            contraAccount?.Code,
+            contraAccount?.Name,
             entry.Notes);
+    }
+
+    private async Task<Dictionary<Guid, ContraAccountInfo>> ResolveContraAccountsAsync(
+        IReadOnlyCollection<EntryRecord> entries,
+        CancellationToken cancellationToken)
+    {
+        if (entries.Count == 0)
+        {
+            return new Dictionary<Guid, ContraAccountInfo>();
+        }
+
+        var contraGuids = entries
+            .Select(entry => entry.ContraAccountGuid)
+            .Where(guid => guid.HasValue && guid.Value != Guid.Empty)
+            .Select(guid => guid!.Value)
+            .Distinct()
+            .ToArray();
+
+        if (contraGuids.Length == 0)
+        {
+            return new Dictionary<Guid, ContraAccountInfo>();
+        }
+
+        var accounts = await mainDbContext.Accounts
+            .AsNoTracking()
+            .Where(account => contraGuids.Contains(account.Guid))
+            .ToListAsync(cancellationToken);
+        var accountLookup = accounts.ToDictionary(account => account.Guid);
+
+        var result = new Dictionary<Guid, ContraAccountInfo>();
+        foreach (var entry in entries)
+        {
+            if (entry.ContraAccountGuid is not { } contraGuid || contraGuid == Guid.Empty)
+            {
+                continue;
+            }
+
+            if (!accountLookup.TryGetValue(contraGuid, out var contraAccount))
+            {
+                continue;
+            }
+
+            result[entry.Guid] = new ContraAccountInfo(
+                contraAccount.Guid,
+                contraAccount.Number,
+                contraAccount.Code,
+                contraAccount.Name);
+        }
+
+        return result;
     }
 
     private static double GetAccountCurrencyRate(AccountRecord account)
@@ -654,4 +740,10 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         CustomerRecord? Customer,
         AccountRecord Account,
         Guid? CustomerGuidFilter);
+
+    private sealed record ContraAccountInfo(
+        Guid Guid,
+        int? Number,
+        string? Code,
+        string? Name);
 }
