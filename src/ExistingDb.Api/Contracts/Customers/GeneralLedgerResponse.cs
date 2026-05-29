@@ -4,6 +4,8 @@ public sealed record GeneralLedgerResponse(
     Guid? CustomerGuid,
     string? CustomerName,
     Guid AccountGuid,
+    Guid SourceGuid,
+    bool IsCalledByWeb,
     Guid CurrencyGuid,
     DateTime FromDate,
     DateTime ToDate,

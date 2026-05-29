@@ -270,9 +270,11 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
     public async Task<ActionResult<GeneralLedgerResponse>> GetGeneralLedger(
         [FromQuery] Guid? accountGuid = null,
         [FromQuery] Guid? customerGuid = null,
+        [FromQuery] Guid? sourceGuid = null,
         [FromQuery] DateTime? fromDate = null,
         [FromQuery] DateTime? toDate = null,
         [FromQuery] Guid? currencyGuid = null,
+        [FromQuery] bool isCalledByWeb = false,
         [FromQuery] bool detailByAccountCurrency = false,
         [FromQuery] bool showRunningBalance = true,
         CancellationToken cancellationToken = default)
@@ -292,6 +294,15 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             return BadRequest(new { message = "fromDate must be less than or equal to toDate." });
         }
 
+        if (!sourceGuid.HasValue || sourceGuid.Value == Guid.Empty)
+        {
+            return BadRequest(new
+            {
+                message = "sourceGuid is required for prcGeneralLedger (maps report sources in RepSrcs).",
+                sourceGuid
+            });
+        }
+
         var effectiveCurrencyGuid = currencyGuid
             ?? account.CurrencyGuid
             ?? Guid.Empty;
@@ -299,9 +310,11 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         var (rows, resultSetCount) = await ExecuteGeneralLedgerProcedureAsync(
             account.Guid,
             target.CustomerGuidFilter ?? Guid.Empty,
+            sourceGuid.Value,
             effectiveFromDate,
             effectiveToDate,
             effectiveCurrencyGuid,
+            isCalledByWeb,
             detailByAccountCurrency,
             showRunningBalance,
             cancellationToken);
@@ -310,6 +323,8 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             customer?.Guid,
             customer?.CustomerName,
             account.Guid,
+            sourceGuid.Value,
+            isCalledByWeb,
             effectiveCurrencyGuid,
             effectiveFromDate,
             effectiveToDate,
@@ -387,9 +402,11 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
     private async Task<(List<IReadOnlyDictionary<string, object?>> Rows, int ResultSetCount)> ExecuteGeneralLedgerProcedureAsync(
         Guid accountGuid,
         Guid customerGuid,
+        Guid sourceGuid,
         DateTime fromDate,
         DateTime toDate,
         Guid currencyGuid,
+        bool isCalledByWeb,
         bool detailByAccountCurrency,
         bool showRunningBalance,
         CancellationToken cancellationToken)
@@ -414,7 +431,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             var toDateInclusive = toDate.Date.AddDays(1).AddMilliseconds(-3);
             var parameterValues = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
             {
-                ["@IsCalledByWeb"] = 1,
+                ["@IsCalledByWeb"] = isCalledByWeb ? 1 : 0,
                 ["@Account"] = accountGuid,
                 ["@CustGUID"] = customerGuid,
                 ["@CostGuid"] = Guid.Empty,
@@ -440,7 +457,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
                 ["@CollectCheck"] = 0,
                 ["@User"] = Guid.Empty,
                 ["@ShwUser"] = 0,
-                ["@SrcGuid"] = Guid.Empty,
+                ["@SrcGuid"] = sourceGuid,
                 ["@EntryCond"] = Guid.Empty,
                 ["@BillCond"] = Guid.Empty,
                 ["@FromPostDate"] = fromDate.Date,
