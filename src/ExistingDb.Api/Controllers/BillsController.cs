@@ -52,6 +52,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
     private static readonly string[] AdditionAccountNumberCandidates = ["AddAccNum", "AdditionAccNum", "AdditionAccountNumber", "TotalAddAccNum"];
     private static readonly string[] AdditionAccountCodeCandidates = ["AddAccCode", "AdditionAccCode", "AdditionAccountCode"];
     private static readonly string[] AdditionAccountNameCandidates = ["AddAccName", "AdditionAccName", "AdditionAccountName"];
+    private static readonly string[] DocumentDateCandidates = ["Date", "DocDate", "BillDate", "VoucherDate", "PyDate", "TransDate"];
     private static readonly string[] NotesCandidates = ["Notes", "Statement", "Description"];
 
     [HttpGet("invoices")]
@@ -369,6 +370,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         var discount = ConvertToDocumentCurrency(discountRaw, currencyRate);
         var additions = ConvertToDocumentCurrency(additionsRaw, currencyRate);
         var net = ConvertToDocumentCurrency(netRaw, currencyRate);
+        var documentDate = record.Date ?? GetDateValue(rawRow, DocumentDateCandidates);
         var notes = FirstNotBlank(record.Notes, GetStringValue(rawRow, NotesCandidates));
         var (settlementTypeCode, settlementTypeName) = ResolveSettlementType(resolvedType?.Name ?? resolvedType?.Code, isVoucher);
         var (pairsCount, pensCount) = ResolveQuantityCounters(rawRow);
@@ -383,7 +385,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         return new BillDocumentResponse(
             record.Guid,
             record.Number,
-            record.Date,
+            documentDate,
             record.TypeGuid,
             resolvedType?.Code,
             resolvedType?.Name,
@@ -431,6 +433,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         var discount = ConvertToDocumentCurrency(discountRaw, currencyRate);
         var additions = ConvertToDocumentCurrency(additionsRaw, currencyRate);
         var net = ConvertToDocumentCurrency(netRaw, currencyRate);
+        var documentDate = record.Date ?? GetDateValue(rawRow, DocumentDateCandidates);
         var notes = FirstNotBlank(record.Notes, GetStringValue(rawRow, NotesCandidates));
         var (settlementTypeCode, settlementTypeName) = ResolveSettlementType(resolvedType?.Name ?? resolvedType?.Code, isVoucher);
         var (pairsCount, pensCount) = ResolveQuantityCounters(rawRow);
@@ -445,7 +448,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         return new BillDocumentResponse(
             record.Guid,
             record.Number,
-            record.Date,
+            documentDate,
             record.TypeGuid,
             resolvedType?.Code,
             resolvedType?.Name,
@@ -952,7 +955,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         var currencySymbol = FirstNotBlank(
             GetStringValue(row, DocumentCurrencySymbolCandidates),
             currencyReference?.Symbol,
-            ResolveCurrencySymbolFromCode(currencyCode),
+            ResolveCurrencySymbol(currencyCode, currencyName),
             "ل.س");
         return (currencyGuid, currencyName, currencyCode, currencySymbol, currencyRate);
     }
@@ -969,6 +972,13 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         return (pairsCount, pensCount);
     }
 
+    private static string? ResolveCurrencySymbol(string? currencyCode, string? currencyName)
+    {
+        return FirstNotBlank(
+            ResolveCurrencySymbolFromCode(currencyCode),
+            ResolveCurrencySymbolFromCode(currencyName));
+    }
+
     private static string? ResolveCurrencySymbolFromCode(string? currencyCode)
     {
         if (string.IsNullOrWhiteSpace(currencyCode))
@@ -977,6 +987,18 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         }
 
         var normalized = currencyCode.Trim().ToUpperInvariant();
+        if (normalized.Contains("SYP")
+            || normalized.Contains("SYR")
+            || normalized.Contains("SYRIAN")
+            || normalized.Contains("ليرة")
+            || normalized.Contains("سورية")
+            || normalized.Contains("سوري")
+            || normalized.Contains("ل.س")
+            || normalized.Contains("ل س"))
+        {
+            return "ل.س";
+        }
+
         if (normalized.Contains("USD") || normalized.Contains("DOLLAR"))
         {
             return "$";
@@ -1525,6 +1547,34 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             if (!string.IsNullOrWhiteSpace(convertedValue))
             {
                 return convertedValue.Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private static DateTime? GetDateValue(IReadOnlyDictionary<string, object?>? row, params string[] candidates)
+    {
+        if (row is null)
+        {
+            return null;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (!row.TryGetValue(candidate, out var rawValue) || rawValue is null)
+            {
+                continue;
+            }
+
+            switch (rawValue)
+            {
+                case DateTime dateTime:
+                    return dateTime;
+                case DateTimeOffset dateTimeOffset:
+                    return dateTimeOffset.DateTime;
+                case string stringValue when DateTime.TryParse(stringValue, out var parsedDate):
+                    return parsedDate;
             }
         }
 

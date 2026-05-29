@@ -4,7 +4,9 @@ using ExistingDb.Api.Data;
 using ExistingDb.Api.Data.MainDb;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace ExistingDb.Api.Controllers;
 
@@ -78,6 +80,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         var summaryContraAccounts = await ResolveContraAccountsAsync(
             new[] { lastCreditorEntry, lastDebtorEntry }.Where(entry => entry is not null).Select(entry => entry!).ToArray(),
             cancellationToken);
+        var accountCurrency = await ResolveCurrencyInfoAsync(account.CurrencyGuid, cancellationToken);
 
         return Ok(new CustomerAccountSummaryResponse(
             customer?.Guid,
@@ -88,6 +91,9 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             account.Name,
             account.CurrencyGuid,
             accountCurrencyRate,
+            accountCurrency?.Name,
+            accountCurrency?.Code,
+            accountCurrency?.Symbol,
             currentDebit,
             currentCredit,
             currentDebit - currentCredit,
@@ -145,6 +151,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         var customerGuidFilter = target.CustomerGuidFilter;
 
         var accountCurrencyRate = GetAccountCurrencyRate(account);
+        var accountCurrency = await ResolveCurrencyInfoAsync(account.CurrencyGuid, cancellationToken);
         var defaultRate = accountCurrencyRate > 0 ? accountCurrencyRate : 1d;
         var initialBalanceInAccountCurrency = ConvertMainToAccountCurrency(
             (account.InitDebit ?? 0) - (account.InitCredit ?? 0),
@@ -254,6 +261,9 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             account.Guid,
             account.CurrencyGuid,
             accountCurrencyRate,
+            accountCurrency?.Name,
+            accountCurrency?.Code,
+            accountCurrency?.Symbol,
             fromDateOnly,
             toDate?.Date,
             openingBalanceInAccountCurrency,
@@ -870,6 +880,75 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         return result;
     }
 
+    private async Task<CurrencyDisplayInfo?> ResolveCurrencyInfoAsync(Guid? currencyGuid, CancellationToken cancellationToken)
+    {
+        if (!currencyGuid.HasValue || currencyGuid.Value == Guid.Empty)
+        {
+            return null;
+        }
+
+        return await UseOpenSqlConnectionAsync(async connection =>
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandType = CommandType.Text;
+            command.CommandText = "SELECT TOP (1) * FROM [my000] WHERE [GUID] = @guid";
+            command.Parameters.Add(new SqlParameter("@guid", SqlDbType.UniqueIdentifier) { Value = currencyGuid.Value });
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                return null;
+            }
+
+            var row = new Dictionary<string, object?>(reader.FieldCount, StringComparer.OrdinalIgnoreCase);
+            for (var index = 0; index < reader.FieldCount; index++)
+            {
+                row[reader.GetName(index)] = await reader.IsDBNullAsync(index, cancellationToken)
+                    ? null
+                    : reader.GetValue(index);
+            }
+
+            var name = FirstNotBlank(
+                GetStringValue(row, "Name", "AName", "ArabicName", "LatinName", "CurrencyName", "CurName"),
+                GetStringValue(row, "ArabicName"),
+                GetStringValue(row, "AName"));
+            var code = FirstNotBlank(
+                GetStringValue(row, "Code", "CurCode", "CurrencyCode", "Abbrev", "LatinCode"),
+                GetStringValue(row, "Code"),
+                GetStringValue(row, "Abbrev"));
+            var symbol = FirstNotBlank(
+                GetStringValue(row, "Symbol", "CurSymbol", "CurrencySymbol", "Sign", "CurrencySign"),
+                ResolveCurrencySymbolFromCode(code),
+                ResolveCurrencySymbolFromCode(name),
+                "ل.س");
+            return new CurrencyDisplayInfo(name, code, symbol);
+        }, cancellationToken);
+    }
+
+    private async Task<T> UseOpenSqlConnectionAsync<T>(
+        Func<SqlConnection, Task<T>> callback,
+        CancellationToken cancellationToken)
+    {
+        var connection = mainDbContext.Database.GetDbConnection() as SqlConnection
+            ?? throw new InvalidOperationException("MainDb provider must be SQL Server.");
+        var shouldCloseConnection = connection.State != ConnectionState.Open;
+        if (shouldCloseConnection)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            return await callback(connection);
+        }
+        finally
+        {
+            if (shouldCloseConnection)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
+
     private static double GetAccountCurrencyRate(AccountRecord account)
     {
         return account.CurrencyVal is > 0 ? account.CurrencyVal.Value : 1d;
@@ -1067,6 +1146,86 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         return null;
     }
 
+    private static string? GetStringValue(IReadOnlyDictionary<string, object?> row, params string[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (!row.TryGetValue(candidate, out var rawValue) || rawValue is null)
+            {
+                continue;
+            }
+
+            var value = Convert.ToString(rawValue);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private static string? FirstNotBlank(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ResolveCurrencySymbolFromCode(string? currencyText)
+    {
+        if (string.IsNullOrWhiteSpace(currencyText))
+        {
+            return null;
+        }
+
+        var normalized = currencyText.Trim().ToUpperInvariant();
+        if (normalized.Contains("SYP")
+            || normalized.Contains("SYR")
+            || normalized.Contains("SYRIAN")
+            || normalized.Contains("ليرة")
+            || normalized.Contains("سورية")
+            || normalized.Contains("سوري")
+            || normalized.Contains("ل.س")
+            || normalized.Contains("ل س"))
+        {
+            return "ل.س";
+        }
+
+        if (normalized.Contains("USD") || normalized.Contains("DOLLAR"))
+        {
+            return "$";
+        }
+
+        if (normalized.Contains("EUR"))
+        {
+            return "€";
+        }
+
+        if (normalized.Contains("TRY"))
+        {
+            return "₺";
+        }
+
+        if (normalized.Contains("SAR"))
+        {
+            return "﷼";
+        }
+
+        if (normalized.Contains("AED"))
+        {
+            return "د.إ";
+        }
+
+        return null;
+    }
+
     private sealed record EntryReferenceInfo(
         string ReasonType,
         string? ReasonDocumentType,
@@ -1088,4 +1247,9 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         int? Number,
         string? Code,
         string? Name);
+
+    private sealed record CurrencyDisplayInfo(
+        string? Name,
+        string? Code,
+        string? Symbol);
 }

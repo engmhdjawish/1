@@ -361,6 +361,7 @@ GET /api/customers/{guid}/account/summary
 
 - عملة الحساب (`accountCurrencyGuid`)
 - سعر التعادل المعتمد (`accountCurrencyRate`)
+- اسم/كود/رمز عملة الحساب (`accountCurrencyName`, `accountCurrencyCode`, `accountCurrencySymbol`)
 - الرصيد الحالي (`currentBalance`)
 - آخر حركة دائن (`lastCreditorMovement`) مع التاريخ وسبب الحركة ونوع السند
 - آخر حركة مدين (`lastDebtorMovement`) مع التاريخ وسبب الحركة ونوع السند
@@ -407,6 +408,7 @@ entries.read   (لكشف الحساب التفصيلي)
 
 - قيمة المدين والدائن بعملة الحساب
 - قيمة المدين والدائن بالعملة الرئيسية (`debitMainCurrency` / `creditMainCurrency`)
+- بيانات عملة الحساب في رأس الاستجابة (`accountCurrencyName`, `accountCurrencyCode`, `accountCurrencySymbol`)
 - التحويل لعملة الحساب يتم بسعر التعادل الخاص بكل قيد (`currencyRateUsed`) مع اعتماد سعر الحساب كبديل عند غيابه
 - الإشارة الصافية للحركة (`signedAmount`)
 - الرصيد التراكمي (`runningBalance`)

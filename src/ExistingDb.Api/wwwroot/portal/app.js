@@ -343,28 +343,30 @@
         return;
       }
 
-      renderLedgerRows(result.data.entries || []);
+      renderLedgerRows(result.data.entries || [], result.data || {});
     });
   }
 
-  function renderLedgerRows(rows) {
+  function renderLedgerRows(rows, statementData) {
     const tbody = document.querySelector("#ledgerTable tbody");
     if (!rows.length) {
       tbody.innerHTML = `<tr><td colspan="9">لا توجد قيود.</td></tr>`;
       return;
     }
 
+    const currencySymbol = statementData?.accountCurrencySymbol;
+    const currencyCode = statementData?.accountCurrencyCode;
     tbody.innerHTML = rows.map((entry) => `
       <tr>
-        <td>${safeHtml(formatDate(entry.date))}</td>
-        <td>${safeHtml(entry.number ?? "-")}</td>
-        <td>${safeHtml(formatNumber(entry.debit))}</td>
-        <td>${safeHtml(formatNumber(entry.credit))}</td>
+        <td>${safeHtml(formatDate(entry.entryDate ?? entry.date))}</td>
+        <td>${safeHtml(entry.entryNumber ?? entry.number ?? "-")}</td>
+        <td>${safeHtml(formatMoney(entry.debit, currencySymbol, currencyCode))}</td>
+        <td>${safeHtml(formatMoney(entry.credit, currencySymbol, currencyCode))}</td>
         <td>${safeHtml(entry.reasonType || "-")}</td>
         <td>${safeHtml(entry.reasonDocumentType || "-")}</td>
         <td>${safeHtml(entry.referenceNumber ?? "-")}</td>
         <td>${safeHtml(entry.contraAccountName || "-")}</td>
-        <td>${safeHtml(formatNumber(entry.runningBalance))}</td>
+        <td>${safeHtml(formatMoney(entry.runningBalance, currencySymbol, currencyCode))}</td>
       </tr>
     `).join("");
   }
@@ -832,18 +834,25 @@
     }
 
     const summary = summaryRes.data;
+    const summaryCurrency = [summary.accountCurrencyName, summary.accountCurrencyCode, summary.accountCurrencySymbol]
+      .filter(Boolean)
+      .join(" - ");
     document.getElementById("customerSummaryCard").innerHTML = `
       <div class="detail-grid">
         ${detailCell("اسم العميل", summary.customerName || "-")}
         ${detailCell("اسم الحساب", summary.accountName || "-")}
         ${detailCell("كود الحساب", summary.accountCode || "-")}
-        ${detailCell("الرصيد الحالي", formatNumber(summary.currentBalance))}
-        ${detailCell("مدين", formatNumber(summary.currentDebit))}
-        ${detailCell("دائن", formatNumber(summary.currentCredit))}
+        ${detailCell("عملة الحساب", summaryCurrency || "-")}
+        ${detailCell("الرصيد الحالي", formatMoney(summary.currentBalance, summary.accountCurrencySymbol, summary.accountCurrencyCode))}
+        ${detailCell("مدين", formatMoney(summary.currentDebit, summary.accountCurrencySymbol, summary.accountCurrencyCode))}
+        ${detailCell("دائن", formatMoney(summary.currentCredit, summary.accountCurrencySymbol, summary.accountCurrencyCode))}
       </div>
     `;
 
-    const entries = statementRes.ok ? (statementRes.data.entries || []) : [];
+    const statement = statementRes.ok ? (statementRes.data || {}) : {};
+    const entries = statement.entries || [];
+    const statementCurrencySymbol = statement.accountCurrencySymbol;
+    const statementCurrencyCode = statement.accountCurrencyCode;
     const tbody = document.querySelector("#customerStatementTable tbody");
     if (!entries.length) {
       tbody.innerHTML = `<tr><td colspan="7">لا توجد حركات.</td></tr>`;
@@ -852,13 +861,13 @@
 
     tbody.innerHTML = entries.map((entry) => `
       <tr>
-        <td>${safeHtml(formatDate(entry.date))}</td>
-        <td>${safeHtml(entry.number ?? "-")}</td>
-        <td>${safeHtml(formatNumber(entry.debit))}</td>
-        <td>${safeHtml(formatNumber(entry.credit))}</td>
+        <td>${safeHtml(formatDate(entry.entryDate ?? entry.date))}</td>
+        <td>${safeHtml(entry.entryNumber ?? entry.number ?? "-")}</td>
+        <td>${safeHtml(formatMoney(entry.debit, statementCurrencySymbol, statementCurrencyCode))}</td>
+        <td>${safeHtml(formatMoney(entry.credit, statementCurrencySymbol, statementCurrencyCode))}</td>
         <td>${safeHtml(entry.reasonType || "-")}</td>
         <td>${safeHtml(entry.reasonDocumentType || "-")}</td>
-        <td>${safeHtml(formatNumber(entry.runningBalance))}</td>
+        <td>${safeHtml(formatMoney(entry.runningBalance, statementCurrencySymbol, statementCurrencyCode))}</td>
       </tr>
     `).join("");
   }
