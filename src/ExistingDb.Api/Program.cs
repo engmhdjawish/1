@@ -5,6 +5,7 @@ using ExistingDb.Api.Data;
 using ExistingDb.Api.Images;
 using ExistingDb.Api.Middleware;
 using ExistingDb.Api.Options;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -14,6 +15,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.Configure<SeedAdminOptions>(builder.Configuration.GetSection(SeedAdminOptions.SectionName));
+builder.Services.Configure<DevelopmentAuthOptions>(builder.Configuration.GetSection(DevelopmentAuthOptions.SectionName));
+
+var developmentAuthOptions = builder.Configuration.GetSection(DevelopmentAuthOptions.SectionName).Get<DevelopmentAuthOptions>()
+    ?? new DevelopmentAuthOptions();
+var useDevelopmentBypassAuth = builder.Environment.IsDevelopment() && developmentAuthOptions.BypassSwaggerAuth;
 
 var apiManagementConnection = builder.Configuration.GetConnectionString("ApiManagementDb")
     ?? throw new InvalidOperationException("ConnectionStrings:ApiManagementDb is required.");
@@ -31,30 +37,46 @@ builder.Services.AddDbContext<MainDbContext>(options =>
         sqlServerOptions.UseCompatibilityLevel(120);
     }));
 
-builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+var authenticationBuilder = builder.Services
+    .AddAuthentication(options =>
     {
-        var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
-            ?? throw new InvalidOperationException("Jwt configuration is required.");
-
-        if (Encoding.UTF8.GetByteCount(jwtOptions.SigningKey) < 32)
-        {
-            throw new InvalidOperationException("Jwt:SigningKey must be at least 32 bytes.");
-        }
-
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidIssuer = jwtOptions.Issuer,
-            ValidateAudience = true,
-            ValidAudience = jwtOptions.Audience,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
-            ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromMinutes(1)
-        };
+        options.DefaultAuthenticateScheme = useDevelopmentBypassAuth
+            ? DevelopmentBypassAuthenticationHandler.SchemeName
+            : JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = useDevelopmentBypassAuth
+            ? DevelopmentBypassAuthenticationHandler.SchemeName
+            : JwtBearerDefaults.AuthenticationScheme;
     });
+
+if (useDevelopmentBypassAuth)
+{
+    authenticationBuilder.AddScheme<AuthenticationSchemeOptions, DevelopmentBypassAuthenticationHandler>(
+        DevelopmentBypassAuthenticationHandler.SchemeName,
+        _ => { });
+}
+
+authenticationBuilder.AddJwtBearer(options =>
+{
+    var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
+        ?? throw new InvalidOperationException("Jwt configuration is required.");
+
+    if (Encoding.UTF8.GetByteCount(jwtOptions.SigningKey) < 32)
+    {
+        throw new InvalidOperationException("Jwt:SigningKey must be at least 32 bytes.");
+    }
+
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidIssuer = jwtOptions.Issuer,
+        ValidateAudience = true,
+        ValidAudience = jwtOptions.Audience,
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.FromMinutes(1)
+    };
+});
 
 builder.Services.AddAuthorization();
 
@@ -78,30 +100,33 @@ builder.Services.AddSwaggerGen(options =>
         Description = "REST API secured by JWT with separate API management database."
     });
 
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    if (!useDevelopmentBypassAuth)
     {
-        Description = "JWT Authorization header using the Bearer scheme.",
-        Name = "Authorization",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT"
-    });
-
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
+        options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
         {
-            new OpenApiSecurityScheme
+            Description = "JWT Authorization header using the Bearer scheme.",
+            Name = "Authorization",
+            In = ParameterLocation.Header,
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT"
+        });
+
+        options.AddSecurityRequirement(new OpenApiSecurityRequirement
+        {
             {
-                Reference = new OpenApiReference
+                new OpenApiSecurityScheme
                 {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            []
-        }
-    });
+                    Reference = new OpenApiReference
+                    {
+                        Type = ReferenceType.SecurityScheme,
+                        Id = "Bearer"
+                    }
+                },
+                []
+            }
+        });
+    }
 });
 
 var app = builder.Build();

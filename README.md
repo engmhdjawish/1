@@ -90,6 +90,23 @@ dotnet run --project src/ExistingDb.Api
 http://localhost:5249/swagger
 ```
 
+### تجاوز المصادقة مؤقتًا أثناء التطوير
+
+للتطوير المحلي فقط يمكنك تجاوز تسجيل الدخول في Swagger عبر:
+
+```json
+"DevelopmentAuth": {
+  "BypassSwaggerAuth": true,
+  "UserId": "11111111-1111-1111-1111-111111111111",
+  "UserName": "dev-admin",
+  "Role": "Admin"
+}
+```
+
+- يعمل فقط في بيئة `Development`.
+- عند تفعيله لا تحتاج Login/Token في Swagger.
+- أعده إلى `false` بعد الانتهاء من الاختبارات المحلية.
+
 ## Endpoints المرحلة الأولى
 
 ```text
