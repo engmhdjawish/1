@@ -30,6 +30,26 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         }
 
         var accountCurrencyRate = GetAccountCurrencyRate(account);
+        var defaultRate = accountCurrencyRate > 0 ? accountCurrencyRate : 1d;
+        var initDebitInAccountCurrency = ConvertMainToAccountCurrency(account.InitDebit ?? 0, accountCurrencyRate);
+        var initCreditInAccountCurrency = ConvertMainToAccountCurrency(account.InitCredit ?? 0, accountCurrencyRate);
+        var debitFromEntriesInAccountCurrency = await mainDbContext.Entries
+            .AsNoTracking()
+            .Where(entry => entry.AccountGuid == account.Guid)
+            .Select(entry => (double?)((entry.Debit ?? 0) / (entry.CurrencyVal.HasValue && entry.CurrencyVal.Value > 0
+                ? entry.CurrencyVal.Value
+                : defaultRate)))
+            .SumAsync(cancellationToken) ?? 0;
+        var creditFromEntriesInAccountCurrency = await mainDbContext.Entries
+            .AsNoTracking()
+            .Where(entry => entry.AccountGuid == account.Guid)
+            .Select(entry => (double?)((entry.Credit ?? 0) / (entry.CurrencyVal.HasValue && entry.CurrencyVal.Value > 0
+                ? entry.CurrencyVal.Value
+                : defaultRate)))
+            .SumAsync(cancellationToken) ?? 0;
+        var currentDebit = initDebitInAccountCurrency + debitFromEntriesInAccountCurrency;
+        var currentCredit = initCreditInAccountCurrency + creditFromEntriesInAccountCurrency;
+
         var lastCreditorEntry = await mainDbContext.Entries
             .AsNoTracking()
             .Where(entry => entry.AccountGuid == account.Guid && (entry.Credit ?? 0) > 0)
@@ -62,9 +82,9 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             account.Name,
             account.CurrencyGuid,
             accountCurrencyRate,
-            ConvertMainToAccountCurrency(account.Debit ?? 0, accountCurrencyRate),
-            ConvertMainToAccountCurrency(account.Credit ?? 0, accountCurrencyRate),
-            ConvertMainToAccountCurrency((account.Debit ?? 0) - (account.Credit ?? 0), accountCurrencyRate),
+            currentDebit,
+            currentCredit,
+            currentDebit - currentCredit,
             lastCreditorEntry is null
                 ? null
                 : ToMovement(lastCreditorEntry, references.GetValueOrDefault(lastCreditorEntry.Guid), accountCurrencyRate),
@@ -98,6 +118,11 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         }
 
         var accountCurrencyRate = GetAccountCurrencyRate(account);
+        var defaultRate = accountCurrencyRate > 0 ? accountCurrencyRate : 1d;
+        var initialBalanceInAccountCurrency = ConvertMainToAccountCurrency(
+            (account.InitDebit ?? 0) - (account.InitCredit ?? 0),
+            accountCurrencyRate);
+
         if (fromDate.HasValue && toDate.HasValue && fromDate.Value.Date > toDate.Value.Date)
         {
             return BadRequest(new { message = "fromDate must be less than or equal to toDate." });
@@ -131,19 +156,23 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             ? await mainDbContext.Entries
                 .AsNoTracking()
                 .Where(entry => entry.AccountGuid == account.Guid && entry.Date < fromDateOnly.Value)
-                .Select(entry => (double?)((entry.Debit ?? 0) - (entry.Credit ?? 0)))
+                .Select(entry => (double?)(((entry.Debit ?? 0) - (entry.Credit ?? 0)) / (entry.CurrencyVal.HasValue && entry.CurrencyVal.Value > 0
+                    ? entry.CurrencyVal.Value
+                    : defaultRate)))
                 .SumAsync(cancellationToken) ?? 0
             : 0d;
-        var openingBalanceInAccountCurrency = ConvertMainToAccountCurrency(openingBalance, accountCurrencyRate);
+        var openingBalanceInAccountCurrency = initialBalanceInAccountCurrency + openingBalance;
 
         var balanceBeforePage = openingBalanceInAccountCurrency;
         if (offset > 0)
         {
             var amountBeforePage = await orderedEntries
                 .Take(offset)
-                .Select(entry => (double?)((entry.Debit ?? 0) - (entry.Credit ?? 0)))
+                .Select(entry => (double?)(((entry.Debit ?? 0) - (entry.Credit ?? 0)) / (entry.CurrencyVal.HasValue && entry.CurrencyVal.Value > 0
+                    ? entry.CurrencyVal.Value
+                    : defaultRate)))
                 .SumAsync(cancellationToken) ?? 0;
-            balanceBeforePage += ConvertMainToAccountCurrency(amountBeforePage, accountCurrencyRate);
+            balanceBeforePage += amountBeforePage;
         }
 
         var pageEntries = await orderedEntries
@@ -159,7 +188,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         {
             var debitMain = entry.Debit ?? 0;
             var creditMain = entry.Credit ?? 0;
-            var conversionRate = ResolveConversionRate(accountCurrencyRate, entry.CurrencyVal);
+            var conversionRate = ResolveConversionRate(entry.CurrencyVal, accountCurrencyRate);
             var debit = ConvertMainToAccountCurrency(debitMain, conversionRate);
             var credit = ConvertMainToAccountCurrency(creditMain, conversionRate);
             var signedAmount = debit - credit;
@@ -432,7 +461,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
     {
         var debitMain = entry.Debit ?? 0;
         var creditMain = entry.Credit ?? 0;
-        var conversionRate = ResolveConversionRate(accountCurrencyRate, entry.CurrencyVal);
+        var conversionRate = ResolveConversionRate(entry.CurrencyVal, accountCurrencyRate);
         var debit = ConvertMainToAccountCurrency(debitMain, conversionRate);
         var credit = ConvertMainToAccountCurrency(creditMain, conversionRate);
         var effectiveReference = reference ?? EntryReferenceInfo.Unknown;
@@ -460,16 +489,16 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         return account.CurrencyVal is > 0 ? account.CurrencyVal.Value : 1d;
     }
 
-    private static double ResolveConversionRate(double accountCurrencyRate, double? entryCurrencyRate)
+    private static double ResolveConversionRate(double? entryCurrencyRate, double accountCurrencyRate)
     {
-        if (accountCurrencyRate > 0)
-        {
-            return accountCurrencyRate;
-        }
-
         if (entryCurrencyRate is > 0)
         {
             return entryCurrencyRate.Value;
+        }
+
+        if (accountCurrencyRate > 0)
+        {
+            return accountCurrencyRate;
         }
 
         return 1d;
