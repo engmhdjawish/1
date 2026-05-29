@@ -2,9 +2,11 @@ using ExistingDb.Api.Authorization;
 using ExistingDb.Api.Contracts.Customers;
 using ExistingDb.Api.Data;
 using ExistingDb.Api.Data.MainDb;
+using Microsoft.Data.SqlClient;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace ExistingDb.Api.Controllers;
 
@@ -260,6 +262,59 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             totalCount));
     }
 
+    [HttpGet("general-ledger")]
+    [RequirePermission("entries.read")]
+    public async Task<ActionResult<GeneralLedgerResponse>> GetGeneralLedger(
+        [FromQuery] Guid? accountGuid = null,
+        [FromQuery] Guid? customerGuid = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] Guid? currencyGuid = null,
+        [FromQuery] bool detailByAccountCurrency = false,
+        [FromQuery] bool showRunningBalance = true,
+        CancellationToken cancellationToken = default)
+    {
+        var (target, errorResult) = await ResolveAccountScopeAsync(accountGuid, customerGuid, cancellationToken);
+        if (errorResult is not null)
+        {
+            return errorResult;
+        }
+
+        var account = target!.Account;
+        var customer = target.Customer;
+        var effectiveFromDate = (fromDate ?? DateTime.UtcNow.Date.AddMonths(-1)).Date;
+        var effectiveToDate = (toDate ?? DateTime.UtcNow.Date).Date;
+        if (effectiveFromDate > effectiveToDate)
+        {
+            return BadRequest(new { message = "fromDate must be less than or equal to toDate." });
+        }
+
+        var effectiveCurrencyGuid = currencyGuid
+            ?? account.CurrencyGuid
+            ?? Guid.Empty;
+
+        var (rows, resultSetCount) = await ExecuteGeneralLedgerProcedureAsync(
+            account.Guid,
+            target.CustomerGuidFilter ?? Guid.Empty,
+            effectiveFromDate,
+            effectiveToDate,
+            effectiveCurrencyGuid,
+            detailByAccountCurrency,
+            showRunningBalance,
+            cancellationToken);
+
+        return Ok(new GeneralLedgerResponse(
+            customer?.Guid,
+            customer?.CustomerName,
+            account.Guid,
+            effectiveCurrencyGuid,
+            effectiveFromDate,
+            effectiveToDate,
+            resultSetCount,
+            rows.Count,
+            rows));
+    }
+
     private IQueryable<EntryRecord> BuildEntriesQuery(Guid accountGuid, Guid? customerGuid)
     {
         var query = mainDbContext.Entries
@@ -324,6 +379,130 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         }
 
         return (new AccountQueryTarget(customer, account, customerGuid), null);
+    }
+
+    private async Task<(List<IReadOnlyDictionary<string, object?>> Rows, int ResultSetCount)> ExecuteGeneralLedgerProcedureAsync(
+        Guid accountGuid,
+        Guid customerGuid,
+        DateTime fromDate,
+        DateTime toDate,
+        Guid currencyGuid,
+        bool detailByAccountCurrency,
+        bool showRunningBalance,
+        CancellationToken cancellationToken)
+    {
+        var connection = mainDbContext.Database.GetDbConnection();
+        var sqlConnection = connection as SqlConnection
+            ?? throw new InvalidOperationException("MainDb provider must be SQL Server.");
+
+        var shouldCloseConnection = sqlConnection.State != ConnectionState.Open;
+        if (shouldCloseConnection)
+        {
+            await sqlConnection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            await using var sqlCommand = sqlConnection.CreateCommand();
+            sqlCommand.CommandText = "prcGeneralLedger";
+            sqlCommand.CommandType = CommandType.StoredProcedure;
+            SqlCommandBuilder.DeriveParameters(sqlCommand);
+
+            var toDateInclusive = toDate.Date.AddDays(1).AddMilliseconds(-3);
+            var parameterValues = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["@IsCalledByWeb"] = 1,
+                ["@Account"] = accountGuid,
+                ["@CustGUID"] = customerGuid,
+                ["@CostGuid"] = Guid.Empty,
+                ["@MatGUID"] = Guid.Empty,
+                ["@GroupGUID"] = Guid.Empty,
+                ["@FromCheckDate"] = 0,
+                ["@StartDate"] = fromDate.Date,
+                ["@EndDate"] = toDateInclusive,
+                ["@CurGUID"] = currencyGuid,
+                ["@Class"] = string.Empty,
+                ["@ShowUnPosted"] = 0,
+                ["@Level"] = 0,
+                ["@Contain"] = string.Empty,
+                ["@NotContain"] = string.Empty,
+                ["@PrevBalance"] = 1,
+                ["@ObverseAcc"] = Guid.Empty,
+                ["@UnifyAccEn"] = 0,
+                ["@ShowIsCheck"] = 0,
+                ["@rid"] = 0,
+                ["@ItemChecked"] = 3,
+                ["@ShowEmptyBal"] = 0,
+                ["@CheckForUsers"] = 0,
+                ["@CollectCheck"] = 0,
+                ["@User"] = Guid.Empty,
+                ["@ShwUser"] = 0,
+                ["@SrcGuid"] = Guid.Empty,
+                ["@EntryCond"] = Guid.Empty,
+                ["@BillCond"] = Guid.Empty,
+                ["@FromPostDate"] = fromDate.Date,
+                ["@ToPostDate"] = toDateInclusive,
+                ["@IsFilterByDate"] = 1,
+                ["@IsFilterByPostDate"] = 0,
+                ["@DetialByAccountCurrency"] = detailByAccountCurrency ? 1 : 0,
+                ["@ShowRelatedMatInfo"] = 0,
+                ["@IsGroupedByCost"] = 0,
+                ["@IsGroupedByClass"] = 0,
+                ["@ShowRunningBalance"] = showRunningBalance ? 1 : 0,
+                ["@ShowObverseAcc"] = 1,
+                ["@ShowMainAcc"] = 1,
+                ["@NoAccessStr"] = "لا توجد صلاحية",
+                ["@isOpeningEntryAsPrevBalance"] = 0
+            };
+
+            foreach (SqlParameter parameter in sqlCommand.Parameters)
+            {
+                if (parameter.Direction == ParameterDirection.ReturnValue)
+                {
+                    continue;
+                }
+
+                if (parameterValues.TryGetValue(parameter.ParameterName, out var assignedValue))
+                {
+                    parameter.Value = assignedValue ?? DBNull.Value;
+                    continue;
+                }
+
+                parameter.Value = GetFallbackParameterValue(parameter);
+            }
+
+            await using var reader = await sqlCommand.ExecuteReaderAsync(cancellationToken);
+            var rows = new List<IReadOnlyDictionary<string, object?>>();
+            var resultSetCount = 0;
+
+            do
+            {
+                resultSetCount++;
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    var row = new Dictionary<string, object?>(reader.FieldCount, StringComparer.OrdinalIgnoreCase);
+                    for (var index = 0; index < reader.FieldCount; index++)
+                    {
+                        var fieldName = reader.GetName(index);
+                        var value = await reader.IsDBNullAsync(index, cancellationToken)
+                            ? null
+                            : NormalizeSqlValue(reader.GetValue(index));
+                        row[fieldName] = value;
+                    }
+
+                    rows.Add(row);
+                }
+            } while (await reader.NextResultAsync(cancellationToken));
+
+            return (rows, resultSetCount);
+        }
+        finally
+        {
+            if (shouldCloseConnection)
+            {
+                await sqlConnection.CloseAsync();
+            }
+        }
     }
 
     private async Task<Dictionary<Guid, EntryReferenceInfo>> ResolveEntryReferencesAsync(
@@ -831,6 +1010,31 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         }
 
         return null;
+    }
+
+    private static object GetFallbackParameterValue(SqlParameter parameter)
+    {
+        return parameter.SqlDbType switch
+        {
+            SqlDbType.UniqueIdentifier => Guid.Empty,
+            SqlDbType.Bit => 0,
+            SqlDbType.TinyInt or SqlDbType.SmallInt or SqlDbType.Int or SqlDbType.BigInt => 0,
+            SqlDbType.Decimal or SqlDbType.Float or SqlDbType.Real or SqlDbType.Money or SqlDbType.SmallMoney => 0m,
+            SqlDbType.Date or SqlDbType.DateTime or SqlDbType.DateTime2 or SqlDbType.SmallDateTime => new DateTime(1900, 1, 1),
+            SqlDbType.NChar or SqlDbType.NText or SqlDbType.NVarChar or SqlDbType.Char or SqlDbType.Text or SqlDbType.VarChar => string.Empty,
+            _ => DBNull.Value
+        };
+    }
+
+    private static object? NormalizeSqlValue(object? value)
+    {
+        return value switch
+        {
+            null => null,
+            DBNull => null,
+            byte[] bytes => Convert.ToBase64String(bytes),
+            _ => value
+        };
     }
 
     private sealed record EntryReferenceInfo(

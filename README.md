@@ -381,6 +381,21 @@ entries.read   (لكشف الحساب التفصيلي)
 - نوع المرجع (فاتورة/دفعة/حسم) مع نوع السند الفعلي (`reasonDocumentType`) ورقم/تاريخ المرجع عند توفرها
 - تفاصيل الحساب المقابل لكل سطر: `contraAccountGuid`, `contraAccountNumber`, `contraAccountCode`, `contraAccountName`
 
+دفتر الأستاذ (اعتماد مباشر على إجراء الأمين):
+
+```http
+GET /api/accounts/general-ledger?accountGuid={accountGuid}&fromDate=2026-01-01&toDate=2026-05-19
+GET /api/accounts/general-ledger?accountGuid={accountGuid}&customerGuid={customerGuid}&currencyGuid={currencyGuid}
+```
+
+ملاحظات:
+
+- هذا المسار يستدعي الإجراء المخزن `prcGeneralLedger` مباشرة ويعيد الصفوف كما هي (حقول ديناميكية).
+- مفيد عندما تحتاج تفاصيل التقرير نفسها التي تظهر في "دفتر الأستاذ" داخل نظام الأمين.
+- يدعم خيارات:
+  - `detailByAccountCurrency`
+  - `showRunningBalance`
+
 ## Materials Read API
 
 تكامل المواد يقرأ من جدول:
