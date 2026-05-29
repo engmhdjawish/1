@@ -255,6 +255,20 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             return new Dictionary<Guid, EntryReferenceInfo>();
         }
 
+        var entries = await mainDbContext.Entries
+            .AsNoTracking()
+            .Where(entry => entryGuids.Contains(entry.Guid))
+            .ToListAsync(cancellationToken);
+
+        var entryParentByGuid = entries.ToDictionary(entry => entry.Guid, entry => entry.ParentGuid);
+        var baseRelations = await mainDbContext.EntryRelations
+            .AsNoTracking()
+            .Where(relation => entryGuids.Contains(relation.EntryGuid))
+            .ToListAsync(cancellationToken);
+        var baseRelationByEntry = baseRelations
+            .GroupBy(relation => relation.EntryGuid)
+            .ToDictionary(group => group.Key, group => group.First());
+
         var billRelations = await mainDbContext.EntryBillRelations
             .AsNoTracking()
             .Where(relation => entryGuids.Contains(relation.EntryGuid) && relation.BillGuid.HasValue)
@@ -290,12 +304,27 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             .Where(relation => entryGuids.Contains(relation.EntryGuid))
             .ToListAsync(cancellationToken);
 
+        var parentGuids = entryParentByGuid.Values
+            .Concat(baseRelations.Select(relation => relation.ParentGuid))
+            .Where(guid => guid.HasValue && guid != Guid.Empty)
+            .Select(guid => guid!.Value)
+            .Distinct()
+            .ToArray();
+
         var billGuids = billRelations
             .Select(relation => relation.BillGuid!.Value)
+            .Concat(parentGuids)
             .Distinct()
             .ToArray();
         var paymentGuids = paymentRelations
             .Select(relation => relation.PaymentGuid!.Value)
+            .Concat(parentGuids)
+            .Distinct()
+            .ToArray();
+        var noteGuids = noteRelations
+            .Select(relation => relation.NoteGuid!.Value)
+            .Concat(collectedNoteRelations.Select(relation => relation.NoteGuid!.Value))
+            .Concat(parentGuids)
             .Distinct()
             .ToArray();
 
@@ -310,6 +339,12 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             : await mainDbContext.Payments
                 .AsNoTracking()
                 .Where(payment => paymentGuids.Contains(payment.Guid))
+                .ToListAsync(cancellationToken);
+        var notes = noteGuids.Length == 0
+            ? new List<CreditDebitNoteRecord>()
+            : await mainDbContext.CreditDebitNotes
+                .AsNoTracking()
+                .Where(note => noteGuids.Contains(note.Guid))
                 .ToListAsync(cancellationToken);
 
         var typeGuids = bills
@@ -344,6 +379,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
 
         var billLookup = bills.ToDictionary(item => item.Guid);
         var paymentLookup = payments.ToDictionary(item => item.Guid);
+        var noteLookup = notes.ToDictionary(item => item.Guid);
         var billTypeLookup = billTypes.ToDictionary(item => item.Guid);
         var noteTypeLookup = noteTypes.ToDictionary(item => item.Guid);
         var entryTypeLookup = entryTypes.ToDictionary(item => item.Guid);
@@ -368,6 +404,12 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         var collectedNoteTypeByEntry = collectedNoteTypeRelations
             .GroupBy(relation => relation.EntryGuid)
             .ToDictionary(group => group.Key, group => group.Select(item => item.TypeGuid).FirstOrDefault());
+
+        Guid? ResolveParentGuid(Guid entryGuid)
+        {
+            return entryParentByGuid.GetValueOrDefault(entryGuid)
+                ?? baseRelationByEntry.GetValueOrDefault(entryGuid)?.ParentGuid;
+        }
 
         string? ResolveDocumentTypeName(Guid? typeGuid)
         {
@@ -397,58 +439,68 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         var result = new Dictionary<Guid, EntryReferenceInfo>();
         foreach (var entryGuid in entryGuids)
         {
-            if (billByEntry.TryGetValue(entryGuid, out var billGuid))
+            var parentGuid = ResolveParentGuid(entryGuid);
+
+            if (billByEntry.TryGetValue(entryGuid, out var billGuid) ||
+                (parentGuid.HasValue && billLookup.ContainsKey(parentGuid.Value) && (billGuid = parentGuid.Value) != Guid.Empty))
             {
                 billLookup.TryGetValue(billGuid, out var bill);
+                var baseRelation = baseRelationByEntry.GetValueOrDefault(entryGuid);
                 result[entryGuid] = new EntryReferenceInfo(
                     "invoice",
                     ResolveDocumentTypeName(bill?.TypeGuid) ?? "invoice",
                     billGuid,
-                    bill?.Number,
+                    bill?.Number ?? baseRelation?.ParentNumber,
                     bill?.Date,
                     bill?.Notes);
                 continue;
             }
 
-            if (paymentByEntry.TryGetValue(entryGuid, out var paymentGuid))
+            if (paymentByEntry.TryGetValue(entryGuid, out var paymentGuid) ||
+                (parentGuid.HasValue && paymentLookup.ContainsKey(parentGuid.Value) && (paymentGuid = parentGuid.Value) != Guid.Empty))
             {
                 paymentLookup.TryGetValue(paymentGuid, out var payment);
                 var paymentTypeGuid = paymentTypeByEntry.GetValueOrDefault(entryGuid) ?? payment?.TypeGuid;
+                var baseRelation = baseRelationByEntry.GetValueOrDefault(entryGuid);
                 result[entryGuid] = new EntryReferenceInfo(
                     "payment",
                     ResolveDocumentTypeName(paymentTypeGuid) ?? "payment",
                     paymentGuid,
-                    payment?.Number,
+                    payment?.Number ?? baseRelation?.ParentNumber,
                     payment?.Date,
                     payment?.Notes);
                 continue;
             }
 
-            if (noteByEntry.TryGetValue(entryGuid, out var noteGuid))
+            if (noteByEntry.TryGetValue(entryGuid, out var noteGuid) ||
+                collectedNoteByEntry.TryGetValue(entryGuid, out noteGuid) ||
+                (parentGuid.HasValue && noteLookup.ContainsKey(parentGuid.Value) && (noteGuid = parentGuid.Value) != Guid.Empty))
             {
+                noteLookup.TryGetValue(noteGuid, out var note);
+                var noteTypeName = ResolveDocumentTypeName(
+                    noteTypeByEntry.GetValueOrDefault(entryGuid)
+                    ?? collectedNoteTypeByEntry.GetValueOrDefault(entryGuid))
+                    ?? ResolveNoteTypeLabel(note?.NoteType)
+                    ?? "discount";
+                var baseRelation = baseRelationByEntry.GetValueOrDefault(entryGuid);
                 result[entryGuid] = new EntryReferenceInfo(
                     "discount",
-                    ResolveDocumentTypeName(noteTypeByEntry.GetValueOrDefault(entryGuid)) ?? "discount",
+                    noteTypeName,
                     noteGuid,
-                    null,
-                    null,
-                    null);
+                    note?.Number ?? baseRelation?.ParentNumber,
+                    note?.Date,
+                    note?.Statement);
                 continue;
             }
 
-            if (collectedNoteByEntry.TryGetValue(entryGuid, out var collectedNoteGuid))
-            {
-                result[entryGuid] = new EntryReferenceInfo(
-                    "discount",
-                    ResolveDocumentTypeName(collectedNoteTypeByEntry.GetValueOrDefault(entryGuid)) ?? "discount",
-                    collectedNoteGuid,
-                    null,
-                    null,
-                    null);
-                continue;
-            }
-
-            result[entryGuid] = EntryReferenceInfo.Unknown;
+            var unknownRelation = baseRelationByEntry.GetValueOrDefault(entryGuid);
+            result[entryGuid] = new EntryReferenceInfo(
+                "unknown",
+                unknownRelation?.ParentType is null ? null : $"parent-type-{unknownRelation.ParentType}",
+                unknownRelation?.ParentGuid,
+                unknownRelation?.ParentNumber,
+                null,
+                null);
         }
 
         return result;
@@ -512,6 +564,16 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         }
 
         return amountInMainCurrency / conversionRate;
+    }
+
+    private static string? ResolveNoteTypeLabel(int? noteType)
+    {
+        return noteType switch
+        {
+            1 => "debit-note",
+            2 => "credit-note",
+            _ => null
+        };
     }
 
     private sealed record EntryReferenceInfo(
