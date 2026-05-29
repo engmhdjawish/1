@@ -571,13 +571,16 @@
       <div class="detail-grid">
         ${detailCell("النوع", document.typeName || document.typeCode || "-")}
         ${detailCell("التسوية", document.settlementTypeName || "-")}
-        ${detailCell("العملة", document.currencyCode || document.currencySymbol || "-")}
+        ${detailCell("العملة", [document.currencyName, document.currencyCode, document.currencySymbol].filter(Boolean).join(" - ") || "-")}
+        ${detailCell("سعر التعادل", formatNumber(document.currencyRate))}
         ${detailCell("العميل", document.customerName || "-")}
         ${detailCell("الحساب", document.accountName || "-")}
         ${detailCell("الإجمالي", formatMoney(document.totalAmount, document.currencySymbol, document.currencyCode))}
         ${detailCell("الحسم", formatMoney(document.totalDiscount, document.currencySymbol, document.currencyCode))}
         ${detailCell("الإضافات", formatMoney(document.totalAdditions, document.currencySymbol, document.currencyCode))}
         ${detailCell("الصافي", formatMoney(document.netAmount, document.currencySymbol, document.currencyCode))}
+        ${detailCell("عدد البنود", formatNumber(result.data.linesCount))}
+        ${detailCell("إجمالي الكمية", formatNumber(result.data.totalQuantity))}
         ${detailCell("عدد الأزواج", formatNumber(document.pairsCount))}
         ${detailCell("عدد الأقلام", formatNumber(document.pensCount))}
         ${detailCell("حساب الحسم", document.discountAccountName || "-")}
@@ -586,13 +589,14 @@
     `;
 
     if (!items.length) {
-      ui.modalItemsTable.innerHTML = `<tr><td colspan="6">لا توجد عناصر.</td></tr>`;
+      ui.modalItemsTable.innerHTML = `<tr><td colspan="7">لا توجد عناصر.</td></tr>`;
     } else {
       ui.modalItemsTable.innerHTML = items.map((item) => `
         <tr>
           <td>${safeHtml(item.materialName || item.materialCode || item.materialGuid || "-")}</td>
-          <td>${safeHtml(formatNumber(item.quantity))}</td>
-          <td>${safeHtml(formatMoney(item.price, document.currencySymbol, document.currencyCode))}</td>
+          <td>${safeHtml(formatNumber(item.quantityUnit1 ?? item.quantity))}</td>
+          <td>${safeHtml(formatNumber(item.quantityUnit2))}</td>
+          <td>${safeHtml(formatMoney(item.unitPriceUnit1 ?? item.price, document.currencySymbol, document.currencyCode))}</td>
           <td>${safeHtml(formatMoney(item.discount, document.currencySymbol, document.currencyCode))}</td>
           <td>${safeHtml(formatMoney(item.additions, document.currencySymbol, document.currencyCode))}</td>
           <td>${safeHtml(formatMoney(item.lineTotal, document.currencySymbol, document.currencyCode))}</td>

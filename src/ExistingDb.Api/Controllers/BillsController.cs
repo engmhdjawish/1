@@ -23,6 +23,9 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
     private static readonly string[] AdditionsCandidates = ["TotalAdd", "Additions", "Addition", "Extra", "TotalExtra", "Expenses"];
     private static readonly string[] NetCandidates = ["Net", "NetTotal", "FinalTotal", "TotalNet", "AmountDue"];
     private static readonly string[] ItemQuantityCandidates = ["Qty", "Quantity", "MatQty", "QTY"];
+    private static readonly string[] ItemQuantityUnit1Candidates = ["Qty1", "Quantity1", "QTY1", "Unit1Qty", "Qty", "Quantity", "MatQty", "QTY"];
+    private static readonly string[] ItemQuantityUnit2Candidates = ["Qty2", "Quantity2", "QTY2", "Unit2Qty", "QtySecond", "Qty_2"];
+    private static readonly string[] ItemUnitPriceUnit1Candidates = ["Price", "Price1", "UnitPrice", "UnitPrice1", "PiecePrice", "Value1"];
     private static readonly string[] ItemPriceCandidates = ["Price", "UnitPrice", "Value", "Amount"];
     private static readonly string[] ItemDiscountCandidates = ["Discount", "Disc", "ItemDiscount"];
     private static readonly string[] ItemAdditionCandidates = ["Addition", "Add", "Extra"];
@@ -30,7 +33,9 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
     private static readonly string[] CustomerGuidCandidates = ["CustGUID", "CustomerGUID", "CusGUID"];
     private static readonly string[] AccountGuidCandidates = ["AccountGUID", "AccGUID", "MainAccGUID"];
     private static readonly string[] MaterialGuidCandidates = ["MatGUID", "MaterialGUID", "MatGuid"];
-    private static readonly string[] CurrencyGuidCandidates = ["CurrencyGUID", "CurGUID", "CurrGUID", "CurrencyGuid"];
+    private static readonly string[] CurrencyGuidCandidates = ["CurrencyGUID", "CurGUID", "CurrGUID", "CurrencyGuid", "CurrancyGUID", "CurrancyGuid"];
+    private static readonly string[] CurrencyRateCandidates = ["CurrencyVal", "CurVal", "CurrancyVal", "CurrencyValue", "CurRate", "Rate", "ExchangeRate", "CurrancyValue"];
+    private static readonly string[] CurrencyNameCandidates = ["Name", "CurName", "CurrencyName", "LatinName"];
     private static readonly string[] CurrencyCodeCandidates = ["CurrencyCode", "CurCode", "CodeCur", "CurName", "CurrencyName"];
     private static readonly string[] CurrencySymbolCandidates = ["CurrencySymbol", "CurSymbol", "Symbol", "CurrencySign"];
     private static readonly string[] PairsCountCandidates = ["Pairs", "PairsCount", "TotalPairs", "PairQty", "QtyPair", "Qty2"];
@@ -111,6 +116,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         var documentGuids = records.Select(record => record.Guid).ToArray();
         var types = await ResolveTypeLookupAsync(records.Select(record => record.TypeGuid), TypeLookupSource.Bill, cancellationToken);
         var rawRows = await LoadTableRowsByGuidsAsync("bu000", documentGuids, cancellationToken);
+        var currencyLookup = await ResolveCurrencyReferencesAsync(rawRows.Values, cancellationToken);
         var links = await ResolveDocumentLinksAsync(documentGuids, DocumentKind.Invoice, rawRows, cancellationToken);
         var items = records
             .Select(record =>
@@ -120,7 +126,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
                     : null;
                 rawRows.TryGetValue(record.Guid, out var rawRow);
                 links.TryGetValue(record.Guid, out var link);
-                return BuildDocumentResponse(record, type, rawRow, link, isVoucher: false);
+                return BuildDocumentResponse(record, type, rawRow, link, currencyLookup, isVoucher: false);
             })
             .ToArray();
 
@@ -140,15 +146,16 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
 
         var types = await ResolveTypeLookupAsync([record.TypeGuid], TypeLookupSource.Bill, cancellationToken);
         var rawRows = await LoadTableRowsByGuidsAsync("bu000", [guid], cancellationToken);
+        var currencyLookup = await ResolveCurrencyReferencesAsync(rawRows.Values, cancellationToken);
         var links = await ResolveDocumentLinksAsync([guid], DocumentKind.Invoice, rawRows, cancellationToken);
         rawRows.TryGetValue(guid, out var rawRow);
         links.TryGetValue(guid, out var link);
         var type = record.TypeGuid.HasValue && types.TryGetValue(record.TypeGuid.Value, out var resolvedType)
             ? resolvedType
             : null;
-        var document = BuildDocumentResponse(record, type, rawRow, link, isVoucher: false);
+        var document = BuildDocumentResponse(record, type, rawRow, link, currencyLookup, isVoucher: false);
         var billItemRows = await LoadBillItemRowsAsync(guid, cancellationToken);
-        var billItems = await BuildBillItemResponsesAsync(billItemRows, cancellationToken);
+        var billItems = await BuildBillItemResponsesAsync(billItemRows, document.CurrencyRate, cancellationToken);
         var totalQuantity = billItems.Sum(item => item.Quantity ?? 0d);
         var totalPairs = document.PairsCount ?? totalQuantity;
         var totalPens = document.PensCount;
@@ -265,6 +272,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         var documentGuids = records.Select(record => record.Guid).ToArray();
         var types = await ResolveTypeLookupAsync(records.Select(record => record.TypeGuid), TypeLookupSource.Entry, cancellationToken);
         var rawRows = await LoadTableRowsByGuidsAsync("py000", documentGuids, cancellationToken);
+        var currencyLookup = await ResolveCurrencyReferencesAsync(rawRows.Values, cancellationToken);
         var links = await ResolveDocumentLinksAsync(documentGuids, DocumentKind.Voucher, rawRows, cancellationToken);
         var items = records
             .Select(record =>
@@ -274,7 +282,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
                     : null;
                 rawRows.TryGetValue(record.Guid, out var rawRow);
                 links.TryGetValue(record.Guid, out var link);
-                return BuildDocumentResponse(record, type, rawRow, link, isVoucher: true);
+                return BuildDocumentResponse(record, type, rawRow, link, currencyLookup, isVoucher: true);
             })
             .ToArray();
 
@@ -294,13 +302,14 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
 
         var types = await ResolveTypeLookupAsync([record.TypeGuid], TypeLookupSource.Entry, cancellationToken);
         var rawRows = await LoadTableRowsByGuidsAsync("py000", [guid], cancellationToken);
+        var currencyLookup = await ResolveCurrencyReferencesAsync(rawRows.Values, cancellationToken);
         var links = await ResolveDocumentLinksAsync([guid], DocumentKind.Voucher, rawRows, cancellationToken);
         rawRows.TryGetValue(guid, out var rawRow);
         links.TryGetValue(guid, out var link);
         var type = record.TypeGuid.HasValue && types.TryGetValue(record.TypeGuid.Value, out var resolvedType)
             ? resolvedType
             : null;
-        var document = BuildDocumentResponse(record, type, rawRow, link, isVoucher: true);
+        var document = BuildDocumentResponse(record, type, rawRow, link, currencyLookup, isVoucher: true);
         return Ok(new BillDocumentDetailsResponse(document, [], 0, null, document.PairsCount, document.PensCount));
     }
 
@@ -345,12 +354,18 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         ResolvedType? resolvedType,
         IReadOnlyDictionary<string, object?>? rawRow,
         DocumentLinkInfo? link,
+        IReadOnlyDictionary<Guid, CurrencyReference> currencyLookup,
         bool isVoucher)
     {
-        var (total, discount, additions, net) = ResolveDocumentTotals(rawRow, isVoucher);
+        var (currencyGuid, currencyName, currencyCode, currencySymbol, currencyRateRaw) = ResolveCurrencyInfo(rawRow, currencyLookup);
+        var currencyRate = ResolveEffectiveCurrencyRate(currencyRateRaw, link?.Account?.CurrencyVal);
+        var (totalRaw, discountRaw, additionsRaw, netRaw) = ResolveDocumentTotals(rawRow, isVoucher);
+        var total = ConvertToDocumentCurrency(totalRaw, currencyRate);
+        var discount = ConvertToDocumentCurrency(discountRaw, currencyRate);
+        var additions = ConvertToDocumentCurrency(additionsRaw, currencyRate);
+        var net = ConvertToDocumentCurrency(netRaw, currencyRate);
         var notes = FirstNotBlank(record.Notes, GetStringValue(rawRow, NotesCandidates));
         var (settlementTypeCode, settlementTypeName) = ResolveSettlementType(resolvedType?.Name ?? resolvedType?.Code, isVoucher);
-        var (currencyGuid, currencyCode, currencySymbol) = ResolveCurrencyInfo(rawRow, null);
         var (pairsCount, pensCount) = ResolveQuantityCounters(rawRow);
         var discountAccountGuid = GetGuidValue(rawRow, DiscountAccountGuidCandidates) ?? link?.DiscountAccount?.Guid;
         var discountAccountCode = FirstNotBlank(GetStringValue(rawRow, DiscountAccountCodeCandidates), link?.DiscountAccount?.Code);
@@ -366,8 +381,10 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             resolvedType?.Code,
             resolvedType?.Name,
             currencyGuid,
+            currencyName,
             currencyCode,
             currencySymbol,
+            currencyRate,
             settlementTypeCode,
             settlementTypeName,
             link?.Customer?.Guid,
@@ -396,12 +413,18 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         ResolvedType? resolvedType,
         IReadOnlyDictionary<string, object?>? rawRow,
         DocumentLinkInfo? link,
+        IReadOnlyDictionary<Guid, CurrencyReference> currencyLookup,
         bool isVoucher)
     {
-        var (total, discount, additions, net) = ResolveDocumentTotals(rawRow, isVoucher);
+        var (currencyGuid, currencyName, currencyCode, currencySymbol, currencyRateRaw) = ResolveCurrencyInfo(rawRow, currencyLookup);
+        var currencyRate = ResolveEffectiveCurrencyRate(currencyRateRaw, link?.Account?.CurrencyVal);
+        var (totalRaw, discountRaw, additionsRaw, netRaw) = ResolveDocumentTotals(rawRow, isVoucher);
+        var total = ConvertToDocumentCurrency(totalRaw, currencyRate);
+        var discount = ConvertToDocumentCurrency(discountRaw, currencyRate);
+        var additions = ConvertToDocumentCurrency(additionsRaw, currencyRate);
+        var net = ConvertToDocumentCurrency(netRaw, currencyRate);
         var notes = FirstNotBlank(record.Notes, GetStringValue(rawRow, NotesCandidates));
         var (settlementTypeCode, settlementTypeName) = ResolveSettlementType(resolvedType?.Name ?? resolvedType?.Code, isVoucher);
-        var (currencyGuid, currencyCode, currencySymbol) = ResolveCurrencyInfo(rawRow, null);
         var (pairsCount, pensCount) = ResolveQuantityCounters(rawRow);
         var discountAccountGuid = GetGuidValue(rawRow, DiscountAccountGuidCandidates) ?? link?.DiscountAccount?.Guid;
         var discountAccountCode = FirstNotBlank(GetStringValue(rawRow, DiscountAccountCodeCandidates), link?.DiscountAccount?.Code);
@@ -417,8 +440,10 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             resolvedType?.Code,
             resolvedType?.Name,
             currencyGuid,
+            currencyName,
             currencyCode,
             currencySymbol,
+            currencyRate,
             settlementTypeCode,
             settlementTypeName,
             link?.Customer?.Guid,
@@ -572,6 +597,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
 
     private async Task<IReadOnlyCollection<BillDocumentItemResponse>> BuildBillItemResponsesAsync(
         IReadOnlyCollection<IReadOnlyDictionary<string, object?>> billItemRows,
+        double? currencyRate,
         CancellationToken cancellationToken)
     {
         if (billItemRows.Count == 0)
@@ -598,12 +624,19 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             {
                 var itemGuid = GetGuidValue(row, "GUID") ?? Guid.Empty;
                 var materialGuid = GetGuidValue(row, MaterialGuidCandidates);
-                var quantity = GetNumberValue(row, ItemQuantityCandidates);
-                var price = GetNumberValue(row, ItemPriceCandidates);
-                var discount = GetNumberValue(row, ItemDiscountCandidates);
-                var additions = GetNumberValue(row, ItemAdditionCandidates);
-                var lineTotal = GetNumberValue(row, ItemLineTotalCandidates)
-                    ?? ComputeLineTotal(quantity, price, discount, additions);
+                var quantityUnit1 = GetNumberValue(row, ItemQuantityUnit1Candidates);
+                var quantityUnit2 = GetNumberValue(row, ItemQuantityUnit2Candidates);
+                var quantity = quantityUnit1 ?? GetNumberValue(row, ItemQuantityCandidates) ?? quantityUnit2;
+                var unitPriceMain = GetNumberValue(row, ItemUnitPriceUnit1Candidates)
+                    ?? GetNumberValue(row, ItemPriceCandidates);
+                var discountMain = GetNumberValue(row, ItemDiscountCandidates);
+                var additionsMain = GetNumberValue(row, ItemAdditionCandidates);
+                var lineTotalMain = GetNumberValue(row, ItemLineTotalCandidates)
+                    ?? ComputeLineTotal(quantity, unitPriceMain, discountMain, additionsMain);
+                var price = ConvertToDocumentCurrency(unitPriceMain, currencyRate);
+                var discount = ConvertToDocumentCurrency(discountMain, currencyRate);
+                var additions = ConvertToDocumentCurrency(additionsMain, currencyRate);
+                var lineTotal = ConvertToDocumentCurrency(lineTotalMain, currencyRate);
                 var material = materialGuid.HasValue && materialLookup.TryGetValue(materialGuid.Value, out var resolvedMaterial)
                     ? resolvedMaterial
                     : null;
@@ -614,6 +647,9 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
                     material?.Number,
                     material?.Code,
                     material?.Name,
+                    quantityUnit1,
+                    quantityUnit2,
+                    price,
                     quantity,
                     price,
                     discount,
@@ -705,6 +741,70 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             }
 
             return rows;
+        }, cancellationToken);
+    }
+
+    private async Task<Dictionary<Guid, CurrencyReference>> ResolveCurrencyReferencesAsync(
+        IEnumerable<IReadOnlyDictionary<string, object?>> rows,
+        CancellationToken cancellationToken)
+    {
+        var currencyGuids = rows
+            .Select(row => GetGuidValue(row, CurrencyGuidCandidates))
+            .Where(guid => guid.HasValue && guid.Value != Guid.Empty)
+            .Select(guid => guid!.Value)
+            .Distinct()
+            .ToArray();
+        if (currencyGuids.Length == 0)
+        {
+            return [];
+        }
+
+        return await UseOpenSqlConnectionAsync(async connection =>
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandType = CommandType.Text;
+            var parameterNames = new string[currencyGuids.Length];
+            for (var index = 0; index < currencyGuids.Length; index++)
+            {
+                var parameterName = $"@c{index}";
+                parameterNames[index] = parameterName;
+                command.Parameters.Add(new SqlParameter(parameterName, SqlDbType.UniqueIdentifier) { Value = currencyGuids[index] });
+            }
+
+            command.CommandText = $"SELECT * FROM [cur000] WHERE [GUID] IN ({string.Join(", ", parameterNames)})";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+            var lookup = new Dictionary<Guid, CurrencyReference>(currencyGuids.Length);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var row = new Dictionary<string, object?>(reader.FieldCount, StringComparer.OrdinalIgnoreCase);
+                for (var index = 0; index < reader.FieldCount; index++)
+                {
+                    row[reader.GetName(index)] = await reader.IsDBNullAsync(index, cancellationToken)
+                        ? null
+                        : reader.GetValue(index);
+                }
+
+                if (GetGuidValue(row, "GUID") is not { } currencyGuid || currencyGuid == Guid.Empty)
+                {
+                    continue;
+                }
+
+                var name = FirstNotBlank(
+                    GetStringValue(row, CurrencyNameCandidates),
+                    GetStringValue(row, "ArabicName"),
+                    GetStringValue(row, "AName"));
+                var code = FirstNotBlank(
+                    GetStringValue(row, CurrencyCodeCandidates),
+                    GetStringValue(row, "Code"),
+                    GetStringValue(row, "Abbrev"));
+                var symbol = FirstNotBlank(
+                    GetStringValue(row, CurrencySymbolCandidates),
+                    ResolveCurrencySymbolFromCode(code));
+                lookup[currencyGuid] = new CurrencyReference(currencyGuid, name, code, symbol);
+            }
+
+            return lookup;
         }, cancellationToken);
     }
 
@@ -804,17 +904,55 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         return subtotal - (discount ?? 0d) + (additions ?? 0d);
     }
 
-    private static (Guid? CurrencyGuid, string? CurrencyCode, string? CurrencySymbol) ResolveCurrencyInfo(
+    private static double? ConvertToDocumentCurrency(double? amount, double? currencyRate)
+    {
+        if (!amount.HasValue)
+        {
+            return null;
+        }
+
+        if (!currencyRate.HasValue || currencyRate.Value <= 0d)
+        {
+            return amount;
+        }
+
+        return amount.Value / currencyRate.Value;
+    }
+
+    private static double ResolveEffectiveCurrencyRate(double? documentRate, double? accountRate)
+    {
+        if (documentRate.HasValue && documentRate.Value > 0d)
+        {
+            return documentRate.Value;
+        }
+
+        if (accountRate.HasValue && accountRate.Value > 0d)
+        {
+            return accountRate.Value;
+        }
+
+        return 1d;
+    }
+
+    private static (Guid? CurrencyGuid, string? CurrencyName, string? CurrencyCode, string? CurrencySymbol, double? CurrencyRate) ResolveCurrencyInfo(
         IReadOnlyDictionary<string, object?>? row,
-        string? fallbackCurrencyCode)
+        IReadOnlyDictionary<Guid, CurrencyReference> currencyLookup)
     {
         var currencyGuid = GetGuidValue(row, CurrencyGuidCandidates);
-        var currencyCode = FirstNotBlank(GetStringValue(row, CurrencyCodeCandidates), fallbackCurrencyCode);
+        var currencyRate = GetNumberValue(row, CurrencyRateCandidates);
+        currencyLookup.TryGetValue(currencyGuid ?? Guid.Empty, out var currencyReference);
+        var currencyName = FirstNotBlank(
+            GetStringValue(row, CurrencyNameCandidates),
+            currencyReference?.Name);
+        var currencyCode = FirstNotBlank(
+            GetStringValue(row, CurrencyCodeCandidates),
+            currencyReference?.Code);
         var currencySymbol = FirstNotBlank(
             GetStringValue(row, CurrencySymbolCandidates),
+            currencyReference?.Symbol,
             ResolveCurrencySymbolFromCode(currencyCode),
             "ل.س");
-        return (currencyGuid, currencyCode, currencySymbol);
+        return (currencyGuid, currencyName, currencyCode, currencySymbol, currencyRate);
     }
 
     private static (double? PairsCount, double? PensCount) ResolveQuantityCounters(IReadOnlyDictionary<string, object?>? row)
@@ -1457,6 +1595,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
     }
 
     private sealed record ResolvedType(string? Code, string? Name);
+    private sealed record CurrencyReference(Guid Guid, string? Name, string? Code, string? Symbol);
     private sealed record AccountReference(Guid Guid, int? Number, string? Code, string? Name);
     private sealed record DocumentLinkInfo(
         CustomerRecord? Customer,

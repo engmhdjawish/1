@@ -446,6 +446,9 @@ GET /api/bills/voucher-types
 - بيانات العميل والحساب المرتبطين بالمستند عند توفرها:
   - `customerGuid`, `customerName`
   - `accountGuid`, `accountNumber`, `accountCode`, `accountName`
+- بيانات العملة من ربط `bu000/py000.CurrencyGUID` مع `cur000`:
+  - `currencyGuid`, `currencyName`, `currencyCode`, `currencySymbol`
+  - `currencyRate` (سعر التعادل المستخدم لتحويل القيم إلى عملة المستند)
 - المجاميع عند توفرها من جداول الأمين:
   - `totalAmount`
   - `totalDiscount`
@@ -457,7 +460,11 @@ GET /api/bills/voucher-types
 
 - عناصر الفاتورة (`items`) مع:
   - المادة: `materialGuid`, `materialNumber`, `materialCode`, `materialName`
-  - القيم: `quantity`, `price`, `discount`, `additions`, `lineTotal`
+  - الكميات: `quantityUnit1`, `quantityUnit2`, `quantity`
+  - السعر: `unitPriceUnit1` و `price` (بعد التحويل بعملة البيع)
+  - القيم: `discount`, `additions`, `lineTotal`
+- مجاميع إضافية في التفاصيل:
+  - `linesCount`, `totalQuantity`, `totalPairs`, `totalPens`
 
 الصلاحية المطلوبة:
 
