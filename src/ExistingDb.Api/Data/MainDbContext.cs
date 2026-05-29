@@ -175,7 +175,6 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
             entity.Property(entry => entry.Credit).HasColumnName("Credit");
             entity.Property(entry => entry.CurrencyVal).HasColumnName("CurrencyVal");
             entity.Property(entry => entry.Notes).HasColumnName("Notes").HasMaxLength(1000);
-            entity.Property(entry => entry.TypeGuid).HasColumnName("TypeGUID");
             entity.Property(entry => entry.ParentGuid).HasColumnName("ParentGUID");
             entity.Property(entry => entry.AccountGuid).HasColumnName("AccountGUID");
             entity.Property(entry => entry.ContraAccountGuid).HasColumnName("ContraAccGUID");

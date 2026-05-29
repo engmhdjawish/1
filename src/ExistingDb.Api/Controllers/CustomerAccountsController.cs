@@ -434,7 +434,6 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             .Concat(paymentTypeRelations.Select(relation => relation.TypeGuid))
             .Concat(noteTypeRelations.Select(relation => relation.TypeGuid))
             .Concat(collectedNoteTypeRelations.Select(relation => relation.TypeGuid))
-            .Concat(entries.Select(entry => entry.TypeGuid))
             .Where(guid => guid.HasValue)
             .Select(guid => guid!.Value)
             .Distinct()
@@ -486,6 +485,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         var collectedNoteTypeByEntry = collectedNoteTypeRelations
             .GroupBy(relation => relation.EntryGuid)
             .ToDictionary(group => group.Key, group => group.Select(item => item.TypeGuid).FirstOrDefault());
+        var parentTypeHintByCode = new Dictionary<int, EntryReferenceInfo>();
 
         Guid? ResolveParentGuid(Guid entryGuid)
         {
@@ -518,6 +518,17 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             return null;
         }
 
+        void RegisterParentTypeHint(Guid entryGuid, EntryReferenceInfo info)
+        {
+            var parentType = baseRelationByEntry.GetValueOrDefault(entryGuid)?.ParentType;
+            if (!parentType.HasValue || parentType.Value <= 0 || parentTypeHintByCode.ContainsKey(parentType.Value))
+            {
+                return;
+            }
+
+            parentTypeHintByCode[parentType.Value] = info;
+        }
+
         var result = new Dictionary<Guid, EntryReferenceInfo>();
         foreach (var entryGuid in entryGuids)
         {
@@ -528,13 +539,15 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             {
                 billLookup.TryGetValue(billGuid, out var bill);
                 var baseRelation = baseRelationByEntry.GetValueOrDefault(entryGuid);
-                result[entryGuid] = new EntryReferenceInfo(
+                var info = new EntryReferenceInfo(
                     "invoice",
                     ResolveDocumentTypeName(bill?.TypeGuid) ?? "invoice",
                     billGuid,
                     bill?.Number ?? baseRelation?.ParentNumber,
                     bill?.Date,
                     bill?.Notes);
+                result[entryGuid] = info;
+                RegisterParentTypeHint(entryGuid, info);
                 continue;
             }
 
@@ -544,13 +557,15 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
                 paymentLookup.TryGetValue(paymentGuid, out var payment);
                 var paymentTypeGuid = paymentTypeByEntry.GetValueOrDefault(entryGuid) ?? payment?.TypeGuid;
                 var baseRelation = baseRelationByEntry.GetValueOrDefault(entryGuid);
-                result[entryGuid] = new EntryReferenceInfo(
+                var info = new EntryReferenceInfo(
                     "payment",
                     ResolveDocumentTypeName(paymentTypeGuid) ?? "payment",
                     paymentGuid,
                     payment?.Number ?? baseRelation?.ParentNumber,
                     payment?.Date,
                     payment?.Notes);
+                result[entryGuid] = info;
+                RegisterParentTypeHint(entryGuid, info);
                 continue;
             }
 
@@ -565,41 +580,43 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
                     ?? ResolveNoteTypeLabel(note?.NoteType)
                     ?? "discount";
                 var baseRelation = baseRelationByEntry.GetValueOrDefault(entryGuid);
-                result[entryGuid] = new EntryReferenceInfo(
+                var info = new EntryReferenceInfo(
                     "discount",
                     noteTypeName,
                     noteGuid,
                     note?.Number ?? baseRelation?.ParentNumber,
                     note?.Date,
                     note?.Statement);
+                result[entryGuid] = info;
+                RegisterParentTypeHint(entryGuid, info);
                 continue;
             }
 
             var unknownRelation = baseRelationByEntry.GetValueOrDefault(entryGuid);
             var entry = entryByGuid.GetValueOrDefault(entryGuid);
-            var entryTypeName = ResolveDocumentTypeName(entry?.TypeGuid);
-            if (!string.IsNullOrWhiteSpace(entryTypeName))
+            if (unknownRelation?.ParentType is { } parentType
+                && parentTypeHintByCode.TryGetValue(parentType, out var parentTypeHint))
             {
                 result[entryGuid] = new EntryReferenceInfo(
-                    MapReasonTypeFromDocumentType(entryTypeName),
-                    entryTypeName,
+                    parentTypeHint.ReasonType,
+                    parentTypeHint.ReasonDocumentType,
+                    unknownRelation?.ParentGuid ?? entry?.ParentGuid ?? parentTypeHint.ReferenceGuid,
+                    unknownRelation?.ParentNumber ?? entry?.Number ?? parentTypeHint.ReferenceNumber,
+                    entry?.Date ?? parentTypeHint.ReferenceDate,
+                    entry?.Notes ?? parentTypeHint.ReferenceNotes);
+                continue;
+            }
+
+            var inferredDocumentType = InferDocumentTypeFromEntryNotes(entry?.Notes);
+            if (!string.IsNullOrWhiteSpace(inferredDocumentType))
+            {
+                result[entryGuid] = new EntryReferenceInfo(
+                    MapReasonTypeFromDocumentType(inferredDocumentType),
+                    inferredDocumentType,
                     unknownRelation?.ParentGuid ?? entry?.ParentGuid,
                     unknownRelation?.ParentNumber ?? entry?.Number,
                     entry?.Date,
                     entry?.Notes);
-                continue;
-            }
-
-            if (entry?.ContraAccountGuid is { } contraGuid && contraGuid != Guid.Empty)
-            {
-                var fallbackDocumentType = InferDocumentTypeFromEntryNotes(entry.Notes) ?? "سند";
-                result[entryGuid] = new EntryReferenceInfo(
-                    MapReasonTypeFromDocumentType(fallbackDocumentType),
-                    fallbackDocumentType,
-                    unknownRelation?.ParentGuid ?? entry.ParentGuid,
-                    unknownRelation?.ParentNumber ?? entry.Number,
-                    entry.Date,
-                    entry.Notes);
                 continue;
             }
 
@@ -777,7 +794,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             return "opening";
         }
 
-        return "entry";
+        return "unknown";
     }
 
     private static string? InferDocumentTypeFromEntryNotes(string? notes)
