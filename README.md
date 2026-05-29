@@ -399,6 +399,37 @@ entries.read   (لكشف الحساب التفصيلي)
 - تفاصيل الحساب المقابل لكل سطر: `contraAccountGuid`, `contraAccountNumber`, `contraAccountCode`, `contraAccountName`
 - عند غياب تصنيف مرجع مباشر، يتم استنتاج نوع العملية من الحساب المقابل واتجاه القيد (مثل: `قبض` / `دفع` / `مبيع`) مع الاعتماد على اختصارات الأنواع من `vwEt/vwBt/vwNt` عند توفرها.
 
+## Bills & Vouchers Browse API
+
+للتصفح المباشر للفواتير والسندات بكل أنواعها:
+
+```http
+GET /api/bills/invoices?page=1&pageSize=100
+GET /api/bills/invoices?typeGuid={typeGuid}&fromDate=2026-01-01&toDate=2026-01-31&search=1254
+
+GET /api/bills/vouchers?page=1&pageSize=100
+GET /api/bills/vouchers?typeGuid={typeGuid}&fromDate=2026-01-01&toDate=2026-01-31&search=قبض
+```
+
+خيارات الأنواع (للقوائم المنسدلة/الفلاتر):
+
+```http
+GET /api/bills/invoice-types
+GET /api/bills/voucher-types
+```
+
+المسارات تعيد:
+
+- رقم المستند وتاريخه وملاحظاته.
+- `typeGuid` ونوع المستند النصي (`typeName`) والاختصار (`typeCode`) عند توفره.
+- Pagination قياسية: `page`, `pageSize`, `totalCount`.
+
+الصلاحية المطلوبة:
+
+```text
+bills.read
+```
+
 ## Materials Read API
 
 تكامل المواد يقرأ من جدول:
