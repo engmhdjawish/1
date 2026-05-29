@@ -15,8 +15,14 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
     public DbSet<EntryRecord> Entries => Set<EntryRecord>();
     public DbSet<EntryBillRelationRecord> EntryBillRelations => Set<EntryBillRelationRecord>();
     public DbSet<EntryPaymentRelationRecord> EntryPaymentRelations => Set<EntryPaymentRelationRecord>();
+    public DbSet<EntryPaymentTypeRelationRecord> EntryPaymentTypeRelations => Set<EntryPaymentTypeRelationRecord>();
     public DbSet<EntryNoteRelationRecord> EntryNoteRelations => Set<EntryNoteRelationRecord>();
+    public DbSet<EntryNoteTypeRelationRecord> EntryNoteTypeRelations => Set<EntryNoteTypeRelationRecord>();
     public DbSet<EntryCollectedNoteRelationRecord> EntryCollectedNoteRelations => Set<EntryCollectedNoteRelationRecord>();
+    public DbSet<EntryCollectedNoteTypeRelationRecord> EntryCollectedNoteTypeRelations => Set<EntryCollectedNoteTypeRelationRecord>();
+    public DbSet<BillTypeRecord> BillTypes => Set<BillTypeRecord>();
+    public DbSet<NoteTypeRecord> NoteTypes => Set<NoteTypeRecord>();
+    public DbSet<EntryTypeRecord> EntryTypes => Set<EntryTypeRecord>();
     public DbSet<MaterialInventoryRecord> MaterialInventory => Set<MaterialInventoryRecord>();
     public DbSet<MaterialGroupRecord> MaterialGroups => Set<MaterialGroupRecord>();
     public DbSet<StoreRecord> Stores => Set<StoreRecord>();
@@ -110,6 +116,7 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
             entity.Property(bill => bill.Guid).HasColumnName("GUID");
             entity.Property(bill => bill.Number).HasColumnName("Number");
             entity.Property(bill => bill.Date).HasColumnName("Date");
+            entity.Property(bill => bill.TypeGuid).HasColumnName("TypeGUID");
             entity.Property(bill => bill.Notes).HasColumnName("Notes").HasMaxLength(1000);
         });
 
@@ -121,6 +128,7 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
             entity.Property(payment => payment.Guid).HasColumnName("GUID");
             entity.Property(payment => payment.Number).HasColumnName("Number");
             entity.Property(payment => payment.Date).HasColumnName("Date");
+            entity.Property(payment => payment.TypeGuid).HasColumnName("TypeGUID");
             entity.Property(payment => payment.Notes).HasColumnName("Notes").HasMaxLength(1000);
         });
 
@@ -133,6 +141,8 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
             entity.Property(account => account.Number).HasColumnName("Number");
             entity.Property(account => account.Name).HasColumnName("Name").HasMaxLength(250);
             entity.Property(account => account.Code).HasColumnName("Code").HasMaxLength(250);
+            entity.Property(account => account.CurrencyGuid).HasColumnName("CurrencyGUID");
+            entity.Property(account => account.CurrencyVal).HasColumnName("CurrencyVal");
             entity.Property(account => account.Debit).HasColumnName("Debit");
             entity.Property(account => account.Credit).HasColumnName("Credit");
             entity.Property(account => account.InitDebit).HasColumnName("InitDebit");
@@ -149,6 +159,7 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
             entity.Property(entry => entry.Date).HasColumnName("Date");
             entity.Property(entry => entry.Debit).HasColumnName("Debit");
             entity.Property(entry => entry.Credit).HasColumnName("Credit");
+            entity.Property(entry => entry.CurrencyVal).HasColumnName("CurrencyVal");
             entity.Property(entry => entry.Notes).HasColumnName("Notes").HasMaxLength(1000);
             entity.Property(entry => entry.ParentGuid).HasColumnName("ParentGUID");
             entity.Property(entry => entry.AccountGuid).HasColumnName("AccountGUID");
@@ -174,6 +185,16 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
             entity.Property(relation => relation.PaymentGuid).HasColumnName("erPayGUID");
         });
 
+        modelBuilder.Entity<EntryPaymentTypeRelationRecord>(entity =>
+        {
+            entity.ToView("vwER_EntriesPays_PYType");
+            entity.HasNoKey();
+
+            entity.Property(relation => relation.EntryGuid).HasColumnName("erEntryGUID");
+            entity.Property(relation => relation.PaymentGuid).HasColumnName("erPayGUID");
+            entity.Property(relation => relation.TypeGuid).HasColumnName("TypeGUID");
+        });
+
         modelBuilder.Entity<EntryNoteRelationRecord>(entity =>
         {
             entity.ToView("vwER_EntriesNotes");
@@ -183,6 +204,16 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
             entity.Property(relation => relation.NoteGuid).HasColumnName("erNoteGUID");
         });
 
+        modelBuilder.Entity<EntryNoteTypeRelationRecord>(entity =>
+        {
+            entity.ToView("vwER_EntriesNotes_Types");
+            entity.HasNoKey();
+
+            entity.Property(relation => relation.EntryGuid).HasColumnName("erEntryGUID");
+            entity.Property(relation => relation.NoteGuid).HasColumnName("erNoteGUID");
+            entity.Property(relation => relation.TypeGuid).HasColumnName("TypeGUID");
+        });
+
         modelBuilder.Entity<EntryCollectedNoteRelationRecord>(entity =>
         {
             entity.ToView("vwER_EntriesCollectedNotes");
@@ -190,6 +221,51 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
 
             entity.Property(relation => relation.EntryGuid).HasColumnName("erEntryGUID");
             entity.Property(relation => relation.NoteGuid).HasColumnName("erNoteGUID");
+        });
+
+        modelBuilder.Entity<EntryCollectedNoteTypeRelationRecord>(entity =>
+        {
+            entity.ToView("vwER_EntriesCollectedNotes_Types");
+            entity.HasNoKey();
+
+            entity.Property(relation => relation.EntryGuid).HasColumnName("erEntryGUID");
+            entity.Property(relation => relation.NoteGuid).HasColumnName("erNoteGUID");
+            entity.Property(relation => relation.TypeGuid).HasColumnName("TypeGUID");
+        });
+
+        modelBuilder.Entity<BillTypeRecord>(entity =>
+        {
+            entity.ToTable("bt000");
+            entity.HasKey(type => type.Guid);
+
+            entity.Property(type => type.Guid).HasColumnName("GUID");
+            entity.Property(type => type.Type).HasColumnName("Type");
+            entity.Property(type => type.BillGroup).HasColumnName("BillGroup");
+            entity.Property(type => type.BillType).HasColumnName("BillType");
+            entity.Property(type => type.Name).HasColumnName("Name").HasMaxLength(250);
+            entity.Property(type => type.LatinName).HasColumnName("LatinName").HasMaxLength(250);
+        });
+
+        modelBuilder.Entity<NoteTypeRecord>(entity =>
+        {
+            entity.ToTable("nt000");
+            entity.HasKey(type => type.Guid);
+
+            entity.Property(type => type.Guid).HasColumnName("GUID");
+            entity.Property(type => type.NoteGroup).HasColumnName("NoteGroup");
+            entity.Property(type => type.NoteType).HasColumnName("NoteType");
+            entity.Property(type => type.Name).HasColumnName("Name").HasMaxLength(250);
+            entity.Property(type => type.LatinName).HasColumnName("LatinName").HasMaxLength(250);
+        });
+
+        modelBuilder.Entity<EntryTypeRecord>(entity =>
+        {
+            entity.ToTable("et000");
+            entity.HasKey(type => type.Guid);
+
+            entity.Property(type => type.Guid).HasColumnName("GUID");
+            entity.Property(type => type.Name).HasColumnName("Name").HasMaxLength(250);
+            entity.Property(type => type.LatinName).HasColumnName("LatinName").HasMaxLength(250);
         });
 
         modelBuilder.Entity<MaterialInventoryRecord>(entity =>

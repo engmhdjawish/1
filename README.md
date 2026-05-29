@@ -319,11 +319,13 @@ AccountGUID
 GET /api/customers/{guid}/account/summary
 ```
 
-الاستجابة تعرض:
+الاستجابة تعرض (بعملة الحساب):
 
+- عملة الحساب (`accountCurrencyGuid`)
+- سعر التعادل المعتمد (`accountCurrencyRate`)
 - الرصيد الحالي (`currentBalance`)
-- آخر حركة دائن (`lastCreditorMovement`) مع التاريخ والسبب
-- آخر حركة مدين (`lastDebtorMovement`) مع التاريخ والسبب
+- آخر حركة دائن (`lastCreditorMovement`) مع التاريخ وسبب الحركة ونوع السند
+- آخر حركة مدين (`lastDebtorMovement`) مع التاريخ وسبب الحركة ونوع السند
 
 سبب الحركة (`reasonType`) يكون:
 
@@ -331,6 +333,10 @@ GET /api/customers/{guid}/account/summary
 - `payment` = دفعة
 - `discount` = حسم/إشعار
 - `unknown` = غير مصنف
+
+ونوع السند النصي يعاد في الحقل:
+
+- `reasonDocumentType`
 
 كشف حساب تفصيلي:
 
@@ -348,10 +354,11 @@ entries.read   (لكشف الحساب التفصيلي)
 
 يرجع القيود مرتبة زمنيًا مع:
 
-- قيمة المدين والدائن
+- قيمة المدين والدائن بعملة الحساب
+- قيمة المدين والدائن بالعملة الرئيسية (`debitMainCurrency` / `creditMainCurrency`)
 - الإشارة الصافية للحركة (`signedAmount`)
 - الرصيد التراكمي (`runningBalance`)
-- نوع المرجع (فاتورة/دفعة/حسم) مع رقم/تاريخ المرجع عند توفرها
+- نوع المرجع (فاتورة/دفعة/حسم) مع نوع السند الفعلي (`reasonDocumentType`) ورقم/تاريخ المرجع عند توفرها
 
 ## Materials Read API
 

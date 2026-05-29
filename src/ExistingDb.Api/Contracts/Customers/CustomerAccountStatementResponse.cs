@@ -4,6 +4,8 @@ public sealed record CustomerAccountStatementResponse(
     Guid CustomerGuid,
     string? CustomerName,
     Guid AccountGuid,
+    Guid? AccountCurrencyGuid,
+    double AccountCurrencyRate,
     DateTime? FromDate,
     DateTime? ToDate,
     double OpeningBalance,

@@ -7,6 +7,7 @@ public sealed class EntryRecord
     public DateTime? Date { get; set; }
     public double? Debit { get; set; }
     public double? Credit { get; set; }
+    public double? CurrencyVal { get; set; }
     public string? Notes { get; set; }
     public Guid? ParentGuid { get; set; }
     public Guid? AccountGuid { get; set; }
