@@ -9,6 +9,7 @@ public sealed class EntryRecord
     public double? Credit { get; set; }
     public double? CurrencyVal { get; set; }
     public string? Notes { get; set; }
+    public Guid? TypeGuid { get; set; }
     public Guid? ParentGuid { get; set; }
     public Guid? AccountGuid { get; set; }
     public Guid? ContraAccountGuid { get; set; }

@@ -434,6 +434,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             .Concat(paymentTypeRelations.Select(relation => relation.TypeGuid))
             .Concat(noteTypeRelations.Select(relation => relation.TypeGuid))
             .Concat(collectedNoteTypeRelations.Select(relation => relation.TypeGuid))
+            .Concat(entries.Select(entry => entry.TypeGuid))
             .Where(guid => guid.HasValue)
             .Select(guid => guid!.Value)
             .Distinct()
@@ -576,25 +577,39 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
 
             var unknownRelation = baseRelationByEntry.GetValueOrDefault(entryGuid);
             var entry = entryByGuid.GetValueOrDefault(entryGuid);
-            if (entry?.ContraAccountGuid is { } contraGuid && contraGuid != Guid.Empty)
+            var entryTypeName = ResolveDocumentTypeName(entry?.TypeGuid);
+            if (!string.IsNullOrWhiteSpace(entryTypeName))
             {
                 result[entryGuid] = new EntryReferenceInfo(
-                    "entry",
-                    "journal-entry",
-                    unknownRelation?.ParentGuid,
-                    unknownRelation?.ParentNumber,
-                    null,
-                    null);
+                    MapReasonTypeFromDocumentType(entryTypeName),
+                    entryTypeName,
+                    unknownRelation?.ParentGuid ?? entry?.ParentGuid,
+                    unknownRelation?.ParentNumber ?? entry?.Number,
+                    entry?.Date,
+                    entry?.Notes);
+                continue;
+            }
+
+            if (entry?.ContraAccountGuid is { } contraGuid && contraGuid != Guid.Empty)
+            {
+                var fallbackDocumentType = InferDocumentTypeFromEntryNotes(entry.Notes) ?? "سند";
+                result[entryGuid] = new EntryReferenceInfo(
+                    MapReasonTypeFromDocumentType(fallbackDocumentType),
+                    fallbackDocumentType,
+                    unknownRelation?.ParentGuid ?? entry.ParentGuid,
+                    unknownRelation?.ParentNumber ?? entry.Number,
+                    entry.Date,
+                    entry.Notes);
                 continue;
             }
 
             result[entryGuid] = new EntryReferenceInfo(
                 "unknown",
                 unknownRelation?.ParentType is null ? null : $"parent-type-{unknownRelation.ParentType}",
-                unknownRelation?.ParentGuid,
-                unknownRelation?.ParentNumber,
-                null,
-                null);
+                unknownRelation?.ParentGuid ?? entry?.ParentGuid,
+                unknownRelation?.ParentNumber ?? entry?.Number,
+                entry?.Date,
+                entry?.Notes);
         }
 
         return result;
@@ -723,6 +738,82 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             2 => "credit-note",
             _ => null
         };
+    }
+
+    private static string MapReasonTypeFromDocumentType(string? documentTypeName)
+    {
+        if (string.IsNullOrWhiteSpace(documentTypeName))
+        {
+            return "unknown";
+        }
+
+        var normalized = documentTypeName.Trim().ToLowerInvariant();
+        if (normalized.Contains("مبيع")
+            || normalized.Contains("بيع")
+            || normalized.Contains("شراء")
+            || normalized.Contains("فاتورة"))
+        {
+            return "invoice";
+        }
+
+        if (normalized.Contains("قبض")
+            || normalized.Contains("دفع")
+            || normalized.Contains("سند"))
+        {
+            return "payment";
+        }
+
+        if (normalized.Contains("حسم")
+            || normalized.Contains("اشعار")
+            || normalized.Contains("إشعار")
+            || normalized.Contains("debit-note")
+            || normalized.Contains("credit-note"))
+        {
+            return "discount";
+        }
+
+        if (normalized.Contains("افتتاح"))
+        {
+            return "opening";
+        }
+
+        return "entry";
+    }
+
+    private static string? InferDocumentTypeFromEntryNotes(string? notes)
+    {
+        if (string.IsNullOrWhiteSpace(notes))
+        {
+            return null;
+        }
+
+        var normalized = notes.Trim().ToLowerInvariant();
+        if (normalized.Contains("قبض"))
+        {
+            return "سند قبض";
+        }
+
+        if (normalized.Contains("دفع"))
+        {
+            return "سند دفع";
+        }
+
+        if (normalized.Contains("مبيع") || normalized.Contains("بيع"))
+        {
+            return "فاتورة مبيع";
+        }
+
+        if (normalized.Contains("شراء"))
+        {
+            return "فاتورة شراء";
+        }
+
+        if (normalized.Contains("افتتاح"))
+        {
+            return "قيد افتتاحي";
+        }
+
+        return null;
     }
 
     private sealed record EntryReferenceInfo(
