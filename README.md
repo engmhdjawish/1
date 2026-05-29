@@ -397,24 +397,7 @@ entries.read   (لكشف الحساب التفصيلي)
 - الرصيد التراكمي (`runningBalance`)
 - نوع المرجع (فاتورة/دفعة/حسم) مع نوع السند الفعلي (`reasonDocumentType`) ورقم/تاريخ المرجع عند توفرها
 - تفاصيل الحساب المقابل لكل سطر: `contraAccountGuid`, `contraAccountNumber`, `contraAccountCode`, `contraAccountName`
-- عند غياب تصنيف مرجع مباشر، يتم استنتاج نوع العملية من الحساب المقابل واتجاه القيد (مثل: `سند قبض` / `سند دفع` / `فاتورة مبيع`).
-
-دفتر الأستاذ (اعتماد مباشر على إجراء الأمين):
-
-```http
-GET /api/accounts/general-ledger?accountGuid={accountGuid}&sourceGuid={sourceGuid}&fromDate=2026-01-01&toDate=2026-05-19
-GET /api/accounts/general-ledger?accountGuid={accountGuid}&customerGuid={customerGuid}&sourceGuid={sourceGuid}&currencyGuid={currencyGuid}
-```
-
-ملاحظات:
-
-- هذا المسار يستدعي الإجراء المخزن `prcGeneralLedger` مباشرة ويعيد الصفوف كما هي (حقول ديناميكية).
-- مفيد عندما تحتاج تفاصيل التقرير نفسها التي تظهر في "دفتر الأستاذ" داخل نظام الأمين.
-- يجب تمرير `sourceGuid` نفسه المستخدم داخل `RepSrcs` (يمكن التقاطه من تتبع الأمين مثل القيمة `@SrcGuid`).
-- يدعم خيارات:
-  - `isCalledByWeb` (افتراضيًا `false` لمطابقة تطبيق الأمين)
-  - `detailByAccountCurrency`
-  - `showRunningBalance`
+- عند غياب تصنيف مرجع مباشر، يتم استنتاج نوع العملية من الحساب المقابل واتجاه القيد (مثل: `قبض` / `دفع` / `مبيع`) مع الاعتماد على اختصارات الأنواع من `vwEt/vwBt/vwNt` عند توفرها.
 
 ## Materials Read API
 

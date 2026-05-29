@@ -2,11 +2,9 @@ using ExistingDb.Api.Authorization;
 using ExistingDb.Api.Contracts.Customers;
 using ExistingDb.Api.Data;
 using ExistingDb.Api.Data.MainDb;
-using Microsoft.Data.SqlClient;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Data;
 
 namespace ExistingDb.Api.Controllers;
 
@@ -265,74 +263,6 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             totalCount));
     }
 
-    [HttpGet("general-ledger")]
-    [RequirePermission("entries.read")]
-    public async Task<ActionResult<GeneralLedgerResponse>> GetGeneralLedger(
-        [FromQuery] Guid? accountGuid = null,
-        [FromQuery] Guid? customerGuid = null,
-        [FromQuery] Guid? sourceGuid = null,
-        [FromQuery] DateTime? fromDate = null,
-        [FromQuery] DateTime? toDate = null,
-        [FromQuery] Guid? currencyGuid = null,
-        [FromQuery] bool isCalledByWeb = false,
-        [FromQuery] bool detailByAccountCurrency = false,
-        [FromQuery] bool showRunningBalance = true,
-        CancellationToken cancellationToken = default)
-    {
-        var (target, errorResult) = await ResolveAccountScopeAsync(accountGuid, customerGuid, cancellationToken);
-        if (errorResult is not null)
-        {
-            return errorResult;
-        }
-
-        var account = target!.Account;
-        var customer = target.Customer;
-        var effectiveFromDate = (fromDate ?? DateTime.UtcNow.Date.AddMonths(-1)).Date;
-        var effectiveToDate = (toDate ?? DateTime.UtcNow.Date).Date;
-        if (effectiveFromDate > effectiveToDate)
-        {
-            return BadRequest(new { message = "fromDate must be less than or equal to toDate." });
-        }
-
-        if (!sourceGuid.HasValue || sourceGuid.Value == Guid.Empty)
-        {
-            return BadRequest(new
-            {
-                message = "sourceGuid is required for prcGeneralLedger (maps report sources in RepSrcs).",
-                sourceGuid
-            });
-        }
-
-        var effectiveCurrencyGuid = currencyGuid
-            ?? account.CurrencyGuid
-            ?? Guid.Empty;
-
-        var (rows, resultSetCount) = await ExecuteGeneralLedgerProcedureAsync(
-            account.Guid,
-            target.CustomerGuidFilter ?? Guid.Empty,
-            sourceGuid.Value,
-            effectiveFromDate,
-            effectiveToDate,
-            effectiveCurrencyGuid,
-            isCalledByWeb,
-            detailByAccountCurrency,
-            showRunningBalance,
-            cancellationToken);
-
-        return Ok(new GeneralLedgerResponse(
-            customer?.Guid,
-            customer?.CustomerName,
-            account.Guid,
-            sourceGuid.Value,
-            isCalledByWeb,
-            effectiveCurrencyGuid,
-            effectiveFromDate,
-            effectiveToDate,
-            resultSetCount,
-            rows.Count,
-            rows));
-    }
-
     private IQueryable<EntryRecord> BuildEntriesQuery(Guid accountGuid, Guid? customerGuid)
     {
         var query = mainDbContext.Entries
@@ -397,132 +327,6 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         }
 
         return (new AccountQueryTarget(customer, account, customerGuid), null);
-    }
-
-    private async Task<(List<IReadOnlyDictionary<string, object?>> Rows, int ResultSetCount)> ExecuteGeneralLedgerProcedureAsync(
-        Guid accountGuid,
-        Guid customerGuid,
-        Guid sourceGuid,
-        DateTime fromDate,
-        DateTime toDate,
-        Guid currencyGuid,
-        bool isCalledByWeb,
-        bool detailByAccountCurrency,
-        bool showRunningBalance,
-        CancellationToken cancellationToken)
-    {
-        var connection = mainDbContext.Database.GetDbConnection();
-        var sqlConnection = connection as SqlConnection
-            ?? throw new InvalidOperationException("MainDb provider must be SQL Server.");
-
-        var shouldCloseConnection = sqlConnection.State != ConnectionState.Open;
-        if (shouldCloseConnection)
-        {
-            await sqlConnection.OpenAsync(cancellationToken);
-        }
-
-        try
-        {
-            await using var sqlCommand = sqlConnection.CreateCommand();
-            sqlCommand.CommandText = "prcGeneralLedger";
-            sqlCommand.CommandType = CommandType.StoredProcedure;
-            SqlCommandBuilder.DeriveParameters(sqlCommand);
-
-            var toDateInclusive = toDate.Date.AddDays(1).AddMilliseconds(-3);
-            var parameterValues = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["@IsCalledByWeb"] = isCalledByWeb ? 1 : 0,
-                ["@Account"] = accountGuid,
-                ["@CustGUID"] = customerGuid,
-                ["@CostGuid"] = Guid.Empty,
-                ["@MatGUID"] = Guid.Empty,
-                ["@GroupGUID"] = Guid.Empty,
-                ["@FromCheckDate"] = 0,
-                ["@StartDate"] = fromDate.Date,
-                ["@EndDate"] = toDateInclusive,
-                ["@CurGUID"] = currencyGuid,
-                ["@Class"] = string.Empty,
-                ["@ShowUnPosted"] = 0,
-                ["@Level"] = 0,
-                ["@Contain"] = string.Empty,
-                ["@NotContain"] = string.Empty,
-                ["@PrevBalance"] = 1,
-                ["@ObverseAcc"] = Guid.Empty,
-                ["@UnifyAccEn"] = 0,
-                ["@ShowIsCheck"] = 0,
-                ["@rid"] = 0,
-                ["@ItemChecked"] = 3,
-                ["@ShowEmptyBal"] = 0,
-                ["@CheckForUsers"] = 0,
-                ["@CollectCheck"] = 0,
-                ["@User"] = Guid.Empty,
-                ["@ShwUser"] = 0,
-                ["@SrcGuid"] = sourceGuid,
-                ["@EntryCond"] = Guid.Empty,
-                ["@BillCond"] = Guid.Empty,
-                ["@FromPostDate"] = fromDate.Date,
-                ["@ToPostDate"] = toDateInclusive,
-                ["@IsFilterByDate"] = 1,
-                ["@IsFilterByPostDate"] = 0,
-                ["@DetialByAccountCurrency"] = detailByAccountCurrency ? 1 : 0,
-                ["@ShowRelatedMatInfo"] = 0,
-                ["@IsGroupedByCost"] = 0,
-                ["@IsGroupedByClass"] = 0,
-                ["@ShowRunningBalance"] = showRunningBalance ? 1 : 0,
-                ["@ShowObverseAcc"] = 1,
-                ["@ShowMainAcc"] = 1,
-                ["@NoAccessStr"] = "لا توجد صلاحية",
-                ["@isOpeningEntryAsPrevBalance"] = 0
-            };
-
-            foreach (SqlParameter parameter in sqlCommand.Parameters)
-            {
-                if (parameter.Direction == ParameterDirection.ReturnValue)
-                {
-                    continue;
-                }
-
-                if (parameterValues.TryGetValue(parameter.ParameterName, out var assignedValue))
-                {
-                    parameter.Value = assignedValue ?? DBNull.Value;
-                    continue;
-                }
-
-                parameter.Value = GetFallbackParameterValue(parameter);
-            }
-
-            await using var reader = await sqlCommand.ExecuteReaderAsync(cancellationToken);
-            var rows = new List<IReadOnlyDictionary<string, object?>>();
-            var resultSetCount = 0;
-
-            do
-            {
-                resultSetCount++;
-                while (await reader.ReadAsync(cancellationToken))
-                {
-                    var row = new Dictionary<string, object?>(reader.FieldCount, StringComparer.OrdinalIgnoreCase);
-                    for (var index = 0; index < reader.FieldCount; index++)
-                    {
-                        var fieldName = reader.GetName(index);
-                        var value = await reader.IsDBNullAsync(index, cancellationToken)
-                            ? null
-                            : NormalizeSqlValue(reader.GetValue(index));
-                        row[fieldName] = value;
-                    }
-
-                    rows.Add(row);
-                }
-            } while (await reader.NextResultAsync(cancellationToken));
-
-            return (rows, resultSetCount);
-        }
-        finally
-        {
-            if (shouldCloseConnection)
-            {
-                await sqlConnection.CloseAsync();
-            }
-        }
     }
 
     private async Task<Dictionary<Guid, EntryReferenceInfo>> ResolveEntryReferencesAsync(
@@ -665,9 +469,21 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
                 .AsNoTracking()
                 .Where(type => typeGuids.Contains(type.Guid))
                 .ToListAsync(cancellationToken);
+        var billTypeViews = typeGuids.Length == 0
+            ? new List<BillTypeViewRecord>()
+            : await mainDbContext.BillTypeViews
+                .AsNoTracking()
+                .Where(type => typeGuids.Contains(type.Guid))
+                .ToListAsync(cancellationToken);
         var noteTypes = typeGuids.Length == 0
             ? new List<NoteTypeRecord>()
             : await mainDbContext.NoteTypes
+                .AsNoTracking()
+                .Where(type => typeGuids.Contains(type.Guid))
+                .ToListAsync(cancellationToken);
+        var noteTypeViews = typeGuids.Length == 0
+            ? new List<NoteTypeViewRecord>()
+            : await mainDbContext.NoteTypeViews
                 .AsNoTracking()
                 .Where(type => typeGuids.Contains(type.Guid))
                 .ToListAsync(cancellationToken);
@@ -677,13 +493,28 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
                 .AsNoTracking()
                 .Where(type => typeGuids.Contains(type.Guid))
                 .ToListAsync(cancellationToken);
+        var entryTypeViews = typeGuids.Length == 0
+            ? new List<EntryTypeViewRecord>()
+            : await mainDbContext.EntryTypeViews
+                .AsNoTracking()
+                .Where(type => typeGuids.Contains(type.Guid))
+                .ToListAsync(cancellationToken);
 
         var billLookup = bills.ToDictionary(item => item.Guid);
         var paymentLookup = payments.ToDictionary(item => item.Guid);
         var noteLookup = notes.ToDictionary(item => item.Guid);
         var billTypeLookup = billTypes.ToDictionary(item => item.Guid);
+        var billTypeViewLookup = billTypeViews
+            .GroupBy(item => item.Guid)
+            .ToDictionary(group => group.Key, group => group.First());
         var noteTypeLookup = noteTypes.ToDictionary(item => item.Guid);
+        var noteTypeViewLookup = noteTypeViews
+            .GroupBy(item => item.Guid)
+            .ToDictionary(group => group.Key, group => group.First());
         var entryTypeLookup = entryTypes.ToDictionary(item => item.Guid);
+        var entryTypeViewLookup = entryTypeViews
+            .GroupBy(item => item.Guid)
+            .ToDictionary(group => group.Key, group => group.First());
         var billByEntry = billRelations
             .GroupBy(relation => relation.EntryGuid)
             .ToDictionary(group => group.Key, group => group.Select(item => item.BillGuid!.Value).First());
@@ -707,6 +538,31 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             .ToDictionary(group => group.Key, group => group.Select(item => item.TypeGuid).FirstOrDefault());
         var parentTypeHintByCode = new Dictionary<int, EntryReferenceInfo>();
 
+        static string? PickPreferredTypeLabel(string? abbrev, string? latinAbbrev, string? name, string? latinName)
+        {
+            if (!string.IsNullOrWhiteSpace(abbrev))
+            {
+                return abbrev.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(latinAbbrev))
+            {
+                return latinAbbrev.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                return name.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(latinName))
+            {
+                return latinName.Trim();
+            }
+
+            return null;
+        }
+
         string? ResolveDocumentTypeName(Guid? typeGuid)
         {
             if (!typeGuid.HasValue || typeGuid == Guid.Empty)
@@ -714,14 +570,53 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
                 return null;
             }
 
+            if (billTypeViewLookup.TryGetValue(typeGuid.Value, out var billTypeView))
+            {
+                var resolved = PickPreferredTypeLabel(
+                    billTypeView.Abbrev,
+                    billTypeView.LatinAbbrev,
+                    billTypeView.Name,
+                    billTypeView.LatinName);
+                if (!string.IsNullOrWhiteSpace(resolved))
+                {
+                    return resolved;
+                }
+            }
+
             if (billTypeLookup.TryGetValue(typeGuid.Value, out var billType) && !string.IsNullOrWhiteSpace(billType.Name))
             {
                 return billType.Name;
             }
 
+            if (noteTypeViewLookup.TryGetValue(typeGuid.Value, out var noteTypeView))
+            {
+                var resolved = PickPreferredTypeLabel(
+                    noteTypeView.Abbrev,
+                    noteTypeView.LatinAbbrev,
+                    noteTypeView.Name,
+                    noteTypeView.LatinName);
+                if (!string.IsNullOrWhiteSpace(resolved))
+                {
+                    return resolved;
+                }
+            }
+
             if (noteTypeLookup.TryGetValue(typeGuid.Value, out var noteType) && !string.IsNullOrWhiteSpace(noteType.Name))
             {
                 return noteType.Name;
+            }
+
+            if (entryTypeViewLookup.TryGetValue(typeGuid.Value, out var entryTypeView))
+            {
+                var resolved = PickPreferredTypeLabel(
+                    entryTypeView.Abbrev,
+                    entryTypeView.LatinAbbrev,
+                    entryTypeView.Name,
+                    entryTypeView.LatinName);
+                if (!string.IsNullOrWhiteSpace(resolved))
+                {
+                    return resolved;
+                }
             }
 
             if (entryTypeLookup.TryGetValue(typeGuid.Value, out var entryType) && !string.IsNullOrWhiteSpace(entryType.Name))
@@ -820,6 +715,19 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
                     baseRelation?.ParentNumber ?? entry?.Number ?? parentTypeHint.ReferenceNumber,
                     entry?.Date ?? parentTypeHint.ReferenceDate,
                     entry?.Notes ?? parentTypeHint.ReferenceNotes);
+                continue;
+            }
+
+            var parentTypeDocumentType = InferDocumentTypeFromParentType(baseRelation?.ParentType, entry);
+            if (!string.IsNullOrWhiteSpace(parentTypeDocumentType))
+            {
+                result[entryGuid] = new EntryReferenceInfo(
+                    MapReasonTypeFromDocumentType(parentTypeDocumentType),
+                    parentTypeDocumentType,
+                    baseRelation?.ParentGuid ?? entry?.ParentGuid,
+                    baseRelation?.ParentNumber ?? entry?.Number,
+                    entry?.Date,
+                    entry?.Notes);
                 continue;
             }
 
@@ -1107,6 +1015,22 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         return null;
     }
 
+    private static string? InferDocumentTypeFromParentType(int? parentType, EntryRecord? entry)
+    {
+        if (!parentType.HasValue)
+        {
+            return null;
+        }
+
+        return parentType.Value switch
+        {
+            2 => "مبيع",
+            4 => (entry?.Credit ?? 0) > 0 ? "قبض" : "دفع",
+            5 => "حسم",
+            _ => null
+        };
+    }
+
     private static string? InferDocumentTypeFromEntryNotes(string? notes)
     {
         if (string.IsNullOrWhiteSpace(notes))
@@ -1141,31 +1065,6 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         }
 
         return null;
-    }
-
-    private static object GetFallbackParameterValue(SqlParameter parameter)
-    {
-        return parameter.SqlDbType switch
-        {
-            SqlDbType.UniqueIdentifier => Guid.Empty,
-            SqlDbType.Bit => 0,
-            SqlDbType.TinyInt or SqlDbType.SmallInt or SqlDbType.Int or SqlDbType.BigInt => 0,
-            SqlDbType.Decimal or SqlDbType.Float or SqlDbType.Real or SqlDbType.Money or SqlDbType.SmallMoney => 0m,
-            SqlDbType.Date or SqlDbType.DateTime or SqlDbType.DateTime2 or SqlDbType.SmallDateTime => new DateTime(1900, 1, 1),
-            SqlDbType.NChar or SqlDbType.NText or SqlDbType.NVarChar or SqlDbType.Char or SqlDbType.Text or SqlDbType.VarChar => string.Empty,
-            _ => DBNull.Value
-        };
-    }
-
-    private static object? NormalizeSqlValue(object? value)
-    {
-        return value switch
-        {
-            null => null,
-            DBNull => null,
-            byte[] bytes => Convert.ToBase64String(bytes),
-            _ => value
-        };
     }
 
     private sealed record EntryReferenceInfo(

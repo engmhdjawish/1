@@ -23,8 +23,11 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
     public DbSet<EntryCollectedNoteRelationRecord> EntryCollectedNoteRelations => Set<EntryCollectedNoteRelationRecord>();
     public DbSet<EntryCollectedNoteTypeRelationRecord> EntryCollectedNoteTypeRelations => Set<EntryCollectedNoteTypeRelationRecord>();
     public DbSet<BillTypeRecord> BillTypes => Set<BillTypeRecord>();
+    public DbSet<BillTypeViewRecord> BillTypeViews => Set<BillTypeViewRecord>();
     public DbSet<NoteTypeRecord> NoteTypes => Set<NoteTypeRecord>();
+    public DbSet<NoteTypeViewRecord> NoteTypeViews => Set<NoteTypeViewRecord>();
     public DbSet<EntryTypeRecord> EntryTypes => Set<EntryTypeRecord>();
+    public DbSet<EntryTypeViewRecord> EntryTypeViews => Set<EntryTypeViewRecord>();
     public DbSet<MaterialInventoryRecord> MaterialInventory => Set<MaterialInventoryRecord>();
     public DbSet<MaterialGroupRecord> MaterialGroups => Set<MaterialGroupRecord>();
     public DbSet<StoreRecord> Stores => Set<StoreRecord>();
@@ -271,6 +274,18 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
             entity.Property(type => type.LatinName).HasColumnName("LatinName").HasMaxLength(250);
         });
 
+        modelBuilder.Entity<BillTypeViewRecord>(entity =>
+        {
+            entity.ToView("vwBt");
+            entity.HasNoKey();
+
+            entity.Property(type => type.Guid).HasColumnName("btGUID");
+            entity.Property(type => type.Name).HasColumnName("btName").HasMaxLength(250);
+            entity.Property(type => type.LatinName).HasColumnName("btLatinName").HasMaxLength(250);
+            entity.Property(type => type.Abbrev).HasColumnName("btAbbrev").HasMaxLength(250);
+            entity.Property(type => type.LatinAbbrev).HasColumnName("btLatinAbbrev").HasMaxLength(250);
+        });
+
         modelBuilder.Entity<NoteTypeRecord>(entity =>
         {
             entity.ToTable("nt000");
@@ -283,6 +298,18 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
             entity.Property(type => type.LatinName).HasColumnName("LatinName").HasMaxLength(250);
         });
 
+        modelBuilder.Entity<NoteTypeViewRecord>(entity =>
+        {
+            entity.ToView("vwNt");
+            entity.HasNoKey();
+
+            entity.Property(type => type.Guid).HasColumnName("ntGUID");
+            entity.Property(type => type.Name).HasColumnName("ntName").HasMaxLength(250);
+            entity.Property(type => type.LatinName).HasColumnName("ntLatinName").HasMaxLength(250);
+            entity.Property(type => type.Abbrev).HasColumnName("ntAbbrev").HasMaxLength(250);
+            entity.Property(type => type.LatinAbbrev).HasColumnName("ntLatinAbbrev").HasMaxLength(250);
+        });
+
         modelBuilder.Entity<EntryTypeRecord>(entity =>
         {
             entity.ToTable("et000");
@@ -291,6 +318,18 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
             entity.Property(type => type.Guid).HasColumnName("GUID");
             entity.Property(type => type.Name).HasColumnName("Name").HasMaxLength(250);
             entity.Property(type => type.LatinName).HasColumnName("LatinName").HasMaxLength(250);
+        });
+
+        modelBuilder.Entity<EntryTypeViewRecord>(entity =>
+        {
+            entity.ToView("vwEt");
+            entity.HasNoKey();
+
+            entity.Property(type => type.Guid).HasColumnName("etGUID");
+            entity.Property(type => type.Name).HasColumnName("etName").HasMaxLength(250);
+            entity.Property(type => type.LatinName).HasColumnName("etLatinName").HasMaxLength(250);
+            entity.Property(type => type.Abbrev).HasColumnName("etAbbrev").HasMaxLength(250);
+            entity.Property(type => type.LatinAbbrev).HasColumnName("etLatinAbbrev").HasMaxLength(250);
         });
 
         modelBuilder.Entity<MaterialInventoryRecord>(entity =>
