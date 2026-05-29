@@ -3,7 +3,7 @@ namespace ExistingDb.Api.Contracts.Images;
 public sealed class UploadMaterialImageRequest
 {
     public IFormFile? File { get; init; }
-    public string? MaterialGuids { get; init; }
-    public bool IsPrimary { get; init; }
+    public IReadOnlyCollection<IFormFile>? Files { get; init; }
+    public Guid? MaterialGuid { get; init; }
 }
 

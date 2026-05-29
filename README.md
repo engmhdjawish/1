@@ -125,11 +125,13 @@ POST   /api/material-images
 GET    /api/material-images/{id}
 GET    /api/material-images/{id}/file
 GET    /api/material-images/{id}/thumbnail
-POST   /api/material-images/{id}/materials
-PUT    /api/material-images/{id}/materials
-DELETE /api/material-images/{id}/materials
+PUT    /api/material-images/{id}/material
+DELETE /api/material-images/{id}/material
 DELETE /api/material-images/{id}
 GET    /api/materials/{materialGuid}/images
+GET    /api/material-images/download
+GET    /api/material-images/download/materials
+GET    /api/material-images/download/bills/{billGuid}
 ```
 
 ## إدارة كلمات المرور
@@ -203,7 +205,7 @@ Body:
 }
 ```
 
-رفع صورة:
+رفع صورة واحدة أو مجموعة صور:
 
 ```http
 POST /api/material-images
@@ -213,9 +215,9 @@ Content-Type: multipart/form-data
 Form fields:
 
 ```text
-file          الصورة
-materialGuids GUID1,GUID2 اختياري للربط مباشرة
-isPrimary     true/false
+file          صورة واحدة (اختياري إذا أرسلت files)
+files         مجموعة صور (اختياري إذا أرسلت file)
+materialGuid  اختياري لربط مباشر، ويُسمح به فقط مع صورة واحدة
 ```
 
 عند رفع صورة:
@@ -223,27 +225,28 @@ isPrimary     true/false
 - تحفظ في مجلد الصور من الإعدادات.
 - إذا كان الاسم موجوداً، يتم تعديل الاسم تلقائياً مثل `image_1.jpg`.
 - يتم توليد thumbnail داخل مجلد الثامبنيل.
-- يُنشأ سجل في `bm000` (GUID جديد + اسم الملف).
-- الربط مع المادة يتم بتحديث `mt000.PictureGUID`.
+- يُنشأ سجل في `bm000` (GUID جديد + المسار الكامل للصورة).
+- كل صورة ترتبط بمادة واحدة كحد أعلى عبر `mt000.PictureGUID`.
+- إذا تم رفع مجموعة صور، تُحفظ كصور غير مرتبطة حتى يتم ربطها لاحقاً.
 
 إدارة الربط:
 
 ```http
-POST   /api/material-images/{id}/materials
-PUT    /api/material-images/{id}/materials
-DELETE /api/material-images/{id}/materials
+PUT    /api/material-images/{id}/material
+DELETE /api/material-images/{id}/material
 ```
 
 Body:
 
 ```json
 {
-  "materialGuids": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
-  "isPrimary": false
+  "materialGuid": "00000000-0000-0000-0000-000000000000"
 }
 ```
+
+ملاحظة:
+
+- عند ربط صورة بمادة، يتم فك أي ربط سابق لنفس الصورة من مواد أخرى لضمان علاقة (صورة واحدة ↔ مادة واحدة).
 
 الاستعلام:
 
@@ -262,13 +265,24 @@ GET /api/material-images/{id}/file
 GET /api/material-images/{id}/thumbnail
 ```
 
+تحميل الصور كملف ZIP:
+
+```http
+GET /api/material-images/download
+GET /api/material-images/download?linked=true
+GET /api/material-images/download?linked=false
+GET /api/material-images/download?materialGuid=MATERIAL_GUID
+GET /api/material-images/download/materials?search=...&groupGuids=...&storeGuids=...
+GET /api/material-images/download/bills/{billGuid}
+```
+
 حذف الصورة:
 
 ```http
 DELETE /api/material-images/{id}
 ```
 
-يحذف السجل من `bm000`، يفك الربط عبر `mt000.PictureGUID`، ويحاول حذف ملف الصورة والثامبنيل من السيرفر.
+يحذف السجل من `bm000`، ويفك الربط عبر `mt000.PictureGUID` إن وجد، ويحاول حذف ملف الصورة والثامبنيل من السيرفر.
 
 ## Customers Read API
 

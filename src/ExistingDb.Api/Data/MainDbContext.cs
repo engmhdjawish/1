@@ -8,6 +8,7 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
     public DbSet<CustomerRecord> Customers => Set<CustomerRecord>();
     public DbSet<MaterialRecord> Materials => Set<MaterialRecord>();
     public DbSet<MaterialImageRecord> MaterialImages => Set<MaterialImageRecord>();
+    public DbSet<BillItemRecord> BillItems => Set<BillItemRecord>();
     public DbSet<MaterialInventoryRecord> MaterialInventory => Set<MaterialInventoryRecord>();
     public DbSet<MaterialGroupRecord> MaterialGroups => Set<MaterialGroupRecord>();
     public DbSet<StoreRecord> Stores => Set<StoreRecord>();
@@ -81,6 +82,16 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
 
             entity.Property(image => image.Guid).HasColumnName("GUID");
             entity.Property(image => image.Name).HasColumnName("Name").HasMaxLength(260);
+        });
+
+        modelBuilder.Entity<BillItemRecord>(entity =>
+        {
+            entity.ToTable("bi000");
+            entity.HasKey(item => item.Guid);
+
+            entity.Property(item => item.Guid).HasColumnName("GUID");
+            entity.Property(item => item.ParentGuid).HasColumnName("ParentGUID");
+            entity.Property(item => item.MaterialGuid).HasColumnName("MatGUID");
         });
 
         modelBuilder.Entity<MaterialInventoryRecord>(entity =>

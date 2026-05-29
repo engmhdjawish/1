@@ -2,17 +2,13 @@ namespace ExistingDb.Api.Contracts.Images;
 
 public sealed record MaterialImageResponse(
     Guid Id,
-    string Name,
+    string ImagePath,
     string? ThumbnailName,
-    string OriginalFileName,
+    string FileName,
     string StoredFileName,
     string ContentType,
     long SizeBytes,
-    int? Width,
-    int? Height,
-    int? ThumbnailWidth,
-    int? ThumbnailHeight,
-    IReadOnlyCollection<Guid> MaterialGuids,
+    Guid? MaterialGuid,
     DateTimeOffset CreatedAt,
     DateTimeOffset? UpdatedAt);
 
