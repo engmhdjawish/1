@@ -5,7 +5,9 @@ using ExistingDb.Api.Data;
 using ExistingDb.Api.Data.MainDb;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace ExistingDb.Api.Controllers;
 
@@ -15,6 +17,21 @@ namespace ExistingDb.Api.Controllers;
 [RequirePermission("bills.read")]
 public sealed class BillsController(MainDbContext mainDbContext) : ControllerBase
 {
+    private static readonly string[] InvoiceTotalCandidates = ["Total", "FinalTotal", "TotalValue", "Value", "Net", "NetTotal", "Amount"];
+    private static readonly string[] VoucherTotalCandidates = ["Total", "Value", "Amount", "Net", "Debit", "Credit"];
+    private static readonly string[] DiscountCandidates = ["TotalDisc", "Discount", "Disc", "TotalDiscount", "DiscValue"];
+    private static readonly string[] AdditionsCandidates = ["TotalAdd", "Additions", "Addition", "Extra", "TotalExtra", "Expenses"];
+    private static readonly string[] NetCandidates = ["Net", "NetTotal", "FinalTotal", "TotalNet", "AmountDue"];
+    private static readonly string[] ItemQuantityCandidates = ["Qty", "Quantity", "MatQty", "QTY"];
+    private static readonly string[] ItemPriceCandidates = ["Price", "UnitPrice", "Value", "Amount"];
+    private static readonly string[] ItemDiscountCandidates = ["Discount", "Disc", "ItemDiscount"];
+    private static readonly string[] ItemAdditionCandidates = ["Addition", "Add", "Extra"];
+    private static readonly string[] ItemLineTotalCandidates = ["Total", "LineTotal", "FinalTotal", "Net", "Amount", "Value"];
+    private static readonly string[] CustomerGuidCandidates = ["CustGUID", "CustomerGUID", "CusGUID"];
+    private static readonly string[] AccountGuidCandidates = ["AccountGUID", "AccGUID", "MainAccGUID"];
+    private static readonly string[] MaterialGuidCandidates = ["MatGUID", "MaterialGUID", "MatGuid"];
+    private static readonly string[] NotesCandidates = ["Notes", "Statement", "Description"];
+
     [HttpGet("invoices")]
     public async Task<ActionResult<PagedResponse<BillDocumentResponse>>> GetInvoices(
         [FromQuery] string? search = null,
@@ -62,28 +79,49 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
-        var types = await ResolveTypeLookupAsync(
-            records.Select(record => record.TypeGuid),
-            preferredSource: TypeLookupSource.Bill,
-            cancellationToken);
+
+        var documentGuids = records.Select(record => record.Guid).ToArray();
+        var types = await ResolveTypeLookupAsync(records.Select(record => record.TypeGuid), TypeLookupSource.Bill, cancellationToken);
+        var rawRows = await LoadTableRowsByGuidsAsync("bu000", documentGuids, cancellationToken);
+        var links = await ResolveDocumentLinksAsync(documentGuids, DocumentKind.Invoice, rawRows, cancellationToken);
         var items = records
             .Select(record =>
             {
                 var type = record.TypeGuid.HasValue && types.TryGetValue(record.TypeGuid.Value, out var resolvedType)
                     ? resolvedType
                     : null;
-                return new BillDocumentResponse(
-                    record.Guid,
-                    record.Number,
-                    record.Date,
-                    record.TypeGuid,
-                    type?.Code,
-                    type?.Name,
-                    record.Notes);
+                rawRows.TryGetValue(record.Guid, out var rawRow);
+                links.TryGetValue(record.Guid, out var link);
+                return BuildDocumentResponse(record, type, rawRow, link, isVoucher: false);
             })
             .ToArray();
 
         return Ok(new PagedResponse<BillDocumentResponse>(items, page, pageSize, totalCount));
+    }
+
+    [HttpGet("invoices/{guid:guid}")]
+    public async Task<ActionResult<BillDocumentDetailsResponse>> GetInvoice(Guid guid, CancellationToken cancellationToken = default)
+    {
+        var record = await mainDbContext.Bills
+            .AsNoTracking()
+            .SingleOrDefaultAsync(bill => bill.Guid == guid, cancellationToken);
+        if (record is null)
+        {
+            return NotFound();
+        }
+
+        var types = await ResolveTypeLookupAsync([record.TypeGuid], TypeLookupSource.Bill, cancellationToken);
+        var rawRows = await LoadTableRowsByGuidsAsync("bu000", [guid], cancellationToken);
+        var links = await ResolveDocumentLinksAsync([guid], DocumentKind.Invoice, rawRows, cancellationToken);
+        rawRows.TryGetValue(guid, out var rawRow);
+        links.TryGetValue(guid, out var link);
+        var type = record.TypeGuid.HasValue && types.TryGetValue(record.TypeGuid.Value, out var resolvedType)
+            ? resolvedType
+            : null;
+        var document = BuildDocumentResponse(record, type, rawRow, link, isVoucher: false);
+        var billItemRows = await LoadBillItemRowsAsync(guid, cancellationToken);
+        var billItems = await BuildBillItemResponsesAsync(billItemRows, cancellationToken);
+        return Ok(new BillDocumentDetailsResponse(document, billItems));
     }
 
     [HttpGet("invoice-types")]
@@ -169,28 +207,47 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
-        var types = await ResolveTypeLookupAsync(
-            records.Select(record => record.TypeGuid),
-            preferredSource: TypeLookupSource.Entry,
-            cancellationToken);
+
+        var documentGuids = records.Select(record => record.Guid).ToArray();
+        var types = await ResolveTypeLookupAsync(records.Select(record => record.TypeGuid), TypeLookupSource.Entry, cancellationToken);
+        var rawRows = await LoadTableRowsByGuidsAsync("py000", documentGuids, cancellationToken);
+        var links = await ResolveDocumentLinksAsync(documentGuids, DocumentKind.Voucher, rawRows, cancellationToken);
         var items = records
             .Select(record =>
             {
                 var type = record.TypeGuid.HasValue && types.TryGetValue(record.TypeGuid.Value, out var resolvedType)
                     ? resolvedType
                     : null;
-                return new BillDocumentResponse(
-                    record.Guid,
-                    record.Number,
-                    record.Date,
-                    record.TypeGuid,
-                    type?.Code,
-                    type?.Name,
-                    record.Notes);
+                rawRows.TryGetValue(record.Guid, out var rawRow);
+                links.TryGetValue(record.Guid, out var link);
+                return BuildDocumentResponse(record, type, rawRow, link, isVoucher: true);
             })
             .ToArray();
 
         return Ok(new PagedResponse<BillDocumentResponse>(items, page, pageSize, totalCount));
+    }
+
+    [HttpGet("vouchers/{guid:guid}")]
+    public async Task<ActionResult<BillDocumentDetailsResponse>> GetVoucher(Guid guid, CancellationToken cancellationToken = default)
+    {
+        var record = await mainDbContext.Payments
+            .AsNoTracking()
+            .SingleOrDefaultAsync(payment => payment.Guid == guid, cancellationToken);
+        if (record is null)
+        {
+            return NotFound();
+        }
+
+        var types = await ResolveTypeLookupAsync([record.TypeGuid], TypeLookupSource.Entry, cancellationToken);
+        var rawRows = await LoadTableRowsByGuidsAsync("py000", [guid], cancellationToken);
+        var links = await ResolveDocumentLinksAsync([guid], DocumentKind.Voucher, rawRows, cancellationToken);
+        rawRows.TryGetValue(guid, out var rawRow);
+        links.TryGetValue(guid, out var link);
+        var type = record.TypeGuid.HasValue && types.TryGetValue(record.TypeGuid.Value, out var resolvedType)
+            ? resolvedType
+            : null;
+        var document = BuildDocumentResponse(record, type, rawRow, link, isVoucher: true);
+        return Ok(new BillDocumentDetailsResponse(document, []));
     }
 
     [HttpGet("voucher-types")]
@@ -227,6 +284,409 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             .ToArray();
 
         return Ok(items);
+    }
+
+    private BillDocumentResponse BuildDocumentResponse(
+        BillHeaderRecord record,
+        ResolvedType? resolvedType,
+        IReadOnlyDictionary<string, object?>? rawRow,
+        DocumentLinkInfo? link,
+        bool isVoucher)
+    {
+        var (total, discount, additions, net) = ResolveDocumentTotals(rawRow, isVoucher);
+        var notes = FirstNotBlank(record.Notes, GetStringValue(rawRow, NotesCandidates));
+        var (settlementTypeCode, settlementTypeName) = ResolveSettlementType(resolvedType?.Name ?? resolvedType?.Code, isVoucher);
+        return new BillDocumentResponse(
+            record.Guid,
+            record.Number,
+            record.Date,
+            record.TypeGuid,
+            resolvedType?.Code,
+            resolvedType?.Name,
+            settlementTypeCode,
+            settlementTypeName,
+            link?.Customer?.Guid,
+            link?.Customer?.CustomerName,
+            link?.Account?.Guid,
+            link?.Account?.Number,
+            link?.Account?.Code,
+            link?.Account?.Name,
+            total,
+            discount,
+            additions,
+            net,
+            notes);
+    }
+
+    private BillDocumentResponse BuildDocumentResponse(
+        PaymentRecord record,
+        ResolvedType? resolvedType,
+        IReadOnlyDictionary<string, object?>? rawRow,
+        DocumentLinkInfo? link,
+        bool isVoucher)
+    {
+        var (total, discount, additions, net) = ResolveDocumentTotals(rawRow, isVoucher);
+        var notes = FirstNotBlank(record.Notes, GetStringValue(rawRow, NotesCandidates));
+        var (settlementTypeCode, settlementTypeName) = ResolveSettlementType(resolvedType?.Name ?? resolvedType?.Code, isVoucher);
+        return new BillDocumentResponse(
+            record.Guid,
+            record.Number,
+            record.Date,
+            record.TypeGuid,
+            resolvedType?.Code,
+            resolvedType?.Name,
+            settlementTypeCode,
+            settlementTypeName,
+            link?.Customer?.Guid,
+            link?.Customer?.CustomerName,
+            link?.Account?.Guid,
+            link?.Account?.Number,
+            link?.Account?.Code,
+            link?.Account?.Name,
+            total,
+            discount,
+            additions,
+            net,
+            notes);
+    }
+
+    private async Task<Dictionary<Guid, DocumentLinkInfo>> ResolveDocumentLinksAsync(
+        IReadOnlyCollection<Guid> documentGuids,
+        DocumentKind documentKind,
+        IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, object?>> rawRows,
+        CancellationToken cancellationToken)
+    {
+        if (documentGuids.Count == 0)
+        {
+            return [];
+        }
+
+        var normalizedDocumentGuids = documentGuids.Distinct().ToArray();
+        var entryGuidsByDocument = documentKind switch
+        {
+            DocumentKind.Invoice => await mainDbContext.EntryBillRelations
+                .AsNoTracking()
+                .Where(relation => relation.BillGuid.HasValue && normalizedDocumentGuids.Contains(relation.BillGuid.Value))
+                .GroupBy(relation => relation.BillGuid!.Value)
+                .ToDictionaryAsync(
+                    group => group.Key,
+                    group => group.Select(relation => relation.EntryGuid).Distinct().ToArray(),
+                    cancellationToken),
+            _ => await mainDbContext.EntryPaymentRelations
+                .AsNoTracking()
+                .Where(relation => relation.PaymentGuid.HasValue && normalizedDocumentGuids.Contains(relation.PaymentGuid.Value))
+                .GroupBy(relation => relation.PaymentGuid!.Value)
+                .ToDictionaryAsync(
+                    group => group.Key,
+                    group => group.Select(relation => relation.EntryGuid).Distinct().ToArray(),
+                    cancellationToken)
+        };
+
+        var entryGuids = entryGuidsByDocument.Values
+            .SelectMany(value => value)
+            .Distinct()
+            .ToArray();
+        var entries = entryGuids.Length == 0
+            ? []
+            : await mainDbContext.Entries
+                .AsNoTracking()
+                .Where(entry => entryGuids.Contains(entry.Guid))
+                .ToListAsync(cancellationToken);
+        var entryLookup = entries.ToDictionary(entry => entry.Guid);
+
+        var rowCustomerGuidByDocument = normalizedDocumentGuids.ToDictionary(
+            guid => guid,
+            guid => rawRows.TryGetValue(guid, out var row) ? GetGuidValue(row, CustomerGuidCandidates) : null);
+        var rowAccountGuidByDocument = normalizedDocumentGuids.ToDictionary(
+            guid => guid,
+            guid => rawRows.TryGetValue(guid, out var row) ? GetGuidValue(row, AccountGuidCandidates) : null);
+
+        var customerGuids = entries
+            .Select(entry => entry.CustomerGuid)
+            .Concat(rowCustomerGuidByDocument.Values)
+            .Where(guid => guid.HasValue && guid.Value != Guid.Empty)
+            .Select(guid => guid!.Value)
+            .Distinct()
+            .ToArray();
+        var accountGuids = entries
+            .Select(entry => entry.AccountGuid)
+            .Concat(rowAccountGuidByDocument.Values)
+            .Where(guid => guid.HasValue && guid.Value != Guid.Empty)
+            .Select(guid => guid!.Value)
+            .Distinct()
+            .ToArray();
+
+        var customers = customerGuids.Length == 0
+            ? []
+            : await mainDbContext.Customers
+                .AsNoTracking()
+                .Where(customer => customerGuids.Contains(customer.Guid))
+                .ToListAsync(cancellationToken);
+        var customerLookup = customers.ToDictionary(customer => customer.Guid);
+
+        var accounts = accountGuids.Length == 0
+            ? []
+            : await mainDbContext.Accounts
+                .AsNoTracking()
+                .Where(account => accountGuids.Contains(account.Guid))
+                .ToListAsync(cancellationToken);
+        var accountLookup = accounts.ToDictionary(account => account.Guid);
+
+        var result = new Dictionary<Guid, DocumentLinkInfo>(normalizedDocumentGuids.Length);
+        foreach (var documentGuid in normalizedDocumentGuids)
+        {
+            var linkedEntries = entryGuidsByDocument.TryGetValue(documentGuid, out var relatedEntryGuids)
+                ? relatedEntryGuids.Select(entryGuid => entryLookup.GetValueOrDefault(entryGuid)).Where(entry => entry is not null).ToArray()
+                : [];
+            var preferredEntry = linkedEntries.FirstOrDefault(entry => entry!.CustomerGuid.HasValue || entry.AccountGuid.HasValue)
+                ?? linkedEntries.FirstOrDefault();
+
+            var customerGuid = preferredEntry?.CustomerGuid ?? rowCustomerGuidByDocument.GetValueOrDefault(documentGuid);
+            var accountGuid = preferredEntry?.AccountGuid ?? rowAccountGuidByDocument.GetValueOrDefault(documentGuid);
+            var customer = customerGuid.HasValue && customerLookup.TryGetValue(customerGuid.Value, out var resolvedCustomer)
+                ? resolvedCustomer
+                : null;
+            var account = accountGuid.HasValue && accountLookup.TryGetValue(accountGuid.Value, out var resolvedAccount)
+                ? resolvedAccount
+                : null;
+            result[documentGuid] = new DocumentLinkInfo(customer, account);
+        }
+
+        return result;
+    }
+
+    private async Task<IReadOnlyCollection<BillDocumentItemResponse>> BuildBillItemResponsesAsync(
+        IReadOnlyCollection<IReadOnlyDictionary<string, object?>> billItemRows,
+        CancellationToken cancellationToken)
+    {
+        if (billItemRows.Count == 0)
+        {
+            return [];
+        }
+
+        var materialGuids = billItemRows
+            .Select(row => GetGuidValue(row, MaterialGuidCandidates))
+            .Where(guid => guid.HasValue && guid.Value != Guid.Empty)
+            .Select(guid => guid!.Value)
+            .Distinct()
+            .ToArray();
+        var materials = materialGuids.Length == 0
+            ? []
+            : await mainDbContext.Materials
+                .AsNoTracking()
+                .Where(material => materialGuids.Contains(material.Guid))
+                .ToListAsync(cancellationToken);
+        var materialLookup = materials.ToDictionary(material => material.Guid);
+
+        var items = billItemRows
+            .Select(row =>
+            {
+                var itemGuid = GetGuidValue(row, "GUID") ?? Guid.Empty;
+                var materialGuid = GetGuidValue(row, MaterialGuidCandidates);
+                var quantity = GetNumberValue(row, ItemQuantityCandidates);
+                var price = GetNumberValue(row, ItemPriceCandidates);
+                var discount = GetNumberValue(row, ItemDiscountCandidates);
+                var additions = GetNumberValue(row, ItemAdditionCandidates);
+                var lineTotal = GetNumberValue(row, ItemLineTotalCandidates)
+                    ?? ComputeLineTotal(quantity, price, discount, additions);
+                var material = materialGuid.HasValue && materialLookup.TryGetValue(materialGuid.Value, out var resolvedMaterial)
+                    ? resolvedMaterial
+                    : null;
+
+                return new BillDocumentItemResponse(
+                    itemGuid,
+                    materialGuid,
+                    material?.Number,
+                    material?.Code,
+                    material?.Name,
+                    quantity,
+                    price,
+                    discount,
+                    additions,
+                    lineTotal);
+            })
+            .ToArray();
+
+        return items;
+    }
+
+    private async Task<IReadOnlyCollection<IReadOnlyDictionary<string, object?>>> LoadBillItemRowsAsync(
+        Guid billGuid,
+        CancellationToken cancellationToken)
+    {
+        return await UseOpenSqlConnectionAsync(async connection =>
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT * FROM [bi000] WHERE [ParentGUID] = @parentGuid";
+            command.CommandType = CommandType.Text;
+            command.Parameters.Add(new SqlParameter("@parentGuid", SqlDbType.UniqueIdentifier) { Value = billGuid });
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+            var rows = new List<IReadOnlyDictionary<string, object?>>();
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var row = new Dictionary<string, object?>(reader.FieldCount, StringComparer.OrdinalIgnoreCase);
+                for (var index = 0; index < reader.FieldCount; index++)
+                {
+                    row[reader.GetName(index)] = await reader.IsDBNullAsync(index, cancellationToken)
+                        ? null
+                        : reader.GetValue(index);
+                }
+
+                rows.Add(row);
+            }
+
+            return (IReadOnlyCollection<IReadOnlyDictionary<string, object?>>)rows;
+        }, cancellationToken);
+    }
+
+    private async Task<Dictionary<Guid, IReadOnlyDictionary<string, object?>>> LoadTableRowsByGuidsAsync(
+        string tableName,
+        IReadOnlyCollection<Guid> guids,
+        CancellationToken cancellationToken)
+    {
+        if (guids.Count == 0)
+        {
+            return [];
+        }
+
+        if (!string.Equals(tableName, "bu000", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(tableName, "py000", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Table '{tableName}' is not allowed for dynamic document loading.");
+        }
+
+        var normalizedGuids = guids.Distinct().ToArray();
+        return await UseOpenSqlConnectionAsync(async connection =>
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandType = CommandType.Text;
+            var parameterNames = new string[normalizedGuids.Length];
+            for (var index = 0; index < normalizedGuids.Length; index++)
+            {
+                var parameterName = $"@p{index}";
+                parameterNames[index] = parameterName;
+                command.Parameters.Add(new SqlParameter(parameterName, SqlDbType.UniqueIdentifier) { Value = normalizedGuids[index] });
+            }
+
+            command.CommandText = $"SELECT * FROM [{tableName}] WHERE [GUID] IN ({string.Join(", ", parameterNames)})";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+            var rows = new Dictionary<Guid, IReadOnlyDictionary<string, object?>>(normalizedGuids.Length);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var row = new Dictionary<string, object?>(reader.FieldCount, StringComparer.OrdinalIgnoreCase);
+                for (var index = 0; index < reader.FieldCount; index++)
+                {
+                    row[reader.GetName(index)] = await reader.IsDBNullAsync(index, cancellationToken)
+                        ? null
+                        : reader.GetValue(index);
+                }
+
+                if (GetGuidValue(row, "GUID") is { } guid && guid != Guid.Empty)
+                {
+                    rows[guid] = row;
+                }
+            }
+
+            return rows;
+        }, cancellationToken);
+    }
+
+    private async Task<T> UseOpenSqlConnectionAsync<T>(
+        Func<SqlConnection, Task<T>> callback,
+        CancellationToken cancellationToken)
+    {
+        var connection = mainDbContext.Database.GetDbConnection() as SqlConnection
+            ?? throw new InvalidOperationException("MainDb provider must be SQL Server.");
+        var shouldCloseConnection = connection.State != ConnectionState.Open;
+        if (shouldCloseConnection)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            return await callback(connection);
+        }
+        finally
+        {
+            if (shouldCloseConnection)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
+
+    private static (double? Total, double? Discount, double? Additions, double? Net) ResolveDocumentTotals(
+        IReadOnlyDictionary<string, object?>? row,
+        bool isVoucher)
+    {
+        if (row is null)
+        {
+            return (null, null, null, null);
+        }
+
+        var total = isVoucher
+            ? GetNumberValue(row, VoucherTotalCandidates)
+            : GetNumberValue(row, InvoiceTotalCandidates);
+        var discount = GetNumberValue(row, DiscountCandidates);
+        var additions = GetNumberValue(row, AdditionsCandidates);
+        var net = GetNumberValue(row, NetCandidates);
+
+        if (!net.HasValue && total.HasValue)
+        {
+            net = total.Value + (additions ?? 0d) - (discount ?? 0d);
+        }
+
+        if (!total.HasValue && net.HasValue)
+        {
+            total = net;
+        }
+
+        return (total, discount, additions, net);
+    }
+
+    private static (string? SettlementTypeCode, string? SettlementTypeName) ResolveSettlementType(string? typeText, bool isVoucher)
+    {
+        if (string.IsNullOrWhiteSpace(typeText))
+        {
+            return (null, null);
+        }
+
+        var normalized = typeText.Trim().ToLowerInvariant();
+        if (normalized.Contains("نقد") || normalized.Contains("cash"))
+        {
+            return ("cash", "نقد");
+        }
+
+        if (normalized.Contains("آجل") || normalized.Contains("اجل") || normalized.Contains("credit"))
+        {
+            return ("credit", "آجل");
+        }
+
+        if (isVoucher && normalized.Contains("قبض"))
+        {
+            return ("receipt", "قبض");
+        }
+
+        if (isVoucher && normalized.Contains("دفع"))
+        {
+            return ("payment", "دفع");
+        }
+
+        return (null, null);
+    }
+
+    private static double? ComputeLineTotal(double? quantity, double? price, double? discount, double? additions)
+    {
+        if (!quantity.HasValue && !price.HasValue && !discount.HasValue && !additions.HasValue)
+        {
+            return null;
+        }
+
+        var subtotal = (quantity ?? 1d) * (price ?? 0d);
+        return subtotal - (discount ?? 0d) + (additions ?? 0d);
     }
 
     private static IQueryable<BillHeaderRecord> ApplySearchFilter(IQueryable<BillHeaderRecord> query, string? search)
@@ -462,6 +922,115 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         return new ResolvedType(null, resolvedName);
     }
 
+    private static Guid? GetGuidValue(IReadOnlyDictionary<string, object?>? row, params string[] candidates)
+    {
+        if (row is null)
+        {
+            return null;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (!row.TryGetValue(candidate, out var rawValue) || rawValue is null)
+            {
+                continue;
+            }
+
+            if (rawValue is Guid guidValue)
+            {
+                return guidValue;
+            }
+
+            if (rawValue is string stringValue && Guid.TryParse(stringValue, out var parsedGuid))
+            {
+                return parsedGuid;
+            }
+        }
+
+        return null;
+    }
+
+    private static double? GetNumberValue(IReadOnlyDictionary<string, object?>? row, params string[] candidates)
+    {
+        if (row is null)
+        {
+            return null;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (!row.TryGetValue(candidate, out var rawValue) || rawValue is null)
+            {
+                continue;
+            }
+
+            if (TryConvertToDouble(rawValue, out var convertedValue))
+            {
+                return convertedValue;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? GetStringValue(IReadOnlyDictionary<string, object?>? row, params string[] candidates)
+    {
+        if (row is null)
+        {
+            return null;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (!row.TryGetValue(candidate, out var rawValue) || rawValue is null)
+            {
+                continue;
+            }
+
+            var convertedValue = Convert.ToString(rawValue);
+            if (!string.IsNullOrWhiteSpace(convertedValue))
+            {
+                return convertedValue.Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private static bool TryConvertToDouble(object value, out double number)
+    {
+        switch (value)
+        {
+            case double doubleValue:
+                number = doubleValue;
+                return true;
+            case float floatValue:
+                number = floatValue;
+                return true;
+            case decimal decimalValue:
+                number = Convert.ToDouble(decimalValue);
+                return true;
+            case int intValue:
+                number = intValue;
+                return true;
+            case long longValue:
+                number = longValue;
+                return true;
+            case short shortValue:
+                number = shortValue;
+                return true;
+            case byte byteValue:
+                number = byteValue;
+                return true;
+            case string stringValue when double.TryParse(stringValue, out var parsedValue):
+                number = parsedValue;
+                return true;
+            default:
+                number = 0;
+                return false;
+        }
+    }
+
     private static string? FirstNotBlank(params string?[] values)
     {
         foreach (var value in values)
@@ -476,10 +1045,17 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
     }
 
     private sealed record ResolvedType(string? Code, string? Name);
+    private sealed record DocumentLinkInfo(CustomerRecord? Customer, AccountRecord? Account);
 
     private enum TypeLookupSource
     {
         Bill = 0,
         Entry = 1
+    }
+
+    private enum DocumentKind
+    {
+        Invoice = 0,
+        Voucher = 1
     }
 }

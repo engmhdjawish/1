@@ -406,9 +406,11 @@ entries.read   (لكشف الحساب التفصيلي)
 ```http
 GET /api/bills/invoices?page=1&pageSize=100
 GET /api/bills/invoices?typeGuid={typeGuid}&fromDate=2026-01-01&toDate=2026-01-31&search=1254
+GET /api/bills/invoices/{guid}
 
 GET /api/bills/vouchers?page=1&pageSize=100
 GET /api/bills/vouchers?typeGuid={typeGuid}&fromDate=2026-01-01&toDate=2026-01-31&search=قبض
+GET /api/bills/vouchers/{guid}
 ```
 
 خيارات الأنواع (للقوائم المنسدلة/الفلاتر):
@@ -422,7 +424,22 @@ GET /api/bills/voucher-types
 
 - رقم المستند وتاريخه وملاحظاته.
 - `typeGuid` ونوع المستند النصي (`typeName`) والاختصار (`typeCode`) عند توفره.
+- نوع التسوية (`settlementTypeCode`, `settlementTypeName`) مثل `cash/credit` أو `قبض/دفع` حسب نوع السند.
+- بيانات العميل والحساب المرتبطين بالمستند عند توفرها:
+  - `customerGuid`, `customerName`
+  - `accountGuid`, `accountNumber`, `accountCode`, `accountName`
+- المجاميع عند توفرها من جداول الأمين:
+  - `totalAmount`
+  - `totalDiscount`
+  - `totalAdditions`
+  - `netAmount`
 - Pagination قياسية: `page`, `pageSize`, `totalCount`.
+
+استجابة التفاصيل (`GET /api/bills/invoices/{guid}`) تضيف:
+
+- عناصر الفاتورة (`items`) مع:
+  - المادة: `materialGuid`, `materialNumber`, `materialCode`, `materialName`
+  - القيم: `quantity`, `price`, `discount`, `additions`, `lineTotal`
 
 الصلاحية المطلوبة:
 
