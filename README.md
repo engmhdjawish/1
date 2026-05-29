@@ -446,9 +446,9 @@ GET /api/bills/voucher-types
 - بيانات العميل والحساب المرتبطين بالمستند عند توفرها:
   - `customerGuid`, `customerName`
   - `accountGuid`, `accountNumber`, `accountCode`, `accountName`
-- بيانات العملة من ربط `bu000/py000.CurrencyGUID` مع `cur000`:
+- بيانات العملة من ربط `bu000/py000.CurrencyGUID` مع `my000`:
   - `currencyGuid`, `currencyName`, `currencyCode`, `currencySymbol`
-  - `currencyRate` (سعر التعادل المستخدم لتحويل القيم إلى عملة المستند)
+  - `currencyRate` (مأخوذ من `CurrencyVal` في الفاتورة/السند نفسه، ويُستخدم لقسمة القيم)
 - المجاميع عند توفرها من جداول الأمين:
   - `totalAmount`
   - `totalDiscount`

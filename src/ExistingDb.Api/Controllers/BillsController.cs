@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using System.Globalization;
 
 namespace ExistingDb.Api.Controllers;
 
@@ -35,9 +36,12 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
     private static readonly string[] MaterialGuidCandidates = ["MatGUID", "MaterialGUID", "MatGuid"];
     private static readonly string[] CurrencyGuidCandidates = ["CurrencyGUID", "CurGUID", "CurrGUID", "CurrencyGuid", "CurrancyGUID", "CurrancyGuid"];
     private static readonly string[] CurrencyRateCandidates = ["CurrencyVal", "CurVal", "CurrancyVal", "CurrencyValue", "CurRate", "Rate", "ExchangeRate", "CurrancyValue"];
-    private static readonly string[] CurrencyNameCandidates = ["Name", "CurName", "CurrencyName", "LatinName"];
-    private static readonly string[] CurrencyCodeCandidates = ["CurrencyCode", "CurCode", "CodeCur", "CurName", "CurrencyName"];
-    private static readonly string[] CurrencySymbolCandidates = ["CurrencySymbol", "CurSymbol", "Symbol", "CurrencySign"];
+    private static readonly string[] DocumentCurrencyNameCandidates = ["CurrencyName", "CurName"];
+    private static readonly string[] DocumentCurrencyCodeCandidates = ["CurrencyCode", "CurCode", "CodeCur", "CurrCode", "CurrancyCode"];
+    private static readonly string[] DocumentCurrencySymbolCandidates = ["CurrencySymbol", "CurSymbol", "CurrencySign", "CurrSign"];
+    private static readonly string[] CurrencyLookupNameCandidates = ["Name", "AName", "ArabicName", "LatinName", "CurrencyName", "CurName"];
+    private static readonly string[] CurrencyLookupCodeCandidates = ["Code", "CurCode", "CurrencyCode", "Abbrev", "LatinCode"];
+    private static readonly string[] CurrencyLookupSymbolCandidates = ["Symbol", "CurSymbol", "CurrencySymbol", "Sign", "CurrencySign"];
     private static readonly string[] PairsCountCandidates = ["Pairs", "PairsCount", "TotalPairs", "PairQty", "QtyPair", "Qty2"];
     private static readonly string[] PensCountCandidates = ["Pens", "PensCount", "TotalPens", "Pieces", "PiecesCount", "QTy1", "Qty1"];
     private static readonly string[] DiscountAccountGuidCandidates = ["DiscAccGUID", "DiscountAccGUID", "DiscountAccountGUID", "TotalDiscAccGUID"];
@@ -357,8 +361,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         IReadOnlyDictionary<Guid, CurrencyReference> currencyLookup,
         bool isVoucher)
     {
-        var (currencyGuid, currencyName, currencyCode, currencySymbol, currencyRateRaw) = ResolveCurrencyInfo(rawRow, currencyLookup);
-        var currencyRate = ResolveEffectiveCurrencyRate(currencyRateRaw, link?.Account?.CurrencyVal);
+        var (currencyGuid, currencyName, currencyCode, currencySymbol, currencyRate) = ResolveCurrencyInfo(rawRow, currencyLookup);
         var (totalRaw, discountRaw, additionsRaw, netRaw) = ResolveDocumentTotals(rawRow, isVoucher);
         var total = ConvertToDocumentCurrency(totalRaw, currencyRate);
         var discount = ConvertToDocumentCurrency(discountRaw, currencyRate);
@@ -416,8 +419,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         IReadOnlyDictionary<Guid, CurrencyReference> currencyLookup,
         bool isVoucher)
     {
-        var (currencyGuid, currencyName, currencyCode, currencySymbol, currencyRateRaw) = ResolveCurrencyInfo(rawRow, currencyLookup);
-        var currencyRate = ResolveEffectiveCurrencyRate(currencyRateRaw, link?.Account?.CurrencyVal);
+        var (currencyGuid, currencyName, currencyCode, currencySymbol, currencyRate) = ResolveCurrencyInfo(rawRow, currencyLookup);
         var (totalRaw, discountRaw, additionsRaw, netRaw) = ResolveDocumentTotals(rawRow, isVoucher);
         var total = ConvertToDocumentCurrency(totalRaw, currencyRate);
         var discount = ConvertToDocumentCurrency(discountRaw, currencyRate);
@@ -771,7 +773,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
                 command.Parameters.Add(new SqlParameter(parameterName, SqlDbType.UniqueIdentifier) { Value = currencyGuids[index] });
             }
 
-            command.CommandText = $"SELECT * FROM [cur000] WHERE [GUID] IN ({string.Join(", ", parameterNames)})";
+            command.CommandText = $"SELECT * FROM [my000] WHERE [GUID] IN ({string.Join(", ", parameterNames)})";
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
             var lookup = new Dictionary<Guid, CurrencyReference>(currencyGuids.Length);
@@ -791,15 +793,15 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
                 }
 
                 var name = FirstNotBlank(
-                    GetStringValue(row, CurrencyNameCandidates),
+                    GetStringValue(row, CurrencyLookupNameCandidates),
                     GetStringValue(row, "ArabicName"),
                     GetStringValue(row, "AName"));
                 var code = FirstNotBlank(
-                    GetStringValue(row, CurrencyCodeCandidates),
+                    GetStringValue(row, CurrencyLookupCodeCandidates),
                     GetStringValue(row, "Code"),
                     GetStringValue(row, "Abbrev"));
                 var symbol = FirstNotBlank(
-                    GetStringValue(row, CurrencySymbolCandidates),
+                    GetStringValue(row, CurrencyLookupSymbolCandidates),
                     ResolveCurrencySymbolFromCode(code));
                 lookup[currencyGuid] = new CurrencyReference(currencyGuid, name, code, symbol);
             }
@@ -919,36 +921,26 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         return amount.Value / currencyRate.Value;
     }
 
-    private static double ResolveEffectiveCurrencyRate(double? documentRate, double? accountRate)
-    {
-        if (documentRate.HasValue && documentRate.Value > 0d)
-        {
-            return documentRate.Value;
-        }
-
-        if (accountRate.HasValue && accountRate.Value > 0d)
-        {
-            return accountRate.Value;
-        }
-
-        return 1d;
-    }
-
     private static (Guid? CurrencyGuid, string? CurrencyName, string? CurrencyCode, string? CurrencySymbol, double? CurrencyRate) ResolveCurrencyInfo(
         IReadOnlyDictionary<string, object?>? row,
         IReadOnlyDictionary<Guid, CurrencyReference> currencyLookup)
     {
         var currencyGuid = GetGuidValue(row, CurrencyGuidCandidates);
         var currencyRate = GetNumberValue(row, CurrencyRateCandidates);
+        if (!currencyRate.HasValue || currencyRate.Value <= 0d)
+        {
+            currencyRate = 1d;
+        }
+
         currencyLookup.TryGetValue(currencyGuid ?? Guid.Empty, out var currencyReference);
         var currencyName = FirstNotBlank(
-            GetStringValue(row, CurrencyNameCandidates),
+            GetStringValue(row, DocumentCurrencyNameCandidates),
             currencyReference?.Name);
         var currencyCode = FirstNotBlank(
-            GetStringValue(row, CurrencyCodeCandidates),
+            GetStringValue(row, DocumentCurrencyCodeCandidates),
             currencyReference?.Code);
         var currencySymbol = FirstNotBlank(
-            GetStringValue(row, CurrencySymbolCandidates),
+            GetStringValue(row, DocumentCurrencySymbolCandidates),
             currencyReference?.Symbol,
             ResolveCurrencySymbolFromCode(currencyCode),
             "ل.س");
@@ -1543,9 +1535,40 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             case byte byteValue:
                 number = byteValue;
                 return true;
-            case string stringValue when double.TryParse(stringValue, out var parsedValue):
-                number = parsedValue;
-                return true;
+            case string stringValue:
+                var normalized = stringValue.Trim();
+                if (double.TryParse(normalized, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedInvariant))
+                {
+                    number = parsedInvariant;
+                    return true;
+                }
+
+                if (double.TryParse(normalized, NumberStyles.Any, CultureInfo.CurrentCulture, out var parsedCurrent))
+                {
+                    number = parsedCurrent;
+                    return true;
+                }
+
+                var swappedSeparators = normalized.Replace(',', '.');
+                if (double.TryParse(swappedSeparators, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedSwapped))
+                {
+                    number = parsedSwapped;
+                    return true;
+                }
+
+                number = 0;
+                return false;
+            case IConvertible convertible:
+                try
+                {
+                    number = convertible.ToDouble(CultureInfo.InvariantCulture);
+                    return true;
+                }
+                catch
+                {
+                    number = 0;
+                    return false;
+                }
             default:
                 number = 0;
                 return false;
