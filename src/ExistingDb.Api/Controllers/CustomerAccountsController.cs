@@ -221,8 +221,11 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             var signedAmount = debit - credit;
             runningBalance += signedAmount;
 
-            var reference = references.GetValueOrDefault(entry.Guid) ?? EntryReferenceInfo.Unknown;
             var contraAccount = contraAccounts.GetValueOrDefault(entry.Guid);
+            var reference = ResolveReferenceForDisplay(
+                entry,
+                references.GetValueOrDefault(entry.Guid),
+                contraAccount);
             statementEntries.Add(new CustomerAccountStatementEntryResponse(
                 entry.Guid,
                 entry.Date,
@@ -822,7 +825,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         var conversionRate = ResolveConversionRate(entry.CurrencyVal, accountCurrencyRate);
         var debit = ConvertMainToAccountCurrency(debitMain, conversionRate);
         var credit = ConvertMainToAccountCurrency(creditMain, conversionRate);
-        var effectiveReference = reference ?? EntryReferenceInfo.Unknown;
+        var effectiveReference = ResolveReferenceForDisplay(entry, reference, contraAccount);
         return new CustomerAccountMovementResponse(
             entry.Guid,
             entry.Date,
@@ -844,6 +847,35 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             contraAccount?.Code,
             contraAccount?.Name,
             entry.Notes);
+    }
+
+    private static EntryReferenceInfo ResolveReferenceForDisplay(
+        EntryRecord entry,
+        EntryReferenceInfo? reference,
+        ContraAccountInfo? contraAccount)
+    {
+        var effectiveReference = reference ?? EntryReferenceInfo.Unknown;
+        var hasReferenceClassification = !string.Equals(effectiveReference.ReasonType, "unknown", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(effectiveReference.ReasonDocumentType);
+        if (hasReferenceClassification)
+        {
+            return effectiveReference;
+        }
+
+        var inferredDocumentType = InferDocumentTypeFromContra(entry, contraAccount)
+            ?? InferDocumentTypeFromEntryNotes(entry.Notes);
+        if (string.IsNullOrWhiteSpace(inferredDocumentType))
+        {
+            return effectiveReference;
+        }
+
+        return new EntryReferenceInfo(
+            MapReasonTypeFromDocumentType(inferredDocumentType),
+            inferredDocumentType,
+            effectiveReference.ReferenceGuid ?? entry.ParentGuid,
+            effectiveReference.ReferenceNumber ?? entry.Number,
+            effectiveReference.ReferenceDate ?? entry.Date,
+            effectiveReference.ReferenceNotes ?? entry.Notes);
     }
 
     private async Task<Dictionary<Guid, ContraAccountInfo>> ResolveContraAccountsAsync(
@@ -947,6 +979,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         if (normalized.Contains("مبيع")
             || normalized.Contains("بيع")
             || normalized.Contains("شراء")
+            || normalized.Contains("مردود")
             || normalized.Contains("فاتورة"))
         {
             return "invoice";
@@ -974,6 +1007,70 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         }
 
         return "unknown";
+    }
+
+    private static string? InferDocumentTypeFromContra(EntryRecord entry, ContraAccountInfo? contraAccount)
+    {
+        if (contraAccount is null)
+        {
+            return null;
+        }
+
+        var accountName = contraAccount.Name?.Trim();
+        if (string.IsNullOrWhiteSpace(accountName))
+        {
+            return null;
+        }
+
+        var debit = entry.Debit ?? 0;
+        var credit = entry.Credit ?? 0;
+        var normalizedName = accountName.ToLowerInvariant();
+
+        var isCashOrBank = normalizedName.Contains("صندوق")
+            || normalizedName.Contains("بنك")
+            || normalizedName.Contains("cash")
+            || normalizedName.Contains("bank");
+        if (isCashOrBank)
+        {
+            if (credit > 0)
+            {
+                return "سند قبض";
+            }
+
+            if (debit > 0)
+            {
+                return "سند دفع";
+            }
+
+            return "سند";
+        }
+
+        if (normalizedName.Contains("مردود") && normalizedName.Contains("مبيعات"))
+        {
+            return "مردود مبيعات";
+        }
+
+        if (normalizedName.Contains("مردود") && (normalizedName.Contains("مشتريات") || normalizedName.Contains("شراء")))
+        {
+            return "مردود مشتريات";
+        }
+
+        if (normalizedName.Contains("مبيعات") || normalizedName.Contains("بيع"))
+        {
+            return debit > 0 ? "فاتورة مبيع" : "مردود مبيعات";
+        }
+
+        if (normalizedName.Contains("مشتريات") || normalizedName.Contains("شراء"))
+        {
+            return credit > 0 ? "فاتورة شراء" : "مردود مشتريات";
+        }
+
+        if (normalizedName.Contains("حسم"))
+        {
+            return "حسم";
+        }
+
+        return null;
     }
 
     private static string? InferDocumentTypeFromEntryNotes(string? notes)
