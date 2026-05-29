@@ -45,9 +45,11 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
     private static readonly string[] PairsCountCandidates = ["Pairs", "PairsCount", "TotalPairs", "PairQty", "QtyPair", "Qty2"];
     private static readonly string[] PensCountCandidates = ["Pens", "PensCount", "TotalPens", "Pieces", "PiecesCount", "QTy1", "Qty1"];
     private static readonly string[] DiscountAccountGuidCandidates = ["DiscAccGUID", "DiscountAccGUID", "DiscountAccountGUID", "TotalDiscAccGUID"];
+    private static readonly string[] DiscountAccountNumberCandidates = ["DiscAccNum", "DiscountAccNum", "DiscountAccountNumber", "TotalDiscAccNum"];
     private static readonly string[] DiscountAccountCodeCandidates = ["DiscAccCode", "DiscountAccCode", "DiscountAccountCode"];
     private static readonly string[] DiscountAccountNameCandidates = ["DiscAccName", "DiscountAccName", "DiscountAccountName"];
     private static readonly string[] AdditionAccountGuidCandidates = ["AddAccGUID", "AdditionAccGUID", "AdditionAccountGUID", "TotalAddAccGUID"];
+    private static readonly string[] AdditionAccountNumberCandidates = ["AddAccNum", "AdditionAccNum", "AdditionAccountNumber", "TotalAddAccNum"];
     private static readonly string[] AdditionAccountCodeCandidates = ["AddAccCode", "AdditionAccCode", "AdditionAccountCode"];
     private static readonly string[] AdditionAccountNameCandidates = ["AddAccName", "AdditionAccName", "AdditionAccountName"];
     private static readonly string[] NotesCandidates = ["Notes", "Statement", "Description"];
@@ -371,9 +373,11 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         var (settlementTypeCode, settlementTypeName) = ResolveSettlementType(resolvedType?.Name ?? resolvedType?.Code, isVoucher);
         var (pairsCount, pensCount) = ResolveQuantityCounters(rawRow);
         var discountAccountGuid = GetGuidValue(rawRow, DiscountAccountGuidCandidates) ?? link?.DiscountAccount?.Guid;
+        var discountAccountNumber = GetNullableIntValue(rawRow, DiscountAccountNumberCandidates) ?? link?.DiscountAccount?.Number;
         var discountAccountCode = FirstNotBlank(GetStringValue(rawRow, DiscountAccountCodeCandidates), link?.DiscountAccount?.Code);
         var discountAccountName = FirstNotBlank(GetStringValue(rawRow, DiscountAccountNameCandidates), link?.DiscountAccount?.Name);
         var additionAccountGuid = GetGuidValue(rawRow, AdditionAccountGuidCandidates) ?? link?.AdditionAccount?.Guid;
+        var additionAccountNumber = GetNullableIntValue(rawRow, AdditionAccountNumberCandidates) ?? link?.AdditionAccount?.Number;
         var additionAccountCode = FirstNotBlank(GetStringValue(rawRow, AdditionAccountCodeCandidates), link?.AdditionAccount?.Code);
         var additionAccountName = FirstNotBlank(GetStringValue(rawRow, AdditionAccountNameCandidates), link?.AdditionAccount?.Name);
         return new BillDocumentResponse(
@@ -403,9 +407,11 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             additions,
             net,
             discountAccountGuid,
+            discountAccountNumber,
             discountAccountCode,
             discountAccountName,
             additionAccountGuid,
+            additionAccountNumber,
             additionAccountCode,
             additionAccountName,
             notes);
@@ -429,9 +435,11 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         var (settlementTypeCode, settlementTypeName) = ResolveSettlementType(resolvedType?.Name ?? resolvedType?.Code, isVoucher);
         var (pairsCount, pensCount) = ResolveQuantityCounters(rawRow);
         var discountAccountGuid = GetGuidValue(rawRow, DiscountAccountGuidCandidates) ?? link?.DiscountAccount?.Guid;
+        var discountAccountNumber = GetNullableIntValue(rawRow, DiscountAccountNumberCandidates) ?? link?.DiscountAccount?.Number;
         var discountAccountCode = FirstNotBlank(GetStringValue(rawRow, DiscountAccountCodeCandidates), link?.DiscountAccount?.Code);
         var discountAccountName = FirstNotBlank(GetStringValue(rawRow, DiscountAccountNameCandidates), link?.DiscountAccount?.Name);
         var additionAccountGuid = GetGuidValue(rawRow, AdditionAccountGuidCandidates) ?? link?.AdditionAccount?.Guid;
+        var additionAccountNumber = GetNullableIntValue(rawRow, AdditionAccountNumberCandidates) ?? link?.AdditionAccount?.Number;
         var additionAccountCode = FirstNotBlank(GetStringValue(rawRow, AdditionAccountCodeCandidates), link?.AdditionAccount?.Code);
         var additionAccountName = FirstNotBlank(GetStringValue(rawRow, AdditionAccountNameCandidates), link?.AdditionAccount?.Name);
         return new BillDocumentResponse(
@@ -461,9 +469,11 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             additions,
             net,
             discountAccountGuid,
+            discountAccountNumber,
             discountAccountCode,
             discountAccountName,
             additionAccountGuid,
+            additionAccountNumber,
             additionAccountCode,
             additionAccountName,
             notes);
@@ -1484,6 +1494,17 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         }
 
         return null;
+    }
+
+    private static int? GetNullableIntValue(IReadOnlyDictionary<string, object?>? row, params string[] candidates)
+    {
+        var number = GetNumberValue(row, candidates);
+        if (!number.HasValue)
+        {
+            return null;
+        }
+
+        return Convert.ToInt32(Math.Round(number.Value, MidpointRounding.AwayFromZero));
     }
 
     private static string? GetStringValue(IReadOnlyDictionary<string, object?>? row, params string[] candidates)

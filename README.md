@@ -454,6 +454,9 @@ GET /api/bills/voucher-types
   - `totalDiscount`
   - `totalAdditions`
   - `netAmount`
+- حسابات المقابل للحسم/الإضافة (عند توفرها):
+  - `discountAccountGuid`, `discountAccountNumber`, `discountAccountCode`, `discountAccountName`
+  - `additionAccountGuid`, `additionAccountNumber`, `additionAccountCode`, `additionAccountName`
 - Pagination قياسية: `page`, `pageSize`, `totalCount`.
 
 استجابة التفاصيل (`GET /api/bills/invoices/{guid}`) تضيف:

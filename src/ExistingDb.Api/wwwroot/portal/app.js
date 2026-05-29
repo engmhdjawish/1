@@ -583,8 +583,8 @@
         ${detailCell("إجمالي الكمية", formatNumber(result.data.totalQuantity))}
         ${detailCell("عدد الأزواج", formatNumber(document.pairsCount))}
         ${detailCell("عدد الأقلام", formatNumber(document.pensCount))}
-        ${detailCell("حساب الحسم", document.discountAccountName || "-")}
-        ${detailCell("حساب الإضافة", document.additionAccountName || "-")}
+        ${detailCell("حساب الحسم", [document.discountAccountNumber, document.discountAccountName].filter(Boolean).join(" - ") || "-")}
+        ${detailCell("حساب الإضافة", [document.additionAccountNumber, document.additionAccountName].filter(Boolean).join(" - ") || "-")}
       </div>
     `;
 

@@ -27,9 +27,11 @@ public sealed record BillDocumentResponse(
     double? TotalAdditions,
     double? NetAmount,
     Guid? DiscountAccountGuid,
+    int? DiscountAccountNumber,
     string? DiscountAccountCode,
     string? DiscountAccountName,
     Guid? AdditionAccountGuid,
+    int? AdditionAccountNumber,
     string? AdditionAccountCode,
     string? AdditionAccountName,
     string? Notes);
