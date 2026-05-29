@@ -36,6 +36,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
     public async Task<ActionResult<PagedResponse<BillDocumentResponse>>> GetInvoices(
         [FromQuery] string? search = null,
         [FromQuery] Guid? typeGuid = null,
+        [FromQuery] string? type = null,
         [FromQuery] DateTime? fromDate = null,
         [FromQuery] DateTime? toDate = null,
         [FromQuery] int page = 1,
@@ -57,6 +58,17 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         if (typeGuid.HasValue && typeGuid.Value != Guid.Empty)
         {
             query = query.Where(bill => bill.TypeGuid == typeGuid.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(type))
+        {
+            var typeGuidsByText = await ResolveTypeGuidsByTextAsync(type, TypeLookupSource.Bill, cancellationToken);
+            if (typeGuidsByText.Length == 0)
+            {
+                return Ok(new PagedResponse<BillDocumentResponse>([], page, pageSize, 0));
+            }
+
+            query = query.Where(bill => bill.TypeGuid.HasValue && typeGuidsByText.Contains(bill.TypeGuid.Value));
         }
 
         if (fromDateOnly.HasValue)
@@ -164,6 +176,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
     public async Task<ActionResult<PagedResponse<BillDocumentResponse>>> GetVouchers(
         [FromQuery] string? search = null,
         [FromQuery] Guid? typeGuid = null,
+        [FromQuery] string? type = null,
         [FromQuery] DateTime? fromDate = null,
         [FromQuery] DateTime? toDate = null,
         [FromQuery] int page = 1,
@@ -185,6 +198,17 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         if (typeGuid.HasValue && typeGuid.Value != Guid.Empty)
         {
             query = query.Where(payment => payment.TypeGuid == typeGuid.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(type))
+        {
+            var typeGuidsByText = await ResolveTypeGuidsByTextAsync(type, TypeLookupSource.Entry, cancellationToken);
+            if (typeGuidsByText.Length == 0)
+            {
+                return Ok(new PagedResponse<BillDocumentResponse>([], page, pageSize, 0));
+            }
+
+            query = query.Where(payment => payment.TypeGuid.HasValue && typeGuidsByText.Contains(payment.TypeGuid.Value));
         }
 
         if (fromDateOnly.HasValue)
@@ -362,25 +386,31 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         }
 
         var normalizedDocumentGuids = documentGuids.Distinct().ToArray();
-        var entryGuidsByDocument = documentKind switch
+        Dictionary<Guid, Guid[]> entryGuidsByDocument;
+        if (documentKind == DocumentKind.Invoice)
         {
-            DocumentKind.Invoice => await mainDbContext.EntryBillRelations
+            var billRelations = await mainDbContext.EntryBillRelations
                 .AsNoTracking()
                 .Where(relation => relation.BillGuid.HasValue && normalizedDocumentGuids.Contains(relation.BillGuid.Value))
+                .ToListAsync(cancellationToken);
+            entryGuidsByDocument = billRelations
                 .GroupBy(relation => relation.BillGuid!.Value)
-                .ToDictionaryAsync(
+                .ToDictionary(
                     group => group.Key,
-                    group => group.Select(relation => relation.EntryGuid).Distinct().ToArray(),
-                    cancellationToken),
-            _ => await mainDbContext.EntryPaymentRelations
+                    group => group.Select(relation => relation.EntryGuid).Distinct().ToArray());
+        }
+        else
+        {
+            var paymentRelations = await mainDbContext.EntryPaymentRelations
                 .AsNoTracking()
                 .Where(relation => relation.PaymentGuid.HasValue && normalizedDocumentGuids.Contains(relation.PaymentGuid.Value))
+                .ToListAsync(cancellationToken);
+            entryGuidsByDocument = paymentRelations
                 .GroupBy(relation => relation.PaymentGuid!.Value)
-                .ToDictionaryAsync(
+                .ToDictionary(
                     group => group.Key,
-                    group => group.Select(relation => relation.EntryGuid).Distinct().ToArray(),
-                    cancellationToken)
-        };
+                    group => group.Select(relation => relation.EntryGuid).Distinct().ToArray());
+        }
 
         var entryGuids = entryGuidsByDocument.Values
             .SelectMany(value => value)
@@ -436,9 +466,9 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         foreach (var documentGuid in normalizedDocumentGuids)
         {
             var linkedEntries = entryGuidsByDocument.TryGetValue(documentGuid, out var relatedEntryGuids)
-                ? relatedEntryGuids.Select(entryGuid => entryLookup.GetValueOrDefault(entryGuid)).Where(entry => entry is not null).ToArray()
+                ? relatedEntryGuids.Select(entryGuid => entryLookup.GetValueOrDefault(entryGuid)).Where(entry => entry is not null).Cast<EntryRecord>().ToArray()
                 : [];
-            var preferredEntry = linkedEntries.FirstOrDefault(entry => entry!.CustomerGuid.HasValue || entry.AccountGuid.HasValue)
+            var preferredEntry = linkedEntries.FirstOrDefault(entry => entry.CustomerGuid.HasValue || entry.AccountGuid.HasValue)
                 ?? linkedEntries.FirstOrDefault();
 
             var customerGuid = preferredEntry?.CustomerGuid ?? rowCustomerGuidByDocument.GetValueOrDefault(documentGuid);
@@ -735,6 +765,93 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         }
 
         return true;
+    }
+
+    private async Task<Guid[]> ResolveTypeGuidsByTextAsync(
+        string type,
+        TypeLookupSource preferredSource,
+        CancellationToken cancellationToken)
+    {
+        var term = type.Trim();
+        if (term.Length == 0)
+        {
+            return [];
+        }
+
+        var billViewGuids = await mainDbContext.BillTypeViews
+            .AsNoTracking()
+            .Where(typeRow =>
+                (typeRow.Abbrev != null && typeRow.Abbrev.Contains(term)) ||
+                (typeRow.LatinAbbrev != null && typeRow.LatinAbbrev.Contains(term)) ||
+                (typeRow.Name != null && typeRow.Name.Contains(term)) ||
+                (typeRow.LatinName != null && typeRow.LatinName.Contains(term)))
+            .Select(typeRow => typeRow.Guid)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var billRecordGuids = await mainDbContext.BillTypes
+            .AsNoTracking()
+            .Where(typeRow =>
+                (typeRow.Name != null && typeRow.Name.Contains(term)) ||
+                (typeRow.LatinName != null && typeRow.LatinName.Contains(term)))
+            .Select(typeRow => typeRow.Guid)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var entryViewGuids = await mainDbContext.EntryTypeViews
+            .AsNoTracking()
+            .Where(typeRow =>
+                (typeRow.Abbrev != null && typeRow.Abbrev.Contains(term)) ||
+                (typeRow.LatinAbbrev != null && typeRow.LatinAbbrev.Contains(term)) ||
+                (typeRow.Name != null && typeRow.Name.Contains(term)) ||
+                (typeRow.LatinName != null && typeRow.LatinName.Contains(term)))
+            .Select(typeRow => typeRow.Guid)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var entryRecordGuids = await mainDbContext.EntryTypes
+            .AsNoTracking()
+            .Where(typeRow =>
+                (typeRow.Name != null && typeRow.Name.Contains(term)) ||
+                (typeRow.LatinName != null && typeRow.LatinName.Contains(term)))
+            .Select(typeRow => typeRow.Guid)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var noteViewGuids = await mainDbContext.NoteTypeViews
+            .AsNoTracking()
+            .Where(typeRow =>
+                (typeRow.Abbrev != null && typeRow.Abbrev.Contains(term)) ||
+                (typeRow.LatinAbbrev != null && typeRow.LatinAbbrev.Contains(term)) ||
+                (typeRow.Name != null && typeRow.Name.Contains(term)) ||
+                (typeRow.LatinName != null && typeRow.LatinName.Contains(term)))
+            .Select(typeRow => typeRow.Guid)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var noteRecordGuids = await mainDbContext.NoteTypes
+            .AsNoTracking()
+            .Where(typeRow =>
+                (typeRow.Name != null && typeRow.Name.Contains(term)) ||
+                (typeRow.LatinName != null && typeRow.LatinName.Contains(term)))
+            .Select(typeRow => typeRow.Guid)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return preferredSource switch
+        {
+            TypeLookupSource.Bill => billViewGuids
+                .Concat(billRecordGuids)
+                .Concat(entryViewGuids)
+                .Concat(entryRecordGuids)
+                .Concat(noteViewGuids)
+                .Concat(noteRecordGuids)
+                .Distinct()
+                .ToArray(),
+            _ => entryViewGuids
+                .Concat(entryRecordGuids)
+                .Concat(billViewGuids)
+                .Concat(billRecordGuids)
+                .Concat(noteViewGuids)
+                .Concat(noteRecordGuids)
+                .Distinct()
+                .ToArray()
+        };
     }
 
     private async Task<Dictionary<Guid, ResolvedType>> ResolveTypeLookupAsync(

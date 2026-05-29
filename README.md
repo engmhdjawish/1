@@ -406,10 +406,12 @@ entries.read   (لكشف الحساب التفصيلي)
 ```http
 GET /api/bills/invoices?page=1&pageSize=100
 GET /api/bills/invoices?typeGuid={typeGuid}&fromDate=2026-01-01&toDate=2026-01-31&search=1254
+GET /api/bills/invoices?type=مبيع
 GET /api/bills/invoices/{guid}
 
 GET /api/bills/vouchers?page=1&pageSize=100
 GET /api/bills/vouchers?typeGuid={typeGuid}&fromDate=2026-01-01&toDate=2026-01-31&search=قبض
+GET /api/bills/vouchers?type=قبض
 GET /api/bills/vouchers/{guid}
 ```
 
@@ -424,6 +426,7 @@ GET /api/bills/voucher-types
 
 - رقم المستند وتاريخه وملاحظاته.
 - `typeGuid` ونوع المستند النصي (`typeName`) والاختصار (`typeCode`) عند توفره.
+- لتصفّح أسلس حسب النوع: يمكن إرسال `type` كنص مباشر (اسم/اختصار) بدل الحاجة إلى `typeGuid`.
 - نوع التسوية (`settlementTypeCode`, `settlementTypeName`) مثل `cash/credit` أو `قبض/دفع` حسب نوع السند.
 - بيانات العميل والحساب المرتبطين بالمستند عند توفرها:
   - `customerGuid`, `customerName`
