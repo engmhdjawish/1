@@ -113,6 +113,8 @@ GET  /api/health
 
 GET  /api/customers
 GET  /api/customers/{guid}
+GET  /api/customers/{guid}/account/summary
+GET  /api/customers/{guid}/account/statement
 
 GET  /api/materials
 GET  /api/materials/{guid}
@@ -308,6 +310,48 @@ Mobile
 EMail
 AccountGUID
 ```
+
+## Customer Accounts API
+
+ملخص حساب العميل:
+
+```http
+GET /api/customers/{guid}/account/summary
+```
+
+الاستجابة تعرض:
+
+- الرصيد الحالي (`currentBalance`)
+- آخر حركة دائن (`lastCreditorMovement`) مع التاريخ والسبب
+- آخر حركة مدين (`lastDebtorMovement`) مع التاريخ والسبب
+
+سبب الحركة (`reasonType`) يكون:
+
+- `invoice` = فاتورة
+- `payment` = دفعة
+- `discount` = حسم/إشعار
+- `unknown` = غير مصنف
+
+كشف حساب تفصيلي:
+
+```http
+GET /api/customers/{guid}/account/statement
+GET /api/customers/{guid}/account/statement?fromDate=2026-01-01&toDate=2026-01-31&page=1&pageSize=100
+```
+
+يتطلب:
+
+```text
+accounts.read
+entries.read   (لكشف الحساب التفصيلي)
+```
+
+يرجع القيود مرتبة زمنيًا مع:
+
+- قيمة المدين والدائن
+- الإشارة الصافية للحركة (`signedAmount`)
+- الرصيد التراكمي (`runningBalance`)
+- نوع المرجع (فاتورة/دفعة/حسم) مع رقم/تاريخ المرجع عند توفرها
 
 ## Materials Read API
 
