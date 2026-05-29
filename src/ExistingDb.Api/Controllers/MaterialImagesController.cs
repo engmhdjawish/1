@@ -602,7 +602,7 @@ public sealed class MaterialImagesController(
         Response.ContentType = "application/zip";
         Response.Headers.ContentDisposition = $"attachment; filename=\"{SanitizeFileName(archiveName)}.zip\"";
 
-        await using var archive = new ZipArchive(Response.Body, ZipArchiveMode.Create, leaveOpen: true);
+        using var archive = new ZipArchive(Response.Body, ZipArchiveMode.Create, leaveOpen: true);
         var usedEntryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in files)
         {
