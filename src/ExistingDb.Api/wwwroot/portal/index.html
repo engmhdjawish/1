@@ -1,288 +1,333 @@
 <!doctype html>
-<html lang="ar">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ExistingDb Test Portal</title>
+  <title>نظام المبيعات والمحاسبة</title>
   <link rel="stylesheet" href="/portal/styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <h1>ExistingDb Test Portal</h1>
-      <p>واجهة اختبار تكاملية لتجربة الـ API كما لو كانت النظام النهائي</p>
-    </div>
-    <div class="connection">
-      <label for="baseUrlInput">Base URL</label>
-      <input id="baseUrlInput" type="text" placeholder="http://localhost:5249" />
-      <button id="saveBaseUrlBtn" class="secondary">حفظ</button>
-      <button id="meQuickBtn">Me</button>
-      <span id="authBadge" class="badge danger">غير مسجل</span>
-    </div>
-  </header>
-
-  <div class="layout">
-    <aside class="sidebar">
-      <button class="nav-btn active" data-section="dashboard">لوحة القياس</button>
-      <button class="nav-btn" data-section="auth">المصادقة</button>
-      <button class="nav-btn" data-section="customers">الزبائن</button>
-      <button class="nav-btn" data-section="accounts">الحسابات / كشف الحساب</button>
-      <button class="nav-btn" data-section="materials">المواد والصور</button>
-      <button class="nav-btn" data-section="bills">الفواتير والسندات</button>
-      <button class="nav-btn" data-section="explorer">API Explorer</button>
+  <div id="app">
+    <aside class="app-sidebar">
+      <div class="logo-wrap">
+        <h1>Al-Ameen Portal</h1>
+        <p>واجهة تشغيلية متكاملة</p>
+      </div>
+      <nav class="menu">
+        <button class="menu-item active" data-page="overview">لوحة التحكم</button>
+        <button class="menu-item" data-page="documents">الفواتير والسندات</button>
+        <button class="menu-item" data-page="inventory">المواد والمخزون</button>
+        <button class="menu-item" data-page="customers">العملاء والحسابات</button>
+        <button class="menu-item" data-page="integration">مركز التكامل</button>
+      </nav>
+      <div class="session-card">
+        <div class="row-between">
+          <span>الحالة</span>
+          <span id="authStatePill" class="pill danger">غير مسجل</span>
+        </div>
+        <label>Base URL</label>
+        <input id="baseUrlInput" type="text" placeholder="http://localhost:5249" />
+        <button id="saveBaseUrlBtn" class="btn ghost">حفظ الرابط</button>
+      </div>
     </aside>
 
-    <main class="content">
-      <section id="section-dashboard" class="section active">
-        <div class="section-head">
-          <h2>لوحة القياس</h2>
-          <button id="refreshDashboardBtn">تحديث</button>
+    <main class="app-main">
+      <header class="app-header">
+        <div class="headline">
+          <h2 id="pageTitle">لوحة التحكم</h2>
+          <p id="pageSubtitle">مؤشرات عامة لحالة النظام</p>
         </div>
-        <div class="cards">
-          <article class="card"><h3>Health</h3><p id="healthStatus">-</p></article>
-          <article class="card"><h3>Customers</h3><p id="customersCount">-</p></article>
-          <article class="card"><h3>Materials</h3><p id="materialsCount">-</p></article>
-          <article class="card"><h3>Invoices</h3><p id="invoicesCount">-</p></article>
-          <article class="card"><h3>Vouchers</h3><p id="vouchersCount">-</p></article>
+        <form id="quickLoginForm" class="quick-login">
+          <input name="userName" placeholder="اسم المستخدم" required />
+          <input name="password" type="password" placeholder="كلمة المرور" required />
+          <button type="submit" class="btn">دخول</button>
+          <button type="button" id="logoutBtn" class="btn danger">خروج</button>
+        </form>
+      </header>
+
+      <section id="page-overview" class="page active">
+        <div class="kpi-grid">
+          <article class="kpi-card">
+            <h3>حالة الخدمة</h3>
+            <p id="kpiHealth">-</p>
+          </article>
+          <article class="kpi-card">
+            <h3>عدد العملاء</h3>
+            <p id="kpiCustomers">-</p>
+          </article>
+          <article class="kpi-card">
+            <h3>عدد المواد</h3>
+            <p id="kpiMaterials">-</p>
+          </article>
+          <article class="kpi-card">
+            <h3>عدد الفواتير</h3>
+            <p id="kpiInvoices">-</p>
+          </article>
+          <article class="kpi-card">
+            <h3>عدد السندات</h3>
+            <p id="kpiVouchers">-</p>
+          </article>
         </div>
-        <pre id="dashboardRaw" class="json"></pre>
+
+        <div class="split two">
+          <article class="panel">
+            <div class="panel-head">
+              <h3>آخر الفواتير</h3>
+              <button id="overviewReloadInvoicesBtn" class="btn ghost">تحديث</button>
+            </div>
+            <div class="table-wrap">
+              <table id="overviewInvoicesTable">
+                <thead>
+                  <tr><th>رقم</th><th>تاريخ</th><th>نوع</th><th>عميل</th><th>صافي</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h3>آخر السندات</h3>
+              <button id="overviewReloadVouchersBtn" class="btn ghost">تحديث</button>
+            </div>
+            <div class="table-wrap">
+              <table id="overviewVouchersTable">
+                <thead>
+                  <tr><th>رقم</th><th>تاريخ</th><th>نوع</th><th>حساب</th><th>صافي</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </article>
+        </div>
       </section>
 
-      <section id="section-auth" class="section">
-        <h2>المصادقة وإدارة الجلسة</h2>
-        <div class="grid two">
-          <form id="loginForm" class="panel">
-            <h3>Login</h3>
-            <label>Username<input name="userName" required /></label>
-            <label>Password<input name="password" type="password" required /></label>
-            <button type="submit">تسجيل دخول</button>
-          </form>
-
-          <div class="panel">
-            <h3>جلسة المستخدم</h3>
+      <section id="page-documents" class="page">
+        <article class="panel">
+          <div class="panel-head">
+            <h3>مركز المستندات</h3>
             <div class="row">
-              <button id="refreshTokenBtn">Refresh Token</button>
-              <button id="logoutBtn" class="danger">Logout</button>
-              <button id="meBtn" class="secondary">Get Me</button>
+              <button id="docModeInvoicesBtn" class="btn mode active">فواتير</button>
+              <button id="docModeVouchersBtn" class="btn mode">سندات</button>
             </div>
-            <form id="changePasswordForm">
-              <h4>Change Password</h4>
-              <label>Current Password<input name="currentPassword" type="password" required /></label>
-              <label>New Password<input name="newPassword" type="password" required /></label>
-              <button type="submit">تغيير كلمة المرور</button>
+          </div>
+          <form id="documentsFilterForm" class="filters">
+            <label>بحث
+              <input name="search" placeholder="رقم، ملاحظة، اسم..." />
+            </label>
+            <label>النوع (نصي)
+              <input name="type" placeholder="مبيع / قبض / دفع..." />
+            </label>
+            <label>من تاريخ
+              <input name="fromDate" type="date" />
+            </label>
+            <label>إلى تاريخ
+              <input name="toDate" type="date" />
+            </label>
+            <label>حجم الصفحة
+              <select name="pageSize">
+                <option>20</option>
+                <option selected>50</option>
+                <option>100</option>
+              </select>
+            </label>
+            <button type="submit" class="btn">بحث</button>
+          </form>
+          <div id="documentTypeChips" class="chips"></div>
+        </article>
+
+        <div class="split doc-layout">
+          <article class="panel">
+            <div class="panel-head">
+              <h3 id="documentsTableTitle">قائمة الفواتير</h3>
+              <div class="pager">
+                <button id="documentsPrevBtn" class="btn ghost">السابق</button>
+                <span id="documentsPageInfo">صفحة 1</span>
+                <button id="documentsNextBtn" class="btn ghost">التالي</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table id="documentsTable">
+                <thead>
+                  <tr>
+                    <th>رقم</th><th>تاريخ</th><th>نوع</th><th>تسوية</th>
+                    <th>عميل</th><th>حساب</th><th>إجمالي</th><th>صافي</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h3>تفاصيل المستند</h3>
+              <span id="documentDetailHint" class="muted">اختر مستندًا من القائمة</span>
+            </div>
+            <div id="documentDetailCard" class="doc-detail-card"></div>
+            <div class="table-wrap">
+              <table id="documentItemsTable">
+                <thead>
+                  <tr><th>المادة</th><th>كمية</th><th>سعر</th><th>حسم</th><th>إضافة</th><th>إجمالي سطر</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="page-inventory" class="page">
+        <article class="panel">
+          <div class="panel-head">
+            <h3>كتالوج المواد</h3>
+            <button id="materialsFilterOptionsBtn" class="btn ghost">خيارات الفلترة</button>
+          </div>
+          <form id="materialsFilterForm" class="filters">
+            <label>بحث
+              <input name="search" placeholder="اسم / كود / باركود" />
+            </label>
+            <label>الصفحة
+              <input name="page" type="number" min="1" value="1" />
+            </label>
+            <label>الحجم
+              <select name="pageSize">
+                <option>12</option>
+                <option selected>24</option>
+                <option>48</option>
+              </select>
+            </label>
+            <button type="submit" class="btn">تحميل</button>
+          </form>
+        </article>
+
+        <div class="split inventory-layout">
+          <article class="panel">
+            <div id="materialsGrid" class="cards-grid"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head">
+              <h3>تفاصيل المادة</h3>
+              <span id="materialDetailHint" class="muted">اختر مادة لعرض التفاصيل</span>
+            </div>
+            <div id="materialDetailCard" class="detail-card"></div>
+            <div class="table-wrap">
+              <table id="materialImagesTable">
+                <thead>
+                  <tr><th>اسم الصورة</th><th>معاينة</th><th>إجراءات</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="page-customers" class="page">
+        <article class="panel">
+          <div class="panel-head">
+            <h3>العملاء والحسابات</h3>
+          </div>
+          <form id="customersFilterForm" class="filters">
+            <label>بحث عميل
+              <input name="search" placeholder="الاسم أو الهاتف..." />
+            </label>
+            <label>الصفحة
+              <input name="page" type="number" min="1" value="1" />
+            </label>
+            <label>الحجم
+              <select name="pageSize">
+                <option>20</option>
+                <option selected>40</option>
+                <option>80</option>
+              </select>
+            </label>
+            <button type="submit" class="btn">تحميل العملاء</button>
+          </form>
+        </article>
+
+        <div class="split customer-layout">
+          <article class="panel">
+            <div class="table-wrap">
+              <table id="customersTable">
+                <thead>
+                  <tr><th>رقم</th><th>الاسم</th><th>جوال</th><th>حساب مرتبط</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h3>ملف الحساب</h3>
+              <button id="reloadCustomerAccountBtn" class="btn ghost">تحديث</button>
+            </div>
+            <form id="customerAccountFilterForm" class="filters compact">
+              <label>Account Guid
+                <input name="accountGuid" />
+              </label>
+              <label>Customer Guid
+                <input name="customerGuid" />
+              </label>
+              <label>من تاريخ
+                <input name="fromDate" type="date" />
+              </label>
+              <label>إلى تاريخ
+                <input name="toDate" type="date" />
+              </label>
             </form>
-          </div>
-        </div>
-        <div class="panel">
-          <h3>Tokens</h3>
-          <label>Access Token<textarea id="accessTokenBox" rows="3"></textarea></label>
-          <label>Refresh Token<textarea id="refreshTokenBox" rows="2"></textarea></label>
-          <div class="row">
-            <button id="applyTokensBtn">تطبيق التوكن يدويًا</button>
-            <button id="clearTokensBtn" class="danger">مسح التوكن</button>
-          </div>
-        </div>
-        <pre id="authRaw" class="json"></pre>
-      </section>
-
-      <section id="section-customers" class="section">
-        <h2>الزبائن</h2>
-        <form id="customersForm" class="panel inline-form">
-          <label>Search<input name="search" /></label>
-          <label>Page<input name="page" type="number" value="1" min="1" /></label>
-          <label>Page Size<input name="pageSize" type="number" value="25" min="1" max="200" /></label>
-          <button type="submit">تحميل الزبائن</button>
-        </form>
-        <div class="table-wrap">
-          <table id="customersTable">
-            <thead>
-              <tr>
-                <th>#</th><th>Name</th><th>Code</th><th>Mobile</th><th>AccountGuid</th><th>Guid</th><th>Action</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <pre id="customerDetailsRaw" class="json"></pre>
-      </section>
-
-      <section id="section-accounts" class="section">
-        <h2>الحسابات / كشف الحساب</h2>
-        <div class="grid two">
-          <form id="accountSummaryForm" class="panel">
-            <h3>Account Summary</h3>
-            <label>Account Guid<input name="accountGuid" /></label>
-            <label>Customer Guid<input name="customerGuid" /></label>
-            <button type="submit">جلب الملخص</button>
-          </form>
-          <form id="accountStatementForm" class="panel">
-            <h3>Account Statement</h3>
-            <label>Account Guid<input name="accountGuid" /></label>
-            <label>Customer Guid<input name="customerGuid" /></label>
-            <label>From Date<input name="fromDate" type="date" /></label>
-            <label>To Date<input name="toDate" type="date" /></label>
-            <label>Page<input name="page" type="number" value="1" min="1" /></label>
-            <label>Page Size<input name="pageSize" type="number" value="100" min="1" max="500" /></label>
-            <button type="submit">جلب كشف الحساب</button>
-          </form>
-        </div>
-        <pre id="accountSummaryRaw" class="json"></pre>
-        <div class="table-wrap">
-          <table id="statementTable">
-            <thead>
-              <tr>
-                <th>Date</th><th>No</th><th>Debit</th><th>Credit</th><th>Reason</th><th>Doc Type</th><th>Ref</th><th>Running</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <pre id="statementRaw" class="json"></pre>
-      </section>
-
-      <section id="section-materials" class="section">
-        <h2>المواد والصور</h2>
-        <form id="materialsForm" class="panel inline-form">
-          <label>Search<input name="search" /></label>
-          <label>Page<input name="page" type="number" value="1" min="1" /></label>
-          <label>Page Size<input name="pageSize" type="number" value="25" min="1" max="200" /></label>
-          <button type="submit">تحميل المواد</button>
-          <button type="button" id="materialsFilterOptionsBtn" class="secondary">Filter Options</button>
-        </form>
-        <div class="table-wrap">
-          <table id="materialsTable">
-            <thead>
-              <tr>
-                <th>#</th><th>Name</th><th>Code</th><th>Qty</th><th>Picture</th><th>Guid</th><th>Action</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-
-        <div class="grid two">
-          <form id="materialImagesForm" class="panel">
-            <h3>تصفح صور المواد</h3>
-            <label>Linked
-              <select name="linked">
-                <option value="">الكل</option>
-                <option value="true">مربوطة</option>
-                <option value="false">غير مربوطة</option>
-              </select>
-            </label>
-            <label>Material Guid<input name="materialGuid" /></label>
-            <label>Page<input name="page" type="number" value="1" min="1" /></label>
-            <label>Page Size<input name="pageSize" type="number" value="20" min="1" max="200" /></label>
-            <button type="submit">تحميل الصور</button>
-          </form>
-          <form id="materialImagesByMaterialForm" class="panel">
-            <h3>صور مادة محددة</h3>
-            <label>Material Guid<input name="materialGuid" required /></label>
-            <button type="submit">جلب الصور</button>
-          </form>
-        </div>
-
-        <div class="table-wrap">
-          <table id="materialImagesTable">
-            <thead>
-              <tr>
-                <th>Name</th><th>Linked Material</th><th>Image Guid</th><th>Actions</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <pre id="materialsRaw" class="json"></pre>
-      </section>
-
-      <section id="section-bills" class="section">
-        <h2>الفواتير والسندات</h2>
-        <div class="grid two">
-          <form id="invoicesForm" class="panel">
-            <h3>Invoices</h3>
-            <label>Search<input name="search" /></label>
-            <label>Type Text<input name="type" placeholder="مبيع / نقد / آجل..." /></label>
-            <label>Type Guid<input name="typeGuid" /></label>
-            <label>From Date<input name="fromDate" type="date" /></label>
-            <label>To Date<input name="toDate" type="date" /></label>
-            <label>Page<input name="page" type="number" value="1" min="1" /></label>
-            <label>Page Size<input name="pageSize" type="number" value="50" min="1" max="500" /></label>
-            <div class="row">
-              <button type="submit">تحميل الفواتير</button>
-              <button type="button" id="invoiceTypesBtn" class="secondary">أنواع الفواتير</button>
+            <div id="accountSummaryCard" class="detail-card"></div>
+            <div class="table-wrap">
+              <table id="customerStatementTable">
+                <thead>
+                  <tr><th>تاريخ</th><th>رقم</th><th>مدين</th><th>دائن</th><th>سبب</th><th>نوع السند</th><th>رصيد</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
             </div>
-          </form>
-          <form id="vouchersForm" class="panel">
-            <h3>Vouchers</h3>
-            <label>Search<input name="search" /></label>
-            <label>Type Text<input name="type" placeholder="قبض / دفع..." /></label>
-            <label>Type Guid<input name="typeGuid" /></label>
-            <label>From Date<input name="fromDate" type="date" /></label>
-            <label>To Date<input name="toDate" type="date" /></label>
-            <label>Page<input name="page" type="number" value="1" min="1" /></label>
-            <label>Page Size<input name="pageSize" type="number" value="50" min="1" max="500" /></label>
-            <div class="row">
-              <button type="submit">تحميل السندات</button>
-              <button type="button" id="voucherTypesBtn" class="secondary">أنواع السندات</button>
-            </div>
-          </form>
+          </article>
         </div>
-
-        <div class="table-wrap">
-          <table id="invoicesTable">
-            <thead>
-              <tr>
-                <th>No</th><th>Date</th><th>Type</th><th>Settlement</th><th>Customer</th><th>Account</th><th>Total</th><th>Net</th><th>Action</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <div class="table-wrap">
-          <table id="invoiceItemsTable">
-            <thead>
-              <tr>
-                <th>Material</th><th>Qty</th><th>Price</th><th>Discount</th><th>Additions</th><th>Line Total</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-
-        <div class="table-wrap">
-          <table id="vouchersTable">
-            <thead>
-              <tr>
-                <th>No</th><th>Date</th><th>Type</th><th>Settlement</th><th>Customer</th><th>Account</th><th>Total</th><th>Net</th><th>Action</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-
-        <pre id="billsRaw" class="json"></pre>
       </section>
 
-      <section id="section-explorer" class="section">
-        <h2>API Explorer (عام)</h2>
-        <form id="explorerForm" class="panel">
-          <div class="row">
-            <label>Method
-              <select name="method">
-                <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option>
-              </select>
-            </label>
-            <label>Path<input name="path" value="/api/health" /></label>
+      <section id="page-integration" class="page">
+        <article class="panel">
+          <div class="panel-head">
+            <h3>مركز التكامل (API Lab)</h3>
           </div>
-          <label>Query (JSON object)<textarea name="query" rows="3">{}</textarea></label>
-          <label>Body (JSON object)<textarea name="body" rows="6">{}</textarea></label>
-          <button type="submit">إرسال</button>
-        </form>
-        <pre id="explorerRaw" class="json"></pre>
+          <form id="apiLabForm" class="api-lab">
+            <div class="row">
+              <label>Method
+                <select name="method">
+                  <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option>
+                </select>
+              </label>
+              <label>Path
+                <input name="path" value="/api/health" />
+              </label>
+            </div>
+            <label>Query JSON
+              <textarea name="query" rows="4">{}</textarea>
+            </label>
+            <label>Body JSON
+              <textarea name="body" rows="8">{}</textarea>
+            </label>
+            <button type="submit" class="btn">إرسال الطلب</button>
+          </form>
+        </article>
+      </section>
+
+      <section class="panel raw-panel">
+        <div class="panel-head">
+          <h3>مخرجات مباشرة (Raw JSON)</h3>
+          <button id="clearRawBtn" class="btn ghost">مسح</button>
+        </div>
+        <pre id="rawOutput"></pre>
       </section>
     </main>
   </div>
 
+  <div id="loadingOverlay" class="overlay hidden">جاري التحميل...</div>
   <div id="toast" class="toast"></div>
 
   <script src="/portal/app.js"></script>

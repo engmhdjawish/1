@@ -8,29 +8,54 @@
   const state = {
     baseUrl: normalizeBaseUrl(localStorage.getItem(storageKeys.baseUrl) || window.location.origin),
     accessToken: localStorage.getItem(storageKeys.accessToken) || "",
-    refreshToken: localStorage.getItem(storageKeys.refreshToken) || ""
+    refreshToken: localStorage.getItem(storageKeys.refreshToken) || "",
+    loadingCount: 0,
+    documents: {
+      mode: "invoices",
+      page: 1,
+      pageSize: 50,
+      totalCount: 0,
+      search: "",
+      type: "",
+      fromDate: "",
+      toDate: "",
+      typeGuid: "",
+      types: [],
+      selectedGuid: ""
+    },
+    materials: {
+      page: 1,
+      pageSize: 24,
+      totalCount: 0,
+      search: "",
+      selectedGuid: "",
+      currentItems: []
+    },
+    customers: {
+      page: 1,
+      pageSize: 40,
+      totalCount: 0,
+      search: "",
+      selectedCustomerGuid: "",
+      selectedAccountGuid: "",
+      fromDate: "",
+      toDate: ""
+    }
   };
 
+  const imageCache = new Map();
   const ui = {
-    baseUrlInput: document.getElementById("baseUrlInput"),
-    saveBaseUrlBtn: document.getElementById("saveBaseUrlBtn"),
-    meQuickBtn: document.getElementById("meQuickBtn"),
-    authBadge: document.getElementById("authBadge"),
+    rawOutput: document.getElementById("rawOutput"),
     toast: document.getElementById("toast"),
-    accessTokenBox: document.getElementById("accessTokenBox"),
-    refreshTokenBox: document.getElementById("refreshTokenBox")
+    loadingOverlay: document.getElementById("loadingOverlay"),
+    authStatePill: document.getElementById("authStatePill"),
+    baseUrlInput: document.getElementById("baseUrlInput"),
+    pageTitle: document.getElementById("pageTitle"),
+    pageSubtitle: document.getElementById("pageSubtitle")
   };
-
-  function notify(message, isError) {
-    ui.toast.textContent = message;
-    ui.toast.style.borderColor = isError ? "#b91c1c" : "#16a34a";
-    ui.toast.classList.add("show");
-    window.clearTimeout(ui.toastTimer);
-    ui.toastTimer = window.setTimeout(() => ui.toast.classList.remove("show"), 2500);
-  }
 
   function normalizeBaseUrl(value) {
-    return (value || "").trim().replace(/\/+$/, "");
+    return String(value || "").trim().replace(/\/+$/, "");
   }
 
   function persistState() {
@@ -39,173 +64,227 @@
     localStorage.setItem(storageKeys.refreshToken, state.refreshToken);
   }
 
-  function syncAuthWidgets() {
-    ui.accessTokenBox.value = state.accessToken;
-    ui.refreshTokenBox.value = state.refreshToken;
-    if (state.accessToken) {
-      ui.authBadge.textContent = "مسجل";
-      ui.authBadge.className = "badge success";
-    } else {
-      ui.authBadge.textContent = "غير مسجل";
-      ui.authBadge.className = "badge danger";
-    }
+  function safeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
-  function formToObject(form) {
-    const data = new FormData(form);
-    const result = {};
-    for (const [key, value] of data.entries()) {
-      const text = String(value).trim();
-      if (text !== "") {
-        result[key] = text;
-      }
-    }
-
-    return result;
+  function formatDate(value) {
+    if (!value) return "-";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "-";
+    return parsed.toLocaleDateString("ar-SY");
   }
 
-  function toQueryString(params) {
-    const query = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value === undefined || value === null || value === "") {
-        return;
-      }
+  function formatNumber(value) {
+    if (value === null || value === undefined || value === "") return "-";
+    const number = Number(value);
+    if (Number.isNaN(number)) return String(value);
+    return number.toLocaleString("ar-SY", { maximumFractionDigits: 2 });
+  }
 
-      query.set(key, value);
+  function notify(message, isError) {
+    ui.toast.textContent = message;
+    ui.toast.style.borderColor = isError ? "#b91c1c" : "#16a34a";
+    ui.toast.classList.add("show");
+    clearTimeout(notify.timer);
+    notify.timer = setTimeout(() => ui.toast.classList.remove("show"), 2600);
+  }
+
+  function writeRaw(value) {
+    ui.rawOutput.textContent = typeof value === "string"
+      ? value
+      : JSON.stringify(value, null, 2);
+  }
+
+  function setLoading(flag) {
+    state.loadingCount += flag ? 1 : -1;
+    if (state.loadingCount < 0) {
+      state.loadingCount = 0;
+    }
+
+    ui.loadingOverlay.classList.toggle("hidden", state.loadingCount === 0);
+  }
+
+  function getItems(payload) {
+    if (!payload) return [];
+    if (Array.isArray(payload)) return payload;
+    return payload.items || [];
+  }
+
+  function toQueryString(query) {
+    const searchParams = new URLSearchParams();
+    Object.entries(query || {}).forEach(([key, value]) => {
+      if (value === null || value === undefined || value === "") return;
+      searchParams.set(key, String(value));
     });
-    const serialized = query.toString();
-    return serialized ? `?${serialized}` : "";
+    const encoded = searchParams.toString();
+    return encoded ? `?${encoded}` : "";
   }
 
   async function apiCall(path, options) {
     const request = options || {};
-    const method = request.method || "GET";
-    const query = request.query || {};
     const headers = request.headers || {};
-    const fullPath = path.startsWith("http://") || path.startsWith("https://")
-      ? path
-      : `${state.baseUrl}${path}${toQueryString(query)}`;
-
     if (!request.noAuth && state.accessToken) {
       headers.Authorization = `Bearer ${state.accessToken}`;
     }
 
-    const fetchOptions = {
-      method,
-      headers
-    };
+    const method = request.method || "GET";
+    const url = path.startsWith("http://") || path.startsWith("https://")
+      ? path
+      : `${state.baseUrl}${path}${toQueryString(request.query)}`;
 
+    const fetchOptions = { method, headers };
     if (request.body !== undefined && request.body !== null) {
       headers["Content-Type"] = "application/json";
       fetchOptions.body = JSON.stringify(request.body);
     }
 
-    if (request.formData) {
-      fetchOptions.body = request.formData;
-    }
-
-    const response = await fetch(fullPath, fetchOptions);
-    let payload = null;
-    const contentType = response.headers.get("content-type") || "";
-    if (response.status !== 204) {
-      if (contentType.includes("application/json")) {
-        payload = await response.json();
-      } else {
-        payload = await response.text();
+    setLoading(true);
+    try {
+      const response = await fetch(url, fetchOptions);
+      let payload = null;
+      if (response.status !== 204) {
+        const contentType = response.headers.get("content-type") || "";
+        payload = contentType.includes("application/json")
+          ? await response.json()
+          : await response.text();
       }
-    }
 
-    return { ok: response.ok, status: response.status, data: payload, response };
+      return { ok: response.ok, status: response.status, data: payload };
+    } catch (error) {
+      return { ok: false, status: 0, data: { message: error.message } };
+    } finally {
+      setLoading(false);
+    }
   }
 
-  async function apiBlob(path) {
+  async function openFileInNewTab(path) {
     const headers = {};
     if (state.accessToken) {
       headers.Authorization = `Bearer ${state.accessToken}`;
     }
 
-    const response = await fetch(`${state.baseUrl}${path}`, { headers });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    setLoading(true);
+    try {
+      const response = await fetch(`${state.baseUrl}${path}`, { headers });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      window.open(objectUrl, "_blank");
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 20000);
+    } catch (error) {
+      notify(`تعذر فتح الملف: ${error.message}`, true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadProtectedImage(path) {
+    if (!path) {
+      return "";
     }
 
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank");
-    setTimeout(() => URL.revokeObjectURL(url), 20000);
-  }
-
-  function writeJson(elementId, value) {
-    const element = document.getElementById(elementId);
-    element.textContent = typeof value === "string"
-      ? value
-      : JSON.stringify(value, null, 2);
-  }
-
-  function getItems(payload) {
-    if (!payload) {
-      return [];
+    if (imageCache.has(path)) {
+      return imageCache.get(path);
     }
 
-    if (Array.isArray(payload)) {
-      return payload;
+    const headers = {};
+    if (state.accessToken) {
+      headers.Authorization = `Bearer ${state.accessToken}`;
     }
 
-    return payload.items || [];
+    try {
+      const response = await fetch(`${state.baseUrl}${path}`, { headers });
+      if (!response.ok) {
+        return "";
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      imageCache.set(path, objectUrl);
+      return objectUrl;
+    } catch {
+      return "";
+    }
   }
 
-  function clearTableBody(tableId) {
-    document.querySelector(`#${tableId} tbody`).innerHTML = "";
+  function setAuthPill(text, isSuccess) {
+    ui.authStatePill.textContent = text;
+    ui.authStatePill.className = `pill ${isSuccess ? "success" : "danger"}`;
   }
 
-  function appendTableRows(tableId, rowsHtml) {
-    document.querySelector(`#${tableId} tbody`).innerHTML = rowsHtml;
+  function syncAuthUi() {
+    setAuthPill(state.accessToken ? "متصل" : "غير مسجل", !!state.accessToken);
   }
 
   function bindNavigation() {
-    const buttons = document.querySelectorAll(".nav-btn");
-    buttons.forEach((button) => {
+    const pagesMeta = {
+      overview: {
+        title: "لوحة التحكم",
+        subtitle: "مؤشرات عامة لحالة النظام"
+      },
+      documents: {
+        title: "الفواتير والسندات",
+        subtitle: "تصفح سلس + تفاصيل كاملة + فلترة ديناميكية"
+      },
+      inventory: {
+        title: "المواد والمخزون",
+        subtitle: "كتالوج عملي مع صور وتفاصيل المادة"
+      },
+      customers: {
+        title: "العملاء والحسابات",
+        subtitle: "اختيار العميل واستعراض الملخص وكشف الحساب"
+      },
+      integration: {
+        title: "مركز التكامل",
+        subtitle: "مختبر API لتجربة أي endpoint"
+      }
+    };
+
+    document.querySelectorAll(".menu-item").forEach((button) => {
       button.addEventListener("click", () => {
-        buttons.forEach((item) => item.classList.remove("active"));
+        document.querySelectorAll(".menu-item").forEach((item) => item.classList.remove("active"));
         button.classList.add("active");
-        const target = button.dataset.section;
-        document.querySelectorAll(".section").forEach((section) => {
-          section.classList.toggle("active", section.id === `section-${target}`);
+        const targetPage = button.dataset.page;
+
+        Object.entries(pagesMeta).forEach(([key, value]) => {
+          const section = document.getElementById(`page-${key}`);
+          section.classList.toggle("active", key === targetPage);
+          if (key === targetPage) {
+            ui.pageTitle.textContent = value.title;
+            ui.pageSubtitle.textContent = value.subtitle;
+          }
         });
       });
     });
   }
 
-  async function loadDashboard() {
-    const calls = [
-      apiCall("/api/health", { noAuth: true }),
-      apiCall("/api/customers", { query: { page: 1, pageSize: 1 } }),
-      apiCall("/api/materials", { query: { page: 1, pageSize: 1 } }),
-      apiCall("/api/bills/invoices", { query: { page: 1, pageSize: 1 } }),
-      apiCall("/api/bills/vouchers", { query: { page: 1, pageSize: 1 } })
-    ];
+  function bindSessionControls() {
+    ui.baseUrlInput.value = state.baseUrl;
 
-    const [health, customers, materials, invoices, vouchers] = await Promise.all(calls);
-    document.getElementById("healthStatus").textContent = health.ok ? "OK" : `HTTP ${health.status}`;
-    document.getElementById("customersCount").textContent = customers.data?.totalCount ?? "-";
-    document.getElementById("materialsCount").textContent = materials.data?.totalCount ?? "-";
-    document.getElementById("invoicesCount").textContent = invoices.data?.totalCount ?? "-";
-    document.getElementById("vouchersCount").textContent = vouchers.data?.totalCount ?? "-";
-    writeJson("dashboardRaw", {
-      health: health.data,
-      customers: customers.data,
-      materials: materials.data,
-      invoices: invoices.data,
-      vouchers: vouchers.data
+    document.getElementById("saveBaseUrlBtn").addEventListener("click", () => {
+      state.baseUrl = normalizeBaseUrl(ui.baseUrlInput.value) || window.location.origin;
+      persistState();
+      notify("تم حفظ رابط السيرفر");
     });
-  }
 
-  function bindAuthActions() {
-    document.getElementById("loginForm").addEventListener("submit", async (event) => {
+    document.getElementById("quickLoginForm").addEventListener("submit", async (event) => {
       event.preventDefault();
-      const payload = formToObject(event.currentTarget);
+      const form = new FormData(event.currentTarget);
+      const payload = {
+        userName: String(form.get("userName") || "").trim(),
+        password: String(form.get("password") || "").trim()
+      };
       const result = await apiCall("/api/auth/login", { method: "POST", body: payload, noAuth: true });
-      writeJson("authRaw", result.data || { status: result.status });
+      writeRaw(result.data || { status: result.status });
       if (!result.ok) {
         notify("فشل تسجيل الدخول", true);
         return;
@@ -214,407 +293,627 @@
       state.accessToken = result.data.accessToken || "";
       state.refreshToken = result.data.refreshToken || "";
       persistState();
-      syncAuthWidgets();
-      notify("تم تسجيل الدخول");
-      loadDashboard().catch(() => {});
+      syncAuthUi();
+      notify(`مرحبًا ${result.data.displayName || result.data.userName || ""}`.trim());
+      await loadOverview();
+      await loadDocumentTypes();
     });
-
-    document.getElementById("refreshTokenBtn").addEventListener("click", async () => {
-      const result = await apiCall("/api/auth/refresh", {
-        method: "POST",
-        body: { refreshToken: state.refreshToken },
-        noAuth: true
-      });
-      writeJson("authRaw", result.data || { status: result.status });
-      if (!result.ok) {
-        notify("فشل تحديث التوكن", true);
-        return;
-      }
-
-      state.accessToken = result.data.accessToken || "";
-      state.refreshToken = result.data.refreshToken || state.refreshToken;
-      persistState();
-      syncAuthWidgets();
-      notify("تم تحديث التوكن");
-    });
-
-    const meAction = async () => {
-      const result = await apiCall("/api/auth/me");
-      writeJson("authRaw", result.data || { status: result.status });
-      if (!result.ok) {
-        notify("تعذر جلب بيانات المستخدم", true);
-      }
-    };
-
-    document.getElementById("meBtn").addEventListener("click", meAction);
-    ui.meQuickBtn.addEventListener("click", meAction);
 
     document.getElementById("logoutBtn").addEventListener("click", async () => {
-      const result = await apiCall("/api/auth/logout", {
-        method: "POST",
-        body: { refreshToken: state.refreshToken }
+      if (state.refreshToken) {
+        await apiCall("/api/auth/logout", {
+          method: "POST",
+          body: { refreshToken: state.refreshToken }
+        });
+      }
+
+      state.accessToken = "";
+      state.refreshToken = "";
+      persistState();
+      syncAuthUi();
+      notify("تم تسجيل الخروج");
+    });
+
+    document.getElementById("clearRawBtn").addEventListener("click", () => {
+      writeRaw({ message: "تم مسح المخرجات" });
+    });
+  }
+
+  async function loadOverview() {
+    const [health, customers, materials, invoices, vouchers] = await Promise.all([
+      apiCall("/api/health", { noAuth: true }),
+      apiCall("/api/customers", { query: { page: 1, pageSize: 1 } }),
+      apiCall("/api/materials", { query: { page: 1, pageSize: 1 } }),
+      apiCall("/api/bills/invoices", { query: { page: 1, pageSize: 5 } }),
+      apiCall("/api/bills/vouchers", { query: { page: 1, pageSize: 5 } })
+    ]);
+
+    document.getElementById("kpiHealth").textContent = health.ok ? "متاح" : `HTTP ${health.status}`;
+    document.getElementById("kpiCustomers").textContent = formatNumber(customers.data?.totalCount);
+    document.getElementById("kpiMaterials").textContent = formatNumber(materials.data?.totalCount);
+    document.getElementById("kpiInvoices").textContent = formatNumber(invoices.data?.totalCount);
+    document.getElementById("kpiVouchers").textContent = formatNumber(vouchers.data?.totalCount);
+
+    renderOverviewTable("overviewInvoicesTable", getItems(invoices.data), true);
+    renderOverviewTable("overviewVouchersTable", getItems(vouchers.data), false);
+    writeRaw({
+      health: health.data,
+      customers: customers.data,
+      materials: materials.data,
+      invoices: invoices.data,
+      vouchers: vouchers.data
+    });
+  }
+
+  function renderOverviewTable(tableId, items, isInvoice) {
+    const tbody = document.querySelector(`#${tableId} tbody`);
+    const accountOrCustomer = isInvoice ? "customerName" : "accountName";
+    tbody.innerHTML = items.map((item) => `
+      <tr>
+        <td>${safeHtml(item.number ?? "-")}</td>
+        <td>${safeHtml(formatDate(item.date))}</td>
+        <td>${safeHtml(item.typeName || item.typeCode || "-")}</td>
+        <td>${safeHtml(item[accountOrCustomer] || "-")}</td>
+        <td>${safeHtml(formatNumber(item.netAmount))}</td>
+      </tr>
+    `).join("");
+  }
+
+  function bindOverviewActions() {
+    document.getElementById("overviewReloadInvoicesBtn").addEventListener("click", loadOverview);
+    document.getElementById("overviewReloadVouchersBtn").addEventListener("click", loadOverview);
+  }
+
+  function bindDocuments() {
+    document.getElementById("docModeInvoicesBtn").addEventListener("click", async () => {
+      switchDocumentMode("invoices");
+      await loadDocumentTypes();
+      await loadDocuments();
+    });
+
+    document.getElementById("docModeVouchersBtn").addEventListener("click", async () => {
+      switchDocumentMode("vouchers");
+      await loadDocumentTypes();
+      await loadDocuments();
+    });
+
+    document.getElementById("documentsFilterForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      state.documents.search = String(form.get("search") || "").trim();
+      state.documents.type = String(form.get("type") || "").trim();
+      state.documents.fromDate = String(form.get("fromDate") || "").trim();
+      state.documents.toDate = String(form.get("toDate") || "").trim();
+      state.documents.pageSize = Number(form.get("pageSize") || 50);
+      state.documents.page = 1;
+      if (state.documents.type) {
+        state.documents.typeGuid = "";
+      }
+
+      await loadDocuments();
+    });
+
+    document.getElementById("documentsPrevBtn").addEventListener("click", async () => {
+      if (state.documents.page <= 1) return;
+      state.documents.page -= 1;
+      await loadDocuments();
+    });
+
+    document.getElementById("documentsNextBtn").addEventListener("click", async () => {
+      const totalPages = Math.max(1, Math.ceil((state.documents.totalCount || 0) / state.documents.pageSize));
+      if (state.documents.page >= totalPages) return;
+      state.documents.page += 1;
+      await loadDocuments();
+    });
+
+    document.querySelector("#documentsTable tbody").addEventListener("click", async (event) => {
+      const row = event.target.closest("tr[data-guid]");
+      if (!row) return;
+      const guid = row.dataset.guid;
+      state.documents.selectedGuid = guid;
+      highlightSelectedRow("#documentsTable", guid);
+      await loadDocumentDetails(guid);
+    });
+  }
+
+  function switchDocumentMode(mode) {
+    state.documents.mode = mode;
+    state.documents.page = 1;
+    state.documents.typeGuid = "";
+    state.documents.selectedGuid = "";
+    document.getElementById("docModeInvoicesBtn").classList.toggle("active", mode === "invoices");
+    document.getElementById("docModeVouchersBtn").classList.toggle("active", mode === "vouchers");
+    document.getElementById("documentsTableTitle").textContent = mode === "invoices" ? "قائمة الفواتير" : "قائمة السندات";
+    document.getElementById("documentDetailCard").innerHTML = "";
+    document.querySelector("#documentItemsTable tbody").innerHTML = "";
+    document.getElementById("documentDetailHint").textContent = "اختر مستندًا من القائمة";
+  }
+
+  async function loadDocumentTypes() {
+    const endpoint = state.documents.mode === "invoices"
+      ? "/api/bills/invoice-types"
+      : "/api/bills/voucher-types";
+    const result = await apiCall(endpoint);
+    if (!result.ok) {
+      state.documents.types = [];
+      renderDocumentTypeChips();
+      notify("تعذر تحميل أنواع المستندات", true);
+      return;
+    }
+
+    state.documents.types = Array.isArray(result.data) ? result.data : [];
+    renderDocumentTypeChips();
+  }
+
+  function renderDocumentTypeChips() {
+    const container = document.getElementById("documentTypeChips");
+    const allChipClass = state.documents.typeGuid ? "chip" : "chip active";
+    const allChip = `<button class="${allChipClass}" data-type-guid="">الكل</button>`;
+    const chips = state.documents.types.map((type) => {
+      const activeClass = state.documents.typeGuid === String(type.typeGuid) ? "chip active" : "chip";
+      const label = `${type.typeName || type.typeCode || "نوع"} (${type.documentsCount || 0})`;
+      return `<button class="${activeClass}" data-type-guid="${type.typeGuid}">${safeHtml(label)}</button>`;
+    }).join("");
+    container.innerHTML = allChip + chips;
+
+    container.querySelectorAll("button[data-type-guid]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        state.documents.typeGuid = button.dataset.typeGuid || "";
+        if (state.documents.typeGuid) {
+          state.documents.type = "";
+          const form = document.getElementById("documentsFilterForm");
+          form.querySelector('input[name="type"]').value = "";
+        }
+
+        state.documents.page = 1;
+        renderDocumentTypeChips();
+        await loadDocuments();
       });
-      writeJson("authRaw", result.data || { status: result.status });
-      state.accessToken = "";
-      state.refreshToken = "";
-      persistState();
-      syncAuthWidgets();
-      notify(result.ok ? "تم تسجيل الخروج" : "تم مسح الجلسة محليًا");
-    });
-
-    document.getElementById("changePasswordForm").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const payload = formToObject(event.currentTarget);
-      const result = await apiCall("/api/auth/change-password", { method: "POST", body: payload });
-      writeJson("authRaw", result.data || { status: result.status });
-      notify(result.ok ? "تم تغيير كلمة المرور" : "فشل تغيير كلمة المرور", !result.ok);
-    });
-
-    document.getElementById("applyTokensBtn").addEventListener("click", () => {
-      state.accessToken = ui.accessTokenBox.value.trim();
-      state.refreshToken = ui.refreshTokenBox.value.trim();
-      persistState();
-      syncAuthWidgets();
-      notify("تم حفظ التوكن يدويًا");
-    });
-
-    document.getElementById("clearTokensBtn").addEventListener("click", () => {
-      state.accessToken = "";
-      state.refreshToken = "";
-      persistState();
-      syncAuthWidgets();
-      notify("تم مسح التوكن");
     });
   }
 
-  function bindCustomers() {
-    document.getElementById("customersForm").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const query = formToObject(event.currentTarget);
-      const result = await apiCall("/api/customers", { query });
-      writeJson("customerDetailsRaw", result.data || { status: result.status });
-      if (!result.ok) {
-        notify("تعذر تحميل الزبائن", true);
-        return;
-      }
+  async function loadDocuments() {
+    const query = {
+      page: state.documents.page,
+      pageSize: state.documents.pageSize,
+      search: state.documents.search,
+      type: state.documents.type,
+      fromDate: state.documents.fromDate,
+      toDate: state.documents.toDate
+    };
+    if (state.documents.typeGuid) {
+      query.typeGuid = state.documents.typeGuid;
+    }
 
-      const rows = getItems(result.data).map((item) => `
-        <tr>
-          <td>${item.number ?? ""}</td>
-          <td>${item.customerName ?? ""}</td>
-          <td>${item.barCode ?? ""}</td>
-          <td>${item.mobile ?? ""}</td>
-          <td>${item.accountGuid ?? ""}</td>
-          <td>${item.guid}</td>
-          <td>
-            <button type="button" class="secondary btn-customer-details" data-guid="${item.guid}">Details</button>
-            <button type="button" class="btn-customer-select" data-guid="${item.guid}" data-account="${item.accountGuid ?? ""}">Select</button>
-          </td>
-        </tr>`).join("");
-      appendTableRows("customersTable", rows);
-    });
+    const endpoint = state.documents.mode === "invoices" ? "/api/bills/invoices" : "/api/bills/vouchers";
+    const result = await apiCall(endpoint, { query });
+    writeRaw(result.data || { status: result.status, endpoint, query });
+    if (!result.ok) {
+      notify("فشل تحميل المستندات", true);
+      renderDocumentsTable([]);
+      return;
+    }
 
-    document.querySelector("#customersTable tbody").addEventListener("click", async (event) => {
-      const detailsBtn = event.target.closest(".btn-customer-details");
-      if (detailsBtn) {
-        const guid = detailsBtn.dataset.guid;
-        const result = await apiCall(`/api/customers/${guid}`);
-        writeJson("customerDetailsRaw", result.data || { status: result.status });
-        return;
-      }
-
-      const selectBtn = event.target.closest(".btn-customer-select");
-      if (selectBtn) {
-        const customerGuid = selectBtn.dataset.guid || "";
-        const accountGuid = selectBtn.dataset.account || "";
-        document.querySelector('#accountSummaryForm input[name="customerGuid"]').value = customerGuid;
-        document.querySelector('#accountSummaryForm input[name="accountGuid"]').value = accountGuid;
-        document.querySelector('#accountStatementForm input[name="customerGuid"]').value = customerGuid;
-        document.querySelector('#accountStatementForm input[name="accountGuid"]').value = accountGuid;
-        notify("تم تمرير الزبون/الحساب إلى قسم الحسابات");
-      }
-    });
+    state.documents.totalCount = result.data.totalCount || 0;
+    renderDocumentsTable(getItems(result.data));
+    updateDocumentPager();
   }
 
-  function bindAccounts() {
-    document.getElementById("accountSummaryForm").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const query = formToObject(event.currentTarget);
-      const result = await apiCall("/api/accounts/summary", { query });
-      writeJson("accountSummaryRaw", result.data || { status: result.status });
-      notify(result.ok ? "تم جلب الملخص" : "فشل جلب الملخص", !result.ok);
-    });
+  function renderDocumentsTable(items) {
+    const tbody = document.querySelector("#documentsTable tbody");
+    tbody.innerHTML = items.map((item) => `
+      <tr data-guid="${item.guid}">
+        <td>${safeHtml(item.number ?? "-")}</td>
+        <td>${safeHtml(formatDate(item.date))}</td>
+        <td>${safeHtml(item.typeName || item.typeCode || "-")}</td>
+        <td>${safeHtml(item.settlementTypeName || "-")}</td>
+        <td>${safeHtml(item.customerName || "-")}</td>
+        <td>${safeHtml(item.accountName || "-")}</td>
+        <td>${safeHtml(formatNumber(item.totalAmount))}</td>
+        <td>${safeHtml(formatNumber(item.netAmount))}</td>
+      </tr>
+    `).join("");
 
-    document.getElementById("accountStatementForm").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const query = formToObject(event.currentTarget);
-      const result = await apiCall("/api/accounts/statement", { query });
-      writeJson("statementRaw", result.data || { status: result.status });
-      if (!result.ok) {
-        clearTableBody("statementTable");
-        notify("فشل جلب كشف الحساب", true);
-        return;
-      }
-
-      const rows = (result.data?.entries || []).map((entry) => `
-        <tr>
-          <td>${entry.date ? new Date(entry.date).toLocaleDateString() : ""}</td>
-          <td>${entry.number ?? ""}</td>
-          <td>${entry.debit ?? ""}</td>
-          <td>${entry.credit ?? ""}</td>
-          <td>${entry.reasonType ?? ""}</td>
-          <td>${entry.reasonDocumentType ?? ""}</td>
-          <td>${entry.referenceNumber ?? ""}</td>
-          <td>${entry.runningBalance ?? ""}</td>
-        </tr>`).join("");
-      appendTableRows("statementTable", rows);
-      notify("تم جلب كشف الحساب");
-    });
+    if (state.documents.selectedGuid) {
+      highlightSelectedRow("#documentsTable", state.documents.selectedGuid);
+    }
   }
 
-  function bindMaterials() {
-    document.getElementById("materialsForm").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const query = formToObject(event.currentTarget);
-      const result = await apiCall("/api/materials", { query });
-      writeJson("materialsRaw", result.data || { status: result.status });
-      if (!result.ok) {
-        notify("فشل تحميل المواد", true);
-        return;
-      }
+  function updateDocumentPager() {
+    const totalPages = Math.max(1, Math.ceil((state.documents.totalCount || 0) / state.documents.pageSize));
+    document.getElementById("documentsPageInfo").textContent = `صفحة ${state.documents.page} من ${totalPages} (${state.documents.totalCount} سجل)`;
+  }
 
-      const rows = getItems(result.data).map((item) => `
-        <tr>
-          <td>${item.number ?? ""}</td>
-          <td>${item.name ?? ""}</td>
-          <td>${item.code ?? ""}</td>
-          <td>${item.qty ?? ""}</td>
-          <td>${item.pictureGuid ?? ""}</td>
-          <td>${item.guid}</td>
-          <td><button type="button" class="btn-material-images" data-guid="${item.guid}">صور المادة</button></td>
-        </tr>`).join("");
-      appendTableRows("materialsTable", rows);
+  async function loadDocumentDetails(guid) {
+    const endpoint = state.documents.mode === "invoices"
+      ? `/api/bills/invoices/${guid}`
+      : `/api/bills/vouchers/${guid}`;
+    const result = await apiCall(endpoint);
+    writeRaw(result.data || { status: result.status, endpoint });
+    if (!result.ok) {
+      notify("فشل جلب تفاصيل المستند", true);
+      return;
+    }
+
+    const documentInfo = result.data.document || {};
+    document.getElementById("documentDetailHint").textContent = `${state.documents.mode === "invoices" ? "فاتورة" : "سند"} رقم ${documentInfo.number ?? "-"}`;
+    renderDocumentDetailCard(documentInfo);
+    renderDocumentItems(result.data.items || []);
+  }
+
+  function renderDocumentDetailCard(documentInfo) {
+    const card = document.getElementById("documentDetailCard");
+    card.innerHTML = `
+      <div class="doc-summary-grid">
+        ${renderSummaryItem("النوع", documentInfo.typeName || documentInfo.typeCode || "-")}
+        ${renderSummaryItem("التسوية", documentInfo.settlementTypeName || "-")}
+        ${renderSummaryItem("العميل", documentInfo.customerName || "-")}
+        ${renderSummaryItem("الحساب", documentInfo.accountName || "-")}
+        ${renderSummaryItem("الإجمالي", formatNumber(documentInfo.totalAmount))}
+        ${renderSummaryItem("الحسم", formatNumber(documentInfo.totalDiscount))}
+        ${renderSummaryItem("الإضافات", formatNumber(documentInfo.totalAdditions))}
+        ${renderSummaryItem("الصافي", formatNumber(documentInfo.netAmount))}
+        ${renderSummaryItem("الملاحظة", documentInfo.notes || "-")}
+      </div>
+    `;
+  }
+
+  function renderSummaryItem(label, value) {
+    return `<div class="doc-summary-item"><span>${safeHtml(label)}</span><strong>${safeHtml(value)}</strong></div>`;
+  }
+
+  function renderDocumentItems(items) {
+    const tbody = document.querySelector("#documentItemsTable tbody");
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="muted">لا توجد عناصر لهذا المستند.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = items.map((item) => `
+      <tr>
+        <td>${safeHtml(item.materialName || item.materialCode || item.materialGuid || "-")}</td>
+        <td>${safeHtml(formatNumber(item.quantity))}</td>
+        <td>${safeHtml(formatNumber(item.price))}</td>
+        <td>${safeHtml(formatNumber(item.discount))}</td>
+        <td>${safeHtml(formatNumber(item.additions))}</td>
+        <td>${safeHtml(formatNumber(item.lineTotal))}</td>
+      </tr>
+    `).join("");
+  }
+
+  function bindInventory() {
+    document.getElementById("materialsFilterForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      state.materials.search = String(form.get("search") || "").trim();
+      state.materials.page = Number(form.get("page") || 1);
+      state.materials.pageSize = Number(form.get("pageSize") || 24);
+      await loadMaterials();
     });
 
     document.getElementById("materialsFilterOptionsBtn").addEventListener("click", async () => {
       const result = await apiCall("/api/materials/filter-options");
-      writeJson("materialsRaw", result.data || { status: result.status });
+      writeRaw(result.data || { status: result.status });
+      notify(result.ok ? "تم جلب خيارات الفلترة" : "تعذر جلب خيارات الفلترة", !result.ok);
     });
 
-    document.getElementById("materialImagesForm").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const query = formToObject(event.currentTarget);
-      const result = await apiCall("/api/material-images", { query });
-      writeJson("materialsRaw", result.data || { status: result.status });
-      if (!result.ok) {
-        notify("فشل تحميل الصور", true);
-        return;
-      }
-
-      renderMaterialImages(result.data);
-    });
-
-    document.getElementById("materialImagesByMaterialForm").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const payload = formToObject(event.currentTarget);
-      const result = await apiCall(`/api/materials/${payload.materialGuid}/images`);
-      writeJson("materialsRaw", result.data || { status: result.status });
-      if (!result.ok) {
-        notify("تعذر تحميل صور المادة", true);
-        return;
-      }
-
-      renderMaterialImages({ items: result.data, totalCount: result.data.length, page: 1, pageSize: result.data.length });
-    });
-
-    document.querySelector("#materialsTable tbody").addEventListener("click", async (event) => {
-      const btn = event.target.closest(".btn-material-images");
-      if (!btn) return;
-      const guid = btn.dataset.guid;
-      const result = await apiCall(`/api/materials/${guid}/images`);
-      writeJson("materialsRaw", result.data || { status: result.status });
-      if (result.ok) {
-        renderMaterialImages({ items: result.data });
-      }
+    document.getElementById("materialsGrid").addEventListener("click", async (event) => {
+      const card = event.target.closest(".material-card[data-guid]");
+      if (!card) return;
+      const guid = card.dataset.guid;
+      state.materials.selectedGuid = guid;
+      highlightSelectedCard(guid);
+      await loadMaterialDetails(guid);
     });
 
     document.querySelector("#materialImagesTable tbody").addEventListener("click", async (event) => {
-      const actionBtn = event.target.closest("button[data-action]");
-      if (!actionBtn) {
-        return;
-      }
-
-      const imageId = actionBtn.dataset.id;
-      try {
-        if (actionBtn.dataset.action === "file") {
-          await apiBlob(`/api/material-images/${imageId}/file`);
-        } else {
-          await apiBlob(`/api/material-images/${imageId}/thumbnail`);
-        }
-      } catch (error) {
-        notify(`فشل جلب الصورة: ${error.message}`, true);
+      const button = event.target.closest("button[data-action]");
+      if (!button) return;
+      const imageGuid = button.dataset.id;
+      const action = button.dataset.action;
+      if (action === "file") {
+        await openFileInNewTab(`/api/material-images/${imageGuid}/file`);
+      } else {
+        await openFileInNewTab(`/api/material-images/${imageGuid}/thumbnail`);
       }
     });
   }
 
-  function renderMaterialImages(payload) {
-    const rows = getItems(payload).map((item) => `
+  async function loadMaterials() {
+    const query = {
+      search: state.materials.search,
+      page: state.materials.page,
+      pageSize: state.materials.pageSize
+    };
+    const result = await apiCall("/api/materials", { query });
+    writeRaw(result.data || { status: result.status, query });
+    if (!result.ok) {
+      notify("فشل تحميل المواد", true);
+      document.getElementById("materialsGrid").innerHTML = "";
+      return;
+    }
+
+    state.materials.totalCount = result.data.totalCount || 0;
+    state.materials.currentItems = getItems(result.data);
+    renderMaterialsGrid(state.materials.currentItems);
+  }
+
+  function renderMaterialsGrid(items) {
+    const grid = document.getElementById("materialsGrid");
+    grid.innerHTML = items.map((item) => {
+      const selectedClass = state.materials.selectedGuid === item.guid ? "material-card selected" : "material-card";
+      const imageToken = item.pictureGuid ? `img-${item.pictureGuid}` : "";
+      return `
+        <article class="${selectedClass}" data-guid="${item.guid}">
+          <div class="material-thumb">
+            ${item.pictureGuid
+              ? `<img alt="${safeHtml(item.name || "material")}" data-image-token="${imageToken}" src="" />`
+              : `<span class="muted">لا صورة</span>`
+            }
+          </div>
+          <div class="material-info">
+            <h4>${safeHtml(item.name || "-")}</h4>
+            <p>${safeHtml(item.code || "-")} • ${safeHtml(formatNumber(item.qty))}</p>
+          </div>
+        </article>
+      `;
+    }).join("");
+
+    hydrateMaterialThumbnails(items).catch(() => {});
+  }
+
+  async function hydrateMaterialThumbnails(items) {
+    for (const material of items) {
+      if (!material.pictureGuid) continue;
+      const imagePath = `/api/material-images/${material.pictureGuid}/thumbnail`;
+      const objectUrl = await loadProtectedImage(imagePath);
+      if (!objectUrl) continue;
+      const imageElement = document.querySelector(`img[data-image-token="img-${material.pictureGuid}"]`);
+      if (imageElement) {
+        imageElement.src = objectUrl;
+      }
+    }
+  }
+
+  function highlightSelectedCard(guid) {
+    document.querySelectorAll(".material-card").forEach((card) => {
+      card.classList.toggle("selected", card.dataset.guid === guid);
+    });
+  }
+
+  async function loadMaterialDetails(materialGuid) {
+    const [material, images] = await Promise.all([
+      apiCall(`/api/materials/${materialGuid}`),
+      apiCall(`/api/materials/${materialGuid}/images`)
+    ]);
+    writeRaw({ material: material.data, images: images.data });
+    if (!material.ok) {
+      notify("تعذر تحميل تفاصيل المادة", true);
+      return;
+    }
+
+    renderMaterialDetailCard(material.data);
+    renderMaterialImages(images.ok ? (images.data || []) : []);
+  }
+
+  function renderMaterialDetailCard(material) {
+    const card = document.getElementById("materialDetailCard");
+    document.getElementById("materialDetailHint").textContent = `${material.name || "-"} (${material.code || "-"})`;
+    card.innerHTML = `
+      <div class="doc-summary-grid">
+        ${renderSummaryItem("رقم المادة", material.number ?? "-")}
+        ${renderSummaryItem("الاسم", material.name || "-")}
+        ${renderSummaryItem("الكود", material.code || "-")}
+        ${renderSummaryItem("الكمية", formatNumber(material.qty))}
+        ${renderSummaryItem("السعر جملة", formatNumber(material.whole))}
+        ${renderSummaryItem("السعر نصف جملة", formatNumber(material.half))}
+        ${renderSummaryItem("سعر شراء", formatNumber(material.endUser))}
+        ${renderSummaryItem("المجموعة", material.groupGuid || "-")}
+      </div>
+    `;
+  }
+
+  function renderMaterialImages(images) {
+    const tbody = document.querySelector("#materialImagesTable tbody");
+    if (!images.length) {
+      tbody.innerHTML = `<tr><td colspan="3" class="muted">لا توجد صور لهذه المادة.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = images.map((image) => `
       <tr>
-        <td>${item.name ?? ""}</td>
-        <td>${item.materialGuid ?? ""}</td>
-        <td>${item.guid}</td>
+        <td>${safeHtml(image.name || "-")}</td>
+        <td>${safeHtml(image.thumbnailPath || image.filePath || "-")}</td>
         <td class="row">
-          <button type="button" data-action="file" data-id="${item.guid}" class="secondary">الملف</button>
-          <button type="button" data-action="thumbnail" data-id="${item.guid}">المصغرة</button>
+          <button class="btn ghost" data-action="thumbnail" data-id="${image.guid}">مصغرة</button>
+          <button class="btn" data-action="file" data-id="${image.guid}">الملف</button>
         </td>
-      </tr>`).join("");
-    appendTableRows("materialImagesTable", rows);
+      </tr>
+    `).join("");
   }
 
-  function bindBills() {
-    document.getElementById("invoicesForm").addEventListener("submit", async (event) => {
+  function bindCustomers() {
+    document.getElementById("customersFilterForm").addEventListener("submit", async (event) => {
       event.preventDefault();
-      const query = formToObject(event.currentTarget);
-      const result = await apiCall("/api/bills/invoices", { query });
-      writeJson("billsRaw", result.data || { status: result.status });
-      if (!result.ok) {
-        notify("فشل تحميل الفواتير", true);
-        return;
-      }
-
-      const rows = getItems(result.data).map((item) => `
-        <tr>
-          <td>${item.number ?? ""}</td>
-          <td>${item.date ? new Date(item.date).toLocaleDateString() : ""}</td>
-          <td>${item.typeName ?? item.typeCode ?? ""}</td>
-          <td>${item.settlementTypeName ?? ""}</td>
-          <td>${item.customerName ?? ""}</td>
-          <td>${item.accountName ?? ""}</td>
-          <td>${item.totalAmount ?? ""}</td>
-          <td>${item.netAmount ?? ""}</td>
-          <td><button type="button" class="btn-invoice-details" data-guid="${item.guid}">تفاصيل</button></td>
-        </tr>`).join("");
-      appendTableRows("invoicesTable", rows);
-      clearTableBody("invoiceItemsTable");
+      const form = new FormData(event.currentTarget);
+      state.customers.search = String(form.get("search") || "").trim();
+      state.customers.page = Number(form.get("page") || 1);
+      state.customers.pageSize = Number(form.get("pageSize") || 40);
+      await loadCustomers();
     });
 
-    document.getElementById("vouchersForm").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const query = formToObject(event.currentTarget);
-      const result = await apiCall("/api/bills/vouchers", { query });
-      writeJson("billsRaw", result.data || { status: result.status });
-      if (!result.ok) {
-        notify("فشل تحميل السندات", true);
-        return;
-      }
+    document.querySelector("#customersTable tbody").addEventListener("click", async (event) => {
+      const row = event.target.closest("tr[data-guid]");
+      if (!row) return;
+      const customerGuid = row.dataset.guid;
+      const accountGuid = row.dataset.accountGuid || "";
+      state.customers.selectedCustomerGuid = customerGuid;
+      state.customers.selectedAccountGuid = accountGuid;
+      highlightSelectedRow("#customersTable", customerGuid);
 
-      const rows = getItems(result.data).map((item) => `
-        <tr>
-          <td>${item.number ?? ""}</td>
-          <td>${item.date ? new Date(item.date).toLocaleDateString() : ""}</td>
-          <td>${item.typeName ?? item.typeCode ?? ""}</td>
-          <td>${item.settlementTypeName ?? ""}</td>
-          <td>${item.customerName ?? ""}</td>
-          <td>${item.accountName ?? ""}</td>
-          <td>${item.totalAmount ?? ""}</td>
-          <td>${item.netAmount ?? ""}</td>
-          <td><button type="button" class="btn-voucher-details" data-guid="${item.guid}">تفاصيل</button></td>
-        </tr>`).join("");
-      appendTableRows("vouchersTable", rows);
+      const form = document.getElementById("customerAccountFilterForm");
+      form.querySelector('input[name="customerGuid"]').value = customerGuid;
+      form.querySelector('input[name="accountGuid"]').value = accountGuid;
+      await loadCustomerAccountData();
     });
 
-    document.getElementById("invoiceTypesBtn").addEventListener("click", async () => {
-      const result = await apiCall("/api/bills/invoice-types");
-      writeJson("billsRaw", result.data || { status: result.status });
-    });
-
-    document.getElementById("voucherTypesBtn").addEventListener("click", async () => {
-      const result = await apiCall("/api/bills/voucher-types");
-      writeJson("billsRaw", result.data || { status: result.status });
-    });
-
-    document.querySelector("#invoicesTable tbody").addEventListener("click", async (event) => {
-      const btn = event.target.closest(".btn-invoice-details");
-      if (!btn) return;
-      const guid = btn.dataset.guid;
-      const result = await apiCall(`/api/bills/invoices/${guid}`);
-      writeJson("billsRaw", result.data || { status: result.status });
-      if (!result.ok) {
-        notify("فشل تحميل تفاصيل الفاتورة", true);
-        return;
-      }
-
-      const rows = (result.data?.items || []).map((item) => `
-        <tr>
-          <td>${item.materialName ?? item.materialCode ?? item.materialGuid ?? ""}</td>
-          <td>${item.quantity ?? ""}</td>
-          <td>${item.price ?? ""}</td>
-          <td>${item.discount ?? ""}</td>
-          <td>${item.additions ?? ""}</td>
-          <td>${item.lineTotal ?? ""}</td>
-        </tr>`).join("");
-      appendTableRows("invoiceItemsTable", rows);
-    });
-
-    document.querySelector("#vouchersTable tbody").addEventListener("click", async (event) => {
-      const btn = event.target.closest(".btn-voucher-details");
-      if (!btn) return;
-      const guid = btn.dataset.guid;
-      const result = await apiCall(`/api/bills/vouchers/${guid}`);
-      writeJson("billsRaw", result.data || { status: result.status });
-      notify(result.ok ? "تم تحميل تفاصيل السند" : "فشل تحميل تفاصيل السند", !result.ok);
-    });
+    document.getElementById("reloadCustomerAccountBtn").addEventListener("click", loadCustomerAccountData);
   }
 
-  function bindExplorer() {
-    document.getElementById("explorerForm").addEventListener("submit", async (event) => {
+  async function loadCustomers() {
+    const query = {
+      search: state.customers.search,
+      page: state.customers.page,
+      pageSize: state.customers.pageSize
+    };
+    const result = await apiCall("/api/customers", { query });
+    writeRaw(result.data || { status: result.status, query });
+    if (!result.ok) {
+      notify("فشل تحميل العملاء", true);
+      return;
+    }
+
+    state.customers.totalCount = result.data.totalCount || 0;
+    const tbody = document.querySelector("#customersTable tbody");
+    tbody.innerHTML = getItems(result.data).map((item) => `
+      <tr data-guid="${item.guid}" data-account-guid="${item.accountGuid || ""}">
+        <td>${safeHtml(item.number ?? "-")}</td>
+        <td>${safeHtml(item.customerName || "-")}</td>
+        <td>${safeHtml(item.mobile || "-")}</td>
+        <td>${safeHtml(item.accountGuid || "-")}</td>
+      </tr>
+    `).join("");
+  }
+
+  async function loadCustomerAccountData() {
+    const form = document.getElementById("customerAccountFilterForm");
+    const formData = new FormData(form);
+    const accountGuid = String(formData.get("accountGuid") || "").trim();
+    const customerGuid = String(formData.get("customerGuid") || "").trim();
+    const fromDate = String(formData.get("fromDate") || "").trim();
+    const toDate = String(formData.get("toDate") || "").trim();
+    if (!accountGuid && !customerGuid) {
+      notify("اختر عميلًا أو املأ accountGuid", true);
+      return;
+    }
+
+    const summaryQuery = { accountGuid, customerGuid };
+    const statementQuery = {
+      accountGuid,
+      customerGuid,
+      fromDate,
+      toDate,
+      page: 1,
+      pageSize: 120
+    };
+
+    const [summary, statement] = await Promise.all([
+      apiCall("/api/accounts/summary", { query: summaryQuery }),
+      apiCall("/api/accounts/statement", { query: statementQuery })
+    ]);
+    writeRaw({ summary: summary.data, statement: statement.data });
+
+    if (!summary.ok) {
+      notify("فشل تحميل ملخص الحساب", true);
+      return;
+    }
+
+    renderAccountSummary(summary.data);
+    renderCustomerStatement(statement.ok ? (statement.data.entries || []) : []);
+  }
+
+  function renderAccountSummary(summary) {
+    const card = document.getElementById("accountSummaryCard");
+    card.innerHTML = `
+      <div class="doc-summary-grid">
+        ${renderSummaryItem("اسم العميل", summary.customerName || "-")}
+        ${renderSummaryItem("اسم الحساب", summary.accountName || "-")}
+        ${renderSummaryItem("كود الحساب", summary.accountCode || "-")}
+        ${renderSummaryItem("مدين حالي", formatNumber(summary.currentDebit))}
+        ${renderSummaryItem("دائن حالي", formatNumber(summary.currentCredit))}
+        ${renderSummaryItem("الرصيد", formatNumber(summary.currentBalance))}
+        ${renderSummaryItem("آخر دائن", summary.lastCreditorMovement?.reasonDocumentType || "-")}
+        ${renderSummaryItem("آخر مدين", summary.lastDebtorMovement?.reasonDocumentType || "-")}
+      </div>
+    `;
+  }
+
+  function renderCustomerStatement(entries) {
+    const tbody = document.querySelector("#customerStatementTable tbody");
+    if (!entries.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="muted">لا توجد حركات ضمن الفلاتر الحالية.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = entries.map((entry) => `
+      <tr>
+        <td>${safeHtml(formatDate(entry.date))}</td>
+        <td>${safeHtml(entry.number ?? "-")}</td>
+        <td>${safeHtml(formatNumber(entry.debit))}</td>
+        <td>${safeHtml(formatNumber(entry.credit))}</td>
+        <td>${safeHtml(entry.reasonType || "-")}</td>
+        <td>${safeHtml(entry.reasonDocumentType || "-")}</td>
+        <td>${safeHtml(formatNumber(entry.runningBalance))}</td>
+      </tr>
+    `).join("");
+  }
+
+  function bindApiLab() {
+    document.getElementById("apiLabForm").addEventListener("submit", async (event) => {
       event.preventDefault();
-      const data = formToObject(event.currentTarget);
+      const formData = new FormData(event.currentTarget);
+      const method = String(formData.get("method") || "GET");
+      const path = String(formData.get("path") || "").trim();
+      if (!path) {
+        notify("يجب تحديد المسار", true);
+        return;
+      }
+
       let query = {};
-      let body;
+      let body = undefined;
       try {
-        query = data.query ? JSON.parse(data.query) : {};
-        body = data.body ? JSON.parse(data.body) : undefined;
+        query = JSON.parse(String(formData.get("query") || "{}"));
+        body = JSON.parse(String(formData.get("body") || "{}"));
       } catch {
-        notify("صيغة JSON غير صحيحة في query/body", true);
+        notify("تنسيق JSON غير صحيح", true);
         return;
       }
 
-      const result = await apiCall(data.path, { method: data.method, query, body });
-      writeJson("explorerRaw", result.data || { status: result.status });
+      if (method === "GET" || method === "DELETE") {
+        body = undefined;
+      }
+
+      const result = await apiCall(path, { method, query, body });
+      writeRaw(result.data || { status: result.status, path, method, query, body });
+      notify(result.ok ? "تم تنفيذ الطلب" : "فشل تنفيذ الطلب", !result.ok);
     });
   }
 
-  function bindTopbar() {
-    ui.baseUrlInput.value = state.baseUrl;
-    ui.saveBaseUrlBtn.addEventListener("click", () => {
-      state.baseUrl = normalizeBaseUrl(ui.baseUrlInput.value) || window.location.origin;
-      persistState();
-      notify("تم حفظ Base URL");
+  function highlightSelectedRow(tableSelector, guid) {
+    document.querySelectorAll(`${tableSelector} tbody tr[data-guid]`).forEach((row) => {
+      row.classList.toggle("selected", row.dataset.guid === guid);
     });
   }
 
   async function bootstrap() {
     bindNavigation();
-    bindTopbar();
-    bindAuthActions();
+    bindSessionControls();
+    bindOverviewActions();
+    bindDocuments();
+    bindInventory();
     bindCustomers();
-    bindAccounts();
-    bindMaterials();
-    bindBills();
-    bindExplorer();
-    syncAuthWidgets();
+    bindApiLab();
+    syncAuthUi();
 
-    document.getElementById("refreshDashboardBtn").addEventListener("click", () => {
-      loadDashboard().catch((error) => {
-        notify(`فشل تحديث اللوحة: ${error.message}`, true);
-      });
-    });
-
-    loadDashboard().catch(() => {
-      writeJson("dashboardRaw", { message: "Dashboard requires valid API URL and authentication for protected endpoints." });
-    });
+    await loadOverview();
+    await loadDocumentTypes();
+    await loadDocuments();
+    await loadMaterials();
+    await loadCustomers();
   }
 
-  bootstrap();
+  bootstrap().catch((error) => {
+    writeRaw({ message: "Startup error", error: error.message });
+    notify("حدث خطأ عند تشغيل الواجهة", true);
+  });
 })();
