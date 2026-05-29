@@ -30,6 +30,17 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
     private static readonly string[] CustomerGuidCandidates = ["CustGUID", "CustomerGUID", "CusGUID"];
     private static readonly string[] AccountGuidCandidates = ["AccountGUID", "AccGUID", "MainAccGUID"];
     private static readonly string[] MaterialGuidCandidates = ["MatGUID", "MaterialGUID", "MatGuid"];
+    private static readonly string[] CurrencyGuidCandidates = ["CurrencyGUID", "CurGUID", "CurrGUID", "CurrencyGuid"];
+    private static readonly string[] CurrencyCodeCandidates = ["CurrencyCode", "CurCode", "CodeCur", "CurName", "CurrencyName"];
+    private static readonly string[] CurrencySymbolCandidates = ["CurrencySymbol", "CurSymbol", "Symbol", "CurrencySign"];
+    private static readonly string[] PairsCountCandidates = ["Pairs", "PairsCount", "TotalPairs", "PairQty", "QtyPair", "Qty2"];
+    private static readonly string[] PensCountCandidates = ["Pens", "PensCount", "TotalPens", "Pieces", "PiecesCount", "QTy1", "Qty1"];
+    private static readonly string[] DiscountAccountGuidCandidates = ["DiscAccGUID", "DiscountAccGUID", "DiscountAccountGUID", "TotalDiscAccGUID"];
+    private static readonly string[] DiscountAccountCodeCandidates = ["DiscAccCode", "DiscountAccCode", "DiscountAccountCode"];
+    private static readonly string[] DiscountAccountNameCandidates = ["DiscAccName", "DiscountAccName", "DiscountAccountName"];
+    private static readonly string[] AdditionAccountGuidCandidates = ["AddAccGUID", "AdditionAccGUID", "AdditionAccountGUID", "TotalAddAccGUID"];
+    private static readonly string[] AdditionAccountCodeCandidates = ["AddAccCode", "AdditionAccCode", "AdditionAccountCode"];
+    private static readonly string[] AdditionAccountNameCandidates = ["AddAccName", "AdditionAccName", "AdditionAccountName"];
     private static readonly string[] NotesCandidates = ["Notes", "Statement", "Description"];
 
     [HttpGet("invoices")]
@@ -81,7 +92,12 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             query = query.Where(bill => bill.Date < toExclusive.Value);
         }
 
-        query = ApplySearchFilter(query, search);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalizedSearch = search.Trim();
+            var relatedGuids = await ResolveSearchRelationGuidsAsync(normalizedSearch, DocumentKind.Invoice, cancellationToken);
+            query = ApplySearchFilter(query, normalizedSearch, relatedGuids);
+        }
 
         var totalCount = await query.CountAsync(cancellationToken);
         var records = await query
@@ -133,7 +149,16 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         var document = BuildDocumentResponse(record, type, rawRow, link, isVoucher: false);
         var billItemRows = await LoadBillItemRowsAsync(guid, cancellationToken);
         var billItems = await BuildBillItemResponsesAsync(billItemRows, cancellationToken);
-        return Ok(new BillDocumentDetailsResponse(document, billItems));
+        var totalQuantity = billItems.Sum(item => item.Quantity ?? 0d);
+        var totalPairs = document.PairsCount ?? totalQuantity;
+        var totalPens = document.PensCount;
+        return Ok(new BillDocumentDetailsResponse(
+            document,
+            billItems,
+            billItems.Count,
+            billItems.Count == 0 ? null : totalQuantity,
+            totalPairs,
+            totalPens));
     }
 
     [HttpGet("invoice-types")]
@@ -221,7 +246,12 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             query = query.Where(payment => payment.Date < toExclusive.Value);
         }
 
-        query = ApplySearchFilter(query, search);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalizedSearch = search.Trim();
+            var relatedGuids = await ResolveSearchRelationGuidsAsync(normalizedSearch, DocumentKind.Voucher, cancellationToken);
+            query = ApplySearchFilter(query, normalizedSearch, relatedGuids);
+        }
 
         var totalCount = await query.CountAsync(cancellationToken);
         var records = await query
@@ -271,7 +301,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             ? resolvedType
             : null;
         var document = BuildDocumentResponse(record, type, rawRow, link, isVoucher: true);
-        return Ok(new BillDocumentDetailsResponse(document, []));
+        return Ok(new BillDocumentDetailsResponse(document, [], 0, null, document.PairsCount, document.PensCount));
     }
 
     [HttpGet("voucher-types")]
@@ -320,6 +350,14 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         var (total, discount, additions, net) = ResolveDocumentTotals(rawRow, isVoucher);
         var notes = FirstNotBlank(record.Notes, GetStringValue(rawRow, NotesCandidates));
         var (settlementTypeCode, settlementTypeName) = ResolveSettlementType(resolvedType?.Name ?? resolvedType?.Code, isVoucher);
+        var (currencyGuid, currencyCode, currencySymbol) = ResolveCurrencyInfo(rawRow, null);
+        var (pairsCount, pensCount) = ResolveQuantityCounters(rawRow);
+        var discountAccountGuid = GetGuidValue(rawRow, DiscountAccountGuidCandidates) ?? link?.DiscountAccount?.Guid;
+        var discountAccountCode = FirstNotBlank(GetStringValue(rawRow, DiscountAccountCodeCandidates), link?.DiscountAccount?.Code);
+        var discountAccountName = FirstNotBlank(GetStringValue(rawRow, DiscountAccountNameCandidates), link?.DiscountAccount?.Name);
+        var additionAccountGuid = GetGuidValue(rawRow, AdditionAccountGuidCandidates) ?? link?.AdditionAccount?.Guid;
+        var additionAccountCode = FirstNotBlank(GetStringValue(rawRow, AdditionAccountCodeCandidates), link?.AdditionAccount?.Code);
+        var additionAccountName = FirstNotBlank(GetStringValue(rawRow, AdditionAccountNameCandidates), link?.AdditionAccount?.Name);
         return new BillDocumentResponse(
             record.Guid,
             record.Number,
@@ -327,6 +365,9 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             record.TypeGuid,
             resolvedType?.Code,
             resolvedType?.Name,
+            currencyGuid,
+            currencyCode,
+            currencySymbol,
             settlementTypeCode,
             settlementTypeName,
             link?.Customer?.Guid,
@@ -335,10 +376,18 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             link?.Account?.Number,
             link?.Account?.Code,
             link?.Account?.Name,
+            pairsCount,
+            pensCount,
             total,
             discount,
             additions,
             net,
+            discountAccountGuid,
+            discountAccountCode,
+            discountAccountName,
+            additionAccountGuid,
+            additionAccountCode,
+            additionAccountName,
             notes);
     }
 
@@ -352,6 +401,14 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         var (total, discount, additions, net) = ResolveDocumentTotals(rawRow, isVoucher);
         var notes = FirstNotBlank(record.Notes, GetStringValue(rawRow, NotesCandidates));
         var (settlementTypeCode, settlementTypeName) = ResolveSettlementType(resolvedType?.Name ?? resolvedType?.Code, isVoucher);
+        var (currencyGuid, currencyCode, currencySymbol) = ResolveCurrencyInfo(rawRow, null);
+        var (pairsCount, pensCount) = ResolveQuantityCounters(rawRow);
+        var discountAccountGuid = GetGuidValue(rawRow, DiscountAccountGuidCandidates) ?? link?.DiscountAccount?.Guid;
+        var discountAccountCode = FirstNotBlank(GetStringValue(rawRow, DiscountAccountCodeCandidates), link?.DiscountAccount?.Code);
+        var discountAccountName = FirstNotBlank(GetStringValue(rawRow, DiscountAccountNameCandidates), link?.DiscountAccount?.Name);
+        var additionAccountGuid = GetGuidValue(rawRow, AdditionAccountGuidCandidates) ?? link?.AdditionAccount?.Guid;
+        var additionAccountCode = FirstNotBlank(GetStringValue(rawRow, AdditionAccountCodeCandidates), link?.AdditionAccount?.Code);
+        var additionAccountName = FirstNotBlank(GetStringValue(rawRow, AdditionAccountNameCandidates), link?.AdditionAccount?.Name);
         return new BillDocumentResponse(
             record.Guid,
             record.Number,
@@ -359,6 +416,9 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             record.TypeGuid,
             resolvedType?.Code,
             resolvedType?.Name,
+            currencyGuid,
+            currencyCode,
+            currencySymbol,
             settlementTypeCode,
             settlementTypeName,
             link?.Customer?.Guid,
@@ -367,10 +427,18 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             link?.Account?.Number,
             link?.Account?.Code,
             link?.Account?.Name,
+            pairsCount,
+            pensCount,
             total,
             discount,
             additions,
             net,
+            discountAccountGuid,
+            discountAccountCode,
+            discountAccountName,
+            additionAccountGuid,
+            additionAccountCode,
+            additionAccountName,
             notes);
     }
 
@@ -440,6 +508,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             .ToArray();
         var accountGuids = entries
             .Select(entry => entry.AccountGuid)
+            .Concat(entries.Select(entry => entry.ContraAccountGuid))
             .Concat(rowAccountGuidByDocument.Values)
             .Where(guid => guid.HasValue && guid.Value != Guid.Empty)
             .Select(guid => guid!.Value)
@@ -479,7 +548,23 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             var account = accountGuid.HasValue && accountLookup.TryGetValue(accountGuid.Value, out var resolvedAccount)
                 ? resolvedAccount
                 : null;
-            result[documentGuid] = new DocumentLinkInfo(customer, account);
+            var candidateAccounts = linkedEntries
+                .SelectMany(entry => new[] { entry.AccountGuid, entry.ContraAccountGuid })
+                .Where(guid => guid.HasValue && guid.Value != Guid.Empty)
+                .Select(guid => accountLookup.GetValueOrDefault(guid!.Value))
+                .Where(foundAccount => foundAccount is not null)
+                .Cast<AccountRecord>()
+                .DistinctBy(foundAccount => foundAccount.Guid)
+                .ToArray();
+            var discountAccount = candidateAccounts
+                .FirstOrDefault(foundAccount => IsDiscountAccount(foundAccount.Name, foundAccount.Code));
+            var additionAccount = candidateAccounts
+                .FirstOrDefault(foundAccount => IsAdditionAccount(foundAccount.Name, foundAccount.Code));
+            result[documentGuid] = new DocumentLinkInfo(
+                customer,
+                account,
+                discountAccount is null ? null : new AccountReference(discountAccount.Guid, discountAccount.Number, discountAccount.Code, discountAccount.Name),
+                additionAccount is null ? null : new AccountReference(additionAccount.Guid, additionAccount.Number, additionAccount.Code, additionAccount.Name));
         }
 
         return result;
@@ -719,36 +804,217 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         return subtotal - (discount ?? 0d) + (additions ?? 0d);
     }
 
-    private static IQueryable<BillHeaderRecord> ApplySearchFilter(IQueryable<BillHeaderRecord> query, string? search)
+    private static (Guid? CurrencyGuid, string? CurrencyCode, string? CurrencySymbol) ResolveCurrencyInfo(
+        IReadOnlyDictionary<string, object?>? row,
+        string? fallbackCurrencyCode)
     {
-        if (string.IsNullOrWhiteSpace(search))
-        {
-            return query;
-        }
-
-        var term = search.Trim();
-        if (int.TryParse(term, out var number))
-        {
-            return query.Where(record => record.Number == number || (record.Notes != null && record.Notes.Contains(term)));
-        }
-
-        return query.Where(record => record.Notes != null && record.Notes.Contains(term));
+        var currencyGuid = GetGuidValue(row, CurrencyGuidCandidates);
+        var currencyCode = FirstNotBlank(GetStringValue(row, CurrencyCodeCandidates), fallbackCurrencyCode);
+        var currencySymbol = FirstNotBlank(
+            GetStringValue(row, CurrencySymbolCandidates),
+            ResolveCurrencySymbolFromCode(currencyCode),
+            "ل.س");
+        return (currencyGuid, currencyCode, currencySymbol);
     }
 
-    private static IQueryable<PaymentRecord> ApplySearchFilter(IQueryable<PaymentRecord> query, string? search)
+    private static (double? PairsCount, double? PensCount) ResolveQuantityCounters(IReadOnlyDictionary<string, object?>? row)
     {
-        if (string.IsNullOrWhiteSpace(search))
+        if (row is null)
         {
-            return query;
+            return (null, null);
         }
 
+        var pairsCount = GetNumberValue(row, PairsCountCandidates);
+        var pensCount = GetNumberValue(row, PensCountCandidates);
+        return (pairsCount, pensCount);
+    }
+
+    private static string? ResolveCurrencySymbolFromCode(string? currencyCode)
+    {
+        if (string.IsNullOrWhiteSpace(currencyCode))
+        {
+            return null;
+        }
+
+        var normalized = currencyCode.Trim().ToUpperInvariant();
+        if (normalized.Contains("USD") || normalized.Contains("DOLLAR"))
+        {
+            return "$";
+        }
+
+        if (normalized.Contains("EUR"))
+        {
+            return "€";
+        }
+
+        if (normalized.Contains("TRY"))
+        {
+            return "₺";
+        }
+
+        if (normalized.Contains("SAR"))
+        {
+            return "ر.س";
+        }
+
+        if (normalized.Contains("SYP") || normalized.Contains("LS") || normalized.Contains("SP"))
+        {
+            return "ل.س";
+        }
+
+        return null;
+    }
+
+    private async Task<Guid[]> ResolveSearchRelationGuidsAsync(
+        string searchTerm,
+        DocumentKind documentKind,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            return [];
+        }
+
+        var term = searchTerm.Trim();
+        var hasNumberTerm = int.TryParse(term, out var numberTerm);
+        if (documentKind == DocumentKind.Invoice)
+        {
+            return await (
+                from relation in mainDbContext.EntryBillRelations.AsNoTracking()
+                where relation.BillGuid.HasValue
+                join entry in mainDbContext.Entries.AsNoTracking()
+                    on relation.EntryGuid equals entry.Guid
+                join account in mainDbContext.Accounts.AsNoTracking()
+                    on entry.AccountGuid equals (Guid?)account.Guid into accountJoin
+                from account in accountJoin.DefaultIfEmpty()
+                join contraAccount in mainDbContext.Accounts.AsNoTracking()
+                    on entry.ContraAccountGuid equals (Guid?)contraAccount.Guid into contraAccountJoin
+                from contraAccount in contraAccountJoin.DefaultIfEmpty()
+                join customer in mainDbContext.Customers.AsNoTracking()
+                    on entry.CustomerGuid equals (Guid?)customer.Guid into customerJoin
+                from customer in customerJoin.DefaultIfEmpty()
+                where (entry.Notes != null && entry.Notes.Contains(term))
+                    || (account != null && (
+                        (account.Name != null && account.Name.Contains(term))
+                        || (account.Code != null && account.Code.Contains(term))
+                        || (hasNumberTerm && account.Number.HasValue && account.Number.Value == numberTerm)))
+                    || (contraAccount != null && (
+                        (contraAccount.Name != null && contraAccount.Name.Contains(term))
+                        || (contraAccount.Code != null && contraAccount.Code.Contains(term))
+                        || (hasNumberTerm && contraAccount.Number.HasValue && contraAccount.Number.Value == numberTerm)))
+                    || (customer != null && (
+                        (customer.CustomerName != null && customer.CustomerName.Contains(term))
+                        || (customer.LatinName != null && customer.LatinName.Contains(term))))
+                select relation.BillGuid!.Value
+            )
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+        }
+
+        return await (
+            from relation in mainDbContext.EntryPaymentRelations.AsNoTracking()
+            where relation.PaymentGuid.HasValue
+            join entry in mainDbContext.Entries.AsNoTracking()
+                on relation.EntryGuid equals entry.Guid
+            join account in mainDbContext.Accounts.AsNoTracking()
+                on entry.AccountGuid equals (Guid?)account.Guid into accountJoin
+            from account in accountJoin.DefaultIfEmpty()
+            join contraAccount in mainDbContext.Accounts.AsNoTracking()
+                on entry.ContraAccountGuid equals (Guid?)contraAccount.Guid into contraAccountJoin
+            from contraAccount in contraAccountJoin.DefaultIfEmpty()
+            join customer in mainDbContext.Customers.AsNoTracking()
+                on entry.CustomerGuid equals (Guid?)customer.Guid into customerJoin
+            from customer in customerJoin.DefaultIfEmpty()
+            where (entry.Notes != null && entry.Notes.Contains(term))
+                || (account != null && (
+                    (account.Name != null && account.Name.Contains(term))
+                    || (account.Code != null && account.Code.Contains(term))
+                    || (hasNumberTerm && account.Number.HasValue && account.Number.Value == numberTerm)))
+                || (contraAccount != null && (
+                    (contraAccount.Name != null && contraAccount.Name.Contains(term))
+                    || (contraAccount.Code != null && contraAccount.Code.Contains(term))
+                    || (hasNumberTerm && contraAccount.Number.HasValue && contraAccount.Number.Value == numberTerm)))
+                || (customer != null && (
+                    (customer.CustomerName != null && customer.CustomerName.Contains(term))
+                    || (customer.LatinName != null && customer.LatinName.Contains(term))))
+            select relation.PaymentGuid!.Value
+        )
+        .Distinct()
+        .ToArrayAsync(cancellationToken);
+    }
+
+    private static IQueryable<BillHeaderRecord> ApplySearchFilter(
+        IQueryable<BillHeaderRecord> query,
+        string search,
+        IReadOnlyCollection<Guid> relatedDocumentGuids)
+    {
         var term = search.Trim();
+        var relatedGuids = relatedDocumentGuids.Count == 0
+            ? Array.Empty<Guid>()
+            : relatedDocumentGuids.Distinct().ToArray();
+        var hasRelatedGuids = relatedGuids.Length > 0;
+
         if (int.TryParse(term, out var number))
         {
-            return query.Where(record => record.Number == number || (record.Notes != null && record.Notes.Contains(term)));
+            return hasRelatedGuids
+                ? query.Where(record => record.Number == number
+                    || (record.Notes != null && record.Notes.Contains(term))
+                    || relatedGuids.Contains(record.Guid))
+                : query.Where(record => record.Number == number
+                    || (record.Notes != null && record.Notes.Contains(term)));
         }
 
-        return query.Where(record => record.Notes != null && record.Notes.Contains(term));
+        if (DateTime.TryParse(term, out var date))
+        {
+            var targetDate = date.Date;
+            return hasRelatedGuids
+                ? query.Where(record => (record.Date.HasValue && record.Date.Value.Date == targetDate)
+                    || (record.Notes != null && record.Notes.Contains(term))
+                    || relatedGuids.Contains(record.Guid))
+                : query.Where(record => (record.Date.HasValue && record.Date.Value.Date == targetDate)
+                    || (record.Notes != null && record.Notes.Contains(term)));
+        }
+
+        return hasRelatedGuids
+            ? query.Where(record => (record.Notes != null && record.Notes.Contains(term)) || relatedGuids.Contains(record.Guid))
+            : query.Where(record => record.Notes != null && record.Notes.Contains(term));
+    }
+
+    private static IQueryable<PaymentRecord> ApplySearchFilter(
+        IQueryable<PaymentRecord> query,
+        string search,
+        IReadOnlyCollection<Guid> relatedDocumentGuids)
+    {
+        var term = search.Trim();
+        var relatedGuids = relatedDocumentGuids.Count == 0
+            ? Array.Empty<Guid>()
+            : relatedDocumentGuids.Distinct().ToArray();
+        var hasRelatedGuids = relatedGuids.Length > 0;
+
+        if (int.TryParse(term, out var number))
+        {
+            return hasRelatedGuids
+                ? query.Where(record => record.Number == number
+                    || (record.Notes != null && record.Notes.Contains(term))
+                    || relatedGuids.Contains(record.Guid))
+                : query.Where(record => record.Number == number
+                    || (record.Notes != null && record.Notes.Contains(term)));
+        }
+
+        if (DateTime.TryParse(term, out var date))
+        {
+            var targetDate = date.Date;
+            return hasRelatedGuids
+                ? query.Where(record => (record.Date.HasValue && record.Date.Value.Date == targetDate)
+                    || (record.Notes != null && record.Notes.Contains(term))
+                    || relatedGuids.Contains(record.Guid))
+                : query.Where(record => (record.Date.HasValue && record.Date.Value.Date == targetDate)
+                    || (record.Notes != null && record.Notes.Contains(term)));
+        }
+
+        return hasRelatedGuids
+            ? query.Where(record => (record.Notes != null && record.Notes.Contains(term)) || relatedGuids.Contains(record.Guid))
+            : query.Where(record => record.Notes != null && record.Notes.Contains(term));
     }
 
     private static bool TryNormalizeDateRange(
@@ -1148,6 +1414,35 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         }
     }
 
+    private static bool IsDiscountAccount(string? name, string? code)
+    {
+        var normalized = $"{name} {code}".Trim().ToLowerInvariant();
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+
+        return normalized.Contains("حسم")
+            || normalized.Contains("خصم")
+            || normalized.Contains("discount");
+    }
+
+    private static bool IsAdditionAccount(string? name, string? code)
+    {
+        var normalized = $"{name} {code}".Trim().ToLowerInvariant();
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+
+        return normalized.Contains("إضافة")
+            || normalized.Contains("اضافة")
+            || normalized.Contains("زيادة")
+            || normalized.Contains("اضافات")
+            || normalized.Contains("addition")
+            || normalized.Contains("extra");
+    }
+
     private static string? FirstNotBlank(params string?[] values)
     {
         foreach (var value in values)
@@ -1162,7 +1457,12 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
     }
 
     private sealed record ResolvedType(string? Code, string? Name);
-    private sealed record DocumentLinkInfo(CustomerRecord? Customer, AccountRecord? Account);
+    private sealed record AccountReference(Guid Guid, int? Number, string? Code, string? Name);
+    private sealed record DocumentLinkInfo(
+        CustomerRecord? Customer,
+        AccountRecord? Account,
+        AccountReference? DiscountAccount,
+        AccountReference? AdditionAccount);
 
     private enum TypeLookupSource
     {

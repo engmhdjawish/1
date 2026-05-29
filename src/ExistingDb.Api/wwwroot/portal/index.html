@@ -27,7 +27,6 @@
         <button class="module-btn" data-module="documents">الفواتير والسندات</button>
         <button class="module-btn" data-module="materials">المواد</button>
         <button class="module-btn" data-module="customers">العملاء</button>
-        <button class="module-btn" data-module="integration">مركز التكامل</button>
       </div>
     </header>
 
@@ -271,37 +270,6 @@
           </article>
         </section>
 
-        <section id="module-integration" class="module-screen">
-          <article class="window">
-            <div class="window-head">
-              <h2>مركز التكامل (API Lab)</h2>
-            </div>
-            <form id="apiLabForm" class="stack-form">
-              <div class="row">
-                <label>Method
-                  <select name="method">
-                    <option>GET</option>
-                    <option>POST</option>
-                    <option>PUT</option>
-                    <option>DELETE</option>
-                  </select>
-                </label>
-                <label>Path<input name="path" value="/api/health" /></label>
-              </div>
-              <label>Query JSON<textarea name="query" rows="4">{}</textarea></label>
-              <label>Body JSON<textarea name="body" rows="8">{}</textarea></label>
-              <button type="submit" class="btn">تنفيذ</button>
-            </form>
-          </article>
-        </section>
-
-        <article class="window">
-          <div class="window-head">
-            <h2>المخرجات المباشرة</h2>
-            <button id="clearRawBtn" class="btn subtle" type="button">مسح</button>
-          </div>
-          <pre id="rawOutput"></pre>
-        </article>
       </main>
     </div>
   </div>

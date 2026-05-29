@@ -44,7 +44,6 @@
   const ui = {
     baseUrlInput: document.getElementById("baseUrlInput"),
     authPill: document.getElementById("authPill"),
-    rawOutput: document.getElementById("rawOutput"),
     toast: document.getElementById("toast"),
     loadingOverlay: document.getElementById("loadingOverlay"),
     documentModal: document.getElementById("documentModal"),
@@ -86,6 +85,25 @@
     return parsed.toLocaleString("ar-SY", { maximumFractionDigits: 2 });
   }
 
+  function formatMoney(value, currencySymbol, currencyCode) {
+    const numberValue = formatNumber(value);
+    if (numberValue === "-") {
+      return "-";
+    }
+
+    const symbol = String(currencySymbol || "").trim();
+    if (symbol) {
+      return `${numberValue} ${symbol}`;
+    }
+
+    const code = String(currencyCode || "").trim();
+    if (code) {
+      return `${numberValue} ${code}`;
+    }
+
+    return numberValue;
+  }
+
   function showToast(message, isError) {
     ui.toast.textContent = message;
     ui.toast.style.borderColor = isError ? "#b91c1c" : "#16a34a";
@@ -95,7 +113,7 @@
   }
 
   function setRaw(value) {
-    ui.rawOutput.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+    void value;
   }
 
   function setLoading(active) {
@@ -257,9 +275,6 @@
       showToast(result.ok ? "تم جلب المستخدم الحالي" : "تعذر جلب المستخدم الحالي", !result.ok);
     });
 
-    document.getElementById("clearRawBtn").addEventListener("click", () => {
-      setRaw({ message: "تم مسح المخرجات" });
-    });
   }
 
   function bindOverview() {
@@ -302,7 +317,7 @@
         <td>${safeHtml(formatDate(item.date))}</td>
         <td>${safeHtml(item.typeName || item.typeCode || "-")}</td>
         <td>${safeHtml(item[field] || "-")}</td>
-        <td>${safeHtml(formatNumber(item.netAmount))}</td>
+        <td>${safeHtml(formatMoney(item.netAmount, item.currencySymbol, item.currencyCode))}</td>
       </tr>
     `).join("");
   }
@@ -521,10 +536,10 @@
         <td>${safeHtml(item.settlementTypeName || "-")}</td>
         <td>${safeHtml(item.customerName || "-")}</td>
         <td>${safeHtml(item.accountName || "-")}</td>
-        <td>${safeHtml(formatNumber(item.totalAmount))}</td>
-        <td>${safeHtml(formatNumber(item.totalDiscount))}</td>
-        <td>${safeHtml(formatNumber(item.totalAdditions))}</td>
-        <td>${safeHtml(formatNumber(item.netAmount))}</td>
+        <td>${safeHtml(formatMoney(item.totalAmount, item.currencySymbol, item.currencyCode))}</td>
+        <td>${safeHtml(formatMoney(item.totalDiscount, item.currencySymbol, item.currencyCode))}</td>
+        <td>${safeHtml(formatMoney(item.totalAdditions, item.currencySymbol, item.currencyCode))}</td>
+        <td>${safeHtml(formatMoney(item.netAmount, item.currencySymbol, item.currencyCode))}</td>
       </tr>
     `).join("");
 
@@ -556,12 +571,17 @@
       <div class="detail-grid">
         ${detailCell("النوع", document.typeName || document.typeCode || "-")}
         ${detailCell("التسوية", document.settlementTypeName || "-")}
+        ${detailCell("العملة", document.currencyCode || document.currencySymbol || "-")}
         ${detailCell("العميل", document.customerName || "-")}
         ${detailCell("الحساب", document.accountName || "-")}
-        ${detailCell("الإجمالي", formatNumber(document.totalAmount))}
-        ${detailCell("الحسم", formatNumber(document.totalDiscount))}
-        ${detailCell("الإضافات", formatNumber(document.totalAdditions))}
-        ${detailCell("الصافي", formatNumber(document.netAmount))}
+        ${detailCell("الإجمالي", formatMoney(document.totalAmount, document.currencySymbol, document.currencyCode))}
+        ${detailCell("الحسم", formatMoney(document.totalDiscount, document.currencySymbol, document.currencyCode))}
+        ${detailCell("الإضافات", formatMoney(document.totalAdditions, document.currencySymbol, document.currencyCode))}
+        ${detailCell("الصافي", formatMoney(document.netAmount, document.currencySymbol, document.currencyCode))}
+        ${detailCell("عدد الأزواج", formatNumber(document.pairsCount))}
+        ${detailCell("عدد الأقلام", formatNumber(document.pensCount))}
+        ${detailCell("حساب الحسم", document.discountAccountName || "-")}
+        ${detailCell("حساب الإضافة", document.additionAccountName || "-")}
       </div>
     `;
 
@@ -572,10 +592,10 @@
         <tr>
           <td>${safeHtml(item.materialName || item.materialCode || item.materialGuid || "-")}</td>
           <td>${safeHtml(formatNumber(item.quantity))}</td>
-          <td>${safeHtml(formatNumber(item.price))}</td>
-          <td>${safeHtml(formatNumber(item.discount))}</td>
-          <td>${safeHtml(formatNumber(item.additions))}</td>
-          <td>${safeHtml(formatNumber(item.lineTotal))}</td>
+          <td>${safeHtml(formatMoney(item.price, document.currencySymbol, document.currencyCode))}</td>
+          <td>${safeHtml(formatMoney(item.discount, document.currencySymbol, document.currencyCode))}</td>
+          <td>${safeHtml(formatMoney(item.additions, document.currencySymbol, document.currencyCode))}</td>
+          <td>${safeHtml(formatMoney(item.lineTotal, document.currencySymbol, document.currencyCode))}</td>
         </tr>
       `).join("");
     }
@@ -839,37 +859,6 @@
     `).join("");
   }
 
-  function bindIntegration() {
-    document.getElementById("apiLabForm").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const form = new FormData(event.currentTarget);
-      const method = String(form.get("method") || "GET");
-      const path = String(form.get("path") || "").trim();
-      if (!path) {
-        showToast("المسار مطلوب", true);
-        return;
-      }
-
-      let query = {};
-      let body = undefined;
-      try {
-        query = JSON.parse(String(form.get("query") || "{}"));
-        body = JSON.parse(String(form.get("body") || "{}"));
-      } catch {
-        showToast("Query أو Body ليس JSON صالحًا", true);
-        return;
-      }
-
-      if (method === "GET" || method === "DELETE") {
-        body = undefined;
-      }
-
-      const result = await apiCall(path, { method, query, body });
-      setRaw(result.data || { status: result.status, method, path, query, body });
-      showToast(result.ok ? "تم التنفيذ" : "فشل التنفيذ", !result.ok);
-    });
-  }
-
   function highlightSelectedRow(tableSelector, guid) {
     document.querySelectorAll(`${tableSelector} tbody tr[data-guid]`).forEach((row) => {
       row.classList.toggle("selected", row.dataset.guid === guid);
@@ -895,7 +884,6 @@
     bindDocuments();
     bindMaterials();
     bindCustomers();
-    bindIntegration();
     hydrateFixedButtons();
     setAuthPill();
 
