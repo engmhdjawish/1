@@ -21,9 +21,15 @@ var mainDbConnection = builder.Configuration.GetConnectionString("MainDb")
     ?? throw new InvalidOperationException("ConnectionStrings:MainDb is required.");
 
 builder.Services.AddDbContext<ApiManagementDbContext>(options =>
-    options.UseSqlServer(apiManagementConnection));
+    options.UseSqlServer(apiManagementConnection, sqlServerOptions =>
+        sqlServerOptions.EnableRetryOnFailure()));
 builder.Services.AddDbContext<MainDbContext>(options =>
-    options.UseSqlServer(mainDbConnection));
+    options.UseSqlServer(mainDbConnection, sqlServerOptions =>
+    {
+        sqlServerOptions.EnableRetryOnFailure();
+        // MainDb may run on legacy compatibility levels that do not support OPENJSON ('$').
+        sqlServerOptions.UseCompatibilityLevel(120);
+    }));
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
