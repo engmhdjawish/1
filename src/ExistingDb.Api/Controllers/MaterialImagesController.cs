@@ -113,9 +113,8 @@ public sealed class MaterialImagesController(
             return NotFound();
         }
 
-        var settings = await imageSettingsService.GetAsync(cancellationToken);
-        var imagePath = ResolveExistingImagePath(image.Name, settings.ImagesDirectory);
-        if (string.IsNullOrWhiteSpace(imagePath))
+        var imagePath = image.Name;
+        if (string.IsNullOrWhiteSpace(imagePath) || !System.IO.File.Exists(imagePath))
         {
             return NotFound();
         }
@@ -135,15 +134,10 @@ public sealed class MaterialImagesController(
             return NotFound();
         }
 
-        var settings = await imageSettingsService.GetAsync(cancellationToken);
-        var thumbnailPath = ResolveExistingThumbnailPath(image.Name, settings.ThumbnailsDirectory);
-        if (string.IsNullOrWhiteSpace(thumbnailPath))
+        var thumbnailPath = image.Name;
+        if (string.IsNullOrWhiteSpace(thumbnailPath) || !System.IO.File.Exists(thumbnailPath))
         {
-            thumbnailPath = ResolveExistingImagePath(image.Name, settings.ImagesDirectory);
-            if (string.IsNullOrWhiteSpace(thumbnailPath))
-            {
-                return NotFound();
-            }
+            return NotFound();
         }
 
         return PhysicalFile(thumbnailPath, GetContentType(thumbnailPath), Path.GetFileName(thumbnailPath));
