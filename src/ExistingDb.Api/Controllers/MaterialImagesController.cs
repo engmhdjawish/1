@@ -113,8 +113,9 @@ public sealed class MaterialImagesController(
             return NotFound();
         }
 
-        var imagePath = image.Name;
-        if (string.IsNullOrWhiteSpace(imagePath) || !System.IO.File.Exists(imagePath))
+        var settings = await imageSettingsService.GetAsync(cancellationToken);
+        var imagePath = image.Name; //ResolveExistingImagePath(image.Name, settings.ImagesDirectory);
+        if (string.IsNullOrWhiteSpace(imagePath))
         {
             return NotFound();
         }
