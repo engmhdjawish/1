@@ -947,15 +947,16 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
 
         currencyLookup.TryGetValue(currencyGuid ?? Guid.Empty, out var currencyReference);
         var currencyName = FirstNotBlank(
-            GetStringValue(row, DocumentCurrencyNameCandidates),
-            currencyReference?.Name);
+            currencyReference?.Name,
+            GetStringValue(row, DocumentCurrencyNameCandidates));
         var currencyCode = FirstNotBlank(
-            GetStringValue(row, DocumentCurrencyCodeCandidates),
-            currencyReference?.Code);
+            currencyReference?.Code,
+            GetStringValue(row, DocumentCurrencyCodeCandidates));
+        var resolvedSymbol = ResolveCurrencySymbol(currencyCode, currencyName);
         var currencySymbol = FirstNotBlank(
-            GetStringValue(row, DocumentCurrencySymbolCandidates),
             currencyReference?.Symbol,
-            ResolveCurrencySymbol(currencyCode, currencyName),
+            resolvedSymbol,
+            GetStringValue(row, DocumentCurrencySymbolCandidates),
             "ل.س");
         return (currencyGuid, currencyName, currencyCode, currencySymbol, currencyRate);
     }
@@ -987,6 +988,31 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         }
 
         var normalized = currencyCode.Trim().ToUpperInvariant();
+        if (normalized is "$" or "US$")
+        {
+            return "$";
+        }
+
+        if (normalized is "€")
+        {
+            return "€";
+        }
+
+        if (normalized is "₺")
+        {
+            return "₺";
+        }
+
+        if (normalized is "ر.س" or "ر س")
+        {
+            return "ر.س";
+        }
+
+        if (normalized is "ل.س" or "ل س" or "LS" or "SP")
+        {
+            return "ل.س";
+        }
+
         if (normalized.Contains("SYP")
             || normalized.Contains("SYR")
             || normalized.Contains("SYRIAN")
