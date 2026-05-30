@@ -656,7 +656,7 @@
 
   async function loadMaterials() {
     const query = {
-      search: state.materials.search,
+      keyword: state.materials.search,
       page: state.materials.page,
       pageSize: state.materials.pageSize
     };

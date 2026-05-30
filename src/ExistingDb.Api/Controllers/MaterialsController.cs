@@ -24,7 +24,7 @@ public sealed class MaterialsController(
 
     [HttpGet]
     public async Task<ActionResult<PagedResponse<MaterialResponse>>> GetMaterials(
-        [FromQuery] string? search = null,
+        [FromQuery] string? keyword = null,
         [FromQuery] string? code = null,
         [FromQuery] string? storeGuids = null,
         [FromQuery] bool? detailedQuantity = null,
@@ -137,22 +137,20 @@ public sealed class MaterialsController(
             query = query.Where(material => !material.PictureGuid.HasValue || material.PictureGuid.Value == Guid.Empty);
         }
 
-        if (!string.IsNullOrWhiteSpace(search))
+        var keywordTerms = ParseKeywordTerms(keyword);
+        if (keywordTerms.Count > 0)
         {
-            var term = search.Trim();
-            var exactCodeExists = await mainDbContext.Materials
-                .AsNoTracking()
-                .AnyAsync(material => material.Code == term, cancellationToken);
-
-            query = exactCodeExists
-                ? query.Where(material => material.Code == term)
-                : query.Where(material =>
-                    (material.Name != null && material.Name.Contains(term)) ||
-                    (material.LatinName != null && material.LatinName.Contains(term)) ||
-                    (material.Code != null && material.Code.Contains(term)) ||
-                    (material.BarCode != null && material.BarCode.Contains(term)) ||
-                    (material.BarCode2 != null && material.BarCode2.Contains(term)) ||
-                    (material.BarCode3 != null && material.BarCode3.Contains(term)));
+            foreach (var term in keywordTerms)
+            {
+                var keywordTerm = term;
+                query = query.Where(material =>
+                    (material.Name != null && material.Name.Contains(keywordTerm)) ||
+                    (material.LatinName != null && material.LatinName.Contains(keywordTerm)) ||
+                    (material.Code != null && material.Code.Contains(keywordTerm)) ||
+                    (material.BarCode != null && material.BarCode.Contains(keywordTerm)) ||
+                    (material.BarCode2 != null && material.BarCode2.Contains(keywordTerm)) ||
+                    (material.BarCode3 != null && material.BarCode3.Contains(keywordTerm)));
+            }
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -696,6 +694,20 @@ public sealed class MaterialsController(
             .Where(input => !string.IsNullOrWhiteSpace(input))
             .SelectMany(input => input!.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
             .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IReadOnlyCollection<string> ParseKeywordTerms(string? keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            return [];
+        }
+
+        return keyword
+            .Split((char[]?)null, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Where(term => !string.IsNullOrWhiteSpace(term))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
