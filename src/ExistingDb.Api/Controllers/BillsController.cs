@@ -31,8 +31,22 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
     private static readonly string[] ItemDiscountCandidates = ["Discount", "Disc", "ItemDiscount"];
     private static readonly string[] ItemAdditionCandidates = ["Addition", "Add", "Extra"];
     private static readonly string[] ItemLineTotalCandidates = ["Total", "LineTotal", "FinalTotal", "Net", "Amount", "Value"];
-    private static readonly string[] CustomerGuidCandidates = ["CustGUID", "CustomerGUID", "CusGUID"];
-    private static readonly string[] AccountGuidCandidates = ["AccountGUID", "AccGUID", "MainAccGUID"];
+    private static readonly string[] CustomerGuidCandidates = ["CustGUID", "CustomerGUID", "CusGUID", "CustomerGuid"];
+    private static readonly string[] AccountGuidCandidates = ["AccountGUID", "AccGUID", "MainAccGUID", "CustAccGUID", "CustomerAccGUID"];
+    private static readonly string[] AccountNumberCandidates = ["AccountNum", "AccNum", "AccountNumber", "AccNumber", "MainAccNum"];
+    private static readonly string[] AccountCodeCandidates = ["AccountCode", "AccCode", "MainAccCode"];
+    private static readonly string[] AccountNameCandidates = ["AccountName", "AccName", "MainAccName"];
+    private static readonly string[] PayTypeCandidates = ["PayType", "paytype", "Paytype", "PaymentType"];
+    private static readonly string[] InvoiceCustomerNameCandidates =
+    [
+        "CustomerName",
+        "CustName",
+        "CusName",
+        "BillCustomer",
+        "PartyName",
+        "ClientName",
+        "AName"
+    ];
     private static readonly string[] MaterialGuidCandidates = ["MatGUID", "MaterialGUID", "MatGuid"];
     private static readonly string[] CurrencyGuidCandidates = ["CurrencyGUID", "CurGUID", "CurrGUID", "CurrencyGuid", "CurrancyGUID", "CurrancyGuid"];
     private static readonly string[] CurrencyRateCandidates = ["CurrencyVal", "CurVal", "CurrancyVal", "CurrencyValue", "CurRate", "Rate", "ExchangeRate", "CurrancyValue"];
@@ -374,7 +388,18 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         var net = ConvertToDocumentCurrency(netRaw, currencyRate);
         var documentDate = record.Date ?? GetDateValue(rawRow, DocumentDateCandidates);
         var notes = FirstNotBlank(record.Notes, GetStringValue(rawRow, NotesCandidates));
-        var (settlementTypeCode, settlementTypeName) = ResolveSettlementType(resolvedType?.Name ?? resolvedType?.Code, isVoucher);
+        var (settlementTypeCode, settlementTypeName) = ResolveInvoiceSettlementType(rawRow);
+        if (settlementTypeCode is null)
+        {
+            (settlementTypeCode, settlementTypeName) = ResolveSettlementType(resolvedType?.Name ?? resolvedType?.Code, isVoucher: false);
+        }
+
+        var customerGuid = link?.Customer?.Guid ?? GetGuidValue(rawRow, CustomerGuidCandidates);
+        var customerName = ResolveInvoiceCustomerName(rawRow, link);
+        var accountGuid = link?.Account?.Guid ?? GetGuidValue(rawRow, AccountGuidCandidates);
+        var accountNumber = link?.Account?.Number ?? GetNullableIntValue(rawRow, AccountNumberCandidates);
+        var accountCode = FirstNotBlank(link?.Account?.Code, GetStringValue(rawRow, AccountCodeCandidates));
+        var accountName = FirstNotBlank(link?.Account?.Name, GetStringValue(rawRow, AccountNameCandidates));
         var (pairsCount, pensCount) = ResolveQuantityCounters(rawRow);
         var discountAccountGuid = GetGuidValue(rawRow, DiscountAccountGuidCandidates) ?? link?.DiscountAccount?.Guid;
         var discountAccountNumber = GetNullableIntValue(rawRow, DiscountAccountNumberCandidates) ?? link?.DiscountAccount?.Number;
@@ -398,12 +423,12 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             currencyRate,
             settlementTypeCode,
             settlementTypeName,
-            link?.Customer?.Guid,
-            link?.Customer?.CustomerName,
-            link?.Account?.Guid,
-            link?.Account?.Number,
-            link?.Account?.Code,
-            link?.Account?.Name,
+            customerGuid,
+            customerName,
+            accountGuid,
+            accountNumber,
+            accountCode,
+            accountName,
             pairsCount,
             pensCount,
             total,
@@ -582,8 +607,18 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             var preferredEntry = linkedEntries.FirstOrDefault(entry => entry.CustomerGuid.HasValue || entry.AccountGuid.HasValue)
                 ?? linkedEntries.FirstOrDefault();
 
-            var customerGuid = preferredEntry?.CustomerGuid ?? rowCustomerGuidByDocument.GetValueOrDefault(documentGuid);
-            var accountGuid = preferredEntry?.AccountGuid ?? rowAccountGuidByDocument.GetValueOrDefault(documentGuid);
+            Guid? customerGuid;
+            Guid? accountGuid;
+            if (documentKind == DocumentKind.Invoice)
+            {
+                accountGuid = rowAccountGuidByDocument.GetValueOrDefault(documentGuid) ?? preferredEntry?.AccountGuid;
+                customerGuid = rowCustomerGuidByDocument.GetValueOrDefault(documentGuid) ?? preferredEntry?.CustomerGuid;
+            }
+            else
+            {
+                customerGuid = preferredEntry?.CustomerGuid ?? rowCustomerGuidByDocument.GetValueOrDefault(documentGuid);
+                accountGuid = preferredEntry?.AccountGuid ?? rowAccountGuidByDocument.GetValueOrDefault(documentGuid);
+            }
             var customer = customerGuid.HasValue && customerLookup.TryGetValue(customerGuid.Value, out var resolvedCustomer)
                 ? resolvedCustomer
                 : null;
@@ -877,6 +912,35 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         }
 
         return (total, discount, additions, net);
+    }
+
+    private static (string? SettlementTypeCode, string? SettlementTypeName) ResolveInvoiceSettlementType(
+        IReadOnlyDictionary<string, object?>? row)
+    {
+        if (row is null)
+        {
+            return (null, null);
+        }
+
+        var payType = GetNullableIntValue(row, PayTypeCandidates);
+        return payType switch
+        {
+            0 => ("cash", "نقد"),
+            1 => ("credit", "آجل"),
+            _ => (null, null)
+        };
+    }
+
+    private static string? ResolveInvoiceCustomerName(
+        IReadOnlyDictionary<string, object?>? row,
+        DocumentLinkInfo? link)
+    {
+        if (!string.IsNullOrWhiteSpace(link?.Customer?.CustomerName))
+        {
+            return link.Customer.CustomerName;
+        }
+
+        return GetStringValue(row, InvoiceCustomerNameCandidates);
     }
 
     private static (string? SettlementTypeCode, string? SettlementTypeName) ResolveSettlementType(string? typeText, bool isVoucher)

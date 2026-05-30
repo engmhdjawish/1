@@ -474,10 +474,13 @@ GET /api/bills/voucher-types
 - رقم المستند وتاريخه وملاحظاته.
 - `typeGuid` ونوع المستند النصي (`typeName`) والاختصار (`typeCode`) عند توفره.
 - لتصفّح أسلس حسب النوع: يمكن إرسال `type` كنص مباشر (اسم/اختصار) بدل الحاجة إلى `typeGuid`.
-- نوع التسوية (`settlementTypeCode`, `settlementTypeName`) مثل `cash/credit` أو `قبض/دفع` حسب نوع السند.
-- بيانات العميل والحساب المرتبطين بالمستند عند توفرها:
-  - `customerGuid`, `customerName`
-  - `accountGuid`, `accountNumber`, `accountCode`, `accountName`
+- نوع التسوية (`settlementTypeCode`, `settlementTypeName`):
+  - للفواتير (`bu000`) يُقرأ من `PayType`: `0` = نقد، `1` = آجل
+  - للسندات يُستنتج من نوع السند (قبض/دفع...) عند الحاجة
+- بيانات العميل والحساب المرتبطين بالمستند:
+  - `accountGuid`, `accountNumber`, `accountCode`, `accountName` تُؤخذ أولًا من الفاتورة نفسها (`bu000`) ثم من القيود المرتبطة
+  - `customerGuid`, `customerName` اختياريان في الفاتورة النقدية (`PayType=0`) وقد تكون فارغين
+  - الفاتورة الآجلة (`PayType=1`) يفترض وجود اسم عميل (من `cu000` أو من حقل اسم العميل في `bu000`)
 - بيانات العملة من ربط `bu000/py000.CurrencyGUID` مع `my000`:
   - `currencyGuid`, `currencyName`, `currencyCode`, `currencySymbol`
   - `currencyRate` (مأخوذ من `CurrencyVal` في الفاتورة/السند نفسه، ويُستخدم لقسمة القيم)
