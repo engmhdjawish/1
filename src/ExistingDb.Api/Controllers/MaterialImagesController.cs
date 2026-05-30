@@ -245,48 +245,67 @@ public sealed class MaterialImagesController(
         return Ok(responseItems);
     }
 
-    [HttpPut("{id:guid}/material")]
+    [HttpPut("links/materials/{materialGuid:guid}/images/{imageGuid:guid}")]
     [RequirePermission("materials.update")]
-    public async Task<IActionResult> LinkMaterial(Guid id, MaterialImageLinkRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> LinkImageToMaterial(
+        Guid materialGuid,
+        Guid imageGuid,
+        CancellationToken cancellationToken)
     {
-        if (request.MaterialGuid == Guid.Empty)
+        if (materialGuid == Guid.Empty)
         {
             return BadRequest(new { message = "MaterialGuid cannot be empty." });
         }
 
+        if (imageGuid == Guid.Empty)
+        {
+            return BadRequest(new { message = "ImageGuid cannot be empty." });
+        }
+
         var imageExists = await mainDbContext.MaterialImages
             .AsNoTracking()
-            .AnyAsync(image => image.Guid == id, cancellationToken);
+            .AnyAsync(image => image.Guid == imageGuid, cancellationToken);
         if (!imageExists)
         {
             return NotFound(new { message = "Image was not found." });
         }
 
-        var linked = await LinkImageToMaterialInternalAsync(id, request.MaterialGuid, cancellationToken);
+        var linked = await LinkImageToMaterialInternalAsync(imageGuid, materialGuid, cancellationToken);
         return linked
             ? NoContent()
             : NotFound(new { message = "Material was not found." });
     }
 
-    [HttpDelete("{id:guid}/material")]
+    [HttpDelete("links/materials/{materialGuid:guid}/images/{imageGuid:guid}")]
     [RequirePermission("materials.update")]
-    public async Task<IActionResult> UnlinkMaterial(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> UnlinkImageFromMaterial(
+        Guid materialGuid,
+        Guid imageGuid,
+        CancellationToken cancellationToken)
     {
-        var linkedMaterials = await mainDbContext.Materials
-            .Where(material => material.PictureGuid == id)
-            .ToListAsync(cancellationToken);
-
-        if (linkedMaterials.Count == 0)
+        if (materialGuid == Guid.Empty)
         {
-            return NoContent();
+            return BadRequest(new { message = "MaterialGuid cannot be empty." });
         }
 
-        foreach (var material in linkedMaterials)
+        if (imageGuid == Guid.Empty)
+        {
+            return BadRequest(new { message = "ImageGuid cannot be empty." });
+        }
+
+        var material = await mainDbContext.Materials
+            .SingleOrDefaultAsync(item => item.Guid == materialGuid, cancellationToken);
+        if (material is null)
+        {
+            return NotFound(new { message = "Material was not found." });
+        }
+
+        if (material.PictureGuid == imageGuid)
         {
             material.PictureGuid = null;
+            await mainDbContext.SaveChangesAsync(cancellationToken);
         }
 
-        await mainDbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
 

@@ -160,8 +160,8 @@ POST   /api/material-images
 GET    /api/material-images/{id}
 GET    /api/material-images/{id}/file
 GET    /api/material-images/{id}/thumbnail
-PUT    /api/material-images/{id}/material
-DELETE /api/material-images/{id}/material
+PUT    /api/material-images/links/materials/{materialGuid}/images/{imageGuid}
+DELETE /api/material-images/links/materials/{materialGuid}/images/{imageGuid}
 DELETE /api/material-images/{id}
 GET    /api/materials/{materialGuid}/images
 GET    /api/material-images/download
@@ -266,16 +266,8 @@ materialGuid  اختياري للربط المباشر عند رفع صورة و
 إدارة الربط:
 
 ```http
-PUT    /api/material-images/{id}/material
-DELETE /api/material-images/{id}/material
-```
-
-Body:
-
-```json
-{
-  "materialGuid": "00000000-0000-0000-0000-000000000000"
-}
+PUT    /api/material-images/links/materials/{materialGuid}/images/{imageGuid}
+DELETE /api/material-images/links/materials/{materialGuid}/images/{imageGuid}
 ```
 
 ملاحظة:
