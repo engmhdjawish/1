@@ -150,18 +150,7 @@ public sealed class MaterialImagesController(
     [Consumes("multipart/form-data")]
     public async Task<ActionResult> UploadImage([FromForm] UploadMaterialImageRequest request, CancellationToken cancellationToken)
     {
-        var files = new List<IFormFile>();
-        if (request.File is not null)
-        {
-            files.Add(request.File);
-        }
-
-        if (request.Files is not null)
-        {
-            files.AddRange(request.Files.Where(file => file is not null));
-        }
-
-        files = files
+        var files = (request.Files ?? [])
             .Where(file => file.Length > 0)
             .ToList();
 
@@ -170,17 +159,15 @@ public sealed class MaterialImagesController(
             return BadRequest(new { message = "At least one image file is required." });
         }
 
-        if (request.MaterialGuid is not null && files.Count != 1)
-        {
-            return BadRequest(new { message = "MaterialGuid can be used only when uploading a single image." });
-        }
+        // MaterialGuid is ignored when uploading multiple files.
+        var effectiveMaterialGuid = files.Count == 1 ? request.MaterialGuid : null;
 
-        if (request.MaterialGuid is Guid materialGuid && materialGuid == Guid.Empty)
+        if (effectiveMaterialGuid is Guid materialGuid && materialGuid == Guid.Empty)
         {
             return BadRequest(new { message = "MaterialGuid cannot be empty." });
         }
 
-        if (request.MaterialGuid is Guid linkedMaterialGuid)
+        if (effectiveMaterialGuid is Guid linkedMaterialGuid)
         {
             var materialExists = await mainDbContext.Materials
                 .AsNoTracking()
@@ -235,7 +222,7 @@ public sealed class MaterialImagesController(
             throw;
         }
 
-        if (request.MaterialGuid is Guid materialGuidToLink)
+        if (effectiveMaterialGuid is Guid materialGuidToLink)
         {
             var linked = await LinkImageToMaterialInternalAsync(createdImages[0].Guid, materialGuidToLink, cancellationToken);
             if (!linked)
@@ -247,7 +234,7 @@ public sealed class MaterialImagesController(
         var settings = await imageSettingsService.GetAsync(cancellationToken);
         if (createdImages.Count == 1)
         {
-            Guid? linkedMaterial = request.MaterialGuid;
+            Guid? linkedMaterial = effectiveMaterialGuid;
             var response = ToResponse(createdImages[0], linkedMaterial, settings);
             return CreatedAtAction(nameof(GetImage), new { id = createdImages[0].Guid }, response);
         }
