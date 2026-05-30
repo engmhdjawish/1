@@ -151,6 +151,7 @@ GET  /api/customers/{guid}/account/statement
 GET  /api/materials
 GET  /api/materials/{guid}
 GET  /api/materials/filter-options
+GET  /api/materials/stores
 
 GET    /api/material-images/settings
 PUT    /api/material-images/settings
@@ -553,6 +554,29 @@ GET /api/materials?storeGuids=STORE_GUID_1,STORE_GUID_2
 GET /api/materials/{guid}?storeGuid=STORE_GUID
 ```
 
+ويتوفر الآن نمط عرض الكميات:
+
+```text
+GET /api/materials?quantityMode=total
+GET /api/materials?quantityMode=detailed
+GET /api/materials?storeGuids=STORE_GUID_1,STORE_GUID_2&quantityMode=detailed
+GET /api/materials/{guid}?storeGuids=STORE_GUID_1,STORE_GUID_2&quantityMode=detailed
+```
+
+- `quantityMode=total` (الافتراضي): يعيد `warehouseQuantity` كمجموع الكمية ضمن المستودعات الممررة (أو `mt000.Qty` عند عدم تمرير مستودعات).
+- `quantityMode=detailed`: يعيد أيضًا `storeQuantities` (قائمة كميات مفصلة حسب المستودع: `storeGuid`, `storeName`, `quantity`).
+- قراءة الكميات حسب المستودعات تتطلب صلاحية:
+
+```text
+inventory.read
+```
+
+ولعرض قائمة المستودعات باسمائها وGUID:
+
+```text
+GET /api/materials/stores
+```
+
 كما يدعم فلاتر وصفية:
 
 ```text
@@ -641,6 +665,21 @@ materialType             -> Color       الصنف، مثل PVC / EVA
 ageCategory              -> Provenance  الفئة العمرية
 groupGuid                -> GroupGUID   مجموعة المادة
 productImageGuid         -> PictureGUID صورة المنتج
+```
+
+حقول مضافة في الاستجابة:
+
+```text
+groupName         -> اسم الجروب المرتبط بـ groupGuid
+productImageTitle -> عنوان/اسم ملف الصورة المرتبط بـ productImageGuid (من bm000.Name)
+storeQuantities   -> الكميات حسب المستودعات عند quantityMode=detailed
+```
+
+تم تبسيط الاستجابة بإزالة الحقول غير الضرورية تشغيليًا مثل:
+
+```text
+recordNumber, latinName, barcode, isPackageConversionFixed,
+averagePrice, lastPrice, classificationType, securityLevel, usageFlag
 ```
 
 خريطة الأسعار الحالية:
