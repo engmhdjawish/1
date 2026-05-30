@@ -114,8 +114,8 @@ public sealed class MaterialImagesController(
         }
 
         var settings = await imageSettingsService.GetAsync(cancellationToken);
-        var imagePath = ResolveImagePath(image.Name, settings.ImagesDirectory);
-        if (!System.IO.File.Exists(imagePath))
+        var imagePath = ResolveExistingImagePath(image.Name, settings.ImagesDirectory);
+        if (string.IsNullOrWhiteSpace(imagePath))
         {
             return NotFound();
         }
@@ -136,8 +136,8 @@ public sealed class MaterialImagesController(
         }
 
         var settings = await imageSettingsService.GetAsync(cancellationToken);
-        var thumbnailPath = ResolveThumbnailPath(image.Name, settings.ThumbnailsDirectory);
-        if (!System.IO.File.Exists(thumbnailPath))
+        var thumbnailPath = ResolveExistingThumbnailPath(image.Name, settings.ThumbnailsDirectory);
+        if (string.IsNullOrWhiteSpace(thumbnailPath))
         {
             return NotFound();
         }
@@ -576,8 +576,9 @@ public sealed class MaterialImagesController(
     {
         var settings = await imageSettingsService.GetAsync(cancellationToken);
         var files = images
-            .Select(image => ResolveImagePath(image.Name, settings.ImagesDirectory))
-            .Where(path => !string.IsNullOrWhiteSpace(path) && System.IO.File.Exists(path))
+            .Select(image => ResolveExistingImagePath(image.Name, settings.ImagesDirectory))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -633,10 +634,12 @@ public sealed class MaterialImagesController(
         Guid? materialGuid,
         ImageStorageSettings settings)
     {
-        var imagePath = ResolveImagePath(image.Name, settings.ImagesDirectory);
-        var thumbnailPath = ResolveThumbnailPath(image.Name, settings.ThumbnailsDirectory);
+        var imagePath = ResolveExistingImagePath(image.Name, settings.ImagesDirectory)
+            ?? ResolveImagePath(image.Name, settings.ImagesDirectory);
+        var thumbnailPath = ResolveExistingThumbnailPath(image.Name, settings.ThumbnailsDirectory)
+            ?? ResolveThumbnailPath(image.Name, settings.ThumbnailsDirectory);
         var imageExists = System.IO.File.Exists(imagePath);
-        var storedFileName = Path.GetFileName(imagePath);
+        var storedFileName = ExtractFileName(image.Name) ?? Path.GetFileName(imagePath);
         var createdAt = imageExists
             ? new DateTimeOffset(System.IO.File.GetCreationTimeUtc(imagePath), TimeSpan.Zero)
             : DateTimeOffset.UnixEpoch;
@@ -650,7 +653,7 @@ public sealed class MaterialImagesController(
             System.IO.File.Exists(thumbnailPath) ? thumbnailPath : null,
             storedFileName,
             storedFileName,
-            GetContentType(imagePath),
+            GetContentType(string.IsNullOrWhiteSpace(imagePath) ? storedFileName : imagePath),
             imageExists ? new FileInfo(imagePath).Length : 0,
             materialGuid,
             createdAt,
@@ -827,6 +830,58 @@ public sealed class MaterialImagesController(
         }
 
         return Path.GetFullPath(Path.Combine(imagesDirectory, Path.GetFileName(name)));
+    }
+
+    private static string? ResolveExistingImagePath(string? name, string imagesDirectory)
+    {
+        var candidates = BuildImagePathCandidates(name, imagesDirectory);
+        return candidates.FirstOrDefault(System.IO.File.Exists);
+    }
+
+    private static string? ResolveExistingThumbnailPath(string? name, string thumbnailsDirectory)
+    {
+        var fileName = ExtractFileName(name);
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return null;
+        }
+
+        var candidate = Path.GetFullPath(Path.Combine(thumbnailsDirectory, fileName));
+        return System.IO.File.Exists(candidate) ? candidate : null;
+    }
+
+    private static IReadOnlyCollection<string> BuildImagePathCandidates(string? name, string imagesDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return [];
+        }
+
+        var value = name.Trim();
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        candidates.Add(Path.GetFullPath(value));
+
+        var fileName = ExtractFileName(value);
+        if (!string.IsNullOrWhiteSpace(fileName))
+        {
+            candidates.Add(Path.GetFullPath(Path.Combine(imagesDirectory, fileName)));
+        }
+
+        return candidates.ToArray();
+    }
+
+    private static string? ExtractFileName(string? pathLikeValue)
+    {
+        if (string.IsNullOrWhiteSpace(pathLikeValue))
+        {
+            return null;
+        }
+
+        var normalized = pathLikeValue.Replace('\\', '/');
+        var lastSeparator = normalized.LastIndexOf('/');
+        return lastSeparator >= 0
+            ? normalized[(lastSeparator + 1)..]
+            : normalized;
     }
 
     private static string ResolveThumbnailPath(string? name, string thumbnailsDirectory)
