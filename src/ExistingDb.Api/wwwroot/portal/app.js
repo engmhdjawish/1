@@ -573,43 +573,73 @@
     }
 
     const document = result.data.document || {};
+    const isInvoice = state.documents.mode === "invoices";
     const items = result.data.items || [];
-    ui.modalTitle.textContent = `${state.documents.mode === "invoices" ? "تفاصيل الفاتورة" : "تفاصيل السند"} رقم ${document.number ?? "-"}`;
-    ui.modalSummary.innerHTML = `
-      <div class="detail-grid">
-        ${detailCell("النوع", document.typeName || document.typeCode || "-")}
-        ${detailCell("التسوية", document.settlementTypeName || "-")}
-        ${detailCell("العملة", [document.currencyName, document.currencyCode, document.currencySymbol].filter(Boolean).join(" - ") || "-")}
-        ${detailCell("سعر التعادل", formatNumber(document.currencyRate))}
-        ${detailCell("العميل", document.customerName || "-")}
-        ${detailCell("الحساب", document.accountName || "-")}
-        ${detailCell("الإجمالي", formatMoney(document.totalAmount, document.currencySymbol, document.currencyCode))}
-        ${detailCell("الحسم", formatMoney(document.totalDiscount, document.currencySymbol, document.currencyCode))}
-        ${detailCell("الإضافات", formatMoney(document.totalAdditions, document.currencySymbol, document.currencyCode))}
-        ${detailCell("الصافي", formatMoney(document.netAmount, document.currencySymbol, document.currencyCode))}
-        ${detailCell("عدد البنود", formatNumber(result.data.linesCount))}
-        ${detailCell("إجمالي الكمية", formatNumber(result.data.totalQuantity))}
-        ${detailCell("عدد الأزواج", formatNumber(document.pairsCount))}
-        ${detailCell("عدد الأقلام", formatNumber(document.pensCount))}
-        ${detailCell("حساب الحسم", [document.discountAccountNumber, document.discountAccountName].filter(Boolean).join(" - ") || "-")}
-        ${detailCell("حساب الإضافة", [document.additionAccountNumber, document.additionAccountName].filter(Boolean).join(" - ") || "-")}
-      </div>
-    `;
+    const entryLines = result.data.entryLines || [];
+    ui.modalTitle.textContent = `${isInvoice ? "تفاصيل الفاتورة" : "تفاصيل السند"} رقم ${document.number ?? "-"}`;
+    const summaryCells = [
+      detailCell("النوع", document.typeName || document.typeCode || "-"),
+      detailCell("التسوية", document.settlementTypeName || "-"),
+      detailCell("العملة", [document.currencyName, document.currencyCode, document.currencySymbol].filter(Boolean).join(" - ") || "-"),
+      detailCell("سعر التعادل", formatNumber(document.currencyRate)),
+      detailCell("العميل", document.customerName || "-"),
+      detailCell("الحساب", document.accountName || "-"),
+      detailCell("الإجمالي", formatMoney(document.totalAmount, document.currencySymbol, document.currencyCode)),
+      detailCell("الحسم", formatMoney(document.totalDiscount, document.currencySymbol, document.currencyCode)),
+      detailCell("الإضافات", formatMoney(document.totalAdditions, document.currencySymbol, document.currencyCode)),
+      detailCell("الصافي", formatMoney(document.netAmount, document.currencySymbol, document.currencyCode)),
+      detailCell("عدد البنود", formatNumber(result.data.linesCount))
+    ];
+    if (isInvoice) {
+      summaryCells.push(
+        detailCell("إجمالي الكمية", formatNumber(result.data.totalQuantity)),
+        detailCell("عدد الأزواج", formatNumber(document.pairsCount)),
+        detailCell("عدد الأقلام", formatNumber(document.pensCount))
+      );
+    } else if (result.data.totalQuantity != null) {
+      summaryCells.push(detailCell("صافي القيود (مدين − دائن)", formatMoney(result.data.totalQuantity, document.currencySymbol, document.currencyCode)));
+    }
+    summaryCells.push(
+      detailCell("حساب الحسم", [document.discountAccountNumber, document.discountAccountName].filter(Boolean).join(" - ") || "-"),
+      detailCell("حساب الإضافة", [document.additionAccountNumber, document.additionAccountName].filter(Boolean).join(" - ") || "-")
+    );
+    ui.modalSummary.innerHTML = `<div class="detail-grid">${summaryCells.join("")}</div>`;
 
-    if (!items.length) {
-      ui.modalItemsTable.innerHTML = `<tr><td colspan="7">لا توجد عناصر.</td></tr>`;
+    const modalHead = document.querySelector("#modalItemsTable thead tr");
+    if (isInvoice) {
+      modalHead.innerHTML = "<th>المادة</th><th>كمية (و1)</th><th>كمية (و2)</th><th>سعر القطعة</th><th>حسم</th><th>إضافة</th><th>إجمالي</th>";
+      if (!items.length) {
+        ui.modalItemsTable.innerHTML = `<tr><td colspan="7">لا توجد عناصر.</td></tr>`;
+      } else {
+        ui.modalItemsTable.innerHTML = items.map((item) => `
+          <tr>
+            <td>${safeHtml(item.materialName || item.materialCode || item.materialGuid || "-")}</td>
+            <td>${safeHtml(formatNumber(item.quantityUnit1 ?? item.quantity))}</td>
+            <td>${safeHtml(formatNumber(item.quantityUnit2))}</td>
+            <td>${safeHtml(formatMoney(item.unitPriceUnit1 ?? item.price, document.currencySymbol, document.currencyCode))}</td>
+            <td>${safeHtml(formatMoney(item.discount, document.currencySymbol, document.currencyCode))}</td>
+            <td>${safeHtml(formatMoney(item.additions, document.currencySymbol, document.currencyCode))}</td>
+            <td>${safeHtml(formatMoney(item.lineTotal, document.currencySymbol, document.currencyCode))}</td>
+          </tr>
+        `).join("");
+      }
     } else {
-      ui.modalItemsTable.innerHTML = items.map((item) => `
-        <tr>
-          <td>${safeHtml(item.materialName || item.materialCode || item.materialGuid || "-")}</td>
-          <td>${safeHtml(formatNumber(item.quantityUnit1 ?? item.quantity))}</td>
-          <td>${safeHtml(formatNumber(item.quantityUnit2))}</td>
-          <td>${safeHtml(formatMoney(item.unitPriceUnit1 ?? item.price, document.currencySymbol, document.currencyCode))}</td>
-          <td>${safeHtml(formatMoney(item.discount, document.currencySymbol, document.currencyCode))}</td>
-          <td>${safeHtml(formatMoney(item.additions, document.currencySymbol, document.currencyCode))}</td>
-          <td>${safeHtml(formatMoney(item.lineTotal, document.currencySymbol, document.currencyCode))}</td>
-        </tr>
-      `).join("");
+      modalHead.innerHTML = "<th>رقم</th><th>حساب</th><th>مقابل</th><th>مدين</th><th>دائن</th><th>عميل</th><th>ملاحظات</th>";
+      if (!entryLines.length) {
+        ui.modalItemsTable.innerHTML = `<tr><td colspan="7">لا توجد قيود محاسبية.</td></tr>`;
+      } else {
+        ui.modalItemsTable.innerHTML = entryLines.map((line) => `
+          <tr>
+            <td>${safeHtml(line.number ?? "-")}</td>
+            <td>${safeHtml([line.accountNumber, line.accountName || line.accountCode].filter(Boolean).join(" - ") || "-")}</td>
+            <td>${safeHtml([line.contraAccountNumber, line.contraAccountName || line.contraAccountCode].filter(Boolean).join(" - ") || "-")}</td>
+            <td>${safeHtml(formatMoney(line.debit, document.currencySymbol, document.currencyCode))}</td>
+            <td>${safeHtml(formatMoney(line.credit, document.currencySymbol, document.currencyCode))}</td>
+            <td>${safeHtml(line.customerName || "-")}</td>
+            <td>${safeHtml(line.notes || "-")}</td>
+          </tr>
+        `).join("");
+      }
     }
 
     ui.documentModal.classList.remove("hidden");

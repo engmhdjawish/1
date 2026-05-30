@@ -187,7 +187,8 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             billItems.Count,
             billItems.Count == 0 ? null : totalQuantity,
             totalPairs,
-            totalPens));
+            totalPens,
+            null));
     }
 
     [HttpGet("invoice-types")]
@@ -333,7 +334,19 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             ? resolvedType
             : null;
         var document = BuildDocumentResponse(record, type, rawRow, link, currencyLookup, isVoucher: true);
-        return Ok(new BillDocumentDetailsResponse(document, [], 0, null, document.PairsCount, document.PensCount));
+        var entryLineRecords = await LoadVoucherEntryLinesAsync(guid, cancellationToken);
+        var entryLines = await BuildVoucherEntryLineResponsesAsync(entryLineRecords, document.CurrencyRate, cancellationToken);
+        var totalDebit = entryLines.Sum(line => line.Debit ?? 0d);
+        var totalCredit = entryLines.Sum(line => line.Credit ?? 0d);
+        var netFromLines = totalDebit > 0 || totalCredit > 0 ? totalDebit - totalCredit : (double?)null;
+        return Ok(new BillDocumentDetailsResponse(
+            document,
+            [],
+            entryLines.Count,
+            netFromLines,
+            null,
+            null,
+            entryLines));
     }
 
     [HttpGet("voucher-types")]
@@ -547,8 +560,21 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
                     group => group.Select(relation => relation.EntryGuid).Distinct().ToArray());
         }
 
-        var entryGuids = entryGuidsByDocument.Values
+        var compoundEntryGuids = entryGuidsByDocument.Values
             .SelectMany(value => value)
+            .Distinct()
+            .ToArray();
+        var lineEntries = documentKind == DocumentKind.Voucher && compoundEntryGuids.Length > 0
+            ? await mainDbContext.Entries
+                .AsNoTracking()
+                .Where(entry => entry.ParentGuid.HasValue && compoundEntryGuids.Contains(entry.ParentGuid.Value))
+                .ToListAsync(cancellationToken)
+            : [];
+        var lineEntriesByCompoundGuid = lineEntries
+            .GroupBy(entry => entry.ParentGuid!.Value)
+            .ToDictionary(group => group.Key, group => group.ToArray());
+        var entryGuids = compoundEntryGuids
+            .Concat(lineEntries.Select(entry => entry.Guid))
             .Distinct()
             .ToArray();
         var entries = entryGuids.Length == 0
@@ -602,7 +628,21 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         foreach (var documentGuid in normalizedDocumentGuids)
         {
             var linkedEntries = entryGuidsByDocument.TryGetValue(documentGuid, out var relatedEntryGuids)
-                ? relatedEntryGuids.Select(entryGuid => entryLookup.GetValueOrDefault(entryGuid)).Where(entry => entry is not null).Cast<EntryRecord>().ToArray()
+                ? relatedEntryGuids
+                    .SelectMany(entryGuid =>
+                    {
+                        if (documentKind == DocumentKind.Voucher
+                            && lineEntriesByCompoundGuid.TryGetValue(entryGuid, out var compoundLines)
+                            && compoundLines.Length > 0)
+                        {
+                            return compoundLines;
+                        }
+
+                        var entry = entryLookup.GetValueOrDefault(entryGuid);
+                        return entry is null ? [] : new[] { entry };
+                    })
+                    .DistinctBy(entry => entry.Guid)
+                    .ToArray()
                 : [];
             var preferredEntry = linkedEntries.FirstOrDefault(entry => entry.CustomerGuid.HasValue || entry.AccountGuid.HasValue)
                 ?? linkedEntries.FirstOrDefault();
@@ -711,6 +751,138 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             .ToArray();
 
         return items;
+    }
+
+    private async Task<Guid[]> ResolveVoucherCompoundEntryGuidsAsync(
+        Guid paymentGuid,
+        CancellationToken cancellationToken)
+    {
+        var compoundGuids = new HashSet<Guid>();
+
+        var paymentRelationGuids = await mainDbContext.EntryPaymentRelations
+            .AsNoTracking()
+            .Where(relation => relation.PaymentGuid == paymentGuid)
+            .Select(relation => relation.EntryGuid)
+            .ToListAsync(cancellationToken);
+        foreach (var entryGuid in paymentRelationGuids)
+        {
+            compoundGuids.Add(entryGuid);
+        }
+
+        var parentRelationGuids = await mainDbContext.EntryRelations
+            .AsNoTracking()
+            .Where(relation => relation.ParentGuid == paymentGuid)
+            .Select(relation => relation.EntryGuid)
+            .ToListAsync(cancellationToken);
+        foreach (var entryGuid in parentRelationGuids)
+        {
+            compoundGuids.Add(entryGuid);
+        }
+
+        return compoundGuids.ToArray();
+    }
+
+    private async Task<IReadOnlyCollection<EntryRecord>> LoadVoucherEntryLinesAsync(
+        Guid paymentGuid,
+        CancellationToken cancellationToken)
+    {
+        var compoundGuids = await ResolveVoucherCompoundEntryGuidsAsync(paymentGuid, cancellationToken);
+        if (compoundGuids.Length == 0)
+        {
+            return [];
+        }
+
+        var lineEntries = await mainDbContext.Entries
+            .AsNoTracking()
+            .Where(entry => entry.ParentGuid.HasValue && compoundGuids.Contains(entry.ParentGuid.Value))
+            .OrderBy(entry => entry.Number)
+            .ThenBy(entry => entry.Guid)
+            .ToListAsync(cancellationToken);
+        if (lineEntries.Count > 0)
+        {
+            return lineEntries;
+        }
+
+        return await mainDbContext.Entries
+            .AsNoTracking()
+            .Where(entry => compoundGuids.Contains(entry.Guid))
+            .OrderBy(entry => entry.Number)
+            .ThenBy(entry => entry.Guid)
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<IReadOnlyCollection<VoucherEntryLineResponse>> BuildVoucherEntryLineResponsesAsync(
+        IReadOnlyCollection<EntryRecord> entryLineRecords,
+        double? currencyRate,
+        CancellationToken cancellationToken)
+    {
+        if (entryLineRecords.Count == 0)
+        {
+            return [];
+        }
+
+        var customerGuids = entryLineRecords
+            .Select(entry => entry.CustomerGuid)
+            .Where(guid => guid.HasValue && guid.Value != Guid.Empty)
+            .Select(guid => guid!.Value)
+            .Distinct()
+            .ToArray();
+        var accountGuids = entryLineRecords
+            .SelectMany(entry => new[] { entry.AccountGuid, entry.ContraAccountGuid })
+            .Where(guid => guid.HasValue && guid.Value != Guid.Empty)
+            .Select(guid => guid!.Value)
+            .Distinct()
+            .ToArray();
+
+        var customers = customerGuids.Length == 0
+            ? []
+            : await mainDbContext.Customers
+                .AsNoTracking()
+                .Where(customer => customerGuids.Contains(customer.Guid))
+                .ToListAsync(cancellationToken);
+        var customerLookup = customers.ToDictionary(customer => customer.Guid);
+
+        var accounts = accountGuids.Length == 0
+            ? []
+            : await mainDbContext.Accounts
+                .AsNoTracking()
+                .Where(account => accountGuids.Contains(account.Guid))
+                .ToListAsync(cancellationToken);
+        var accountLookup = accounts.ToDictionary(account => account.Guid);
+
+        return entryLineRecords
+            .Select(entry =>
+            {
+                var account = entry.AccountGuid.HasValue && accountLookup.TryGetValue(entry.AccountGuid.Value, out var resolvedAccount)
+                    ? resolvedAccount
+                    : null;
+                var contraAccount = entry.ContraAccountGuid.HasValue && accountLookup.TryGetValue(entry.ContraAccountGuid.Value, out var resolvedContraAccount)
+                    ? resolvedContraAccount
+                    : null;
+                var customer = entry.CustomerGuid.HasValue && customerLookup.TryGetValue(entry.CustomerGuid.Value, out var resolvedCustomer)
+                    ? resolvedCustomer
+                    : null;
+                var debit = ConvertToDocumentCurrency(entry.Debit, currencyRate);
+                var credit = ConvertToDocumentCurrency(entry.Credit, currencyRate);
+                return new VoucherEntryLineResponse(
+                    entry.Guid,
+                    entry.Number,
+                    entry.Date,
+                    account?.Guid,
+                    account?.Number,
+                    account?.Code,
+                    account?.Name,
+                    contraAccount?.Guid,
+                    contraAccount?.Number,
+                    contraAccount?.Code,
+                    contraAccount?.Name,
+                    customer?.Guid,
+                    FirstNotBlank(customer?.CustomerName, customer?.LatinName),
+                    debit,
+                    credit,
+                    entry.Notes);
+            })
+            .ToArray();
     }
 
     private async Task<IReadOnlyCollection<IReadOnlyDictionary<string, object?>>> LoadBillItemRowsAsync(
@@ -1165,7 +1337,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             .ToArrayAsync(cancellationToken);
         }
 
-        return await (
+        var directPaymentGuids = await (
             from relation in mainDbContext.EntryPaymentRelations.AsNoTracking()
             where relation.PaymentGuid.HasValue
             join entry in mainDbContext.Entries.AsNoTracking()
@@ -1195,6 +1367,42 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         )
         .Distinct()
         .ToArrayAsync(cancellationToken);
+
+        var linePaymentGuids = await (
+            from relation in mainDbContext.EntryPaymentRelations.AsNoTracking()
+            where relation.PaymentGuid.HasValue
+            join entry in mainDbContext.Entries.AsNoTracking()
+                on relation.EntryGuid equals entry.ParentGuid
+            join account in mainDbContext.Accounts.AsNoTracking()
+                on entry.AccountGuid equals (Guid?)account.Guid into accountJoin
+            from account in accountJoin.DefaultIfEmpty()
+            join contraAccount in mainDbContext.Accounts.AsNoTracking()
+                on entry.ContraAccountGuid equals (Guid?)contraAccount.Guid into contraAccountJoin
+            from contraAccount in contraAccountJoin.DefaultIfEmpty()
+            join customer in mainDbContext.Customers.AsNoTracking()
+                on entry.CustomerGuid equals (Guid?)customer.Guid into customerJoin
+            from customer in customerJoin.DefaultIfEmpty()
+            where (entry.Notes != null && entry.Notes.Contains(term))
+                || (account != null && (
+                    (account.Name != null && account.Name.Contains(term))
+                    || (account.Code != null && account.Code.Contains(term))
+                    || (hasNumberTerm && account.Number.HasValue && account.Number.Value == numberTerm)))
+                || (contraAccount != null && (
+                    (contraAccount.Name != null && contraAccount.Name.Contains(term))
+                    || (contraAccount.Code != null && contraAccount.Code.Contains(term))
+                    || (hasNumberTerm && contraAccount.Number.HasValue && contraAccount.Number.Value == numberTerm)))
+                || (customer != null && (
+                    (customer.CustomerName != null && customer.CustomerName.Contains(term))
+                    || (customer.LatinName != null && customer.LatinName.Contains(term))))
+            select relation.PaymentGuid!.Value
+        )
+        .Distinct()
+        .ToArrayAsync(cancellationToken);
+
+        return directPaymentGuids
+            .Concat(linePaymentGuids)
+            .Distinct()
+            .ToArray();
     }
 
     private static IQueryable<BillHeaderRecord> ApplySearchFilter(

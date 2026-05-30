@@ -6,4 +6,5 @@ public sealed record BillDocumentDetailsResponse(
     int LinesCount,
     double? TotalQuantity,
     double? TotalPairs,
-    double? TotalPens);
+    double? TotalPens,
+    IReadOnlyCollection<VoucherEntryLineResponse>? EntryLines = null);

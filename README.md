@@ -504,6 +504,22 @@ GET /api/bills/voucher-types
 - مجاميع إضافية في التفاصيل:
   - `linesCount`, `totalQuantity`, `totalPairs`, `totalPens`
 
+استجابة تفاصيل السند (`GET /api/bills/vouchers/{guid}`) لا تستخدم `bi000`؛ بنود السند هي قيود محاسبية عبر السلسلة:
+
+```text
+py000 (سند) → vwER_EntriesPays / vwER (قيد مركّب ce000) → en000 (سطور القيد، ParentGUID = ce000)
+```
+
+- `items` تبقى فارغة للسندات.
+- `entryLines` تحتوي سطور `en000` المرتبطة بالسند:
+  - `number`, `date`, `debit`, `credit`, `notes`
+  - الحساب: `accountGuid`, `accountNumber`, `accountCode`, `accountName`
+  - المقابل: `contraAccountGuid`, `contraAccountNumber`, `contraAccountCode`, `contraAccountName`
+  - العميل (عند وجوده): `customerGuid`, `customerName`
+- `linesCount` = عدد سطور القيد.
+- `totalQuantity` = صافي القيود (مجموع المدين − مجموع الدائن) بعد تحويل العملة عند توفر `currencyRate`.
+- ربط العميل/الحساب في القائمة والتفاصيل يعتمد على سطور `en000` تحت القيد المركّب، وليس على مواد المخزون.
+
 الصلاحية المطلوبة:
 
 ```text
