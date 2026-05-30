@@ -284,7 +284,7 @@
   async function loadOverview() {
     const [health, customers, materials, invoices, vouchers] = await Promise.all([
       apiCall("/api/health", { noAuth: true }),
-      apiCall("/api/customers", { query: { page: 1, pageSize: 1 } }),
+      apiCall("/api/accounts", { query: { page: 1, pageSize: 1 } }),
       apiCall("/api/materials", { query: { page: 1, pageSize: 1 } }),
       apiCall("/api/bills/invoices", { query: { page: 1, pageSize: 7 } }),
       apiCall("/api/bills/vouchers", { query: { page: 1, pageSize: 7 } })
@@ -775,7 +775,7 @@
       page: state.customers.page,
       pageSize: state.customers.pageSize
     };
-    const result = await apiCall("/api/customers", { query });
+    const result = await apiCall("/api/accounts", { query });
     setRaw(result.data || { status: result.status, query });
     if (!result.ok) {
       showToast("فشل تحميل العملاء", true);

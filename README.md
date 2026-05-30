@@ -143,8 +143,8 @@ GET  /api/admin/resources
 GET  /api/audit
 GET  /api/health
 
-GET  /api/customers
-GET  /api/customers/{guid}
+GET  /api/accounts
+GET  /api/accounts/{guid}
 GET  /api/customers/{guid}/account/summary
 GET  /api/customers/{guid}/account/statement
 
@@ -320,13 +320,13 @@ DELETE /api/material-images/{id}
 
 يحذف السجل من `bm000`، ويفك الربط عبر `mt000.PictureGUID` إن وجد، ويحاول حذف ملف الصورة والثامبنيل من السيرفر.
 
-## Customers Read API
+## Accounts Directory API
 
 أول تكامل مع قاعدة النظام الحالية هو جدول العملاء:
 
 ```text
-cu000 -> GET /api/customers
-cu000 -> GET /api/customers/{guid}
+cu000 -> GET /api/accounts
+cu000 -> GET /api/accounts/{guid}
 ```
 
 يتطلب:
