@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>رفع الصور</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .upload-form {
+            display: flex;
+            flex-direction: column;
+            width: 300px;
+            margin: 0 auto;
+        }
+        .upload-form input[type="file"] {
+            margin-bottom: 10px;
+        }
+        .upload-form button {
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .upload-form button:hover {
+            background-color: #45a049;
+        }
+        .image-preview-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+            justify-content: center;
+        }
+        .image-preview {
+            position: relative;
+            display: inline-block;
+        }
+        .image-preview img {
+            width: 100px;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+        .remove-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: rgba(255, 0, 0, 0.7);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            padding: 5px;
+            cursor: pointer;
+        }
+        .message {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+
+    <h2 style="text-align: center;">رفع الصور</h2>
+
+    <div class="upload-form">
+        <input type="file" id="fileInput" accept="image/*" multiple>
+        <button id="uploadButton">رفع الصور</button>
+    </div>
+
+    <div class="image-preview-container" id="imagePreviewContainer"></div>
+
+    <div class="message" id="message"></div>
+
+    <script>
+        let selectedFiles = [];
+
+        document.getElementById("fileInput").addEventListener("change", function() {
+            const files = this.files;
+            document.getElementById("imagePreviewContainer").innerHTML = ""; // Clear existing previews
+            selectedFiles = []; // Clear the selected files array
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    const previewContainer = document.createElement("div");
+                    previewContainer.classList.add("image-preview");
+
+                    const img = document.createElement("img");
+                    img.src = e.target.result;
+
+                    const removeBtn = document.createElement("button");
+                    removeBtn.innerHTML = "×";
+                    removeBtn.classList.add("remove-btn");
+                    removeBtn.addEventListener("click", function() {
+                        previewContainer.remove();
+                        selectedFiles = selectedFiles.filter(f => f.name !== file.name);
+                    });
+
+                    previewContainer.appendChild(img);
+                    previewContainer.appendChild(removeBtn);
+                    document.getElementById("imagePreviewContainer").appendChild(previewContainer);
+
+                    selectedFiles.push(file);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Get API proxy URL - protects the API endpoints
+        function getApiProxyUrl() {
+            return "api_proxy.php";
+        }
+
+        document.getElementById("uploadButton").addEventListener("click", function() {
+            if (selectedFiles.length === 0) {
+                document.getElementById("message").innerHTML = "يرجى اختيار ملفات لرفعها.";
+                return;
+            }
+
+            let formData = new FormData();
+
+            selectedFiles.forEach(file => {
+                formData.append("files", file);
+            });
+            // Add action code for proxy (hides endpoint path)
+            formData.append("action", "img_upload_alt");
+
+         fetch(getApiProxyUrl(), {
+    method: "POST",
+    body: formData}).then(response => {
+    // تحقق من أن الاستجابة حالة 200 أو 201
+    if (!response.ok) {
+        throw new Error('خطأ في الاستجابة: ' + response.statusText);
+    }
+    return response.json();}).then(data => {
+    if (data.message) {
+        document.getElementById("message").innerHTML = data.message;
+    } else {
+        document.getElementById("message").innerHTML = "حدث خطأ أثناء رفع الصور.";
+    }
+}).catch(error => {
+    console.error("Error:", error);
+    document.getElementById("message").innerHTML = "حدث خطأ في الاتصال بالخادم.";
+});
+});
+    </script>
+
+</body>
+</html>

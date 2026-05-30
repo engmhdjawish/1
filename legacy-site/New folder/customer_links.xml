@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<customerLinks>
+    <!-- Example link entry -->
+    <!--
+    <link>
+        <id>unique-id-here</id>
+        <name>Customer Name or Description</name>
+        <createdDate>2024-01-01 12:00:00</createdDate>
+        <showPrice>true</showPrice>
+        <showQuantity>true</showQuantity>
+        <filters>
+            <keyword></keyword>
+            <materialTypes>
+                <type>Type1</type>
+                <type>Type2</type>
+            </materialTypes>
+            <targetCategories>
+                <category>Category1</category>
+            </targetCategories>
+            <manufacturers>
+                <manufacturer>Manufacturer1</manufacturer>
+            </manufacturers>
+            <minQuantity>0</minQuantity>
+        </filters>
+    </link>
+    -->
+</customerLinks>
+
