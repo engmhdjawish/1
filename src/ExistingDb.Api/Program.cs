@@ -137,10 +137,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseStaticFiles();
 app.UseAuthentication();
 app.UseMiddleware<AuditLoggingMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapGet("/portal", () => Results.Redirect("/portal/index.html"));
 
 app.Run();

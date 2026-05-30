@@ -7,19 +7,11 @@ public sealed record MaterialFilterOptionsResponse(
     IReadOnlyCollection<string> MaterialTypes,
     IReadOnlyCollection<string> AgeCategories,
     IReadOnlyCollection<LookupOptionResponse> Groups,
-    IReadOnlyCollection<LookupOptionResponse> Stores,
-    MaterialPriceRangesResponse PriceRanges);
+    IReadOnlyCollection<LookupOptionResponse> Stores);
 
 public sealed record LookupOptionResponse(
     Guid Guid,
     string? Code,
     string? Name,
     string? LatinName);
-
-public sealed record MaterialPriceRangesResponse(
-    PriceRangeResponse? UnitSalePriceSyp,
-    PriceRangeResponse? UnitSalePriceUsd,
-    PriceRangeResponse? UnitPurchasePriceUsd);
-
-public sealed record PriceRangeResponse(double? Min, double? Max);
 
