@@ -334,16 +334,31 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             ? resolvedType
             : null;
         var document = BuildDocumentResponse(record, type, rawRow, link, currencyLookup, isVoucher: true);
-        var entryLineRecords = await LoadVoucherEntryLinesAsync(guid, cancellationToken);
-        var entryLines = await BuildVoucherEntryLineResponsesAsync(entryLineRecords, document.CurrencyRate, cancellationToken);
-        var totalDebit = entryLines.Sum(line => line.Debit ?? 0d);
-        var totalCredit = entryLines.Sum(line => line.Credit ?? 0d);
-        var netFromLines = totalDebit > 0 || totalCredit > 0 ? totalDebit - totalCredit : (double?)null;
+
+        // The voucher header carries the main account (cash/bank box). Its detail lines are the
+        // movements posted against the *counterparty* accounts, so we drop the mirror lines that
+        // belong to the main account itself.
+        var mainAccountGuid = link?.Account?.Guid ?? GetGuidValue(rawRow, AccountGuidCandidates);
+        var allEntryLines = await LoadVoucherEntryLinesAsync(guid, cancellationToken);
+        var counterpartyLines = mainAccountGuid is { } main && main != Guid.Empty
+            ? allEntryLines.Where(entry => entry.AccountGuid.HasValue && entry.AccountGuid.Value != main).ToArray()
+            : allEntryLines.ToArray();
+        if (counterpartyLines.Length == 0 && allEntryLines.Count > 0)
+        {
+            counterpartyLines = allEntryLines.ToArray();
+        }
+
+        var entryLines = await BuildVoucherEntryLineResponsesAsync(counterpartyLines, document.CurrencyRate, cancellationToken);
+        // Each counterparty line carries the amount on a single side, so the voucher total is the
+        // sum of the non-zero side across all counterparty movements.
+        var voucherTotal = entryLines.Count == 0
+            ? (double?)null
+            : entryLines.Sum(line => (line.Debit ?? 0d) + (line.Credit ?? 0d));
         return Ok(new BillDocumentDetailsResponse(
             document,
             [],
             entryLines.Count,
-            netFromLines,
+            voucherTotal,
             null,
             null,
             entryLines));
@@ -560,21 +575,8 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
                     group => group.Select(relation => relation.EntryGuid).Distinct().ToArray());
         }
 
-        var compoundEntryGuids = entryGuidsByDocument.Values
+        var entryGuids = entryGuidsByDocument.Values
             .SelectMany(value => value)
-            .Distinct()
-            .ToArray();
-        var lineEntries = documentKind == DocumentKind.Voucher && compoundEntryGuids.Length > 0
-            ? await mainDbContext.Entries
-                .AsNoTracking()
-                .Where(entry => entry.ParentGuid.HasValue && compoundEntryGuids.Contains(entry.ParentGuid.Value))
-                .ToListAsync(cancellationToken)
-            : [];
-        var lineEntriesByCompoundGuid = lineEntries
-            .GroupBy(entry => entry.ParentGuid!.Value)
-            .ToDictionary(group => group.Key, group => group.ToArray());
-        var entryGuids = compoundEntryGuids
-            .Concat(lineEntries.Select(entry => entry.Guid))
             .Distinct()
             .ToArray();
         var entries = entryGuids.Length == 0
@@ -628,24 +630,9 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         foreach (var documentGuid in normalizedDocumentGuids)
         {
             var linkedEntries = entryGuidsByDocument.TryGetValue(documentGuid, out var relatedEntryGuids)
-                ? relatedEntryGuids
-                    .SelectMany(entryGuid =>
-                    {
-                        if (documentKind == DocumentKind.Voucher
-                            && lineEntriesByCompoundGuid.TryGetValue(entryGuid, out var compoundLines)
-                            && compoundLines.Length > 0)
-                        {
-                            return compoundLines;
-                        }
-
-                        var entry = entryLookup.GetValueOrDefault(entryGuid);
-                        return entry is null ? [] : new[] { entry };
-                    })
-                    .DistinctBy(entry => entry.Guid)
-                    .ToArray()
+                ? relatedEntryGuids.Select(entryGuid => entryLookup.GetValueOrDefault(entryGuid)).Where(entry => entry is not null).Cast<EntryRecord>().ToArray()
                 : [];
-            var preferredEntry = linkedEntries.FirstOrDefault(entry => entry.CustomerGuid.HasValue && entry.CustomerGuid != Guid.Empty)
-                ?? linkedEntries.FirstOrDefault(entry => entry.AccountGuid.HasValue && entry.AccountGuid != Guid.Empty)
+            var preferredEntry = linkedEntries.FirstOrDefault(entry => entry.CustomerGuid.HasValue || entry.AccountGuid.HasValue)
                 ?? linkedEntries.FirstOrDefault();
 
             Guid? customerGuid;
@@ -657,8 +644,10 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             }
             else
             {
-                customerGuid = preferredEntry?.CustomerGuid ?? rowCustomerGuidByDocument.GetValueOrDefault(documentGuid);
-                accountGuid = preferredEntry?.AccountGuid ?? rowAccountGuidByDocument.GetValueOrDefault(documentGuid);
+                // Voucher header shows the voucher's main account (py000.AccountGUID, e.g. the cash/bank box).
+                // The counterparty movements live in the entry lines and are exposed via the details endpoint.
+                accountGuid = rowAccountGuidByDocument.GetValueOrDefault(documentGuid) ?? preferredEntry?.AccountGuid;
+                customerGuid = rowCustomerGuidByDocument.GetValueOrDefault(documentGuid) ?? preferredEntry?.CustomerGuid;
             }
             var customer = customerGuid.HasValue && customerLookup.TryGetValue(customerGuid.Value, out var resolvedCustomer)
                 ? resolvedCustomer

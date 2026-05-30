@@ -604,7 +604,7 @@
         detailCell("عدد الأقلام", formatNumber(document.pensCount))
       );
     } else if (result.data.totalQuantity != null) {
-      summaryCells.push(detailCell("صافي القيود (مدين − دائن)", formatMoney(result.data.totalQuantity, document.currencySymbol, document.currencyCode)));
+      summaryCells.push(detailCell("إجمالي السند", formatMoney(result.data.totalQuantity, document.currencySymbol, document.currencyCode)));
     }
     summaryCells.push(
       detailCell("حساب الحسم", [document.discountAccountNumber, document.discountAccountName].filter(Boolean).join(" - ") || "-"),

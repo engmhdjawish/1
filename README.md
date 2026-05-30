@@ -516,15 +516,22 @@ GET /api/bills/voucher-types
 py000 (سند) → vwER_EntriesPays / vwER (قيد مركّب ce000) → en000 (سطور القيد، ParentGUID = ce000)
 ```
 
+مفهوم العرض:
+
+- **ترويسة السند** تعرض الحساب الرئيسي للسند (`py000.AccountGUID`)، وهو حساب الصندوق/البنك الذي تتم عليه عملية القبض أو الدفع.
+- **تفاصيل السند** هي الحركات على **الحسابات المقابلة** فقط. لأن كل حركة في `en000` تُسجّل كسطرين متقابلين (سطر على الحساب الرئيسي وسطر على الحساب المقابل)، يتم استبعاد السطور التي `AccountGUID` فيها = الحساب الرئيسي، والإبقاء على سطور الحسابات المقابلة.
+
+تفاصيل الحقول:
+
 - `items` تبقى فارغة للسندات.
-- `entryLines` تحتوي سطور `en000` المرتبطة بالسند:
+- `entryLines` تحتوي سطور الحسابات المقابلة (بعد استبعاد سطور الحساب الرئيسي):
   - `number`, `date`, `debit`, `credit`, `notes`
-  - الحساب: `accountGuid`, `accountNumber`, `accountCode`, `accountName`
-  - المقابل: `contraAccountGuid`, `contraAccountNumber`, `contraAccountCode`, `contraAccountName`
-  - العميل (عند وجوده): `customerGuid`, `customerName`
-- `linesCount` = عدد سطور القيد.
-- `totalQuantity` = صافي القيود (مجموع المدين − مجموع الدائن) بعد تحويل العملة عند توفر `currencyRate`.
-- ربط العميل/الحساب في القائمة والتفاصيل يعتمد على سطور `en000` تحت القيد المركّب، وليس على مواد المخزون.
+  - الحساب المقابل (الطرف الآخر للحركة): `accountGuid`, `accountNumber`, `accountCode`, `accountName`
+  - الحساب الرئيسي للسند يظهر كحساب مقابل للسطر: `contraAccountGuid`, `contraAccountNumber`, `contraAccountCode`, `contraAccountName`
+  - العميل المرتبط بالسطر (عند وجوده): `customerGuid`, `customerName`
+- `linesCount` = عدد حركات الحسابات المقابلة.
+- `totalQuantity` = إجمالي السند = مجموع قيم الطرف غير الصفري لسطور الحسابات المقابلة (بعد تحويل العملة عند توفر `currencyRate`).
+- حساب الترويسة (في القائمة والتفاصيل) يُؤخذ من `py000.AccountGUID` مباشرةً.
 
 الصلاحية المطلوبة:
 
