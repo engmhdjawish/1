@@ -13,3 +13,8 @@ appsettings.Local.json
 .env
 uploads/
 
+portal/.env
+portal/vendor/
+portal/storage/*
+!portal/storage/.gitkeep
+
