@@ -55,7 +55,8 @@
     documentModal: document.getElementById("documentModal"),
     modalTitle: document.getElementById("modalTitle"),
     modalSummary: document.getElementById("modalSummary"),
-    modalItemsTable: document.querySelector("#modalItemsTable tbody")
+    modalItemsTable: document.querySelector("#modalItemsTable tbody"),
+    modalItemsHead: document.querySelector("#modalItemsTable thead tr")
   };
 
   function normalizeUrl(value) {
@@ -351,6 +352,27 @@
 
       renderLedgerRows(result.data.entries || [], result.data || {});
     });
+
+    document.querySelector("#ledgerTable tbody").addEventListener("click", openSourceDocumentFromRow);
+    document.querySelector("#ledgerTable tbody").addEventListener("dblclick", openSourceDocumentFromRow);
+  }
+
+  function reasonToDocumentKind(reasonType) {
+    if (reasonType === "invoice") return "invoices";
+    if (reasonType === "payment") return "vouchers";
+    return "";
+  }
+
+  async function openSourceDocumentFromRow(event) {
+    const row = event.target.closest("tr[data-ref-guid]");
+    if (!row) return;
+    const refGuid = row.dataset.refGuid;
+    const kind = row.dataset.refKind;
+    if (!refGuid || !kind) {
+      showToast("لا يوجد مستند مصدر مرتبط بهذه الحركة", true);
+      return;
+    }
+    await openDocumentModal(refGuid, kind);
   }
 
   function renderLedgerRows(rows, statementData) {
@@ -368,8 +390,11 @@
       const movementCurrencyLabel = [entry.movementCurrencyCode, entry.movementCurrencySymbol]
         .filter(Boolean)
         .join(" ") || entry.movementCurrencyName || "-";
+      const kind = reasonToDocumentKind(entry.reasonType);
+      const refGuid = entry.referenceGuid || "";
+      const openable = kind && refGuid;
       return `
-      <tr>
+      <tr data-ref-guid="${refGuid}" data-ref-kind="${kind}" class="${openable ? "linkable" : ""}" title="${openable ? "اضغط لفتح المستند المصدر" : ""}">
         <td>${safeHtml(formatDate(entry.entryDate ?? entry.date))}</td>
         <td>${safeHtml(entry.entryNumber ?? entry.number ?? "-")}</td>
         <td>${safeHtml(formatMoney(entry.debit, movementSymbol, movementCode))}</td>
@@ -568,8 +593,10 @@
     document.getElementById("documentsPagerLabel").textContent = `صفحة ${state.documents.page} من ${totalPages} (${state.documents.totalCount} سجل)`;
   }
 
-  async function openDocumentModal(guid) {
-    const endpoint = state.documents.mode === "invoices"
+  async function openDocumentModal(guid, forcedKind) {
+    const mode = forcedKind || state.documents.mode;
+    const isInvoice = mode === "invoices";
+    const endpoint = isInvoice
       ? `/api/bills/invoices/${guid}`
       : `/api/bills/vouchers/${guid}`;
     const result = await apiCall(endpoint);
@@ -580,7 +607,6 @@
     }
 
     const document = result.data.document || {};
-    const isInvoice = state.documents.mode === "invoices";
     const items = result.data.items || [];
     const entryLines = result.data.entryLines || [];
     ui.modalTitle.textContent = `${isInvoice ? "تفاصيل الفاتورة" : "تفاصيل السند"} رقم ${document.number ?? "-"}`;
@@ -612,7 +638,7 @@
     );
     ui.modalSummary.innerHTML = `<div class="detail-grid">${summaryCells.join("")}</div>`;
 
-    const modalHead = document.querySelector("#modalItemsTable thead tr");
+    const modalHead = ui.modalItemsHead;
     if (isInvoice) {
       modalHead.innerHTML = "<th>المادة</th><th>كمية (و1)</th><th>كمية (و2)</th><th>سعر القطعة</th><th>حسم</th><th>إضافة</th><th>إجمالي</th>";
       if (!items.length) {
@@ -972,8 +998,11 @@
       const movementCurrencyLabel = [entry.movementCurrencyCode, entry.movementCurrencySymbol]
         .filter(Boolean)
         .join(" ") || entry.movementCurrencyName || "-";
+      const kind = reasonToDocumentKind(entry.reasonType);
+      const refGuid = entry.referenceGuid || "";
+      const openable = kind && refGuid;
       return `
-      <tr>
+      <tr data-ref-guid="${refGuid}" data-ref-kind="${kind}" class="${openable ? "linkable" : ""}" title="${openable ? "اضغط لفتح المستند المصدر" : ""}">
         <td>${safeHtml(formatDate(entry.entryDate ?? entry.date))}</td>
         <td>${safeHtml(entry.entryNumber ?? entry.number ?? "-")}</td>
         <td>${safeHtml(formatMoney(entry.debit, movementSymbol, movementCode))}</td>
@@ -985,6 +1014,9 @@
         <td>${safeHtml(formatMoney(entry.runningBalance, statementCurrencySymbol, statementCurrencyCode))}</td>
       </tr>`;
     }).join("");
+
+    tbody.onclick = openSourceDocumentFromRow;
+    tbody.ondblclick = openSourceDocumentFromRow;
   }
 
   function highlightSelectedRow(tableSelector, guid) {

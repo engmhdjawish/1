@@ -351,6 +351,14 @@ tbody tr.selected td {
   background: #dbeafe;
 }
 
+tbody tr.linkable td:first-child {
+  border-right: 3px solid #2563eb;
+}
+
+tbody tr.linkable:hover td {
+  background: #e0f2fe;
+}
+
 .detail-panel h3 {
   margin: 0 0 0.45rem;
   font-size: 0.88rem;
