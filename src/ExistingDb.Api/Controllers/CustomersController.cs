@@ -22,7 +22,8 @@ public sealed class CustomersController(
 
     [HttpGet]
     public async Task<ActionResult<PagedResponse<CustomerResponse>>> GetCustomers(
-        [FromQuery] string? search = null,
+        [FromQuery] string? keyword = null,
+        [FromQuery(Name = "search")] string? legacySearch = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
@@ -31,9 +32,9 @@ public sealed class CustomersController(
         pageSize = Math.Clamp(pageSize, 1, 200);
 
         var query = mainDbContext.Customers.AsNoTracking();
-        if (!string.IsNullOrWhiteSpace(search))
+        var keywordTerms = ParseKeywordTerms(!string.IsNullOrWhiteSpace(keyword) ? keyword : legacySearch);
+        foreach (var term in keywordTerms)
         {
-            var term = search.Trim();
             query = query.Where(customer =>
                 (customer.CustomerName != null && customer.CustomerName.Contains(term)) ||
                 (customer.LatinName != null && customer.LatinName.Contains(term)) ||
@@ -133,6 +134,20 @@ public sealed class CustomersController(
             FieldAccessMode.Mask => Convert.ToString(fieldMasker.Mask(value.Value, decision.MaskingStrategy)),
             _ => value.Value.ToString()
         };
+    }
+
+    private static IReadOnlyCollection<string> ParseKeywordTerms(string? keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            return [];
+        }
+
+        return keyword
+            .Split((char[]?)null, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Where(term => !string.IsNullOrWhiteSpace(term))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 }
 

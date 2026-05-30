@@ -57,7 +57,8 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
 
     [HttpGet("invoices")]
     public async Task<ActionResult<PagedResponse<BillDocumentResponse>>> GetInvoices(
-        [FromQuery] string? search = null,
+        [FromQuery] string? keyword = null,
+        [FromQuery(Name = "search")] string? legacySearch = null,
         [FromQuery] Guid? typeGuid = null,
         [FromQuery] string? type = null,
         [FromQuery] DateTime? fromDate = null,
@@ -104,11 +105,11 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             query = query.Where(bill => bill.Date < toExclusive.Value);
         }
 
-        if (!string.IsNullOrWhiteSpace(search))
+        var keywordTerms = ParseKeywordTerms(!string.IsNullOrWhiteSpace(keyword) ? keyword : legacySearch);
+        foreach (var term in keywordTerms)
         {
-            var normalizedSearch = search.Trim();
-            var relatedGuids = await ResolveSearchRelationGuidsAsync(normalizedSearch, DocumentKind.Invoice, cancellationToken);
-            query = ApplySearchFilter(query, normalizedSearch, relatedGuids);
+            var relatedGuids = await ResolveSearchRelationGuidsAsync(term, DocumentKind.Invoice, cancellationToken);
+            query = ApplySearchFilter(query, term, relatedGuids);
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -213,7 +214,8 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
 
     [HttpGet("vouchers")]
     public async Task<ActionResult<PagedResponse<BillDocumentResponse>>> GetVouchers(
-        [FromQuery] string? search = null,
+        [FromQuery] string? keyword = null,
+        [FromQuery(Name = "search")] string? legacySearch = null,
         [FromQuery] Guid? typeGuid = null,
         [FromQuery] string? type = null,
         [FromQuery] DateTime? fromDate = null,
@@ -260,11 +262,11 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             query = query.Where(payment => payment.Date < toExclusive.Value);
         }
 
-        if (!string.IsNullOrWhiteSpace(search))
+        var keywordTerms = ParseKeywordTerms(!string.IsNullOrWhiteSpace(keyword) ? keyword : legacySearch);
+        foreach (var term in keywordTerms)
         {
-            var normalizedSearch = search.Trim();
-            var relatedGuids = await ResolveSearchRelationGuidsAsync(normalizedSearch, DocumentKind.Voucher, cancellationToken);
-            query = ApplySearchFilter(query, normalizedSearch, relatedGuids);
+            var relatedGuids = await ResolveSearchRelationGuidsAsync(term, DocumentKind.Voucher, cancellationToken);
+            query = ApplySearchFilter(query, term, relatedGuids);
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -1219,6 +1221,20 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         }
 
         return true;
+    }
+
+    private static IReadOnlyCollection<string> ParseKeywordTerms(string? keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            return [];
+        }
+
+        return keyword
+            .Split((char[]?)null, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Where(term => !string.IsNullOrWhiteSpace(term))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private async Task<Guid[]> ResolveTypeGuidsByTextAsync(

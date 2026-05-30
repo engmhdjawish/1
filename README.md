@@ -327,7 +327,10 @@ DELETE /api/material-images/{id}
 ```text
 cu000 -> GET /api/accounts
 cu000 -> GET /api/accounts/{guid}
+cu000 -> GET /api/accounts?keyword=محمد 1001
 ```
+
+يدعم `keyword` بنفس مبدأ المواد: تقسيم النص إلى كلمات (space-separated) وتطبيق AND بين الكلمات على الحقول النصية ذات الصلة.
 
 يتطلب:
 
@@ -424,15 +427,17 @@ entries.read   (لكشف الحساب التفصيلي)
 
 ```http
 GET /api/bills/invoices?page=1&pageSize=100
-GET /api/bills/invoices?typeGuid={typeGuid}&fromDate=2026-01-01&toDate=2026-01-31&search=1254
+GET /api/bills/invoices?typeGuid={typeGuid}&fromDate=2026-01-01&toDate=2026-01-31&keyword=1254
 GET /api/bills/invoices?type=مبيع
 GET /api/bills/invoices/{guid}
 
 GET /api/bills/vouchers?page=1&pageSize=100
-GET /api/bills/vouchers?typeGuid={typeGuid}&fromDate=2026-01-01&toDate=2026-01-31&search=قبض
+GET /api/bills/vouchers?typeGuid={typeGuid}&fromDate=2026-01-01&toDate=2026-01-31&keyword=قبض
 GET /api/bills/vouchers?type=قبض
 GET /api/bills/vouchers/{guid}
 ```
+
+بحث `keyword` في الفواتير/السندات يدعم تقسيم الكلمات وتطبيق AND بينها (أي كل كلمة يجب أن تحقق مطابقة).
 
 خيارات الأنواع (للقوائم المنسدلة/الفلاتر):
 

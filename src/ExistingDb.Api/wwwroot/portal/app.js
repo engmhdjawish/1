@@ -500,7 +500,7 @@
     const query = {
       page: state.documents.page,
       pageSize: state.documents.pageSize,
-      search: state.documents.search,
+      keyword: state.documents.search,
       type: state.documents.type,
       fromDate: state.documents.fromDate,
       toDate: state.documents.toDate
@@ -771,7 +771,7 @@
 
   async function loadCustomers() {
     const query = {
-      search: state.customers.search,
+      keyword: state.customers.search,
       page: state.customers.page,
       pageSize: state.customers.pageSize
     };
