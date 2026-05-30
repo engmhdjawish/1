@@ -657,21 +657,26 @@
         `).join("");
       }
     } else {
-      modalHead.innerHTML = "<th>رقم</th><th>حساب</th><th>مقابل</th><th>مدين</th><th>دائن</th><th>عميل</th><th>ملاحظات</th>";
+      modalHead.innerHTML = "<th>رقم</th><th>حساب</th><th>مقابل</th><th>مدين</th><th>دائن</th><th>التعادل</th><th>عميل</th><th>ملاحظات</th>";
       if (!entryLines.length) {
-        ui.modalItemsTable.innerHTML = `<tr><td colspan="7">لا توجد قيود محاسبية.</td></tr>`;
+        ui.modalItemsTable.innerHTML = `<tr><td colspan="8">لا توجد قيود محاسبية.</td></tr>`;
       } else {
-        ui.modalItemsTable.innerHTML = entryLines.map((line) => `
+        ui.modalItemsTable.innerHTML = entryLines.map((line) => {
+          const equivalent = line.equivalentValue != null
+            ? formatMoney(line.equivalentValue, line.equivalentCurrencySymbol, line.equivalentCurrencyCode)
+            : "-";
+          return `
           <tr>
             <td>${safeHtml(line.number ?? "-")}</td>
             <td>${safeHtml([line.accountNumber, line.accountName || line.accountCode].filter(Boolean).join(" - ") || "-")}</td>
             <td>${safeHtml([line.contraAccountNumber, line.contraAccountName || line.contraAccountCode].filter(Boolean).join(" - ") || "-")}</td>
             <td>${safeHtml(formatMoney(line.debit, document.currencySymbol, document.currencyCode))}</td>
             <td>${safeHtml(formatMoney(line.credit, document.currencySymbol, document.currencyCode))}</td>
+            <td>${safeHtml(equivalent)}</td>
             <td>${safeHtml(line.customerName || "-")}</td>
             <td>${safeHtml(line.notes || "-")}</td>
-          </tr>
-        `).join("");
+          </tr>`;
+        }).join("");
       }
     }
 

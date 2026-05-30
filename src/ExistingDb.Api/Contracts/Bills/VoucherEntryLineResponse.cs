@@ -16,4 +16,8 @@ public sealed record VoucherEntryLineResponse(
     string? CustomerName,
     double? Debit,
     double? Credit,
-    string? Notes);
+    string? Notes,
+    double? EquivalentValue = null,
+    Guid? EquivalentCurrencyGuid = null,
+    string? EquivalentCurrencyCode = null,
+    string? EquivalentCurrencySymbol = null);

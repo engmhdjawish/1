@@ -348,7 +348,12 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             counterpartyLines = allEntryLines.ToArray();
         }
 
-        var entryLines = await BuildVoucherEntryLineResponsesAsync(counterpartyLines, document.CurrencyRate, cancellationToken);
+        var entryLines = await BuildVoucherEntryLineResponsesAsync(
+            counterpartyLines,
+            allEntryLines,
+            document.CurrencyGuid,
+            document.CurrencyRate,
+            cancellationToken);
         // Each counterparty line carries the amount on a single side, so the voucher total is the
         // sum of the non-zero side across all counterparty movements.
         var voucherTotal = entryLines.Count == 0
@@ -803,6 +808,8 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
 
     private async Task<IReadOnlyCollection<VoucherEntryLineResponse>> BuildVoucherEntryLineResponsesAsync(
         IReadOnlyCollection<EntryRecord> entryLineRecords,
+        IReadOnlyCollection<EntryRecord> allEntryLines,
+        Guid? documentCurrencyGuid,
         double? currencyRate,
         CancellationToken cancellationToken)
     {
@@ -840,6 +847,13 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
                 .ToListAsync(cancellationToken);
         var accountLookup = accounts.ToDictionary(account => account.Guid);
 
+        var currencyLookup = await ResolveCurrencyReferencesByGuidsAsync(
+            allEntryLines
+                .Select(entry => entry.CurrencyGuid)
+                .Where(guid => guid.HasValue)
+                .Select(guid => guid!.Value),
+            cancellationToken);
+
         return entryLineRecords
             .Select(entry =>
             {
@@ -854,6 +868,13 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
                     : null;
                 var debit = ConvertToDocumentCurrency(entry.Debit, currencyRate);
                 var credit = ConvertToDocumentCurrency(entry.Credit, currencyRate);
+
+                var (equivalentValue, equivalentCurrency) = ResolveLineEquivalent(
+                    entry,
+                    allEntryLines,
+                    documentCurrencyGuid,
+                    currencyLookup);
+
                 return new VoucherEntryLineResponse(
                     entry.Guid,
                     entry.Number,
@@ -870,9 +891,68 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
                     FirstNotBlank(customer?.CustomerName, customer?.LatinName),
                     debit,
                     credit,
-                    entry.Notes);
+                    entry.Notes,
+                    equivalentValue,
+                    equivalentCurrency?.Guid,
+                    equivalentCurrency?.Code,
+                    equivalentCurrency?.Symbol);
             })
             .ToArray();
+    }
+
+    // For a currency-exchange movement, one side of the entry is in the base currency (CurrencyVal = 1)
+    // while its counterpart carries the foreign currency and exchange rate. We expose the foreign
+    // amount (base value / exchange rate) so it can be shown next to the recorded base amount,
+    // e.g. 68850 ل.س ( = 500 $ ). The foreign side may be the line itself or its mirror line.
+    private static (double? Value, CurrencyReference? Currency) ResolveLineEquivalent(
+        EntryRecord entry,
+        IReadOnlyCollection<EntryRecord> allEntryLines,
+        Guid? documentCurrencyGuid,
+        IReadOnlyDictionary<Guid, CurrencyReference> currencyLookup)
+    {
+        var mirror = allEntryLines.FirstOrDefault(candidate =>
+            candidate.Guid != entry.Guid
+            && candidate.AccountGuid == entry.ContraAccountGuid
+            && candidate.ContraAccountGuid == entry.AccountGuid
+            && Math.Abs(((candidate.Debit ?? 0) + (candidate.Credit ?? 0)) - ((entry.Debit ?? 0) + (entry.Credit ?? 0))) < 0.01);
+
+        var foreignLine = IsForeignCurrencyLine(entry, documentCurrencyGuid)
+            ? entry
+            : mirror is not null && IsForeignCurrencyLine(mirror, documentCurrencyGuid)
+                ? mirror
+                : null;
+        if (foreignLine is null
+            || foreignLine.CurrencyVal is not { } rate
+            || rate <= 0
+            || foreignLine.CurrencyGuid is not { } currencyGuid
+            || currencyGuid == Guid.Empty
+            || !currencyLookup.TryGetValue(currencyGuid, out var currency))
+        {
+            return (null, null);
+        }
+
+        var baseAmount = (foreignLine.Debit ?? 0) + (foreignLine.Credit ?? 0);
+        if (baseAmount == 0)
+        {
+            return (null, null);
+        }
+
+        return (baseAmount / rate, currency);
+    }
+
+    private static bool IsForeignCurrencyLine(EntryRecord entry, Guid? documentCurrencyGuid)
+    {
+        if (entry.CurrencyVal is not { } rate || rate <= 0 || rate == 1d)
+        {
+            return false;
+        }
+
+        if (entry.CurrencyGuid is not { } currencyGuid || currencyGuid == Guid.Empty)
+        {
+            return false;
+        }
+
+        return documentCurrencyGuid is null || currencyGuid != documentCurrencyGuid.Value;
     }
 
     private async Task<IReadOnlyCollection<IReadOnlyDictionary<string, object?>>> LoadBillItemRowsAsync(
@@ -965,7 +1045,16 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         var currencyGuids = rows
             .Select(row => GetGuidValue(row, CurrencyGuidCandidates))
             .Where(guid => guid.HasValue && guid.Value != Guid.Empty)
-            .Select(guid => guid!.Value)
+            .Select(guid => guid!.Value);
+        return await ResolveCurrencyReferencesByGuidsAsync(currencyGuids, cancellationToken);
+    }
+
+    private async Task<Dictionary<Guid, CurrencyReference>> ResolveCurrencyReferencesByGuidsAsync(
+        IEnumerable<Guid> guids,
+        CancellationToken cancellationToken)
+    {
+        var currencyGuids = guids
+            .Where(guid => guid != Guid.Empty)
             .Distinct()
             .ToArray();
         if (currencyGuids.Length == 0)
