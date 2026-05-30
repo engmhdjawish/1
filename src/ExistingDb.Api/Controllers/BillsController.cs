@@ -956,8 +956,8 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             GetStringValue(row, DocumentCurrencyCodeCandidates));
         var resolvedSymbol = ResolveCurrencySymbol(currencyCode, currencyName);
         var currencySymbol = FirstNotBlank(
-            currencyReference?.Symbol,
             resolvedSymbol,
+            currencyReference?.Symbol,
             GetStringValue(row, DocumentCurrencySymbolCandidates),
             "ل.س");
         return (currencyGuid, currencyName, currencyCode, currencySymbol, currencyRate);
