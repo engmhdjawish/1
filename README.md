@@ -451,6 +451,17 @@ entries.read   (لكشف الحساب التفصيلي)
   - وعند غيابه (كما في القيود المركّبة `ce000`) يُستنتج من سطور `en000` الشقيقة تحت نفس القيد المركّب (`ParentGUID`) باختيار السطر المعاكس بالاتجاه (مدين مقابل دائن)
 - عند غياب تصنيف مرجع مباشر، يتم استنتاج نوع العملية من الحساب المقابل واتجاه القيد (مثل: `قبض` / `دفع` / `مبيع`) مع الاعتماد على اختصارات الأنواع من `vwEt/vwBt/vwNt` عند توفرها.
 
+## Portal website database (PostgreSQL)
+
+قاعدة بيانات **منفصلة** لموقع PHP الخارجي (طلبات، روابط، عملاء ويب، أقسام الرئيسية، زوّار):
+
+- التصميم: [docs/portal-database-design.md](docs/portal-database-design.md)
+- DDL: [docs/portal-db-schema.sql](docs/portal-db-schema.sql)
+- بذور أولية: [docs/portal-db-seed.sql](docs/portal-db-seed.sql)
+- حساب خدمة API: [docs/portal-api-service-account.md](docs/portal-api-service-account.md)
+
+تسجيل عملاء الويب: **ذاتي + إنشاء من الإدارة**، مع **موافقة وتفعيل** من موظّف يملك `web_customers.approve` ومنح `access_policy_id`.
+
 ## Bills & Vouchers Browse API
 
 للتصفح المباشر للفواتير والسندات بكل أنواعها:
