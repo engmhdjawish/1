@@ -25,6 +25,7 @@ public sealed class MaterialsController(
     [HttpGet]
     public async Task<ActionResult<PagedResponse<MaterialResponse>>> GetMaterials(
         [FromQuery] string? search = null,
+        [FromQuery] string? code = null,
         [FromQuery] Guid? storeGuid = null,
         [FromQuery] string? storeGuids = null,
         [FromQuery] string? quantityMode = null,
@@ -118,6 +119,12 @@ public sealed class MaterialsController(
             maxUnitSalePriceUsd,
             minUnitPurchasePriceUsd,
             maxUnitPurchasePriceUsd);
+
+        if (!string.IsNullOrWhiteSpace(code))
+        {
+            var normalizedCode = code.Trim();
+            query = query.Where(material => material.Code == normalizedCode);
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
         {
