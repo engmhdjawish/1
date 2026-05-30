@@ -13,11 +13,11 @@ namespace ExistingDb.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/accounts")]
-[RequirePermission("customers.read")]
 [RequirePermission("accounts.read")]
 public sealed class CustomerAccountsController(MainDbContext mainDbContext) : ControllerBase
 {
     [HttpGet("~/api/customers/{customerGuid:guid}/account/summary")]
+    [RequirePermission("customers.read")]
     public Task<ActionResult<CustomerAccountSummaryResponse>> GetSummaryByCustomer(Guid customerGuid, CancellationToken cancellationToken)
     {
         return GetSummary(null, customerGuid, cancellationToken);
@@ -114,6 +114,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
     }
 
     [HttpGet("~/api/customers/{customerGuid:guid}/account/statement")]
+    [RequirePermission("customers.read")]
     [RequirePermission("entries.read")]
     public Task<ActionResult<CustomerAccountStatementResponse>> GetStatementByCustomer(
         Guid customerGuid,

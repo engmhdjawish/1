@@ -11,7 +11,7 @@ namespace ExistingDb.Api.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/accounts")]
+[Route("api/customers")]
 [RequirePermission("customers.read")]
 public sealed class CustomersController(
     MainDbContext mainDbContext,

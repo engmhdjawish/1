@@ -143,8 +143,12 @@ GET  /api/admin/resources
 GET  /api/audit
 GET  /api/health
 
+GET  /api/customers
+GET  /api/customers/{guid}
 GET  /api/accounts
 GET  /api/accounts/{guid}
+GET  /api/accounts/summary
+GET  /api/accounts/statement
 GET  /api/customers/{guid}/account/summary
 GET  /api/customers/{guid}/account/statement
 
@@ -320,14 +324,14 @@ DELETE /api/material-images/{id}
 
 يحذف السجل من `bm000`، ويفك الربط عبر `mt000.PictureGUID` إن وجد، ويحاول حذف ملف الصورة والثامبنيل من السيرفر.
 
-## Accounts Directory API
+## Customers Read API
 
 أول تكامل مع قاعدة النظام الحالية هو جدول العملاء:
 
 ```text
-cu000 -> GET /api/accounts
-cu000 -> GET /api/accounts/{guid}
-cu000 -> GET /api/accounts?keyword=محمد 1001
+cu000 -> GET /api/customers
+cu000 -> GET /api/customers/{guid}
+cu000 -> GET /api/customers?keyword=محمد 1001
 ```
 
 يدعم `keyword` بنفس مبدأ المواد: تقسيم النص إلى كلمات (space-separated) وتطبيق AND بين الكلمات على الحقول النصية ذات الصلة.
@@ -346,6 +350,25 @@ Phone2
 Mobile
 EMail
 AccountGUID
+```
+
+## Accounts Directory API
+
+لقائمة الحسابات المحاسبية (بما فيها الحسابات غير المرتبطة ببطاقة عميل مثل الصندوق):
+
+```text
+ac000 -> GET /api/accounts
+ac000 -> GET /api/accounts/{guid}
+ac000 -> GET /api/accounts?keyword=صندوق 111
+```
+
+يدعم `keyword` بنفس مبدأ المواد (تقسيم إلى كلمات + AND).  
+ويبحث في `Name` و`Code` ورقم الحساب `Number`.
+
+يتطلب:
+
+```text
+accounts.read
 ```
 
 ## Customer Accounts API

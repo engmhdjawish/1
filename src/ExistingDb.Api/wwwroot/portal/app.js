@@ -38,6 +38,12 @@
       search: "",
       selectedCustomerGuid: "",
       selectedAccountGuid: ""
+    },
+    accountsDirectory: {
+      page: 1,
+      pageSize: 50,
+      search: "",
+      selectedAccountGuid: ""
     }
   };
 
@@ -284,7 +290,7 @@
   async function loadOverview() {
     const [health, customers, materials, invoices, vouchers] = await Promise.all([
       apiCall("/api/health", { noAuth: true }),
-      apiCall("/api/accounts", { query: { page: 1, pageSize: 1 } }),
+      apiCall("/api/customers", { query: { page: 1, pageSize: 1 } }),
       apiCall("/api/materials", { query: { page: 1, pageSize: 1 } }),
       apiCall("/api/bills/invoices", { query: { page: 1, pageSize: 7 } }),
       apiCall("/api/bills/vouchers", { query: { page: 1, pageSize: 7 } })
@@ -756,9 +762,36 @@
       state.customers.selectedCustomerGuid = row.dataset.guid;
       state.customers.selectedAccountGuid = row.dataset.accountGuid || "";
       highlightSelectedRow("#customersTable", state.customers.selectedCustomerGuid);
+      state.accountsDirectory.selectedAccountGuid = "";
+      highlightSelectedRow("#accountsTable", state.accountsDirectory.selectedAccountGuid);
 
       const form = document.getElementById("customerAccountForm");
       form.querySelector('input[name="customerGuid"]').value = state.customers.selectedCustomerGuid;
+      form.querySelector('input[name="accountGuid"]').value = state.customers.selectedAccountGuid;
+      await loadCustomerAccount();
+    });
+
+    document.getElementById("accountsFilterForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      state.accountsDirectory.search = String(form.get("search") || "").trim();
+      state.accountsDirectory.page = Number(form.get("page") || 1);
+      state.accountsDirectory.pageSize = Number(form.get("pageSize") || 50);
+      await loadAccountsDirectory();
+    });
+
+    document.querySelector("#accountsTable tbody").addEventListener("click", async (event) => {
+      const row = event.target.closest("tr[data-guid]");
+      if (!row) return;
+
+      state.accountsDirectory.selectedAccountGuid = row.dataset.guid;
+      state.customers.selectedCustomerGuid = "";
+      state.customers.selectedAccountGuid = row.dataset.guid;
+      highlightSelectedRow("#accountsTable", state.accountsDirectory.selectedAccountGuid);
+      highlightSelectedRow("#customersTable", state.customers.selectedCustomerGuid);
+
+      const form = document.getElementById("customerAccountForm");
+      form.querySelector('input[name="customerGuid"]').value = "";
       form.querySelector('input[name="accountGuid"]').value = state.customers.selectedAccountGuid;
       await loadCustomerAccount();
     });
@@ -775,7 +808,7 @@
       page: state.customers.page,
       pageSize: state.customers.pageSize
     };
-    const result = await apiCall("/api/accounts", { query });
+    const result = await apiCall("/api/customers", { query });
     setRaw(result.data || { status: result.status, query });
     if (!result.ok) {
       showToast("فشل تحميل العملاء", true);
@@ -784,6 +817,22 @@
     }
 
     renderCustomersRows(getItems(result.data));
+  }
+
+  async function loadAccountsDirectory() {
+    const query = {
+      keyword: state.accountsDirectory.search,
+      page: state.accountsDirectory.page,
+      pageSize: state.accountsDirectory.pageSize
+    };
+    const result = await apiCall("/api/accounts", { query });
+    if (!result.ok) {
+      showToast("فشل تحميل الحسابات", true);
+      renderAccountsRows([]);
+      return;
+    }
+
+    renderAccountsRows(getItems(result.data));
   }
 
   function renderCustomersRows(rows) {
@@ -801,6 +850,27 @@
         <td>${safeHtml(item.accountGuid || "-")}</td>
       </tr>
     `).join("");
+  }
+
+  function renderAccountsRows(rows) {
+    const tbody = document.querySelector("#accountsTable tbody");
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="4">لا توجد بيانات.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = rows.map((item) => `
+      <tr data-guid="${item.guid}">
+        <td>${safeHtml(item.number ?? "-")}</td>
+        <td>${safeHtml(item.code || "-")}</td>
+        <td>${safeHtml(item.name || "-")}</td>
+        <td>${safeHtml(item.currencyRate ?? "-")}</td>
+      </tr>
+    `).join("");
+
+    if (state.accountsDirectory.selectedAccountGuid) {
+      highlightSelectedRow("#accountsTable", state.accountsDirectory.selectedAccountGuid);
+    }
   }
 
   async function loadCustomerAccount() {
@@ -905,6 +975,7 @@
     await loadDocuments();
     await loadMaterials();
     await loadCustomers();
+    await loadAccountsDirectory();
   }
 
   bootstrap().catch((error) => {
