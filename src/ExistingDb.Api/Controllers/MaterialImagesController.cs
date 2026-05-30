@@ -840,40 +840,24 @@ public sealed class MaterialImagesController(
 
     private static string? ResolveExistingThumbnailPath(string? name, string thumbnailsDirectory)
     {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return null;
-        }
-
-        var value = name.Trim();
-        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        var fileName = ExtractFileName(value);
+        var fileName = ExtractFileName(name);
         if (!string.IsNullOrWhiteSpace(fileName))
         {
-            candidates.Add(Path.GetFullPath(Path.Combine(thumbnailsDirectory, fileName)));
+            var candidate = Path.GetFullPath(Path.Combine(thumbnailsDirectory, fileName));
+            return System.IO.File.Exists(candidate) ? candidate : null;
         }
-        candidates.Add(Path.GetFullPath(value));
 
-        return candidates.FirstOrDefault(System.IO.File.Exists);
+        return null;
     }
 
     private static IReadOnlyCollection<string> BuildImagePathCandidates(string? name, string imagesDirectory)
     {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return [];
-        }
-
-        var value = name.Trim();
+        var fileName = ExtractFileName(name);
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        var fileName = ExtractFileName(value);
         if (!string.IsNullOrWhiteSpace(fileName))
         {
             candidates.Add(Path.GetFullPath(Path.Combine(imagesDirectory, fileName)));
         }
-        candidates.Add(Path.GetFullPath(value));
 
         return candidates.ToArray();
     }
