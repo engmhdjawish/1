@@ -90,6 +90,7 @@
 
 - `docs/portal-db-schema.sql` — DDL كامل PostgreSQL
 - `docs/portal-db-seed.sql` — أدوار وصلاحيات وسياسات افتراضية
+- `portal/README.md` — تشغيل محلي (PHP + PostgreSQL)
 
 ## ترتيب التنفيذ
 
