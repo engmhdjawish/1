@@ -531,26 +531,13 @@ GET /api/materials/filter-options
       "name": "المستودع الرئيسي",
       "latinName": "Main Store"
     }
-  ],
-  "priceRanges": {
-    "unitSalePriceSyp": {
-      "min": 100000,
-      "max": 500000
-    },
-    "unitSalePriceUsd": {
-      "min": 5,
-      "max": 30
-    },
-    "unitPurchasePriceUsd": null
-  }
+  ]
 }
 ```
 
-نطاقات الأسعار تراعي الصلاحيات. إذا لم يكن المستخدم يملك صلاحية قراءة سعر الشراء `EndUser`، يرجع:
+قوائم `groups` و `stores` تعاد مرتبة أبجديًا.
 
-```json
-"unitPurchasePriceUsd": null
-```
+حاليًا لا يتم إرجاع `priceRanges` ضمن `GET /api/materials/filter-options`.
 
 إذا كانت قيمة البحث تطابق `Code` بشكل كامل، يعيد الـ API المادة المطابقة فقط. مثال: البحث عن `100` لا يعيد المادة ذات الكود `1000` إذا كان هناك كود مطابق تماماً `100`.
 
