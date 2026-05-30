@@ -139,7 +139,11 @@ public sealed class MaterialImagesController(
         var thumbnailPath = ResolveExistingThumbnailPath(image.Name, settings.ThumbnailsDirectory);
         if (string.IsNullOrWhiteSpace(thumbnailPath))
         {
-            return NotFound();
+            thumbnailPath = ResolveExistingImagePath(image.Name, settings.ImagesDirectory);
+            if (string.IsNullOrWhiteSpace(thumbnailPath))
+            {
+                return NotFound();
+            }
         }
 
         return PhysicalFile(thumbnailPath, GetContentType(thumbnailPath), Path.GetFileName(thumbnailPath));
@@ -840,14 +844,22 @@ public sealed class MaterialImagesController(
 
     private static string? ResolveExistingThumbnailPath(string? name, string thumbnailsDirectory)
     {
-        var fileName = ExtractFileName(name);
-        if (string.IsNullOrWhiteSpace(fileName))
+        if (string.IsNullOrWhiteSpace(name))
         {
             return null;
         }
 
-        var candidate = Path.GetFullPath(Path.Combine(thumbnailsDirectory, fileName));
-        return System.IO.File.Exists(candidate) ? candidate : null;
+        var value = name.Trim();
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        candidates.Add(Path.GetFullPath(value));
+
+        var fileName = ExtractFileName(value);
+        if (!string.IsNullOrWhiteSpace(fileName))
+        {
+            candidates.Add(Path.GetFullPath(Path.Combine(thumbnailsDirectory, fileName)));
+        }
+
+        return candidates.FirstOrDefault(System.IO.File.Exists);
     }
 
     private static IReadOnlyCollection<string> BuildImagePathCandidates(string? name, string imagesDirectory)
@@ -886,7 +898,7 @@ public sealed class MaterialImagesController(
 
     private static string ResolveThumbnailPath(string? name, string thumbnailsDirectory)
     {
-        var fileName = Path.GetFileName(name ?? string.Empty);
+        var fileName = ExtractFileName(name);
         if (string.IsNullOrWhiteSpace(fileName))
         {
             return string.Empty;
