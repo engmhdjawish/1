@@ -21,4 +21,8 @@ public sealed record CustomerAccountStatementEntryResponse(
     int? ContraAccountNumber,
     string? ContraAccountCode,
     string? ContraAccountName,
-    string? Notes);
+    string? Notes,
+    Guid? MovementCurrencyGuid = null,
+    string? MovementCurrencyName = null,
+    string? MovementCurrencyCode = null,
+    string? MovementCurrencySymbol = null);

@@ -438,10 +438,16 @@ entries.read   (لكشف الحساب التفصيلي)
 - قيمة المدين والدائن بالعملة الرئيسية (`debitMainCurrency` / `creditMainCurrency`)
 - بيانات عملة الحساب في رأس الاستجابة (`accountCurrencyName`, `accountCurrencyCode`, `accountCurrencySymbol`)
 - التحويل لعملة الحساب يتم بسعر التعادل الخاص بكل قيد (`currencyRateUsed`) مع اعتماد سعر الحساب كبديل عند غيابه
+- عملة الحركة نفسها (تُقرأ من `en000.CurrencyGUID` لكل قيد، وليست بالضرورة عملة الحساب):
+  - `movementCurrencyGuid`, `movementCurrencyName`, `movementCurrencyCode`, `movementCurrencySymbol`
+  - عند غياب عملة القيد يتم الرجوع لعملة الحساب
+  - نفس الحقول متاحة أيضًا في `lastCreditorMovement` / `lastDebtorMovement` ضمن ملخص الحساب
 - الإشارة الصافية للحركة (`signedAmount`)
 - الرصيد التراكمي (`runningBalance`)
 - نوع المرجع (فاتورة/دفعة/حسم) مع نوع السند الفعلي (`reasonDocumentType`) ورقم/تاريخ المرجع عند توفرها
 - تفاصيل الحساب المقابل لكل سطر: `contraAccountGuid`, `contraAccountNumber`, `contraAccountCode`, `contraAccountName`
+  - يُؤخذ أولًا من `en000.ContraAccGUID` المباشر
+  - وعند غيابه (كما في القيود المركّبة `ce000`) يُستنتج من سطور `en000` الشقيقة تحت نفس القيد المركّب (`ParentGUID`) باختيار السطر المعاكس بالاتجاه (مدين مقابل دائن)
 - عند غياب تصنيف مرجع مباشر، يتم استنتاج نوع العملية من الحساب المقابل واتجاه القيد (مثل: `قبض` / `دفع` / `مبيع`) مع الاعتماد على اختصارات الأنواع من `vwEt/vwBt/vwNt` عند توفرها.
 
 ## Bills & Vouchers Browse API

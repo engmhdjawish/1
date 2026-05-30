@@ -644,7 +644,8 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
                     .DistinctBy(entry => entry.Guid)
                     .ToArray()
                 : [];
-            var preferredEntry = linkedEntries.FirstOrDefault(entry => entry.CustomerGuid.HasValue || entry.AccountGuid.HasValue)
+            var preferredEntry = linkedEntries.FirstOrDefault(entry => entry.CustomerGuid.HasValue && entry.CustomerGuid != Guid.Empty)
+                ?? linkedEntries.FirstOrDefault(entry => entry.AccountGuid.HasValue && entry.AccountGuid != Guid.Empty)
                 ?? linkedEntries.FirstOrDefault();
 
             Guid? customerGuid;

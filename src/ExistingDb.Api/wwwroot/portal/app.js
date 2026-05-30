@@ -356,25 +356,32 @@
   function renderLedgerRows(rows, statementData) {
     const tbody = document.querySelector("#ledgerTable tbody");
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="9">لا توجد قيود.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10">لا توجد قيود.</td></tr>`;
       return;
     }
 
     const currencySymbol = statementData?.accountCurrencySymbol;
     const currencyCode = statementData?.accountCurrencyCode;
-    tbody.innerHTML = rows.map((entry) => `
+    tbody.innerHTML = rows.map((entry) => {
+      const movementSymbol = entry.movementCurrencySymbol || currencySymbol;
+      const movementCode = entry.movementCurrencyCode || currencyCode;
+      const movementCurrencyLabel = [entry.movementCurrencyCode, entry.movementCurrencySymbol]
+        .filter(Boolean)
+        .join(" ") || entry.movementCurrencyName || "-";
+      return `
       <tr>
         <td>${safeHtml(formatDate(entry.entryDate ?? entry.date))}</td>
         <td>${safeHtml(entry.entryNumber ?? entry.number ?? "-")}</td>
-        <td>${safeHtml(formatMoney(entry.debit, currencySymbol, currencyCode))}</td>
-        <td>${safeHtml(formatMoney(entry.credit, currencySymbol, currencyCode))}</td>
+        <td>${safeHtml(formatMoney(entry.debit, movementSymbol, movementCode))}</td>
+        <td>${safeHtml(formatMoney(entry.credit, movementSymbol, movementCode))}</td>
+        <td>${safeHtml(movementCurrencyLabel)}</td>
         <td>${safeHtml(entry.reasonType || "-")}</td>
         <td>${safeHtml(entry.reasonDocumentType || "-")}</td>
         <td>${safeHtml(entry.referenceNumber ?? "-")}</td>
-        <td>${safeHtml(entry.contraAccountName || "-")}</td>
+        <td>${safeHtml([entry.contraAccountNumber, entry.contraAccountName || entry.contraAccountCode].filter(Boolean).join(" - ") || "-")}</td>
         <td>${safeHtml(formatMoney(entry.runningBalance, currencySymbol, currencyCode))}</td>
-      </tr>
-    `).join("");
+      </tr>`;
+    }).join("");
   }
 
   function bindDocuments() {
@@ -955,21 +962,29 @@
     const statementCurrencyCode = statement.accountCurrencyCode;
     const tbody = document.querySelector("#customerStatementTable tbody");
     if (!entries.length) {
-      tbody.innerHTML = `<tr><td colspan="7">لا توجد حركات.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9">لا توجد حركات.</td></tr>`;
       return;
     }
 
-    tbody.innerHTML = entries.map((entry) => `
+    tbody.innerHTML = entries.map((entry) => {
+      const movementSymbol = entry.movementCurrencySymbol || statementCurrencySymbol;
+      const movementCode = entry.movementCurrencyCode || statementCurrencyCode;
+      const movementCurrencyLabel = [entry.movementCurrencyCode, entry.movementCurrencySymbol]
+        .filter(Boolean)
+        .join(" ") || entry.movementCurrencyName || "-";
+      return `
       <tr>
         <td>${safeHtml(formatDate(entry.entryDate ?? entry.date))}</td>
         <td>${safeHtml(entry.entryNumber ?? entry.number ?? "-")}</td>
-        <td>${safeHtml(formatMoney(entry.debit, statementCurrencySymbol, statementCurrencyCode))}</td>
-        <td>${safeHtml(formatMoney(entry.credit, statementCurrencySymbol, statementCurrencyCode))}</td>
+        <td>${safeHtml(formatMoney(entry.debit, movementSymbol, movementCode))}</td>
+        <td>${safeHtml(formatMoney(entry.credit, movementSymbol, movementCode))}</td>
+        <td>${safeHtml(movementCurrencyLabel)}</td>
         <td>${safeHtml(entry.reasonType || "-")}</td>
         <td>${safeHtml(entry.reasonDocumentType || "-")}</td>
+        <td>${safeHtml([entry.contraAccountNumber, entry.contraAccountName || entry.contraAccountCode].filter(Boolean).join(" - ") || "-")}</td>
         <td>${safeHtml(formatMoney(entry.runningBalance, statementCurrencySymbol, statementCurrencyCode))}</td>
-      </tr>
-    `).join("");
+      </tr>`;
+    }).join("");
   }
 
   function highlightSelectedRow(tableSelector, guid) {
