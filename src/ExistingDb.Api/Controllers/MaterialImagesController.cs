@@ -276,36 +276,56 @@ public sealed class MaterialImagesController(
             : NotFound(new { message = "Material was not found." });
     }
 
-    [HttpDelete("links/materials/{materialGuid:guid}/images/{imageGuid:guid}")]
+    [HttpPost("unlink")]
     [RequirePermission("materials.update")]
     public async Task<IActionResult> UnlinkImageFromMaterial(
-        Guid materialGuid,
-        Guid imageGuid,
+        [FromBody] MaterialImageUnlinkRequest request,
         CancellationToken cancellationToken)
     {
-        if (materialGuid == Guid.Empty)
+        if (request.MaterialGuid is Guid materialGuidValue && materialGuidValue == Guid.Empty)
         {
             return BadRequest(new { message = "MaterialGuid cannot be empty." });
         }
 
-        if (imageGuid == Guid.Empty)
+        if (request.ImageGuid is Guid imageGuidValue && imageGuidValue == Guid.Empty)
         {
             return BadRequest(new { message = "ImageGuid cannot be empty." });
         }
 
-        var material = await mainDbContext.Materials
-            .SingleOrDefaultAsync(item => item.Guid == materialGuid, cancellationToken);
-        if (material is null)
+        var materialGuid = request.MaterialGuid;
+        var imageGuid = request.ImageGuid;
+
+        if (!materialGuid.HasValue && !imageGuid.HasValue)
         {
-            return NotFound(new { message = "Material was not found." });
+            return BadRequest(new { message = "Either MaterialGuid or ImageGuid must be provided." });
         }
 
-        if (material.PictureGuid == imageGuid)
+        var linkedMaterialsQuery = mainDbContext.Materials.AsQueryable();
+        if (materialGuid.HasValue)
+        {
+            linkedMaterialsQuery = linkedMaterialsQuery.Where(material => material.Guid == materialGuid.Value);
+        }
+
+        if (imageGuid.HasValue)
+        {
+            linkedMaterialsQuery = linkedMaterialsQuery.Where(material => material.PictureGuid == imageGuid.Value);
+        }
+
+        var linkedMaterials = await linkedMaterialsQuery
+            .Where(material => material.PictureGuid.HasValue)
+            .ToListAsync(cancellationToken);
+
+        if (linkedMaterials.Count == 0)
+        {
+            return NoContent();
+        }
+
+        foreach (var material in linkedMaterials)
         {
             material.PictureGuid = null;
-            await mainDbContext.SaveChangesAsync(cancellationToken);
         }
 
+        await mainDbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
 

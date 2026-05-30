@@ -161,7 +161,7 @@ GET    /api/material-images/{id}
 GET    /api/material-images/{id}/file
 GET    /api/material-images/{id}/thumbnail
 PUT    /api/material-images/links/materials/{materialGuid}/images/{imageGuid}
-DELETE /api/material-images/links/materials/{materialGuid}/images/{imageGuid}
+POST   /api/material-images/unlink
 DELETE /api/material-images/{id}
 GET    /api/materials/{materialGuid}/images
 GET    /api/material-images/download
@@ -267,12 +267,22 @@ materialGuid  اختياري للربط المباشر عند رفع صورة و
 
 ```http
 PUT    /api/material-images/links/materials/{materialGuid}/images/{imageGuid}
-DELETE /api/material-images/links/materials/{materialGuid}/images/{imageGuid}
+POST   /api/material-images/unlink
+```
+
+Body:
+
+```json
+{
+  "materialGuid": "00000000-0000-0000-0000-000000000000",
+  "imageGuid": "00000000-0000-0000-0000-000000000000"
+}
 ```
 
 ملاحظة:
 
 - عند ربط صورة بمادة، يتم فك أي ربط سابق لنفس الصورة من مواد أخرى لضمان علاقة (صورة واحدة ↔ مادة واحدة).
+- عند فك الربط عبر `POST /api/material-images/unlink` يكفي إرسال `materialGuid` أو `imageGuid` أو كليهما، ولا يشترط إرسال الاثنين معًا.
 
 الاستعلام:
 
