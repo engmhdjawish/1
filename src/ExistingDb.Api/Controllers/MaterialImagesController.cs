@@ -823,17 +823,13 @@ public sealed class MaterialImagesController(
 
     private static string ResolveImagePath(string? name, string imagesDirectory)
     {
-        if (string.IsNullOrWhiteSpace(name))
+        var fileName = ExtractFileName(name);
+        if (string.IsNullOrWhiteSpace(fileName))
         {
             return string.Empty;
         }
 
-        if (Path.IsPathRooted(name))
-        {
-            return Path.GetFullPath(name);
-        }
-
-        return Path.GetFullPath(Path.Combine(imagesDirectory, Path.GetFileName(name)));
+        return Path.GetFullPath(Path.Combine(imagesDirectory, fileName));
     }
 
     private static string? ResolveExistingImagePath(string? name, string imagesDirectory)
@@ -851,13 +847,13 @@ public sealed class MaterialImagesController(
 
         var value = name.Trim();
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        candidates.Add(Path.GetFullPath(value));
 
         var fileName = ExtractFileName(value);
         if (!string.IsNullOrWhiteSpace(fileName))
         {
             candidates.Add(Path.GetFullPath(Path.Combine(thumbnailsDirectory, fileName)));
         }
+        candidates.Add(Path.GetFullPath(value));
 
         return candidates.FirstOrDefault(System.IO.File.Exists);
     }
@@ -871,13 +867,13 @@ public sealed class MaterialImagesController(
 
         var value = name.Trim();
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        candidates.Add(Path.GetFullPath(value));
 
         var fileName = ExtractFileName(value);
         if (!string.IsNullOrWhiteSpace(fileName))
         {
             candidates.Add(Path.GetFullPath(Path.Combine(imagesDirectory, fileName)));
         }
+        candidates.Add(Path.GetFullPath(value));
 
         return candidates.ToArray();
     }
