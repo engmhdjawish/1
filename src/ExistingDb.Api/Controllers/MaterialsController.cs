@@ -26,9 +26,10 @@ public sealed class MaterialsController(
     public async Task<ActionResult<PagedResponse<MaterialResponse>>> GetMaterials(
         [FromQuery] string? search = null,
         [FromQuery] string? code = null,
-        [FromQuery] Guid? storeGuid = null,
         [FromQuery] string? storeGuids = null,
-        [FromQuery] string? quantityMode = null,
+        [FromQuery] bool? detailedQuantity = null,
+        [FromQuery] bool? hasImage = null,
+        [FromQuery] bool? withoutImage = null,
         [FromQuery] string? countryOfOrigin = null,
         [FromQuery] string? countryOfOrigins = null,
         [FromQuery] string? manufacturer = null,
@@ -57,18 +58,18 @@ public sealed class MaterialsController(
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 200);
 
-        var selectedStoreGuids = ParseStoreGuids(storeGuid, storeGuids);
-        if (!TryParseQuantityMode(quantityMode, out var parsedQuantityMode))
+        if (hasImage is true && withoutImage is true)
         {
             return BadRequest(new
             {
-                message = "quantityMode must be either 'total' or 'detailed'.",
-                quantityMode
+                message = "hasImage and withoutImage cannot both be true."
             });
         }
 
+        var selectedStoreGuids = ParseStoreGuids(storeGuids);
+        var withDetailedQuantity = detailedQuantity == true;
         var canReadInventory = await permissionService.HasPermissionAsync(User, "inventory.read", cancellationToken);
-        if ((selectedStoreGuids.Count > 0 || parsedQuantityMode == MaterialQuantityMode.Detailed) && !canReadInventory)
+        if ((selectedStoreGuids.Count > 0 || withDetailedQuantity) && !canReadInventory)
         {
             return Forbid();
         }
@@ -126,6 +127,16 @@ public sealed class MaterialsController(
             query = query.Where(material => material.Code == normalizedCode);
         }
 
+        if (hasImage is true)
+        {
+            query = query.Where(material => material.PictureGuid.HasValue && material.PictureGuid.Value != Guid.Empty);
+        }
+
+        if (withoutImage is true)
+        {
+            query = query.Where(material => !material.PictureGuid.HasValue || material.PictureGuid.Value == Guid.Empty);
+        }
+
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();
@@ -155,7 +166,7 @@ public sealed class MaterialsController(
         var groupLookup = await GetGroupNameByGuidAsync(materials, cancellationToken);
         var imageLookup = await GetImageTitleByGuidAsync(materials, cancellationToken);
         var quantityByMaterial = await GetQuantityByMaterialAsync(materials, selectedStoreGuids, cancellationToken);
-        var storeQuantitiesByMaterial = parsedQuantityMode == MaterialQuantityMode.Detailed
+        var storeQuantitiesByMaterial = withDetailedQuantity
             ? await GetStoreQuantitiesByMaterialAsync(materials, selectedStoreGuids, cancellationToken)
             : new Dictionary<Guid, IReadOnlyCollection<MaterialStoreQuantityResponse>>();
         var response = materials
@@ -174,15 +185,8 @@ public sealed class MaterialsController(
     [HttpGet("stores")]
     public async Task<ActionResult<IReadOnlyCollection<MaterialStoreOptionResponse>>> GetStores(CancellationToken cancellationToken = default)
     {
-        var canReadInventory = await permissionService.HasPermissionAsync(User, "inventory.read", cancellationToken);
-        if (!canReadInventory)
-        {
-            return Forbid();
-        }
-
         var stores = await mainDbContext.Stores
             .AsNoTracking()
-            .Where(store => store.IsActive != false)
             .OrderBy(store => store.Number)
             .ThenBy(store => store.Name)
             .Take(MaxFilterOptions)
@@ -199,7 +203,6 @@ public sealed class MaterialsController(
     public async Task<ActionResult<MaterialFilterOptionsResponse>> GetFilterOptions(CancellationToken cancellationToken)
     {
         var fieldAccess = await permissionService.GetFieldAccessAsync(User, ResourceCode, cancellationToken);
-        var canReadInventory = await permissionService.HasPermissionAsync(User, "inventory.read", cancellationToken);
         var response = new MaterialFilterOptionsResponse(
             await GetDistinctOptionsAsync(mainDbContext.Materials.Select(material => material.Origin), cancellationToken),
             await GetDistinctOptionsAsync(mainDbContext.Materials.Select(material => material.Company), cancellationToken),
@@ -207,7 +210,7 @@ public sealed class MaterialsController(
             await GetDistinctOptionsAsync(mainDbContext.Materials.Select(material => material.Color), cancellationToken),
             await GetDistinctOptionsAsync(mainDbContext.Materials.Select(material => material.Provenance), cancellationToken),
             await GetGroupsAsync(cancellationToken),
-            canReadInventory ? await GetStoresAsync(cancellationToken) : [],
+            await GetStoresAsync(cancellationToken),
             new MaterialPriceRangesResponse(
                 IsFieldDenied(fieldAccess, "Whole")
                     ? null
@@ -225,9 +228,8 @@ public sealed class MaterialsController(
     [HttpGet("{guid:guid}")]
     public async Task<ActionResult<MaterialResponse>> GetMaterial(
         Guid guid,
-        [FromQuery] Guid? storeGuid = null,
         [FromQuery] string? storeGuids = null,
-        [FromQuery] string? quantityMode = null,
+        [FromQuery] bool? detailedQuantity = null,
         CancellationToken cancellationToken = default)
     {
         var material = await mainDbContext.Materials
@@ -239,18 +241,10 @@ public sealed class MaterialsController(
             return NotFound();
         }
 
-        var selectedStoreGuids = ParseStoreGuids(storeGuid, storeGuids);
-        if (!TryParseQuantityMode(quantityMode, out var parsedQuantityMode))
-        {
-            return BadRequest(new
-            {
-                message = "quantityMode must be either 'total' or 'detailed'.",
-                quantityMode
-            });
-        }
-
+        var selectedStoreGuids = ParseStoreGuids(storeGuids);
+        var withDetailedQuantity = detailedQuantity == true;
         var canReadInventory = await permissionService.HasPermissionAsync(User, "inventory.read", cancellationToken);
-        if ((selectedStoreGuids.Count > 0 || parsedQuantityMode == MaterialQuantityMode.Detailed) && !canReadInventory)
+        if ((selectedStoreGuids.Count > 0 || withDetailedQuantity) && !canReadInventory)
         {
             return Forbid();
         }
@@ -258,7 +252,7 @@ public sealed class MaterialsController(
         var quantityByMaterial = await GetQuantityByMaterialAsync([material], selectedStoreGuids, cancellationToken);
         var groupLookup = await GetGroupNameByGuidAsync([material], cancellationToken);
         var imageLookup = await GetImageTitleByGuidAsync([material], cancellationToken);
-        var storeQuantitiesByMaterial = parsedQuantityMode == MaterialQuantityMode.Detailed
+        var storeQuantitiesByMaterial = withDetailedQuantity
             ? await GetStoreQuantitiesByMaterialAsync([material], selectedStoreGuids, cancellationToken)
             : new Dictionary<Guid, IReadOnlyCollection<MaterialStoreQuantityResponse>>();
         var fieldAccess = await permissionService.GetFieldAccessAsync(User, ResourceCode, cancellationToken);
@@ -693,34 +687,9 @@ public sealed class MaterialsController(
         return fieldAccess.TryGetValue(fieldName, out var decision) && decision.ReadMode == FieldAccessMode.Deny;
     }
 
-    private static IReadOnlyCollection<Guid> ParseStoreGuids(Guid? storeGuid, string? storeGuids)
+    private static IReadOnlyCollection<Guid> ParseStoreGuids(string? storeGuids)
     {
-        return ParseGuids(storeGuid, storeGuids);
-    }
-
-    private static bool TryParseQuantityMode(string? rawValue, out MaterialQuantityMode mode)
-    {
-        if (string.IsNullOrWhiteSpace(rawValue))
-        {
-            mode = MaterialQuantityMode.Total;
-            return true;
-        }
-
-        var normalized = rawValue.Trim().ToLowerInvariant();
-        if (normalized is "total" or "sum" or "summary")
-        {
-            mode = MaterialQuantityMode.Total;
-            return true;
-        }
-
-        if (normalized is "detailed" or "detail" or "stores")
-        {
-            mode = MaterialQuantityMode.Detailed;
-            return true;
-        }
-
-        mode = MaterialQuantityMode.Total;
-        return false;
+        return ParseGuids(null, storeGuids);
     }
 
     private static IReadOnlyCollection<Guid> ParseGuids(Guid? singleGuid, string? commaSeparatedGuids)
@@ -773,10 +742,5 @@ public sealed class MaterialsController(
         };
     }
 
-    private enum MaterialQuantityMode
-    {
-        Total = 0,
-        Detailed = 1
-    }
 }
 

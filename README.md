@@ -492,10 +492,14 @@ mt000 -> GET /api/materials/{guid}
 ```text
 GET /api/materials?search=اسم-او-كود-او-باركود
 GET /api/materials?code=MAT-1001
+GET /api/materials?hasImage=true
+GET /api/materials?withoutImage=true
 ```
 
 - الحقل `code` مخصص للمطابقة التامة لكود المادة.
 - يمكن استخدامه مع `search`، وعندها تكون النتيجة تقاطع الفلترين.
+- الحقل `hasImage=true` يجلب المواد التي تحتوي صورة مرتبطة.
+- الحقل `withoutImage=true` يجلب المواد التي لا تحتوي صورة مرتبطة.
 
 ولبناء واجهة فلاتر في موقع أو تطبيق، استخدم:
 
@@ -553,22 +557,21 @@ GET /api/materials/filter-options
 ويدعم فلترة الكمية حسب مستودع واحد أو عدة مستودعات:
 
 ```text
-GET /api/materials?storeGuid=STORE_GUID
 GET /api/materials?storeGuids=STORE_GUID_1,STORE_GUID_2
-GET /api/materials/{guid}?storeGuid=STORE_GUID
+GET /api/materials/{guid}?storeGuids=STORE_GUID_1,STORE_GUID_2
 ```
 
 ويتوفر الآن نمط عرض الكميات:
 
 ```text
-GET /api/materials?quantityMode=total
-GET /api/materials?quantityMode=detailed
-GET /api/materials?storeGuids=STORE_GUID_1,STORE_GUID_2&quantityMode=detailed
-GET /api/materials/{guid}?storeGuids=STORE_GUID_1,STORE_GUID_2&quantityMode=detailed
+GET /api/materials?detailedQuantity=false
+GET /api/materials?detailedQuantity=true
+GET /api/materials?storeGuids=STORE_GUID_1,STORE_GUID_2&detailedQuantity=true
+GET /api/materials/{guid}?storeGuids=STORE_GUID_1,STORE_GUID_2&detailedQuantity=true
 ```
 
-- `quantityMode=total` (الافتراضي): يعيد `warehouseQuantity` كمجموع الكمية ضمن المستودعات الممررة (أو `mt000.Qty` عند عدم تمرير مستودعات).
-- `quantityMode=detailed`: يعيد أيضًا `storeQuantities` (قائمة كميات مفصلة حسب المستودع: `storeGuid`, `storeName`, `quantity`).
+- `detailedQuantity=false` (الافتراضي): يعيد `warehouseQuantity` كمجموع الكمية ضمن المستودعات الممررة (أو `mt000.Qty` عند عدم تمرير مستودعات).
+- `detailedQuantity=true`: يعيد أيضًا `storeQuantities` (قائمة كميات مفصلة حسب المستودع: `storeGuid`, `storeName`, `quantity`).
 - قراءة الكميات حسب المستودعات تتطلب صلاحية:
 
 ```text
@@ -676,7 +679,7 @@ productImageGuid         -> PictureGUID صورة المنتج
 ```text
 groupName         -> اسم الجروب المرتبط بـ groupGuid
 productImageTitle -> عنوان/اسم ملف الصورة المرتبط بـ productImageGuid (من bm000.Name)
-storeQuantities   -> الكميات حسب المستودعات عند quantityMode=detailed
+storeQuantities   -> الكميات حسب المستودعات عند detailedQuantity=true
 ```
 
 تم تبسيط الاستجابة بإزالة الحقول غير الضرورية تشغيليًا مثل:
