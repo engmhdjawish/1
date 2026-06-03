@@ -51,6 +51,8 @@ public sealed class MaterialsController(
         [FromQuery] double? minUnitPurchasePriceUsd = null,
         [FromQuery] double? maxUnitPurchasePriceUsd = null,
         [FromQuery] string? groupBy = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null,
         [FromQuery] bool includeResultFilters = false,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
@@ -102,17 +104,33 @@ public sealed class MaterialsController(
 
         if (!TryParseGroupBy(groupBy, out var grouping))
         {
-            return ValidationProblem(new Dictionary<string, string[]>
+            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
             {
                 ["groupBy"] = ["Invalid value. Supported values: ageCategory, sizeRange, materialType, manufacturer, countryOfOrigin, group."]
-            });
+            }));
+        }
+
+        if (!TryParseSortBy(sortBy, out var sorting))
+        {
+            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["sortBy"] = ["Invalid value. Supported values: number, name, ageCategory, sizeRange, materialType, manufacturer, countryOfOrigin, warehouseQuantity, unitSalePriceSyp, unitSalePriceUsd, unitPurchasePriceUsd."]
+            }));
+        }
+
+        if (!TryParseSortDirection(sortDirection, out var direction))
+        {
+            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["sortDirection"] = ["Invalid value. Supported values: asc, desc."]
+            }));
         }
 
         var query = materialQueryBuilder.Build(filters);
         query = await materialQueryBuilder.ApplySearchFilterAsync(query, filters.Search, cancellationToken);
 
         var totalCount = await query.CountAsync(cancellationToken);
-        var materials = await ApplyOrdering(query, grouping)
+        var materials = await ApplyOrdering(query, grouping, sorting, direction)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -161,8 +179,16 @@ public sealed class MaterialsController(
 
     private static IOrderedQueryable<MaterialRecord> ApplyOrdering(
         IQueryable<MaterialRecord> query,
-        MaterialGroupBy grouping) =>
-        grouping switch
+        MaterialGroupBy grouping,
+        MaterialSortBy sorting,
+        SortDirection direction)
+    {
+        if (grouping == MaterialGroupBy.None)
+        {
+            return ApplyPrimarySort(query, sorting, direction);
+        }
+
+        var grouped = grouping switch
         {
             MaterialGroupBy.AgeCategory => query.OrderBy(material => material.Provenance ?? string.Empty),
             MaterialGroupBy.SizeRange => query.OrderBy(material => material.Dim ?? string.Empty),
@@ -171,8 +197,76 @@ public sealed class MaterialsController(
             MaterialGroupBy.CountryOfOrigin => query.OrderBy(material => material.Origin ?? string.Empty),
             MaterialGroupBy.Group => query.OrderBy(material => material.GroupGuid),
             _ => query.OrderBy(material => material.Number)
-        }
-        .ThenBy(material => material.Name);
+        };
+
+        return ApplySecondarySort(grouped, sorting, direction);
+    }
+
+    private static IOrderedQueryable<MaterialRecord> ApplyPrimarySort(
+        IQueryable<MaterialRecord> query,
+        MaterialSortBy sorting,
+        SortDirection direction)
+    {
+        var descending = direction == SortDirection.Desc;
+        return sorting switch
+        {
+            MaterialSortBy.Name => descending
+                ? query.OrderByDescending(material => material.Name ?? string.Empty).ThenBy(material => material.Number)
+                : query.OrderBy(material => material.Name ?? string.Empty).ThenBy(material => material.Number),
+            MaterialSortBy.AgeCategory => descending
+                ? query.OrderByDescending(material => material.Provenance ?? string.Empty).ThenBy(material => material.Number)
+                : query.OrderBy(material => material.Provenance ?? string.Empty).ThenBy(material => material.Number),
+            MaterialSortBy.SizeRange => descending
+                ? query.OrderByDescending(material => material.Dim ?? string.Empty).ThenBy(material => material.Number)
+                : query.OrderBy(material => material.Dim ?? string.Empty).ThenBy(material => material.Number),
+            MaterialSortBy.MaterialType => descending
+                ? query.OrderByDescending(material => material.Color ?? string.Empty).ThenBy(material => material.Number)
+                : query.OrderBy(material => material.Color ?? string.Empty).ThenBy(material => material.Number),
+            MaterialSortBy.Manufacturer => descending
+                ? query.OrderByDescending(material => material.Company ?? string.Empty).ThenBy(material => material.Number)
+                : query.OrderBy(material => material.Company ?? string.Empty).ThenBy(material => material.Number),
+            MaterialSortBy.CountryOfOrigin => descending
+                ? query.OrderByDescending(material => material.Origin ?? string.Empty).ThenBy(material => material.Number)
+                : query.OrderBy(material => material.Origin ?? string.Empty).ThenBy(material => material.Number),
+            MaterialSortBy.WarehouseQuantity => descending
+                ? query.OrderByDescending(material => material.Qty ?? 0).ThenBy(material => material.Number)
+                : query.OrderBy(material => material.Qty ?? 0).ThenBy(material => material.Number),
+            MaterialSortBy.UnitSalePriceSyp => descending
+                ? query.OrderByDescending(material => material.Whole ?? 0).ThenBy(material => material.Number)
+                : query.OrderBy(material => material.Whole ?? 0).ThenBy(material => material.Number),
+            MaterialSortBy.UnitSalePriceUsd => descending
+                ? query.OrderByDescending(material => material.Half ?? 0).ThenBy(material => material.Number)
+                : query.OrderBy(material => material.Half ?? 0).ThenBy(material => material.Number),
+            MaterialSortBy.UnitPurchasePriceUsd => descending
+                ? query.OrderByDescending(material => material.EndUser ?? 0).ThenBy(material => material.Number)
+                : query.OrderBy(material => material.EndUser ?? 0).ThenBy(material => material.Number),
+            _ => descending
+                ? query.OrderByDescending(material => material.Number).ThenBy(material => material.Name)
+                : query.OrderBy(material => material.Number).ThenBy(material => material.Name)
+        };
+    }
+
+    private static IOrderedQueryable<MaterialRecord> ApplySecondarySort(
+        IOrderedQueryable<MaterialRecord> query,
+        MaterialSortBy sorting,
+        SortDirection direction)
+    {
+        var descending = direction == SortDirection.Desc;
+        return sorting switch
+        {
+            MaterialSortBy.Name => descending ? query.ThenByDescending(material => material.Name ?? string.Empty) : query.ThenBy(material => material.Name ?? string.Empty),
+            MaterialSortBy.AgeCategory => descending ? query.ThenByDescending(material => material.Provenance ?? string.Empty) : query.ThenBy(material => material.Provenance ?? string.Empty),
+            MaterialSortBy.SizeRange => descending ? query.ThenByDescending(material => material.Dim ?? string.Empty) : query.ThenBy(material => material.Dim ?? string.Empty),
+            MaterialSortBy.MaterialType => descending ? query.ThenByDescending(material => material.Color ?? string.Empty) : query.ThenBy(material => material.Color ?? string.Empty),
+            MaterialSortBy.Manufacturer => descending ? query.ThenByDescending(material => material.Company ?? string.Empty) : query.ThenBy(material => material.Company ?? string.Empty),
+            MaterialSortBy.CountryOfOrigin => descending ? query.ThenByDescending(material => material.Origin ?? string.Empty) : query.ThenBy(material => material.Origin ?? string.Empty),
+            MaterialSortBy.WarehouseQuantity => descending ? query.ThenByDescending(material => material.Qty ?? 0) : query.ThenBy(material => material.Qty ?? 0),
+            MaterialSortBy.UnitSalePriceSyp => descending ? query.ThenByDescending(material => material.Whole ?? 0) : query.ThenBy(material => material.Whole ?? 0),
+            MaterialSortBy.UnitSalePriceUsd => descending ? query.ThenByDescending(material => material.Half ?? 0) : query.ThenBy(material => material.Half ?? 0),
+            MaterialSortBy.UnitPurchasePriceUsd => descending ? query.ThenByDescending(material => material.EndUser ?? 0) : query.ThenBy(material => material.EndUser ?? 0),
+            _ => query.ThenBy(material => material.Number).ThenBy(material => material.Name)
+        };
+    }
 
     private async Task<MaterialGroupingResponse> BuildGroupingResponseAsync(
         MaterialGroupBy grouping,
@@ -322,6 +416,51 @@ public sealed class MaterialsController(
         };
 
         return grouping != MaterialGroupBy.Invalid;
+    }
+
+    private static bool TryParseSortBy(string? value, out MaterialSortBy sorting)
+    {
+        sorting = MaterialSortBy.Number;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        sorting = value.Trim().ToLowerInvariant() switch
+        {
+            "number" => MaterialSortBy.Number,
+            "name" => MaterialSortBy.Name,
+            "agecategory" or "age" => MaterialSortBy.AgeCategory,
+            "sizerange" or "size" => MaterialSortBy.SizeRange,
+            "materialtype" or "type" => MaterialSortBy.MaterialType,
+            "manufacturer" => MaterialSortBy.Manufacturer,
+            "countryoforigin" or "origin" => MaterialSortBy.CountryOfOrigin,
+            "warehousequantity" or "qty" => MaterialSortBy.WarehouseQuantity,
+            "unitsalepricesyp" => MaterialSortBy.UnitSalePriceSyp,
+            "unitsalepriceusd" => MaterialSortBy.UnitSalePriceUsd,
+            "unitpurchasepriceusd" => MaterialSortBy.UnitPurchasePriceUsd,
+            _ => MaterialSortBy.Invalid
+        };
+
+        return sorting != MaterialSortBy.Invalid;
+    }
+
+    private static bool TryParseSortDirection(string? value, out SortDirection direction)
+    {
+        direction = SortDirection.Asc;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        direction = value.Trim().ToLowerInvariant() switch
+        {
+            "asc" => SortDirection.Asc,
+            "desc" => SortDirection.Desc,
+            _ => SortDirection.Invalid
+        };
+
+        return direction != SortDirection.Invalid;
     }
 
     private static string ToGroupByValue(MaterialGroupBy grouping) =>
@@ -777,6 +916,29 @@ public sealed class MaterialsController(
         Manufacturer = 4,
         CountryOfOrigin = 5,
         Group = 6
+    }
+
+    private enum MaterialSortBy
+    {
+        Invalid = -1,
+        Number = 0,
+        Name = 1,
+        AgeCategory = 2,
+        SizeRange = 3,
+        MaterialType = 4,
+        Manufacturer = 5,
+        CountryOfOrigin = 6,
+        WarehouseQuantity = 7,
+        UnitSalePriceSyp = 8,
+        UnitSalePriceUsd = 9,
+        UnitPurchasePriceUsd = 10
+    }
+
+    private enum SortDirection
+    {
+        Invalid = -1,
+        Asc = 0,
+        Desc = 1
     }
 }
 

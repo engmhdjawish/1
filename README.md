@@ -480,6 +480,21 @@ GET /api/materials?groupBy=ageCategory&includeResultFilters=true
 ageCategory | sizeRange | materialType | manufacturer | countryOfOrigin | group
 ```
 
+ويدعم endpoint أيضاً **sorting اختياري**:
+
+```text
+GET /api/materials?sortBy=name&sortDirection=asc
+```
+
+القيم المدعومة لـ `sortBy`:
+
+```text
+number | name | ageCategory | sizeRange | materialType | manufacturer | countryOfOrigin | warehouseQuantity | unitSalePriceSyp | unitSalePriceUsd | unitPurchasePriceUsd
+```
+
+- `sortDirection`: `asc` (الافتراضي) أو `desc`.
+- عند استخدام `groupBy` مع `sortBy`، يتم الترتيب أولاً حسب المجموعة ثم ترتيب العناصر داخل كل مجموعة حسب `sortBy`.
+
 عند تمرير `groupBy` يرجع حقل إضافي `grouping`:
 
 ```json
