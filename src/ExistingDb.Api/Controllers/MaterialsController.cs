@@ -1,9 +1,9 @@
 using System.Linq.Expressions;
 using ExistingDb.Api.Authorization;
-using ExistingDb.Api.Contracts.Common;
 using ExistingDb.Api.Contracts.Materials;
 using ExistingDb.Api.Data;
 using ExistingDb.Api.Data.MainDb;
+using ExistingDb.Api.Services.Materials;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,13 +17,15 @@ namespace ExistingDb.Api.Controllers;
 public sealed class MaterialsController(
     MainDbContext mainDbContext,
     IPermissionService permissionService,
-    IFieldMasker fieldMasker) : ControllerBase
+    IFieldMasker fieldMasker,
+    MaterialQueryBuilder materialQueryBuilder,
+    MaterialResultFiltersService materialResultFiltersService) : ControllerBase
 {
     private const string ResourceCode = "materials";
     private const int MaxFilterOptions = 500;
 
     [HttpGet]
-    public async Task<ActionResult<PagedResponse<MaterialResponse>>> GetMaterials(
+    public async Task<ActionResult<MaterialPagedResponse>> GetMaterials(
         [FromQuery] string? search = null,
         [FromQuery] Guid? storeGuid = null,
         [FromQuery] string? storeGuids = null,
@@ -48,6 +50,7 @@ public sealed class MaterialsController(
         [FromQuery] double? maxUnitSalePriceUsd = null,
         [FromQuery] double? minUnitPurchasePriceUsd = null,
         [FromQuery] double? maxUnitPurchasePriceUsd = null,
+        [FromQuery] bool includeResultFilters = false,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
@@ -55,34 +58,10 @@ public sealed class MaterialsController(
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 200);
 
-        var selectedStoreGuids = ParseStoreGuids(storeGuid, storeGuids);
-        var selectedGroupGuids = ParseGuids(groupGuid, groupGuids);
-        var fieldAccess = await permissionService.GetFieldAccessAsync(User, ResourceCode, cancellationToken);
-        var priceFilterAccessResult = ValidatePriceFilterAccess(
-            fieldAccess,
-            minUnitSalePriceSyp,
-            maxUnitSalePriceSyp,
-            minUnitSalePriceUsd,
-            maxUnitSalePriceUsd,
-            minUnitPurchasePriceUsd,
-            maxUnitPurchasePriceUsd);
-
-        if (priceFilterAccessResult is not null)
-        {
-            return priceFilterAccessResult;
-        }
-
-        var query = mainDbContext.Materials.AsNoTracking();
-
-        query = ApplyStoreAndQuantityFilters(
-            query,
-            selectedStoreGuids,
-            minWarehouseQuantity,
-            maxWarehouseQuantity,
-            isAvailable);
-
-        query = ApplyTextFilters(
-            query,
+        var filters = MaterialListFilters.FromQuery(
+            search,
+            storeGuid,
+            storeGuids,
             countryOfOrigin,
             countryOfOrigins,
             manufacturer,
@@ -92,10 +71,12 @@ public sealed class MaterialsController(
             materialType,
             materialTypes,
             ageCategory,
-            ageCategories);
-        query = ApplyGroupFilter(query, selectedGroupGuids);
-        query = ApplyPriceFilters(
-            query,
+            ageCategories,
+            groupGuid,
+            groupGuids,
+            minWarehouseQuantity,
+            maxWarehouseQuantity,
+            isAvailable,
             minUnitSalePriceSyp,
             maxUnitSalePriceSyp,
             minUnitSalePriceUsd,
@@ -103,23 +84,23 @@ public sealed class MaterialsController(
             minUnitPurchasePriceUsd,
             maxUnitPurchasePriceUsd);
 
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var term = search.Trim();
-            var exactCodeExists = await mainDbContext.Materials
-                .AsNoTracking()
-                .AnyAsync(material => material.Code == term, cancellationToken);
+        var fieldAccess = await permissionService.GetFieldAccessAsync(User, ResourceCode, cancellationToken);
+        var priceFilterAccessResult = ValidatePriceFilterAccess(
+            fieldAccess,
+            filters.MinUnitSalePriceSyp,
+            filters.MaxUnitSalePriceSyp,
+            filters.MinUnitSalePriceUsd,
+            filters.MaxUnitSalePriceUsd,
+            filters.MinUnitPurchasePriceUsd,
+            filters.MaxUnitPurchasePriceUsd);
 
-            query = exactCodeExists
-                ? query.Where(material => material.Code == term)
-                : query.Where(material =>
-                    (material.Name != null && material.Name.Contains(term)) ||
-                    (material.LatinName != null && material.LatinName.Contains(term)) ||
-                    (material.Code != null && material.Code.Contains(term)) ||
-                    (material.BarCode != null && material.BarCode.Contains(term)) ||
-                    (material.BarCode2 != null && material.BarCode2.Contains(term)) ||
-                    (material.BarCode3 != null && material.BarCode3.Contains(term)));
+        if (priceFilterAccessResult is not null)
+        {
+            return priceFilterAccessResult;
         }
+
+        var query = materialQueryBuilder.Build(filters);
+        query = await materialQueryBuilder.ApplySearchFilterAsync(query, filters.Search, cancellationToken);
 
         var totalCount = await query.CountAsync(cancellationToken);
         var materials = await query
@@ -129,13 +110,41 @@ public sealed class MaterialsController(
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        var quantityByMaterial = await GetQuantityByMaterialAsync(materials, selectedStoreGuids, cancellationToken);
-        var response = materials
+        var quantityByMaterial = await GetQuantityByMaterialAsync(materials, filters.StoreGuids, cancellationToken);
+        var items = materials
             .Select(material => ToResponse(material, fieldAccess, quantityByMaterial.GetValueOrDefault(material.Guid, material.Qty)))
             .ToArray();
 
-        return Ok(new PagedResponse<MaterialResponse>(response, page, pageSize, totalCount));
+        MaterialAppliedFiltersResponse? appliedFilters = null;
+        MaterialResultFiltersResponse? resultFilters = null;
+        if (includeResultFilters)
+        {
+            appliedFilters = ToAppliedFilters(filters);
+            resultFilters = await materialResultFiltersService.BuildAsync(filters, filters.Search, cancellationToken);
+        }
+
+        return Ok(new MaterialPagedResponse(items, page, pageSize, totalCount, appliedFilters, resultFilters));
     }
+
+    private static MaterialAppliedFiltersResponse ToAppliedFilters(MaterialListFilters filters) =>
+        new(
+            filters.Search,
+            filters.StoreGuids,
+            filters.CountryOfOrigins,
+            filters.Manufacturers,
+            filters.SizeRanges,
+            filters.MaterialTypes,
+            filters.AgeCategories,
+            filters.GroupGuids,
+            filters.MinWarehouseQuantity,
+            filters.MaxWarehouseQuantity,
+            filters.IsAvailable,
+            filters.MinUnitSalePriceSyp,
+            filters.MaxUnitSalePriceSyp,
+            filters.MinUnitSalePriceUsd,
+            filters.MaxUnitSalePriceUsd,
+            filters.MinUnitPurchasePriceUsd,
+            filters.MaxUnitPurchasePriceUsd);
 
     [HttpGet("filter-options")]
     public async Task<ActionResult<MaterialFilterOptionsResponse>> GetFilterOptions(CancellationToken cancellationToken)
