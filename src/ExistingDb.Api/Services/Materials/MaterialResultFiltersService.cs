@@ -44,7 +44,7 @@ public sealed class MaterialResultFiltersService(MainDbContext mainDbContext, Ma
             .Take(MaxFacetValues)
             .ToListAsync(cancellationToken);
 
-        return ToFacetValues(rows);
+        return rows.Select(row => new FacetValueResponse(row.Value, row.Count)).ToList();
     }
 
     private async Task<IReadOnlyCollection<FacetValueResponse>> GetDimFacetAsync(
@@ -62,7 +62,7 @@ public sealed class MaterialResultFiltersService(MainDbContext mainDbContext, Ma
             .Take(MaxFacetValues)
             .ToListAsync(cancellationToken);
 
-        return ToFacetValues(rows);
+        return rows.Select(row => new FacetValueResponse(row.Value, row.Count)).ToList();
     }
 
     private async Task<IReadOnlyCollection<FacetValueResponse>> GetColorFacetAsync(
@@ -80,7 +80,7 @@ public sealed class MaterialResultFiltersService(MainDbContext mainDbContext, Ma
             .Take(MaxFacetValues)
             .ToListAsync(cancellationToken);
 
-        return ToFacetValues(rows);
+        return rows.Select(row => new FacetValueResponse(row.Value, row.Count)).ToList();
     }
 
     private async Task<IReadOnlyCollection<FacetValueResponse>> GetCompanyFacetAsync(
@@ -98,7 +98,7 @@ public sealed class MaterialResultFiltersService(MainDbContext mainDbContext, Ma
             .Take(MaxFacetValues)
             .ToListAsync(cancellationToken);
 
-        return ToFacetValues(rows);
+        return rows.Select(row => new FacetValueResponse(row.Value, row.Count)).ToList();
     }
 
     private async Task<IReadOnlyCollection<FacetValueResponse>> GetOriginFacetAsync(
@@ -116,16 +116,8 @@ public sealed class MaterialResultFiltersService(MainDbContext mainDbContext, Ma
             .Take(MaxFacetValues)
             .ToListAsync(cancellationToken);
 
-        return ToFacetValues(rows);
+        return rows.Select(row => new FacetValueResponse(row.Value, row.Count)).ToList();
     }
-
-    private static IReadOnlyCollection<FacetValueResponse> ToFacetValues(
-        IEnumerable<(string Value, int Count)> rows) =>
-        rows.Select(row => new FacetValueResponse(row.Value, row.Count)).ToList();
-
-    private static IReadOnlyCollection<FacetValueResponse> ToFacetValues(
-        IEnumerable<{string Value, int Count}> rows) =>
-        rows.Select(row => new FacetValueResponse(row.Value, row.Count)).ToList();
 
     private async Task<IQueryable<ExistingDb.Api.Data.MainDb.MaterialRecord>> BuildFacetQueryAsync(
         MaterialListFilters filters,
