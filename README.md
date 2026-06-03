@@ -468,6 +468,39 @@ GET /api/materials?ageCategories=رجالي&includeResultFilters=true
 - لكل بُعد (عمر، مقاس، …) يُستثنى فلتر ذلك البُعد عند حساب قيمه — فيبقى بإمكان العميل التبديل من رجالي إلى نسواني مع الإبقاء على باقي الفلاتر في الطلب.
 - `includeResultFilters=false` (الافتراضي) يعيد `items` فقط بدون `appliedFilters` / `resultFilters`.
 
+ويدعم endpoint نفسه **grouping اختياري** (لتنظيم النتائج ضمن مجموعات واضحة):
+
+```text
+GET /api/materials?groupBy=ageCategory&includeResultFilters=true
+```
+
+القيم المدعومة لـ `groupBy`:
+
+```text
+ageCategory | sizeRange | materialType | manufacturer | countryOfOrigin | group
+```
+
+عند تمرير `groupBy` يرجع حقل إضافي `grouping`:
+
+```json
+{
+  "grouping": {
+    "groupBy": "ageCategory",
+    "groups": [
+      {
+        "key": "رجالي",
+        "displayName": "رجالي",
+        "totalCount": 52,
+        "items": [ /* عناصر هذه المجموعة ضمن الصفحة الحالية */ ]
+      }
+    ]
+  }
+}
+```
+
+- `totalCount` داخل كل مجموعة محسوب من **كل** النتائج المطابقة (قبل pagination).
+- `items` داخل كل مجموعة تمثل عناصر هذه المجموعة في الصفحة الحالية فقط.
+
 ولبناء قوائم فلاتر **عامة من كل الأمين** (إدارة / تهيئة)، استخدم:
 
 ```text

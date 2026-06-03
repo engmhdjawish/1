@@ -50,6 +50,7 @@ public sealed class MaterialsController(
         [FromQuery] double? maxUnitSalePriceUsd = null,
         [FromQuery] double? minUnitPurchasePriceUsd = null,
         [FromQuery] double? maxUnitPurchasePriceUsd = null,
+        [FromQuery] string? groupBy = null,
         [FromQuery] bool includeResultFilters = false,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
@@ -99,13 +100,19 @@ public sealed class MaterialsController(
             return priceFilterAccessResult;
         }
 
+        if (!TryParseGroupBy(groupBy, out var grouping))
+        {
+            return ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["groupBy"] = ["Invalid value. Supported values: ageCategory, sizeRange, materialType, manufacturer, countryOfOrigin, group."]
+            });
+        }
+
         var query = materialQueryBuilder.Build(filters);
         query = await materialQueryBuilder.ApplySearchFilterAsync(query, filters.Search, cancellationToken);
 
         var totalCount = await query.CountAsync(cancellationToken);
-        var materials = await query
-            .OrderBy(material => material.Number)
-            .ThenBy(material => material.Name)
+        var materials = await ApplyOrdering(query, grouping)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -123,7 +130,13 @@ public sealed class MaterialsController(
             resultFilters = await materialResultFiltersService.BuildAsync(filters, filters.Search, cancellationToken);
         }
 
-        return Ok(new MaterialPagedResponse(items, page, pageSize, totalCount, appliedFilters, resultFilters));
+        MaterialGroupingResponse? groupingResponse = null;
+        if (grouping != MaterialGroupBy.None)
+        {
+            groupingResponse = await BuildGroupingResponseAsync(grouping, query, materials, items, cancellationToken);
+        }
+
+        return Ok(new MaterialPagedResponse(items, page, pageSize, totalCount, appliedFilters, resultFilters, groupingResponse));
     }
 
     private static MaterialAppliedFiltersResponse ToAppliedFilters(MaterialListFilters filters) =>
@@ -145,6 +158,183 @@ public sealed class MaterialsController(
             filters.MaxUnitSalePriceUsd,
             filters.MinUnitPurchasePriceUsd,
             filters.MaxUnitPurchasePriceUsd);
+
+    private static IOrderedQueryable<MaterialRecord> ApplyOrdering(
+        IQueryable<MaterialRecord> query,
+        MaterialGroupBy grouping) =>
+        grouping switch
+        {
+            MaterialGroupBy.AgeCategory => query.OrderBy(material => material.Provenance ?? string.Empty),
+            MaterialGroupBy.SizeRange => query.OrderBy(material => material.Dim ?? string.Empty),
+            MaterialGroupBy.MaterialType => query.OrderBy(material => material.Color ?? string.Empty),
+            MaterialGroupBy.Manufacturer => query.OrderBy(material => material.Company ?? string.Empty),
+            MaterialGroupBy.CountryOfOrigin => query.OrderBy(material => material.Origin ?? string.Empty),
+            MaterialGroupBy.Group => query.OrderBy(material => material.GroupGuid),
+            _ => query.OrderBy(material => material.Number)
+        }
+        .ThenBy(material => material.Name);
+
+    private async Task<MaterialGroupingResponse> BuildGroupingResponseAsync(
+        MaterialGroupBy grouping,
+        IQueryable<MaterialRecord> filteredQuery,
+        IReadOnlyCollection<MaterialRecord> pageMaterials,
+        IReadOnlyCollection<MaterialResponse> pageItems,
+        CancellationToken cancellationToken)
+    {
+        var counts = await GetGroupingCountsAsync(grouping, filteredQuery, cancellationToken);
+        var itemsByGuid = pageItems.ToDictionary(item => item.MaterialGuid);
+        var groupedPageItems = pageMaterials
+            .Select(material => new
+            {
+                Key = GetGroupingKey(material, grouping),
+                Item = itemsByGuid.GetValueOrDefault(material.Guid)
+            })
+            .Where(row => !string.IsNullOrWhiteSpace(row.Key) && row.Item is not null)
+            .GroupBy(row => row.Key!)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyCollection<MaterialResponse>)group.Select(row => row.Item!).ToList());
+
+        var groupedResponse = counts
+            .Select(group => new MaterialGroupBucketResponse(
+                group.Key,
+                group.DisplayName,
+                group.TotalCount,
+                groupedPageItems.GetValueOrDefault(group.Key, Array.Empty<MaterialResponse>())))
+            .ToList();
+
+        return new MaterialGroupingResponse(ToGroupByValue(grouping), groupedResponse);
+    }
+
+    private async Task<IReadOnlyCollection<MaterialGroupingCount>> GetGroupingCountsAsync(
+        MaterialGroupBy grouping,
+        IQueryable<MaterialRecord> query,
+        CancellationToken cancellationToken)
+    {
+        return grouping switch
+        {
+            MaterialGroupBy.AgeCategory => await query
+                .Where(material => material.Provenance != null && material.Provenance != string.Empty)
+                .GroupBy(material => material.Provenance!)
+                .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count()))
+                .OrderBy(group => group.DisplayName)
+                .ToListAsync(cancellationToken),
+            MaterialGroupBy.SizeRange => await query
+                .Where(material => material.Dim != null && material.Dim != string.Empty)
+                .GroupBy(material => material.Dim!)
+                .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count()))
+                .OrderBy(group => group.DisplayName)
+                .ToListAsync(cancellationToken),
+            MaterialGroupBy.MaterialType => await query
+                .Where(material => material.Color != null && material.Color != string.Empty)
+                .GroupBy(material => material.Color!)
+                .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count()))
+                .OrderBy(group => group.DisplayName)
+                .ToListAsync(cancellationToken),
+            MaterialGroupBy.Manufacturer => await query
+                .Where(material => material.Company != null && material.Company != string.Empty)
+                .GroupBy(material => material.Company!)
+                .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count()))
+                .OrderBy(group => group.DisplayName)
+                .ToListAsync(cancellationToken),
+            MaterialGroupBy.CountryOfOrigin => await query
+                .Where(material => material.Origin != null && material.Origin != string.Empty)
+                .GroupBy(material => material.Origin!)
+                .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count()))
+                .OrderBy(group => group.DisplayName)
+                .ToListAsync(cancellationToken),
+            MaterialGroupBy.Group => await GetGroupGuidCountsAsync(query, cancellationToken),
+            _ => []
+        };
+    }
+
+    private async Task<IReadOnlyCollection<MaterialGroupingCount>> GetGroupGuidCountsAsync(
+        IQueryable<MaterialRecord> query,
+        CancellationToken cancellationToken)
+    {
+        var countsByGroup = await query
+            .Where(material => material.GroupGuid.HasValue)
+            .GroupBy(material => material.GroupGuid!.Value)
+            .Select(group => new
+            {
+                GroupGuid = group.Key,
+                Count = group.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        if (countsByGroup.Count == 0)
+        {
+            return [];
+        }
+
+        var groupGuids = countsByGroup.Select(group => group.GroupGuid).ToArray();
+        var groups = await mainDbContext.MaterialGroups
+            .AsNoTracking()
+            .Where(group => groupGuids.Contains(group.Guid))
+            .Select(group => new
+            {
+                group.Guid,
+                group.Name,
+                group.Code
+            })
+            .ToDictionaryAsync(group => group.Guid, cancellationToken);
+
+        return countsByGroup
+            .Select(group =>
+            {
+                groups.TryGetValue(group.GroupGuid, out var groupData);
+                var displayName = groupData?.Name ?? groupData?.Code ?? group.GroupGuid.ToString();
+                return new MaterialGroupingCount(group.GroupGuid.ToString(), displayName, group.Count);
+            })
+            .OrderBy(group => group.DisplayName)
+            .ToList();
+    }
+
+    private static string? GetGroupingKey(MaterialRecord material, MaterialGroupBy grouping) =>
+        grouping switch
+        {
+            MaterialGroupBy.AgeCategory => material.Provenance,
+            MaterialGroupBy.SizeRange => material.Dim,
+            MaterialGroupBy.MaterialType => material.Color,
+            MaterialGroupBy.Manufacturer => material.Company,
+            MaterialGroupBy.CountryOfOrigin => material.Origin,
+            MaterialGroupBy.Group => material.GroupGuid?.ToString(),
+            _ => null
+        };
+
+    private static bool TryParseGroupBy(string? value, out MaterialGroupBy grouping)
+    {
+        grouping = MaterialGroupBy.None;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        grouping = value.Trim().ToLowerInvariant() switch
+        {
+            "agecategory" or "age" => MaterialGroupBy.AgeCategory,
+            "sizerange" or "size" => MaterialGroupBy.SizeRange,
+            "materialtype" or "type" => MaterialGroupBy.MaterialType,
+            "manufacturer" => MaterialGroupBy.Manufacturer,
+            "countryoforigin" or "origin" => MaterialGroupBy.CountryOfOrigin,
+            "group" => MaterialGroupBy.Group,
+            _ => MaterialGroupBy.Invalid
+        };
+
+        return grouping != MaterialGroupBy.Invalid;
+    }
+
+    private static string ToGroupByValue(MaterialGroupBy grouping) =>
+        grouping switch
+        {
+            MaterialGroupBy.AgeCategory => "ageCategory",
+            MaterialGroupBy.SizeRange => "sizeRange",
+            MaterialGroupBy.MaterialType => "materialType",
+            MaterialGroupBy.Manufacturer => "manufacturer",
+            MaterialGroupBy.CountryOfOrigin => "countryOfOrigin",
+            MaterialGroupBy.Group => "group",
+            _ => "none"
+        };
 
     [HttpGet("filter-options")]
     public async Task<ActionResult<MaterialFilterOptionsResponse>> GetFilterOptions(CancellationToken cancellationToken)
@@ -573,6 +763,20 @@ public sealed class MaterialsController(
             FieldAccessMode.Mask => fieldMasker.Mask(value.Value, decision.MaskingStrategy),
             _ => value
         };
+    }
+
+    private sealed record MaterialGroupingCount(string Key, string? DisplayName, int TotalCount);
+
+    private enum MaterialGroupBy
+    {
+        Invalid = -1,
+        None = 0,
+        AgeCategory = 1,
+        SizeRange = 2,
+        MaterialType = 3,
+        Manufacturer = 4,
+        CountryOfOrigin = 5,
+        Group = 6
     }
 }
 

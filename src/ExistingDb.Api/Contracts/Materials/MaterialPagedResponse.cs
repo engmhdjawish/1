@@ -6,7 +6,8 @@ public sealed record MaterialPagedResponse(
     int PageSize,
     int TotalCount,
     MaterialAppliedFiltersResponse? AppliedFilters = null,
-    MaterialResultFiltersResponse? ResultFilters = null);
+    MaterialResultFiltersResponse? ResultFilters = null,
+    MaterialGroupingResponse? Grouping = null);
 
 public sealed record MaterialAppliedFiltersResponse(
     string? Search,
@@ -42,3 +43,13 @@ public sealed record GroupFacetValueResponse(
     string? Code,
     string? Name,
     int Count);
+
+public sealed record MaterialGroupingResponse(
+    string GroupBy,
+    IReadOnlyCollection<MaterialGroupBucketResponse> Groups);
+
+public sealed record MaterialGroupBucketResponse(
+    string Key,
+    string? DisplayName,
+    int TotalCount,
+    IReadOnlyCollection<MaterialResponse> Items);
