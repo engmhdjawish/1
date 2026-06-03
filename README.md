@@ -480,20 +480,35 @@ GET /api/materials?groupBy=ageCategory&includeResultFilters=true
 ageCategory | sizeRange | materialType | manufacturer | countryOfOrigin | group
 ```
 
-ويدعم endpoint أيضاً **sorting اختياري**:
+ويدعم endpoint أيضاً **sorting اختياري**.
+
+## ترتيب متعدد (موصى به)
 
 ```text
-GET /api/materials?sortBy=name&sortDirection=asc
+GET /api/materials?sort=ageCategory:asc,materialType:asc,-manufacturer
 ```
 
-القيم المدعومة لـ `sortBy`:
+- `sort` يقبل مفاتيح مفصولة بفواصل.
+- الصيغة المدعومة لكل مفتاح:
+  - `field:asc`
+  - `field:desc`
+  - `-field` (اختصار `desc`)
+  - `+field` (اختصار `asc`)
+
+المفاتيح المدعومة:
 
 ```text
 number | name | ageCategory | sizeRange | materialType | manufacturer | countryOfOrigin | warehouseQuantity | unitSalePriceSyp | unitSalePriceUsd | unitPurchasePriceUsd
 ```
 
+## ترتيب أحادي (توافق خلفي)
+
+```text
+GET /api/materials?sortBy=name&sortDirection=asc
+```
+
 - `sortDirection`: `asc` (الافتراضي) أو `desc`.
-- عند استخدام `groupBy` مع `sortBy`، يتم الترتيب أولاً حسب المجموعة ثم ترتيب العناصر داخل كل مجموعة حسب `sortBy`.
+- عند استخدام `groupBy` مع `sort`/`sortBy`، يتم الترتيب أولاً حسب المجموعة ثم ترتيب العناصر داخل كل مجموعة.
 
 عند تمرير `groupBy` يرجع حقل إضافي `grouping`:
 

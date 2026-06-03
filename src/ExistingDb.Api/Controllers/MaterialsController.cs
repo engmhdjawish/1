@@ -53,6 +53,7 @@ public sealed class MaterialsController(
         [FromQuery] string? groupBy = null,
         [FromQuery] string? sortBy = null,
         [FromQuery] string? sortDirection = null,
+        [FromQuery] string? sort = null,
         [FromQuery] bool includeResultFilters = false,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
@@ -110,27 +111,43 @@ public sealed class MaterialsController(
             }));
         }
 
-        if (!TryParseSortBy(sortBy, out var sorting))
+        IReadOnlyCollection<MaterialSortClause> sortClauses;
+        if (!string.IsNullOrWhiteSpace(sort))
         {
-            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+            if (!TryParseSort(sort, out sortClauses))
             {
-                ["sortBy"] = ["Invalid value. Supported values: number, name, ageCategory, sizeRange, materialType, manufacturer, countryOfOrigin, warehouseQuantity, unitSalePriceSyp, unitSalePriceUsd, unitPurchasePriceUsd."]
-            }));
+                return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+                {
+                    ["sort"] = ["Invalid value. Use comma-separated fields, e.g. ageCategory:asc,materialType:asc,-manufacturer."]
+                }));
+            }
         }
-
-        if (!TryParseSortDirection(sortDirection, out var direction))
+        else
         {
-            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+            if (!TryParseSortBy(sortBy, out var sorting))
             {
-                ["sortDirection"] = ["Invalid value. Supported values: asc, desc."]
-            }));
+                return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+                {
+                    ["sortBy"] = ["Invalid value. Supported values: number, name, ageCategory, sizeRange, materialType, manufacturer, countryOfOrigin, warehouseQuantity, unitSalePriceSyp, unitSalePriceUsd, unitPurchasePriceUsd."]
+                }));
+            }
+
+            if (!TryParseSortDirection(sortDirection, out var direction))
+            {
+                return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+                {
+                    ["sortDirection"] = ["Invalid value. Supported values: asc, desc."]
+                }));
+            }
+
+            sortClauses = [new MaterialSortClause(sorting, direction)];
         }
 
         var query = materialQueryBuilder.Build(filters);
         query = await materialQueryBuilder.ApplySearchFilterAsync(query, filters.Search, cancellationToken);
 
         var totalCount = await query.CountAsync(cancellationToken);
-        var materials = await ApplyOrdering(query, grouping, sorting, direction)
+        var materials = await ApplyOrdering(query, grouping, sortClauses)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -180,26 +197,29 @@ public sealed class MaterialsController(
     private static IOrderedQueryable<MaterialRecord> ApplyOrdering(
         IQueryable<MaterialRecord> query,
         MaterialGroupBy grouping,
-        MaterialSortBy sorting,
-        SortDirection direction)
+        IReadOnlyCollection<MaterialSortClause> sortClauses)
     {
-        if (grouping == MaterialGroupBy.None)
+        IOrderedQueryable<MaterialRecord>? ordered = grouping == MaterialGroupBy.None
+            ? null
+            : grouping switch
+            {
+                MaterialGroupBy.AgeCategory => query.OrderBy(material => material.Provenance ?? string.Empty),
+                MaterialGroupBy.SizeRange => query.OrderBy(material => material.Dim ?? string.Empty),
+                MaterialGroupBy.MaterialType => query.OrderBy(material => material.Color ?? string.Empty),
+                MaterialGroupBy.Manufacturer => query.OrderBy(material => material.Company ?? string.Empty),
+                MaterialGroupBy.CountryOfOrigin => query.OrderBy(material => material.Origin ?? string.Empty),
+                MaterialGroupBy.Group => query.OrderBy(material => material.GroupGuid),
+                _ => null
+            };
+
+        foreach (var sortClause in sortClauses)
         {
-            return ApplyPrimarySort(query, sorting, direction);
+            ordered = ordered is null
+                ? ApplyPrimarySort(query, sortClause.SortBy, sortClause.Direction)
+                : ApplySecondarySort(ordered, sortClause.SortBy, sortClause.Direction);
         }
 
-        var grouped = grouping switch
-        {
-            MaterialGroupBy.AgeCategory => query.OrderBy(material => material.Provenance ?? string.Empty),
-            MaterialGroupBy.SizeRange => query.OrderBy(material => material.Dim ?? string.Empty),
-            MaterialGroupBy.MaterialType => query.OrderBy(material => material.Color ?? string.Empty),
-            MaterialGroupBy.Manufacturer => query.OrderBy(material => material.Company ?? string.Empty),
-            MaterialGroupBy.CountryOfOrigin => query.OrderBy(material => material.Origin ?? string.Empty),
-            MaterialGroupBy.Group => query.OrderBy(material => material.GroupGuid),
-            _ => query.OrderBy(material => material.Number)
-        };
-
-        return ApplySecondarySort(grouped, sorting, direction);
+        return ordered ?? query.OrderBy(material => material.Number).ThenBy(material => material.Name);
     }
 
     private static IOrderedQueryable<MaterialRecord> ApplyPrimarySort(
@@ -443,6 +463,81 @@ public sealed class MaterialsController(
         };
 
         return sorting != MaterialSortBy.Invalid;
+    }
+
+    private static bool TryParseSort(
+        string value,
+        out IReadOnlyCollection<MaterialSortClause> sortClauses)
+    {
+        var clauses = new List<MaterialSortClause>();
+        foreach (var token in value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!TryParseSortToken(token, out var clause))
+            {
+                sortClauses = [];
+                return false;
+            }
+
+            if (clauses.All(existing => existing.SortBy != clause.SortBy))
+            {
+                clauses.Add(clause);
+            }
+        }
+
+        sortClauses = clauses.Count == 0
+            ? [new MaterialSortClause(MaterialSortBy.Number, SortDirection.Asc)]
+            : clauses;
+        return true;
+    }
+
+    private static bool TryParseSortToken(string token, out MaterialSortClause clause)
+    {
+        clause = new MaterialSortClause(MaterialSortBy.Number, SortDirection.Asc);
+        var trimmed = token.Trim();
+        if (trimmed.Length == 0)
+        {
+            return false;
+        }
+
+        var direction = SortDirection.Asc;
+        string sortKey;
+        if (trimmed.StartsWith("-", StringComparison.Ordinal))
+        {
+            direction = SortDirection.Desc;
+            sortKey = trimmed[1..];
+        }
+        else if (trimmed.StartsWith("+", StringComparison.Ordinal))
+        {
+            sortKey = trimmed[1..];
+        }
+        else
+        {
+            sortKey = trimmed;
+        }
+
+        var parts = sortKey.Split(':', 2, StringSplitOptions.TrimEntries);
+        var sortByPart = parts[0];
+        if (string.IsNullOrWhiteSpace(sortByPart))
+        {
+            return false;
+        }
+
+        if (parts.Length == 2)
+        {
+            var directionPart = parts[1];
+            if (string.IsNullOrWhiteSpace(directionPart) || !TryParseSortDirection(directionPart, out direction))
+            {
+                return false;
+            }
+        }
+
+        if (!TryParseSortBy(sortByPart, out var sortBy))
+        {
+            return false;
+        }
+
+        clause = new MaterialSortClause(sortBy, direction);
+        return true;
     }
 
     private static bool TryParseSortDirection(string? value, out SortDirection direction)
@@ -905,6 +1000,8 @@ public sealed class MaterialsController(
     }
 
     private sealed record MaterialGroupingCount(string Key, string? DisplayName, int TotalCount);
+
+    private sealed record MaterialSortClause(MaterialSortBy SortBy, SortDirection Direction);
 
     private enum MaterialGroupBy
     {
