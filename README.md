@@ -431,7 +431,44 @@ mt000 -> GET /api/materials/{guid}
 GET /api/materials?search=اسم-او-كود-او-باركود
 ```
 
-ولبناء واجهة فلاتر في موقع أو تطبيق، استخدم:
+لفلاتر **مشتقة من نتائج الاستعلام الحالي** (faceted — تظهر فقط القيم الموجودة في النتائج، مع إمكانية التبديل بين الأعمار مثلاً بعد اختيار رجالي):
+
+```text
+GET /api/materials?ageCategories=رجالي&includeResultFilters=true
+```
+
+يرجع نفس الحقول السابقة (`items`, `page`, `pageSize`, `totalCount`) بالإضافة إلى:
+
+```json
+{
+  "appliedFilters": {
+    "ageCategories": ["رجالي"],
+    "sizeRanges": [],
+    "groupGuids": []
+  },
+  "resultFilters": {
+    "ageCategories": [
+      { "value": "رجالي", "count": 52 },
+      { "value": "نسواني", "count": 35 }
+    ],
+    "sizeRanges": [
+      { "value": "نمر كبار", "count": 30 }
+    ],
+    "materialTypes": [],
+    "manufacturers": [],
+    "countryOfOrigins": [],
+    "groups": [
+      { "guid": "...", "code": "SUMMER", "name": "صيفي", "count": 12 }
+    ]
+  }
+}
+```
+
+- `resultFilters` تُحسب من **كل** المواد المطابقة (قبل `page`/`pageSize`)، وليس من الصفحة الحالية فقط.
+- لكل بُعد (عمر، مقاس، …) يُستثنى فلتر ذلك البُعد عند حساب قيمه — فيبقى بإمكان العميل التبديل من رجالي إلى نسواني مع الإبقاء على باقي الفلاتر في الطلب.
+- `includeResultFilters=false` (الافتراضي) يعيد `items` فقط بدون `appliedFilters` / `resultFilters`.
+
+ولبناء قوائم فلاتر **عامة من كل الأمين** (إدارة / تهيئة)، استخدم:
 
 ```text
 GET /api/materials/filter-options
