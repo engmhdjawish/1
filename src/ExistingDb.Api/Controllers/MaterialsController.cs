@@ -51,8 +51,6 @@ public sealed class MaterialsController(
         [FromQuery] double? minUnitPurchasePriceUsd = null,
         [FromQuery] double? maxUnitPurchasePriceUsd = null,
         [FromQuery] string? groupBy = null,
-        [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null,
         [FromQuery] string? sort = null,
         [FromQuery] bool includeResultFilters = false,
         [FromQuery] int page = 1,
@@ -111,36 +109,12 @@ public sealed class MaterialsController(
             }));
         }
 
-        IReadOnlyCollection<MaterialSortClause> sortClauses;
-        if (!string.IsNullOrWhiteSpace(sort))
+        if (!TryParseSort(sort ?? string.Empty, out var sortClauses))
         {
-            if (!TryParseSort(sort, out sortClauses))
+            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
             {
-                return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
-                {
-                    ["sort"] = ["Invalid value. Use comma-separated fields, e.g. ageCategory:asc,materialType:asc,-manufacturer."]
-                }));
-            }
-        }
-        else
-        {
-            if (!TryParseSortBy(sortBy, out var sorting))
-            {
-                return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
-                {
-                    ["sortBy"] = ["Invalid value. Supported values: number, name, ageCategory, sizeRange, materialType, manufacturer, countryOfOrigin, warehouseQuantity, unitSalePriceSyp, unitSalePriceUsd, unitPurchasePriceUsd."]
-                }));
-            }
-
-            if (!TryParseSortDirection(sortDirection, out var direction))
-            {
-                return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
-                {
-                    ["sortDirection"] = ["Invalid value. Supported values: asc, desc."]
-                }));
-            }
-
-            sortClauses = [new MaterialSortClause(sorting, direction)];
+                ["sort"] = ["Invalid value. Use comma-separated fields, e.g. ageCategory:asc,materialType:asc,-manufacturer."]
+            }));
         }
 
         var query = materialQueryBuilder.Build(filters);

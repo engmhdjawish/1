@@ -501,14 +501,7 @@ GET /api/materials?sort=ageCategory:asc,materialType:asc,-manufacturer
 number | name | ageCategory | sizeRange | materialType | manufacturer | countryOfOrigin | warehouseQuantity | unitSalePriceSyp | unitSalePriceUsd | unitPurchasePriceUsd
 ```
 
-## ترتيب أحادي (توافق خلفي)
-
-```text
-GET /api/materials?sortBy=name&sortDirection=asc
-```
-
-- `sortDirection`: `asc` (الافتراضي) أو `desc`.
-- عند استخدام `groupBy` مع `sort`/`sortBy`، يتم الترتيب أولاً حسب المجموعة ثم ترتيب العناصر داخل كل مجموعة.
+- عند استخدام `groupBy` مع `sort`، يتم الترتيب أولاً حسب المجموعة ثم ترتيب العناصر داخل كل مجموعة.
 
 عند تمرير `groupBy` يرجع حقل إضافي `grouping`:
 
