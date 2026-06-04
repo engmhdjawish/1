@@ -178,7 +178,7 @@ final class HomeSectionService
                     :display_mode,
                     :max_products,
                     :sort_order,
-                    :is_active,
+                    CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END,
                     :updated_by_user_id
                  )
                  RETURNING id::text'
@@ -191,7 +191,7 @@ final class HomeSectionService
                 'display_mode' => $displayMode,
                 'max_products' => $maxProducts,
                 'sort_order' => $sortOrder,
-                'is_active' => $isActive,
+                'is_active' => $isActive ? 1 : 0,
                 'updated_by_user_id' => $updatedByUserId,
             ]);
 
@@ -211,7 +211,7 @@ final class HomeSectionService
                 display_mode = :display_mode,
                 max_products = :max_products,
                 sort_order = :sort_order,
-                is_active = :is_active,
+                is_active = CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END,
                 updated_by_user_id = :updated_by_user_id,
                 updated_at = NOW()
              WHERE id = :id'
@@ -225,7 +225,7 @@ final class HomeSectionService
             'display_mode' => $displayMode,
             'max_products' => $maxProducts,
             'sort_order' => $sortOrder,
-            'is_active' => $isActive,
+            'is_active' => $isActive ? 1 : 0,
             'updated_by_user_id' => $updatedByUserId,
         ]);
 
@@ -239,12 +239,12 @@ final class HomeSectionService
 
         $stmt = Database::pdo()->prepare(
             'UPDATE home_sections
-             SET is_active = :is_active, updated_at = NOW(), updated_by_user_id = :updated_by_user_id
+             SET is_active = CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END, updated_at = NOW(), updated_by_user_id = :updated_by_user_id
              WHERE id = :id'
         );
         $stmt->execute([
             'id' => $id,
-            'is_active' => $isActive,
+            'is_active' => $isActive ? 1 : 0,
             'updated_by_user_id' => $updatedByUserId,
         ]);
 

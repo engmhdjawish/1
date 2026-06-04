@@ -172,13 +172,13 @@ final class ShareLinkService
                     :token,
                     :name,
                     :policy_id,
-                    :require_password,
+                    CASE WHEN :require_password = 1 THEN TRUE ELSE FALSE END,
                     :access_username,
                     :password_hash,
                     :keyword,
                     :min_quantity,
                     :expires_at,
-                    :is_active,
+                    CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END,
                     :created_by
                  )
                  RETURNING id::text'
@@ -187,13 +187,13 @@ final class ShareLinkService
                 'token' => self::generateToken(),
                 'name' => $name,
                 'policy_id' => $accessPolicyId,
-                'require_password' => $requirePassword,
+                'require_password' => $requirePassword ? 1 : 0,
                 'access_username' => $accessUsername !== '' ? $accessUsername : null,
                 'password_hash' => $requirePassword ? Password::hash($plainPassword) : null,
                 'keyword' => $keyword !== '' ? $keyword : null,
                 'min_quantity' => max(0, $minQuantity),
                 'expires_at' => $expiresAt,
-                'is_active' => $isActive,
+                'is_active' => $isActive ? 1 : 0,
                 'created_by' => $userId,
             ]);
 
@@ -225,13 +225,13 @@ final class ShareLinkService
             'UPDATE share_links SET
                 name_ar = :name,
                 access_policy_id = :policy_id,
-                require_password = :require_password,
+                require_password = CASE WHEN :require_password = 1 THEN TRUE ELSE FALSE END,
                 access_username = :access_username,
                 password_hash = :password_hash,
                 keyword = :keyword,
                 min_quantity = :min_quantity,
                 expires_at = :expires_at,
-                is_active = :is_active,
+                is_active = CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END,
                 updated_at = NOW()
              WHERE id = :id'
         );
@@ -239,13 +239,13 @@ final class ShareLinkService
             'id' => $id,
             'name' => $name,
             'policy_id' => $accessPolicyId,
-            'require_password' => $requirePassword,
+            'require_password' => $requirePassword ? 1 : 0,
             'access_username' => $requirePassword ? ($accessUsername !== '' ? $accessUsername : null) : null,
             'password_hash' => $nextPasswordHash,
             'keyword' => $keyword !== '' ? $keyword : null,
             'min_quantity' => max(0, $minQuantity),
             'expires_at' => $expiresAt,
-            'is_active' => $isActive,
+            'is_active' => $isActive ? 1 : 0,
         ]);
 
         return [
@@ -259,12 +259,12 @@ final class ShareLinkService
     {
         $stmt = Database::pdo()->prepare(
             'UPDATE share_links
-             SET is_active = :is_active, updated_at = NOW()
+             SET is_active = CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END, updated_at = NOW()
              WHERE id = :id'
         );
         $stmt->execute([
             'id' => $id,
-            'is_active' => $isActive,
+            'is_active' => $isActive ? 1 : 0,
         ]);
 
         return $stmt->rowCount() > 0;
