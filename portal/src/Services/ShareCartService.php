@@ -53,7 +53,7 @@ final class ShareCartService
             $_SESSION[self::SESSION_KEY] = [];
         }
 
-        $quantity = max(0.01, $quantity);
+        $quantity = max(1.0, round($quantity));
         if (!isset($_SESSION[self::SESSION_KEY][$token]) || !is_array($_SESSION[self::SESSION_KEY][$token])) {
             $_SESSION[self::SESSION_KEY][$token] = [
                 'share_link_id' => $shareLinkId,
@@ -95,7 +95,7 @@ final class ShareCartService
             return true;
         }
 
-        $_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]['quantity'] = $quantity;
+        $_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]['quantity'] = max(1.0, round($quantity));
         return true;
     }
 
@@ -134,21 +134,81 @@ final class ShareCartService
         return $id !== '' ? $id : null;
     }
 
+    public static function packageFactor(array $material): float
+    {
+        $factor = self::parseAmount(
+            $material['packageConversionFactor']
+                ?? $material['PackageConversionFactor']
+                ?? $material['unit2Fact']
+                ?? $material['Unit2Fact']
+                ?? 0
+        );
+        if ($factor <= 0) {
+            $factor = (float) max(1, (int) ($material['pcsPerBox'] ?? $material['PcsPerBox'] ?? 1));
+        }
+
+        return max(1.0, $factor);
+    }
+
+    public static function packageUnitLabel(array $material): string
+    {
+        $label = trim((string) (
+            $material['packageUnit']
+                ?? $material['PackageUnit']
+                ?? $material['unit2']
+                ?? $material['Unit2']
+                ?? ''
+        ));
+
+        return $label !== '' ? $label : 'طرد';
+    }
+
     /** @param array<string, mixed> $apiItem */
     public static function lineFromApiItem(array $apiItem, bool $capturePrices): array
     {
         $materialGuid = trim((string) ($apiItem['materialGuid'] ?? $apiItem['MaterialGuid'] ?? ''));
         $imageGuid = trim((string) ($apiItem['productImageGuid'] ?? $apiItem['ProductImageGuid'] ?? ''));
         $imageUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : null;
+        $factor = self::packageFactor($apiItem);
+        $unitSp = self::parseAmount($apiItem['unitSalePriceSyp'] ?? $apiItem['UnitSalePriceSyp'] ?? 0);
+        $unitUsd = self::parseAmount($apiItem['unitSalePriceUsd'] ?? $apiItem['UnitSalePriceUsd'] ?? 0);
 
         return [
             'material_guid' => $materialGuid,
             'material_code' => trim((string) ($apiItem['materialCode'] ?? $apiItem['MaterialCode'] ?? '')),
             'material_name_ar' => trim((string) ($apiItem['name'] ?? $apiItem['Name'] ?? 'مادة')),
-            'pcs_per_box' => max(1, (int) ($apiItem['pcsPerBox'] ?? $apiItem['PcsPerBox'] ?? 1)),
-            'sale_price_sp' => $capturePrices ? self::parseAmount($apiItem['unitSalePriceSyp'] ?? $apiItem['UnitSalePriceSyp'] ?? 0) : 0.0,
-            'sale_price_usd' => $capturePrices ? self::parseAmount($apiItem['unitSalePriceUsd'] ?? $apiItem['UnitSalePriceUsd'] ?? 0) : 0.0,
+            'package_unit' => self::packageUnitLabel($apiItem),
+            'package_factor' => $factor,
+            'pcs_per_box' => max(1, (int) round($factor)),
+            'sale_price_sp' => $capturePrices ? $unitSp * $factor : 0.0,
+            'sale_price_usd' => $capturePrices ? $unitUsd * $factor : 0.0,
             'image_url' => $imageUrl,
+        ];
+    }
+
+    /** @param array<string, mixed> $post */
+    public static function lineFromForm(array $post, bool $capturePrices): array
+    {
+        $factor = max(1.0, (float) ($post['package_factor'] ?? $post['pcs_per_box'] ?? 1));
+        $unitSp = self::parseAmount($post['unit_sale_price_sp'] ?? 0);
+        $unitUsd = self::parseAmount($post['unit_sale_price_usd'] ?? 0);
+        $packageUnit = trim((string) ($post['package_unit'] ?? ''));
+        $hasPackagePrices = !empty($post['prices_are_package']);
+
+        return [
+            'material_guid' => trim((string) ($post['material_guid'] ?? '')),
+            'material_code' => trim((string) ($post['material_code'] ?? '')),
+            'material_name_ar' => trim((string) ($post['material_name_ar'] ?? 'مادة')) ?: 'مادة',
+            'package_unit' => $packageUnit !== '' ? $packageUnit : 'طرد',
+            'package_factor' => $factor,
+            'pcs_per_box' => max(1, (int) round($factor)),
+            'sale_price_sp' => $capturePrices
+                ? ($hasPackagePrices ? self::parseAmount($post['sale_price_sp'] ?? 0) : $unitSp * $factor)
+                : 0.0,
+            'sale_price_usd' => $capturePrices
+                ? ($hasPackagePrices ? self::parseAmount($post['sale_price_usd'] ?? 0) : $unitUsd * $factor)
+                : 0.0,
+            'image_url' => trim((string) ($post['image_url'] ?? '')) ?: null,
         ];
     }
 

@@ -45,14 +45,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'unloc
 
 if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string) ($_POST['action'] ?? '');
+    $materialGuid = trim((string) ($_POST['material_guid'] ?? ''));
     if ($action === 'update_item') {
-        $materialGuid = trim((string) ($_POST['material_guid'] ?? ''));
-        $quantity = (float) ($_POST['quantity'] ?? 0);
-        if (ShareCartService::updateQuantity($token, $materialGuid, $quantity)) {
-            $notice = $quantity > 0 ? 'تم تحديث الكمية.' : 'تم حذف المادة من السلة.';
+        $quantity = max(0, (int) round((float) ($_POST['quantity'] ?? 0)));
+        if (ShareCartService::updateQuantity($token, $materialGuid, (float) $quantity)) {
+            $notice = $quantity > 0 ? 'تم تحديث عدد الطرود.' : 'تم حذف المادة من السلة.';
+        }
+    } elseif ($action === 'bump_item') {
+        $delta = (int) ($_POST['delta'] ?? 0);
+        $items = ShareCartService::items($token);
+        $current = (int) round((float) ($items[$materialGuid]['quantity'] ?? 1));
+        $next = max(0, $current + $delta);
+        if (ShareCartService::updateQuantity($token, $materialGuid, (float) $next)) {
+            $notice = $next > 0 ? 'تم تحديث عدد الطرود.' : 'تم حذف المادة من السلة.';
         }
     } elseif ($action === 'remove_item') {
-        $materialGuid = trim((string) ($_POST['material_guid'] ?? ''));
         if (ShareCartService::remove($token, $materialGuid)) {
             $notice = 'تم حذف المادة من السلة.';
         }
@@ -64,7 +71,7 @@ if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] =
         $guestPhone = trim((string) ($_POST['guest_phone'] ?? ''));
         $notes = trim((string) ($_POST['notes_ar'] ?? ''));
         $cartItems = array_values(ShareCartService::items($token));
-        if ($guestName === '' || mb_strlen($guestName) < 2) {
+        if ($guestName === '' || text_length($guestName) < 2) {
             $error = 'يرجى إدخال اسم صحيح (حرفان على الأقل).';
         } elseif ($guestPhone === '' || preg_match('/\d{8,}/', preg_replace('/\D+/', '', $guestPhone)) !== 1) {
             $error = 'يرجى إدخال رقم هاتف صحيح (8 أرقام على الأقل).';
@@ -99,141 +106,221 @@ if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] =
 $cartItems = ($shareLink !== null && $hasAccess && !$error) ? ShareCartService::items($token) : [];
 $totals = ($shareLink !== null && $hasAccess && !$error) ? ShareCartService::totals($token) : ['total_sp' => 0.0, 'total_usd' => 0.0];
 $shareName = is_array($shareLink) ? (string) ($shareLink['name_ar'] ?? 'رابط مشاركة') : 'رابط مشاركة';
+$cartCount = ShareCartService::itemCount($token);
 
 ob_start();
 ?>
-<div class="bg-white rounded-xl p-6 shadow-sm border">
-  <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+<div class="max-w-6xl mx-auto">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
     <div>
-      <h1 class="text-2xl font-extrabold">سلة المشتريات</h1>
-      <p class="text-sm text-gray-600 mt-1"><?= h($shareName) ?></p>
+      <h1 class="text-2xl md:text-3xl font-extrabold">سلة المشتريات</h1>
+      <p class="text-sm text-gray-600 mt-1"><?= h($shareName) ?> — الطلب بالوحدة الثانية (طرد/تعبئة)</p>
     </div>
     <?php if ($token !== '' && $hasAccess && !$error): ?>
-      <a href="/share.php?token=<?= urlencode($token) ?>" class="h-10 inline-flex items-center px-4 rounded-full border border-gray-300 text-sm font-bold hover:border-primary">
+      <a
+        href="/share.php?token=<?= urlencode($token) ?>"
+        class="h-11 inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-5 text-sm font-bold hover:border-primary"
+      >
+        <span class="material-symbols-outlined text-[20px]" aria-hidden="true">storefront</span>
         متابعة التصفح
       </a>
     <?php endif; ?>
   </div>
 
   <?php if ($error): ?>
-    <p class="mb-4 rounded border bg-red-50 border-red-200 text-red-700 px-3 py-2 text-sm"><?= h($error) ?></p>
+    <p class="mb-4 rounded-xl border bg-red-50 border-red-200 text-red-700 px-4 py-3 text-sm"><?= h($error) ?></p>
   <?php endif; ?>
   <?php if ($notice): ?>
-    <p class="mb-4 rounded border bg-green-50 border-green-200 text-green-700 px-3 py-2 text-sm"><?= h($notice) ?></p>
+    <p class="mb-4 rounded-xl border bg-green-50 border-green-200 text-green-700 px-4 py-3 text-sm"><?= h($notice) ?></p>
   <?php endif; ?>
 
   <?php if ($requiresPassword && !$hasAccess && $shareLink !== null): ?>
-    <form method="post" class="max-w-md rounded-xl border border-gray-200 p-4 space-y-3">
+    <form method="post" class="max-w-md rounded-xl border border-gray-200 bg-white p-5 space-y-3 shadow-sm">
       <input type="hidden" name="token" value="<?= h($token) ?>">
       <input type="hidden" name="action" value="unlock">
       <p class="text-sm text-gray-600">هذا الرابط محمي بكلمة مرور.</p>
       <label class="block text-sm font-bold">اسم المستخدم
-        <input name="access_username" class="h-11 w-full rounded border border-gray-300 px-3 mt-1">
+        <input name="access_username" class="h-11 w-full rounded-lg border border-gray-300 px-3 mt-1">
       </label>
       <label class="block text-sm font-bold">كلمة المرور
-        <input type="password" name="access_password" class="h-11 w-full rounded border border-gray-300 px-3 mt-1">
+        <input type="password" name="access_password" class="h-11 w-full rounded-lg border border-gray-300 px-3 mt-1">
       </label>
-      <button class="h-11 rounded bg-primary text-white px-6 font-bold">دخول</button>
+      <button class="h-11 rounded-lg bg-primary text-white px-6 font-bold">دخول</button>
     </form>
   <?php elseif ($hasAccess && !$error): ?>
     <?php if ($cartItems === []): ?>
-      <p class="text-gray-500">السلة فارغة.</p>
-      <a href="/share.php?token=<?= urlencode($token) ?>" class="mt-4 inline-flex h-11 items-center rounded bg-primary text-white px-6 font-bold">تصفح المواد</a>
+      <div class="bg-white rounded-xl border p-8 text-center shadow-sm">
+        <span class="material-symbols-outlined text-5xl text-gray-300" aria-hidden="true">shopping_cart</span>
+        <p class="text-gray-500 mt-3">السلة فارغة.</p>
+        <a href="/share.php?token=<?= urlencode($token) ?>" class="mt-4 inline-flex h-11 items-center rounded-lg bg-primary text-white px-6 font-bold">تصفح المواد</a>
+      </div>
     <?php else: ?>
-      <div class="space-y-3 mb-6">
-        <?php foreach ($cartItems as $line): ?>
-          <?php
-            $materialGuid = (string) ($line['material_guid'] ?? '');
-            $lineTotalSp = (float) ($line['quantity'] ?? 0) * (float) ($line['sale_price_sp'] ?? 0);
-            $lineTotalUsd = (float) ($line['quantity'] ?? 0) * (float) ($line['sale_price_usd'] ?? 0);
-          ?>
-          <article class="border rounded-lg p-4 flex flex-wrap gap-4 items-start">
-            <?php if (!empty($line['image_url'])): ?>
-              <img src="<?= h((string) $line['image_url']) ?>" alt="" class="w-20 h-20 object-cover rounded bg-gray-100" loading="lazy">
-            <?php endif; ?>
-            <div class="flex-1 min-w-[200px]">
-              <div class="font-bold"><?= h((string) ($line['material_name_ar'] ?? '')) ?></div>
-              <?php if (!empty($line['material_code'])): ?>
-                <div class="text-xs text-gray-500"><?= h((string) $line['material_code']) ?></div>
-              <?php endif; ?>
-              <?php if ($showPrice): ?>
-                <div class="text-sm text-primary font-bold mt-1">
-                  <?= format_money((float) ($line['sale_price_sp'] ?? 0), true) ?> ل.س
-                  <?php if ((float) ($line['sale_price_usd'] ?? 0) > 0): ?>
-                    <span class="text-emerald-700"> / $<?= number_format((float) $line['sale_price_usd'], 2, '.', ',') ?></span>
-                  <?php endif; ?>
-                </div>
-              <?php endif; ?>
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-8">
+          <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-right border-collapse min-w-[640px]">
+                <thead>
+                  <tr class="bg-gray-50 border-b border-gray-200 text-sm text-gray-600">
+                    <th class="p-4 font-bold">المنتج</th>
+                    <th class="p-4 font-bold">سعر الطرد</th>
+                    <th class="p-4 font-bold">الكمية</th>
+                    <th class="p-4 font-bold">الإجمالي</th>
+                    <th class="p-4 font-bold text-center">حذف</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <?php foreach ($cartItems as $line): ?>
+                    <?php
+                      $materialGuid = (string) ($line['material_guid'] ?? '');
+                      $packageUnit = (string) ($line['package_unit'] ?? 'طرد');
+                      $qty = max(1, (int) round((float) ($line['quantity'] ?? 1)));
+                      $priceSp = (float) ($line['sale_price_sp'] ?? 0);
+                      $priceUsd = (float) ($line['sale_price_usd'] ?? 0);
+                      $lineTotalSp = $qty * $priceSp;
+                      $lineTotalUsd = $qty * $priceUsd;
+                    ?>
+                    <tr class="hover:bg-gray-50/80">
+                      <td class="p-4">
+                        <div class="flex items-center gap-3">
+                          <?php if (!empty($line['image_url'])): ?>
+                            <img src="<?= h((string) $line['image_url']) ?>" alt="" class="w-16 h-16 rounded-lg object-cover bg-gray-100 shrink-0" loading="lazy">
+                          <?php else: ?>
+                            <div class="w-16 h-16 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-400">
+                              <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>
+                            </div>
+                          <?php endif; ?>
+                          <div>
+                            <div class="font-bold text-sm"><?= h((string) ($line['material_name_ar'] ?? '')) ?></div>
+                            <?php if (!empty($line['material_code'])): ?>
+                              <div class="text-xs text-gray-500"><?= h((string) $line['material_code']) ?></div>
+                            <?php endif; ?>
+                          </div>
+                        </div>
+                      </td>
+                      <td class="p-4 text-sm whitespace-nowrap">
+                        <?php if ($showPrice): ?>
+                          <div class="font-bold text-primary"><?= format_money($priceSp, true) ?> ل.س</div>
+                          <?php if ($priceUsd > 0): ?>
+                            <div class="text-emerald-700 text-xs">$<?= number_format($priceUsd, 2, '.', ',') ?></div>
+                          <?php endif; ?>
+                          <div class="text-xs text-gray-500">/ <?= h($packageUnit) ?></div>
+                        <?php else: ?>
+                          —
+                        <?php endif; ?>
+                      </td>
+                      <td class="p-4">
+                        <div class="flex items-center border border-gray-200 rounded-lg w-max bg-white overflow-hidden">
+                          <form method="post">
+                            <input type="hidden" name="token" value="<?= h($token) ?>">
+                            <input type="hidden" name="action" value="bump_item">
+                            <input type="hidden" name="material_guid" value="<?= h($materialGuid) ?>">
+                            <input type="hidden" name="delta" value="-1">
+                            <button type="submit" class="px-3 py-2 text-primary hover:bg-gray-50 border-l border-gray-200" aria-label="إنقاص">−</button>
+                          </form>
+                          <form method="post" class="flex items-center">
+                            <input type="hidden" name="token" value="<?= h($token) ?>">
+                            <input type="hidden" name="action" value="update_item">
+                            <input type="hidden" name="material_guid" value="<?= h($materialGuid) ?>">
+                            <input
+                              type="number"
+                              name="quantity"
+                              min="1"
+                              step="1"
+                              value="<?= (int) $qty ?>"
+                              class="w-14 text-center font-bold border-0 focus:ring-0 py-2"
+                              onchange="this.form.submit()"
+                            >
+                          </form>
+                          <form method="post">
+                            <input type="hidden" name="token" value="<?= h($token) ?>">
+                            <input type="hidden" name="action" value="bump_item">
+                            <input type="hidden" name="material_guid" value="<?= h($materialGuid) ?>">
+                            <input type="hidden" name="delta" value="1">
+                            <button type="submit" class="px-3 py-2 text-primary hover:bg-gray-50 border-r border-gray-200" aria-label="زيادة">+</button>
+                          </form>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1"><?= h($packageUnit) ?></div>
+                      </td>
+                      <td class="p-4 text-sm font-bold whitespace-nowrap">
+                        <?php if ($showPrice): ?>
+                          <?= format_money($lineTotalSp, true) ?> ل.س
+                          <?php if ($lineTotalUsd > 0): ?>
+                            <div class="text-emerald-700 text-xs font-normal">$<?= number_format($lineTotalUsd, 2, '.', ',') ?></div>
+                          <?php endif; ?>
+                        <?php else: ?>
+                          —
+                        <?php endif; ?>
+                      </td>
+                      <td class="p-4 text-center">
+                        <form method="post">
+                          <input type="hidden" name="token" value="<?= h($token) ?>">
+                          <input type="hidden" name="action" value="remove_item">
+                          <input type="hidden" name="material_guid" value="<?= h($materialGuid) ?>">
+                          <button type="submit" class="p-2 rounded-full text-red-600 hover:bg-red-50" aria-label="حذف">
+                            <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
             </div>
-            <form method="post" class="flex items-end gap-2">
-              <input type="hidden" name="token" value="<?= h($token) ?>">
-              <input type="hidden" name="action" value="update_item">
-              <input type="hidden" name="material_guid" value="<?= h($materialGuid) ?>">
-              <label class="text-xs font-bold">الكمية
-                <input type="number" name="quantity" min="0" step="0.01" value="<?= h((string) ($line['quantity'] ?? 1)) ?>" class="h-10 w-24 rounded border border-gray-300 px-2 mt-1">
-              </label>
-              <button class="h-10 px-3 rounded border border-gray-300 text-sm font-bold">تحديث</button>
-            </form>
-            <form method="post">
-              <input type="hidden" name="token" value="<?= h($token) ?>">
-              <input type="hidden" name="action" value="remove_item">
-              <input type="hidden" name="material_guid" value="<?= h($materialGuid) ?>">
-              <button class="h-10 px-3 rounded border border-red-200 text-red-700 text-sm font-bold">حذف</button>
-            </form>
+          </div>
+
+          <form method="post" class="mt-4">
+            <input type="hidden" name="token" value="<?= h($token) ?>">
+            <input type="hidden" name="action" value="clear_cart">
+            <button type="submit" class="text-sm font-bold text-gray-600 hover:text-red-600">تفريغ السلة</button>
+          </form>
+        </div>
+
+        <div class="lg:col-span-4">
+          <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 sticky top-24">
+            <h2 class="text-lg font-extrabold border-b border-gray-100 pb-3 mb-4">ملخص الطلب</h2>
+            <p class="text-xs text-gray-500 mb-4"><?= (int) $cartCount ?> صنف — الأسعار والكميات بالطرد (الوحدة الثانية)</p>
+
             <?php if ($showPrice): ?>
-              <div class="text-sm font-bold text-gray-700">
-                المجموع: <?= format_money($lineTotalSp, true) ?> ل.س
-                <?php if ($lineTotalUsd > 0): ?>
-                  <span class="text-emerald-700">($<?= number_format($lineTotalUsd, 2, '.', ',') ?>)</span>
+              <div class="space-y-2 text-sm mb-4">
+                <div class="flex justify-between font-bold text-base">
+                  <span>الإجمالي (ل.س)</span>
+                  <span class="text-primary"><?= format_money((float) $totals['total_sp'], true) ?> ل.س</span>
+                </div>
+                <?php if ((float) $totals['total_usd'] > 0): ?>
+                  <div class="flex justify-between font-bold text-emerald-700">
+                    <span>الإجمالي ($)</span>
+                    <span>$<?= number_format((float) $totals['total_usd'], 2, '.', ',') ?></span>
+                  </div>
                 <?php endif; ?>
               </div>
             <?php endif; ?>
-          </article>
-        <?php endforeach; ?>
-      </div>
 
-      <?php if ($showPrice): ?>
-        <div class="rounded-lg bg-gray-50 border p-4 mb-6 text-sm">
-          <div class="flex justify-between font-bold">
-            <span>الإجمالي (ل.س)</span>
-            <span><?= format_money((float) $totals['total_sp'], true) ?> ل.س</span>
+            <?php if ($allowOrder): ?>
+              <form method="post" class="space-y-3 border-t border-gray-100 pt-4">
+                <input type="hidden" name="token" value="<?= h($token) ?>">
+                <input type="hidden" name="action" value="submit_order">
+                <p class="text-xs font-bold text-gray-600">إرسال الطلب بدون تسجيل دخول</p>
+                <label class="block text-sm font-bold">الاسم الكامل *
+                  <input name="guest_name_ar" required class="h-11 w-full rounded-lg border border-gray-300 px-3 mt-1">
+                </label>
+                <label class="block text-sm font-bold">رقم الهاتف *
+                  <input name="guest_phone" required dir="ltr" class="h-11 w-full rounded-lg border border-gray-300 px-3 mt-1 text-left" placeholder="09xxxxxxxx">
+                </label>
+                <label class="block text-sm font-bold">ملاحظات
+                  <textarea name="notes_ar" rows="3" class="w-full rounded-lg border border-gray-300 px-3 py-2 mt-1 text-sm" placeholder="اختياري"></textarea>
+                </label>
+                <button class="w-full h-12 rounded-lg bg-primary text-white font-extrabold shadow-md hover:opacity-95 transition inline-flex items-center justify-center gap-2">
+                  <span class="material-symbols-outlined" aria-hidden="true">send</span>
+                  تأكيد وإرسال الطلب
+                </button>
+              </form>
+            <?php else: ?>
+              <p class="text-sm text-amber-800 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">هذا الرابط يسمح بالسلة فقط دون إرسال طلب.</p>
+            <?php endif; ?>
           </div>
-          <?php if ((float) $totals['total_usd'] > 0): ?>
-            <div class="flex justify-between font-bold text-emerald-700 mt-1">
-              <span>الإجمالي ($)</span>
-              <span>$<?= number_format((float) $totals['total_usd'], 2, '.', ',') ?></span>
-            </div>
-          <?php endif; ?>
         </div>
-      <?php endif; ?>
-
-      <form method="post" class="inline">
-        <input type="hidden" name="token" value="<?= h($token) ?>">
-        <input type="hidden" name="action" value="clear_cart">
-        <button type="submit" class="h-10 px-4 rounded border border-gray-300 text-sm font-bold mb-6">تفريغ السلة</button>
-      </form>
-
-      <?php if ($allowOrder): ?>
-        <section class="border-t pt-6">
-          <h2 class="text-lg font-extrabold mb-3">إرسال الطلب (بدون تسجيل دخول)</h2>
-          <form method="post" class="max-w-lg space-y-3">
-            <input type="hidden" name="token" value="<?= h($token) ?>">
-            <input type="hidden" name="action" value="submit_order">
-            <label class="block text-sm font-bold">الاسم الكامل *
-              <input name="guest_name_ar" required class="h-11 w-full rounded border border-gray-300 px-3 mt-1" placeholder="اسمك">
-            </label>
-            <label class="block text-sm font-bold">رقم الهاتف *
-              <input name="guest_phone" required dir="ltr" class="h-11 w-full rounded border border-gray-300 px-3 mt-1 text-left" placeholder="09xxxxxxxx">
-            </label>
-            <label class="block text-sm font-bold">ملاحظات
-              <textarea name="notes_ar" rows="3" class="w-full rounded border border-gray-300 px-3 py-2 mt-1" placeholder="اختياري"></textarea>
-            </label>
-            <button class="h-12 w-full rounded bg-primary text-white font-extrabold">تأكيد وإرسال الطلب</button>
-          </form>
-        </section>
-      <?php else: ?>
-        <p class="text-sm text-amber-700 rounded border border-amber-200 bg-amber-50 px-3 py-2">سياسة هذا الرابط تسمح بالسلة فقط دون إرسال طلب.</p>
-      <?php endif; ?>
+      </div>
     <?php endif; ?>
   <?php endif; ?>
 </div>
