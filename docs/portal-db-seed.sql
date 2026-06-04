@@ -9,7 +9,13 @@ VALUES
     ('share_standard', 'رابط مشاركة — قياسي', 'كما يُعرّف في الرابط (افتراضي)', TRUE, FALSE, TRUE, TRUE),
     ('customer_standard', 'عميل مفعّل — قياسي', 'عميل ويب بعد الموافقة', TRUE, TRUE, TRUE, TRUE),
     ('customer_vip', 'عميل مفعّل — مميز', 'عرض كميات + طلب', TRUE, TRUE, TRUE, TRUE)
-ON CONFLICT (code) DO NOTHING;
+ON CONFLICT (code) DO UPDATE SET
+    name_ar = EXCLUDED.name_ar,
+    description_ar = EXCLUDED.description_ar,
+    show_price = EXCLUDED.show_price,
+    show_quantity = EXCLUDED.show_quantity,
+    allow_cart = EXCLUDED.allow_cart,
+    allow_order = EXCLUDED.allow_order;
 
 -- Web roles
 INSERT INTO web_roles (code, name_ar, description_ar, is_system)
@@ -18,7 +24,10 @@ VALUES
     ('sales', 'مبيعات', 'روابط مشاركة وطلبات وزوّار', TRUE),
     ('content', 'محتوى', 'الصفحة الرئيسية ومعلومات الشركة', TRUE),
     ('customers_admin', 'إدارة العملاء', 'موافقة وتفعيل عملاء الويب', TRUE)
-ON CONFLICT (code) DO NOTHING;
+ON CONFLICT (code) DO UPDATE SET
+    name_ar = EXCLUDED.name_ar,
+    description_ar = EXCLUDED.description_ar,
+    is_system = EXCLUDED.is_system;
 
 -- Web permissions
 INSERT INTO web_permissions (code, name_ar, category_ar, description_ar)
@@ -37,7 +46,10 @@ VALUES
     ('web_users.manage', 'إدارة موظفي الموقع', 'إدارة', NULL),
     ('images.upload', 'رفع صور المواد', 'مواد', NULL),
     ('access_policies.manage', 'إدارة سياسات الوصول', 'إعدادات', NULL)
-ON CONFLICT (code) DO NOTHING;
+ON CONFLICT (code) DO UPDATE SET
+    name_ar = EXCLUDED.name_ar,
+    category_ar = EXCLUDED.category_ar,
+    description_ar = EXCLUDED.description_ar;
 
 -- Role → permission mapping
 INSERT INTO web_role_permissions (role_id, permission_id)
