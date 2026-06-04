@@ -5,22 +5,72 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
+use Portal\Services\WebUserService;
 
 WebSession::requirePermission('web_users.manage');
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
-$heading = 'المستخدمون والأدوار';
-$description = 'إدارة حسابات موظفي البوابة وربطها بالأدوار والصلاحيات.';
-$readiness = 'partial (النموذج جاهز ويحتاج تنفيذ شاشات CRUD)';
-$nextActions = [
-    ['href' => '/dashboard/index.php', 'label' => 'العودة إلى لوحة التحكم'],
-    ['href' => '/dashboard/settings.php', 'label' => 'مراجعة الإعدادات العامة'],
-];
+$flash = null;
+$flashType = 'success';
 $user = WebSession::user();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = trim((string) ($_POST['action'] ?? ''));
+
+    if ($action === 'save_user') {
+        $postedRoleIds = $_POST['role_ids'] ?? [];
+        $roleIds = is_array($postedRoleIds)
+            ? array_map('strval', $postedRoleIds)
+            : [trim((string) $postedRoleIds)];
+        $result = WebUserService::saveUser(
+            trim((string) ($_POST['id'] ?? '')) !== '' ? trim((string) ($_POST['id'] ?? '')) : null,
+            trim((string) ($_POST['user_name'] ?? '')),
+            trim((string) ($_POST['display_name_ar'] ?? '')),
+            trim((string) ($_POST['email'] ?? '')),
+            trim((string) ($_POST['plain_password'] ?? '')),
+            isset($_POST['is_active']),
+            $roleIds
+        );
+
+        $flash = $result['message'];
+        $flashType = $result['ok'] ? 'success' : 'error';
+        if ($result['ok']) {
+            $_GET['edit'] = (string) ($result['id'] ?? '');
+        }
+    } elseif ($action === 'toggle_active') {
+        $targetId = trim((string) ($_POST['id'] ?? ''));
+        $next = ($_POST['next_active'] ?? '0') === '1';
+        if (($user['id'] ?? '') === $targetId && !$next) {
+            $flash = 'لا يمكن تعطيل الحساب الحالي أثناء تسجيل الدخول.';
+            $flashType = 'error';
+        } else {
+            $ok = WebUserService::setActive($targetId, $next);
+            $flash = $ok ? 'تم تحديث حالة المستخدم.' : 'تعذر تحديث حالة المستخدم.';
+            $flashType = $ok ? 'success' : 'error';
+        }
+    }
+}
+
+$filters = [
+    'q' => trim((string) ($_GET['q'] ?? '')),
+    'role' => trim((string) ($_GET['role'] ?? '')),
+    'active' => trim((string) ($_GET['active'] ?? '')),
+];
+
+$roles = WebUserService::listRoles();
+$users = WebUserService::listUsers($filters['q'], $filters['role'], $filters['active']);
+$stats = WebUserService::stats();
+
+$editId = trim((string) ($_GET['edit'] ?? ''));
+$editUser = $editId !== '' ? WebUserService::getUserById($editId) : null;
+if ($editUser === null) {
+    $editId = '';
+}
+
 $currentRoute = '/dashboard/users.php';
 
 ob_start();
-require dirname(__DIR__, 2) . '/views/dashboard/coming-soon.php';
+require dirname(__DIR__, 2) . '/views/dashboard/users.php';
 $content = ob_get_clean();
 $title = 'المستخدمون والأدوار';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

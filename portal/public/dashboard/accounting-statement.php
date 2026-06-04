@@ -95,12 +95,13 @@ ob_start();
       <span class="text-gray-600">بحث العميل (الاسم أو الهاتف)</span>
       <input
         type="text"
+        id="customerSearchInput"
         name="customerSearch"
         value="<?= h($query['customerSearch']) ?>"
         class="mt-1 w-full border rounded px-3 py-2"
         placeholder="مثال: أحمد / 0932..."
       >
-      <input type="hidden" name="customerGuid" value="<?= h($query['customerGuid']) ?>">
+      <input type="hidden" id="customerGuidHidden" name="customerGuid" value="<?= h($query['customerGuid']) ?>">
     </label>
     <label class="text-sm">
       <span class="text-gray-600">من تاريخ</span>
@@ -113,6 +114,22 @@ ob_start();
     <button class="bg-primary text-white rounded px-4 py-2">بحث / عرض</button>
   </form>
 </section>
+
+<script>
+  (() => {
+    const searchInput = document.getElementById('customerSearchInput');
+    const guidInput = document.getElementById('customerGuidHidden');
+    if (!searchInput || !guidInput) {
+      return;
+    }
+    const original = searchInput.value.trim();
+    searchInput.addEventListener('input', () => {
+      if (searchInput.value.trim() !== original) {
+        guidInput.value = '';
+      }
+    });
+  })();
+</script>
 
 <?php if ($error): ?>
   <p class="mb-4 rounded border bg-red-50 border-red-200 text-red-700 px-3 py-2 text-sm"><?= h($error) ?></p>
