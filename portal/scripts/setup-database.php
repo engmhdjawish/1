@@ -43,10 +43,12 @@ $port = Config::get('PORTAL_DB_PORT', '5432');
 $name = Config::get('PORTAL_DB_NAME', 'portal_db');
 $user = Config::get('PORTAL_DB_USER', 'portal');
 $password = Config::get('PORTAL_DB_PASSWORD', 'portal');
+$psqlBin = Config::get('PORTAL_PSQL_BIN', 'psql') ?? 'psql';
 
 putenv('PGPASSWORD=' . $password);
 $psqlBase = sprintf(
-    'psql -h %s -p %s -U %s -d %s',
+    '%s -h %s -p %s -U %s -d %s',
+    escapeshellarg($psqlBin),
     escapeshellarg($host),
     escapeshellarg($port),
     escapeshellarg($user),
