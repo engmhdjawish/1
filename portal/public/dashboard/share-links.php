@@ -5,6 +5,8 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
+use Portal\Config;
+use Portal\Services\ApiClient;
 use Portal\Services\ShareLinkService;
 
 WebSession::requirePermission('share_links.manage');
@@ -19,6 +21,42 @@ $user = WebSession::user();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string) ($_POST['action'] ?? ''));
     if ($action === 'save') {
+        $parseValues = static function (mixed $value): array {
+            if (is_array($value)) {
+                $parts = $value;
+            } else {
+                $parts = preg_split('/[,|\n]+/u', (string) $value) ?: [];
+            }
+            $values = [];
+            foreach ($parts as $part) {
+                $item = trim((string) $part);
+                if ($item !== '') {
+                    $values[] = $item;
+                }
+            }
+            return array_values(array_unique($values));
+        };
+        $parseNullableFloat = static function (mixed $value): ?float {
+            if (is_array($value)) {
+                return null;
+            }
+            $text = trim((string) $value);
+            return $text !== '' && is_numeric($text) ? (float) $text : null;
+        };
+        $parseNullableBool = static function (mixed $value): ?bool {
+            if (is_array($value)) {
+                return null;
+            }
+            $text = trim(strtolower((string) $value));
+            return match ($text) {
+                '1', 'true', 'yes', 'on' => true,
+                '0', 'false', 'no', 'off' => false,
+                default => null,
+            };
+        };
+        $defaultSortClauses = $parseValues($_POST['option_default_sort_clauses'] ?? []);
+        $defaultSortValue = $defaultSortClauses !== [] ? implode(',', $defaultSortClauses) : 'number:asc';
+        $visibleClientFilters = $parseValues($_POST['option_visible_client_filters'] ?? []);
         $result = ShareLinkService::save(
             trim((string) ($_POST['id'] ?? '')) ?: null,
             trim((string) ($_POST['name_ar'] ?? '')),
@@ -30,7 +68,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             (float) ($_POST['min_quantity'] ?? 0),
             trim((string) ($_POST['expires_at'] ?? '')),
             isset($_POST['is_active']),
-            isset($user['id']) ? (string) $user['id'] : null
+            isset($user['id']) ? (string) $user['id'] : null,
+            $parseValues($_POST['forced_material_types'] ?? []),
+            $parseValues($_POST['forced_age_categories'] ?? []),
+            $parseValues($_POST['forced_manufacturers'] ?? []),
+            $parseValues($_POST['forced_size_ranges'] ?? []),
+            $parseValues($_POST['forced_country_origins'] ?? []),
+            $parseValues($_POST['forced_store_guids'] ?? []),
+            $parseValues($_POST['forced_group_guids'] ?? []),
+            $parseNullableBool($_POST['forced_is_available'] ?? null),
+            $parseNullableFloat($_POST['forced_min_warehouse_quantity'] ?? null),
+            $parseNullableFloat($_POST['forced_max_warehouse_quantity'] ?? null),
+            $parseNullableFloat($_POST['forced_min_unit_sale_price_syp'] ?? null),
+            $parseNullableFloat($_POST['forced_max_unit_sale_price_syp'] ?? null),
+            $parseNullableFloat($_POST['forced_min_unit_sale_price_usd'] ?? null),
+            $parseNullableFloat($_POST['forced_max_unit_sale_price_usd'] ?? null),
+            $parseNullableFloat($_POST['forced_min_unit_purchase_price_usd'] ?? null),
+            $parseNullableFloat($_POST['forced_max_unit_purchase_price_usd'] ?? null),
+            isset($_POST['option_show_images']),
+            trim((string) ($_POST['option_price_mode'] ?? 'both')),
+            isset($_POST['option_allow_client_filters']),
+            isset($_POST['option_allow_sorting']),
+            isset($_POST['option_include_result_filters']),
+            $visibleClientFilters,
+            $defaultSortValue,
+            trim((string) ($_POST['option_default_group_by'] ?? 'none'))
         );
         $flash = $result['message'];
         $flashType = $result['ok'] ? 'success' : 'error';
@@ -44,6 +106,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         $flash = $ok ? 'تم تحديث حالة الرابط.' : 'تعذر تحديث حالة الرابط.';
         $flashType = $ok ? 'success' : 'error';
+    } elseif ($action === 'delete') {
+        $deleteResult = ShareLinkService::delete(trim((string) ($_POST['id'] ?? '')));
+        $flash = $deleteResult['message'];
+        $flashType = $deleteResult['ok'] ? 'success' : 'error';
+        if ($deleteResult['ok'] && $editId !== '' && $editId === trim((string) ($_POST['id'] ?? ''))) {
+            $editId = '';
+            $editLink = null;
+        }
     }
 }
 
@@ -62,6 +132,51 @@ if ($editLink === null) {
 }
 $stats = ShareLinkService::stats();
 $policies = ShareLinkService::listAccessPolicies();
+$publicBaseUrl = rtrim(Config::appUrl(), '/');
+$materialFilterOptions = [
+    'materialTypes' => [],
+    'ageCategories' => [],
+    'manufacturers' => [],
+    'sizeRanges' => [],
+    'countryOfOrigins' => [],
+    'stores' => [],
+    'groups' => [],
+    'priceRanges' => [
+        'unitSalePriceSyp' => null,
+        'unitSalePriceUsd' => null,
+        'unitPurchasePriceUsd' => null,
+    ],
+];
+$materialFilterOptionsError = null;
+try {
+    $filtersResponse = ApiClient::get('/api/materials/filter-options');
+    if ($filtersResponse['ok']) {
+        $data = is_array($filtersResponse['data']) ? $filtersResponse['data'] : [];
+        $stores = is_array($data['stores'] ?? null) ? $data['stores'] : (is_array($data['Stores'] ?? null) ? $data['Stores'] : []);
+        $groups = is_array($data['groups'] ?? null) ? $data['groups'] : (is_array($data['Groups'] ?? null) ? $data['Groups'] : []);
+        $priceRanges = is_array($data['priceRanges'] ?? null) ? $data['priceRanges'] : (is_array($data['PriceRanges'] ?? null) ? $data['PriceRanges'] : null);
+        $materialFilterOptions = [
+            'materialTypes' => array_values(array_map('strval', is_array($data['materialTypes'] ?? null) ? $data['materialTypes'] : ($data['MaterialTypes'] ?? []))),
+            'ageCategories' => array_values(array_map('strval', is_array($data['ageCategories'] ?? null) ? $data['ageCategories'] : ($data['AgeCategories'] ?? []))),
+            'manufacturers' => array_values(array_map('strval', is_array($data['manufacturers'] ?? null) ? $data['manufacturers'] : ($data['Manufacturers'] ?? []))),
+            'sizeRanges' => array_values(array_map('strval', is_array($data['sizeRanges'] ?? null) ? $data['sizeRanges'] : ($data['SizeRanges'] ?? []))),
+            'countryOfOrigins' => array_values(array_map('strval', is_array($data['countryOfOrigins'] ?? null) ? $data['countryOfOrigins'] : ($data['CountryOfOrigins'] ?? []))),
+            'stores' => array_values(array_filter($stores, static fn ($row) => is_array($row))),
+            'groups' => array_values(array_filter($groups, static fn ($row) => is_array($row))),
+            'priceRanges' => is_array($priceRanges)
+                ? $priceRanges
+                : [
+                    'unitSalePriceSyp' => null,
+                    'unitSalePriceUsd' => null,
+                    'unitPurchasePriceUsd' => null,
+                ],
+        ];
+    } else {
+        $materialFilterOptionsError = 'تعذر جلب فلاتر المواد من API (رمز ' . (int) ($filtersResponse['status'] ?? 0) . ').';
+    }
+} catch (\Throwable $exception) {
+    $materialFilterOptionsError = $exception->getMessage();
+}
 
 $currentRoute = '/dashboard/share-links.php';
 

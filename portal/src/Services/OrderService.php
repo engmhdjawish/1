@@ -11,6 +11,181 @@ final class OrderService
 {
     private const ALLOWED_STATUSES = ['pending', 'confirmed', 'completed', 'cancelled'];
 
+    /**
+     * @param list<array{
+     *   material_guid: string,
+     *   material_code?: string,
+     *   material_name_ar: string,
+     *   quantity: float,
+     *   pcs_per_box?: int,
+     *   sale_price_sp?: float,
+     *   sale_price_usd?: float,
+     *   image_url?: string|null
+     * }> $items
+     * @return array{id: string, order_number: string, quote_access_token: string, total_sp: float, total_usd: float}|null
+     */
+    public static function createGuestShareOrder(
+        string $shareLinkId,
+        string $guestNameAr,
+        string $guestPhone,
+        ?string $notesAr,
+        array $items
+    ): ?array {
+        $shareLinkId = trim($shareLinkId);
+        $guestNameAr = trim($guestNameAr);
+        $guestPhone = trim($guestPhone);
+        $notesAr = $notesAr !== null ? trim($notesAr) : null;
+
+        if ($shareLinkId === '' || $guestNameAr === '' || $guestPhone === '' || $items === []) {
+            return null;
+        }
+
+        $normalizedItems = [];
+        $totalSp = 0.0;
+        $totalUsd = 0.0;
+        $sortOrder = 0;
+        foreach ($items as $item) {
+            $materialGuid = trim((string) ($item['material_guid'] ?? ''));
+            $name = trim((string) ($item['material_name_ar'] ?? ''));
+            $quantity = (float) ($item['quantity'] ?? 0);
+            if ($materialGuid === '' || $name === '' || $quantity <= 0) {
+                continue;
+            }
+
+            $saleSp = (float) ($item['sale_price_sp'] ?? 0);
+            $saleUsd = (float) ($item['sale_price_usd'] ?? 0);
+            $totalSp += $quantity * $saleSp;
+            $totalUsd += $quantity * $saleUsd;
+
+            $normalizedItems[] = [
+                'material_guid' => $materialGuid,
+                'material_code' => trim((string) ($item['material_code'] ?? '')),
+                'material_name_ar' => $name,
+                'quantity' => $quantity,
+                'pcs_per_box' => max(1, (int) ($item['pcs_per_box'] ?? 1)),
+                'sale_price_sp' => $saleSp,
+                'sale_price_usd' => $saleUsd,
+                'image_url' => isset($item['image_url']) && is_string($item['image_url']) ? trim($item['image_url']) : null,
+                'sort_order' => $sortOrder++,
+            ];
+        }
+
+        if ($normalizedItems === []) {
+            return null;
+        }
+
+        $pdo = Database::pdo();
+        $orderNumber = self::generateOrderNumber();
+        $quoteToken = bin2hex(random_bytes(32));
+
+        try {
+            $pdo->beginTransaction();
+
+            $orderStmt = $pdo->prepare(
+                'INSERT INTO orders (
+                    order_number,
+                    share_link_id,
+                    guest_name_ar,
+                    guest_phone,
+                    status,
+                    total_sp,
+                    total_usd,
+                    notes_ar,
+                    quote_access_token
+                 ) VALUES (
+                    :order_number,
+                    :share_link_id,
+                    :guest_name_ar,
+                    :guest_phone,
+                    :status,
+                    :total_sp,
+                    :total_usd,
+                    :notes_ar,
+                    :quote_access_token
+                 )
+                 RETURNING id::text'
+            );
+            $orderStmt->execute([
+                'order_number' => $orderNumber,
+                'share_link_id' => $shareLinkId,
+                'guest_name_ar' => $guestNameAr,
+                'guest_phone' => $guestPhone,
+                'status' => 'pending',
+                'total_sp' => $totalSp,
+                'total_usd' => $totalUsd,
+                'notes_ar' => $notesAr !== '' ? $notesAr : null,
+                'quote_access_token' => $quoteToken,
+            ]);
+            $orderId = (string) $orderStmt->fetchColumn();
+            if ($orderId === '') {
+                $pdo->rollBack();
+                return null;
+            }
+
+            $itemStmt = $pdo->prepare(
+                'INSERT INTO order_items (
+                    order_id,
+                    material_guid,
+                    material_code,
+                    material_name_ar,
+                    quantity,
+                    pcs_per_box,
+                    sale_price_sp,
+                    sale_price_usd,
+                    image_url,
+                    sort_order
+                 ) VALUES (
+                    :order_id,
+                    :material_guid,
+                    :material_code,
+                    :material_name_ar,
+                    :quantity,
+                    :pcs_per_box,
+                    :sale_price_sp,
+                    :sale_price_usd,
+                    :image_url,
+                    :sort_order
+                 )'
+            );
+
+            foreach ($normalizedItems as $line) {
+                $itemStmt->execute([
+                    'order_id' => $orderId,
+                    'material_guid' => $line['material_guid'],
+                    'material_code' => $line['material_code'] !== '' ? $line['material_code'] : null,
+                    'material_name_ar' => $line['material_name_ar'],
+                    'quantity' => $line['quantity'],
+                    'pcs_per_box' => $line['pcs_per_box'],
+                    'sale_price_sp' => $line['sale_price_sp'],
+                    'sale_price_usd' => $line['sale_price_usd'],
+                    'image_url' => $line['image_url'],
+                    'sort_order' => $line['sort_order'],
+                ]);
+            }
+
+            $pdo->commit();
+        } catch (\Throwable) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            return null;
+        }
+
+        return [
+            'id' => $orderId,
+            'order_number' => $orderNumber,
+            'quote_access_token' => $quoteToken,
+            'total_sp' => $totalSp,
+            'total_usd' => $totalUsd,
+        ];
+    }
+
+    private static function generateOrderNumber(): string
+    {
+        return 'ORD-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(4)), 0, 8));
+    }
+
     /** @param array{status?: string, q?: string, sync?: string, fromDate?: string, toDate?: string, limit?: int} $filters */
     public static function list(array $filters = []): array
     {
@@ -139,6 +314,88 @@ final class OrderService
         }
 
         return $counts;
+    }
+
+    /** @return array<string, mixed>|null */
+    public static function getOrderDetails(string $orderId): ?array
+    {
+        $orderId = trim($orderId);
+        if ($orderId === '') {
+            return null;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT
+                o.id::text AS id,
+                o.order_number,
+                o.status::text AS status,
+                o.amine_sync_status::text AS amine_sync_status,
+                o.total_sp,
+                o.total_usd,
+                o.notes_ar,
+                o.reservation_notes_ar,
+                o.amine_sync_error_ar,
+                o.created_at,
+                o.updated_at,
+                o.amine_synced_at,
+                o.quote_access_token,
+                wc.name_ar AS customer_name_ar,
+                wc.phone AS customer_phone,
+                o.guest_name_ar,
+                o.guest_phone,
+                sl.name_ar AS share_link_name
+             FROM orders o
+             LEFT JOIN web_customers wc ON wc.id = o.web_customer_id
+             LEFT JOIN share_links sl ON sl.id = o.share_link_id
+             WHERE o.id = :id
+             LIMIT 1'
+        );
+        $stmt->execute(['id' => $orderId]);
+        $order = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($order === false) {
+            return null;
+        }
+
+        $itemsStmt = Database::pdo()->prepare(
+            'SELECT
+                id::text AS id,
+                material_guid::text AS material_guid,
+                material_code,
+                material_name_ar,
+                quantity,
+                pcs_per_box,
+                sale_price_sp,
+                sale_price_usd,
+                image_url,
+                sort_order
+             FROM order_items
+             WHERE order_id = :order_id
+             ORDER BY sort_order ASC, material_name_ar ASC'
+        );
+        $itemsStmt->execute(['order_id' => $orderId]);
+        $items = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $timeline = [];
+        $timeline[] = [
+            'label' => 'إنشاء الطلب',
+            'at' => (string) ($order['created_at'] ?? ''),
+        ];
+        if ((string) ($order['updated_at'] ?? '') !== '' && ($order['updated_at'] ?? '') !== ($order['created_at'] ?? '')) {
+            $timeline[] = [
+                'label' => 'آخر تحديث',
+                'at' => (string) ($order['updated_at'] ?? ''),
+            ];
+        }
+        if ((string) ($order['amine_synced_at'] ?? '') !== '') {
+            $timeline[] = [
+                'label' => 'تمت مزامنة الأمين',
+                'at' => (string) ($order['amine_synced_at'] ?? ''),
+            ];
+        }
+
+        $order['items'] = $items;
+        $order['timeline'] = $timeline;
+        return $order;
     }
 
     /** @return list<array{status: string, orders_count: int, total_sp: float, total_usd: float}> */

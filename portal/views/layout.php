@@ -32,6 +32,7 @@ declare(strict_types=1);
       body { font-family: Manrope, sans-serif; background: #f6f6f8; color: #111827; }
       .site-link { color: #374151; }
       .site-link:hover { color: #D81921; }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     </style>
 </head>
 <body class="min-h-screen text-text-main bg-surface-bg">

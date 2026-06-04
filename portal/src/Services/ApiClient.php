@@ -20,6 +20,50 @@ final class ApiClient
         return self::request('POST', $path, json_encode($body, JSON_UNESCAPED_UNICODE));
     }
 
+    public static function getBinary(string $path, array $query = []): array
+    {
+        $base = rtrim(Config::get('AMINE_API_BASE_URL', 'http://127.0.0.1:5000') ?? '', '/');
+        $url = $base . $path;
+        if ($query !== []) {
+            $url .= '?' . http_build_query($query);
+        }
+
+        $token = self::accessToken();
+        $headers = [
+            'Accept: */*',
+            'Authorization: Bearer ' . $token,
+        ];
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => 'GET',
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_TIMEOUT => 60,
+            CURLOPT_SSL_VERIFYPEER => false,
+        ]);
+
+        $body = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $contentType = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($body === false) {
+            return ['ok' => false, 'status' => 0, 'error' => $error ?: 'فشل الاتصال بالـ API'];
+        }
+        if ($status === 401) {
+            self::clearToken();
+        }
+
+        return [
+            'ok' => $status >= 200 && $status < 300,
+            'status' => $status,
+            'body' => $body,
+            'contentType' => $contentType !== '' ? $contentType : 'application/octet-stream',
+        ];
+    }
+
     private static function request(string $method, string $path, ?string $body = null, array $query = []): array
     {
         $base = rtrim(Config::get('AMINE_API_BASE_URL', 'http://127.0.0.1:5000') ?? '', '/');

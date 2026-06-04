@@ -89,17 +89,19 @@ php -S 127.0.0.1:8080
 | `/store.php` | متجر عام |
 | `/register.php` | تسجيل عميل → `pending` |
 | `/login.php` | دخول موظّف أو عميل مفعّل |
+| `/share.php?token=...` | صفحة رابط مشاركة عام بقيود العرض/الفلاتر |
 | `/dashboard/index.php` | لوحة الإدارة الرئيسية |
-| `/dashboard/customers.php` | موافقة العملاء |
+| `/dashboard/customers.php` | إدارة العملاء (عرض/إضافة/تعديل/موافقة) |
 | `/dashboard/orders.php` | إدارة الطلبات + تغيير الحالة |
-| `/dashboard/share-links.php` | متابعة روابط المشاركة |
-| `/dashboard/home-sections.php` | Shell أقسام الرئيسية (جاهز للتوسعة) |
-| `/dashboard/users.php` | Shell المستخدمون والأدوار |
-| `/dashboard/settings.php` | Shell الإعدادات |
+| `/dashboard/share-links.php` | إنشاء/تعديل روابط مشاركة بقيود وفلاتر وخيارات عرض |
+| `/dashboard/home-sections.php` | إدارة أقسام الرئيسية |
+| `/dashboard/users.php` | إدارة المستخدمين والأدوار |
+| `/dashboard/settings.php` | إعدادات الشركة وسياسة المتجر |
 | `/dashboard/accounting.php` | لوحة المحاسب |
 | `/dashboard/accounting-sync.php` | طابور مزامنة الأمين |
 | `/dashboard/accounting-reports.php` | تقرير مالي أولي |
 | `/dashboard/accounting-statement.php` | كشف حساب عميل عبر API |
+| `/api/image.php?id=...` | جلب صورة مادة عبر بروكسي الخدمة |
 | `/api/proxy.php` | بروكسي JSON للـ API |
 
 ## تفعيل أقسام الرئيسية

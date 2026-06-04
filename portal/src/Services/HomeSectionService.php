@@ -365,7 +365,7 @@ final class HomeSectionService
 
     private static function normalizeSlug(string $value): string
     {
-        $value = trim(mb_strtolower($value, 'UTF-8'));
+        $value = trim(function_exists('mb_strtolower') ? mb_strtolower($value, 'UTF-8') : strtolower($value));
         $value = preg_replace('/[\s_]+/u', '-', $value) ?? '';
         $value = preg_replace('/[^a-z0-9\-]/u', '', $value) ?? '';
         $value = trim($value, '-');

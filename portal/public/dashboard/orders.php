@@ -35,8 +35,10 @@ $filters = [
     'toDate' => trim((string) ($_GET['toDate'] ?? '')),
     'limit' => (int) ($_GET['limit'] ?? 50),
 ];
+$detailsId = trim((string) ($_GET['details'] ?? ''));
 
 $orders = OrderService::list($filters);
+$orderDetails = $detailsId !== '' ? OrderService::getOrderDetails($detailsId) : null;
 $statusCounts = OrderService::statusCounts();
 $syncCounts = OrderService::syncCounts();
 $user = WebSession::user();

@@ -46,6 +46,7 @@ $password = Config::get('PORTAL_DB_PASSWORD', 'portal');
 $psqlBin = Config::get('PORTAL_PSQL_BIN', 'psql') ?? 'psql';
 
 putenv('PGPASSWORD=' . $password);
+putenv('PGCLIENTENCODING=UTF8');
 $psqlBase = sprintf(
     '%s -h %s -p %s -U %s -d %s',
     escapeshellarg($psqlBin),
