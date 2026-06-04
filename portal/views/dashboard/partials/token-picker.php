@@ -9,11 +9,17 @@ if (!isset($renderTokenPicker)) {
         array $optionItems,
         array $selectedItems,
         string $pickerId,
-        bool $showAllButton = true
+        bool $showAllButton = true,
+        bool $allowDynamicOptions = false
     ): void {
         $selectedNormalized = array_values(array_unique(array_filter(array_map('strval', $selectedItems), static fn ($value) => trim($value) !== '')));
         ?>
-        <div class="token-picker space-y-2" data-picker-id="<?= h($pickerId) ?>" data-input-name="<?= h($inputName) ?>">
+        <div
+          class="token-picker space-y-2"
+          data-picker-id="<?= h($pickerId) ?>"
+          data-input-name="<?= h($inputName) ?>"
+          <?= $allowDynamicOptions ? 'data-allow-dynamic="1"' : '' ?>
+        >
           <span class="text-text-muted block mb-1 text-sm"><?= h($title) ?></span>
           <div class="flex flex-wrap gap-2">
             <input type="text" data-role="search" class="h-10 min-w-[180px] flex-1 rounded-lg border border-border-subtle px-3 focus:border-primary focus:ring-primary" placeholder="ابحث ضمن الخيارات...">
@@ -37,7 +43,7 @@ if (!isset($renderTokenPicker)) {
           </select>
           <div data-role="chips" class="flex flex-wrap gap-2 min-h-[32px]"></div>
           <div data-role="hidden-inputs"></div>
-          <script type="application/json" data-role="selected-values"><?= json_encode($selectedNormalized, JSON_UNESCAPED_UNICODE) ?></script>
+          <script type="application/json" data-role="selected-values"><?= h(json_encode($selectedNormalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '[]') ?></script>
         </div>
         <?php
     };
@@ -49,8 +55,30 @@ if (!defined('PORTAL_TOKEN_PICKER_SCRIPT')) {
     <script>
     (() => {
       const normalize = (value) => (value || '').toString().trim();
+      const pickerRegistry = new Map();
+
+      const ensureOption = (pickerState, value, label) => {
+        const normalized = normalize(value);
+        if (normalized === '') return;
+        const existing = pickerState.allOptions.find((item) => item.value === normalized);
+        if (existing) {
+          if (label && existing.label !== label) {
+            existing.label = label;
+          }
+          return;
+        }
+        const entry = { value: normalized, label: label || normalized };
+        pickerState.allOptions.push(entry);
+        const optionEl = document.createElement('option');
+        optionEl.value = normalized;
+        optionEl.textContent = entry.label;
+        pickerState.optionsSelect.appendChild(optionEl);
+      };
+
       const initPicker = (picker) => {
         const inputName = picker.dataset.inputName;
+        const pickerId = picker.dataset.pickerId || '';
+        const allowDynamic = picker.dataset.allowDynamic === '1';
         const searchInput = picker.querySelector('[data-role="search"]');
         const optionsSelect = picker.querySelector('[data-role="options"]');
         const chipsHost = picker.querySelector('[data-role="chips"]');
@@ -73,6 +101,22 @@ if (!defined('PORTAL_TOKEN_PICKER_SCRIPT')) {
           selectedValues = [];
         }
         selectedValues = Array.from(new Set(selectedValues));
+
+        const state = {
+          picker,
+          pickerId,
+          inputName,
+          allowDynamic,
+          searchInput,
+          optionsSelect,
+          chipsHost,
+          hiddenHost,
+          allOptions,
+          selectedValues,
+          renderOptions: null,
+          renderSelected: null,
+        };
+
         const renderOptions = () => {
           const search = normalize(searchInput?.value || '').toLowerCase();
           for (const option of Array.from(optionsSelect.options)) {
@@ -81,6 +125,8 @@ if (!defined('PORTAL_TOKEN_PICKER_SCRIPT')) {
             option.hidden = search !== '' && !text.includes(search) && !value.includes(search);
           }
         };
+        state.renderOptions = renderOptions;
+
         const renderSelected = () => {
           chipsHost.innerHTML = '';
           hiddenHost.innerHTML = '';
@@ -90,12 +136,19 @@ if (!defined('PORTAL_TOKEN_PICKER_SCRIPT')) {
             const chip = document.createElement('button');
             chip.type = 'button';
             chip.className = 'inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs';
-            chip.textContent = label + ' ×';
+            chip.textContent = label;
+            chip.title = 'حذف';
+            const remove = document.createElement('span');
+            remove.className = 'text-slate-500';
+            remove.textContent = '×';
+            chip.appendChild(remove);
             chip.addEventListener('click', () => {
               selectedValues = selectedValues.filter((item) => item !== value);
+              state.selectedValues = selectedValues;
               renderSelected();
             });
             chipsHost.appendChild(chip);
+
             const hiddenInput = document.createElement('input');
             hiddenInput.type = 'hidden';
             hiddenInput.name = inputName;
@@ -103,22 +156,79 @@ if (!defined('PORTAL_TOKEN_PICKER_SCRIPT')) {
             hiddenHost.appendChild(hiddenInput);
           }
         };
-        const addValues = (values) => {
+        state.renderSelected = renderSelected;
+
+        const addValues = (values, labelsByValue = {}) => {
           for (const value of values) {
             const normalized = normalize(value);
-            if (normalized === '' || !allOptions.some((option) => option.value === normalized)) continue;
-            if (!selectedValues.includes(normalized)) selectedValues.push(normalized);
+            if (normalized === '') continue;
+            const label = labelsByValue[normalized] || '';
+            if (allowDynamic) {
+              ensureOption(state, normalized, label);
+            } else if (!allOptions.some((option) => option.value === normalized)) {
+              continue;
+            }
+            if (!selectedValues.includes(normalized)) {
+              selectedValues.push(normalized);
+            }
           }
+          state.selectedValues = selectedValues;
           renderSelected();
         };
-        addButton?.addEventListener('click', () => addValues(Array.from(optionsSelect.selectedOptions).map((o) => o.value)));
+
+        addButton?.addEventListener('click', () => {
+          addValues(Array.from(optionsSelect.selectedOptions).map((o) => o.value));
+        });
         addAllButton?.addEventListener('click', () => addValues(allOptions.map((o) => o.value)));
-        clearButton?.addEventListener('click', () => { selectedValues = []; renderSelected(); });
+        clearButton?.addEventListener('click', () => {
+          selectedValues = [];
+          state.selectedValues = selectedValues;
+          renderSelected();
+        });
         searchInput?.addEventListener('input', renderOptions);
-        optionsSelect?.addEventListener('dblclick', () => addValues(Array.from(optionsSelect.selectedOptions).map((o) => o.value)));
+        optionsSelect?.addEventListener('dblclick', () => {
+          addValues(Array.from(optionsSelect.selectedOptions).map((o) => o.value));
+        });
+
+        if (pickerId !== '') {
+          pickerRegistry.set(pickerId, state);
+        }
+
         renderOptions();
         renderSelected();
       };
+
+      window.portalTokenPickerAddOptions = (pickerId, items) => {
+        const state = pickerRegistry.get(pickerId);
+        if (!state || !Array.isArray(items)) return;
+        const values = [];
+        const labels = {};
+        for (const item of items) {
+          const value = normalize(item?.value ?? item?.guid ?? '');
+          if (value === '') continue;
+          const label = normalize(item?.label ?? item?.name ?? value);
+          ensureOption(state, value, label);
+          values.push(value);
+          labels[value] = label;
+        }
+        state.selectedValues = state.selectedValues || [];
+        const addValues = (vals, labelMap) => {
+          for (const v of vals) {
+            const normalized = normalize(v);
+            if (normalized === '') continue;
+            if (state.allowDynamic) {
+              ensureOption(state, normalized, labelMap[normalized] || '');
+            }
+            if (!state.selectedValues.includes(normalized)) {
+              state.selectedValues.push(normalized);
+            }
+          }
+          state.renderSelected?.();
+        };
+        addValues(values, labels);
+        state.renderOptions?.();
+      };
+
       document.querySelectorAll('.token-picker').forEach((picker) => initPicker(picker));
     })();
     </script>

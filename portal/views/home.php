@@ -25,6 +25,12 @@ use Portal\Services\ShareCartService;
     <?php
       $products = is_array($section['products'] ?? null) ? $section['products'] : [];
       $sectionId = (string) ($section['slug'] ?? $section['id'] ?? '');
+      $displayOptions = is_array($section['display_options'] ?? null) ? $section['display_options'] : [];
+      $showImages = array_key_exists('show_images', $displayOptions) ? (bool) $displayOptions['show_images'] : true;
+      $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
+      $showPriceSyp = $priceMode === 'both' || $priceMode === 'syp';
+      $showPriceUsd = $priceMode === 'both' || $priceMode === 'usd';
+      $showAnyPrice = $showPriceSyp || $showPriceUsd;
     ?>
     <section class="bg-white rounded-xl p-6 shadow-sm border border-gray-100" id="<?= h($sectionId) ?>">
       <div class="flex flex-wrap items-end justify-between gap-3 mb-4">
@@ -53,10 +59,14 @@ use Portal\Services\ShareCartService;
                 $packaging = ShareCartService::packaging($item);
                 $primaryUnit = ShareCartService::primaryUnitLabel($item);
                 $packageUnit = ShareCartService::packageUnitLabel($item);
+                $unitSaleSp = ShareCartService::unitSalePriceSp($item);
+                $unitSaleUsd = ShareCartService::unitSalePriceUsd($item);
                 $packagePriceSp = ShareCartService::packageSalePriceSp($item);
+                $packagePriceUsd = ShareCartService::packageSalePriceUsd($item);
                 $imageGuid = trim((string) ($item['productImageGuid'] ?? $item['ProductImageGuid'] ?? ''));
               ?>
               <article class="home-strip-card snap-start shrink-0 w-56 border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden flex flex-col">
+                <?php if ($showImages): ?>
                 <div class="h-32 bg-gray-100 flex items-center justify-center">
                   <?php if ($imageGuid !== ''): ?>
                     <img
@@ -69,6 +79,7 @@ use Portal\Services\ShareCartService;
                     <span class="material-symbols-outlined text-gray-300 text-4xl" aria-hidden="true">inventory_2</span>
                   <?php endif; ?>
                 </div>
+                <?php endif; ?>
                 <div class="p-3 flex flex-col flex-1">
                   <div class="font-bold text-sm line-clamp-2 min-h-[2.5rem]"><?= h((string) ($item['name'] ?? '-')) ?></div>
                   <div class="text-xs text-gray-500 mt-1"><?= h((string) ($item['materialCode'] ?? '')) ?></div>
@@ -76,11 +87,23 @@ use Portal\Services\ShareCartService;
                     تعبئة: <?= h(rtrim(rtrim(number_format($packaging, 2, '.', ','), '0'), '.')) ?>
                     <?= h($primaryUnit) ?>/<?= h($packageUnit) ?>
                   </div>
-                  <?php if ($packagePriceSp > 0): ?>
-                    <div class="text-primary font-extrabold mt-2 text-sm">
-                      <?= format_money($packagePriceSp, true) ?> ل.س
-                      <span class="text-xs font-normal text-gray-500">/ <?= h($packageUnit) ?></span>
-                    </div>
+                  <?php if ($showAnyPrice): ?>
+                    <?php if ($showPriceSyp && $packagePriceSp > 0): ?>
+                      <div class="text-primary font-extrabold mt-2 text-sm">
+                        <?= format_money($packagePriceSp, true) ?> ل.س
+                        <span class="text-xs font-normal text-gray-500">/ <?= h($packageUnit) ?></span>
+                      </div>
+                    <?php elseif ($showPriceSyp && $unitSaleSp > 0): ?>
+                      <div class="text-xs text-gray-500 mt-2"><?= format_money($unitSaleSp, true) ?> ل.س / <?= h($primaryUnit) ?></div>
+                    <?php endif; ?>
+                    <?php if ($showPriceUsd && $packagePriceUsd > 0): ?>
+                      <div class="text-emerald-700 font-bold mt-1 text-sm">
+                        $<?= number_format($packagePriceUsd, 2, '.', ',') ?>
+                        <span class="text-xs font-normal text-gray-500">/ <?= h($packageUnit) ?></span>
+                      </div>
+                    <?php elseif ($showPriceUsd && $unitSaleUsd > 0): ?>
+                      <div class="text-xs text-gray-500 mt-1">$<?= number_format($unitSaleUsd, 2, '.', ',') ?> / <?= h($primaryUnit) ?></div>
+                    <?php endif; ?>
                   <?php endif; ?>
                 </div>
               </article>

@@ -65,18 +65,30 @@ $buildFilterPayload = static function () use ($parseValues, $parseNullableFloat,
         'max_unit_purchase_price_usd' => $parseNullableFloat($_POST['filter_max_unit_purchase_price_usd'] ?? null),
     ];
 };
+$buildDisplayOptions = static function (): array {
+    $priceMode = trim((string) ($_POST['option_price_mode'] ?? 'both'));
+
+    return [
+        'show_images' => isset($_POST['option_show_images']),
+        'price_mode' => in_array($priceMode, ['both', 'syp', 'usd', 'none'], true) ? $priceMode : 'both',
+    ];
+};
 
 $flash = null;
 $flashType = 'success';
 $editId = trim((string) ($_GET['edit'] ?? ''));
 $user = WebSession::user();
-$materialSearchQ = trim((string) ($_GET['material_q'] ?? ''));
-$materialSearchResults = [];
+
+if (isset($_GET['saved']) && $_GET['saved'] === '1') {
+    $flash = 'تم حفظ القسم.';
+    $flashType = 'success';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string) ($_POST['action'] ?? ''));
     if ($action === 'save_section') {
         $displayMode = trim((string) ($_POST['display_mode'] ?? 'filter'));
+        $displayOptions = $buildDisplayOptions();
         $result = HomeSectionService::saveSection(
             trim((string) ($_POST['id'] ?? '')) ?: null,
             trim((string) ($_POST['slug'] ?? '')),
@@ -89,19 +101,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             isset($_POST['is_active']),
             isset($user['id']) ? (string) $user['id'] : null
         );
-        $flash = $result['message'];
-        $flashType = $result['ok'] ? 'success' : 'error';
         if ($result['ok']) {
             $sectionId = (string) ($result['id'] ?? '');
-            $editId = $sectionId;
             if ($displayMode === 'manual') {
                 HomeSectionService::syncManualProducts($sectionId, $parseValues($_POST['manual_material_guids'] ?? []));
-                HomeSectionService::syncFilters($sectionId, []);
+                HomeSectionService::syncFilters($sectionId, [], $displayOptions);
             } else {
-                HomeSectionService::syncFilters($sectionId, $buildFilterPayload());
+                HomeSectionService::syncFilters($sectionId, $buildFilterPayload(), $displayOptions);
                 HomeSectionService::syncManualProducts($sectionId, []);
             }
+            header('Location: /dashboard/home-sections.php?edit=' . rawurlencode($sectionId) . '&saved=1');
+            exit;
         }
+        $flash = $result['message'];
+        $flashType = 'error';
     } elseif ($action === 'toggle_section') {
         $ok = HomeSectionService::setActive(
             trim((string) ($_POST['id'] ?? '')),
@@ -110,7 +123,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         $flash = $ok ? 'تم تحديث حالة القسم.' : 'تعذر تحديث حالة القسم.';
         $flashType = $ok ? 'success' : 'error';
+    } elseif ($action === 'delete_section') {
+        $deleteId = trim((string) ($_POST['id'] ?? ''));
+        $deleteResult = HomeSectionService::deleteSection($deleteId);
+        $flash = $deleteResult['message'];
+        $flashType = $deleteResult['ok'] ? 'success' : 'error';
+        if ($deleteResult['ok']) {
+            if ($editId !== '' && $editId === $deleteId) {
+                header('Location: /dashboard/home-sections.php?deleted=1');
+                exit;
+            }
+            header('Location: /dashboard/home-sections.php?deleted=1');
+            exit;
+        }
     }
+}
+
+if (isset($_GET['deleted']) && $_GET['deleted'] === '1' && $flash === null) {
+    $flash = 'تم حذف القسم.';
+    $flashType = 'success';
 }
 
 $stats = HomeSectionService::stats();
@@ -118,23 +149,22 @@ $sections = HomeSectionService::adminSections();
 $editSection = $editId !== '' ? HomeSectionService::getSectionById($editId) : null;
 if ($editSection === null) {
     $editId = '';
-}
-
-if ($materialSearchQ !== '') {
-    try {
-        $searchResponse = ApiClient::get('/api/materials', [
-            'page' => 1,
-            'pageSize' => 24,
-            'search' => $materialSearchQ,
-        ]);
-        if ($searchResponse['ok']) {
-            $materialSearchResults = is_array($searchResponse['data']['items'] ?? null)
-                ? $searchResponse['data']['items']
-                : [];
-        }
-    } catch (\Throwable) {
-        $materialSearchResults = [];
-    }
+    $editSection = [
+        'id' => '',
+        'slug' => '',
+        'title_ar' => '',
+        'subtitle_ar' => '',
+        'banner_image_url' => '',
+        'display_mode' => 'filter',
+        'max_products' => 12,
+        'sort_order' => 0,
+        'is_active' => 1,
+        'filter_rules' => [],
+        'display_options' => HomeSectionService::defaultDisplayOptions(),
+        'material_guids' => [],
+        'manual_products' => [],
+        'preview_products' => [],
+    ];
 }
 
 $materialFilterOptions = [

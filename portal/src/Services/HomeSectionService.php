@@ -29,6 +29,18 @@ final class HomeSectionService
     private const FILTER_MIN_UNIT_PURCHASE_PRICE_USD = 'min_unit_purchase_price_usd';
     private const FILTER_MAX_UNIT_PURCHASE_PRICE_USD = 'max_unit_purchase_price_usd';
 
+    private const OPTION_SHOW_IMAGES = 'option_show_images';
+    private const OPTION_PRICE_MODE = 'option_price_mode';
+
+    /** @return array{show_images: bool, price_mode: string} */
+    public static function defaultDisplayOptions(): array
+    {
+        return [
+            'show_images' => true,
+            'price_mode' => 'both',
+        ];
+    }
+
     /** @return list<array<string, mixed>> */
     public static function activeSections(): array
     {
@@ -43,6 +55,7 @@ final class HomeSectionService
             $parsed = self::parseFilterRows(self::filtersForSection($sectionId));
             $section['filters'] = $parsed['rows'];
             $section['filter_rules'] = $parsed['rules'];
+            $section['display_options'] = $parsed['display_options'];
             $section['material_guids'] = self::manualProducts($sectionId);
             $section['products'] = self::loadProducts($section);
         }
@@ -71,6 +84,7 @@ final class HomeSectionService
              LEFT JOIN (
                 SELECT section_id, COUNT(*)::int AS filters_count
                 FROM home_section_filters
+                WHERE filter_type NOT LIKE 'option\_%'
                 GROUP BY section_id
              ) filters ON filters.section_id = hs.id
              LEFT JOIN (
@@ -128,6 +142,7 @@ final class HomeSectionService
         $parsed = self::parseFilterRows(self::sectionFilters($id));
         $row['filters'] = $parsed['rows'];
         $row['filter_rules'] = $parsed['rules'];
+        $row['display_options'] = $parsed['display_options'];
         $row['material_guids'] = self::manualProducts($id);
         $row['manual_products'] = self::loadManualProductDetails($row['material_guids']);
         $row['preview_products'] = self::loadProducts($row);
@@ -258,8 +273,32 @@ final class HomeSectionService
         return $stmt->rowCount() > 0;
     }
 
-    /** @param array<string, mixed> $payload */
-    public static function syncFilters(string $sectionId, array $payload): void
+    /** @return array{ok: bool, message: string} */
+    public static function deleteSection(string $id): array
+    {
+        $id = trim($id);
+        if ($id === '') {
+            return ['ok' => false, 'message' => 'المعرّف غير صالح.'];
+        }
+
+        try {
+            $stmt = Database::pdo()->prepare('DELETE FROM home_sections WHERE id = :id');
+            $stmt->execute(['id' => $id]);
+            if ($stmt->rowCount() === 0) {
+                return ['ok' => false, 'message' => 'القسم غير موجود أو تم حذفه مسبقًا.'];
+            }
+
+            return ['ok' => true, 'message' => 'تم حذف القسم.'];
+        } catch (\Throwable) {
+            return ['ok' => false, 'message' => 'تعذر حذف القسم.'];
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @param array{show_images?: bool, price_mode?: string} $displayOptions
+     */
+    public static function syncFilters(string $sectionId, array $payload, array $displayOptions = []): void
     {
         $pdo = Database::pdo();
         $pdo->prepare('DELETE FROM home_section_filters WHERE section_id = :id')->execute(['id' => $sectionId]);
@@ -320,6 +359,34 @@ final class HomeSectionService
         $insertNumber(self::FILTER_MAX_UNIT_SALE_PRICE_USD, $payload['max_unit_sale_price_usd'] ?? null);
         $insertNumber(self::FILTER_MIN_UNIT_PURCHASE_PRICE_USD, $payload['min_unit_purchase_price_usd'] ?? null);
         $insertNumber(self::FILTER_MAX_UNIT_PURCHASE_PRICE_USD, $payload['max_unit_purchase_price_usd'] ?? null);
+
+        self::insertDisplayOptions($insert, $sectionId, $displayOptions);
+    }
+
+    /**
+     * @param array{show_images?: bool, price_mode?: string} $displayOptions
+     */
+    private static function insertDisplayOptions(\PDOStatement $insert, string $sectionId, array $displayOptions): void
+    {
+        $defaults = self::defaultDisplayOptions();
+        $showImages = array_key_exists('show_images', $displayOptions)
+            ? (bool) $displayOptions['show_images']
+            : $defaults['show_images'];
+        $priceMode = trim((string) ($displayOptions['price_mode'] ?? $defaults['price_mode']));
+        if (!in_array($priceMode, ['both', 'syp', 'usd', 'none'], true)) {
+            $priceMode = $defaults['price_mode'];
+        }
+
+        $insert->execute([
+            'section_id' => $sectionId,
+            'filter_type' => self::OPTION_SHOW_IMAGES,
+            'value_ar' => $showImages ? '1' : '0',
+        ]);
+        $insert->execute([
+            'section_id' => $sectionId,
+            'filter_type' => self::OPTION_PRICE_MODE,
+            'value_ar' => $priceMode,
+        ]);
     }
 
     /** @param list<string> $guids */
@@ -375,10 +442,15 @@ final class HomeSectionService
 
     /**
      * @param list<array{filter_type: string, value_ar: string}> $rows
-     * @return array{rows: list<array{filter_type: string, value_ar: string}>, rules: array<string, mixed>}
+     * @return array{
+     *   rows: list<array{filter_type: string, value_ar: string}>,
+     *   rules: array<string, mixed>,
+     *   display_options: array{show_images: bool, price_mode: string}
+     * }
      */
     private static function parseFilterRows(array $rows): array
     {
+        $displayOptions = self::defaultDisplayOptions();
         $rules = [
             'keyword' => '',
             'material_types' => [],
@@ -407,6 +479,10 @@ final class HomeSectionService
             }
 
             match ($type) {
+                self::OPTION_SHOW_IMAGES => $displayOptions['show_images'] = self::toNullableBool($value) ?? true,
+                self::OPTION_PRICE_MODE => $displayOptions['price_mode'] = in_array($value, ['both', 'syp', 'usd', 'none'], true)
+                    ? $value
+                    : 'both',
                 self::FILTER_KEYWORD, 'keyword' => $rules['keyword'] = $value,
                 self::FILTER_MATERIAL_TYPE, 'material_type' => $rules['material_types'][] = $value,
                 self::FILTER_AGE_CATEGORY, 'age_category', 'target_category' => $rules['age_categories'][] = $value,
@@ -428,7 +504,16 @@ final class HomeSectionService
             };
         }
 
-        return ['rows' => $rows, 'rules' => $rules];
+        $materialRows = [];
+        foreach ($rows as $row) {
+            $type = trim((string) ($row['filter_type'] ?? ''));
+            if ($type === '' || str_starts_with($type, 'option_')) {
+                continue;
+            }
+            $materialRows[] = $row;
+        }
+
+        return ['rows' => $materialRows, 'rules' => $rules, 'display_options' => $displayOptions];
     }
 
     /** @return list<string> */

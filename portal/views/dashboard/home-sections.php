@@ -4,19 +4,22 @@ declare(strict_types=1);
 
 /** @var array{total: int, active: int, manual: int, filter: int} $stats */
 /** @var list<array<string, mixed>> $sections */
-/** @var array<string, mixed>|null $editSection */
+/** @var array<string, mixed> $editSection */
 /** @var string $editId */
 /** @var string|null $flash */
 /** @var string $flashType */
 /** @var array $materialFilterOptions */
 /** @var string|null $materialFilterOptionsError */
-/** @var string $materialSearchQ */
-/** @var list<array<string, mixed>> $materialSearchResults */
 
 require __DIR__ . '/partials/token-picker.php';
 
 $rules = is_array($editSection['filter_rules'] ?? null) ? $editSection['filter_rules'] : [];
+$displayOptions = is_array($editSection['display_options'] ?? null)
+    ? $editSection['display_options']
+    : ['show_images' => true, 'price_mode' => 'both'];
 $displayMode = (string) ($editSection['display_mode'] ?? 'filter');
+$showImages = array_key_exists('show_images', $displayOptions) ? (bool) $displayOptions['show_images'] : true;
+$priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
 
 $selectedMaterialTypes = array_map('strval', $rules['material_types'] ?? []);
 $selectedAgeCategories = array_map('strval', $rules['age_categories'] ?? []);
@@ -94,21 +97,6 @@ foreach ($editSection['manual_products'] ?? [] as $product) {
     $label = $name !== '' ? $name . ($code !== '' ? ' (' . $code . ')' : '') : $guid;
     $manualPickerOptions[] = ['value' => $guid, 'label' => $label];
 }
-foreach ($materialSearchResults as $item) {
-    if (!is_array($item)) {
-        continue;
-    }
-    $guid = trim((string) ($item['materialGuid'] ?? $item['MaterialGuid'] ?? ''));
-    if ($guid === '') {
-        continue;
-    }
-    $name = trim((string) ($item['name'] ?? ''));
-    $code = trim((string) ($item['materialCode'] ?? ''));
-    $label = $name !== '' ? $name . ($code !== '' ? ' (' . $code . ')' : '') : $guid;
-    if (!in_array($guid, array_column($manualPickerOptions, 'value'), true)) {
-        $manualPickerOptions[] = ['value' => $guid, 'label' => $label];
-    }
-}
 
 $selectedManualGuids = array_map('strval', $editSection['material_guids'] ?? []);
 $priceRanges = is_array($materialFilterOptions['priceRanges'] ?? null) ? $materialFilterOptions['priceRanges'] : [];
@@ -138,6 +126,14 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
   <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $flashType === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700' ?>">
     <?= h($flash) ?>
   </p>
+<?php endif; ?>
+
+<?php if ($editId !== ''): ?>
+  <form method="post" class="mb-3 flex justify-end" onsubmit="return confirm('هل أنت متأكد من حذف هذا القسم؟')">
+    <input type="hidden" name="action" value="delete_section">
+    <input type="hidden" name="id" value="<?= h($editId) ?>">
+    <button type="submit" class="h-9 px-4 rounded-lg text-xs font-bold bg-red-600 text-white">حذف القسم</button>
+  </form>
 <?php endif; ?>
 
 <form method="post" id="home-section-form" class="space-y-6 mb-6">
@@ -179,15 +175,34 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
         <input type="number" min="1" max="48" name="max_products" value="<?= h((string) ($editSection['max_products'] ?? '12')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4">
       </label>
       <label class="text-sm md:col-span-2 inline-flex items-center gap-2">
-        <input type="checkbox" name="is_active" <?= $editSection === null || !empty($editSection['is_active']) ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
+        <input type="checkbox" name="is_active" <?= !empty($editSection['is_active']) ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
         <span>نشط على الصفحة الرئيسية</span>
+      </label>
+    </div>
+  </article>
+
+  <article class="bg-white border border-border-subtle rounded-2xl p-5">
+    <h3 class="font-bold text-lg mb-3">خيارات العرض على الرئيسية</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <label class="text-sm inline-flex items-center gap-2">
+        <input type="checkbox" name="option_show_images" <?= $showImages ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
+        <span>إظهار الصور</span>
+      </label>
+      <label class="text-sm">
+        <span class="text-text-muted block mb-1">وضع السعر</span>
+        <select name="option_price_mode" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+          <option value="both" <?= $priceMode === 'both' ? 'selected' : '' ?>>سوري + دولار</option>
+          <option value="syp" <?= $priceMode === 'syp' ? 'selected' : '' ?>>سوري فقط</option>
+          <option value="usd" <?= $priceMode === 'usd' ? 'selected' : '' ?>>دولار فقط</option>
+          <option value="none" <?= $priceMode === 'none' ? 'selected' : '' ?>>بدون سعر</option>
+        </select>
       </label>
     </div>
   </article>
 
   <article id="filter-mode-panel" class="bg-white border border-border-subtle rounded-2xl p-5 <?= $displayMode === 'manual' ? 'hidden' : '' ?>">
     <h3 class="font-bold text-lg mb-2">فلاتر القسم (مثل رابط المشاركة)</h3>
-    <p class="text-sm text-text-muted mb-4">يُجلب مجموعة أكبر من المواد من API ثم يُعرض عدد عشوائي منها في الشريط عند كل تحديث للرئيسية.</p>
+    <p class="text-sm text-text-muted mb-4">ابحث ضمن القوائم ثم اضغط «إضافة» أو انقر مرتين على الخيار. يُجلب مجموعة من المواد ثم يُعرض عدد عشوائي في الشريط.</p>
 
     <?php if ($materialFilterOptionsError): ?>
       <p class="mb-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 px-3 py-2 text-xs"><?= h($materialFilterOptionsError) ?></p>
@@ -237,37 +252,53 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
         <span class="text-text-muted block mb-1">أدنى سعر بيع $</span>
         <input type="number" step="0.01" min="0" name="filter_min_unit_sale_price_usd" value="<?= h((string) ($rules['min_unit_sale_price_usd'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3">
       </label>
+      <label class="text-sm">
+        <span class="text-text-muted block mb-1">أعلى سعر بيع $</span>
+        <input type="number" step="0.01" min="0" name="filter_max_unit_sale_price_usd" value="<?= h((string) ($rules['max_unit_sale_price_usd'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3">
+      </label>
+      <label class="text-sm">
+        <span class="text-text-muted block mb-1">أدنى سعر شراء $</span>
+        <input type="number" step="0.01" min="0" name="filter_min_unit_purchase_price_usd" value="<?= h((string) ($rules['min_unit_purchase_price_usd'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3">
+      </label>
+      <label class="text-sm">
+        <span class="text-text-muted block mb-1">أعلى سعر شراء $</span>
+        <input type="number" step="0.01" min="0" name="filter_max_unit_purchase_price_usd" value="<?= h((string) ($rules['max_unit_purchase_price_usd'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3">
+      </label>
     </div>
   </article>
 
   <article id="manual-mode-panel" class="bg-white border border-border-subtle rounded-2xl p-5 <?= $displayMode === 'filter' ? 'hidden' : '' ?>">
     <h3 class="font-bold text-lg mb-2">اختيار المواد يدوياً</h3>
-    <p class="text-sm text-text-muted mb-4">حدد المواد التي تريد إظهارها في الشريط. عند كل زيارة للرئيسية يُختار عدد عشوائي من قائمتك.</p>
+    <p class="text-sm text-text-muted mb-4">اكتب اسم المادة أو رقمها واضغط Enter للبحث وإضافة النتائج دون إعادة تحميل الصفحة.</p>
 
     <div class="mb-4 flex flex-wrap gap-2 items-end">
       <label class="text-sm flex-1 min-w-[200px]">
         <span class="text-text-muted block mb-1">بحث لإضافة مواد</span>
-        <input form="material-search-form" name="material_q" value="<?= h($materialSearchQ) ?>" class="h-10 w-full rounded-xl border border-border-subtle px-3" placeholder="اسم أو كود المادة">
+        <input type="text" id="hs-material-search" class="h-10 w-full rounded-xl border border-border-subtle px-3" placeholder="اسم أو كود المادة — Enter للبحث">
       </label>
-      <button form="material-search-form" type="submit" class="h-10 px-4 rounded-xl border border-border-subtle text-sm font-bold">بحث</button>
+      <p id="hs-material-search-status" class="text-xs text-text-muted min-h-[1.25rem] pb-2"></p>
     </div>
 
-    <?php $renderTokenPicker('المواد المختارة للقسم', 'manual_material_guids[]', $manualPickerOptions, $selectedManualGuids, 'hs-manual-materials', false); ?>
+    <?php $renderTokenPicker('المواد المختارة للقسم', 'manual_material_guids[]', $manualPickerOptions, $selectedManualGuids, 'hs-manual-materials', false, true); ?>
   </article>
 
-  <?php if ($editId !== '' && $previewProducts !== []): ?>
+  <?php if ($editId !== ''): ?>
     <article class="bg-white border border-border-subtle rounded-2xl p-5">
       <h3 class="font-bold mb-3">معاينة عشوائية (مثال لزيارة واحدة)</h3>
-      <div class="flex gap-3 overflow-x-auto pb-2">
-        <?php foreach ($previewProducts as $item): ?>
-          <?php if (!is_array($item)) continue; ?>
-          <div class="shrink-0 w-44 border rounded-lg p-2 bg-surface-low text-xs">
-            <div class="font-bold line-clamp-2"><?= h((string) ($item['name'] ?? '-')) ?></div>
-            <div class="text-text-muted"><?= h((string) ($item['materialCode'] ?? '')) ?></div>
-          </div>
-        <?php endforeach; ?>
-      </div>
-      <p class="text-xs text-text-muted mt-2">تحديث الصفحة الرئيسية يعيد ترتيباً عشوائياً جديداً ضمن نفس الفلاتر.</p>
+      <?php if ($previewProducts === []): ?>
+        <p class="text-sm text-text-muted">لا توجد مواد في المعاينة (تحقق من الفلاتر أو المواد اليدوية واتصال API).</p>
+      <?php else: ?>
+        <div class="flex gap-3 overflow-x-auto pb-2">
+          <?php foreach ($previewProducts as $item): ?>
+            <?php if (!is_array($item)) continue; ?>
+            <div class="shrink-0 w-44 border rounded-lg p-2 bg-surface-low text-xs">
+              <div class="font-bold line-clamp-2"><?= h((string) ($item['name'] ?? '-')) ?></div>
+              <div class="text-text-muted"><?= h((string) ($item['materialCode'] ?? '')) ?></div>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+      <p class="text-xs text-text-muted mt-2">تحديث الصفحة الرئيسية يعيد ترتيباً عشوائياً جديداً ضمن نفس الإعدادات.</p>
     </article>
   <?php endif; ?>
 
@@ -279,12 +310,6 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
       <?= $editId !== '' ? 'حفظ القسم' : 'إنشاء القسم' ?>
     </button>
   </div>
-</form>
-
-<form method="get" id="material-search-form" class="hidden">
-  <?php if ($editId !== ''): ?>
-    <input type="hidden" name="edit" value="<?= h($editId) ?>">
-  <?php endif; ?>
 </form>
 
 <section class="bg-white border border-border-subtle rounded-2xl overflow-hidden">
@@ -319,13 +344,18 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
                 <?= !empty($section['is_active']) ? '<span class="text-green-700 font-bold text-xs">نشط</span>' : '<span class="text-xs">متوقف</span>' ?>
               </td>
               <td class="px-5 py-4">
-                <div class="flex justify-end gap-2">
+                <div class="flex justify-end gap-2 flex-wrap">
                   <a href="/dashboard/home-sections.php?edit=<?= urlencode((string) $section['id']) ?>" class="h-9 px-3 rounded-lg border text-xs font-bold">تعديل</a>
                   <form method="post">
                     <input type="hidden" name="action" value="toggle_section">
                     <input type="hidden" name="id" value="<?= h((string) $section['id']) ?>">
                     <input type="hidden" name="next_active" value="<?= !empty($section['is_active']) ? '0' : '1' ?>">
                     <button class="h-9 px-3 rounded-lg text-xs font-bold bg-primary text-white"><?= !empty($section['is_active']) ? 'إيقاف' : 'تفعيل' ?></button>
+                  </form>
+                  <form method="post" onsubmit="return confirm('حذف القسم؟')">
+                    <input type="hidden" name="action" value="delete_section">
+                    <input type="hidden" name="id" value="<?= h((string) $section['id']) ?>">
+                    <button class="h-9 px-3 rounded-lg text-xs font-bold bg-red-600 text-white">حذف</button>
                   </form>
                 </div>
               </td>
@@ -349,5 +379,41 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
   };
   modeSelect?.addEventListener('change', syncPanels);
   syncPanels();
+
+  const searchInput = document.getElementById('hs-material-search');
+  const statusEl = document.getElementById('hs-material-search-status');
+  const runMaterialSearch = async () => {
+    const q = (searchInput?.value || '').trim();
+    if (q === '' || !statusEl) return;
+    statusEl.textContent = 'جاري البحث...';
+    try {
+      const response = await fetch('/dashboard/home-sections-api.php?q=' + encodeURIComponent(q), {
+        headers: { Accept: 'application/json' },
+      });
+      const data = await response.json();
+      if (!data.ok) {
+        statusEl.textContent = data.message || 'تعذر البحث.';
+        return;
+      }
+      const items = Array.isArray(data.items) ? data.items : [];
+      if (items.length === 0) {
+        statusEl.textContent = 'لا توجد نتائج.';
+        return;
+      }
+      if (typeof window.portalTokenPickerAddOptions === 'function') {
+        window.portalTokenPickerAddOptions('hs-manual-materials', items);
+      }
+      statusEl.textContent = 'تمت إضافة ' + items.length + ' مادة.';
+      if (searchInput) searchInput.value = '';
+    } catch (_) {
+      statusEl.textContent = 'تعذر الاتصال بالخادم.';
+    }
+  };
+  searchInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      runMaterialSearch();
+    }
+  });
 })();
 </script>
