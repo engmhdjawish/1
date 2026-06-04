@@ -679,14 +679,48 @@ public sealed class MaterialsController(
 
     private async Task<IReadOnlyCollection<LookupOptionResponse>> GetStoresAsync(CancellationToken cancellationToken)
     {
-        return await mainDbContext.Stores
+        var stores = await mainDbContext.Stores
             .AsNoTracking()
-            .Where(store => store.IsActive != false)
             .OrderBy(store => store.Number)
             .ThenBy(store => store.Name)
             .Take(MaxFilterOptions)
             .Select(store => new LookupOptionResponse(store.Guid, store.Code, store.Name, store.LatinName))
             .ToListAsync(cancellationToken);
+
+        if (stores.Count > 0)
+        {
+            return stores;
+        }
+
+        return await GetStoresFromInventoryAsync(cancellationToken);
+    }
+
+    private async Task<IReadOnlyCollection<LookupOptionResponse>> GetStoresFromInventoryAsync(CancellationToken cancellationToken)
+    {
+        var storeGuids = await mainDbContext.MaterialInventory
+            .AsNoTracking()
+            .Where(inventory => inventory.StoreGuid.HasValue)
+            .Select(inventory => inventory.StoreGuid!.Value)
+            .Distinct()
+            .Take(MaxFilterOptions)
+            .ToListAsync(cancellationToken);
+
+        if (storeGuids.Count == 0)
+        {
+            return [];
+        }
+
+        var storesByGuid = await mainDbContext.Stores
+            .AsNoTracking()
+            .Where(store => storeGuids.Contains(store.Guid))
+            .Select(store => new LookupOptionResponse(store.Guid, store.Code, store.Name, store.LatinName))
+            .ToDictionaryAsync(store => store.Guid, cancellationToken);
+
+        return storeGuids
+            .Select(storeGuid => storesByGuid.GetValueOrDefault(storeGuid)
+                ?? new LookupOptionResponse(storeGuid, storeGuid.ToString("N"), null, null))
+            .OrderBy(store => store.Name ?? store.Code ?? store.Guid.ToString())
+            .ToList();
     }
 
     private static async Task<PriceRangeResponse?> GetPriceRangeAsync(
