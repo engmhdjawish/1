@@ -34,6 +34,37 @@ final class ShareLinkService
     private const OPTION_INCLUDE_RESULT_FILTERS = 'option_include_result_filters';
     private const OPTION_DEFAULT_SORT = 'option_default_sort';
     private const OPTION_DEFAULT_GROUP_BY = 'option_default_group_by';
+    private const OPTION_VISIBLE_CLIENT_FILTER = 'option_visible_client_filter';
+
+    /** @var list<string> */
+    private const DEFAULT_VISIBLE_CLIENT_FILTERS = [
+        'search',
+        'materialTypes',
+        'ageCategories',
+        'manufacturers',
+        'sizeRanges',
+        'countryOfOrigins',
+        'sort',
+    ];
+
+    /** @var list<string> */
+    private const ALLOWED_VISIBLE_CLIENT_FILTERS = [
+        'search',
+        'availability',
+        'warehouseRange',
+        'priceSaleSyp',
+        'priceSaleUsd',
+        'pricePurchaseUsd',
+        'materialTypes',
+        'ageCategories',
+        'manufacturers',
+        'sizeRanges',
+        'countryOfOrigins',
+        'stores',
+        'groups',
+        'sort',
+        'groupBy',
+    ];
 
     /** @param array{active?: string, q?: string, limit?: int} $filters */
     public static function list(array $filters = []): array
@@ -271,6 +302,7 @@ final class ShareLinkService
         bool $allowClientFilters = true,
         bool $allowSorting = true,
         bool $includeResultFilters = true,
+        array $visibleClientFilters = [],
         ?string $defaultSort = null,
         ?string $defaultGroupBy = null
     ): array {
@@ -319,6 +351,7 @@ final class ShareLinkService
         $forcedMaxUnitSalePriceUsd = self::normalizeNullableNumber($forcedMaxUnitSalePriceUsd);
         $forcedMinUnitPurchasePriceUsd = self::normalizeNullableNumber($forcedMinUnitPurchasePriceUsd);
         $forcedMaxUnitPurchasePriceUsd = self::normalizeNullableNumber($forcedMaxUnitPurchasePriceUsd);
+        $visibleClientFilters = self::normalizeVisibleClientFilters($visibleClientFilters);
 
         if (!self::isValidRange($forcedMinWarehouseQuantity, $forcedMaxWarehouseQuantity)) {
             return ['ok' => false, 'message' => 'مدى الكمية غير صحيح (الحد الأدنى أكبر من الحد الأعلى).'];
@@ -408,6 +441,7 @@ final class ShareLinkService
                 $allowClientFilters,
                 $allowSorting,
                 $includeResultFilters,
+                $visibleClientFilters,
                 $defaultSort,
                 $defaultGroupBy
             );
@@ -488,6 +522,7 @@ final class ShareLinkService
                 $allowClientFilters,
                 $allowSorting,
                 $includeResultFilters,
+                $visibleClientFilters,
                 $defaultSort,
                 $defaultGroupBy
             );
@@ -522,6 +557,30 @@ final class ShareLinkService
         ]);
 
         return $stmt->rowCount() > 0;
+    }
+
+    /** @return array{ok: bool, message: string} */
+    public static function delete(string $id): array
+    {
+        $id = trim($id);
+        if ($id === '') {
+            return ['ok' => false, 'message' => 'المعرّف غير صالح.'];
+        }
+
+        try {
+            $stmt = Database::pdo()->prepare('DELETE FROM share_links WHERE id = :id');
+            $stmt->execute(['id' => $id]);
+            if ($stmt->rowCount() === 0) {
+                return ['ok' => false, 'message' => 'الرابط غير موجود أو تم حذفه مسبقًا.'];
+            }
+
+            return ['ok' => true, 'message' => 'تم حذف رابط المشاركة.'];
+        } catch (\Throwable $exception) {
+            return [
+                'ok' => false,
+                'message' => 'تعذر حذف الرابط. قد يكون مرتبطًا بطلبات سابقة. استخدم الإيقاف بدل الحذف عند الحاجة.',
+            ];
+        }
     }
 
     public static function countActive(): int
@@ -581,6 +640,7 @@ final class ShareLinkService
      *      allow_client_filters: bool,
      *      allow_sorting: bool,
      *      include_result_filters: bool,
+     *      visible_client_filters: list<string>,
      *      default_sort: string,
      *      default_group_by: string
      *   }
@@ -594,6 +654,7 @@ final class ShareLinkService
             'allow_client_filters' => true,
             'allow_sorting' => true,
             'include_result_filters' => true,
+            'visible_client_filters' => self::DEFAULT_VISIBLE_CLIENT_FILTERS,
             'default_sort' => 'number:asc',
             'default_group_by' => 'none',
         ];
@@ -641,6 +702,7 @@ final class ShareLinkService
             'constraints' => $constraintDefaults,
             'options' => $defaults,
         ];
+        $hasVisibleClientFilters = false;
 
         foreach ($rows as $row) {
             $type = trim((string) ($row['filter_type'] ?? ''));
@@ -714,6 +776,15 @@ final class ShareLinkService
                 case self::OPTION_INCLUDE_RESULT_FILTERS:
                     $result['options']['include_result_filters'] = self::toBool($value, true);
                     break;
+                case self::OPTION_VISIBLE_CLIENT_FILTER:
+                    if (!$hasVisibleClientFilters) {
+                        $result['options']['visible_client_filters'] = [];
+                        $hasVisibleClientFilters = true;
+                    }
+                    if (in_array($value, self::ALLOWED_VISIBLE_CLIENT_FILTERS, true)) {
+                        $result['options']['visible_client_filters'][] = $value;
+                    }
+                    break;
                 case self::OPTION_DEFAULT_SORT:
                     $result['options']['default_sort'] = $value;
                     break;
@@ -732,6 +803,7 @@ final class ShareLinkService
         $result['forced_country_origins'] = self::normalizeFilterValues($result['forced_country_origins']);
         $result['forced_store_guids'] = self::normalizeGuidFilterValues($result['forced_store_guids']);
         $result['forced_group_guids'] = self::normalizeGuidFilterValues($result['forced_group_guids']);
+        $result['options']['visible_client_filters'] = self::normalizeVisibleClientFilters($result['options']['visible_client_filters'] ?? []);
 
         return $result;
     }
@@ -759,6 +831,7 @@ final class ShareLinkService
         bool $allowClientFilters,
         bool $allowSorting,
         bool $includeResultFilters,
+        array $visibleClientFilters,
         ?string $defaultSort,
         ?string $defaultGroupBy
     ): void {
@@ -817,6 +890,7 @@ final class ShareLinkService
         $insertNumber(self::FILTER_MAX_UNIT_SALE_PRICE_USD, $forcedMaxUnitSalePriceUsd);
         $insertNumber(self::FILTER_MIN_UNIT_PURCHASE_PRICE_USD, $forcedMinUnitPurchasePriceUsd);
         $insertNumber(self::FILTER_MAX_UNIT_PURCHASE_PRICE_USD, $forcedMaxUnitPurchasePriceUsd);
+        $insertValues(self::OPTION_VISIBLE_CLIENT_FILTER, $visibleClientFilters);
 
         $optionValues = [
             self::OPTION_SHOW_IMAGES => $showImages ? '1' : '0',
@@ -925,6 +999,27 @@ final class ShareLinkService
             '0', 'false', 'no', 'off' => false,
             default => null,
         };
+    }
+
+    /** @param array<int, mixed> $values
+     *  @return list<string>
+     */
+    private static function normalizeVisibleClientFilters(array $values): array
+    {
+        $normalized = self::normalizeFilterValues($values);
+        $allowed = array_flip(self::ALLOWED_VISIBLE_CLIENT_FILTERS);
+        $filtered = [];
+        foreach ($normalized as $value) {
+            if (isset($allowed[$value])) {
+                $filtered[] = $value;
+            }
+        }
+
+        if ($filtered === []) {
+            return self::DEFAULT_VISIBLE_CLIENT_FILTERS;
+        }
+
+        return array_values(array_unique($filtered));
     }
 
     private static function toBool(string $value, bool $default): bool

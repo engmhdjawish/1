@@ -54,6 +54,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 default => null,
             };
         };
+        $defaultSortClauses = $parseValues($_POST['option_default_sort_clauses'] ?? []);
+        $defaultSortValue = $defaultSortClauses !== [] ? implode(',', $defaultSortClauses) : 'number:asc';
+        $visibleClientFilters = $parseValues($_POST['option_visible_client_filters'] ?? []);
         $result = ShareLinkService::save(
             trim((string) ($_POST['id'] ?? '')) ?: null,
             trim((string) ($_POST['name_ar'] ?? '')),
@@ -87,7 +90,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             isset($_POST['option_allow_client_filters']),
             isset($_POST['option_allow_sorting']),
             isset($_POST['option_include_result_filters']),
-            trim((string) ($_POST['option_default_sort'] ?? 'number:asc')),
+            $visibleClientFilters,
+            $defaultSortValue,
             trim((string) ($_POST['option_default_group_by'] ?? 'none'))
         );
         $flash = $result['message'];
@@ -102,6 +106,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         $flash = $ok ? 'تم تحديث حالة الرابط.' : 'تعذر تحديث حالة الرابط.';
         $flashType = $ok ? 'success' : 'error';
+    } elseif ($action === 'delete') {
+        $deleteResult = ShareLinkService::delete(trim((string) ($_POST['id'] ?? '')));
+        $flash = $deleteResult['message'];
+        $flashType = $deleteResult['ok'] ? 'success' : 'error';
+        if ($deleteResult['ok'] && $editId !== '' && $editId === trim((string) ($_POST['id'] ?? ''))) {
+            $editId = '';
+            $editLink = null;
+        }
     }
 }
 
@@ -140,16 +152,19 @@ try {
     $filtersResponse = ApiClient::get('/api/materials/filter-options');
     if ($filtersResponse['ok']) {
         $data = is_array($filtersResponse['data']) ? $filtersResponse['data'] : [];
+        $stores = is_array($data['stores'] ?? null) ? $data['stores'] : (is_array($data['Stores'] ?? null) ? $data['Stores'] : []);
+        $groups = is_array($data['groups'] ?? null) ? $data['groups'] : (is_array($data['Groups'] ?? null) ? $data['Groups'] : []);
+        $priceRanges = is_array($data['priceRanges'] ?? null) ? $data['priceRanges'] : (is_array($data['PriceRanges'] ?? null) ? $data['PriceRanges'] : null);
         $materialFilterOptions = [
-            'materialTypes' => array_values(array_map('strval', $data['materialTypes'] ?? [])),
-            'ageCategories' => array_values(array_map('strval', $data['ageCategories'] ?? [])),
-            'manufacturers' => array_values(array_map('strval', $data['manufacturers'] ?? [])),
-            'sizeRanges' => array_values(array_map('strval', $data['sizeRanges'] ?? [])),
-            'countryOfOrigins' => array_values(array_map('strval', $data['countryOfOrigins'] ?? [])),
-            'stores' => array_values(array_filter($data['stores'] ?? [], static fn ($row) => is_array($row))),
-            'groups' => array_values(array_filter($data['groups'] ?? [], static fn ($row) => is_array($row))),
-            'priceRanges' => is_array($data['priceRanges'] ?? null)
-                ? $data['priceRanges']
+            'materialTypes' => array_values(array_map('strval', is_array($data['materialTypes'] ?? null) ? $data['materialTypes'] : ($data['MaterialTypes'] ?? []))),
+            'ageCategories' => array_values(array_map('strval', is_array($data['ageCategories'] ?? null) ? $data['ageCategories'] : ($data['AgeCategories'] ?? []))),
+            'manufacturers' => array_values(array_map('strval', is_array($data['manufacturers'] ?? null) ? $data['manufacturers'] : ($data['Manufacturers'] ?? []))),
+            'sizeRanges' => array_values(array_map('strval', is_array($data['sizeRanges'] ?? null) ? $data['sizeRanges'] : ($data['SizeRanges'] ?? []))),
+            'countryOfOrigins' => array_values(array_map('strval', is_array($data['countryOfOrigins'] ?? null) ? $data['countryOfOrigins'] : ($data['CountryOfOrigins'] ?? []))),
+            'stores' => array_values(array_filter($stores, static fn ($row) => is_array($row))),
+            'groups' => array_values(array_filter($groups, static fn ($row) => is_array($row))),
+            'priceRanges' => is_array($priceRanges)
+                ? $priceRanges
                 : [
                     'unitSalePriceSyp' => null,
                     'unitSalePriceUsd' => null,

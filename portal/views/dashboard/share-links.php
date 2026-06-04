@@ -31,6 +31,14 @@ $allowSorting = array_key_exists('allow_sorting', $linkOptions) ? (bool) $linkOp
 $includeResultFilters = array_key_exists('include_result_filters', $linkOptions) ? (bool) $linkOptions['include_result_filters'] : true;
 $defaultSort = (string) ($linkOptions['default_sort'] ?? 'number:asc');
 $defaultGroupBy = (string) ($linkOptions['default_group_by'] ?? 'none');
+$visibleClientFilters = array_map('strval', is_array($linkOptions['visible_client_filters'] ?? null) ? $linkOptions['visible_client_filters'] : []);
+if ($visibleClientFilters === []) {
+    $visibleClientFilters = ['search', 'materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins', 'sort'];
+}
+$defaultSortClauses = array_values(array_filter(array_map('trim', explode(',', $defaultSort)), static fn ($value) => $value !== ''));
+if ($defaultSortClauses === []) {
+    $defaultSortClauses = ['number:asc'];
+}
 
 $selectedMaterialTypes = array_map('strval', $editLink['forced_material_types'] ?? []);
 $selectedAgeCategories = array_map('strval', $editLink['forced_age_categories'] ?? []);
@@ -47,14 +55,24 @@ $ageCategoryOptions = array_values(array_unique(array_merge($materialFilterOptio
 $manufacturerOptions = array_values(array_unique(array_merge($materialFilterOptions['manufacturers'] ?? [], $selectedManufacturers)));
 $sizeRangeOptions = array_values(array_unique(array_merge($materialFilterOptions['sizeRanges'] ?? [], $selectedSizeRanges)));
 $countryOriginOptions = array_values(array_unique(array_merge($materialFilterOptions['countryOfOrigins'] ?? [], $selectedCountryOrigins)));
-$storeOptions = array_values(array_filter($materialFilterOptions['stores'] ?? [], static fn ($row) => is_array($row) && !empty($row['guid'])));
-$groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? [], static fn ($row) => is_array($row) && !empty($row['guid'])));
+$storeOptions = array_values(array_filter($materialFilterOptions['stores'] ?? [], static function ($row): bool {
+    if (!is_array($row)) {
+        return false;
+    }
+    return trim((string) ($row['guid'] ?? $row['Guid'] ?? '')) !== '';
+}));
+$groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? [], static function ($row): bool {
+    if (!is_array($row)) {
+        return false;
+    }
+    return trim((string) ($row['guid'] ?? $row['Guid'] ?? '')) !== '';
+}));
 $priceRanges = is_array($materialFilterOptions['priceRanges'] ?? null) ? $materialFilterOptions['priceRanges'] : [];
 
 foreach ($selectedStoreGuids as $guid) {
     $exists = false;
     foreach ($storeOptions as $store) {
-        if ((string) ($store['guid'] ?? '') === $guid) {
+        if ((string) ($store['guid'] ?? $store['Guid'] ?? '') === $guid) {
             $exists = true;
             break;
         }
@@ -67,7 +85,7 @@ foreach ($selectedStoreGuids as $guid) {
 foreach ($selectedGroupGuids as $guid) {
     $exists = false;
     foreach ($groupOptions as $group) {
-        if ((string) ($group['guid'] ?? '') === $guid) {
+        if ((string) ($group['guid'] ?? $group['Guid'] ?? '') === $guid) {
             $exists = true;
             break;
         }
@@ -76,6 +94,112 @@ foreach ($selectedGroupGuids as $guid) {
         $groupOptions[] = ['guid' => $guid, 'name' => $guid];
     }
 }
+
+$toOptionObjects = static function (array $values): array {
+    $result = [];
+    foreach ($values as $value) {
+        $item = trim((string) $value);
+        if ($item === '') {
+            continue;
+        }
+        $result[] = ['value' => $item, 'label' => $item];
+    }
+
+    return array_values(array_unique($result, SORT_REGULAR));
+};
+
+$storeOptionObjects = [];
+foreach ($storeOptions as $store) {
+    $storeGuid = trim((string) ($store['guid'] ?? $store['Guid'] ?? ''));
+    if ($storeGuid === '') {
+        continue;
+    }
+    $storeLabel = trim((string) ($store['name'] ?? $store['Name'] ?? '')) !== ''
+        ? (string) ($store['name'] ?? $store['Name'])
+        : ((string) ($store['code'] ?? $store['Code'] ?? '') !== '' ? (string) ($store['code'] ?? $store['Code']) : $storeGuid);
+    $storeOptionObjects[] = ['value' => $storeGuid, 'label' => $storeLabel];
+}
+
+$groupOptionObjects = [];
+foreach ($groupOptions as $group) {
+    $groupGuid = trim((string) ($group['guid'] ?? $group['Guid'] ?? ''));
+    if ($groupGuid === '') {
+        continue;
+    }
+    $groupLabel = trim((string) ($group['name'] ?? $group['Name'] ?? '')) !== ''
+        ? (string) ($group['name'] ?? $group['Name'])
+        : ((string) ($group['code'] ?? $group['Code'] ?? '') !== '' ? (string) ($group['code'] ?? $group['Code']) : $groupGuid);
+    $groupOptionObjects[] = ['value' => $groupGuid, 'label' => $groupLabel];
+}
+
+$sortPresetOptions = [
+    ['value' => 'number:asc', 'label' => 'رقم المادة تصاعدي'],
+    ['value' => 'number:desc', 'label' => 'رقم المادة تنازلي'],
+    ['value' => 'materialType:asc', 'label' => 'النوع تصاعدي'],
+    ['value' => 'ageCategory:asc', 'label' => 'العمر تصاعدي'],
+    ['value' => 'manufacturer:asc', 'label' => 'الشركة تصاعدي'],
+    ['value' => 'sizeRange:asc', 'label' => 'القياس تصاعدي'],
+    ['value' => 'countryOfOrigin:asc', 'label' => 'بلد المنشأ تصاعدي'],
+    ['value' => '-unitSalePriceSyp', 'label' => 'سعر البيع ل.س تنازلي'],
+    ['value' => 'unitSalePriceSyp:asc', 'label' => 'سعر البيع ل.س تصاعدي'],
+    ['value' => 'unitSalePriceUsd:asc', 'label' => 'سعر البيع دولار تصاعدي'],
+    ['value' => 'unitSalePriceUsd:desc', 'label' => 'سعر البيع دولار تنازلي'],
+];
+
+$visibleFilterOptions = [
+    ['value' => 'search', 'label' => 'بحث نصي'],
+    ['value' => 'materialTypes', 'label' => 'نوع المادة'],
+    ['value' => 'ageCategories', 'label' => 'الفئة العمرية'],
+    ['value' => 'manufacturers', 'label' => 'الشركة'],
+    ['value' => 'sizeRanges', 'label' => 'القياس'],
+    ['value' => 'countryOfOrigins', 'label' => 'بلد المنشأ'],
+    ['value' => 'stores', 'label' => 'المخازن'],
+    ['value' => 'groups', 'label' => 'المجموعات'],
+    ['value' => 'availability', 'label' => 'التوفر'],
+    ['value' => 'warehouseRange', 'label' => 'مدى الكمية'],
+    ['value' => 'priceSaleSyp', 'label' => 'مدى سعر البيع ل.س'],
+    ['value' => 'priceSaleUsd', 'label' => 'مدى سعر البيع $'],
+    ['value' => 'pricePurchaseUsd', 'label' => 'مدى سعر الشراء $'],
+    ['value' => 'sort', 'label' => 'الترتيب'],
+    ['value' => 'groupBy', 'label' => 'التجميع'],
+];
+
+$renderTokenPicker = static function (
+    string $title,
+    string $inputName,
+    array $optionItems,
+    array $selectedItems,
+    string $pickerId,
+    bool $showAllButton = true
+): void {
+    $selectedNormalized = array_values(array_unique(array_filter(array_map('strval', $selectedItems), static fn ($value) => trim($value) !== '')));
+    ?>
+    <div class="token-picker space-y-2" data-picker-id="<?= h($pickerId) ?>" data-input-name="<?= h($inputName) ?>">
+      <span class="text-text-muted block mb-1 text-sm"><?= h($title) ?></span>
+      <div class="flex flex-wrap gap-2">
+        <input type="text" data-role="search" class="h-10 min-w-[180px] flex-1 rounded-lg border border-border-subtle px-3 focus:border-primary focus:ring-primary" placeholder="ابحث ضمن الخيارات...">
+        <button type="button" data-action="add" class="h-10 px-3 rounded-lg border border-border-subtle text-sm">إضافة</button>
+        <?php if ($showAllButton): ?>
+          <button type="button" data-action="add-all" class="h-10 px-3 rounded-lg border border-border-subtle text-sm">الكل</button>
+        <?php endif; ?>
+        <button type="button" data-action="clear" class="h-10 px-3 rounded-lg border border-border-subtle text-sm">تفريغ</button>
+      </div>
+      <select data-role="options" multiple size="6" class="w-full rounded-lg border border-border-subtle px-3 py-2 text-sm focus:border-primary focus:ring-primary">
+        <?php foreach ($optionItems as $option): ?>
+          <?php $value = trim((string) ($option['value'] ?? '')); ?>
+          <?php if ($value === '') {
+              continue;
+          } ?>
+          <?php $label = trim((string) ($option['label'] ?? $value)); ?>
+          <option value="<?= h($value) ?>"><?= h($label) ?></option>
+        <?php endforeach; ?>
+      </select>
+      <div data-role="chips" class="flex flex-wrap gap-2"></div>
+      <div data-role="hidden-inputs"></div>
+      <script type="application/json" data-role="selected-values"><?= h(json_encode($selectedNormalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '[]') ?></script>
+    </div>
+    <?php
+};
 ?>
 <section class="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
   <div>
@@ -155,84 +279,30 @@ foreach ($selectedGroupGuids as $guid) {
           <?= h($materialFilterOptionsError) ?>
         </p>
       <?php endif; ?>
-      <label class="text-sm md:col-span-2">
-        <span class="text-text-muted block mb-1">تقييد اختياري: نوع المادة (اختيار متعدد)</span>
-        <select name="forced_material_types[]" multiple class="min-h-24 w-full rounded-xl border border-border-subtle px-3 py-2 focus:border-primary focus:ring-primary">
-          <?php foreach ($materialTypeOptions as $option): ?>
-            <option value="<?= h($option) ?>" <?= in_array($option, $selectedMaterialTypes, true) ? 'selected' : '' ?>><?= h($option) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </label>
-      <label class="text-sm md:col-span-2">
-        <span class="text-text-muted block mb-1">تقييد اختياري: الفئة العمرية (اختيار متعدد)</span>
-        <select name="forced_age_categories[]" multiple class="min-h-24 w-full rounded-xl border border-border-subtle px-3 py-2 focus:border-primary focus:ring-primary">
-          <?php foreach ($ageCategoryOptions as $option): ?>
-            <option value="<?= h($option) ?>" <?= in_array($option, $selectedAgeCategories, true) ? 'selected' : '' ?>><?= h($option) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </label>
-      <label class="text-sm">
-        <span class="text-text-muted block mb-1">تقييد اختياري: الشركة (اختيار متعدد)</span>
-        <select name="forced_manufacturers[]" multiple class="min-h-24 w-full rounded-xl border border-border-subtle px-3 py-2 focus:border-primary focus:ring-primary">
-          <?php foreach ($manufacturerOptions as $option): ?>
-            <option value="<?= h($option) ?>" <?= in_array($option, $selectedManufacturers, true) ? 'selected' : '' ?>><?= h($option) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </label>
-      <label class="text-sm">
-        <span class="text-text-muted block mb-1">تقييد اختياري: القياس (اختيار متعدد)</span>
-        <select name="forced_size_ranges[]" multiple class="min-h-24 w-full rounded-xl border border-border-subtle px-3 py-2 focus:border-primary focus:ring-primary">
-          <?php foreach ($sizeRangeOptions as $option): ?>
-            <option value="<?= h($option) ?>" <?= in_array($option, $selectedSizeRanges, true) ? 'selected' : '' ?>><?= h($option) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </label>
-      <label class="text-sm md:col-span-2">
-        <span class="text-text-muted block mb-1">تقييد اختياري: بلد المنشأ (اختيار متعدد)</span>
-        <select name="forced_country_origins[]" multiple class="min-h-24 w-full rounded-xl border border-border-subtle px-3 py-2 focus:border-primary focus:ring-primary">
-          <?php foreach ($countryOriginOptions as $option): ?>
-            <option value="<?= h($option) ?>" <?= in_array($option, $selectedCountryOrigins, true) ? 'selected' : '' ?>><?= h($option) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </label>
-      <label class="text-sm md:col-span-2">
-        <span class="text-text-muted block mb-1">تقييد اختياري: المخازن (اختيار متعدد)</span>
-        <select name="forced_store_guids[]" multiple class="min-h-24 w-full rounded-xl border border-border-subtle px-3 py-2 focus:border-primary focus:ring-primary">
-          <?php foreach ($storeOptions as $store): ?>
-            <?php
-                $storeGuid = (string) ($store['guid'] ?? '');
-                if ($storeGuid === '') {
-                    continue;
-                }
-                $storeLabel = trim((string) ($store['name'] ?? '')) !== ''
-                    ? (string) $store['name']
-                    : ((string) ($store['code'] ?? '') !== '' ? (string) $store['code'] : $storeGuid);
-            ?>
-            <option value="<?= h($storeGuid) ?>" <?= in_array($storeGuid, $selectedStoreGuids, true) ? 'selected' : '' ?>>
-              <?= h($storeLabel) ?>
-            </option>
-          <?php endforeach; ?>
-        </select>
-      </label>
-      <label class="text-sm md:col-span-2">
-        <span class="text-text-muted block mb-1">تقييد اختياري: المجموعات (اختيار متعدد)</span>
-        <select name="forced_group_guids[]" multiple class="min-h-24 w-full rounded-xl border border-border-subtle px-3 py-2 focus:border-primary focus:ring-primary">
-          <?php foreach ($groupOptions as $group): ?>
-            <?php
-                $groupGuid = (string) ($group['guid'] ?? '');
-                if ($groupGuid === '') {
-                    continue;
-                }
-                $groupLabel = trim((string) ($group['name'] ?? '')) !== ''
-                    ? (string) $group['name']
-                    : ((string) ($group['code'] ?? '') !== '' ? (string) $group['code'] : $groupGuid);
-            ?>
-            <option value="<?= h($groupGuid) ?>" <?= in_array($groupGuid, $selectedGroupGuids, true) ? 'selected' : '' ?>>
-              <?= h($groupLabel) ?>
-            </option>
-          <?php endforeach; ?>
-        </select>
-      </label>
+      <div class="md:col-span-2">
+        <?php $renderTokenPicker('تقييد اختياري: نوع المادة', 'forced_material_types[]', $toOptionObjects($materialTypeOptions), $selectedMaterialTypes, 'forced-material-types'); ?>
+      </div>
+      <div class="md:col-span-2">
+        <?php $renderTokenPicker('تقييد اختياري: الفئة العمرية', 'forced_age_categories[]', $toOptionObjects($ageCategoryOptions), $selectedAgeCategories, 'forced-age-categories'); ?>
+      </div>
+      <div class="md:col-span-1">
+        <?php $renderTokenPicker('تقييد اختياري: الشركة', 'forced_manufacturers[]', $toOptionObjects($manufacturerOptions), $selectedManufacturers, 'forced-manufacturers'); ?>
+      </div>
+      <div class="md:col-span-1">
+        <?php $renderTokenPicker('تقييد اختياري: القياس', 'forced_size_ranges[]', $toOptionObjects($sizeRangeOptions), $selectedSizeRanges, 'forced-size-ranges'); ?>
+      </div>
+      <div class="md:col-span-2">
+        <?php $renderTokenPicker('تقييد اختياري: بلد المنشأ', 'forced_country_origins[]', $toOptionObjects($countryOriginOptions), $selectedCountryOrigins, 'forced-country-origins'); ?>
+      </div>
+      <div class="md:col-span-2">
+        <?php $renderTokenPicker('تقييد اختياري: المخازن', 'forced_store_guids[]', $storeOptionObjects, $selectedStoreGuids, 'forced-store-guids'); ?>
+        <?php if ($storeOptionObjects === []): ?>
+          <p class="mt-1 text-xs text-amber-700">لم تصل قائمة مخازن من API حاليًا. تأكد من البيانات والصلاحيات، أو حدّث الصفحة بعد توفرها.</p>
+        <?php endif; ?>
+      </div>
+      <div class="md:col-span-2">
+        <?php $renderTokenPicker('تقييد اختياري: المجموعات', 'forced_group_guids[]', $groupOptionObjects, $selectedGroupGuids, 'forced-group-guids'); ?>
+      </div>
       <div class="md:col-span-2 rounded-xl border border-border-subtle p-4 bg-surface-low">
         <h3 class="text-sm font-bold mb-3">قيود متقدمة إضافية</h3>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -322,17 +392,10 @@ foreach ($selectedGroupGuids as $guid) {
               <option value="none" <?= $priceMode === 'none' ? 'selected' : '' ?>>بدون سعر</option>
             </select>
           </label>
-          <label class="text-sm">
-            <span class="text-text-muted block mb-1">الترتيب الافتراضي</span>
-            <input name="option_default_sort" list="sort-presets" value="<?= h($defaultSort) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="number:asc,materialType:asc">
-            <datalist id="sort-presets">
-              <option value="number:asc"></option>
-              <option value="number:desc"></option>
-              <option value="materialType:asc,manufacturer:asc"></option>
-              <option value="ageCategory:asc,materialType:asc"></option>
-              <option value="manufacturer:asc,-unitSalePriceSyp"></option>
-            </datalist>
-          </label>
+          <div class="text-sm md:col-span-2">
+            <?php $renderTokenPicker('الترتيب الافتراضي (قائمة جاهزة)', 'option_default_sort_clauses[]', $sortPresetOptions, $defaultSortClauses, 'option-default-sort', false); ?>
+            <p class="text-xs text-text-muted mt-1">يمكن إضافة أكثر من ترتيب، وسيتم تطبيقها بنفس ترتيب العناصر المختارة.</p>
+          </div>
           <label class="text-sm">
             <span class="text-text-muted block mb-1">التجميع الافتراضي</span>
             <select name="option_default_group_by" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
@@ -345,6 +408,10 @@ foreach ($selectedGroupGuids as $guid) {
               <option value="group" <?= $defaultGroupBy === 'group' ? 'selected' : '' ?>>حسب المجموعة</option>
             </select>
           </label>
+          <div class="text-sm md:col-span-2">
+            <?php $renderTokenPicker('فلاتر واجهة العميل المرئية فقط', 'option_visible_client_filters[]', $visibleFilterOptions, $visibleClientFilters, 'option-visible-client-filters'); ?>
+            <p class="text-xs text-text-muted mt-1">الواجهة النهائية ستعرض فقط الفلاتر المحددة هنا لتحسين تجربة المستخدم.</p>
+          </div>
         </div>
       </div>
       <label class="text-sm">
@@ -469,6 +536,11 @@ foreach ($selectedGroupGuids as $guid) {
                       <?= !empty($row['is_active']) ? 'إيقاف' : 'تفعيل' ?>
                     </button>
                   </form>
+                  <form method="post" onsubmit="return confirm('هل أنت متأكد من حذف الرابط؟')">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="id" value="<?= h((string) $row['id']) ?>">
+                    <button class="h-9 px-3 rounded-lg text-xs font-bold bg-red-600 text-white">حذف</button>
+                  </form>
                 </div>
               </td>
             </tr>
@@ -478,3 +550,111 @@ foreach ($selectedGroupGuids as $guid) {
     </div>
   <?php endif; ?>
 </section>
+
+<script>
+(() => {
+  const normalize = (value) => (value || '').toString().trim();
+
+  const initPicker = (picker) => {
+    const inputName = picker.dataset.inputName;
+    const searchInput = picker.querySelector('[data-role="search"]');
+    const optionsSelect = picker.querySelector('[data-role="options"]');
+    const chipsHost = picker.querySelector('[data-role="chips"]');
+    const hiddenHost = picker.querySelector('[data-role="hidden-inputs"]');
+    const selectedScript = picker.querySelector('script[data-role="selected-values"]');
+    const addButton = picker.querySelector('[data-action="add"]');
+    const addAllButton = picker.querySelector('[data-action="add-all"]');
+    const clearButton = picker.querySelector('[data-action="clear"]');
+
+    const allOptions = Array.from(optionsSelect.options).map((option) => ({
+      value: normalize(option.value),
+      label: normalize(option.textContent),
+    })).filter((option) => option.value !== '');
+
+    let selectedValues = [];
+    try {
+      const parsed = JSON.parse(selectedScript?.textContent || '[]');
+      if (Array.isArray(parsed)) {
+        selectedValues = parsed.map((value) => normalize(value)).filter((value) => value !== '');
+      }
+    } catch (_) {
+      selectedValues = [];
+    }
+    selectedValues = Array.from(new Set(selectedValues));
+
+    const renderOptions = () => {
+      const search = normalize(searchInput?.value || '').toLowerCase();
+      for (const option of Array.from(optionsSelect.options)) {
+        const text = normalize(option.textContent).toLowerCase();
+        const value = normalize(option.value).toLowerCase();
+        option.hidden = search !== '' && !text.includes(search) && !value.includes(search);
+      }
+    };
+
+    const renderSelected = () => {
+      chipsHost.innerHTML = '';
+      hiddenHost.innerHTML = '';
+      for (const value of selectedValues) {
+        const option = allOptions.find((item) => item.value === value);
+        const label = option ? option.label : value;
+
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs';
+        chip.textContent = label;
+        chip.title = 'حذف';
+
+        const remove = document.createElement('span');
+        remove.className = 'text-slate-500';
+        remove.textContent = '×';
+        chip.appendChild(remove);
+        chip.addEventListener('click', () => {
+          selectedValues = selectedValues.filter((item) => item !== value);
+          renderSelected();
+        });
+        chipsHost.appendChild(chip);
+
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = inputName;
+        hiddenInput.value = value;
+        hiddenHost.appendChild(hiddenInput);
+      }
+    };
+
+    const addValues = (values) => {
+      for (const value of values) {
+        const normalized = normalize(value);
+        if (normalized === '') continue;
+        if (!allOptions.some((option) => option.value === normalized)) continue;
+        if (!selectedValues.includes(normalized)) {
+          selectedValues.push(normalized);
+        }
+      }
+      renderSelected();
+    };
+
+    addButton?.addEventListener('click', () => {
+      const picked = Array.from(optionsSelect.selectedOptions).map((option) => option.value);
+      addValues(picked);
+    });
+    addAllButton?.addEventListener('click', () => {
+      addValues(allOptions.map((option) => option.value));
+    });
+    clearButton?.addEventListener('click', () => {
+      selectedValues = [];
+      renderSelected();
+    });
+    searchInput?.addEventListener('input', renderOptions);
+    optionsSelect?.addEventListener('dblclick', () => {
+      const picked = Array.from(optionsSelect.selectedOptions).map((option) => option.value);
+      addValues(picked);
+    });
+
+    renderOptions();
+    renderSelected();
+  };
+
+  document.querySelectorAll('.token-picker').forEach((picker) => initPicker(picker));
+})();
+</script>

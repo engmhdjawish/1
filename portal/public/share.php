@@ -74,6 +74,18 @@ $defaultGroupBy = trim((string) ($shareOptions['default_group_by'] ?? 'none'));
 $defaultGroupBy = in_array($defaultGroupBy, ['none', 'ageCategory', 'sizeRange', 'materialType', 'manufacturer', 'countryOfOrigin', 'group'], true)
     ? $defaultGroupBy
     : 'none';
+$visibleClientFilters = array_values(array_map(
+    'strval',
+    is_array($shareOptions['visible_client_filters'] ?? null)
+        ? $shareOptions['visible_client_filters']
+        : []
+));
+if ($visibleClientFilters === []) {
+    $visibleClientFilters = ['search', 'materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins', 'sort'];
+}
+$isClientFilterVisible = static function (string $code) use ($visibleClientFilters): bool {
+    return in_array($code, $visibleClientFilters, true);
+};
 
 $forcedMaterialTypes = array_map('strval', is_array($shareLink) ? ($shareLink['forced_material_types'] ?? []) : []);
 $forcedAgeCategories = array_map('strval', is_array($shareLink) ? ($shareLink['forced_age_categories'] ?? []) : []);
@@ -109,22 +121,22 @@ $forcedMaxUnitPurchasePriceUsd = isset($constraints['max_unit_purchase_price_usd
     ? (float) $constraints['max_unit_purchase_price_usd']
     : null;
 
-$selectedMaterialTypes = $allowClientFilters ? $parseList('materialTypes') : [];
-$selectedAgeCategories = $allowClientFilters ? $parseList('ageCategories') : [];
-$selectedManufacturers = $allowClientFilters ? $parseList('manufacturers') : [];
-$selectedSizeRanges = $allowClientFilters ? $parseList('sizeRanges') : [];
-$selectedCountryOrigins = $allowClientFilters ? $parseList('countryOfOrigins') : [];
-$selectedStoreGuids = $allowClientFilters ? $parseList('storeGuids') : [];
-$selectedGroupGuids = $allowClientFilters ? $parseList('groupGuids') : [];
-$selectedIsAvailable = $allowClientFilters ? $parseNullableBool('isAvailable') : null;
-$selectedMinWarehouseQuantity = $allowClientFilters ? $parseNullableFloat('minWarehouseQuantity') : null;
-$selectedMaxWarehouseQuantity = $allowClientFilters ? $parseNullableFloat('maxWarehouseQuantity') : null;
-$selectedMinUnitSalePriceSyp = $allowClientFilters ? $parseNullableFloat('minUnitSalePriceSyp') : null;
-$selectedMaxUnitSalePriceSyp = $allowClientFilters ? $parseNullableFloat('maxUnitSalePriceSyp') : null;
-$selectedMinUnitSalePriceUsd = $allowClientFilters ? $parseNullableFloat('minUnitSalePriceUsd') : null;
-$selectedMaxUnitSalePriceUsd = $allowClientFilters ? $parseNullableFloat('maxUnitSalePriceUsd') : null;
-$selectedMinUnitPurchasePriceUsd = $allowClientFilters ? $parseNullableFloat('minUnitPurchasePriceUsd') : null;
-$selectedMaxUnitPurchasePriceUsd = $allowClientFilters ? $parseNullableFloat('maxUnitPurchasePriceUsd') : null;
+$selectedMaterialTypes = ($allowClientFilters && $isClientFilterVisible('materialTypes')) ? $parseList('materialTypes') : [];
+$selectedAgeCategories = ($allowClientFilters && $isClientFilterVisible('ageCategories')) ? $parseList('ageCategories') : [];
+$selectedManufacturers = ($allowClientFilters && $isClientFilterVisible('manufacturers')) ? $parseList('manufacturers') : [];
+$selectedSizeRanges = ($allowClientFilters && $isClientFilterVisible('sizeRanges')) ? $parseList('sizeRanges') : [];
+$selectedCountryOrigins = ($allowClientFilters && $isClientFilterVisible('countryOfOrigins')) ? $parseList('countryOfOrigins') : [];
+$selectedStoreGuids = ($allowClientFilters && $isClientFilterVisible('stores')) ? $parseList('storeGuids') : [];
+$selectedGroupGuids = ($allowClientFilters && $isClientFilterVisible('groups')) ? $parseList('groupGuids') : [];
+$selectedIsAvailable = ($allowClientFilters && $isClientFilterVisible('availability')) ? $parseNullableBool('isAvailable') : null;
+$selectedMinWarehouseQuantity = ($allowClientFilters && $isClientFilterVisible('warehouseRange')) ? $parseNullableFloat('minWarehouseQuantity') : null;
+$selectedMaxWarehouseQuantity = ($allowClientFilters && $isClientFilterVisible('warehouseRange')) ? $parseNullableFloat('maxWarehouseQuantity') : null;
+$selectedMinUnitSalePriceSyp = ($allowClientFilters && $isClientFilterVisible('priceSaleSyp')) ? $parseNullableFloat('minUnitSalePriceSyp') : null;
+$selectedMaxUnitSalePriceSyp = ($allowClientFilters && $isClientFilterVisible('priceSaleSyp')) ? $parseNullableFloat('maxUnitSalePriceSyp') : null;
+$selectedMinUnitSalePriceUsd = ($allowClientFilters && $isClientFilterVisible('priceSaleUsd')) ? $parseNullableFloat('minUnitSalePriceUsd') : null;
+$selectedMaxUnitSalePriceUsd = ($allowClientFilters && $isClientFilterVisible('priceSaleUsd')) ? $parseNullableFloat('maxUnitSalePriceUsd') : null;
+$selectedMinUnitPurchasePriceUsd = ($allowClientFilters && $isClientFilterVisible('pricePurchaseUsd')) ? $parseNullableFloat('minUnitPurchasePriceUsd') : null;
+$selectedMaxUnitPurchasePriceUsd = ($allowClientFilters && $isClientFilterVisible('pricePurchaseUsd')) ? $parseNullableFloat('maxUnitPurchasePriceUsd') : null;
 
 $mergeConstrainedValues = static function (array $forced, array $selected, bool &$hasConflict): array {
     if ($forced === []) {
@@ -224,15 +236,15 @@ $validateRange($queryMinUnitSalePriceUsd, $queryMaxUnitSalePriceUsd, $hasConstra
 $validateRange($queryMinUnitPurchasePriceUsd, $queryMaxUnitPurchasePriceUsd, $hasConstraintConflict);
 
 $baseKeyword = trim((string) (is_array($shareLink) ? ($shareLink['keyword'] ?? '') : ''));
-$userKeyword = $allowClientFilters ? trim((string) ($_GET['q'] ?? '')) : '';
+$userKeyword = ($allowClientFilters && $isClientFilterVisible('search')) ? trim((string) ($_GET['q'] ?? '')) : '';
 $search = trim($baseKeyword . ' ' . $userKeyword);
 $search = $search !== '' ? $search : null;
 
-$selectedSort = $allowSorting
+$selectedSort = ($allowSorting && $isClientFilterVisible('sort'))
     ? trim((string) ($_GET['sort'] ?? $defaultSort))
     : $defaultSort;
 $selectedSort = $selectedSort !== '' ? $selectedSort : 'number:asc';
-$selectedGroupBy = $allowClientFilters
+$selectedGroupBy = ($allowClientFilters && $isClientFilterVisible('groupBy'))
     ? trim((string) ($_GET['groupBy'] ?? $defaultGroupBy))
     : $defaultGroupBy;
 $selectedGroupBy = in_array($selectedGroupBy, ['none', 'ageCategory', 'sizeRange', 'materialType', 'manufacturer', 'countryOfOrigin', 'group'], true)
@@ -262,16 +274,19 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
         $optionsResponse = ApiClient::get('/api/materials/filter-options');
         if ($optionsResponse['ok']) {
             $optionsData = is_array($optionsResponse['data']) ? $optionsResponse['data'] : [];
+            $stores = is_array($optionsData['stores'] ?? null) ? $optionsData['stores'] : (is_array($optionsData['Stores'] ?? null) ? $optionsData['Stores'] : []);
+            $groups = is_array($optionsData['groups'] ?? null) ? $optionsData['groups'] : (is_array($optionsData['Groups'] ?? null) ? $optionsData['Groups'] : []);
+            $priceRanges = is_array($optionsData['priceRanges'] ?? null) ? $optionsData['priceRanges'] : (is_array($optionsData['PriceRanges'] ?? null) ? $optionsData['PriceRanges'] : null);
             $filterOptions = [
-                'materialTypes' => array_values(array_map('strval', $optionsData['materialTypes'] ?? [])),
-                'ageCategories' => array_values(array_map('strval', $optionsData['ageCategories'] ?? [])),
-                'manufacturers' => array_values(array_map('strval', $optionsData['manufacturers'] ?? [])),
-                'sizeRanges' => array_values(array_map('strval', $optionsData['sizeRanges'] ?? [])),
-                'countryOfOrigins' => array_values(array_map('strval', $optionsData['countryOfOrigins'] ?? [])),
-                'stores' => array_values(array_filter($optionsData['stores'] ?? [], static fn ($row) => is_array($row))),
-                'groups' => array_values(array_filter($optionsData['groups'] ?? [], static fn ($row) => is_array($row))),
-                'priceRanges' => is_array($optionsData['priceRanges'] ?? null)
-                    ? $optionsData['priceRanges']
+                'materialTypes' => array_values(array_map('strval', is_array($optionsData['materialTypes'] ?? null) ? $optionsData['materialTypes'] : ($optionsData['MaterialTypes'] ?? []))),
+                'ageCategories' => array_values(array_map('strval', is_array($optionsData['ageCategories'] ?? null) ? $optionsData['ageCategories'] : ($optionsData['AgeCategories'] ?? []))),
+                'manufacturers' => array_values(array_map('strval', is_array($optionsData['manufacturers'] ?? null) ? $optionsData['manufacturers'] : ($optionsData['Manufacturers'] ?? []))),
+                'sizeRanges' => array_values(array_map('strval', is_array($optionsData['sizeRanges'] ?? null) ? $optionsData['sizeRanges'] : ($optionsData['SizeRanges'] ?? []))),
+                'countryOfOrigins' => array_values(array_map('strval', is_array($optionsData['countryOfOrigins'] ?? null) ? $optionsData['countryOfOrigins'] : ($optionsData['CountryOfOrigins'] ?? []))),
+                'stores' => array_values(array_filter($stores, static fn ($row) => is_array($row))),
+                'groups' => array_values(array_filter($groups, static fn ($row) => is_array($row))),
+                'priceRanges' => is_array($priceRanges)
+                    ? $priceRanges
                     : [
                         'unitSalePriceSyp' => null,
                         'unitSalePriceUsd' => null,
@@ -350,13 +365,23 @@ $showPriceSyp = in_array($priceMode, ['both', 'syp'], true);
 $showPriceUsd = in_array($priceMode, ['both', 'usd'], true);
 $showQuantity = (bool) (is_array($shareLink) && (($shareLink['show_quantity'] ?? 0) ? true : false));
 
-$storeOptions = array_values(array_filter($filterOptions['stores'] ?? [], static fn ($row) => is_array($row) && !empty($row['guid'])));
-$groupOptions = array_values(array_filter($filterOptions['groups'] ?? [], static fn ($row) => is_array($row) && !empty($row['guid'])));
+$storeOptions = array_values(array_filter($filterOptions['stores'] ?? [], static function ($row): bool {
+    if (!is_array($row)) {
+        return false;
+    }
+    return trim((string) ($row['guid'] ?? $row['Guid'] ?? '')) !== '';
+}));
+$groupOptions = array_values(array_filter($filterOptions['groups'] ?? [], static function ($row): bool {
+    if (!is_array($row)) {
+        return false;
+    }
+    return trim((string) ($row['guid'] ?? $row['Guid'] ?? '')) !== '';
+}));
 
 foreach ($selectedStoreGuids as $guid) {
     $exists = false;
     foreach ($storeOptions as $store) {
-        if ((string) ($store['guid'] ?? '') === $guid) {
+        if ((string) ($store['guid'] ?? $store['Guid'] ?? '') === $guid) {
             $exists = true;
             break;
         }
@@ -368,7 +393,7 @@ foreach ($selectedStoreGuids as $guid) {
 foreach ($selectedGroupGuids as $guid) {
     $exists = false;
     foreach ($groupOptions as $group) {
-        if ((string) ($group['guid'] ?? '') === $guid) {
+        if ((string) ($group['guid'] ?? $group['Guid'] ?? '') === $guid) {
             $exists = true;
             break;
         }
@@ -414,27 +439,33 @@ ob_start();
     <?php if ($allowClientFilters): ?>
       <form method="get" class="mb-5 grid grid-cols-1 md:grid-cols-4 gap-3">
         <input type="hidden" name="token" value="<?= h($token) ?>">
-        <label class="text-sm md:col-span-2">
-          <span class="text-gray-600 block mb-1">بحث</span>
-          <input name="q" value="<?= h((string) ($_GET['q'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3" placeholder="اسم المادة أو الكود">
-        </label>
-        <label class="text-sm">
-          <span class="text-gray-600 block mb-1">أقل كمية</span>
-          <input type="number" name="minWarehouseQuantity" min="0" step="0.01" value="<?= h((string) ($_GET['minWarehouseQuantity'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-        </label>
-        <label class="text-sm">
-          <span class="text-gray-600 block mb-1">أعلى كمية</span>
-          <input type="number" name="maxWarehouseQuantity" min="0" step="0.01" value="<?= h((string) ($_GET['maxWarehouseQuantity'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-        </label>
-        <label class="text-sm">
-          <span class="text-gray-600 block mb-1">التوفر</span>
-          <select name="isAvailable" class="h-11 w-full rounded border border-gray-300 px-3">
-            <option value="" <?= !isset($_GET['isAvailable']) || $_GET['isAvailable'] === '' ? 'selected' : '' ?>>الكل</option>
-            <option value="1" <?= (string) ($_GET['isAvailable'] ?? '') === '1' ? 'selected' : '' ?>>متوفر</option>
-            <option value="0" <?= (string) ($_GET['isAvailable'] ?? '') === '0' ? 'selected' : '' ?>>غير متوفر</option>
-          </select>
-        </label>
-        <?php if ($allowSorting): ?>
+        <?php if ($isClientFilterVisible('search')): ?>
+          <label class="text-sm md:col-span-2">
+            <span class="text-gray-600 block mb-1">بحث</span>
+            <input name="q" value="<?= h((string) ($_GET['q'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3" placeholder="اسم المادة أو الكود">
+          </label>
+        <?php endif; ?>
+        <?php if ($isClientFilterVisible('warehouseRange')): ?>
+          <label class="text-sm">
+            <span class="text-gray-600 block mb-1">أقل كمية</span>
+            <input type="number" name="minWarehouseQuantity" min="0" step="0.01" value="<?= h((string) ($_GET['minWarehouseQuantity'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
+          </label>
+          <label class="text-sm">
+            <span class="text-gray-600 block mb-1">أعلى كمية</span>
+            <input type="number" name="maxWarehouseQuantity" min="0" step="0.01" value="<?= h((string) ($_GET['maxWarehouseQuantity'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
+          </label>
+        <?php endif; ?>
+        <?php if ($isClientFilterVisible('availability')): ?>
+          <label class="text-sm">
+            <span class="text-gray-600 block mb-1">التوفر</span>
+            <select name="isAvailable" class="h-11 w-full rounded border border-gray-300 px-3">
+              <option value="" <?= !isset($_GET['isAvailable']) || $_GET['isAvailable'] === '' ? 'selected' : '' ?>>الكل</option>
+              <option value="1" <?= (string) ($_GET['isAvailable'] ?? '') === '1' ? 'selected' : '' ?>>متوفر</option>
+              <option value="0" <?= (string) ($_GET['isAvailable'] ?? '') === '0' ? 'selected' : '' ?>>غير متوفر</option>
+            </select>
+          </label>
+        <?php endif; ?>
+        <?php if ($allowSorting && $isClientFilterVisible('sort')): ?>
           <label class="text-sm">
             <span class="text-gray-600 block mb-1">الترتيب</span>
             <input name="sort" list="share-sort-presets" value="<?= h($selectedSort) ?>" class="h-11 w-full rounded border border-gray-300 px-3" placeholder="number:asc,materialType:asc">
@@ -447,32 +478,34 @@ ob_start();
             </datalist>
           </label>
         <?php endif; ?>
-        <label class="text-sm">
-          <span class="text-gray-600 block mb-1">التجميع</span>
-          <select name="groupBy" class="h-11 w-full rounded border border-gray-300 px-3">
-            <option value="none" <?= $selectedGroupBy === 'none' ? 'selected' : '' ?>>بدون</option>
-            <option value="ageCategory" <?= $selectedGroupBy === 'ageCategory' ? 'selected' : '' ?>>الفئة العمرية</option>
-            <option value="sizeRange" <?= $selectedGroupBy === 'sizeRange' ? 'selected' : '' ?>>القياس</option>
-            <option value="materialType" <?= $selectedGroupBy === 'materialType' ? 'selected' : '' ?>>النوع</option>
-            <option value="manufacturer" <?= $selectedGroupBy === 'manufacturer' ? 'selected' : '' ?>>الشركة</option>
-            <option value="countryOfOrigin" <?= $selectedGroupBy === 'countryOfOrigin' ? 'selected' : '' ?>>بلد المنشأ</option>
-            <option value="group" <?= $selectedGroupBy === 'group' ? 'selected' : '' ?>>المجموعة</option>
-          </select>
-        </label>
+        <?php if ($isClientFilterVisible('groupBy')): ?>
+          <label class="text-sm">
+            <span class="text-gray-600 block mb-1">التجميع</span>
+            <select name="groupBy" class="h-11 w-full rounded border border-gray-300 px-3">
+              <option value="none" <?= $selectedGroupBy === 'none' ? 'selected' : '' ?>>بدون</option>
+              <option value="ageCategory" <?= $selectedGroupBy === 'ageCategory' ? 'selected' : '' ?>>الفئة العمرية</option>
+              <option value="sizeRange" <?= $selectedGroupBy === 'sizeRange' ? 'selected' : '' ?>>القياس</option>
+              <option value="materialType" <?= $selectedGroupBy === 'materialType' ? 'selected' : '' ?>>النوع</option>
+              <option value="manufacturer" <?= $selectedGroupBy === 'manufacturer' ? 'selected' : '' ?>>الشركة</option>
+              <option value="countryOfOrigin" <?= $selectedGroupBy === 'countryOfOrigin' ? 'selected' : '' ?>>بلد المنشأ</option>
+              <option value="group" <?= $selectedGroupBy === 'group' ? 'selected' : '' ?>>المجموعة</option>
+            </select>
+          </label>
+        <?php endif; ?>
 
-        <?php if ($storeOptions !== []): ?>
+        <?php if ($isClientFilterVisible('stores') && $storeOptions !== []): ?>
           <fieldset class="md:col-span-2 rounded border border-gray-200 p-3">
             <legend class="text-sm text-gray-600 px-1">المخازن</legend>
             <div class="grid grid-cols-1 gap-2 mt-2 text-sm max-h-48 overflow-auto">
               <?php foreach ($storeOptions as $store): ?>
                 <?php
-                  $storeGuid = (string) ($store['guid'] ?? '');
+                  $storeGuid = (string) ($store['guid'] ?? $store['Guid'] ?? '');
                   if ($storeGuid === '') {
                       continue;
                   }
-                  $storeLabel = trim((string) ($store['name'] ?? '')) !== ''
-                      ? (string) $store['name']
-                      : ((string) ($store['code'] ?? '') !== '' ? (string) $store['code'] : $storeGuid);
+                  $storeLabel = trim((string) ($store['name'] ?? $store['Name'] ?? '')) !== ''
+                      ? (string) ($store['name'] ?? $store['Name'])
+                      : ((string) ($store['code'] ?? $store['Code'] ?? '') !== '' ? (string) ($store['code'] ?? $store['Code']) : $storeGuid);
                   $isChecked = in_array($storeGuid, $selectedStoreGuids, true);
                 ?>
                 <label class="inline-flex items-center gap-2">
@@ -484,19 +517,19 @@ ob_start();
           </fieldset>
         <?php endif; ?>
 
-        <?php if ($groupOptions !== []): ?>
+        <?php if ($isClientFilterVisible('groups') && $groupOptions !== []): ?>
           <fieldset class="md:col-span-2 rounded border border-gray-200 p-3">
             <legend class="text-sm text-gray-600 px-1">المجموعات</legend>
             <div class="grid grid-cols-1 gap-2 mt-2 text-sm max-h-48 overflow-auto">
               <?php foreach ($groupOptions as $group): ?>
                 <?php
-                  $groupGuid = (string) ($group['guid'] ?? '');
+                  $groupGuid = (string) ($group['guid'] ?? $group['Guid'] ?? '');
                   if ($groupGuid === '') {
                       continue;
                   }
-                  $groupLabel = trim((string) ($group['name'] ?? '')) !== ''
-                      ? (string) $group['name']
-                      : ((string) ($group['code'] ?? '') !== '' ? (string) $group['code'] : $groupGuid);
+                  $groupLabel = trim((string) ($group['name'] ?? $group['Name'] ?? '')) !== ''
+                      ? (string) ($group['name'] ?? $group['Name'])
+                      : ((string) ($group['code'] ?? $group['Code'] ?? '') !== '' ? (string) ($group['code'] ?? $group['Code']) : $groupGuid);
                   $isChecked = in_array($groupGuid, $selectedGroupGuids, true);
                 ?>
                 <label class="inline-flex items-center gap-2">
@@ -508,50 +541,61 @@ ob_start();
           </fieldset>
         <?php endif; ?>
 
-        <fieldset class="md:col-span-4 rounded border border-gray-200 p-3">
-          <legend class="text-sm text-gray-600 px-1">المدى السعري (اختياري)</legend>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
-            <label class="text-sm">
-              <span class="text-gray-600 block mb-1">سعر البيع ل.س (من)</span>
-              <input type="number" name="minUnitSalePriceSyp" min="0" step="0.01" value="<?= h((string) ($_GET['minUnitSalePriceSyp'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-            </label>
-            <label class="text-sm">
-              <span class="text-gray-600 block mb-1">سعر البيع ل.س (إلى)</span>
-              <input type="number" name="maxUnitSalePriceSyp" min="0" step="0.01" value="<?= h((string) ($_GET['maxUnitSalePriceSyp'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-            </label>
-            <label class="text-sm">
-              <span class="text-gray-600 block mb-1">سعر البيع $ (من)</span>
-              <input type="number" name="minUnitSalePriceUsd" min="0" step="0.01" value="<?= h((string) ($_GET['minUnitSalePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-            </label>
-            <label class="text-sm">
-              <span class="text-gray-600 block mb-1">سعر البيع $ (إلى)</span>
-              <input type="number" name="maxUnitSalePriceUsd" min="0" step="0.01" value="<?= h((string) ($_GET['maxUnitSalePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-            </label>
-            <label class="text-sm">
-              <span class="text-gray-600 block mb-1">سعر الشراء $ (من)</span>
-              <input type="number" name="minUnitPurchasePriceUsd" min="0" step="0.01" value="<?= h((string) ($_GET['minUnitPurchasePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-            </label>
-            <label class="text-sm">
-              <span class="text-gray-600 block mb-1">سعر الشراء $ (إلى)</span>
-              <input type="number" name="maxUnitPurchasePriceUsd" min="0" step="0.01" value="<?= h((string) ($_GET['maxUnitPurchasePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-            </label>
-          </div>
-        </fieldset>
+        <?php if ($isClientFilterVisible('priceSaleSyp') || $isClientFilterVisible('priceSaleUsd') || $isClientFilterVisible('pricePurchaseUsd')): ?>
+          <fieldset class="md:col-span-4 rounded border border-gray-200 p-3">
+            <legend class="text-sm text-gray-600 px-1">المدى السعري (اختياري)</legend>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
+              <?php if ($isClientFilterVisible('priceSaleSyp')): ?>
+                <label class="text-sm">
+                  <span class="text-gray-600 block mb-1">سعر البيع ل.س (من)</span>
+                  <input type="number" name="minUnitSalePriceSyp" min="0" step="0.01" value="<?= h((string) ($_GET['minUnitSalePriceSyp'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
+                </label>
+                <label class="text-sm">
+                  <span class="text-gray-600 block mb-1">سعر البيع ل.س (إلى)</span>
+                  <input type="number" name="maxUnitSalePriceSyp" min="0" step="0.01" value="<?= h((string) ($_GET['maxUnitSalePriceSyp'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
+                </label>
+              <?php endif; ?>
+              <?php if ($isClientFilterVisible('priceSaleUsd')): ?>
+                <label class="text-sm">
+                  <span class="text-gray-600 block mb-1">سعر البيع $ (من)</span>
+                  <input type="number" name="minUnitSalePriceUsd" min="0" step="0.01" value="<?= h((string) ($_GET['minUnitSalePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
+                </label>
+                <label class="text-sm">
+                  <span class="text-gray-600 block mb-1">سعر البيع $ (إلى)</span>
+                  <input type="number" name="maxUnitSalePriceUsd" min="0" step="0.01" value="<?= h((string) ($_GET['maxUnitSalePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
+                </label>
+              <?php endif; ?>
+              <?php if ($isClientFilterVisible('pricePurchaseUsd')): ?>
+                <label class="text-sm">
+                  <span class="text-gray-600 block mb-1">سعر الشراء $ (من)</span>
+                  <input type="number" name="minUnitPurchasePriceUsd" min="0" step="0.01" value="<?= h((string) ($_GET['minUnitPurchasePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
+                </label>
+                <label class="text-sm">
+                  <span class="text-gray-600 block mb-1">سعر الشراء $ (إلى)</span>
+                  <input type="number" name="maxUnitPurchasePriceUsd" min="0" step="0.01" value="<?= h((string) ($_GET['maxUnitPurchasePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
+                </label>
+              <?php endif; ?>
+            </div>
+          </fieldset>
+        <?php endif; ?>
 
         <?php
           $facetMap = [
-              'materialTypes' => 'نوع المادة',
-              'ageCategories' => 'الفئة العمرية',
-              'manufacturers' => 'الشركة',
-              'sizeRanges' => 'القياس',
-              'countryOfOrigins' => 'بلد المنشأ',
+              'materialTypes' => ['label' => 'نوع المادة', 'visible' => $isClientFilterVisible('materialTypes')],
+              'ageCategories' => ['label' => 'الفئة العمرية', 'visible' => $isClientFilterVisible('ageCategories')],
+              'manufacturers' => ['label' => 'الشركة', 'visible' => $isClientFilterVisible('manufacturers')],
+              'sizeRanges' => ['label' => 'القياس', 'visible' => $isClientFilterVisible('sizeRanges')],
+              'countryOfOrigins' => ['label' => 'بلد المنشأ', 'visible' => $isClientFilterVisible('countryOfOrigins')],
           ];
         ?>
-        <?php foreach ($facetMap as $facetKey => $facetTitle): ?>
+        <?php foreach ($facetMap as $facetKey => $facetConfig): ?>
+          <?php if (empty($facetConfig['visible'])) {
+              continue;
+          } ?>
           <?php $values = $resultFilters[$facetKey] ?? []; ?>
           <?php if ($values !== []): ?>
             <fieldset class="md:col-span-2 rounded border border-gray-200 p-3">
-              <legend class="text-sm text-gray-600 px-1"><?= h($facetTitle) ?></legend>
+              <legend class="text-sm text-gray-600 px-1"><?= h((string) $facetConfig['label']) ?></legend>
               <div class="grid grid-cols-2 gap-2 mt-2 text-sm">
                 <?php foreach ($values as $facet): ?>
                   <?php
