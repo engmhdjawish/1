@@ -12,7 +12,24 @@ require $base . '/bootstrap.php';
 
 use Portal\Config;
 
-$docs = Config::get('PORTAL_REPO_DOCS_PATH', $base . '/../docs') ?? $base . '/../docs';
+$docs = Config::get('PORTAL_REPO_DOCS_PATH', $base . '/../docs') ?? ($base . '/../docs');
+$isAbsolutePath = static function (string $path): bool {
+    if ($path === '') {
+        return false;
+    }
+
+    // Windows: C:\... or C:/... or UNC (\\server\share)
+    if (preg_match('/^[A-Za-z]:[\/\\\\]/', $path) === 1 || str_starts_with($path, '\\\\')) {
+        return true;
+    }
+
+    // Linux/macOS absolute path
+    return str_starts_with($path, '/');
+};
+if (!$isAbsolutePath($docs)) {
+    $docs = $base . '/' . ltrim($docs, '/\\');
+}
+
 $schema = realpath($docs . '/portal-db-schema.sql');
 $seed = realpath($docs . '/portal-db-seed.sql');
 
@@ -27,9 +44,9 @@ $name = Config::get('PORTAL_DB_NAME', 'portal_db');
 $user = Config::get('PORTAL_DB_USER', 'portal');
 $password = Config::get('PORTAL_DB_PASSWORD', 'portal');
 
+putenv('PGPASSWORD=' . $password);
 $psqlBase = sprintf(
-    'PGPASSWORD=%s psql -h %s -p %s -U %s -d %s',
-    escapeshellarg($password),
+    'psql -h %s -p %s -U %s -d %s',
     escapeshellarg($host),
     escapeshellarg($port),
     escapeshellarg($user),
