@@ -5,7 +5,9 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Services\ApiClient;
+use Portal\Services\ShareCartService;
 use Portal\Services\ShareLinkService;
+use Portal\Support\SharePageAccess;
 
 require dirname(__DIR__) . '/views/helpers.php';
 
@@ -13,6 +15,7 @@ $token = trim((string) ($_GET['token'] ?? $_POST['token'] ?? ''));
 $shareLink = $token !== '' ? ShareLinkService::getByPublicToken($token) : null;
 $error = null;
 $apiError = null;
+$cartNotice = null;
 
 if ($token === '') {
     $error = 'يرجى فتح الصفحة باستخدام رابط مشاركة صحيح يحتوي على token.';
@@ -31,11 +34,32 @@ $hasAccess = !$requiresPassword || !empty($_SESSION['share_link_access'][$token]
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'unlock' && $shareLink !== null) {
     $userName = trim((string) ($_POST['access_username'] ?? ''));
     $password = trim((string) ($_POST['access_password'] ?? ''));
-    if (ShareLinkService::verifyProtectedAccess($token, $userName, $password)) {
-        $_SESSION['share_link_access'][$token] = true;
+    if (SharePageAccess::unlock($token, $userName, $password)) {
         $hasAccess = true;
     } else {
         $error = 'بيانات الدخول غير صحيحة.';
+    }
+}
+
+$policyFlags = SharePageAccess::policyFlags($shareLink);
+$allowCart = $policyFlags['allow_cart'];
+$allowOrder = $policyFlags['allow_order'];
+
+if ($shareLink !== null && $hasAccess && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'add_to_cart' && $allowCart) {
+    $quantity = max(0.01, (float) ($_POST['quantity'] ?? 1));
+    $capturePrices = (bool) (($shareLink['show_price'] ?? 0) ? true : false);
+    $line = [
+        'material_guid' => trim((string) ($_POST['material_guid'] ?? '')),
+        'material_code' => trim((string) ($_POST['material_code'] ?? '')),
+        'material_name_ar' => trim((string) ($_POST['material_name_ar'] ?? 'مادة')) ?: 'مادة',
+        'pcs_per_box' => max(1, (int) ($_POST['pcs_per_box'] ?? 1)),
+        'sale_price_sp' => $capturePrices ? ShareCartService::parseAmount($_POST['sale_price_sp'] ?? 0) : 0.0,
+        'sale_price_usd' => $capturePrices ? ShareCartService::parseAmount($_POST['sale_price_usd'] ?? 0) : 0.0,
+        'image_url' => trim((string) ($_POST['image_url'] ?? '')) ?: null,
+    ];
+    if ($line['material_guid'] !== '') {
+        ShareCartService::add($token, (string) ($shareLink['id'] ?? ''), $line, $quantity);
+        $cartNotice = 'تمت إضافة المادة إلى السلة.';
     }
 }
 
@@ -512,8 +536,25 @@ $renderFilterChips = static function (string $paramName, array $options, array $
 ob_start();
 ?>
 <div class="bg-white rounded-xl p-6 shadow-sm border">
-  <h1 class="text-2xl font-extrabold mb-2"><?= h((string) (is_array($shareLink) ? ($shareLink['name_ar'] ?? 'رابط مشاركة') : 'رابط مشاركة')) ?></h1>
-  <p class="text-sm text-gray-600 mb-4">سياسة الوصول: <?= h((string) (is_array($shareLink) ? ($shareLink['access_policy_name_ar'] ?? '—') : '—')) ?></p>
+  <div class="flex flex-wrap items-start justify-between gap-3 mb-2">
+    <div>
+      <h1 class="text-2xl font-extrabold"><?= h((string) (is_array($shareLink) ? ($shareLink['name_ar'] ?? 'رابط مشاركة') : 'رابط مشاركة')) ?></h1>
+      <p class="text-sm text-gray-600 mt-1">سياسة الوصول: <?= h((string) (is_array($shareLink) ? ($shareLink['access_policy_name_ar'] ?? '—') : '—')) ?></p>
+    </div>
+    <?php if ($allowCart && $hasAccess && $token !== '' && !$error): ?>
+      <?php $cartCount = ShareCartService::itemCount($token); ?>
+      <a
+        href="/cart.php?token=<?= urlencode($token) ?>"
+        class="h-11 inline-flex items-center gap-2 rounded-full bg-primary text-white px-5 text-sm font-extrabold shadow-sm"
+      >
+        السلة<?= $cartCount > 0 ? ' (' . (int) $cartCount . ')' : '' ?>
+      </a>
+    <?php endif; ?>
+  </div>
+
+  <?php if ($cartNotice): ?>
+    <p class="mb-4 rounded border bg-green-50 border-green-200 text-green-700 px-3 py-2 text-sm"><?= h($cartNotice) ?></p>
+  <?php endif; ?>
 
   <?php if ($error): ?>
     <p class="mb-4 rounded border bg-red-50 border-red-200 text-red-700 px-3 py-2 text-sm"><?= h($error) ?></p>
@@ -773,6 +814,36 @@ ob_start();
             <div class="text-xs text-gray-500 mt-1">
               الكمية: <?= number_format((float) ($item['warehouseQuantity'] ?? 0), 2, '.', ',') ?>
             </div>
+          <?php endif; ?>
+
+          <?php if ($allowCart && $hasAccess): ?>
+            <?php
+              $materialGuid = trim((string) ($item['materialGuid'] ?? $item['MaterialGuid'] ?? ''));
+              $imageGuid = trim((string) ($item['productImageGuid'] ?? $item['ProductImageGuid'] ?? ''));
+              $imageUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '';
+            ?>
+            <?php if ($materialGuid !== ''): ?>
+              <form method="post" class="mt-3 flex flex-wrap items-end gap-2">
+                <input type="hidden" name="token" value="<?= h($token) ?>">
+                <input type="hidden" name="action" value="add_to_cart">
+                <input type="hidden" name="material_guid" value="<?= h($materialGuid) ?>">
+                <input type="hidden" name="material_code" value="<?= h((string) ($item['materialCode'] ?? $item['MaterialCode'] ?? '')) ?>">
+                <input type="hidden" name="material_name_ar" value="<?= h((string) ($item['name'] ?? $item['Name'] ?? 'مادة')) ?>">
+                <input type="hidden" name="sale_price_sp" value="<?= h((string) ShareCartService::parseAmount($item['unitSalePriceSyp'] ?? $item['UnitSalePriceSyp'] ?? 0)) ?>">
+                <input type="hidden" name="sale_price_usd" value="<?= h((string) ShareCartService::parseAmount($item['unitSalePriceUsd'] ?? $item['UnitSalePriceUsd'] ?? 0)) ?>">
+                <?php if ($imageUrl !== ''): ?>
+                  <input type="hidden" name="image_url" value="<?= h($imageUrl) ?>">
+                <?php endif; ?>
+                <label class="text-xs font-bold text-gray-600">
+                  الكمية
+                  <input type="number" name="quantity" min="0.01" step="0.01" value="1" class="h-10 w-20 rounded border border-gray-300 px-2 mt-1 block">
+                </label>
+                <button type="submit" class="h-10 px-4 rounded bg-primary text-white text-sm font-bold">إضافة للسلة</button>
+              </form>
+              <?php if ($allowOrder): ?>
+                <p class="text-xs text-gray-500 mt-1">بعد الإضافة يمكنك إرسال الطلب من صفحة السلة بدون تسجيل دخول.</p>
+              <?php endif; ?>
+            <?php endif; ?>
           <?php endif; ?>
         </article>
       <?php endforeach; ?>
