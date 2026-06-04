@@ -317,10 +317,70 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
             'maxUnitPurchasePriceUsd' => $queryMaxUnitPurchasePriceUsd,
             'groupBy' => $selectedGroupBy !== 'none' ? $selectedGroupBy : null,
             'sort' => $selectedSort,
-            'includeResultFilters' => ($allowClientFilters && $includeResultFilters) ? 1 : 0,
+            'includeResultFilters' => ($allowClientFilters && $includeResultFilters) ? 'true' : 'false',
         ], static fn ($value) => $value !== null && $value !== '');
 
         $materials = ApiClient::get('/api/materials', $params);
+        if (!$materials['ok'] && (int) ($materials['status'] ?? 0) === 400) {
+            // Fallback to a safer query if strict filters are rejected.
+            $fallbackParams = array_filter([
+                'page' => $page,
+                'pageSize' => 24,
+                'search' => $search,
+                'materialTypes' => $queryMaterialTypes !== [] ? implode(',', $queryMaterialTypes) : null,
+                'ageCategories' => $queryAgeCategories !== [] ? implode(',', $queryAgeCategories) : null,
+                'manufacturers' => $queryManufacturers !== [] ? implode(',', $queryManufacturers) : null,
+                'sizeRanges' => $querySizeRanges !== [] ? implode(',', $querySizeRanges) : null,
+                'countryOfOrigins' => $queryCountryOrigins !== [] ? implode(',', $queryCountryOrigins) : null,
+                'sort' => 'number:asc',
+                'includeResultFilters' => ($allowClientFilters && $includeResultFilters) ? 'true' : 'false',
+            ], static fn ($value) => $value !== null && $value !== '');
+
+            $retry = ApiClient::get('/api/materials', $fallbackParams);
+            if ($retry['ok']) {
+                $materials = $retry;
+                $apiError = 'تم تجاهل بعض قيود الرابط لعدم توافقها مع API وتم عرض النتائج بالوضع الآمن.';
+            }
+        }
+
+        $extractApiError = static function (array $response): string {
+            $status = (int) ($response['status'] ?? 0);
+            $data = $response['data'] ?? null;
+            if (is_array($data)) {
+                $messages = [];
+                if (!empty($data['title']) && is_string($data['title'])) {
+                    $messages[] = trim($data['title']);
+                }
+                if (!empty($data['detail']) && is_string($data['detail'])) {
+                    $messages[] = trim($data['detail']);
+                }
+                if (isset($data['errors']) && is_array($data['errors'])) {
+                    foreach ($data['errors'] as $field => $fieldErrors) {
+                        if (!is_array($fieldErrors)) {
+                            continue;
+                        }
+                        foreach ($fieldErrors as $fieldError) {
+                            $errorText = trim((string) $fieldError);
+                            if ($errorText !== '') {
+                                $messages[] = $field . ': ' . $errorText;
+                            }
+                        }
+                    }
+                }
+                $messages = array_values(array_unique(array_filter($messages, static fn ($value) => trim((string) $value) !== '')));
+                if ($messages !== []) {
+                    return 'تعذر جلب المواد من API (رمز ' . $status . '): ' . implode(' | ', $messages);
+                }
+            }
+
+            $raw = trim((string) ($response['raw'] ?? ''));
+            if ($raw !== '') {
+                return 'تعذر جلب المواد من API (رمز ' . $status . '): ' . substr($raw, 0, 260);
+            }
+
+            return 'تعذر جلب المواد من API (رمز ' . $status . ')';
+        };
+
         if ($materials['ok']) {
             $products = $materials['data']['items'] ?? [];
             $resultFilters = $materials['data']['resultFilters'] ?? [];
@@ -349,7 +409,7 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
                 ];
             }
         } else {
-            $apiError = 'تعذر جلب المواد من API (رمز ' . (int) ($materials['status'] ?? 0) . ')';
+            $apiError = $extractApiError($materials);
         }
     } catch (\Throwable $exception) {
         $apiError = $exception->getMessage();
