@@ -257,7 +257,16 @@ ob_start();
         <article class="border rounded-lg p-3 bg-white">
           <?php if ($showImages): ?>
             <div class="h-24 rounded bg-gray-100 flex items-center justify-center text-gray-500 text-xs mb-3">
-              <?= !empty($item['productImageGuid']) ? 'صورة متاحة' : 'بدون صورة' ?>
+              <?php if (!empty($item['productImageGuid'])): ?>
+                <img
+                  src="/api/image.php?id=<?= urlencode((string) $item['productImageGuid']) ?>&thumb=1"
+                  alt="<?= h((string) ($item['name'] ?? 'صورة مادة')) ?>"
+                  class="h-24 w-full object-cover rounded"
+                  loading="lazy"
+                >
+              <?php else: ?>
+                بدون صورة
+              <?php endif; ?>
             </div>
           <?php endif; ?>
           <div class="font-semibold"><?= h((string) ($item['name'] ?? '-')) ?></div>
