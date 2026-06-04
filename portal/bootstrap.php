@@ -6,6 +6,8 @@ if (is_file(__DIR__ . '/vendor/autoload.php')) {
     require __DIR__ . '/vendor/autoload.php';
 }
 
-use Portal\Bootstrap;
+if (!class_exists('Portal\\Bootstrap')) {
+    require __DIR__ . '/src/Bootstrap.php';
+}
 
-Bootstrap::init(__DIR__);
+\Portal\Bootstrap::init(__DIR__);
