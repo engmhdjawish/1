@@ -16,6 +16,7 @@ $permissions = array_map('strval', $user['permissions'] ?? []);
 $isSuper = in_array('*', $permissions, true);
 $canManageCompany = $isSuper || in_array('company_settings.manage', $permissions, true);
 $canManageGuestPolicy = $isSuper || in_array('store_policy.manage', $permissions, true) || in_array('access_policies.manage', $permissions, true);
+$canManageAccessPolicies = $canManageGuestPolicy;
 
 if (!$canManageCompany && !$canManageGuestPolicy) {
     http_response_code(403);
@@ -70,6 +71,7 @@ $apiConfig = [
     'base_url' => Config::get('AMINE_API_BASE_URL', 'http://127.0.0.1:5000') ?? '',
     'username' => Config::get('AMINE_API_USERNAME', '') ?? '',
 ];
+$canManageAccessPolicies = $canManageGuestPolicy;
 $currentRoute = '/dashboard/settings.php';
 
 ob_start();

@@ -9,6 +9,7 @@ declare(strict_types=1);
 /** @var array{base_url: string, username: string} $apiConfig */
 /** @var bool $canManageCompany */
 /** @var bool $canManageGuestPolicy */
+/** @var bool $canManageAccessPolicies */
 /** @var string|null $flash */
 /** @var string $flashType */
 ?>
@@ -96,17 +97,27 @@ declare(strict_types=1);
 </section>
 
 <section class="bg-white border border-border-subtle rounded-2xl p-5">
-  <div class="flex items-center justify-between mb-4">
-    <h2 class="text-base font-extrabold text-slate-900">سياسة المتجر العام (الزائر)</h2>
-    <?php if (!$canManageGuestPolicy): ?>
-      <span class="text-xs rounded-full px-3 py-1 bg-amber-100 text-amber-700">قراءة فقط</span>
+  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+    <div>
+      <h2 class="text-base font-extrabold text-slate-900">سياسة المتجر العام (الزائر)</h2>
+      <p class="text-sm text-text-muted mt-1">لإضافة وتعديل وحذف السياسات استخدم صفحة سياسات الوصول.</p>
+    </div>
+    <?php if ($canManageAccessPolicies): ?>
+      <a href="/dashboard/access-policies.php" class="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl bg-primary text-white font-bold hover:brightness-110 transition">
+        <span class="material-symbols-outlined text-base">policy</span>
+        إدارة سياسات الوصول
+      </a>
     <?php endif; ?>
   </div>
 
-  <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end mb-5">
+  <?php if (!$canManageGuestPolicy): ?>
+    <span class="inline-flex text-xs rounded-full px-3 py-1 bg-amber-100 text-amber-700 mb-3">قراءة فقط</span>
+  <?php endif; ?>
+
+  <form method="post" action="/dashboard/access-policies.php" class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
     <input type="hidden" name="action" value="save_guest_policy">
     <label class="text-sm">
-      <span class="text-text-muted block mb-1">السياسة الافتراضية للزائر</span>
+      <span class="text-text-muted block mb-1">السياسة الافتراضية للزائر (من القائمة النشطة)</span>
       <select name="access_policy_id" <?= $canManageGuestPolicy ? '' : 'disabled' ?> class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
         <option value="">اختر السياسة</option>
         <?php foreach ($policies as $policy): ?>
@@ -117,46 +128,9 @@ declare(strict_types=1);
       </select>
     </label>
     <div class="flex md:justify-end">
-      <button <?= $canManageGuestPolicy ? '' : 'disabled' ?> class="h-11 px-6 rounded-xl bg-primary text-white font-bold hover:brightness-110 transition disabled:opacity-50 disabled:cursor-not-allowed">
-        حفظ السياسة
+      <button <?= $canManageGuestPolicy ? '' : 'disabled' ?> class="h-11 px-6 rounded-xl border border-primary text-primary font-bold hover:bg-primary/5 transition disabled:opacity-50 disabled:cursor-not-allowed">
+        حفظ سياسة الزائر
       </button>
     </div>
   </form>
-
-  <div class="overflow-auto">
-    <table class="w-full min-w-[860px] text-sm">
-      <thead class="bg-surface-low border-b border-border-subtle text-text-muted">
-        <tr>
-          <th class="px-4 py-3 text-right font-bold">السياسة</th>
-          <th class="px-4 py-3 text-right font-bold">إظهار السعر</th>
-          <th class="px-4 py-3 text-right font-bold">إظهار الكمية</th>
-          <th class="px-4 py-3 text-right font-bold">السلة</th>
-          <th class="px-4 py-3 text-right font-bold">الطلب</th>
-          <th class="px-4 py-3 text-right font-bold">الحالة</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-border-subtle">
-        <?php foreach ($policies as $policy): ?>
-          <?php $isDefault = $guestPolicyId === (string) ($policy['id'] ?? ''); ?>
-          <tr class="<?= $isDefault ? 'bg-primary/5' : '' ?>">
-            <td class="px-4 py-3">
-              <div class="font-bold text-slate-900"><?= h((string) ($policy['name_ar'] ?? '')) ?></div>
-              <div class="text-xs text-text-muted"><?= h((string) ($policy['code'] ?? '')) ?></div>
-            </td>
-            <td class="px-4 py-3"><?= (int) ($policy['show_price'] ?? 0) === 1 ? 'نعم' : 'لا' ?></td>
-            <td class="px-4 py-3"><?= (int) ($policy['show_quantity'] ?? 0) === 1 ? 'نعم' : 'لا' ?></td>
-            <td class="px-4 py-3"><?= (int) ($policy['allow_cart'] ?? 0) === 1 ? 'نعم' : 'لا' ?></td>
-            <td class="px-4 py-3"><?= (int) ($policy['allow_order'] ?? 0) === 1 ? 'نعم' : 'لا' ?></td>
-            <td class="px-4 py-3">
-              <?php if ($isDefault): ?>
-                <span class="inline-flex rounded-full bg-green-100 text-green-700 text-xs font-bold px-3 py-1">الافتراضية الحالية</span>
-              <?php else: ?>
-                <span class="inline-flex rounded-full bg-slate-100 text-slate-700 text-xs font-bold px-3 py-1">متاحة</span>
-              <?php endif; ?>
-            </td>
-          </tr>
-        <?php endforeach; ?>
-      </tbody>
-    </table>
-  </div>
 </section>
