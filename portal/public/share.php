@@ -776,14 +776,15 @@ ob_start();
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <?php foreach ($products as $item): ?>
         <?php
-          $packageFactor = ShareCartService::packageFactor($item);
+          $packaging = ShareCartService::packaging($item);
+          $primaryUnit = ShareCartService::primaryUnitLabel($item);
           $packageUnit = ShareCartService::packageUnitLabel($item);
-          $unitSaleSp = ShareCartService::parseAmount($item['unitSalePriceSyp'] ?? $item['UnitSalePriceSyp'] ?? 0);
-          $unitSaleUsd = ShareCartService::parseAmount($item['unitSalePriceUsd'] ?? $item['UnitSalePriceUsd'] ?? 0);
-          $packageSaleSp = $unitSaleSp * $packageFactor;
-          $packageSaleUsd = $unitSaleUsd * $packageFactor;
+          $unitSaleSp = ShareCartService::unitSalePriceSp($item);
+          $unitSaleUsd = ShareCartService::unitSalePriceUsd($item);
+          $packageSaleSp = ShareCartService::packageSalePriceSp($item);
+          $packageSaleUsd = ShareCartService::packageSalePriceUsd($item);
           $warehouseQty = (float) ($item['warehouseQuantity'] ?? 0);
-          $packagesAvailable = $packageFactor > 0 ? floor($warehouseQty / $packageFactor) : $warehouseQty;
+          $packagesAvailable = $packaging > 0 ? floor($warehouseQty / $packaging) : $warehouseQty;
         ?>
         <article class="border border-gray-200 rounded-xl p-4 bg-white shadow-sm flex flex-col">
           <?php if ($showImages): ?>
@@ -806,24 +807,32 @@ ob_start();
             <?= h((string) ($item['manufacturer'] ?? '')) ?><?= !empty($item['materialType']) ? ' • ' . h((string) $item['materialType']) : '' ?>
           </div>
 
+          <div class="mt-2 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-bold text-gray-700">
+            التعبئة:
+            <span class="text-primary"><?= h(rtrim(rtrim(number_format($packaging, 2, '.', ','), '0'), '.')) ?></span>
+            <?= h($primaryUnit) ?> / <?= h($packageUnit) ?>
+          </div>
+
           <?php if ($showPriceSyp): ?>
-            <div class="text-primary font-bold mt-2">
-              <?= format_money($packageSaleSp, true) ?> ل.س
-              <span class="text-xs font-normal text-gray-500">/ <?= h($packageUnit) ?></span>
+            <div class="text-xs text-gray-500 mt-2">
+              سعر <?= h($primaryUnit) ?>: <?= format_money($unitSaleSp, true) ?> ل.س
+            </div>
+            <div class="text-primary font-extrabold mt-0.5">
+              سعر <?= h($packageUnit) ?>: <?= format_money($packageSaleSp, true) ?> ل.س
             </div>
           <?php endif; ?>
           <?php if ($showPriceUsd): ?>
-            <div class="text-emerald-700 font-bold mt-1">
-              $<?= number_format($packageSaleUsd, 2, '.', ',') ?>
-              <span class="text-xs font-normal text-gray-500">/ <?= h($packageUnit) ?></span>
+            <div class="text-xs text-gray-500 mt-1">
+              سعر <?= h($primaryUnit) ?>: $<?= number_format($unitSaleUsd, 2, '.', ',') ?>
+            </div>
+            <div class="text-emerald-700 font-bold mt-0.5">
+              سعر <?= h($packageUnit) ?>: $<?= number_format($packageSaleUsd, 2, '.', ',') ?>
             </div>
           <?php endif; ?>
           <?php if ($showQuantity): ?>
             <div class="text-xs text-gray-500 mt-1">
               متاح: <?= number_format($packagesAvailable, 0, '.', ',') ?> <?= h($packageUnit) ?>
-              <?php if ($packageFactor > 1): ?>
-                <span class="text-gray-400">(<?= number_format($warehouseQty, 0, '.', ',') ?> <?= h((string) ($item['primaryUnit'] ?? $item['PrimaryUnit'] ?? 'قطعة')) ?>)</span>
-              <?php endif; ?>
+              <span class="text-gray-400">(<?= number_format($warehouseQty, 0, '.', ',') ?> <?= h($primaryUnit) ?>)</span>
             </div>
           <?php endif; ?>
 
@@ -840,8 +849,9 @@ ob_start();
                 <input type="hidden" name="material_guid" value="<?= h($materialGuid) ?>">
                 <input type="hidden" name="material_code" value="<?= h((string) ($item['materialCode'] ?? $item['MaterialCode'] ?? '')) ?>">
                 <input type="hidden" name="material_name_ar" value="<?= h((string) ($item['name'] ?? $item['Name'] ?? 'مادة')) ?>">
+                <input type="hidden" name="primary_unit" value="<?= h($primaryUnit) ?>">
                 <input type="hidden" name="package_unit" value="<?= h($packageUnit) ?>">
-                <input type="hidden" name="package_factor" value="<?= h((string) $packageFactor) ?>">
+                <input type="hidden" name="packaging" value="<?= h((string) $packaging) ?>">
                 <input type="hidden" name="unit_sale_price_sp" value="<?= h((string) $unitSaleSp) ?>">
                 <input type="hidden" name="unit_sale_price_usd" value="<?= h((string) $unitSaleUsd) ?>">
                 <?php if ($imageUrl !== ''): ?>
