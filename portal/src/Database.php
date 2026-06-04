@@ -23,7 +23,7 @@ final class Database
         $user = Config::get('PORTAL_DB_USER', 'portal');
         $password = Config::get('PORTAL_DB_PASSWORD', 'portal');
 
-        $dsn = "pgsql:host=$host;port=$port;dbname=$name";
+        $dsn = "pgsql:host=$host;port=$port;dbname=$name;options='--client_encoding=UTF8'";
         try {
             self::$pdo = new PDO($dsn, $user, $password, [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
