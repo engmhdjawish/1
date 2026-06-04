@@ -52,4 +52,13 @@ final class ShareLinkService
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    public static function countActive(): int
+    {
+        $value = Database::pdo()->query(
+            'SELECT COUNT(*)::int FROM share_links WHERE is_active = TRUE'
+        )->fetchColumn();
+
+        return (int) $value;
+    }
 }

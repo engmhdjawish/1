@@ -11,12 +11,14 @@ final class OrderService
 {
     private const ALLOWED_STATUSES = ['pending', 'confirmed', 'completed', 'cancelled'];
 
-    /** @param array{status?: string, q?: string, sync?: string, limit?: int} $filters */
+    /** @param array{status?: string, q?: string, sync?: string, fromDate?: string, toDate?: string, limit?: int} $filters */
     public static function list(array $filters = []): array
     {
         $status = trim((string) ($filters['status'] ?? ''));
         $search = trim((string) ($filters['q'] ?? ''));
         $sync = trim((string) ($filters['sync'] ?? ''));
+        $fromDate = trim((string) ($filters['fromDate'] ?? ''));
+        $toDate = trim((string) ($filters['toDate'] ?? ''));
         $limit = max(1, min(200, (int) ($filters['limit'] ?? 50)));
 
         $sql = 'SELECT
@@ -62,6 +64,16 @@ final class OrderService
                 OR o.guest_phone ILIKE :search
             )';
             $params['search'] = '%' . $search . '%';
+        }
+
+        if ($fromDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fromDate) === 1) {
+            $sql .= ' AND o.created_at::date >= :from_date';
+            $params['from_date'] = $fromDate;
+        }
+
+        if ($toDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $toDate) === 1) {
+            $sql .= ' AND o.created_at::date <= :to_date';
+            $params['to_date'] = $toDate;
         }
 
         $sql .= ' ORDER BY o.created_at DESC LIMIT :limit';

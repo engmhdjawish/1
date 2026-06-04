@@ -12,9 +12,10 @@ require dirname(__DIR__, 2) . '/views/helpers.php';
 
 $flash = null;
 $flashType = 'success';
+$permissions = WebSession::user()['permissions'] ?? [];
+$canManageOrders = in_array('orders.manage', $permissions, true) || in_array('*', $permissions, true);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $permissions = WebSession::user()['permissions'] ?? [];
-    if (!in_array('orders.manage', $permissions, true) && !in_array('*', $permissions, true)) {
+    if (!$canManageOrders) {
         $flash = 'ليس لديك صلاحية تعديل حالة الطلب.';
         $flashType = 'error';
     } else {
@@ -30,6 +31,8 @@ $filters = [
     'status' => trim((string) ($_GET['status'] ?? '')),
     'sync' => trim((string) ($_GET['sync'] ?? '')),
     'q' => trim((string) ($_GET['q'] ?? '')),
+    'fromDate' => trim((string) ($_GET['fromDate'] ?? '')),
+    'toDate' => trim((string) ($_GET['toDate'] ?? '')),
     'limit' => (int) ($_GET['limit'] ?? 50),
 ];
 

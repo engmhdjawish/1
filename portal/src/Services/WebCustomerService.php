@@ -10,6 +10,9 @@ use PDO;
 
 final class WebCustomerService
 {
+    private const ALLOWED_STATUSES = ['pending', 'active', 'rejected', 'suspended'];
+    private const ALLOWED_SOURCES = ['self_register', 'admin_created'];
+
     public static function registerSelf(string $name, string $phone, string $password, ?string $email = null): array
     {
         $pdo = Database::pdo();
@@ -117,11 +120,88 @@ final class WebCustomerService
     /** @return list<array<string, mixed>> */
     public static function listPending(): array
     {
-        $pdo = Database::pdo();
-        return $pdo->query(
-            "SELECT id, name_ar, phone, email, registration_source, created_at
-             FROM web_customers WHERE status = 'pending' ORDER BY created_at ASC"
+        return self::listByStatus('pending', '', '', 200);
+    }
+
+    /** @return list<array<string, mixed>> */
+    public static function listByStatus(
+        string $status = 'pending',
+        string $search = '',
+        string $source = '',
+        int $limit = 100
+    ): array {
+        if (!in_array($status, self::ALLOWED_STATUSES, true)) {
+            $status = 'pending';
+        }
+
+        $search = trim($search);
+        $source = in_array($source, self::ALLOWED_SOURCES, true) ? $source : '';
+        $limit = max(1, min(300, $limit));
+
+        $sql = "SELECT
+                    wc.id,
+                    wc.name_ar,
+                    wc.phone,
+                    wc.email,
+                    wc.status::text AS status,
+                    wc.registration_source::text AS registration_source,
+                    wc.created_at,
+                    wc.is_active,
+                    ap.name_ar AS access_policy_name_ar
+                FROM web_customers wc
+                LEFT JOIN access_policies ap ON ap.id = wc.access_policy_id
+                WHERE wc.status = :status";
+        $params = ['status' => $status];
+
+        if ($source !== '') {
+            $sql .= ' AND wc.registration_source = :source';
+            $params['source'] = $source;
+        }
+
+        if ($search !== '') {
+            $sql .= ' AND (
+                wc.name_ar ILIKE :search
+                OR wc.phone ILIKE :search
+                OR wc.email ILIKE :search
+            )';
+            $params['search'] = '%' . $search . '%';
+        }
+
+        $sql .= ' ORDER BY wc.created_at DESC LIMIT :limit';
+        $stmt = Database::pdo()->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value);
+        }
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** @return array{pending: int, active: int, rejected: int, suspended: int} */
+    public static function statusCounts(): array
+    {
+        $rows = Database::pdo()->query(
+            'SELECT status::text AS status, COUNT(*)::int AS count
+             FROM web_customers
+             GROUP BY status'
         )->fetchAll(PDO::FETCH_ASSOC);
+
+        $counts = [
+            'pending' => 0,
+            'active' => 0,
+            'rejected' => 0,
+            'suspended' => 0,
+        ];
+
+        foreach ($rows as $row) {
+            $status = (string) ($row['status'] ?? '');
+            if (array_key_exists($status, $counts)) {
+                $counts[$status] = (int) $row['count'];
+            }
+        }
+
+        return $counts;
     }
 
     /** @return list<array<string, mixed>> */
