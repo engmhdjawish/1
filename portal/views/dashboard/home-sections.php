@@ -367,6 +367,8 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
   <?php endif; ?>
 </section>
 
+<?php portal_render_token_picker_script(); ?>
+
 <script>
 (() => {
   const modeSelect = document.getElementById('display_mode');

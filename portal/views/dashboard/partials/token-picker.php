@@ -49,9 +49,14 @@ if (!isset($renderTokenPicker)) {
     };
 }
 
-if (!defined('PORTAL_TOKEN_PICKER_SCRIPT')) {
-    define('PORTAL_TOKEN_PICKER_SCRIPT', true);
-    ?>
+if (!function_exists('portal_render_token_picker_script')) {
+    function portal_render_token_picker_script(): void
+    {
+        if (defined('PORTAL_TOKEN_PICKER_SCRIPT')) {
+            return;
+        }
+        define('PORTAL_TOKEN_PICKER_SCRIPT', true);
+        ?>
     <script>
     (() => {
       const normalize = (value) => (value || '').toString().trim();
@@ -64,6 +69,8 @@ if (!defined('PORTAL_TOKEN_PICKER_SCRIPT')) {
         if (existing) {
           if (label && existing.label !== label) {
             existing.label = label;
+            const optionEl = Array.from(pickerState.optionsSelect.options).find((o) => normalize(o.value) === normalized);
+            if (optionEl) optionEl.textContent = label;
           }
           return;
         }
@@ -76,6 +83,11 @@ if (!defined('PORTAL_TOKEN_PICKER_SCRIPT')) {
       };
 
       const initPicker = (picker) => {
+        if (picker.dataset.initialized === '1') {
+          return;
+        }
+        picker.dataset.initialized = '1';
+
         const inputName = picker.dataset.inputName;
         const pickerId = picker.dataset.pickerId || '';
         const allowDynamic = picker.dataset.allowDynamic === '1';
@@ -131,7 +143,7 @@ if (!defined('PORTAL_TOKEN_PICKER_SCRIPT')) {
           chipsHost.innerHTML = '';
           hiddenHost.innerHTML = '';
           for (const value of selectedValues) {
-            const option = allOptions.find((item) => item.value === value);
+            const option = state.allOptions.find((item) => item.value === value);
             const label = option ? option.label : value;
             const chip = document.createElement('button');
             chip.type = 'button';
@@ -165,7 +177,7 @@ if (!defined('PORTAL_TOKEN_PICKER_SCRIPT')) {
             const label = labelsByValue[normalized] || '';
             if (allowDynamic) {
               ensureOption(state, normalized, label);
-            } else if (!allOptions.some((option) => option.value === normalized)) {
+            } else if (!state.allOptions.some((option) => option.value === normalized)) {
               continue;
             }
             if (!selectedValues.includes(normalized)) {
@@ -179,14 +191,19 @@ if (!defined('PORTAL_TOKEN_PICKER_SCRIPT')) {
         addButton?.addEventListener('click', () => {
           addValues(Array.from(optionsSelect.selectedOptions).map((o) => o.value));
         });
-        addAllButton?.addEventListener('click', () => addValues(allOptions.map((o) => o.value)));
+        addAllButton?.addEventListener('click', () => addValues(state.allOptions.map((o) => o.value)));
         clearButton?.addEventListener('click', () => {
           selectedValues = [];
           state.selectedValues = selectedValues;
           renderSelected();
         });
         searchInput?.addEventListener('input', renderOptions);
-        optionsSelect?.addEventListener('dblclick', () => {
+        optionsSelect?.addEventListener('dblclick', (event) => {
+          const target = event.target;
+          if (target && target.tagName === 'OPTION') {
+            addValues([target.value], { [normalize(target.value)]: normalize(target.textContent) });
+            return;
+          }
           addValues(Array.from(optionsSelect.selectedOptions).map((o) => o.value));
         });
 
@@ -196,6 +213,10 @@ if (!defined('PORTAL_TOKEN_PICKER_SCRIPT')) {
 
         renderOptions();
         renderSelected();
+      };
+
+      const initAllPickers = () => {
+        document.querySelectorAll('.token-picker').forEach((picker) => initPicker(picker));
       };
 
       window.portalTokenPickerAddOptions = (pickerId, items) => {
@@ -211,26 +232,24 @@ if (!defined('PORTAL_TOKEN_PICKER_SCRIPT')) {
           values.push(value);
           labels[value] = label;
         }
-        state.selectedValues = state.selectedValues || [];
-        const addValues = (vals, labelMap) => {
-          for (const v of vals) {
-            const normalized = normalize(v);
-            if (normalized === '') continue;
-            if (state.allowDynamic) {
-              ensureOption(state, normalized, labelMap[normalized] || '');
-            }
-            if (!state.selectedValues.includes(normalized)) {
-              state.selectedValues.push(normalized);
-            }
+        for (const v of values) {
+          const normalized = normalize(v);
+          if (normalized === '') continue;
+          if (!state.selectedValues.includes(normalized)) {
+            state.selectedValues.push(normalized);
           }
-          state.renderSelected?.();
-        };
-        addValues(values, labels);
+        }
+        state.renderSelected?.();
         state.renderOptions?.();
       };
 
-      document.querySelectorAll('.token-picker').forEach((picker) => initPicker(picker));
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initAllPickers);
+      } else {
+        initAllPickers();
+      }
     })();
     </script>
-    <?php
+        <?php
+    }
 }
