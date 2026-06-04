@@ -252,6 +252,8 @@ $selectedGroupBy = in_array($selectedGroupBy, ['none', 'ageCategory', 'sizeRange
     : 'none';
 
 $page = max(1, (int) ($_GET['page'] ?? 1));
+$pageSize = 24;
+$totalCount = 0;
 $products = [];
 $resultFilters = [];
 $filterOptions = [
@@ -383,6 +385,9 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
 
         if ($materials['ok']) {
             $products = $materials['data']['items'] ?? [];
+            $totalCount = max(0, (int) ($materials['data']['totalCount'] ?? 0));
+            $page = max(1, (int) ($materials['data']['page'] ?? $page));
+            $pageSize = max(1, (int) ($materials['data']['pageSize'] ?? $pageSize));
             $resultFilters = $materials['data']['resultFilters'] ?? [];
             if (!is_array($resultFilters)) {
                 $resultFilters = [];
@@ -463,6 +468,47 @@ foreach ($selectedGroupGuids as $guid) {
     }
 }
 
+$totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
+if ($page > $totalPages) {
+    $page = $totalPages;
+}
+$rangeStart = $totalCount === 0 ? 0 : (($page - 1) * $pageSize + 1);
+$rangeEnd = min($totalCount, $page * $pageSize);
+
+$buildShareUrl = static function (int $targetPage) use ($token): string {
+    $params = $_GET;
+    $params['token'] = $token;
+    $params['page'] = max(1, $targetPage);
+
+    return '/share.php?' . http_build_query($params);
+};
+
+$renderFilterChips = static function (string $paramName, array $options, array $selectedValues): void {
+    if ($options === []) {
+        return;
+    }
+
+    echo '<div class="flex flex-wrap gap-2 mt-2">';
+    foreach ($options as $option) {
+        $value = (string) ($option['value'] ?? '');
+        if ($value === '') {
+            continue;
+        }
+        $label = (string) ($option['label'] ?? $value);
+        $count = $option['count'] ?? null;
+        $isChecked = in_array($value, $selectedValues, true);
+        $countSuffix = $count !== null ? ' (' . (int) $count . ')' : '';
+        echo '<label class="cursor-pointer">';
+        echo '<input type="checkbox" class="peer sr-only" name="' . h($paramName) . '[]" value="' . h($value) . '"' . ($isChecked ? ' checked' : '') . '>';
+        echo '<span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-bold border transition ';
+        echo 'border-gray-300 bg-white text-gray-700 hover:border-primary ';
+        echo 'peer-checked:bg-primary peer-checked:text-white peer-checked:border-primary">';
+        echo h($label . $countSuffix);
+        echo '</span></label>';
+    }
+    echo '</div>';
+};
+
 ob_start();
 ?>
 <div class="bg-white rounded-xl p-6 shadow-sm border">
@@ -499,6 +545,7 @@ ob_start();
     <?php if ($allowClientFilters): ?>
       <form method="get" class="mb-5 grid grid-cols-1 md:grid-cols-4 gap-3">
         <input type="hidden" name="token" value="<?= h($token) ?>">
+        <input type="hidden" name="page" value="1">
         <?php if ($isClientFilterVisible('search')): ?>
           <label class="text-sm md:col-span-2">
             <span class="text-gray-600 block mb-1">بحث</span>
@@ -516,14 +563,19 @@ ob_start();
           </label>
         <?php endif; ?>
         <?php if ($isClientFilterVisible('availability')): ?>
-          <label class="text-sm">
+          <?php $availabilityValue = (string) ($_GET['isAvailable'] ?? ''); ?>
+          <div class="text-sm md:col-span-2">
             <span class="text-gray-600 block mb-1">التوفر</span>
-            <select name="isAvailable" class="h-11 w-full rounded border border-gray-300 px-3">
-              <option value="" <?= !isset($_GET['isAvailable']) || $_GET['isAvailable'] === '' ? 'selected' : '' ?>>الكل</option>
-              <option value="1" <?= (string) ($_GET['isAvailable'] ?? '') === '1' ? 'selected' : '' ?>>متوفر</option>
-              <option value="0" <?= (string) ($_GET['isAvailable'] ?? '') === '0' ? 'selected' : '' ?>>غير متوفر</option>
-            </select>
-          </label>
+            <div class="flex flex-wrap gap-2 mt-1">
+              <?php foreach (['' => 'الكل', '1' => 'متوفر', '0' => 'غير متوفر'] as $value => $label): ?>
+                <?php $isActive = $availabilityValue === (string) $value; ?>
+                <label class="cursor-pointer">
+                  <input type="radio" class="peer sr-only" name="isAvailable" value="<?= h((string) $value) ?>" <?= $isActive ? 'checked' : '' ?>>
+                  <span class="inline-flex px-3 py-1.5 rounded-full text-sm font-bold border transition border-gray-300 bg-white text-gray-700 hover:border-primary peer-checked:bg-primary peer-checked:text-white peer-checked:border-primary"><?= h($label) ?></span>
+                </label>
+              <?php endforeach; ?>
+            </div>
+          </div>
         <?php endif; ?>
         <?php if ($allowSorting && $isClientFilterVisible('sort')): ?>
           <label class="text-sm">
@@ -554,50 +606,42 @@ ob_start();
         <?php endif; ?>
 
         <?php if ($isClientFilterVisible('stores') && $storeOptions !== []): ?>
-          <fieldset class="md:col-span-2 rounded border border-gray-200 p-3">
-            <legend class="text-sm text-gray-600 px-1">المخازن</legend>
-            <div class="grid grid-cols-1 gap-2 mt-2 text-sm max-h-48 overflow-auto">
-              <?php foreach ($storeOptions as $store): ?>
-                <?php
-                  $storeGuid = (string) ($store['guid'] ?? $store['Guid'] ?? '');
-                  if ($storeGuid === '') {
-                      continue;
-                  }
-                  $storeLabel = trim((string) ($store['name'] ?? $store['Name'] ?? '')) !== ''
-                      ? (string) ($store['name'] ?? $store['Name'])
-                      : ((string) ($store['code'] ?? $store['Code'] ?? '') !== '' ? (string) ($store['code'] ?? $store['Code']) : $storeGuid);
-                  $isChecked = in_array($storeGuid, $selectedStoreGuids, true);
-                ?>
-                <label class="inline-flex items-center gap-2">
-                  <input type="checkbox" name="storeGuids[]" value="<?= h($storeGuid) ?>" <?= $isChecked ? 'checked' : '' ?>>
-                  <span><?= h($storeLabel) ?></span>
-                </label>
-              <?php endforeach; ?>
-            </div>
+          <?php
+            $storeChipOptions = [];
+            foreach ($storeOptions as $store) {
+                $storeGuid = (string) ($store['guid'] ?? $store['Guid'] ?? '');
+                if ($storeGuid === '') {
+                    continue;
+                }
+                $storeLabel = trim((string) ($store['name'] ?? $store['Name'] ?? '')) !== ''
+                    ? (string) ($store['name'] ?? $store['Name'])
+                    : ((string) ($store['code'] ?? $store['Code'] ?? '') !== '' ? (string) ($store['code'] ?? $store['Code']) : $storeGuid);
+                $storeChipOptions[] = ['value' => $storeGuid, 'label' => $storeLabel];
+            }
+          ?>
+          <fieldset class="md:col-span-4 rounded border border-gray-200 p-3">
+            <legend class="text-sm font-bold text-gray-700 px-1">المخازن</legend>
+            <?php $renderFilterChips('storeGuids', $storeChipOptions, $selectedStoreGuids); ?>
           </fieldset>
         <?php endif; ?>
 
         <?php if ($isClientFilterVisible('groups') && $groupOptions !== []): ?>
-          <fieldset class="md:col-span-2 rounded border border-gray-200 p-3">
-            <legend class="text-sm text-gray-600 px-1">المجموعات</legend>
-            <div class="grid grid-cols-1 gap-2 mt-2 text-sm max-h-48 overflow-auto">
-              <?php foreach ($groupOptions as $group): ?>
-                <?php
-                  $groupGuid = (string) ($group['guid'] ?? $group['Guid'] ?? '');
-                  if ($groupGuid === '') {
-                      continue;
-                  }
-                  $groupLabel = trim((string) ($group['name'] ?? $group['Name'] ?? '')) !== ''
-                      ? (string) ($group['name'] ?? $group['Name'])
-                      : ((string) ($group['code'] ?? $group['Code'] ?? '') !== '' ? (string) ($group['code'] ?? $group['Code']) : $groupGuid);
-                  $isChecked = in_array($groupGuid, $selectedGroupGuids, true);
-                ?>
-                <label class="inline-flex items-center gap-2">
-                  <input type="checkbox" name="groupGuids[]" value="<?= h($groupGuid) ?>" <?= $isChecked ? 'checked' : '' ?>>
-                  <span><?= h($groupLabel) ?></span>
-                </label>
-              <?php endforeach; ?>
-            </div>
+          <?php
+            $groupChipOptions = [];
+            foreach ($groupOptions as $group) {
+                $groupGuid = (string) ($group['guid'] ?? $group['Guid'] ?? '');
+                if ($groupGuid === '') {
+                    continue;
+                }
+                $groupLabel = trim((string) ($group['name'] ?? $group['Name'] ?? '')) !== ''
+                    ? (string) ($group['name'] ?? $group['Name'])
+                    : ((string) ($group['code'] ?? $group['Code'] ?? '') !== '' ? (string) ($group['code'] ?? $group['Code']) : $groupGuid);
+                $groupChipOptions[] = ['value' => $groupGuid, 'label' => $groupLabel];
+            }
+          ?>
+          <fieldset class="md:col-span-4 rounded border border-gray-200 p-3">
+            <legend class="text-sm font-bold text-gray-700 px-1">المجموعات</legend>
+            <?php $renderFilterChips('groupGuids', $groupChipOptions, $selectedGroupGuids); ?>
           </fieldset>
         <?php endif; ?>
 
@@ -654,25 +698,24 @@ ob_start();
           } ?>
           <?php $values = $resultFilters[$facetKey] ?? []; ?>
           <?php if ($values !== []): ?>
-            <fieldset class="md:col-span-2 rounded border border-gray-200 p-3">
-              <legend class="text-sm text-gray-600 px-1"><?= h((string) $facetConfig['label']) ?></legend>
-              <div class="grid grid-cols-2 gap-2 mt-2 text-sm">
-                <?php foreach ($values as $facet): ?>
-                  <?php
-                    $facetValue = (string) ($facet['value'] ?? '');
-                    $isChecked = in_array($facetValue, (array) ($_GET[$facetKey] ?? []), true);
-                  ?>
-                  <label class="inline-flex items-center gap-2">
-                    <input type="checkbox" name="<?= h($facetKey) ?>[]" value="<?= h($facetValue) ?>" <?= $isChecked ? 'checked' : '' ?>>
-                    <span>
-                      <?= h($facetValue) ?>
-                      <?php if (isset($facet['count']) && $facet['count'] !== null): ?>
-                        <small class="text-gray-500">(<?= (int) $facet['count'] ?>)</small>
-                      <?php endif; ?>
-                    </span>
-                  </label>
-                <?php endforeach; ?>
-              </div>
+            <?php
+              $facetChipOptions = [];
+              $selectedFacetValues = $parseList($facetKey);
+              foreach ($values as $facet) {
+                  $facetValue = (string) ($facet['value'] ?? '');
+                  if ($facetValue === '') {
+                      continue;
+                  }
+                  $facetChipOptions[] = [
+                      'value' => $facetValue,
+                      'label' => $facetValue,
+                      'count' => $facet['count'] ?? null,
+                  ];
+              }
+            ?>
+            <fieldset class="md:col-span-4 rounded border border-gray-200 p-3">
+              <legend class="text-sm font-bold text-gray-700 px-1"><?= h((string) $facetConfig['label']) ?></legend>
+              <?php $renderFilterChips($facetKey, $facetChipOptions, $selectedFacetValues); ?>
             </fieldset>
           <?php endif; ?>
         <?php endforeach; ?>
@@ -682,6 +725,15 @@ ob_start();
           <a href="/share.php?token=<?= urlencode($token) ?>" class="h-11 inline-flex items-center rounded border border-gray-300 px-6 text-sm">إعادة ضبط</a>
         </div>
       </form>
+    <?php endif; ?>
+
+    <?php if ($totalCount > 0): ?>
+      <p class="text-sm text-gray-600 mb-3">
+        عرض <?= (int) $rangeStart ?>–<?= (int) $rangeEnd ?> من <?= (int) $totalCount ?> مادة
+        <?php if ($totalPages > 1): ?>
+          <span class="text-gray-400">(صفحة <?= (int) $page ?> من <?= (int) $totalPages ?>)</span>
+        <?php endif; ?>
+      </p>
     <?php endif; ?>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -728,6 +780,33 @@ ob_start();
 
     <?php if ($products === [] && !$apiError && !$hasConstraintConflict): ?>
       <p class="text-gray-500 mt-4">لا توجد نتائج مطابقة.</p>
+    <?php endif; ?>
+
+    <?php if ($totalPages > 1): ?>
+      <nav class="mt-8 flex flex-wrap items-center justify-center gap-2" aria-label="ترقيم الصفحات">
+        <?php if ($page > 1): ?>
+          <a href="<?= h($buildShareUrl($page - 1)) ?>" class="h-10 inline-flex items-center px-4 rounded-full border border-gray-300 text-sm font-bold hover:border-primary">السابق</a>
+        <?php endif; ?>
+        <?php
+          $windowStart = max(1, $page - 2);
+          $windowEnd = min($totalPages, $page + 2);
+          if ($windowEnd - $windowStart < 4) {
+              $windowStart = max(1, $windowEnd - 4);
+              $windowEnd = min($totalPages, $windowStart + 4);
+          }
+          for ($pageNumber = $windowStart; $pageNumber <= $windowEnd; $pageNumber++):
+            $isCurrent = $pageNumber === $page;
+        ?>
+          <a
+            href="<?= h($buildShareUrl($pageNumber)) ?>"
+            class="h-10 min-w-10 inline-flex items-center justify-center px-3 rounded-full text-sm font-bold border <?= $isCurrent ? 'bg-primary text-white border-primary' : 'border-gray-300 hover:border-primary' ?>"
+            <?= $isCurrent ? 'aria-current="page"' : '' ?>
+          ><?= (int) $pageNumber ?></a>
+        <?php endfor; ?>
+        <?php if ($page < $totalPages): ?>
+          <a href="<?= h($buildShareUrl($page + 1)) ?>" class="h-10 inline-flex items-center px-4 rounded-full border border-gray-300 text-sm font-bold hover:border-primary">التالي</a>
+        <?php endif; ?>
+      </nav>
     <?php endif; ?>
   <?php endif; ?>
 </div>
