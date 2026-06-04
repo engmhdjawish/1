@@ -84,7 +84,7 @@ final class HomeSectionService
              LEFT JOIN (
                 SELECT section_id, COUNT(*)::int AS filters_count
                 FROM home_section_filters
-                WHERE filter_type NOT IN ('option_show_images', 'option_price_mode')
+                WHERE filter_type NOT IN (\'option_show_images\', \'option_price_mode\')
                 GROUP BY section_id
              ) filters ON filters.section_id = hs.id
              LEFT JOIN (
