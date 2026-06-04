@@ -10,6 +10,21 @@ declare(strict_types=1);
 /** @var string $editId */
 /** @var string|null $flash */
 /** @var string $flashType */
+/** @var string $publicBaseUrl */
+
+$linkOptions = (array) (($editLink['options'] ?? null) ?: []);
+$showImages = array_key_exists('show_images', $linkOptions) ? (bool) $linkOptions['show_images'] : true;
+$priceMode = (string) ($linkOptions['price_mode'] ?? 'both');
+$allowClientFilters = array_key_exists('allow_client_filters', $linkOptions) ? (bool) $linkOptions['allow_client_filters'] : true;
+$allowSorting = array_key_exists('allow_sorting', $linkOptions) ? (bool) $linkOptions['allow_sorting'] : true;
+$includeResultFilters = array_key_exists('include_result_filters', $linkOptions) ? (bool) $linkOptions['include_result_filters'] : true;
+$defaultSort = (string) ($linkOptions['default_sort'] ?? 'number:asc');
+
+$forcedMaterialTypes = implode(', ', array_map('strval', $editLink['forced_material_types'] ?? []));
+$forcedAgeCategories = implode(', ', array_map('strval', $editLink['forced_age_categories'] ?? []));
+$forcedManufacturers = implode(', ', array_map('strval', $editLink['forced_manufacturers'] ?? []));
+$forcedSizeRanges = implode(', ', array_map('strval', $editLink['forced_size_ranges'] ?? []));
+$forcedCountryOrigins = implode(', ', array_map('strval', $editLink['forced_country_origins'] ?? []));
 ?>
 <section class="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
   <div>
@@ -84,6 +99,61 @@ declare(strict_types=1);
         <input type="checkbox" name="require_password" <?= !empty($editLink['require_password']) ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
         <span>حماية الرابط بكلمة مرور</span>
       </label>
+      <label class="text-sm md:col-span-2">
+        <span class="text-text-muted block mb-1">فلتر إلزامي: نوع المادة (CSV)</span>
+        <input name="forced_material_types" value="<?= h($forcedMaterialTypes) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="رجالي, نسواني">
+      </label>
+      <label class="text-sm md:col-span-2">
+        <span class="text-text-muted block mb-1">فلتر إلزامي: الفئة العمرية (CSV)</span>
+        <input name="forced_age_categories" value="<?= h($forcedAgeCategories) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="أطفال, شباب">
+      </label>
+      <label class="text-sm">
+        <span class="text-text-muted block mb-1">فلتر إلزامي: الشركة الصانعة (CSV)</span>
+        <input name="forced_manufacturers" value="<?= h($forcedManufacturers) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="Company A, Company B">
+      </label>
+      <label class="text-sm">
+        <span class="text-text-muted block mb-1">فلتر إلزامي: القياس (CSV)</span>
+        <input name="forced_size_ranges" value="<?= h($forcedSizeRanges) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="S, M, L">
+      </label>
+      <label class="text-sm md:col-span-2">
+        <span class="text-text-muted block mb-1">فلتر إلزامي: بلد المنشأ (CSV)</span>
+        <input name="forced_country_origins" value="<?= h($forcedCountryOrigins) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="سوريا, تركيا">
+      </label>
+
+      <div class="md:col-span-2 rounded-xl border border-border-subtle p-4 bg-surface-low">
+        <h3 class="text-sm font-bold mb-3">خيارات عرض الرابط للعميل</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <label class="text-sm inline-flex items-center gap-2">
+            <input type="checkbox" name="option_show_images" <?= $showImages ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
+            <span>إظهار الصور</span>
+          </label>
+          <label class="text-sm inline-flex items-center gap-2">
+            <input type="checkbox" name="option_allow_client_filters" <?= $allowClientFilters ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
+            <span>السماح للعميل بالفلاتر</span>
+          </label>
+          <label class="text-sm inline-flex items-center gap-2">
+            <input type="checkbox" name="option_allow_sorting" <?= $allowSorting ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
+            <span>السماح للعميل بالترتيب</span>
+          </label>
+          <label class="text-sm inline-flex items-center gap-2">
+            <input type="checkbox" name="option_include_result_filters" <?= $includeResultFilters ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
+            <span>إظهار فلاتر النتائج الديناميكية</span>
+          </label>
+          <label class="text-sm">
+            <span class="text-text-muted block mb-1">وضع السعر</span>
+            <select name="option_price_mode" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+              <option value="both" <?= $priceMode === 'both' ? 'selected' : '' ?>>سوري + دولار</option>
+              <option value="syp" <?= $priceMode === 'syp' ? 'selected' : '' ?>>سوري فقط</option>
+              <option value="usd" <?= $priceMode === 'usd' ? 'selected' : '' ?>>دولار فقط</option>
+              <option value="none" <?= $priceMode === 'none' ? 'selected' : '' ?>>بدون سعر</option>
+            </select>
+          </label>
+          <label class="text-sm">
+            <span class="text-text-muted block mb-1">الترتيب الافتراضي</span>
+            <input name="option_default_sort" value="<?= h($defaultSort) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="number:asc">
+          </label>
+        </div>
+      </div>
       <label class="text-sm">
         <span class="text-text-muted block mb-1">اسم مستخدم الوصول</span>
         <input name="access_username" value="<?= h((string) ($editLink['access_username'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="guest-username">
@@ -109,7 +179,8 @@ declare(strict_types=1);
     <ul class="space-y-2 text-sm text-text-muted">
       <li>• لكل رابط token مستقل يمكن مشاركته على المسوّقين أو العملاء.</li>
       <li>• عند تفعيل كلمة المرور، يصبح الدخول عبر user/pass للرابط.</li>
-      <li>• كلمة مفتاحية وأدنى كمية تُستخدم كفلتر أولي للمنتجات.</li>
+      <li>• الرابط يستطيع فرض قيود ثابتة (نوع/فئة/شركة/قياس/منشأ) مع فلاتر تنقّل اختيارية للعميل.</li>
+      <li>• يمكنك التحكم بإظهار الصور ووضع عرض السعر (سوري/دولار/كلاهما/بدون).</li>
       <li>• استخدم الإيقاف المؤقت للرابط بدل الحذف للحفاظ على الإحصاءات.</li>
     </ul>
   </article>
@@ -155,6 +226,7 @@ declare(strict_types=1);
             <th class="text-right px-5 py-4 font-bold">الفلاتر الأولية</th>
             <th class="text-right px-5 py-4 font-bold">انتهاء الصلاحية</th>
             <th class="text-right px-5 py-4 font-bold">الحالة</th>
+            <th class="text-right px-5 py-4 font-bold">رابط المشاركة</th>
             <th class="text-left px-5 py-4 font-bold">إجراءات</th>
           </tr>
         </thead>
@@ -180,6 +252,15 @@ declare(strict_types=1);
                 <?php else: ?>
                   <span class="inline-flex rounded-full bg-slate-100 text-slate-700 px-3 py-1 text-xs font-bold">متوقف</span>
                 <?php endif; ?>
+              </td>
+              <td class="px-5 py-4 text-xs">
+                <a
+                  href="/share.php?token=<?= urlencode((string) ($row['public_token'] ?? '')) ?>"
+                  target="_blank"
+                  class="font-mono text-primary underline"
+                >
+                  <?= h($publicBaseUrl . '/share.php?token=' . (string) ($row['public_token'] ?? '')) ?>
+                </a>
               </td>
               <td class="px-5 py-4">
                 <div class="flex items-center justify-end gap-2">
