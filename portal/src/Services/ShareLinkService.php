@@ -15,6 +15,17 @@ final class ShareLinkService
     private const FILTER_MANUFACTURER = 'manufacturer';
     private const FILTER_SIZE_RANGE = 'size_range';
     private const FILTER_COUNTRY_ORIGIN = 'country_origin';
+    private const FILTER_STORE_GUID = 'store_guid';
+    private const FILTER_GROUP_GUID = 'group_guid';
+    private const FILTER_IS_AVAILABLE = 'is_available';
+    private const FILTER_MIN_WAREHOUSE_QUANTITY = 'min_warehouse_quantity';
+    private const FILTER_MAX_WAREHOUSE_QUANTITY = 'max_warehouse_quantity';
+    private const FILTER_MIN_UNIT_SALE_PRICE_SYP = 'min_unit_sale_price_syp';
+    private const FILTER_MAX_UNIT_SALE_PRICE_SYP = 'max_unit_sale_price_syp';
+    private const FILTER_MIN_UNIT_SALE_PRICE_USD = 'min_unit_sale_price_usd';
+    private const FILTER_MAX_UNIT_SALE_PRICE_USD = 'max_unit_sale_price_usd';
+    private const FILTER_MIN_UNIT_PURCHASE_PRICE_USD = 'min_unit_purchase_price_usd';
+    private const FILTER_MAX_UNIT_PURCHASE_PRICE_USD = 'max_unit_purchase_price_usd';
 
     private const OPTION_SHOW_IMAGES = 'option_show_images';
     private const OPTION_PRICE_MODE = 'option_price_mode';
@@ -22,6 +33,7 @@ final class ShareLinkService
     private const OPTION_ALLOW_SORTING = 'option_allow_sorting';
     private const OPTION_INCLUDE_RESULT_FILTERS = 'option_include_result_filters';
     private const OPTION_DEFAULT_SORT = 'option_default_sort';
+    private const OPTION_DEFAULT_GROUP_BY = 'option_default_group_by';
 
     /** @param array{active?: string, q?: string, limit?: int} $filters */
     public static function list(array $filters = []): array
@@ -243,12 +255,24 @@ final class ShareLinkService
         array $forcedManufacturers = [],
         array $forcedSizeRanges = [],
         array $forcedCountryOrigins = [],
+        array $forcedStoreGuids = [],
+        array $forcedGroupGuids = [],
+        ?bool $forcedIsAvailable = null,
+        ?float $forcedMinWarehouseQuantity = null,
+        ?float $forcedMaxWarehouseQuantity = null,
+        ?float $forcedMinUnitSalePriceSyp = null,
+        ?float $forcedMaxUnitSalePriceSyp = null,
+        ?float $forcedMinUnitSalePriceUsd = null,
+        ?float $forcedMaxUnitSalePriceUsd = null,
+        ?float $forcedMinUnitPurchasePriceUsd = null,
+        ?float $forcedMaxUnitPurchasePriceUsd = null,
         bool $showImages = true,
         string $priceMode = 'both',
         bool $allowClientFilters = true,
         bool $allowSorting = true,
         bool $includeResultFilters = true,
-        ?string $defaultSort = null
+        ?string $defaultSort = null,
+        ?string $defaultGroupBy = null
     ): array {
         $name = trim($name);
         if ($name === '') {
@@ -270,6 +294,10 @@ final class ShareLinkService
         $priceMode = in_array($priceMode, ['both', 'syp', 'usd', 'none'], true) ? $priceMode : 'both';
         $defaultSort = trim((string) $defaultSort);
         $defaultSort = $defaultSort !== '' ? $defaultSort : null;
+        $defaultGroupBy = trim((string) $defaultGroupBy);
+        $defaultGroupBy = in_array($defaultGroupBy, ['ageCategory', 'sizeRange', 'materialType', 'manufacturer', 'countryOfOrigin', 'group'], true)
+            ? $defaultGroupBy
+            : null;
 
         if ($requirePassword && $accessUsername === '') {
             return ['ok' => false, 'message' => 'اسم مستخدم الوصول مطلوب عند تفعيل كلمة المرور.'];
@@ -280,6 +308,30 @@ final class ShareLinkService
         $forcedManufacturers = self::normalizeFilterValues($forcedManufacturers);
         $forcedSizeRanges = self::normalizeFilterValues($forcedSizeRanges);
         $forcedCountryOrigins = self::normalizeFilterValues($forcedCountryOrigins);
+        $forcedStoreGuids = self::normalizeGuidFilterValues($forcedStoreGuids);
+        $forcedGroupGuids = self::normalizeGuidFilterValues($forcedGroupGuids);
+
+        $forcedMinWarehouseQuantity = self::normalizeNullableNumber($forcedMinWarehouseQuantity);
+        $forcedMaxWarehouseQuantity = self::normalizeNullableNumber($forcedMaxWarehouseQuantity);
+        $forcedMinUnitSalePriceSyp = self::normalizeNullableNumber($forcedMinUnitSalePriceSyp);
+        $forcedMaxUnitSalePriceSyp = self::normalizeNullableNumber($forcedMaxUnitSalePriceSyp);
+        $forcedMinUnitSalePriceUsd = self::normalizeNullableNumber($forcedMinUnitSalePriceUsd);
+        $forcedMaxUnitSalePriceUsd = self::normalizeNullableNumber($forcedMaxUnitSalePriceUsd);
+        $forcedMinUnitPurchasePriceUsd = self::normalizeNullableNumber($forcedMinUnitPurchasePriceUsd);
+        $forcedMaxUnitPurchasePriceUsd = self::normalizeNullableNumber($forcedMaxUnitPurchasePriceUsd);
+
+        if (!self::isValidRange($forcedMinWarehouseQuantity, $forcedMaxWarehouseQuantity)) {
+            return ['ok' => false, 'message' => 'مدى الكمية غير صحيح (الحد الأدنى أكبر من الحد الأعلى).'];
+        }
+        if (!self::isValidRange($forcedMinUnitSalePriceSyp, $forcedMaxUnitSalePriceSyp)) {
+            return ['ok' => false, 'message' => 'مدى سعر البيع (ل.س) غير صحيح.'];
+        }
+        if (!self::isValidRange($forcedMinUnitSalePriceUsd, $forcedMaxUnitSalePriceUsd)) {
+            return ['ok' => false, 'message' => 'مدى سعر البيع (دولار) غير صحيح.'];
+        }
+        if (!self::isValidRange($forcedMinUnitPurchasePriceUsd, $forcedMaxUnitPurchasePriceUsd)) {
+            return ['ok' => false, 'message' => 'مدى سعر الشراء (دولار) غير صحيح.'];
+        }
 
         $pdo = Database::pdo();
         $pdo->beginTransaction();
@@ -340,12 +392,24 @@ final class ShareLinkService
                 $forcedManufacturers,
                 $forcedSizeRanges,
                 $forcedCountryOrigins,
+                $forcedStoreGuids,
+                $forcedGroupGuids,
+                $forcedIsAvailable,
+                $forcedMinWarehouseQuantity,
+                $forcedMaxWarehouseQuantity,
+                $forcedMinUnitSalePriceSyp,
+                $forcedMaxUnitSalePriceSyp,
+                $forcedMinUnitSalePriceUsd,
+                $forcedMaxUnitSalePriceUsd,
+                $forcedMinUnitPurchasePriceUsd,
+                $forcedMaxUnitPurchasePriceUsd,
                 $showImages,
                 $priceMode,
                 $allowClientFilters,
                 $allowSorting,
                 $includeResultFilters,
-                $defaultSort
+                $defaultSort,
+                $defaultGroupBy
             );
             $pdo->commit();
 
@@ -408,12 +472,24 @@ final class ShareLinkService
                 $forcedManufacturers,
                 $forcedSizeRanges,
                 $forcedCountryOrigins,
+                $forcedStoreGuids,
+                $forcedGroupGuids,
+                $forcedIsAvailable,
+                $forcedMinWarehouseQuantity,
+                $forcedMaxWarehouseQuantity,
+                $forcedMinUnitSalePriceSyp,
+                $forcedMaxUnitSalePriceSyp,
+                $forcedMinUnitSalePriceUsd,
+                $forcedMaxUnitSalePriceUsd,
+                $forcedMinUnitPurchasePriceUsd,
+                $forcedMaxUnitPurchasePriceUsd,
                 $showImages,
                 $priceMode,
                 $allowClientFilters,
                 $allowSorting,
                 $includeResultFilters,
-                $defaultSort
+                $defaultSort,
+                $defaultGroupBy
             );
             $pdo->commit();
 
@@ -471,6 +547,9 @@ final class ShareLinkService
         $row['forced_manufacturers'] = $filters['forced_manufacturers'];
         $row['forced_size_ranges'] = $filters['forced_size_ranges'];
         $row['forced_country_origins'] = $filters['forced_country_origins'];
+        $row['forced_store_guids'] = $filters['forced_store_guids'];
+        $row['forced_group_guids'] = $filters['forced_group_guids'];
+        $row['constraints'] = $filters['constraints'];
         $row['options'] = $filters['options'];
 
         return $row;
@@ -483,13 +562,27 @@ final class ShareLinkService
      *   forced_manufacturers: list<string>,
      *   forced_size_ranges: list<string>,
      *   forced_country_origins: list<string>,
+     *   forced_store_guids: list<string>,
+     *   forced_group_guids: list<string>,
+     *   constraints: array{
+     *      is_available: bool|null,
+     *      min_warehouse_quantity: float|null,
+     *      max_warehouse_quantity: float|null,
+     *      min_unit_sale_price_syp: float|null,
+     *      max_unit_sale_price_syp: float|null,
+     *      min_unit_sale_price_usd: float|null,
+     *      max_unit_sale_price_usd: float|null,
+     *      min_unit_purchase_price_usd: float|null,
+     *      max_unit_purchase_price_usd: float|null
+     *   },
      *   options: array{
      *      show_images: bool,
      *      price_mode: string,
      *      allow_client_filters: bool,
      *      allow_sorting: bool,
      *      include_result_filters: bool,
-     *      default_sort: string
+     *      default_sort: string,
+     *      default_group_by: string
      *   }
      * }
      */
@@ -502,6 +595,18 @@ final class ShareLinkService
             'allow_sorting' => true,
             'include_result_filters' => true,
             'default_sort' => 'number:asc',
+            'default_group_by' => 'none',
+        ];
+        $constraintDefaults = [
+            'is_available' => null,
+            'min_warehouse_quantity' => null,
+            'max_warehouse_quantity' => null,
+            'min_unit_sale_price_syp' => null,
+            'max_unit_sale_price_syp' => null,
+            'min_unit_sale_price_usd' => null,
+            'max_unit_sale_price_usd' => null,
+            'min_unit_purchase_price_usd' => null,
+            'max_unit_purchase_price_usd' => null,
         ];
         if ($linkId === '') {
             return [
@@ -510,6 +615,9 @@ final class ShareLinkService
                 'forced_manufacturers' => [],
                 'forced_size_ranges' => [],
                 'forced_country_origins' => [],
+                'forced_store_guids' => [],
+                'forced_group_guids' => [],
+                'constraints' => $constraintDefaults,
                 'options' => $defaults,
             ];
         }
@@ -528,6 +636,9 @@ final class ShareLinkService
             'forced_manufacturers' => [],
             'forced_size_ranges' => [],
             'forced_country_origins' => [],
+            'forced_store_guids' => [],
+            'forced_group_guids' => [],
+            'constraints' => $constraintDefaults,
             'options' => $defaults,
         ];
 
@@ -555,6 +666,39 @@ final class ShareLinkService
                 case self::FILTER_COUNTRY_ORIGIN:
                     $result['forced_country_origins'][] = $value;
                     break;
+                case self::FILTER_STORE_GUID:
+                    $result['forced_store_guids'][] = $value;
+                    break;
+                case self::FILTER_GROUP_GUID:
+                    $result['forced_group_guids'][] = $value;
+                    break;
+                case self::FILTER_IS_AVAILABLE:
+                    $result['constraints']['is_available'] = self::toNullableBool($value);
+                    break;
+                case self::FILTER_MIN_WAREHOUSE_QUANTITY:
+                    $result['constraints']['min_warehouse_quantity'] = self::toNullableFloat($value);
+                    break;
+                case self::FILTER_MAX_WAREHOUSE_QUANTITY:
+                    $result['constraints']['max_warehouse_quantity'] = self::toNullableFloat($value);
+                    break;
+                case self::FILTER_MIN_UNIT_SALE_PRICE_SYP:
+                    $result['constraints']['min_unit_sale_price_syp'] = self::toNullableFloat($value);
+                    break;
+                case self::FILTER_MAX_UNIT_SALE_PRICE_SYP:
+                    $result['constraints']['max_unit_sale_price_syp'] = self::toNullableFloat($value);
+                    break;
+                case self::FILTER_MIN_UNIT_SALE_PRICE_USD:
+                    $result['constraints']['min_unit_sale_price_usd'] = self::toNullableFloat($value);
+                    break;
+                case self::FILTER_MAX_UNIT_SALE_PRICE_USD:
+                    $result['constraints']['max_unit_sale_price_usd'] = self::toNullableFloat($value);
+                    break;
+                case self::FILTER_MIN_UNIT_PURCHASE_PRICE_USD:
+                    $result['constraints']['min_unit_purchase_price_usd'] = self::toNullableFloat($value);
+                    break;
+                case self::FILTER_MAX_UNIT_PURCHASE_PRICE_USD:
+                    $result['constraints']['max_unit_purchase_price_usd'] = self::toNullableFloat($value);
+                    break;
                 case self::OPTION_SHOW_IMAGES:
                     $result['options']['show_images'] = self::toBool($value, true);
                     break;
@@ -573,6 +717,11 @@ final class ShareLinkService
                 case self::OPTION_DEFAULT_SORT:
                     $result['options']['default_sort'] = $value;
                     break;
+                case self::OPTION_DEFAULT_GROUP_BY:
+                    $result['options']['default_group_by'] = in_array($value, ['none', 'ageCategory', 'sizeRange', 'materialType', 'manufacturer', 'countryOfOrigin', 'group'], true)
+                        ? $value
+                        : 'none';
+                    break;
             }
         }
 
@@ -581,6 +730,8 @@ final class ShareLinkService
         $result['forced_manufacturers'] = self::normalizeFilterValues($result['forced_manufacturers']);
         $result['forced_size_ranges'] = self::normalizeFilterValues($result['forced_size_ranges']);
         $result['forced_country_origins'] = self::normalizeFilterValues($result['forced_country_origins']);
+        $result['forced_store_guids'] = self::normalizeGuidFilterValues($result['forced_store_guids']);
+        $result['forced_group_guids'] = self::normalizeGuidFilterValues($result['forced_group_guids']);
 
         return $result;
     }
@@ -592,12 +743,24 @@ final class ShareLinkService
         array $forcedManufacturers,
         array $forcedSizeRanges,
         array $forcedCountryOrigins,
+        array $forcedStoreGuids,
+        array $forcedGroupGuids,
+        ?bool $forcedIsAvailable,
+        ?float $forcedMinWarehouseQuantity,
+        ?float $forcedMaxWarehouseQuantity,
+        ?float $forcedMinUnitSalePriceSyp,
+        ?float $forcedMaxUnitSalePriceSyp,
+        ?float $forcedMinUnitSalePriceUsd,
+        ?float $forcedMaxUnitSalePriceUsd,
+        ?float $forcedMinUnitPurchasePriceUsd,
+        ?float $forcedMaxUnitPurchasePriceUsd,
         bool $showImages,
         string $priceMode,
         bool $allowClientFilters,
         bool $allowSorting,
         bool $includeResultFilters,
-        ?string $defaultSort
+        ?string $defaultSort,
+        ?string $defaultGroupBy
     ): void {
         $delete = Database::pdo()->prepare(
             'DELETE FROM share_link_filters WHERE link_id = :link_id'
@@ -624,6 +787,36 @@ final class ShareLinkService
         $insertValues(self::FILTER_MANUFACTURER, $forcedManufacturers);
         $insertValues(self::FILTER_SIZE_RANGE, $forcedSizeRanges);
         $insertValues(self::FILTER_COUNTRY_ORIGIN, $forcedCountryOrigins);
+        $insertValues(self::FILTER_STORE_GUID, $forcedStoreGuids);
+        $insertValues(self::FILTER_GROUP_GUID, $forcedGroupGuids);
+
+        if ($forcedIsAvailable !== null) {
+            $insert->execute([
+                'link_id' => $linkId,
+                'filter_type' => self::FILTER_IS_AVAILABLE,
+                'value_ar' => $forcedIsAvailable ? '1' : '0',
+            ]);
+        }
+
+        $insertNumber = static function (string $type, ?float $value) use ($insert, $linkId): void {
+            if ($value === null) {
+                return;
+            }
+
+            $insert->execute([
+                'link_id' => $linkId,
+                'filter_type' => $type,
+                'value_ar' => rtrim(rtrim(sprintf('%.8F', $value), '0'), '.'),
+            ]);
+        };
+        $insertNumber(self::FILTER_MIN_WAREHOUSE_QUANTITY, $forcedMinWarehouseQuantity);
+        $insertNumber(self::FILTER_MAX_WAREHOUSE_QUANTITY, $forcedMaxWarehouseQuantity);
+        $insertNumber(self::FILTER_MIN_UNIT_SALE_PRICE_SYP, $forcedMinUnitSalePriceSyp);
+        $insertNumber(self::FILTER_MAX_UNIT_SALE_PRICE_SYP, $forcedMaxUnitSalePriceSyp);
+        $insertNumber(self::FILTER_MIN_UNIT_SALE_PRICE_USD, $forcedMinUnitSalePriceUsd);
+        $insertNumber(self::FILTER_MAX_UNIT_SALE_PRICE_USD, $forcedMaxUnitSalePriceUsd);
+        $insertNumber(self::FILTER_MIN_UNIT_PURCHASE_PRICE_USD, $forcedMinUnitPurchasePriceUsd);
+        $insertNumber(self::FILTER_MAX_UNIT_PURCHASE_PRICE_USD, $forcedMaxUnitPurchasePriceUsd);
 
         $optionValues = [
             self::OPTION_SHOW_IMAGES => $showImages ? '1' : '0',
@@ -632,6 +825,10 @@ final class ShareLinkService
             self::OPTION_ALLOW_SORTING => $allowSorting ? '1' : '0',
             self::OPTION_INCLUDE_RESULT_FILTERS => $includeResultFilters ? '1' : '0',
             self::OPTION_DEFAULT_SORT => trim((string) $defaultSort) !== '' ? trim((string) $defaultSort) : 'number:asc',
+            self::OPTION_DEFAULT_GROUP_BY => trim((string) $defaultGroupBy) !== ''
+                && in_array(trim((string) $defaultGroupBy), ['ageCategory', 'sizeRange', 'materialType', 'manufacturer', 'countryOfOrigin', 'group'], true)
+                ? trim((string) $defaultGroupBy)
+                : 'none',
         ];
 
         foreach ($optionValues as $type => $value) {
@@ -668,6 +865,66 @@ final class ShareLinkService
         }
 
         return $normalized;
+    }
+
+    /** @param array<int, mixed> $values
+     *  @return list<string>
+     */
+    private static function normalizeGuidFilterValues(array $values): array
+    {
+        $normalized = [];
+        foreach ($values as $value) {
+            $chunks = is_array($value)
+                ? $value
+                : (preg_split('/[,|\n]+/u', (string) $value) ?: []);
+            foreach ($chunks as $chunk) {
+                $item = trim((string) $chunk);
+                if ($item === '' || !preg_match('/^[0-9a-fA-F-]{36}$/', $item)) {
+                    continue;
+                }
+                $normalized[] = strtolower($item);
+            }
+        }
+
+        $normalized = array_values(array_unique($normalized));
+        if (count($normalized) > 40) {
+            $normalized = array_slice($normalized, 0, 40);
+        }
+
+        return $normalized;
+    }
+
+    private static function normalizeNullableNumber(?float $value): ?float
+    {
+        if ($value === null || !is_finite($value)) {
+            return null;
+        }
+
+        return max(0, $value);
+    }
+
+    private static function isValidRange(?float $min, ?float $max): bool
+    {
+        if ($min === null || $max === null) {
+            return true;
+        }
+
+        return $min <= $max;
+    }
+
+    private static function toNullableFloat(string $value): ?float
+    {
+        return is_numeric($value) ? (float) $value : null;
+    }
+
+    private static function toNullableBool(string $value): ?bool
+    {
+        $value = trim(strtolower($value));
+        return match ($value) {
+            '1', 'true', 'yes', 'on' => true,
+            '0', 'false', 'no', 'off' => false,
+            default => null,
+        };
     }
 
     private static function toBool(string $value, bool $default): bool

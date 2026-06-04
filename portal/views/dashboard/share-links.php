@@ -11,7 +11,16 @@ declare(strict_types=1);
 /** @var string|null $flash */
 /** @var string $flashType */
 /** @var string $publicBaseUrl */
-/** @var array<string, list<string>> $materialFilterOptions */
+/** @var array{
+ *  materialTypes: list<string>,
+ *  ageCategories: list<string>,
+ *  manufacturers: list<string>,
+ *  sizeRanges: list<string>,
+ *  countryOfOrigins: list<string>,
+ *  stores: list<array<string, mixed>>,
+ *  groups: list<array<string, mixed>>,
+ *  priceRanges: array<string, mixed>
+ * } $materialFilterOptions */
 /** @var string|null $materialFilterOptionsError */
 
 $linkOptions = (array) (($editLink['options'] ?? null) ?: []);
@@ -21,18 +30,52 @@ $allowClientFilters = array_key_exists('allow_client_filters', $linkOptions) ? (
 $allowSorting = array_key_exists('allow_sorting', $linkOptions) ? (bool) $linkOptions['allow_sorting'] : true;
 $includeResultFilters = array_key_exists('include_result_filters', $linkOptions) ? (bool) $linkOptions['include_result_filters'] : true;
 $defaultSort = (string) ($linkOptions['default_sort'] ?? 'number:asc');
+$defaultGroupBy = (string) ($linkOptions['default_group_by'] ?? 'none');
 
 $selectedMaterialTypes = array_map('strval', $editLink['forced_material_types'] ?? []);
 $selectedAgeCategories = array_map('strval', $editLink['forced_age_categories'] ?? []);
 $selectedManufacturers = array_map('strval', $editLink['forced_manufacturers'] ?? []);
 $selectedSizeRanges = array_map('strval', $editLink['forced_size_ranges'] ?? []);
 $selectedCountryOrigins = array_map('strval', $editLink['forced_country_origins'] ?? []);
+$selectedStoreGuids = array_map('strval', $editLink['forced_store_guids'] ?? []);
+$selectedGroupGuids = array_map('strval', $editLink['forced_group_guids'] ?? []);
+$constraints = is_array($editLink['constraints'] ?? null) ? $editLink['constraints'] : [];
+$forcedIsAvailable = array_key_exists('is_available', $constraints) ? $constraints['is_available'] : null;
 
 $materialTypeOptions = array_values(array_unique(array_merge($materialFilterOptions['materialTypes'] ?? [], $selectedMaterialTypes)));
 $ageCategoryOptions = array_values(array_unique(array_merge($materialFilterOptions['ageCategories'] ?? [], $selectedAgeCategories)));
 $manufacturerOptions = array_values(array_unique(array_merge($materialFilterOptions['manufacturers'] ?? [], $selectedManufacturers)));
 $sizeRangeOptions = array_values(array_unique(array_merge($materialFilterOptions['sizeRanges'] ?? [], $selectedSizeRanges)));
 $countryOriginOptions = array_values(array_unique(array_merge($materialFilterOptions['countryOfOrigins'] ?? [], $selectedCountryOrigins)));
+$storeOptions = array_values(array_filter($materialFilterOptions['stores'] ?? [], static fn ($row) => is_array($row) && !empty($row['guid'])));
+$groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? [], static fn ($row) => is_array($row) && !empty($row['guid'])));
+$priceRanges = is_array($materialFilterOptions['priceRanges'] ?? null) ? $materialFilterOptions['priceRanges'] : [];
+
+foreach ($selectedStoreGuids as $guid) {
+    $exists = false;
+    foreach ($storeOptions as $store) {
+        if ((string) ($store['guid'] ?? '') === $guid) {
+            $exists = true;
+            break;
+        }
+    }
+    if (!$exists) {
+        $storeOptions[] = ['guid' => $guid, 'name' => $guid];
+    }
+}
+
+foreach ($selectedGroupGuids as $guid) {
+    $exists = false;
+    foreach ($groupOptions as $group) {
+        if ((string) ($group['guid'] ?? '') === $guid) {
+            $exists = true;
+            break;
+        }
+    }
+    if (!$exists) {
+        $groupOptions[] = ['guid' => $guid, 'name' => $guid];
+    }
+}
 ?>
 <section class="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
   <div>
@@ -152,6 +195,104 @@ $countryOriginOptions = array_values(array_unique(array_merge($materialFilterOpt
           <?php endforeach; ?>
         </select>
       </label>
+      <label class="text-sm md:col-span-2">
+        <span class="text-text-muted block mb-1">تقييد اختياري: المخازن (اختيار متعدد)</span>
+        <select name="forced_store_guids[]" multiple class="min-h-24 w-full rounded-xl border border-border-subtle px-3 py-2 focus:border-primary focus:ring-primary">
+          <?php foreach ($storeOptions as $store): ?>
+            <?php
+                $storeGuid = (string) ($store['guid'] ?? '');
+                if ($storeGuid === '') {
+                    continue;
+                }
+                $storeLabel = trim((string) ($store['name'] ?? '')) !== ''
+                    ? (string) $store['name']
+                    : ((string) ($store['code'] ?? '') !== '' ? (string) $store['code'] : $storeGuid);
+            ?>
+            <option value="<?= h($storeGuid) ?>" <?= in_array($storeGuid, $selectedStoreGuids, true) ? 'selected' : '' ?>>
+              <?= h($storeLabel) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label class="text-sm md:col-span-2">
+        <span class="text-text-muted block mb-1">تقييد اختياري: المجموعات (اختيار متعدد)</span>
+        <select name="forced_group_guids[]" multiple class="min-h-24 w-full rounded-xl border border-border-subtle px-3 py-2 focus:border-primary focus:ring-primary">
+          <?php foreach ($groupOptions as $group): ?>
+            <?php
+                $groupGuid = (string) ($group['guid'] ?? '');
+                if ($groupGuid === '') {
+                    continue;
+                }
+                $groupLabel = trim((string) ($group['name'] ?? '')) !== ''
+                    ? (string) $group['name']
+                    : ((string) ($group['code'] ?? '') !== '' ? (string) $group['code'] : $groupGuid);
+            ?>
+            <option value="<?= h($groupGuid) ?>" <?= in_array($groupGuid, $selectedGroupGuids, true) ? 'selected' : '' ?>>
+              <?= h($groupLabel) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <div class="md:col-span-2 rounded-xl border border-border-subtle p-4 bg-surface-low">
+        <h3 class="text-sm font-bold mb-3">قيود متقدمة إضافية</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <label class="text-sm">
+            <span class="text-text-muted block mb-1">توفر المادة</span>
+            <select name="forced_is_available" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+              <option value="" <?= $forcedIsAvailable === null ? 'selected' : '' ?>>بدون قيد</option>
+              <option value="1" <?= $forcedIsAvailable === true ? 'selected' : '' ?>>متوفر فقط</option>
+              <option value="0" <?= $forcedIsAvailable === false ? 'selected' : '' ?>>غير متوفر فقط</option>
+            </select>
+          </label>
+          <label class="text-sm">
+            <span class="text-text-muted block mb-1">أدنى كمية بالمخزون</span>
+            <input type="number" step="0.01" min="0" name="forced_min_warehouse_quantity" value="<?= h((string) ($constraints['min_warehouse_quantity'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+          </label>
+          <label class="text-sm">
+            <span class="text-text-muted block mb-1">أعلى كمية بالمخزون</span>
+            <input type="number" step="0.01" min="0" name="forced_max_warehouse_quantity" value="<?= h((string) ($constraints['max_warehouse_quantity'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+          </label>
+          <label class="text-sm">
+            <span class="text-text-muted block mb-1">
+              أدنى سعر بيع ل.س
+              <?php if (is_array($priceRanges['unitSalePriceSyp'] ?? null)): ?>
+                <small class="text-text-muted">(API: <?= h((string) ($priceRanges['unitSalePriceSyp']['min'] ?? '0')) ?> - <?= h((string) ($priceRanges['unitSalePriceSyp']['max'] ?? '0')) ?>)</small>
+              <?php endif; ?>
+            </span>
+            <input type="number" step="0.01" min="0" name="forced_min_unit_sale_price_syp" value="<?= h((string) ($constraints['min_unit_sale_price_syp'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+          </label>
+          <label class="text-sm">
+            <span class="text-text-muted block mb-1">أعلى سعر بيع ل.س</span>
+            <input type="number" step="0.01" min="0" name="forced_max_unit_sale_price_syp" value="<?= h((string) ($constraints['max_unit_sale_price_syp'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+          </label>
+          <label class="text-sm">
+            <span class="text-text-muted block mb-1">
+              أدنى سعر بيع $
+              <?php if (is_array($priceRanges['unitSalePriceUsd'] ?? null)): ?>
+                <small class="text-text-muted">(API: <?= h((string) ($priceRanges['unitSalePriceUsd']['min'] ?? '0')) ?> - <?= h((string) ($priceRanges['unitSalePriceUsd']['max'] ?? '0')) ?>)</small>
+              <?php endif; ?>
+            </span>
+            <input type="number" step="0.01" min="0" name="forced_min_unit_sale_price_usd" value="<?= h((string) ($constraints['min_unit_sale_price_usd'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+          </label>
+          <label class="text-sm">
+            <span class="text-text-muted block mb-1">أعلى سعر بيع $</span>
+            <input type="number" step="0.01" min="0" name="forced_max_unit_sale_price_usd" value="<?= h((string) ($constraints['max_unit_sale_price_usd'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+          </label>
+          <label class="text-sm">
+            <span class="text-text-muted block mb-1">
+              أدنى سعر شراء $
+              <?php if (is_array($priceRanges['unitPurchasePriceUsd'] ?? null)): ?>
+                <small class="text-text-muted">(API: <?= h((string) ($priceRanges['unitPurchasePriceUsd']['min'] ?? '0')) ?> - <?= h((string) ($priceRanges['unitPurchasePriceUsd']['max'] ?? '0')) ?>)</small>
+              <?php endif; ?>
+            </span>
+            <input type="number" step="0.01" min="0" name="forced_min_unit_purchase_price_usd" value="<?= h((string) ($constraints['min_unit_purchase_price_usd'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+          </label>
+          <label class="text-sm">
+            <span class="text-text-muted block mb-1">أعلى سعر شراء $</span>
+            <input type="number" step="0.01" min="0" name="forced_max_unit_purchase_price_usd" value="<?= h((string) ($constraints['max_unit_purchase_price_usd'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+          </label>
+        </div>
+      </div>
 
       <div class="md:col-span-2 rounded-xl border border-border-subtle p-4 bg-surface-low">
         <h3 class="text-sm font-bold mb-3">خيارات عرض الرابط للعميل</h3>
@@ -192,6 +333,18 @@ $countryOriginOptions = array_values(array_unique(array_merge($materialFilterOpt
               <option value="manufacturer:asc,-unitSalePriceSyp"></option>
             </datalist>
           </label>
+          <label class="text-sm">
+            <span class="text-text-muted block mb-1">التجميع الافتراضي</span>
+            <select name="option_default_group_by" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+              <option value="none" <?= $defaultGroupBy === 'none' ? 'selected' : '' ?>>بدون تجميع</option>
+              <option value="ageCategory" <?= $defaultGroupBy === 'ageCategory' ? 'selected' : '' ?>>حسب الفئة العمرية</option>
+              <option value="sizeRange" <?= $defaultGroupBy === 'sizeRange' ? 'selected' : '' ?>>حسب القياس</option>
+              <option value="materialType" <?= $defaultGroupBy === 'materialType' ? 'selected' : '' ?>>حسب النوع</option>
+              <option value="manufacturer" <?= $defaultGroupBy === 'manufacturer' ? 'selected' : '' ?>>حسب الشركة</option>
+              <option value="countryOfOrigin" <?= $defaultGroupBy === 'countryOfOrigin' ? 'selected' : '' ?>>حسب بلد المنشأ</option>
+              <option value="group" <?= $defaultGroupBy === 'group' ? 'selected' : '' ?>>حسب المجموعة</option>
+            </select>
+          </label>
         </div>
       </div>
       <label class="text-sm">
@@ -221,6 +374,7 @@ $countryOriginOptions = array_values(array_unique(array_merge($materialFilterOpt
       <li>• عند تفعيل كلمة المرور، يصبح الدخول عبر user/pass للرابط.</li>
       <li>• القيود اختيارية وتُختار من فلاتر API المتاحة (بدون إدخال يدوي).</li>
       <li>• عند اختيار أكثر من قيمة داخل نفس الحقل يكون الشرط مركبًا (OR)، وبين الحقول المختلفة يكون (AND).</li>
+      <li>• يمكنك فرض قيود متقدمة مثل التوفر، المدى السعري، الكمية، المخازن، والمجموعات.</li>
       <li>• يمكنك التحكم بإظهار الصور ووضع عرض السعر (سوري/دولار/كلاهما/بدون).</li>
       <li>• يدعم الترتيب المركب من API مثل: <code>ageCategory:asc,materialType:asc</code>.</li>
       <li>• استخدم الإيقاف المؤقت للرابط بدل الحذف للحفاظ على الإحصاءات.</li>

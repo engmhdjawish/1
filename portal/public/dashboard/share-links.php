@@ -36,6 +36,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             return array_values(array_unique($values));
         };
+        $parseNullableFloat = static function (mixed $value): ?float {
+            if (is_array($value)) {
+                return null;
+            }
+            $text = trim((string) $value);
+            return $text !== '' && is_numeric($text) ? (float) $text : null;
+        };
+        $parseNullableBool = static function (mixed $value): ?bool {
+            if (is_array($value)) {
+                return null;
+            }
+            $text = trim(strtolower((string) $value));
+            return match ($text) {
+                '1', 'true', 'yes', 'on' => true,
+                '0', 'false', 'no', 'off' => false,
+                default => null,
+            };
+        };
         $result = ShareLinkService::save(
             trim((string) ($_POST['id'] ?? '')) ?: null,
             trim((string) ($_POST['name_ar'] ?? '')),
@@ -53,12 +71,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $parseValues($_POST['forced_manufacturers'] ?? []),
             $parseValues($_POST['forced_size_ranges'] ?? []),
             $parseValues($_POST['forced_country_origins'] ?? []),
+            $parseValues($_POST['forced_store_guids'] ?? []),
+            $parseValues($_POST['forced_group_guids'] ?? []),
+            $parseNullableBool($_POST['forced_is_available'] ?? null),
+            $parseNullableFloat($_POST['forced_min_warehouse_quantity'] ?? null),
+            $parseNullableFloat($_POST['forced_max_warehouse_quantity'] ?? null),
+            $parseNullableFloat($_POST['forced_min_unit_sale_price_syp'] ?? null),
+            $parseNullableFloat($_POST['forced_max_unit_sale_price_syp'] ?? null),
+            $parseNullableFloat($_POST['forced_min_unit_sale_price_usd'] ?? null),
+            $parseNullableFloat($_POST['forced_max_unit_sale_price_usd'] ?? null),
+            $parseNullableFloat($_POST['forced_min_unit_purchase_price_usd'] ?? null),
+            $parseNullableFloat($_POST['forced_max_unit_purchase_price_usd'] ?? null),
             isset($_POST['option_show_images']),
             trim((string) ($_POST['option_price_mode'] ?? 'both')),
             isset($_POST['option_allow_client_filters']),
             isset($_POST['option_allow_sorting']),
             isset($_POST['option_include_result_filters']),
-            trim((string) ($_POST['option_default_sort'] ?? 'number:asc'))
+            trim((string) ($_POST['option_default_sort'] ?? 'number:asc')),
+            trim((string) ($_POST['option_default_group_by'] ?? 'none'))
         );
         $flash = $result['message'];
         $flashType = $result['ok'] ? 'success' : 'error';
@@ -97,6 +127,13 @@ $materialFilterOptions = [
     'manufacturers' => [],
     'sizeRanges' => [],
     'countryOfOrigins' => [],
+    'stores' => [],
+    'groups' => [],
+    'priceRanges' => [
+        'unitSalePriceSyp' => null,
+        'unitSalePriceUsd' => null,
+        'unitPurchasePriceUsd' => null,
+    ],
 ];
 $materialFilterOptionsError = null;
 try {
@@ -109,6 +146,15 @@ try {
             'manufacturers' => array_values(array_map('strval', $data['manufacturers'] ?? [])),
             'sizeRanges' => array_values(array_map('strval', $data['sizeRanges'] ?? [])),
             'countryOfOrigins' => array_values(array_map('strval', $data['countryOfOrigins'] ?? [])),
+            'stores' => array_values(array_filter($data['stores'] ?? [], static fn ($row) => is_array($row))),
+            'groups' => array_values(array_filter($data['groups'] ?? [], static fn ($row) => is_array($row))),
+            'priceRanges' => is_array($data['priceRanges'] ?? null)
+                ? $data['priceRanges']
+                : [
+                    'unitSalePriceSyp' => null,
+                    'unitSalePriceUsd' => null,
+                    'unitPurchasePriceUsd' => null,
+                ],
         ];
     } else {
         $materialFilterOptionsError = 'تعذر جلب فلاتر المواد من API (رمز ' . (int) ($filtersResponse['status'] ?? 0) . ').';
