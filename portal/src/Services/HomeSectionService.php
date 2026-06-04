@@ -11,18 +11,39 @@ final class HomeSectionService
 {
     private const DISPLAY_MODES = ['manual', 'filter'];
 
+    private const FILTER_KEYWORD = 'keyword';
+    private const FILTER_MATERIAL_TYPE = 'material_type';
+    private const FILTER_AGE_CATEGORY = 'age_category';
+    private const FILTER_MANUFACTURER = 'manufacturer';
+    private const FILTER_SIZE_RANGE = 'size_range';
+    private const FILTER_COUNTRY_ORIGIN = 'country_origin';
+    private const FILTER_STORE_GUID = 'store_guid';
+    private const FILTER_GROUP_GUID = 'group_guid';
+    private const FILTER_IS_AVAILABLE = 'is_available';
+    private const FILTER_MIN_WAREHOUSE_QUANTITY = 'min_warehouse_quantity';
+    private const FILTER_MAX_WAREHOUSE_QUANTITY = 'max_warehouse_quantity';
+    private const FILTER_MIN_UNIT_SALE_PRICE_SYP = 'min_unit_sale_price_syp';
+    private const FILTER_MAX_UNIT_SALE_PRICE_SYP = 'max_unit_sale_price_syp';
+    private const FILTER_MIN_UNIT_SALE_PRICE_USD = 'min_unit_sale_price_usd';
+    private const FILTER_MAX_UNIT_SALE_PRICE_USD = 'max_unit_sale_price_usd';
+    private const FILTER_MIN_UNIT_PURCHASE_PRICE_USD = 'min_unit_purchase_price_usd';
+    private const FILTER_MAX_UNIT_PURCHASE_PRICE_USD = 'max_unit_purchase_price_usd';
+
     /** @return list<array<string, mixed>> */
     public static function activeSections(): array
     {
         $pdo = Database::pdo();
         $sections = $pdo->query(
-            'SELECT id, slug, title_ar, subtitle_ar, banner_image_url, display_mode, max_products
+            'SELECT id::text AS id, slug, title_ar, subtitle_ar, banner_image_url, display_mode::text AS display_mode, max_products
              FROM home_sections WHERE is_active = TRUE ORDER BY sort_order ASC'
         )->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($sections as &$section) {
-            $section['filters'] = self::filtersForSection($section['id']);
-            $section['material_guids'] = self::manualProducts($section['id']);
+            $sectionId = (string) $section['id'];
+            $parsed = self::parseFilterRows(self::filtersForSection($sectionId));
+            $section['filters'] = $parsed['rows'];
+            $section['filter_rules'] = $parsed['rules'];
+            $section['material_guids'] = self::manualProducts($sectionId);
             $section['products'] = self::loadProducts($section);
         }
 
@@ -104,8 +125,12 @@ final class HomeSectionService
             return null;
         }
 
-        $row['filters'] = self::sectionFilters($id);
+        $parsed = self::parseFilterRows(self::sectionFilters($id));
+        $row['filters'] = $parsed['rows'];
+        $row['filter_rules'] = $parsed['rules'];
         $row['material_guids'] = self::manualProducts($id);
+        $row['manual_products'] = self::loadManualProductDetails($row['material_guids']);
+        $row['preview_products'] = self::loadProducts($row);
 
         return $row;
     }
@@ -161,25 +186,11 @@ final class HomeSectionService
         if ($id === null || trim($id) === '') {
             $insert = $pdo->prepare(
                 'INSERT INTO home_sections (
-                    slug,
-                    title_ar,
-                    subtitle_ar,
-                    banner_image_url,
-                    display_mode,
-                    max_products,
-                    sort_order,
-                    is_active,
-                    updated_by_user_id
+                    slug, title_ar, subtitle_ar, banner_image_url, display_mode,
+                    max_products, sort_order, is_active, updated_by_user_id
                  ) VALUES (
-                    :slug,
-                    :title_ar,
-                    :subtitle_ar,
-                    :banner_image_url,
-                    :display_mode,
-                    :max_products,
-                    :sort_order,
-                    CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END,
-                    :updated_by_user_id
+                    :slug, :title_ar, :subtitle_ar, :banner_image_url, :display_mode,
+                    :max_products, :sort_order, CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END, :updated_by_user_id
                  )
                  RETURNING id::text'
             );
@@ -204,16 +215,11 @@ final class HomeSectionService
 
         $update = $pdo->prepare(
             'UPDATE home_sections SET
-                slug = :slug,
-                title_ar = :title_ar,
-                subtitle_ar = :subtitle_ar,
-                banner_image_url = :banner_image_url,
-                display_mode = :display_mode,
-                max_products = :max_products,
-                sort_order = :sort_order,
+                slug = :slug, title_ar = :title_ar, subtitle_ar = :subtitle_ar,
+                banner_image_url = :banner_image_url, display_mode = :display_mode,
+                max_products = :max_products, sort_order = :sort_order,
                 is_active = CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END,
-                updated_by_user_id = :updated_by_user_id,
-                updated_at = NOW()
+                updated_by_user_id = :updated_by_user_id, updated_at = NOW()
              WHERE id = :id'
         );
         $update->execute([
@@ -239,7 +245,8 @@ final class HomeSectionService
 
         $stmt = Database::pdo()->prepare(
             'UPDATE home_sections
-             SET is_active = CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END, updated_at = NOW(), updated_by_user_id = :updated_by_user_id
+             SET is_active = CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END,
+                 updated_at = NOW(), updated_by_user_id = :updated_by_user_id
              WHERE id = :id'
         );
         $stmt->execute([
@@ -251,37 +258,94 @@ final class HomeSectionService
         return $stmt->rowCount() > 0;
     }
 
-    /** @return array{ok: bool, message: string} */
-    public static function addFilter(string $sectionId, string $filterType, string $valueAr): array
+    /** @param array<string, mixed> $payload */
+    public static function syncFilters(string $sectionId, array $payload): void
     {
-        $filterType = trim($filterType);
-        $valueAr = trim($valueAr);
-        if ($filterType === '' || $valueAr === '') {
-            return ['ok' => false, 'message' => 'نوع الفلتر وقيمته مطلوبان.'];
+        $pdo = Database::pdo();
+        $pdo->prepare('DELETE FROM home_section_filters WHERE section_id = :id')->execute(['id' => $sectionId]);
+
+        $insert = $pdo->prepare(
+            'INSERT INTO home_section_filters (section_id, filter_type, value_ar)
+             VALUES (:section_id, :filter_type, :value_ar)'
+        );
+
+        $insertValues = static function (string $type, array $values) use ($insert, $sectionId): void {
+            foreach ($values as $value) {
+                $value = trim((string) $value);
+                if ($value === '') {
+                    continue;
+                }
+                $insert->execute([
+                    'section_id' => $sectionId,
+                    'filter_type' => $type,
+                    'value_ar' => $value,
+                ]);
+            }
+        };
+
+        $insertNumber = static function (string $type, mixed $value) use ($insert, $sectionId): void {
+            if ($value === null || $value === '') {
+                return;
+            }
+            $insert->execute([
+                'section_id' => $sectionId,
+                'filter_type' => $type,
+                'value_ar' => is_bool($value) ? ($value ? '1' : '0') : (string) $value,
+            ]);
+        };
+
+        $keyword = trim((string) ($payload['keyword'] ?? ''));
+        if ($keyword !== '') {
+            $insert->execute([
+                'section_id' => $sectionId,
+                'filter_type' => self::FILTER_KEYWORD,
+                'value_ar' => $keyword,
+            ]);
         }
 
-        $stmt = Database::pdo()->prepare(
-            'INSERT INTO home_section_filters (section_id, filter_type, value_ar)
-             VALUES (:section_id, :filter_type, :value_ar)
-             ON CONFLICT (section_id, filter_type, value_ar) DO NOTHING'
-        );
-        $stmt->execute([
-            'section_id' => $sectionId,
-            'filter_type' => $filterType,
-            'value_ar' => $valueAr,
-        ]);
+        $insertValues(self::FILTER_MATERIAL_TYPE, self::stringList($payload['material_types'] ?? []));
+        $insertValues(self::FILTER_AGE_CATEGORY, self::stringList($payload['age_categories'] ?? []));
+        $insertValues(self::FILTER_MANUFACTURER, self::stringList($payload['manufacturers'] ?? []));
+        $insertValues(self::FILTER_SIZE_RANGE, self::stringList($payload['size_ranges'] ?? []));
+        $insertValues(self::FILTER_COUNTRY_ORIGIN, self::stringList($payload['country_origins'] ?? []));
+        $insertValues(self::FILTER_STORE_GUID, self::stringList($payload['store_guids'] ?? []));
+        $insertValues(self::FILTER_GROUP_GUID, self::stringList($payload['group_guids'] ?? []));
 
-        return ['ok' => true, 'message' => 'تمت إضافة الفلتر.'];
+        $insertNumber(self::FILTER_IS_AVAILABLE, $payload['is_available'] ?? null);
+        $insertNumber(self::FILTER_MIN_WAREHOUSE_QUANTITY, $payload['min_warehouse_quantity'] ?? null);
+        $insertNumber(self::FILTER_MAX_WAREHOUSE_QUANTITY, $payload['max_warehouse_quantity'] ?? null);
+        $insertNumber(self::FILTER_MIN_UNIT_SALE_PRICE_SYP, $payload['min_unit_sale_price_syp'] ?? null);
+        $insertNumber(self::FILTER_MAX_UNIT_SALE_PRICE_SYP, $payload['max_unit_sale_price_syp'] ?? null);
+        $insertNumber(self::FILTER_MIN_UNIT_SALE_PRICE_USD, $payload['min_unit_sale_price_usd'] ?? null);
+        $insertNumber(self::FILTER_MAX_UNIT_SALE_PRICE_USD, $payload['max_unit_sale_price_usd'] ?? null);
+        $insertNumber(self::FILTER_MIN_UNIT_PURCHASE_PRICE_USD, $payload['min_unit_purchase_price_usd'] ?? null);
+        $insertNumber(self::FILTER_MAX_UNIT_PURCHASE_PRICE_USD, $payload['max_unit_purchase_price_usd'] ?? null);
     }
 
-    public static function removeFilter(string $filterId): bool
+    /** @param list<string> $guids */
+    public static function syncManualProducts(string $sectionId, array $guids): void
     {
-        $stmt = Database::pdo()->prepare(
-            'DELETE FROM home_section_filters WHERE id = :id'
-        );
-        $stmt->execute(['id' => $filterId]);
+        $pdo = Database::pdo();
+        $pdo->prepare('DELETE FROM home_section_products WHERE section_id = :id')->execute(['id' => $sectionId]);
 
-        return $stmt->rowCount() > 0;
+        $insert = $pdo->prepare(
+            'INSERT INTO home_section_products (section_id, material_guid, sort_order)
+             VALUES (:section_id, :material_guid, :sort_order)
+             ON CONFLICT (section_id, material_guid) DO NOTHING'
+        );
+
+        $sortOrder = 0;
+        foreach ($guids as $guid) {
+            $guid = trim($guid);
+            if ($guid === '') {
+                continue;
+            }
+            $insert->execute([
+                'section_id' => $sectionId,
+                'material_guid' => $guid,
+                'sort_order' => $sortOrder++,
+            ]);
+        }
     }
 
     /** @return list<array{id: string, filter_type: string, value_ar: string}> */
@@ -309,6 +373,64 @@ final class HomeSectionService
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * @param list<array{filter_type: string, value_ar: string}> $rows
+     * @return array{rows: list<array{filter_type: string, value_ar: string}>, rules: array<string, mixed>}
+     */
+    private static function parseFilterRows(array $rows): array
+    {
+        $rules = [
+            'keyword' => '',
+            'material_types' => [],
+            'age_categories' => [],
+            'manufacturers' => [],
+            'size_ranges' => [],
+            'country_origins' => [],
+            'store_guids' => [],
+            'group_guids' => [],
+            'is_available' => null,
+            'min_warehouse_quantity' => null,
+            'max_warehouse_quantity' => null,
+            'min_unit_sale_price_syp' => null,
+            'max_unit_sale_price_syp' => null,
+            'min_unit_sale_price_usd' => null,
+            'max_unit_sale_price_usd' => null,
+            'min_unit_purchase_price_usd' => null,
+            'max_unit_purchase_price_usd' => null,
+        ];
+
+        foreach ($rows as $row) {
+            $type = trim((string) ($row['filter_type'] ?? ''));
+            $value = trim((string) ($row['value_ar'] ?? ''));
+            if ($type === '' || $value === '') {
+                continue;
+            }
+
+            match ($type) {
+                self::FILTER_KEYWORD, 'keyword' => $rules['keyword'] = $value,
+                self::FILTER_MATERIAL_TYPE, 'material_type' => $rules['material_types'][] = $value,
+                self::FILTER_AGE_CATEGORY, 'age_category', 'target_category' => $rules['age_categories'][] = $value,
+                self::FILTER_MANUFACTURER, 'manufacturer' => $rules['manufacturers'][] = $value,
+                self::FILTER_SIZE_RANGE, 'size_range' => $rules['size_ranges'][] = $value,
+                self::FILTER_COUNTRY_ORIGIN, 'country_origin' => $rules['country_origins'][] = $value,
+                self::FILTER_STORE_GUID, 'store_guid' => $rules['store_guids'][] = $value,
+                self::FILTER_GROUP_GUID, 'group_guid' => $rules['group_guids'][] = $value,
+                self::FILTER_IS_AVAILABLE => $rules['is_available'] = self::toNullableBool($value),
+                self::FILTER_MIN_WAREHOUSE_QUANTITY => $rules['min_warehouse_quantity'] = self::toNullableFloat($value),
+                self::FILTER_MAX_WAREHOUSE_QUANTITY => $rules['max_warehouse_quantity'] = self::toNullableFloat($value),
+                self::FILTER_MIN_UNIT_SALE_PRICE_SYP => $rules['min_unit_sale_price_syp'] = self::toNullableFloat($value),
+                self::FILTER_MAX_UNIT_SALE_PRICE_SYP => $rules['max_unit_sale_price_syp'] = self::toNullableFloat($value),
+                self::FILTER_MIN_UNIT_SALE_PRICE_USD => $rules['min_unit_sale_price_usd'] = self::toNullableFloat($value),
+                self::FILTER_MAX_UNIT_SALE_PRICE_USD => $rules['max_unit_sale_price_usd'] = self::toNullableFloat($value),
+                self::FILTER_MIN_UNIT_PURCHASE_PRICE_USD => $rules['min_unit_purchase_price_usd'] = self::toNullableFloat($value),
+                self::FILTER_MAX_UNIT_PURCHASE_PRICE_USD => $rules['max_unit_purchase_price_usd'] = self::toNullableFloat($value),
+                default => null,
+            };
+        }
+
+        return ['rows' => $rows, 'rules' => $rules];
+    }
+
     /** @return list<string> */
     private static function manualProducts(string $sectionId): array
     {
@@ -321,26 +443,89 @@ final class HomeSectionService
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
 
+    /** @param list<string> $guids
+     * @return list<array{guid: string, name: string, code: string}>
+     */
+    private static function loadManualProductDetails(array $guids): array
+    {
+        $items = [];
+        foreach ($guids as $guid) {
+            $guid = trim($guid);
+            if ($guid === '') {
+                continue;
+            }
+            try {
+                $response = ApiClient::get('/api/materials/' . rawurlencode($guid));
+                if (!$response['ok'] || !is_array($response['data'])) {
+                    continue;
+                }
+                $data = $response['data'];
+                $items[] = [
+                    'guid' => $guid,
+                    'name' => trim((string) ($data['name'] ?? $data['Name'] ?? '')),
+                    'code' => trim((string) ($data['materialCode'] ?? $data['MaterialCode'] ?? '')),
+                ];
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        return $items;
+    }
+
     /** @param array<string, mixed> $section */
     private static function loadProducts(array $section): array
     {
-        $query = ['page' => 1, 'pageSize' => (int) $section['max_products']];
+        $maxProducts = max(1, (int) ($section['max_products'] ?? 12));
+        $displayMode = (string) ($section['display_mode'] ?? 'filter');
 
-        if ($section['display_mode'] === 'manual' && !empty($section['material_guids'])) {
-            $query['keyword'] = implode(' ', $section['material_guids']);
-        } else {
-            foreach ($section['filters'] as $filter) {
-                $type = $filter['filter_type'];
-                $value = $filter['value_ar'];
-                match ($type) {
-                    'keyword' => $query['keyword'] = $value,
-                    'material_type' => $query['materialTypes'] = self::appendCsv($query['materialTypes'] ?? null, $value),
-                    'manufacturer' => $query['manufacturers'] = self::appendCsv($query['manufacturers'] ?? null, $value),
-                    'target_category', 'age_category' => $query['ageCategories'] = self::appendCsv($query['ageCategories'] ?? null, $value),
-                    default => null,
-                };
+        if ($displayMode === 'manual') {
+            $guids = is_array($section['material_guids'] ?? null) ? $section['material_guids'] : [];
+            return self::pickRandomManualProducts($guids, $maxProducts);
+        }
+
+        $rules = is_array($section['filter_rules'] ?? null)
+            ? $section['filter_rules']
+            : self::parseFilterRows(is_array($section['filters'] ?? null) ? $section['filters'] : [])['rules'];
+
+        return self::pickRandomFilteredProducts($rules, $maxProducts);
+    }
+
+    /** @param list<string> $guids */
+    private static function pickRandomManualProducts(array $guids, int $maxProducts): array
+    {
+        if ($guids === []) {
+            return [];
+        }
+
+        $guids = array_values(array_unique(array_filter(array_map('strval', $guids), static fn ($g) => trim($g) !== '')));
+        shuffle($guids);
+
+        $items = [];
+        foreach ($guids as $guid) {
+            if (count($items) >= $maxProducts) {
+                break;
+            }
+            try {
+                $response = ApiClient::get('/api/materials/' . rawurlencode($guid));
+                if ($response['ok'] && is_array($response['data'])) {
+                    $items[] = $response['data'];
+                }
+            } catch (\Throwable) {
+                continue;
             }
         }
+
+        shuffle($items);
+
+        return array_slice($items, 0, $maxProducts);
+    }
+
+    /** @param array<string, mixed> $rules */
+    private static function pickRandomFilteredProducts(array $rules, int $maxProducts): array
+    {
+        $poolSize = min(200, max($maxProducts * 8, 48));
+        $query = self::buildApiQuery($rules, $poolSize);
 
         try {
             $result = ApiClient::get('/api/materials', $query);
@@ -348,19 +533,114 @@ final class HomeSectionService
                 return [];
             }
 
-            return $result['data']['items'] ?? $result['data']['data'] ?? [];
+            $items = $result['data']['items'] ?? [];
+            if (!is_array($items) || $items === []) {
+                return [];
+            }
+
+            shuffle($items);
+
+            return array_slice($items, 0, $maxProducts);
         } catch (\Throwable) {
             return [];
         }
     }
 
-    private static function appendCsv(?string $existing, string $value): string
+    /** @param array<string, mixed> $rules */
+    private static function buildApiQuery(array $rules, int $pageSize): array
     {
-        if ($existing === null || $existing === '') {
-            return $value;
+        $query = [
+            'page' => 1,
+            'pageSize' => $pageSize,
+            'sort' => 'number:asc',
+        ];
+
+        $keyword = trim((string) ($rules['keyword'] ?? ''));
+        if ($keyword !== '') {
+            $query['search'] = $keyword;
         }
 
-        return $existing . ',' . $value;
+        $appendCsv = static function (?string $existing, string $value): string {
+            return $existing === null || $existing === '' ? $value : $existing . ',' . $value;
+        };
+
+        foreach ($rules['material_types'] ?? [] as $value) {
+            $query['materialTypes'] = $appendCsv($query['materialTypes'] ?? null, (string) $value);
+        }
+        foreach ($rules['age_categories'] ?? [] as $value) {
+            $query['ageCategories'] = $appendCsv($query['ageCategories'] ?? null, (string) $value);
+        }
+        foreach ($rules['manufacturers'] ?? [] as $value) {
+            $query['manufacturers'] = $appendCsv($query['manufacturers'] ?? null, (string) $value);
+        }
+        foreach ($rules['size_ranges'] ?? [] as $value) {
+            $query['sizeRanges'] = $appendCsv($query['sizeRanges'] ?? null, (string) $value);
+        }
+        foreach ($rules['country_origins'] ?? [] as $value) {
+            $query['countryOfOrigins'] = $appendCsv($query['countryOfOrigins'] ?? null, (string) $value);
+        }
+        foreach ($rules['store_guids'] ?? [] as $value) {
+            $query['storeGuids'] = $appendCsv($query['storeGuids'] ?? null, (string) $value);
+        }
+        foreach ($rules['group_guids'] ?? [] as $value) {
+            $query['groupGuids'] = $appendCsv($query['groupGuids'] ?? null, (string) $value);
+        }
+
+        if (($rules['is_available'] ?? null) === true) {
+            $query['isAvailable'] = 'true';
+        } elseif (($rules['is_available'] ?? null) === false) {
+            $query['isAvailable'] = 'false';
+        }
+
+        foreach ([
+            'min_warehouse_quantity' => 'minWarehouseQuantity',
+            'max_warehouse_quantity' => 'maxWarehouseQuantity',
+            'min_unit_sale_price_syp' => 'minUnitSalePriceSyp',
+            'max_unit_sale_price_syp' => 'maxUnitSalePriceSyp',
+            'min_unit_sale_price_usd' => 'minUnitSalePriceUsd',
+            'max_unit_sale_price_usd' => 'maxUnitSalePriceUsd',
+            'min_unit_purchase_price_usd' => 'minUnitPurchasePriceUsd',
+            'max_unit_purchase_price_usd' => 'maxUnitPurchasePriceUsd',
+        ] as $ruleKey => $apiKey) {
+            $value = $rules[$ruleKey] ?? null;
+            if ($value !== null && $value !== '') {
+                $query[$apiKey] = $value;
+            }
+        }
+
+        return $query;
+    }
+
+    /** @return list<string> */
+    private static function stringList(mixed $value): array
+    {
+        if (!is_array($value)) {
+            $value = preg_split('/[,|\n]+/u', (string) $value) ?: [];
+        }
+
+        $result = [];
+        foreach ($value as $item) {
+            $item = trim((string) $item);
+            if ($item !== '') {
+                $result[] = $item;
+            }
+        }
+
+        return array_values(array_unique($result));
+    }
+
+    private static function toNullableBool(string $value): ?bool
+    {
+        return match (strtolower(trim($value))) {
+            '1', 'true', 'yes', 'on' => true,
+            '0', 'false', 'no', 'off' => false,
+            default => null,
+        };
+    }
+
+    private static function toNullableFloat(string $value): ?float
+    {
+        return is_numeric($value) ? (float) $value : null;
     }
 
     private static function normalizeSlug(string $value): string

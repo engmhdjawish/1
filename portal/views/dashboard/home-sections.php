@@ -8,32 +8,128 @@ declare(strict_types=1);
 /** @var string $editId */
 /** @var string|null $flash */
 /** @var string $flashType */
+/** @var array $materialFilterOptions */
+/** @var string|null $materialFilterOptionsError */
+/** @var string $materialSearchQ */
+/** @var list<array<string, mixed>> $materialSearchResults */
 
-$filterTypeLabels = [
-    'keyword' => 'كلمة بحث',
-    'material_type' => 'نوع المادة',
-    'manufacturer' => 'الشركة المصنعة',
-    'target_category' => 'فئة مستهدفة',
-    'age_category' => 'فئة عمرية',
-];
+require __DIR__ . '/partials/token-picker.php';
+
+$rules = is_array($editSection['filter_rules'] ?? null) ? $editSection['filter_rules'] : [];
+$displayMode = (string) ($editSection['display_mode'] ?? 'filter');
+
+$selectedMaterialTypes = array_map('strval', $rules['material_types'] ?? []);
+$selectedAgeCategories = array_map('strval', $rules['age_categories'] ?? []);
+$selectedManufacturers = array_map('strval', $rules['manufacturers'] ?? []);
+$selectedSizeRanges = array_map('strval', $rules['size_ranges'] ?? []);
+$selectedCountryOrigins = array_map('strval', $rules['country_origins'] ?? []);
+$selectedStoreGuids = array_map('strval', $rules['store_guids'] ?? []);
+$selectedGroupGuids = array_map('strval', $rules['group_guids'] ?? []);
+$filterIsAvailable = array_key_exists('is_available', $rules) ? $rules['is_available'] : null;
+
+$toOptionObjects = static function (array $values): array {
+    $result = [];
+    foreach ($values as $value) {
+        $item = trim((string) $value);
+        if ($item !== '') {
+            $result[] = ['value' => $item, 'label' => $item];
+        }
+    }
+    return array_values(array_unique($result, SORT_REGULAR));
+};
+
+$materialTypeOptions = array_values(array_unique(array_merge($materialFilterOptions['materialTypes'] ?? [], $selectedMaterialTypes)));
+$ageCategoryOptions = array_values(array_unique(array_merge($materialFilterOptions['ageCategories'] ?? [], $selectedAgeCategories)));
+$manufacturerOptions = array_values(array_unique(array_merge($materialFilterOptions['manufacturers'] ?? [], $selectedManufacturers)));
+$sizeRangeOptions = array_values(array_unique(array_merge($materialFilterOptions['sizeRanges'] ?? [], $selectedSizeRanges)));
+$countryOriginOptions = array_values(array_unique(array_merge($materialFilterOptions['countryOfOrigins'] ?? [], $selectedCountryOrigins)));
+
+$storeOptionObjects = [];
+foreach ($materialFilterOptions['stores'] ?? [] as $store) {
+    if (!is_array($store)) {
+        continue;
+    }
+    $guid = trim((string) ($store['guid'] ?? $store['Guid'] ?? ''));
+    if ($guid === '') {
+        continue;
+    }
+    $label = trim((string) ($store['name'] ?? $store['Name'] ?? '')) ?: $guid;
+    $storeOptionObjects[] = ['value' => $guid, 'label' => $label];
+}
+foreach ($selectedStoreGuids as $guid) {
+    if (!in_array($guid, array_column($storeOptionObjects, 'value'), true)) {
+        $storeOptionObjects[] = ['value' => $guid, 'label' => $guid];
+    }
+}
+
+$groupOptionObjects = [];
+foreach ($materialFilterOptions['groups'] ?? [] as $group) {
+    if (!is_array($group)) {
+        continue;
+    }
+    $guid = trim((string) ($group['guid'] ?? $group['Guid'] ?? ''));
+    if ($guid === '') {
+        continue;
+    }
+    $label = trim((string) ($group['name'] ?? $group['Name'] ?? '')) ?: $guid;
+    $groupOptionObjects[] = ['value' => $guid, 'label' => $label];
+}
+foreach ($selectedGroupGuids as $guid) {
+    if (!in_array($guid, array_column($groupOptionObjects, 'value'), true)) {
+        $groupOptionObjects[] = ['value' => $guid, 'label' => $guid];
+    }
+}
+
+$manualPickerOptions = [];
+foreach ($editSection['manual_products'] ?? [] as $product) {
+    if (!is_array($product)) {
+        continue;
+    }
+    $guid = trim((string) ($product['guid'] ?? ''));
+    if ($guid === '') {
+        continue;
+    }
+    $name = trim((string) ($product['name'] ?? ''));
+    $code = trim((string) ($product['code'] ?? ''));
+    $label = $name !== '' ? $name . ($code !== '' ? ' (' . $code . ')' : '') : $guid;
+    $manualPickerOptions[] = ['value' => $guid, 'label' => $label];
+}
+foreach ($materialSearchResults as $item) {
+    if (!is_array($item)) {
+        continue;
+    }
+    $guid = trim((string) ($item['materialGuid'] ?? $item['MaterialGuid'] ?? ''));
+    if ($guid === '') {
+        continue;
+    }
+    $name = trim((string) ($item['name'] ?? ''));
+    $code = trim((string) ($item['materialCode'] ?? ''));
+    $label = $name !== '' ? $name . ($code !== '' ? ' (' . $code . ')' : '') : $guid;
+    if (!in_array($guid, array_column($manualPickerOptions, 'value'), true)) {
+        $manualPickerOptions[] = ['value' => $guid, 'label' => $label];
+    }
+}
+
+$selectedManualGuids = array_map('strval', $editSection['material_guids'] ?? []);
+$priceRanges = is_array($materialFilterOptions['priceRanges'] ?? null) ? $materialFilterOptions['priceRanges'] : [];
+$previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSection['preview_products'] : [];
 ?>
 <section class="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
   <div>
-    <h1 class="text-2xl font-extrabold text-slate-900">إدارة أقسام الصفحة الرئيسية</h1>
-    <p class="text-sm text-text-muted mt-1">ضبط البانرات وترتيب الأقسام وقواعد اختيار المنتجات للواجهة العامة.</p>
+    <h1 class="text-2xl font-extrabold text-slate-900">أقسام الصفحة الرئيسية</h1>
+    <p class="text-sm text-text-muted mt-1">
+      أنشئ أقساماً مثل «وصلنا حديثاً» أو «رجالي» — اختر مواداً يدوياً أو فلاتر API.
+      في وضع الفلترة تتغيّر المواد المعروضة <strong>عشوائياً عند كل تحديث</strong> للصفحة الرئيسية.
+    </p>
   </div>
   <div class="flex flex-wrap gap-3">
     <article class="bg-white border border-border-subtle rounded-xl px-4 py-3 min-w-24 text-center">
       <p class="text-xl font-extrabold"><?= (int) $stats['total'] ?></p>
-      <p class="text-xs text-text-muted">إجمالي الأقسام</p>
+      <p class="text-xs text-text-muted">إجمالي</p>
     </article>
     <article class="bg-white border border-border-subtle rounded-xl px-4 py-3 min-w-24 text-center">
       <p class="text-xl font-extrabold text-green-700"><?= (int) $stats['active'] ?></p>
-      <p class="text-xs text-text-muted">أقسام نشطة</p>
-    </article>
-    <article class="bg-white border border-border-subtle rounded-xl px-4 py-3 min-w-24 text-center">
-      <p class="text-xl font-extrabold text-blue-700"><?= (int) $stats['filter'] ?></p>
-      <p class="text-xs text-text-muted">وضع filter</p>
+      <p class="text-xs text-text-muted">نشط</p>
     </article>
   </div>
 </section>
@@ -44,117 +140,165 @@ $filterTypeLabels = [
   </p>
 <?php endif; ?>
 
-<section class="grid grid-cols-1 xl:grid-cols-[1fr_430px] gap-5 mb-6">
+<form method="post" id="home-section-form" class="space-y-6 mb-6">
+  <input type="hidden" name="action" value="save_section">
+  <input type="hidden" name="id" value="<?= h((string) ($editSection['id'] ?? '')) ?>">
+
   <article class="bg-white border border-border-subtle rounded-2xl p-5">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="font-bold text-lg"><?= $editId !== '' ? 'تعديل القسم' : 'إضافة قسم جديد' ?></h2>
-      <?php if ($editId !== ''): ?>
-        <a href="/dashboard/home-sections.php" class="text-sm text-text-muted hover:text-primary">إلغاء التعديل</a>
-      <?php endif; ?>
-    </div>
-    <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-      <input type="hidden" name="action" value="save_section">
-      <input type="hidden" name="id" value="<?= h((string) ($editSection['id'] ?? '')) ?>">
+    <h2 class="font-bold text-lg mb-4"><?= $editId !== '' ? 'تعديل القسم' : 'قسم جديد' ?></h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
       <label class="text-sm md:col-span-2">
-        <span class="text-text-muted block mb-1">عنوان القسم</span>
-        <input name="title_ar" required value="<?= h((string) ($editSection['title_ar'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="مثال: وصلنا حديثًا">
+        <span class="text-text-muted block mb-1">عنوان القسم *</span>
+        <input name="title_ar" required value="<?= h((string) ($editSection['title_ar'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="وصلنا حديثاً">
       </label>
       <label class="text-sm">
         <span class="text-text-muted block mb-1">Slug</span>
-        <input name="slug" value="<?= h((string) ($editSection['slug'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="new-arrivals">
+        <input name="slug" value="<?= h((string) ($editSection['slug'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary">
       </label>
       <label class="text-sm">
         <span class="text-text-muted block mb-1">ترتيب العرض</span>
-        <input type="number" min="0" name="sort_order" value="<?= h((string) ($editSection['sort_order'] ?? '0')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary">
+        <input type="number" min="0" name="sort_order" value="<?= h((string) ($editSection['sort_order'] ?? '0')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4">
       </label>
       <label class="text-sm md:col-span-2">
         <span class="text-text-muted block mb-1">وصف مختصر</span>
-        <input name="subtitle_ar" value="<?= h((string) ($editSection['subtitle_ar'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="أفضل المنتجات الجديدة لهذا الأسبوع">
+        <input name="subtitle_ar" value="<?= h((string) ($editSection['subtitle_ar'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4">
       </label>
       <label class="text-sm md:col-span-2">
-        <span class="text-text-muted block mb-1">رابط صورة البانر</span>
-        <input name="banner_image_url" value="<?= h((string) ($editSection['banner_image_url'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="https://.../banner.jpg">
+        <span class="text-text-muted block mb-1">رابط صورة البانر (اختياري)</span>
+        <input name="banner_image_url" value="<?= h((string) ($editSection['banner_image_url'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4">
       </label>
       <label class="text-sm">
-        <span class="text-text-muted block mb-1">وضع العرض</span>
-        <select name="display_mode" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
-          <option value="filter" <?= (($editSection['display_mode'] ?? 'filter') === 'filter') ? 'selected' : '' ?>>فلترة تلقائية</option>
-          <option value="manual" <?= (($editSection['display_mode'] ?? '') === 'manual') ? 'selected' : '' ?>>اختيار يدوي</option>
+        <span class="text-text-muted block mb-1">طريقة اختيار المواد</span>
+        <select name="display_mode" id="display_mode" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+          <option value="filter" <?= $displayMode === 'filter' ? 'selected' : '' ?>>فلترة API (عشوائي عند كل زيارة)</option>
+          <option value="manual" <?= $displayMode === 'manual' ? 'selected' : '' ?>>مواد محددة يدوياً (عشوائي من القائمة)</option>
         </select>
       </label>
       <label class="text-sm">
-        <span class="text-text-muted block mb-1">عدد المنتجات</span>
-        <input type="number" min="1" max="48" name="max_products" value="<?= h((string) ($editSection['max_products'] ?? '12')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary">
+        <span class="text-text-muted block mb-1">عدد المواد في الشريط</span>
+        <input type="number" min="1" max="48" name="max_products" value="<?= h((string) ($editSection['max_products'] ?? '12')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4">
       </label>
       <label class="text-sm md:col-span-2 inline-flex items-center gap-2">
         <input type="checkbox" name="is_active" <?= $editSection === null || !empty($editSection['is_active']) ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
-        <span>القسم نشط على الصفحة الرئيسية</span>
+        <span>نشط على الصفحة الرئيسية</span>
       </label>
-      <div class="md:col-span-2 flex justify-end">
-        <button class="h-11 px-6 rounded-xl bg-primary text-white font-bold hover:brightness-110 transition">
-          <?= $editId !== '' ? 'حفظ التعديلات' : 'إضافة القسم' ?>
-        </button>
-      </div>
-    </form>
+    </div>
   </article>
 
-  <article class="bg-white border border-border-subtle rounded-2xl p-5">
-    <h3 class="font-bold mb-3">إدارة الفلاتر</h3>
-    <?php if ($editSection === null): ?>
-      <p class="text-sm text-text-muted">اختر قسمًا من القائمة (تعديل) لإضافة فلاتر مخصصة له.</p>
-    <?php else: ?>
-      <p class="text-sm text-text-muted mb-3">
-        الفلاتر الحالية للقسم: <strong><?= h((string) ($editSection['title_ar'] ?? '')) ?></strong>
-      </p>
-      <div class="flex flex-wrap gap-2 mb-4">
-        <?php foreach (($editSection['filters'] ?? []) as $filter): ?>
-          <form method="post" class="inline-flex items-center gap-1 bg-surface-low rounded-full px-3 py-1 text-xs">
-            <input type="hidden" name="action" value="remove_filter">
-            <input type="hidden" name="filter_id" value="<?= h((string) ($filter['id'] ?? '')) ?>">
-            <input type="hidden" name="section_id" value="<?= h((string) ($editSection['id'] ?? '')) ?>">
-            <span><?= h($filterTypeLabels[(string) ($filter['filter_type'] ?? '')] ?? (string) ($filter['filter_type'] ?? 'فلتر')) ?>:</span>
-            <strong><?= h((string) ($filter['value_ar'] ?? '')) ?></strong>
-            <button class="text-red-600 hover:text-red-700">×</button>
-          </form>
-        <?php endforeach; ?>
-        <?php if (($editSection['filters'] ?? []) === []): ?>
-          <span class="text-xs text-text-muted">لا توجد فلاتر حتى الآن.</span>
-        <?php endif; ?>
-      </div>
-      <form method="post" class="grid grid-cols-1 gap-3">
-        <input type="hidden" name="action" value="add_filter">
-        <input type="hidden" name="section_id" value="<?= h((string) ($editSection['id'] ?? '')) ?>">
-        <label class="text-sm">
-          <span class="text-text-muted block mb-1">نوع الفلتر</span>
-          <select name="filter_type" class="h-10 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
-            <?php foreach ($filterTypeLabels as $key => $label): ?>
-              <option value="<?= h($key) ?>"><?= h($label) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </label>
-        <label class="text-sm">
-          <span class="text-text-muted block mb-1">قيمة الفلتر</span>
-          <input name="value_ar" class="h-10 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="مثال: رجالي">
-        </label>
-        <button class="h-10 rounded-xl bg-primary text-white font-bold hover:brightness-110 transition">إضافة فلتر</button>
-      </form>
+  <article id="filter-mode-panel" class="bg-white border border-border-subtle rounded-2xl p-5 <?= $displayMode === 'manual' ? 'hidden' : '' ?>">
+    <h3 class="font-bold text-lg mb-2">فلاتر القسم (مثل رابط المشاركة)</h3>
+    <p class="text-sm text-text-muted mb-4">يُجلب مجموعة أكبر من المواد من API ثم يُعرض عدد عشوائي منها في الشريط عند كل تحديث للرئيسية.</p>
+
+    <?php if ($materialFilterOptionsError): ?>
+      <p class="mb-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 px-3 py-2 text-xs"><?= h($materialFilterOptionsError) ?></p>
     <?php endif; ?>
+
+    <label class="text-sm block mb-4">
+      <span class="text-text-muted block mb-1">كلمة بحث في المواد</span>
+      <input name="filter_keyword" value="<?= h((string) ($rules['keyword'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4" placeholder="مثال: صيف">
+    </label>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="md:col-span-2"><?php $renderTokenPicker('نوع المادة', 'filter_material_types[]', $toOptionObjects($materialTypeOptions), $selectedMaterialTypes, 'hs-material-types'); ?></div>
+      <div class="md:col-span-2"><?php $renderTokenPicker('الفئة العمرية', 'filter_age_categories[]', $toOptionObjects($ageCategoryOptions), $selectedAgeCategories, 'hs-age-categories'); ?></div>
+      <div><?php $renderTokenPicker('الشركة', 'filter_manufacturers[]', $toOptionObjects($manufacturerOptions), $selectedManufacturers, 'hs-manufacturers'); ?></div>
+      <div><?php $renderTokenPicker('القياس', 'filter_size_ranges[]', $toOptionObjects($sizeRangeOptions), $selectedSizeRanges, 'hs-size-ranges'); ?></div>
+      <div class="md:col-span-2"><?php $renderTokenPicker('بلد المنشأ', 'filter_country_origins[]', $toOptionObjects($countryOriginOptions), $selectedCountryOrigins, 'hs-country-origins'); ?></div>
+      <div class="md:col-span-2"><?php $renderTokenPicker('المخازن', 'filter_store_guids[]', $storeOptionObjects, $selectedStoreGuids, 'hs-store-guids', false); ?></div>
+      <div class="md:col-span-2"><?php $renderTokenPicker('المجموعات', 'filter_group_guids[]', $groupOptionObjects, $selectedGroupGuids, 'hs-group-guids', false); ?></div>
+    </div>
+
+    <div class="mt-4 rounded-xl border border-border-subtle p-4 bg-surface-low grid grid-cols-1 md:grid-cols-3 gap-3">
+      <label class="text-sm">
+        <span class="text-text-muted block mb-1">التوفر</span>
+        <select name="filter_is_available" class="h-11 w-full rounded-xl border border-border-subtle px-3">
+          <option value="" <?= $filterIsAvailable === null ? 'selected' : '' ?>>بدون قيد</option>
+          <option value="1" <?= $filterIsAvailable === true ? 'selected' : '' ?>>متوفر فقط</option>
+          <option value="0" <?= $filterIsAvailable === false ? 'selected' : '' ?>>غير متوفر</option>
+        </select>
+      </label>
+      <label class="text-sm">
+        <span class="text-text-muted block mb-1">أدنى كمية مخزون</span>
+        <input type="number" step="0.01" min="0" name="filter_min_warehouse_quantity" value="<?= h((string) ($rules['min_warehouse_quantity'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3">
+      </label>
+      <label class="text-sm">
+        <span class="text-text-muted block mb-1">أعلى كمية مخزون</span>
+        <input type="number" step="0.01" min="0" name="filter_max_warehouse_quantity" value="<?= h((string) ($rules['max_warehouse_quantity'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3">
+      </label>
+      <label class="text-sm">
+        <span class="text-text-muted block mb-1">أدنى سعر بيع ل.س</span>
+        <input type="number" step="0.01" min="0" name="filter_min_unit_sale_price_syp" value="<?= h((string) ($rules['min_unit_sale_price_syp'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3">
+      </label>
+      <label class="text-sm">
+        <span class="text-text-muted block mb-1">أعلى سعر بيع ل.س</span>
+        <input type="number" step="0.01" min="0" name="filter_max_unit_sale_price_syp" value="<?= h((string) ($rules['max_unit_sale_price_syp'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3">
+      </label>
+      <label class="text-sm">
+        <span class="text-text-muted block mb-1">أدنى سعر بيع $</span>
+        <input type="number" step="0.01" min="0" name="filter_min_unit_sale_price_usd" value="<?= h((string) ($rules['min_unit_sale_price_usd'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3">
+      </label>
+    </div>
   </article>
-</section>
+
+  <article id="manual-mode-panel" class="bg-white border border-border-subtle rounded-2xl p-5 <?= $displayMode === 'filter' ? 'hidden' : '' ?>">
+    <h3 class="font-bold text-lg mb-2">اختيار المواد يدوياً</h3>
+    <p class="text-sm text-text-muted mb-4">حدد المواد التي تريد إظهارها في الشريط. عند كل زيارة للرئيسية يُختار عدد عشوائي من قائمتك.</p>
+
+    <div class="mb-4 flex flex-wrap gap-2 items-end">
+      <label class="text-sm flex-1 min-w-[200px]">
+        <span class="text-text-muted block mb-1">بحث لإضافة مواد</span>
+        <input form="material-search-form" name="material_q" value="<?= h($materialSearchQ) ?>" class="h-10 w-full rounded-xl border border-border-subtle px-3" placeholder="اسم أو كود المادة">
+      </label>
+      <button form="material-search-form" type="submit" class="h-10 px-4 rounded-xl border border-border-subtle text-sm font-bold">بحث</button>
+    </div>
+
+    <?php $renderTokenPicker('المواد المختارة للقسم', 'manual_material_guids[]', $manualPickerOptions, $selectedManualGuids, 'hs-manual-materials', false); ?>
+  </article>
+
+  <?php if ($editId !== '' && $previewProducts !== []): ?>
+    <article class="bg-white border border-border-subtle rounded-2xl p-5">
+      <h3 class="font-bold mb-3">معاينة عشوائية (مثال لزيارة واحدة)</h3>
+      <div class="flex gap-3 overflow-x-auto pb-2">
+        <?php foreach ($previewProducts as $item): ?>
+          <?php if (!is_array($item)) continue; ?>
+          <div class="shrink-0 w-44 border rounded-lg p-2 bg-surface-low text-xs">
+            <div class="font-bold line-clamp-2"><?= h((string) ($item['name'] ?? '-')) ?></div>
+            <div class="text-text-muted"><?= h((string) ($item['materialCode'] ?? '')) ?></div>
+          </div>
+        <?php endforeach; ?>
+      </div>
+      <p class="text-xs text-text-muted mt-2">تحديث الصفحة الرئيسية يعيد ترتيباً عشوائياً جديداً ضمن نفس الفلاتر.</p>
+    </article>
+  <?php endif; ?>
+
+  <div class="flex justify-end gap-2">
+    <?php if ($editId !== ''): ?>
+      <a href="/dashboard/home-sections.php" class="h-11 px-5 inline-flex items-center rounded-xl border border-border-subtle text-sm font-bold">قسم جديد</a>
+    <?php endif; ?>
+    <button type="submit" class="h-11 px-8 rounded-xl bg-primary text-white font-extrabold hover:brightness-110">
+      <?= $editId !== '' ? 'حفظ القسم' : 'إنشاء القسم' ?>
+    </button>
+  </div>
+</form>
+
+<form method="get" id="material-search-form" class="hidden">
+  <?php if ($editId !== ''): ?>
+    <input type="hidden" name="edit" value="<?= h($editId) ?>">
+  <?php endif; ?>
+</form>
 
 <section class="bg-white border border-border-subtle rounded-2xl overflow-hidden">
   <?php if ($sections === []): ?>
     <p class="p-6 text-sm text-text-muted text-center">لا توجد أقسام بعد.</p>
   <?php else: ?>
     <div class="overflow-auto">
-      <table class="w-full min-w-[980px] text-sm">
+      <table class="w-full min-w-[900px] text-sm">
         <thead class="bg-surface-low border-b border-border-subtle text-text-muted">
           <tr>
-            <th class="px-5 py-4 text-right font-bold">العنوان</th>
-            <th class="px-5 py-4 text-right font-bold">Slug</th>
+            <th class="px-5 py-4 text-right font-bold">القسم</th>
             <th class="px-5 py-4 text-right font-bold">الوضع</th>
-            <th class="px-5 py-4 text-right font-bold">الفلاتر</th>
-            <th class="px-5 py-4 text-right font-bold">المنتجات اليدوية</th>
+            <th class="px-5 py-4 text-right font-bold">فلاتر</th>
+            <th class="px-5 py-4 text-right font-bold">يدوي</th>
             <th class="px-5 py-4 text-right font-bold">الترتيب</th>
             <th class="px-5 py-4 text-right font-bold">الحالة</th>
             <th class="px-5 py-4 text-left font-bold">إجراءات</th>
@@ -162,33 +306,26 @@ $filterTypeLabels = [
         </thead>
         <tbody class="divide-y divide-border-subtle">
           <?php foreach ($sections as $section): ?>
-            <tr class="hover:bg-slate-50 transition">
+            <tr class="hover:bg-slate-50">
               <td class="px-5 py-4">
                 <div class="font-bold"><?= h((string) ($section['title_ar'] ?? '')) ?></div>
-                <div class="text-xs text-text-muted mt-1"><?= h((string) ($section['subtitle_ar'] ?? '')) ?></div>
+                <div class="text-xs text-text-muted"><?= h((string) ($section['subtitle_ar'] ?? '')) ?></div>
               </td>
-              <td class="px-5 py-4 font-mono text-xs"><?= h((string) ($section['slug'] ?? '')) ?></td>
-              <td class="px-5 py-4"><?= h((string) ($section['display_mode'] ?? '')) ?></td>
+              <td class="px-5 py-4"><?= ($section['display_mode'] ?? '') === 'manual' ? 'يدوي' : 'فلترة' ?></td>
               <td class="px-5 py-4"><?= (int) ($section['filters_count'] ?? 0) ?></td>
               <td class="px-5 py-4"><?= (int) ($section['products_count'] ?? 0) ?></td>
               <td class="px-5 py-4"><?= (int) ($section['sort_order'] ?? 0) ?></td>
               <td class="px-5 py-4">
-                <?php if (!empty($section['is_active'])): ?>
-                  <span class="inline-flex rounded-full bg-green-100 text-green-700 px-3 py-1 text-xs font-bold">نشط</span>
-                <?php else: ?>
-                  <span class="inline-flex rounded-full bg-slate-100 text-slate-700 px-3 py-1 text-xs font-bold">متوقف</span>
-                <?php endif; ?>
+                <?= !empty($section['is_active']) ? '<span class="text-green-700 font-bold text-xs">نشط</span>' : '<span class="text-xs">متوقف</span>' ?>
               </td>
               <td class="px-5 py-4">
-                <div class="flex items-center justify-end gap-2">
-                  <a href="/dashboard/home-sections.php?edit=<?= urlencode((string) $section['id']) ?>" class="h-9 px-3 rounded-lg border border-border-subtle text-xs text-text-muted bg-white hover:bg-surface-low">تعديل</a>
+                <div class="flex justify-end gap-2">
+                  <a href="/dashboard/home-sections.php?edit=<?= urlencode((string) $section['id']) ?>" class="h-9 px-3 rounded-lg border text-xs font-bold">تعديل</a>
                   <form method="post">
                     <input type="hidden" name="action" value="toggle_section">
                     <input type="hidden" name="id" value="<?= h((string) $section['id']) ?>">
                     <input type="hidden" name="next_active" value="<?= !empty($section['is_active']) ? '0' : '1' ?>">
-                    <button class="h-9 px-3 rounded-lg text-xs font-bold <?= !empty($section['is_active']) ? 'bg-slate-800 text-white' : 'bg-primary text-white' ?>">
-                      <?= !empty($section['is_active']) ? 'إيقاف' : 'تفعيل' ?>
-                    </button>
+                    <button class="h-9 px-3 rounded-lg text-xs font-bold bg-primary text-white"><?= !empty($section['is_active']) ? 'إيقاف' : 'تفعيل' ?></button>
                   </form>
                 </div>
               </td>
@@ -199,3 +336,18 @@ $filterTypeLabels = [
     </div>
   <?php endif; ?>
 </section>
+
+<script>
+(() => {
+  const modeSelect = document.getElementById('display_mode');
+  const filterPanel = document.getElementById('filter-mode-panel');
+  const manualPanel = document.getElementById('manual-mode-panel');
+  const syncPanels = () => {
+    const isManual = modeSelect?.value === 'manual';
+    filterPanel?.classList.toggle('hidden', isManual);
+    manualPanel?.classList.toggle('hidden', !isManual);
+  };
+  modeSelect?.addEventListener('change', syncPanels);
+  syncPanels();
+})();
+</script>
