@@ -297,43 +297,46 @@ public sealed class MaterialsController(
     private async Task<IReadOnlyCollection<MaterialGroupingCount>> GetGroupingCountsAsync(
         MaterialGroupBy grouping,
         IQueryable<MaterialRecord> query,
-        CancellationToken cancellationToken)
-    {
-        return grouping switch
+        CancellationToken cancellationToken) =>
+        grouping switch
         {
-            MaterialGroupBy.AgeCategory => await query
-                .Where(material => material.Provenance != null && material.Provenance != string.Empty)
-                .GroupBy(material => material.Provenance!)
-                .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count()))
-                .OrderBy(group => group.DisplayName)
-                .ToListAsync(cancellationToken),
-            MaterialGroupBy.SizeRange => await query
-                .Where(material => material.Dim != null && material.Dim != string.Empty)
-                .GroupBy(material => material.Dim!)
-                .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count()))
-                .OrderBy(group => group.DisplayName)
-                .ToListAsync(cancellationToken),
-            MaterialGroupBy.MaterialType => await query
-                .Where(material => material.Color != null && material.Color != string.Empty)
-                .GroupBy(material => material.Color!)
-                .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count()))
-                .OrderBy(group => group.DisplayName)
-                .ToListAsync(cancellationToken),
-            MaterialGroupBy.Manufacturer => await query
-                .Where(material => material.Company != null && material.Company != string.Empty)
-                .GroupBy(material => material.Company!)
-                .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count()))
-                .OrderBy(group => group.DisplayName)
-                .ToListAsync(cancellationToken),
-            MaterialGroupBy.CountryOfOrigin => await query
-                .Where(material => material.Origin != null && material.Origin != string.Empty)
-                .GroupBy(material => material.Origin!)
-                .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count()))
-                .OrderBy(group => group.DisplayName)
-                .ToListAsync(cancellationToken),
+            MaterialGroupBy.AgeCategory => await GetStringFieldGroupingCountsAsync(
+                query, material => material.Provenance, cancellationToken),
+            MaterialGroupBy.SizeRange => await GetStringFieldGroupingCountsAsync(
+                query, material => material.Dim, cancellationToken),
+            MaterialGroupBy.MaterialType => await GetStringFieldGroupingCountsAsync(
+                query, material => material.Color, cancellationToken),
+            MaterialGroupBy.Manufacturer => await GetStringFieldGroupingCountsAsync(
+                query, material => material.Company, cancellationToken),
+            MaterialGroupBy.CountryOfOrigin => await GetStringFieldGroupingCountsAsync(
+                query, material => material.Origin, cancellationToken),
             MaterialGroupBy.Group => await GetGroupGuidCountsAsync(query, cancellationToken),
             _ => []
         };
+
+    private static async Task<IReadOnlyCollection<MaterialGroupingCount>> GetStringFieldGroupingCountsAsync(
+        IQueryable<MaterialRecord> query,
+        Expression<Func<MaterialRecord, string?>> fieldSelector,
+        CancellationToken cancellationToken)
+    {
+        var parameter = fieldSelector.Parameters[0];
+        var property = fieldSelector.Body;
+        var notNull = Expression.NotEqual(property, Expression.Constant(null, typeof(string)));
+        var notEmpty = Expression.NotEqual(property, Expression.Constant(string.Empty, typeof(string)));
+        var hasValue = Expression.Lambda<Func<MaterialRecord, bool>>(
+            Expression.AndAlso(notNull, notEmpty),
+            parameter);
+
+        var rows = await query
+            .Where(hasValue)
+            .GroupBy(fieldSelector)
+            .Select(group => new { Key = group.Key!, Count = group.Count() })
+            .OrderBy(group => group.Key)
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count))
+            .ToList();
     }
 
     private async Task<IReadOnlyCollection<MaterialGroupingCount>> GetGroupGuidCountsAsync(
