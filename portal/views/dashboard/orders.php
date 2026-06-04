@@ -9,6 +9,7 @@ declare(strict_types=1);
 /** @var string|null $flash */
 /** @var string $flashType */
 /** @var bool $canManageOrders */
+/** @var array<string, mixed>|null $orderDetails */
 
 $statusLabels = [
     'pending' => 'جديد',
@@ -31,6 +32,13 @@ $statusClass = static function (string $status): string {
         'cancelled' => 'bg-red-100 text-red-700',
         default => 'bg-amber-100 text-amber-700',
     };
+};
+
+$buildOrdersUrl = static function (array $params): string {
+    return '/dashboard/orders.php?' . http_build_query(array_filter(
+        $params,
+        static fn ($value) => $value !== null && $value !== ''
+    ));
 };
 ?>
 <section class="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
@@ -153,11 +161,22 @@ $statusClass = static function (string $status): string {
                       </select>
                       <button class="h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold">حفظ</button>
                     </form>
-                  <?php else: ?>
-                    <button class="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border-subtle text-text-muted">
-                      <span class="material-symbols-outlined">visibility</span>
-                    </button>
                   <?php endif; ?>
+                  <a
+                    href="<?= h($buildOrdersUrl([
+                        'q' => $filters['q'] ?? '',
+                        'status' => $filters['status'] ?? '',
+                        'sync' => $filters['sync'] ?? '',
+                        'fromDate' => $filters['fromDate'] ?? '',
+                        'toDate' => $filters['toDate'] ?? '',
+                        'limit' => $filters['limit'] ?? 50,
+                        'details' => (string) ($row['id'] ?? ''),
+                    ])) ?>"
+                    class="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border-subtle text-text-muted hover:bg-surface-low"
+                    title="تفاصيل الطلب"
+                  >
+                    <span class="material-symbols-outlined">visibility</span>
+                  </a>
                 </div>
               </td>
             </tr>
@@ -167,3 +186,102 @@ $statusClass = static function (string $status): string {
     </div>
   <?php endif; ?>
 </section>
+
+<?php if ($orderDetails): ?>
+  <div class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm"></div>
+  <aside class="fixed top-0 left-0 z-50 h-screen w-full max-w-2xl bg-white shadow-2xl overflow-y-auto">
+    <div class="sticky top-0 bg-white border-b border-border-subtle px-5 py-4 flex items-center justify-between">
+      <div>
+        <h2 class="text-lg font-extrabold text-slate-900">تفاصيل الطلب #<?= h((string) ($orderDetails['order_number'] ?? '')) ?></h2>
+        <p class="text-xs text-text-muted mt-1">
+          <?= h((string) (($orderDetails['customer_name_ar'] ?? '') !== '' ? $orderDetails['customer_name_ar'] : ($orderDetails['guest_name_ar'] ?? 'ضيف'))) ?>
+        </p>
+      </div>
+      <a href="<?= h($buildOrdersUrl($filters)) ?>" class="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-surface-low">
+        <span class="material-symbols-outlined">close</span>
+      </a>
+    </div>
+
+    <div class="p-5 space-y-5">
+      <section class="grid grid-cols-2 gap-3 text-sm">
+        <article class="rounded-xl border border-border-subtle p-3">
+          <p class="text-text-muted text-xs">الحالة</p>
+          <p class="font-bold mt-1"><?= h((string) ($statusLabels[(string) ($orderDetails['status'] ?? 'pending')] ?? ($orderDetails['status'] ?? 'pending'))) ?></p>
+        </article>
+        <article class="rounded-xl border border-border-subtle p-3">
+          <p class="text-text-muted text-xs">حالة المزامنة</p>
+          <p class="font-bold mt-1"><?= h((string) ($syncLabels[(string) ($orderDetails['amine_sync_status'] ?? 'none')] ?? ($orderDetails['amine_sync_status'] ?? 'none'))) ?></p>
+        </article>
+        <article class="rounded-xl border border-border-subtle p-3">
+          <p class="text-text-muted text-xs">الإجمالي (ل.س)</p>
+          <p class="font-bold mt-1"><?= number_format((float) ($orderDetails['total_sp'] ?? 0), 0, '.', ',') ?></p>
+        </article>
+        <article class="rounded-xl border border-border-subtle p-3">
+          <p class="text-text-muted text-xs">الإجمالي (USD)</p>
+          <p class="font-bold mt-1"><?= number_format((float) ($orderDetails['total_usd'] ?? 0), 2, '.', ',') ?></p>
+        </article>
+      </section>
+
+      <section>
+        <h3 class="font-bold text-slate-900 mb-2">العناصر</h3>
+        <?php $items = $orderDetails['items'] ?? []; ?>
+        <?php if ($items === []): ?>
+          <p class="text-sm text-text-muted rounded-xl border border-border-subtle p-3">لا توجد عناصر مرتبطة بهذا الطلب.</p>
+        <?php else: ?>
+          <div class="rounded-xl border border-border-subtle overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-surface-low text-text-muted">
+                <tr>
+                  <th class="px-3 py-2 text-right font-bold">المادة</th>
+                  <th class="px-3 py-2 text-right font-bold">الكمية</th>
+                  <th class="px-3 py-2 text-right font-bold">سعر SP</th>
+                  <th class="px-3 py-2 text-right font-bold">سعر USD</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border-subtle">
+                <?php foreach ($items as $item): ?>
+                  <tr>
+                    <td class="px-3 py-2">
+                      <div class="font-semibold"><?= h((string) ($item['material_name_ar'] ?? '—')) ?></div>
+                      <div class="text-xs text-text-muted"><?= h((string) ($item['material_code'] ?? '')) ?></div>
+                    </td>
+                    <td class="px-3 py-2"><?= number_format((float) ($item['quantity'] ?? 0), 2, '.', ',') ?></td>
+                    <td class="px-3 py-2"><?= number_format((float) ($item['sale_price_sp'] ?? 0), 0, '.', ',') ?></td>
+                    <td class="px-3 py-2"><?= number_format((float) ($item['sale_price_usd'] ?? 0), 2, '.', ',') ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+        <?php endif; ?>
+      </section>
+
+      <section>
+        <h3 class="font-bold text-slate-900 mb-2">الخط الزمني</h3>
+        <?php $timeline = $orderDetails['timeline'] ?? []; ?>
+        <ol class="space-y-2">
+          <?php foreach ($timeline as $entry): ?>
+            <li class="rounded-xl border border-border-subtle p-3 text-sm">
+              <p class="font-semibold"><?= h((string) ($entry['label'] ?? 'حدث')) ?></p>
+              <p class="text-xs text-text-muted mt-1"><?= h((string) ($entry['at'] ?? '')) ?></p>
+            </li>
+          <?php endforeach; ?>
+        </ol>
+      </section>
+
+      <?php if ((string) ($orderDetails['notes_ar'] ?? '') !== ''): ?>
+        <section class="rounded-xl border border-border-subtle p-3">
+          <h3 class="font-bold text-slate-900 mb-1">ملاحظات الطلب</h3>
+          <p class="text-sm text-text-muted"><?= h((string) ($orderDetails['notes_ar'] ?? '')) ?></p>
+        </section>
+      <?php endif; ?>
+
+      <?php if ((string) ($orderDetails['amine_sync_error_ar'] ?? '') !== ''): ?>
+        <section class="rounded-xl border border-red-200 bg-red-50 p-3">
+          <h3 class="font-bold text-red-700 mb-1">خطأ مزامنة الأمين</h3>
+          <p class="text-sm text-red-700"><?= h((string) ($orderDetails['amine_sync_error_ar'] ?? '')) ?></p>
+        </section>
+      <?php endif; ?>
+    </div>
+  </aside>
+<?php endif; ?>
