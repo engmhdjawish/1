@@ -6,6 +6,7 @@ using ExistingDb.Api.Contracts.Images;
 using ExistingDb.Api.Data;
 using ExistingDb.Api.Data.MainDb;
 using ExistingDb.Api.Images;
+using ExistingDb.Api.Services.Materials;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -675,76 +676,14 @@ public sealed class MaterialImagesController(
         IReadOnlyCollection<Guid> selectedStoreGuids,
         double? minWarehouseQuantity,
         double? maxWarehouseQuantity,
-        bool? isAvailable)
-    {
-        if (selectedStoreGuids.Count == 0)
-        {
-            if (isAvailable is true)
-            {
-                query = query.Where(material => (material.Qty ?? 0) > 0);
-            }
-            else if (isAvailable is false)
-            {
-                query = query.Where(material => (material.Qty ?? 0) <= 0);
-            }
-
-            if (minWarehouseQuantity is not null)
-            {
-                query = query.Where(material => (material.Qty ?? 0) >= minWarehouseQuantity.Value);
-            }
-
-            if (maxWarehouseQuantity is not null)
-            {
-                query = query.Where(material => (material.Qty ?? 0) <= maxWarehouseQuantity.Value);
-            }
-
-            return query;
-        }
-
-        var storeQuantities = mainDbContext.MaterialInventory
-            .AsNoTracking()
-            .Where(inventory => inventory.MaterialGuid.HasValue)
-            .Where(inventory => inventory.StoreGuid.HasValue && selectedStoreGuids.Contains(inventory.StoreGuid.Value))
-            .GroupBy(inventory => inventory.MaterialGuid!.Value)
-            .Select(group => new
-            {
-                MaterialGuid = group.Key,
-                Quantity = group.Sum(inventory => inventory.Qty ?? 0)
-            });
-
-        if (isAvailable is true)
-        {
-            query = query.Where(material => storeQuantities.Any(quantity =>
-                quantity.MaterialGuid == material.Guid &&
-                quantity.Quantity > 0));
-        }
-        else if (isAvailable is false)
-        {
-            query = query.Where(material => !storeQuantities.Any(quantity =>
-                quantity.MaterialGuid == material.Guid &&
-                quantity.Quantity > 0));
-        }
-        else
-        {
-            query = query.Where(material => storeQuantities.Any(quantity => quantity.MaterialGuid == material.Guid));
-        }
-
-        if (minWarehouseQuantity is not null)
-        {
-            query = query.Where(material => storeQuantities.Any(quantity =>
-                quantity.MaterialGuid == material.Guid &&
-                quantity.Quantity >= minWarehouseQuantity.Value));
-        }
-
-        if (maxWarehouseQuantity is not null)
-        {
-            query = query.Where(material => storeQuantities.Any(quantity =>
-                quantity.MaterialGuid == material.Guid &&
-                quantity.Quantity <= maxWarehouseQuantity.Value));
-        }
-
-        return query;
-    }
+        bool? isAvailable) =>
+        MaterialStoreInventoryQuery.ApplyStoreAndQuantityFilters(
+            mainDbContext,
+            query,
+            selectedStoreGuids,
+            minWarehouseQuantity,
+            maxWarehouseQuantity,
+            isAvailable);
 
     private static IQueryable<MaterialRecord> ApplyTextFilters(
         IQueryable<MaterialRecord> query,
