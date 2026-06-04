@@ -114,7 +114,8 @@ ob_start();
   <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
     <div>
       <h1 class="text-2xl md:text-3xl font-extrabold">سلة المشتريات</h1>
-      <p class="text-sm text-gray-600 mt-1"><?= h($shareName) ?> — الطلب بالوحدة الثانية (طرد/تعبئة)</p>
+      <p class="text-sm text-gray-600 mt-1"><?= h($shareName) ?> — الطلب بالطرد (الوحدة الثانية)</p>
+      <p class="text-xs text-amber-700 mt-1">إن ظهرت أسعار خاطئة، <strong>أفرغ السلة</strong> وأعد الإضافة من صفحة التصفح بعد التحديث.</p>
     </div>
     <?php if ($token !== '' && $hasAccess && !$error): ?>
       <a
@@ -174,7 +175,11 @@ ob_start();
                     <?php
                       $materialGuid = (string) ($line['material_guid'] ?? '');
                       $packageUnit = (string) ($line['package_unit'] ?? 'طرد');
+                      $primaryUnit = (string) ($line['primary_unit'] ?? 'قطعة');
+                      $packaging = (float) ($line['packaging'] ?? 1);
                       $qty = max(1, (int) round((float) ($line['quantity'] ?? 1)));
+                      $unitSp = (float) ($line['unit_sale_price_sp'] ?? 0);
+                      $unitUsd = (float) ($line['unit_sale_price_usd'] ?? 0);
                       $priceSp = (float) ($line['sale_price_sp'] ?? 0);
                       $priceUsd = (float) ($line['sale_price_usd'] ?? 0);
                       $lineTotalSp = $qty * $priceSp;
@@ -195,16 +200,21 @@ ob_start();
                             <?php if (!empty($line['material_code'])): ?>
                               <div class="text-xs text-gray-500"><?= h((string) $line['material_code']) ?></div>
                             <?php endif; ?>
+                            <div class="text-xs text-gray-600 mt-1">
+                              التعبئة:
+                              <strong><?= h(rtrim(rtrim(number_format($packaging, 2, '.', ','), '0'), '.')) ?></strong>
+                              <?= h($primaryUnit) ?> / <?= h($packageUnit) ?>
+                            </div>
                           </div>
                         </div>
                       </td>
                       <td class="p-4 text-sm whitespace-nowrap">
                         <?php if ($showPrice): ?>
-                          <div class="font-bold text-primary"><?= format_money($priceSp, true) ?> ل.س</div>
+                          <div class="text-xs text-gray-500"><?= format_money($unitSp, true) ?> ل.س / <?= h($primaryUnit) ?></div>
+                          <div class="font-bold text-primary"><?= format_money($priceSp, true) ?> ل.س / <?= h($packageUnit) ?></div>
                           <?php if ($priceUsd > 0): ?>
-                            <div class="text-emerald-700 text-xs">$<?= number_format($priceUsd, 2, '.', ',') ?></div>
+                            <div class="text-emerald-700 text-xs mt-0.5">$<?= number_format($priceUsd, 2, '.', ',') ?> / <?= h($packageUnit) ?></div>
                           <?php endif; ?>
-                          <div class="text-xs text-gray-500">/ <?= h($packageUnit) ?></div>
                         <?php else: ?>
                           —
                         <?php endif; ?>
@@ -279,7 +289,10 @@ ob_start();
         <div class="lg:col-span-4">
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 sticky top-24">
             <h2 class="text-lg font-extrabold border-b border-gray-100 pb-3 mb-4">ملخص الطلب</h2>
-            <p class="text-xs text-gray-500 mb-4"><?= (int) $cartCount ?> صنف — الأسعار والكميات بالطرد (الوحدة الثانية)</p>
+            <p class="text-xs text-gray-500 mb-4">
+              <?= (int) $cartCount ?> صنف — الإجمالي = سعر الطرد × عدد الطرود
+              (سعر الطرد = سعر الوحدة الأولى × التعبئة)
+            </p>
 
             <?php if ($showPrice): ?>
               <div class="space-y-2 text-sm mb-4">
