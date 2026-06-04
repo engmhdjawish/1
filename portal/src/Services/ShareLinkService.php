@@ -190,7 +190,7 @@ final class ShareLinkService
             return false;
         }
 
-        return hash_equals(mb_strtolower($storedUser), mb_strtolower($username))
+        return hash_equals(strtolower($storedUser), strtolower($username))
             && Password::verify($plainPassword, $storedHash);
     }
 
@@ -672,7 +672,7 @@ final class ShareLinkService
 
     private static function toBool(string $value, bool $default): bool
     {
-        $value = trim(mb_strtolower($value));
+        $value = trim(strtolower($value));
         return match ($value) {
             '1', 'true', 'yes', 'on' => true,
             '0', 'false', 'no', 'off' => false,

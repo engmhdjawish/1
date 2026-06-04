@@ -11,6 +11,8 @@ declare(strict_types=1);
 /** @var string|null $flash */
 /** @var string $flashType */
 /** @var string $publicBaseUrl */
+/** @var array<string, list<string>> $materialFilterOptions */
+/** @var string|null $materialFilterOptionsError */
 
 $linkOptions = (array) (($editLink['options'] ?? null) ?: []);
 $showImages = array_key_exists('show_images', $linkOptions) ? (bool) $linkOptions['show_images'] : true;
@@ -20,11 +22,17 @@ $allowSorting = array_key_exists('allow_sorting', $linkOptions) ? (bool) $linkOp
 $includeResultFilters = array_key_exists('include_result_filters', $linkOptions) ? (bool) $linkOptions['include_result_filters'] : true;
 $defaultSort = (string) ($linkOptions['default_sort'] ?? 'number:asc');
 
-$forcedMaterialTypes = implode(', ', array_map('strval', $editLink['forced_material_types'] ?? []));
-$forcedAgeCategories = implode(', ', array_map('strval', $editLink['forced_age_categories'] ?? []));
-$forcedManufacturers = implode(', ', array_map('strval', $editLink['forced_manufacturers'] ?? []));
-$forcedSizeRanges = implode(', ', array_map('strval', $editLink['forced_size_ranges'] ?? []));
-$forcedCountryOrigins = implode(', ', array_map('strval', $editLink['forced_country_origins'] ?? []));
+$selectedMaterialTypes = array_map('strval', $editLink['forced_material_types'] ?? []);
+$selectedAgeCategories = array_map('strval', $editLink['forced_age_categories'] ?? []);
+$selectedManufacturers = array_map('strval', $editLink['forced_manufacturers'] ?? []);
+$selectedSizeRanges = array_map('strval', $editLink['forced_size_ranges'] ?? []);
+$selectedCountryOrigins = array_map('strval', $editLink['forced_country_origins'] ?? []);
+
+$materialTypeOptions = array_values(array_unique(array_merge($materialFilterOptions['materialTypes'] ?? [], $selectedMaterialTypes)));
+$ageCategoryOptions = array_values(array_unique(array_merge($materialFilterOptions['ageCategories'] ?? [], $selectedAgeCategories)));
+$manufacturerOptions = array_values(array_unique(array_merge($materialFilterOptions['manufacturers'] ?? [], $selectedManufacturers)));
+$sizeRangeOptions = array_values(array_unique(array_merge($materialFilterOptions['sizeRanges'] ?? [], $selectedSizeRanges)));
+$countryOriginOptions = array_values(array_unique(array_merge($materialFilterOptions['countryOfOrigins'] ?? [], $selectedCountryOrigins)));
 ?>
 <section class="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
   <div>
@@ -99,25 +107,50 @@ $forcedCountryOrigins = implode(', ', array_map('strval', $editLink['forced_coun
         <input type="checkbox" name="require_password" <?= !empty($editLink['require_password']) ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
         <span>حماية الرابط بكلمة مرور</span>
       </label>
+      <?php if ($materialFilterOptionsError): ?>
+        <p class="md:col-span-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 px-3 py-2 text-xs">
+          <?= h($materialFilterOptionsError) ?>
+        </p>
+      <?php endif; ?>
       <label class="text-sm md:col-span-2">
-        <span class="text-text-muted block mb-1">فلتر إلزامي: نوع المادة (CSV)</span>
-        <input name="forced_material_types" value="<?= h($forcedMaterialTypes) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="رجالي, نسواني">
+        <span class="text-text-muted block mb-1">تقييد اختياري: نوع المادة (اختيار متعدد)</span>
+        <select name="forced_material_types[]" multiple class="min-h-24 w-full rounded-xl border border-border-subtle px-3 py-2 focus:border-primary focus:ring-primary">
+          <?php foreach ($materialTypeOptions as $option): ?>
+            <option value="<?= h($option) ?>" <?= in_array($option, $selectedMaterialTypes, true) ? 'selected' : '' ?>><?= h($option) ?></option>
+          <?php endforeach; ?>
+        </select>
       </label>
       <label class="text-sm md:col-span-2">
-        <span class="text-text-muted block mb-1">فلتر إلزامي: الفئة العمرية (CSV)</span>
-        <input name="forced_age_categories" value="<?= h($forcedAgeCategories) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="أطفال, شباب">
+        <span class="text-text-muted block mb-1">تقييد اختياري: الفئة العمرية (اختيار متعدد)</span>
+        <select name="forced_age_categories[]" multiple class="min-h-24 w-full rounded-xl border border-border-subtle px-3 py-2 focus:border-primary focus:ring-primary">
+          <?php foreach ($ageCategoryOptions as $option): ?>
+            <option value="<?= h($option) ?>" <?= in_array($option, $selectedAgeCategories, true) ? 'selected' : '' ?>><?= h($option) ?></option>
+          <?php endforeach; ?>
+        </select>
       </label>
       <label class="text-sm">
-        <span class="text-text-muted block mb-1">فلتر إلزامي: الشركة الصانعة (CSV)</span>
-        <input name="forced_manufacturers" value="<?= h($forcedManufacturers) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="Company A, Company B">
+        <span class="text-text-muted block mb-1">تقييد اختياري: الشركة (اختيار متعدد)</span>
+        <select name="forced_manufacturers[]" multiple class="min-h-24 w-full rounded-xl border border-border-subtle px-3 py-2 focus:border-primary focus:ring-primary">
+          <?php foreach ($manufacturerOptions as $option): ?>
+            <option value="<?= h($option) ?>" <?= in_array($option, $selectedManufacturers, true) ? 'selected' : '' ?>><?= h($option) ?></option>
+          <?php endforeach; ?>
+        </select>
       </label>
       <label class="text-sm">
-        <span class="text-text-muted block mb-1">فلتر إلزامي: القياس (CSV)</span>
-        <input name="forced_size_ranges" value="<?= h($forcedSizeRanges) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="S, M, L">
+        <span class="text-text-muted block mb-1">تقييد اختياري: القياس (اختيار متعدد)</span>
+        <select name="forced_size_ranges[]" multiple class="min-h-24 w-full rounded-xl border border-border-subtle px-3 py-2 focus:border-primary focus:ring-primary">
+          <?php foreach ($sizeRangeOptions as $option): ?>
+            <option value="<?= h($option) ?>" <?= in_array($option, $selectedSizeRanges, true) ? 'selected' : '' ?>><?= h($option) ?></option>
+          <?php endforeach; ?>
+        </select>
       </label>
       <label class="text-sm md:col-span-2">
-        <span class="text-text-muted block mb-1">فلتر إلزامي: بلد المنشأ (CSV)</span>
-        <input name="forced_country_origins" value="<?= h($forcedCountryOrigins) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="سوريا, تركيا">
+        <span class="text-text-muted block mb-1">تقييد اختياري: بلد المنشأ (اختيار متعدد)</span>
+        <select name="forced_country_origins[]" multiple class="min-h-24 w-full rounded-xl border border-border-subtle px-3 py-2 focus:border-primary focus:ring-primary">
+          <?php foreach ($countryOriginOptions as $option): ?>
+            <option value="<?= h($option) ?>" <?= in_array($option, $selectedCountryOrigins, true) ? 'selected' : '' ?>><?= h($option) ?></option>
+          <?php endforeach; ?>
+        </select>
       </label>
 
       <div class="md:col-span-2 rounded-xl border border-border-subtle p-4 bg-surface-low">
@@ -150,7 +183,14 @@ $forcedCountryOrigins = implode(', ', array_map('strval', $editLink['forced_coun
           </label>
           <label class="text-sm">
             <span class="text-text-muted block mb-1">الترتيب الافتراضي</span>
-            <input name="option_default_sort" value="<?= h($defaultSort) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="number:asc">
+            <input name="option_default_sort" list="sort-presets" value="<?= h($defaultSort) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="number:asc,materialType:asc">
+            <datalist id="sort-presets">
+              <option value="number:asc"></option>
+              <option value="number:desc"></option>
+              <option value="materialType:asc,manufacturer:asc"></option>
+              <option value="ageCategory:asc,materialType:asc"></option>
+              <option value="manufacturer:asc,-unitSalePriceSyp"></option>
+            </datalist>
           </label>
         </div>
       </div>
@@ -179,8 +219,10 @@ $forcedCountryOrigins = implode(', ', array_map('strval', $editLink['forced_coun
     <ul class="space-y-2 text-sm text-text-muted">
       <li>• لكل رابط token مستقل يمكن مشاركته على المسوّقين أو العملاء.</li>
       <li>• عند تفعيل كلمة المرور، يصبح الدخول عبر user/pass للرابط.</li>
-      <li>• الرابط يستطيع فرض قيود ثابتة (نوع/فئة/شركة/قياس/منشأ) مع فلاتر تنقّل اختيارية للعميل.</li>
+      <li>• القيود اختيارية وتُختار من فلاتر API المتاحة (بدون إدخال يدوي).</li>
+      <li>• عند اختيار أكثر من قيمة داخل نفس الحقل يكون الشرط مركبًا (OR)، وبين الحقول المختلفة يكون (AND).</li>
       <li>• يمكنك التحكم بإظهار الصور ووضع عرض السعر (سوري/دولار/كلاهما/بدون).</li>
+      <li>• يدعم الترتيب المركب من API مثل: <code>ageCategory:asc,materialType:asc</code>.</li>
       <li>• استخدم الإيقاف المؤقت للرابط بدل الحذف للحفاظ على الإحصاءات.</li>
     </ul>
   </article>

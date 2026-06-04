@@ -6,6 +6,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
 use Portal\Config;
+use Portal\Services\ApiClient;
 use Portal\Services\ShareLinkService;
 
 WebSession::requirePermission('share_links.manage');
@@ -20,8 +21,12 @@ $user = WebSession::user();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string) ($_POST['action'] ?? ''));
     if ($action === 'save') {
-        $parseCsv = static function (string $value): array {
-            $parts = preg_split('/[,|\n]+/u', $value) ?: [];
+        $parseValues = static function (mixed $value): array {
+            if (is_array($value)) {
+                $parts = $value;
+            } else {
+                $parts = preg_split('/[,|\n]+/u', (string) $value) ?: [];
+            }
             $values = [];
             foreach ($parts as $part) {
                 $item = trim((string) $part);
@@ -43,11 +48,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             trim((string) ($_POST['expires_at'] ?? '')),
             isset($_POST['is_active']),
             isset($user['id']) ? (string) $user['id'] : null,
-            $parseCsv(trim((string) ($_POST['forced_material_types'] ?? ''))),
-            $parseCsv(trim((string) ($_POST['forced_age_categories'] ?? ''))),
-            $parseCsv(trim((string) ($_POST['forced_manufacturers'] ?? ''))),
-            $parseCsv(trim((string) ($_POST['forced_size_ranges'] ?? ''))),
-            $parseCsv(trim((string) ($_POST['forced_country_origins'] ?? ''))),
+            $parseValues($_POST['forced_material_types'] ?? []),
+            $parseValues($_POST['forced_age_categories'] ?? []),
+            $parseValues($_POST['forced_manufacturers'] ?? []),
+            $parseValues($_POST['forced_size_ranges'] ?? []),
+            $parseValues($_POST['forced_country_origins'] ?? []),
             isset($_POST['option_show_images']),
             trim((string) ($_POST['option_price_mode'] ?? 'both')),
             isset($_POST['option_allow_client_filters']),
@@ -86,6 +91,31 @@ if ($editLink === null) {
 $stats = ShareLinkService::stats();
 $policies = ShareLinkService::listAccessPolicies();
 $publicBaseUrl = rtrim(Config::appUrl(), '/');
+$materialFilterOptions = [
+    'materialTypes' => [],
+    'ageCategories' => [],
+    'manufacturers' => [],
+    'sizeRanges' => [],
+    'countryOfOrigins' => [],
+];
+$materialFilterOptionsError = null;
+try {
+    $filtersResponse = ApiClient::get('/api/materials/filter-options');
+    if ($filtersResponse['ok']) {
+        $data = is_array($filtersResponse['data']) ? $filtersResponse['data'] : [];
+        $materialFilterOptions = [
+            'materialTypes' => array_values(array_map('strval', $data['materialTypes'] ?? [])),
+            'ageCategories' => array_values(array_map('strval', $data['ageCategories'] ?? [])),
+            'manufacturers' => array_values(array_map('strval', $data['manufacturers'] ?? [])),
+            'sizeRanges' => array_values(array_map('strval', $data['sizeRanges'] ?? [])),
+            'countryOfOrigins' => array_values(array_map('strval', $data['countryOfOrigins'] ?? [])),
+        ];
+    } else {
+        $materialFilterOptionsError = 'تعذر جلب فلاتر المواد من API (رمز ' . (int) ($filtersResponse['status'] ?? 0) . ').';
+    }
+} catch (\Throwable $exception) {
+    $materialFilterOptionsError = $exception->getMessage();
+}
 
 $currentRoute = '/dashboard/share-links.php';
 

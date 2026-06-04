@@ -22,7 +22,7 @@ if ($token !== '' && $shareLink === null) {
     $error = 'الرابط غير صالح أو غير نشط أو منتهي الصلاحية.';
 }
 
-$requiresPassword = (bool) (($shareLink['require_password'] ?? 0) ? true : false);
+$requiresPassword = (bool) (is_array($shareLink) && (($shareLink['require_password'] ?? 0) ? true : false));
 if (!isset($_SESSION['share_link_access']) || !is_array($_SESSION['share_link_access'])) {
     $_SESSION['share_link_access'] = [];
 }
@@ -81,11 +81,11 @@ $mergeConstrainedValues = static function (array $forced, array $selected, bool 
 
     $forcedMap = [];
     foreach ($forced as $value) {
-        $forcedMap[mb_strtolower($value)] = $value;
+        $forcedMap[strtolower($value)] = $value;
     }
     $intersection = [];
     foreach ($selected as $value) {
-        $key = mb_strtolower($value);
+        $key = strtolower($value);
         if (isset($forcedMap[$key])) {
             $intersection[] = $forcedMap[$key];
         }
@@ -121,9 +121,28 @@ $selectedSort = $selectedSort !== '' ? $selectedSort : 'number:asc';
 $page = max(1, (int) ($_GET['page'] ?? 1));
 $products = [];
 $resultFilters = [];
+$filterOptions = [
+    'materialTypes' => [],
+    'ageCategories' => [],
+    'manufacturers' => [],
+    'sizeRanges' => [],
+    'countryOfOrigins' => [],
+];
 
 if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
     try {
+        $optionsResponse = ApiClient::get('/api/materials/filter-options');
+        if ($optionsResponse['ok']) {
+            $optionsData = is_array($optionsResponse['data']) ? $optionsResponse['data'] : [];
+            $filterOptions = [
+                'materialTypes' => array_values(array_map('strval', $optionsData['materialTypes'] ?? [])),
+                'ageCategories' => array_values(array_map('strval', $optionsData['ageCategories'] ?? [])),
+                'manufacturers' => array_values(array_map('strval', $optionsData['manufacturers'] ?? [])),
+                'sizeRanges' => array_values(array_map('strval', $optionsData['sizeRanges'] ?? [])),
+                'countryOfOrigins' => array_values(array_map('strval', $optionsData['countryOfOrigins'] ?? [])),
+            ];
+        }
+
         $params = array_filter([
             'page' => $page,
             'pageSize' => 24,
@@ -142,6 +161,30 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
         if ($materials['ok']) {
             $products = $materials['data']['items'] ?? [];
             $resultFilters = $materials['data']['resultFilters'] ?? [];
+            if (!is_array($resultFilters)) {
+                $resultFilters = [];
+            }
+            if ($allowClientFilters && $resultFilters === []) {
+                $toFacetValues = static function (array $values): array {
+                    $items = [];
+                    foreach ($values as $value) {
+                        $item = trim((string) $value);
+                        if ($item === '') {
+                            continue;
+                        }
+                        $items[] = ['value' => $item, 'count' => null];
+                    }
+                    return $items;
+                };
+
+                $resultFilters = [
+                    'materialTypes' => $toFacetValues($filterOptions['materialTypes']),
+                    'ageCategories' => $toFacetValues($filterOptions['ageCategories']),
+                    'manufacturers' => $toFacetValues($filterOptions['manufacturers']),
+                    'sizeRanges' => $toFacetValues($filterOptions['sizeRanges']),
+                    'countryOfOrigins' => $toFacetValues($filterOptions['countryOfOrigins']),
+                ];
+            }
         } else {
             $apiError = 'تعذر جلب المواد من API (رمز ' . (int) ($materials['status'] ?? 0) . ')';
         }
@@ -162,8 +205,8 @@ $showQuantity = (bool) (is_array($shareLink) && (($shareLink['show_quantity'] ??
 ob_start();
 ?>
 <div class="bg-white rounded-xl p-6 shadow-sm border">
-  <h1 class="text-2xl font-extrabold mb-2"><?= h((string) ($shareLink['name_ar'] ?? 'رابط مشاركة')) ?></h1>
-  <p class="text-sm text-gray-600 mb-4">سياسة الوصول: <?= h((string) ($shareLink['access_policy_name_ar'] ?? '—')) ?></p>
+  <h1 class="text-2xl font-extrabold mb-2"><?= h((string) (is_array($shareLink) ? ($shareLink['name_ar'] ?? 'رابط مشاركة') : 'رابط مشاركة')) ?></h1>
+  <p class="text-sm text-gray-600 mb-4">سياسة الوصول: <?= h((string) (is_array($shareLink) ? ($shareLink['access_policy_name_ar'] ?? '—') : '—')) ?></p>
 
   <?php if ($error): ?>
     <p class="mb-4 rounded border bg-red-50 border-red-200 text-red-700 px-3 py-2 text-sm"><?= h($error) ?></p>
@@ -206,12 +249,14 @@ ob_start();
         <?php if ($allowSorting): ?>
           <label class="text-sm">
             <span class="text-gray-600 block mb-1">الترتيب</span>
-            <select name="sort" class="h-11 w-full rounded border border-gray-300 px-3">
-              <option value="number:asc" <?= $selectedSort === 'number:asc' ? 'selected' : '' ?>>رقم المادة تصاعدي</option>
-              <option value="number:desc" <?= $selectedSort === 'number:desc' ? 'selected' : '' ?>>رقم المادة تنازلي</option>
-              <option value="materialType:asc,manufacturer:asc" <?= $selectedSort === 'materialType:asc,manufacturer:asc' ? 'selected' : '' ?>>النوع ثم الشركة</option>
-              <option value="ageCategory:asc,materialType:asc" <?= $selectedSort === 'ageCategory:asc,materialType:asc' ? 'selected' : '' ?>>العمر ثم النوع</option>
-            </select>
+            <input name="sort" list="share-sort-presets" value="<?= h($selectedSort) ?>" class="h-11 w-full rounded border border-gray-300 px-3" placeholder="number:asc,materialType:asc">
+            <datalist id="share-sort-presets">
+              <option value="number:asc"></option>
+              <option value="number:desc"></option>
+              <option value="materialType:asc,manufacturer:asc"></option>
+              <option value="ageCategory:asc,materialType:asc"></option>
+              <option value="manufacturer:asc,-unitSalePriceSyp"></option>
+            </datalist>
           </label>
         <?php endif; ?>
 
@@ -237,7 +282,12 @@ ob_start();
                   ?>
                   <label class="inline-flex items-center gap-2">
                     <input type="checkbox" name="<?= h($facetKey) ?>[]" value="<?= h($facetValue) ?>" <?= $isChecked ? 'checked' : '' ?>>
-                    <span><?= h($facetValue) ?> <small class="text-gray-500">(<?= (int) ($facet['count'] ?? 0) ?>)</small></span>
+                    <span>
+                      <?= h($facetValue) ?>
+                      <?php if (isset($facet['count']) && $facet['count'] !== null): ?>
+                        <small class="text-gray-500">(<?= (int) $facet['count'] ?>)</small>
+                      <?php endif; ?>
+                    </span>
                   </label>
                 <?php endforeach; ?>
               </div>
