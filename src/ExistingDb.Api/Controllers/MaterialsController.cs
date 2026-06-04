@@ -274,7 +274,6 @@ public sealed class MaterialsController(
     {
         var stores = await mainDbContext.Stores
             .AsNoTracking()
-            .Where(store => store.IsActive == null || store.IsActive == true)
             .OrderBy(store => store.Number)
             .ThenBy(store => store.Name)
             .Take(MaxFilterOptions)
