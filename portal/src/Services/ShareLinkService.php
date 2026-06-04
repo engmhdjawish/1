@@ -652,7 +652,7 @@ final class ShareLinkService
         foreach ($values as $value) {
             $chunks = is_array($value)
                 ? $value
-                : preg_split('/[,|\n]+/u', (string) $value) ?: [];
+                : (preg_split('/[,|\n]+/u', (string) $value) ?: []);
             foreach ($chunks as $chunk) {
                 $item = trim((string) $chunk);
                 if ($item === '') {
