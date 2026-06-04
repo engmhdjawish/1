@@ -46,20 +46,12 @@ $allowCart = $policyFlags['allow_cart'];
 $allowOrder = $policyFlags['allow_order'];
 
 if ($shareLink !== null && $hasAccess && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'add_to_cart' && $allowCart) {
-    $quantity = max(0.01, (float) ($_POST['quantity'] ?? 1));
+    $quantity = max(1, (int) round((float) ($_POST['quantity'] ?? 1)));
     $capturePrices = (bool) (($shareLink['show_price'] ?? 0) ? true : false);
-    $line = [
-        'material_guid' => trim((string) ($_POST['material_guid'] ?? '')),
-        'material_code' => trim((string) ($_POST['material_code'] ?? '')),
-        'material_name_ar' => trim((string) ($_POST['material_name_ar'] ?? 'مادة')) ?: 'مادة',
-        'pcs_per_box' => max(1, (int) ($_POST['pcs_per_box'] ?? 1)),
-        'sale_price_sp' => $capturePrices ? ShareCartService::parseAmount($_POST['sale_price_sp'] ?? 0) : 0.0,
-        'sale_price_usd' => $capturePrices ? ShareCartService::parseAmount($_POST['sale_price_usd'] ?? 0) : 0.0,
-        'image_url' => trim((string) ($_POST['image_url'] ?? '')) ?: null,
-    ];
+    $line = ShareCartService::lineFromForm($_POST, $capturePrices);
     if ($line['material_guid'] !== '') {
-        ShareCartService::add($token, (string) ($shareLink['id'] ?? ''), $line, $quantity);
-        $cartNotice = 'تمت إضافة المادة إلى السلة.';
+        ShareCartService::add($token, (string) ($shareLink['id'] ?? ''), $line, (float) $quantity);
+        $cartNotice = 'تمت إضافة الطرد إلى السلة.';
     }
 }
 
@@ -545,9 +537,13 @@ ob_start();
       <?php $cartCount = ShareCartService::itemCount($token); ?>
       <a
         href="/cart.php?token=<?= urlencode($token) ?>"
-        class="h-11 inline-flex items-center gap-2 rounded-full bg-primary text-white px-5 text-sm font-extrabold shadow-sm"
+        class="relative h-11 inline-flex items-center gap-2 rounded-full bg-primary text-white pl-5 pr-4 text-sm font-extrabold shadow-md hover:opacity-95 transition"
       >
-        السلة<?= $cartCount > 0 ? ' (' . (int) $cartCount . ')' : '' ?>
+        <span class="material-symbols-outlined text-[22px]" aria-hidden="true">shopping_cart</span>
+        السلة
+        <?php if ($cartCount > 0): ?>
+          <span class="min-w-[22px] h-[22px] px-1 rounded-full bg-white text-primary text-xs font-extrabold flex items-center justify-center"><?= (int) $cartCount ?></span>
+        <?php endif; ?>
       </a>
     <?php endif; ?>
   </div>
@@ -779,7 +775,17 @@ ob_start();
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <?php foreach ($products as $item): ?>
-        <article class="border rounded-lg p-3 bg-white">
+        <?php
+          $packageFactor = ShareCartService::packageFactor($item);
+          $packageUnit = ShareCartService::packageUnitLabel($item);
+          $unitSaleSp = ShareCartService::parseAmount($item['unitSalePriceSyp'] ?? $item['UnitSalePriceSyp'] ?? 0);
+          $unitSaleUsd = ShareCartService::parseAmount($item['unitSalePriceUsd'] ?? $item['UnitSalePriceUsd'] ?? 0);
+          $packageSaleSp = $unitSaleSp * $packageFactor;
+          $packageSaleUsd = $unitSaleUsd * $packageFactor;
+          $warehouseQty = (float) ($item['warehouseQuantity'] ?? 0);
+          $packagesAvailable = $packageFactor > 0 ? floor($warehouseQty / $packageFactor) : $warehouseQty;
+        ?>
+        <article class="border border-gray-200 rounded-xl p-4 bg-white shadow-sm flex flex-col">
           <?php if ($showImages): ?>
             <div class="h-24 rounded bg-gray-100 flex items-center justify-center text-gray-500 text-xs mb-3">
               <?php if (!empty($item['productImageGuid'])): ?>
@@ -802,17 +808,22 @@ ob_start();
 
           <?php if ($showPriceSyp): ?>
             <div class="text-primary font-bold mt-2">
-              <?= format_money((float) ($item['unitSalePriceSyp'] ?? 0), true) ?> ل.س
+              <?= format_money($packageSaleSp, true) ?> ل.س
+              <span class="text-xs font-normal text-gray-500">/ <?= h($packageUnit) ?></span>
             </div>
           <?php endif; ?>
           <?php if ($showPriceUsd): ?>
             <div class="text-emerald-700 font-bold mt-1">
-              $<?= number_format((float) ($item['unitSalePriceUsd'] ?? 0), 2, '.', ',') ?>
+              $<?= number_format($packageSaleUsd, 2, '.', ',') ?>
+              <span class="text-xs font-normal text-gray-500">/ <?= h($packageUnit) ?></span>
             </div>
           <?php endif; ?>
           <?php if ($showQuantity): ?>
             <div class="text-xs text-gray-500 mt-1">
-              الكمية: <?= number_format((float) ($item['warehouseQuantity'] ?? 0), 2, '.', ',') ?>
+              متاح: <?= number_format($packagesAvailable, 0, '.', ',') ?> <?= h($packageUnit) ?>
+              <?php if ($packageFactor > 1): ?>
+                <span class="text-gray-400">(<?= number_format($warehouseQty, 0, '.', ',') ?> <?= h((string) ($item['primaryUnit'] ?? $item['PrimaryUnit'] ?? 'قطعة')) ?>)</span>
+              <?php endif; ?>
             </div>
           <?php endif; ?>
 
@@ -823,26 +834,38 @@ ob_start();
               $imageUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '';
             ?>
             <?php if ($materialGuid !== ''): ?>
-              <form method="post" class="mt-3 flex flex-wrap items-end gap-2">
+              <form method="post" class="mt-auto pt-3 border-t border-gray-100 space-y-2">
                 <input type="hidden" name="token" value="<?= h($token) ?>">
                 <input type="hidden" name="action" value="add_to_cart">
                 <input type="hidden" name="material_guid" value="<?= h($materialGuid) ?>">
                 <input type="hidden" name="material_code" value="<?= h((string) ($item['materialCode'] ?? $item['MaterialCode'] ?? '')) ?>">
                 <input type="hidden" name="material_name_ar" value="<?= h((string) ($item['name'] ?? $item['Name'] ?? 'مادة')) ?>">
-                <input type="hidden" name="sale_price_sp" value="<?= h((string) ShareCartService::parseAmount($item['unitSalePriceSyp'] ?? $item['UnitSalePriceSyp'] ?? 0)) ?>">
-                <input type="hidden" name="sale_price_usd" value="<?= h((string) ShareCartService::parseAmount($item['unitSalePriceUsd'] ?? $item['UnitSalePriceUsd'] ?? 0)) ?>">
+                <input type="hidden" name="package_unit" value="<?= h($packageUnit) ?>">
+                <input type="hidden" name="package_factor" value="<?= h((string) $packageFactor) ?>">
+                <input type="hidden" name="unit_sale_price_sp" value="<?= h((string) $unitSaleSp) ?>">
+                <input type="hidden" name="unit_sale_price_usd" value="<?= h((string) $unitSaleUsd) ?>">
                 <?php if ($imageUrl !== ''): ?>
                   <input type="hidden" name="image_url" value="<?= h($imageUrl) ?>">
                 <?php endif; ?>
-                <label class="text-xs font-bold text-gray-600">
-                  الكمية
-                  <input type="number" name="quantity" min="0.01" step="0.01" value="1" class="h-10 w-20 rounded border border-gray-300 px-2 mt-1 block">
-                </label>
-                <button type="submit" class="h-10 px-4 rounded bg-primary text-white text-sm font-bold">إضافة للسلة</button>
+                <div class="flex items-center justify-between gap-2">
+                  <label class="text-xs font-bold text-gray-600 shrink-0">عدد <?= h($packageUnit) ?></label>
+                  <input
+                    type="number"
+                    name="quantity"
+                    min="1"
+                    step="1"
+                    value="1"
+                    class="h-10 w-20 rounded-lg border border-gray-300 px-2 text-center font-bold"
+                  >
+                </div>
+                <button
+                  type="submit"
+                  class="w-full h-11 rounded-lg bg-primary text-white text-sm font-extrabold shadow-md hover:opacity-95 transition inline-flex items-center justify-center gap-2"
+                >
+                  <span class="material-symbols-outlined text-[20px]" aria-hidden="true">add_shopping_cart</span>
+                  إضافة للسلة
+                </button>
               </form>
-              <?php if ($allowOrder): ?>
-                <p class="text-xs text-gray-500 mt-1">بعد الإضافة يمكنك إرسال الطلب من صفحة السلة بدون تسجيل دخول.</p>
-              <?php endif; ?>
             <?php endif; ?>
           <?php endif; ?>
         </article>
