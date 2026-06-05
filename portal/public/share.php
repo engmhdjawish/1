@@ -112,6 +112,7 @@ $forcedStoreGuids = array_map('strval', is_array($shareLink) ? ($shareLink['forc
 $forcedGroupGuids = array_map('strval', is_array($shareLink) ? ($shareLink['forced_group_guids'] ?? []) : []);
 $constraints = is_array($shareLink) && is_array($shareLink['constraints'] ?? null) ? $shareLink['constraints'] : [];
 $forcedIsAvailable = array_key_exists('is_available', $constraints) ? $constraints['is_available'] : null;
+$forcedHasImage = array_key_exists('has_image', $constraints) ? $constraints['has_image'] : null;
 $forcedMinWarehouseQuantity = isset($constraints['min_warehouse_quantity']) && is_numeric((string) $constraints['min_warehouse_quantity'])
     ? (float) $constraints['min_warehouse_quantity']
     : null;
@@ -231,6 +232,7 @@ $baseMinQuantity = (float) (is_array($shareLink) ? ($shareLink['min_quantity'] ?
 $effectiveMinQuantity = $baseMinQuantity > 0 ? $baseMinQuantity : null;
 
 $queryIsAvailable = $mergeBool(is_bool($forcedIsAvailable) ? $forcedIsAvailable : null, $selectedIsAvailable, $hasConstraintConflict);
+$queryHasImage = is_bool($forcedHasImage) ? $forcedHasImage : null;
 $queryMinWarehouseQuantity = $mergeMin($forcedMinWarehouseQuantity, $selectedMinWarehouseQuantity);
 $queryMaxWarehouseQuantity = $mergeMax($forcedMaxWarehouseQuantity, $selectedMaxWarehouseQuantity);
 $queryMinUnitSalePriceSyp = $mergeMin($forcedMinUnitSalePriceSyp, $selectedMinUnitSalePriceSyp);
@@ -325,6 +327,7 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
             'countryOfOrigins' => $queryCountryOrigins !== [] ? implode(',', $queryCountryOrigins) : null,
             'groupGuids' => $queryGroupGuids !== [] ? implode(',', $queryGroupGuids) : null,
             'isAvailable' => $queryIsAvailable === null ? null : ($queryIsAvailable ? 'true' : 'false'),
+            'hasImage' => $queryHasImage === null ? null : ($queryHasImage ? 'true' : 'false'),
             'minWarehouseQuantity' => $queryMinWarehouseQuantity !== null ? $queryMinWarehouseQuantity : $effectiveMinQuantity,
             'maxWarehouseQuantity' => $queryMaxWarehouseQuantity,
             'minUnitSalePriceSyp' => $queryMinUnitSalePriceSyp,

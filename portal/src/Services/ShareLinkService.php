@@ -18,6 +18,7 @@ final class ShareLinkService
     private const FILTER_STORE_GUID = 'store_guid';
     private const FILTER_GROUP_GUID = 'group_guid';
     private const FILTER_IS_AVAILABLE = 'is_available';
+    private const FILTER_HAS_IMAGE = 'has_image';
     private const FILTER_MIN_WAREHOUSE_QUANTITY = 'min_warehouse_quantity';
     private const FILTER_MAX_WAREHOUSE_QUANTITY = 'max_warehouse_quantity';
     private const FILTER_MIN_UNIT_SALE_PRICE_SYP = 'min_unit_sale_price_syp';
@@ -83,9 +84,16 @@ final class ShareLinkService
                     CASE WHEN sl.is_active THEN 1 ELSE 0 END AS is_active,
                     CASE WHEN sl.require_password THEN 1 ELSE 0 END AS require_password,
                     sl.created_at,
-                    ap.name_ar AS access_policy_name_ar
+                    ap.name_ar AS access_policy_name_ar,
+                    COALESCE(filters.filters_count, 0)::int AS filters_count
                 FROM share_links sl
                 INNER JOIN access_policies ap ON ap.id = sl.access_policy_id
+                LEFT JOIN (
+                    SELECT link_id, COUNT(*)::int AS filters_count
+                    FROM share_link_filters
+                    WHERE filter_type NOT LIKE \'option_%\'
+                    GROUP BY link_id
+                ) filters ON filters.link_id = sl.id
                 WHERE 1 = 1';
         $params = [];
 
@@ -257,6 +265,30 @@ final class ShareLinkService
         ];
     }
 
+    /** @return array{
+     *   show_images: bool,
+     *   price_mode: string,
+     *   allow_client_filters: bool,
+     *   allow_sorting: bool,
+     *   include_result_filters: bool,
+     *   visible_client_filters: list<string>,
+     *   default_sort: string,
+     *   default_group_by: string
+     * } */
+    public static function defaultLinkOptions(): array
+    {
+        return [
+            'show_images' => true,
+            'price_mode' => 'both',
+            'allow_client_filters' => true,
+            'allow_sorting' => true,
+            'include_result_filters' => true,
+            'visible_client_filters' => self::DEFAULT_VISIBLE_CLIENT_FILTERS,
+            'default_sort' => 'number:asc',
+            'default_group_by' => 'none',
+        ];
+    }
+
     /** @return list<array{id: string, code: string, name_ar: string}> */
     public static function listAccessPolicies(): array
     {
@@ -289,6 +321,7 @@ final class ShareLinkService
         array $forcedStoreGuids = [],
         array $forcedGroupGuids = [],
         ?bool $forcedIsAvailable = null,
+        ?bool $forcedHasImage = null,
         ?float $forcedMinWarehouseQuantity = null,
         ?float $forcedMaxWarehouseQuantity = null,
         ?float $forcedMinUnitSalePriceSyp = null,
@@ -428,6 +461,7 @@ final class ShareLinkService
                 $forcedStoreGuids,
                 $forcedGroupGuids,
                 $forcedIsAvailable,
+                $forcedHasImage,
                 $forcedMinWarehouseQuantity,
                 $forcedMaxWarehouseQuantity,
                 $forcedMinUnitSalePriceSyp,
@@ -509,6 +543,7 @@ final class ShareLinkService
                 $forcedStoreGuids,
                 $forcedGroupGuids,
                 $forcedIsAvailable,
+                $forcedHasImage,
                 $forcedMinWarehouseQuantity,
                 $forcedMaxWarehouseQuantity,
                 $forcedMinUnitSalePriceSyp,
@@ -660,6 +695,7 @@ final class ShareLinkService
         ];
         $constraintDefaults = [
             'is_available' => null,
+            'has_image' => null,
             'min_warehouse_quantity' => null,
             'max_warehouse_quantity' => null,
             'min_unit_sale_price_syp' => null,
@@ -736,6 +772,9 @@ final class ShareLinkService
                     break;
                 case self::FILTER_IS_AVAILABLE:
                     $result['constraints']['is_available'] = self::toNullableBool($value);
+                    break;
+                case self::FILTER_HAS_IMAGE:
+                    $result['constraints']['has_image'] = self::toNullableBool($value);
                     break;
                 case self::FILTER_MIN_WAREHOUSE_QUANTITY:
                     $result['constraints']['min_warehouse_quantity'] = self::toNullableFloat($value);
@@ -818,6 +857,7 @@ final class ShareLinkService
         array $forcedStoreGuids,
         array $forcedGroupGuids,
         ?bool $forcedIsAvailable,
+        ?bool $forcedHasImage,
         ?float $forcedMinWarehouseQuantity,
         ?float $forcedMaxWarehouseQuantity,
         ?float $forcedMinUnitSalePriceSyp,
@@ -868,6 +908,13 @@ final class ShareLinkService
                 'link_id' => $linkId,
                 'filter_type' => self::FILTER_IS_AVAILABLE,
                 'value_ar' => $forcedIsAvailable ? '1' : '0',
+            ]);
+        }
+        if ($forcedHasImage !== null) {
+            $insert->execute([
+                'link_id' => $linkId,
+                'filter_type' => self::FILTER_HAS_IMAGE,
+                'value_ar' => $forcedHasImage ? '1' : '0',
             ]);
         }
 

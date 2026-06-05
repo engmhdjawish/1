@@ -15,8 +15,19 @@ require dirname(__DIR__, 2) . '/views/helpers.php';
 $flash = null;
 $flashType = 'success';
 $editId = trim((string) ($_GET['edit'] ?? ''));
+$isNew = ($_GET['new'] ?? '') === '1';
+$showForm = $editId !== '' || $isNew;
 $editLink = null;
 $user = WebSession::user();
+
+if (isset($_GET['saved']) && $_GET['saved'] === '1') {
+    $flash = 'تم حفظ رابط المشاركة.';
+    $flashType = 'success';
+}
+if (isset($_GET['deleted']) && $_GET['deleted'] === '1') {
+    $flash = 'تم حذف رابط المشاركة.';
+    $flashType = 'success';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string) ($_POST['action'] ?? ''));
@@ -77,6 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $parseValues($_POST['forced_store_guids'] ?? []),
             $parseValues($_POST['forced_group_guids'] ?? []),
             $parseNullableBool($_POST['forced_is_available'] ?? null),
+            $parseNullableBool($_POST['forced_has_image'] ?? null),
             $parseNullableFloat($_POST['forced_min_warehouse_quantity'] ?? null),
             $parseNullableFloat($_POST['forced_max_warehouse_quantity'] ?? null),
             $parseNullableFloat($_POST['forced_min_unit_sale_price_syp'] ?? null),
@@ -94,11 +106,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $defaultSortValue,
             trim((string) ($_POST['option_default_group_by'] ?? 'none'))
         );
-        $flash = $result['message'];
-        $flashType = $result['ok'] ? 'success' : 'error';
         if ($result['ok']) {
-            $editId = (string) ($result['id'] ?? '');
+            header('Location: /dashboard/share-links.php?saved=1');
+            exit;
         }
+        $flash = $result['message'];
+        $flashType = 'error';
+        $showForm = true;
+        $editId = trim((string) ($_POST['id'] ?? ''));
+        $isNew = $editId === '';
     } elseif ($action === 'toggle') {
         $ok = ShareLinkService::setActive(
             trim((string) ($_POST['id'] ?? '')),
@@ -110,9 +126,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $deleteResult = ShareLinkService::delete(trim((string) ($_POST['id'] ?? '')));
         $flash = $deleteResult['message'];
         $flashType = $deleteResult['ok'] ? 'success' : 'error';
-        if ($deleteResult['ok'] && $editId !== '' && $editId === trim((string) ($_POST['id'] ?? ''))) {
-            $editId = '';
-            $editLink = null;
+        if ($deleteResult['ok']) {
+            header('Location: /dashboard/share-links.php?deleted=1');
+            exit;
         }
     }
 }
@@ -126,9 +142,32 @@ $filters = [
 $links = ShareLinkService::list($filters);
 if ($editId !== '') {
     $editLink = ShareLinkService::getById($editId);
+    if ($editLink === null) {
+        $editId = '';
+        $showForm = $isNew;
+    }
 }
-if ($editLink === null) {
-    $editId = '';
+if ($showForm && $editLink === null) {
+    $editLink = [
+        'id' => '',
+        'name_ar' => '',
+        'access_policy_id' => '',
+        'require_password' => 0,
+        'access_username' => '',
+        'keyword' => '',
+        'min_quantity' => 0,
+        'expires_at' => null,
+        'is_active' => 1,
+        'forced_material_types' => [],
+        'forced_age_categories' => [],
+        'forced_manufacturers' => [],
+        'forced_size_ranges' => [],
+        'forced_country_origins' => [],
+        'forced_store_guids' => [],
+        'forced_group_guids' => [],
+        'constraints' => [],
+        'options' => ShareLinkService::defaultLinkOptions(),
+    ];
 }
 $stats = ShareLinkService::stats();
 $policies = ShareLinkService::listAccessPolicies();
