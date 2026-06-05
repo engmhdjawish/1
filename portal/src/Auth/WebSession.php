@@ -40,16 +40,48 @@ final class WebSession
         }
     }
 
-    public static function login(string $userName, string $password): bool
+    /** @param-out string|null $errorMessage */
+    public static function login(string $userName, string $password, ?string &$errorMessage = null): bool
     {
+        $errorMessage = null;
+        $userName = trim($userName);
+        $password = trim($password);
+
+        if ($userName === '' || $password === '') {
+            $errorMessage = 'أدخل اسم المستخدم وكلمة المرور.';
+
+            return false;
+        }
+
         $pdo = Database::pdo();
         $stmt = $pdo->prepare(
-            'SELECT u.id, u.user_name, u.display_name_ar, u.password_hash, u.is_active
-             FROM web_users u WHERE u.user_name = :user_name LIMIT 1'
+            'SELECT
+                u.id,
+                u.user_name,
+                u.display_name_ar,
+                u.password_hash,
+                CASE WHEN u.is_active THEN 1 ELSE 0 END AS is_active
+             FROM web_users u
+             WHERE u.user_name ILIKE :user_name
+             LIMIT 1'
         );
         $stmt->execute(['user_name' => $userName]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$user || !$user['is_active'] || !Password::verify($password, $user['password_hash'])) {
+        if (!$user) {
+            $errorMessage = 'اسم المستخدم غير موجود.';
+
+            return false;
+        }
+
+        if ((int) ($user['is_active'] ?? 0) !== 1) {
+            $errorMessage = 'الحساب غير نشط. تواصل مع المدير لتفعيله.';
+
+            return false;
+        }
+
+        if (!Password::verify($password, (string) ($user['password_hash'] ?? ''))) {
+            $errorMessage = 'كلمة المرور غير صحيحة.';
+
             return false;
         }
 

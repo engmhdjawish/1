@@ -203,6 +203,19 @@ final class WebUserService
         try {
             $pdo->beginTransaction();
 
+            $passwordHash = null;
+            if ($plainPassword !== '') {
+                try {
+                    $passwordHash = Password::hash($plainPassword);
+                } catch (\Throwable $exception) {
+                    if ($pdo->inTransaction()) {
+                        $pdo->rollBack();
+                    }
+
+                    return ['ok' => false, 'message' => $exception->getMessage()];
+                }
+            }
+
             $userId = $id !== null ? trim($id) : '';
             if ($userId === '') {
                 $insert = $pdo->prepare(
@@ -225,12 +238,12 @@ final class WebUserService
                     'user_name' => $userName,
                     'email' => $email !== '' ? $email : null,
                     'display_name_ar' => $displayNameAr,
-                    'password_hash' => Password::hash($plainPassword),
+                    'password_hash' => $passwordHash,
                     'is_active' => $isActive ? 1 : 0,
                 ]);
                 $userId = (string) $insert->fetchColumn();
             } else {
-                if ($plainPassword !== '') {
+                if ($passwordHash !== null) {
                     $update = $pdo->prepare(
                         'UPDATE web_users SET
                             user_name = :user_name,
@@ -246,7 +259,7 @@ final class WebUserService
                         'user_name' => $userName,
                         'email' => $email !== '' ? $email : null,
                         'display_name_ar' => $displayNameAr,
-                        'password_hash' => Password::hash($plainPassword),
+                        'password_hash' => $passwordHash,
                         'is_active' => $isActive ? 1 : 0,
                     ]);
                 } else {

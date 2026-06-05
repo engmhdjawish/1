@@ -96,6 +96,11 @@ $selectedRoleIds = array_map('strval', $editUser['role_ids'] ?? []);
         <input type="checkbox" name="is_active" value="1" <?= $editing ? ((int) ($editUser['is_active'] ?? 0) === 1 ? 'checked' : '') : 'checked' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
         <span>الحساب نشط</span>
       </label>
+      <?php if ($editing): ?>
+        <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          عند تغيير كلمة المرور تأكد من تفعيل «الحساب نشط» واستخدم نفس <strong>اسم المستخدم</strong> عند الدخول.
+        </p>
+      <?php endif; ?>
 
       <button class="w-full h-11 rounded-xl bg-primary text-white font-bold hover:brightness-110 transition">
         <?= $editing ? 'حفظ التعديلات' : 'إنشاء المستخدم' ?>
