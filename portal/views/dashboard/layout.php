@@ -19,11 +19,15 @@ $navigation = [
         '/dashboard/users.php' => ['label' => 'المستخدمون والأدوار', 'icon' => 'badge'],
         '/dashboard/settings.php' => ['label' => 'الإعدادات', 'icon' => 'settings'],
     ],
-    'المحاسبة' => [
-        '/dashboard/accounting.php' => ['label' => 'لوحة المحاسب', 'icon' => 'account_balance'],
+    'بيانات الأمين' => [
+        '/dashboard/accounting.php' => ['label' => 'لوحة المحاسبة', 'icon' => 'account_balance'],
+        '/dashboard/accounting-customers.php' => ['label' => 'عملاء الأمين', 'icon' => 'groups'],
+        '/dashboard/accounting-documents.php' => ['label' => 'الفواتير والسندات', 'icon' => 'receipt_long'],
+        '/dashboard/accounting-statement.php' => ['label' => 'كشف الحساب', 'icon' => 'account_balance_wallet'],
+    ],
+    'طلبات الموقع' => [
         '/dashboard/accounting-sync.php' => ['label' => 'طابور المزامنة', 'icon' => 'sync'],
-        '/dashboard/accounting-reports.php' => ['label' => 'التقارير المالية', 'icon' => 'analytics'],
-        '/dashboard/accounting-statement.php' => ['label' => 'كشف حساب عميل', 'icon' => 'receipt_long'],
+        '/dashboard/accounting-reports.php' => ['label' => 'تقارير الطلبات', 'icon' => 'analytics'],
     ],
 ];
 ?>
