@@ -12,4 +12,4 @@ obj/
 appsettings.Local.json
 .env
 uploads/
-
+amine-api-token.json
