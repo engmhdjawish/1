@@ -366,8 +366,6 @@ $truncate = static function (string $text, int $max = 48): string {
         <span><strong class="text-slate-900"><?= h($formatPackages((float) ($summary['packages_count'] ?? 0))) ?></strong> طرد</span>
         <span class="text-slate-300">|</span>
         <span><strong class="text-slate-900"><?= (int) ($summary['items_count'] ?? 0) ?></strong> صنف</span>
-        <span class="text-slate-300">|</span>
-        <span><strong class="text-slate-900"><?= h($formatPackages((float) ($summary['pieces_count'] ?? 0))) ?></strong> قلم</span>
       </div>
       <div class="flex items-center justify-between rounded-xl bg-slate-900 text-white px-4 py-3">
         <span class="text-sm font-bold">إجمالي الحساب</span>
