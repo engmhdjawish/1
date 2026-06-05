@@ -130,8 +130,9 @@ GET  /api/health
 
 GET  /api/customers
 GET  /api/customers/{guid}
-GET  /api/customers/{guid}/account/summary
-GET  /api/customers/{guid}/account/statement
+
+GET  /api/accounts/summary
+GET  /api/accounts/statement
 
 GET  /api/materials
 GET  /api/materials/{guid}
@@ -336,11 +337,9 @@ AccountGUID
 GET /api/accounts/summary?accountGuid={accountGuid}
 GET /api/accounts/summary?customerGuid={customerGuid}
 GET /api/accounts/summary?accountGuid={accountGuid}&customerGuid={customerGuid}
-GET /api/customers/{guid}/account/summary
 ```
 
-> المسار تحت `/api/accounts` هو المسار المرن الأساسي الجديد.
-> المسار `/api/customers/{guid}/account/*` بقي مدعومًا للتوافق الخلفي.
+> استخدم دائمًا `/api/accounts/summary` مع `accountGuid` و/أو `customerGuid` في query string.
 
 الاستجابة تعرض (بعملة الحساب):
 
@@ -371,8 +370,6 @@ GET /api/accounts/statement?accountGuid={accountGuid}
 GET /api/accounts/statement?customerGuid={customerGuid}
 GET /api/accounts/statement?accountGuid={accountGuid}&customerGuid={customerGuid}
 GET /api/accounts/statement?accountGuid={accountGuid}&fromDate=2026-01-01&toDate=2026-01-31&page=1&pageSize=100
-GET /api/customers/{guid}/account/statement
-GET /api/customers/{guid}/account/statement?fromDate=2026-01-01&toDate=2026-01-31&page=1&pageSize=100
 ```
 
 ملاحظة مهمة:

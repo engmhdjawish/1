@@ -17,12 +17,6 @@ namespace ExistingDb.Api.Controllers;
 [RequirePermission("accounts.read")]
 public sealed class CustomerAccountsController(MainDbContext mainDbContext) : ControllerBase
 {
-    [HttpGet("~/api/customers/{customerGuid:guid}/account/summary")]
-    public Task<ActionResult<CustomerAccountSummaryResponse>> GetSummaryByCustomer(Guid customerGuid, CancellationToken cancellationToken)
-    {
-        return GetSummary(null, customerGuid, cancellationToken);
-    }
-
     [HttpGet("summary")]
     public async Task<ActionResult<CustomerAccountSummaryResponse>> GetSummary(
         [FromQuery] Guid? accountGuid = null,
@@ -107,19 +101,6 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
                     references.GetValueOrDefault(lastDebtorEntry.Guid),
                     summaryContraAccounts.GetValueOrDefault(lastDebtorEntry.Guid),
                     accountCurrencyRate)));
-    }
-
-    [HttpGet("~/api/customers/{customerGuid:guid}/account/statement")]
-    [RequirePermission("entries.read")]
-    public Task<ActionResult<CustomerAccountStatementResponse>> GetStatementByCustomer(
-        Guid customerGuid,
-        [FromQuery] DateTime? fromDate = null,
-        [FromQuery] DateTime? toDate = null,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 100,
-        CancellationToken cancellationToken = default)
-    {
-        return GetStatement(null, customerGuid, fromDate, toDate, page, pageSize, cancellationToken);
     }
 
     [HttpGet("statement")]
