@@ -24,8 +24,11 @@ final class PortalSettingsService
             'company_phone' => '',
             'company_mobile' => '',
             'company_whatsapp' => '',
+            'company_email' => '',
             'company_address' => '',
             'company_logo' => '',
+            'about_us_title_ar' => '',
+            'about_us_ar' => '',
         ];
 
         foreach ($rows as $row) {
@@ -47,8 +50,11 @@ final class PortalSettingsService
             'company_phone',
             'company_mobile',
             'company_whatsapp',
+            'company_email',
             'company_address',
             'company_logo',
+            'about_us_title_ar',
+            'about_us_ar',
         ];
 
         $stmt = Database::pdo()->prepare(
@@ -73,23 +79,27 @@ final class PortalSettingsService
     /** @return list<array<string, mixed>> */
     public static function accessPolicies(bool $onlyActive = true): array
     {
-        $sql = 'SELECT
-                    id::text AS id,
-                    code,
-                    name_ar,
-                    description_ar,
-                    CASE WHEN show_price THEN 1 ELSE 0 END AS show_price,
-                    CASE WHEN show_quantity THEN 1 ELSE 0 END AS show_quantity,
-                    CASE WHEN allow_cart THEN 1 ELSE 0 END AS allow_cart,
-                    CASE WHEN allow_order THEN 1 ELSE 0 END AS allow_order,
-                    CASE WHEN is_active THEN 1 ELSE 0 END AS is_active
-                FROM access_policies';
-        if ($onlyActive) {
-            $sql .= ' WHERE is_active = TRUE';
-        }
-        $sql .= ' ORDER BY name_ar';
+        return AccessPolicyService::list(!$onlyActive);
+    }
 
-        return Database::pdo()->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+    public static function companyLogoUrl(?array $company = null): ?string
+    {
+        $settings = $company ?? self::companySettings();
+        $logo = trim((string) ($settings['company_logo'] ?? ''));
+        if ($logo === '') {
+            return null;
+        }
+        if (str_starts_with($logo, '/media/') || str_starts_with($logo, 'http://') || str_starts_with($logo, 'https://')) {
+            return $logo;
+        }
+
+        return null;
+    }
+
+    /** @return array{ok: bool, message: string} */
+    public static function databaseHealth(): array
+    {
+        return Database::testConnection();
     }
 
     public static function guestPolicyId(): ?string

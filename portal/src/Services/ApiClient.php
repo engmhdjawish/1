@@ -215,6 +215,11 @@ final class ApiClient
         ], JSON_PRETTY_PRINT));
     }
 
+    public static function invalidateToken(): void
+    {
+        self::clearToken();
+    }
+
     private static function clearToken(): void
     {
         $path = self::tokenPath();

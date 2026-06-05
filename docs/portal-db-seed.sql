@@ -99,8 +99,11 @@ VALUES
     ('company_phone', '00963-11-2213299'),
     ('company_mobile', '00963932997794'),
     ('company_whatsapp', '+963932997794'),
+    ('company_email', ''),
     ('company_address', 'دمشق - حريقة - شارع المأمون'),
-    ('company_logo', 'JawishLogo.png')
+    ('company_logo', ''),
+    ('about_us_title_ar', 'من نحن'),
+    ('about_us_ar', '')
 ON CONFLICT (key) DO NOTHING;
 
 -- Example homepage sections (inactive until configured)
