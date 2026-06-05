@@ -269,27 +269,28 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
 
   <article id="manual-mode-panel" class="bg-white border border-border-subtle rounded-2xl p-5 <?= $displayMode === 'filter' ? 'hidden' : '' ?>">
     <h3 class="font-bold text-lg mb-2">اختيار المواد يدوياً</h3>
-    <p class="text-sm text-text-muted mb-4">اكتب اسم المادة أو رقمها واضغط Enter لعرض قائمة منسدلة، ثم اختر المادة لإضافتها.</p>
+    <p class="text-sm text-text-muted mb-4">اكتب اسم المادة أو رقمها — تظهر قائمة منسدلة فوراً (بدون إعادة تحميل الصفحة)، ثم اختر المادة لإضافتها.</p>
 
     <div class="mb-4 flex flex-wrap gap-2 items-start">
-      <label class="text-sm flex-1 min-w-[240px] relative" id="hs-material-search-wrap">
+      <div class="text-sm flex-1 min-w-[240px] relative" id="hs-material-search-wrap">
         <span class="text-text-muted block mb-1">بحث لإضافة مواد</span>
         <input
-          type="text"
+          type="search"
           id="hs-material-search"
           autocomplete="off"
+          enterkeyhint="search"
           role="combobox"
           aria-expanded="false"
           aria-controls="hs-material-search-results"
           class="h-10 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary"
-          placeholder="اسم أو كود المادة — Enter للبحث"
+          placeholder="اسم أو كود المادة"
         >
         <ul
           id="hs-material-search-results"
           class="hidden absolute z-30 mt-1 w-full max-h-60 overflow-y-auto rounded-xl border border-border-subtle bg-white shadow-lg text-sm divide-y divide-border-subtle"
           role="listbox"
         ></ul>
-      </label>
+      </div>
       <p id="hs-material-search-status" class="text-xs text-text-muted min-h-[1.25rem] pt-8 flex-1"></p>
     </div>
 
@@ -320,7 +321,7 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
     <?php if ($editId !== ''): ?>
       <a href="/dashboard/home-sections.php" class="h-11 px-5 inline-flex items-center rounded-xl border border-border-subtle text-sm font-bold">قسم جديد</a>
     <?php endif; ?>
-    <button type="submit" class="h-11 px-8 rounded-xl bg-primary text-white font-extrabold hover:brightness-110">
+    <button type="submit" id="home-section-save-btn" class="h-11 px-8 rounded-xl bg-primary text-white font-extrabold hover:brightness-110">
       <?= $editId !== '' ? 'حفظ القسم' : 'إنشاء القسم' ?>
     </button>
   </div>
@@ -385,6 +386,30 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
 
 <script>
 (() => {
+  const mainForm = document.getElementById('home-section-form');
+  const saveBtn = document.getElementById('home-section-save-btn');
+  let explicitSave = false;
+
+  saveBtn?.addEventListener('click', () => {
+    explicitSave = true;
+  });
+
+  mainForm?.addEventListener('submit', (event) => {
+    if (!explicitSave) {
+      event.preventDefault();
+      return false;
+    }
+    explicitSave = false;
+  });
+
+  mainForm?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    const target = event.target;
+    if (!target || target.tagName === 'TEXTAREA') return;
+    if (target.id === 'home-section-save-btn') return;
+    event.preventDefault();
+  }, true);
+
   const modeSelect = document.getElementById('display_mode');
   const filterPanel = document.getElementById('filter-mode-panel');
   const manualPanel = document.getElementById('manual-mode-panel');
@@ -457,17 +482,24 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
     if (statusEl) statusEl.textContent = items.length + ' نتيجة — اختر من القائمة (↑↓ ثم Enter)';
   };
 
+  let searchTimer = null;
+  let searchRequestId = 0;
+
   const runMaterialSearch = async () => {
     const q = (searchInput?.value || '').trim();
     if (q === '') {
       hideResults();
+      if (statusEl) statusEl.textContent = '';
       return;
     }
+    const requestId = ++searchRequestId;
     if (statusEl) statusEl.textContent = 'جاري البحث...';
     try {
       const response = await fetch('/dashboard/home-sections-api.php?q=' + encodeURIComponent(q), {
         headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
       });
+      if (requestId !== searchRequestId) return;
       const data = await response.json();
       if (!data.ok) {
         hideResults();
@@ -476,10 +508,30 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
       }
       renderResults(Array.isArray(data.items) ? data.items : []);
     } catch (_) {
+      if (requestId !== searchRequestId) return;
       hideResults();
       if (statusEl) statusEl.textContent = 'تعذر الاتصال بالخادم.';
     }
   };
+
+  const scheduleMaterialSearch = (delayMs = 280) => {
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      searchTimer = null;
+      runMaterialSearch();
+    }, delayMs);
+  };
+
+  searchInput?.addEventListener('input', () => {
+    const q = (searchInput?.value || '').trim();
+    if (q === '') {
+      if (searchTimer) clearTimeout(searchTimer);
+      hideResults();
+      if (statusEl) statusEl.textContent = '';
+      return;
+    }
+    scheduleMaterialSearch();
+  });
 
   searchInput?.addEventListener('keydown', (event) => {
     const hasList = resultsEl && !resultsEl.classList.contains('hidden') && searchItems.length > 0;
@@ -497,6 +549,8 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
     }
     if (event.key === 'Enter') {
       event.preventDefault();
+      event.stopPropagation();
+      if (searchTimer) clearTimeout(searchTimer);
       if (hasList && activeResultIndex >= 0 && searchItems[activeResultIndex]) {
         addMaterialItem(searchItems[activeResultIndex]);
         return;

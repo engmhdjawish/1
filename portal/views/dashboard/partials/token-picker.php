@@ -210,6 +210,20 @@ if (!function_exists('portal_render_token_picker_script')) {
           renderSelected();
         });
         searchInput?.addEventListener('input', renderOptions);
+        searchInput?.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter') return;
+          event.preventDefault();
+          event.stopPropagation();
+          const visible = Array.from(optionsSelect.options).filter((option) => !option.hidden && normalize(option.value) !== '');
+          if (visible.length === 1) {
+            addValues([visible[0].value], { [normalize(visible[0].value)]: normalize(visible[0].textContent) });
+            return;
+          }
+          const picked = Array.from(optionsSelect.selectedOptions).map((o) => o.value);
+          if (picked.length > 0) {
+            addValues(picked);
+          }
+        });
         optionsSelect?.addEventListener('dblclick', (event) => {
           const target = event.target;
           if (target && target.tagName === 'OPTION') {
