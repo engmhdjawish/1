@@ -32,20 +32,53 @@ public sealed class MaterialQueryBuilder(MainDbContext mainDbContext)
             return query;
         }
 
-        var term = search.Trim();
-        var exactCodeExists = await mainDbContext.Materials
-            .AsNoTracking()
-            .AnyAsync(material => material.Code == term, cancellationToken);
+        var keywords = SplitSearchKeywords(search);
+        if (keywords.Length == 0)
+        {
+            return query;
+        }
 
-        return exactCodeExists
-            ? query.Where(material => material.Code == term)
-            : query.Where(material =>
-                (material.Name != null && material.Name.Contains(term)) ||
-                (material.LatinName != null && material.LatinName.Contains(term)) ||
-                (material.Code != null && material.Code.Contains(term)) ||
-                (material.BarCode != null && material.BarCode.Contains(term)) ||
-                (material.BarCode2 != null && material.BarCode2.Contains(term)) ||
-                (material.BarCode3 != null && material.BarCode3.Contains(term)));
+        if (keywords.Length == 1)
+        {
+            var keyword = keywords[0];
+            var exactCodeExists = await mainDbContext.Materials
+                .AsNoTracking()
+                .AnyAsync(material => material.Code == keyword, cancellationToken);
+
+            if (exactCodeExists)
+            {
+                return query.Where(material => material.Code == keyword);
+            }
+        }
+
+        foreach (var keyword in keywords)
+        {
+            query = ApplyKeywordContainsFilter(query, keyword);
+        }
+
+        return query;
+    }
+
+    private static string[] SplitSearchKeywords(string search)
+    {
+        return search
+            .Split([' ', '\t', '\r', '\n', ',', '،', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(keyword => !string.IsNullOrWhiteSpace(keyword))
+            .Select(keyword => keyword.Trim())
+            .ToArray();
+    }
+
+    private static IQueryable<MaterialRecord> ApplyKeywordContainsFilter(
+        IQueryable<MaterialRecord> query,
+        string keyword)
+    {
+        return query.Where(material =>
+            (material.Name != null && material.Name.Contains(keyword)) ||
+            (material.LatinName != null && material.LatinName.Contains(keyword)) ||
+            (material.Code != null && material.Code.Contains(keyword)) ||
+            (material.BarCode != null && material.BarCode.Contains(keyword)) ||
+            (material.BarCode2 != null && material.BarCode2.Contains(keyword)) ||
+            (material.BarCode3 != null && material.BarCode3.Contains(keyword)));
     }
 
     private IQueryable<MaterialRecord> ApplyStoreAndQuantityFilters(
