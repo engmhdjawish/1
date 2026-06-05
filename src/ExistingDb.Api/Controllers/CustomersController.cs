@@ -155,5 +155,19 @@ public sealed class CustomersController(
             _ => value.Value.ToString()
         };
     }
+
+    private static IReadOnlyCollection<string> ParseKeywordTerms(string? keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            return [];
+        }
+
+        return keyword
+            .Split((char[]?)null, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Where(term => !string.IsNullOrWhiteSpace(term))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
 }
 

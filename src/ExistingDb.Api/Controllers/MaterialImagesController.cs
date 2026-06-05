@@ -114,8 +114,8 @@ public sealed class MaterialImagesController(
         }
 
         var settings = await imageSettingsService.GetAsync(cancellationToken);
-        var imagePath = ResolveImagePath(image.Name, settings.ImagesDirectory);
-        if (!System.IO.File.Exists(imagePath))
+        var imagePath = ResolveExistingImagePath(Path.GetFileName(image.Name), settings.ImagesDirectory);
+        if (string.IsNullOrWhiteSpace(imagePath))
         {
             return NotFound();
         }
@@ -136,8 +136,8 @@ public sealed class MaterialImagesController(
         }
 
         var settings = await imageSettingsService.GetAsync(cancellationToken);
-        var thumbnailPath = ResolveThumbnailPath(image.Name, settings.ThumbnailsDirectory);
-        if (!System.IO.File.Exists(thumbnailPath))
+        var thumbnailPath = ResolveExistingImagePath(Path.GetFileName(image.Name), settings.ThumbnailsDirectory);
+        if (string.IsNullOrWhiteSpace(thumbnailPath) || !System.IO.File.Exists(thumbnailPath))
         {
             return NotFound();
         }
@@ -150,18 +150,7 @@ public sealed class MaterialImagesController(
     [Consumes("multipart/form-data")]
     public async Task<ActionResult> UploadImage([FromForm] UploadMaterialImageRequest request, CancellationToken cancellationToken)
     {
-        var files = new List<IFormFile>();
-        if (request.File is not null)
-        {
-            files.Add(request.File);
-        }
-
-        if (request.Files is not null)
-        {
-            files.AddRange(request.Files.Where(file => file is not null));
-        }
-
-        files = files
+        var files = (request.Files ?? [])
             .Where(file => file.Length > 0)
             .ToList();
 
@@ -170,17 +159,15 @@ public sealed class MaterialImagesController(
             return BadRequest(new { message = "At least one image file is required." });
         }
 
-        if (request.MaterialGuid is not null && files.Count != 1)
-        {
-            return BadRequest(new { message = "MaterialGuid can be used only when uploading a single image." });
-        }
+        // MaterialGuid is ignored when uploading multiple files.
+        var effectiveMaterialGuid = files.Count == 1 ? request.MaterialGuid : null;
 
-        if (request.MaterialGuid is Guid materialGuid && materialGuid == Guid.Empty)
+        if (effectiveMaterialGuid is Guid materialGuid && materialGuid == Guid.Empty)
         {
             return BadRequest(new { message = "MaterialGuid cannot be empty." });
         }
 
-        if (request.MaterialGuid is Guid linkedMaterialGuid)
+        if (effectiveMaterialGuid is Guid linkedMaterialGuid)
         {
             var materialExists = await mainDbContext.Materials
                 .AsNoTracking()
@@ -235,7 +222,7 @@ public sealed class MaterialImagesController(
             throw;
         }
 
-        if (request.MaterialGuid is Guid materialGuidToLink)
+        if (effectiveMaterialGuid is Guid materialGuidToLink)
         {
             var linked = await LinkImageToMaterialInternalAsync(createdImages[0].Guid, materialGuidToLink, cancellationToken);
             if (!linked)
@@ -247,7 +234,7 @@ public sealed class MaterialImagesController(
         var settings = await imageSettingsService.GetAsync(cancellationToken);
         if (createdImages.Count == 1)
         {
-            Guid? linkedMaterial = request.MaterialGuid;
+            Guid? linkedMaterial = effectiveMaterialGuid;
             var response = ToResponse(createdImages[0], linkedMaterial, settings);
             return CreatedAtAction(nameof(GetImage), new { id = createdImages[0].Guid }, response);
         }
@@ -258,35 +245,74 @@ public sealed class MaterialImagesController(
         return Ok(responseItems);
     }
 
-    [HttpPut("{id:guid}/material")]
+    [HttpPut("links/materials/{materialGuid:guid}/images/{imageGuid:guid}")]
     [RequirePermission("materials.update")]
-    public async Task<IActionResult> LinkMaterial(Guid id, MaterialImageLinkRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> LinkImageToMaterial(
+        Guid materialGuid,
+        Guid imageGuid,
+        CancellationToken cancellationToken)
     {
-        if (request.MaterialGuid == Guid.Empty)
+        if (materialGuid == Guid.Empty)
         {
             return BadRequest(new { message = "MaterialGuid cannot be empty." });
         }
 
+        if (imageGuid == Guid.Empty)
+        {
+            return BadRequest(new { message = "ImageGuid cannot be empty." });
+        }
+
         var imageExists = await mainDbContext.MaterialImages
             .AsNoTracking()
-            .AnyAsync(image => image.Guid == id, cancellationToken);
+            .AnyAsync(image => image.Guid == imageGuid, cancellationToken);
         if (!imageExists)
         {
             return NotFound(new { message = "Image was not found." });
         }
 
-        var linked = await LinkImageToMaterialInternalAsync(id, request.MaterialGuid, cancellationToken);
+        var linked = await LinkImageToMaterialInternalAsync(imageGuid, materialGuid, cancellationToken);
         return linked
             ? NoContent()
             : NotFound(new { message = "Material was not found." });
     }
 
-    [HttpDelete("{id:guid}/material")]
+    [HttpPost("unlink")]
     [RequirePermission("materials.update")]
-    public async Task<IActionResult> UnlinkMaterial(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> UnlinkImageFromMaterial(
+        [FromBody] MaterialImageUnlinkRequest request,
+        CancellationToken cancellationToken)
     {
-        var linkedMaterials = await mainDbContext.Materials
-            .Where(material => material.PictureGuid == id)
+        if (request.MaterialGuid is Guid materialGuidValue && materialGuidValue == Guid.Empty)
+        {
+            return BadRequest(new { message = "MaterialGuid cannot be empty." });
+        }
+
+        if (request.ImageGuid is Guid imageGuidValue && imageGuidValue == Guid.Empty)
+        {
+            return BadRequest(new { message = "ImageGuid cannot be empty." });
+        }
+
+        var materialGuid = request.MaterialGuid;
+        var imageGuid = request.ImageGuid;
+
+        if (!materialGuid.HasValue && !imageGuid.HasValue)
+        {
+            return BadRequest(new { message = "Either MaterialGuid or ImageGuid must be provided." });
+        }
+
+        var linkedMaterialsQuery = mainDbContext.Materials.AsQueryable();
+        if (materialGuid.HasValue)
+        {
+            linkedMaterialsQuery = linkedMaterialsQuery.Where(material => material.Guid == materialGuid.Value);
+        }
+
+        if (imageGuid.HasValue)
+        {
+            linkedMaterialsQuery = linkedMaterialsQuery.Where(material => material.PictureGuid == imageGuid.Value);
+        }
+
+        var linkedMaterials = await linkedMaterialsQuery
+            .Where(material => material.PictureGuid.HasValue)
             .ToListAsync(cancellationToken);
 
         if (linkedMaterials.Count == 0)
@@ -589,8 +615,9 @@ public sealed class MaterialImagesController(
     {
         var settings = await imageSettingsService.GetAsync(cancellationToken);
         var files = images
-            .Select(image => ResolveImagePath(image.Name, settings.ImagesDirectory))
-            .Where(path => !string.IsNullOrWhiteSpace(path) && System.IO.File.Exists(path))
+            .Select(image => ResolveExistingImagePath(image.Name, settings.ImagesDirectory))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -646,10 +673,12 @@ public sealed class MaterialImagesController(
         Guid? materialGuid,
         ImageStorageSettings settings)
     {
-        var imagePath = ResolveImagePath(image.Name, settings.ImagesDirectory);
-        var thumbnailPath = ResolveThumbnailPath(image.Name, settings.ThumbnailsDirectory);
+        var imagePath = ResolveExistingImagePath(image.Name, settings.ImagesDirectory)
+            ?? ResolveImagePath(image.Name, settings.ImagesDirectory);
+        var thumbnailPath = ResolveExistingThumbnailPath(image.Name, settings.ThumbnailsDirectory)
+            ?? ResolveThumbnailPath(image.Name, settings.ThumbnailsDirectory);
         var imageExists = System.IO.File.Exists(imagePath);
-        var storedFileName = Path.GetFileName(imagePath);
+        var storedFileName = ExtractFileName(image.Name) ?? Path.GetFileName(imagePath);
         var createdAt = imageExists
             ? new DateTimeOffset(System.IO.File.GetCreationTimeUtc(imagePath), TimeSpan.Zero)
             : DateTimeOffset.UnixEpoch;
@@ -663,7 +692,7 @@ public sealed class MaterialImagesController(
             System.IO.File.Exists(thumbnailPath) ? thumbnailPath : null,
             storedFileName,
             storedFileName,
-            GetContentType(imagePath),
+            GetContentType(string.IsNullOrWhiteSpace(imagePath) ? storedFileName : imagePath),
             imageExists ? new FileInfo(imagePath).Length : 0,
             materialGuid,
             createdAt,
@@ -829,22 +858,62 @@ public sealed class MaterialImagesController(
 
     private static string ResolveImagePath(string? name, string imagesDirectory)
     {
-        if (string.IsNullOrWhiteSpace(name))
+        var fileName = ExtractFileName(name);
+        if (string.IsNullOrWhiteSpace(fileName))
         {
             return string.Empty;
         }
 
-        if (Path.IsPathRooted(name))
+        return Path.GetFullPath(Path.Combine(imagesDirectory, fileName));
+    }
+
+    private static string? ResolveExistingImagePath(string? name, string imagesDirectory)
+    {
+        var candidates = BuildImagePathCandidates(name, imagesDirectory);
+        return candidates.FirstOrDefault(System.IO.File.Exists);
+    }
+
+    private static string? ResolveExistingThumbnailPath(string? name, string thumbnailsDirectory)
+    {
+        var fileName = ExtractFileName(name);
+        if (!string.IsNullOrWhiteSpace(fileName))
         {
-            return Path.GetFullPath(name);
+            var candidate = Path.GetFullPath(Path.Combine(thumbnailsDirectory, fileName));
+            return System.IO.File.Exists(candidate) ? candidate : null;
         }
 
-        return Path.GetFullPath(Path.Combine(imagesDirectory, Path.GetFileName(name)));
+        return null;
+    }
+
+    private static IReadOnlyCollection<string> BuildImagePathCandidates(string? name, string imagesDirectory)
+    {
+        var fileName = ExtractFileName(name);
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(fileName))
+        {
+            candidates.Add(Path.GetFullPath(Path.Combine(imagesDirectory, fileName)));
+        }
+
+        return candidates.ToArray();
+    }
+
+    private static string? ExtractFileName(string? pathLikeValue)
+    {
+        if (string.IsNullOrWhiteSpace(pathLikeValue))
+        {
+            return null;
+        }
+
+        var normalized = pathLikeValue.Replace('\\', '/');
+        var lastSeparator = normalized.LastIndexOf('/');
+        return lastSeparator >= 0
+            ? normalized[(lastSeparator + 1)..]
+            : normalized;
     }
 
     private static string ResolveThumbnailPath(string? name, string thumbnailsDirectory)
     {
-        var fileName = Path.GetFileName(name ?? string.Empty);
+        var fileName = ExtractFileName(name);
         if (string.IsNullOrWhiteSpace(fileName))
         {
             return string.Empty;

@@ -90,6 +90,22 @@ dotnet run --project src/ExistingDb.Api
 http://localhost:5249/swagger
 ```
 
+واجهة تشغيلية متكاملة (Portal):
+
+```text
+http://localhost:5249/portal
+```
+
+الواجهة توفر تجربة قريبة من المنتج النهائي (نمط محاسبي عملي):
+
+- تسجيل دخول JWT وإدارة جلسة المستخدم.
+- لوحة تحكم بمؤشرات رئيسية (health + أعداد العملاء/المواد/الفواتير/السندات).
+- شاشة مستندات (فواتير/سندات) بنمط master-detail مع فلترة سريعة وأنواع ديناميكية ونافذة تفاصيل (نقر مزدوج على الصف يفتح التفاصيل).
+- في دفتر الأستاذ وكشف الحساب: النقر على حركة من نوع فاتورة/قبض/دفع يفتح المستند المصدر مباشرةً (عبر `referenceGuid` ونوع الحركة `reasonType`).
+- شاشة مواد عملية بجدول كثيف + تفاصيل وصور.
+- شاشة عملاء مرتبطة بملخص الحساب وكشف الحساب.
+- الواجهة موجهة للمستخدم النهائي ولا تعرض JSON داخل الشاشة التشغيلية.
+
 ### تجاوز المصادقة مؤقتًا أثناء التطوير
 
 للتطوير المحلي فقط يمكنك تجاوز تسجيل الدخول في Swagger عبر:
@@ -135,10 +151,19 @@ GET  /api/accounts
 GET  /api/accounts/{guid}
 GET  /api/accounts/summary
 GET  /api/accounts/statement
+GET  /api/accounts/general-ledger
+
+GET  /api/bills/invoices
+GET  /api/bills/invoices/{guid}
+GET  /api/bills/vouchers
+GET  /api/bills/vouchers/{guid}
+GET  /api/bills/invoice-types
+GET  /api/bills/voucher-types
 
 GET  /api/materials
 GET  /api/materials/{guid}
 GET  /api/materials/filter-options
+GET  /api/materials/stores
 
 GET    /api/material-images/settings
 PUT    /api/material-images/settings
@@ -147,8 +172,8 @@ POST   /api/material-images
 GET    /api/material-images/{id}
 GET    /api/material-images/{id}/file
 GET    /api/material-images/{id}/thumbnail
-PUT    /api/material-images/{id}/material
-DELETE /api/material-images/{id}/material
+PUT    /api/material-images/links/materials/{materialGuid}/images/{imageGuid}
+POST   /api/material-images/unlink
 DELETE /api/material-images/{id}
 GET    /api/materials/{materialGuid}/images
 GET    /api/material-images/download
@@ -237,9 +262,8 @@ Content-Type: multipart/form-data
 Form fields:
 
 ```text
-file          صورة واحدة (اختياري إذا أرسلت files)
-files         مجموعة صور (اختياري إذا أرسلت file)
-materialGuid  اختياري لربط مباشر، ويُسمح به فقط مع صورة واحدة
+files[]       مجموعة صور (مطلوب)
+materialGuid  اختياري للربط المباشر عند رفع صورة واحدة
 ```
 
 عند رفع صورة:
@@ -249,26 +273,28 @@ materialGuid  اختياري لربط مباشر، ويُسمح به فقط مع
 - يتم توليد thumbnail داخل مجلد الثامبنيل.
 - يُنشأ سجل في `bm000` (GUID جديد + المسار الكامل للصورة).
 - كل صورة ترتبط بمادة واحدة كحد أعلى عبر `mt000.PictureGUID`.
-- إذا تم رفع مجموعة صور، تُحفظ كصور غير مرتبطة حتى يتم ربطها لاحقاً.
+- إذا تم رفع أكثر من صورة، يتم تجاهل `materialGuid` تلقائياً وتُحفظ الصور كغير مرتبطة حتى يتم ربطها لاحقاً.
 
 إدارة الربط:
 
 ```http
-PUT    /api/material-images/{id}/material
-DELETE /api/material-images/{id}/material
+PUT    /api/material-images/links/materials/{materialGuid}/images/{imageGuid}
+POST   /api/material-images/unlink
 ```
 
 Body:
 
 ```json
 {
-  "materialGuid": "00000000-0000-0000-0000-000000000000"
+  "materialGuid": "00000000-0000-0000-0000-000000000000",
+  "imageGuid": "00000000-0000-0000-0000-000000000000"
 }
 ```
 
 ملاحظة:
 
 - عند ربط صورة بمادة، يتم فك أي ربط سابق لنفس الصورة من مواد أخرى لضمان علاقة (صورة واحدة ↔ مادة واحدة).
+- عند فك الربط عبر `POST /api/material-images/unlink` يكفي إرسال `materialGuid` أو `imageGuid` أو كليهما، ولا يشترط إرسال الاثنين معًا.
 
 الاستعلام:
 
@@ -336,13 +362,15 @@ AccountGUID
 
 ## Accounts Directory API
 
+لقائمة الحسابات المحاسبية (بما فيها الحسابات غير المرتبطة ببطاقة عميل مثل الصندوق):
+
 ```text
 ac000 -> GET /api/accounts
 ac000 -> GET /api/accounts/{guid}
 GET /api/accounts?keyword=صندوق 1201
 ```
 
-يدعم `keyword` (أو `search`) بنفس مبدأ العملاء: **AND** بين الكلمات على الاسم والكود ورقم الحساب (إن كان الرمز رقماً).
+يدعم `keyword` (أو `search`) بنفس مبدأ العملاء: **AND** بين الكلمات على `Name` و`Code` ورقم الحساب `Number` (إن كان الرمز رقماً).
 
 يتطلب:
 
@@ -366,6 +394,7 @@ GET /api/accounts/summary?accountGuid={accountGuid}&customerGuid={customerGuid}
 
 - عملة الحساب (`accountCurrencyGuid`)
 - سعر التعادل المعتمد (`accountCurrencyRate`)
+- اسم/كود/رمز عملة الحساب (`accountCurrencyName`, `accountCurrencyCode`, `accountCurrencySymbol`)
 - الرصيد الحالي (`currentBalance`)
 - آخر حركة دائن (`lastCreditorMovement`) مع التاريخ وسبب الحركة ونوع السند
 - آخر حركة مدين (`lastDebtorMovement`) مع التاريخ وسبب الحركة ونوع السند
@@ -410,12 +439,19 @@ entries.read   (لكشف الحساب التفصيلي)
 
 - قيمة المدين والدائن بعملة الحساب
 - قيمة المدين والدائن بالعملة الرئيسية (`debitMainCurrency` / `creditMainCurrency`)
+- بيانات عملة الحساب في رأس الاستجابة (`accountCurrencyName`, `accountCurrencyCode`, `accountCurrencySymbol`)
 - التحويل لعملة الحساب يتم بسعر التعادل الخاص بكل قيد (`currencyRateUsed`) مع اعتماد سعر الحساب كبديل عند غيابه
+- عملة الحركة نفسها (تُقرأ من `en000.CurrencyGUID` لكل قيد، وليست بالضرورة عملة الحساب):
+  - `movementCurrencyGuid`, `movementCurrencyName`, `movementCurrencyCode`, `movementCurrencySymbol`
+  - عند غياب عملة القيد يتم الرجوع لعملة الحساب
+  - نفس الحقول متاحة أيضًا في `lastCreditorMovement` / `lastDebtorMovement` ضمن ملخص الحساب
 - الإشارة الصافية للحركة (`signedAmount`)
 - الرصيد التراكمي (`runningBalance`)
 - نوع المرجع (فاتورة/دفعة/حسم) مع نوع السند الفعلي (`reasonDocumentType`) ورقم/تاريخ المرجع عند توفرها
 - تفاصيل الحساب المقابل لكل سطر: `contraAccountGuid`, `contraAccountNumber`, `contraAccountCode`, `contraAccountName`
-- عند غياب تصنيف مرجع مباشر، يتم استنتاج نوع العملية من الحساب المقابل واتجاه القيد (مثل: `سند قبض` / `سند دفع` / `فاتورة مبيع`).
+  - يُؤخذ أولًا من `en000.ContraAccGUID` المباشر
+  - وعند غيابه (كما في القيود المركّبة `ce000`) يُستنتج من سطور `en000` الشقيقة تحت نفس القيد المركّب (`ParentGUID`) باختيار السطر المعاكس بالاتجاه (مدين مقابل دائن)
+- عند غياب تصنيف مرجع مباشر، يتم استنتاج نوع العملية من الحساب المقابل واتجاه القيد (مثل: `قبض` / `دفع` / `مبيع`) مع الاعتماد على اختصارات الأنواع من `vwEt/vwBt/vwNt` عند توفرها.
 
 دفتر الأستاذ (اعتماد مباشر على إجراء الأمين):
 
@@ -434,6 +470,104 @@ GET /api/accounts/general-ledger?accountGuid={accountGuid}&customerGuid={custome
   - `detailByAccountCurrency`
   - `showRunningBalance`
 
+## Bills & Vouchers Browse API
+
+للتصفح المباشر للفواتير والسندات بكل أنواعها:
+
+```http
+GET /api/bills/invoices?page=1&pageSize=100
+GET /api/bills/invoices?typeGuid={typeGuid}&fromDate=2026-01-01&toDate=2026-01-31&keyword=1254
+GET /api/bills/invoices?type=مبيع
+GET /api/bills/invoices/{guid}
+
+GET /api/bills/vouchers?page=1&pageSize=100
+GET /api/bills/vouchers?typeGuid={typeGuid}&fromDate=2026-01-01&toDate=2026-01-31&keyword=قبض
+GET /api/bills/vouchers?type=قبض
+GET /api/bills/vouchers/{guid}
+```
+
+بحث `keyword` في الفواتير/السندات يدعم تقسيم الكلمات وتطبيق AND بينها (أي كل كلمة يجب أن تحقق مطابقة).
+
+خيارات الأنواع (للقوائم المنسدلة/الفلاتر):
+
+```http
+GET /api/bills/invoice-types
+GET /api/bills/voucher-types
+```
+
+المسارات تعيد:
+
+- رقم المستند وتاريخه وملاحظاته.
+- `typeGuid` ونوع المستند النصي (`typeName`) والاختصار (`typeCode`) عند توفره.
+- لتصفّح أسلس حسب النوع: يمكن إرسال `type` كنص مباشر (اسم/اختصار) بدل الحاجة إلى `typeGuid`.
+- نوع التسوية (`settlementTypeCode`, `settlementTypeName`):
+  - للفواتير (`bu000`) يُقرأ من `PayType`: `0` = نقد، `1` = آجل
+  - للسندات يُستنتج من نوع السند (قبض/دفع...) عند الحاجة
+- بيانات العميل والحساب المرتبطين بالمستند:
+  - `accountGuid`, `accountNumber`, `accountCode`, `accountName` تُؤخذ أولًا من الفاتورة نفسها (`bu000`) ثم من القيود المرتبطة
+  - `customerGuid`, `customerName` اختياريان في الفاتورة النقدية (`PayType=0`) وقد تكون فارغين
+  - الفاتورة الآجلة (`PayType=1`) يفترض وجود اسم عميل (من `cu000` أو من حقل اسم العميل في `bu000`)
+- بيانات العملة من ربط `bu000/py000.CurrencyGUID` مع `my000`:
+  - `currencyGuid`, `currencyName`, `currencyCode`, `currencySymbol`
+  - `currencyRate` (مأخوذ من `CurrencyVal` في الفاتورة/السند نفسه، ويُستخدم لقسمة القيم)
+- المجاميع عند توفرها من جداول الأمين:
+  - `totalAmount`
+  - `totalDiscount`
+  - `totalAdditions`
+  - `netAmount`
+- حسابات المقابل للحسم/الإضافة (عند توفرها):
+  - `discountAccountGuid`, `discountAccountNumber`, `discountAccountCode`, `discountAccountName`
+  - `additionAccountGuid`, `additionAccountNumber`, `additionAccountCode`, `additionAccountName`
+- Pagination قياسية: `page`, `pageSize`, `totalCount`.
+
+استجابة التفاصيل (`GET /api/bills/invoices/{guid}`) تضيف:
+
+- عناصر الفاتورة (`items`) مع:
+  - المادة: `materialGuid`, `materialNumber`, `materialCode`, `materialName`
+  - الكميات: `quantityUnit1`, `quantityUnit2`, `quantity`
+  - السعر: `unitPriceUnit1` و `price` (بعد التحويل بعملة البيع)
+  - القيم: `discount`, `additions`, `lineTotal`
+- مجاميع إضافية في التفاصيل:
+  - `linesCount`, `totalQuantity`, `totalPairs`, `totalPens`
+
+استجابة تفاصيل السند (`GET /api/bills/vouchers/{guid}`) لا تستخدم `bi000`؛ بنود السند هي قيود محاسبية عبر السلسلة:
+
+```text
+py000 (سند) → vwER_EntriesPays / vwER (قيد مركّب ce000) → en000 (سطور القيد، ParentGUID = ce000)
+```
+
+مفهوم العرض:
+
+- **ترويسة السند** تعرض الحساب الرئيسي للسند (`py000.AccountGUID`)، وهو حساب الصندوق/البنك الذي تتم عليه عملية القبض أو الدفع.
+- **تفاصيل السند** هي الحركات على **الحسابات المقابلة** فقط. لأن كل حركة في `en000` تُسجّل كسطرين متقابلين (سطر على الحساب الرئيسي وسطر على الحساب المقابل)، يتم استبعاد السطور التي `AccountGUID` فيها = الحساب الرئيسي، والإبقاء على سطور الحسابات المقابلة.
+
+تفاصيل الحقول:
+
+- `items` تبقى فارغة للسندات.
+- `entryLines` تحتوي سطور الحسابات المقابلة (بعد استبعاد سطور الحساب الرئيسي):
+  - `number`, `date`, `debit`, `credit`, `notes`
+  - الحساب المقابل (الطرف الآخر للحركة): `accountGuid`, `accountNumber`, `accountCode`, `accountName`
+  - الحساب الرئيسي للسند يظهر كحساب مقابل للسطر: `contraAccountGuid`, `contraAccountNumber`, `contraAccountCode`, `contraAccountName`
+  - العميل المرتبط بالسطر (عند وجوده): `customerGuid`, `customerName`
+- `linesCount` = عدد حركات الحسابات المقابلة.
+- `totalQuantity` = إجمالي السند = مجموع قيم الطرف غير الصفري لسطور الحسابات المقابلة (بعد تحويل العملة عند توفر `currencyRate`).
+- حساب الترويسة (في القائمة والتفاصيل) يُؤخذ من `py000.AccountGUID` مباشرةً.
+
+التعادل بالعملة الأجنبية (للمبادلات/شراء عملة):
+
+- قيم `en000.Debit/Credit` مخزّنة بالعملة الأساس (الليرة السورية)، و`CurrencyVal` هو سعر صرف عملة السطر، و`CurrencyGUID` عملته.
+- عندما يكون أحد طرفي الحركة بعملة أجنبية (`CurrencyVal ≠ 1` وتختلف عن عملة المستند)، يُحسب التعادل:
+  - `equivalentValue = (Debit + Credit) / CurrencyVal`
+  - `equivalentCurrencyGuid`, `equivalentCurrencyCode`, `equivalentCurrencySymbol` من `CurrencyGUID` لذلك السطر
+- الطرف الأجنبي قد يكون السطر نفسه أو سطر المرآة (سطر الحساب الرئيسي المُهمَل)، فيتم فحص الاثنين واختيار الطرف ذي العملة الأجنبية.
+- مثال: `موني اوت` بقيمة `68850` ل.س وسعر `137.7` ← `68850 / 137.7 = 500 $`. يظهر في البورتال بعمود "التعادل" بجانب المبلغ.
+
+الصلاحية المطلوبة:
+
+```text
+bills.read
+```
+
 ## Materials Read API
 
 تكامل المواد يقرأ من جدول:
@@ -446,8 +580,14 @@ mt000 -> GET /api/materials/{guid}
 يدعم البحث:
 
 ```text
-GET /api/materials?search=اسم-او-كود-او-باركود
+GET /api/materials?keyword=اسم-او-كود-او-باركود
+GET /api/materials?code=MAT-1001
+GET /api/materials?hasImage=true
+GET /api/materials?withoutImage=true
 ```
+
+- الحقل `keyword` يقسم عبارة البحث إلى كلمات ويشترط ظهور **كل الكلمات** (بأي ترتيب).
+- الحقل `code` مخصص للمطابقة التامة لكود المادة.
 
 لفلاتر **مشتقة من نتائج الاستعلام الحالي** (faceted — تظهر فقط القيم الموجودة في النتائج، مع إمكانية التبديل بين الأعمار مثلاً بعد اختيار رجالي):
 
@@ -572,35 +712,44 @@ GET /api/materials/filter-options
       "name": "المستودع الرئيسي",
       "latinName": "Main Store"
     }
-  ],
-  "priceRanges": {
-    "unitSalePriceSyp": {
-      "min": 100000,
-      "max": 500000
-    },
-    "unitSalePriceUsd": {
-      "min": 5,
-      "max": 30
-    },
-    "unitPurchasePriceUsd": null
-  }
+  ]
 }
 ```
 
-نطاقات الأسعار تراعي الصلاحيات. إذا لم يكن المستخدم يملك صلاحية قراءة سعر الشراء `EndUser`، يرجع:
+قوائم `groups` و `stores` تعاد مرتبة أبجديًا.
 
-```json
-"unitPurchasePriceUsd": null
-```
+حاليًا لا يتم إرجاع `priceRanges` ضمن `GET /api/materials/filter-options`.
 
-إذا كانت قيمة البحث تطابق `Code` بشكل كامل، يعيد الـ API المادة المطابقة فقط. مثال: البحث عن `100` لا يعيد المادة ذات الكود `1000` إذا كان هناك كود مطابق تماماً `100`.
+يمكن ضبط المطابقة التامة للكود عبر `code`، بينما `keyword` مخصص للبحث المرن متعدد الكلمات.
 
 ويدعم فلترة الكمية حسب مستودع واحد أو عدة مستودعات:
 
 ```text
-GET /api/materials?storeGuid=STORE_GUID
 GET /api/materials?storeGuids=STORE_GUID_1,STORE_GUID_2
-GET /api/materials/{guid}?storeGuid=STORE_GUID
+GET /api/materials/{guid}?storeGuids=STORE_GUID_1,STORE_GUID_2
+```
+
+ويتوفر الآن نمط عرض الكميات:
+
+```text
+GET /api/materials?detailedQuantity=false
+GET /api/materials?detailedQuantity=true
+GET /api/materials?storeGuids=STORE_GUID_1,STORE_GUID_2&detailedQuantity=true
+GET /api/materials/{guid}?storeGuids=STORE_GUID_1,STORE_GUID_2&detailedQuantity=true
+```
+
+- `detailedQuantity=false` (الافتراضي): يعيد `warehouseQuantity` كمجموع الكمية ضمن المستودعات الممررة (أو `mt000.Qty` عند عدم تمرير مستودعات).
+- `detailedQuantity=true`: يعيد أيضًا `storeQuantities` (قائمة كميات مفصلة حسب المستودع: `storeGuid`, `storeName`, `quantity`).
+- قراءة الكميات حسب المستودعات تتطلب صلاحية:
+
+```text
+inventory.read
+```
+
+ولعرض قائمة المستودعات باسمائها وGUID:
+
+```text
+GET /api/materials/stores
 ```
 
 كما يدعم فلاتر وصفية:
@@ -691,6 +840,21 @@ materialType             -> Color       الصنف، مثل PVC / EVA
 ageCategory              -> Provenance  الفئة العمرية
 groupGuid                -> GroupGUID   مجموعة المادة
 productImageGuid         -> PictureGUID صورة المنتج
+```
+
+حقول مضافة في الاستجابة:
+
+```text
+groupName         -> اسم الجروب المرتبط بـ groupGuid
+productImageTitle -> عنوان/اسم ملف الصورة المرتبط بـ productImageGuid (من bm000.Name)
+storeQuantities   -> الكميات حسب المستودعات عند detailedQuantity=true
+```
+
+تم تبسيط الاستجابة بإزالة الحقول غير الضرورية تشغيليًا مثل:
+
+```text
+recordNumber, latinName, barcode, isPackageConversionFixed,
+averagePrice, lastPrice, classificationType, securityLevel, usageFlag
 ```
 
 خريطة الأسعار الحالية:
