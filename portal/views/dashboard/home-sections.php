@@ -269,14 +269,28 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
 
   <article id="manual-mode-panel" class="bg-white border border-border-subtle rounded-2xl p-5 <?= $displayMode === 'filter' ? 'hidden' : '' ?>">
     <h3 class="font-bold text-lg mb-2">اختيار المواد يدوياً</h3>
-    <p class="text-sm text-text-muted mb-4">اكتب اسم المادة أو رقمها واضغط Enter للبحث وإضافة النتائج دون إعادة تحميل الصفحة.</p>
+    <p class="text-sm text-text-muted mb-4">اكتب اسم المادة أو رقمها واضغط Enter لعرض قائمة منسدلة، ثم اختر المادة لإضافتها.</p>
 
-    <div class="mb-4 flex flex-wrap gap-2 items-end">
-      <label class="text-sm flex-1 min-w-[200px]">
+    <div class="mb-4 flex flex-wrap gap-2 items-start">
+      <label class="text-sm flex-1 min-w-[240px] relative" id="hs-material-search-wrap">
         <span class="text-text-muted block mb-1">بحث لإضافة مواد</span>
-        <input type="text" id="hs-material-search" class="h-10 w-full rounded-xl border border-border-subtle px-3" placeholder="اسم أو كود المادة — Enter للبحث">
+        <input
+          type="text"
+          id="hs-material-search"
+          autocomplete="off"
+          role="combobox"
+          aria-expanded="false"
+          aria-controls="hs-material-search-results"
+          class="h-10 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary"
+          placeholder="اسم أو كود المادة — Enter للبحث"
+        >
+        <ul
+          id="hs-material-search-results"
+          class="hidden absolute z-30 mt-1 w-full max-h-60 overflow-y-auto rounded-xl border border-border-subtle bg-white shadow-lg text-sm divide-y divide-border-subtle"
+          role="listbox"
+        ></ul>
       </label>
-      <p id="hs-material-search-status" class="text-xs text-text-muted min-h-[1.25rem] pb-2"></p>
+      <p id="hs-material-search-status" class="text-xs text-text-muted min-h-[1.25rem] pt-8 flex-1"></p>
     </div>
 
     <?php $renderTokenPicker('المواد المختارة للقسم', 'manual_material_guids[]', $manualPickerOptions, $selectedManualGuids, 'hs-manual-materials', false, true); ?>
@@ -383,39 +397,121 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
   syncPanels();
 
   const searchInput = document.getElementById('hs-material-search');
+  const resultsEl = document.getElementById('hs-material-search-results');
+  const searchWrap = document.getElementById('hs-material-search-wrap');
   const statusEl = document.getElementById('hs-material-search-status');
+  let searchItems = [];
+  let activeResultIndex = -1;
+
+  const hideResults = () => {
+    if (!resultsEl) return;
+    resultsEl.classList.add('hidden');
+    resultsEl.innerHTML = '';
+    searchInput?.setAttribute('aria-expanded', 'false');
+    activeResultIndex = -1;
+    searchItems = [];
+  };
+
+  const highlightResult = () => {
+    if (!resultsEl) return;
+    Array.from(resultsEl.querySelectorAll('[data-result-index]')).forEach((node) => {
+      const index = Number(node.getAttribute('data-result-index'));
+      node.classList.toggle('bg-primary/10', index === activeResultIndex);
+      node.classList.toggle('font-bold', index === activeResultIndex);
+    });
+  };
+
+  const addMaterialItem = (item) => {
+    if (!item || typeof window.portalTokenPickerAddOptions !== 'function') return;
+    window.portalTokenPickerAddOptions('hs-manual-materials', [item]);
+    if (statusEl) statusEl.textContent = 'تمت إضافة: ' + (item.label || item.value);
+    if (searchInput) searchInput.value = '';
+    hideResults();
+  };
+
+  const renderResults = (items) => {
+    if (!resultsEl) return;
+    searchItems = items;
+    resultsEl.innerHTML = '';
+    if (items.length === 0) {
+      hideResults();
+      if (statusEl) statusEl.textContent = 'لا توجد نتائج.';
+      return;
+    }
+    items.forEach((item, index) => {
+      const li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      li.setAttribute('data-result-index', String(index));
+      li.className = 'px-3 py-2.5 cursor-pointer hover:bg-surface-low text-right';
+      li.textContent = item.label || item.value || '';
+      li.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        addMaterialItem(item);
+      });
+      resultsEl.appendChild(li);
+    });
+    resultsEl.classList.remove('hidden');
+    searchInput?.setAttribute('aria-expanded', 'true');
+    activeResultIndex = 0;
+    highlightResult();
+    if (statusEl) statusEl.textContent = items.length + ' نتيجة — اختر من القائمة (↑↓ ثم Enter)';
+  };
+
   const runMaterialSearch = async () => {
     const q = (searchInput?.value || '').trim();
-    if (q === '' || !statusEl) return;
-    statusEl.textContent = 'جاري البحث...';
+    if (q === '') {
+      hideResults();
+      return;
+    }
+    if (statusEl) statusEl.textContent = 'جاري البحث...';
     try {
       const response = await fetch('/dashboard/home-sections-api.php?q=' + encodeURIComponent(q), {
         headers: { Accept: 'application/json' },
       });
       const data = await response.json();
       if (!data.ok) {
-        statusEl.textContent = data.message || 'تعذر البحث.';
+        hideResults();
+        if (statusEl) statusEl.textContent = data.message || 'تعذر البحث.';
         return;
       }
-      const items = Array.isArray(data.items) ? data.items : [];
-      if (items.length === 0) {
-        statusEl.textContent = 'لا توجد نتائج.';
-        return;
-      }
-      if (typeof window.portalTokenPickerAddOptions === 'function') {
-        window.portalTokenPickerAddOptions('hs-manual-materials', items);
-      }
-      statusEl.textContent = 'تمت إضافة ' + items.length + ' مادة.';
-      if (searchInput) searchInput.value = '';
+      renderResults(Array.isArray(data.items) ? data.items : []);
     } catch (_) {
-      statusEl.textContent = 'تعذر الاتصال بالخادم.';
+      hideResults();
+      if (statusEl) statusEl.textContent = 'تعذر الاتصال بالخادم.';
     }
   };
+
   searchInput?.addEventListener('keydown', (event) => {
+    const hasList = resultsEl && !resultsEl.classList.contains('hidden') && searchItems.length > 0;
+    if (event.key === 'ArrowDown' && hasList) {
+      event.preventDefault();
+      activeResultIndex = Math.min(activeResultIndex + 1, searchItems.length - 1);
+      highlightResult();
+      return;
+    }
+    if (event.key === 'ArrowUp' && hasList) {
+      event.preventDefault();
+      activeResultIndex = Math.max(activeResultIndex - 1, 0);
+      highlightResult();
+      return;
+    }
     if (event.key === 'Enter') {
       event.preventDefault();
+      if (hasList && activeResultIndex >= 0 && searchItems[activeResultIndex]) {
+        addMaterialItem(searchItems[activeResultIndex]);
+        return;
+      }
       runMaterialSearch();
+      return;
     }
+    if (event.key === 'Escape') {
+      hideResults();
+    }
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!searchWrap || searchWrap.contains(event.target)) return;
+    hideResults();
   });
 })();
 </script>
