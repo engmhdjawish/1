@@ -43,7 +43,11 @@ if (!isset($renderTokenPicker)) {
           </select>
           <div data-role="chips" class="flex flex-wrap gap-2 min-h-[32px]"></div>
           <div data-role="hidden-inputs"></div>
-          <script type="application/json" data-role="selected-values"><?= h(json_encode($selectedNormalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '[]') ?></script>
+          <?php
+            $selectedJson = json_encode($selectedNormalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '[]';
+            $selectedJson = str_replace('</', '<\/', $selectedJson);
+          ?>
+          <script type="application/json" data-role="selected-values"><?= $selectedJson ?></script>
         </div>
         <?php
     };
@@ -128,6 +132,14 @@ if (!function_exists('portal_render_token_picker_script')) {
           renderOptions: null,
           renderSelected: null,
         };
+
+        for (const value of selectedValues) {
+          if (!state.allOptions.some((item) => item.value === value)) {
+            const fromSelect = Array.from(optionsSelect.options).find((o) => normalize(o.value) === value);
+            const label = fromSelect ? normalize(fromSelect.textContent) : value;
+            ensureOption(state, value, label);
+          }
+        }
 
         const renderOptions = () => {
           const search = normalize(searchInput?.value || '').toLowerCase();
