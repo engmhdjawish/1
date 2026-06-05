@@ -14,6 +14,15 @@ public sealed class MaterialQueryBuilder(MainDbContext mainDbContext)
     {
         var query = mainDbContext.Materials.AsNoTracking();
 
+        if (filters.HasImage is true)
+        {
+            query = query.Where(material => material.PictureGuid != null);
+        }
+        else if (filters.HasImage is false)
+        {
+            query = query.Where(material => material.PictureGuid == null);
+        }
+
         query = ApplyStoreAndQuantityFilters(query, filters);
         query = ApplyTextFilters(query, filters, exclusions);
         query = ApplyGroupFilter(query, filters, exclusions);

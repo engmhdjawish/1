@@ -20,6 +20,7 @@ final class HomeSectionService
     private const FILTER_STORE_GUID = 'store_guid';
     private const FILTER_GROUP_GUID = 'group_guid';
     private const FILTER_IS_AVAILABLE = 'is_available';
+    private const FILTER_HAS_IMAGE = 'has_image';
     private const FILTER_MIN_WAREHOUSE_QUANTITY = 'min_warehouse_quantity';
     private const FILTER_MAX_WAREHOUSE_QUANTITY = 'max_warehouse_quantity';
     private const FILTER_MIN_UNIT_SALE_PRICE_SYP = 'min_unit_sale_price_syp';
@@ -351,6 +352,7 @@ final class HomeSectionService
         $insertValues(self::FILTER_GROUP_GUID, self::stringList($payload['group_guids'] ?? []));
 
         $insertNumber(self::FILTER_IS_AVAILABLE, $payload['is_available'] ?? null);
+        $insertNumber(self::FILTER_HAS_IMAGE, $payload['has_image'] ?? null);
         $insertNumber(self::FILTER_MIN_WAREHOUSE_QUANTITY, $payload['min_warehouse_quantity'] ?? null);
         $insertNumber(self::FILTER_MAX_WAREHOUSE_QUANTITY, $payload['max_warehouse_quantity'] ?? null);
         $insertNumber(self::FILTER_MIN_UNIT_SALE_PRICE_SYP, $payload['min_unit_sale_price_syp'] ?? null);
@@ -461,6 +463,7 @@ final class HomeSectionService
             'store_guids' => [],
             'group_guids' => [],
             'is_available' => null,
+            'has_image' => null,
             'min_warehouse_quantity' => null,
             'max_warehouse_quantity' => null,
             'min_unit_sale_price_syp' => null,
@@ -492,6 +495,7 @@ final class HomeSectionService
                 self::FILTER_STORE_GUID, 'store_guid' => $rules['store_guids'][] = $value,
                 self::FILTER_GROUP_GUID, 'group_guid' => $rules['group_guids'][] = $value,
                 self::FILTER_IS_AVAILABLE => $rules['is_available'] = self::toNullableBool($value),
+                self::FILTER_HAS_IMAGE => $rules['has_image'] = self::toNullableBool($value),
                 self::FILTER_MIN_WAREHOUSE_QUANTITY => $rules['min_warehouse_quantity'] = self::toNullableFloat($value),
                 self::FILTER_MAX_WAREHOUSE_QUANTITY => $rules['max_warehouse_quantity'] = self::toNullableFloat($value),
                 self::FILTER_MIN_UNIT_SALE_PRICE_SYP => $rules['min_unit_sale_price_syp'] = self::toNullableFloat($value),
@@ -675,6 +679,12 @@ final class HomeSectionService
             $query['isAvailable'] = 'true';
         } elseif (($rules['is_available'] ?? null) === false) {
             $query['isAvailable'] = 'false';
+        }
+
+        if (($rules['has_image'] ?? null) === true) {
+            $query['hasImage'] = 'true';
+        } elseif (($rules['has_image'] ?? null) === false) {
+            $query['hasImage'] = 'false';
         }
 
         foreach ([

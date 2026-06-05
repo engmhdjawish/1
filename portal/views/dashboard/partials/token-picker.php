@@ -11,8 +11,10 @@ if (!isset($renderTokenPicker)) {
         string $pickerId,
         bool $showAllButton = true,
         bool $allowDynamicOptions = false,
-        bool $chipsOnly = false
+        bool $chipsOnly = false,
+        int $optionsSize = 6
     ): void {
+        $optionsSize = max(3, min(12, $optionsSize));
         $selectedNormalized = array_values(array_unique(array_filter(array_map('strval', $selectedItems), static fn ($value) => trim($value) !== '')));
         $optionLabels = [];
         foreach ($optionItems as $option) {
@@ -45,7 +47,7 @@ if (!isset($renderTokenPicker)) {
             <?php endif; ?>
             <button type="button" data-action="clear" class="h-10 px-3 rounded-lg border border-border-subtle text-sm">تفريغ</button>
           </div>
-          <select data-role="options" multiple size="6" class="w-full rounded-lg border border-border-subtle px-3 py-2 text-sm focus:border-primary focus:ring-primary">
+          <select data-role="options" multiple size="<?= (int) $optionsSize ?>" class="w-full rounded-lg border border-border-subtle px-3 py-1.5 text-sm focus:border-primary focus:ring-primary">
             <?php foreach ($optionItems as $option): ?>
               <?php
                 $value = trim((string) ($option['value'] ?? ''));

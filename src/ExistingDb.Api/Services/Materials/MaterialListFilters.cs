@@ -13,6 +13,7 @@ public sealed class MaterialListFilters
     public double? MinWarehouseQuantity { get; init; }
     public double? MaxWarehouseQuantity { get; init; }
     public bool? IsAvailable { get; init; }
+    public bool? HasImage { get; init; }
     public double? MinUnitSalePriceSyp { get; init; }
     public double? MaxUnitSalePriceSyp { get; init; }
     public double? MinUnitSalePriceUsd { get; init; }
@@ -39,6 +40,7 @@ public sealed class MaterialListFilters
         double? minWarehouseQuantity,
         double? maxWarehouseQuantity,
         bool? isAvailable,
+        bool? hasImage,
         double? minUnitSalePriceSyp,
         double? maxUnitSalePriceSyp,
         double? minUnitSalePriceUsd,
@@ -58,6 +60,7 @@ public sealed class MaterialListFilters
             MinWarehouseQuantity = minWarehouseQuantity,
             MaxWarehouseQuantity = maxWarehouseQuantity,
             IsAvailable = isAvailable,
+            HasImage = hasImage,
             MinUnitSalePriceSyp = minUnitSalePriceSyp,
             MaxUnitSalePriceSyp = maxUnitSalePriceSyp,
             MinUnitSalePriceUsd = minUnitSalePriceUsd,
