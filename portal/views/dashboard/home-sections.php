@@ -6,12 +6,18 @@ declare(strict_types=1);
 /** @var list<array<string, mixed>> $sections */
 /** @var array<string, mixed> $editSection */
 /** @var string $editId */
+/** @var bool $showForm */
+/** @var bool $isNew */
 /** @var string|null $flash */
 /** @var string $flashType */
 /** @var array $materialFilterOptions */
 /** @var string|null $materialFilterOptionsError */
 
 require __DIR__ . '/partials/token-picker.php';
+require __DIR__ . '/partials/media-picker.php';
+
+$showForm = $showForm ?? false;
+$isNew = $isNew ?? false;
 
 $rules = is_array($editSection['filter_rules'] ?? null) ? $editSection['filter_rules'] : [];
 $displayOptions = is_array($editSection['display_options'] ?? null)
@@ -111,7 +117,11 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
       في وضع الفلترة تتغيّر المواد المعروضة <strong>عشوائياً عند كل تحديث</strong> للصفحة الرئيسية.
     </p>
   </div>
-  <div class="flex flex-wrap gap-3">
+  <div class="flex flex-wrap items-center gap-3">
+    <?php if (!$showForm): ?>
+      <a href="/dashboard/home-sections.php?new=1" class="h-9 px-4 inline-flex items-center rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">قسم جديد</a>
+      <a href="/dashboard/site-media.php" class="h-9 px-4 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">مكتبة الصور</a>
+    <?php endif; ?>
     <article class="bg-white border border-border-subtle rounded-xl px-4 py-3 min-w-24 text-center">
       <p class="text-xl font-extrabold"><?= (int) $stats['total'] ?></p>
       <p class="text-xs text-text-muted">إجمالي</p>
@@ -129,6 +139,7 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
   </p>
 <?php endif; ?>
 
+<?php if ($showForm): ?>
 <?php if ($editId !== ''): ?>
   <form method="post" id="hs-delete-form" class="hidden" onsubmit="return confirm('هل أنت متأكد من حذف هذا القسم؟')">
     <input type="hidden" name="action" value="delete_section">
@@ -140,11 +151,11 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
   <input type="hidden" name="action" value="save_section">
   <input type="hidden" name="id" value="<?= h((string) ($editSection['id'] ?? '')) ?>">
 
-  <div class="sticky top-0 z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
+  <div class="sticky top-16 z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
     <h2 class="font-bold text-base"><?= $editId !== '' ? 'تعديل القسم' : 'قسم جديد' ?></h2>
     <div class="flex flex-wrap items-center gap-2">
+      <a href="/dashboard/home-sections.php" class="h-9 px-4 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"><?= $editId !== '' ? 'إلغاء التعديل' : 'إلغاء' ?></a>
       <?php if ($editId !== ''): ?>
-        <a href="/dashboard/home-sections.php" class="h-9 px-4 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">إلغاء التعديل</a>
         <button type="submit" form="hs-delete-form" class="h-9 px-4 rounded-lg border border-red-300 bg-white text-xs font-bold text-red-700 hover:bg-red-50">حذف</button>
       <?php endif; ?>
       <button type="submit" id="home-section-save-btn" class="h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">
@@ -175,10 +186,9 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
         <span class="text-text-muted block mb-0.5">وصف مختصر</span>
         <input name="subtitle_ar" value="<?= h((string) ($editSection['subtitle_ar'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
       </label>
-      <label class="text-xs md:col-span-3">
-        <span class="text-text-muted block mb-0.5">رابط صورة البانر</span>
-        <input name="banner_image_url" value="<?= h((string) ($editSection['banner_image_url'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
-      </label>
+      <div class="md:col-span-3">
+        <?php $renderMediaPickerField('صورة البانر', 'banner_image_url', (string) ($editSection['banner_image_url'] ?? ''), 'hs-banner-image', 'banner'); ?>
+      </div>
       <label class="text-xs">
         <span class="text-text-muted block mb-0.5">طريقة اختيار المواد</span>
         <select name="display_mode" id="display_mode" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
@@ -345,6 +355,8 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
     </details>
   <?php endif; ?>
 </form>
+<?php portal_render_media_picker_modal(); ?>
+<?php endif; ?>
 
 <section class="bg-white border border-border-subtle rounded-xl overflow-hidden">
   <?php if ($sections === []): ?>
@@ -405,8 +417,9 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
   <?php endif; ?>
 </section>
 
+<?php if ($showForm): ?>
 <?php portal_render_token_picker_script(); ?>
-
+<?php portal_render_media_picker_script(); ?>
 <script>
 (() => {
   const mainForm = document.getElementById('home-section-form');
@@ -686,3 +699,4 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
   });
 })();
 </script>
+<?php endif; ?>

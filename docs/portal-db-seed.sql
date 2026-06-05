@@ -45,6 +45,7 @@ VALUES
     ('web_customers.manage', 'إنشاء وتعديل عملاء الويب', 'عملاء', NULL),
     ('web_users.manage', 'إدارة موظفي الموقع', 'إدارة', NULL),
     ('images.upload', 'رفع صور المواد', 'مواد', NULL),
+    ('site_media.manage', 'مكتبة صور الموقع', 'محتوى', 'رفع وإدارة بنرات وإعلانات وشعارات الموقع'),
     ('access_policies.manage', 'إدارة سياسات الوصول', 'إعدادات', NULL)
 ON CONFLICT (code) DO UPDATE SET
     name_ar = EXCLUDED.name_ar,
@@ -72,7 +73,7 @@ INSERT INTO web_role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM web_roles r
 JOIN web_permissions p ON p.code IN (
-    'dashboard.view', 'home_sections.manage', 'company_settings.manage', 'images.upload'
+    'dashboard.view', 'home_sections.manage', 'company_settings.manage', 'images.upload', 'site_media.manage'
 )
 WHERE r.code = 'content'
 ON CONFLICT DO NOTHING;

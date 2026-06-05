@@ -170,6 +170,23 @@ CREATE TABLE home_section_filters (
 
 -- filter_type: keyword | material_type | target_category | manufacturer | min_quantity
 
+-- Site media library (banners, ads, logos — not material photos)
+CREATE TYPE site_media_category AS ENUM ('banner', 'ad', 'logo', 'other');
+
+CREATE TABLE site_media_assets (
+    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title_ar                VARCHAR(200),
+    category                site_media_category NOT NULL DEFAULT 'banner',
+    file_name               VARCHAR(255) NOT NULL,
+    storage_path            VARCHAR(1000) NOT NULL,
+    mime_type               VARCHAR(100) NOT NULL,
+    file_size_bytes         INT NOT NULL DEFAULT 0 CHECK (file_size_bytes >= 0),
+    uploaded_by_web_user_id UUID REFERENCES web_users (id),
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX ix_site_media_category ON site_media_assets (category, created_at DESC);
+
 CREATE TABLE home_section_products (
     section_id      UUID NOT NULL REFERENCES home_sections (id) ON DELETE CASCADE,
     material_guid   UUID NOT NULL,

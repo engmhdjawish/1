@@ -78,6 +78,8 @@ $buildDisplayOptions = static function (): array {
 $flash = null;
 $flashType = 'success';
 $editId = trim((string) ($_GET['edit'] ?? ''));
+$isNew = ($_GET['new'] ?? '') === '1';
+$showForm = $editId !== '' || $isNew;
 $user = WebSession::user();
 
 if (isset($_GET['saved']) && $_GET['saved'] === '1') {
@@ -111,11 +113,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 HomeSectionService::syncFilters($sectionId, $buildFilterPayload(), $displayOptions);
                 HomeSectionService::syncManualProducts($sectionId, []);
             }
-            header('Location: /dashboard/home-sections.php?edit=' . rawurlencode($sectionId) . '&saved=1');
+            header('Location: /dashboard/home-sections.php?saved=1');
             exit;
         }
         $flash = $result['message'];
         $flashType = 'error';
+        $showForm = true;
+        $editId = trim((string) ($_POST['id'] ?? ''));
+        $isNew = $editId === '';
     } elseif ($action === 'toggle_section') {
         $ok = HomeSectionService::setActive(
             trim((string) ($_POST['id'] ?? '')),
@@ -147,9 +152,15 @@ if (isset($_GET['deleted']) && $_GET['deleted'] === '1' && $flash === null) {
 
 $stats = HomeSectionService::stats();
 $sections = HomeSectionService::adminSections();
-$editSection = $editId !== '' ? HomeSectionService::getSectionById($editId) : null;
-if ($editSection === null) {
-    $editId = '';
+$editSection = null;
+if ($editId !== '') {
+    $editSection = HomeSectionService::getSectionById($editId);
+    if ($editSection === null) {
+        $editId = '';
+        $showForm = $isNew;
+    }
+}
+if ($showForm && $editSection === null) {
     $editSection = [
         'id' => '',
         'slug' => '',
