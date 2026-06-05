@@ -12,25 +12,40 @@ header('Content-Type: application/json; charset=utf-8');
 WebSession::requirePermission('home_sections.manage');
 
 $q = trim((string) ($_GET['q'] ?? ''));
+$page = max(1, (int) ($_GET['page'] ?? 1));
+$pageSize = max(1, min(48, (int) ($_GET['pageSize'] ?? 24)));
+
 if ($q === '') {
-    echo json_encode(['ok' => true, 'items' => []], JSON_UNESCAPED_UNICODE);
+    echo json_encode([
+        'ok' => true,
+        'items' => [],
+        'page' => $page,
+        'pageSize' => $pageSize,
+        'total' => 0,
+        'hasMore' => false,
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 $items = [];
+$total = 0;
+$hasMore = false;
+
 try {
     $response = ApiClient::get('/api/materials', [
-        'page' => 1,
-        'pageSize' => 24,
+        'page' => $page,
+        'pageSize' => $pageSize,
         'search' => $q,
     ]);
     if ($response['ok']) {
-        $rows = is_array($response['data']['items'] ?? null) ? $response['data']['items'] : [];
+        $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+        $rows = is_array($data['items'] ?? null) ? $data['items'] : [];
+        $total = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
         foreach ($rows as $row) {
             if (!is_array($row)) {
                 continue;
             }
-            $guid = trim((string) ($row['materialGuid'] ?? $row['MaterialGuid'] ?? ''));
+            $guid = trim((string) ($row['materialGuid'] ?? $row['MaterialGuid'] ?? $row['guid'] ?? $row['Guid'] ?? ''));
             if ($guid === '') {
                 continue;
             }
@@ -39,6 +54,7 @@ try {
             $label = $name !== '' ? $name . ($code !== '' ? ' (' . $code . ')' : '') : $guid;
             $items[] = ['value' => $guid, 'label' => $label];
         }
+        $hasMore = ($page * $pageSize) < $total;
     }
 } catch (\Throwable) {
     http_response_code(500);
@@ -46,4 +62,11 @@ try {
     exit;
 }
 
-echo json_encode(['ok' => true, 'items' => $items], JSON_UNESCAPED_UNICODE);
+echo json_encode([
+    'ok' => true,
+    'items' => $items,
+    'page' => $page,
+    'pageSize' => $pageSize,
+    'total' => $total,
+    'hasMore' => $hasMore,
+], JSON_UNESCAPED_UNICODE);
