@@ -431,7 +431,100 @@ mt000 -> GET /api/materials/{guid}
 GET /api/materials?search=اسم-او-كود-او-باركود
 ```
 
-ولبناء واجهة فلاتر في موقع أو تطبيق، استخدم:
+لفلاتر **مشتقة من نتائج الاستعلام الحالي** (faceted — تظهر فقط القيم الموجودة في النتائج، مع إمكانية التبديل بين الأعمار مثلاً بعد اختيار رجالي):
+
+```text
+GET /api/materials?ageCategories=رجالي&includeResultFilters=true
+```
+
+يرجع نفس الحقول السابقة (`items`, `page`, `pageSize`, `totalCount`) بالإضافة إلى:
+
+```json
+{
+  "appliedFilters": {
+    "ageCategories": ["رجالي"],
+    "sizeRanges": [],
+    "groupGuids": []
+  },
+  "resultFilters": {
+    "ageCategories": [
+      { "value": "رجالي", "count": 52 },
+      { "value": "نسواني", "count": 35 }
+    ],
+    "sizeRanges": [
+      { "value": "نمر كبار", "count": 30 }
+    ],
+    "materialTypes": [],
+    "manufacturers": [],
+    "countryOfOrigins": [],
+    "groups": [
+      { "guid": "...", "code": "SUMMER", "name": "صيفي", "count": 12 }
+    ]
+  }
+}
+```
+
+- `resultFilters` تُحسب من **كل** المواد المطابقة (قبل `page`/`pageSize`)، وليس من الصفحة الحالية فقط.
+- لكل بُعد (عمر، مقاس، …) يُستثنى فلتر ذلك البُعد عند حساب قيمه — فيبقى بإمكان العميل التبديل من رجالي إلى نسواني مع الإبقاء على باقي الفلاتر في الطلب.
+- `includeResultFilters=false` (الافتراضي) يعيد `items` فقط بدون `appliedFilters` / `resultFilters`.
+
+ويدعم endpoint نفسه **grouping اختياري** (لتنظيم النتائج ضمن مجموعات واضحة):
+
+```text
+GET /api/materials?groupBy=ageCategory&includeResultFilters=true
+```
+
+القيم المدعومة لـ `groupBy`:
+
+```text
+ageCategory | sizeRange | materialType | manufacturer | countryOfOrigin | group
+```
+
+ويدعم endpoint أيضاً **sorting اختياري**.
+
+## ترتيب متعدد (موصى به)
+
+```text
+GET /api/materials?sort=ageCategory:asc,materialType:asc,-manufacturer
+```
+
+- `sort` يقبل مفاتيح مفصولة بفواصل.
+- الصيغة المدعومة لكل مفتاح:
+  - `field:asc`
+  - `field:desc`
+  - `-field` (اختصار `desc`)
+  - `+field` (اختصار `asc`)
+
+المفاتيح المدعومة:
+
+```text
+number | name | ageCategory | sizeRange | materialType | manufacturer | countryOfOrigin | warehouseQuantity | unitSalePriceSyp | unitSalePriceUsd | unitPurchasePriceUsd
+```
+
+- عند استخدام `groupBy` مع `sort`، يتم الترتيب أولاً حسب المجموعة ثم ترتيب العناصر داخل كل مجموعة.
+
+عند تمرير `groupBy` يرجع حقل إضافي `grouping`:
+
+```json
+{
+  "grouping": {
+    "groupBy": "ageCategory",
+    "groups": [
+      {
+        "key": "رجالي",
+        "displayName": "رجالي",
+        "totalCount": 52,
+        "items": [ /* عناصر هذه المجموعة ضمن الصفحة الحالية */ ]
+      }
+    ]
+  }
+}
+```
+
+- `totalCount` داخل كل مجموعة محسوب من **كل** النتائج المطابقة (قبل pagination).
+- `items` داخل كل مجموعة تمثل عناصر هذه المجموعة في الصفحة الحالية فقط.
+
+ولبناء قوائم فلاتر **عامة من كل الأمين** (إدارة / تهيئة)، استخدم:
 
 ```text
 GET /api/materials/filter-options

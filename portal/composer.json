@@ -1,0 +1,13 @@
+{
+  "name": "jawish/portal",
+  "description": "JAWISH public website and dashboard (PHP + PostgreSQL)",
+  "type": "project",
+  "require": {
+    "php": ">=8.2"
+  },
+  "autoload": {
+    "psr-4": {
+      "Portal\\": "src/"
+    }
+  }
+}

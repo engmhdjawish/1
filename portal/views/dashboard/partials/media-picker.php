@@ -1,0 +1,251 @@
+<?php
+
+declare(strict_types=1);
+
+use Portal\Services\SiteMediaService;
+
+if (!isset($renderMediaPickerField)) {
+    $renderMediaPickerField = static function (
+        string $label,
+        string $inputName,
+        string $currentUrl,
+        string $fieldId,
+        string $defaultCategory = 'banner'
+    ): void {
+        $currentUrl = trim($currentUrl);
+        $defaultCategory = in_array($defaultCategory, SiteMediaService::CATEGORIES, true) ? $defaultCategory : 'banner';
+        ?>
+        <div class="text-xs" id="<?= h($fieldId) ?>-wrap" data-media-field="<?= h($fieldId) ?>" data-default-category="<?= h($defaultCategory) ?>">
+          <span class="text-text-muted block mb-0.5"><?= h($label) ?></span>
+          <input type="hidden" name="<?= h($inputName) ?>" id="<?= h($fieldId) ?>-input" value="<?= h($currentUrl) ?>">
+          <div class="flex flex-wrap items-center gap-2">
+            <div id="<?= h($fieldId) ?>-preview" class="h-16 w-28 rounded-lg border border-border-subtle bg-surface-low overflow-hidden flex items-center justify-center text-[10px] text-text-muted">
+              <?php if ($currentUrl !== ''): ?>
+                <img src="<?= h($currentUrl) ?>" alt="" class="h-full w-full object-cover">
+              <?php else: ?>
+                بدون صورة
+              <?php endif; ?>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              <button type="button" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold hover:bg-slate-50" data-media-open="<?= h($fieldId) ?>">اختر من المكتبة</button>
+              <a href="/dashboard/site-media.php" target="_blank" class="h-8 px-3 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-600 hover:bg-slate-50">إدارة المكتبة</a>
+              <button type="button" class="h-8 px-3 rounded-lg border border-red-200 text-xs font-bold text-red-700 hover:bg-red-50" data-media-clear="<?= h($fieldId) ?>">إزالة</button>
+            </div>
+          </div>
+        </div>
+        <?php
+    };
+}
+
+if (!function_exists('portal_render_media_picker_modal')) {
+    function portal_render_media_picker_modal(): void
+    {
+        if (defined('PORTAL_MEDIA_PICKER_MODAL')) {
+            return;
+        }
+        define('PORTAL_MEDIA_PICKER_MODAL', true);
+        $categories = SiteMediaService::CATEGORIES;
+        $labels = SiteMediaService::CATEGORY_LABELS;
+        ?>
+        <div id="portal-media-picker-modal" class="hidden fixed inset-0 z-[80]">
+          <div class="absolute inset-0 bg-black/50" data-media-close></div>
+          <div class="absolute inset-x-3 top-6 bottom-6 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-[min(920px,96vw)] bg-white rounded-xl border border-border-subtle shadow-2xl flex flex-col overflow-hidden">
+            <div class="px-4 py-3 border-b border-border-subtle flex items-center justify-between gap-2">
+              <h3 class="font-bold text-sm">مكتبة صور الموقع</h3>
+              <button type="button" class="h-8 w-8 rounded-lg hover:bg-slate-100" data-media-close aria-label="إغلاق">×</button>
+            </div>
+            <div class="px-4 py-2 border-b border-border-subtle flex flex-wrap gap-2 items-center">
+              <?php foreach ($categories as $category): ?>
+                <button type="button" class="h-8 px-3 rounded-lg border text-xs font-bold media-picker-cat" data-media-category="<?= h($category) ?>"><?= h($labels[$category] ?? $category) ?></button>
+              <?php endforeach; ?>
+            </div>
+            <form id="portal-media-upload-form" class="px-4 py-3 border-b border-border-subtle bg-surface-low grid grid-cols-1 md:grid-cols-4 gap-2 items-end" enctype="multipart/form-data">
+              <label class="text-xs md:col-span-2">
+                <span class="text-text-muted block mb-0.5">رفع صورة جديدة</span>
+                <input type="file" name="file" accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml" required class="block w-full text-xs">
+              </label>
+              <label class="text-xs">
+                <span class="text-text-muted block mb-0.5">التصنيف</span>
+                <select name="category" id="portal-media-upload-category" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+                  <?php foreach ($categories as $category): ?>
+                    <option value="<?= h($category) ?>"><?= h($labels[$category] ?? $category) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </label>
+              <label class="text-xs">
+                <span class="text-text-muted block mb-0.5">عنوان (اختياري)</span>
+                <input type="text" name="title_ar" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+              </label>
+              <button type="submit" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold md:col-span-4 md:justify-self-end">رفع وإضافة للمكتبة</button>
+              <p id="portal-media-upload-status" class="text-xs text-text-muted md:col-span-4 min-h-[1rem]"></p>
+            </form>
+            <div id="portal-media-grid" class="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 content-start"></div>
+            <p id="portal-media-grid-status" class="px-4 py-2 text-xs text-text-muted border-t border-border-subtle"></p>
+          </div>
+        </div>
+        <?php
+    };
+}
+
+if (!function_exists('portal_render_media_picker_script')) {
+    function portal_render_media_picker_script(): void
+    {
+        if (defined('PORTAL_MEDIA_PICKER_SCRIPT')) {
+            return;
+        }
+        define('PORTAL_MEDIA_PICKER_SCRIPT', true);
+        ?>
+        <script>
+        (() => {
+          const modal = document.getElementById('portal-media-picker-modal');
+          const grid = document.getElementById('portal-media-grid');
+          const gridStatus = document.getElementById('portal-media-grid-status');
+          const uploadForm = document.getElementById('portal-media-upload-form');
+          const uploadStatus = document.getElementById('portal-media-upload-status');
+          const uploadCategory = document.getElementById('portal-media-upload-category');
+          let activeFieldId = null;
+          let activeCategory = 'banner';
+
+          const setPreview = (fieldId, url) => {
+            const input = document.getElementById(fieldId + '-input');
+            const preview = document.getElementById(fieldId + '-preview');
+            if (input) input.value = url || '';
+            if (!preview) return;
+            if (!url) {
+              preview.innerHTML = 'بدون صورة';
+              return;
+            }
+            preview.innerHTML = '';
+            const img = document.createElement('img');
+            img.src = url;
+            img.alt = '';
+            img.className = 'h-full w-full object-cover';
+            preview.appendChild(img);
+          };
+
+          const closeModal = () => {
+            modal?.classList.add('hidden');
+            activeFieldId = null;
+          };
+
+          const renderGrid = (items) => {
+            if (!grid) return;
+            grid.innerHTML = '';
+            if (!Array.isArray(items) || items.length === 0) {
+              if (gridStatus) gridStatus.textContent = 'لا توجد صور في هذا التصنيف.';
+              return;
+            }
+            if (gridStatus) gridStatus.textContent = items.length + ' صورة — انقر للاختيار';
+            items.forEach((item) => {
+              if (!item || !item.url) return;
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'group rounded-lg border border-border-subtle overflow-hidden text-right hover:border-primary focus:border-primary';
+              btn.innerHTML =
+                '<div class="aspect-[4/3] bg-surface-low overflow-hidden">'
+                + '<img src="' + item.url + '" alt="" class="h-full w-full object-cover group-hover:scale-105 transition">'
+                + '</div>'
+                + '<div class="p-2 text-[11px]">'
+                + '<div class="font-bold truncate">' + (item.title_ar || item.file_name || 'صورة') + '</div>'
+                + '<div class="text-text-muted">' + (item.category_label || item.category || '') + '</div>'
+                + '</div>';
+              btn.addEventListener('click', () => {
+                if (!activeFieldId) return;
+                setPreview(activeFieldId, item.url);
+                closeModal();
+              });
+              grid.appendChild(btn);
+            });
+          };
+
+          const loadGrid = async (category) => {
+            activeCategory = category || 'banner';
+            if (gridStatus) gridStatus.textContent = 'جاري التحميل...';
+            document.querySelectorAll('.media-picker-cat').forEach((node) => {
+              const isActive = node.getAttribute('data-media-category') === activeCategory;
+              node.classList.toggle('bg-primary', isActive);
+              node.classList.toggle('text-white', isActive);
+              node.classList.toggle('border-primary', isActive);
+            });
+            if (uploadCategory) uploadCategory.value = activeCategory;
+            try {
+              const response = await fetch('/dashboard/site-media-api.php?category=' + encodeURIComponent(activeCategory), {
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json' },
+              });
+              const data = await response.json();
+              if (!data.ok) {
+                if (gridStatus) gridStatus.textContent = data.message || 'تعذر تحميل المكتبة.';
+                renderGrid([]);
+                return;
+              }
+              renderGrid(data.items || []);
+            } catch (_) {
+              if (gridStatus) gridStatus.textContent = 'تعذر الاتصال بالخادم.';
+              renderGrid([]);
+            }
+          };
+
+          document.querySelectorAll('[data-media-open]').forEach((button) => {
+            button.addEventListener('click', () => {
+              const fieldId = button.getAttribute('data-media-open');
+              if (!fieldId || !modal) return;
+              activeFieldId = fieldId;
+              const wrap = document.getElementById(fieldId + '-wrap');
+              const defaultCategory = wrap?.getAttribute('data-default-category') || 'banner';
+              modal.classList.remove('hidden');
+              loadGrid(defaultCategory);
+            });
+          });
+
+          document.querySelectorAll('[data-media-clear]').forEach((button) => {
+            button.addEventListener('click', () => {
+              const fieldId = button.getAttribute('data-media-clear');
+              if (fieldId) setPreview(fieldId, '');
+            });
+          });
+
+          document.querySelectorAll('.media-picker-cat').forEach((button) => {
+            button.addEventListener('click', () => {
+              loadGrid(button.getAttribute('data-media-category') || 'banner');
+            });
+          });
+
+          modal?.querySelectorAll('[data-media-close]').forEach((node) => {
+            node.addEventListener('click', closeModal);
+          });
+
+          uploadForm?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            if (!uploadForm) return;
+            if (uploadStatus) uploadStatus.textContent = 'جاري الرفع...';
+            const formData = new FormData(uploadForm);
+            formData.append('action', 'upload');
+            try {
+              const response = await fetch('/dashboard/site-media-api.php', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+              });
+              const data = await response.json();
+              if (!data.ok) {
+                if (uploadStatus) uploadStatus.textContent = data.message || 'تعذر الرفع.';
+                return;
+              }
+              if (uploadStatus) uploadStatus.textContent = data.message || 'تم الرفع.';
+              uploadForm.reset();
+              if (uploadCategory) uploadCategory.value = activeCategory;
+              await loadGrid(activeCategory);
+              if (activeFieldId && data.asset?.url) {
+                setPreview(activeFieldId, data.asset.url);
+                closeModal();
+              }
+            } catch (_) {
+              if (uploadStatus) uploadStatus.textContent = 'تعذر الاتصال بالخادم.';
+            }
+          });
+        })();
+        </script>
+        <?php
+    }
+}

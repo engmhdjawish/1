@@ -1,0 +1,176 @@
+{
+  "version": 1,
+  "generatedFor": "cursor/materials-result-filters-f03f",
+  "designSources": [
+    "designs/stitch-designs1.zip",
+    "designs/stitch-designs2.zip"
+  ],
+  "admin": [
+    {
+      "id": "admin.dashboard",
+      "source": "designs/stitch-designs1/stitch_/_1/code.html",
+      "targetRoute": "/dashboard/index.php",
+      "requiredApi": ["/api/health", "/api/customers", "/api/materials"],
+      "readiness": "ready"
+    },
+    {
+      "id": "admin.customers",
+      "source": "designs/stitch-designs1/stitch_/_13/code.html",
+      "targetRoute": "/dashboard/customers.php",
+      "requiredApi": [],
+      "requiredPortalServices": ["web_customers", "access_policies"],
+      "readiness": "portal-backend-required"
+    },
+    {
+      "id": "admin.orders",
+      "source": "designs/stitch-designs1/stitch_/_4/code.html",
+      "targetRoute": "/dashboard/orders.php",
+      "requiredApi": [],
+      "requiredPortalServices": ["orders", "order_items"],
+      "readiness": "portal-backend-required"
+    },
+    {
+      "id": "admin.shareLinks",
+      "source": "designs/stitch-designs1/stitch_/_11/code.html",
+      "targetRoute": "/dashboard/share-links.php",
+      "requiredApi": ["/api/materials"],
+      "requiredPortalServices": ["share_links", "share_link_filters"],
+      "readiness": "partial"
+    },
+    {
+      "id": "admin.homeContent",
+      "source": "designs/stitch-designs1/stitch_/_10/code.html",
+      "targetRoute": "/dashboard/home-sections.php",
+      "requiredApi": ["/api/materials"],
+      "requiredPortalServices": ["home_sections", "home_section_filters"],
+      "readiness": "partial"
+    },
+    {
+      "id": "admin.usersRoles",
+      "source": "designs/stitch-designs1/stitch_/_12/code.html",
+      "targetRoute": "/dashboard/users.php",
+      "requiredApi": ["/api/admin/users", "/api/admin/roles", "/api/admin/permissions"],
+      "readiness": "ready"
+    },
+    {
+      "id": "admin.settings",
+      "source": "designs/stitch-designs1/stitch_/_6/code.html",
+      "targetRoute": "/dashboard/settings.php",
+      "requiredApi": ["/api/health"],
+      "requiredPortalServices": ["store_guest_settings", "portal_settings"],
+      "readiness": "partial"
+    }
+  ],
+  "customer": [
+    {
+      "id": "customer.home",
+      "source": "designs/stitch-designs2/stitch_/_15/code.html",
+      "targetRoute": "/index.php",
+      "requiredApi": ["/api/materials"],
+      "requiredPortalServices": ["home_sections", "home_section_filters"],
+      "readiness": "partial"
+    },
+    {
+      "id": "customer.catalog",
+      "source": "designs/stitch-designs2/stitch_/_10/code.html",
+      "targetRoute": "/store.php",
+      "requiredApi": ["/api/materials"],
+      "readiness": "ready"
+    },
+    {
+      "id": "customer.login",
+      "source": "designs/stitch-designs2/stitch_/_14/code.html",
+      "targetRoute": "/login.php",
+      "requiredApi": [],
+      "requiredPortalServices": ["web_users", "web_customers"],
+      "readiness": "portal-backend-required"
+    },
+    {
+      "id": "customer.register",
+      "source": "designs/stitch-designs2/stitch_/_7/code.html",
+      "targetRoute": "/register.php",
+      "requiredPortalServices": ["web_customers"],
+      "readiness": "portal-backend-required"
+    },
+    {
+      "id": "customer.accountStates",
+      "source": "designs/stitch-designs2/stitch_/_5/code.html",
+      "targetRoute": "/account/status.php",
+      "requiredPortalServices": ["web_customers"],
+      "readiness": "portal-backend-required"
+    },
+    {
+      "id": "customer.account",
+      "source": "designs/stitch-designs2/stitch_/_6/code.html",
+      "targetRoute": "/account/index.php",
+      "requiredPortalServices": ["web_customers", "orders"],
+      "readiness": "portal-backend-required"
+    },
+    {
+      "id": "customer.myOrders",
+      "source": "designs/stitch-designs2/stitch_/_2/code.html",
+      "targetRoute": "/account/orders.php",
+      "requiredPortalServices": ["orders", "order_items"],
+      "readiness": "portal-backend-required"
+    },
+    {
+      "id": "customer.orderDetails",
+      "source": "designs/stitch-designs2/stitch_/_3/code.html",
+      "targetRoute": "/account/order-details.php",
+      "requiredPortalServices": ["orders", "order_items"],
+      "readiness": "portal-backend-required"
+    },
+    {
+      "id": "customer.cart",
+      "source": "designs/stitch-designs2/stitch_/_11/code.html",
+      "targetRoute": "/cart.php",
+      "requiredPortalServices": ["cart_session", "orders", "order_items"],
+      "readiness": "portal-backend-required"
+    },
+    {
+      "id": "customer.checkout",
+      "source": "designs/stitch-designs2/stitch_/_4/code.html",
+      "targetRoute": "/checkout.php",
+      "requiredPortalServices": ["orders", "order_items"],
+      "readiness": "portal-backend-required"
+    },
+    {
+      "id": "customer.shareTokenStore",
+      "source": "designs/stitch-designs2/stitch_/_1/code.html",
+      "targetRoute": "/l/{token}",
+      "requiredApi": ["/api/materials"],
+      "requiredPortalServices": ["share_links", "share_link_filters"],
+      "readiness": "partial"
+    }
+  ],
+  "accounting": [
+    {
+      "id": "accounting.dashboard",
+      "source": "designs/stitch-designs2/stitch_/_12/code.html",
+      "targetRoute": "/dashboard/accounting.php",
+      "requiredPortalServices": ["orders"],
+      "readiness": "portal-backend-required"
+    },
+    {
+      "id": "accounting.syncQueue",
+      "source": "designs/stitch-designs2/stitch_/_13/code.html",
+      "targetRoute": "/dashboard/accounting-sync.php",
+      "requiredPortalServices": ["orders.amine_sync_status"],
+      "readiness": "blocked-until-sync-bridge"
+    },
+    {
+      "id": "accounting.reports",
+      "source": "designs/stitch-designs2/stitch_/_16/code.html",
+      "targetRoute": "/dashboard/accounting-reports.php",
+      "requiredPortalServices": ["orders", "order_items"],
+      "readiness": "portal-backend-required"
+    },
+    {
+      "id": "accounting.customerStatement",
+      "source": "designs/stitch-designs2/stitch_/_17/code.html",
+      "targetRoute": "/dashboard/accounting-statement.php",
+      "requiredApi": ["/api/accounts/summary", "/api/accounts/statement"],
+      "readiness": "ready"
+    }
+  ]
+}
