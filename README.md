@@ -131,6 +131,8 @@ GET  /api/health
 GET  /api/customers
 GET  /api/customers/{guid}
 
+GET  /api/accounts
+GET  /api/accounts/{guid}
 GET  /api/accounts/summary
 GET  /api/accounts/statement
 
@@ -311,7 +313,10 @@ DELETE /api/material-images/{id}
 ```text
 cu000 -> GET /api/customers
 cu000 -> GET /api/customers/{guid}
+GET /api/customers?keyword=محمد 9329
 ```
+
+يدعم `keyword` (أو `search` للتوافق) بنفس مبدأ المواد: تقسيم النص إلى كلمات وتطبيق **AND** بينها — أي كل كلمة يجب أن تطابق أحد الحقول (الاسم، اللاتيني، الهاتف، الموبايل، البريد، الباركود، الملاحظات، أو رقم العميل إن كان رقماً)، بغض النظر عن ترتيب الكلمات.
 
 يتطلب:
 
@@ -327,6 +332,22 @@ Phone2
 Mobile
 EMail
 AccountGUID
+```
+
+## Accounts Directory API
+
+```text
+ac000 -> GET /api/accounts
+ac000 -> GET /api/accounts/{guid}
+GET /api/accounts?keyword=صندوق 1201
+```
+
+يدعم `keyword` (أو `search`) بنفس مبدأ العملاء: **AND** بين الكلمات على الاسم والكود ورقم الحساب (إن كان الرمز رقماً).
+
+يتطلب:
+
+```text
+accounts.read
 ```
 
 ## Customer Accounts API

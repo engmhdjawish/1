@@ -3,6 +3,7 @@ using ExistingDb.Api.Contracts.Common;
 using ExistingDb.Api.Contracts.Customers;
 using ExistingDb.Api.Data;
 using ExistingDb.Api.Data.MainDb;
+using ExistingDb.Api.Services.Search;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +23,8 @@ public sealed class CustomersController(
 
     [HttpGet]
     public async Task<ActionResult<PagedResponse<CustomerResponse>>> GetCustomers(
-        [FromQuery] string? search = null,
+        [FromQuery] string? keyword = null,
+        [FromQuery(Name = "search")] string? legacySearch = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
@@ -31,17 +33,9 @@ public sealed class CustomersController(
         pageSize = Math.Clamp(pageSize, 1, 200);
 
         var query = mainDbContext.Customers.AsNoTracking();
-        if (!string.IsNullOrWhiteSpace(search))
+        foreach (var term in KeywordSearchTerms.Parse(keyword, legacySearch))
         {
-            var term = search.Trim();
-            query = query.Where(customer =>
-                (customer.CustomerName != null && customer.CustomerName.Contains(term)) ||
-                (customer.LatinName != null && customer.LatinName.Contains(term)) ||
-                (customer.Phone1 != null && customer.Phone1.Contains(term)) ||
-                (customer.Phone2 != null && customer.Phone2.Contains(term)) ||
-                (customer.Mobile != null && customer.Mobile.Contains(term)) ||
-                (customer.Email != null && customer.Email.Contains(term)) ||
-                (customer.BarCode != null && customer.BarCode.Contains(term)));
+            query = ApplyCustomerKeywordFilter(query, term);
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -72,6 +66,33 @@ public sealed class CustomersController(
 
         var fieldAccess = await permissionService.GetFieldAccessAsync(User, ResourceCode, cancellationToken);
         return Ok(ToResponse(customer, fieldAccess));
+    }
+
+    private static IQueryable<CustomerRecord> ApplyCustomerKeywordFilter(IQueryable<CustomerRecord> query, string term)
+    {
+        if (double.TryParse(term, out var numberTerm))
+        {
+            return query.Where(customer =>
+                (customer.CustomerName != null && customer.CustomerName.Contains(term)) ||
+                (customer.LatinName != null && customer.LatinName.Contains(term)) ||
+                (customer.Phone1 != null && customer.Phone1.Contains(term)) ||
+                (customer.Phone2 != null && customer.Phone2.Contains(term)) ||
+                (customer.Mobile != null && customer.Mobile.Contains(term)) ||
+                (customer.Email != null && customer.Email.Contains(term)) ||
+                (customer.BarCode != null && customer.BarCode.Contains(term)) ||
+                (customer.Notes != null && customer.Notes.Contains(term)) ||
+                (customer.Number.HasValue && customer.Number.Value == numberTerm));
+        }
+
+        return query.Where(customer =>
+            (customer.CustomerName != null && customer.CustomerName.Contains(term)) ||
+            (customer.LatinName != null && customer.LatinName.Contains(term)) ||
+            (customer.Phone1 != null && customer.Phone1.Contains(term)) ||
+            (customer.Phone2 != null && customer.Phone2.Contains(term)) ||
+            (customer.Mobile != null && customer.Mobile.Contains(term)) ||
+            (customer.Email != null && customer.Email.Contains(term)) ||
+            (customer.BarCode != null && customer.BarCode.Contains(term)) ||
+            (customer.Notes != null && customer.Notes.Contains(term)));
     }
 
     private CustomerResponse ToResponse(
