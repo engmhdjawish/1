@@ -50,7 +50,9 @@ $accountSummary = is_array($accountSummary ?? null) ? $accountSummary : null;
         </p>
       </div>
       <div class="flex flex-wrap gap-2">
-        <a href="<?= h(accounting_url('/dashboard/accounting-statement.php', ['customerGuid' => $customerGuid, 'customerSearch' => (string) ($query['keyword'] ?? '')])) ?>" class="rounded-xl bg-primary text-white px-4 py-2 text-sm font-bold">كشف الحساب</a>
+        <?php if (web_can('accounting.statement.view')): ?>
+          <a href="<?= h(accounting_url('/dashboard/accounting-statement.php', ['customerGuid' => $customerGuid, 'customerSearch' => (string) ($query['keyword'] ?? '')])) ?>" class="rounded-xl bg-primary text-white px-4 py-2 text-sm font-bold">كشف الحساب</a>
+        <?php endif; ?>
         <a href="<?= h(accounting_url('/dashboard/accounting-customers.php', ['keyword' => (string) ($query['keyword'] ?? '')])) ?>" class="rounded-xl border border-border-subtle bg-white px-4 py-2 text-sm font-semibold">إغلاق التفاصيل</a>
       </div>
     </div>

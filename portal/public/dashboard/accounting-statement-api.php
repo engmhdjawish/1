@@ -7,7 +7,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Auth\WebSession;
 use Portal\Services\AccountingApiService;
 
-WebSession::requirePermission('orders.view');
+WebSession::requirePermission('accounting.statement.view');
 
 header('Content-Type: application/json; charset=utf-8');
 

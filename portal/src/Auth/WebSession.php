@@ -32,12 +32,46 @@ final class WebSession
     public static function requirePermission(string $permissionCode): void
     {
         self::requireLogin();
-        $permissions = self::user()['permissions'] ?? [];
-        if (!in_array($permissionCode, $permissions, true) && !in_array('*', $permissions, true)) {
+        if (!self::hasPermission($permissionCode)) {
             http_response_code(403);
             echo 'غير مصرح لك بهذه العملية.';
             exit;
         }
+    }
+
+    /** @param list<string> $permissionCodes */
+    public static function requireAnyPermission(array $permissionCodes): void
+    {
+        self::requireLogin();
+        if (!self::hasAnyPermission($permissionCodes)) {
+            http_response_code(403);
+            echo 'غير مصرح لك بهذه العملية.';
+            exit;
+        }
+    }
+
+    public static function hasPermission(string $permissionCode): bool
+    {
+        $permissions = self::user()['permissions'] ?? [];
+
+        return in_array('*', $permissions, true) || in_array($permissionCode, $permissions, true);
+    }
+
+    /** @param list<string> $permissionCodes */
+    public static function hasAnyPermission(array $permissionCodes): bool
+    {
+        $permissions = self::user()['permissions'] ?? [];
+        if (in_array('*', $permissions, true)) {
+            return true;
+        }
+
+        foreach ($permissionCodes as $permissionCode) {
+            if (in_array($permissionCode, $permissions, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @param-out string|null $errorMessage */
@@ -86,11 +120,14 @@ final class WebSession
         }
 
         $permissions = self::loadPermissions($user['id']);
+        $roles = self::loadRoleLabels($user['id']);
         $_SESSION[self::SESSION_KEY] = [
             'id' => $user['id'],
             'user_name' => $user['user_name'],
             'display_name_ar' => $user['display_name_ar'],
             'permissions' => $permissions,
+            'roles' => $roles,
+            'role_label' => $roles[0] ?? 'موظف',
         ];
 
         $pdo->prepare('UPDATE web_users SET last_login_at = NOW() WHERE id = :id')
@@ -117,13 +154,6 @@ final class WebSession
         );
         $stmt->execute(['user_id' => $userId]);
         $codes = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        if (in_array('dashboard.view', $codes, true)) {
-            foreach ($pdo->query('SELECT code FROM web_permissions')->fetchAll(PDO::FETCH_COLUMN) as $code) {
-                if ($code && str_starts_with($code, 'super_')) {
-                    continue;
-                }
-            }
-        }
 
         $roleStmt = $pdo->prepare(
             'SELECT r.code FROM web_roles r
@@ -137,5 +167,21 @@ final class WebSession
         }
 
         return array_values(array_filter($codes));
+    }
+
+    /** @return list<string> */
+    private static function loadRoleLabels(string $userId): array
+    {
+        $pdo = Database::pdo();
+        $stmt = $pdo->prepare(
+            'SELECT r.name_ar
+             FROM web_roles r
+             INNER JOIN web_user_roles ur ON ur.role_id = r.id
+             WHERE ur.user_id = :user_id
+             ORDER BY r.is_system DESC, r.name_ar ASC'
+        );
+        $stmt->execute(['user_id' => $userId]);
+
+        return array_values(array_filter($stmt->fetchAll(PDO::FETCH_COLUMN)));
     }
 }

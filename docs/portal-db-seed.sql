@@ -23,7 +23,8 @@ VALUES
     ('super_admin', 'مدير النظام', 'صلاحيات كاملة على الموقع', TRUE),
     ('sales', 'مبيعات', 'روابط مشاركة وطلبات وزوّار', TRUE),
     ('content', 'محتوى', 'الصفحة الرئيسية ومعلومات الشركة', TRUE),
-    ('customers_admin', 'إدارة العملاء', 'موافقة وتفعيل عملاء الويب', TRUE)
+    ('customers_admin', 'إدارة العملاء', 'موافقة وتفعيل عملاء الويب', TRUE),
+    ('accountant', 'محاسبة', 'الوصول لسجلات الأمين والتقارير المالية', TRUE)
 ON CONFLICT (code) DO UPDATE SET
     name_ar = EXCLUDED.name_ar,
     description_ar = EXCLUDED.description_ar,
@@ -46,7 +47,13 @@ VALUES
     ('web_users.manage', 'إدارة موظفي الموقع', 'إدارة', NULL),
     ('images.upload', 'رفع صور المواد', 'مواد', NULL),
     ('site_media.manage', 'مكتبة صور الموقع', 'محتوى', 'رفع وإدارة بنرات وإعلانات وشعارات الموقع'),
-    ('access_policies.manage', 'إدارة سياسات الوصول', 'إعدادات', NULL)
+    ('access_policies.manage', 'إدارة سياسات الوصول', 'إعدادات', NULL),
+    ('accounting.view', 'لوحة المحاسب', 'محاسبة', NULL),
+    ('accounting.customers.view', 'عملاء الأمين', 'محاسبة', NULL),
+    ('accounting.documents.view', 'الفواتير والسندات', 'محاسبة', NULL),
+    ('accounting.statement.view', 'كشف حساب عميل', 'محاسبة', NULL),
+    ('accounting.sync.view', 'طابور المزامنة', 'محاسبة', NULL),
+    ('accounting.reports.view', 'التقارير المالية', 'محاسبة', NULL)
 ON CONFLICT (code) DO UPDATE SET
     name_ar = EXCLUDED.name_ar,
     category_ar = EXCLUDED.category_ar,
@@ -85,6 +92,21 @@ JOIN web_permissions p ON p.code IN (
     'dashboard.view', 'web_customers.view', 'web_customers.approve', 'web_customers.manage'
 )
 WHERE r.code = 'customers_admin'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO web_role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM web_roles r
+JOIN web_permissions p ON p.code IN (
+    'dashboard.view',
+    'accounting.view',
+    'accounting.customers.view',
+    'accounting.documents.view',
+    'accounting.statement.view',
+    'accounting.sync.view',
+    'accounting.reports.view'
+)
+WHERE r.code = 'accountant'
 ON CONFLICT DO NOTHING;
 
 -- Default store guest policy (متجر عام)

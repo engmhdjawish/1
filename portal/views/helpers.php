@@ -2,9 +2,22 @@
 
 declare(strict_types=1);
 
+use Portal\Auth\WebSession;
+
 function h(?string $value): string
 {
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+function web_can(string $permission): bool
+{
+    return WebSession::hasPermission($permission);
+}
+
+/** @param list<string> $permissions */
+function web_can_any(array $permissions): bool
+{
+    return WebSession::hasAnyPermission($permissions);
 }
 
 function format_money(?float $amount, bool $show): string

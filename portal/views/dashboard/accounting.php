@@ -65,22 +65,28 @@ $statusCounts = is_array($statusCounts ?? null) ? $statusCounts : [];
       <span class="text-xs text-text-muted">من API الأمين</span>
     </div>
     <div class="p-4 grid gap-2 sm:grid-cols-2 text-sm">
-      <a href="/dashboard/accounting-customers.php" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
-        <span class="material-symbols-outlined text-primary">group</span>
-        عملاء الأمين
-      </a>
-      <a href="/dashboard/accounting-documents.php?kind=invoices" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
-        <span class="material-symbols-outlined text-primary">receipt_long</span>
-        الفواتير
-      </a>
-      <a href="/dashboard/accounting-documents.php?kind=vouchers" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
-        <span class="material-symbols-outlined text-primary">payments</span>
-        السندات
-      </a>
-      <a href="/dashboard/accounting-statement.php" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
-        <span class="material-symbols-outlined text-primary">account_balance_wallet</span>
-        كشف حساب
-      </a>
+      <?php if (web_can('accounting.customers.view')): ?>
+        <a href="/dashboard/accounting-customers.php" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary">group</span>
+          عملاء الأمين
+        </a>
+      <?php endif; ?>
+      <?php if (web_can('accounting.documents.view')): ?>
+        <a href="/dashboard/accounting-documents.php?kind=invoices" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary">receipt_long</span>
+          الفواتير
+        </a>
+        <a href="/dashboard/accounting-documents.php?kind=vouchers" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary">payments</span>
+          السندات
+        </a>
+      <?php endif; ?>
+      <?php if (web_can('accounting.statement.view')): ?>
+        <a href="/dashboard/accounting-statement.php" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary">account_balance_wallet</span>
+          كشف حساب
+        </a>
+      <?php endif; ?>
     </div>
   </article>
 
@@ -90,27 +96,36 @@ $statusCounts = is_array($statusCounts ?? null) ? $statusCounts : [];
       <span class="text-xs text-text-muted">من قاعدة البوابة</span>
     </div>
     <div class="p-4 grid gap-2 sm:grid-cols-2 text-sm">
-      <a href="/dashboard/accounting-sync.php" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
-        <span class="material-symbols-outlined text-primary">sync</span>
-        طابور المزامنة
-      </a>
-      <a href="/dashboard/accounting-reports.php" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
-        <span class="material-symbols-outlined text-primary">analytics</span>
-        التقارير المالية
-      </a>
-      <a href="/dashboard/orders.php" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
-        <span class="material-symbols-outlined text-primary">shopping_cart</span>
-        إدارة الطلبات
-      </a>
-      <a href="/dashboard/customers.php" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
-        <span class="material-symbols-outlined text-primary">person_add</span>
-        عملاء الموقع
-      </a>
+      <?php if (web_can('accounting.sync.view')): ?>
+        <a href="/dashboard/accounting-sync.php" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary">sync</span>
+          طابور المزامنة
+        </a>
+      <?php endif; ?>
+      <?php if (web_can('accounting.reports.view')): ?>
+        <a href="/dashboard/accounting-reports.php" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary">analytics</span>
+          التقارير المالية
+        </a>
+      <?php endif; ?>
+      <?php if (web_can('orders.view')): ?>
+        <a href="/dashboard/orders.php" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary">shopping_cart</span>
+          إدارة الطلبات
+        </a>
+      <?php endif; ?>
+      <?php if (web_can('web_customers.view')): ?>
+        <a href="/dashboard/customers.php" class="rounded-xl border border-border-subtle px-3 py-3 hover:bg-surface-low transition flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary">person_add</span>
+          عملاء الموقع
+        </a>
+      <?php endif; ?>
     </div>
   </article>
 </section>
 
 <section class="grid gap-4 lg:grid-cols-2">
+  <?php if (web_can('accounting.documents.view')): ?>
   <article class="rounded-xl border border-border-subtle bg-white overflow-hidden">
     <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60 flex items-center justify-between">
       <h2 class="font-bold">آخر الفواتير</h2>
@@ -150,7 +165,9 @@ $statusCounts = is_array($statusCounts ?? null) ? $statusCounts : [];
       </div>
     <?php endif; ?>
   </article>
+  <?php endif; ?>
 
+  <?php if (web_can('accounting.documents.view')): ?>
   <article class="rounded-xl border border-border-subtle bg-white overflow-hidden">
     <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60 flex items-center justify-between">
       <h2 class="font-bold">آخر السندات</h2>
@@ -190,4 +207,5 @@ $statusCounts = is_array($statusCounts ?? null) ? $statusCounts : [];
       </div>
     <?php endif; ?>
   </article>
+  <?php endif; ?>
 </section>
