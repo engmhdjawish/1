@@ -57,6 +57,14 @@ declare(strict_types=1);
           دخول
         </button>
       </form>
+
+      <p class="text-sm text-gray-600 mt-5 text-center">
+        <?php if ($type === 'customer'): ?>
+          ليس لديك حساب؟ <a href="/register.php" class="text-primary font-bold hover:underline">سجّل كعميل جديد</a>
+        <?php else: ?>
+          <a href="/index.php" class="text-primary font-bold hover:underline">العودة للموقع</a>
+        <?php endif; ?>
+      </p>
     </div>
   </section>
 </div>

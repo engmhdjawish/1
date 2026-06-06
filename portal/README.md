@@ -97,6 +97,8 @@ php -S 127.0.0.1:8080
 | `/dashboard/home-sections.php` | إدارة أقسام الرئيسية |
 | `/dashboard/users.php` | إدارة المستخدمين والأدوار |
 | `/dashboard/settings.php` | إعدادات الشركة وسياسة المتجر |
+| `/store.php` | المتجر العام (بحث، فلاتر، صور، ترقيم) |
+| `/product.php?guid=…` | تفاصيل مادة |
 | `/dashboard/accounting.php` | لوحة المحاسب (يتطلب `accounting.view`) |
 | `/dashboard/accounting-sync.php` | طابور مزامنة الأمين |
 | `/dashboard/accounting-reports.php` | تقرير مالي أولي |
