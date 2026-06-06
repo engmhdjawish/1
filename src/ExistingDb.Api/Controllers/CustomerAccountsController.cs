@@ -1228,11 +1228,8 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
                     GetStringValue(row, "Code", "CurCode", "CurrencyCode", "Abbrev", "LatinCode"),
                     GetStringValue(row, "Code"),
                     GetStringValue(row, "Abbrev"));
-                var symbol = FirstNotBlank(
-                    GetStringValue(row, "Symbol", "CurSymbol", "CurrencySymbol", "Sign", "CurrencySign"),
-                    ResolveCurrencySymbolFromCode(code),
-                    ResolveCurrencySymbolFromCode(name),
-                    "ل.س");
+                // In Amine my000 the display token (e.g. $ or ل.س) is stored in Code/Abbrev — keep symbol aligned with code.
+                var symbol = code;
                 result[currencyGuid] = new CurrencyDisplayInfo(name, code, symbol);
             }
 
