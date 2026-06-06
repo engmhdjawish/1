@@ -70,22 +70,21 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     <h2 class="font-bold mb-2">رفع متسلسل مع استئناف</h2>
     <p class="text-xs text-text-muted mb-3">اختر عدة صور — تُرفع واحدة تلو الأخرى مع شريط تقدم. عند انقطاع الاتصال أو إغلاق المتصفح يمكن الاستئناف من حيث توقفت.</p>
 
-    <div id="resumeBanner" class="hidden mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <span id="resumeBannerText">يوجد رفع غير مكتمل.</span>
-        <div class="flex gap-2">
-          <button type="button" id="resumeUploadBtn" class="rounded-lg bg-primary text-white px-3 py-1.5 font-bold">استئناف</button>
-          <button type="button" id="discardQueueBtn" class="rounded-lg border border-border-subtle bg-white px-3 py-1.5 font-bold">إلغاء الطابور</button>
-        </div>
+    <div id="uploadPickPanel" class="space-y-3">
+      <input type="file" id="uploadPicker" accept="image/jpeg,image/png,image/gif,image/webp" multiple class="block w-full text-sm">
+      <button type="button" id="startUploadBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold" disabled>بدء الرفع</button>
+    </div>
+
+    <div id="uploadActivePanel" class="hidden space-y-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+      <p id="uploadActiveStatus" class="text-xs text-amber-900">جاري رفع الصور...</p>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" id="pauseUploadBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">إيقاف مؤقت</button>
+        <button type="button" id="resumeUploadBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold hidden">استئناف</button>
+        <button type="button" id="discardQueueBtn" class="h-9 px-4 rounded-lg border border-red-200 bg-white text-xs font-bold text-red-700">إلغاء</button>
       </div>
     </div>
 
-    <div class="space-y-3">
-      <input type="file" id="uploadPicker" accept="image/jpeg,image/png,image/gif,image/webp" multiple class="block w-full text-sm">
-      <div class="flex flex-wrap gap-2">
-        <button type="button" id="startUploadBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold" disabled>بدء الرفع</button>
-        <button type="button" id="pauseUploadBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold hidden">إيقاف مؤقت</button>
-      </div>
+    <div class="space-y-3 mt-3">
       <div id="overallProgressWrap" class="hidden">
         <div class="flex justify-between text-xs text-text-muted mb-1">
           <span id="overallProgressLabel">0 / 0</span>
@@ -217,8 +216,9 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   const overallLabel = document.getElementById('overallProgressLabel');
   const remainingLabel = document.getElementById('remainingLabel');
   const overallBar = document.getElementById('overallProgressBar');
-  const resumeBanner = document.getElementById('resumeBanner');
-  const resumeBannerText = document.getElementById('resumeBannerText');
+  const uploadPickPanel = document.getElementById('uploadPickPanel');
+  const uploadActivePanel = document.getElementById('uploadActivePanel');
+  const uploadActiveStatus = document.getElementById('uploadActiveStatus');
   const resumeBtn = document.getElementById('resumeUploadBtn');
   const discardBtn = document.getElementById('discardQueueBtn');
   const browseForm = document.getElementById('browseFiltersForm');
@@ -246,7 +246,40 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   let browseTotalCount = null;
   let paused = false;
   let uploading = false;
+  let uploadSessionStarted = false;
   let dbPromise = null;
+
+  function hasPendingUploadItems() {
+    return queue?.items.some((item) => ['pending', 'uploading', 'error', 'missing'].includes(item.status)) ?? false;
+  }
+
+  function updateUploadControls() {
+    const hasQueue = !!(queue && queue.items.length > 0);
+    const pending = hasPendingUploadItems();
+    const sessionActive = hasQueue && pending && (uploadSessionStarted || uploading);
+
+    uploadPickPanel?.classList.toggle('hidden', sessionActive || uploading);
+    uploadActivePanel?.classList.toggle('hidden', !(sessionActive || uploading));
+
+    if (startBtn) {
+      startBtn.disabled = !hasQueue || sessionActive || uploading;
+    }
+
+    pauseBtn?.classList.toggle('hidden', !uploading);
+    resumeBtn?.classList.toggle('hidden', uploading || !pending);
+
+    if (uploadActiveStatus) {
+      if (uploading) {
+        uploadActiveStatus.textContent = 'جاري رفع الصور...';
+      } else if (paused) {
+        uploadActiveStatus.textContent = 'متوقف مؤقتاً — يمكنك الاستئناف أو الإلغاء.';
+      } else if (pending) {
+        uploadActiveStatus.textContent = 'يوجد رفع غير مكتمل — يمكنك الاستئناف أو الإلغاء.';
+      } else {
+        uploadActiveStatus.textContent = '';
+      }
+    }
+  }
 
   function uid() {
     return crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
@@ -347,12 +380,11 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   function renderQueue() {
     if (!queue || queue.items.length === 0) {
       queueSection.classList.add('hidden');
-      startBtn.disabled = true;
+      updateUploadControls();
       return;
     }
 
     queueSection.classList.remove('hidden');
-    startBtn.disabled = uploading;
     queueList.innerHTML = queue.items.map((item) => `
       <div class="p-3" data-item-id="${item.id}">
         <div class="flex items-center justify-between gap-2 mb-1">
@@ -376,6 +408,7 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     overallLabel.textContent = `${done} / ${total}`;
     remainingLabel.textContent = `متبقي: ${remaining}`;
     overallBar.style.width = `${total ? Math.round((done / total) * 100) : 0}%`;
+    updateUploadControls();
   }
 
   function escapeHtml(value) {
@@ -417,11 +450,9 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     }
 
     saveQueue();
-    renderQueue();
+    uploadSessionStarted = false;
     paused = false;
-    pauseBtn.classList.add('hidden');
-    startBtn.disabled = false;
-    resumeBanner.classList.add('hidden');
+    renderQueue();
   }
 
   async function uploadItem(item) {
@@ -492,8 +523,8 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     if (!queue || uploading) return;
     uploading = true;
     paused = false;
-    startBtn.disabled = true;
-    pauseBtn.classList.remove('hidden');
+    uploadSessionStarted = true;
+    updateUploadControls();
 
     for (const item of queue.items) {
       if (paused) break;
@@ -502,14 +533,19 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     }
 
     uploading = false;
-    startBtn.disabled = false;
-    pauseBtn.classList.add('hidden');
 
-    const pending = queue.items.some((item) => ['pending', 'uploading', 'error', 'missing'].includes(item.status));
+    if (paused) {
+      saveQueue();
+      updateUploadControls();
+      return;
+    }
+
+    const pending = hasPendingUploadItems();
     if (!pending) {
       await idbClearQueue(queue.id);
       localStorage.removeItem(QUEUE_STORAGE_KEY);
-      resumeBanner.classList.add('hidden');
+      uploadSessionStarted = false;
+      updateUploadControls();
       await refreshStats();
       if (browseResults && !browseResults.classList.contains('hidden')) {
         await loadBrowseResults(browsePage);
@@ -520,23 +556,13 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
           queueSection.classList.add('hidden');
           overallWrap.classList.add('hidden');
           picker.value = '';
+          updateUploadControls();
         }
       }, 1500);
     } else {
       saveQueue();
-      showResumeBanner();
+      updateUploadControls();
     }
-  }
-
-  function showResumeBanner() {
-    if (!queue) return;
-    const remaining = queue.items.filter((item) => item.status !== 'done').length;
-    if (remaining <= 0) {
-      resumeBanner.classList.add('hidden');
-      return;
-    }
-    resumeBannerText.textContent = `يوجد ${remaining} صورة لم يكتمل رفعها. يمكنك الاستئناف من حيث توقفت.`;
-    resumeBanner.classList.remove('hidden');
   }
 
   async function restoreQueueFromStorage() {
@@ -567,24 +593,30 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
       }
     }
 
+    const pending = hasPendingUploadItems();
+    if (pending) {
+      uploadSessionStarted = true;
+    }
     saveQueue();
     renderQueue();
-    showResumeBanner();
   }
 
   async function discardQueue() {
+    if (!confirm('إلغاء الرفع وحذف الطابور؟')) {
+      return;
+    }
     if (queue) {
       await idbClearQueue(queue.id);
     }
     queue = null;
     paused = false;
     uploading = false;
+    uploadSessionStarted = false;
     localStorage.removeItem(QUEUE_STORAGE_KEY);
-    resumeBanner.classList.add('hidden');
     queueSection.classList.add('hidden');
     overallWrap.classList.add('hidden');
     picker.value = '';
-    startBtn.disabled = true;
+    updateUploadControls();
   }
 
   async function refreshStats() {
@@ -733,9 +765,7 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   startBtn?.addEventListener('click', () => processQueue());
   pauseBtn?.addEventListener('click', () => {
     paused = true;
-    uploading = false;
-    pauseBtn.classList.add('hidden');
-    startBtn.disabled = false;
+    updateUploadControls();
   });
   resumeBtn?.addEventListener('click', () => processQueue());
   discardBtn?.addEventListener('click', () => discardQueue());
