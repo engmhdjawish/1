@@ -38,14 +38,10 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         var initDebitInAccountCurrency = ConvertMainToAccountCurrency(account.InitDebit ?? 0, accountCurrencyRate);
         var initCreditInAccountCurrency = ConvertMainToAccountCurrency(account.InitCredit ?? 0, accountCurrencyRate);
         var debitFromEntriesInAccountCurrency = await summaryEntriesQuery
-            .Select(entry => (double?)((entry.Debit ?? 0) / (entry.CurrencyVal.HasValue && entry.CurrencyVal.Value > 0
-                ? entry.CurrencyVal.Value
-                : defaultRate)))
+            .Select(entry => (double?)((entry.Debit ?? 0) / defaultRate))
             .SumAsync(cancellationToken) ?? 0;
         var creditFromEntriesInAccountCurrency = await summaryEntriesQuery
-            .Select(entry => (double?)((entry.Credit ?? 0) / (entry.CurrencyVal.HasValue && entry.CurrencyVal.Value > 0
-                ? entry.CurrencyVal.Value
-                : defaultRate)))
+            .Select(entry => (double?)((entry.Credit ?? 0) / defaultRate))
             .SumAsync(cancellationToken) ?? 0;
         var currentDebit = initDebitInAccountCurrency + debitFromEntriesInAccountCurrency;
         var currentCredit = initCreditInAccountCurrency + creditFromEntriesInAccountCurrency;
@@ -194,9 +190,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         var openingBalance = fromDateOnly.HasValue
             ? await BuildEntriesQuery(account.Guid, customerGuidFilter)
                 .Where(entry => entry.Date < fromDateOnly.Value)
-                .Select(entry => (double?)(((entry.Debit ?? 0) - (entry.Credit ?? 0)) / (entry.CurrencyVal.HasValue && entry.CurrencyVal.Value > 0
-                    ? entry.CurrencyVal.Value
-                    : defaultRate)))
+                .Select(entry => (double?)(((entry.Debit ?? 0) - (entry.Credit ?? 0)) / defaultRate))
                 .SumAsync(cancellationToken) ?? 0
             : 0d;
         var openingBalanceInAccountCurrency = initialBalanceInAccountCurrency + openingBalance;
@@ -206,9 +200,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         {
             var amountBeforePage = await orderedEntries
                 .Take(offset)
-                .Select(entry => (double?)(((entry.Debit ?? 0) - (entry.Credit ?? 0)) / (entry.CurrencyVal.HasValue && entry.CurrencyVal.Value > 0
-                    ? entry.CurrencyVal.Value
-                    : defaultRate)))
+                .Select(entry => (double?)(((entry.Debit ?? 0) - (entry.Credit ?? 0)) / defaultRate))
                 .SumAsync(cancellationToken) ?? 0;
             balanceBeforePage += amountBeforePage;
         }
@@ -232,9 +224,8 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         {
             var debitMain = entry.Debit ?? 0;
             var creditMain = entry.Credit ?? 0;
-            var conversionRate = ResolveConversionRate(entry.CurrencyVal, accountCurrencyRate);
-            var debit = ConvertMainToAccountCurrency(debitMain, conversionRate);
-            var credit = ConvertMainToAccountCurrency(creditMain, conversionRate);
+            var debit = ConvertMainToAccountCurrency(debitMain, accountCurrencyRate);
+            var credit = ConvertMainToAccountCurrency(creditMain, accountCurrencyRate);
             var signedAmount = debit - credit;
             runningBalance += signedAmount;
 
@@ -261,7 +252,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
                 runningBalance,
                 reference.ReasonType,
                 reference.ReasonDocumentType,
-                conversionRate,
+                accountCurrencyRate,
                 reference.ReferenceGuid,
                 reference.ReferenceNumber,
                 reference.ReferenceDate,
@@ -992,9 +983,8 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
     {
         var debitMain = entry.Debit ?? 0;
         var creditMain = entry.Credit ?? 0;
-        var conversionRate = ResolveConversionRate(entry.CurrencyVal, accountCurrencyRate);
-        var debit = ConvertMainToAccountCurrency(debitMain, conversionRate);
-        var credit = ConvertMainToAccountCurrency(creditMain, conversionRate);
+        var debit = ConvertMainToAccountCurrency(debitMain, accountCurrencyRate);
+        var credit = ConvertMainToAccountCurrency(creditMain, accountCurrencyRate);
         var effectiveReference = ResolveReferenceForDisplay(entry, reference, contraAccount);
         return new CustomerAccountMovementResponse(
             entry.Guid,
@@ -1007,7 +997,7 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
             debit - credit,
             effectiveReference.ReasonType,
             effectiveReference.ReasonDocumentType,
-            conversionRate,
+            accountCurrencyRate,
             effectiveReference.ReferenceGuid,
             effectiveReference.ReferenceNumber,
             effectiveReference.ReferenceDate,
@@ -1317,29 +1307,14 @@ public sealed class CustomerAccountsController(MainDbContext mainDbContext) : Co
         return account.CurrencyVal is > 0 ? account.CurrencyVal.Value : 1d;
     }
 
-    private static double ResolveConversionRate(double? entryCurrencyRate, double accountCurrencyRate)
+    private static double ConvertMainToAccountCurrency(double amountInMainCurrency, double accountCurrencyRate)
     {
-        if (entryCurrencyRate is > 0)
-        {
-            return entryCurrencyRate.Value;
-        }
-
-        if (accountCurrencyRate > 0)
-        {
-            return accountCurrencyRate;
-        }
-
-        return 1d;
-    }
-
-    private static double ConvertMainToAccountCurrency(double amountInMainCurrency, double conversionRate)
-    {
-        if (conversionRate <= 0)
+        if (accountCurrencyRate <= 0)
         {
             return amountInMainCurrency;
         }
 
-        return amountInMainCurrency / conversionRate;
+        return amountInMainCurrency / accountCurrencyRate;
     }
 
     private static string? ResolveNoteTypeLabel(int? noteType)
