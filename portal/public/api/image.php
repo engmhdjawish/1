@@ -18,6 +18,10 @@ if ($id === '' || preg_match('/^[0-9a-fA-F-]{36}$/', $id) !== 1) {
 }
 
 $localPath = MaterialImageStorageService::resolvePathForGuid($id, $thumb);
+if ($localPath === null && $thumb) {
+    $localPath = MaterialImageStorageService::resolvePathForGuid($id, false);
+}
+
 if ($localPath !== null && is_readable($localPath)) {
     $mime = match (strtolower(pathinfo($localPath, PATHINFO_EXTENSION))) {
         'jpg', 'jpeg' => 'image/jpeg',
@@ -33,8 +37,14 @@ if ($localPath !== null && is_readable($localPath)) {
     exit;
 }
 
-$path = '/api/material-images/' . $id . ($thumb ? '/thumbnail' : '/file');
-$result = ApiClient::getBinary($path);
+$apiSuffixes = $thumb ? ['/thumbnail', '/file'] : ['/file'];
+$result = ['ok' => false, 'status' => 404];
+foreach ($apiSuffixes as $suffix) {
+    $result = ApiClient::getBinary('/api/material-images/' . $id . $suffix);
+    if ($result['ok']) {
+        break;
+    }
+}
 
 if (!$result['ok']) {
     http_response_code((int) ($result['status'] ?? 404));

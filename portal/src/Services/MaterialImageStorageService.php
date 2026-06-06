@@ -18,7 +18,7 @@ final class MaterialImageStorageService
 
     private static bool $settingsReady = false;
 
-    /** @var array<string, string> */
+    /** @var array<string, list<string>> */
     private static array $fileNameByGuid = [];
 
     public static function ensureSettings(): void
@@ -184,23 +184,21 @@ final class MaterialImageStorageService
 
     public static function resolveLocalPath(string $fileName, bool $thumb = false): ?string
     {
-        $fileName = self::sanitizeFileName($fileName);
-        if ($fileName === '') {
-            return null;
-        }
-
         $settings = self::settings();
         $directory = $thumb ? $settings['thumbnails_dir'] : $settings['images_dir'];
-        $path = self::safeJoin($directory, $fileName);
-        if ($path === null || !is_file($path)) {
-            if ($thumb) {
-                return self::resolveLocalPath($fileName, false);
-            }
 
-            return null;
+        foreach (self::fileNameCandidates($fileName) as $candidate) {
+            $path = self::findFileInDirectory($directory, $candidate);
+            if ($path !== null) {
+                return $path;
+            }
         }
 
-        return $path;
+        if ($thumb) {
+            return self::resolveLocalPath($fileName, false);
+        }
+
+        return null;
     }
 
     public static function resolvePathForGuid(string $imageGuid, bool $thumb = false): ?string
@@ -210,12 +208,14 @@ final class MaterialImageStorageService
             return null;
         }
 
-        $fileName = self::fileNameFromAmineApi($imageGuid);
-        if ($fileName === null) {
-            return null;
+        foreach (self::fileNamesFromAmineApi($imageGuid) as $fileName) {
+            $path = self::resolveLocalPath($fileName, $thumb);
+            if ($path !== null) {
+                return $path;
+            }
         }
 
-        return self::resolveLocalPath($fileName, $thumb);
+        return null;
     }
 
     /** @return array{local_count: int, thumbnail_count: int} */
@@ -279,7 +279,8 @@ final class MaterialImageStorageService
         return ['ok' => true, 'message' => 'تم', 'file_name' => $fileName, 'replaced' => $replaced];
     }
 
-    private static function fileNameFromAmineApi(string $imageGuid): ?string
+    /** @return list<string> */
+    private static function fileNamesFromAmineApi(string $imageGuid): array
     {
         if (isset(self::$fileNameByGuid[$imageGuid])) {
             return self::$fileNameByGuid[$imageGuid];
@@ -288,21 +289,82 @@ final class MaterialImageStorageService
         try {
             $response = ApiClient::get('/api/material-images/' . rawurlencode($imageGuid));
             if (!($response['ok'] ?? false)) {
-                return null;
+                return [];
             }
 
             $data = is_array($response['data'] ?? null) ? $response['data'] : [];
-            $fileName = self::sanitizeFileName((string) ($data['storedFileName'] ?? $data['fileName'] ?? ''));
-            if ($fileName === '') {
-                return null;
+            $candidates = self::fileNameCandidates(
+                (string) ($data['storedFileName'] ?? ''),
+                (string) ($data['fileName'] ?? ''),
+                (string) ($data['imagePath'] ?? ''),
+                (string) ($data['thumbnailName'] ?? '')
+            );
+            if ($candidates === []) {
+                return [];
             }
 
-            self::$fileNameByGuid[$imageGuid] = $fileName;
+            self::$fileNameByGuid[$imageGuid] = $candidates;
 
-            return $fileName;
+            return $candidates;
         } catch (Throwable) {
+            return [];
+        }
+    }
+
+    /** @return list<string> */
+    private static function fileNameCandidates(string ...$values): array
+    {
+        $candidates = [];
+        foreach ($values as $value) {
+            $lookup = self::lookupFileName($value);
+            if ($lookup !== '') {
+                $candidates[] = $lookup;
+            }
+            $sanitized = self::sanitizeFileName($value);
+            if ($sanitized !== '' && $sanitized !== $lookup) {
+                $candidates[] = $sanitized;
+            }
+        }
+
+        return array_values(array_unique($candidates));
+    }
+
+    private static function lookupFileName(string $value): string
+    {
+        $value = str_replace('\\', '/', trim($value));
+        $value = basename($value);
+        if ($value === '' || str_contains($value, '..')) {
+            return '';
+        }
+
+        return $value;
+    }
+
+    private static function findFileInDirectory(string $directory, string $fileName): ?string
+    {
+        $fileName = self::lookupFileName($fileName);
+        if ($fileName === '' || !is_dir($directory)) {
             return null;
         }
+
+        $path = self::safeJoin($directory, $fileName);
+        if ($path !== null && is_file($path)) {
+            return $path;
+        }
+
+        foreach (scandir($directory) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            if (strcasecmp($entry, $fileName) === 0) {
+                $match = self::safeJoin($directory, $entry);
+                if ($match !== null && is_file($match)) {
+                    return $match;
+                }
+            }
+        }
+
+        return null;
     }
 
     private static function generateThumbnail(string $sourcePath, string $targetPath): bool
@@ -404,7 +466,7 @@ final class MaterialImageStorageService
     private static function safeJoin(string $directory, string $fileName): ?string
     {
         $directory = rtrim(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $directory), DIRECTORY_SEPARATOR);
-        $fileName = self::sanitizeFileName($fileName);
+        $fileName = self::lookupFileName($fileName);
         if ($directory === '' || $fileName === '') {
             return null;
         }
