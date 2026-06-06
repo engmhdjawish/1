@@ -11,6 +11,8 @@ use Portal\Services\PortalSettingsService;
 WebSession::requirePermission('images.upload');
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
+MaterialImageStorageService::ensureSchema();
+
 $flash = null;
 $flashType = 'success';
 $user = WebSession::user();

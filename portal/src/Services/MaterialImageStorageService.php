@@ -17,6 +17,40 @@ final class MaterialImageStorageService
     /** @var list<string> */
     private const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
+    private static bool $schemaReady = false;
+
+    public static function ensureSchema(): void
+    {
+        if (self::$schemaReady) {
+            return;
+        }
+
+        $pdo = Database::pdo();
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS material_image_index (
+                image_guid UUID PRIMARY KEY,
+                file_name TEXT NOT NULL,
+                api_updated_at TIMESTAMPTZ NULL,
+                indexed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )'
+        );
+        $pdo->exec(
+            'CREATE INDEX IF NOT EXISTS ix_material_image_index_file_name
+             ON material_image_index (file_name)'
+        );
+
+        $stmt = $pdo->prepare(
+            'INSERT INTO company_settings (key, value_ar)
+             VALUES (:key, :value_ar)
+             ON CONFLICT (key) DO NOTHING'
+        );
+        foreach (['material_images_dir', 'material_thumbnails_dir'] as $key) {
+            $stmt->execute(['key' => $key, 'value_ar' => '']);
+        }
+
+        self::$schemaReady = true;
+    }
+
     /** @return array{images_dir: string, thumbnails_dir: string} */
     public static function settings(): array
     {
@@ -182,6 +216,7 @@ final class MaterialImageStorageService
 
     public static function resolvePathForGuid(string $imageGuid, bool $thumb = false): ?string
     {
+        self::ensureSchema();
         $imageGuid = trim($imageGuid);
         if ($imageGuid === '') {
             return null;
@@ -201,6 +236,7 @@ final class MaterialImageStorageService
     /** @return array{ok: bool, message: string, indexed: int} */
     public static function refreshIndexFromApi(): array
     {
+        self::ensureSchema();
         $indexed = 0;
         $page = 1;
         $pageSize = 200;
@@ -255,6 +291,7 @@ final class MaterialImageStorageService
 
     public static function stats(): array
     {
+        self::ensureSchema();
         $files = self::listLocalFiles();
         $withThumb = 0;
         foreach ($files as $file) {
@@ -263,8 +300,13 @@ final class MaterialImageStorageService
             }
         }
 
-        $stmt = Database::pdo()->query('SELECT COUNT(*) FROM material_image_index');
-        $indexed = (int) ($stmt->fetchColumn() ?: 0);
+        $indexed = 0;
+        try {
+            $stmt = Database::pdo()->query('SELECT COUNT(*) FROM material_image_index');
+            $indexed = (int) ($stmt->fetchColumn() ?: 0);
+        } catch (Throwable) {
+            $indexed = 0;
+        }
 
         return [
             'local_count' => count($files),
