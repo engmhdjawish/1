@@ -76,31 +76,33 @@ $code = (string) ($document['currencyCode'] ?? '');
   </div>
   <div class="overflow-auto">
     <?php if ($isInvoice): ?>
-      <table class="w-full text-sm min-w-[920px]">
-        <thead class="text-text-muted border-b border-border-subtle">
+      <?php
+      $unit2Header = accounting_invoice_unit_header($items, 'materialUnit2', 'الوحدة الثانية');
+      $unit1Header = accounting_invoice_unit_header($items, 'materialUnity', 'الوحدة الأولى');
+      ?>
+      <table class="w-full text-sm min-w-[820px] statement-table">
+        <thead class="text-text-muted border-b border-border-subtle bg-surface-low/80">
           <tr>
-            <th class="text-right p-3">المادة</th>
-            <th class="text-right p-3">كمية و1</th>
-            <th class="text-right p-3">كمية و2</th>
-            <th class="text-right p-3">السعر</th>
-            <th class="text-right p-3">حسم</th>
-            <th class="text-right p-3">إضافة</th>
-            <th class="text-right p-3">الإجمالي</th>
+            <th class="text-right p-3 whitespace-nowrap">#</th>
+            <th class="text-right p-3 whitespace-nowrap">المادة</th>
+            <th class="text-right p-3 whitespace-nowrap"><?= h($unit2Header) ?></th>
+            <th class="text-right p-3 whitespace-nowrap"><?= h($unit1Header) ?></th>
+            <th class="text-right p-3 whitespace-nowrap">سعر القطعة</th>
+            <th class="text-right p-3 whitespace-nowrap">الإجمالي</th>
           </tr>
         </thead>
         <tbody>
           <?php if ($items === []): ?>
-            <tr><td colspan="7" class="p-4 text-text-muted">لا توجد بنود.</td></tr>
+            <tr><td colspan="6" class="p-4 text-text-muted">لا توجد بنود.</td></tr>
           <?php else: ?>
-            <?php foreach ($items as $item): ?>
-              <tr class="border-b border-border-subtle last:border-0">
-                <td class="p-3 font-semibold"><?= h((string) ($item['materialName'] ?? $item['materialCode'] ?? '—')) ?></td>
-                <td class="p-3"><?= h(format_decimal($item['quantityUnit1'] ?? $item['quantity'] ?? null)) ?></td>
-                <td class="p-3"><?= h(format_decimal($item['quantityUnit2'] ?? null)) ?></td>
-                <td class="p-3"><?= h(format_accounting_money($item['unitPriceUnit1'] ?? $item['price'] ?? null, $symbol, $code)) ?></td>
-                <td class="p-3"><?= h(format_accounting_money($item['discount'] ?? null, $symbol, $code)) ?></td>
-                <td class="p-3"><?= h(format_accounting_money($item['additions'] ?? null, $symbol, $code)) ?></td>
-                <td class="p-3 font-semibold"><?= h(format_accounting_money($item['lineTotal'] ?? null, $symbol, $code)) ?></td>
+            <?php foreach ($items as $index => $item): ?>
+              <tr class="<?= $index % 2 === 0 ? 'bg-white' : 'bg-surface-low/40' ?> border-b border-border-subtle last:border-0 hover:bg-primary/5 transition-colors">
+                <td class="p-3 whitespace-nowrap text-text-muted tabular-nums"><?= h((string) ($index + 1)) ?></td>
+                <td class="p-3 font-semibold"><?= h(accounting_material_label($item)) ?></td>
+                <td class="p-3 whitespace-nowrap tabular-nums"><?= h(format_decimal($item['quantityUnit2'] ?? null)) ?></td>
+                <td class="p-3 whitespace-nowrap tabular-nums"><?= h(format_decimal($item['quantityUnit1'] ?? $item['quantity'] ?? null)) ?></td>
+                <td class="p-3 whitespace-nowrap tabular-nums"><?= h(format_accounting_money($item['unitPriceUnit1'] ?? $item['price'] ?? null, $symbol, $code)) ?></td>
+                <td class="p-3 whitespace-nowrap tabular-nums font-bold"><?= h(format_accounting_money($item['lineTotal'] ?? null, $symbol, $code)) ?></td>
               </tr>
             <?php endforeach; ?>
           <?php endif; ?>

@@ -6,6 +6,8 @@ public sealed record BillDocumentItemResponse(
     int? MaterialNumber,
     string? MaterialCode,
     string? MaterialName,
+    string? MaterialUnity,
+    string? MaterialUnit2,
     double? QuantityUnit1,
     double? QuantityUnit2,
     double? UnitPriceUnit1,

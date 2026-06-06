@@ -734,6 +734,8 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
                     material?.Number,
                     material?.Code,
                     material?.Name,
+                    material?.Unity,
+                    material?.Unit2,
                     quantityUnit1,
                     quantityUnit2,
                     price,

@@ -377,8 +377,8 @@ $showAccountResults = !$hasSelection && ($query['accountSearch'] ?? '') !== '';
       <div class="border border-border-subtle rounded-xl overflow-hidden">
         <div class="px-4 py-2 border-b border-border-subtle bg-surface-low/60 font-bold text-sm" id="modalItemsTitle">البنود</div>
         <div class="overflow-auto">
-          <table class="w-full text-sm min-w-[720px]">
-            <thead class="text-text-muted border-b border-border-subtle bg-surface-low/40" id="modalItemsHead"></thead>
+          <table class="w-full text-sm min-w-[820px] statement-table">
+            <thead class="text-text-muted border-b border-border-subtle bg-surface-low/80 sticky top-0 z-10" id="modalItemsHead"></thead>
             <tbody id="modalItemsBody"></tbody>
           </table>
         </div>
@@ -428,6 +428,25 @@ $showAccountResults = !$hasSelection && ($query['accountSearch'] ?? '') !== '';
   function formatMoney(value, symbol, code) {
     const suffix = symbol || code || '';
     return `${formatNumber(value)}${suffix ? ' ' + suffix : ''}`;
+  }
+
+  function formatMaterialLabel(item) {
+    const code = String(item.materialCode ?? '').trim();
+    const name = String(item.materialName ?? '').trim();
+    if (code && name) return `${code} - ${name}`;
+    return name || code || '—';
+  }
+
+  function resolveUnitHeader(items, field, fallback) {
+    for (const item of items) {
+      const value = String(item[field] ?? '').trim();
+      if (value) return value;
+    }
+    return fallback;
+  }
+
+  function invoiceRowClass(index) {
+    return `${index % 2 === 0 ? 'bg-white' : 'bg-surface-low/40'} border-b border-border-subtle last:border-0 hover:bg-primary/5 transition-colors`;
   }
 
   async function apiCall(action, params = {}) {
@@ -619,21 +638,31 @@ $showAccountResults = !$hasSelection && ($query['accountSearch'] ?? '') !== '';
 
       if (isInvoice) {
         modalItemsTitle.textContent = 'بنود الفاتورة';
-        modalItemsHead.innerHTML = '<tr><th class="text-right p-3">المادة</th><th class="text-right p-3">كمية (و1)</th><th class="text-right p-3">كمية (و2)</th><th class="text-right p-3">سعر القطعة</th><th class="text-right p-3">حسم</th><th class="text-right p-3">إضافة</th><th class="text-right p-3">إجمالي</th></tr>';
         const items = data.items || [];
+        const unit2Header = resolveUnitHeader(items, 'materialUnit2', 'الوحدة الثانية');
+        const unit1Header = resolveUnitHeader(items, 'materialUnity', 'الوحدة الأولى');
+        modalItemsHead.innerHTML = `
+          <tr>
+            <th class="text-right p-3 whitespace-nowrap">#</th>
+            <th class="text-right p-3 whitespace-nowrap">المادة</th>
+            <th class="text-right p-3 whitespace-nowrap">${escapeHtml(unit2Header)}</th>
+            <th class="text-right p-3 whitespace-nowrap">${escapeHtml(unit1Header)}</th>
+            <th class="text-right p-3 whitespace-nowrap">سعر القطعة</th>
+            <th class="text-right p-3 whitespace-nowrap">الإجمالي</th>
+          </tr>
+        `;
         modalItemsBody.innerHTML = items.length
-          ? items.map((item) => `
-            <tr class="border-b border-border-subtle last:border-0">
-              <td class="p-3">${escapeHtml(item.materialName || item.materialCode || '—')}</td>
-              <td class="p-3">${escapeHtml(formatNumber(item.quantityUnit1 ?? item.quantity))}</td>
-              <td class="p-3">${escapeHtml(formatNumber(item.quantityUnit2))}</td>
-              <td class="p-3">${escapeHtml(formatMoney(item.unitPriceUnit1 ?? item.price, document.currencySymbol, document.currencyCode))}</td>
-              <td class="p-3">${escapeHtml(formatMoney(item.discount, document.currencySymbol, document.currencyCode))}</td>
-              <td class="p-3">${escapeHtml(formatMoney(item.additions, document.currencySymbol, document.currencyCode))}</td>
-              <td class="p-3 font-semibold">${escapeHtml(formatMoney(item.lineTotal, document.currencySymbol, document.currencyCode))}</td>
+          ? items.map((item, index) => `
+            <tr class="${invoiceRowClass(index)}">
+              <td class="p-3 whitespace-nowrap text-text-muted tabular-nums">${escapeHtml(String(index + 1))}</td>
+              <td class="p-3 font-semibold">${escapeHtml(formatMaterialLabel(item))}</td>
+              <td class="p-3 whitespace-nowrap tabular-nums">${escapeHtml(formatNumber(item.quantityUnit2))}</td>
+              <td class="p-3 whitespace-nowrap tabular-nums">${escapeHtml(formatNumber(item.quantityUnit1 ?? item.quantity))}</td>
+              <td class="p-3 whitespace-nowrap tabular-nums">${escapeHtml(formatMoney(item.unitPriceUnit1 ?? item.price, document.currencySymbol, document.currencyCode))}</td>
+              <td class="p-3 whitespace-nowrap tabular-nums font-bold">${escapeHtml(formatMoney(item.lineTotal, document.currencySymbol, document.currencyCode))}</td>
             </tr>
           `).join('')
-          : '<tr><td colspan="7" class="p-4 text-center text-text-muted">لا توجد بنود.</td></tr>';
+          : '<tr><td colspan="6" class="p-4 text-center text-text-muted">لا توجد بنود.</td></tr>';
       } else {
         modalItemsTitle.textContent = 'قيود السند';
         modalItemsHead.innerHTML = '<tr><th class="text-right p-3">رقم</th><th class="text-right p-3">حساب</th><th class="text-right p-3">مقابل</th><th class="text-right p-3">مدين</th><th class="text-right p-3">دائن</th><th class="text-right p-3">التعادل</th><th class="text-right p-3">عميل</th><th class="text-right p-3">ملاحظات</th></tr>';

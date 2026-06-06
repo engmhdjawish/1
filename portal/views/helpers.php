@@ -98,6 +98,31 @@ function accounting_document_kind(?string $reasonType): ?string
     return null;
 }
 
+/** @param array<string, mixed> $item */
+function accounting_material_label(array $item): string
+{
+    $code = trim((string) ($item['materialCode'] ?? ''));
+    $name = trim((string) ($item['materialName'] ?? ''));
+    if ($code !== '' && $name !== '') {
+        return $code . ' - ' . $name;
+    }
+
+    return $name !== '' ? $name : ($code !== '' ? $code : '—');
+}
+
+/** @param list<array<string, mixed>> $items */
+function accounting_invoice_unit_header(array $items, string $field, string $fallback): string
+{
+    foreach ($items as $item) {
+        $value = trim((string) ($item[$field] ?? ''));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    return $fallback;
+}
+
 function accounting_format_date(mixed $value): string
 {
     if ($value === null || $value === '') {
