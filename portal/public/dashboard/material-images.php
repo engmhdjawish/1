@@ -11,7 +11,7 @@ use Portal\Services\PortalSettingsService;
 WebSession::requirePermission('images.upload');
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
-MaterialImageStorageService::ensureSchema();
+MaterialImageStorageService::ensureSettings();
 
 $flash = null;
 $flashType = 'success';
@@ -55,15 +55,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if ($action === 'refresh_index') {
-        $result = MaterialImageStorageService::refreshIndexFromApi();
-        $flash = $result['message'];
-        $flashType = $result['ok'] ? 'success' : 'error';
-        if ($result['ok']) {
-            header('Location: /dashboard/material-images.php?indexed=1');
-            exit;
-        }
-    }
 }
 
 if (isset($_GET['saved']) && $_GET['saved'] === '1' && $flash === null) {
@@ -72,10 +63,6 @@ if (isset($_GET['saved']) && $_GET['saved'] === '1' && $flash === null) {
 if (isset($_GET['uploaded']) && $_GET['uploaded'] === '1' && $flash === null) {
     $flash = 'تم رفع الصور بنجاح.';
 }
-if (isset($_GET['indexed']) && $_GET['indexed'] === '1' && $flash === null) {
-    $flash = 'تم تحديث فهرس الصور من API.';
-}
-
 $company = PortalSettingsService::companySettings();
 $paths = MaterialImageStorageService::settings();
 $stats = MaterialImageStorageService::stats();

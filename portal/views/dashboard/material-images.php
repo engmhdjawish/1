@@ -3,14 +3,14 @@
 declare(strict_types=1);
 
 /** @var array{images_dir: string, thumbnails_dir: string} $paths */
-/** @var array{local_count: int, thumbnail_count: int, indexed_count: int} $stats */
+/** @var array{local_count: int, thumbnail_count: int} $stats */
 /** @var list<array<string, mixed>> $files */
 /** @var string|null $flash */
 /** @var string $flashType */
 /** @var array<string, string> $settingsForm */
 
 $paths = is_array($paths ?? null) ? $paths : ['images_dir' => '', 'thumbnails_dir' => ''];
-$stats = is_array($stats ?? null) ? $stats : ['local_count' => 0, 'thumbnail_count' => 0, 'indexed_count' => 0];
+$stats = is_array($stats ?? null) ? $stats : ['local_count' => 0, 'thumbnail_count' => 0];
 $files = is_array($files ?? null) ? $files : [];
 $settingsForm = is_array($settingsForm ?? null) ? $settingsForm : [];
 ?>
@@ -18,7 +18,7 @@ $settingsForm = is_array($settingsForm ?? null) ? $settingsForm : [];
   <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
     <div>
       <h1 class="text-2xl font-extrabold">صور المواد المحلية</h1>
-      <p class="text-sm text-text-muted mt-1">ارفع صور المواد بنفس أسماء ملفات الأمين — يتم استبدال الملفات المتطابقة وتوليد thumbnail تلقائياً.</p>
+      <p class="text-sm text-text-muted mt-1">ارفع صور المواد بنفس أسماء ملفات الأمين. عند العرض يُجلب اسم الملف من API الأمين ثم تُقرأ النسخة المحلية.</p>
     </div>
     <div class="flex flex-wrap gap-2 text-xs">
       <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">
@@ -26,9 +26,6 @@ $settingsForm = is_array($settingsForm ?? null) ? $settingsForm : [];
       </span>
       <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">
         ثامبنيل: <strong><?= (int) ($stats['thumbnail_count'] ?? 0) ?></strong>
-      </span>
-      <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">
-        مفهرس GUID: <strong><?= (int) ($stats['indexed_count'] ?? 0) ?></strong>
       </span>
     </div>
   </div>
@@ -69,11 +66,6 @@ $settingsForm = is_array($settingsForm ?? null) ? $settingsForm : [];
       <input type="hidden" name="action" value="upload">
       <input type="file" name="files[]" accept="image/jpeg,image/png,image/gif,image/webp" multiple required class="block w-full text-sm">
       <button class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold">رفع واستبدال</button>
-    </form>
-    <form method="post" class="mt-4 pt-4 border-t border-border-subtle">
-      <input type="hidden" name="action" value="refresh_index">
-      <p class="text-xs text-text-muted mb-2">يربط معرفات الصور (GUID) بأسماء الملفات من API لعرض أسرع على الموقع.</p>
-      <button class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold hover:bg-surface-low">تحديث الفهرس من API</button>
     </form>
   </article>
 </section>

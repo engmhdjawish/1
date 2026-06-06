@@ -6,7 +6,6 @@ namespace Portal\Services;
 
 use Portal\Config;
 use Portal\Database;
-use PDO;
 use Throwable;
 
 final class MaterialImageStorageService
@@ -17,29 +16,18 @@ final class MaterialImageStorageService
     /** @var list<string> */
     private const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
-    private static bool $schemaReady = false;
+    private static bool $settingsReady = false;
 
-    public static function ensureSchema(): void
+    /** @var array<string, string> */
+    private static array $fileNameByGuid = [];
+
+    public static function ensureSettings(): void
     {
-        if (self::$schemaReady) {
+        if (self::$settingsReady) {
             return;
         }
 
-        $pdo = Database::pdo();
-        $pdo->exec(
-            'CREATE TABLE IF NOT EXISTS material_image_index (
-                image_guid UUID PRIMARY KEY,
-                file_name TEXT NOT NULL,
-                api_updated_at TIMESTAMPTZ NULL,
-                indexed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )'
-        );
-        $pdo->exec(
-            'CREATE INDEX IF NOT EXISTS ix_material_image_index_file_name
-             ON material_image_index (file_name)'
-        );
-
-        $stmt = $pdo->prepare(
+        $stmt = Database::pdo()->prepare(
             'INSERT INTO company_settings (key, value_ar)
              VALUES (:key, :value_ar)
              ON CONFLICT (key) DO NOTHING'
@@ -48,12 +36,13 @@ final class MaterialImageStorageService
             $stmt->execute(['key' => $key, 'value_ar' => '']);
         }
 
-        self::$schemaReady = true;
+        self::$settingsReady = true;
     }
 
     /** @return array{images_dir: string, thumbnails_dir: string} */
     public static function settings(): array
     {
+        self::ensureSettings();
         $map = PortalSettingsService::companySettings();
 
         return [
@@ -216,16 +205,12 @@ final class MaterialImageStorageService
 
     public static function resolvePathForGuid(string $imageGuid, bool $thumb = false): ?string
     {
-        self::ensureSchema();
         $imageGuid = trim($imageGuid);
         if ($imageGuid === '') {
             return null;
         }
 
-        $fileName = self::fileNameForGuid($imageGuid);
-        if ($fileName === null) {
-            $fileName = self::fetchAndCacheFileName($imageGuid);
-        }
+        $fileName = self::fileNameFromAmineApi($imageGuid);
         if ($fileName === null) {
             return null;
         }
@@ -233,65 +218,9 @@ final class MaterialImageStorageService
         return self::resolveLocalPath($fileName, $thumb);
     }
 
-    /** @return array{ok: bool, message: string, indexed: int} */
-    public static function refreshIndexFromApi(): array
-    {
-        self::ensureSchema();
-        $indexed = 0;
-        $page = 1;
-        $pageSize = 200;
-
-        try {
-            do {
-                $response = ApiClient::get('/api/material-images', [
-                    'page' => $page,
-                    'pageSize' => $pageSize,
-                ]);
-                if (!($response['ok'] ?? false)) {
-                    return [
-                        'ok' => false,
-                        'message' => 'تعذر جلب فهرس الصور من API (رمز ' . (int) ($response['status'] ?? 0) . ').',
-                        'indexed' => $indexed,
-                    ];
-                }
-
-                $data = is_array($response['data'] ?? null) ? $response['data'] : [];
-                $items = is_array($data['items'] ?? null) ? $data['items'] : [];
-                $totalCount = (int) ($data['totalCount'] ?? 0);
-
-                foreach ($items as $item) {
-                    if (!is_array($item)) {
-                        continue;
-                    }
-                    $guid = trim((string) ($item['id'] ?? $item['Id'] ?? ''));
-                    $fileName = self::sanitizeFileName((string) ($item['storedFileName'] ?? $item['fileName'] ?? $item['imagePath'] ?? ''));
-                    if ($guid === '' || $fileName === '') {
-                        continue;
-                    }
-                    self::upsertIndex($guid, $fileName, (string) ($item['updatedAt'] ?? $item['createdAt'] ?? ''));
-                    $indexed++;
-                }
-
-                if ($items === []) {
-                    break;
-                }
-
-                $page++;
-            } while (($page - 1) * $pageSize < $totalCount);
-        } catch (Throwable $exception) {
-            return ['ok' => false, 'message' => $exception->getMessage(), 'indexed' => $indexed];
-        }
-
-        return [
-            'ok' => true,
-            'message' => 'تم تحديث فهرس ' . $indexed . ' صورة من API.',
-            'indexed' => $indexed,
-        ];
-    }
-
+    /** @return array{local_count: int, thumbnail_count: int} */
     public static function stats(): array
     {
-        self::ensureSchema();
         $files = self::listLocalFiles();
         $withThumb = 0;
         foreach ($files as $file) {
@@ -300,18 +229,9 @@ final class MaterialImageStorageService
             }
         }
 
-        $indexed = 0;
-        try {
-            $stmt = Database::pdo()->query('SELECT COUNT(*) FROM material_image_index');
-            $indexed = (int) ($stmt->fetchColumn() ?: 0);
-        } catch (Throwable) {
-            $indexed = 0;
-        }
-
         return [
             'local_count' => count($files),
             'thumbnail_count' => $withThumb,
-            'indexed_count' => $indexed,
         ];
     }
 
@@ -357,6 +277,32 @@ final class MaterialImageStorageService
         }
 
         return ['ok' => true, 'message' => 'تم', 'file_name' => $fileName, 'replaced' => $replaced];
+    }
+
+    private static function fileNameFromAmineApi(string $imageGuid): ?string
+    {
+        if (isset(self::$fileNameByGuid[$imageGuid])) {
+            return self::$fileNameByGuid[$imageGuid];
+        }
+
+        try {
+            $response = ApiClient::get('/api/material-images/' . rawurlencode($imageGuid));
+            if (!($response['ok'] ?? false)) {
+                return null;
+            }
+
+            $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+            $fileName = self::sanitizeFileName((string) ($data['storedFileName'] ?? $data['fileName'] ?? ''));
+            if ($fileName === '') {
+                return null;
+            }
+
+            self::$fileNameByGuid[$imageGuid] = $fileName;
+
+            return $fileName;
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     private static function generateThumbnail(string $sourcePath, string $targetPath): bool
@@ -413,58 +359,6 @@ final class MaterialImageStorageService
         imagedestroy($thumb);
 
         return (bool) $saved;
-    }
-
-    private static function fileNameForGuid(string $imageGuid): ?string
-    {
-        $stmt = Database::pdo()->prepare(
-            'SELECT file_name FROM material_image_index WHERE image_guid = :guid LIMIT 1'
-        );
-        $stmt->execute(['guid' => $imageGuid]);
-        $fileName = $stmt->fetchColumn();
-        if ($fileName === false) {
-            return null;
-        }
-
-        $sanitized = self::sanitizeFileName((string) $fileName);
-
-        return $sanitized !== '' ? $sanitized : null;
-    }
-
-    private static function fetchAndCacheFileName(string $imageGuid): ?string
-    {
-        $response = ApiClient::get('/api/material-images/' . rawurlencode($imageGuid));
-        if (!($response['ok'] ?? false)) {
-            return null;
-        }
-
-        $data = is_array($response['data'] ?? null) ? $response['data'] : [];
-        $fileName = self::sanitizeFileName((string) ($data['storedFileName'] ?? $data['fileName'] ?? ''));
-        if ($fileName === '') {
-            return null;
-        }
-
-        self::upsertIndex($imageGuid, $fileName, (string) ($data['updatedAt'] ?? $data['createdAt'] ?? ''));
-
-        return $fileName;
-    }
-
-    private static function upsertIndex(string $guid, string $fileName, string $apiUpdatedAt): void
-    {
-        $stmt = Database::pdo()->prepare(
-            'INSERT INTO material_image_index (image_guid, file_name, api_updated_at, indexed_at)
-             VALUES (:guid, :file_name, :api_updated_at, NOW())
-             ON CONFLICT (image_guid)
-             DO UPDATE SET
-                file_name = EXCLUDED.file_name,
-                api_updated_at = EXCLUDED.api_updated_at,
-                indexed_at = NOW()'
-        );
-        $stmt->execute([
-            'guid' => $guid,
-            'file_name' => $fileName,
-            'api_updated_at' => $apiUpdatedAt !== '' ? $apiUpdatedAt : null,
-        ]);
     }
 
     private static function sanitizeFileName(string $fileName): string
