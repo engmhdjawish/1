@@ -16,6 +16,9 @@ final class MaterialImageStorageService
     /** @var list<string> */
     private const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
+    /** @var list<string> */
+    private const LISTABLE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
+
     private static bool $settingsReady = false;
 
     /** @var array<string, list<string>> */
@@ -68,6 +71,20 @@ final class MaterialImageStorageService
             'material_images_dir' => trim((string) ($values['material_images_dir'] ?? '')),
             'material_thumbnails_dir' => trim((string) ($values['material_thumbnails_dir'] ?? '')),
         ], $updatedByUserId);
+    }
+
+    /**
+     * @param array<string, mixed> $file single $_FILES entry
+     * @return array{ok: bool, message: string, file_name?: string, replaced?: bool}
+     */
+    public static function uploadSingle(array $file): array
+    {
+        $settings = self::settings();
+        if (!self::ensureDirectory($settings['images_dir']) || !self::ensureDirectory($settings['thumbnails_dir'])) {
+            return ['ok' => false, 'message' => 'تعذر إنشاء مجلدات التخزين.'];
+        }
+
+        return self::uploadOne($file, $settings['images_dir'], $settings['thumbnails_dir']);
     }
 
     /**
@@ -157,17 +174,20 @@ final class MaterialImageStorageService
             if (!is_file($path)) {
                 continue;
             }
-            if (!self::isAllowedFileName($entry)) {
+            if (!self::isListableFileName($entry)) {
                 continue;
             }
 
-            $thumbPath = self::thumbnailPath($entry, $settings['thumbnails_dir']);
+            $thumbPath = self::findFileInDirectory($settings['thumbnails_dir'], $entry);
+            $fullPreviewPath = self::findFileInDirectory($settings['images_dir'], $entry);
             $rows[] = [
                 'file_name' => $entry,
                 'size_bytes' => filesize($path) ?: 0,
                 'modified_at' => date('Y-m-d H:i:s', (int) filemtime($path)),
-                'has_thumbnail' => is_file($thumbPath),
-                'preview_url' => self::publicUrl($entry, true),
+                'has_thumbnail' => $thumbPath !== null,
+                'is_previewable' => $fullPreviewPath !== null,
+                'preview_url' => self::publicUrl($entry, false),
+                'preview_thumb_url' => self::publicUrl($entry, true),
             ];
         }
 
@@ -437,6 +457,13 @@ final class MaterialImageStorageService
         $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
 
         return in_array($extension, self::ALLOWED_EXTENSIONS, true);
+    }
+
+    private static function isListableFileName(string $fileName): bool
+    {
+        $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+
+        return in_array($extension, self::LISTABLE_EXTENSIONS, true);
     }
 
     private static function thumbnailPath(string $fileName, string $thumbnailsDir): string

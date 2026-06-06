@@ -17,6 +17,10 @@ if ($file === '') {
 }
 
 $path = MaterialImageStorageService::resolveLocalPath($file, $thumb);
+if ($path === null && $thumb) {
+    $path = MaterialImageStorageService::resolveLocalPath($file, false);
+}
+
 if ($path === null || !is_readable($path)) {
     http_response_code(404);
     header('Content-Type: text/plain; charset=utf-8');
@@ -29,6 +33,7 @@ $mime = match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
     'png' => 'image/png',
     'gif' => 'image/gif',
     'webp' => 'image/webp',
+    'bmp' => 'image/bmp',
     default => 'application/octet-stream',
 };
 
