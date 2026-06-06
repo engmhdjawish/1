@@ -59,21 +59,10 @@ final class StoreCatalogService
         $page = max(1, (int) ($query['page'] ?? 1));
         $pageSize = 24;
         $search = trim((string) ($query['q'] ?? $query['search'] ?? ''));
-        $sort = trim((string) ($query['sort'] ?? 'number:asc'));
+        $sort = self::normalizeSort($query['sort'] ?? 'number:asc');
         $materialTypes = self::parseList($query['materialTypes'] ?? []);
         $manufacturers = self::parseList($query['manufacturers'] ?? []);
         $isAvailable = self::parseNullableBool($query['isAvailable'] ?? null);
-
-        $apiQuery = array_filter([
-            'page' => $page,
-            'pageSize' => $pageSize,
-            'search' => $search !== '' ? $search : null,
-            'sort' => $sort !== '' ? $sort : null,
-            'materialTypes' => $materialTypes !== [] ? implode(',', $materialTypes) : null,
-            'manufacturers' => $manufacturers !== [] ? implode(',', $manufacturers) : null,
-            'isAvailable' => $isAvailable,
-            'includeResultFilters' => true,
-        ], static fn ($value) => $value !== null && $value !== '');
 
         $products = [];
         $totalCount = 0;
@@ -85,7 +74,7 @@ final class StoreCatalogService
         }
 
         try {
-            $materials = ApiClient::get('/api/materials', $apiQuery);
+            $materials = self::fetchMaterials($page, $pageSize, $search, $sort, $materialTypes, $manufacturers, $isAvailable);
             if ($materials['ok']) {
                 $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
                 $products = is_array($data['items'] ?? null) ? $data['items'] : [];
@@ -94,7 +83,11 @@ final class StoreCatalogService
                 $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
                 $resultFilters = is_array($data['resultFilters'] ?? null) ? $data['resultFilters'] : [];
             } else {
-                $apiError = 'تعذر جلب المواد من API (رمز ' . (int) ($materials['status'] ?? 0) . ')';
+                $apiError = self::extractApiError($materials);
+            }
+
+            if ($resultFilters === []) {
+                $resultFilters = self::loadStaticResultFilters();
             }
         } catch (\Throwable $exception) {
             $apiError = $exception->getMessage();
@@ -186,6 +179,10 @@ final class StoreCatalogService
 
     private static function parseNullableBool(mixed $value): ?bool
     {
+        if (is_bool($value)) {
+            return $value;
+        }
+
         $value = trim(strtolower((string) $value));
 
         return match ($value) {
@@ -193,5 +190,164 @@ final class StoreCatalogService
             '0', 'false', 'no', 'off' => false,
             default => null,
         };
+    }
+
+    /** @param list<string> $materialTypes */
+    /** @param list<string> $manufacturers */
+    private static function buildApiQuery(
+        int $page,
+        int $pageSize,
+        string $search,
+        string $sort,
+        array $materialTypes,
+        array $manufacturers,
+        ?bool $isAvailable,
+        bool $includeResultFilters
+    ): array {
+        return array_filter([
+            'page' => $page,
+            'pageSize' => $pageSize,
+            'search' => $search !== '' ? $search : null,
+            'sort' => $sort,
+            'materialTypes' => $materialTypes !== [] ? implode(',', $materialTypes) : null,
+            'manufacturers' => $manufacturers !== [] ? implode(',', $manufacturers) : null,
+            'isAvailable' => $isAvailable === null ? null : ($isAvailable ? 'true' : 'false'),
+            'includeResultFilters' => $includeResultFilters ? 'true' : null,
+        ], static fn ($value) => $value !== null && $value !== '');
+    }
+
+    /** @param list<string> $materialTypes */
+    /** @param list<string> $manufacturers */
+    private static function fetchMaterials(
+        int $page,
+        int $pageSize,
+        string $search,
+        string $sort,
+        array $materialTypes,
+        array $manufacturers,
+        ?bool $isAvailable
+    ): array {
+        $primaryQuery = self::buildApiQuery(
+            $page,
+            $pageSize,
+            $search,
+            $sort,
+            $materialTypes,
+            $manufacturers,
+            $isAvailable,
+            false
+        );
+        $materials = ApiClient::get('/api/materials', $primaryQuery);
+        if ($materials['ok'] || (int) ($materials['status'] ?? 0) !== 400) {
+            return $materials;
+        }
+
+        $fallbackQuery = self::buildApiQuery(
+            $page,
+            $pageSize,
+            $search,
+            'number:asc',
+            [],
+            [],
+            null,
+            false
+        );
+        $retry = ApiClient::get('/api/materials', $fallbackQuery);
+        if ($retry['ok']) {
+            return $retry;
+        }
+
+        return $materials;
+    }
+
+    private static function normalizeSort(mixed $sort): string
+    {
+        $sort = trim(is_array($sort) ? '' : (string) $sort);
+        $allowed = [
+            'number:asc',
+            'number:desc',
+            'name:asc',
+            'name:desc',
+            '-unitSalePriceSyp',
+            'unitSalePriceSyp:desc',
+            '-unitSalePriceUsd',
+            'unitSalePriceUsd:desc',
+        ];
+
+        if (in_array($sort, $allowed, true)) {
+            return $sort;
+        }
+
+        return 'number:asc';
+    }
+
+    /** @return array<string, list<array{value: string, count: int|null}>> */
+    private static function loadStaticResultFilters(): array
+    {
+        try {
+            $response = ApiClient::get('/api/materials/filter-options');
+            if (!$response['ok'] || !is_array($response['data'] ?? null)) {
+                return [];
+            }
+
+            $data = $response['data'];
+            $toFacetValues = static function (mixed $values): array {
+                if (!is_array($values)) {
+                    return [];
+                }
+                $items = [];
+                foreach ($values as $value) {
+                    $item = trim((string) $value);
+                    if ($item === '') {
+                        continue;
+                    }
+                    $items[] = ['value' => $item, 'count' => null];
+                }
+
+                return $items;
+            };
+
+            return [
+                'materialTypes' => $toFacetValues($data['materialTypes'] ?? $data['MaterialTypes'] ?? []),
+                'manufacturers' => $toFacetValues($data['manufacturers'] ?? $data['Manufacturers'] ?? []),
+            ];
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    /** @param array<string, mixed> $response */
+    private static function extractApiError(array $response): string
+    {
+        $status = (int) ($response['status'] ?? 0);
+        $data = $response['data'] ?? null;
+        if (is_array($data)) {
+            $messages = [];
+            if (!empty($data['title']) && is_string($data['title'])) {
+                $messages[] = trim($data['title']);
+            }
+            if (!empty($data['detail']) && is_string($data['detail'])) {
+                $messages[] = trim($data['detail']);
+            }
+            if (isset($data['errors']) && is_array($data['errors'])) {
+                foreach ($data['errors'] as $field => $fieldErrors) {
+                    if (!is_array($fieldErrors)) {
+                        continue;
+                    }
+                    foreach ($fieldErrors as $fieldError) {
+                        $errorText = trim((string) $fieldError);
+                        if ($errorText !== '') {
+                            $messages[] = $field . ': ' . $errorText;
+                        }
+                    }
+                }
+            }
+            $messages = array_values(array_unique(array_filter($messages, static fn ($value) => trim((string) $value) !== '')));
+            if ($messages !== []) {
+                return 'تعذر جلب المواد من API (رمز ' . $status . '): ' . implode(' | ', $messages);
+            }
+        }
+
+        return 'تعذر جلب المواد من API (رمز ' . $status . ')';
     }
 }
