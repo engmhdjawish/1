@@ -198,7 +198,7 @@ final class MaterialImageStorageService
 
     public static function publicUrl(string $fileName, bool $thumb = true): string
     {
-        return '/media/material.php?file=' . rawurlencode(self::sanitizeFileName($fileName))
+        return '/media/material.php?file=' . rawurlencode(self::lookupFileName($fileName))
             . ($thumb ? '&thumb=1' : '&thumb=0');
     }
 
