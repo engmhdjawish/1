@@ -13,6 +13,7 @@ require dirname(__DIR__, 2) . '/views/helpers.php';
 $flash = null;
 $flashType = 'success';
 $user = WebSession::user();
+$currentUserId = isset($user['id']) ? (string) $user['id'] : '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string) ($_POST['action'] ?? ''));
@@ -37,16 +38,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($result['ok']) {
             $_GET['edit'] = (string) ($result['id'] ?? '');
         }
+    } elseif ($action === 'save_role') {
+        $postedPermissionIds = $_POST['permission_ids'] ?? [];
+        $permissionIds = is_array($postedPermissionIds)
+            ? array_map('strval', $postedPermissionIds)
+            : [trim((string) $postedPermissionIds)];
+        $result = WebUserService::saveRole(
+            trim((string) ($_POST['id'] ?? '')) !== '' ? trim((string) ($_POST['id'] ?? '')) : null,
+            trim((string) ($_POST['code'] ?? '')),
+            trim((string) ($_POST['name_ar'] ?? '')),
+            trim((string) ($_POST['description_ar'] ?? '')),
+            $permissionIds
+        );
+
+        $flash = $result['message'];
+        $flashType = $result['ok'] ? 'success' : 'error';
+        if ($result['ok']) {
+            $_GET['edit_role'] = (string) ($result['id'] ?? '');
+        }
     } elseif ($action === 'toggle_active') {
         $targetId = trim((string) ($_POST['id'] ?? ''));
         $next = ($_POST['next_active'] ?? '0') === '1';
-        if (($user['id'] ?? '') === $targetId && !$next) {
+        if ($currentUserId === $targetId && !$next) {
             $flash = 'لا يمكن تعطيل الحساب الحالي أثناء تسجيل الدخول.';
             $flashType = 'error';
         } else {
             $ok = WebUserService::setActive($targetId, $next);
             $flash = $ok ? 'تم تحديث حالة المستخدم.' : 'تعذر تحديث حالة المستخدم.';
             $flashType = $ok ? 'success' : 'error';
+        }
+    } elseif ($action === 'delete_user') {
+        $result = WebUserService::deleteUser(trim((string) ($_POST['id'] ?? '')), $currentUserId);
+        $flash = $result['message'];
+        $flashType = $result['ok'] ? 'success' : 'error';
+        if ($result['ok'] && trim((string) ($_GET['edit'] ?? '')) === trim((string) ($_POST['id'] ?? ''))) {
+            unset($_GET['edit']);
+        }
+    } elseif ($action === 'delete_role') {
+        $result = WebUserService::deleteRole(trim((string) ($_POST['id'] ?? '')));
+        $flash = $result['message'];
+        $flashType = $result['ok'] ? 'success' : 'error';
+        if ($result['ok'] && trim((string) ($_GET['edit_role'] ?? '')) === trim((string) ($_POST['id'] ?? ''))) {
+            unset($_GET['edit_role']);
         }
     }
 }
@@ -58,6 +91,7 @@ $filters = [
 ];
 
 $roles = WebUserService::listRoles();
+$permissions = WebUserService::listPermissions();
 $users = WebUserService::listUsers($filters['q'], $filters['role'], $filters['active']);
 $stats = WebUserService::stats();
 
@@ -66,6 +100,22 @@ $editUser = $editId !== '' ? WebUserService::getUserById($editId) : null;
 if ($editUser === null) {
     $editId = '';
 }
+
+$editRoleId = trim((string) ($_GET['edit_role'] ?? ''));
+$editRole = $editRoleId !== '' ? WebUserService::getRoleById($editRoleId) : null;
+if ($editRole === null) {
+    $editRoleId = '';
+}
+
+$permissionsByCategory = [];
+foreach ($permissions as $permission) {
+    $category = trim((string) ($permission['category_ar'] ?? 'عام'));
+    if ($category === '') {
+        $category = 'عام';
+    }
+    $permissionsByCategory[$category][] = $permission;
+}
+ksort($permissionsByCategory);
 
 $currentRoute = '/dashboard/users.php';
 
