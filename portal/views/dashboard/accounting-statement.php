@@ -412,10 +412,14 @@ $showAccountResults = !$hasSelection && ($query['accountSearch'] ?? '') !== '';
       .replaceAll("'", '&#39;');
   }
 
-  function formatNumber(value) {
-    const number = Number(value ?? 0);
-    if (!Number.isFinite(number)) return '0.00';
-    return number.toLocaleString('ar-SY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  function formatDecimal(value, decimals = 2) {
+    if (value === null || value === undefined || value === '') return '—';
+    const number = Number(value);
+    if (!Number.isFinite(number)) return String(value);
+    return number.toLocaleString('en-US', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
   }
 
   function formatDate(value) {
@@ -425,9 +429,17 @@ $showAccountResults = !$hasSelection && ($query['accountSearch'] ?? '') !== '';
     return date.toLocaleDateString('ar-SY');
   }
 
-  function formatMoney(value, symbol, code) {
-    const suffix = symbol || code || '';
-    return `${formatNumber(value)}${suffix ? ' ' + suffix : ''}`;
+  function formatAccountingMoney(value, symbol, code) {
+    const formatted = formatDecimal(value);
+    if (formatted === '—') return formatted;
+    const suffix = String(symbol ?? '').trim() || String(code ?? '').trim();
+    return suffix ? `${formatted} ${suffix}` : formatted;
+  }
+
+  function formatEntryAmount(value) {
+    const number = Number(value ?? 0);
+    if (!Number.isFinite(number) || number <= 0) return '—';
+    return formatDecimal(number);
   }
 
   function formatMaterialLabel(item) {
@@ -626,13 +638,13 @@ $showAccountResults = !$hasSelection && ($query['accountSearch'] ?? '') !== '';
         summaryCard('النوع', document.typeName || document.typeCode || '—'),
         summaryCard('التسوية', document.settlementTypeName || '—'),
         summaryCard('العملة', [document.currencyName, document.currencyCode, document.currencySymbol].filter(Boolean).join(' - ') || '—'),
-        summaryCard('سعر التعادل', formatNumber(document.currencyRate)),
+        summaryCard('سعر التعادل', formatDecimal(document.currencyRate)),
         summaryCard('العميل', document.customerName || '—'),
         summaryCard('الحساب', [document.accountNumber, document.accountName].filter(Boolean).join(' - ') || '—'),
-        summaryCard('الإجمالي', formatMoney(document.totalAmount, document.currencySymbol, document.currencyCode)),
-        summaryCard('الحسم', formatMoney(document.totalDiscount, document.currencySymbol, document.currencyCode)),
-        summaryCard('الإضافات', formatMoney(document.totalAdditions, document.currencySymbol, document.currencyCode)),
-        summaryCard('الصافي', formatMoney(document.netAmount, document.currencySymbol, document.currencyCode)),
+        summaryCard('الإجمالي', formatAccountingMoney(document.totalAmount, document.currencySymbol, document.currencyCode)),
+        summaryCard('الحسم', formatAccountingMoney(document.totalDiscount, document.currencySymbol, document.currencyCode)),
+        summaryCard('الإضافات', formatAccountingMoney(document.totalAdditions, document.currencySymbol, document.currencyCode)),
+        summaryCard('الصافي', formatAccountingMoney(document.netAmount, document.currencySymbol, document.currencyCode)),
       ];
       modalSummary.innerHTML = summaryItems.join('');
 
@@ -656,10 +668,10 @@ $showAccountResults = !$hasSelection && ($query['accountSearch'] ?? '') !== '';
             <tr class="${invoiceRowClass(index)}">
               <td class="p-3 whitespace-nowrap text-text-muted tabular-nums">${escapeHtml(String(index + 1))}</td>
               <td class="p-3 font-semibold">${escapeHtml(formatMaterialLabel(item))}</td>
-              <td class="p-3 whitespace-nowrap tabular-nums">${escapeHtml(formatNumber(item.quantityUnit2))}</td>
-              <td class="p-3 whitespace-nowrap tabular-nums">${escapeHtml(formatNumber(item.quantityUnit1 ?? item.quantity))}</td>
-              <td class="p-3 whitespace-nowrap tabular-nums">${escapeHtml(formatMoney(item.unitPriceUnit1 ?? item.price, document.currencySymbol, document.currencyCode))}</td>
-              <td class="p-3 whitespace-nowrap tabular-nums font-bold">${escapeHtml(formatMoney(item.lineTotal, document.currencySymbol, document.currencyCode))}</td>
+              <td class="p-3 whitespace-nowrap tabular-nums">${escapeHtml(formatDecimal(item.quantityUnit2))}</td>
+              <td class="p-3 whitespace-nowrap tabular-nums">${escapeHtml(formatDecimal(item.quantityUnit1 ?? item.quantity))}</td>
+              <td class="p-3 whitespace-nowrap tabular-nums">${escapeHtml(formatAccountingMoney(item.unitPriceUnit1 ?? item.price, document.currencySymbol, document.currencyCode))}</td>
+              <td class="p-3 whitespace-nowrap tabular-nums font-bold">${escapeHtml(formatAccountingMoney(item.lineTotal, document.currencySymbol, document.currencyCode))}</td>
             </tr>
           `).join('')
           : '<tr><td colspan="6" class="p-4 text-center text-text-muted">لا توجد بنود.</td></tr>';
@@ -669,16 +681,18 @@ $showAccountResults = !$hasSelection && ($query['accountSearch'] ?? '') !== '';
         const entryLines = data.entryLines || [];
         modalItemsBody.innerHTML = entryLines.length
           ? entryLines.map((line) => {
+            const debit = Number(line.debit ?? 0);
+            const credit = Number(line.credit ?? 0);
             const equivalent = line.equivalentValue != null
-              ? formatMoney(line.equivalentValue, line.equivalentCurrencySymbol, line.equivalentCurrencyCode)
+              ? formatAccountingMoney(line.equivalentValue, line.equivalentCurrencySymbol, line.equivalentCurrencyCode)
               : '—';
             return `
               <tr class="border-b border-border-subtle last:border-0">
                 <td class="p-3">${escapeHtml(line.number ?? '—')}</td>
                 <td class="p-3">${escapeHtml([line.accountNumber, line.accountName || line.accountCode].filter(Boolean).join(' - ') || '—')}</td>
                 <td class="p-3">${escapeHtml([line.contraAccountNumber, line.contraAccountName || line.contraAccountCode].filter(Boolean).join(' - ') || '—')}</td>
-                <td class="p-3">${escapeHtml(formatMoney(line.debit, document.currencySymbol, document.currencyCode))}</td>
-                <td class="p-3">${escapeHtml(formatMoney(line.credit, document.currencySymbol, document.currencyCode))}</td>
+                <td class="p-3 whitespace-nowrap tabular-nums ${debit > 0 ? 'text-emerald-700 font-semibold' : 'text-text-muted'}">${escapeHtml(formatEntryAmount(line.debit))}</td>
+                <td class="p-3 whitespace-nowrap tabular-nums ${credit > 0 ? 'text-rose-700 font-semibold' : 'text-text-muted'}">${escapeHtml(formatEntryAmount(line.credit))}</td>
                 <td class="p-3">${escapeHtml(equivalent)}</td>
                 <td class="p-3">${escapeHtml(line.customerName || '—')}</td>
                 <td class="p-3">${escapeHtml(line.notes || '—')}</td>
