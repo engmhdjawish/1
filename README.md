@@ -440,7 +440,9 @@ entries.read   (لكشف الحساب التفصيلي)
 - قيمة المدين والدائن بعملة الحساب
 - قيمة المدين والدائن بالعملة الرئيسية (`debitMainCurrency` / `creditMainCurrency`)
 - بيانات عملة الحساب في رأس الاستجابة (`accountCurrencyName`, `accountCurrencyCode`, `accountCurrencySymbol`)
-- التحويل لعملة الحساب يتم بسعر عملة الحساب (`accountCurrencyRate` / `currencyRateUsed`) لأن قيم `Debit/Credit` في `en000` مخزّنة بالفعل بالعملة الأساسية؛ `CurrencyVal` على القيد يصف عملة الحركة (`movementCurrency*`) ولا يُعاد استخدامه في حساب الرصيد
+- التحويل لعملة الحساب:
+  - حساب بالعملة الرئيسية (`accountCurrencyRate = 1`): قيم `Debit/Credit` في `en000` تُعرض كما هي (بدون قسمة على `CurrencyVal`) لأنها مخزّنة بالفعل بعملة الحساب حتى لو كان `CurrencyVal` على القيد يصف عملة الحركة القديمة (مثل `0.01` لليرة القديمة)
+  - حساب بعملة أجنبية (`accountCurrencyRate > 1`): تُقسَّم القيم على سعر القيد `CurrencyVal` عند توفره، وإلا على `accountCurrencyRate`؛ `currencyRateUsed` يعكس السعر الفعلي لكل قيد
 - عملة الحركة نفسها (تُقرأ من `en000.CurrencyGUID` لكل قيد، وليست بالضرورة عملة الحساب):
   - `movementCurrencyGuid`, `movementCurrencyName`, `movementCurrencyCode`, `movementCurrencySymbol`
   - عند غياب عملة القيد يتم الرجوع لعملة الحساب
