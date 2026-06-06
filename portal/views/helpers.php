@@ -149,3 +149,42 @@ function accounting_format_date(mixed $value): string
 
     return date('Y-m-d', $timestamp);
 }
+
+function material_guid(array $item): string
+{
+    return trim((string) ($item['materialGuid'] ?? $item['MaterialGuid'] ?? $item['guid'] ?? $item['Guid'] ?? ''));
+}
+
+function material_image_guid(array $item): string
+{
+    return trim((string) ($item['productImageGuid'] ?? $item['ProductImageGuid'] ?? ''));
+}
+
+function product_url(string $guid): string
+{
+    return '/product.php?guid=' . rawurlencode(trim($guid));
+}
+
+/** @param array<string, scalar|null> $params */
+function store_url(array $params = []): string
+{
+    $filtered = [];
+    foreach ($params as $key => $value) {
+        if ($value === null) {
+            continue;
+        }
+        $text = trim((string) $value);
+        if ($text !== '') {
+            $filtered[$key] = $text;
+        }
+    }
+
+    $query = http_build_query($filtered);
+
+    return '/store.php' . ($query !== '' ? '?' . $query : '');
+}
+
+function format_packaging(float $value): string
+{
+    return rtrim(rtrim(number_format($value, 2, '.', ','), '0'), '.');
+}
