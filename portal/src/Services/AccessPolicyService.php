@@ -110,11 +110,11 @@ final class AccessPolicyService
                  SET code = :code,
                      name_ar = :name_ar,
                      description_ar = :description_ar,
-                     show_price = :show_price,
-                     show_quantity = :show_quantity,
-                     allow_cart = :allow_cart,
-                     allow_order = :allow_order,
-                     is_active = :is_active,
+                     show_price = CASE WHEN :show_price = 1 THEN TRUE ELSE FALSE END,
+                     show_quantity = CASE WHEN :show_quantity = 1 THEN TRUE ELSE FALSE END,
+                     allow_cart = CASE WHEN :allow_cart = 1 THEN TRUE ELSE FALSE END,
+                     allow_order = CASE WHEN :allow_order = 1 THEN TRUE ELSE FALSE END,
+                     is_active = CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END,
                      updated_at = NOW()
                  WHERE id = :id'
             );
@@ -123,11 +123,11 @@ final class AccessPolicyService
                 'code' => $code,
                 'name_ar' => $nameAr,
                 'description_ar' => $descriptionAr !== '' ? $descriptionAr : null,
-                'show_price' => $showPrice,
-                'show_quantity' => $showQuantity,
-                'allow_cart' => $allowCart,
-                'allow_order' => $allowOrder,
-                'is_active' => $isActive,
+                'show_price' => $showPrice ? 1 : 0,
+                'show_quantity' => $showQuantity ? 1 : 0,
+                'allow_cart' => $allowCart ? 1 : 0,
+                'allow_order' => $allowOrder ? 1 : 0,
+                'is_active' => $isActive ? 1 : 0,
             ]);
 
             return ['ok' => true, 'message' => 'تم تحديث السياسة.', 'id' => $id];
@@ -137,7 +137,12 @@ final class AccessPolicyService
             'INSERT INTO access_policies (
                 code, name_ar, description_ar, show_price, show_quantity, allow_cart, allow_order, is_active
              ) VALUES (
-                :code, :name_ar, :description_ar, :show_price, :show_quantity, :allow_cart, :allow_order, :is_active
+                :code, :name_ar, :description_ar,
+                CASE WHEN :show_price = 1 THEN TRUE ELSE FALSE END,
+                CASE WHEN :show_quantity = 1 THEN TRUE ELSE FALSE END,
+                CASE WHEN :allow_cart = 1 THEN TRUE ELSE FALSE END,
+                CASE WHEN :allow_order = 1 THEN TRUE ELSE FALSE END,
+                CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END
              )
              RETURNING id::text'
         );
@@ -145,11 +150,11 @@ final class AccessPolicyService
             'code' => $code,
             'name_ar' => $nameAr,
             'description_ar' => $descriptionAr !== '' ? $descriptionAr : null,
-            'show_price' => $showPrice,
-            'show_quantity' => $showQuantity,
-            'allow_cart' => $allowCart,
-            'allow_order' => $allowOrder,
-            'is_active' => $isActive,
+            'show_price' => $showPrice ? 1 : 0,
+            'show_quantity' => $showQuantity ? 1 : 0,
+            'allow_cart' => $allowCart ? 1 : 0,
+            'allow_order' => $allowOrder ? 1 : 0,
+            'is_active' => $isActive ? 1 : 0,
         ]);
         $newId = (string) $stmt->fetchColumn();
 
@@ -166,9 +171,12 @@ final class AccessPolicyService
         }
 
         $stmt = Database::pdo()->prepare(
-            'UPDATE access_policies SET is_active = :is_active, updated_at = NOW() WHERE id = :id'
+            'UPDATE access_policies
+             SET is_active = CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END,
+                 updated_at = NOW()
+             WHERE id = :id'
         );
-        $stmt->execute(['id' => $id, 'is_active' => $active]);
+        $stmt->execute(['id' => $id, 'is_active' => $active ? 1 : 0]);
 
         return $stmt->rowCount() > 0;
     }
