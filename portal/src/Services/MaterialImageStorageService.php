@@ -238,20 +238,75 @@ final class MaterialImageStorageService
         return null;
     }
 
+    /**
+     * @param array<string, mixed> $filters
+     * @return array{
+     *   ok: bool,
+     *   message: string,
+     *   items: list<array<string, mixed>>,
+     *   page: int,
+     *   page_size: int,
+     *   total_count: int|null,
+     *   has_more: bool
+     * }
+     */
+    public static function browseMaterials(array $filters): array
+    {
+        $page = max(1, (int) ($filters['page'] ?? 1));
+        $pageSize = max(1, min(48, (int) ($filters['page_size'] ?? 24)));
+        $localStatus = (string) ($filters['local_status'] ?? 'all');
+        if (!in_array($localStatus, ['all', 'on_site', 'missing'], true)) {
+            $localStatus = 'all';
+        }
+
+        $apiQuery = self::buildMaterialsApiQuery($filters);
+        if ($localStatus === 'all') {
+            $apiQuery['page'] = $page;
+            $apiQuery['pageSize'] = $pageSize;
+
+            try {
+                $response = ApiClient::get('/api/materials', $apiQuery);
+            } catch (Throwable $exception) {
+                return self::browseError('تعذر الاتصال بـ API المواد: ' . $exception->getMessage());
+            }
+
+            if (!($response['ok'] ?? false)) {
+                return self::browseError('تعذر جلب المواد من API (رمز ' . (int) ($response['status'] ?? 0) . ').');
+            }
+
+            $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+            $rows = is_array($data['items'] ?? null) ? $data['items'] : [];
+            $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+            $items = [];
+            foreach ($rows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $items[] = self::mapBrowseRow($row);
+            }
+
+            return [
+                'ok' => true,
+                'message' => '',
+                'items' => $items,
+                'page' => $page,
+                'page_size' => $pageSize,
+                'total_count' => $totalCount,
+                'has_more' => ($page * $pageSize) < $totalCount,
+            ];
+        }
+
+        return self::browseMaterialsWithLocalFilter($apiQuery, $localStatus, $page, $pageSize);
+    }
+
     /** @return array{local_count: int, thumbnail_count: int} */
     public static function stats(): array
     {
-        $files = self::listLocalFiles();
-        $withThumb = 0;
-        foreach ($files as $file) {
-            if (!empty($file['has_thumbnail'])) {
-                $withThumb++;
-            }
-        }
+        $settings = self::settings();
 
         return [
-            'local_count' => count($files),
-            'thumbnail_count' => $withThumb,
+            'local_count' => self::countListableFilesInDirectory($settings['images_dir']),
+            'thumbnail_count' => self::countListableFilesInDirectory($settings['thumbnails_dir']),
         ];
     }
 
@@ -542,5 +597,243 @@ final class MaterialImageStorageService
             UPLOAD_ERR_NO_FILE => 'لم يُرفع ملف.',
             default => 'فشل رفع الملف.',
         };
+    }
+
+    /**
+     * @param array<string, mixed> $filters
+     * @return array<string, int|string|bool|null>
+     */
+    private static function buildMaterialsApiQuery(array $filters): array
+    {
+        $query = [];
+
+        $search = trim((string) ($filters['search'] ?? ''));
+        if ($search !== '') {
+            $query['search'] = $search;
+        }
+
+        foreach ([
+            'material_types' => 'materialTypes',
+            'age_categories' => 'ageCategories',
+            'manufacturers' => 'manufacturers',
+            'size_ranges' => 'sizeRanges',
+            'country_origins' => 'countryOfOrigins',
+            'store_guids' => 'storeGuids',
+            'group_guids' => 'groupGuids',
+        ] as $inputKey => $apiKey) {
+            $values = self::normalizeFilterValues($filters[$inputKey] ?? null);
+            if ($values !== []) {
+                $query[$apiKey] = implode(',', $values);
+            }
+        }
+
+        $hasImage = $filters['has_image'] ?? true;
+        if ($hasImage === true || $hasImage === '1' || $hasImage === 1 || $hasImage === 'true') {
+            $query['hasImage'] = 'true';
+        } elseif ($hasImage === false || $hasImage === '0' || $hasImage === 0 || $hasImage === 'false') {
+            $query['hasImage'] = 'false';
+        }
+
+        $isAvailable = $filters['is_available'] ?? null;
+        if ($isAvailable === true || $isAvailable === '1' || $isAvailable === 1 || $isAvailable === 'true') {
+            $query['isAvailable'] = 'true';
+        } elseif ($isAvailable === false || $isAvailable === '0' || $isAvailable === 0 || $isAvailable === 'false') {
+            $query['isAvailable'] = 'false';
+        }
+
+        return $query;
+    }
+
+    /**
+     * @param array<string, int|string|bool|null> $apiQuery
+     * @return array{
+     *   ok: bool,
+     *   message: string,
+     *   items: list<array<string, mixed>>,
+     *   page: int,
+     *   page_size: int,
+     *   total_count: int|null,
+     *   has_more: bool
+     * }
+     */
+    private static function browseMaterialsWithLocalFilter(
+        array $apiQuery,
+        string $localStatus,
+        int $page,
+        int $pageSize
+    ): array {
+        $skip = ($page - 1) * $pageSize;
+        $collected = [];
+        $matchedIndex = 0;
+        $apiPage = 1;
+        $apiPageSize = 50;
+        $hasMoreApi = true;
+        $hasMore = false;
+
+        while ($hasMoreApi && count($collected) < $pageSize && $apiPage <= 80) {
+            $apiQuery['page'] = $apiPage;
+            $apiQuery['pageSize'] = $apiPageSize;
+
+            try {
+                $response = ApiClient::get('/api/materials', $apiQuery);
+            } catch (Throwable $exception) {
+                return self::browseError('تعذر الاتصال بـ API المواد: ' . $exception->getMessage());
+            }
+
+            if (!($response['ok'] ?? false)) {
+                return self::browseError('تعذر جلب المواد من API (رمز ' . (int) ($response['status'] ?? 0) . ').');
+            }
+
+            $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+            $rows = is_array($data['items'] ?? null) ? $data['items'] : [];
+            $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+            $hasMoreApi = ($apiPage * $apiPageSize) < $totalCount;
+
+            if ($rows === []) {
+                break;
+            }
+
+            foreach ($rows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+
+                $mapped = self::mapBrowseRow($row);
+                if (!self::matchesLocalStatus($mapped, $localStatus)) {
+                    continue;
+                }
+
+                if ($matchedIndex >= $skip && count($collected) < $pageSize) {
+                    $collected[] = $mapped;
+                }
+                $matchedIndex++;
+
+                if (count($collected) === $pageSize) {
+                    $hasMore = true;
+                    break 2;
+                }
+            }
+
+            $apiPage++;
+        }
+
+        return [
+            'ok' => true,
+            'message' => '',
+            'items' => $collected,
+            'page' => $page,
+            'page_size' => $pageSize,
+            'total_count' => null,
+            'has_more' => $hasMore,
+        ];
+    }
+
+    /** @param array<string, mixed> $row */
+    private static function mapBrowseRow(array $row): array
+    {
+        $materialGuid = trim((string) ($row['materialGuid'] ?? $row['MaterialGuid'] ?? ''));
+        $imageGuid = trim((string) ($row['productImageGuid'] ?? $row['ProductImageGuid'] ?? ''));
+        $name = trim((string) ($row['name'] ?? $row['Name'] ?? ''));
+        $code = trim((string) ($row['materialCode'] ?? $row['MaterialCode'] ?? ''));
+        $storedFileName = '';
+
+        $localPath = null;
+        if ($imageGuid !== '') {
+            $localPath = self::resolvePathForGuid($imageGuid, false);
+            $candidates = self::$fileNameByGuid[$imageGuid] ?? [];
+            if ($candidates !== []) {
+                $storedFileName = (string) $candidates[0];
+            }
+        }
+
+        return [
+            'material_guid' => $materialGuid,
+            'image_guid' => $imageGuid,
+            'name' => $name,
+            'material_code' => $code,
+            'material_type' => trim((string) ($row['materialType'] ?? $row['MaterialType'] ?? '')),
+            'manufacturer' => trim((string) ($row['manufacturer'] ?? $row['Manufacturer'] ?? '')),
+            'age_category' => trim((string) ($row['ageCategory'] ?? $row['AgeCategory'] ?? '')),
+            'has_local' => $localPath !== null,
+            'stored_file_name' => $storedFileName,
+            'preview_url' => $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '',
+            'local_preview_url' => $storedFileName !== '' ? self::publicUrl($storedFileName, true) : '',
+        ];
+    }
+
+    /** @param array<string, mixed> $row */
+    private static function matchesLocalStatus(array $row, string $localStatus): bool
+    {
+        return match ($localStatus) {
+            'on_site' => !empty($row['has_local']),
+            'missing' => !empty($row['image_guid']) && empty($row['has_local']),
+            default => true,
+        };
+    }
+
+    /** @return list<string> */
+    private static function normalizeFilterValues(mixed $value): array
+    {
+        if (is_string($value)) {
+            $parts = preg_split('/[,|\n]+/u', $value) ?: [];
+        } elseif (is_array($value)) {
+            $parts = $value;
+        } else {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($parts as $part) {
+            $item = trim((string) $part);
+            if ($item !== '') {
+                $normalized[] = $item;
+            }
+        }
+
+        return array_values(array_unique($normalized));
+    }
+
+    private static function countListableFilesInDirectory(string $directory): int
+    {
+        if (!is_dir($directory)) {
+            return 0;
+        }
+
+        $count = 0;
+        foreach (scandir($directory) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $directory . DIRECTORY_SEPARATOR . $entry;
+            if (is_file($path) && self::isListableFileName($entry)) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * @return array{
+     *   ok: bool,
+     *   message: string,
+     *   items: list<array<string, mixed>>,
+     *   page: int,
+     *   page_size: int,
+     *   total_count: int|null,
+     *   has_more: bool
+     * }
+     */
+    private static function browseError(string $message): array
+    {
+        return [
+            'ok' => false,
+            'message' => $message,
+            'items' => [],
+            'page' => 1,
+            'page_size' => 24,
+            'total_count' => 0,
+            'has_more' => false,
+        ];
     }
 }

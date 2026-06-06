@@ -4,21 +4,28 @@ declare(strict_types=1);
 
 /** @var array{images_dir: string, thumbnails_dir: string} $paths */
 /** @var array{local_count: int, thumbnail_count: int} $stats */
-/** @var list<array<string, mixed>> $files */
+/** @var array<string, mixed> $materialFilterOptions */
+/** @var string|null $materialFilterOptionsError */
 /** @var string|null $flash */
 /** @var string $flashType */
 /** @var array<string, string> $settingsForm */
 
 $paths = is_array($paths ?? null) ? $paths : ['images_dir' => '', 'thumbnails_dir' => ''];
 $stats = is_array($stats ?? null) ? $stats : ['local_count' => 0, 'thumbnail_count' => 0];
-$files = is_array($files ?? null) ? $files : [];
+$materialFilterOptions = is_array($materialFilterOptions ?? null) ? $materialFilterOptions : [];
 $settingsForm = is_array($settingsForm ?? null) ? $settingsForm : [];
+$materialTypeOptions = array_values($materialFilterOptions['materialTypes'] ?? []);
+$ageCategoryOptions = array_values($materialFilterOptions['ageCategories'] ?? []);
+$manufacturerOptions = array_values($materialFilterOptions['manufacturers'] ?? []);
+$sizeRangeOptions = array_values($materialFilterOptions['sizeRanges'] ?? []);
+$countryOriginOptions = array_values($materialFilterOptions['countryOfOrigins'] ?? []);
+$groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? [], static fn ($row) => is_array($row)));
 ?>
 <section class="mb-6">
   <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
     <div>
       <h1 class="text-2xl font-extrabold">صور المواد على الموقع</h1>
-      <p class="text-sm text-text-muted mt-1">مخزون الملفات المحلية التي يعرضها الموقع للزوار — يجب أن تطابق أسماء ملفات الأمين.</p>
+      <p class="text-sm text-text-muted mt-1">ارفع الصور وتحقق من توفرها على الموقع عبر تصفح مواد محددة بالفلاتر — بدون تحميل آلاف الصور دفعة واحدة.</p>
     </div>
     <div class="flex flex-wrap gap-2 text-xs" id="statsPills">
       <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">
@@ -101,59 +108,94 @@ $settingsForm = is_array($settingsForm ?? null) ? $settingsForm : [];
 </section>
 
 <section class="rounded-xl border border-border-subtle bg-white overflow-hidden">
-  <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-    <div>
-      <h2 class="font-bold">مخزون الموقع</h2>
-      <p class="text-xs text-text-muted mt-0.5">هذه قائمة الملفات الموجودة فعلياً على سيرفر الموقع — ما يظهر هنا هو ما يمكن للموقع عرضه محلياً.</p>
-    </div>
-    <div class="flex gap-2 items-center">
-      <input type="search" id="localFileSearch" placeholder="بحث بالاسم..." class="h-8 rounded-lg border border-border-subtle px-3 text-xs">
-      <span class="text-xs text-text-muted whitespace-nowrap" id="localFileCount"><?= count($files) ?> ملف</span>
-    </div>
+  <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60">
+    <h2 class="font-bold">تصفح صور المواد</h2>
+    <p class="text-xs text-text-muted mt-0.5">ابحث عن مواد محددة وتحقق هل صورتها موجودة على سيرفر الموقع أم لا.</p>
   </div>
-  <div class="overflow-auto">
-    <table class="w-full text-sm min-w-[920px]" id="localFilesTable">
-      <thead class="text-text-muted border-b border-border-subtle">
-        <tr>
-          <th class="text-right p-3">معاينة</th>
-          <th class="text-right p-3">اسم الملف</th>
-          <th class="text-right p-3">الحجم</th>
-          <th class="text-right p-3">آخر تعديل</th>
-          <th class="text-right p-3">الحالة</th>
-        </tr>
-      </thead>
-      <tbody id="localFilesBody">
-        <?php if ($files === []): ?>
-          <tr id="localFilesEmpty"><td colspan="5" class="p-4 text-sm text-text-muted">لا توجد صور على سيرفر الموقع بعد.</td></tr>
-        <?php else: ?>
-          <?php foreach ($files as $file): ?>
-            <tr class="border-b border-border-subtle last:border-0 local-file-row" data-name="<?= h(strtolower((string) ($file['file_name'] ?? ''))) ?>">
-              <td class="p-3">
-                <img
-                  src="<?= h((string) ($file['preview_url'] ?? '')) ?>"
-                  data-thumb="<?= h((string) ($file['preview_thumb_url'] ?? '')) ?>"
-                  alt=""
-                  class="local-preview w-12 h-12 rounded-lg object-cover bg-surface-low border border-border-subtle"
-                  loading="lazy"
-                >
-              </td>
-              <td class="p-3 font-mono text-xs" dir="ltr">
-                <a href="<?= h((string) ($file['preview_url'] ?? '')) ?>" target="_blank" class="text-primary hover:underline"><?= h((string) ($file['file_name'] ?? '')) ?></a>
-              </td>
-              <td class="p-3"><?= h(number_format(((int) ($file['size_bytes'] ?? 0)) / 1024, 1)) ?> KB</td>
-              <td class="p-3 text-text-muted"><?= h((string) ($file['modified_at'] ?? '')) ?></td>
-              <td class="p-3">
-                <?php if (!empty($file['has_thumbnail'])): ?>
-                  <span class="text-status-active text-xs font-bold">جاهزة للعرض</span>
-                <?php else: ?>
-                  <span class="text-status-pending text-xs font-bold">بدون ثامبنيل</span>
-                <?php endif; ?>
-              </td>
-            </tr>
+
+  <form id="browseFiltersForm" class="p-4 border-b border-border-subtle space-y-3">
+    <?php if (!empty($materialFilterOptionsError)): ?>
+      <p class="rounded-lg border border-amber-200 bg-amber-50 text-amber-700 px-3 py-2 text-xs"><?= h($materialFilterOptionsError) ?></p>
+    <?php endif; ?>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+      <label class="text-xs lg:col-span-2">
+        <span class="text-text-muted block mb-1">بحث بالاسم أو الكود</span>
+        <input type="search" id="browseSearch" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="مثال: صيف 2026">
+      </label>
+      <label class="text-xs">
+        <span class="text-text-muted block mb-1">حالة الصورة على الموقع</span>
+        <select id="browseLocalStatus" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+          <option value="all">الكل</option>
+          <option value="missing" selected>ناقصة على الموقع</option>
+          <option value="on_site">موجودة على الموقع</option>
+        </select>
+      </label>
+      <label class="text-xs">
+        <span class="text-text-muted block mb-1">صورة في الأمين</span>
+        <select id="browseHasImage" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+          <option value="1" selected>مع صورة فقط</option>
+          <option value="">بدون قيد</option>
+          <option value="0">بدون صورة</option>
+        </select>
+      </label>
+      <label class="text-xs">
+        <span class="text-text-muted block mb-1">نوع المادة</span>
+        <select id="browseMaterialTypes" multiple class="h-20 w-full rounded-lg border border-border-subtle px-2 text-sm">
+          <?php foreach ($materialTypeOptions as $option): ?>
+            <option value="<?= h($option) ?>"><?= h($option) ?></option>
           <?php endforeach; ?>
-        <?php endif; ?>
-      </tbody>
-    </table>
+        </select>
+      </label>
+      <label class="text-xs">
+        <span class="text-text-muted block mb-1">الفئة العمرية</span>
+        <select id="browseAgeCategories" multiple class="h-20 w-full rounded-lg border border-border-subtle px-2 text-sm">
+          <?php foreach ($ageCategoryOptions as $option): ?>
+            <option value="<?= h($option) ?>"><?= h($option) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label class="text-xs">
+        <span class="text-text-muted block mb-1">الشركة</span>
+        <select id="browseManufacturers" multiple class="h-20 w-full rounded-lg border border-border-subtle px-2 text-sm">
+          <?php foreach ($manufacturerOptions as $option): ?>
+            <option value="<?= h($option) ?>"><?= h($option) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label class="text-xs">
+        <span class="text-text-muted block mb-1">المجموعة</span>
+        <select id="browseGroupGuids" multiple class="h-20 w-full rounded-lg border border-border-subtle px-2 text-sm">
+          <?php foreach ($groupOptions as $group): ?>
+            <?php
+              $groupGuid = trim((string) ($group['guid'] ?? $group['Guid'] ?? ''));
+              $groupName = trim((string) ($group['name'] ?? $group['Name'] ?? $groupGuid));
+            ?>
+            <?php if ($groupGuid !== ''): ?>
+              <option value="<?= h($groupGuid) ?>"><?= h($groupName) ?></option>
+            <?php endif; ?>
+          <?php endforeach; ?>
+        </select>
+      </label>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <button type="submit" id="browseSubmitBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold">عرض النتائج</button>
+      <button type="button" id="browseResetBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">مسح الفلاتر</button>
+      <span class="text-xs text-text-muted" id="browseSummary">اختر الفلاتر ثم اضغط «عرض النتائج».</span>
+    </div>
+  </form>
+
+  <div id="browseLoading" class="hidden px-4 py-8 text-center text-sm text-text-muted">جاري التحميل...</div>
+  <div id="browseError" class="hidden px-4 py-3 text-sm text-red-700 bg-red-50 border-b border-red-100"></div>
+  <div id="browseEmpty" class="hidden px-4 py-8 text-center text-sm text-text-muted">لا توجد مواد مطابقة للفلاتر.</div>
+
+  <div id="browseResults" class="hidden divide-y divide-border-subtle"></div>
+
+  <div id="browsePagination" class="hidden px-4 py-3 border-t border-border-subtle bg-surface-low/40 flex items-center justify-between gap-2">
+    <button type="button" id="browsePrevBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold disabled:opacity-40" disabled>السابق</button>
+    <span class="text-xs text-text-muted" id="browsePageLabel">صفحة 1</span>
+    <button type="button" id="browseNextBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold disabled:opacity-40" disabled>التالي</button>
   </div>
 </section>
 
@@ -179,9 +221,29 @@ $settingsForm = is_array($settingsForm ?? null) ? $settingsForm : [];
   const resumeBannerText = document.getElementById('resumeBannerText');
   const resumeBtn = document.getElementById('resumeUploadBtn');
   const discardBtn = document.getElementById('discardQueueBtn');
-  const localSearch = document.getElementById('localFileSearch');
+  const browseForm = document.getElementById('browseFiltersForm');
+  const browseSearch = document.getElementById('browseSearch');
+  const browseLocalStatus = document.getElementById('browseLocalStatus');
+  const browseHasImage = document.getElementById('browseHasImage');
+  const browseMaterialTypes = document.getElementById('browseMaterialTypes');
+  const browseAgeCategories = document.getElementById('browseAgeCategories');
+  const browseManufacturers = document.getElementById('browseManufacturers');
+  const browseGroupGuids = document.getElementById('browseGroupGuids');
+  const browseResetBtn = document.getElementById('browseResetBtn');
+  const browseSummary = document.getElementById('browseSummary');
+  const browseLoading = document.getElementById('browseLoading');
+  const browseError = document.getElementById('browseError');
+  const browseEmpty = document.getElementById('browseEmpty');
+  const browseResults = document.getElementById('browseResults');
+  const browsePagination = document.getElementById('browsePagination');
+  const browsePrevBtn = document.getElementById('browsePrevBtn');
+  const browseNextBtn = document.getElementById('browseNextBtn');
+  const browsePageLabel = document.getElementById('browsePageLabel');
 
   let queue = null;
+  let browsePage = 1;
+  let browseHasMore = false;
+  let browseTotalCount = null;
   let paused = false;
   let uploading = false;
   let dbPromise = null;
@@ -448,7 +510,10 @@ $settingsForm = is_array($settingsForm ?? null) ? $settingsForm : [];
       await idbClearQueue(queue.id);
       localStorage.removeItem(QUEUE_STORAGE_KEY);
       resumeBanner.classList.add('hidden');
-      await refreshLocalFiles();
+      await refreshStats();
+      if (browseResults && !browseResults.classList.contains('hidden')) {
+        await loadBrowseResults(browsePage);
+      }
       setTimeout(() => {
         if (queue && queue.items.every((item) => item.status === 'done')) {
           queue = null;
@@ -522,60 +587,143 @@ $settingsForm = is_array($settingsForm ?? null) ? $settingsForm : [];
     startBtn.disabled = true;
   }
 
-  async function refreshLocalFiles() {
+  async function refreshStats() {
     try {
-      const response = await fetch(`${API_URL}?action=list`);
+      const response = await fetch(`${API_URL}?action=stats`);
       const payload = await response.json();
       if (!payload.ok) return;
 
       const statLocal = document.getElementById('statLocalCount');
       const statThumb = document.getElementById('statThumbCount');
-      const countEl = document.getElementById('localFileCount');
       if (statLocal) statLocal.textContent = String(payload.stats?.local_count ?? 0);
       if (statThumb) statThumb.textContent = String(payload.stats?.thumbnail_count ?? 0);
-      if (countEl) countEl.textContent = `${payload.files?.length ?? 0} ملف`;
-
-      const tbody = document.getElementById('localFilesBody');
-      if (!tbody) return;
-      const files = payload.files || [];
-      if (files.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-sm text-text-muted">لا توجد صور على سيرفر الموقع بعد.</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = files.map((file) => `
-        <tr class="border-b border-border-subtle last:border-0 local-file-row" data-name="${escapeHtml(String(file.file_name || '').toLowerCase())}">
-          <td class="p-3">
-            <img src="${escapeHtml(file.preview_url || '')}" data-thumb="${escapeHtml(file.preview_thumb_url || '')}" alt="" class="local-preview w-12 h-12 rounded-lg object-cover bg-surface-low border border-border-subtle" loading="lazy">
-          </td>
-          <td class="p-3 font-mono text-xs" dir="ltr">
-            <a href="${escapeHtml(file.preview_url || '')}" target="_blank" class="text-primary hover:underline">${escapeHtml(file.file_name || '')}</a>
-          </td>
-          <td class="p-3">${(Number(file.size_bytes || 0) / 1024).toFixed(1)} KB</td>
-          <td class="p-3 text-text-muted">${escapeHtml(file.modified_at || '')}</td>
-          <td class="p-3"><span class="text-xs font-bold ${file.has_thumbnail ? 'text-status-active' : 'text-status-pending'}">${file.has_thumbnail ? 'جاهزة للعرض' : 'بدون ثامبنيل'}</span></td>
-        </tr>
-      `).join('');
-      bindPreviewFallbacks();
     } catch {
       // ignore
     }
   }
 
-  function bindPreviewFallbacks() {
-    document.querySelectorAll('.local-preview').forEach((img) => {
-      img.addEventListener('error', () => {
-        const thumb = img.getAttribute('data-thumb');
-        if (thumb && img.src !== thumb) {
-          img.src = thumb;
-          return;
+  function selectedValues(selectEl) {
+    if (!selectEl) return [];
+    return Array.from(selectEl.selectedOptions).map((option) => option.value).filter(Boolean);
+  }
+
+  function buildBrowseParams(page) {
+    const params = new URLSearchParams();
+    params.set('action', 'browse');
+    params.set('page', String(page));
+    params.set('page_size', '24');
+    const search = browseSearch?.value.trim() || '';
+    if (search) params.set('search', search);
+    if (browseLocalStatus?.value) params.set('local_status', browseLocalStatus.value);
+    if (browseHasImage?.value !== '') params.set('has_image', browseHasImage.value);
+    selectedValues(browseMaterialTypes).forEach((value) => params.append('material_types[]', value));
+    selectedValues(browseAgeCategories).forEach((value) => params.append('age_categories[]', value));
+    selectedValues(browseManufacturers).forEach((value) => params.append('manufacturers[]', value));
+    selectedValues(browseGroupGuids).forEach((value) => params.append('group_guids[]', value));
+    return params;
+  }
+
+  function renderBrowseItem(item) {
+    const name = item.name || 'بدون اسم';
+    const code = item.material_code ? ` (${item.material_code})` : '';
+    const meta = [item.material_type, item.manufacturer, item.age_category].filter(Boolean).join(' · ');
+    const statusClass = item.has_local ? 'text-status-active' : 'text-status-pending';
+    const statusLabel = item.has_local ? 'موجودة على الموقع' : (item.image_guid ? 'ناقصة على الموقع' : 'بدون صورة في الأمين');
+    const preview = item.preview_url || '';
+    const fileName = item.stored_file_name || '';
+
+    return `
+      <article class="p-4 flex flex-col sm:flex-row gap-3 sm:items-center">
+        <div class="shrink-0">
+          ${preview
+            ? `<img src="${escapeHtml(preview)}" alt="" class="browse-preview w-20 h-20 rounded-xl object-cover bg-surface-low border border-border-subtle" loading="lazy">`
+            : '<div class="w-20 h-20 rounded-xl bg-surface-low border border-border-subtle flex items-center justify-center text-[11px] text-text-muted">لا صورة</div>'}
+        </div>
+        <div class="flex-1 min-w-0">
+          <h3 class="font-bold text-sm truncate">${escapeHtml(name)}${escapeHtml(code)}</h3>
+          ${meta ? `<p class="text-xs text-text-muted mt-0.5">${escapeHtml(meta)}</p>` : ''}
+          ${fileName ? `<p class="text-[11px] font-mono text-text-muted mt-1 truncate" dir="ltr">${escapeHtml(fileName)}</p>` : ''}
+        </div>
+        <div class="text-left sm:text-center shrink-0">
+          <span class="text-xs font-bold ${statusClass}">${escapeHtml(statusLabel)}</span>
+        </div>
+      </article>
+    `;
+  }
+
+  function updateBrowsePagination() {
+    if (!browsePagination || !browsePageLabel || !browsePrevBtn || !browseNextBtn) return;
+    const totalText = browseTotalCount === null ? '' : ` من ${browseTotalCount}`;
+    browsePageLabel.textContent = `صفحة ${browsePage}${totalText}`;
+    browsePrevBtn.disabled = browsePage <= 1;
+    browseNextBtn.disabled = !browseHasMore;
+    browsePagination.classList.toggle('hidden', browseResults?.classList.contains('hidden'));
+  }
+
+  async function loadBrowseResults(page = 1) {
+    browsePage = Math.max(1, page);
+    browseLoading?.classList.remove('hidden');
+    browseError?.classList.add('hidden');
+    browseEmpty?.classList.add('hidden');
+    browseResults?.classList.add('hidden');
+    browsePagination?.classList.add('hidden');
+
+    try {
+      const response = await fetch(`${API_URL}?${buildBrowseParams(browsePage).toString()}`);
+      const payload = await response.json();
+      browseLoading?.classList.add('hidden');
+
+      if (!payload.ok) {
+        if (browseError) {
+          browseError.textContent = payload.message || 'تعذر تحميل النتائج.';
+          browseError.classList.remove('hidden');
         }
-        img.replaceWith(Object.assign(document.createElement('div'), {
-          className: 'w-12 h-12 rounded-lg bg-surface-low border border-border-subtle flex items-center justify-center text-[10px] text-text-muted',
-          textContent: 'لا معاينة',
-        }));
-      }, { once: true });
+        return;
+      }
+
+      const items = payload.items || [];
+      browseHasMore = !!payload.has_more;
+      browseTotalCount = payload.total_count ?? null;
+
+      if (items.length === 0) {
+        browseEmpty?.classList.remove('hidden');
+        if (browseSummary) browseSummary.textContent = 'لا توجد مواد مطابقة.';
+        return;
+      }
+
+      if (browseResults) {
+        browseResults.innerHTML = items.map(renderBrowseItem).join('');
+        browseResults.classList.remove('hidden');
+      }
+      if (browseSummary) {
+        const countLabel = browseTotalCount === null
+          ? `${items.length} مادة في هذه الصفحة`
+          : `${items.length} من ${browseTotalCount} مادة`;
+        browseSummary.textContent = countLabel;
+      }
+      updateBrowsePagination();
+    } catch {
+      browseLoading?.classList.add('hidden');
+      if (browseError) {
+        browseError.textContent = 'تعذر الاتصال بالخادم.';
+        browseError.classList.remove('hidden');
+      }
+    }
+  }
+
+  function resetBrowseFilters() {
+    if (browseSearch) browseSearch.value = '';
+    if (browseLocalStatus) browseLocalStatus.value = 'missing';
+    if (browseHasImage) browseHasImage.value = '1';
+    [browseMaterialTypes, browseAgeCategories, browseManufacturers, browseGroupGuids].forEach((selectEl) => {
+      if (!selectEl) return;
+      Array.from(selectEl.options).forEach((option) => { option.selected = false; });
     });
+    browseResults?.classList.add('hidden');
+    browsePagination?.classList.add('hidden');
+    browseEmpty?.classList.add('hidden');
+    browseError?.classList.add('hidden');
+    if (browseSummary) browseSummary.textContent = 'اختر الفلاتر ثم اضغط «عرض النتائج».';
   }
 
   picker?.addEventListener('change', async () => {
@@ -592,15 +740,18 @@ $settingsForm = is_array($settingsForm ?? null) ? $settingsForm : [];
   resumeBtn?.addEventListener('click', () => processQueue());
   discardBtn?.addEventListener('click', () => discardQueue());
 
-  localSearch?.addEventListener('input', () => {
-    const term = localSearch.value.trim().toLowerCase();
-    document.querySelectorAll('.local-file-row').forEach((row) => {
-      const name = row.getAttribute('data-name') || '';
-      row.classList.toggle('hidden', term !== '' && !name.includes(term));
-    });
+  browseForm?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    loadBrowseResults(1);
+  });
+  browseResetBtn?.addEventListener('click', () => resetBrowseFilters());
+  browsePrevBtn?.addEventListener('click', () => {
+    if (browsePage > 1) loadBrowseResults(browsePage - 1);
+  });
+  browseNextBtn?.addEventListener('click', () => {
+    if (browseHasMore) loadBrowseResults(browsePage + 1);
   });
 
-  bindPreviewFallbacks();
   restoreQueueFromStorage();
 })();
 </script>
