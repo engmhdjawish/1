@@ -187,6 +187,16 @@ CREATE TABLE site_media_assets (
 
 CREATE INDEX ix_site_media_category ON site_media_assets (category, created_at DESC);
 
+-- Local material image index (GUID from Amine API -> file name on web server)
+CREATE TABLE material_image_index (
+    image_guid              UUID PRIMARY KEY,
+    file_name               TEXT NOT NULL,
+    api_updated_at          TIMESTAMPTZ NULL,
+    indexed_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX ix_material_image_index_file_name ON material_image_index (file_name);
+
 CREATE TABLE home_section_products (
     section_id      UUID NOT NULL REFERENCES home_sections (id) ON DELETE CASCADE,
     material_guid   UUID NOT NULL,

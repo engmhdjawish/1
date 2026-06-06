@@ -16,6 +16,7 @@ $navigation = [
         '/dashboard/share-links.php' => ['label' => 'روابط المشاركة', 'icon' => 'share'],
         '/dashboard/home-sections.php' => ['label' => 'أقسام الرئيسية', 'icon' => 'home_storage'],
         '/dashboard/site-media.php' => ['label' => 'مكتبة الصور', 'icon' => 'photo_library'],
+        '/dashboard/material-images.php' => ['label' => 'صور المواد', 'icon' => 'inventory_2'],
         '/dashboard/users.php' => ['label' => 'المستخدمون والأدوار', 'icon' => 'badge'],
         '/dashboard/settings.php' => ['label' => 'الإعدادات', 'icon' => 'settings'],
     ],

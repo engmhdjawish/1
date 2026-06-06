@@ -103,7 +103,9 @@ VALUES
     ('company_address', 'دمشق - حريقة - شارع المأمون'),
     ('company_logo', ''),
     ('about_us_title_ar', 'من نحن'),
-    ('about_us_ar', '')
+    ('about_us_ar', ''),
+    ('material_images_dir', ''),
+    ('material_thumbnails_dir', '')
 ON CONFLICT (key) DO NOTHING;
 
 -- Example homepage sections (inactive until configured)

@@ -101,7 +101,9 @@ php -S 127.0.0.1:8080
 | `/dashboard/accounting-sync.php` | طابور مزامنة الأمين |
 | `/dashboard/accounting-reports.php` | تقرير مالي أولي |
 | `/dashboard/accounting-statement.php` | كشف حساب عميل عبر API |
-| `/api/image.php?id=...` | جلب صورة مادة عبر بروكسي الخدمة |
+| `/dashboard/material-images.php` | رفع صور المواد محلياً بنفس أسماء الأمين + توليد thumbnail |
+| `/api/image.php?id=...` | عرض صورة مادة (محلي أولاً ثم API كاحتياط) |
+| `/media/material.php?file=...` | عرض ملف صورة مادة محلي بالاسم |
 | `/api/proxy.php` | بروكسي JSON للـ API |
 
 ## تفعيل أقسام الرئيسية

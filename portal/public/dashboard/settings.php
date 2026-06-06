@@ -67,6 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash = 'لا تملك صلاحية تعديل إعدادات الشركة.';
             $flashType = 'error';
         } else {
+            $currentCompany = PortalSettingsService::companySettings();
             PortalSettingsService::saveCompanySettings([
                 'company_name' => trim((string) ($_POST['company_name'] ?? '')),
                 'company_phone' => trim((string) ($_POST['company_phone'] ?? '')),
@@ -77,6 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'company_logo' => trim((string) ($_POST['company_logo'] ?? '')),
                 'about_us_title_ar' => trim((string) ($_POST['about_us_title_ar'] ?? '')),
                 'about_us_ar' => trim((string) ($_POST['about_us_ar'] ?? '')),
+                'material_images_dir' => (string) ($currentCompany['material_images_dir'] ?? ''),
+                'material_thumbnails_dir' => (string) ($currentCompany['material_thumbnails_dir'] ?? ''),
             ], isset($user['id']) ? (string) $user['id'] : null);
             header('Location: /dashboard/settings.php?tab=company&saved=1');
             exit;
