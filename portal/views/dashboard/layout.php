@@ -22,9 +22,11 @@ $navigation = [
     ],
     'المحاسبة' => [
         '/dashboard/accounting.php' => ['label' => 'لوحة المحاسب', 'icon' => 'account_balance'],
+        '/dashboard/accounting-customers.php' => ['label' => 'عملاء الأمين', 'icon' => 'groups'],
+        '/dashboard/accounting-documents.php' => ['label' => 'الفواتير والسندات', 'icon' => 'receipt_long'],
+        '/dashboard/accounting-statement.php' => ['label' => 'كشف حساب عميل', 'icon' => 'account_balance_wallet'],
         '/dashboard/accounting-sync.php' => ['label' => 'طابور المزامنة', 'icon' => 'sync'],
         '/dashboard/accounting-reports.php' => ['label' => 'التقارير المالية', 'icon' => 'analytics'],
-        '/dashboard/accounting-statement.php' => ['label' => 'كشف حساب عميل', 'icon' => 'receipt_long'],
     ],
 ];
 ?>
