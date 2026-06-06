@@ -100,7 +100,8 @@ php -S 127.0.0.1:8080
 | `/dashboard/accounting.php` | لوحة المحاسب |
 | `/dashboard/accounting-sync.php` | طابور مزامنة الأمين |
 | `/dashboard/accounting-reports.php` | تقرير مالي أولي |
-| `/dashboard/accounting-statement.php` | كشف حساب عميل عبر API |
+| `/dashboard/accounting-statement.php` | كشف حساب عميل (بحث تلقائي + نافذة تفاصيل الفاتورة/السند) |
+| `/dashboard/accounting-statement-api.php` | بروكسي JSON لكشف الحساب والعملاء والفواتير/السندات |
 | `/api/image.php?id=...` | جلب صورة مادة عبر بروكسي الخدمة |
 | `/api/proxy.php` | بروكسي JSON للـ API |
 
