@@ -45,8 +45,12 @@ $showAccountResults = !$hasSelection && ($query['accountSearch'] ?? '') !== '';
       <p class="text-sm text-text-muted mt-1">ابحث باسم العميل أو اسم الحساب أو كليهما، ثم اعرض الحركات مع روابط الفواتير والسندات.</p>
     </div>
     <div class="flex flex-wrap gap-3 text-sm">
-      <a href="/dashboard/accounting-customers.php" class="text-primary font-semibold">عملاء الأمين</a>
-      <a href="/dashboard/accounting-documents.php" class="text-primary font-semibold">الفواتير والسندات</a>
+      <?php if (web_can('accounting.customers.view')): ?>
+        <a href="/dashboard/accounting-customers.php" class="text-primary font-semibold">عملاء الأمين</a>
+      <?php endif; ?>
+      <?php if (web_can('accounting.documents.view')): ?>
+        <a href="/dashboard/accounting-documents.php" class="text-primary font-semibold">الفواتير والسندات</a>
+      <?php endif; ?>
     </div>
   </div>
 </section>

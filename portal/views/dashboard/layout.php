@@ -2,33 +2,21 @@
 
 declare(strict_types=1);
 
+use Portal\Auth\WebSession;
+use Portal\Support\DashboardNavigation;
+
 /** @var string $title */
 /** @var string $content */
 /** @var array<string, mixed>|null $user */
 /** @var string|null $currentRoute */
 
+require_once dirname(__DIR__) . '/helpers.php';
+
 $currentRoute ??= parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: '/dashboard/index.php';
-$navigation = [
-    'الإدارة' => [
-        '/dashboard/index.php' => ['label' => 'لوحة التحكم', 'icon' => 'dashboard'],
-        '/dashboard/customers.php' => ['label' => 'إدارة العملاء', 'icon' => 'group'],
-        '/dashboard/orders.php' => ['label' => 'إدارة الطلبات', 'icon' => 'shopping_cart'],
-        '/dashboard/share-links.php' => ['label' => 'روابط المشاركة', 'icon' => 'share'],
-        '/dashboard/home-sections.php' => ['label' => 'أقسام الرئيسية', 'icon' => 'home_storage'],
-        '/dashboard/site-media.php' => ['label' => 'مكتبة الصور', 'icon' => 'photo_library'],
-        '/dashboard/material-images.php' => ['label' => 'صور المواد', 'icon' => 'inventory_2'],
-        '/dashboard/users.php' => ['label' => 'المستخدمون والأدوار', 'icon' => 'badge'],
-        '/dashboard/settings.php' => ['label' => 'الإعدادات', 'icon' => 'settings'],
-    ],
-    'المحاسبة' => [
-        '/dashboard/accounting.php' => ['label' => 'لوحة المحاسب', 'icon' => 'account_balance'],
-        '/dashboard/accounting-customers.php' => ['label' => 'عملاء الأمين', 'icon' => 'groups'],
-        '/dashboard/accounting-documents.php' => ['label' => 'الفواتير والسندات', 'icon' => 'receipt_long'],
-        '/dashboard/accounting-statement.php' => ['label' => 'كشف حساب عميل', 'icon' => 'account_balance_wallet'],
-        '/dashboard/accounting-sync.php' => ['label' => 'طابور المزامنة', 'icon' => 'sync'],
-        '/dashboard/accounting-reports.php' => ['label' => 'التقارير المالية', 'icon' => 'analytics'],
-    ],
-];
+$user ??= WebSession::user();
+$navigation = DashboardNavigation::forUser($user);
+$quickLinks = DashboardNavigation::quickLinks(4);
+$roleLabel = (string) ($user['role_label'] ?? 'موظف');
 ?>
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -69,61 +57,157 @@ $navigation = [
     .material-symbols-outlined.fill {
       font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
     }
+    #mobileNavDrawer { transition: transform 0.25s ease; }
+    #mobileNavDrawer.is-open { transform: translateX(0); }
+    #mobileNavOverlay.is-open { opacity: 1; pointer-events: auto; }
   </style>
 </head>
 <body class="min-h-screen text-slate-900">
   <header class="sticky top-0 z-50 h-16 bg-surface-white shadow-sm border-b border-border-subtle">
-    <div class="h-full px-4 lg:px-10 flex items-center justify-between gap-4">
-      <div class="flex items-center gap-4">
-        <span class="font-extrabold text-primary text-lg">Jawish Trading</span>
-        <nav class="hidden lg:flex items-center gap-4 text-sm">
-          <a href="/dashboard/index.php" class="<?= $currentRoute === '/dashboard/index.php' ? 'text-primary font-bold border-b-2 border-primary pb-1' : 'text-text-muted hover:text-primary' ?>">لوحة التحكم</a>
-          <a href="/dashboard/orders.php" class="<?= $currentRoute === '/dashboard/orders.php' ? 'text-primary font-bold border-b-2 border-primary pb-1' : 'text-text-muted hover:text-primary' ?>">الطلبات</a>
-          <a href="/dashboard/customers.php" class="<?= $currentRoute === '/dashboard/customers.php' ? 'text-primary font-bold border-b-2 border-primary pb-1' : 'text-text-muted hover:text-primary' ?>">العملاء</a>
-        </nav>
+    <div class="h-full px-4 lg:px-10 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2 sm:gap-4 min-w-0">
+        <button
+          type="button"
+          id="openMobileNavBtn"
+          class="lg:hidden inline-flex items-center justify-center w-10 h-10 rounded-xl border border-border-subtle hover:bg-surface-low transition shrink-0"
+          aria-controls="mobileNavDrawer"
+          aria-expanded="false"
+          aria-label="فتح القائمة"
+        >
+          <span class="material-symbols-outlined">menu</span>
+        </button>
+        <span class="font-extrabold text-primary text-base sm:text-lg truncate">Jawish Trading</span>
+        <?php if ($quickLinks !== []): ?>
+          <nav class="hidden lg:flex items-center gap-4 text-sm">
+            <?php foreach ($quickLinks as $link): ?>
+              <a
+                href="<?= h($link['route']) ?>"
+                class="<?= $currentRoute === $link['route'] ? 'text-primary font-bold border-b-2 border-primary pb-1' : 'text-text-muted hover:text-primary' ?>"
+              >
+                <?= h($link['label']) ?>
+              </a>
+            <?php endforeach; ?>
+          </nav>
+        <?php endif; ?>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2 sm:gap-3 shrink-0">
         <div class="hidden md:flex flex-col items-end">
           <span class="text-sm font-bold"><?= h($user['display_name_ar'] ?? '') ?></span>
-          <span class="text-xs text-text-muted">مدير النظام</span>
+          <span class="text-xs text-text-muted"><?= h($roleLabel) ?></span>
         </div>
-        <a href="/logout.php" class="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-red-50 text-red-600 transition">
+        <a href="/logout.php" class="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-red-50 text-red-600 transition" title="تسجيل الخروج">
           <span class="material-symbols-outlined">logout</span>
         </a>
       </div>
     </div>
   </header>
+
+  <div
+    id="mobileNavOverlay"
+    class="lg:hidden fixed inset-0 z-[60] bg-black/40 opacity-0 pointer-events-none transition"
+    aria-hidden="true"
+  ></div>
+  <aside
+    id="mobileNavDrawer"
+    class="lg:hidden fixed top-0 right-0 z-[70] h-full w-[min(88vw,320px)] max-w-full bg-surface-white border-l border-border-subtle shadow-2xl flex flex-col translate-x-full"
+    aria-hidden="true"
+  >
+    <div class="flex items-center justify-between gap-3 px-4 py-4 border-b border-border-subtle">
+      <div>
+        <h2 class="font-bold text-primary">القائمة</h2>
+        <p class="text-xs text-text-muted mt-0.5"><?= h($roleLabel) ?></p>
+      </div>
+      <button
+        type="button"
+        id="closeMobileNavBtn"
+        class="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-red-50 text-gray-600"
+        aria-label="إغلاق القائمة"
+      >
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <div class="flex-1 overflow-y-auto p-4">
+      <?php if ($navigation === []): ?>
+        <p class="text-sm text-text-muted px-2">لا توجد صفحات متاحة لحسابك.</p>
+      <?php else: ?>
+        <?php require __DIR__ . '/partials/sidebar-nav.php'; ?>
+      <?php endif; ?>
+    </div>
+    <div class="p-4 border-t border-border-subtle">
+      <a href="/index.php" class="flex items-center justify-center gap-2 bg-primary text-white rounded-xl py-2.5 font-bold hover:brightness-110 transition">
+        <span class="material-symbols-outlined">public</span>
+        عرض الموقع
+      </a>
+    </div>
+  </aside>
+
   <div class="flex">
-    <aside class="hidden lg:flex fixed top-16 right-0 h-[calc(100vh-64px)] w-64 bg-surface-white border-l border-border-subtle flex-col p-4 z-40">
-      <div class="px-2 py-4 border-b border-border-subtle mb-4">
+    <aside class="hidden lg:flex fixed top-16 right-0 h-[calc(100vh-64px)] w-72 bg-surface-white border-l border-border-subtle flex-col z-40">
+      <div class="px-4 py-4 border-b border-border-subtle">
         <h2 class="font-bold text-primary">لوحة التحكم</h2>
         <p class="text-xs text-text-muted mt-1">نظام إدارة البوابة</p>
       </div>
-      <?php foreach ($navigation as $groupTitle => $items): ?>
-        <section class="mb-4">
-          <h3 class="text-xs text-text-muted mb-2 px-2"><?= h($groupTitle) ?></h3>
-          <div class="space-y-1">
-            <?php foreach ($items as $route => $item): ?>
-              <?php $isActive = $currentRoute === $route; ?>
-              <a
-                href="<?= h($route) ?>"
-                class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition <?= $isActive ? 'bg-primary/10 text-primary font-bold border-r-4 border-primary' : 'text-text-muted hover:bg-surface-low' ?>"
-              >
-                <span class="material-symbols-outlined <?= $isActive ? 'fill' : '' ?>"><?= h($item['icon']) ?></span>
-                <span class="text-sm"><?= h($item['label']) ?></span>
-              </a>
-            <?php endforeach; ?>
-          </div>
-        </section>
-      <?php endforeach; ?>
-      <div class="mt-auto pt-4 border-t border-border-subtle">
+      <div class="flex-1 overflow-y-auto p-4">
+        <?php if ($navigation === []): ?>
+          <p class="text-sm text-text-muted px-2">لا توجد صفحات متاحة لحسابك.</p>
+        <?php else: ?>
+          <?php require __DIR__ . '/partials/sidebar-nav.php'; ?>
+        <?php endif; ?>
+      </div>
+      <div class="p-4 border-t border-border-subtle">
         <a href="/index.php" class="flex items-center justify-center gap-2 bg-primary text-white rounded-xl py-2.5 font-bold hover:brightness-110 transition">
           <span class="material-symbols-outlined">public</span>
           عرض الموقع
         </a>
       </div>
     </aside>
-    <main class="flex-1 lg:mr-64 p-4 md:p-6 lg:p-8 min-w-0"><?= $content ?></main>
+    <main class="flex-1 lg:mr-72 p-4 md:p-6 lg:p-8 min-w-0 pb-24 lg:pb-8"><?= $content ?></main>
   </div>
+
+  <?php if ($navigation !== []): ?>
+    <nav class="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-surface-white border-t border-border-subtle shadow-[0_-4px_16px_rgba(0,0,0,0.06)] px-2 py-1.5" aria-label="اختصارات سريعة">
+      <div class="grid gap-1" style="grid-template-columns: repeat(<?= min(4, count($quickLinks)) ?>, minmax(0, 1fr));">
+        <?php foreach (array_slice($quickLinks, 0, 4) as $link): ?>
+          <?php $isActive = $currentRoute === $link['route']; ?>
+          <a
+            href="<?= h($link['route']) ?>"
+            class="flex flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-2 text-[11px] transition <?= $isActive ? 'text-primary font-bold bg-primary/5' : 'text-text-muted' ?>"
+          >
+            <span class="material-symbols-outlined text-[20px] <?= $isActive ? 'fill' : '' ?>"><?= h($link['icon']) ?></span>
+            <span class="truncate w-full text-center"><?= h($link['label']) ?></span>
+          </a>
+        <?php endforeach; ?>
+      </div>
+    </nav>
+  <?php endif; ?>
+
+  <script>
+    (() => {
+      const drawer = document.getElementById('mobileNavDrawer');
+      const overlay = document.getElementById('mobileNavOverlay');
+      const openBtn = document.getElementById('openMobileNavBtn');
+      const closeBtn = document.getElementById('closeMobileNavBtn');
+      if (!drawer || !overlay || !openBtn || !closeBtn) return;
+
+      const setOpen = (open) => {
+        drawer.classList.toggle('is-open', open);
+        overlay.classList.toggle('is-open', open);
+        drawer.setAttribute('aria-hidden', open ? 'false' : 'true');
+        overlay.setAttribute('aria-hidden', open ? 'false' : 'true');
+        openBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        document.body.style.overflow = open ? 'hidden' : '';
+      };
+
+      openBtn.addEventListener('click', () => setOpen(true));
+      closeBtn.addEventListener('click', () => setOpen(false));
+      overlay.addEventListener('click', () => setOpen(false));
+      drawer.querySelectorAll('[data-nav-link]').forEach((link) => {
+        link.addEventListener('click', () => setOpen(false));
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') setOpen(false);
+      });
+    })();
+  </script>
 </body>
 </html>
