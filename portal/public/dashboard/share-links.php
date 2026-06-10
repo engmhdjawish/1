@@ -65,9 +65,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 default => null,
             };
         };
-        $defaultSortClauses = $parseValues($_POST['option_default_sort_clauses'] ?? []);
-        $defaultSortValue = $defaultSortClauses !== [] ? implode(',', $defaultSortClauses) : 'number:asc';
+        $clientSortFields = $parseValues($_POST['option_client_sort_fields'] ?? []);
+        $defaultSortField = $clientSortFields[0] ?? 'number';
+        $defaultSortValue = $defaultSortField . ':asc';
         $visibleClientFilters = $parseValues($_POST['option_visible_client_filters'] ?? []);
+        $allowClientFilters = isset($_POST['option_allow_client_filters']);
         $result = ShareLinkService::save(
             trim((string) ($_POST['id'] ?? '')) ?: null,
             trim((string) ($_POST['name_ar'] ?? '')),
@@ -76,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             trim((string) ($_POST['access_username'] ?? '')),
             trim((string) ($_POST['plain_password'] ?? '')),
             trim((string) ($_POST['keyword'] ?? '')),
-            (float) ($_POST['min_quantity'] ?? 0),
+            0,
             trim((string) ($_POST['expires_at'] ?? '')),
             isset($_POST['is_active']),
             isset($user['id']) ? (string) $user['id'] : null,
@@ -99,10 +101,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $parseNullableFloat($_POST['forced_max_unit_purchase_price_usd'] ?? null),
             isset($_POST['option_show_images']),
             trim((string) ($_POST['option_price_mode'] ?? 'both')),
-            isset($_POST['option_allow_client_filters']),
+            $allowClientFilters,
             isset($_POST['option_allow_sorting']),
-            isset($_POST['option_include_result_filters']),
+            $allowClientFilters,
             $visibleClientFilters,
+            $clientSortFields,
             $defaultSortValue,
             trim((string) ($_POST['option_default_group_by'] ?? 'none'))
         );
