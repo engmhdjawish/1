@@ -170,6 +170,13 @@ $sortFieldOptions = [
 
 $visibleFilterOptions = [
     ['value' => 'search', 'label' => 'بحث نصي'],
+    ['value' => 'materialTypes', 'label' => 'نوع المادة'],
+    ['value' => 'ageCategories', 'label' => 'الفئة العمرية'],
+    ['value' => 'manufacturers', 'label' => 'الشركة'],
+    ['value' => 'sizeRanges', 'label' => 'القياس'],
+    ['value' => 'countryOfOrigins', 'label' => 'بلد المنشأ'],
+    ['value' => 'stores', 'label' => 'المخازن'],
+    ['value' => 'groups', 'label' => 'المجموعات'],
     ['value' => 'availability', 'label' => 'التوفر'],
     ['value' => 'warehouseRange', 'label' => 'مدى الكمية'],
     ['value' => 'priceSaleSyp', 'label' => 'مدى سعر البيع ل.س'],
@@ -378,7 +385,7 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
         </label>
         <label class="text-xs inline-flex items-center gap-1.5 md:col-span-2">
           <input type="checkbox" name="option_allow_client_filters" <?= $allowClientFilters ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
-          <span>عرض فلاتر النتائج للعميل (خيارات مرتبطة بمحتوى الرابط فقط)</span>
+          <span>السماح بفلاتر للعميل</span>
         </label>
         <label class="text-xs inline-flex items-center gap-1.5">
           <input type="checkbox" name="option_allow_sorting" <?= $allowSorting ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
@@ -410,8 +417,8 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
           <p class="mt-1 text-[11px] text-text-muted">اختر حقول الترتيب فقط — العميل يحدد تصاعدي أو تنازلي بالضغط على الخيار.</p>
         </div>
         <div class="text-xs md:col-span-2">
-          <?php $renderTokenPicker('فلاتر إضافية للعميل', 'option_visible_client_filters[]', $visibleFilterOptions, $visibleClientFilters, 'sl-visible-client-filters', true, false, false, 4); ?>
-          <p class="mt-1 text-[11px] text-text-muted">فلاتر النوع والعمر والشركة… تُعرض تلقائياً من نتائج الرابط عند تفعيل «عرض فلاتر النتائج».</p>
+          <?php $renderTokenPicker('الفلاتر المعروضة للعميل', 'option_visible_client_filters[]', $visibleFilterOptions, $visibleClientFilters, 'sl-visible-client-filters', true, false, false, 4); ?>
+          <p class="mt-1 text-[11px] text-text-muted">اختر أنواع الفلاتر التي يراها العميل. داخل كل فلتر تظهر فقط القيم الموجودة في نتائج الرابط — مثلاً «نسواني» دون «رجالي» إذا لم تكن رجالي ضمن النتائج رغم فرضها في قيود الرابط.</p>
         </div>
       </div>
     </details>

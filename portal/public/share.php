@@ -121,13 +121,6 @@ if ($visibleClientFilters === []) {
 $isClientFilterVisible = static function (string $code) use ($visibleClientFilters): bool {
     return in_array($code, $visibleClientFilters, true);
 };
-$showResultFacet = static function (string $facetKey) use ($useDynamicResultFilters, $isClientFilterVisible): bool {
-    if ($isClientFilterVisible($facetKey)) {
-        return true;
-    }
-
-    return $useDynamicResultFilters;
-};
 
 $forcedMaterialTypes = array_map('strval', is_array($shareLink) ? ($shareLink['forced_material_types'] ?? []) : []);
 $forcedAgeCategories = array_map('strval', is_array($shareLink) ? ($shareLink['forced_age_categories'] ?? []) : []);
@@ -164,13 +157,13 @@ $forcedMaxUnitPurchasePriceUsd = isset($constraints['max_unit_purchase_price_usd
     ? (float) $constraints['max_unit_purchase_price_usd']
     : null;
 
-$selectedMaterialTypes = ($allowClientFilters && $showResultFacet('materialTypes')) ? $parseList('materialTypes') : [];
-$selectedAgeCategories = ($allowClientFilters && $showResultFacet('ageCategories')) ? $parseList('ageCategories') : [];
-$selectedManufacturers = ($allowClientFilters && $showResultFacet('manufacturers')) ? $parseList('manufacturers') : [];
-$selectedSizeRanges = ($allowClientFilters && $showResultFacet('sizeRanges')) ? $parseList('sizeRanges') : [];
-$selectedCountryOrigins = ($allowClientFilters && $showResultFacet('countryOfOrigins')) ? $parseList('countryOfOrigins') : [];
-$selectedStoreGuids = ($allowClientFilters && $showResultFacet('stores')) ? $parseList('storeGuids') : [];
-$selectedGroupGuids = ($allowClientFilters && $showResultFacet('groups')) ? $parseList('groupGuids') : [];
+$selectedMaterialTypes = ($allowClientFilters && $isClientFilterVisible('materialTypes')) ? $parseList('materialTypes') : [];
+$selectedAgeCategories = ($allowClientFilters && $isClientFilterVisible('ageCategories')) ? $parseList('ageCategories') : [];
+$selectedManufacturers = ($allowClientFilters && $isClientFilterVisible('manufacturers')) ? $parseList('manufacturers') : [];
+$selectedSizeRanges = ($allowClientFilters && $isClientFilterVisible('sizeRanges')) ? $parseList('sizeRanges') : [];
+$selectedCountryOrigins = ($allowClientFilters && $isClientFilterVisible('countryOfOrigins')) ? $parseList('countryOfOrigins') : [];
+$selectedStoreGuids = ($allowClientFilters && $isClientFilterVisible('stores')) ? $parseList('storeGuids') : [];
+$selectedGroupGuids = ($allowClientFilters && $isClientFilterVisible('groups')) ? $parseList('groupGuids') : [];
 $selectedIsAvailable = ($allowClientFilters && $isClientFilterVisible('availability')) ? $parseNullableBool('isAvailable') : null;
 $selectedMinWarehouseQuantity = ($allowClientFilters && $isClientFilterVisible('warehouseRange')) ? $parseNullableFloat('minWarehouseQuantity') : null;
 $selectedMaxWarehouseQuantity = ($allowClientFilters && $isClientFilterVisible('warehouseRange')) ? $parseNullableFloat('maxWarehouseQuantity') : null;
@@ -455,39 +448,12 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
             if (!is_array($resultFilters)) {
                 $resultFilters = [];
             }
-            if ($allowClientFilters && $resultFilters === []) {
-                $toForcedFacetValues = static function (array $values): array {
-                    $items = [];
-                    foreach ($values as $value) {
-                        $item = trim((string) $value);
-                        if ($item === '') {
-                            continue;
-                        }
-                        $items[] = ['value' => $item, 'count' => null];
-                    }
-
-                    return $items;
-                };
-
-                $resultFilters = [
-                    'materialTypes' => $toForcedFacetValues($forcedMaterialTypes),
-                    'ageCategories' => $toForcedFacetValues($forcedAgeCategories),
-                    'manufacturers' => $toForcedFacetValues($forcedManufacturers),
-                    'sizeRanges' => $toForcedFacetValues($forcedSizeRanges),
-                    'countryOfOrigins' => $toForcedFacetValues($forcedCountryOrigins),
-                    'groups' => array_map(
-                        static fn (string $guid): array => ['guid' => $guid, 'code' => null, 'name' => $guid, 'count' => null],
-                        $forcedGroupGuids
-                    ),
-                ];
-            }
-
             $normalizeFacetKey = static fn (string $value): string => Text::lower($value);
             $scopeStringFacets = static function (array $facets, array $forced) use ($normalizeFacetKey): array {
                 $withResults = array_values(array_filter($facets, static function (array $facet): bool {
                     $count = $facet['count'] ?? null;
 
-                    return $count === null || (int) $count > 0;
+                    return $count !== null && (int) $count > 0;
                 }));
                 if ($forced === []) {
                     return $withResults;
@@ -505,7 +471,7 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
                 $withResults = array_values(array_filter($facets, static function (array $facet): bool {
                     $count = $facet['count'] ?? null;
 
-                    return $count === null || (int) $count > 0;
+                    return $count !== null && (int) $count > 0;
                 }));
                 if ($forcedGuids === []) {
                     return $withResults;
@@ -801,7 +767,7 @@ ob_start();
           </label>
         <?php endif; ?>
 
-        <?php if ($showResultFacet('stores') && $storeOptions !== [] && ($forcedStoreGuids !== [] || $queryStoreGuids !== [])): ?>
+        <?php if ($isClientFilterVisible('stores') && $storeOptions !== []): ?>
           <?php
             $storeChipOptions = [];
             foreach ($storeOptions as $store) {
@@ -821,7 +787,7 @@ ob_start();
           </fieldset>
         <?php endif; ?>
 
-        <?php if ($showResultFacet('groups') && $groupOptions !== []): ?>
+        <?php if ($isClientFilterVisible('groups') && $groupOptions !== []): ?>
           <?php
             $groupChipOptions = [];
             $groupFacetCounts = [];
@@ -895,11 +861,11 @@ ob_start();
 
         <?php
           $facetMap = [
-              'materialTypes' => ['label' => 'نوع المادة', 'visible' => $showResultFacet('materialTypes')],
-              'ageCategories' => ['label' => 'الفئة العمرية', 'visible' => $showResultFacet('ageCategories')],
-              'manufacturers' => ['label' => 'الشركة', 'visible' => $showResultFacet('manufacturers')],
-              'sizeRanges' => ['label' => 'القياس', 'visible' => $showResultFacet('sizeRanges')],
-              'countryOfOrigins' => ['label' => 'بلد المنشأ', 'visible' => $showResultFacet('countryOfOrigins')],
+              'materialTypes' => ['label' => 'نوع المادة', 'visible' => $isClientFilterVisible('materialTypes')],
+              'ageCategories' => ['label' => 'الفئة العمرية', 'visible' => $isClientFilterVisible('ageCategories')],
+              'manufacturers' => ['label' => 'الشركة', 'visible' => $isClientFilterVisible('manufacturers')],
+              'sizeRanges' => ['label' => 'القياس', 'visible' => $isClientFilterVisible('sizeRanges')],
+              'countryOfOrigins' => ['label' => 'بلد المنشأ', 'visible' => $isClientFilterVisible('countryOfOrigins')],
           ];
         ?>
         <?php foreach ($facetMap as $facetKey => $facetConfig): ?>
