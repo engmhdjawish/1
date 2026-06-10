@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 trim((string) ($_POST['email'] ?? '')),
                 trim((string) ($_POST['access_policy_id'] ?? '')),
                 trim((string) ($_POST['status'] ?? 'pending')),
-                isset($_POST['is_active']),
+                ((string) ($_POST['is_active'] ?? '0')) === '1',
                 trim((string) ($_POST['plain_password'] ?? '')),
                 trim((string) ($_POST['notes_ar'] ?? '')),
                 trim((string) ($_POST['rejection_reason_ar'] ?? '')),
@@ -64,13 +64,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_GET['edit'] = (string) ($result['id'] ?? '');
             }
         }
+    } elseif ($action === 'suspend') {
+        if (!$canManageCustomers) {
+            $flash = 'لا تملك صلاحية تعليق الحسابات.';
+            $flashType = 'error';
+        } else {
+            $ok = WebCustomerService::suspend(
+                $customerId,
+                $adminId,
+                trim((string) ($_POST['suspend_reason'] ?? ''))
+            );
+            $flash = $ok ? 'تم تعليق الحساب.' : 'تعذر تعليق الحساب (قد يكون معلقاً أو مرفوضاً مسبقاً).';
+            $flashType = $ok ? 'success' : 'error';
+            if ($ok) {
+                $statusFilter = 'suspended';
+            }
+        }
+    } elseif ($action === 'reactivate') {
+        if (!$canApproveCustomers) {
+            $flash = 'لا تملك صلاحية إعادة تفعيل الحسابات.';
+            $flashType = 'error';
+        } else {
+            $policyId = trim((string) ($_POST['access_policy_id'] ?? ''));
+            $ok = WebCustomerService::reactivate($customerId, $policyId, $adminId);
+            $flash = $ok ? 'تم إعادة تفعيل الحساب.' : 'تعذر إعادة التفعيل. تأكد من اختيار سياسة وصول.';
+            $flashType = $ok ? 'success' : 'error';
+            if ($ok) {
+                $statusFilter = 'active';
+            }
+        }
+    } elseif ($action === 'toggle_login') {
+        if (!$canManageCustomers) {
+            $flash = 'لا تملك صلاحية تعديل حالة الدخول.';
+            $flashType = 'error';
+        } else {
+            $enable = ((string) ($_POST['enable_login'] ?? '0')) === '1';
+            $ok = WebCustomerService::setLoginActive($customerId, $enable);
+            $flash = $ok
+                ? ($enable ? 'تم تفعيل دخول العميل.' : 'تم إيقاف دخول العميل.')
+                : 'تعذر تعديل حالة الدخول (يجب أن يكون الحساب نشطاً).';
+            $flashType = $ok ? 'success' : 'error';
+        }
     }
 }
 
 $statusFilter = trim((string) ($_GET['status'] ?? 'pending'));
 $searchFilter = trim((string) ($_GET['q'] ?? ''));
 $sourceFilter = trim((string) ($_GET['source'] ?? ''));
-$editId = trim((string) ($_GET['edit'] ?? ''));
+$editId = isset($_GET['new']) ? '' : trim((string) ($_GET['edit'] ?? ''));
 $detailsId = trim((string) ($_GET['details'] ?? ''));
 
 $customers = WebCustomerService::listByStatus($statusFilter, $searchFilter, $sourceFilter, 120);
