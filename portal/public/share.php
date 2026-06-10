@@ -8,6 +8,7 @@ use Portal\Services\ApiClient;
 use Portal\Services\ShareCartService;
 use Portal\Services\ShareLinkService;
 use Portal\Support\SharePageAccess;
+use Portal\Support\Text;
 
 require dirname(__DIR__) . '/views/helpers.php';
 
@@ -81,24 +82,40 @@ $parseNullableBool = static function (string $key): ?bool {
 };
 
 $shareOptions = is_array($shareLink) ? (array) ($shareLink['options'] ?? []) : [];
-$allowClientFilters = (bool) (($shareOptions['allow_client_filters'] ?? true) ? true : false);
-$allowSorting = (bool) (($shareOptions['allow_sorting'] ?? true) ? true : false);
-$includeResultFilters = (bool) (($shareOptions['include_result_filters'] ?? true) ? true : false);
-$defaultSort = trim((string) ($shareOptions['default_sort'] ?? 'number:asc'));
-$defaultSort = $defaultSort !== '' ? $defaultSort : 'number:asc';
-$defaultGroupBy = trim((string) ($shareOptions['default_group_by'] ?? 'none'));
-$defaultGroupBy = in_array($defaultGroupBy, ['none', 'ageCategory', 'sizeRange', 'materialType', 'manufacturer', 'countryOfOrigin', 'group'], true)
-    ? $defaultGroupBy
-    : 'none';
 $visibleClientFilters = array_values(array_map(
     'strval',
     is_array($shareOptions['visible_client_filters'] ?? null)
         ? $shareOptions['visible_client_filters']
         : []
 ));
-if ($visibleClientFilters === []) {
-    $visibleClientFilters = ['search', 'materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins', 'sort'];
+$allowClientFilters = $visibleClientFilters !== []
+    || (bool) (($shareOptions['allow_client_filters'] ?? false) ? true : false);
+$allowSorting = (bool) (($shareOptions['allow_sorting'] ?? true) ? true : false);
+$useDynamicResultFilters = $allowClientFilters && (bool) (($shareOptions['include_result_filters'] ?? true) ? true : false);
+$defaultSort = trim((string) ($shareOptions['default_sort'] ?? 'number:asc'));
+$clientSortFields = array_values(array_map('strval', is_array($shareOptions['client_sort_fields'] ?? null) ? $shareOptions['client_sort_fields'] : []));
+if ($clientSortFields === []) {
+    $clientSortFields = ['number', 'materialType', 'manufacturer'];
 }
+$sortFieldLabels = [
+    'number' => 'رقم المادة',
+    'materialType' => 'نوع المادة',
+    'ageCategory' => 'الفئة العمرية',
+    'manufacturer' => 'الشركة',
+    'sizeRange' => 'القياس',
+    'countryOfOrigin' => 'بلد المنشأ',
+    'unitSalePriceSyp' => 'سعر البيع ل.س',
+    'unitSalePriceUsd' => 'سعر البيع $',
+];
+$clientSortFields = array_values(array_filter($clientSortFields, static fn (string $field): bool => isset($sortFieldLabels[$field])));
+if ($clientSortFields === []) {
+    $clientSortFields = ['number'];
+}
+$defaultSort = $defaultSort !== '' ? $defaultSort : 'number:asc';
+$defaultGroupBy = trim((string) ($shareOptions['default_group_by'] ?? 'none'));
+$defaultGroupBy = in_array($defaultGroupBy, ['none', 'ageCategory', 'sizeRange', 'materialType', 'manufacturer', 'countryOfOrigin', 'group'], true)
+    ? $defaultGroupBy
+    : 'none';
 $isClientFilterVisible = static function (string $code) use ($visibleClientFilters): bool {
     return in_array($code, $visibleClientFilters, true);
 };
@@ -228,9 +245,6 @@ $mergeBool = static function (?bool $forced, ?bool $selected, bool &$hasConflict
     return $forced;
 };
 
-$baseMinQuantity = (float) (is_array($shareLink) ? ($shareLink['min_quantity'] ?? 0) : 0);
-$effectiveMinQuantity = $baseMinQuantity > 0 ? $baseMinQuantity : null;
-
 $queryIsAvailable = $mergeBool(is_bool($forcedIsAvailable) ? $forcedIsAvailable : null, $selectedIsAvailable, $hasConstraintConflict);
 $queryHasImage = is_bool($forcedHasImage) ? $forcedHasImage : null;
 $queryMinWarehouseQuantity = $mergeMin($forcedMinWarehouseQuantity, $selectedMinWarehouseQuantity);
@@ -242,12 +256,6 @@ $queryMaxUnitSalePriceUsd = $mergeMax($forcedMaxUnitSalePriceUsd, $selectedMaxUn
 $queryMinUnitPurchasePriceUsd = $mergeMin($forcedMinUnitPurchasePriceUsd, $selectedMinUnitPurchasePriceUsd);
 $queryMaxUnitPurchasePriceUsd = $mergeMax($forcedMaxUnitPurchasePriceUsd, $selectedMaxUnitPurchasePriceUsd);
 
-if ($effectiveMinQuantity !== null) {
-    $queryMinWarehouseQuantity = $queryMinWarehouseQuantity !== null
-        ? max($queryMinWarehouseQuantity, $effectiveMinQuantity)
-        : $effectiveMinQuantity;
-}
-
 $validateRange($queryMinWarehouseQuantity, $queryMaxWarehouseQuantity, $hasConstraintConflict);
 $validateRange($queryMinUnitSalePriceSyp, $queryMaxUnitSalePriceSyp, $hasConstraintConflict);
 $validateRange($queryMinUnitSalePriceUsd, $queryMaxUnitSalePriceUsd, $hasConstraintConflict);
@@ -258,10 +266,37 @@ $userKeyword = ($allowClientFilters && $isClientFilterVisible('search')) ? trim(
 $search = trim($baseKeyword . ' ' . $userKeyword);
 $search = $search !== '' ? $search : null;
 
-$selectedSort = ($allowSorting && $isClientFilterVisible('sort'))
-    ? trim((string) ($_GET['sort'] ?? $defaultSort))
-    : $defaultSort;
-$selectedSort = $selectedSort !== '' ? $selectedSort : 'number:asc';
+$parseSortClause = static function (string $clause): array {
+    $clause = trim($clause);
+    if ($clause === '') {
+        return ['field' => 'number', 'dir' => 'asc'];
+    }
+    if (str_starts_with($clause, '-')) {
+        return ['field' => trim(substr($clause, 1)), 'dir' => 'desc'];
+    }
+    $parts = explode(':', $clause, 2);
+
+    return [
+        'field' => trim($parts[0]) !== '' ? trim($parts[0]) : 'number',
+        'dir' => strtolower(trim($parts[1] ?? 'asc')) === 'desc' ? 'desc' : 'asc',
+    ];
+};
+$defaultSortParsed = $parseSortClause(explode(',', $defaultSort)[0] ?? 'number:asc');
+$requestedSort = $allowSorting ? trim((string) ($_GET['sort'] ?? '')) : '';
+$activeSortParsed = $requestedSort !== ''
+    ? $parseSortClause(explode(',', $requestedSort)[0] ?? $requestedSort)
+    : $defaultSortParsed;
+if (!in_array($activeSortParsed['field'], $clientSortFields, true)) {
+    $activeSortParsed = ['field' => $clientSortFields[0], 'dir' => 'asc'];
+}
+$selectedSort = $activeSortParsed['field'] . ':' . $activeSortParsed['dir'];
+$buildNextSortValue = static function (string $field) use ($activeSortParsed): string {
+    if ($activeSortParsed['field'] !== $field) {
+        return $field . ':asc';
+    }
+
+    return $activeSortParsed['dir'] === 'asc' ? $field . ':desc' : $field . ':asc';
+};
 $selectedGroupBy = ($allowClientFilters && $isClientFilterVisible('groupBy'))
     ? trim((string) ($_GET['groupBy'] ?? $defaultGroupBy))
     : $defaultGroupBy;
@@ -328,7 +363,7 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
             'groupGuids' => $queryGroupGuids !== [] ? implode(',', $queryGroupGuids) : null,
             'isAvailable' => $queryIsAvailable === null ? null : ($queryIsAvailable ? 'true' : 'false'),
             'hasImage' => $queryHasImage === null ? null : ($queryHasImage ? 'true' : 'false'),
-            'minWarehouseQuantity' => $queryMinWarehouseQuantity !== null ? $queryMinWarehouseQuantity : $effectiveMinQuantity,
+            'minWarehouseQuantity' => $queryMinWarehouseQuantity,
             'maxWarehouseQuantity' => $queryMaxWarehouseQuantity,
             'minUnitSalePriceSyp' => $queryMinUnitSalePriceSyp,
             'maxUnitSalePriceSyp' => $queryMaxUnitSalePriceSyp,
@@ -338,7 +373,7 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
             'maxUnitPurchasePriceUsd' => $queryMaxUnitPurchasePriceUsd,
             'groupBy' => $selectedGroupBy !== 'none' ? $selectedGroupBy : null,
             'sort' => $selectedSort,
-            'includeResultFilters' => ($allowClientFilters && $includeResultFilters) ? 'true' : 'false',
+            'includeResultFilters' => $useDynamicResultFilters ? 'true' : 'false',
         ], static fn ($value) => $value !== null && $value !== '');
 
         $materials = ApiClient::get('/api/materials', $params);
@@ -354,7 +389,7 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
                 'sizeRanges' => $querySizeRanges !== [] ? implode(',', $querySizeRanges) : null,
                 'countryOfOrigins' => $queryCountryOrigins !== [] ? implode(',', $queryCountryOrigins) : null,
                 'sort' => 'number:asc',
-                'includeResultFilters' => ($allowClientFilters && $includeResultFilters) ? 'true' : 'false',
+                'includeResultFilters' => $useDynamicResultFilters ? 'true' : 'false',
             ], static fn ($value) => $value !== null && $value !== '');
 
             $retry = ApiClient::get('/api/materials', $fallbackParams);
@@ -411,27 +446,67 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
             if (!is_array($resultFilters)) {
                 $resultFilters = [];
             }
-            if ($allowClientFilters && $resultFilters === []) {
-                $toFacetValues = static function (array $values): array {
-                    $items = [];
-                    foreach ($values as $value) {
-                        $item = trim((string) $value);
-                        if ($item === '') {
-                            continue;
-                        }
-                        $items[] = ['value' => $item, 'count' => null];
-                    }
-                    return $items;
-                };
+            $normalizeFacetKey = static fn (string $value): string => Text::lower($value);
+            $scopeStringFacets = static function (array $facets, array $forced) use ($normalizeFacetKey): array {
+                $withResults = array_values(array_filter($facets, static function (array $facet): bool {
+                    $count = $facet['count'] ?? null;
 
-                $resultFilters = [
-                    'materialTypes' => $toFacetValues($filterOptions['materialTypes']),
-                    'ageCategories' => $toFacetValues($filterOptions['ageCategories']),
-                    'manufacturers' => $toFacetValues($filterOptions['manufacturers']),
-                    'sizeRanges' => $toFacetValues($filterOptions['sizeRanges']),
-                    'countryOfOrigins' => $toFacetValues($filterOptions['countryOfOrigins']),
-                ];
-            }
+                    return $count !== null && (int) $count > 0;
+                }));
+                if ($forced === []) {
+                    return $withResults;
+                }
+                $allowed = [];
+                foreach ($forced as $value) {
+                    $allowed[$normalizeFacetKey((string) $value)] = true;
+                }
+
+                return array_values(array_filter($withResults, static function (array $facet) use ($allowed, $normalizeFacetKey): bool {
+                    return isset($allowed[$normalizeFacetKey((string) ($facet['value'] ?? ''))]);
+                }));
+            };
+            $scopeGroupFacets = static function (array $facets, array $forcedGuids): array {
+                $withResults = array_values(array_filter($facets, static function (array $facet): bool {
+                    $count = $facet['count'] ?? null;
+
+                    return $count !== null && (int) $count > 0;
+                }));
+                if ($forcedGuids === []) {
+                    return $withResults;
+                }
+                $allowed = array_flip(array_map('strtolower', $forcedGuids));
+
+                return array_values(array_filter($withResults, static function (array $facet) use ($allowed): bool {
+                    $guid = strtolower((string) ($facet['guid'] ?? ''));
+
+                    return $guid !== '' && isset($allowed[$guid]);
+                }));
+            };
+
+            $resultFilters['materialTypes'] = $scopeStringFacets(
+                is_array($resultFilters['materialTypes'] ?? null) ? $resultFilters['materialTypes'] : [],
+                $forcedMaterialTypes
+            );
+            $resultFilters['ageCategories'] = $scopeStringFacets(
+                is_array($resultFilters['ageCategories'] ?? null) ? $resultFilters['ageCategories'] : [],
+                $forcedAgeCategories
+            );
+            $resultFilters['manufacturers'] = $scopeStringFacets(
+                is_array($resultFilters['manufacturers'] ?? null) ? $resultFilters['manufacturers'] : [],
+                $forcedManufacturers
+            );
+            $resultFilters['sizeRanges'] = $scopeStringFacets(
+                is_array($resultFilters['sizeRanges'] ?? null) ? $resultFilters['sizeRanges'] : [],
+                $forcedSizeRanges
+            );
+            $resultFilters['countryOfOrigins'] = $scopeStringFacets(
+                is_array($resultFilters['countryOfOrigins'] ?? null) ? $resultFilters['countryOfOrigins'] : [],
+                $forcedCountryOrigins
+            );
+            $resultFilters['groups'] = $scopeGroupFacets(
+                is_array($resultFilters['groups'] ?? null) ? $resultFilters['groups'] : [],
+                $forcedGroupGuids
+            );
         } else {
             $apiError = $extractApiError($materials);
         }
@@ -461,6 +536,40 @@ $groupOptions = array_values(array_filter($filterOptions['groups'] ?? [], static
     }
     return trim((string) ($row['guid'] ?? $row['Guid'] ?? '')) !== '';
 }));
+if ($forcedStoreGuids !== []) {
+    $forcedStoreMap = array_flip(array_map('strtolower', $forcedStoreGuids));
+    $storeOptions = array_values(array_filter($storeOptions, static function (array $store) use ($forcedStoreMap): bool {
+        $guid = strtolower((string) ($store['guid'] ?? $store['Guid'] ?? ''));
+
+        return $guid !== '' && isset($forcedStoreMap[$guid]);
+    }));
+}
+if (isset($resultFilters['groups']) && is_array($resultFilters['groups']) && $resultFilters['groups'] !== []) {
+    $groupOptions = [];
+    foreach ($resultFilters['groups'] as $groupFacet) {
+        if (!is_array($groupFacet)) {
+            continue;
+        }
+        $groupGuid = trim((string) ($groupFacet['guid'] ?? ''));
+        if ($groupGuid === '') {
+            continue;
+        }
+        $groupOptions[] = [
+            'guid' => $groupGuid,
+            'name' => (string) ($groupFacet['name'] ?? $groupFacet['code'] ?? $groupGuid),
+            'code' => $groupFacet['code'] ?? null,
+        ];
+    }
+} elseif ($forcedGroupGuids !== []) {
+    $forcedGroupMap = array_flip(array_map('strtolower', $forcedGroupGuids));
+    $groupOptions = array_values(array_filter($groupOptions, static function (array $group) use ($forcedGroupMap): bool {
+        $guid = strtolower((string) ($group['guid'] ?? $group['Guid'] ?? ''));
+
+        return $guid !== '' && isset($forcedGroupMap[$guid]);
+    }));
+} else {
+    $groupOptions = [];
+}
 
 foreach ($selectedStoreGuids as $guid) {
     $exists = false;
@@ -617,18 +726,29 @@ ob_start();
             </div>
           </div>
         <?php endif; ?>
-        <?php if ($allowSorting && $isClientFilterVisible('sort')): ?>
-          <label class="text-sm">
+        <?php if ($allowSorting && $clientSortFields !== []): ?>
+          <div class="text-sm md:col-span-4">
             <span class="text-gray-600 block mb-1">الترتيب</span>
-            <input name="sort" list="share-sort-presets" value="<?= h($selectedSort) ?>" class="h-11 w-full rounded border border-gray-300 px-3" placeholder="number:asc,materialType:asc">
-            <datalist id="share-sort-presets">
-              <option value="number:asc"></option>
-              <option value="number:desc"></option>
-              <option value="materialType:asc,manufacturer:asc"></option>
-              <option value="ageCategory:asc,materialType:asc"></option>
-              <option value="manufacturer:asc,-unitSalePriceSyp"></option>
-            </datalist>
-          </label>
+            <div class="flex flex-wrap gap-2 mt-1">
+              <?php foreach ($clientSortFields as $sortField): ?>
+                <?php
+                  $isActiveSort = $activeSortParsed['field'] === $sortField;
+                  $sortLabel = $sortFieldLabels[$sortField] ?? $sortField;
+                  $sortArrow = $isActiveSort ? ($activeSortParsed['dir'] === 'asc' ? ' ↑' : ' ↓') : '';
+                  $nextSortValue = $buildNextSortValue($sortField);
+                ?>
+                <button
+                  type="submit"
+                  name="sort"
+                  value="<?= h($nextSortValue) ?>"
+                  class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-bold border transition <?= $isActiveSort ? 'bg-primary text-white border-primary' : 'border-gray-300 bg-white text-gray-700 hover:border-primary' ?>"
+                >
+                  <?= h($sortLabel . $sortArrow) ?>
+                </button>
+              <?php endforeach; ?>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">اضغط على الخيار للتبديل بين تصاعدي وتنازلي.</p>
+          </div>
         <?php endif; ?>
         <?php if ($isClientFilterVisible('groupBy')): ?>
           <label class="text-sm">
@@ -668,6 +788,16 @@ ob_start();
         <?php if ($isClientFilterVisible('groups') && $groupOptions !== []): ?>
           <?php
             $groupChipOptions = [];
+            $groupFacetCounts = [];
+            foreach (is_array($resultFilters['groups'] ?? null) ? $resultFilters['groups'] : [] as $groupFacet) {
+                if (!is_array($groupFacet)) {
+                    continue;
+                }
+                $facetGuid = (string) ($groupFacet['guid'] ?? '');
+                if ($facetGuid !== '') {
+                    $groupFacetCounts[strtolower($facetGuid)] = $groupFacet['count'] ?? null;
+                }
+            }
             foreach ($groupOptions as $group) {
                 $groupGuid = (string) ($group['guid'] ?? $group['Guid'] ?? '');
                 if ($groupGuid === '') {
@@ -676,7 +806,11 @@ ob_start();
                 $groupLabel = trim((string) ($group['name'] ?? $group['Name'] ?? '')) !== ''
                     ? (string) ($group['name'] ?? $group['Name'])
                     : ((string) ($group['code'] ?? $group['Code'] ?? '') !== '' ? (string) ($group['code'] ?? $group['Code']) : $groupGuid);
-                $groupChipOptions[] = ['value' => $groupGuid, 'label' => $groupLabel];
+                $groupChipOptions[] = [
+                    'value' => $groupGuid,
+                    'label' => $groupLabel,
+                    'count' => $groupFacetCounts[strtolower($groupGuid)] ?? null,
+                ];
             }
           ?>
           <fieldset class="md:col-span-4 rounded border border-gray-200 p-3">
