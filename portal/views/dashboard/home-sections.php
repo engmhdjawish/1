@@ -133,21 +133,17 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
   </div>
 </section>
 
-<?php if ($flash): ?>
-  <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $flashType === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700' ?>">
-    <?= h($flash) ?>
-  </p>
-<?php endif; ?>
+<?php require __DIR__ . '/partials/flash.php'; ?>
 
 <?php if ($showForm): ?>
 <?php if ($editId !== ''): ?>
-  <form method="post" id="hs-delete-form" class="hidden" onsubmit="return confirm('هل أنت متأكد من حذف هذا القسم؟')">
+  <form method="post" id="hs-delete-form" class="hidden" data-dashboard-confirm="هل أنت متأكد من حذف هذا القسم؟">
     <input type="hidden" name="action" value="delete_section">
     <input type="hidden" name="id" value="<?= h($editId) ?>">
   </form>
 <?php endif; ?>
 
-<form method="post" id="home-section-form" class="space-y-3 mb-4">
+<form method="post" id="home-section-form" data-dashboard-explicit-save class="space-y-3 mb-4">
   <input type="hidden" name="action" value="save_section">
   <input type="hidden" name="id" value="<?= h((string) ($editSection['id'] ?? '')) ?>">
 
@@ -158,7 +154,7 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
       <?php if ($editId !== ''): ?>
         <button type="submit" form="hs-delete-form" class="h-9 px-4 rounded-lg border border-red-300 bg-white text-xs font-bold text-red-700 hover:bg-red-50">حذف</button>
       <?php endif; ?>
-      <button type="submit" id="home-section-save-btn" class="h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">
+      <button type="submit" id="home-section-save-btn" data-dashboard-save-btn class="dashboard-btn h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">
         <?= $editId !== '' ? 'حفظ التعديلات' : 'إنشاء القسم' ?>
       </button>
     </div>
@@ -392,17 +388,17 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
               <td class="px-4 py-3">
                 <div class="flex justify-end gap-1.5 flex-wrap">
                   <a href="/dashboard/home-sections.php?edit=<?= urlencode((string) $section['id']) ?>" class="h-8 px-3 inline-flex items-center rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">تعديل</a>
-                  <form method="post">
+                  <form method="post" data-dashboard-ajax data-dashboard-reload>
                     <input type="hidden" name="action" value="toggle_section">
                     <input type="hidden" name="id" value="<?= h((string) $section['id']) ?>">
                     <input type="hidden" name="next_active" value="<?= !empty($section['is_active']) ? '0' : '1' ?>">
                     <?php if (!empty($section['is_active'])): ?>
-                      <button class="h-8 px-3 rounded-lg text-xs font-bold bg-slate-600 text-white hover:bg-slate-700">إيقاف</button>
+                      <button type="submit" class="dashboard-btn h-8 px-3 rounded-lg text-xs font-bold bg-slate-600 text-white hover:bg-slate-700">إيقاف</button>
                     <?php else: ?>
-                      <button class="h-8 px-3 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">تفعيل</button>
+                      <button type="submit" class="dashboard-btn h-8 px-3 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">تفعيل</button>
                     <?php endif; ?>
                   </form>
-                  <form method="post" onsubmit="return confirm('حذف القسم؟')">
+                  <form method="post" data-dashboard-confirm="حذف القسم؟">
                     <input type="hidden" name="action" value="delete_section">
                     <input type="hidden" name="id" value="<?= h((string) $section['id']) ?>">
                     <button class="h-8 px-3 rounded-lg border border-red-300 bg-white text-xs font-bold text-red-700 hover:bg-red-50">حذف</button>
@@ -422,30 +418,6 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
 <?php portal_render_media_picker_script(); ?>
 <script>
 (() => {
-  const mainForm = document.getElementById('home-section-form');
-  const saveBtn = document.getElementById('home-section-save-btn');
-  let explicitSave = false;
-
-  saveBtn?.addEventListener('click', () => {
-    explicitSave = true;
-  });
-
-  mainForm?.addEventListener('submit', (event) => {
-    if (!explicitSave) {
-      event.preventDefault();
-      return false;
-    }
-    explicitSave = false;
-  });
-
-  mainForm?.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter') return;
-    const target = event.target;
-    if (!target || target.tagName === 'TEXTAREA') return;
-    if (target.id === 'home-section-save-btn') return;
-    event.preventDefault();
-  }, true);
-
   const modeSelect = document.getElementById('display_mode');
   const filterPanel = document.getElementById('filter-mode-panel');
   const manualPanel = document.getElementById('manual-mode-panel');

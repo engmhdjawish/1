@@ -49,7 +49,7 @@ $editing = $editCustomer !== null;
       <h1 class="text-2xl font-extrabold text-slate-900">إدارة العملاء</h1>
       <p class="text-sm text-text-muted mt-1">عرض التفاصيل، إضافة عميل جديد، وتعديل بيانات العملاء الحاليين.</p>
     </div>
-    <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-3 w-full md:w-auto">
+    <form method="get" data-dashboard-filter class="grid grid-cols-1 md:grid-cols-3 gap-3 w-full md:w-auto">
       <input type="hidden" name="status" value="<?= h($statusFilter) ?>">
       <label class="text-sm">
         <span class="text-text-muted block mb-1">بحث</span>
@@ -68,11 +68,7 @@ $editing = $editCustomer !== null;
   </div>
 </section>
 
-<?php if ($flash): ?>
-  <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $flashType === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700' ?>">
-    <?= h($flash) ?>
-  </p>
-<?php endif; ?>
+<?php require __DIR__ . '/partials/flash.php'; ?>
 
 <section class="mb-6 flex gap-2 overflow-x-auto pb-2">
   <?php foreach ($statusTabs as $key => $tab): ?>
@@ -90,7 +86,7 @@ $editing = $editCustomer !== null;
 
 <section class="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-5">
   <article class="xl:col-span-2 bg-surface-white rounded-2xl border border-border-subtle shadow-sm overflow-hidden">
-    <div class="overflow-x-auto">
+    <div class="dashboard-table-wrap overflow-x-auto">
       <table class="w-full min-w-[980px] text-sm">
         <thead class="bg-surface-low border-b border-border-subtle text-text-muted">
           <tr>
@@ -165,15 +161,15 @@ $editing = $editCustomer !== null;
                   <?php endif; ?>
 
                   <?php if ($canApproveCustomers && $status === 'pending'): ?>
-                    <form method="post" class="flex items-center gap-2">
+                    <form method="post" data-dashboard-ajax data-dashboard-reload class="flex flex-wrap items-center gap-2">
                       <input type="hidden" name="customer_id" value="<?= h((string) ($row['id'] ?? '')) ?>">
-                      <select name="access_policy_id" class="h-9 rounded-lg border border-border-subtle px-2 text-xs" required>
+                      <select name="access_policy_id" class="h-9 rounded-lg border border-border-subtle px-2 text-xs min-w-[8rem]" required>
                         <?php foreach ($policies as $policy): ?>
                           <option value="<?= h((string) $policy['id']) ?>"><?= h((string) $policy['name_ar']) ?></option>
                         <?php endforeach; ?>
                       </select>
-                      <button name="action" value="approve" class="h-9 px-3 rounded-lg bg-green-600 text-white text-xs font-bold">موافقة</button>
-                      <button name="action" value="reject" class="h-9 px-3 rounded-lg bg-red-600 text-white text-xs font-bold">رفض</button>
+                      <button type="submit" name="action" value="approve" class="dashboard-btn h-9 px-3 rounded-lg bg-green-600 text-white text-xs font-bold">موافقة</button>
+                      <button type="submit" name="action" value="reject" class="dashboard-btn h-9 px-3 rounded-lg bg-red-600 text-white text-xs font-bold">رفض</button>
                     </form>
                   <?php endif; ?>
                 </div>
@@ -198,7 +194,7 @@ $editing = $editCustomer !== null;
         لا تملك صلاحية إضافة أو تعديل العملاء.
       </p>
     <?php else: ?>
-      <form method="post" class="space-y-3">
+      <form method="post" data-dashboard-ajax data-dashboard-reload class="space-y-3">
         <input type="hidden" name="action" value="save_customer">
         <input type="hidden" name="customer_id" value="<?= h((string) ($editCustomer['id'] ?? '')) ?>">
 
@@ -259,7 +255,7 @@ $editing = $editCustomer !== null;
           <span>الحساب نشط</span>
         </label>
 
-        <button class="w-full h-11 rounded-xl bg-primary text-white font-bold hover:brightness-110 transition">
+        <button type="submit" class="dashboard-btn w-full h-11 rounded-xl bg-primary text-white font-bold hover:brightness-110 transition">
           <?= $editing ? 'حفظ التعديلات' : 'إضافة العميل' ?>
         </button>
       </form>

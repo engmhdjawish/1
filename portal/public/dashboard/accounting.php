@@ -17,25 +17,25 @@ $currentRoute = '/dashboard/accounting.php';
 
 ob_start();
 ?>
-<section class="bg-white border rounded-xl p-5 mb-4">
+<section class="dashboard-card mb-4">
   <h1 class="text-xl font-bold mb-2">لوحة المحاسب</h1>
-  <p class="text-sm text-gray-600">ملخص مالي وتشغيلي سريع بالاعتماد على بيانات الطلبات.</p>
+  <p class="text-sm text-muted">ملخص مالي وتشغيلي سريع بالاعتماد على بيانات الطلبات.</p>
 </section>
 
 <section class="grid gap-3 grid-cols-2 md:grid-cols-4 mb-4">
-  <article class="bg-white border rounded-lg p-3">
+  <article class="dashboard-card">
     <div class="text-xs text-gray-500">طلبات مؤكدة</div>
     <div class="text-xl font-bold mt-1"><?= (int) ($statusCounts['confirmed'] ?? 0) ?></div>
   </article>
-  <article class="bg-white border rounded-lg p-3">
+  <article class="dashboard-card">
     <div class="text-xs text-gray-500">طلبات مكتملة</div>
     <div class="text-xl font-bold mt-1 text-green-700"><?= (int) ($statusCounts['completed'] ?? 0) ?></div>
   </article>
-  <article class="bg-white border rounded-lg p-3">
+  <article class="dashboard-card">
     <div class="text-xs text-gray-500">بانتظار مزامنة</div>
     <div class="text-xl font-bold mt-1 text-yellow-700"><?= (int) ($syncCounts['pending'] ?? 0) ?></div>
   </article>
-  <article class="bg-white border rounded-lg p-3">
+  <article class="dashboard-card">
     <div class="text-xs text-gray-500">فشل مزامنة</div>
     <div class="text-xl font-bold mt-1 text-red-700"><?= (int) ($syncCounts['failed'] ?? 0) ?></div>
   </article>

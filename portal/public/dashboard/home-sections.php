@@ -7,6 +7,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Auth\WebSession;
 use Portal\Services\ApiClient;
 use Portal\Services\HomeSectionService;
+use Portal\Support\DashboardHttp;
 
 WebSession::requirePermission('home_sections.manage');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -129,6 +130,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         $flash = $ok ? 'تم تحديث حالة القسم.' : 'تعذر تحديث حالة القسم.';
         $flashType = $ok ? 'success' : 'error';
+        if (DashboardHttp::wantsJson()) {
+            DashboardHttp::json($ok, $flash, ['reload' => true]);
+        }
     } elseif ($action === 'delete_section') {
         $deleteId = trim((string) ($_POST['id'] ?? ''));
         $deleteResult = HomeSectionService::deleteSection($deleteId);

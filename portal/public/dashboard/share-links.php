@@ -8,6 +8,7 @@ use Portal\Auth\WebSession;
 use Portal\Config;
 use Portal\Services\ApiClient;
 use Portal\Services\ShareLinkService;
+use Portal\Support\DashboardHttp;
 
 WebSession::requirePermission('share_links.manage');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -122,6 +123,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         $flash = $ok ? 'تم تحديث حالة الرابط.' : 'تعذر تحديث حالة الرابط.';
         $flashType = $ok ? 'success' : 'error';
+        if (DashboardHttp::wantsJson()) {
+            DashboardHttp::json($ok, $flash, ['reload' => true]);
+        }
     } elseif ($action === 'delete') {
         $deleteResult = ShareLinkService::delete(trim((string) ($_POST['id'] ?? '')));
         $flash = $deleteResult['message'];

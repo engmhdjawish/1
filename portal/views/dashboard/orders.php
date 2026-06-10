@@ -62,14 +62,10 @@ $buildOrdersUrl = static function (array $params): string {
   </div>
 </section>
 
-<?php if ($flash): ?>
-  <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $flashType === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700' ?>">
-    <?= h($flash) ?>
-  </p>
-<?php endif; ?>
+<?php require __DIR__ . '/partials/flash.php'; ?>
 
 <section class="bg-white border border-border-subtle rounded-2xl p-5 mb-5">
-  <form method="get" class="grid grid-cols-1 lg:grid-cols-5 gap-4 items-end">
+  <form method="get" data-dashboard-filter class="grid grid-cols-1 lg:grid-cols-5 gap-4 items-end">
     <label class="text-sm">
       <span class="text-text-muted block mb-1">البحث</span>
       <input type="text" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="رقم الطلب، اسم العميل...">
@@ -152,14 +148,14 @@ $buildOrdersUrl = static function (array $params): string {
               <td class="px-5 py-4">
                 <div class="flex items-center justify-end gap-2">
                   <?php if ($canManageOrders): ?>
-                    <form method="post" class="flex items-center gap-2">
+                    <form method="post" data-dashboard-ajax data-dashboard-reload class="flex flex-wrap items-center gap-2">
                       <input type="hidden" name="order_id" value="<?= h((string) ($row['id'] ?? '')) ?>">
                       <select name="next_status" class="h-9 rounded-lg border border-border-subtle px-2 text-xs">
                         <?php foreach ($statusLabels as $statusKey => $statusLabel): ?>
                           <option value="<?= h($statusKey) ?>" <?= ($row['status'] ?? '') === $statusKey ? 'selected' : '' ?>><?= h($statusLabel) ?></option>
                         <?php endforeach; ?>
                       </select>
-                      <button class="h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold">حفظ</button>
+                      <button type="submit" class="dashboard-btn h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold">حفظ</button>
                     </form>
                   <?php endif; ?>
                   <a

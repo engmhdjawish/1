@@ -205,32 +205,28 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
   </div>
 </section>
 
-<?php if ($flash): ?>
-  <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $flashType === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700' ?>">
-    <?= h($flash) ?>
-  </p>
-<?php endif; ?>
+<?php require __DIR__ . '/partials/flash.php'; ?>
 
 <?php if ($showForm): ?>
 <?php if ($editId !== ''): ?>
-  <form method="post" id="sl-delete-form" class="hidden" onsubmit="return confirm('هل أنت متأكد من حذف هذا الرابط؟')">
+  <form method="post" id="sl-delete-form" class="hidden" data-dashboard-confirm="هل أنت متأكد من حذف هذا الرابط؟">
     <input type="hidden" name="action" value="delete">
     <input type="hidden" name="id" value="<?= h($editId) ?>">
   </form>
 <?php endif; ?>
 
-<form method="post" id="share-link-form" class="space-y-3 mb-4">
+<form method="post" id="share-link-form" data-dashboard-explicit-save class="space-y-3 mb-4">
   <input type="hidden" name="action" value="save">
   <input type="hidden" name="id" value="<?= h((string) ($editLink['id'] ?? '')) ?>">
 
-  <div class="sticky top-16 z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
+  <div class="dashboard-sticky-toolbar sticky top-16 z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
     <h2 class="font-bold text-base"><?= $editId !== '' ? 'تعديل رابط المشاركة' : 'رابط مشاركة جديد' ?></h2>
     <div class="flex flex-wrap items-center gap-2">
       <a href="/dashboard/share-links.php" class="h-9 px-4 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"><?= $editId !== '' ? 'إلغاء التعديل' : 'إلغاء' ?></a>
       <?php if ($editId !== ''): ?>
         <button type="submit" form="sl-delete-form" class="h-9 px-4 rounded-lg border border-red-300 bg-white text-xs font-bold text-red-700 hover:bg-red-50">حذف</button>
       <?php endif; ?>
-      <button type="submit" id="share-link-save-btn" class="h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">
+      <button type="submit" id="share-link-save-btn" data-dashboard-save-btn class="dashboard-btn h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">
         <?= $editId !== '' ? 'حفظ التعديلات' : 'إنشاء الرابط' ?>
       </button>
     </div>
@@ -524,17 +520,17 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
               <td class="px-4 py-3">
                 <div class="flex justify-end gap-1.5 flex-wrap">
                   <a href="/dashboard/share-links.php?edit=<?= urlencode((string) $row['id']) ?>" class="h-8 px-3 inline-flex items-center rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">تعديل</a>
-                  <form method="post">
+                  <form method="post" data-dashboard-ajax data-dashboard-reload>
                     <input type="hidden" name="action" value="toggle">
                     <input type="hidden" name="id" value="<?= h((string) $row['id']) ?>">
                     <input type="hidden" name="next_active" value="<?= !empty($row['is_active']) ? '0' : '1' ?>">
                     <?php if (!empty($row['is_active'])): ?>
-                      <button class="h-8 px-3 rounded-lg text-xs font-bold bg-slate-600 text-white hover:bg-slate-700">إيقاف</button>
+                      <button type="submit" class="dashboard-btn h-8 px-3 rounded-lg text-xs font-bold bg-slate-600 text-white hover:bg-slate-700">إيقاف</button>
                     <?php else: ?>
-                      <button class="h-8 px-3 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">تفعيل</button>
+                      <button type="submit" class="dashboard-btn h-8 px-3 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">تفعيل</button>
                     <?php endif; ?>
                   </form>
-                  <form method="post" onsubmit="return confirm('حذف الرابط؟')">
+                  <form method="post" data-dashboard-confirm="حذف الرابط؟">
                     <input type="hidden" name="action" value="delete">
                     <input type="hidden" name="id" value="<?= h((string) $row['id']) ?>">
                     <button class="h-8 px-3 rounded-lg border border-red-300 bg-white text-xs font-bold text-red-700 hover:bg-red-50">حذف</button>
@@ -551,33 +547,6 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
 
 <?php if ($showForm): ?>
 <?php portal_render_token_picker_script(); ?>
-<script>
-(() => {
-  const mainForm = document.getElementById('share-link-form');
-  const saveBtn = document.getElementById('share-link-save-btn');
-  let explicitSave = false;
-
-  saveBtn?.addEventListener('click', () => {
-    explicitSave = true;
-  });
-
-  mainForm?.addEventListener('submit', (event) => {
-    if (!explicitSave) {
-      event.preventDefault();
-      return false;
-    }
-    explicitSave = false;
-  });
-
-  mainForm?.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter') return;
-    const target = event.target;
-    if (!target || target.tagName === 'TEXTAREA') return;
-    if (target.id === 'share-link-save-btn') return;
-    event.preventDefault();
-  }, true);
-})();
-</script>
 <?php endif; ?>
 
 <script>

@@ -10,6 +10,7 @@ use Portal\Database;
 use Portal\Services\AccessPolicyService;
 use Portal\Services\EnvConfigService;
 use Portal\Services\PortalSettingsService;
+use Portal\Support\DashboardHttp;
 
 WebSession::requireLogin();
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -165,6 +166,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
             $flash = $ok ? 'تم تحديث حالة السياسة.' : 'تعذر تحديث السياسة (قد تكون السياسة الافتراضية للزائر).';
             $flashType = $ok ? 'success' : 'error';
+        }
+        if (DashboardHttp::wantsJson()) {
+            DashboardHttp::json($flashType === 'success', (string) $flash, ['reload' => true]);
         }
         $tab = 'policies';
     } elseif ($action === 'delete_policy') {

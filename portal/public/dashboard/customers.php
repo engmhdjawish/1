@@ -6,6 +6,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
 use Portal\Services\WebCustomerService;
+use Portal\Support\DashboardHttp;
 
 WebSession::requirePermission('web_customers.view');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -40,6 +41,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash = $ok ? 'تم رفض الطلب.' : 'تعذر رفض الطلب.';
             $flashType = $ok ? 'success' : 'error';
         }
+        if (DashboardHttp::wantsJson()) {
+            DashboardHttp::json($flashType === 'success', (string) $flash, ['reload' => true]);
+        }
     } elseif ($action === 'save_customer') {
         if (!$canManageCustomers) {
             $flash = 'لا تملك صلاحية إضافة/تعديل العملاء.';
@@ -62,6 +66,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashType = $result['ok'] ? 'success' : 'error';
             if ($result['ok']) {
                 $_GET['edit'] = (string) ($result['id'] ?? '');
+            }
+            if (DashboardHttp::wantsJson()) {
+                DashboardHttp::json(
+                    $result['ok'],
+                    $result['message'],
+                    ['reload' => $result['ok'], 'id' => $result['id'] ?? null]
+                );
             }
         }
     }

@@ -6,6 +6,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
 use Portal\Services\WebUserService;
+use Portal\Support\DashboardHttp;
 
 WebSession::requirePermission('web_users.manage');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -37,6 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($result['ok']) {
             $_GET['edit'] = (string) ($result['id'] ?? '');
         }
+        if (DashboardHttp::wantsJson()) {
+            DashboardHttp::json($result['ok'], $result['message'], ['reload' => $result['ok'], 'id' => $result['id'] ?? null]);
+        }
     } elseif ($action === 'toggle_active') {
         $targetId = trim((string) ($_POST['id'] ?? ''));
         $next = ($_POST['next_active'] ?? '0') === '1';
@@ -47,6 +51,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ok = WebUserService::setActive($targetId, $next);
             $flash = $ok ? 'تم تحديث حالة المستخدم.' : 'تعذر تحديث حالة المستخدم.';
             $flashType = $ok ? 'success' : 'error';
+        }
+        if (DashboardHttp::wantsJson()) {
+            DashboardHttp::json($flashType === 'success', (string) $flash, ['reload' => true]);
         }
     }
 }

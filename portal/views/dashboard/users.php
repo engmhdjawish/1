@@ -38,11 +38,7 @@ $selectedRoleIds = array_map('strval', $editUser['role_ids'] ?? []);
   </div>
 </section>
 
-<?php if ($flash): ?>
-  <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $flashType === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700' ?>">
-    <?= h($flash) ?>
-  </p>
-<?php endif; ?>
+<?php require __DIR__ . '/partials/flash.php'; ?>
 
 <section class="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-5">
   <article class="xl:col-span-1 bg-white border border-border-subtle rounded-2xl p-5">
@@ -52,7 +48,7 @@ $selectedRoleIds = array_map('strval', $editUser['role_ids'] ?? []);
         <a href="/dashboard/users.php" class="text-xs text-primary hover:underline">إلغاء التعديل</a>
       <?php endif; ?>
     </div>
-    <form method="post" class="space-y-4">
+    <form method="post" data-dashboard-ajax data-dashboard-reload class="space-y-4">
       <input type="hidden" name="action" value="save_user">
       <input type="hidden" name="id" value="<?= h((string) ($editUser['id'] ?? '')) ?>">
 
@@ -182,11 +178,11 @@ $selectedRoleIds = array_map('strval', $editUser['role_ids'] ?? []);
                   >
                     تعديل
                   </a>
-                  <form method="post">
+                  <form method="post" data-dashboard-ajax data-dashboard-reload>
                     <input type="hidden" name="action" value="toggle_active">
                     <input type="hidden" name="id" value="<?= h((string) ($row['id'] ?? '')) ?>">
                     <input type="hidden" name="next_active" value="<?= $isActive ? '0' : '1' ?>">
-                    <button class="h-9 px-3 rounded-lg text-xs font-bold <?= $isActive ? 'bg-red-600 text-white' : 'bg-green-600 text-white' ?>">
+                    <button type="submit" class="dashboard-btn h-9 px-3 rounded-lg text-xs font-bold <?= $isActive ? 'bg-red-600 text-white' : 'bg-green-600 text-white' ?>">
                       <?= $isActive ? 'تعطيل' : 'تفعيل' ?>
                     </button>
                   </form>
