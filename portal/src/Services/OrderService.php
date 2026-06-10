@@ -206,15 +206,22 @@ final class OrderService
                     o.created_at,
                     o.updated_at,
                     o.quote_access_token,
+                    o.notes_ar,
                     wc.name_ar AS customer_name_ar,
+                    wc.phone AS customer_phone,
                     o.guest_name_ar,
+                    o.guest_phone,
                     sl.name_ar AS share_link_name,
-                    COALESCE(items.items_count, 0) AS items_count
+                    COALESCE(items.items_count, 0) AS items_count,
+                    COALESCE(items.packages_count, 0)::float8 AS packages_count
                 FROM orders o
                 LEFT JOIN web_customers wc ON wc.id = o.web_customer_id
                 LEFT JOIN share_links sl ON sl.id = o.share_link_id
                 LEFT JOIN (
-                    SELECT order_id, COUNT(*)::int AS items_count
+                    SELECT
+                        order_id,
+                        COUNT(*)::int AS items_count,
+                        COALESCE(SUM(quantity), 0)::float8 AS packages_count
                     FROM order_items
                     GROUP BY order_id
                 ) items ON items.order_id = o.id
@@ -374,6 +381,39 @@ final class OrderService
         );
         $itemsStmt->execute(['order_id' => $orderId]);
         $items = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $totalPackages = 0.0;
+        $totalPieces = 0.0;
+        foreach ($items as &$item) {
+            $quantity = max(0.0, (float) ($item['quantity'] ?? 0));
+            $packaging = max(1, (int) ($item['pcs_per_box'] ?? 1));
+            $packagePriceUsd = max(0.0, (float) ($item['sale_price_usd'] ?? 0));
+            $packagePriceSp = max(0.0, (float) ($item['sale_price_sp'] ?? 0));
+
+            $item['packages_count'] = $quantity;
+            $item['packaging'] = $packaging;
+            $item['unit_sale_price_usd'] = $packaging > 0 ? $packagePriceUsd / $packaging : 0.0;
+            $item['unit_sale_price_sp'] = $packaging > 0 ? $packagePriceSp / $packaging : 0.0;
+            $item['line_total_usd'] = $quantity * $packagePriceUsd;
+            $item['line_total_sp'] = $quantity * $packagePriceSp;
+            $item['pieces_count'] = $quantity * $packaging;
+
+            $totalPackages += $quantity;
+            $totalPieces += $quantity * $packaging;
+        }
+        unset($item);
+
+        $order['summary'] = [
+            'items_count' => count($items),
+            'packages_count' => $totalPackages,
+            'pieces_count' => $totalPieces,
+        ];
+        $order['display_name'] = trim((string) ($order['customer_name_ar'] ?? '')) !== ''
+            ? (string) $order['customer_name_ar']
+            : (trim((string) ($order['guest_name_ar'] ?? '')) !== '' ? (string) $order['guest_name_ar'] : '—');
+        $order['display_phone'] = trim((string) ($order['customer_phone'] ?? '')) !== ''
+            ? (string) $order['customer_phone']
+            : (trim((string) ($order['guest_phone'] ?? '')) !== '' ? (string) $order['guest_phone'] : '—');
 
         $timeline = [];
         $timeline[] = [
