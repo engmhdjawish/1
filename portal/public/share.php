@@ -8,6 +8,7 @@ use Portal\Services\ApiClient;
 use Portal\Services\ShareCartService;
 use Portal\Services\ShareLinkService;
 use Portal\Support\SharePageAccess;
+use Portal\Support\Text;
 
 require dirname(__DIR__) . '/views/helpers.php';
 
@@ -481,7 +482,7 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
                 ];
             }
 
-            $normalizeFacetKey = static fn (string $value): string => str_lower($value);
+            $normalizeFacetKey = static fn (string $value): string => Text::lower($value);
             $scopeStringFacets = static function (array $facets, array $forced) use ($normalizeFacetKey): array {
                 $withResults = array_values(array_filter($facets, static function (array $facet): bool {
                     $count = $facet['count'] ?? null;
