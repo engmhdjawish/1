@@ -41,12 +41,6 @@ final class ShareLinkService
     /** @var list<string> */
     private const DEFAULT_VISIBLE_CLIENT_FILTERS = [
         'search',
-        'materialTypes',
-        'ageCategories',
-        'manufacturers',
-        'sizeRanges',
-        'countryOfOrigins',
-        'sort',
     ];
 
     /** @var list<string> */

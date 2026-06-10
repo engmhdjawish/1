@@ -34,3 +34,14 @@ function text_length(string $value): int
 
     return strlen($value);
 }
+
+/** Lowercase without requiring ext-mbstring (common on Windows PHP builds). */
+function str_lower(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    return function_exists('mb_strtolower') ? mb_strtolower($value, 'UTF-8') : strtolower($value);
+}

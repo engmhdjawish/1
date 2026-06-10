@@ -35,7 +35,7 @@ $defaultSort = (string) ($linkOptions['default_sort'] ?? 'number:asc');
 $defaultGroupBy = (string) ($linkOptions['default_group_by'] ?? 'none');
 $visibleClientFilters = array_map('strval', is_array($linkOptions['visible_client_filters'] ?? null) ? $linkOptions['visible_client_filters'] : []);
 if ($visibleClientFilters === []) {
-    $visibleClientFilters = ['search', 'materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins', 'sort'];
+    $visibleClientFilters = ['search'];
 }
 $clientSortFields = array_map('strval', is_array($linkOptions['client_sort_fields'] ?? null) ? $linkOptions['client_sort_fields'] : []);
 if ($clientSortFields === []) {
@@ -170,19 +170,11 @@ $sortFieldOptions = [
 
 $visibleFilterOptions = [
     ['value' => 'search', 'label' => 'بحث نصي'],
-    ['value' => 'materialTypes', 'label' => 'نوع المادة'],
-    ['value' => 'ageCategories', 'label' => 'الفئة العمرية'],
-    ['value' => 'manufacturers', 'label' => 'الشركة'],
-    ['value' => 'sizeRanges', 'label' => 'القياس'],
-    ['value' => 'countryOfOrigins', 'label' => 'بلد المنشأ'],
-    ['value' => 'stores', 'label' => 'المخازن'],
-    ['value' => 'groups', 'label' => 'المجموعات'],
     ['value' => 'availability', 'label' => 'التوفر'],
     ['value' => 'warehouseRange', 'label' => 'مدى الكمية'],
     ['value' => 'priceSaleSyp', 'label' => 'مدى سعر البيع ل.س'],
     ['value' => 'priceSaleUsd', 'label' => 'مدى سعر البيع $'],
     ['value' => 'pricePurchaseUsd', 'label' => 'مدى سعر الشراء $'],
-    ['value' => 'sort', 'label' => 'الترتيب'],
     ['value' => 'groupBy', 'label' => 'التجميع'],
 ];
 
@@ -418,7 +410,8 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
           <p class="mt-1 text-[11px] text-text-muted">اختر حقول الترتيب فقط — العميل يحدد تصاعدي أو تنازلي بالضغط على الخيار.</p>
         </div>
         <div class="text-xs md:col-span-2">
-          <?php $renderTokenPicker('فلاتر واجهة العميل المرئية', 'option_visible_client_filters[]', $visibleFilterOptions, $visibleClientFilters, 'sl-visible-client-filters', true, false, false, 4); ?>
+          <?php $renderTokenPicker('فلاتر إضافية للعميل', 'option_visible_client_filters[]', $visibleFilterOptions, $visibleClientFilters, 'sl-visible-client-filters', true, false, false, 4); ?>
+          <p class="mt-1 text-[11px] text-text-muted">فلاتر النوع والعمر والشركة… تُعرض تلقائياً من نتائج الرابط عند تفعيل «عرض فلاتر النتائج».</p>
         </div>
       </div>
     </details>

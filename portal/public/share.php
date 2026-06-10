@@ -115,10 +115,17 @@ $visibleClientFilters = array_values(array_map(
         : []
 ));
 if ($visibleClientFilters === []) {
-    $visibleClientFilters = ['search', 'materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins', 'sort'];
+    $visibleClientFilters = ['search'];
 }
 $isClientFilterVisible = static function (string $code) use ($visibleClientFilters): bool {
     return in_array($code, $visibleClientFilters, true);
+};
+$showResultFacet = static function (string $facetKey) use ($useDynamicResultFilters, $isClientFilterVisible): bool {
+    if ($isClientFilterVisible($facetKey)) {
+        return true;
+    }
+
+    return $useDynamicResultFilters;
 };
 
 $forcedMaterialTypes = array_map('strval', is_array($shareLink) ? ($shareLink['forced_material_types'] ?? []) : []);
@@ -156,13 +163,13 @@ $forcedMaxUnitPurchasePriceUsd = isset($constraints['max_unit_purchase_price_usd
     ? (float) $constraints['max_unit_purchase_price_usd']
     : null;
 
-$selectedMaterialTypes = ($allowClientFilters && $isClientFilterVisible('materialTypes')) ? $parseList('materialTypes') : [];
-$selectedAgeCategories = ($allowClientFilters && $isClientFilterVisible('ageCategories')) ? $parseList('ageCategories') : [];
-$selectedManufacturers = ($allowClientFilters && $isClientFilterVisible('manufacturers')) ? $parseList('manufacturers') : [];
-$selectedSizeRanges = ($allowClientFilters && $isClientFilterVisible('sizeRanges')) ? $parseList('sizeRanges') : [];
-$selectedCountryOrigins = ($allowClientFilters && $isClientFilterVisible('countryOfOrigins')) ? $parseList('countryOfOrigins') : [];
-$selectedStoreGuids = ($allowClientFilters && $isClientFilterVisible('stores')) ? $parseList('storeGuids') : [];
-$selectedGroupGuids = ($allowClientFilters && $isClientFilterVisible('groups')) ? $parseList('groupGuids') : [];
+$selectedMaterialTypes = ($allowClientFilters && $showResultFacet('materialTypes')) ? $parseList('materialTypes') : [];
+$selectedAgeCategories = ($allowClientFilters && $showResultFacet('ageCategories')) ? $parseList('ageCategories') : [];
+$selectedManufacturers = ($allowClientFilters && $showResultFacet('manufacturers')) ? $parseList('manufacturers') : [];
+$selectedSizeRanges = ($allowClientFilters && $showResultFacet('sizeRanges')) ? $parseList('sizeRanges') : [];
+$selectedCountryOrigins = ($allowClientFilters && $showResultFacet('countryOfOrigins')) ? $parseList('countryOfOrigins') : [];
+$selectedStoreGuids = ($allowClientFilters && $showResultFacet('stores')) ? $parseList('storeGuids') : [];
+$selectedGroupGuids = ($allowClientFilters && $showResultFacet('groups')) ? $parseList('groupGuids') : [];
 $selectedIsAvailable = ($allowClientFilters && $isClientFilterVisible('availability')) ? $parseNullableBool('isAvailable') : null;
 $selectedMinWarehouseQuantity = ($allowClientFilters && $isClientFilterVisible('warehouseRange')) ? $parseNullableFloat('minWarehouseQuantity') : null;
 $selectedMaxWarehouseQuantity = ($allowClientFilters && $isClientFilterVisible('warehouseRange')) ? $parseNullableFloat('maxWarehouseQuantity') : null;
@@ -283,9 +290,7 @@ $parseSortClause = static function (string $clause): array {
     ];
 };
 $defaultSortParsed = $parseSortClause(explode(',', $defaultSort)[0] ?? 'number:asc');
-$requestedSort = ($allowSorting && $isClientFilterVisible('sort'))
-    ? trim((string) ($_GET['sort'] ?? ''))
-    : '';
+$requestedSort = $allowSorting ? trim((string) ($_GET['sort'] ?? '')) : '';
 $activeSortParsed = $requestedSort !== ''
     ? $parseSortClause(explode(',', $requestedSort)[0] ?? $requestedSort)
     : $defaultSortParsed;
@@ -476,7 +481,7 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
                 ];
             }
 
-            $normalizeFacetKey = static fn (string $value): string => mb_strtolower(trim($value));
+            $normalizeFacetKey = static fn (string $value): string => str_lower($value);
             $scopeStringFacets = static function (array $facets, array $forced) use ($normalizeFacetKey): array {
                 $withResults = array_values(array_filter($facets, static function (array $facet): bool {
                     $count = $facet['count'] ?? null;
@@ -756,7 +761,7 @@ ob_start();
             </div>
           </div>
         <?php endif; ?>
-        <?php if ($allowSorting && $isClientFilterVisible('sort') && $clientSortFields !== []): ?>
+        <?php if ($allowSorting && $clientSortFields !== []): ?>
           <div class="text-sm md:col-span-4">
             <span class="text-gray-600 block mb-1">الترتيب</span>
             <div class="flex flex-wrap gap-2 mt-1">
@@ -795,7 +800,7 @@ ob_start();
           </label>
         <?php endif; ?>
 
-        <?php if ($isClientFilterVisible('stores') && $storeOptions !== [] && ($forcedStoreGuids !== [] || $queryStoreGuids !== [])): ?>
+        <?php if ($showResultFacet('stores') && $storeOptions !== [] && ($forcedStoreGuids !== [] || $queryStoreGuids !== [])): ?>
           <?php
             $storeChipOptions = [];
             foreach ($storeOptions as $store) {
@@ -815,7 +820,7 @@ ob_start();
           </fieldset>
         <?php endif; ?>
 
-        <?php if ($isClientFilterVisible('groups') && $groupOptions !== []): ?>
+        <?php if ($showResultFacet('groups') && $groupOptions !== []): ?>
           <?php
             $groupChipOptions = [];
             $groupFacetCounts = [];
@@ -889,11 +894,11 @@ ob_start();
 
         <?php
           $facetMap = [
-              'materialTypes' => ['label' => 'نوع المادة', 'visible' => $isClientFilterVisible('materialTypes')],
-              'ageCategories' => ['label' => 'الفئة العمرية', 'visible' => $isClientFilterVisible('ageCategories')],
-              'manufacturers' => ['label' => 'الشركة', 'visible' => $isClientFilterVisible('manufacturers')],
-              'sizeRanges' => ['label' => 'القياس', 'visible' => $isClientFilterVisible('sizeRanges')],
-              'countryOfOrigins' => ['label' => 'بلد المنشأ', 'visible' => $isClientFilterVisible('countryOfOrigins')],
+              'materialTypes' => ['label' => 'نوع المادة', 'visible' => $showResultFacet('materialTypes')],
+              'ageCategories' => ['label' => 'الفئة العمرية', 'visible' => $showResultFacet('ageCategories')],
+              'manufacturers' => ['label' => 'الشركة', 'visible' => $showResultFacet('manufacturers')],
+              'sizeRanges' => ['label' => 'القياس', 'visible' => $showResultFacet('sizeRanges')],
+              'countryOfOrigins' => ['label' => 'بلد المنشأ', 'visible' => $showResultFacet('countryOfOrigins')],
           ];
         ?>
         <?php foreach ($facetMap as $facetKey => $facetConfig): ?>
