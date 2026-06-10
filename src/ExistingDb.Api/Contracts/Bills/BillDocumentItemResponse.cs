@@ -13,4 +13,6 @@ public sealed record BillDocumentItemResponse(
     double? Price,
     double? Discount,
     double? Additions,
-    double? LineTotal);
+    double? LineTotal,
+    string? MaterialUnity,
+    string? MaterialUnit2);

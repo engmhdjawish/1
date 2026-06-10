@@ -6,6 +6,7 @@ using ExistingDb.Api.Contracts.Images;
 using ExistingDb.Api.Data;
 using ExistingDb.Api.Data.MainDb;
 using ExistingDb.Api.Images;
+using ExistingDb.Api.Services.Materials;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -374,14 +375,14 @@ public sealed class MaterialImagesController(
             return NotFound();
         }
 
-        if (!material.PictureGuid.HasValue)
+        if (!MaterialPictureGuid.HasImage(material.PictureGuid))
         {
             return Ok(Array.Empty<MaterialImageResponse>());
         }
 
         var image = await mainDbContext.MaterialImages
             .AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Guid == material.PictureGuid.Value, cancellationToken);
+            .SingleOrDefaultAsync(item => item.Guid == material.PictureGuid!.Value, cancellationToken);
 
         if (image is null)
         {

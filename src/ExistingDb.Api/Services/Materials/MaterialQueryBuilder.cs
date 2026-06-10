@@ -16,11 +16,13 @@ public sealed class MaterialQueryBuilder(MainDbContext mainDbContext)
 
         if (filters.HasImage is true)
         {
-            query = query.Where(material => material.PictureGuid != null);
+            query = query.Where(material =>
+                material.PictureGuid != null && material.PictureGuid != Guid.Empty);
         }
         else if (filters.HasImage is false)
         {
-            query = query.Where(material => material.PictureGuid == null);
+            query = query.Where(material =>
+                material.PictureGuid == null || material.PictureGuid == Guid.Empty);
         }
 
         query = ApplyStoreAndQuantityFilters(query, filters);

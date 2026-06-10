@@ -29,6 +29,13 @@ declare(strict_types=1);
     <p class="text-center text-text-muted mb-6">لم يُضف محتوى تعريفي بعد. يمكن إدارته من لوحة التحكم → الإعدادات.</p>
   <?php endif; ?>
 
+  <div class="mb-6 text-center">
+    <a href="/store.php" class="inline-flex h-11 items-center gap-2 rounded-xl bg-primary text-white px-5 font-bold">
+      <span class="material-symbols-outlined text-base" aria-hidden="true">storefront</span>
+      تصفّح المتجر
+    </a>
+  </div>
+
   <aside class="bg-white border border-gray-200 rounded-2xl p-6">
     <h2 class="font-bold text-lg mb-4">تواصل معنا</h2>
     <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">

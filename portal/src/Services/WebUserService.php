@@ -72,7 +72,7 @@ final class WebUserService
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /** @return list<array{id: string, code: string, name_ar: string, is_system: int, permissions_count: int}> */
+    /** @return list<array{id: string, code: string, name_ar: string, description_ar: string, is_system: int, permissions_count: int, users_count: int}> */
     public static function listRoles(): array
     {
         return Database::pdo()->query(
@@ -80,16 +80,75 @@ final class WebUserService
                 r.id::text AS id,
                 r.code,
                 r.name_ar,
+                COALESCE(r.description_ar, \'\') AS description_ar,
                 CASE WHEN r.is_system THEN 1 ELSE 0 END AS is_system,
-                COALESCE(perms.permissions_count, 0)::int AS permissions_count
+                COALESCE(perms.permissions_count, 0)::int AS permissions_count,
+                COALESCE(users.users_count, 0)::int AS users_count
              FROM web_roles r
              LEFT JOIN (
                 SELECT role_id, COUNT(*)::int AS permissions_count
                 FROM web_role_permissions
                 GROUP BY role_id
              ) perms ON perms.role_id = r.id
-             ORDER BY r.name_ar'
+             LEFT JOIN (
+                SELECT role_id, COUNT(DISTINCT user_id)::int AS users_count
+                FROM web_user_roles
+                GROUP BY role_id
+             ) users ON users.role_id = r.id
+             ORDER BY r.is_system DESC, r.name_ar'
         )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** @return list<array{id: string, code: string, name_ar: string, category_ar: string, description_ar: string}> */
+    public static function listPermissions(): array
+    {
+        return Database::pdo()->query(
+            'SELECT
+                id::text AS id,
+                code,
+                name_ar,
+                category_ar,
+                COALESCE(description_ar, \'\') AS description_ar
+             FROM web_permissions
+             ORDER BY category_ar, name_ar'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function getRoleById(string $id): ?array
+    {
+        $stmt = Database::pdo()->prepare(
+            'SELECT
+                id::text AS id,
+                code,
+                name_ar,
+                COALESCE(description_ar, \'\') AS description_ar,
+                CASE WHEN is_system THEN 1 ELSE 0 END AS is_system
+             FROM web_roles
+             WHERE id = :id
+             LIMIT 1'
+        );
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row === false) {
+            return null;
+        }
+
+        $row['permission_ids'] = self::rolePermissionIds($id);
+
+        return $row;
+    }
+
+    /** @return list<string> */
+    public static function rolePermissionIds(string $roleId): array
+    {
+        $stmt = Database::pdo()->prepare(
+            'SELECT permission_id::text
+             FROM web_role_permissions
+             WHERE role_id = :role_id'
+        );
+        $stmt->execute(['role_id' => $roleId]);
+
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
 
     /** @return array{total: int, active: int, inactive: int, admins: int} */
@@ -325,5 +384,226 @@ final class WebUserService
             'is_active' => $isActive ? 1 : 0,
         ]);
         return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * @param list<string> $permissionIds
+     * @return array{ok: bool, message: string, id?: string}
+     */
+    public static function saveRole(
+        ?string $id,
+        string $code,
+        string $nameAr,
+        ?string $descriptionAr,
+        array $permissionIds
+    ): array {
+        $code = strtolower(trim($code));
+        $nameAr = trim($nameAr);
+        $descriptionAr = trim((string) $descriptionAr);
+        $permissionIds = array_values(array_unique(array_filter(array_map('trim', $permissionIds))));
+        $roleId = $id !== null ? trim($id) : '';
+
+        if ($nameAr === '') {
+            return ['ok' => false, 'message' => 'اسم الدور مطلوب.'];
+        }
+        if ($permissionIds === []) {
+            return ['ok' => false, 'message' => 'اختر صلاحية واحدة على الأقل.'];
+        }
+
+        $pdo = Database::pdo();
+        $existingRole = null;
+        if ($roleId !== '') {
+            $existingRole = self::getRoleById($roleId);
+            if ($existingRole === null) {
+                return ['ok' => false, 'message' => 'الدور غير موجود.'];
+            }
+            if ((int) ($existingRole['is_system'] ?? 0) === 1) {
+                $code = (string) ($existingRole['code'] ?? $code);
+            }
+        }
+
+        if ($roleId === '') {
+            if ($code === '') {
+                return ['ok' => false, 'message' => 'رمز الدور مطلوب.'];
+            }
+            if (!preg_match('/^[a-z][a-z0-9_]{2,79}$/', $code)) {
+                return ['ok' => false, 'message' => 'رمز الدور يجب أن يبدأ بحرف إنجليزي ويحتوي أحرفًا وأرقامًا وشرطة سفلية فقط.'];
+            }
+        }
+
+        if ($code !== '') {
+            $duplicate = $pdo->prepare(
+                'SELECT 1
+                 FROM web_roles
+                 WHERE code = :code
+                   AND (:exclude_id = \'\' OR id::text <> :exclude_id)
+                 LIMIT 1'
+            );
+            $duplicate->execute([
+                'code' => $code,
+                'exclude_id' => $roleId,
+            ]);
+            if ($duplicate->fetchColumn()) {
+                return ['ok' => false, 'message' => 'رمز الدور مستخدم مسبقًا.'];
+            }
+        }
+
+        try {
+            $pdo->beginTransaction();
+
+            if ($roleId === '') {
+                $insert = $pdo->prepare(
+                    'INSERT INTO web_roles (code, name_ar, description_ar, is_system)
+                     VALUES (:code, :name_ar, :description_ar, FALSE)
+                     RETURNING id::text'
+                );
+                $insert->execute([
+                    'code' => $code,
+                    'name_ar' => $nameAr,
+                    'description_ar' => $descriptionAr !== '' ? $descriptionAr : null,
+                ]);
+                $roleId = (string) $insert->fetchColumn();
+            } else {
+                $update = $pdo->prepare(
+                    'UPDATE web_roles SET
+                        name_ar = :name_ar,
+                        description_ar = :description_ar
+                     WHERE id = :id'
+                );
+                $update->execute([
+                    'id' => $roleId,
+                    'name_ar' => $nameAr,
+                    'description_ar' => $descriptionAr !== '' ? $descriptionAr : null,
+                ]);
+            }
+
+            $pdo->prepare('DELETE FROM web_role_permissions WHERE role_id = :role_id')
+                ->execute(['role_id' => $roleId]);
+
+            $insertPermission = $pdo->prepare(
+                'INSERT INTO web_role_permissions (role_id, permission_id)
+                 SELECT :role_id, id
+                 FROM web_permissions
+                 WHERE id::text = :permission_id'
+            );
+            foreach ($permissionIds as $permissionId) {
+                $insertPermission->execute([
+                    'role_id' => $roleId,
+                    'permission_id' => $permissionId,
+                ]);
+            }
+
+            $pdo->commit();
+
+            return [
+                'ok' => true,
+                'message' => $id ? 'تم تحديث الدور.' : 'تم إنشاء الدور.',
+                'id' => $roleId,
+            ];
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            return ['ok' => false, 'message' => 'تعذر حفظ الدور: ' . $exception->getMessage()];
+        }
+    }
+
+    /** @return array{ok: bool, message: string} */
+    public static function deleteRole(string $id): array
+    {
+        $id = trim($id);
+        if ($id === '') {
+            return ['ok' => false, 'message' => 'معرّف الدور غير صالح.'];
+        }
+
+        $role = self::getRoleById($id);
+        if ($role === null) {
+            return ['ok' => false, 'message' => 'الدور غير موجود.'];
+        }
+        if ((int) ($role['is_system'] ?? 0) === 1) {
+            return ['ok' => false, 'message' => 'لا يمكن حذف أدوار النظام الافتراضية.'];
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT COUNT(DISTINCT user_id)::int
+             FROM web_user_roles
+             WHERE role_id = :role_id'
+        );
+        $stmt->execute(['role_id' => $id]);
+        $usersCount = (int) $stmt->fetchColumn();
+        if ($usersCount > 0) {
+            return ['ok' => false, 'message' => 'لا يمكن حذف الدور لأنه مُعيَّن لـ ' . $usersCount . ' مستخدم. أزل الدور عنهم أولاً.'];
+        }
+
+        $delete = Database::pdo()->prepare('DELETE FROM web_roles WHERE id = :id');
+        $delete->execute(['id' => $id]);
+
+        if ($delete->rowCount() <= 0) {
+            return ['ok' => false, 'message' => 'تعذر حذف الدور.'];
+        }
+
+        return ['ok' => true, 'message' => 'تم حذف الدور.'];
+    }
+
+    /** @return array{ok: bool, message: string} */
+    public static function deleteUser(string $id, string $currentUserId): array
+    {
+        $id = trim($id);
+        $currentUserId = trim($currentUserId);
+        if ($id === '') {
+            return ['ok' => false, 'message' => 'معرّف المستخدم غير صالح.'];
+        }
+        if ($id === $currentUserId) {
+            return ['ok' => false, 'message' => 'لا يمكن حذف الحساب الحالي أثناء تسجيل الدخول.'];
+        }
+
+        $target = self::getUserById($id);
+        if ($target === null) {
+            return ['ok' => false, 'message' => 'المستخدم غير موجود.'];
+        }
+
+        if (self::userHasRoleCode($id, 'super_admin') && self::countUsersWithRoleCode('super_admin') <= 1) {
+            return ['ok' => false, 'message' => 'لا يمكن حذف آخر مدير نظام في البوابة.'];
+        }
+
+        $delete = Database::pdo()->prepare('DELETE FROM web_users WHERE id = :id');
+        $delete->execute(['id' => $id]);
+        if ($delete->rowCount() <= 0) {
+            return ['ok' => false, 'message' => 'تعذر حذف المستخدم.'];
+        }
+
+        return ['ok' => true, 'message' => 'تم حذف المستخدم.'];
+    }
+
+    private static function userHasRoleCode(string $userId, string $roleCode): bool
+    {
+        $stmt = Database::pdo()->prepare(
+            'SELECT 1
+             FROM web_user_roles ur
+             INNER JOIN web_roles r ON r.id = ur.role_id
+             WHERE ur.user_id = :user_id
+               AND r.code = :role_code
+             LIMIT 1'
+        );
+        $stmt->execute([
+            'user_id' => $userId,
+            'role_code' => $roleCode,
+        ]);
+
+        return (bool) $stmt->fetchColumn();
+    }
+
+    private static function countUsersWithRoleCode(string $roleCode): int
+    {
+        $stmt = Database::pdo()->prepare(
+            'SELECT COUNT(DISTINCT ur.user_id)::int
+             FROM web_user_roles ur
+             INNER JOIN web_roles r ON r.id = ur.role_id
+             WHERE r.code = :role_code'
+        );
+        $stmt->execute(['role_code' => $roleCode]);
+
+        return (int) $stmt->fetchColumn();
     }
 }

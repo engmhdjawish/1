@@ -639,7 +639,7 @@ public sealed class MaterialsController(
             material.Color,
             material.Provenance,
             material.GroupGuid,
-            material.PictureGuid,
+            MaterialPictureGuid.Normalize(material.PictureGuid),
             material.CurrencyGuid,
             material.Type,
             material.Security,

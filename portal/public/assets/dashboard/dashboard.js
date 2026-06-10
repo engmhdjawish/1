@@ -243,6 +243,7 @@
   function bindMobileNav() {
     qs('#dashboard-menu-btn')?.addEventListener('click', openDrawer);
     qs('#dashboard-drawer-backdrop')?.addEventListener('click', closeDrawer);
+    qs('#dashboard-drawer-close')?.addEventListener('click', closeDrawer);
     qs('#dashboard-bottom-menu-btn')?.addEventListener('click', (e) => {
       e.preventDefault();
       openDrawer();
