@@ -69,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $defaultSortField = $clientSortFields[0] ?? 'number';
         $defaultSortValue = $defaultSortField . ':asc';
         $visibleClientFilters = $parseValues($_POST['option_visible_client_filters'] ?? []);
-        $allowClientFilters = isset($_POST['option_allow_client_filters']);
+        $allowClientFilters = $visibleClientFilters !== [];
         $result = ShareLinkService::save(
             trim((string) ($_POST['id'] ?? '')) ?: null,
             trim((string) ($_POST['name_ar'] ?? '')),

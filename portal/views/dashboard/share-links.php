@@ -34,9 +34,6 @@ $allowSorting = array_key_exists('allow_sorting', $linkOptions) ? (bool) $linkOp
 $defaultSort = (string) ($linkOptions['default_sort'] ?? 'number:asc');
 $defaultGroupBy = (string) ($linkOptions['default_group_by'] ?? 'none');
 $visibleClientFilters = array_map('strval', is_array($linkOptions['visible_client_filters'] ?? null) ? $linkOptions['visible_client_filters'] : []);
-if ($visibleClientFilters === []) {
-    $visibleClientFilters = ['search'];
-}
 $clientSortFields = array_map('strval', is_array($linkOptions['client_sort_fields'] ?? null) ? $linkOptions['client_sort_fields'] : []);
 if ($clientSortFields === []) {
     foreach (array_filter(array_map('trim', explode(',', $defaultSort))) as $clause) {
@@ -383,10 +380,10 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
           <input type="checkbox" name="option_show_images" <?= $showImages ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
           <span>إظهار الصور</span>
         </label>
-        <label class="text-xs inline-flex items-center gap-1.5 md:col-span-2">
-          <input type="checkbox" name="option_allow_client_filters" <?= $allowClientFilters ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
-          <span>السماح بفلاتر للعميل</span>
-        </label>
+        <div class="text-xs md:col-span-2 order-first">
+          <?php $renderTokenPicker('الفلاتر المعروضة للعميل', 'option_visible_client_filters[]', $visibleFilterOptions, $visibleClientFilters, 'sl-visible-client-filters', true, false, false, 4); ?>
+          <p class="mt-1 text-[11px] text-text-muted">اختر أنواع الفلاتر التي يراها العميل فقط. داخل كل فلتر تُعرض القيم الموجودة في نتائج الرابط — مثلاً «نسواني» دون «رجالي» إذا لم تكن رجالي ضمن النتائج.</p>
+        </div>
         <label class="text-xs inline-flex items-center gap-1.5">
           <input type="checkbox" name="option_allow_sorting" <?= $allowSorting ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
           <span>السماح بالترتيب</span>
@@ -415,10 +412,6 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
         <div class="text-xs md:col-span-2">
           <?php $renderTokenPicker('خيارات الترتيب المتاحة للعميل', 'option_client_sort_fields[]', $sortFieldOptions, $clientSortFields, 'sl-client-sort-fields', false, false, false, 4); ?>
           <p class="mt-1 text-[11px] text-text-muted">اختر حقول الترتيب فقط — العميل يحدد تصاعدي أو تنازلي بالضغط على الخيار.</p>
-        </div>
-        <div class="text-xs md:col-span-2">
-          <?php $renderTokenPicker('الفلاتر المعروضة للعميل', 'option_visible_client_filters[]', $visibleFilterOptions, $visibleClientFilters, 'sl-visible-client-filters', true, false, false, 4); ?>
-          <p class="mt-1 text-[11px] text-text-muted">اختر أنواع الفلاتر التي يراها العميل. داخل كل فلتر تظهر فقط القيم الموجودة في نتائج الرابط — مثلاً «نسواني» دون «رجالي» إذا لم تكن رجالي ضمن النتائج رغم فرضها في قيود الرابط.</p>
         </div>
       </div>
     </details>

@@ -82,7 +82,14 @@ $parseNullableBool = static function (string $key): ?bool {
 };
 
 $shareOptions = is_array($shareLink) ? (array) ($shareLink['options'] ?? []) : [];
-$allowClientFilters = (bool) (($shareOptions['allow_client_filters'] ?? true) ? true : false);
+$visibleClientFilters = array_values(array_map(
+    'strval',
+    is_array($shareOptions['visible_client_filters'] ?? null)
+        ? $shareOptions['visible_client_filters']
+        : []
+));
+$allowClientFilters = $visibleClientFilters !== []
+    || (bool) (($shareOptions['allow_client_filters'] ?? false) ? true : false);
 $allowSorting = (bool) (($shareOptions['allow_sorting'] ?? true) ? true : false);
 $useDynamicResultFilters = $allowClientFilters && (bool) (($shareOptions['include_result_filters'] ?? true) ? true : false);
 $defaultSort = trim((string) ($shareOptions['default_sort'] ?? 'number:asc'));
@@ -109,15 +116,6 @@ $defaultGroupBy = trim((string) ($shareOptions['default_group_by'] ?? 'none'));
 $defaultGroupBy = in_array($defaultGroupBy, ['none', 'ageCategory', 'sizeRange', 'materialType', 'manufacturer', 'countryOfOrigin', 'group'], true)
     ? $defaultGroupBy
     : 'none';
-$visibleClientFilters = array_values(array_map(
-    'strval',
-    is_array($shareOptions['visible_client_filters'] ?? null)
-        ? $shareOptions['visible_client_filters']
-        : []
-));
-if ($visibleClientFilters === []) {
-    $visibleClientFilters = ['search'];
-}
 $isClientFilterVisible = static function (string $code) use ($visibleClientFilters): bool {
     return in_array($code, $visibleClientFilters, true);
 };

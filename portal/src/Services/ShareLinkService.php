@@ -39,9 +39,7 @@ final class ShareLinkService
     private const OPTION_CLIENT_SORT_FIELD = 'option_client_sort_field';
 
     /** @var list<string> */
-    private const DEFAULT_VISIBLE_CLIENT_FILTERS = [
-        'search',
-    ];
+    private const DEFAULT_VISIBLE_CLIENT_FILTERS = [];
 
     /** @var list<string> */
     private const ALLOWED_VISIBLE_CLIENT_FILTERS = [
@@ -1092,10 +1090,6 @@ final class ShareLinkService
             if (isset($allowed[$value])) {
                 $filtered[] = $value;
             }
-        }
-
-        if ($filtered === []) {
-            return self::DEFAULT_VISIBLE_CLIENT_FILTERS;
         }
 
         return array_values(array_unique($filtered));
