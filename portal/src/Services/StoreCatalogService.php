@@ -99,6 +99,8 @@ final class StoreCatalogService
             }
         }
 
+        $contextOfferSlug = self::contextOfferSlug($sectionContext);
+
         $products = [];
         $totalCount = 0;
         $resultFilters = [];
@@ -122,12 +124,14 @@ final class StoreCatalogService
                 $groupGuids,
                 $storeGuids,
                 $isAvailable,
-                $hasImage
+                $hasImage,
+                $sectionContext !== null
             );
             if ($materials['ok']) {
                 $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
                 $products = self::withOfferPricing(
-                    is_array($data['items'] ?? null) ? $data['items'] : []
+                    is_array($data['items'] ?? null) ? $data['items'] : [],
+                    $contextOfferSlug
                 );
                 $totalCount = max(0, (int) ($data['totalCount'] ?? 0));
                 $page = max(1, (int) ($data['page'] ?? $page));
@@ -219,9 +223,10 @@ final class StoreCatalogService
         $page = min(max(1, $page), $totalPages);
         $offset = ($page - 1) * $pageSize;
         $products = array_slice($products, $offset, $pageSize);
+        $contextOfferSlug = self::contextOfferSlug($sectionContext);
 
         return [
-            'products' => $products,
+            'products' => self::withOfferPricing($products, $contextOfferSlug),
             'totalCount' => $totalCount,
             'page' => $page,
             'pageSize' => $pageSize,
@@ -293,7 +298,7 @@ final class StoreCatalogService
         return $state;
     }
 
-    public static function findMaterial(string $guid): ?array
+    public static function findMaterial(string $guid, ?string $offerSlug = null): ?array
     {
         $guid = trim($guid);
         if ($guid === '') {
@@ -311,25 +316,37 @@ final class StoreCatalogService
                 return null;
             }
 
-            return self::withOfferPricing([$data])[0] ?? $data;
+            return self::withOfferPricing([$data], $offerSlug)[0] ?? $data;
         } catch (\Throwable) {
             return null;
         }
     }
 
     /** @param list<array<string, mixed>> $products @return list<array<string, mixed>> */
-    public static function withOfferPricing(array $products): array
+    public static function withOfferPricing(array $products, ?string $offerSlug = null): array
     {
         $result = [];
         foreach ($products as $product) {
             if (!is_array($product)) {
                 continue;
             }
-            $overlay = SpecialOfferService::pricingOverlay($product);
+            $overlay = SpecialOfferService::pricingOverlay($product, null, $offerSlug);
             $result[] = !empty($overlay['has_offer']) ? array_merge($product, $overlay) : $product;
         }
 
         return $result;
+    }
+
+    /** @param array<string, mixed>|null $sectionContext */
+    private static function contextOfferSlug(?array $sectionContext): ?string
+    {
+        if ($sectionContext === null || empty($sectionContext['is_offer_section'])) {
+            return null;
+        }
+
+        $slug = trim((string) ($sectionContext['slug'] ?? ''));
+
+        return $slug !== '' ? $slug : null;
     }
 
     /** @return array{products: list<array<string, mixed>>, totalCount: int, page: int, pageSize: int, totalPages: int, rangeStart: int, rangeEnd: int, resultFilters: array<string, mixed>, apiError: string|null, filters: array<string, mixed>} */
@@ -376,7 +393,8 @@ final class StoreCatalogService
         array $groupGuids,
         array $storeGuids,
         ?bool $isAvailable,
-        ?bool $hasImage
+        ?bool $hasImage,
+        bool $preserveFiltersOnRetry = false
     ): array {
         $primaryQuery = self::buildExtendedApiQuery(
             $page,
@@ -399,25 +417,48 @@ final class StoreCatalogService
             return $materials;
         }
 
-        $fallbackQuery = self::buildExtendedApiQuery(
-            $page,
-            $pageSize,
-            $search,
-            'number:asc',
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            null,
-            null,
-            false
-        );
-        $retry = ApiClient::get('/api/materials', $fallbackQuery);
-        if ($retry['ok']) {
-            return $retry;
+        if (!$preserveFiltersOnRetry) {
+            $fallbackQuery = self::buildExtendedApiQuery(
+                $page,
+                $pageSize,
+                $search,
+                'number:asc',
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                null,
+                null,
+                false
+            );
+            $retry = ApiClient::get('/api/materials', $fallbackQuery);
+            if ($retry['ok']) {
+                return $retry;
+            }
+        } else {
+            $retryQuery = self::buildExtendedApiQuery(
+                $page,
+                $pageSize,
+                $search,
+                'number:asc',
+                $materialTypes,
+                $manufacturers,
+                $ageCategories,
+                $sizeRanges,
+                $countryOfOrigins,
+                $groupGuids,
+                $storeGuids,
+                $isAvailable,
+                $hasImage,
+                false
+            );
+            $retry = ApiClient::get('/api/materials', $retryQuery);
+            if ($retry['ok']) {
+                return $retry;
+            }
         }
 
         return $materials;

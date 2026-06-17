@@ -9,22 +9,26 @@ use Portal\Services\SpecialOfferService;
 /** @var array<string, mixed> $product */
 /** @var array<string, mixed> $displayOptions */
 /** @var string|null $returnUrl */
+/** @var string|null $offerSlug */
 
 $product = is_array($product ?? null) ? $product : [];
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
+$offerSlug = trim((string) ($offerSlug ?? $_GET['offer'] ?? ''));
 $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
 $showPriceSyp = in_array($priceMode, ['both', 'syp'], true);
 $showPriceUsd = in_array($priceMode, ['both', 'usd'], true);
 $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
 $showImages = (bool) ($displayOptions['show_images'] ?? true);
 
-if (empty($product['has_offer'])) {
-    $guid = material_guid($product);
-    if ($guid !== '') {
-        $overlay = SpecialOfferService::pricingOverlay($product);
-        if (!empty($overlay['has_offer'])) {
-            $product = array_merge($product, $overlay);
-        }
+$guid = material_guid($product);
+if ($guid !== '') {
+    $overlay = SpecialOfferService::pricingOverlay(
+        $product,
+        null,
+        $offerSlug !== '' ? $offerSlug : null
+    );
+    if (!empty($overlay['has_offer'])) {
+        $product = array_merge($product, $overlay);
     }
 }
 

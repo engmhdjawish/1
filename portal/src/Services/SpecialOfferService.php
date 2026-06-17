@@ -200,6 +200,40 @@ final class SpecialOfferService
         return ['ok' => true, 'message' => 'تم حفظ العرض.', 'id' => $id];
     }
 
+    /** Full active offer row (pricing + rules) for storefront deep-links. */
+    public static function activeOfferBySlug(string $slug): ?array
+    {
+        $slug = trim($slug);
+        if ($slug === '') {
+            return null;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
+                    selection_mode::text AS selection_mode, discount_type::text AS discount_type,
+                    discount_percent, fixed_price_syp, fixed_price_usd,
+                    min_packages, max_packages, max_products, priority, starts_at
+             FROM special_offers
+             WHERE slug = :slug
+               AND is_active = TRUE
+               AND starts_at <= NOW()
+               AND (ends_at IS NULL OR ends_at > NOW())
+             LIMIT 1'
+        );
+        $stmt->execute(['slug' => $slug]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row === false) {
+            return null;
+        }
+
+        $id = (string) $row['id'];
+        $parsed = self::parseFilterRows(self::filtersForOffer($id));
+        $row['filter_rules'] = $parsed['rules'];
+        $row['material_guids'] = self::manualProducts($id);
+
+        return $row;
+    }
+
     /** @return array<string, mixed>|null */
     public static function storeContextBySlug(string $slug): ?array
     {
@@ -294,9 +328,15 @@ final class SpecialOfferService
     }
 
     /** @param array<string, mixed> $material */
-    public static function pricingOverlay(array $material, ?array $offer = null): array
+    public static function pricingOverlay(array $material, ?array $offer = null, ?string $offerSlug = null): array
     {
         $guid = trim((string) ($material['materialGuid'] ?? $material['MaterialGuid'] ?? ''));
+        if ($offer === null && $offerSlug !== null && trim($offerSlug) !== '') {
+            $offer = self::activeOfferBySlug($offerSlug);
+            if ($offer !== null && !self::offerIncludesMaterial($offer, $guid, $material)) {
+                $offer = null;
+            }
+        }
         $offer ??= self::resolveForMaterial($guid, $material);
         if ($offer === null) {
             return ['has_offer' => false];
@@ -304,7 +344,11 @@ final class SpecialOfferService
 
         $pricing = self::computePricing($material, $offer);
 
-        return array_merge(['has_offer' => true, 'offer' => $offer], $pricing);
+        return array_merge([
+            'has_offer' => true,
+            'offer' => $offer,
+            'offer_badge' => trim((string) ($offer['badge_text_ar'] ?? '')) ?: self::defaultBadge($offer),
+        ], $pricing);
     }
 
     /**
@@ -464,7 +508,7 @@ final class SpecialOfferService
     }
 
     /** @param array<string, mixed> $offer */
-    private static function offerIncludesMaterial(array $offer, string $guid, array $material): bool
+    public static function offerIncludesMaterial(array $offer, string $guid, array $material): bool
     {
         if ((string) ($offer['selection_mode'] ?? '') === 'manual') {
             return in_array($guid, $offer['material_guids'] ?? [], true);

@@ -103,7 +103,15 @@ if ($aboutSnippet !== '') {
                 }
               }
               $guid = material_guid($item);
-              $cardUrl = $guid !== '' ? product_url($guid, home_section_return_url($section)) : home_section_store_url($section);
+              $sectionSlug = trim((string) ($section['slug'] ?? ''));
+              $isOfferSection = !empty($section['is_offer_section']);
+              $cardUrl = $guid !== ''
+                  ? product_url(
+                      $guid,
+                      home_section_return_url($section),
+                      $isOfferSection && $sectionSlug !== '' ? $sectionSlug : null
+                  )
+                  : home_section_store_url($section);
               $packaging = ShareCartService::packaging($item);
               $primaryUnit = ShareCartService::primaryUnitLabel($item);
               $packageUnit = ShareCartService::packageUnitLabel($item);

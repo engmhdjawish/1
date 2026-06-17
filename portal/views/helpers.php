@@ -161,7 +161,7 @@ function material_image_guid(array $item): string
     return trim((string) ($item['productImageGuid'] ?? $item['ProductImageGuid'] ?? ''));
 }
 
-function product_url(string $guid, ?string $return = null): string
+function product_url(string $guid, ?string $return = null, ?string $offer = null): string
 {
     $guid = trim($guid);
     if ($guid === '') {
@@ -171,6 +171,10 @@ function product_url(string $guid, ?string $return = null): string
     $params = ['guid' => $guid];
     if ($return !== null && trim($return) !== '') {
         $params['return'] = safe_return_url($return);
+    }
+    $offer = trim((string) $offer);
+    if ($offer !== '') {
+        $params['offer'] = $offer;
     }
 
     return '/product.php?' . http_build_query($params);

@@ -10,7 +10,8 @@ require dirname(__DIR__) . '/views/helpers.php';
 
 $guid = trim((string) ($_GET['guid'] ?? ''));
 $returnUrl = trim((string) ($_GET['return'] ?? ''));
-$product = $guid !== '' ? StoreCatalogService::findMaterial($guid) : null;
+$offerSlug = trim((string) ($_GET['offer'] ?? ''));
+$product = $guid !== '' ? StoreCatalogService::findMaterial($guid, $offerSlug !== '' ? $offerSlug : null) : null;
 
 if ($product === null) {
     http_response_code(404);

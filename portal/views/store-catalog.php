@@ -35,8 +35,15 @@ $buildStoreUrl = static function (int $targetPage) use ($filters): string {
 };
 
 $productReturnUrl = null;
+$productOfferSlug = null;
 if ($sectionContext !== null) {
     $productReturnUrl = store_url(CatalogSectionResolver::storeLinkParams($sectionContext));
+    if (!empty($sectionContext['is_offer_section'])) {
+        $productOfferSlug = trim((string) ($sectionContext['slug'] ?? ''));
+        if ($productOfferSlug === '') {
+            $productOfferSlug = null;
+        }
+    }
 }
 ?>
 <?php if ($sectionContext !== null): ?>
@@ -154,7 +161,10 @@ if ($sectionContext !== null) {
 
   <div class="flex flex-wrap gap-2 justify-end">
     <button class="h-11 rounded-xl bg-primary text-white px-6 font-bold">تطبيق</button>
-    <a href="/store.php" class="h-11 inline-flex items-center rounded-xl border border-gray-300 px-6 text-sm font-semibold">إعادة ضبط</a>
+    <a href="<?= h(store_url(array_filter([
+        'section' => (string) ($filters['section'] ?? ''),
+        'offer' => (string) ($filters['offer'] ?? ''),
+    ], static fn (string $value): bool => trim($value) !== ''))) ?>" class="h-11 inline-flex items-center rounded-xl border border-gray-300 px-6 text-sm font-semibold">إعادة ضبط</a>
   </div>
 </form>
 
