@@ -52,6 +52,15 @@
     return form.querySelector('[type="submit"]:not([disabled])');
   }
 
+  /** Resolved POST/GET URL — form.action is shadowed when a control is named "action". */
+  function formActionUrl(form) {
+    const raw = form.getAttribute('action');
+    if (!raw) {
+      return window.location.href;
+    }
+    return new URL(raw, window.location.href).href;
+  }
+
   function updateActiveNav(route) {
     qsa('[data-dashboard-route]').forEach((el) => {
       const match = el.getAttribute('data-dashboard-route') === route;
@@ -177,7 +186,7 @@
       if (submitter && submitter.name) {
         body.set(submitter.name, submitter.value);
       }
-      const data = await fetchJson(form.action || window.location.href, {
+      const data = await fetchJson(formActionUrl(form), {
         method: (form.method || 'POST').toUpperCase(),
         body,
       });
@@ -280,7 +289,7 @@
         if (form.method.toLowerCase() !== 'get') return;
         event.preventDefault();
         const params = new URLSearchParams(new FormData(form));
-        const url = (form.action || window.location.pathname) + '?' + params.toString();
+        const url = formActionUrl(form).replace(/\?.*$/, '') + '?' + params.toString();
         navigate(url);
       });
     });
