@@ -146,12 +146,13 @@ final class WebCustomerService
             "SELECT 1
              FROM web_customers
              WHERE phone = :phone
-               AND (:exclude_id = '' OR id::text <> :exclude_id)
+               AND (:exclude_id_is_empty = '' OR id::text <> :exclude_id_value)
              LIMIT 1"
         );
         $duplicate->execute([
             'phone' => $phone,
-            'exclude_id' => $customerId,
+            'exclude_id_is_empty' => $customerId,
+            'exclude_id_value' => $customerId,
         ]);
         if ($duplicate->fetchColumn()) {
             return ['ok' => false, 'message' => 'رقم الهاتف مسجّل مسبقاً لعميل آخر.'];

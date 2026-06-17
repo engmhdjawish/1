@@ -248,12 +248,14 @@ final class WebUserService
             'SELECT 1
              FROM web_users
              WHERE user_name = :user_name
-               AND (:exclude_id = \'\' OR id::text <> :exclude_id)
+               AND (:exclude_id_is_empty = \'\' OR id::text <> :exclude_id_value)
              LIMIT 1'
         );
+        $excludeId = $id !== null ? trim($id) : '';
         $duplicate->execute([
             'user_name' => $userName,
-            'exclude_id' => $id !== null ? trim($id) : '',
+            'exclude_id_is_empty' => $excludeId,
+            'exclude_id_value' => $excludeId,
         ]);
         if ($duplicate->fetchColumn()) {
             return ['ok' => false, 'message' => 'اسم المستخدم مستخدم مسبقًا.'];
@@ -436,12 +438,13 @@ final class WebUserService
                 'SELECT 1
                  FROM web_roles
                  WHERE code = :code
-                   AND (:exclude_id = \'\' OR id::text <> :exclude_id)
+                   AND (:exclude_id_is_empty = \'\' OR id::text <> :exclude_id_value)
                  LIMIT 1'
             );
             $duplicate->execute([
                 'code' => $code,
-                'exclude_id' => $roleId,
+                'exclude_id_is_empty' => $roleId,
+                'exclude_id_value' => $roleId,
             ]);
             if ($duplicate->fetchColumn()) {
                 return ['ok' => false, 'message' => 'رمز الدور مستخدم مسبقًا.'];
