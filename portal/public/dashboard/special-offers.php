@@ -130,7 +130,14 @@ if (isset($_GET['deleted']) && $_GET['deleted'] === '1' && $flash === null) {
     $flash = 'تم حذف العرض.';
 }
 
-$offers = SpecialOfferService::adminList();
+$dbError = null;
+try {
+    $offers = SpecialOfferService::adminList();
+} catch (\Throwable $e) {
+    $offers = [];
+    $dbError = 'تعذر الاتصال بجداول العروض. شغّل ملف الترحيل: docs/portal-migration-special-offers.sql على قاعدة PostgreSQL.';
+}
+
 $editOffer = null;
 if ($editId !== '') {
     $editOffer = SpecialOfferService::getById($editId);

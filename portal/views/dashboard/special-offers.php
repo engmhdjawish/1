@@ -11,11 +11,20 @@ declare(strict_types=1);
 /** @var string $flashType */
 /** @var array $materialFilterOptions */
 /** @var string|null $materialFilterOptionsError */
+/** @var string|null $dbError */
 
 require __DIR__ . '/partials/token-picker.php';
 require __DIR__ . '/partials/media-picker.php';
 
 $showForm = $showForm ?? false;
+$editOffer = is_array($editOffer ?? null) ? $editOffer : [
+    'id' => '',
+    'filter_rules' => [],
+    'selection_mode' => 'filter',
+    'discount_type' => 'percent',
+    'material_guids' => [],
+    'manual_products' => [],
+];
 $rules = is_array($editOffer['filter_rules'] ?? null) ? $editOffer['filter_rules'] : [];
 $selectionMode = (string) ($editOffer['selection_mode'] ?? 'filter');
 $discountType = (string) ($editOffer['discount_type'] ?? 'percent');
@@ -75,6 +84,10 @@ foreach ($editOffer['manual_products'] ?? [] as $product) {
 </section>
 
 <?php require __DIR__ . '/partials/flash.php'; ?>
+
+<?php if (!empty($dbError)): ?>
+  <div class="mb-4 rounded-xl border border-red-200 bg-red-50 text-red-800 px-4 py-3 text-sm"><?= h($dbError) ?></div>
+<?php endif; ?>
 
 <?php if ($showForm): ?>
 <form method="post" id="special-offer-form" data-dashboard-explicit-save class="space-y-3 mb-4">
