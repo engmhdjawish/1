@@ -22,7 +22,15 @@ final class DashboardHttp
     /** @param array<string, mixed> $payload */
     public static function json(bool $ok, string $message, array $payload = []): never
     {
-        header('Content-Type: application/json; charset=utf-8');
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        if (!headers_sent()) {
+            http_response_code($ok ? 200 : 400);
+            header('Content-Type: application/json; charset=utf-8');
+        }
+
         echo json_encode(
             array_merge(['ok' => $ok, 'message' => $message], $payload),
             JSON_UNESCAPED_UNICODE

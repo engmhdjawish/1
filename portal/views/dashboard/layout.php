@@ -18,6 +18,8 @@ $navigation = DashboardNavigation::forUser($user);
 $quickLinks = DashboardNavigation::quickLinks(4);
 $bottomNav = array_slice($quickLinks, 0, 3);
 $roleLabel = (string) ($user['role_label'] ?? 'موظف');
+$dashboardJsFile = dirname(__DIR__, 2) . '/public/assets/dashboard/dashboard.js';
+$dashboardJsVersion = is_file($dashboardJsFile) ? (string) filemtime($dashboardJsFile) : '1';
 ?>
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">

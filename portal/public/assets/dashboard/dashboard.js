@@ -74,6 +74,21 @@
     document.body.style.overflow = 'hidden';
   }
 
+  function describeInvalidJsonResponse(res, raw) {
+    const preview = String(raw || '').replace(/\s+/g, ' ').trim();
+    const short = preview.slice(0, 220);
+    if (res.redirected && /login\.php/i.test(res.url || '')) {
+      return 'انتهت جلسة الدخول — أعد تسجيل الدخول ثم جرّب مجدداً.';
+    }
+    if (short.startsWith('<') || /<!DOCTYPE/i.test(short)) {
+      return 'الخادم أعاد صفحة HTML بدل JSON (غالباً خطأ PHP أو إعادة توجيه). افتح Network في المتصفح واطّلع على Response.';
+    }
+    if (short) {
+      return short;
+    }
+    return 'رد فارغ من الخادم.';
+  }
+
   async function fetchJson(url, options = {}) {
     const res = await fetch(url, {
       credentials: 'same-origin',
@@ -84,14 +99,34 @@
       },
       ...options,
     });
+    const raw = await res.text();
     let data = null;
-    try {
-      data = await res.json();
-    } catch {
-      data = { ok: false, message: 'استجابة غير صالحة من الخادم.' };
+    if (raw) {
+      try {
+        data = JSON.parse(raw);
+      } catch (parseError) {
+        const detail = describeInvalidJsonResponse(res, raw);
+        console.error('[dashboard] invalid JSON response', {
+          url,
+          status: res.status,
+          redirected: res.redirected,
+          finalUrl: res.url,
+          contentType: res.headers.get('content-type'),
+          bodyPreview: raw.slice(0, 1200),
+          parseError,
+        });
+        throw new Error(`استجابة غير صالحة [HTTP ${res.status}]: ${detail}`);
+      }
+    }
+    if (!data) {
+      throw new Error(`استجابة فارغة من الخادم [HTTP ${res.status}]`);
     }
     if (!res.ok || data.ok === false) {
-      throw new Error(data.message || ('خطأ ' + res.status));
+      const err = new Error(data.message || ('خطأ ' + res.status));
+      if (data.login) {
+        err.loginRequired = true;
+      }
+      throw err;
     }
     return data;
   }
@@ -154,6 +189,11 @@
       }
     } catch (err) {
       showToast(err.message || 'تعذر تنفيذ العملية.', 'error');
+      if (err.loginRequired) {
+        setTimeout(() => {
+          window.location.href = '/login.php?type=staff';
+        }, 900);
+      }
     } finally {
       setButtonLoading(submitter, false);
     }
