@@ -35,7 +35,8 @@ public sealed class AuditLoggingMiddleware(RequestDelegate next, ILogger<AuditLo
             try
             {
                 dbContext.AuditLogs.Add(CreateAuditLog(context, errorMessage));
-                await dbContext.SaveChangesAsync(context.RequestAborted);
+                // Best-effort audit: do not tie persistence to the client request token (may be canceled after long queries).
+                await dbContext.SaveChangesAsync(CancellationToken.None);
             }
             catch (Exception exception)
             {
