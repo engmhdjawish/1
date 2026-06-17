@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Portal\Auth\WebSession;
 use Portal\Services\CatalogSectionResolver;
+use Portal\Services\ShareCartService;
 
 function h(?string $value): string
 {
@@ -246,4 +247,23 @@ function store_url(array $params = []): string
 function format_packaging(float $value): string
 {
     return rtrim(rtrim(number_format($value, 2, '.', ','), '0'), '.');
+}
+
+/** @param array<string, mixed> $item */
+function packages_available_display(array $item): float
+{
+    $packaging = ShareCartService::packaging($item);
+    if ($packaging <= 0) {
+        return 0.0;
+    }
+
+    $warehouseQty = (float) (
+        $item['warehouseQuantity']
+        ?? $item['WarehouseQuantity']
+        ?? $item['qty']
+        ?? $item['Qty']
+        ?? 0
+    );
+
+    return max(0.0, floor($warehouseQty / $packaging));
 }

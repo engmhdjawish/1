@@ -114,11 +114,12 @@ final class StoreCatalogService
             );
             if ($materials['ok']) {
                 $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
+                $rawItems = $data['items'] ?? $data['Items'] ?? [];
                 $products = self::withOfferPricing(
-                    is_array($data['items'] ?? null) ? $data['items'] : [],
+                    is_array($rawItems) ? $rawItems : [],
                     $contextOfferSlug
                 );
-                $totalCount = max(0, (int) ($data['totalCount'] ?? 0));
+                $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
                 $page = max(1, (int) ($data['page'] ?? $page));
                 $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
                 $resultFilters = is_array($data['resultFilters'] ?? null) ? $data['resultFilters'] : [];
@@ -273,11 +274,12 @@ final class StoreCatalogService
             $materials = self::requestMaterialsQuery($apiQuery);
             if ($materials['ok']) {
                 $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
+                $rawItems = $data['items'] ?? $data['Items'] ?? [];
                 $products = self::withOfferPricing(
-                    is_array($data['items'] ?? null) ? $data['items'] : [],
+                    is_array($rawItems) ? $rawItems : [],
                     $contextOfferSlug
                 );
-                $totalCount = max(0, (int) ($data['totalCount'] ?? 0));
+                $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
                 $page = max(1, (int) ($data['page'] ?? $page));
                 $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
                 $resultFilters = is_array($data['resultFilters'] ?? null) ? $data['resultFilters'] : [];

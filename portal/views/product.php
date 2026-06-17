@@ -50,7 +50,7 @@ $offerMin = $offer !== null && is_numeric((string) ($offer['min_packages'] ?? ''
 $offerMax = $offer !== null && is_numeric((string) ($offer['max_packages'] ?? ''))
     ? (float) $offer['max_packages'] : null;
 $warehouseQty = (float) ($product['warehouseQuantity'] ?? 0);
-$packagesAvailable = packages_available_display($product);
+$packagesAvailable = $showQuantity ? packages_available_display($product) : 0.0;
 
 $returnUrl = safe_return_url($returnUrl ?? ($_GET['return'] ?? '/store.php'));
 $backLabel = return_link_label($returnUrl);
