@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Portal\Auth\CustomerSession;
 use Portal\Services\ShareCartService;
+use Portal\Services\SpecialOfferService;
 
 /** @var array<string, mixed> $product */
 /** @var array<string, mixed> $displayOptions */
@@ -16,13 +17,33 @@ $showPriceUsd = in_array($priceMode, ['both', 'usd'], true);
 $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
 $showImages = (bool) ($displayOptions['show_images'] ?? true);
 
+if (empty($product['has_offer'])) {
+    $guid = material_guid($product);
+    if ($guid !== '') {
+        $overlay = SpecialOfferService::pricingOverlay($product);
+        if (!empty($overlay['has_offer'])) {
+            $product = array_merge($product, $overlay);
+        }
+    }
+}
+
 $packaging = ShareCartService::packaging($product);
 $primaryUnit = ShareCartService::primaryUnitLabel($product);
 $packageUnit = ShareCartService::packageUnitLabel($product);
+$hasOffer = !empty($product['has_offer']);
 $unitSaleSp = ShareCartService::unitSalePriceSp($product);
 $unitSaleUsd = ShareCartService::unitSalePriceUsd($product);
 $packageSaleSp = ShareCartService::packageSalePriceSp($product);
 $packageSaleUsd = ShareCartService::packageSalePriceUsd($product);
+$origPackSp = $hasOffer ? (float) ($product['original_package_sale_price_sp'] ?? 0) : 0.0;
+$origPackUsd = $hasOffer ? (float) ($product['original_package_sale_price_usd'] ?? 0) : 0.0;
+$origUnitSp = $hasOffer ? (float) ($product['original_unit_sale_price_sp'] ?? 0) : 0.0;
+$offerBadge = trim((string) ($product['offer_badge'] ?? ''));
+$offer = is_array($product['offer'] ?? null) ? $product['offer'] : null;
+$offerMin = $offer !== null && is_numeric((string) ($offer['min_packages'] ?? ''))
+    ? (float) $offer['min_packages'] : null;
+$offerMax = $offer !== null && is_numeric((string) ($offer['max_packages'] ?? ''))
+    ? (float) $offer['max_packages'] : null;
 $warehouseQty = (float) ($product['warehouseQuantity'] ?? 0);
 $packagesAvailable = $packaging > 0 ? floor($warehouseQty / $packaging) : $warehouseQty;
 $imageGuid = material_image_guid($product);
@@ -73,21 +94,41 @@ $specs = array_filter([
 
       <?php if ($showPriceSyp || $showPriceUsd): ?>
         <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-2">
+          <?php if ($offerBadge !== ''): ?>
+            <span class="inline-flex mb-1 px-2.5 py-1 rounded-full bg-red-600 text-white text-xs font-extrabold"><?= h($offerBadge) ?></span>
+          <?php endif; ?>
           <?php if ($showPriceSyp): ?>
             <div>
               <div class="text-xs text-gray-500">سعر <?= h($primaryUnit) ?></div>
+              <?php if ($hasOffer && $origUnitSp > $unitSaleSp): ?>
+                <div class="text-xs text-gray-400 line-through"><?= format_money($origUnitSp, true) ?> ل.س</div>
+              <?php endif; ?>
               <div class="font-bold"><?= format_money($unitSaleSp, true) ?> ل.س</div>
             </div>
             <div>
               <div class="text-xs text-gray-500">سعر <?= h($packageUnit) ?></div>
+              <?php if ($hasOffer && $origPackSp > $packageSaleSp): ?>
+                <div class="text-sm text-gray-400 line-through"><?= format_money($origPackSp, true) ?> ل.س</div>
+              <?php endif; ?>
               <div class="text-primary text-2xl font-extrabold"><?= format_money($packageSaleSp, true) ?> ل.س</div>
             </div>
           <?php endif; ?>
           <?php if ($showPriceUsd): ?>
             <div class="pt-2 border-t border-gray-200">
               <div class="text-xs text-gray-500">سعر <?= h($packageUnit) ?> بالدولار</div>
+              <?php if ($hasOffer && $origPackUsd > $packageSaleUsd): ?>
+                <div class="text-sm text-gray-400 line-through">$<?= number_format($origPackUsd, 2, '.', ',') ?></div>
+              <?php endif; ?>
               <div class="text-emerald-700 text-xl font-extrabold">$<?= number_format($packageSaleUsd, 2, '.', ',') ?></div>
             </div>
+          <?php endif; ?>
+          <?php if ($hasOffer && ($offerMin !== null || $offerMax !== null)): ?>
+            <p class="text-xs text-amber-800 pt-2 border-t border-gray-200">
+              حدود العرض:
+              <?php if ($offerMin !== null): ?>الحد الأدنى <?= h(SpecialOfferService::formatQuantityLabel($offerMin)) ?> <?= h($packageUnit) ?><?php endif; ?>
+              <?php if ($offerMin !== null && $offerMax !== null): ?> — <?php endif; ?>
+              <?php if ($offerMax !== null): ?>الحد الأقصى <?= h(SpecialOfferService::formatQuantityLabel($offerMax)) ?> <?= h($packageUnit) ?><?php endif; ?>
+            </p>
           <?php endif; ?>
         </div>
       <?php else: ?>

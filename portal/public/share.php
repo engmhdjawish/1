@@ -51,8 +51,12 @@ if ($shareLink !== null && $hasAccess && ($_SERVER['REQUEST_METHOD'] ?? '') === 
     $capturePrices = (bool) (($shareLink['show_price'] ?? 0) ? true : false);
     $line = ShareCartService::lineFromForm($_POST, $capturePrices);
     if ($line['material_guid'] !== '') {
-        ShareCartService::add($token, (string) ($shareLink['id'] ?? ''), $line, (float) $quantity);
-        $cartNotice = 'تمت إضافة الطرد إلى السلة.';
+        $result = ShareCartService::add($token, (string) ($shareLink['id'] ?? ''), $line, (float) $quantity);
+        if ($result['ok']) {
+            $cartNotice = 'تمت إضافة الطرد إلى السلة.';
+        } else {
+            $cartNotice = $result['message'] !== '' ? $result['message'] : 'تعذر الإضافة إلى السلة.';
+        }
     }
 }
 

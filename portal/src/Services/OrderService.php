@@ -65,6 +65,9 @@ final class OrderService
                 'pcs_per_box' => max(1, (int) ($item['pcs_per_box'] ?? 1)),
                 'sale_price_sp' => $saleSp,
                 'sale_price_usd' => $saleUsd,
+                'original_sale_price_sp' => isset($item['original_sale_price_sp']) ? (float) $item['original_sale_price_sp'] : null,
+                'original_sale_price_usd' => isset($item['original_sale_price_usd']) ? (float) $item['original_sale_price_usd'] : null,
+                'special_offer_id' => trim((string) ($item['special_offer_id'] ?? '')) ?: null,
                 'image_url' => isset($item['image_url']) && is_string($item['image_url']) ? trim($item['image_url']) : null,
                 'sort_order' => $sortOrder++,
             ];
@@ -132,6 +135,9 @@ final class OrderService
                     pcs_per_box,
                     sale_price_sp,
                     sale_price_usd,
+                    original_sale_price_sp,
+                    original_sale_price_usd,
+                    special_offer_id,
                     image_url,
                     sort_order
                  ) VALUES (
@@ -143,6 +149,9 @@ final class OrderService
                     :pcs_per_box,
                     :sale_price_sp,
                     :sale_price_usd,
+                    :original_sale_price_sp,
+                    :original_sale_price_usd,
+                    :special_offer_id,
                     :image_url,
                     :sort_order
                  )'
@@ -158,6 +167,9 @@ final class OrderService
                     'pcs_per_box' => $line['pcs_per_box'],
                     'sale_price_sp' => $line['sale_price_sp'],
                     'sale_price_usd' => $line['sale_price_usd'],
+                    'original_sale_price_sp' => $line['original_sale_price_sp'],
+                    'original_sale_price_usd' => $line['original_sale_price_usd'],
+                    'special_offer_id' => $line['special_offer_id'],
                     'image_url' => $line['image_url'],
                     'sort_order' => $line['sort_order'],
                 ]);

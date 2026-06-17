@@ -10,6 +10,7 @@ use Portal\Database;
 use Portal\Services\AccessPolicyService;
 use Portal\Services\EnvConfigService;
 use Portal\Services\PortalSettingsService;
+use Portal\Services\StorePolicyService;
 use Portal\Support\DashboardHttp;
 
 WebSession::requireLogin();
@@ -126,6 +127,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flashType = 'error';
             } else {
                 PortalSettingsService::setGuestPolicy($policyId, isset($user['id']) ? (string) $user['id'] : null);
+                $maxRaw = trim((string) ($_POST['max_packages_per_material'] ?? ''));
+                $maxPackages = $maxRaw !== '' && is_numeric($maxRaw) ? (float) $maxRaw : null;
+                StorePolicyService::setMaxPackagesPerMaterial($maxPackages, isset($user['id']) ? (string) $user['id'] : null);
                 header('Location: /dashboard/settings.php?tab=policies&saved=1');
                 exit;
             }
@@ -194,6 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $company = PortalSettingsService::companySettings();
 $policies = AccessPolicyService::list(true);
 $guestPolicyId = PortalSettingsService::guestPolicyId();
+$maxPackagesPerMaterial = StorePolicyService::maxPackagesPerMaterial();
 $apiHealth = PortalSettingsService::apiHealth();
 $dbHealth = PortalSettingsService::databaseHealth();
 $integration = EnvConfigService::integrationSettings();

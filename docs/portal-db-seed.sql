@@ -35,6 +35,7 @@ INSERT INTO web_permissions (code, name_ar, category_ar, description_ar)
 VALUES
     ('dashboard.view', 'عرض لوحة التحكم', 'عام', NULL),
     ('home_sections.manage', 'إدارة أقسام الرئيسية', 'محتوى', NULL),
+    ('special_offers.manage', 'إدارة العروض الخاصة', 'محتوى', 'عروض الموقع والحسومات'),
     ('company_settings.manage', 'إعدادات الشركة', 'محتوى', NULL),
     ('store_policy.manage', 'سياسة المتجر العام', 'إعدادات', NULL),
     ('share_links.manage', 'إدارة روابط المشاركة', 'مبيعات', NULL),
@@ -80,7 +81,7 @@ INSERT INTO web_role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM web_roles r
 JOIN web_permissions p ON p.code IN (
-    'dashboard.view', 'home_sections.manage', 'company_settings.manage', 'images.upload', 'site_media.manage'
+    'dashboard.view', 'home_sections.manage', 'special_offers.manage', 'company_settings.manage', 'images.upload', 'site_media.manage'
 )
 WHERE r.code = 'content'
 ON CONFLICT DO NOTHING;
