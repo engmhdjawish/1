@@ -45,6 +45,11 @@ final class DashboardNavigation
                             'icon' => 'home_storage',
                             'permission' => 'home_sections.manage',
                         ],
+                        '/dashboard/special-offers.php' => [
+                            'label' => 'العروض الخاصة',
+                            'icon' => 'sell',
+                            'permission' => 'special_offers.manage',
+                        ],
                         '/dashboard/site-media.php' => [
                             'label' => 'مكتبة الصور',
                             'icon' => 'photo_library',

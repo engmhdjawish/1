@@ -77,7 +77,9 @@ final class StoreCatalogService
             $materials = self::fetchMaterials($page, $pageSize, $search, $sort, $materialTypes, $manufacturers, $isAvailable);
             if ($materials['ok']) {
                 $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
-                $products = is_array($data['items'] ?? null) ? $data['items'] : [];
+                $products = self::withOfferPricing(
+                    is_array($data['items'] ?? null) ? $data['items'] : []
+                );
                 $totalCount = max(0, (int) ($data['totalCount'] ?? 0));
                 $page = max(1, (int) ($data['page'] ?? $page));
                 $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
@@ -132,11 +134,29 @@ final class StoreCatalogService
             }
 
             $data = $result['data'] ?? null;
+            if (!is_array($data)) {
+                return null;
+            }
 
-            return is_array($data) ? $data : null;
+            return self::withOfferPricing([$data])[0] ?? $data;
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /** @param list<array<string, mixed>> $products @return list<array<string, mixed>> */
+    public static function withOfferPricing(array $products): array
+    {
+        $result = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $overlay = SpecialOfferService::pricingOverlay($product);
+            $result[] = !empty($overlay['has_offer']) ? array_merge($product, $overlay) : $product;
+        }
+
+        return $result;
     }
 
     /** @return array{products: list<array<string, mixed>>, totalCount: int, page: int, pageSize: int, totalPages: int, rangeStart: int, rangeEnd: int, resultFilters: array<string, mixed>, apiError: string|null, filters: array<string, mixed>} */

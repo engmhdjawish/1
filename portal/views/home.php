@@ -118,12 +118,11 @@ if ($aboutSnippet !== '') {
                   <?= h(format_packaging($packaging)) ?> <?= h($primaryUnit) ?>/<?= h($packageUnit) ?>
                 </div>
                 <?php if ($showAnyPrice): ?>
-                  <?php if ($showPriceSyp && $packagePriceSp > 0): ?>
-                    <div class="text-primary font-extrabold mt-2 text-sm"><?= format_money($packagePriceSp, true) ?> ل.س</div>
-                  <?php endif; ?>
-                  <?php if ($showPriceUsd && $packagePriceUsd > 0): ?>
-                    <div class="text-emerald-700 font-bold mt-1 text-sm">$<?= number_format($packagePriceUsd, 2, '.', ',') ?></div>
-                  <?php endif; ?>
+                  <?php
+                    $showPriceSypBlock = $showPriceSyp;
+                    $showPriceUsdBlock = $showPriceUsd;
+                    require __DIR__ . '/partials/offer-price-block.php';
+                  ?>
                 <?php endif; ?>
               </div>
             </a>

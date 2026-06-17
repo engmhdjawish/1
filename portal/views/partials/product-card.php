@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Portal\Services\ShareCartService;
+use Portal\Services\SpecialOfferService;
 
 /** @var array<string, mixed> $item */
 /** @var array{show_images?: bool, show_price?: bool, show_quantity?: bool, price_mode?: string} $displayOptions */
@@ -15,6 +16,16 @@ $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
 $showPriceSyp = in_array($priceMode, ['both', 'syp'], true);
 $showPriceUsd = in_array($priceMode, ['both', 'usd'], true);
 $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
+
+if (empty($item['has_offer'])) {
+    $guid = material_guid($item);
+    if ($guid !== '') {
+        $overlay = SpecialOfferService::pricingOverlay($item);
+        if (!empty($overlay['has_offer'])) {
+            $item = array_merge($item, $overlay);
+        }
+    }
+}
 
 $packaging = ShareCartService::packaging($item);
 $primaryUnit = ShareCartService::primaryUnitLabel($item);
@@ -57,16 +68,18 @@ $detailUrl = $guid !== '' ? product_url($guid) : '';
         تعبئة <?= h(format_packaging($packaging)) ?> <?= h($primaryUnit) ?>/<?= h($packageUnit) ?>
       </div>
       <?php if ($showPriceSyp && ($packageSaleSp > 0 || $unitSaleSp > 0)): ?>
-        <div class="text-primary font-extrabold mt-3 text-base">
-          <?= format_money($packageSaleSp > 0 ? $packageSaleSp : $unitSaleSp, true) ?> ل.س
-          <span class="text-xs font-normal text-gray-500">/ <?= h($packageSaleSp > 0 ? $packageUnit : $primaryUnit) ?></span>
-        </div>
+        <?php
+          $showPriceSypBlock = true;
+          $showPriceUsdBlock = false;
+          require __DIR__ . '/offer-price-block.php';
+        ?>
       <?php endif; ?>
       <?php if ($showPriceUsd && ($packageSaleUsd > 0 || $unitSaleUsd > 0)): ?>
-        <div class="text-emerald-700 font-bold mt-1 text-sm">
-          $<?= number_format($packageSaleUsd > 0 ? $packageSaleUsd : $unitSaleUsd, 2, '.', ',') ?>
-          <span class="text-xs font-normal text-gray-500">/ <?= h($packageSaleUsd > 0 ? $packageUnit : $primaryUnit) ?></span>
-        </div>
+        <?php
+          $showPriceSypBlock = false;
+          $showPriceUsdBlock = true;
+          require __DIR__ . '/offer-price-block.php';
+        ?>
       <?php endif; ?>
       <?php if ($showQuantity): ?>
         <div class="text-xs text-gray-500 mt-2">
