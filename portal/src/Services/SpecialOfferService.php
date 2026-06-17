@@ -438,7 +438,7 @@ final class SpecialOfferService
     /** @param array<string, mixed> $rules */
     private static function materialMatchesRules(array $material, array $rules): bool
     {
-        $field = static fn (string ...$keys): string => {
+        $field = static function (string ...$keys) use ($material): string {
             foreach ($keys as $key) {
                 $v = trim((string) ($material[$key] ?? ''));
                 if ($v !== '') {
