@@ -53,7 +53,7 @@ if ($shareLink !== null && $hasAccess && ($_SERVER['REQUEST_METHOD'] ?? '') === 
     if ($line['material_guid'] !== '') {
         $result = ShareCartService::add($token, (string) ($shareLink['id'] ?? ''), $line, (float) $quantity);
         if ($result['ok']) {
-            $cartNotice = 'تمت إضافة الطرد إلى السلة.';
+            $cartNotice = $result['message'] !== '' ? $result['message'] : 'تمت إضافة الطرد إلى السلة.';
         } else {
             $cartNotice = $result['message'] !== '' ? $result['message'] : 'تعذر الإضافة إلى السلة.';
         }
@@ -925,7 +925,7 @@ ob_start();
           $packageSaleSp = ShareCartService::packageSalePriceSp($item);
           $packageSaleUsd = ShareCartService::packageSalePriceUsd($item);
           $warehouseQty = (float) ($item['warehouseQuantity'] ?? 0);
-          $packagesAvailable = $packaging > 0 ? floor($warehouseQty / $packaging) : $warehouseQty;
+          $packagesAvailable = packages_available_display($item);
         ?>
         <article class="border border-gray-200 rounded-xl p-4 bg-white shadow-sm flex flex-col">
           <?php if ($showImages): ?>

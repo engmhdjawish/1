@@ -7,6 +7,7 @@ namespace Portal\Services;
 final class ShareCartService
 {
     private const SESSION_KEY = 'share_carts';
+    private const UNAVAILABLE_KEY = 'unavailable_items';
 
     /** @return array<string, array<string, mixed>> */
     public static function items(string $token): array
@@ -76,7 +77,24 @@ final class ShareCartService
         if (!$validation['ok']) {
             return $validation;
         }
-        $quantity = $existingQty > 0 ? ($validation['quantity'] - $existingQty) : $validation['quantity'];
+        $targetQty = $validation['quantity'];
+
+        $stockCheck = StockReservationService::validateCartLine(
+            array_merge($line, ['quantity' => $targetQty])
+        );
+        if (!$stockCheck['ok']) {
+            if ($stockCheck['capped_packages'] > 0 && $existingQty <= 0) {
+                $targetQty = $stockCheck['capped_packages'];
+            } else {
+                return [
+                    'ok' => false,
+                    'message' => $stockCheck['message'],
+                    'quantity' => max(0.0, $stockCheck['capped_packages']),
+                ];
+            }
+        }
+
+        $quantity = $existingQty > 0 ? ($targetQty - $existingQty) : $targetQty;
         if ($quantity <= 0) {
             return $validation;
         }
@@ -132,13 +150,196 @@ final class ShareCartService
         if (!$validation['ok']) {
             return $validation;
         }
+        $quantity = $validation['quantity'];
 
-        $_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]['quantity'] = $validation['quantity'];
+        $stockCheck = StockReservationService::validateCartLine(
+            array_merge($items[$materialGuid], ['quantity' => $quantity])
+        );
+        if (!$stockCheck['ok']) {
+            if ($stockCheck['capped_packages'] <= 0) {
+                self::moveToUnavailable($token, $materialGuid, $stockCheck['message']);
+
+                return [
+                    'ok' => false,
+                    'message' => $stockCheck['message'],
+                    'quantity' => 0.0,
+                    'moved_unavailable' => true,
+                ];
+            }
+            $quantity = $stockCheck['capped_packages'];
+        }
+
+        $_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]['quantity'] = $quantity;
         $_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid] = self::normalizeLine(
             $_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]
         );
 
-        return $validation;
+        return [
+            'ok' => true,
+            'message' => $stockCheck['message'] !== '' ? $stockCheck['message'] : '',
+            'quantity' => $quantity,
+        ];
+    }
+
+    /** @return array<string, array<string, mixed>> */
+    public static function unavailableItems(string $token): array
+    {
+        $token = trim($token);
+        if ($token === '') {
+            return [];
+        }
+
+        $items = $_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY] ?? [];
+        if (!is_array($items)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($items as $guid => $line) {
+            if (!is_array($line)) {
+                continue;
+            }
+            $normalized[(string) $guid] = self::normalizeLine($line);
+        }
+
+        return $normalized;
+    }
+
+    public static function moveToUnavailable(string $token, string $materialGuid, string $message): bool
+    {
+        $token = trim($token);
+        $materialGuid = trim($materialGuid);
+        if ($token === '' || $materialGuid === '' || !isset($_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid])) {
+            return false;
+        }
+
+        $line = self::normalizeLine((array) $_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]);
+        $line['stock_message'] = trim($message) !== '' ? trim($message) : 'نفدت الكمية المتاحة لهذا الصنف.';
+        $line['stock_unavailable_at'] = date('c');
+
+        if (!isset($_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY]) || !is_array($_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY])) {
+            $_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY] = [];
+        }
+
+        $_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY][$materialGuid] = $line;
+        unset($_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]);
+
+        return true;
+    }
+
+    public static function removeUnavailable(string $token, string $materialGuid): bool
+    {
+        $token = trim($token);
+        $materialGuid = trim($materialGuid);
+        if ($token === '' || $materialGuid === '' || !isset($_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY][$materialGuid])) {
+            return false;
+        }
+
+        unset($_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY][$materialGuid]);
+
+        return true;
+    }
+
+    /**
+     * Re-check cart lines against warehouse minus open orders.
+     *
+     * @return array{moved: list<string>, notices: list<string>}
+     */
+    public static function reconcileStock(string $token): array
+    {
+        $token = trim($token);
+        if ($token === '') {
+            return ['moved' => [], 'notices' => []];
+        }
+
+        $moved = [];
+        $notices = [];
+        foreach (self::items($token) as $guid => $line) {
+            $check = StockReservationService::validateCartLine($line);
+            if ($check['available_packages'] <= 0) {
+                if (self::moveToUnavailable($token, $guid, $check['message'])) {
+                    $moved[] = $guid;
+                    $notices[] = $check['message'];
+                }
+                continue;
+            }
+
+            if ($check['capped_packages'] < (float) ($line['quantity'] ?? 0)) {
+                $_SESSION[self::SESSION_KEY][$token]['items'][$guid]['quantity'] = $check['capped_packages'];
+                $_SESSION[self::SESSION_KEY][$token]['items'][$guid] = self::normalizeLine(
+                    $_SESSION[self::SESSION_KEY][$token]['items'][$guid]
+                );
+                $notices[] = $check['message'];
+            }
+        }
+
+        return [
+            'moved' => $moved,
+            'notices' => array_values(array_unique(array_filter($notices, static fn (string $n): bool => trim($n) !== ''))),
+        ];
+    }
+
+    /** @param list<string> $submittedGuids @param list<array<string, mixed>> $unavailableLines */
+    public static function finalizeAfterSuccessfulOrder(string $token, array $submittedGuids, array $unavailableLines): void
+    {
+        $token = trim($token);
+        if ($token === '' || !isset($_SESSION[self::SESSION_KEY][$token])) {
+            return;
+        }
+
+        foreach ($submittedGuids as $guid) {
+            $guid = trim((string) $guid);
+            if ($guid !== '') {
+                unset($_SESSION[self::SESSION_KEY][$token]['items'][$guid]);
+            }
+        }
+
+        if ($unavailableLines !== []) {
+            if (!isset($_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY]) || !is_array($_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY])) {
+                $_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY] = [];
+            }
+            foreach ($unavailableLines as $line) {
+                if (!is_array($line)) {
+                    continue;
+                }
+                $guid = trim((string) ($line['material_guid'] ?? ''));
+                if ($guid === '') {
+                    continue;
+                }
+                $line['stock_message'] = trim((string) ($line['stock_message'] ?? '')) ?: 'نفدت الكمية المتاحة لهذا الصنف.';
+                $_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY][$guid] = self::normalizeLine($line);
+                unset($_SESSION[self::SESSION_KEY][$token]['items'][$guid]);
+            }
+        }
+    }
+
+    /** @param list<array<string, mixed>> $unavailableLines */
+    public static function stashUnavailableLines(string $token, array $unavailableLines): void
+    {
+        $token = trim($token);
+        if ($token === '' || $unavailableLines === []) {
+            return;
+        }
+
+        if (!isset($_SESSION[self::SESSION_KEY][$token])) {
+            $_SESSION[self::SESSION_KEY][$token] = ['items' => []];
+        }
+        if (!isset($_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY]) || !is_array($_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY])) {
+            $_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY] = [];
+        }
+
+        foreach ($unavailableLines as $line) {
+            if (!is_array($line)) {
+                continue;
+            }
+            $guid = trim((string) ($line['material_guid'] ?? ''));
+            if ($guid === '') {
+                continue;
+            }
+            $line['stock_message'] = trim((string) ($line['stock_message'] ?? '')) ?: 'نفدت الكمية المتاحة لهذا الصنف.';
+            $_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY][$guid] = self::normalizeLine($line);
+            unset($_SESSION[self::SESSION_KEY][$token]['items'][$guid]);
+        }
     }
 
     public static function remove(string $token, string $materialGuid): bool
@@ -161,6 +362,16 @@ final class ShareCartService
         }
 
         unset($_SESSION[self::SESSION_KEY][$token]);
+    }
+
+    public static function clearUnavailable(string $token): void
+    {
+        $token = trim($token);
+        if ($token === '' || !isset($_SESSION[self::SESSION_KEY][$token])) {
+            return;
+        }
+
+        unset($_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY]);
     }
 
     public static function shareLinkId(string $token): ?string

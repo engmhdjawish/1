@@ -35,7 +35,7 @@ $unitSaleUsd = ShareCartService::unitSalePriceUsd($item);
 $packageSaleSp = ShareCartService::packageSalePriceSp($item);
 $packageSaleUsd = ShareCartService::packageSalePriceUsd($item);
 $warehouseQty = (float) ($item['warehouseQuantity'] ?? 0);
-$packagesAvailable = $packaging > 0 ? floor($warehouseQty / $packaging) : $warehouseQty;
+$packagesAvailable = packages_available_display($item);
 $guid = material_guid($item);
 $imageGuid = material_image_guid($item);
 $detailUrl = $guid !== '' ? product_url($guid) : '';

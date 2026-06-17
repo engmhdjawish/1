@@ -45,7 +45,7 @@ $offerMin = $offer !== null && is_numeric((string) ($offer['min_packages'] ?? ''
 $offerMax = $offer !== null && is_numeric((string) ($offer['max_packages'] ?? ''))
     ? (float) $offer['max_packages'] : null;
 $warehouseQty = (float) ($product['warehouseQuantity'] ?? 0);
-$packagesAvailable = $packaging > 0 ? floor($warehouseQty / $packaging) : $warehouseQty;
+$packagesAvailable = packages_available_display($product);
 $imageGuid = material_image_guid($product);
 
 $specs = array_filter([

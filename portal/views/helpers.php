@@ -188,3 +188,9 @@ function format_packaging(float $value): string
 {
     return rtrim(rtrim(number_format($value, 2, '.', ','), '0'), '.');
 }
+
+/** @param array<string, mixed> $item */
+function packages_available_display(array $item): float
+{
+    return \Portal\Services\StockReservationService::displayPackagesAvailable($item);
+}

@@ -52,8 +52,15 @@ if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] =
         $result = ShareCartService::updateQuantity($token, $materialGuid, (float) $quantity);
         if ($result['ok']) {
             $notice = $quantity > 0 ? 'تم تحديث عدد الطرود.' : 'تم حذف المادة من السلة.';
+            if ($result['message'] !== '') {
+                $notice = $result['message'];
+            }
         } else {
-            $error = $result['message'] !== '' ? $result['message'] : 'تعذر تحديث الكمية.';
+            if (!empty($result['moved_unavailable'])) {
+                $notice = $result['message'] !== '' ? $result['message'] : 'نُقل الصنف إلى قائمة غير المتوفرة.';
+            } else {
+                $error = $result['message'] !== '' ? $result['message'] : 'تعذر تحديث الكمية.';
+            }
         }
     } elseif ($action === 'bump_item') {
         $delta = (int) ($_POST['delta'] ?? 0);
@@ -63,8 +70,15 @@ if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] =
         $result = ShareCartService::updateQuantity($token, $materialGuid, (float) $next);
         if ($result['ok']) {
             $notice = $next > 0 ? 'تم تحديث عدد الطرود.' : 'تم حذف المادة من السلة.';
+            if ($result['message'] !== '') {
+                $notice = $result['message'];
+            }
         } else {
-            $error = $result['message'] !== '' ? $result['message'] : 'تعذر تحديث الكمية.';
+            if (!empty($result['moved_unavailable'])) {
+                $notice = $result['message'] !== '' ? $result['message'] : 'نُقل الصنف إلى قائمة غير المتوفرة.';
+            } else {
+                $error = $result['message'] !== '' ? $result['message'] : 'تعذر تحديث الكمية.';
+            }
         }
     } elseif ($action === 'remove_item') {
         if (ShareCartService::remove($token, $materialGuid)) {
@@ -73,6 +87,13 @@ if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] =
     } elseif ($action === 'clear_cart') {
         ShareCartService::clear($token);
         $notice = 'تم تفريغ السلة.';
+    } elseif ($action === 'remove_unavailable') {
+        if (ShareCartService::removeUnavailable($token, $materialGuid)) {
+            $notice = 'تم إزالة الصنف من قائمة غير المتوفرة.';
+        }
+    } elseif ($action === 'clear_unavailable') {
+        ShareCartService::clearUnavailable($token);
+        $notice = 'تم تفريغ قائمة الأصناف غير المتوفرة.';
     } elseif ($action === 'submit_order' && $allowOrder) {
         $guestName = trim((string) ($_POST['guest_name_ar'] ?? ''));
         $guestPhone = trim((string) ($_POST['guest_phone'] ?? ''));
@@ -86,23 +107,35 @@ if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] =
             $error = 'السلة فارغة.';
         } else {
             $shareLinkId = (string) ($shareLink['id'] ?? ShareCartService::shareLinkId($token) ?? '');
-            $order = OrderService::createGuestShareOrder(
+            $result = OrderService::createGuestShareOrder(
                 $shareLinkId,
                 $guestName,
                 $guestPhone,
                 $notes !== '' ? $notes : null,
                 $cartItems
             );
-            if ($order === null) {
-                $error = 'تعذر حفظ الطلب. حاول مرة أخرى أو تواصل معنا.';
+            if (!$result['ok']) {
+                ShareCartService::stashUnavailableLines($token, is_array($result['unavailable_items'] ?? null) ? $result['unavailable_items'] : []);
+                $error = (string) ($result['message'] ?? 'تعذر حفظ الطلب. حاول مرة أخرى أو تواصل معنا.');
             } else {
-                ShareCartService::clear($token);
-                if (!isset($_SESSION['share_order_success']) || !is_array($_SESSION['share_order_success'])) {
-                    $_SESSION['share_order_success'] = [];
+                $order = is_array($result['order'] ?? null) ? $result['order'] : null;
+                if ($order === null) {
+                    $error = 'تعذر حفظ الطلب. حاول مرة أخرى أو تواصل معنا.';
+                } else {
+                    ShareCartService::finalizeAfterSuccessfulOrder(
+                        $token,
+                        is_array($result['submitted_material_guids'] ?? null) ? $result['submitted_material_guids'] : [],
+                        is_array($result['unavailable_items'] ?? null) ? $result['unavailable_items'] : []
+                    );
+                    if (!isset($_SESSION['share_order_success']) || !is_array($_SESSION['share_order_success'])) {
+                        $_SESSION['share_order_success'] = [];
+                    }
+                    $order['partial_notices'] = is_array($result['notices'] ?? null) ? $result['notices'] : [];
+                    $order['had_unavailable_items'] = is_array($result['unavailable_items'] ?? null) && $result['unavailable_items'] !== [];
+                    $_SESSION['share_order_success'][$token] = $order;
+                    header('Location: /order-confirmation.php?token=' . rawurlencode($token), true, 303);
+                    exit;
                 }
-                $_SESSION['share_order_success'][$token] = $order;
-                header('Location: /order-confirmation.php?token=' . rawurlencode($token), true, 303);
-                exit;
             }
         }
     } elseif ($action === 'submit_order' && !$allowOrder) {
@@ -110,8 +143,17 @@ if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] =
     }
 }
 
-$cartItems = ($shareLink !== null && $hasAccess && !$error) ? ShareCartService::items($token) : [];
-$totals = ($shareLink !== null && $hasAccess && !$error) ? ShareCartService::totals($token) : ['total_sp' => 0.0, 'total_usd' => 0.0];
+$stockNotices = [];
+if ($shareLink !== null && $hasAccess && $token !== '') {
+    $reconcile = ShareCartService::reconcileStock($token);
+    if ($reconcile['notices'] !== []) {
+        $stockNotices = $reconcile['notices'];
+    }
+}
+
+$cartItems = ($shareLink !== null && $hasAccess) ? ShareCartService::items($token) : [];
+$unavailableItems = ($shareLink !== null && $hasAccess) ? ShareCartService::unavailableItems($token) : [];
+$totals = ($shareLink !== null && $hasAccess) ? ShareCartService::totals($token) : ['total_sp' => 0.0, 'total_usd' => 0.0];
 $shareName = is_array($shareLink) ? (string) ($shareLink['name_ar'] ?? 'رابط مشاركة') : 'رابط مشاركة';
 $cartCount = ShareCartService::itemCount($token);
 $maxPackagesPerMaterial = StorePolicyService::maxPackagesPerMaterial();
@@ -128,7 +170,7 @@ ob_start();
         <p class="text-xs text-gray-600 mt-1">الحد الأقصى للطلب: <?= h(\Portal\Services\SpecialOfferService::formatQuantityLabel($maxPackagesPerMaterial)) ?> طرد لكل مادة.</p>
       <?php endif; ?>
     </div>
-    <?php if ($token !== '' && $hasAccess && !$error): ?>
+    <?php if ($token !== '' && $hasAccess): ?>
       <a
         href="/share.php?token=<?= urlencode($token) ?>"
         class="h-11 inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-5 text-sm font-bold hover:border-primary"
@@ -145,6 +187,14 @@ ob_start();
   <?php if ($notice): ?>
     <p class="mb-4 rounded-xl border bg-green-50 border-green-200 text-green-700 px-4 py-3 text-sm"><?= h($notice) ?></p>
   <?php endif; ?>
+  <?php if ($stockNotices !== []): ?>
+    <div class="mb-4 rounded-xl border bg-amber-50 border-amber-200 text-amber-900 px-4 py-3 text-sm space-y-1">
+      <p class="font-bold">تنبيه المخزون</p>
+      <?php foreach ($stockNotices as $stockNotice): ?>
+        <p><?= h($stockNotice) ?></p>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
 
   <?php if ($requiresPassword && !$hasAccess && $shareLink !== null): ?>
     <form method="post" class="max-w-md rounded-xl border border-gray-200 bg-white p-5 space-y-3 shadow-sm">
@@ -159,8 +209,8 @@ ob_start();
       </label>
       <button class="h-11 rounded-lg bg-primary text-white px-6 font-bold">دخول</button>
     </form>
-  <?php elseif ($hasAccess && !$error): ?>
-    <?php if ($cartItems === []): ?>
+  <?php elseif ($hasAccess): ?>
+    <?php if ($cartItems === [] && $unavailableItems === []): ?>
       <div class="bg-white rounded-xl border p-8 text-center shadow-sm">
         <span class="material-symbols-outlined text-5xl text-gray-300" aria-hidden="true">shopping_cart</span>
         <p class="text-gray-500 mt-3">السلة فارغة.</p>
@@ -169,6 +219,11 @@ ob_start();
     <?php else: ?>
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div class="lg:col-span-8">
+          <?php if ($cartItems === []): ?>
+            <div class="bg-white rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500 mb-4">
+              لا توجد أصناف جاهزة للطلب في السلة حالياً.
+            </div>
+          <?php else: ?>
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div class="overflow-x-auto">
               <table class="w-full text-right border-collapse min-w-[640px]">
@@ -294,8 +349,52 @@ ob_start();
           <form method="post" class="mt-4">
             <input type="hidden" name="token" value="<?= h($token) ?>">
             <input type="hidden" name="action" value="clear_cart">
-            <button type="submit" class="text-sm font-bold text-gray-600 hover:text-red-600">تفريغ السلة</button>
+            <button type="submit" class="text-sm font-bold text-gray-600 hover:text-red-600" <?= $cartItems === [] ? 'disabled' : '' ?>>تفريغ السلة</button>
           </form>
+          <?php endif; ?>
+
+          <?php if ($unavailableItems !== []): ?>
+            <section class="mt-8 bg-white rounded-xl border border-red-200 shadow-sm overflow-hidden">
+              <div class="px-4 py-3 border-b border-red-100 bg-red-50 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 class="text-lg font-extrabold text-red-800">غير متوفرة للطلب</h2>
+                  <p class="text-xs text-red-700 mt-0.5">هذه الأصناف لن تُرسل مع الطلب. قد يكون السبب حجز كميتها لطلبات أخرى قيد المعالجة.</p>
+                </div>
+                <form method="post">
+                  <input type="hidden" name="token" value="<?= h($token) ?>">
+                  <input type="hidden" name="action" value="clear_unavailable">
+                  <button type="submit" class="text-xs font-bold text-red-700 hover:underline">إزالة الكل</button>
+                </form>
+              </div>
+              <div class="divide-y divide-red-50">
+                <?php foreach ($unavailableItems as $line): ?>
+                  <?php
+                    $materialGuid = (string) ($line['material_guid'] ?? '');
+                    $packageUnit = (string) ($line['package_unit'] ?? 'طرد');
+                    $qty = max(1, (int) round((float) ($line['quantity'] ?? 1)));
+                  ?>
+                  <div class="p-4 flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <?php if (!empty($line['image_url'])): ?>
+                        <img src="<?= h((string) $line['image_url']) ?>" alt="" class="w-14 h-14 rounded-lg object-cover bg-gray-100 shrink-0 opacity-70" loading="lazy">
+                      <?php endif; ?>
+                      <div class="min-w-0">
+                        <div class="font-bold text-sm text-gray-800"><?= h((string) ($line['material_name_ar'] ?? '')) ?></div>
+                        <div class="text-xs text-red-700 mt-1"><?= h((string) ($line['stock_message'] ?? 'نفدت الكمية المتاحة.')) ?></div>
+                        <div class="text-xs text-gray-500 mt-1">الكمية المطلوبة: <?= (int) $qty ?> <?= h($packageUnit) ?></div>
+                      </div>
+                    </div>
+                    <form method="post">
+                      <input type="hidden" name="token" value="<?= h($token) ?>">
+                      <input type="hidden" name="action" value="remove_unavailable">
+                      <input type="hidden" name="material_guid" value="<?= h($materialGuid) ?>">
+                      <button type="submit" class="text-xs font-bold text-gray-600 hover:text-red-600">إزالة</button>
+                    </form>
+                  </div>
+                <?php endforeach; ?>
+              </div>
+            </section>
+          <?php endif; ?>
         </div>
 
         <div class="lg:col-span-4">
@@ -335,7 +434,10 @@ ob_start();
                 <label class="block text-sm font-bold">ملاحظات
                   <textarea name="notes_ar" rows="3" class="w-full rounded-lg border border-gray-300 px-3 py-2 mt-1 text-sm" placeholder="اختياري"></textarea>
                 </label>
-                <button class="w-full h-12 rounded-lg bg-primary text-white font-extrabold shadow-md hover:opacity-95 transition inline-flex items-center justify-center gap-2">
+                <button
+                  class="w-full h-12 rounded-lg bg-primary text-white font-extrabold shadow-md hover:opacity-95 transition inline-flex items-center justify-center gap-2<?= $cartItems === [] ? ' opacity-50 cursor-not-allowed' : '' ?>"
+                  <?= $cartItems === [] ? 'disabled' : '' ?>
+                >
                   <span class="material-symbols-outlined" aria-hidden="true">send</span>
                   تأكيد وإرسال الطلب
                 </button>
