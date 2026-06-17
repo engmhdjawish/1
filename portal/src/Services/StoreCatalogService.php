@@ -75,28 +75,12 @@ final class StoreCatalogService
         $isAvailable = self::parseNullableBool($query['isAvailable'] ?? null);
         $hasImage = self::parseNullableBool($query['hasImage'] ?? null);
 
-        if ($sectionContext !== null && $materialTypes === [] && $manufacturers === [] && $search === '') {
+        if ($sectionContext !== null) {
             if ((string) ($sectionContext['selection_mode'] ?? '') === 'manual') {
                 return self::catalogFromManualSection($sectionContext, $page, $pageSize, $sort, $search);
             }
 
-            $rules = is_array($sectionContext['filter_rules'] ?? null) ? $sectionContext['filter_rules'] : [];
-            $materialTypes = self::parseList($rules['material_types'] ?? []);
-            $manufacturers = self::parseList($rules['manufacturers'] ?? []);
-            $ageCategories = self::parseList($rules['age_categories'] ?? []);
-            $sizeRanges = self::parseList($rules['size_ranges'] ?? []);
-            $countryOfOrigins = self::parseList($rules['country_origins'] ?? []);
-            $groupGuids = self::parseList($rules['group_guids'] ?? []);
-            $storeGuids = self::parseList($rules['store_guids'] ?? []);
-            if ($search === '' && trim((string) ($rules['keyword'] ?? '')) !== '') {
-                $search = trim((string) $rules['keyword']);
-            }
-            if ($isAvailable === null && array_key_exists('is_available', $rules)) {
-                $isAvailable = $rules['is_available'];
-            }
-            if ($hasImage === null && array_key_exists('has_image', $rules)) {
-                $hasImage = $rules['has_image'];
-            }
+            return self::catalogFromFilterSection($sectionContext, $page, $pageSize, $sort, $search, $isAvailable);
         }
 
         $contextOfferSlug = self::contextOfferSlug($sectionContext);
@@ -125,7 +109,8 @@ final class StoreCatalogService
                 $storeGuids,
                 $isAvailable,
                 $hasImage,
-                $sectionContext !== null
+                false,
+                true
             );
             if ($materials['ok']) {
                 $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
@@ -236,6 +221,7 @@ final class StoreCatalogService
             'resultFilters' => self::loadStaticResultFilters(),
             'apiError' => null,
             'section_context' => $sectionContext,
+            'section_filter_summary' => [['label' => 'العرض', 'value' => 'منتجات محددة يدوياً']],
             'filters' => self::buildFiltersState(
                 $search,
                 $sort,
@@ -253,15 +239,114 @@ final class StoreCatalogService
         ];
     }
 
+    /** @param array<string, mixed> $sectionContext */
+    private static function catalogFromFilterSection(
+        array $sectionContext,
+        int $page,
+        int $pageSize,
+        string $sort,
+        string $userSearch,
+        ?bool $userIsAvailable
+    ): array {
+        if (self::activePolicy() === null) {
+            return self::emptyCatalogResult($page, $pageSize, 'لم تُضبط سياسة عرض المتجر بعد.');
+        }
+
+        $rules = is_array($sectionContext['filter_rules'] ?? null) ? $sectionContext['filter_rules'] : [];
+        $contextOfferSlug = self::contextOfferSlug($sectionContext);
+        $apiQuery = CatalogSectionResolver::apiQueryFromRules($rules, $page, $pageSize, $sort);
+        $apiQuery['includeResultFilters'] = 'true';
+
+        if ($userSearch !== '') {
+            $apiQuery['search'] = $userSearch;
+        }
+        if ($userIsAvailable !== null) {
+            $apiQuery['isAvailable'] = $userIsAvailable ? 'true' : 'false';
+        }
+
+        $products = [];
+        $totalCount = 0;
+        $resultFilters = [];
+        $apiError = null;
+
+        try {
+            $materials = self::requestMaterialsQuery($apiQuery);
+            if ($materials['ok']) {
+                $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
+                $products = self::withOfferPricing(
+                    is_array($data['items'] ?? null) ? $data['items'] : [],
+                    $contextOfferSlug
+                );
+                $totalCount = max(0, (int) ($data['totalCount'] ?? 0));
+                $page = max(1, (int) ($data['page'] ?? $page));
+                $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
+                $resultFilters = is_array($data['resultFilters'] ?? null) ? $data['resultFilters'] : [];
+            } else {
+                $apiError = self::extractApiError($materials);
+            }
+        } catch (\Throwable $exception) {
+            $apiError = $exception->getMessage();
+        }
+
+        $displaySearch = $userSearch !== '' ? $userSearch : trim((string) ($rules['keyword'] ?? ''));
+        $displayIsAvailable = $userIsAvailable;
+        if ($displayIsAvailable === null && array_key_exists('is_available', $rules)) {
+            $displayIsAvailable = $rules['is_available'];
+        }
+
+        $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
+        if ($page > $totalPages) {
+            $page = $totalPages;
+        }
+
+        return [
+            'products' => $products,
+            'totalCount' => $totalCount,
+            'page' => $page,
+            'pageSize' => $pageSize,
+            'totalPages' => $totalPages,
+            'rangeStart' => $totalCount === 0 ? 0 : (($page - 1) * $pageSize + 1),
+            'rangeEnd' => min($totalCount, $page * $pageSize),
+            'resultFilters' => $resultFilters,
+            'apiError' => $apiError,
+            'section_context' => $sectionContext,
+            'section_filter_summary' => CatalogSectionResolver::filterSummaryLabels($rules),
+            'filters' => self::buildFiltersState(
+                $displaySearch,
+                $sort,
+                self::parseList($rules['material_types'] ?? []),
+                self::parseList($rules['manufacturers'] ?? []),
+                self::parseList($rules['age_categories'] ?? []),
+                self::parseList($rules['size_ranges'] ?? []),
+                self::parseList($rules['country_origins'] ?? []),
+                self::parseList($rules['group_guids'] ?? []),
+                self::parseList($rules['store_guids'] ?? []),
+                $displayIsAvailable,
+                array_key_exists('has_image', $rules) ? $rules['has_image'] : null,
+                $sectionContext
+            ),
+        ];
+    }
+
     /**
-     * @param list<string> $materialTypes
-     * @param list<string> $manufacturers
-     * @param list<string> $ageCategories
-     * @param list<string> $sizeRanges
-     * @param list<string> $countryOfOrigins
-     * @param list<string> $groupGuids
-     * @param list<string> $storeGuids
+     * @param array<string, string|int> $apiQuery
      * @return array<string, mixed>
+     */
+    private static function requestMaterialsQuery(array $apiQuery): array
+    {
+        $materials = ApiClient::get('/api/materials', $apiQuery);
+        if ($materials['ok'] || (int) ($materials['status'] ?? 0) !== 400) {
+            return $materials;
+        }
+
+        $retryQuery = $apiQuery;
+        $retryQuery['sort'] = 'number:asc';
+
+        return ApiClient::get('/api/materials', $retryQuery);
+    }
+
+    /**
+     * @param array<string, mixed> $sectionContext
      */
     private static function buildFiltersState(
         string $search,
@@ -394,7 +479,8 @@ final class StoreCatalogService
         array $storeGuids,
         ?bool $isAvailable,
         ?bool $hasImage,
-        bool $preserveFiltersOnRetry = false
+        bool $preserveFiltersOnRetry = false,
+        bool $includeResultFilters = true
     ): array {
         $primaryQuery = self::buildExtendedApiQuery(
             $page,
@@ -410,7 +496,7 @@ final class StoreCatalogService
             $storeGuids,
             $isAvailable,
             $hasImage,
-            false
+            $includeResultFilters
         );
         $materials = ApiClient::get('/api/materials', $primaryQuery);
         if ($materials['ok'] || (int) ($materials['status'] ?? 0) !== 400) {
@@ -432,7 +518,7 @@ final class StoreCatalogService
                 [],
                 null,
                 null,
-                false
+                $includeResultFilters
             );
             $retry = ApiClient::get('/api/materials', $fallbackQuery);
             if ($retry['ok']) {
@@ -453,7 +539,7 @@ final class StoreCatalogService
                 $storeGuids,
                 $isAvailable,
                 $hasImage,
-                false
+                $includeResultFilters
             );
             $retry = ApiClient::get('/api/materials', $retryQuery);
             if ($retry['ok']) {

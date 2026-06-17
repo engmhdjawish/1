@@ -12,6 +12,8 @@ $catalog = is_array($catalog ?? null) ? $catalog : [];
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
 $filters = is_array($catalog['filters'] ?? null) ? $catalog['filters'] : [];
 $sectionContext = is_array($catalog['section_context'] ?? null) ? $catalog['section_context'] : null;
+$sectionFilterSummary = is_array($catalog['section_filter_summary'] ?? null) ? $catalog['section_filter_summary'] : [];
+$isSectionBrowse = $sectionContext !== null;
 $products = is_array($catalog['products'] ?? null) ? $catalog['products'] : [];
 $resultFilters = is_array($catalog['resultFilters'] ?? null) ? $catalog['resultFilters'] : [];
 $materialTypeOptions = is_array($resultFilters['materialTypes'] ?? null) ? $resultFilters['materialTypes'] : [];
@@ -20,15 +22,19 @@ $selectedMaterialTypes = is_array($filters['materialTypes'] ?? null) ? $filters[
 $selectedManufacturers = is_array($filters['manufacturers'] ?? null) ? $filters['manufacturers'] : [];
 $availabilityValue = $filters['isAvailable'] === true ? '1' : ($filters['isAvailable'] === false ? '0' : '');
 
-$buildStoreUrl = static function (int $targetPage) use ($filters): string {
-    return store_url(array_merge([
+$buildStoreUrl = static function (int $targetPage) use ($filters, $isSectionBrowse): string {
+    $params = [
         'page' => $targetPage,
         'q' => (string) ($filters['q'] ?? ''),
         'sort' => (string) ($filters['sort'] ?? ''),
         'isAvailable' => $filters['isAvailable'] === true ? '1' : ($filters['isAvailable'] === false ? '0' : ''),
-        'materialTypes' => is_array($filters['materialTypes'] ?? null) ? $filters['materialTypes'] : [],
-        'manufacturers' => is_array($filters['manufacturers'] ?? null) ? $filters['manufacturers'] : [],
-    ], array_filter([
+    ];
+    if (!$isSectionBrowse) {
+        $params['materialTypes'] = is_array($filters['materialTypes'] ?? null) ? $filters['materialTypes'] : [];
+        $params['manufacturers'] = is_array($filters['manufacturers'] ?? null) ? $filters['manufacturers'] : [];
+    }
+
+    return store_url(array_merge($params, array_filter([
         'section' => (string) ($filters['section'] ?? ''),
         'offer' => (string) ($filters['offer'] ?? ''),
     ], static fn (string $value): bool => trim($value) !== '')));
@@ -115,7 +121,23 @@ if ($sectionContext !== null) {
     </div>
   </div>
 
-  <?php if ($materialTypeOptions !== []): ?>
+  <?php if ($isSectionBrowse && $sectionFilterSummary !== []): ?>
+    <div class="rounded-xl border border-primary/20 bg-white p-3">
+      <p class="text-sm font-bold text-gray-700 mb-2">فلاتر هذا القسم (ثابتة)</p>
+      <div class="flex flex-wrap gap-2">
+        <?php foreach ($sectionFilterSummary as $chip): ?>
+          <?php if (!is_array($chip)) continue; ?>
+          <span class="inline-flex items-center gap-1 rounded-full bg-red-50 border border-red-100 px-3 py-1.5 text-xs font-bold text-slate-800">
+            <span class="text-primary"><?= h((string) ($chip['label'] ?? '')) ?>:</span>
+            <?= h((string) ($chip['value'] ?? '')) ?>
+          </span>
+        <?php endforeach; ?>
+      </div>
+      <p class="text-xs text-gray-500 mt-2">يمكنك البحث أو تغيير الترتيب والتوفر ضمن نفس القسم فقط.</p>
+    </div>
+  <?php endif; ?>
+
+  <?php if (!$isSectionBrowse && $materialTypeOptions !== []): ?>
     <fieldset class="rounded-xl border border-gray-200 p-3">
       <legend class="text-sm font-bold text-gray-700 px-1">نوع المادة</legend>
       <div class="flex flex-wrap gap-2 mt-2">
@@ -137,7 +159,7 @@ if ($sectionContext !== null) {
     </fieldset>
   <?php endif; ?>
 
-  <?php if ($manufacturerOptions !== []): ?>
+  <?php if (!$isSectionBrowse && $manufacturerOptions !== []): ?>
     <fieldset class="rounded-xl border border-gray-200 p-3">
       <legend class="text-sm font-bold text-gray-700 px-1">الشركة</legend>
       <div class="flex flex-wrap gap-2 mt-2">

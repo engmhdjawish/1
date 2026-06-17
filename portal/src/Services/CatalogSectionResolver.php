@@ -41,6 +41,60 @@ final class CatalogSectionResolver
         return ['section' => $slug];
     }
 
+    /** Human-readable chips for section filter rules shown in the store UI. */
+    public static function filterSummaryLabels(array $rules): array
+    {
+        $items = [];
+        $keyword = trim((string) ($rules['keyword'] ?? ''));
+        if ($keyword !== '') {
+            $items[] = ['label' => 'بحث', 'value' => $keyword];
+        }
+
+        $appendList = static function (string $label, mixed $values) use (&$items): void {
+            if (!is_array($values)) {
+                return;
+            }
+            foreach ($values as $value) {
+                $text = trim((string) $value);
+                if ($text !== '') {
+                    $items[] = ['label' => $label, 'value' => $text];
+                }
+            }
+        };
+
+        $appendList('نوع المادة', $rules['material_types'] ?? []);
+        $appendList('فئة عمرية', $rules['age_categories'] ?? []);
+        $appendList('الشركة', $rules['manufacturers'] ?? []);
+        $appendList('القياس', $rules['size_ranges'] ?? []);
+        $appendList('بلد المنشأ', $rules['country_origins'] ?? []);
+
+        if (($rules['is_available'] ?? null) === true) {
+            $items[] = ['label' => 'التوفر', 'value' => 'متوفر فقط'];
+        } elseif (($rules['is_available'] ?? null) === false) {
+            $items[] = ['label' => 'التوفر', 'value' => 'غير متوفر فقط'];
+        }
+
+        if (($rules['has_image'] ?? null) === true) {
+            $items[] = ['label' => 'الصورة', 'value' => 'مع صورة فقط'];
+        }
+
+        foreach ([
+            'min_warehouse_quantity' => 'حد أدنى للمخزون',
+            'max_warehouse_quantity' => 'حد أقصى للمخزون',
+            'min_unit_sale_price_syp' => 'حد أدنى سعر (ل.س)',
+            'max_unit_sale_price_syp' => 'حد أقصى سعر (ل.س)',
+            'min_unit_sale_price_usd' => 'حد أدنى سعر ($)',
+            'max_unit_sale_price_usd' => 'حد أقصى سعر ($)',
+        ] as $key => $label) {
+            $value = $rules[$key] ?? null;
+            if ($value !== null && $value !== '') {
+                $items[] = ['label' => $label, 'value' => (string) $value];
+            }
+        }
+
+        return $items;
+    }
+
     /**
      * @param array<string, mixed> $rules
      * @return array<string, string|int>

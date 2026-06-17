@@ -83,7 +83,7 @@ final class HomeSectionService
         }
 
         $id = (string) $row['id'];
-        $parsed = self::parseFilterRows(self::sectionFilters($id));
+        $parsed = self::parseFilterRows(self::filtersForSection($id));
 
         return [
             'id' => $id,
