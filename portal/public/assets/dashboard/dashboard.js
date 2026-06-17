@@ -197,12 +197,15 @@
       form.addEventListener('submit', (event) => {
         if (!explicit) {
           event.preventDefault();
+          event.stopImmediatePropagation();
           return;
         }
         explicit = false;
-        if (form.hasAttribute('data-dashboard-ajax')) return;
+        if (form.hasAttribute('data-dashboard-ajax')) {
+          return;
+        }
         setButtonLoading(getSubmitter(form, event), true);
-      });
+      }, true);
       form.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter') return;
         const target = event.target;

@@ -218,13 +218,13 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
 
 <?php if ($showForm): ?>
 <?php if ($editId !== ''): ?>
-  <form method="post" id="sl-delete-form" class="hidden" data-dashboard-confirm="هل أنت متأكد من حذف هذا الرابط؟">
+  <form method="post" id="sl-delete-form" class="hidden" data-dashboard-ajax data-dashboard-reload onsubmit="return confirm('هل أنت متأكد من حذف هذا الرابط؟');">
     <input type="hidden" name="action" value="delete">
     <input type="hidden" name="id" value="<?= h($editId) ?>">
   </form>
 <?php endif; ?>
 
-<form method="post" id="share-link-form" data-dashboard-explicit-save class="space-y-3 mb-4">
+<form method="post" id="share-link-form" data-dashboard-explicit-save data-dashboard-ajax data-dashboard-reload class="space-y-3 mb-4">
   <input type="hidden" name="action" value="save">
   <input type="hidden" name="id" value="<?= h((string) ($editLink['id'] ?? '')) ?>">
 
@@ -532,7 +532,7 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
                       <button type="submit" class="dashboard-btn h-8 px-3 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">تفعيل</button>
                     <?php endif; ?>
                   </form>
-                  <form method="post" data-dashboard-confirm="حذف الرابط؟">
+                  <form method="post" data-dashboard-ajax data-dashboard-reload onsubmit="return confirm('حذف الرابط؟');">
                     <input type="hidden" name="action" value="delete">
                     <input type="hidden" name="id" value="<?= h((string) $row['id']) ?>">
                     <button class="h-8 px-3 rounded-lg border border-red-300 bg-white text-xs font-bold text-red-700 hover:bg-red-50">حذف</button>
