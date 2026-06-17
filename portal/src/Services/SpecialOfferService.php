@@ -531,34 +531,33 @@ final class SpecialOfferService
             return '';
         };
 
-        foreach ($rules['material_types'] ?? [] as $value) {
-            if ($field('materialType', 'MaterialType', 'color', 'Color') !== (string) $value) {
-                return false;
-            }
+        if (!self::fieldMatchesAnyContains($field('materialType', 'MaterialType', 'color', 'Color'), $rules['material_types'] ?? [])) {
+            return false;
         }
-        foreach ($rules['age_categories'] ?? [] as $value) {
-            if ($field('ageCategory', 'AgeCategory', 'provenance', 'Provenance') !== (string) $value) {
-                return false;
-            }
+        if (!self::fieldMatchesAnyContains($field('ageCategory', 'AgeCategory', 'provenance', 'Provenance'), $rules['age_categories'] ?? [])) {
+            return false;
         }
-        foreach ($rules['manufacturers'] ?? [] as $value) {
-            if ($field('manufacturer', 'Manufacturer', 'company', 'Company') !== (string) $value) {
-                return false;
-            }
+        if (!self::fieldMatchesAnyContains($field('manufacturer', 'Manufacturer', 'company', 'Company'), $rules['manufacturers'] ?? [])) {
+            return false;
         }
-        foreach ($rules['size_ranges'] ?? [] as $value) {
-            if ($field('sizeRange', 'SizeRange', 'dim', 'Dim') !== (string) $value) {
-                return false;
-            }
+        if (!self::fieldMatchesAnyContains($field('sizeRange', 'SizeRange', 'dim', 'Dim'), $rules['size_ranges'] ?? [])) {
+            return false;
         }
-        foreach ($rules['country_origins'] ?? [] as $value) {
-            if ($field('countryOfOrigin', 'CountryOfOrigin', 'origin', 'Origin') !== (string) $value) {
-                return false;
-            }
+        if (!self::fieldMatchesAnyContains($field('countryOfOrigin', 'CountryOfOrigin', 'origin', 'Origin'), $rules['country_origins'] ?? [])) {
+            return false;
         }
+
         $groupGuid = strtolower($field('groupGuid', 'GroupGuid'));
-        foreach ($rules['group_guids'] ?? [] as $value) {
-            if ($groupGuid !== strtolower((string) $value)) {
+        $groupRules = is_array($rules['group_guids'] ?? null) ? $rules['group_guids'] : [];
+        if ($groupRules !== []) {
+            $groupMatched = false;
+            foreach ($groupRules as $value) {
+                if ($groupGuid !== '' && $groupGuid === strtolower(trim((string) $value))) {
+                    $groupMatched = true;
+                    break;
+                }
+            }
+            if (!$groupMatched) {
                 return false;
             }
         }
@@ -582,6 +581,35 @@ final class SpecialOfferService
         }
 
         return true;
+    }
+
+    /** @param list<mixed> $ruleValues */
+    private static function fieldMatchesAnyContains(string $fieldValue, array $ruleValues): bool
+    {
+        if ($ruleValues === []) {
+            return true;
+        }
+
+        $fieldValue = trim($fieldValue);
+        if ($fieldValue === '') {
+            return false;
+        }
+
+        foreach ($ruleValues as $ruleValue) {
+            $needle = trim((string) $ruleValue);
+            if ($needle === '') {
+                continue;
+            }
+            if (function_exists('mb_stripos')) {
+                if (mb_stripos($fieldValue, $needle) !== false) {
+                    return true;
+                }
+            } elseif (stripos($fieldValue, $needle) !== false) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @param array<string, mixed> $pricing @param array<string, mixed> $offer */

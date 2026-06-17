@@ -89,22 +89,29 @@ if ($aboutSnippet !== '') {
       <?php if ($products === []): ?>
         <p class="text-gray-500 text-sm">لا توجد منتجات في هذا العرض حالياً.</p>
       <?php else: ?>
+        <?php
+          $sectionGuids = array_values(array_filter(array_map(
+              static fn ($row): string => is_array($row) ? material_guid($row) : '',
+              $products
+          ), static fn (string $g): bool => $g !== ''));
+          $sectionGuidsJson = json_encode($sectionGuids, JSON_UNESCAPED_UNICODE);
+        ?>
         <div class="home-strip flex gap-4 overflow-x-auto pb-3 snap-x snap-mandatory scroll-smooth -mx-1 px-1">
             <?php foreach ($products as $item): ?>
             <?php
               if (!is_array($item)) continue;
-              if (empty($item['has_offer'])) {
-                $itemGuid = material_guid($item);
-                if ($itemGuid !== '') {
-                  $overlay = SpecialOfferService::pricingOverlay($item);
-                  if (!empty($overlay['has_offer'])) {
-                    $item = array_merge($item, $overlay);
-                  }
-                }
-              }
               $guid = material_guid($item);
               $sectionSlug = trim((string) ($section['slug'] ?? ''));
               $isOfferSection = !empty($section['is_offer_section']);
+              $contextOffer = $isOfferSection && $sectionSlug !== ''
+                  ? SpecialOfferService::activeOfferBySlug($sectionSlug)
+                  : null;
+              if ($guid !== '') {
+                $overlay = SpecialOfferService::pricingOverlay($item, $contextOffer);
+                if (!empty($overlay['has_offer'])) {
+                  $item = array_merge($item, $overlay);
+                }
+              }
               $cardUrl = $guid !== ''
                   ? product_url(
                       $guid,
@@ -117,7 +124,17 @@ if ($aboutSnippet !== '') {
               $packageUnit = ShareCartService::packageUnitLabel($item);
               $imageGuid = material_image_guid($item);
             ?>
-            <a href="<?= h($cardUrl) ?>" class="home-strip-card snap-start shrink-0 w-56 border border-gray-200 rounded-2xl bg-white shadow-sm overflow-hidden flex flex-col no-underline text-inherit">
+            <a
+              href="<?= h($cardUrl) ?>"
+              class="home-strip-card snap-start shrink-0 w-56 border border-gray-200 rounded-2xl bg-white shadow-sm overflow-hidden flex flex-col no-underline text-inherit"
+              <?php if ($guid !== ''): ?>
+                data-quick-view="1"
+                data-product-guid="<?= h($guid) ?>"
+                data-offer-slug="<?= h($isOfferSection ? $sectionSlug : '') ?>"
+                data-quick-view-guids="<?= h((string) $sectionGuidsJson) ?>"
+                data-return-url="<?= h(home_section_return_url($section)) ?>"
+              <?php endif; ?>
+            >
               <?php if ($showImages): ?>
                 <div class="h-32 bg-gray-100 flex items-center justify-center overflow-hidden">
                   <?php if ($imageGuid !== ''): ?>

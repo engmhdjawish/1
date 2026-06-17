@@ -412,12 +412,17 @@ final class StoreCatalogService
     /** @param list<array<string, mixed>> $products @return list<array<string, mixed>> */
     public static function withOfferPricing(array $products, ?string $offerSlug = null): array
     {
+        $contextOffer = null;
+        if ($offerSlug !== null && trim($offerSlug) !== '') {
+            $contextOffer = SpecialOfferService::activeOfferBySlug($offerSlug);
+        }
+
         $result = [];
         foreach ($products as $product) {
             if (!is_array($product)) {
                 continue;
             }
-            $overlay = SpecialOfferService::pricingOverlay($product, null, $offerSlug);
+            $overlay = SpecialOfferService::pricingOverlay($product, $contextOffer);
             $result[] = !empty($overlay['has_offer']) ? array_merge($product, $overlay) : $product;
         }
 

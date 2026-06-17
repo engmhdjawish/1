@@ -20,13 +20,10 @@ $showPriceUsd = in_array($priceMode, ['both', 'usd'], true);
 $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
 $showImages = (bool) ($displayOptions['show_images'] ?? true);
 
+$contextOffer = $offerSlug !== '' ? SpecialOfferService::activeOfferBySlug($offerSlug) : null;
 $guid = material_guid($product);
 if ($guid !== '') {
-    $overlay = SpecialOfferService::pricingOverlay(
-        $product,
-        null,
-        $offerSlug !== '' ? $offerSlug : null
-    );
+    $overlay = SpecialOfferService::pricingOverlay($product, $contextOffer);
     if (!empty($overlay['has_offer'])) {
         $product = array_merge($product, $overlay);
     }

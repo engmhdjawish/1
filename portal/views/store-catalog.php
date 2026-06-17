@@ -204,12 +204,25 @@ if ($sectionContext !== null) {
     لا توجد نتائج مطابقة لبحثك.
   </div>
 <?php else: ?>
+  <?php
+    $quickViewGuids = array_values(array_filter(array_map(
+        static fn ($row): string => is_array($row) ? material_guid($row) : '',
+        $products
+    ), static fn (string $g): bool => $g !== ''));
+  ?>
   <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
     <?php foreach ($products as $item): ?>
       <?php if (!is_array($item)) continue; ?>
       <?php require __DIR__ . '/partials/product-card.php'; ?>
     <?php endforeach; ?>
   </div>
+  <script>
+    window.__productQuickView = <?= json_encode([
+        'guids' => $quickViewGuids,
+        'offer' => (string) ($productOfferSlug ?? ''),
+        'return' => (string) ($productReturnUrl ?? ''),
+    ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+  </script>
 <?php endif; ?>
 
 <?php

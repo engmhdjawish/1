@@ -206,5 +206,6 @@ $whatsappLink = $whatsapp !== '' ? 'https://wa.me/' . $whatsapp : '';
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape') setOpen(false); });
   })();
 </script>
+<?php require __DIR__ . '/partials/product-quick-view.php'; ?>
 </body>
 </html>
