@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Portal\Services\PortalSettingsService;
 use Portal\Services\ShareCartService;
+use Portal\Services\SpecialOfferService;
 
 /** @var list<array<string, mixed>> $sections */
 
@@ -76,7 +77,7 @@ if ($aboutSnippet !== '') {
             <p class="text-sm text-gray-500 mt-1"><?= h((string) $section['subtitle_ar']) ?></p>
           <?php endif; ?>
         </div>
-        <a href="/store.php" class="text-sm text-primary font-bold">عرض المزيد</a>
+        <a href="<?= h(home_section_store_url($section)) ?>" class="text-sm text-primary font-bold">عرض المزيد</a>
       </div>
 
       <?php if (!empty($section['banner_image_url'])): ?>
@@ -88,20 +89,52 @@ if ($aboutSnippet !== '') {
       <?php if ($products === []): ?>
         <p class="text-gray-500 text-sm">لا توجد منتجات في هذا العرض حالياً.</p>
       <?php else: ?>
+        <?php
+          $sectionGuids = array_values(array_filter(array_map(
+              static fn ($row): string => is_array($row) ? material_guid($row) : '',
+              $products
+          ), static fn (string $g): bool => $g !== ''));
+          $sectionGuidsJson = json_encode($sectionGuids, JSON_UNESCAPED_UNICODE);
+        ?>
         <div class="home-strip flex gap-4 overflow-x-auto pb-3 snap-x snap-mandatory scroll-smooth -mx-1 px-1">
-          <?php foreach ($products as $item): ?>
+            <?php foreach ($products as $item): ?>
             <?php
               if (!is_array($item)) continue;
               $guid = material_guid($item);
-              $cardUrl = $guid !== '' ? product_url($guid) : '/store.php';
+              $sectionSlug = trim((string) ($section['slug'] ?? ''));
+              $isOfferSection = !empty($section['is_offer_section']);
+              $contextOffer = $isOfferSection && $sectionSlug !== ''
+                  ? SpecialOfferService::activeOfferBySlug($sectionSlug)
+                  : null;
+              if ($guid !== '') {
+                $overlay = SpecialOfferService::pricingOverlay($item, $contextOffer);
+                if (!empty($overlay['has_offer'])) {
+                  $item = array_merge($item, $overlay);
+                }
+              }
+              $cardUrl = $guid !== ''
+                  ? product_url(
+                      $guid,
+                      home_section_return_url($section),
+                      $isOfferSection && $sectionSlug !== '' ? $sectionSlug : null
+                  )
+                  : home_section_store_url($section);
               $packaging = ShareCartService::packaging($item);
               $primaryUnit = ShareCartService::primaryUnitLabel($item);
               $packageUnit = ShareCartService::packageUnitLabel($item);
-              $packagePriceSp = ShareCartService::packageSalePriceSp($item);
-              $packagePriceUsd = ShareCartService::packageSalePriceUsd($item);
               $imageGuid = material_image_guid($item);
             ?>
-            <a href="<?= h($cardUrl) ?>" class="home-strip-card snap-start shrink-0 w-56 border border-gray-200 rounded-2xl bg-white shadow-sm overflow-hidden flex flex-col no-underline text-inherit">
+            <a
+              href="<?= h($cardUrl) ?>"
+              class="home-strip-card snap-start shrink-0 w-56 border border-gray-200 rounded-2xl bg-white shadow-sm overflow-hidden flex flex-col no-underline text-inherit"
+              <?php if ($guid !== ''): ?>
+                data-quick-view="1"
+                data-product-guid="<?= h($guid) ?>"
+                data-offer-slug="<?= h($isOfferSection ? $sectionSlug : '') ?>"
+                data-quick-view-guids="<?= h((string) $sectionGuidsJson) ?>"
+                data-return-url="<?= h(home_section_return_url($section)) ?>"
+              <?php endif; ?>
+            >
               <?php if ($showImages): ?>
                 <div class="h-32 bg-gray-100 flex items-center justify-center overflow-hidden">
                   <?php if ($imageGuid !== ''): ?>

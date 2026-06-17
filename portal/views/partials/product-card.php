@@ -8,22 +8,37 @@ use Portal\Services\SpecialOfferService;
 /** @var array<string, mixed> $item */
 /** @var array{show_images?: bool, show_price?: bool, show_quantity?: bool, price_mode?: string} $displayOptions */
 /** @var bool $linkToDetail */
+/** @var string|null $productReturnUrl */
+/** @var string|null $productOfferSlug */
+/** @var bool $useQuickView */
+/** @var list<string>|null $quickViewGuids */
 
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
 $linkToDetail = (bool) ($linkToDetail ?? true);
+$useQuickView = (bool) ($useQuickView ?? true);
+$quickViewGuids = is_array($quickViewGuids ?? null)
+    ? array_values(array_filter(array_map('strval', $quickViewGuids), static fn (string $g): bool => trim($g) !== ''))
+    : [];
+$productReturnUrl = isset($productReturnUrl) ? (string) $productReturnUrl : null;
+$productOfferSlug = isset($productOfferSlug) ? trim((string) $productOfferSlug) : null;
+if ($productOfferSlug === '') {
+    $productOfferSlug = null;
+}
 $showImages = array_key_exists('show_images', $displayOptions) ? (bool) $displayOptions['show_images'] : true;
 $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
 $showPriceSyp = in_array($priceMode, ['both', 'syp'], true);
 $showPriceUsd = in_array($priceMode, ['both', 'usd'], true);
 $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
 
-if (empty($item['has_offer'])) {
-    $guid = material_guid($item);
-    if ($guid !== '') {
-        $overlay = SpecialOfferService::pricingOverlay($item);
-        if (!empty($overlay['has_offer'])) {
-            $item = array_merge($item, $overlay);
-        }
+$contextOffer = null;
+if ($productOfferSlug !== null) {
+    $contextOffer = SpecialOfferService::activeOfferBySlug($productOfferSlug);
+}
+$guid = material_guid($item);
+if ($guid !== '') {
+    $overlay = SpecialOfferService::pricingOverlay($item, $contextOffer);
+    if (!empty($overlay['has_offer'])) {
+        $item = array_merge($item, $overlay);
     }
 }
 
@@ -35,13 +50,29 @@ $unitSaleUsd = ShareCartService::unitSalePriceUsd($item);
 $packageSaleSp = ShareCartService::packageSalePriceSp($item);
 $packageSaleUsd = ShareCartService::packageSalePriceUsd($item);
 $warehouseQty = (float) ($item['warehouseQuantity'] ?? 0);
-$packagesAvailable = $packaging > 0 ? floor($warehouseQty / $packaging) : $warehouseQty;
+$packagesAvailable = 0.0;
+if ($showQuantity) {
+    $packagesAvailable = packages_available_display($item);
+}
 $guid = material_guid($item);
 $imageGuid = material_image_guid($item);
-$detailUrl = $guid !== '' ? product_url($guid) : '';
+$detailUrl = $guid !== '' ? product_url($guid, $productReturnUrl, $productOfferSlug) : '';
+$quickViewGuidsJson = $quickViewGuids !== [] ? json_encode($quickViewGuids, JSON_UNESCAPED_UNICODE) : '';
 ?>
 <article class="product-card border border-gray-200 rounded-2xl bg-white shadow-sm overflow-hidden flex flex-col h-full transition hover:shadow-md hover:-translate-y-0.5">
-  <?php if ($linkToDetail && $detailUrl !== ''): ?><a href="<?= h($detailUrl) ?>" class="flex flex-col flex-1 text-inherit no-underline"><?php endif; ?>
+  <?php if ($linkToDetail && $detailUrl !== ''): ?>
+    <a
+      href="<?= h($detailUrl) ?>"
+      class="flex flex-col flex-1 text-inherit no-underline"
+      <?php if ($useQuickView): ?>
+        data-quick-view="1"
+        data-product-guid="<?= h($guid) ?>"
+        data-offer-slug="<?= h((string) ($productOfferSlug ?? '')) ?>"
+        <?php if ($quickViewGuidsJson !== ''): ?>data-quick-view-guids="<?= h($quickViewGuidsJson) ?>"<?php endif; ?>
+        <?php if ($productReturnUrl !== null && $productReturnUrl !== ''): ?>data-return-url="<?= h($productReturnUrl) ?>"<?php endif; ?>
+      <?php endif; ?>
+    >
+  <?php endif; ?>
     <?php if ($showImages): ?>
       <div class="h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
         <?php if ($imageGuid !== ''): ?>

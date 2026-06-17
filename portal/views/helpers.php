@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Portal\Auth\WebSession;
+use Portal\Services\CatalogSectionResolver;
+use Portal\Services\ShareCartService;
 
 function h(?string $value): string
 {
@@ -160,17 +162,75 @@ function material_image_guid(array $item): string
     return trim((string) ($item['productImageGuid'] ?? $item['ProductImageGuid'] ?? ''));
 }
 
-function product_url(string $guid): string
+function product_url(string $guid, ?string $return = null, ?string $offer = null): string
 {
-    return '/product.php?guid=' . rawurlencode(trim($guid));
+    $guid = trim($guid);
+    if ($guid === '') {
+        return '/store.php';
+    }
+
+    $params = ['guid' => $guid];
+    if ($return !== null && trim($return) !== '') {
+        $params['return'] = safe_return_url($return);
+    }
+    $offer = trim((string) $offer);
+    if ($offer !== '') {
+        $params['offer'] = $offer;
+    }
+
+    return '/product.php?' . http_build_query($params);
 }
 
-/** @param array<string, scalar|null> $params */
+function safe_return_url(mixed $return): string
+{
+    $return = trim((string) $return);
+    if ($return === '' || !str_starts_with($return, '/') || str_starts_with($return, '//')) {
+        return '/store.php';
+    }
+
+    return $return;
+}
+
+function return_link_label(string $returnUrl): string
+{
+    if ($returnUrl === '/' || str_starts_with($returnUrl, '/#') || str_contains($returnUrl, 'index.php')) {
+        return 'العودة للرئيسية';
+    }
+    if (str_contains($returnUrl, 'store.php')) {
+        return 'العودة للمتجر';
+    }
+
+    return 'رجوع';
+}
+
+/** @param array<string, mixed> $section */
+function home_section_store_url(array $section): string
+{
+    return store_url(CatalogSectionResolver::storeLinkParams($section));
+}
+
+/** @param array<string, mixed> $section */
+function home_section_return_url(array $section): string
+{
+    $slug = trim((string) ($section['slug'] ?? ''));
+
+    return $slug !== '' ? '/#' . $slug : '/';
+}
+
+/** @param array<string, mixed> $params */
 function store_url(array $params = []): string
 {
     $filtered = [];
     foreach ($params as $key => $value) {
         if ($value === null) {
+            continue;
+        }
+        if (is_array($value)) {
+            $items = array_values(array_filter(array_map(static fn ($item): string => trim((string) $item), $value), static fn (string $item): bool => $item !== ''));
+            if ($items === []) {
+                continue;
+            }
+            $filtered[$key] = $items;
             continue;
         }
         $text = trim((string) $value);
@@ -187,4 +247,23 @@ function store_url(array $params = []): string
 function format_packaging(float $value): string
 {
     return rtrim(rtrim(number_format($value, 2, '.', ','), '0'), '.');
+}
+
+/** @param array<string, mixed> $item */
+function packages_available_display(array $item): float
+{
+    $packaging = ShareCartService::packaging($item);
+    if ($packaging <= 0) {
+        return 0.0;
+    }
+
+    $warehouseQty = (float) (
+        $item['warehouseQuantity']
+        ?? $item['WarehouseQuantity']
+        ?? $item['qty']
+        ?? $item['Qty']
+        ?? 0
+    );
+
+    return max(0.0, floor($warehouseQty / $packaging));
 }
