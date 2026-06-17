@@ -200,6 +200,44 @@ final class SpecialOfferService
         return ['ok' => true, 'message' => 'تم حفظ العرض.', 'id' => $id];
     }
 
+    /** @return array<string, mixed>|null */
+    public static function storeContextBySlug(string $slug): ?array
+    {
+        $slug = trim($slug);
+        if ($slug === '') {
+            return null;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT id::text AS id, slug, title_ar, subtitle_ar, selection_mode::text AS selection_mode
+             FROM special_offers
+             WHERE slug = :slug
+               AND is_active = TRUE
+               AND starts_at <= NOW()
+               AND (ends_at IS NULL OR ends_at > NOW())
+             LIMIT 1'
+        );
+        $stmt->execute(['slug' => $slug]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row === false) {
+            return null;
+        }
+
+        $id = (string) $row['id'];
+        $parsed = self::parseFilterRows(self::filtersForOffer($id));
+
+        return [
+            'id' => $id,
+            'slug' => (string) $row['slug'],
+            'title_ar' => (string) $row['title_ar'],
+            'subtitle_ar' => (string) ($row['subtitle_ar'] ?? ''),
+            'selection_mode' => (string) ($row['selection_mode'] ?? 'filter'),
+            'filter_rules' => $parsed['rules'],
+            'material_guids' => self::manualProducts($id),
+            'is_offer_section' => true,
+        ];
+    }
+
     public static function delete(string $id): bool
     {
         $stmt = Database::pdo()->prepare('DELETE FROM special_offers WHERE id = :id');

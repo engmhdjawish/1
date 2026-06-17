@@ -8,9 +8,11 @@ use Portal\Services\SpecialOfferService;
 /** @var array<string, mixed> $item */
 /** @var array{show_images?: bool, show_price?: bool, show_quantity?: bool, price_mode?: string} $displayOptions */
 /** @var bool $linkToDetail */
+/** @var string|null $productReturnUrl */
 
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
 $linkToDetail = (bool) ($linkToDetail ?? true);
+$productReturnUrl = isset($productReturnUrl) ? (string) $productReturnUrl : null;
 $showImages = array_key_exists('show_images', $displayOptions) ? (bool) $displayOptions['show_images'] : true;
 $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
 $showPriceSyp = in_array($priceMode, ['both', 'syp'], true);
@@ -35,10 +37,10 @@ $unitSaleUsd = ShareCartService::unitSalePriceUsd($item);
 $packageSaleSp = ShareCartService::packageSalePriceSp($item);
 $packageSaleUsd = ShareCartService::packageSalePriceUsd($item);
 $warehouseQty = (float) ($item['warehouseQuantity'] ?? 0);
-$packagesAvailable = $packaging > 0 ? floor($warehouseQty / $packaging) : $warehouseQty;
+$packagesAvailable = packages_available_display($item);
 $guid = material_guid($item);
 $imageGuid = material_image_guid($item);
-$detailUrl = $guid !== '' ? product_url($guid) : '';
+$detailUrl = $guid !== '' ? product_url($guid, $productReturnUrl) : '';
 ?>
 <article class="product-card border border-gray-200 rounded-2xl bg-white shadow-sm overflow-hidden flex flex-col h-full transition hover:shadow-md hover:-translate-y-0.5">
   <?php if ($linkToDetail && $detailUrl !== ''): ?><a href="<?= h($detailUrl) ?>" class="flex flex-col flex-1 text-inherit no-underline"><?php endif; ?>

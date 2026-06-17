@@ -8,6 +8,7 @@ use Portal\Services\SpecialOfferService;
 
 /** @var array<string, mixed> $product */
 /** @var array<string, mixed> $displayOptions */
+/** @var string|null $returnUrl */
 
 $product = is_array($product ?? null) ? $product : [];
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
@@ -45,8 +46,10 @@ $offerMin = $offer !== null && is_numeric((string) ($offer['min_packages'] ?? ''
 $offerMax = $offer !== null && is_numeric((string) ($offer['max_packages'] ?? ''))
     ? (float) $offer['max_packages'] : null;
 $warehouseQty = (float) ($product['warehouseQuantity'] ?? 0);
-$packagesAvailable = $packaging > 0 ? floor($warehouseQty / $packaging) : $warehouseQty;
-$imageGuid = material_image_guid($product);
+$packagesAvailable = packages_available_display($product);
+
+$returnUrl = safe_return_url($returnUrl ?? ($_GET['return'] ?? '/store.php'));
+$backLabel = return_link_label($returnUrl);
 
 $specs = array_filter([
     'النوع' => (string) ($product['materialType'] ?? ''),
@@ -56,11 +59,12 @@ $specs = array_filter([
     'بلد المنشأ' => (string) ($product['countryOfOrigin'] ?? ''),
     'المجموعة' => (string) ($product['groupName'] ?? ''),
 ], static fn (string $value): bool => trim($value) !== '');
+$imageGuid = material_image_guid($product);
 ?>
 <section class="mb-4">
-  <a href="/store.php" class="text-sm text-primary font-semibold inline-flex items-center gap-1">
+  <a href="<?= h($returnUrl) ?>" class="text-sm text-primary font-semibold inline-flex items-center gap-1">
     <span class="material-symbols-outlined text-base" aria-hidden="true">arrow_forward</span>
-    العودة للمتجر
+    <?= h($backLabel) ?>
   </a>
 </section>
 
@@ -144,7 +148,7 @@ $specs = array_filter([
       <?php endif; ?>
 
       <div class="flex flex-wrap gap-2 pt-2">
-        <a href="/store.php" class="h-11 inline-flex items-center justify-center rounded-xl border border-gray-300 px-5 text-sm font-bold">متابعة التصفح</a>
+        <a href="<?= h($returnUrl) ?>" class="h-11 inline-flex items-center justify-center rounded-xl border border-gray-300 px-5 text-sm font-bold"><?= h($backLabel) ?></a>
         <?php if (!CustomerSession::check()): ?>
           <a href="/login.php?type=customer" class="h-11 inline-flex items-center justify-center rounded-xl bg-primary text-white px-5 text-sm font-bold">دخول العملاء</a>
         <?php endif; ?>

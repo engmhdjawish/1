@@ -60,9 +60,44 @@ final class StoreCatalogService
         $pageSize = 24;
         $search = trim((string) ($query['q'] ?? $query['search'] ?? ''));
         $sort = self::normalizeSort($query['sort'] ?? 'number:asc');
+        $sectionContext = CatalogSectionResolver::resolve(
+            trim((string) ($query['section'] ?? '')),
+            trim((string) ($query['offer'] ?? ''))
+        );
+
         $materialTypes = self::parseList($query['materialTypes'] ?? []);
         $manufacturers = self::parseList($query['manufacturers'] ?? []);
+        $ageCategories = self::parseList($query['ageCategories'] ?? []);
+        $sizeRanges = self::parseList($query['sizeRanges'] ?? []);
+        $countryOfOrigins = self::parseList($query['countryOfOrigins'] ?? []);
+        $groupGuids = self::parseList($query['groupGuids'] ?? []);
+        $storeGuids = self::parseList($query['storeGuids'] ?? []);
         $isAvailable = self::parseNullableBool($query['isAvailable'] ?? null);
+        $hasImage = self::parseNullableBool($query['hasImage'] ?? null);
+
+        if ($sectionContext !== null && $materialTypes === [] && $manufacturers === [] && $search === '') {
+            if ((string) ($sectionContext['selection_mode'] ?? '') === 'manual') {
+                return self::catalogFromManualSection($sectionContext, $page, $pageSize, $sort, $search);
+            }
+
+            $rules = is_array($sectionContext['filter_rules'] ?? null) ? $sectionContext['filter_rules'] : [];
+            $materialTypes = self::parseList($rules['material_types'] ?? []);
+            $manufacturers = self::parseList($rules['manufacturers'] ?? []);
+            $ageCategories = self::parseList($rules['age_categories'] ?? []);
+            $sizeRanges = self::parseList($rules['size_ranges'] ?? []);
+            $countryOfOrigins = self::parseList($rules['country_origins'] ?? []);
+            $groupGuids = self::parseList($rules['group_guids'] ?? []);
+            $storeGuids = self::parseList($rules['store_guids'] ?? []);
+            if ($search === '' && trim((string) ($rules['keyword'] ?? '')) !== '') {
+                $search = trim((string) $rules['keyword']);
+            }
+            if ($isAvailable === null && array_key_exists('is_available', $rules)) {
+                $isAvailable = $rules['is_available'];
+            }
+            if ($hasImage === null && array_key_exists('has_image', $rules)) {
+                $hasImage = $rules['has_image'];
+            }
+        }
 
         $products = [];
         $totalCount = 0;
@@ -74,7 +109,21 @@ final class StoreCatalogService
         }
 
         try {
-            $materials = self::fetchMaterials($page, $pageSize, $search, $sort, $materialTypes, $manufacturers, $isAvailable);
+            $materials = self::fetchMaterialsExtended(
+                $page,
+                $pageSize,
+                $search,
+                $sort,
+                $materialTypes,
+                $manufacturers,
+                $ageCategories,
+                $sizeRanges,
+                $countryOfOrigins,
+                $groupGuids,
+                $storeGuids,
+                $isAvailable,
+                $hasImage
+            );
             if ($materials['ok']) {
                 $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
                 $products = self::withOfferPricing(
@@ -110,14 +159,138 @@ final class StoreCatalogService
             'rangeEnd' => min($totalCount, $page * $pageSize),
             'resultFilters' => $resultFilters,
             'apiError' => $apiError,
-            'filters' => [
-                'q' => $search,
-                'sort' => $sort,
-                'materialTypes' => $materialTypes,
-                'manufacturers' => $manufacturers,
-                'isAvailable' => $isAvailable,
-            ],
+            'section_context' => $sectionContext,
+            'filters' => self::buildFiltersState(
+                $search,
+                $sort,
+                $materialTypes,
+                $manufacturers,
+                $ageCategories,
+                $sizeRanges,
+                $countryOfOrigins,
+                $groupGuids,
+                $storeGuids,
+                $isAvailable,
+                $hasImage,
+                $sectionContext
+            ),
         ];
+    }
+
+    /** @param array<string, mixed> $sectionContext */
+    private static function catalogFromManualSection(
+        array $sectionContext,
+        int $page,
+        int $pageSize,
+        string $sort,
+        string $search
+    ): array {
+        if (self::activePolicy() === null) {
+            return self::emptyCatalogResult($page, $pageSize, 'لم تُضبط سياسة عرض المتجر بعد.');
+        }
+
+        $guids = is_array($sectionContext['material_guids'] ?? null) ? $sectionContext['material_guids'] : [];
+        $guids = array_values(array_unique(array_filter(array_map('strval', $guids), static fn (string $g): bool => trim($g) !== '')));
+
+        $products = [];
+        foreach ($guids as $guid) {
+            try {
+                $material = self::findMaterial($guid);
+                if ($material === null) {
+                    continue;
+                }
+                if ($search !== '') {
+                    $hay = strtolower(
+                        trim((string) ($material['name'] ?? '')) . ' '
+                        . trim((string) ($material['materialCode'] ?? ''))
+                    );
+                    if (!str_contains($hay, strtolower($search))) {
+                        continue;
+                    }
+                }
+                $products[] = $material;
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        $totalCount = count($products);
+        $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
+        $page = min(max(1, $page), $totalPages);
+        $offset = ($page - 1) * $pageSize;
+        $products = array_slice($products, $offset, $pageSize);
+
+        return [
+            'products' => $products,
+            'totalCount' => $totalCount,
+            'page' => $page,
+            'pageSize' => $pageSize,
+            'totalPages' => $totalPages,
+            'rangeStart' => $totalCount === 0 ? 0 : ($offset + 1),
+            'rangeEnd' => min($totalCount, $page * $pageSize),
+            'resultFilters' => self::loadStaticResultFilters(),
+            'apiError' => null,
+            'section_context' => $sectionContext,
+            'filters' => self::buildFiltersState(
+                $search,
+                $sort,
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                null,
+                null,
+                $sectionContext
+            ),
+        ];
+    }
+
+    /**
+     * @param list<string> $materialTypes
+     * @param list<string> $manufacturers
+     * @param list<string> $ageCategories
+     * @param list<string> $sizeRanges
+     * @param list<string> $countryOfOrigins
+     * @param list<string> $groupGuids
+     * @param list<string> $storeGuids
+     * @return array<string, mixed>
+     */
+    private static function buildFiltersState(
+        string $search,
+        string $sort,
+        array $materialTypes,
+        array $manufacturers,
+        array $ageCategories,
+        array $sizeRanges,
+        array $countryOfOrigins,
+        array $groupGuids,
+        array $storeGuids,
+        ?bool $isAvailable,
+        ?bool $hasImage,
+        ?array $sectionContext
+    ): array {
+        $state = [
+            'q' => $search,
+            'sort' => $sort,
+            'materialTypes' => $materialTypes,
+            'manufacturers' => $manufacturers,
+            'ageCategories' => $ageCategories,
+            'sizeRanges' => $sizeRanges,
+            'countryOfOrigins' => $countryOfOrigins,
+            'groupGuids' => $groupGuids,
+            'storeGuids' => $storeGuids,
+            'isAvailable' => $isAvailable,
+            'hasImage' => $hasImage,
+        ];
+
+        if ($sectionContext !== null) {
+            $state = array_merge(CatalogSectionResolver::storeLinkParams($sectionContext), $state);
+        }
+
+        return $state;
     }
 
     public static function findMaterial(string $guid): ?array
@@ -177,9 +350,112 @@ final class StoreCatalogService
                 'sort' => 'number:asc',
                 'materialTypes' => [],
                 'manufacturers' => [],
+                'ageCategories' => [],
+                'sizeRanges' => [],
+                'countryOfOrigins' => [],
+                'groupGuids' => [],
+                'storeGuids' => [],
                 'isAvailable' => null,
+                'hasImage' => null,
             ],
+            'section_context' => null,
         ];
+    }
+
+    /** @param list<string> $materialTypes @param list<string> $manufacturers */
+    private static function fetchMaterialsExtended(
+        int $page,
+        int $pageSize,
+        string $search,
+        string $sort,
+        array $materialTypes,
+        array $manufacturers,
+        array $ageCategories,
+        array $sizeRanges,
+        array $countryOfOrigins,
+        array $groupGuids,
+        array $storeGuids,
+        ?bool $isAvailable,
+        ?bool $hasImage
+    ): array {
+        $primaryQuery = self::buildExtendedApiQuery(
+            $page,
+            $pageSize,
+            $search,
+            $sort,
+            $materialTypes,
+            $manufacturers,
+            $ageCategories,
+            $sizeRanges,
+            $countryOfOrigins,
+            $groupGuids,
+            $storeGuids,
+            $isAvailable,
+            $hasImage,
+            false
+        );
+        $materials = ApiClient::get('/api/materials', $primaryQuery);
+        if ($materials['ok'] || (int) ($materials['status'] ?? 0) !== 400) {
+            return $materials;
+        }
+
+        $fallbackQuery = self::buildExtendedApiQuery(
+            $page,
+            $pageSize,
+            $search,
+            'number:asc',
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            null,
+            null,
+            false
+        );
+        $retry = ApiClient::get('/api/materials', $fallbackQuery);
+        if ($retry['ok']) {
+            return $retry;
+        }
+
+        return $materials;
+    }
+
+    /** @param list<string> $materialTypes @param list<string> $manufacturers */
+    private static function buildExtendedApiQuery(
+        int $page,
+        int $pageSize,
+        string $search,
+        string $sort,
+        array $materialTypes,
+        array $manufacturers,
+        array $ageCategories,
+        array $sizeRanges,
+        array $countryOfOrigins,
+        array $groupGuids,
+        array $storeGuids,
+        ?bool $isAvailable,
+        ?bool $hasImage,
+        bool $includeResultFilters
+    ): array {
+        return array_filter([
+            'page' => $page,
+            'pageSize' => $pageSize,
+            'search' => $search !== '' ? $search : null,
+            'sort' => $sort,
+            'materialTypes' => $materialTypes !== [] ? implode(',', $materialTypes) : null,
+            'manufacturers' => $manufacturers !== [] ? implode(',', $manufacturers) : null,
+            'ageCategories' => $ageCategories !== [] ? implode(',', $ageCategories) : null,
+            'sizeRanges' => $sizeRanges !== [] ? implode(',', $sizeRanges) : null,
+            'countryOfOrigins' => $countryOfOrigins !== [] ? implode(',', $countryOfOrigins) : null,
+            'groupGuids' => $groupGuids !== [] ? implode(',', $groupGuids) : null,
+            'storeGuids' => $storeGuids !== [] ? implode(',', $storeGuids) : null,
+            'isAvailable' => $isAvailable === null ? null : ($isAvailable ? 'true' : 'false'),
+            'hasImage' => $hasImage === null ? null : ($hasImage ? 'true' : 'false'),
+            'includeResultFilters' => $includeResultFilters ? 'true' : null,
+        ], static fn ($value) => $value !== null && $value !== '');
     }
 
     /** @return list<string> */
@@ -210,74 +486,6 @@ final class StoreCatalogService
             '0', 'false', 'no', 'off' => false,
             default => null,
         };
-    }
-
-    /** @param list<string> $materialTypes */
-    /** @param list<string> $manufacturers */
-    private static function buildApiQuery(
-        int $page,
-        int $pageSize,
-        string $search,
-        string $sort,
-        array $materialTypes,
-        array $manufacturers,
-        ?bool $isAvailable,
-        bool $includeResultFilters
-    ): array {
-        return array_filter([
-            'page' => $page,
-            'pageSize' => $pageSize,
-            'search' => $search !== '' ? $search : null,
-            'sort' => $sort,
-            'materialTypes' => $materialTypes !== [] ? implode(',', $materialTypes) : null,
-            'manufacturers' => $manufacturers !== [] ? implode(',', $manufacturers) : null,
-            'isAvailable' => $isAvailable === null ? null : ($isAvailable ? 'true' : 'false'),
-            'includeResultFilters' => $includeResultFilters ? 'true' : null,
-        ], static fn ($value) => $value !== null && $value !== '');
-    }
-
-    /** @param list<string> $materialTypes */
-    /** @param list<string> $manufacturers */
-    private static function fetchMaterials(
-        int $page,
-        int $pageSize,
-        string $search,
-        string $sort,
-        array $materialTypes,
-        array $manufacturers,
-        ?bool $isAvailable
-    ): array {
-        $primaryQuery = self::buildApiQuery(
-            $page,
-            $pageSize,
-            $search,
-            $sort,
-            $materialTypes,
-            $manufacturers,
-            $isAvailable,
-            false
-        );
-        $materials = ApiClient::get('/api/materials', $primaryQuery);
-        if ($materials['ok'] || (int) ($materials['status'] ?? 0) !== 400) {
-            return $materials;
-        }
-
-        $fallbackQuery = self::buildApiQuery(
-            $page,
-            $pageSize,
-            $search,
-            'number:asc',
-            [],
-            [],
-            null,
-            false
-        );
-        $retry = ApiClient::get('/api/materials', $fallbackQuery);
-        if ($retry['ok']) {
-            return $retry;
-        }
-
-        return $materials;
     }
 
     private static function normalizeSort(mixed $sort): string

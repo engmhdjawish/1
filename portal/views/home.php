@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Portal\Services\PortalSettingsService;
 use Portal\Services\ShareCartService;
+use Portal\Services\SpecialOfferService;
 
 /** @var list<array<string, mixed>> $sections */
 
@@ -76,7 +77,7 @@ if ($aboutSnippet !== '') {
             <p class="text-sm text-gray-500 mt-1"><?= h((string) $section['subtitle_ar']) ?></p>
           <?php endif; ?>
         </div>
-        <a href="/store.php" class="text-sm text-primary font-bold">عرض المزيد</a>
+        <a href="<?= h(home_section_store_url($section)) ?>" class="text-sm text-primary font-bold">عرض المزيد</a>
       </div>
 
       <?php if (!empty($section['banner_image_url'])): ?>
@@ -89,16 +90,23 @@ if ($aboutSnippet !== '') {
         <p class="text-gray-500 text-sm">لا توجد منتجات في هذا العرض حالياً.</p>
       <?php else: ?>
         <div class="home-strip flex gap-4 overflow-x-auto pb-3 snap-x snap-mandatory scroll-smooth -mx-1 px-1">
-          <?php foreach ($products as $item): ?>
+            <?php foreach ($products as $item): ?>
             <?php
               if (!is_array($item)) continue;
+              if (empty($item['has_offer'])) {
+                $itemGuid = material_guid($item);
+                if ($itemGuid !== '') {
+                  $overlay = SpecialOfferService::pricingOverlay($item);
+                  if (!empty($overlay['has_offer'])) {
+                    $item = array_merge($item, $overlay);
+                  }
+                }
+              }
               $guid = material_guid($item);
-              $cardUrl = $guid !== '' ? product_url($guid) : '/store.php';
+              $cardUrl = $guid !== '' ? product_url($guid, home_section_return_url($section)) : home_section_store_url($section);
               $packaging = ShareCartService::packaging($item);
               $primaryUnit = ShareCartService::primaryUnitLabel($item);
               $packageUnit = ShareCartService::packageUnitLabel($item);
-              $packagePriceSp = ShareCartService::packageSalePriceSp($item);
-              $packagePriceUsd = ShareCartService::packageSalePriceUsd($item);
               $imageGuid = material_image_guid($item);
             ?>
             <a href="<?= h($cardUrl) ?>" class="home-strip-card snap-start shrink-0 w-56 border border-gray-200 rounded-2xl bg-white shadow-sm overflow-hidden flex flex-col no-underline text-inherit">

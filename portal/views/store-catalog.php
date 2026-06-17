@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Portal\Services\CatalogSectionResolver;
+
 /** @var array<string, mixed> $catalog */
 /** @var array<string, mixed> $displayOptions */
 /** @var bool $isCustomer */
@@ -9,6 +11,7 @@ declare(strict_types=1);
 $catalog = is_array($catalog ?? null) ? $catalog : [];
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
 $filters = is_array($catalog['filters'] ?? null) ? $catalog['filters'] : [];
+$sectionContext = is_array($catalog['section_context'] ?? null) ? $catalog['section_context'] : null;
 $products = is_array($catalog['products'] ?? null) ? $catalog['products'] : [];
 $resultFilters = is_array($catalog['resultFilters'] ?? null) ? $catalog['resultFilters'] : [];
 $materialTypeOptions = is_array($resultFilters['materialTypes'] ?? null) ? $resultFilters['materialTypes'] : [];
@@ -18,16 +21,38 @@ $selectedManufacturers = is_array($filters['manufacturers'] ?? null) ? $filters[
 $availabilityValue = $filters['isAvailable'] === true ? '1' : ($filters['isAvailable'] === false ? '0' : '');
 
 $buildStoreUrl = static function (int $targetPage) use ($filters): string {
-    return store_url([
+    return store_url(array_merge([
         'page' => $targetPage,
         'q' => (string) ($filters['q'] ?? ''),
         'sort' => (string) ($filters['sort'] ?? ''),
         'isAvailable' => $filters['isAvailable'] === true ? '1' : ($filters['isAvailable'] === false ? '0' : ''),
         'materialTypes' => is_array($filters['materialTypes'] ?? null) ? $filters['materialTypes'] : [],
         'manufacturers' => is_array($filters['manufacturers'] ?? null) ? $filters['manufacturers'] : [],
-    ]);
+    ], array_filter([
+        'section' => (string) ($filters['section'] ?? ''),
+        'offer' => (string) ($filters['offer'] ?? ''),
+    ], static fn (string $value): bool => trim($value) !== '')));
 };
+
+$productReturnUrl = null;
+if ($sectionContext !== null) {
+    $productReturnUrl = store_url(CatalogSectionResolver::storeLinkParams($sectionContext));
+}
 ?>
+<?php if ($sectionContext !== null): ?>
+  <section class="mb-4 rounded-2xl border border-primary/20 bg-red-50 px-4 py-3">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <p class="text-xs text-primary font-bold"><?= !empty($sectionContext['is_offer_section']) ? 'قسم العروض' : 'قسم من الرئيسية' ?></p>
+        <h2 class="text-lg font-extrabold text-slate-900"><?= h((string) ($sectionContext['title_ar'] ?? '')) ?></h2>
+        <?php if (!empty($sectionContext['subtitle_ar'])): ?>
+          <p class="text-sm text-gray-600 mt-0.5"><?= h((string) $sectionContext['subtitle_ar']) ?></p>
+        <?php endif; ?>
+      </div>
+      <a href="/" class="text-sm font-bold text-primary">العودة للرئيسية</a>
+    </div>
+  </section>
+<?php endif; ?>
 <section class="mb-6">
   <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
     <div>
@@ -49,6 +74,8 @@ $buildStoreUrl = static function (int $targetPage) use ($filters): string {
 
 <form method="get" class="mb-6 bg-white rounded-2xl border border-gray-200 shadow-sm p-4 md:p-5 space-y-4">
   <input type="hidden" name="page" value="1">
+  <?php if (!empty($filters['section'])): ?><input type="hidden" name="section" value="<?= h((string) $filters['section']) ?>"><?php endif; ?>
+  <?php if (!empty($filters['offer'])): ?><input type="hidden" name="offer" value="<?= h((string) $filters['offer']) ?>"><?php endif; ?>
   <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
     <label class="text-sm md:col-span-2">
       <span class="text-gray-600 block mb-1 font-medium">بحث</span>

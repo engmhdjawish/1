@@ -9,6 +9,7 @@ use Portal\Services\StoreCatalogService;
 require dirname(__DIR__) . '/views/helpers.php';
 
 $guid = trim((string) ($_GET['guid'] ?? ''));
+$returnUrl = trim((string) ($_GET['return'] ?? ''));
 $product = $guid !== '' ? StoreCatalogService::findMaterial($guid) : null;
 
 if ($product === null) {
