@@ -208,6 +208,9 @@
         const target = event.target;
         if (!target || target.tagName === 'TEXTAREA') return;
         if (target === saveBtn) return;
+        if (target.closest('.token-picker')) return;
+        if (target.getAttribute('data-role') === 'search') return;
+        if (target.type === 'search') return;
         event.preventDefault();
       }, true);
     });
@@ -263,6 +266,12 @@
     bindExplicitSave(root);
     bindConfirm(root);
     bindFilterForms(root);
+    if (typeof window.portalTokenPickerInit === 'function') {
+      window.portalTokenPickerInit(root);
+    }
+    if (typeof window.portalHomeSectionsInit === 'function') {
+      window.portalHomeSectionsInit(root);
+    }
   }
 
   function init() {

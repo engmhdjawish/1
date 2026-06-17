@@ -179,6 +179,8 @@ $roleLabel = (string) ($user['role_label'] ?? 'موظف');
     </nav>
   <?php endif; ?>
 
+  <script src="/assets/dashboard/token-picker.js" defer></script>
+  <script src="/assets/dashboard/home-sections.js" defer></script>
   <script src="/assets/dashboard/dashboard.js" defer></script>
 </body>
 </html>
