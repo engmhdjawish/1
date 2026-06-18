@@ -351,7 +351,6 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
     </details>
   <?php endif; ?>
 </form>
-<?php portal_render_media_picker_modal(); ?>
 <?php endif; ?>
 
 <section class="bg-white border border-border-subtle rounded-xl overflow-hidden">

@@ -328,6 +328,9 @@
     if (typeof window.portalSpecialOffersInit === 'function') {
       window.portalSpecialOffersInit(root);
     }
+    if (typeof window.portalMediaPickerInit === 'function') {
+      window.portalMediaPickerInit();
+    }
   }
 
   function init() {

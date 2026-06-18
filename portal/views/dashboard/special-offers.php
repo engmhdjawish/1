@@ -406,7 +406,6 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
     </details>
   <?php endif; ?>
 </form>
-<?php portal_render_media_picker_modal(); ?>
 <?php portal_render_token_picker_script(); ?>
 <?php endif; ?>
 

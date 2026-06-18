@@ -126,8 +126,6 @@ $tabUrl = static function (string $key) use ($tab): string {
     </div>
   </article>
 </form>
-<?php portal_render_media_picker_modal(); ?>
-<?php portal_render_media_picker_script(); ?>
 <?php endif; ?>
 
 <?php if ($tab === 'integration' && $canManageIntegration): ?>

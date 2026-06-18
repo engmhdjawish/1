@@ -11,6 +11,7 @@ use Portal\Support\DashboardNavigation;
 /** @var string|null $currentRoute */
 
 require_once dirname(__DIR__) . '/helpers.php';
+require_once __DIR__ . '/partials/media-picker.php';
 
 $currentRoute ??= parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: '/dashboard/index.php';
 $user ??= WebSession::user();
@@ -20,6 +21,8 @@ $bottomNav = array_slice($quickLinks, 0, 3);
 $roleLabel = (string) ($user['role_label'] ?? 'موظف');
 $dashboardJsFile = dirname(__DIR__, 2) . '/public/assets/dashboard/dashboard.js';
 $dashboardJsVersion = is_file($dashboardJsFile) ? (string) filemtime($dashboardJsFile) : '1';
+$mediaPickerJsFile = dirname(__DIR__, 2) . '/public/assets/dashboard/media-picker.js';
+$mediaPickerJsVersion = is_file($mediaPickerJsFile) ? (string) filemtime($mediaPickerJsFile) : '1';
 ?>
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -181,7 +184,10 @@ $dashboardJsVersion = is_file($dashboardJsFile) ? (string) filemtime($dashboardJ
     </nav>
   <?php endif; ?>
 
+  <?php portal_render_media_picker_modal(); ?>
+
   <script src="/assets/dashboard/token-picker.js" defer></script>
+  <script src="/assets/dashboard/media-picker.js?v=<?= h($mediaPickerJsVersion) ?>" defer></script>
   <script src="/assets/dashboard/home-sections.js" defer></script>
   <script src="/assets/dashboard/special-offers.js" defer></script>
   <script src="/assets/dashboard/dashboard.js?v=<?= h($dashboardJsVersion) ?>" defer></script>
