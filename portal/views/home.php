@@ -7,6 +7,8 @@ use Portal\Services\ShareCartService;
 use Portal\Services\SpecialOfferService;
 
 /** @var list<array<string, mixed>> $sections */
+/** @var list<array<string, mixed>> $ads */
+$ads ??= [];
 
 $company = PortalSettingsService::companySettings();
 $siteName = trim((string) ($company['company_name'] ?? '')) !== '' ? (string) $company['company_name'] : 'جاويش للتجارة';
@@ -57,6 +59,42 @@ if ($aboutSnippet !== '') {
       </div>
     </div>
   </section>
+
+  <?php if ($ads !== []): ?>
+    <section class="home-ad-strip" aria-label="إعلانات" data-home-ad-carousel>
+      <div class="relative rounded-2xl overflow-hidden border border-gray-100 shadow-sm bg-gray-100 aspect-[21/9] md:aspect-[3/1] max-h-52 md:max-h-64">
+        <?php foreach ($ads as $i => $ad): ?>
+          <?php
+            $adAlt = trim((string) ($ad['title_ar'] ?? ''));
+            if ($adAlt === '') {
+                $adAlt = trim((string) ($ad['file_name'] ?? 'إعلان'));
+            }
+          ?>
+          <img
+            src="<?= h((string) ($ad['url'] ?? '')) ?>"
+            alt="<?= h($adAlt) ?>"
+            class="home-ad-slide absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-in-out <?= $i === 0 ? 'opacity-100 z-10' : 'opacity-0 z-0' ?>"
+            loading="<?= $i === 0 ? 'eager' : 'lazy' ?>"
+            decoding="async"
+            data-ad-index="<?= (int) $i ?>"
+          >
+        <?php endforeach; ?>
+      </div>
+      <?php if (count($ads) > 1): ?>
+        <div class="flex justify-center gap-2 mt-3" role="tablist" aria-label="اختيار إعلان">
+          <?php foreach ($ads as $i => $ad): ?>
+            <button
+              type="button"
+              class="home-ad-dot h-2 rounded-full transition-all duration-300 <?= $i === 0 ? 'w-6 bg-primary' : 'w-2 bg-gray-300' ?>"
+              aria-label="إعلان <?= (int) $i + 1 ?>"
+              aria-selected="<?= $i === 0 ? 'true' : 'false' ?>"
+              data-ad-dot="<?= (int) $i ?>"
+            ></button>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+    </section>
+  <?php endif; ?>
 
   <?php foreach ($sections as $section): ?>
     <?php
@@ -180,4 +218,66 @@ if ($aboutSnippet !== '') {
   .home-strip-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
   .home-strip-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.08); }
   .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .home-ad-dot:focus-visible { outline: 2px solid #D81921; outline-offset: 2px; }
 </style>
+<?php if (count($ads) > 1): ?>
+<script>
+  (() => {
+    const root = document.querySelector('[data-home-ad-carousel]');
+    if (!root) return;
+    const slides = Array.from(root.querySelectorAll('.home-ad-slide'));
+    if (slides.length <= 1) return;
+    const dots = Array.from(root.querySelectorAll('[data-ad-dot]'));
+    let index = 0;
+    let timer = null;
+    const intervalMs = 5000;
+
+    const show = (next) => {
+      index = (next + slides.length) % slides.length;
+      slides.forEach((slide, i) => {
+        const active = i === index;
+        slide.classList.toggle('opacity-100', active);
+        slide.classList.toggle('z-10', active);
+        slide.classList.toggle('opacity-0', !active);
+        slide.classList.toggle('z-0', !active);
+      });
+      dots.forEach((dot, i) => {
+        const active = i === index;
+        dot.classList.toggle('bg-primary', active);
+        dot.classList.toggle('w-6', active);
+        dot.classList.toggle('bg-gray-300', !active);
+        dot.classList.toggle('w-2', !active);
+        dot.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+    };
+
+    const stop = () => {
+      if (timer !== null) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+
+    const start = () => {
+      stop();
+      timer = setInterval(() => show(index + 1), intervalMs);
+    };
+
+    dots.forEach((dot) => {
+      dot.addEventListener('click', () => {
+        show(Number.parseInt(dot.getAttribute('data-ad-dot') || '0', 10));
+        start();
+      });
+    });
+
+    root.addEventListener('mouseenter', stop);
+    root.addEventListener('mouseleave', start);
+    root.addEventListener('focusin', stop);
+    root.addEventListener('focusout', (event) => {
+      if (!root.contains(event.relatedTarget)) start();
+    });
+
+    start();
+  })();
+</script>
+<?php endif; ?>
