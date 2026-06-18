@@ -45,7 +45,7 @@ $parseNullableBool = static function (mixed $value): ?bool {
         default => null,
     };
 };
-$buildFilterPayload = static function () use ($parseValues, $parseNullableBool): array {
+$buildFilterPayload = static function () use ($parseValues, $parseNullableFloat, $parseNullableBool): array {
     return [
         'keyword' => trim((string) ($_POST['filter_keyword'] ?? '')),
         'material_types' => $parseValues($_POST['filter_material_types'] ?? []),
@@ -57,6 +57,22 @@ $buildFilterPayload = static function () use ($parseValues, $parseNullableBool):
         'group_guids' => $parseValues($_POST['filter_group_guids'] ?? []),
         'is_available' => $parseNullableBool($_POST['filter_is_available'] ?? null),
         'has_image' => $parseNullableBool($_POST['filter_has_image'] ?? null),
+        'min_warehouse_quantity' => $parseNullableFloat($_POST['filter_min_warehouse_quantity'] ?? null),
+        'max_warehouse_quantity' => $parseNullableFloat($_POST['filter_max_warehouse_quantity'] ?? null),
+        'min_unit_sale_price_syp' => $parseNullableFloat($_POST['filter_min_unit_sale_price_syp'] ?? null),
+        'max_unit_sale_price_syp' => $parseNullableFloat($_POST['filter_max_unit_sale_price_syp'] ?? null),
+        'min_unit_sale_price_usd' => $parseNullableFloat($_POST['filter_min_unit_sale_price_usd'] ?? null),
+        'max_unit_sale_price_usd' => $parseNullableFloat($_POST['filter_max_unit_sale_price_usd'] ?? null),
+        'min_unit_purchase_price_usd' => $parseNullableFloat($_POST['filter_min_unit_purchase_price_usd'] ?? null),
+        'max_unit_purchase_price_usd' => $parseNullableFloat($_POST['filter_max_unit_purchase_price_usd'] ?? null),
+    ];
+};
+$buildDisplayOptions = static function (): array {
+    $priceMode = trim((string) ($_POST['option_price_mode'] ?? 'both'));
+
+    return [
+        'show_images' => isset($_POST['option_show_images']),
+        'price_mode' => in_array($priceMode, ['both', 'syp', 'usd', 'none'], true) ? $priceMode : 'both',
     ];
 };
 
@@ -70,68 +86,94 @@ $user = WebSession::user();
 if (isset($_GET['saved']) && $_GET['saved'] === '1') {
     $flash = 'تم حفظ العرض.';
 }
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = trim((string) ($_POST['action'] ?? ''));
-    if ($action === 'save_offer') {
-        $selectionMode = trim((string) ($_POST['selection_mode'] ?? 'filter'));
-        $payload = [
-            'id' => trim((string) ($_POST['id'] ?? '')),
-            'slug' => trim((string) ($_POST['slug'] ?? '')),
-            'title_ar' => trim((string) ($_POST['title_ar'] ?? '')),
-            'subtitle_ar' => trim((string) ($_POST['subtitle_ar'] ?? '')),
-            'badge_text_ar' => trim((string) ($_POST['badge_text_ar'] ?? '')),
-            'banner_image_url' => trim((string) ($_POST['banner_image_url'] ?? '')),
-            'selection_mode' => $selectionMode,
-            'discount_type' => trim((string) ($_POST['discount_type'] ?? 'percent')),
-            'discount_percent' => $_POST['discount_percent'] ?? null,
-            'fixed_price_syp' => $_POST['fixed_price_syp'] ?? null,
-            'fixed_price_usd' => $_POST['fixed_price_usd'] ?? null,
-            'starts_at' => trim((string) ($_POST['starts_at'] ?? '')),
-            'ends_at' => trim((string) ($_POST['ends_at'] ?? '')),
-            'is_active' => isset($_POST['is_active']),
-            'priority' => (int) ($_POST['priority'] ?? 0),
-            'min_packages' => $_POST['min_packages'] ?? null,
-            'max_packages' => $_POST['max_packages'] ?? null,
-            'max_products' => (int) ($_POST['max_products'] ?? 12),
-            'show_on_home' => isset($_POST['show_on_home']),
-            'home_sort_order' => (int) ($_POST['home_sort_order'] ?? 0),
-            'filter_rules' => $selectionMode === 'filter' ? $buildFilterPayload() : [],
-            'material_guids' => $selectionMode === 'manual' ? $parseValues($_POST['manual_material_guids'] ?? []) : [],
-        ];
-        $result = SpecialOfferService::save($payload, isset($user['id']) ? (string) $user['id'] : null);
-        if ($result['ok']) {
-            header('Location: /dashboard/special-offers.php?edit=' . urlencode((string) $result['id']) . '&saved=1');
-            exit;
-        }
-        $flash = $result['message'];
-        $flashType = 'error';
-        $showForm = true;
-    } elseif ($action === 'toggle_offer') {
-        $ok = SpecialOfferService::toggleActive(trim((string) ($_POST['id'] ?? '')), ($_POST['next_active'] ?? '0') === '1');
-        $flash = $ok ? 'تم تحديث حالة العرض.' : 'تعذر التحديث.';
-        $flashType = $ok ? 'success' : 'error';
-        if (DashboardHttp::wantsJson()) {
-            DashboardHttp::json($ok, $flash, ['reload' => true]);
-        }
-    } elseif ($action === 'delete_offer') {
-        $deleteId = trim((string) ($_POST['id'] ?? ''));
-        $ok = SpecialOfferService::delete($deleteId);
-        if ($ok) {
-            header('Location: /dashboard/special-offers.php?deleted=1');
-            exit;
-        }
-        $flash = 'تعذر حذف العرض.';
-        $flashType = 'error';
-    }
-}
-
-if (isset($_GET['deleted']) && $_GET['deleted'] === '1' && $flash === null) {
+if (isset($_GET['deleted']) && $_GET['deleted'] === '1') {
     $flash = 'تم حذف العرض.';
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    try {
+        $action = trim((string) ($_POST['action'] ?? ''));
+        if ($action === 'save_offer') {
+            $selectionMode = trim((string) ($_POST['selection_mode'] ?? 'filter'));
+            $payload = [
+                'id' => trim((string) ($_POST['id'] ?? '')),
+                'slug' => trim((string) ($_POST['slug'] ?? '')),
+                'title_ar' => trim((string) ($_POST['title_ar'] ?? '')),
+                'subtitle_ar' => trim((string) ($_POST['subtitle_ar'] ?? '')),
+                'badge_text_ar' => trim((string) ($_POST['badge_text_ar'] ?? '')),
+                'banner_image_url' => trim((string) ($_POST['banner_image_url'] ?? '')),
+                'selection_mode' => $selectionMode,
+                'discount_type' => trim((string) ($_POST['discount_type'] ?? 'percent')),
+                'discount_percent' => $_POST['discount_percent'] ?? null,
+                'fixed_price_syp' => $_POST['fixed_price_syp'] ?? null,
+                'fixed_price_usd' => $_POST['fixed_price_usd'] ?? null,
+                'starts_at' => trim((string) ($_POST['starts_at'] ?? '')),
+                'ends_at' => trim((string) ($_POST['ends_at'] ?? '')),
+                'is_active' => isset($_POST['is_active']),
+                'priority' => (int) ($_POST['priority'] ?? 0),
+                'min_packages' => $_POST['min_packages'] ?? null,
+                'max_packages' => $_POST['max_packages'] ?? null,
+                'max_products' => (int) ($_POST['max_products'] ?? 12),
+                'show_on_home' => isset($_POST['show_on_home']),
+                'home_sort_order' => (int) ($_POST['home_sort_order'] ?? 0),
+                'filter_rules' => $selectionMode === 'filter' ? $buildFilterPayload() : [],
+                'material_guids' => $selectionMode === 'manual' ? $parseValues($_POST['manual_material_guids'] ?? []) : [],
+                'display_options' => $buildDisplayOptions(),
+            ];
+            $result = SpecialOfferService::save($payload, isset($user['id']) ? (string) $user['id'] : null);
+            $flash = $result['message'];
+            $flashType = $result['ok'] ? 'success' : 'error';
+            if ($result['ok']) {
+                if (DashboardHttp::wantsJson()) {
+                    DashboardHttp::json(true, $flash, [
+                        'reload' => true,
+                        'redirect' => '/dashboard/special-offers.php?edit=' . urlencode((string) $result['id']) . '&saved=1',
+                    ]);
+                }
+                header('Location: /dashboard/special-offers.php?edit=' . urlencode((string) $result['id']) . '&saved=1');
+                exit;
+            }
+            $showForm = true;
+            $editId = trim((string) ($_POST['id'] ?? ''));
+            $isNew = $editId === '';
+        } elseif ($action === 'toggle_offer') {
+            $ok = SpecialOfferService::toggleActive(trim((string) ($_POST['id'] ?? '')), ($_POST['next_active'] ?? '0') === '1');
+            $flash = $ok ? 'تم تحديث حالة العرض.' : 'تعذر التحديث.';
+            $flashType = $ok ? 'success' : 'error';
+        } elseif ($action === 'delete_offer') {
+            $deleteId = trim((string) ($_POST['id'] ?? ''));
+            $ok = SpecialOfferService::delete($deleteId);
+            $flash = $ok ? 'تم حذف العرض.' : 'تعذر حذف العرض.';
+            $flashType = $ok ? 'success' : 'error';
+            if ($ok) {
+                if (DashboardHttp::wantsJson()) {
+                    DashboardHttp::json(true, $flash, ['reload' => true]);
+                }
+                header('Location: /dashboard/special-offers.php?deleted=1');
+                exit;
+            }
+        } else {
+            $flash = 'إجراء غير معروف.';
+            $flashType = 'error';
+        }
+    } catch (\Throwable $exception) {
+        $flash = 'تعذر تنفيذ العملية: ' . $exception->getMessage();
+        $flashType = 'error';
+    }
+
+    if (DashboardHttp::wantsJson()) {
+        DashboardHttp::json(
+            $flashType === 'success',
+            (string) ($flash ?? 'تعذر تنفيذ العملية.'),
+            ['reload' => $flashType === 'success']
+        );
+    }
+}
+
 $dbError = null;
+$stats = ['total' => 0, 'active' => 0, 'manual' => 0, 'filter' => 0, 'on_home' => 0];
 try {
+    $stats = SpecialOfferService::stats();
     $offers = SpecialOfferService::adminList();
 } catch (\Throwable $e) {
     $offers = [];
@@ -169,6 +211,7 @@ if ($showForm && $editOffer === null) {
         'show_on_home' => 1,
         'home_sort_order' => 0,
         'filter_rules' => [],
+        'display_options' => SpecialOfferService::defaultDisplayOptions(),
         'material_guids' => [],
         'manual_products' => [],
         'preview_products' => [],

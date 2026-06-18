@@ -23,6 +23,26 @@ final class SpecialOfferService
     private const FILTER_GROUP_GUID = 'group_guid';
     private const FILTER_IS_AVAILABLE = 'is_available';
     private const FILTER_HAS_IMAGE = 'has_image';
+    private const FILTER_MIN_WAREHOUSE_QUANTITY = 'min_warehouse_quantity';
+    private const FILTER_MAX_WAREHOUSE_QUANTITY = 'max_warehouse_quantity';
+    private const FILTER_MIN_UNIT_SALE_PRICE_SYP = 'min_unit_sale_price_syp';
+    private const FILTER_MAX_UNIT_SALE_PRICE_SYP = 'max_unit_sale_price_syp';
+    private const FILTER_MIN_UNIT_SALE_PRICE_USD = 'min_unit_sale_price_usd';
+    private const FILTER_MAX_UNIT_SALE_PRICE_USD = 'max_unit_sale_price_usd';
+    private const FILTER_MIN_UNIT_PURCHASE_PRICE_USD = 'min_unit_purchase_price_usd';
+    private const FILTER_MAX_UNIT_PURCHASE_PRICE_USD = 'max_unit_purchase_price_usd';
+
+    private const OPTION_SHOW_IMAGES = 'option_show_images';
+    private const OPTION_PRICE_MODE = 'option_price_mode';
+
+    /** @return array{show_images: bool, price_mode: string} */
+    public static function defaultDisplayOptions(): array
+    {
+        return [
+            'show_images' => true,
+            'price_mode' => 'both',
+        ];
+    }
 
     /** @return list<array<string, mixed>> */
     public static function activeHomeSections(): array
@@ -49,7 +69,7 @@ final class SpecialOfferService
             $section['is_offer_section'] = true;
             $products = self::loadOfferProducts($section);
             $section['products'] = self::attachOfferPricing($products, $section);
-            $section['display_options'] = ['show_images' => true, 'price_mode' => 'both'];
+            $section['display_options'] = $parsed['display_options'];
         }
 
         return $sections;
@@ -72,7 +92,9 @@ final class SpecialOfferService
              FROM special_offers so
              LEFT JOIN (
                 SELECT offer_id, COUNT(*)::int AS filters_count
-                FROM special_offer_filters GROUP BY offer_id
+                FROM special_offer_filters
+                WHERE filter_type NOT IN (\'option_show_images\', \'option_price_mode\')
+                GROUP BY offer_id
              ) fp ON fp.offer_id = so.id
              LEFT JOIN (
                 SELECT offer_id, COUNT(*)::int AS products_count
@@ -80,6 +102,28 @@ final class SpecialOfferService
              ) mp ON mp.offer_id = so.id
              ORDER BY so.home_sort_order ASC, so.created_at DESC'
         )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /** @return array{total: int, active: int, manual: int, filter: int, on_home: int} */
+    public static function stats(): array
+    {
+        $row = Database::pdo()->query(
+            'SELECT
+                COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE is_active = TRUE)::int AS active,
+                COUNT(*) FILTER (WHERE selection_mode = \'manual\')::int AS manual,
+                COUNT(*) FILTER (WHERE selection_mode = \'filter\')::int AS filter,
+                COUNT(*) FILTER (WHERE show_on_home = TRUE)::int AS on_home
+             FROM special_offers'
+        )->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'total' => (int) ($row['total'] ?? 0),
+            'active' => (int) ($row['active'] ?? 0),
+            'manual' => (int) ($row['manual'] ?? 0),
+            'filter' => (int) ($row['filter'] ?? 0),
+            'on_home' => (int) ($row['on_home'] ?? 0),
+        ];
     }
 
     public static function getById(string $id): ?array
@@ -103,6 +147,7 @@ final class SpecialOfferService
 
         $parsed = self::parseFilterRows(self::filtersForOffer($id));
         $row['filter_rules'] = $parsed['rules'];
+        $row['display_options'] = $parsed['display_options'];
         $row['material_guids'] = self::manualProducts($id);
         $row['manual_products'] = self::loadManualProductDetails($row['material_guids']);
         $row['preview_products'] = self::attachOfferPricing(self::loadOfferProducts($row), $row);
@@ -194,7 +239,14 @@ final class SpecialOfferService
             $stmt->execute($params);
         }
 
-        self::syncFilters($id, is_array($payload['filter_rules'] ?? null) ? $payload['filter_rules'] : []);
+        $displayOptions = is_array($payload['display_options'] ?? null)
+            ? $payload['display_options']
+            : self::defaultDisplayOptions();
+        self::syncFilters(
+            $id,
+            is_array($payload['filter_rules'] ?? null) ? $payload['filter_rules'] : [],
+            $displayOptions
+        );
         self::syncManualProducts($id, is_array($payload['material_guids'] ?? null) ? $payload['material_guids'] : []);
 
         return ['ok' => true, 'message' => 'تم حفظ العرض.', 'id' => $id];
@@ -718,8 +770,8 @@ final class SpecialOfferService
         return $items;
     }
 
-    /** @param array<string, mixed> $rules */
-    private static function syncFilters(string $offerId, array $rules): void
+    /** @param array<string, mixed> $rules @param array{show_images?: bool, price_mode?: string} $displayOptions */
+    private static function syncFilters(string $offerId, array $rules, array $displayOptions = []): void
     {
         $pdo = Database::pdo();
         $pdo->prepare('DELETE FROM special_offer_filters WHERE offer_id = :id')->execute(['id' => $offerId]);
@@ -738,6 +790,12 @@ final class SpecialOfferService
                 $insert($type, $value);
             }
         };
+        $insertNumber = static function (string $type, mixed $value) use ($insert): void {
+            if ($value === null || $value === '') {
+                return;
+            }
+            $insert($type, is_bool($value) ? ($value ? '1' : '0') : (string) $value);
+        };
 
         $insert(self::FILTER_KEYWORD, trim((string) ($rules['keyword'] ?? '')));
         $insertList(self::FILTER_MATERIAL_TYPE, $rules['material_types'] ?? []);
@@ -747,16 +805,27 @@ final class SpecialOfferService
         $insertList(self::FILTER_COUNTRY_ORIGIN, $rules['country_origins'] ?? []);
         $insertList(self::FILTER_STORE_GUID, $rules['store_guids'] ?? []);
         $insertList(self::FILTER_GROUP_GUID, $rules['group_guids'] ?? []);
-        if (($rules['is_available'] ?? null) === true) {
-            $insert(self::FILTER_IS_AVAILABLE, '1');
-        } elseif (($rules['is_available'] ?? null) === false) {
-            $insert(self::FILTER_IS_AVAILABLE, '0');
+        $insertNumber(self::FILTER_IS_AVAILABLE, $rules['is_available'] ?? null);
+        $insertNumber(self::FILTER_HAS_IMAGE, $rules['has_image'] ?? null);
+        $insertNumber(self::FILTER_MIN_WAREHOUSE_QUANTITY, $rules['min_warehouse_quantity'] ?? null);
+        $insertNumber(self::FILTER_MAX_WAREHOUSE_QUANTITY, $rules['max_warehouse_quantity'] ?? null);
+        $insertNumber(self::FILTER_MIN_UNIT_SALE_PRICE_SYP, $rules['min_unit_sale_price_syp'] ?? null);
+        $insertNumber(self::FILTER_MAX_UNIT_SALE_PRICE_SYP, $rules['max_unit_sale_price_syp'] ?? null);
+        $insertNumber(self::FILTER_MIN_UNIT_SALE_PRICE_USD, $rules['min_unit_sale_price_usd'] ?? null);
+        $insertNumber(self::FILTER_MAX_UNIT_SALE_PRICE_USD, $rules['max_unit_sale_price_usd'] ?? null);
+        $insertNumber(self::FILTER_MIN_UNIT_PURCHASE_PRICE_USD, $rules['min_unit_purchase_price_usd'] ?? null);
+        $insertNumber(self::FILTER_MAX_UNIT_PURCHASE_PRICE_USD, $rules['max_unit_purchase_price_usd'] ?? null);
+
+        $defaults = self::defaultDisplayOptions();
+        $showImages = array_key_exists('show_images', $displayOptions)
+            ? (bool) $displayOptions['show_images']
+            : $defaults['show_images'];
+        $priceMode = trim((string) ($displayOptions['price_mode'] ?? $defaults['price_mode']));
+        if (!in_array($priceMode, ['both', 'syp', 'usd', 'none'], true)) {
+            $priceMode = $defaults['price_mode'];
         }
-        if (($rules['has_image'] ?? null) === true) {
-            $insert(self::FILTER_HAS_IMAGE, '1');
-        } elseif (($rules['has_image'] ?? null) === false) {
-            $insert(self::FILTER_HAS_IMAGE, '0');
-        }
+        $insert(self::OPTION_SHOW_IMAGES, $showImages ? '1' : '0');
+        $insert(self::OPTION_PRICE_MODE, $priceMode);
     }
 
     /** @param list<string> $guids */
@@ -784,9 +853,10 @@ final class SpecialOfferService
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
-    /** @param list<array{filter_type: string, value_ar: string}> $rows @return array{rules: array<string, mixed>} */
+    /** @param list<array{filter_type: string, value_ar: string}> $rows @return array{rules: array<string, mixed>, display_options: array{show_images: bool, price_mode: string}} */
     private static function parseFilterRows(array $rows): array
     {
+        $displayOptions = self::defaultDisplayOptions();
         $rules = [
             'keyword' => '',
             'material_types' => [],
@@ -798,11 +868,23 @@ final class SpecialOfferService
             'group_guids' => [],
             'is_available' => null,
             'has_image' => null,
+            'min_warehouse_quantity' => null,
+            'max_warehouse_quantity' => null,
+            'min_unit_sale_price_syp' => null,
+            'max_unit_sale_price_syp' => null,
+            'min_unit_sale_price_usd' => null,
+            'max_unit_sale_price_usd' => null,
+            'min_unit_purchase_price_usd' => null,
+            'max_unit_purchase_price_usd' => null,
         ];
         foreach ($rows as $row) {
             $type = (string) ($row['filter_type'] ?? '');
             $value = (string) ($row['value_ar'] ?? '');
             match ($type) {
+                self::OPTION_SHOW_IMAGES => $displayOptions['show_images'] = self::toNullableBool($value) ?? true,
+                self::OPTION_PRICE_MODE => $displayOptions['price_mode'] = in_array($value, ['both', 'syp', 'usd', 'none'], true)
+                    ? $value
+                    : 'both',
                 self::FILTER_KEYWORD => $rules['keyword'] = $value,
                 self::FILTER_MATERIAL_TYPE => $rules['material_types'][] = $value,
                 self::FILTER_AGE_CATEGORY => $rules['age_categories'][] = $value,
@@ -813,11 +895,19 @@ final class SpecialOfferService
                 self::FILTER_GROUP_GUID => $rules['group_guids'][] = $value,
                 self::FILTER_IS_AVAILABLE => $rules['is_available'] = self::toNullableBool($value),
                 self::FILTER_HAS_IMAGE => $rules['has_image'] = self::toNullableBool($value),
+                self::FILTER_MIN_WAREHOUSE_QUANTITY => $rules['min_warehouse_quantity'] = self::toNullableFloat($value),
+                self::FILTER_MAX_WAREHOUSE_QUANTITY => $rules['max_warehouse_quantity'] = self::toNullableFloat($value),
+                self::FILTER_MIN_UNIT_SALE_PRICE_SYP => $rules['min_unit_sale_price_syp'] = self::toNullableFloat($value),
+                self::FILTER_MAX_UNIT_SALE_PRICE_SYP => $rules['max_unit_sale_price_syp'] = self::toNullableFloat($value),
+                self::FILTER_MIN_UNIT_SALE_PRICE_USD => $rules['min_unit_sale_price_usd'] = self::toNullableFloat($value),
+                self::FILTER_MAX_UNIT_SALE_PRICE_USD => $rules['max_unit_sale_price_usd'] = self::toNullableFloat($value),
+                self::FILTER_MIN_UNIT_PURCHASE_PRICE_USD => $rules['min_unit_purchase_price_usd'] = self::toNullableFloat($value),
+                self::FILTER_MAX_UNIT_PURCHASE_PRICE_USD => $rules['max_unit_purchase_price_usd'] = self::toNullableFloat($value),
                 default => null,
             };
         }
 
-        return ['rules' => $rules];
+        return ['rules' => $rules, 'display_options' => $displayOptions];
     }
 
     /** @return list<string> */
@@ -870,6 +960,22 @@ final class SpecialOfferService
             $query['hasImage'] = 'true';
         } elseif (($rules['has_image'] ?? null) === false) {
             $query['hasImage'] = 'false';
+        }
+
+        foreach ([
+            'min_warehouse_quantity' => 'minWarehouseQuantity',
+            'max_warehouse_quantity' => 'maxWarehouseQuantity',
+            'min_unit_sale_price_syp' => 'minUnitSalePriceSyp',
+            'max_unit_sale_price_syp' => 'maxUnitSalePriceSyp',
+            'min_unit_sale_price_usd' => 'minUnitSalePriceUsd',
+            'max_unit_sale_price_usd' => 'maxUnitSalePriceUsd',
+            'min_unit_purchase_price_usd' => 'minUnitPurchasePriceUsd',
+            'max_unit_purchase_price_usd' => 'maxUnitPurchasePriceUsd',
+        ] as $ruleKey => $apiKey) {
+            $value = $rules[$ruleKey] ?? null;
+            if ($value !== null && $value !== '') {
+                $query[$apiKey] = $value;
+            }
         }
 
         return $query;

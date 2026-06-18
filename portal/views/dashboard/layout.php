@@ -183,6 +183,7 @@ $dashboardJsVersion = is_file($dashboardJsFile) ? (string) filemtime($dashboardJ
 
   <script src="/assets/dashboard/token-picker.js" defer></script>
   <script src="/assets/dashboard/home-sections.js" defer></script>
-  <script src="/assets/dashboard/dashboard.js" defer></script>
+  <script src="/assets/dashboard/special-offers.js" defer></script>
+  <script src="/assets/dashboard/dashboard.js?v=<?= h($dashboardJsVersion) ?>" defer></script>
 </body>
 </html>

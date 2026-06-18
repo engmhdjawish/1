@@ -191,8 +191,9 @@
         body,
       });
       showToast(data.message || 'تم التنفيذ.', data.ok === false ? 'error' : 'success');
-      if (redirect) {
-        await navigate(redirect);
+      const target = redirect || data.redirect;
+      if (target) {
+        await navigate(target);
       } else if (reload || data.reload) {
         await navigate(window.location.href, false);
       }
@@ -323,6 +324,9 @@
     }
     if (typeof window.portalHomeSectionsInit === 'function') {
       window.portalHomeSectionsInit(root);
+    }
+    if (typeof window.portalSpecialOffersInit === 'function') {
+      window.portalSpecialOffersInit(root);
     }
   }
 
