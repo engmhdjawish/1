@@ -253,14 +253,24 @@ final class MaterialImageLinkService
     }
 
     /** @return array{ok: bool, message: string} */
-    public static function deleteImage(string $imageGuid, string $fileName = ''): array
+    public static function deleteImage(string $imageGuid, string $fileName = '', ?string $materialGuid = null): array
     {
         $imageGuid = trim($imageGuid);
         if ($imageGuid === '') {
             return ['ok' => false, 'message' => 'معرف الصورة مطلوب.'];
         }
 
-        self::unlinkImage($imageGuid);
+        $materialGuid = trim((string) $materialGuid);
+        $unlink = self::unlinkImage(
+            $imageGuid,
+            $materialGuid !== '' ? $materialGuid : null
+        );
+        if ($materialGuid !== '' && !($unlink['ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'message' => (string) ($unlink['message'] ?? 'فشل فك الربط بالمادة قبل الحذف.'),
+            ];
+        }
 
         try {
             $response = ApiClient::delete('/api/material-images/' . rawurlencode($imageGuid));
@@ -268,23 +278,21 @@ final class MaterialImageLinkService
             return ['ok' => false, 'message' => $exception->getMessage()];
         }
 
-        $ok = (bool) ($response['ok'] ?? false) || (int) ($response['status'] ?? 0) === 204;
-        if (!$ok) {
+        $status = (int) ($response['status'] ?? 0);
+        $amineDeleted = (bool) ($response['ok'] ?? false) || $status === 204 || $status === 404;
+        if (!$amineDeleted) {
             return [
                 'ok' => false,
                 'message' => (string) ($response['error'] ?? ($response['data']['message'] ?? 'فشل حذف الصورة من الأمين.')),
             ];
         }
 
-        $fileName = basename(str_replace('\\', '/', trim($fileName)));
-        if ($fileName !== '' && !str_contains($fileName, '..')) {
-            MaterialImageStorageService::deleteLocalFile($fileName);
-            MaterialImageSyncService::removeByFileNameOrGuid($fileName, $imageGuid);
-        } else {
-            MaterialImageSyncService::removeByFileNameOrGuid('', $imageGuid);
-        }
+        MaterialImageSyncService::purgeImageRecords($imageGuid, $fileName);
 
-        return ['ok' => true, 'message' => 'تم حذف الصورة من الأمين والموقع.'];
+        return [
+            'ok' => true,
+            'message' => 'تم حذف الصورة من الأمين والموقع، وفك ارتباطها بالمادة، وإزالة سجلاتها من قواعد البيانات.',
+        ];
     }
 
     /**

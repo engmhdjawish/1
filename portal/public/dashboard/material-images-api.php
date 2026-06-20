@@ -190,7 +190,12 @@ if ($method === 'POST') {
     if ($action === 'delete-image') {
         $imageGuid = trim((string) ($_POST['image_guid'] ?? ''));
         $fileName = trim((string) ($_POST['file_name'] ?? ''));
-        $result = MaterialImageLinkService::deleteImage($imageGuid, $fileName);
+        $materialGuid = trim((string) ($_POST['material_guid'] ?? ''));
+        $result = MaterialImageLinkService::deleteImage(
+            $imageGuid,
+            $fileName,
+            $materialGuid !== '' ? $materialGuid : null
+        );
         echo json_encode($result, JSON_UNESCAPED_UNICODE);
         exit;
     }

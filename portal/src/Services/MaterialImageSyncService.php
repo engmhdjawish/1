@@ -837,21 +837,58 @@ final class MaterialImageSyncService
 
     public static function removeByFileNameOrGuid(string $fileName, string $amineImageGuid): void
     {
+        self::purgeImageRecords($amineImageGuid, $fileName);
+    }
+
+    /**
+     * Delete local files and all matching sync-queue rows for an Amine image.
+     *
+     * @return list<string> file names removed from disk
+     */
+    public static function purgeImageRecords(string $amineImageGuid, string $fileName = ''): array
+    {
         self::ensureTable();
-        $fileName = basename(str_replace('\\', '/', trim($fileName)));
         $amineImageGuid = trim($amineImageGuid);
+        $fileName = basename(str_replace('\\', '/', trim($fileName)));
 
-        if ($fileName !== '' && !str_contains($fileName, '..')) {
-            $stmt = Database::pdo()->prepare('DELETE FROM material_image_sync_queue WHERE file_name = :file_name');
-            $stmt->execute(['file_name' => $fileName]);
-        }
-
+        $conditions = [];
+        $params = [];
         if ($amineImageGuid !== '') {
-            $stmt = Database::pdo()->prepare(
-                'DELETE FROM material_image_sync_queue WHERE amine_image_guid::text = :amine_image_guid'
-            );
-            $stmt->execute(['amine_image_guid' => $amineImageGuid]);
+            $conditions[] = 'amine_image_guid::text = :amine_image_guid';
+            $params['amine_image_guid'] = $amineImageGuid;
         }
+        if ($fileName !== '' && !str_contains($fileName, '..')) {
+            $conditions[] = 'file_name = :file_name';
+            $params['file_name'] = $fileName;
+        }
+        if ($conditions === []) {
+            return [];
+        }
+
+        $where = implode(' OR ', $conditions);
+        $select = Database::pdo()->prepare(
+            "SELECT file_name FROM material_image_sync_queue WHERE {$where}"
+        );
+        $select->execute($params);
+        $fileNames = [];
+        foreach ($select->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+            $name = trim((string) ($row['file_name'] ?? ''));
+            if ($name !== '') {
+                $fileNames[] = $name;
+            }
+        }
+        if ($fileName !== '' && !in_array($fileName, $fileNames, true)) {
+            $fileNames[] = $fileName;
+        }
+
+        foreach ($fileNames as $name) {
+            MaterialImageStorageService::deleteLocalFile($name);
+        }
+
+        $delete = Database::pdo()->prepare("DELETE FROM material_image_sync_queue WHERE {$where}");
+        $delete->execute($params);
+
+        return $fileNames;
     }
 
     public static function recordAssignedCopy(

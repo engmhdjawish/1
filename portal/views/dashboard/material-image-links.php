@@ -265,13 +265,17 @@ declare(strict_types=1);
   }
 
   async function deleteImage(item, button, statusEl) {
-    if (!confirm('حذف الصورة من الأمين والموقع نهائياً؟')) return;
+    const linkedNote = item.is_linked_to_material
+      ? ' سيتم أيضاً فك ربطها بالمادة وحذف سجلها من قواعد البيانات.'
+      : ' سيتم أيضاً حذف سجلها من قواعد البيانات.';
+    if (!confirm(`حذف الصورة من الأمين والموقع نهائياً؟${linkedNote}`)) return;
     button.disabled = true;
     if (statusEl) statusEl.textContent = 'جاري الحذف...';
     try {
       const payload = await postAction('delete-image', {
         image_guid: item.amine_image_guid,
         file_name: item.file_name,
+        material_guid: item.linked_material_guid,
       });
       if (statusEl) statusEl.textContent = payload.message || '';
       linkStatus.textContent = payload.message || '';
