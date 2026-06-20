@@ -219,7 +219,7 @@ final class MaterialImageTemplateService
     }
 
     /** @param array<string, mixed> $config */
-    private static function overlayLayer(\GdImage $canvas, array $config, string layerKey): void
+    private static function overlayLayer(\GdImage $canvas, array $config, string $layerKey): void
     {
         $layers = is_array($config['layers'] ?? null) ? $config['layers'] : [];
         $fileName = trim((string) ($layers[$layerKey] ?? ''));
