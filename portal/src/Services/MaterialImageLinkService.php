@@ -522,14 +522,15 @@ final class MaterialImageLinkService
         string $imageGuid,
         ?string $currentMaterialGuid,
         array $materialGuids,
-        ?string $uploadedByUserId = null
+        ?string $uploadedByUserId = null,
+        array $processedPathsByMaterial = []
     ): array {
         $unlink = self::unlinkImage($imageGuid, $currentMaterialGuid !== null && $currentMaterialGuid !== '' ? $currentMaterialGuid : null);
         if (!($unlink['ok'] ?? false) && $currentMaterialGuid !== null && $currentMaterialGuid !== '') {
             return self::assignError((string) ($unlink['message'] ?? 'فشل فك الربط قبل الاستبدال.'));
         }
 
-        return self::assign($sourceFileName, $materialGuids, $uploadedByUserId, $imageGuid);
+        return self::assign($sourceFileName, $materialGuids, $uploadedByUserId, $imageGuid, $processedPathsByMaterial);
     }
 
     /**
@@ -546,7 +547,8 @@ final class MaterialImageLinkService
         string $sourceFileName,
         array $materialGuids,
         ?string $uploadedByUserId = null,
-        ?string $knownAmineSourceGuid = null
+        ?string $knownAmineSourceGuid = null,
+        array $processedPathsByMaterial = []
     ): array {
         MaterialImageSyncService::ensureTable();
         MaterialImageStorageService::ensureSettings();
@@ -582,6 +584,16 @@ final class MaterialImageLinkService
 
         if (!$hasLocal && $amineSourceGuid === '') {
             return self::assignError('الصورة غير موجودة على الأمين أو الموقع.');
+        }
+
+        if ($processedPathsByMaterial !== []) {
+            return self::assignViaUpload(
+                $hasLocal ? (string) $sourcePath : '',
+                $sourceFileName,
+                $materialGuids,
+                $uploadedByUserId,
+                $processedPathsByMaterial
+            );
         }
 
         $effectiveSourcePath = $hasLocal ? $sourcePath : '';
@@ -794,7 +806,8 @@ final class MaterialImageLinkService
         string $sourcePath,
         string $sourceFileName,
         array $materialGuids,
-        ?string $uploadedByUserId
+        ?string $uploadedByUserId,
+        array $processedPathsByMaterial = []
     ): array {
         $linked = 0;
         $failed = 0;
@@ -814,7 +827,20 @@ final class MaterialImageLinkService
             }
 
             $targetFileName = self::buildTargetFileName($material, $extension !== '' ? '.' . $extension : '.jpg');
-            $copy = MaterialImageStorageService::copyLocalFromSource($sourcePath, $targetFileName);
+            $effectiveSource = $processedPathsByMaterial[$materialGuid] ?? $sourcePath;
+            if ($effectiveSource === '' || !is_file($effectiveSource)) {
+                $failed++;
+                $results[] = [
+                    'material_guid' => $materialGuid,
+                    'material_name' => (string) ($material['name'] ?? ''),
+                    'material_code' => (string) ($material['material_code'] ?? ''),
+                    'ok' => false,
+                    'message' => 'ملف الصورة المعالجة غير متوفر.',
+                ];
+                continue;
+            }
+
+            $copy = MaterialImageStorageService::copyLocalFromSource($effectiveSource, $targetFileName);
             if (!($copy['ok'] ?? false)) {
                 $failed++;
                 $results[] = [
@@ -933,6 +959,43 @@ final class MaterialImageLinkService
         }
 
         return $code . $extension;
+    }
+
+    /**
+     * @param array<string, mixed>|null $files
+     * @return array<string, string>
+     */
+    public static function collectProcessedUploads(?array $files): array
+    {
+        if (!is_array($files)) {
+            return [];
+        }
+
+        $tmpNames = $files['tmp_name'] ?? null;
+        if (!is_array($tmpNames)) {
+            return [];
+        }
+
+        $map = [];
+        foreach ($tmpNames as $materialGuid => $tmpPath) {
+            $materialGuid = trim((string) $materialGuid);
+            if ($materialGuid === '' || !is_string($tmpPath) || $tmpPath === '') {
+                continue;
+            }
+
+            $error = (int) ($files['error'][$materialGuid] ?? UPLOAD_ERR_NO_FILE);
+            if ($error !== UPLOAD_ERR_OK) {
+                continue;
+            }
+
+            $originalName = (string) ($files['name'][$materialGuid] ?? 'linked.jpg');
+            $saved = MaterialImageStorageService::saveProcessedUpload($tmpPath, $originalName);
+            if ($saved !== null) {
+                $map[$materialGuid] = $saved;
+            }
+        }
+
+        return $map;
     }
 
     /** @return array<string, array<string, mixed>> */

@@ -164,12 +164,22 @@ if ($method === 'POST') {
         if (!is_array($materialGuids)) {
             $materialGuids = [$materialGuids];
         }
-        $result = MaterialImageLinkService::assign(
-            $sourceFileName,
-            $materialGuids,
-            $userId,
-            $amineSourceGuid !== '' ? $amineSourceGuid : null
+        $processed = MaterialImageLinkService::collectProcessedUploads(
+            is_array($_FILES['processed_image'] ?? null) ? $_FILES['processed_image'] : null
         );
+        try {
+            $result = MaterialImageLinkService::assign(
+                $sourceFileName,
+                $materialGuids,
+                $userId,
+                $amineSourceGuid !== '' ? $amineSourceGuid : null,
+                $processed
+            );
+        } finally {
+            foreach ($processed as $path) {
+                MaterialImageStorageService::deleteTempProcessedFile($path);
+            }
+        }
         echo json_encode(array_merge($result, [
             'sync' => MaterialImageSyncService::stats(),
         ]), JSON_UNESCAPED_UNICODE);
@@ -218,13 +228,23 @@ if ($method === 'POST') {
         if (!is_array($materialGuids)) {
             $materialGuids = [$materialGuids];
         }
-        $result = MaterialImageLinkService::reassign(
-            $sourceFileName,
-            $amineSourceGuid !== '' ? $amineSourceGuid : $imageGuid,
-            $materialGuid !== '' ? $materialGuid : null,
-            $materialGuids,
-            $userId
+        $processed = MaterialImageLinkService::collectProcessedUploads(
+            is_array($_FILES['processed_image'] ?? null) ? $_FILES['processed_image'] : null
         );
+        try {
+            $result = MaterialImageLinkService::reassign(
+                $sourceFileName,
+                $amineSourceGuid !== '' ? $amineSourceGuid : $imageGuid,
+                $materialGuid !== '' ? $materialGuid : null,
+                $materialGuids,
+                $userId,
+                $processed
+            );
+        } finally {
+            foreach ($processed as $path) {
+                MaterialImageStorageService::deleteTempProcessedFile($path);
+            }
+        }
         echo json_encode(array_merge($result, [
             'sync' => MaterialImageSyncService::stats(),
         ]), JSON_UNESCAPED_UNICODE);

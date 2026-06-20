@@ -12,7 +12,7 @@ declare(strict_types=1);
     <div>
       <h1 class="text-2xl font-extrabold">ربط الصور بالمواد</h1>
       <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
-        اضغط على الصورة للتكبير والتحقق قبل الربط. يمكن اختيار عدة مواد لإنشاء نسخة مستقلة لكل مادة.
+        اضغط على الصورة للتكبير والتحقق قبل الربط. يمكن اختيار عدة مواد لإنشاء نسخة مستقلة لكل مادة، مع إمكانية إضافة اسم المادة وتفاصيلها أسفل الصورة اختيارياً.
       </p>
     </div>
     <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white text-xs">
@@ -265,7 +265,164 @@ declare(strict_types=1);
     return response.json();
   }
 
-  async function assign(item, items, button, statusEl = null) {
+  function cardWantsDetails(card) {
+    return !!card?.querySelector('.add-details-checkbox')?.checked;
+  }
+
+  function getDetailLines(card, mat) {
+    const line1Input = card?.querySelector('.detail-line1');
+    const line2Input = card?.querySelector('.detail-line2');
+    const customLine1 = line1Input?.value.trim() || '';
+    const customLine2 = line2Input?.value.trim() || '';
+    const code = mat.code || '';
+    const name = mat.name || '';
+    const autoLine1 = `${code} ${name}`.trim() || mat.label || '';
+    return {
+      line1: customLine1 || autoLine1,
+      line2: customLine2,
+    };
+  }
+
+  function loadImageElement(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('تعذر تحميل الصورة للمعالجة.'));
+      img.src = url;
+    });
+  }
+
+  function toggleDetailsFields(card) {
+    const checkbox = card?.querySelector('.add-details-checkbox');
+    const fields = card?.querySelector('.details-fields');
+    if (!checkbox || !fields) return;
+    fields.classList.toggle('hidden', !checkbox.checked);
+  }
+
+  function fillDetailsFromSelection(card, key) {
+    const selected = sourceMaterialMap.get(key) || [];
+    if (!selected.length) {
+      const message = 'أضف مادة واحدة على الأقل لتعبئة التفاصيل.';
+      card?.querySelector('.card-status')?.replaceChildren(document.createTextNode(message));
+      return;
+    }
+    const first = selected[0];
+    const code = first.code || '';
+    const name = first.name || '';
+    const label = first.label || `${code} ${name}`.trim();
+    const line1 = card?.querySelector('.detail-line1');
+    const line2 = card?.querySelector('.detail-line2');
+    if (line1) line1.value = label;
+    if (line2 && !line2.value.trim()) line2.value = '';
+  }
+
+  function wrapTextLines(ctx, text, maxWidth) {
+    if (!text) return [];
+    const words = String(text).split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    const lines = [];
+    let current = words[0];
+    for (let i = 1; i < words.length; i += 1) {
+      const candidate = `${current} ${words[i]}`;
+      if (ctx.measureText(candidate).width < maxWidth) {
+        current = candidate;
+      } else {
+        lines.push(current);
+        current = words[i];
+      }
+    }
+    lines.push(current);
+    return lines;
+  }
+
+  async function buildImageWithDetails(imageUrl, line1, line2) {
+    const img = await loadImageElement(imageUrl);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('تعذر تجهيز الصورة.');
+
+    const width = img.naturalWidth || img.width;
+    const height = img.naturalHeight || img.height;
+    let fontSize = Math.floor(width / 25);
+    if (fontSize > 36) fontSize = 36;
+    if (fontSize < 14) fontSize = 14;
+    const lineHeight = fontSize * 1.5;
+    const maxWidth = width - 40;
+
+    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+    const lines1 = wrapTextLines(ctx, line1, maxWidth);
+    const lines2 = wrapTextLines(ctx, line2, maxWidth);
+    const totalLines = lines1.length + lines2.length;
+    const bannerHeight = totalLines > 0 ? (totalLines * lineHeight) + 60 : 0;
+
+    canvas.width = width;
+    canvas.height = height + bannerHeight;
+    ctx.drawImage(img, 0, 0, width, height);
+
+    if (bannerHeight > 0) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, height, width, bannerHeight);
+      ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'top';
+      let y = height + 20;
+      lines1.forEach((line) => {
+        ctx.fillText(line, width - 20, y);
+        y += lineHeight;
+      });
+      if (lines1.length && lines2.length) y += 10;
+      lines2.forEach((line) => {
+        ctx.fillText(line, width - 20, y);
+        y += lineHeight;
+      });
+    }
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) reject(new Error('تعذر إنشاء ملف الصورة.'));
+        else resolve(blob);
+      }, 'image/jpeg', 0.9);
+    });
+  }
+
+  async function postAssignForm(action, item, items, card) {
+    const form = new FormData();
+    form.append('action', action);
+    form.append('source_file_name', item.file_name || '');
+    form.append('amine_image_guid', item.amine_image_guid || '');
+    items.forEach((row) => form.append('material_guids[]', row.guid));
+
+    if (action === 'reassign-materials') {
+      form.append('image_guid', item.amine_image_guid || '');
+      form.append('material_guid', item.linked_material_guid || '');
+    }
+
+    if (cardWantsDetails(card)) {
+      form.append('add_details', '1');
+      const imageUrl = item.preview_full_url || item.preview_url;
+      if (!imageUrl) throw new Error('لا توجد معاينة للصورة.');
+      for (const mat of items) {
+        const lines = getDetailLines(card, mat);
+        const blob = await buildImageWithDetails(imageUrl, lines.line1, lines.line2);
+        form.append(`processed_image[${mat.guid}]`, blob, 'linked.jpg');
+      }
+    }
+
+    const response = await fetch(API_URL, { method: 'POST', body: form });
+    return response.json();
+  }
+
+  function handleCardAfterAssign(card, item) {
+    sourceMaterialMap.set(cardKey(item), []);
+    if (currentLinkFilter() === 'unlinked' || !item.is_linked_to_material) {
+      removeCard(card, item);
+      return;
+    }
+    loadSources(page);
+  }
+
+  async function assign(item, items, card, button, statusEl = null) {
     if (!items.length) {
       const message = 'أضف مادة واحدة على الأقل.';
       linkStatus.textContent = message;
@@ -276,11 +433,7 @@ declare(strict_types=1);
     linkStatus.textContent = 'جاري الربط...';
     if (statusEl) statusEl.textContent = 'جاري الربط...';
     try {
-      const payload = await postAction('assign-materials', {
-        source_file_name: item.file_name,
-        amine_image_guid: item.amine_image_guid,
-        material_guids: items.map((row) => row.guid),
-      });
+      const payload = await postAssignForm('assign-materials', item, items, card);
       linkStatus.textContent = payload.message || '';
       if (statusEl) statusEl.textContent = payload.message || '';
       if (payload.items && payload.items.length && !payload.ok) {
@@ -292,19 +445,17 @@ declare(strict_types=1);
           if (statusEl) statusEl.textContent = detail;
         }
       }
-      if (payload.ok) {
-        sourceMaterialMap.set(cardKey(item), []);
-        await loadSources(page);
-      }
-    } catch {
-      linkStatus.textContent = 'تعذر تنفيذ الربط.';
-      if (statusEl) statusEl.textContent = 'تعذر تنفيذ الربط.';
+      if (payload.ok) handleCardAfterAssign(card, item);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر تنفيذ الربط.';
+      linkStatus.textContent = message;
+      if (statusEl) statusEl.textContent = message;
     } finally {
       button.disabled = false;
     }
   }
 
-  async function reassign(item, items, button, statusEl) {
+  async function reassign(item, items, card, button, statusEl) {
     if (!items.length) {
       const message = 'أضف مادة واحدة على الأقل للاستبدال.';
       if (statusEl) statusEl.textContent = message;
@@ -314,21 +465,13 @@ declare(strict_types=1);
     button.disabled = true;
     if (statusEl) statusEl.textContent = 'جاري الاستبدال...';
     try {
-      const payload = await postAction('reassign-materials', {
-        source_file_name: item.file_name,
-        image_guid: item.amine_image_guid,
-        amine_image_guid: item.amine_image_guid,
-        material_guid: item.linked_material_guid,
-        material_guids: items.map((row) => row.guid),
-      });
+      const payload = await postAssignForm('reassign-materials', item, items, card);
       if (statusEl) statusEl.textContent = payload.message || '';
       linkStatus.textContent = payload.message || '';
-      if (payload.ok) {
-        sourceMaterialMap.set(cardKey(item), []);
-        await loadSources(page);
-      }
-    } catch {
-      if (statusEl) statusEl.textContent = 'تعذر تنفيذ الاستبدال.';
+      if (payload.ok) handleCardAfterAssign(card, item);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر تنفيذ الاستبدال.';
+      if (statusEl) statusEl.textContent = message;
     } finally {
       button.disabled = false;
     }
@@ -426,8 +569,10 @@ declare(strict_types=1);
       }
       sug.innerHTML = rows.map((row) => {
         const guid = row.material_guid || '';
-        const label = `${row.material_code || ''} ${row.name || ''}`.trim();
-        return `<button type="button" class="block w-full text-right px-3 py-2 text-xs hover:bg-surface-low add-mat" data-guid="${escapeHtml(guid)}" data-label="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
+        const code = row.material_code || '';
+        const name = row.name || '';
+        const label = `${code} ${name}`.trim();
+        return `<button type="button" class="block w-full text-right px-3 py-2 text-xs hover:bg-surface-low add-mat" data-guid="${escapeHtml(guid)}" data-label="${escapeHtml(label)}" data-code="${escapeHtml(code)}" data-name="${escapeHtml(name)}">${escapeHtml(label)}</button>`;
       }).join('');
       sug.classList.remove('hidden');
     });
@@ -440,9 +585,13 @@ declare(strict_types=1);
       event.stopPropagation();
       const guid = btn.getAttribute('data-guid') || '';
       const label = btn.getAttribute('data-label') || '';
+      const code = btn.getAttribute('data-code') || '';
+      const name = btn.getAttribute('data-name') || '';
       if (!guid) return;
       const selected = sourceMaterialMap.get(key) || [];
-      if (!selected.some((row) => row.guid === guid)) selected.push({ guid, label });
+      if (!selected.some((row) => row.guid === guid)) {
+        selected.push({ guid, label, code, name });
+      }
       sourceMaterialMap.set(key, selected);
       chips.innerHTML = chipsHtml(key);
       closeSuggestions(card);
@@ -463,6 +612,14 @@ declare(strict_types=1);
       chips.innerHTML = chipsHtml(key);
     });
 
+    card.querySelector('.add-details-checkbox')?.addEventListener('change', () => {
+      toggleDetailsFields(card);
+    });
+
+    card.querySelector('.fill-details-btn')?.addEventListener('click', () => {
+      fillDetailsFromSelection(card, key);
+    });
+
     assignBtn.addEventListener('click', async () => {
       closeSuggestions(card);
       const selected = sourceMaterialMap.get(key) || [];
@@ -472,13 +629,13 @@ declare(strict_types=1);
         cardStatus.textContent = message;
         return;
       }
-      await assign(item, selected, assignBtn, cardStatus);
+      await assign(item, selected, card, assignBtn, cardStatus);
     });
 
     reassignBtn?.addEventListener('click', async () => {
       closeSuggestions(card);
       const selected = sourceMaterialMap.get(key) || [];
-      await reassign(item, selected, reassignBtn, cardStatus);
+      await reassign(item, selected, card, reassignBtn, cardStatus);
     });
 
     unlinkBtn?.addEventListener('click', async () => {
@@ -534,6 +691,24 @@ declare(strict_types=1);
             <div class="suggestions hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow max-h-48 overflow-auto"></div>
           </div>
           <div class="chips flex flex-wrap gap-1">${chipsHtml(key)}</div>
+          <div class="rounded-lg border border-border-subtle bg-surface-low/40 p-2 space-y-2">
+            <label class="flex items-start gap-2 text-xs cursor-pointer">
+              <input type="checkbox" class="add-details-checkbox mt-0.5 rounded border-border-subtle">
+              <span class="font-bold leading-snug">إضافة تفاصيل المادة أسفل الصورة؟ (اختياري)</span>
+            </label>
+            <div class="details-fields hidden space-y-2">
+              <button type="button" class="fill-details-btn h-7 px-2 rounded-lg border border-border-subtle bg-white text-[11px] font-bold w-full">تعبئة من المواد المختارة</button>
+              <div>
+                <label class="text-[10px] text-text-muted">السطر الأول (الاسم):</label>
+                <input type="text" class="detail-line1 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: شحاطة فلكسة...">
+              </div>
+              <div>
+                <label class="text-[10px] text-text-muted">السطر الثاني (تعبئة/معلومة إضافية):</label>
+                <input type="text" class="detail-line2 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: التعبئة 8 زوج">
+              </div>
+              <p class="text-[10px] text-text-muted leading-relaxed">إذا تُركت الحقول فارغة واختيرت عدة مواد، يُولَّد السطر الأول تلقائياً لكل مادة عند الربط.</p>
+            </div>
+          </div>
           <button type="button" class="assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>
           ${reassignBlock}
           ${unlinkBlock}

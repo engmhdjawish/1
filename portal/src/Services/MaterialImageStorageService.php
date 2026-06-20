@@ -227,6 +227,55 @@ final class MaterialImageStorageService
     /**
      * @return array{ok: bool, message: string, file_name?: string}
      */
+    public static function saveProcessedUpload(string $tmpPath, string $originalName = 'linked.jpg'): ?string
+    {
+        if ($tmpPath === '' || !is_file($tmpPath)) {
+            return null;
+        }
+
+        $mime = self::detectMime($tmpPath);
+        if (!str_starts_with($mime, 'image/')) {
+            return null;
+        }
+
+        $settings = self::settings();
+        $directory = $settings['images_dir'] . DIRECTORY_SEPARATOR . '_processed';
+        if (!self::ensureDirectory($directory)) {
+            return null;
+        }
+
+        $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        if ($extension === '' || !in_array($extension, self::ALLOWED_EXTENSIONS, true)) {
+            $extension = 'jpg';
+        }
+
+        $dest = $directory . DIRECTORY_SEPARATOR . ('proc_' . bin2hex(random_bytes(8)) . '.' . $extension);
+        if (is_uploaded_file($tmpPath)) {
+            if (!@move_uploaded_file($tmpPath, $dest)) {
+                return null;
+            }
+        } elseif (!@copy($tmpPath, $dest)) {
+            return null;
+        }
+
+        return $dest;
+    }
+
+    public static function deleteTempProcessedFile(string $path): void
+    {
+        $path = str_replace('\\', '/', $path);
+        if ($path === '' || !str_contains($path, '/_processed/')) {
+            return;
+        }
+
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    }
+
+    /**
+     * @return array{ok: bool, message: string, file_name?: string}
+     */
     public static function copyLocalFromSource(string $sourcePath, string $targetFileName): array
     {
         if (!is_file($sourcePath)) {
