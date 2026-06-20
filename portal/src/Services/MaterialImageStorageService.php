@@ -292,8 +292,8 @@ final class MaterialImageStorageService
             return null;
         }
 
-        $fontSize = (int) max(14, min(36, (int) floor($width / 25)));
-        $lineHeight = (int) round($fontSize * 1.5);
+        $fontSize = (int) max(18, min(44, (int) floor($width / 18)));
+        $lineHeight = (int) round($fontSize * 1.45);
         $maxWidth = $width - 40;
         $lines1 = self::wrapTtfTextLines($font, (float) $fontSize, $line1, $maxWidth);
         $lines2 = self::wrapTtfTextLines($font, (float) $fontSize, $line2, $maxWidth);
@@ -413,25 +413,27 @@ final class MaterialImageStorageService
         $candidates = [];
 
         $storageFontsDir = rtrim(Config::storagePath(), '/\\') . DIRECTORY_SEPARATOR . 'fonts';
-        foreach (['tahoma.ttf', 'Tahoma.ttf', 'tahomabd.ttf', 'arial.ttf', 'trado.ttf', 'DejaVuSans.ttf'] as $fileName) {
+        foreach (['tahomabd.ttf', 'TahomaBd.ttf', 'tahoma.ttf', 'Tahoma.ttf', 'arialbd.ttf', 'arial.ttf', 'trado.ttf', 'DejaVuSans-Bold.ttf', 'DejaVuSans.ttf'] as $fileName) {
             $candidates[] = $storageFontsDir . DIRECTORY_SEPARATOR . $fileName;
         }
 
         $windowsFonts = self::windowsFontsDirectory();
         if ($windowsFonts !== null) {
-            foreach (['tahoma.ttf', 'tahomabd.ttf', 'arial.ttf', 'trado.ttf', 'TAHOMA.TTF', 'TAHOMABD.TTF'] as $fileName) {
+            foreach (['tahomabd.ttf', 'TAHOMABD.TTF', 'tahoma.ttf', 'TAHOMA.TTF', 'arialbd.ttf', 'arial.ttf', 'trado.ttf'] as $fileName) {
                 $candidates[] = $windowsFonts . DIRECTORY_SEPARATOR . $fileName;
             }
         }
 
         $candidates = array_merge($candidates, [
-            'C:\\Windows\\Fonts\\tahoma.ttf',
             'C:\\Windows\\Fonts\\tahomabd.ttf',
+            'C:\\Windows\\Fonts\\TAHOMABD.TTF',
+            'C:\\Windows\\Fonts\\tahoma.ttf',
             'C:\\Windows\\Fonts\\TAHOMA.TTF',
-            'C:\\Windows\\Fonts\\trado.ttf',
+            'C:\\Windows\\Fonts\\arialbd.ttf',
             'C:\\Windows\\Fonts\\arial.ttf',
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            'C:\\Windows\\Fonts\\trado.ttf',
             '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
             '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
         ]);
 

@@ -288,14 +288,19 @@ declare(strict_types=1);
     return !!card?.querySelector('.add-details-checkbox')?.checked;
   }
 
+  function formatMaterialLine1(code, name, fallbackLabel = '') {
+    const trimmedCode = String(code || '').trim();
+    const trimmedName = String(name || '').trim();
+    if (trimmedCode && trimmedName) return `${trimmedCode} - ${trimmedName}`;
+    return `${trimmedCode} ${trimmedName}`.trim() || fallbackLabel || '';
+  }
+
   function getDetailLines(card, mat) {
     const line1Input = card?.querySelector('.detail-line1');
     const line2Input = card?.querySelector('.detail-line2');
     const customLine1 = line1Input?.value.trim() || '';
     const customLine2 = line2Input?.value.trim() || '';
-    const code = mat.code || '';
-    const name = mat.name || '';
-    const autoLine1 = `${code} ${name}`.trim() || mat.label || '';
+    const autoLine1 = formatMaterialLine1(mat.code, mat.name, mat.label || '');
     return {
       line1: customLine1 || autoLine1,
       line2: customLine2,
@@ -326,9 +331,7 @@ declare(strict_types=1);
       return;
     }
     const first = selected[0];
-    const code = first.code || '';
-    const name = first.name || '';
-    const label = first.label || `${code} ${name}`.trim();
+    const label = formatMaterialLine1(first.code, first.name, first.label || '');
     const line1 = card?.querySelector('.detail-line1');
     const line2 = card?.querySelector('.detail-line2');
     if (line1) line1.value = label;
@@ -728,7 +731,7 @@ declare(strict_types=1);
               <button type="button" class="fill-details-btn h-7 px-2 rounded-lg border border-border-subtle bg-white text-[11px] font-bold w-full">تعبئة من المواد المختارة</button>
               <div>
                 <label class="text-[10px] text-text-muted">السطر الأول — رمز و اسم المنتج:</label>
-                <input type="text" class="detail-line1 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: 1234 شحاطة فلكسة — أو يُملأ تلقائياً">
+                <input type="text" class="detail-line1 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: 796 - مخيط طبي بني — أو يُملأ تلقائياً">
               </div>
               <div>
                 <label class="text-[10px] text-text-muted">السطر الثاني — التعبئة (اختياري):</label>

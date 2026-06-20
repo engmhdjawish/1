@@ -1067,11 +1067,9 @@ final class MaterialImageLinkService
             }
 
             $material = self::fetchMaterial($materialGuid);
-            $line1 = self::detailLineForMaterial($line1ByMaterial, $materialGuid);
+            $line1Override = self::detailLineForMaterial($line1ByMaterial, $materialGuid);
             $line2Override = self::detailLineForMaterial($line2ByMaterial, $materialGuid);
-            if ($line1 === '' && $material !== null) {
-                $line1 = trim((string) ($material['material_code'] ?? '') . ' ' . (string) ($material['name'] ?? ''));
-            }
+            $line1 = self::buildProductBannerLine($material, $line1Override);
             $line2 = self::buildPackagingBannerLine($material, $line2Override);
             if ($line1 === '' && $line2 === '') {
                 continue;
@@ -1196,6 +1194,28 @@ final class MaterialImageLinkService
         }
 
         return self::assignError('تعذر تجهيز الصورة مع البانر السفلي. تحقق من الصورة والنصوص.');
+    }
+
+    /** @param array<string, mixed>|null $material */
+    private static function buildProductBannerLine(?array $material, string $override = ''): string
+    {
+        $override = trim($override);
+        if ($override !== '') {
+            return $override;
+        }
+
+        if (!is_array($material)) {
+            return '';
+        }
+
+        $code = trim((string) ($material['material_code'] ?? $material['materialCode'] ?? $material['code'] ?? ''));
+        $name = trim((string) ($material['name'] ?? $material['Name'] ?? ''));
+
+        if ($code !== '' && $name !== '') {
+            return $code . ' - ' . $name;
+        }
+
+        return $code !== '' ? $code : $name;
     }
 
     /** @param array<string, mixed>|null $material */
