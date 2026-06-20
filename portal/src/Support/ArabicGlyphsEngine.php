@@ -135,7 +135,7 @@ final class ArabicGlyphsEngine
         $output = '';
         $number = '';
         $nextChar = null;
-        $chars = preg_split('//u', $str, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $chars = Utf8Text::chars($str);
         $max = count($chars);
 
         for ($i = $max - 1; $i >= 0; $i--) {
@@ -145,9 +145,9 @@ final class ArabicGlyphsEngine
             $prevChar = ' ';
             if ($i > 0) {
                 $prevChar = $chars[$i - 1];
-                if (mb_strpos(self::VOWELS, $prevChar) !== false && $i > 1) {
+                if (Utf8Text::contains(self::VOWELS, $prevChar) && $i > 1) {
                     $prevChar = $chars[$i - 2];
-                    if (mb_strpos(self::VOWELS, $prevChar) !== false && $i > 2) {
+                    if (Utf8Text::contains(self::VOWELS, $prevChar) && $i > 2) {
                         $prevChar = $chars[$i - 3];
                     }
                 }
@@ -163,22 +163,26 @@ final class ArabicGlyphsEngine
             }
 
             $range = self::OPEN_RANGE . self::CLOSE_RANGE;
-            $pos = mb_strpos($range, $current);
+            $pos = strpos($range, $current);
             if ($pos !== false) {
-                $output .= mb_substr(self::CLOSE_RANGE . self::OPEN_RANGE, $pos, 1);
+                $output .= Utf8Text::substr(self::CLOSE_RANGE . self::OPEN_RANGE, $pos, 1);
                 continue;
             }
 
-            if (ord($current) < 128) {
+            if (Utf8Text::codepoint($current) < 128) {
                 $output .= $current;
                 $nextChar = $current;
                 continue;
             }
 
-            if ($current === 'ل' && $nextChar !== null && mb_strpos('آأإا', $nextChar) !== false) {
+            if ($current === 'ل' && $nextChar !== null && Utf8Text::contains('آأإا', $nextChar)) {
                 $ligature = $current . $nextChar;
                 if ($nextChar !== '') {
-                    $output = mb_substr($output, 0, mb_strlen($output) - mb_strlen($nextChar));
+                    $output = Utf8Text::substr(
+                        $output,
+                        0,
+                        Utf8Text::length($output) - Utf8Text::length($nextChar)
+                    );
                 }
                 $prevLinks = self::$glyphs[$prevChar]['prevLink'] ?? false;
                 $formIndex = $prevLinks ? 1 : 0;
@@ -191,7 +195,7 @@ final class ArabicGlyphsEngine
                 continue;
             }
 
-            if (mb_strpos(self::VOWELS, $current) !== false) {
+            if (Utf8Text::contains(self::VOWELS, $current)) {
                 $output .= $current;
                 continue;
             }
@@ -259,6 +263,6 @@ final class ArabicGlyphsEngine
             return '';
         }
 
-        return mb_chr((int) hexdec($hex), 'UTF-8');
+        return Utf8Text::chr((int) hexdec($hex));
     }
 }

@@ -376,7 +376,6 @@ final class MaterialImageStorageService
     {
         $gd = function_exists('imagecreatetruecolor');
         $freetype = function_exists('imagettftext');
-        $mbstring = function_exists('mb_strlen');
         $fontPath = self::resolveDetailsFontPath();
 
         $missing = [];
@@ -385,9 +384,6 @@ final class MaterialImageStorageService
         }
         if (!$freetype) {
             $missing[] = 'GD مع دعم FreeType (imagettftext) — فعّل php_gd2 مع freetype في php.ini';
-        }
-        if (!$mbstring) {
-            $missing[] = 'امتداد mbstring';
         }
         if ($fontPath === null) {
             $missing[] = 'خط TrueType readable من PHP — انسخ tahoma.ttf إلى portal/storage/fonts/ أو عيّن PORTAL_DETAILS_FONT_PATH';
@@ -398,10 +394,10 @@ final class MaterialImageStorageService
             : ('البانر السفلي يتطلب: ' . implode('، ', $missing) . '.');
 
         return [
-            'ok' => $gd && $freetype && $mbstring && $fontPath !== null,
+            'ok' => $gd && $freetype && $fontPath !== null,
             'gd' => $gd,
             'freetype' => $freetype,
-            'mbstring' => $mbstring,
+            'mbstring' => function_exists('mb_strlen'),
             'font_path' => $fontPath,
             'message' => $message,
         ];

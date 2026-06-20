@@ -16,10 +16,6 @@ final class ArabicGdText
             return $text;
         }
 
-        if (!function_exists('mb_strlen')) {
-            return $text;
-        }
-
         return ArabicGlyphsEngine::shape($text, true);
     }
 
