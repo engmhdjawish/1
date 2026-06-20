@@ -53,7 +53,8 @@ final class MaterialImageSyncService
         Database::pdo()->exec(
             'ALTER TABLE material_image_sync_queue
                 ADD COLUMN IF NOT EXISTS local_size_bytes BIGINT,
-                ADD COLUMN IF NOT EXISTS local_sha256 VARCHAR(64)'
+                ADD COLUMN IF NOT EXISTS local_sha256 VARCHAR(64),
+                ADD COLUMN IF NOT EXISTS assigned_from_file_name VARCHAR(255)'
         );
     }
 
@@ -838,7 +839,8 @@ final class MaterialImageSyncService
         string $fileName,
         string $localPath,
         string $amineImageGuid,
-        ?string $uploadedByUserId = null
+        ?string $uploadedByUserId = null,
+        ?string $assignedFromFileName = null
     ): void {
         self::ensureTable();
         $fingerprint = self::fileFingerprint($localPath);
@@ -846,13 +848,20 @@ final class MaterialImageSyncService
             return;
         }
 
+        $assignedFromFileName = basename(str_replace('\\', '/', trim((string) $assignedFromFileName)));
+        if ($assignedFromFileName === '' || str_contains($assignedFromFileName, '..')) {
+            $assignedFromFileName = null;
+        }
+
         $stmt = Database::pdo()->prepare(
             'INSERT INTO material_image_sync_queue (
                 file_name, local_file_path, local_thumb_path, local_size_bytes, local_sha256,
-                amine_image_guid, uploaded_by_web_user_id, sync_status, synced_to_amine_at
+                amine_image_guid, uploaded_by_web_user_id, sync_status, synced_to_amine_at,
+                assigned_from_file_name
              ) VALUES (
                 :file_name, :local_file_path, NULL, :local_size_bytes, :local_sha256,
-                :amine_image_guid, :uploaded_by_web_user_id, \'synced\', NOW()
+                :amine_image_guid, :uploaded_by_web_user_id, \'synced\', NOW(),
+                :assigned_from_file_name
              )
              ON CONFLICT (file_name) DO UPDATE SET
                 local_file_path = EXCLUDED.local_file_path,
@@ -862,6 +871,7 @@ final class MaterialImageSyncService
                 sync_status = \'synced\',
                 amine_sync_error_ar = NULL,
                 synced_to_amine_at = NOW(),
+                assigned_from_file_name = COALESCE(EXCLUDED.assigned_from_file_name, material_image_sync_queue.assigned_from_file_name),
                 updated_at = NOW()'
         );
         $stmt->execute([
@@ -871,6 +881,7 @@ final class MaterialImageSyncService
             'local_sha256' => $fingerprint['sha256'],
             'amine_image_guid' => $amineImageGuid,
             'uploaded_by_web_user_id' => $uploadedByUserId !== null && $uploadedByUserId !== '' ? $uploadedByUserId : null,
+            'assigned_from_file_name' => $assignedFromFileName,
         ]);
     }
 

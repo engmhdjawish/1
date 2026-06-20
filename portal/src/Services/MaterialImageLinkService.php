@@ -18,6 +18,7 @@ final class MaterialImageLinkService
     {
         MaterialImageSyncService::ensureTable();
         $queueByFile = self::queueByFileName();
+        $shaIndex = self::queueSha256Index();
 
         $sources = [];
         foreach (MaterialImageStorageService::listLocalFiles() as $file) {
@@ -27,6 +28,10 @@ final class MaterialImageLinkService
             }
 
             $queue = $queueByFile[$fileName] ?? null;
+            if (self::isProbablyMaterialCopy($fileName, is_array($queue) ? $queue : null, $shaIndex)) {
+                continue;
+            }
+
             $amineGuid = trim((string) ($queue['amine_image_guid'] ?? ''));
             $sources[] = [
                 'file_name' => $fileName,
@@ -111,6 +116,9 @@ final class MaterialImageLinkService
             foreach ($shaIndex[$sha] ?? [] as $row) {
                 $relatedName = (string) ($row['file_name'] ?? '');
                 if ($relatedName === '' || strcasecmp($relatedName, $fileName) === 0) {
+                    continue;
+                }
+                if (!self::isProbablyMaterialCopy($relatedName, $row, $shaIndex)) {
                     continue;
                 }
                 if (trim((string) ($row['amine_image_guid'] ?? '')) !== '') {
@@ -253,19 +261,6 @@ final class MaterialImageLinkService
                 continue;
             }
 
-            $candidateGuids = [];
-            $queueGuid = trim((string) ($item['amine_image_guid'] ?? ''));
-            if ($queueGuid !== '') {
-                $candidateGuids[] = $queueGuid;
-            }
-
-            $lookup = $amineLookups[self::lookupKey($fileName)] ?? null;
-            $lookupGuid = trim((string) ($lookup['id'] ?? ''));
-            if ($lookupGuid !== '') {
-                $candidateGuids[] = $lookupGuid;
-                $items[$index]['amine_image_guid'] = $lookupGuid;
-            }
-
             $sha = strtolower(trim((string) ($item['local_sha256'] ?? '')));
             if ($sha === '') {
                 $localPath = (string) ($item['local_path'] ?? '');
@@ -275,17 +270,23 @@ final class MaterialImageLinkService
                 }
             }
 
-            foreach ($shaIndex[$sha] ?? [] as $row) {
-                $relatedGuid = trim((string) ($row['amine_image_guid'] ?? ''));
-                if ($relatedGuid !== '') {
-                    $candidateGuids[] = $relatedGuid;
-                }
-            }
-
             $linkedMaterials = [];
-            foreach (array_values(array_unique($candidateGuids)) as $imageGuid) {
-                $material = $materialByImageGuid[$imageGuid] ?? self::materialLinkedToImageGuid($imageGuid);
-                $materialByImageGuid[$imageGuid] = $material;
+            foreach ($shaIndex[$sha] ?? [] as $row) {
+                $relatedName = (string) ($row['file_name'] ?? '');
+                if ($relatedName === '' || strcasecmp($relatedName, $fileName) === 0) {
+                    continue;
+                }
+                if (!self::isMaterialCopyFile($relatedName, $row, $shaIndex, $materialByImageGuid)) {
+                    continue;
+                }
+
+                $relatedGuid = trim((string) ($row['amine_image_guid'] ?? ''));
+                if ($relatedGuid === '') {
+                    continue;
+                }
+
+                $material = $materialByImageGuid[$relatedGuid] ?? self::materialLinkedToImageGuid($relatedGuid);
+                $materialByImageGuid[$relatedGuid] = $material;
                 if ($material === null) {
                     continue;
                 }
@@ -296,6 +297,31 @@ final class MaterialImageLinkService
                 }
 
                 $linkedMaterials[$materialGuid] = $material;
+            }
+
+            $queueGuid = trim((string) ($item['amine_image_guid'] ?? ''));
+            $lookup = $amineLookups[self::lookupKey($fileName)] ?? null;
+            $lookupGuid = trim((string) ($lookup['id'] ?? ''));
+            if ($lookupGuid !== '') {
+                $items[$index]['amine_image_guid'] = $lookupGuid;
+            }
+
+            $sourceQueueRow = $queueByFile[$fileName] ?? [];
+            if (!self::isProbablyMaterialCopy($fileName, is_array($sourceQueueRow) ? $sourceQueueRow : null, $shaIndex)) {
+                foreach (array_values(array_unique(array_filter([$queueGuid, $lookupGuid]))) as $imageGuid) {
+                    $material = $materialByImageGuid[$imageGuid] ?? self::materialLinkedToImageGuid($imageGuid);
+                    $materialByImageGuid[$imageGuid] = $material;
+                    if ($material === null) {
+                        continue;
+                    }
+
+                    $materialGuid = (string) ($material['material_guid'] ?? '');
+                    if ($materialGuid === '' || isset($linkedMaterials[$materialGuid])) {
+                        continue;
+                    }
+
+                    $linkedMaterials[$materialGuid] = $material;
+                }
             }
 
             if ($linkedMaterials === []) {
@@ -541,7 +567,8 @@ final class MaterialImageLinkService
                 (string) ($copy['file_name'] ?? $storedFileName),
                 $localPath,
                 $imageGuid,
-                $uploadedByUserId
+                $uploadedByUserId,
+                $sourceFileName
             );
 
             $linked++;
@@ -649,7 +676,13 @@ final class MaterialImageLinkService
             $data = is_array($response['data'] ?? null) ? $response['data'] : [];
             $imageGuid = trim((string) ($data['id'] ?? $data['Id'] ?? ''));
             if ($imageGuid !== '') {
-                MaterialImageSyncService::recordAssignedCopy($fileName, $localPath, $imageGuid, $uploadedByUserId);
+                MaterialImageSyncService::recordAssignedCopy(
+                    $fileName,
+                    $localPath,
+                    $imageGuid,
+                    $uploadedByUserId,
+                    $sourceFileName
+                );
             }
 
             $linked++;
@@ -719,7 +752,8 @@ final class MaterialImageLinkService
                 amine_image_guid::text AS amine_image_guid,
                 sync_status::text AS sync_status,
                 local_sha256,
-                local_size_bytes
+                local_size_bytes,
+                assigned_from_file_name
              FROM material_image_sync_queue"
         );
 
@@ -755,7 +789,8 @@ final class MaterialImageLinkService
                 amine_image_guid::text AS amine_image_guid,
                 sync_status::text AS sync_status,
                 local_sha256,
-                local_size_bytes
+                local_size_bytes,
+                assigned_from_file_name
              FROM material_image_sync_queue
              WHERE file_name = :file_name
              LIMIT 1'
@@ -821,5 +856,102 @@ final class MaterialImageLinkService
     private static function lookupKey(string $fileName): string
     {
         return strtolower($fileName);
+    }
+
+    /** @param array<string, mixed>|null $queueRow */
+    /** @param array<string, list<array<string, mixed>>> $shaIndex */
+    private static function isProbablyMaterialCopy(?string $fileName, ?array $queueRow, array $shaIndex): bool
+    {
+        $fileName = trim((string) $fileName);
+        if ($fileName === '') {
+            return false;
+        }
+
+        $queueRow ??= [];
+        if (trim((string) ($queueRow['assigned_from_file_name'] ?? '')) !== '') {
+            return true;
+        }
+
+        $sha = strtolower(trim((string) ($queueRow['local_sha256'] ?? '')));
+        if ($sha === '') {
+            return false;
+        }
+
+        $stem = self::fileStem($fileName);
+        if ($stem === '') {
+            return false;
+        }
+
+        foreach ($shaIndex[$sha] ?? [] as $row) {
+            $siblingName = (string) ($row['file_name'] ?? '');
+            if ($siblingName === '' || strcasecmp($siblingName, $fileName) === 0) {
+                continue;
+            }
+
+            if (self::looksLikeSourceImageName($siblingName, $stem)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $queueRow
+     * @param array<string, list<array<string, mixed>>> $shaIndex
+     * @param array<string, array{material_guid: string, name: string, code: string}|null> $materialByImageGuid
+     */
+    private static function isMaterialCopyFile(
+        string $fileName,
+        array $queueRow,
+        array $shaIndex,
+        array &$materialByImageGuid
+    ): bool {
+        if (self::isProbablyMaterialCopy($fileName, $queueRow, $shaIndex)) {
+            return true;
+        }
+
+        $guid = trim((string) ($queueRow['amine_image_guid'] ?? ''));
+        if ($guid === '') {
+            return false;
+        }
+
+        $material = $materialByImageGuid[$guid] ?? self::materialLinkedToImageGuid($guid);
+        $materialByImageGuid[$guid] = $material;
+        if ($material === null) {
+            return false;
+        }
+
+        return self::fileStemMatchesMaterialCode($fileName, (string) ($material['code'] ?? ''));
+    }
+
+    private static function fileStem(string $fileName): string
+    {
+        return trim((string) pathinfo($fileName, PATHINFO_FILENAME));
+    }
+
+    private static function fileStemMatchesMaterialCode(string $fileName, string $materialCode): bool
+    {
+        $stem = self::fileStem($fileName);
+        $code = trim($materialCode);
+
+        return $stem !== '' && $code !== '' && strcasecmp($stem, $code) === 0;
+    }
+
+    private static function looksLikeSourceImageName(string $fileName, string $copyStem): bool
+    {
+        $stem = self::fileStem($fileName);
+        if ($stem === '' || strcasecmp($stem, $copyStem) === 0) {
+            return false;
+        }
+
+        $copyStemLower = Text::lower($copyStem);
+        $stemLower = Text::lower($stem);
+
+        return strlen($stemLower) > strlen($copyStemLower) + 2
+            || str_contains($stemLower, 'wa')
+            || str_contains($stemLower, 'img')
+            || str_contains($stemLower, '_')
+            || str_contains($stemLower, '.');
     }
 }

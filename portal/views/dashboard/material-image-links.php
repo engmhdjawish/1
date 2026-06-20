@@ -14,6 +14,7 @@ declare(strict_types=1);
       <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
         صفحة مستقلة للربط فقط: اختر صورة أساسية، أضف مادة أو أكثر، ثم نفّذ الربط.
         لكل مادة سيتم إنشاء نسخة مستقلة من الصورة وربطها بالمادة.
+        نسخ المواد (مثل <span dir="ltr">52012.jpg</span>) لا تظهر هنا — فقط الصور الأساسية.
       </p>
     </div>
     <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white text-xs">
