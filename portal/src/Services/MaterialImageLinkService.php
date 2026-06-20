@@ -48,15 +48,35 @@ final class MaterialImageLinkService
      *   has_more: bool
      * }
      */
-    public static function listSourcesPage(int $page = 1, int $pageSize = 24): array
+    public static function listSourcesPage(
+        int $page = 1,
+        int $pageSize = 24,
+        string $linkFilter = 'all',
+        string $materialQuery = ''
+    ): array
     {
         $all = self::listSources();
+        $all = self::enrichLinkState($all);
+        $materialQuery = trim($materialQuery);
+        if ($linkFilter === 'linked') {
+            $all = array_values(array_filter($all, static fn (array $item): bool => !empty($item['is_linked_to_material'])));
+        } elseif ($linkFilter === 'unlinked') {
+            $all = array_values(array_filter($all, static fn (array $item): bool => empty($item['is_linked_to_material'])));
+        }
+        if ($materialQuery !== '') {
+            $needle = mb_strtolower($materialQuery);
+            $all = array_values(array_filter($all, static function (array $item) use ($needle): bool {
+                $name = mb_strtolower((string) ($item['linked_material_name'] ?? ''));
+                $code = mb_strtolower((string) ($item['linked_material_code'] ?? ''));
+
+                return str_contains($name, $needle) || str_contains($code, $needle);
+            }));
+        }
         $page = max(1, $page);
         $pageSize = max(6, min(60, $pageSize));
         $totalCount = count($all);
         $offset = ($page - 1) * $pageSize;
         $items = array_slice($all, $offset, $pageSize);
-        $items = self::enrichLinkState($items);
 
         return [
             'items' => $items,
@@ -77,6 +97,8 @@ final class MaterialImageLinkService
             $amineGuid = trim((string) ($item['amine_image_guid'] ?? ''));
             $items[$index]['is_linked_to_material'] = false;
             $items[$index]['linked_material_guid'] = '';
+            $items[$index]['linked_material_name'] = '';
+            $items[$index]['linked_material_code'] = '';
             if ($amineGuid === '') {
                 continue;
             }
@@ -91,6 +113,16 @@ final class MaterialImageLinkService
                 if ($materialGuid !== '') {
                     $items[$index]['is_linked_to_material'] = true;
                     $items[$index]['linked_material_guid'] = $materialGuid;
+                    try {
+                        $materialResponse = ApiClient::get('/api/materials/' . rawurlencode($materialGuid));
+                        if ($materialResponse['ok'] ?? false) {
+                            $materialData = is_array($materialResponse['data'] ?? null) ? $materialResponse['data'] : [];
+                            $items[$index]['linked_material_name'] = trim((string) ($materialData['name'] ?? $materialData['Name'] ?? ''));
+                            $items[$index]['linked_material_code'] = trim((string) ($materialData['materialCode'] ?? $materialData['MaterialCode'] ?? ''));
+                        }
+                    } catch (Throwable) {
+                        // ignore material metadata fetch failure
+                    }
                 }
             } catch (Throwable) {
                 continue;

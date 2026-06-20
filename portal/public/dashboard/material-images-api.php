@@ -68,9 +68,14 @@ if ($method === 'GET') {
     if ($action === 'link-sources-page') {
         $page = max(1, (int) ($_GET['page'] ?? 1));
         $pageSize = max(6, min(60, (int) ($_GET['page_size'] ?? 24)));
+        $linkFilter = trim((string) ($_GET['link_filter'] ?? 'all'));
+        if (!in_array($linkFilter, ['all', 'linked', 'unlinked'], true)) {
+            $linkFilter = 'all';
+        }
+        $materialQuery = trim((string) ($_GET['material_query'] ?? ''));
         echo json_encode(array_merge(
             ['ok' => true],
-            MaterialImageLinkService::listSourcesPage($page, $pageSize)
+            MaterialImageLinkService::listSourcesPage($page, $pageSize, $linkFilter, $materialQuery)
         ), JSON_UNESCAPED_UNICODE);
         exit;
     }
