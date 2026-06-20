@@ -456,16 +456,6 @@ final class MaterialImageSyncService
             }
 
             $existing = $queueMap[$fileName] ?? null;
-            if ($existing !== null && (string) ($existing['sync_status'] ?? '') === 'synced') {
-                $prepared[] = [
-                    'file_name' => $fileName,
-                    'local_path' => $localPath,
-                    'existing' => $existing,
-                    'fingerprint' => null,
-                    'skip' => true,
-                ];
-                continue;
-            }
 
             $fingerprint = self::fileFingerprint($localPath);
             if ($fingerprint === null) {
@@ -492,11 +482,6 @@ final class MaterialImageSyncService
         $contentChanged = 0;
 
         foreach ($prepared as $item) {
-            if ($item['skip']) {
-                $skipped++;
-                continue;
-            }
-
             $fileName = (string) $item['file_name'];
             $localPath = (string) $item['local_path'];
             /** @var array{size_bytes: int, sha256: string} $fingerprint */
@@ -511,9 +496,8 @@ final class MaterialImageSyncService
                     $skipped++;
                     continue;
                 }
-                if ($outcome === 'content_changed') {
+                if ($outcome === 'content_changed' || $outcome === 'missing_on_amine') {
                     $contentChanged++;
-                    $skipped++;
                     continue;
                 }
                 $skipped++;
@@ -678,7 +662,7 @@ final class MaterialImageSyncService
             $outcome = self::applyAmineLookupToRow($row, $fingerprint, $amine);
             if ($outcome === 'reconciled') {
                 $reconciled++;
-            } elseif ($outcome === 'content_changed') {
+            } elseif ($outcome === 'content_changed' || $outcome === 'missing_on_amine') {
                 $contentChanged++;
             }
         }
@@ -964,7 +948,7 @@ final class MaterialImageSyncService
 
     /** @param array<string, mixed> $row */
     /** @param array{size_bytes: int, sha256: string} $fingerprint */
-  /** @param array<string, mixed>|null $amine */
+    /** @param array<string, mixed>|null $amine */
     private static function applyAmineLookupToRow(array $row, array $fingerprint, ?array $amine): ?string
     {
         $fileName = (string) ($row['file_name'] ?? '');
@@ -974,7 +958,17 @@ final class MaterialImageSyncService
             return null;
         }
 
-        if ($amine === null) {
+        if ($amine === null || !self::amineFileExistsOnDisk($amine)) {
+            if ($id !== '') {
+                self::markPendingWithFingerprint(
+                    $id,
+                    $fingerprint,
+                    'الملف غير موجود على الأمين — ستُعاد المزامنة.'
+                );
+
+                return 'missing_on_amine';
+            }
+
             return null;
         }
 
@@ -1004,6 +998,12 @@ final class MaterialImageSyncService
         }
 
         return 'content_changed';
+    }
+
+    /** @param array<string, mixed> $amine */
+    private static function amineFileExistsOnDisk(array $amine): bool
+    {
+        return (bool) ($amine['fileExistsOnDisk'] ?? $amine['FileExistsOnDisk'] ?? false);
     }
 
     /** @param list<string> $fileNames */
@@ -1306,7 +1306,7 @@ final class MaterialImageSyncService
             $parts[] = 'أُضيف ' . $added . ' للطابور';
         }
         if ($contentChanged > 0) {
-            $parts[] = $contentChanged . ' بمحتوى مختلف عن الأمين — ستُرفع عند المزامنة';
+            $parts[] = $contentChanged . ' تحتاج إعادة مزامنة مع الأمين';
         }
         if ($skipped > 0) {
             $parts[] = 'تُخطّى ' . $skipped;
