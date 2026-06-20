@@ -81,15 +81,10 @@ if ($method === 'GET') {
     }
 
     if ($action === 'material-search') {
-        $result = MaterialImageStorageService::browseMaterials([
-            'page' => 1,
-            'page_size' => 10,
-            'search' => (string) ($_GET['q'] ?? ''),
-            'has_image' => $_GET['has_image'] ?? '',
-            'local_status' => 'all',
-        ]);
-
-        echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        echo json_encode(MaterialImageLinkService::searchMaterials(
+            (string) ($_GET['q'] ?? ''),
+            max(10, min(60, (int) ($_GET['page_size'] ?? 40)))
+        ), JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -164,11 +159,59 @@ if ($method === 'POST') {
     if ($action === 'assign-materials') {
         @set_time_limit(120);
         $sourceFileName = trim((string) ($_POST['source_file_name'] ?? ''));
+        $amineSourceGuid = trim((string) ($_POST['amine_image_guid'] ?? ''));
         $materialGuids = $_POST['material_guids'] ?? ($_POST['material_guids[]'] ?? []);
         if (!is_array($materialGuids)) {
             $materialGuids = [$materialGuids];
         }
-        $result = MaterialImageLinkService::assign($sourceFileName, $materialGuids, $userId);
+        $result = MaterialImageLinkService::assign(
+            $sourceFileName,
+            $materialGuids,
+            $userId,
+            $amineSourceGuid !== '' ? $amineSourceGuid : null
+        );
+        echo json_encode(array_merge($result, [
+            'sync' => MaterialImageSyncService::stats(),
+        ]), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'unlink-image') {
+        $imageGuid = trim((string) ($_POST['image_guid'] ?? ''));
+        $materialGuid = trim((string) ($_POST['material_guid'] ?? ''));
+        $result = MaterialImageLinkService::unlinkImage(
+            $imageGuid,
+            $materialGuid !== '' ? $materialGuid : null
+        );
+        echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'delete-image') {
+        $imageGuid = trim((string) ($_POST['image_guid'] ?? ''));
+        $fileName = trim((string) ($_POST['file_name'] ?? ''));
+        $result = MaterialImageLinkService::deleteImage($imageGuid, $fileName);
+        echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'reassign-materials') {
+        @set_time_limit(120);
+        $sourceFileName = trim((string) ($_POST['source_file_name'] ?? ''));
+        $imageGuid = trim((string) ($_POST['image_guid'] ?? ''));
+        $materialGuid = trim((string) ($_POST['material_guid'] ?? ''));
+        $amineSourceGuid = trim((string) ($_POST['amine_image_guid'] ?? ''));
+        $materialGuids = $_POST['material_guids'] ?? ($_POST['material_guids[]'] ?? []);
+        if (!is_array($materialGuids)) {
+            $materialGuids = [$materialGuids];
+        }
+        $result = MaterialImageLinkService::reassign(
+            $sourceFileName,
+            $amineSourceGuid !== '' ? $amineSourceGuid : $imageGuid,
+            $materialGuid !== '' ? $materialGuid : null,
+            $materialGuids,
+            $userId
+        );
         echo json_encode(array_merge($result, [
             'sync' => MaterialImageSyncService::stats(),
         ]), JSON_UNESCAPED_UNICODE);

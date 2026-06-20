@@ -260,6 +260,21 @@ final class MaterialImageStorageService
         return ['ok' => true, 'message' => 'تم', 'file_name' => $targetFileName];
     }
 
+    public static function deleteLocalFile(string $fileName): void
+    {
+        $fileName = basename(str_replace('\\', '/', trim($fileName)));
+        if ($fileName === '' || str_contains($fileName, '..')) {
+            return;
+        }
+
+        foreach ([false, true] as $thumb) {
+            $path = self::resolveLocalPath($fileName, $thumb);
+            if ($path !== null && is_file($path)) {
+                @unlink($path);
+            }
+        }
+    }
+
     public static function publicUrl(string $fileName, bool $thumb = true): string
     {
         return '/media/material.php?file=' . rawurlencode(self::lookupFileName($fileName))

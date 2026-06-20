@@ -835,6 +835,25 @@ final class MaterialImageSyncService
         return $stmt->rowCount();
     }
 
+    public static function removeByFileNameOrGuid(string $fileName, string $amineImageGuid): void
+    {
+        self::ensureTable();
+        $fileName = basename(str_replace('\\', '/', trim($fileName)));
+        $amineImageGuid = trim($amineImageGuid);
+
+        if ($fileName !== '' && !str_contains($fileName, '..')) {
+            $stmt = Database::pdo()->prepare('DELETE FROM material_image_sync_queue WHERE file_name = :file_name');
+            $stmt->execute(['file_name' => $fileName]);
+        }
+
+        if ($amineImageGuid !== '') {
+            $stmt = Database::pdo()->prepare(
+                'DELETE FROM material_image_sync_queue WHERE amine_image_guid::text = :amine_image_guid'
+            );
+            $stmt->execute(['amine_image_guid' => $amineImageGuid]);
+        }
+    }
+
     public static function recordAssignedCopy(
         string $fileName,
         string $localPath,

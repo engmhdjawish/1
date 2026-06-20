@@ -215,9 +215,10 @@ public sealed class MaterialImagesController(
         pageSize = Math.Clamp(pageSize, 6, 60);
 
         var query = BuildImageQuery(linked, null);
-        if (!string.IsNullOrWhiteSpace(materialSearch))
+        var searchTokens = SplitSearchTokens(materialSearch);
+        foreach (var token in searchTokens)
         {
-            var term = materialSearch.Trim();
+            var term = token;
             query = query.Where(image =>
                 mainDbContext.Materials.Any(material =>
                     material.PictureGuid == image.Guid &&
@@ -1192,6 +1193,11 @@ public sealed class MaterialImagesController(
                         first.Code);
                 });
     }
+
+    private static string[] SplitSearchTokens(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static MaterialImageLookupBatchItemResponse LookupFileOnAmine(
         string fileName,

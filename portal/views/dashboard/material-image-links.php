@@ -12,8 +12,7 @@ declare(strict_types=1);
     <div>
       <h1 class="text-2xl font-extrabold">ربط الصور بالمواد</h1>
       <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
-        صفحة مستقلة للربط: القائمة والفلاتر تُجلب مباشرة من API الأمين (bm000 + PictureGUID) مع ترقيم صفحات.
-        كل صورة تعرض المادة المرتبطة بها فقط — استعلام واحد لكل صفحة بدون فحص صورة صورة.
+        اضغط على الصورة للتكبير والتحقق قبل الربط. يمكن اختيار عدة مواد لإنشاء نسخة مستقلة لكل مادة.
       </p>
     </div>
     <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white text-xs">
@@ -33,7 +32,7 @@ declare(strict_types=1);
 
 <section class="rounded-xl border border-border-subtle bg-white overflow-hidden mb-6">
   <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60 flex items-center justify-between">
-    <h2 class="font-bold">صور أساسية (صفحات)</h2>
+    <h2 class="font-bold">صور الأمين (صفحات)</h2>
     <div class="flex items-center gap-2">
       <button type="button" id="reloadSourcesBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold">تحديث</button>
       <span id="sourcePageLabel" class="text-xs text-text-muted">صفحة 1</span>
@@ -46,7 +45,7 @@ declare(strict_types=1);
         <option value="linked">المرتبطة فقط</option>
         <option value="unlinked">غير المرتبطة فقط</option>
       </select>
-      <input type="search" id="sourceMaterialSearch" class="h-9 rounded-lg border border-border-subtle px-3 text-sm" placeholder="بحث باسم/كود المادة المرتبطة">
+      <input type="search" id="sourceMaterialSearch" class="h-9 rounded-lg border border-border-subtle px-3 text-sm" placeholder="بحث مادة (كلمات بأي ترتيب)">
       <button type="button" id="applySourceFiltersBtn" class="h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold">تطبيق الفلاتر</button>
     </div>
     <div id="sourceCards" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
@@ -58,6 +57,15 @@ declare(strict_types=1);
 </section>
 
 <p id="linkStatus" class="text-sm text-text-muted"></p>
+
+<div id="imageLightbox" class="fixed inset-0 z-[80] hidden items-center justify-center bg-black/85 p-4" role="dialog" aria-modal="true">
+  <button type="button" id="lightboxCloseBtn" class="absolute top-4 left-4 h-10 w-10 rounded-full bg-white/90 text-lg font-bold" aria-label="إغلاق">×</button>
+  <div class="max-w-[96vw] max-h-[92vh] flex flex-col items-center gap-3">
+    <img id="lightboxImg" src="" alt="" class="max-w-full max-h-[78vh] object-contain rounded-lg shadow-2xl bg-white transition-transform duration-150">
+    <p id="lightboxCaption" class="text-white text-sm text-center max-w-2xl"></p>
+    <p class="text-white/70 text-xs text-center">انقر على الصورة للتكبير عند النقطة — انقر مجدداً للعودة</p>
+  </div>
+</div>
 
 <script>
 (() => {
@@ -71,6 +79,10 @@ declare(strict_types=1);
   const sourceMaterialSearch = document.getElementById('sourceMaterialSearch');
   const applySourceFiltersBtn = document.getElementById('applySourceFiltersBtn');
   const linkStatus = document.getElementById('linkStatus');
+  const imageLightbox = document.getElementById('imageLightbox');
+  const lightboxImg = document.getElementById('lightboxImg');
+  const lightboxCaption = document.getElementById('lightboxCaption');
+  const lightboxCloseBtn = document.getElementById('lightboxCloseBtn');
   let page = 1;
   let hasMore = false;
   const pageSize = 12;
@@ -80,35 +92,106 @@ declare(strict_types=1);
     return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[c]));
   }
 
-  function chipsHtml(fileName) {
-    const items = sourceMaterialMap.get(fileName) || [];
-    if (!items.length) return '<span class="text-[11px] text-text-muted">لا توجد مواد مضافة.</span>';
-    return items.map((item, index) => `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-surface-low text-[11px]">${escapeHtml(item.label)}<button type="button" data-remove="${index}" class="text-red-600">×</button></span>`).join('');
+  function cardKey(item) {
+    return item.amine_image_guid || item.file_name || '';
+  }
+
+  function chipsHtml(key) {
+    const items = sourceMaterialMap.get(key) || [];
+    if (!items.length) {
+      return '<span class="text-[11px] text-text-muted">لم تُضف مواد بعد — يمكن اختيار أكثر من مادة.</span>';
+    }
+    return items.map((item, index) => (
+      `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-surface-low text-[11px]">`
+      + `${escapeHtml(item.label)}`
+      + `<button type="button" data-remove="${index}" class="text-red-600" title="إزالة">×</button>`
+      + `</span>`
+    )).join('');
+  }
+
+  function closeSuggestions(card) {
+    const sug = card?.querySelector('.suggestions');
+    if (!sug) return;
+    sug.classList.add('hidden');
+    sug.innerHTML = '';
+  }
+
+  function openLightbox(url, caption) {
+    if (!url || !imageLightbox || !lightboxImg) return;
+    lightboxImg.src = url;
+    lightboxImg.alt = caption || '';
+    lightboxImg.style.transform = '';
+    lightboxImg.style.transformOrigin = 'center center';
+    lightboxImg.style.cursor = 'zoom-in';
+    lightboxImg.dataset.zoomed = '0';
+    if (lightboxCaption) lightboxCaption.textContent = caption || '';
+    imageLightbox.classList.remove('hidden');
+    imageLightbox.classList.add('flex');
+  }
+
+  function closeLightbox() {
+    if (!imageLightbox || !lightboxImg) return;
+    imageLightbox.classList.add('hidden');
+    imageLightbox.classList.remove('flex');
+    lightboxImg.src = '';
+    lightboxImg.style.transform = '';
+    lightboxImg.dataset.zoomed = '0';
+  }
+
+  function toggleLightboxZoom(event) {
+    if (!lightboxImg || lightboxImg.src === '') return;
+    const rect = lightboxImg.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+    if (lightboxImg.dataset.zoomed === '1') {
+      lightboxImg.style.transform = '';
+      lightboxImg.style.transformOrigin = 'center center';
+      lightboxImg.style.cursor = 'zoom-in';
+      lightboxImg.dataset.zoomed = '0';
+      return;
+    }
+    lightboxImg.style.transformOrigin = `${x}% ${y}%`;
+    lightboxImg.style.transform = 'scale(2.5)';
+    lightboxImg.style.cursor = 'zoom-out';
+    lightboxImg.dataset.zoomed = '1';
   }
 
   async function searchMaterials(keyword) {
-    const response = await fetch(`${API_URL}?action=material-search&q=${encodeURIComponent(keyword)}&has_image=0`);
+    const response = await fetch(`${API_URL}?action=material-search&q=${encodeURIComponent(keyword)}&page_size=40`);
     const payload = await response.json();
     return payload.items || [];
   }
 
-  async function assign(fileName, items, button, statusEl = null) {
+  async function postAction(action, fields) {
+    const form = new FormData();
+    form.append('action', action);
+    Object.entries(fields).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        value.forEach((entry) => form.append(`${key}[]`, entry));
+      } else if (value !== undefined && value !== null && value !== '') {
+        form.append(key, value);
+      }
+    });
+    const response = await fetch(API_URL, { method: 'POST', body: form });
+    return response.json();
+  }
+
+  async function assign(item, items, button, statusEl = null) {
     if (!items.length) {
       const message = 'أضف مادة واحدة على الأقل.';
       linkStatus.textContent = message;
       if (statusEl) statusEl.textContent = message;
       return;
     }
-    const form = new FormData();
-    form.append('action', 'assign-materials');
-    form.append('source_file_name', fileName);
-    items.forEach((item) => form.append('material_guids[]', item.guid));
     button.disabled = true;
     linkStatus.textContent = 'جاري الربط...';
     if (statusEl) statusEl.textContent = 'جاري الربط...';
     try {
-      const response = await fetch(API_URL, { method: 'POST', body: form });
-      const payload = await response.json();
+      const payload = await postAction('assign-materials', {
+        source_file_name: item.file_name,
+        amine_image_guid: item.amine_image_guid,
+        material_guids: items.map((row) => row.guid),
+      });
       linkStatus.textContent = payload.message || '';
       if (statusEl) statusEl.textContent = payload.message || '';
       if (payload.items && payload.items.length && !payload.ok) {
@@ -121,7 +204,7 @@ declare(strict_types=1);
         }
       }
       if (payload.ok) {
-        sourceMaterialMap.set(fileName, []);
+        sourceMaterialMap.set(cardKey(item), []);
         await loadSources(page);
       }
     } catch {
@@ -132,19 +215,95 @@ declare(strict_types=1);
     }
   }
 
-  function bindCard(card, fileName) {
+  async function reassign(item, items, button, statusEl) {
+    if (!items.length) {
+      const message = 'أضف مادة واحدة على الأقل للاستبدال.';
+      if (statusEl) statusEl.textContent = message;
+      return;
+    }
+    if (!confirm('سيتم فك الربط الحالي ثم ربط الصورة بالمواد المختارة. متابعة؟')) return;
+    button.disabled = true;
+    if (statusEl) statusEl.textContent = 'جاري الاستبدال...';
+    try {
+      const payload = await postAction('reassign-materials', {
+        source_file_name: item.file_name,
+        image_guid: item.amine_image_guid,
+        amine_image_guid: item.amine_image_guid,
+        material_guid: item.linked_material_guid,
+        material_guids: items.map((row) => row.guid),
+      });
+      if (statusEl) statusEl.textContent = payload.message || '';
+      linkStatus.textContent = payload.message || '';
+      if (payload.ok) {
+        sourceMaterialMap.set(cardKey(item), []);
+        await loadSources(page);
+      }
+    } catch {
+      if (statusEl) statusEl.textContent = 'تعذر تنفيذ الاستبدال.';
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function unlink(item, button, statusEl) {
+    if (!confirm('فك ربط هذه الصورة بالمادة الحالية؟')) return;
+    button.disabled = true;
+    if (statusEl) statusEl.textContent = 'جاري فك الربط...';
+    try {
+      const payload = await postAction('unlink-image', {
+        image_guid: item.amine_image_guid,
+        material_guid: item.linked_material_guid,
+      });
+      if (statusEl) statusEl.textContent = payload.message || '';
+      linkStatus.textContent = payload.message || '';
+      if (payload.ok) await loadSources(page);
+    } catch {
+      if (statusEl) statusEl.textContent = 'تعذر فك الربط.';
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function deleteImage(item, button, statusEl) {
+    if (!confirm('حذف الصورة من الأمين والموقع نهائياً؟')) return;
+    button.disabled = true;
+    if (statusEl) statusEl.textContent = 'جاري الحذف...';
+    try {
+      const payload = await postAction('delete-image', {
+        image_guid: item.amine_image_guid,
+        file_name: item.file_name,
+      });
+      if (statusEl) statusEl.textContent = payload.message || '';
+      linkStatus.textContent = payload.message || '';
+      if (payload.ok) await loadSources(page);
+    } catch {
+      if (statusEl) statusEl.textContent = 'تعذر حذف الصورة.';
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function bindCard(card, item) {
+    const key = cardKey(item);
     const input = card.querySelector('.material-input');
     const sug = card.querySelector('.suggestions');
     const chips = card.querySelector('.chips');
     const assignBtn = card.querySelector('.assign-btn');
+    const reassignBtn = card.querySelector('.reassign-btn');
+    const unlinkBtn = card.querySelector('.unlink-btn');
+    const deleteBtn = card.querySelector('.delete-btn');
     const cardStatus = card.querySelector('.card-status');
+    const previewBtn = card.querySelector('.preview-btn');
     if (!input || !sug || !chips || !assignBtn || !cardStatus) return;
+
+    previewBtn?.addEventListener('click', () => {
+      openLightbox(item.preview_full_url || item.preview_url, item.linked_material_name || '');
+    });
 
     input.addEventListener('input', async () => {
       const q = input.value.trim();
       if (q.length < 2) {
-        sug.classList.add('hidden');
-        sug.innerHTML = '';
+        closeSuggestions(card);
         return;
       }
       const rows = await searchMaterials(q);
@@ -165,38 +324,59 @@ declare(strict_types=1);
       const target = event.target;
       const btn = target instanceof HTMLElement ? target.closest('.add-mat') : null;
       if (!(btn instanceof HTMLButtonElement)) return;
+      event.preventDefault();
+      event.stopPropagation();
       const guid = btn.getAttribute('data-guid') || '';
       const label = btn.getAttribute('data-label') || '';
       if (!guid) return;
-      const items = sourceMaterialMap.get(fileName) || [];
-      if (!items.some((item) => item.guid === guid)) items.push({ guid, label });
-      sourceMaterialMap.set(fileName, items);
-      chips.innerHTML = chipsHtml(fileName);
-      sug.classList.add('hidden');
-      sug.innerHTML = '';
+      const selected = sourceMaterialMap.get(key) || [];
+      if (!selected.some((row) => row.guid === guid)) selected.push({ guid, label });
+      sourceMaterialMap.set(key, selected);
+      chips.innerHTML = chipsHtml(key);
+      closeSuggestions(card);
       input.value = '';
+      input.blur();
     });
 
     chips.addEventListener('click', (event) => {
       const target = event.target;
       const btn = target instanceof HTMLElement ? target.closest('button[data-remove]') : null;
       if (!(btn instanceof HTMLButtonElement)) return;
+      event.stopPropagation();
+      closeSuggestions(card);
       const idx = Number(btn.getAttribute('data-remove') || -1);
-      const items = sourceMaterialMap.get(fileName) || [];
-      if (idx >= 0) items.splice(idx, 1);
-      sourceMaterialMap.set(fileName, items);
-      chips.innerHTML = chipsHtml(fileName);
+      const selected = sourceMaterialMap.get(key) || [];
+      if (idx >= 0) selected.splice(idx, 1);
+      sourceMaterialMap.set(key, selected);
+      chips.innerHTML = chipsHtml(key);
     });
 
     assignBtn.addEventListener('click', async () => {
-      const selected = sourceMaterialMap.get(fileName) || [];
+      closeSuggestions(card);
+      const selected = sourceMaterialMap.get(key) || [];
       if (!selected.length) {
-        const message = `الصورة «${fileName}»: أضف مادة واحدة على الأقل قبل الربط.`;
+        const message = 'أضف مادة واحدة على الأقل قبل الربط.';
         linkStatus.textContent = message;
         cardStatus.textContent = message;
         return;
       }
-      await assign(fileName, selected, assignBtn, cardStatus);
+      await assign(item, selected, assignBtn, cardStatus);
+    });
+
+    reassignBtn?.addEventListener('click', async () => {
+      closeSuggestions(card);
+      const selected = sourceMaterialMap.get(key) || [];
+      await reassign(item, selected, reassignBtn, cardStatus);
+    });
+
+    unlinkBtn?.addEventListener('click', async () => {
+      closeSuggestions(card);
+      await unlink(item, unlinkBtn, cardStatus);
+    });
+
+    deleteBtn?.addEventListener('click', async () => {
+      closeSuggestions(card);
+      await deleteImage(item, deleteBtn, cardStatus);
     });
   }
 
@@ -206,31 +386,54 @@ declare(strict_types=1);
       sourceCards.innerHTML = '<div class="text-xs text-text-muted">لا توجد صور في هذه الصفحة.</div>';
     } else {
       sourceCards.innerHTML = items.map((item) => {
-        const fileName = item.file_name || '';
-        const linkBadge = item.is_linked_to_material
-          ? '<span class="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">مرتبطة بمادة</span>'
-          : '<span class="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">غير مرتبطة</span>';
-        const linkedMeta = item.is_linked_to_material
-          ? `<p class="text-[11px] text-text-muted">${escapeHtml(item.linked_material_code || '')} ${escapeHtml(item.linked_material_name || '')}</p>`
+        const key = cardKey(item);
+        const isLinked = !!item.is_linked_to_material;
+        const materialTitle = isLinked
+          ? escapeHtml(item.linked_material_name || 'مادة مرتبطة')
+          : '<span class="text-text-muted">غير مرتبطة بمادة</span>';
+        const materialCode = item.linked_material_code
+          ? `<span class="text-xs text-text-muted font-mono" dir="ltr">${escapeHtml(item.linked_material_code)}</span>`
           : '';
+        const linkBadge = isLinked
+          ? '<span class="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">مرتبطة</span>'
+          : '<span class="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">غير مرتبطة</span>';
         const preview = item.preview_url
-          ? `<img src="${escapeHtml(item.preview_url)}" class="w-full h-44 object-contain rounded-lg border border-border-subtle bg-surface-low" alt="">`
-          : '<div class="w-full h-44 rounded-lg border border-border-subtle bg-surface-low"></div>';
-        return `<article class="rounded-xl border border-border-subtle p-3 bg-white space-y-2" data-file="${escapeHtml(fileName)}">
+          ? `<button type="button" class="preview-btn group relative w-full h-48 rounded-lg border border-border-subtle bg-surface-low overflow-hidden" title="تكبير الصورة">
+              <img src="${escapeHtml(item.preview_url)}" class="w-full h-full object-contain" alt="">
+              <span class="absolute bottom-2 left-2 rounded-md bg-black/60 text-white text-[10px] px-2 py-1 opacity-90 group-hover:bg-black/80">🔍 تكبير</span>
+            </button>`
+          : '<div class="w-full h-48 rounded-lg border border-border-subtle bg-surface-low"></div>';
+        const reassignBlock = isLinked
+          ? `<button type="button" class="reassign-btn h-8 px-3 rounded-lg bg-primary text-white text-xs font-bold w-full">استبدال الربط بمواد جديدة</button>`
+          : '';
+        const unlinkBlock = isLinked
+          ? `<button type="button" class="unlink-btn h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold w-full">فك الربط</button>`
+          : '';
+
+        return `<article class="rounded-xl border border-border-subtle p-3 bg-white space-y-2" data-key="${escapeHtml(key)}">
           ${preview}
-          <p class="text-xs font-mono truncate" dir="ltr">${escapeHtml(fileName)}</p>
-          <div>${linkBadge}</div>
-          ${linkedMeta}
-          <div class="relative">
-            <input class="material-input h-9 w-full rounded-lg border border-border-subtle px-3 text-xs" placeholder="ابحث عن مادة...">
-            <div class="suggestions hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow"></div>
+          <div class="space-y-1">
+            <div class="flex items-center justify-between gap-2">${linkBadge}</div>
+            <p class="text-sm font-bold leading-snug">${materialTitle}</p>
+            ${materialCode}
           </div>
-          <div class="chips flex flex-wrap gap-1">${chipsHtml(fileName)}</div>
+          <div class="relative">
+            <input class="material-input h-9 w-full rounded-lg border border-border-subtle px-3 text-xs" placeholder="ابحث عن مادة (كلمات بأي ترتيب)...">
+            <div class="suggestions hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow max-h-48 overflow-auto"></div>
+          </div>
+          <div class="chips flex flex-wrap gap-1">${chipsHtml(key)}</div>
           <button type="button" class="assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>
+          ${reassignBlock}
+          ${unlinkBlock}
+          <button type="button" class="delete-btn h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold w-full">حذف الصورة</button>
           <p class="card-status text-[11px] text-text-muted"></p>
         </article>`;
       }).join('');
-      sourceCards.querySelectorAll('article[data-file]').forEach((card) => bindCard(card, card.getAttribute('data-file') || ''));
+
+      items.forEach((item, index) => {
+        const card = sourceCards.children[index];
+        if (card) bindCard(card, item);
+      });
     }
 
     page = Number(payload.page || 1);
@@ -252,6 +455,26 @@ declare(strict_types=1);
     }
     renderSources(payload);
   }
+
+  document.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (!target.closest('.material-input') && !target.closest('.suggestions')) {
+      sourceCards?.querySelectorAll('article').forEach((card) => closeSuggestions(card));
+    }
+  });
+
+  lightboxCloseBtn?.addEventListener('click', closeLightbox);
+  lightboxImg?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleLightboxZoom(event);
+  });
+  imageLightbox?.addEventListener('click', (event) => {
+    if (event.target === imageLightbox) closeLightbox();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeLightbox();
+  });
 
   sourcePrevBtn?.addEventListener('click', () => { if (page > 1) loadSources(page - 1); });
   sourceNextBtn?.addEventListener('click', () => { if (hasMore) loadSources(page + 1); });

@@ -10,6 +10,11 @@ final class ApiClient
 {
     private const TOKEN_FILE = 'amine-api-token.json';
 
+    public static function delete(string $path): array
+    {
+        return self::request('DELETE', $path);
+    }
+
     public static function get(string $path, array $query = []): array
     {
         return self::request('GET', $path, null, $query);

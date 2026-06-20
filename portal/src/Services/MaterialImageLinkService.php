@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Database;
+use Portal\Support\Text;
 use PDO;
 use Throwable;
 
@@ -136,11 +137,15 @@ final class MaterialImageLinkService
         $previewUrl = $hasLocal
             ? MaterialImageStorageService::publicUrl($fileName, true)
             : ($imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '');
+        $previewFullUrl = $hasLocal
+            ? MaterialImageStorageService::publicUrl($fileName, false)
+            : ($imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) : '');
 
         return [
             'file_name' => $fileName,
             'local_path' => $hasLocal ? (string) $localPath : '',
             'preview_url' => $previewUrl,
+            'preview_full_url' => $previewFullUrl,
             'amine_image_guid' => $imageGuid,
             'is_synced' => $imageGuid !== '',
             'is_linked_to_material' => $isLinked,
@@ -160,6 +165,148 @@ final class MaterialImageLinkService
     }
 
     /**
+     * @return array{ok: bool, message: string, items: list<array<string, mixed>>}
+     */
+    public static function searchMaterials(string $query, int $pageSize = 40): array
+    {
+        $query = trim($query);
+        if (strlen($query) < 2) {
+            return ['ok' => true, 'message' => '', 'items' => []];
+        }
+
+        $tokens = preg_split('/\s+/u', $query, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $apiSearch = $tokens[0] ?? $query;
+
+        try {
+            $result = MaterialImageStorageService::browseMaterials([
+                'page' => 1,
+                'page_size' => max(10, min(60, $pageSize)),
+                'search' => $apiSearch,
+                'has_image' => '',
+                'local_status' => 'all',
+            ]);
+        } catch (Throwable $exception) {
+            return ['ok' => false, 'message' => $exception->getMessage(), 'items' => []];
+        }
+
+        if (!($result['ok'] ?? false)) {
+            return ['ok' => false, 'message' => (string) ($result['message'] ?? 'تعذر البحث.'), 'items' => []];
+        }
+
+        $items = self::filterMaterialsByTokens($result['items'] ?? [], $tokens);
+
+        return ['ok' => true, 'message' => '', 'items' => $items];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $items
+     * @param list<string> $tokens
+     * @return list<array<string, mixed>>
+     */
+    private static function filterMaterialsByTokens(array $items, array $tokens): array
+    {
+        if ($tokens === []) {
+            return $items;
+        }
+
+        return array_values(array_filter($items, static function (array $row) use ($tokens): bool {
+            $haystack = Text::lower(trim(
+                (string) ($row['name'] ?? '') . ' ' . (string) ($row['material_code'] ?? '')
+            ));
+            foreach ($tokens as $token) {
+                $needle = Text::lower(trim($token));
+                if ($needle === '' || !str_contains($haystack, $needle)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }));
+    }
+
+    /** @return array{ok: bool, message: string} */
+    public static function unlinkImage(string $imageGuid, ?string $materialGuid = null): array
+    {
+        $imageGuid = trim($imageGuid);
+        if ($imageGuid === '') {
+            return ['ok' => false, 'message' => 'معرف الصورة مطلوب.'];
+        }
+
+        $body = ['imageGuid' => $imageGuid];
+        $materialGuid = trim((string) $materialGuid);
+        if ($materialGuid !== '') {
+            $body['materialGuid'] = $materialGuid;
+        }
+
+        try {
+            $response = ApiClient::postJson('/api/material-images/unlink', $body);
+        } catch (Throwable $exception) {
+            return ['ok' => false, 'message' => $exception->getMessage()];
+        }
+
+        $ok = (bool) ($response['ok'] ?? false) || (int) ($response['status'] ?? 0) === 204;
+
+        return [
+            'ok' => $ok,
+            'message' => $ok ? 'تم فك ربط الصورة بالمادة.' : (string) ($response['error'] ?? ($response['data']['message'] ?? 'فشل فك الربط.')),
+        ];
+    }
+
+    /** @return array{ok: bool, message: string} */
+    public static function deleteImage(string $imageGuid, string $fileName = ''): array
+    {
+        $imageGuid = trim($imageGuid);
+        if ($imageGuid === '') {
+            return ['ok' => false, 'message' => 'معرف الصورة مطلوب.'];
+        }
+
+        self::unlinkImage($imageGuid);
+
+        try {
+            $response = ApiClient::delete('/api/material-images/' . rawurlencode($imageGuid));
+        } catch (Throwable $exception) {
+            return ['ok' => false, 'message' => $exception->getMessage()];
+        }
+
+        $ok = (bool) ($response['ok'] ?? false) || (int) ($response['status'] ?? 0) === 204;
+        if (!$ok) {
+            return [
+                'ok' => false,
+                'message' => (string) ($response['error'] ?? ($response['data']['message'] ?? 'فشل حذف الصورة من الأمين.')),
+            ];
+        }
+
+        $fileName = basename(str_replace('\\', '/', trim($fileName)));
+        if ($fileName !== '' && !str_contains($fileName, '..')) {
+            MaterialImageStorageService::deleteLocalFile($fileName);
+            MaterialImageSyncService::removeByFileNameOrGuid($fileName, $imageGuid);
+        } else {
+            MaterialImageSyncService::removeByFileNameOrGuid('', $imageGuid);
+        }
+
+        return ['ok' => true, 'message' => 'تم حذف الصورة من الأمين والموقع.'];
+    }
+
+    /**
+     * @param list<string> $materialGuids
+     * @return array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>}
+     */
+    public static function reassign(
+        string $sourceFileName,
+        string $imageGuid,
+        ?string $currentMaterialGuid,
+        array $materialGuids,
+        ?string $uploadedByUserId = null
+    ): array {
+        $unlink = self::unlinkImage($imageGuid, $currentMaterialGuid !== null && $currentMaterialGuid !== '' ? $currentMaterialGuid : null);
+        if (!($unlink['ok'] ?? false) && $currentMaterialGuid !== null && $currentMaterialGuid !== '') {
+            return self::assignError((string) ($unlink['message'] ?? 'فشل فك الربط قبل الاستبدال.'));
+        }
+
+        return self::assign($sourceFileName, $materialGuids, $uploadedByUserId, $imageGuid);
+    }
+
+    /**
      * @param list<string> $materialGuids
      * @return array{
      *   ok: bool,
@@ -169,8 +316,12 @@ final class MaterialImageLinkService
      *   items: list<array<string, mixed>>
      * }
      */
-    public static function assign(string $sourceFileName, array $materialGuids, ?string $uploadedByUserId = null): array
-    {
+    public static function assign(
+        string $sourceFileName,
+        array $materialGuids,
+        ?string $uploadedByUserId = null,
+        ?string $knownAmineSourceGuid = null
+    ): array {
         MaterialImageSyncService::ensureTable();
         MaterialImageStorageService::ensureSettings();
 
@@ -195,14 +346,22 @@ final class MaterialImageLinkService
         }
 
         $sourcePath = MaterialImageStorageService::resolveLocalPath($sourceFileName, false);
-        if ($sourcePath === null || !is_file($sourcePath)) {
-            return self::assignError('الصورة الأساسية غير موجودة على الموقع.');
+        $hasLocal = $sourcePath !== null && is_file($sourcePath);
+        $amineSourceGuid = trim((string) $knownAmineSourceGuid);
+        if ($amineSourceGuid === '' && $hasLocal) {
+            $amineSourceGuid = self::resolveAmineSourceGuid($sourceFileName, $sourcePath);
+        } elseif ($amineSourceGuid === '') {
+            $amineSourceGuid = self::resolveAmineSourceGuidWithoutLocal($sourceFileName);
         }
 
-        $amineSourceGuid = self::resolveAmineSourceGuid($sourceFileName, $sourcePath);
+        if (!$hasLocal && $amineSourceGuid === '') {
+            return self::assignError('الصورة غير موجودة على الأمين أو الموقع.');
+        }
+
+        $effectiveSourcePath = $hasLocal ? $sourcePath : '';
         if ($amineSourceGuid !== '') {
             $amineResult = self::assignViaAmine(
-                $sourcePath,
+                $effectiveSourcePath,
                 $sourceFileName,
                 $amineSourceGuid,
                 $materialGuids,
@@ -212,15 +371,40 @@ final class MaterialImageLinkService
                 return $amineResult;
             }
 
-            $uploadResult = self::assignViaUpload($sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId);
-            if (($uploadResult['linked'] ?? 0) > 0) {
-                return $uploadResult;
+            if ($hasLocal) {
+                $uploadResult = self::assignViaUpload($sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId);
+                if (($uploadResult['linked'] ?? 0) > 0) {
+                    return $uploadResult;
+                }
+
+                return self::combineAssignFailures($amineResult, $uploadResult);
             }
 
-            return self::combineAssignFailures($amineResult, $uploadResult);
+            return $amineResult;
+        }
+
+        if (!$hasLocal) {
+            return self::assignError('الصورة غير موجودة على الموقع ولا يمكن رفعها للأمين.');
         }
 
         return self::assignViaUpload($sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId);
+    }
+
+    private static function resolveAmineSourceGuidWithoutLocal(string $fileName): string
+    {
+        $queueRow = self::queueRowByFileName($fileName);
+        $queueGuid = trim((string) ($queueRow['amine_image_guid'] ?? ''));
+        if ($queueGuid !== '' && self::imageGuidExistsOnAmine($queueGuid)) {
+            return $queueGuid;
+        }
+
+        $lookup = MaterialImageSyncService::lookupFilesOnAmine([
+            ['file_name' => $fileName, 'fingerprint' => null],
+        ]);
+        $found = $lookup[self::lookupKey($fileName)] ?? null;
+        $lookupGuid = trim((string) ($found['id'] ?? ''));
+
+        return $lookupGuid !== '' && self::imageGuidExistsOnAmine($lookupGuid) ? $lookupGuid : '';
     }
 
     private static function resolveAmineSourceGuid(string $fileName, string $sourcePath): string
@@ -314,29 +498,44 @@ final class MaterialImageLinkService
                 continue;
             }
 
-            $copy = MaterialImageStorageService::copyLocalFromSource($sourcePath, $storedFileName);
-            if (!($copy['ok'] ?? false)) {
-                $failed++;
-                $results[] = [
-                    'material_guid' => $materialGuid,
-                    'material_name' => $materialName,
-                    'material_code' => $materialCode,
-                    'ok' => false,
-                    'message' => (string) ($copy['message'] ?? 'فشل النسخ المحلي.'),
-                ];
-                continue;
+            $hasLocalSource = $sourcePath !== '' && is_file($sourcePath);
+            $localPath = '';
+            if ($hasLocalSource) {
+                $copy = MaterialImageStorageService::copyLocalFromSource($sourcePath, $storedFileName);
+                if (!($copy['ok'] ?? false)) {
+                    $failed++;
+                    $results[] = [
+                        'material_guid' => $materialGuid,
+                        'material_name' => $materialName,
+                        'material_code' => $materialCode,
+                        'ok' => false,
+                        'message' => (string) ($copy['message'] ?? 'فشل النسخ المحلي.'),
+                    ];
+                    continue;
+                }
+                $localPath = MaterialImageStorageService::settings()['images_dir']
+                    . DIRECTORY_SEPARATOR
+                    . (string) ($copy['file_name'] ?? $storedFileName);
+            } else {
+                $copy = ['ok' => true, 'file_name' => $storedFileName];
+                $download = ApiClient::getBinary('/api/material-images/' . rawurlencode($imageGuid) . '/file');
+                if ($download['ok'] ?? false) {
+                    $localPath = MaterialImageStorageService::settings()['images_dir']
+                        . DIRECTORY_SEPARATOR
+                        . $storedFileName;
+                    @file_put_contents($localPath, $download['body'] ?? '');
+                }
             }
 
-            $localPath = MaterialImageStorageService::settings()['images_dir']
-                . DIRECTORY_SEPARATOR
-                . (string) ($copy['file_name'] ?? $storedFileName);
-            MaterialImageSyncService::recordAssignedCopy(
-                (string) ($copy['file_name'] ?? $storedFileName),
-                $localPath,
-                $imageGuid,
-                $uploadedByUserId,
-                $sourceFileName
-            );
+            if ($localPath !== '' && is_file($localPath)) {
+                MaterialImageSyncService::recordAssignedCopy(
+                    (string) ($copy['file_name'] ?? $storedFileName),
+                    $localPath,
+                    $imageGuid,
+                    $uploadedByUserId,
+                    $sourceFileName
+                );
+            }
 
             $linked++;
             $results[] = [
