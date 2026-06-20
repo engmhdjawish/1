@@ -9,7 +9,7 @@ use Portal\Services\OrderService;
 use Portal\Services\ShareLinkService;
 use Portal\Services\WebCustomerService;
 
-WebSession::requireLogin();
+WebSession::requirePermission('dashboard.view');
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 $pendingCustomers = count(WebCustomerService::listPending());
@@ -137,7 +137,9 @@ ob_start();
               <p class="font-bold text-sm"><?= h((string) ($row['order_number'] ?? '')) ?></p>
               <p class="text-xs text-text-muted"><?= h((string) ($row['updated_at'] ?? '')) ?></p>
             </div>
-            <a href="/dashboard/accounting-sync.php?sync=failed" class="text-primary text-xs font-bold">متابعة</a>
+            <?php if (WebSession::hasPermission('accounting.sync.view')): ?>
+              <a href="/dashboard/accounting-sync.php?sync=failed" class="text-primary text-xs font-bold">متابعة</a>
+            <?php endif; ?>
           </div>
         <?php endforeach; ?>
       </div>

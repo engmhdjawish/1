@@ -7,6 +7,7 @@ require dirname(__DIR__) . '/bootstrap.php';
 use Portal\Services\OrderService;
 use Portal\Services\ShareCartService;
 use Portal\Services\ShareLinkService;
+use Portal\Services\StorePolicyService;
 use Portal\Support\SharePageAccess;
 
 require dirname(__DIR__) . '/views/helpers.php';
@@ -48,16 +49,22 @@ if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] =
     $materialGuid = trim((string) ($_POST['material_guid'] ?? ''));
     if ($action === 'update_item') {
         $quantity = max(0, (int) round((float) ($_POST['quantity'] ?? 0)));
-        if (ShareCartService::updateQuantity($token, $materialGuid, (float) $quantity)) {
+        $result = ShareCartService::updateQuantity($token, $materialGuid, (float) $quantity);
+        if ($result['ok']) {
             $notice = $quantity > 0 ? 'تم تحديث عدد الطرود.' : 'تم حذف المادة من السلة.';
+        } else {
+            $error = $result['message'] !== '' ? $result['message'] : 'تعذر تحديث الكمية.';
         }
     } elseif ($action === 'bump_item') {
         $delta = (int) ($_POST['delta'] ?? 0);
         $items = ShareCartService::items($token);
         $current = (int) round((float) ($items[$materialGuid]['quantity'] ?? 1));
         $next = max(0, $current + $delta);
-        if (ShareCartService::updateQuantity($token, $materialGuid, (float) $next)) {
+        $result = ShareCartService::updateQuantity($token, $materialGuid, (float) $next);
+        if ($result['ok']) {
             $notice = $next > 0 ? 'تم تحديث عدد الطرود.' : 'تم حذف المادة من السلة.';
+        } else {
+            $error = $result['message'] !== '' ? $result['message'] : 'تعذر تحديث الكمية.';
         }
     } elseif ($action === 'remove_item') {
         if (ShareCartService::remove($token, $materialGuid)) {
@@ -107,6 +114,7 @@ $cartItems = ($shareLink !== null && $hasAccess && !$error) ? ShareCartService::
 $totals = ($shareLink !== null && $hasAccess && !$error) ? ShareCartService::totals($token) : ['total_sp' => 0.0, 'total_usd' => 0.0];
 $shareName = is_array($shareLink) ? (string) ($shareLink['name_ar'] ?? 'رابط مشاركة') : 'رابط مشاركة';
 $cartCount = ShareCartService::itemCount($token);
+$maxPackagesPerMaterial = StorePolicyService::maxPackagesPerMaterial();
 
 ob_start();
 ?>
@@ -116,6 +124,9 @@ ob_start();
       <h1 class="text-2xl md:text-3xl font-extrabold">سلة المشتريات</h1>
       <p class="text-sm text-gray-600 mt-1"><?= h($shareName) ?> — الطلب بالطرد (الوحدة الثانية)</p>
       <p class="text-xs text-amber-700 mt-1">إن ظهرت أسعار خاطئة، <strong>أفرغ السلة</strong> وأعد الإضافة من صفحة التصفح بعد التحديث.</p>
+      <?php if ($maxPackagesPerMaterial !== null): ?>
+        <p class="text-xs text-gray-600 mt-1">الحد الأقصى للطلب: <?= h(\Portal\Services\SpecialOfferService::formatQuantityLabel($maxPackagesPerMaterial)) ?> طرد لكل مادة.</p>
+      <?php endif; ?>
     </div>
     <?php if ($token !== '' && $hasAccess && !$error): ?>
       <a
@@ -236,6 +247,7 @@ ob_start();
                               type="number"
                               name="quantity"
                               min="1"
+                              <?php if ($maxPackagesPerMaterial !== null): ?>max="<?= (int) $maxPackagesPerMaterial ?>"<?php endif; ?>
                               step="1"
                               value="<?= (int) $qty ?>"
                               class="w-14 text-center font-bold border-0 focus:ring-0 py-2"

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ExistingDb.Api.Data.Entities;
 
 public sealed class ApiPermission
@@ -8,6 +10,7 @@ public sealed class ApiPermission
     public string? Description { get; set; }
     public string Category { get; set; } = string.Empty;
 
+    [JsonIgnore]
     public ICollection<ApiRolePermission> RolePermissions { get; set; } = [];
 }
 

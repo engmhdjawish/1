@@ -31,17 +31,26 @@ $showImages = array_key_exists('show_images', $linkOptions) ? (bool) $linkOption
 $priceMode = (string) ($linkOptions['price_mode'] ?? 'both');
 $allowClientFilters = array_key_exists('allow_client_filters', $linkOptions) ? (bool) $linkOptions['allow_client_filters'] : true;
 $allowSorting = array_key_exists('allow_sorting', $linkOptions) ? (bool) $linkOptions['allow_sorting'] : true;
-$includeResultFilters = array_key_exists('include_result_filters', $linkOptions) ? (bool) $linkOptions['include_result_filters'] : true;
 $defaultSort = (string) ($linkOptions['default_sort'] ?? 'number:asc');
 $defaultGroupBy = (string) ($linkOptions['default_group_by'] ?? 'none');
 $visibleClientFilters = array_map('strval', is_array($linkOptions['visible_client_filters'] ?? null) ? $linkOptions['visible_client_filters'] : []);
-if ($visibleClientFilters === []) {
-    $visibleClientFilters = ['search', 'materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins', 'sort'];
+$clientSortFields = array_map('strval', is_array($linkOptions['client_sort_fields'] ?? null) ? $linkOptions['client_sort_fields'] : []);
+if ($clientSortFields === []) {
+    foreach (array_filter(array_map('trim', explode(',', $defaultSort))) as $clause) {
+        if ($clause === '') {
+            continue;
+        }
+        $field = str_starts_with($clause, '-') ? substr($clause, 1) : explode(':', $clause, 2)[0];
+        $field = trim((string) $field);
+        if ($field !== '') {
+            $clientSortFields[] = $field;
+        }
+    }
 }
-$defaultSortClauses = array_values(array_filter(array_map('trim', explode(',', $defaultSort)), static fn ($value) => $value !== ''));
-if ($defaultSortClauses === []) {
-    $defaultSortClauses = ['number:asc'];
+if ($clientSortFields === []) {
+    $clientSortFields = ['number', 'materialType', 'manufacturer'];
 }
+$clientSortFields = array_values(array_unique($clientSortFields));
 
 $selectedMaterialTypes = array_map('strval', $editLink['forced_material_types'] ?? []);
 $selectedAgeCategories = array_map('strval', $editLink['forced_age_categories'] ?? []);
@@ -53,6 +62,10 @@ $selectedGroupGuids = array_map('strval', $editLink['forced_group_guids'] ?? [])
 $constraints = is_array($editLink['constraints'] ?? null) ? $editLink['constraints'] : [];
 $forcedIsAvailable = array_key_exists('is_available', $constraints) ? $constraints['is_available'] : null;
 $forcedHasImage = array_key_exists('has_image', $constraints) ? $constraints['has_image'] : null;
+$constraintsMinWarehouse = (string) ($constraints['min_warehouse_quantity'] ?? '');
+if ($constraintsMinWarehouse === '' && isset($editLink['min_quantity']) && (float) $editLink['min_quantity'] > 0) {
+    $constraintsMinWarehouse = (string) $editLink['min_quantity'];
+}
 
 $showForm = $showForm ?? false;
 $isNew = $isNew ?? false;
@@ -141,18 +154,15 @@ foreach ($groupOptions as $group) {
     $groupOptionObjects[] = ['value' => $groupGuid, 'label' => $groupLabel];
 }
 
-$sortPresetOptions = [
-    ['value' => 'number:asc', 'label' => 'رقم المادة تصاعدي'],
-    ['value' => 'number:desc', 'label' => 'رقم المادة تنازلي'],
-    ['value' => 'materialType:asc', 'label' => 'النوع تصاعدي'],
-    ['value' => 'ageCategory:asc', 'label' => 'العمر تصاعدي'],
-    ['value' => 'manufacturer:asc', 'label' => 'الشركة تصاعدي'],
-    ['value' => 'sizeRange:asc', 'label' => 'القياس تصاعدي'],
-    ['value' => 'countryOfOrigin:asc', 'label' => 'بلد المنشأ تصاعدي'],
-    ['value' => '-unitSalePriceSyp', 'label' => 'سعر البيع ل.س تنازلي'],
-    ['value' => 'unitSalePriceSyp:asc', 'label' => 'سعر البيع ل.س تصاعدي'],
-    ['value' => 'unitSalePriceUsd:asc', 'label' => 'سعر البيع دولار تصاعدي'],
-    ['value' => 'unitSalePriceUsd:desc', 'label' => 'سعر البيع دولار تنازلي'],
+$sortFieldOptions = [
+    ['value' => 'number', 'label' => 'رقم المادة'],
+    ['value' => 'materialType', 'label' => 'نوع المادة'],
+    ['value' => 'ageCategory', 'label' => 'الفئة العمرية'],
+    ['value' => 'manufacturer', 'label' => 'الشركة'],
+    ['value' => 'sizeRange', 'label' => 'القياس'],
+    ['value' => 'countryOfOrigin', 'label' => 'بلد المنشأ'],
+    ['value' => 'unitSalePriceSyp', 'label' => 'سعر البيع ل.س'],
+    ['value' => 'unitSalePriceUsd', 'label' => 'سعر البيع $'],
 ];
 
 $visibleFilterOptions = [
@@ -169,7 +179,6 @@ $visibleFilterOptions = [
     ['value' => 'priceSaleSyp', 'label' => 'مدى سعر البيع ل.س'],
     ['value' => 'priceSaleUsd', 'label' => 'مدى سعر البيع $'],
     ['value' => 'pricePurchaseUsd', 'label' => 'مدى سعر الشراء $'],
-    ['value' => 'sort', 'label' => 'الترتيب'],
     ['value' => 'groupBy', 'label' => 'التجميع'],
 ];
 
@@ -205,32 +214,28 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
   </div>
 </section>
 
-<?php if ($flash): ?>
-  <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $flashType === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700' ?>">
-    <?= h($flash) ?>
-  </p>
-<?php endif; ?>
+<?php require __DIR__ . '/partials/flash.php'; ?>
 
 <?php if ($showForm): ?>
 <?php if ($editId !== ''): ?>
-  <form method="post" id="sl-delete-form" class="hidden" onsubmit="return confirm('هل أنت متأكد من حذف هذا الرابط؟')">
+  <form method="post" id="sl-delete-form" class="hidden" data-dashboard-ajax data-dashboard-reload onsubmit="return confirm('هل أنت متأكد من حذف هذا الرابط؟');">
     <input type="hidden" name="action" value="delete">
     <input type="hidden" name="id" value="<?= h($editId) ?>">
   </form>
 <?php endif; ?>
 
-<form method="post" id="share-link-form" class="space-y-3 mb-4">
+<form method="post" id="share-link-form" data-dashboard-explicit-save data-dashboard-ajax data-dashboard-reload class="space-y-3 mb-4">
   <input type="hidden" name="action" value="save">
   <input type="hidden" name="id" value="<?= h((string) ($editLink['id'] ?? '')) ?>">
 
-  <div class="sticky top-16 z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
+  <div class="dashboard-sticky-toolbar sticky top-16 z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
     <h2 class="font-bold text-base"><?= $editId !== '' ? 'تعديل رابط المشاركة' : 'رابط مشاركة جديد' ?></h2>
     <div class="flex flex-wrap items-center gap-2">
       <a href="/dashboard/share-links.php" class="h-9 px-4 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"><?= $editId !== '' ? 'إلغاء التعديل' : 'إلغاء' ?></a>
       <?php if ($editId !== ''): ?>
         <button type="submit" form="sl-delete-form" class="h-9 px-4 rounded-lg border border-red-300 bg-white text-xs font-bold text-red-700 hover:bg-red-50">حذف</button>
       <?php endif; ?>
-      <button type="submit" id="share-link-save-btn" class="h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">
+      <button type="submit" id="share-link-save-btn" data-dashboard-save-btn class="dashboard-btn h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">
         <?= $editId !== '' ? 'حفظ التعديلات' : 'إنشاء الرابط' ?>
       </button>
     </div>
@@ -258,10 +263,6 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
         <input name="keyword" value="<?= h((string) ($editLink['keyword'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm focus:border-primary focus:ring-primary" placeholder="new-arrivals">
       </label>
       <label class="text-xs">
-        <span class="text-text-muted block mb-0.5">أقل كمية مطلوبة</span>
-        <input name="min_quantity" type="number" min="0" step="0.01" value="<?= h((string) ($editLink['min_quantity'] ?? '0')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm focus:border-primary focus:ring-primary">
-      </label>
-      <label class="text-xs">
         <span class="text-text-muted block mb-0.5">ينتهي بتاريخ</span>
         <input name="expires_at" type="datetime-local" value="<?= h(isset($editLink['expires_at']) && $editLink['expires_at'] ? str_replace(' ', 'T', substr((string) $editLink['expires_at'], 0, 16)) : '') ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
       </label>
@@ -269,10 +270,6 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
         <label class="inline-flex items-center gap-1.5">
           <input type="checkbox" name="is_active" <?= $isNew || !empty($editLink['is_active']) ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
           <span>نشط</span>
-        </label>
-        <label class="inline-flex items-center gap-1.5">
-          <input type="checkbox" name="require_password" <?= !empty($editLink['require_password']) ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
-          <span>حماية بكلمة مرور</span>
         </label>
       </div>
     </div>
@@ -329,12 +326,13 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
           </label>
         </div>
 
-        <details class="rounded-lg border border-border-subtle bg-surface-low">
+        <details open class="rounded-lg border border-border-subtle bg-surface-low">
           <summary class="px-3 py-2 text-xs font-bold cursor-pointer">مخزون وأسعار (متقدم)</summary>
+          <p class="px-3 text-[11px] text-text-muted">حدود المخزون والأسعار تُطبَّق على نتائج الرابط. استخدم «أدنى مخزون» لإخفاء المواد ذات الكمية المنخفضة.</p>
           <div class="px-3 pb-3 grid grid-cols-2 md:grid-cols-4 gap-2">
             <label class="text-xs">
               <span class="text-text-muted block mb-0.5">أدنى مخزون</span>
-              <input type="number" step="0.01" min="0" name="forced_min_warehouse_quantity" value="<?= h((string) ($constraints['min_warehouse_quantity'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+              <input type="number" step="0.01" min="0" name="forced_min_warehouse_quantity" value="<?= h($constraintsMinWarehouse) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
             </label>
             <label class="text-xs">
               <span class="text-text-muted block mb-0.5">أعلى مخزون</span>
@@ -378,17 +376,13 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
           <input type="checkbox" name="option_show_images" <?= $showImages ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
           <span>إظهار الصور</span>
         </label>
-        <label class="text-xs inline-flex items-center gap-1.5">
-          <input type="checkbox" name="option_allow_client_filters" <?= $allowClientFilters ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
-          <span>السماح بالفلاتر</span>
-        </label>
+        <div class="text-xs md:col-span-2 order-first">
+          <?php $renderTokenPicker('الفلاتر المعروضة للعميل', 'option_visible_client_filters[]', $visibleFilterOptions, $visibleClientFilters, 'sl-visible-client-filters', true, false, false, 4); ?>
+          <p class="mt-1 text-[11px] text-text-muted">اختر أنواع الفلاتر التي يراها العميل فقط. داخل كل فلتر تُعرض القيم الموجودة في نتائج الرابط — مثلاً «نسواني» دون «رجالي» إذا لم تكن رجالي ضمن النتائج.</p>
+        </div>
         <label class="text-xs inline-flex items-center gap-1.5">
           <input type="checkbox" name="option_allow_sorting" <?= $allowSorting ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
           <span>السماح بالترتيب</span>
-        </label>
-        <label class="text-xs inline-flex items-center gap-1.5">
-          <input type="checkbox" name="option_include_result_filters" <?= $includeResultFilters ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
-          <span>فلاتر النتائج الديناميكية</span>
         </label>
         <label class="text-xs">
           <span class="text-text-muted block mb-0.5">وضع السعر</span>
@@ -412,10 +406,8 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
           </select>
         </label>
         <div class="text-xs md:col-span-2">
-          <?php $renderTokenPicker('الترتيب الافتراضي', 'option_default_sort_clauses[]', $sortPresetOptions, $defaultSortClauses, 'sl-default-sort', false, false, false, 4); ?>
-        </div>
-        <div class="text-xs md:col-span-2">
-          <?php $renderTokenPicker('فلاتر واجهة العميل المرئية', 'option_visible_client_filters[]', $visibleFilterOptions, $visibleClientFilters, 'sl-visible-client-filters', true, false, false, 4); ?>
+          <?php $renderTokenPicker('خيارات الترتيب المتاحة للعميل', 'option_client_sort_fields[]', $sortFieldOptions, $clientSortFields, 'sl-client-sort-fields', false, false, false, 4); ?>
+          <p class="mt-1 text-[11px] text-text-muted">اختر حقول الترتيب فقط — العميل يحدد تصاعدي أو تنازلي بالضغط على الخيار.</p>
         </div>
       </div>
     </details>
@@ -424,15 +416,21 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
   <article class="bg-white border border-border-subtle rounded-xl p-3">
     <details class="group">
       <summary class="font-bold text-sm cursor-pointer list-none">الوصول وكلمة المرور</summary>
-      <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-        <label class="text-xs">
-          <span class="text-text-muted block mb-0.5">اسم مستخدم الوصول</span>
-          <input name="access_username" value="<?= h((string) ($editLink['access_username'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="guest-username">
+      <div class="mt-2 space-y-2">
+        <label class="text-xs inline-flex items-center gap-1.5">
+          <input type="checkbox" name="require_password" <?= !empty($editLink['require_password']) ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
+          <span>تفعيل حماية الرابط بكلمة مرور</span>
         </label>
-        <label class="text-xs">
-          <span class="text-text-muted block mb-0.5">كلمة مرور الوصول <?= $editId !== '' ? '(اختياري للتغيير)' : '' ?></span>
-          <input name="plain_password" type="password" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="••••••••">
-        </label>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <label class="text-xs">
+            <span class="text-text-muted block mb-0.5">اسم مستخدم الوصول</span>
+            <input name="access_username" value="<?= h((string) ($editLink['access_username'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="guest-username">
+          </label>
+          <label class="text-xs">
+            <span class="text-text-muted block mb-0.5">كلمة مرور الوصول <?= $editId !== '' ? '(اختياري للتغيير)' : '' ?></span>
+            <input name="plain_password" type="password" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="••••••••">
+          </label>
+        </div>
       </div>
     </details>
   </article>
@@ -524,17 +522,17 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
               <td class="px-4 py-3">
                 <div class="flex justify-end gap-1.5 flex-wrap">
                   <a href="/dashboard/share-links.php?edit=<?= urlencode((string) $row['id']) ?>" class="h-8 px-3 inline-flex items-center rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">تعديل</a>
-                  <form method="post">
+                  <form method="post" data-dashboard-ajax data-dashboard-reload>
                     <input type="hidden" name="action" value="toggle">
                     <input type="hidden" name="id" value="<?= h((string) $row['id']) ?>">
                     <input type="hidden" name="next_active" value="<?= !empty($row['is_active']) ? '0' : '1' ?>">
                     <?php if (!empty($row['is_active'])): ?>
-                      <button class="h-8 px-3 rounded-lg text-xs font-bold bg-slate-600 text-white hover:bg-slate-700">إيقاف</button>
+                      <button type="submit" class="dashboard-btn h-8 px-3 rounded-lg text-xs font-bold bg-slate-600 text-white hover:bg-slate-700">إيقاف</button>
                     <?php else: ?>
-                      <button class="h-8 px-3 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">تفعيل</button>
+                      <button type="submit" class="dashboard-btn h-8 px-3 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">تفعيل</button>
                     <?php endif; ?>
                   </form>
-                  <form method="post" onsubmit="return confirm('حذف الرابط؟')">
+                  <form method="post" data-dashboard-ajax data-dashboard-reload onsubmit="return confirm('حذف الرابط؟');">
                     <input type="hidden" name="action" value="delete">
                     <input type="hidden" name="id" value="<?= h((string) $row['id']) ?>">
                     <button class="h-8 px-3 rounded-lg border border-red-300 bg-white text-xs font-bold text-red-700 hover:bg-red-50">حذف</button>
@@ -551,33 +549,6 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
 
 <?php if ($showForm): ?>
 <?php portal_render_token_picker_script(); ?>
-<script>
-(() => {
-  const mainForm = document.getElementById('share-link-form');
-  const saveBtn = document.getElementById('share-link-save-btn');
-  let explicitSave = false;
-
-  saveBtn?.addEventListener('click', () => {
-    explicitSave = true;
-  });
-
-  mainForm?.addEventListener('submit', (event) => {
-    if (!explicitSave) {
-      event.preventDefault();
-      return false;
-    }
-    explicitSave = false;
-  });
-
-  mainForm?.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter') return;
-    const target = event.target;
-    if (!target || target.tagName === 'TEXTAREA') return;
-    if (target.id === 'share-link-save-btn') return;
-    event.preventDefault();
-  }, true);
-})();
-</script>
 <?php endif; ?>
 
 <script>

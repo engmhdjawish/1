@@ -6,6 +6,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
 use Portal\Services\OrderService;
+use Portal\Support\DashboardHttp;
 
 WebSession::requirePermission('orders.view');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -24,6 +25,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ok = $orderId !== '' && $nextStatus !== '' && OrderService::updateStatus($orderId, $nextStatus);
         $flash = $ok ? 'تم تحديث حالة الطلب.' : 'تعذر تحديث حالة الطلب.';
         $flashType = $ok ? 'success' : 'error';
+        if (DashboardHttp::wantsJson()) {
+            DashboardHttp::json($ok, $flash, ['reload' => true]);
+        }
     }
 }
 

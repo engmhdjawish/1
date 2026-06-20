@@ -11,7 +11,8 @@ WebSession::requireLogin();
 $userPermissions = WebSession::user()['permissions'] ?? [];
 $canManageMedia = in_array('*', $userPermissions, true)
     || in_array('site_media.manage', $userPermissions, true)
-    || in_array('home_sections.manage', $userPermissions, true);
+    || in_array('home_sections.manage', $userPermissions, true)
+    || in_array('special_offers.manage', $userPermissions, true);
 if (!$canManageMedia) {
     http_response_code(403);
     header('Content-Type: application/json; charset=utf-8');

@@ -10,6 +10,8 @@ use Portal\Database;
 use Portal\Services\AccessPolicyService;
 use Portal\Services\EnvConfigService;
 use Portal\Services\PortalSettingsService;
+use Portal\Services\StorePolicyService;
+use Portal\Support\DashboardHttp;
 
 WebSession::requireLogin();
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -67,6 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash = 'لا تملك صلاحية تعديل إعدادات الشركة.';
             $flashType = 'error';
         } else {
+            $currentCompany = PortalSettingsService::companySettings();
             PortalSettingsService::saveCompanySettings([
                 'company_name' => trim((string) ($_POST['company_name'] ?? '')),
                 'company_phone' => trim((string) ($_POST['company_phone'] ?? '')),
@@ -77,6 +80,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'company_logo' => trim((string) ($_POST['company_logo'] ?? '')),
                 'about_us_title_ar' => trim((string) ($_POST['about_us_title_ar'] ?? '')),
                 'about_us_ar' => trim((string) ($_POST['about_us_ar'] ?? '')),
+                'material_images_dir' => (string) ($currentCompany['material_images_dir'] ?? ''),
+                'material_thumbnails_dir' => (string) ($currentCompany['material_thumbnails_dir'] ?? ''),
             ], isset($user['id']) ? (string) $user['id'] : null);
             header('Location: /dashboard/settings.php?tab=company&saved=1');
             exit;
@@ -122,6 +127,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flashType = 'error';
             } else {
                 PortalSettingsService::setGuestPolicy($policyId, isset($user['id']) ? (string) $user['id'] : null);
+                $maxRaw = trim((string) ($_POST['max_packages_per_material'] ?? ''));
+                $maxPackages = $maxRaw !== '' && is_numeric($maxRaw) ? (float) $maxRaw : null;
+                StorePolicyService::setMaxPackagesPerMaterial($maxPackages, isset($user['id']) ? (string) $user['id'] : null);
                 header('Location: /dashboard/settings.php?tab=policies&saved=1');
                 exit;
             }
@@ -166,6 +174,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash = $ok ? 'تم تحديث حالة السياسة.' : 'تعذر تحديث السياسة (قد تكون السياسة الافتراضية للزائر).';
             $flashType = $ok ? 'success' : 'error';
         }
+        if (DashboardHttp::wantsJson()) {
+            DashboardHttp::json($flashType === 'success', (string) $flash, ['reload' => true]);
+        }
         $tab = 'policies';
     } elseif ($action === 'delete_policy') {
         if (!$canManagePolicies) {
@@ -187,6 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $company = PortalSettingsService::companySettings();
 $policies = AccessPolicyService::list(true);
 $guestPolicyId = PortalSettingsService::guestPolicyId();
+$maxPackagesPerMaterial = StorePolicyService::maxPackagesPerMaterial();
 $apiHealth = PortalSettingsService::apiHealth();
 $dbHealth = PortalSettingsService::databaseHealth();
 $integration = EnvConfigService::integrationSettings();

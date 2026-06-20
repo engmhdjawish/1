@@ -97,11 +97,19 @@ php -S 127.0.0.1:8080
 | `/dashboard/home-sections.php` | إدارة أقسام الرئيسية |
 | `/dashboard/users.php` | إدارة المستخدمين والأدوار |
 | `/dashboard/settings.php` | إعدادات الشركة وسياسة المتجر |
-| `/dashboard/accounting.php` | لوحة المحاسب |
+| `/store.php` | المتجر العام (بحث، فلاتر، صور، ترقيم) |
+| `/product.php?guid=…` | تفاصيل مادة |
+| `/dashboard/accounting.php` | لوحة المحاسب (يتطلب `accounting.view`) |
 | `/dashboard/accounting-sync.php` | طابور مزامنة الأمين |
 | `/dashboard/accounting-reports.php` | تقرير مالي أولي |
-| `/dashboard/accounting-statement.php` | كشف حساب عميل عبر API |
-| `/api/image.php?id=...` | جلب صورة مادة عبر بروكسي الخدمة |
+| `/dashboard/accounting-statement.php` | كشف حساب (بحث عميل/حساب تلقائي + نافذة تفاصيل الفاتورة/السند) |
+| `/dashboard/accounting-statement-api.php` | بروكسي JSON لكشف الحساب والعملاء والحسابات والفواتير/السندات |
+| `/dashboard/accounting-customers.php` | عملاء الأمين |
+| `/dashboard/accounting-documents.php` | الفواتير والسندات |
+| `/dashboard/material-images.php` | مخزون صور الموقع + رفع متسلسل مع استئناف (IndexedDB) |
+| `/dashboard/material-images-api.php` | API رفع صورة واحدة + قائمة الملفات المحلية |
+| `/api/image.php?id=...` | عرض صورة مادة (محلي أولاً ثم API كاحتياط) |
+| `/media/material.php?file=...` | عرض ملف صورة مادة محلي بالاسم |
 | `/api/proxy.php` | بروكسي JSON للـ API |
 
 ## تفعيل أقسام الرئيسية

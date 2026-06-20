@@ -64,6 +64,39 @@ final class HomeSectionService
         return $sections;
     }
 
+    /** @return array<string, mixed>|null */
+    public static function storeContextBySlug(string $slug): ?array
+    {
+        $slug = trim($slug);
+        if ($slug === '') {
+            return null;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT id::text AS id, slug, title_ar, subtitle_ar, display_mode::text AS display_mode
+             FROM home_sections WHERE slug = :slug AND is_active = TRUE LIMIT 1'
+        );
+        $stmt->execute(['slug' => $slug]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row === false) {
+            return null;
+        }
+
+        $id = (string) $row['id'];
+        $parsed = self::parseFilterRows(self::filtersForSection($id));
+
+        return [
+            'id' => $id,
+            'slug' => (string) $row['slug'],
+            'title_ar' => (string) $row['title_ar'],
+            'subtitle_ar' => (string) ($row['subtitle_ar'] ?? ''),
+            'selection_mode' => (string) ($row['display_mode'] ?? 'filter'),
+            'filter_rules' => $parsed['rules'],
+            'material_guids' => self::manualProducts($id),
+            'is_offer_section' => false,
+        ];
+    }
+
     /** @return list<array<string, mixed>> */
     public static function adminSections(): array
     {

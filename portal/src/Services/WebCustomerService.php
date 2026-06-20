@@ -146,18 +146,21 @@ final class WebCustomerService
             "SELECT 1
              FROM web_customers
              WHERE phone = :phone
-               AND (:exclude_id = '' OR id::text <> :exclude_id)
+               AND (:exclude_id_is_empty = '' OR id::text <> :exclude_id_value)
              LIMIT 1"
         );
         $duplicate->execute([
             'phone' => $phone,
-            'exclude_id' => $customerId,
+            'exclude_id_is_empty' => $customerId,
+            'exclude_id_value' => $customerId,
         ]);
         if ($duplicate->fetchColumn()) {
             return ['ok' => false, 'message' => 'رقم الهاتف مسجّل مسبقاً لعميل آخر.'];
         }
 
-        $isActive = $status === 'active' ? true : $isActive;
+        if ($status !== 'active') {
+            $isActive = false;
+        }
         $approvedAt = $status === 'active' ? date('c') : null;
         $approvedBy = $status === 'active' ? $adminUserId : null;
         $safePolicyId = $accessPolicyId !== '' ? $accessPolicyId : null;
@@ -324,6 +327,84 @@ final class WebCustomerService
             'reason' => $reason,
             'admin' => $adminUserId,
             'id' => $customerId,
+        ]);
+
+        return $stmt->rowCount() > 0;
+    }
+
+    public static function suspend(string $customerId, string $adminUserId, ?string $reason = null): bool
+    {
+        $customerId = trim($customerId);
+        if ($customerId === '') {
+            return false;
+        }
+
+        $pdo = Database::pdo();
+        $stmt = $pdo->prepare(
+            'UPDATE web_customers SET
+                status = \'suspended\',
+                is_active = FALSE,
+                notes_ar = COALESCE(:notes, notes_ar),
+                updated_at = NOW()
+             WHERE id = :id
+               AND status IN (\'active\', \'pending\')'
+        );
+        $stmt->execute([
+            'id' => $customerId,
+            'notes' => $reason !== null && trim($reason) !== '' ? trim($reason) : null,
+        ]);
+
+        return $stmt->rowCount() > 0;
+    }
+
+    public static function reactivate(string $customerId, string $accessPolicyId, string $adminUserId): bool
+    {
+        $customerId = trim($customerId);
+        $accessPolicyId = trim($accessPolicyId);
+        if ($customerId === '' || $accessPolicyId === '') {
+            return false;
+        }
+
+        $pdo = Database::pdo();
+        $stmt = $pdo->prepare(
+            'UPDATE web_customers SET
+                status = \'active\',
+                is_active = TRUE,
+                access_policy_id = :policy,
+                approved_by_web_user_id = :admin,
+                approved_at = NOW(),
+                rejection_reason_ar = NULL,
+                updated_at = NOW()
+             WHERE id = :id
+               AND status IN (\'suspended\', \'rejected\')'
+        );
+        $stmt->execute([
+            'id' => $customerId,
+            'policy' => $accessPolicyId,
+            'admin' => $adminUserId,
+        ]);
+
+        return $stmt->rowCount() > 0;
+    }
+
+    public static function setLoginActive(string $customerId, bool $active): bool
+    {
+        $customerId = trim($customerId);
+        if ($customerId === '') {
+            return false;
+        }
+
+        $pdo = Database::pdo();
+        $stmt = $pdo->prepare(
+            'UPDATE web_customers SET
+                is_active = CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END,
+                updated_at = NOW()
+             WHERE id = :id
+               AND status = \'active\''
+        );
+        $stmt->execute([
+            'id' => $customerId,
+            'is_active' => $active ? 1 : 0,
         ]);
 
         return $stmt->rowCount() > 0;

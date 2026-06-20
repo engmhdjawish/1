@@ -14,7 +14,7 @@ $labels = SiteMediaService::CATEGORY_LABELS;
 <section class="flex flex-col md:flex-row justify-between md:items-center gap-3 mb-4">
   <div>
     <h1 class="text-xl font-extrabold text-slate-900">مكتبة صور الموقع</h1>
-    <p class="text-sm text-text-muted mt-1">ارفع وصفّ بنرات وإعلانات وشعارات الموقع واستخدمها في الأقسام دون الحاجة لرابط خارجي.</p>
+    <p class="text-sm text-text-muted mt-1">ارفع وصفّ بنرات وإعلانات وشعارات الموقع. البانرات للأقسام، وصور تصنيف «إعلان» تُعرض تلقائياً في شريط الإعلانات بالصفحة الرئيسية.</p>
   </div>
   <a href="/dashboard/home-sections.php" class="h-9 px-4 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">العودة للأقسام</a>
 </section>

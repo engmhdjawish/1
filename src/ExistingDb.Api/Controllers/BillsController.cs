@@ -741,7 +741,9 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
                     price,
                     discount,
                     additions,
-                    lineTotal);
+                    lineTotal,
+                    material?.Unity,
+                    material?.Unit2);
             })
             .ToArray();
 
@@ -1101,9 +1103,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
                     GetStringValue(row, CurrencyLookupCodeCandidates),
                     GetStringValue(row, "Code"),
                     GetStringValue(row, "Abbrev"));
-                var symbol = FirstNotBlank(
-                    GetStringValue(row, CurrencyLookupSymbolCandidates),
-                    ResolveCurrencySymbolFromCode(code));
+                var symbol = code;
                 lookup[currencyGuid] = new CurrencyReference(currencyGuid, name, code, symbol);
             }
 
@@ -1269,12 +1269,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         var currencyCode = FirstNotBlank(
             currencyReference?.Code,
             GetStringValue(row, DocumentCurrencyCodeCandidates));
-        var resolvedSymbol = ResolveCurrencySymbol(currencyCode, currencyName);
-        var currencySymbol = FirstNotBlank(
-            resolvedSymbol,
-            currencyReference?.Symbol,
-            GetStringValue(row, DocumentCurrencySymbolCandidates),
-            "ل.س");
+        var currencySymbol = currencyCode;
         return (currencyGuid, currencyName, currencyCode, currencySymbol, currencyRate);
     }
 

@@ -126,8 +126,6 @@ $tabUrl = static function (string $key) use ($tab): string {
     </div>
   </article>
 </form>
-<?php portal_render_media_picker_modal(); ?>
-<?php portal_render_media_picker_script(); ?>
 <?php endif; ?>
 
 <?php if ($tab === 'integration' && $canManageIntegration): ?>
@@ -205,7 +203,7 @@ $tabUrl = static function (string $key) use ($tab): string {
 
 <?php if ($canManageGuestPolicy): ?>
 <article class="bg-white border border-border-subtle rounded-xl p-3 mb-3">
-  <form method="post" class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2 items-end">
+  <form method="post" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1fr_1fr_auto] gap-2 items-end">
     <input type="hidden" name="action" value="save_guest_policy">
     <label class="text-xs">
       <span class="text-text-muted block mb-0.5">السياسة الافتراضية للزائر (المتجر العام)</span>
@@ -219,8 +217,21 @@ $tabUrl = static function (string $key) use ($tab): string {
         <?php endforeach; ?>
       </select>
     </label>
-    <button class="h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">حفظ الافتراضية</button>
+    <label class="text-xs">
+      <span class="text-text-muted block mb-0.5">الحد الأقصى للطرد لكل مادة (المتجر)</span>
+      <input
+        type="number"
+        name="max_packages_per_material"
+        min="1"
+        step="1"
+        class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm"
+        value="<?= $maxPackagesPerMaterial !== null ? h((string) $maxPackagesPerMaterial) : '' ?>"
+        placeholder="بدون حد"
+      >
+    </label>
+    <button class="h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">حفظ إعدادات المتجر</button>
   </form>
+  <p class="text-[11px] text-text-muted mt-2">يُطبَّق على الطلبات في المتجر والسلة. اترك الحقل فارغًا لإلغاء الحد.</p>
 </article>
 <?php endif; ?>
 

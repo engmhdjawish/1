@@ -42,7 +42,7 @@ function proxyMaterials(array $jsonBody, array $query): array
     $params = array_filter([
         'page' => $jsonBody['page'] ?? $query['page'] ?? 1,
         'pageSize' => $jsonBody['pageSize'] ?? $query['pageSize'] ?? 50,
-        'keyword' => $jsonBody['keyword'] ?? $jsonBody['search'] ?? $query['keyword'] ?? null,
+        'search' => $jsonBody['search'] ?? $jsonBody['keyword'] ?? $query['search'] ?? $query['keyword'] ?? null,
         'materialTypes' => $jsonBody['materialTypes'] ?? null,
         'manufacturers' => $jsonBody['manufacturers'] ?? null,
         'ageCategories' => $jsonBody['targetCategories'] ?? $jsonBody['ageCategories'] ?? null,

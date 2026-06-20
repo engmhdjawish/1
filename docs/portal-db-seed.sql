@@ -23,7 +23,8 @@ VALUES
     ('super_admin', 'مدير النظام', 'صلاحيات كاملة على الموقع', TRUE),
     ('sales', 'مبيعات', 'روابط مشاركة وطلبات وزوّار', TRUE),
     ('content', 'محتوى', 'الصفحة الرئيسية ومعلومات الشركة', TRUE),
-    ('customers_admin', 'إدارة العملاء', 'موافقة وتفعيل عملاء الويب', TRUE)
+    ('customers_admin', 'إدارة العملاء', 'موافقة وتفعيل عملاء الويب', TRUE),
+    ('accountant', 'محاسبة', 'الوصول لسجلات الأمين والتقارير المالية', TRUE)
 ON CONFLICT (code) DO UPDATE SET
     name_ar = EXCLUDED.name_ar,
     description_ar = EXCLUDED.description_ar,
@@ -34,6 +35,7 @@ INSERT INTO web_permissions (code, name_ar, category_ar, description_ar)
 VALUES
     ('dashboard.view', 'عرض لوحة التحكم', 'عام', NULL),
     ('home_sections.manage', 'إدارة أقسام الرئيسية', 'محتوى', NULL),
+    ('special_offers.manage', 'إدارة العروض الخاصة', 'محتوى', 'عروض الموقع والحسومات'),
     ('company_settings.manage', 'إعدادات الشركة', 'محتوى', NULL),
     ('store_policy.manage', 'سياسة المتجر العام', 'إعدادات', NULL),
     ('share_links.manage', 'إدارة روابط المشاركة', 'مبيعات', NULL),
@@ -46,7 +48,13 @@ VALUES
     ('web_users.manage', 'إدارة موظفي الموقع', 'إدارة', NULL),
     ('images.upload', 'رفع صور المواد', 'مواد', NULL),
     ('site_media.manage', 'مكتبة صور الموقع', 'محتوى', 'رفع وإدارة بنرات وإعلانات وشعارات الموقع'),
-    ('access_policies.manage', 'إدارة سياسات الوصول', 'إعدادات', NULL)
+    ('access_policies.manage', 'إدارة سياسات الوصول', 'إعدادات', NULL),
+    ('accounting.view', 'لوحة المحاسب', 'محاسبة', NULL),
+    ('accounting.customers.view', 'عملاء الأمين', 'محاسبة', NULL),
+    ('accounting.documents.view', 'الفواتير والسندات', 'محاسبة', NULL),
+    ('accounting.statement.view', 'كشف حساب عميل', 'محاسبة', NULL),
+    ('accounting.sync.view', 'طابور المزامنة', 'محاسبة', NULL),
+    ('accounting.reports.view', 'التقارير المالية', 'محاسبة', NULL)
 ON CONFLICT (code) DO UPDATE SET
     name_ar = EXCLUDED.name_ar,
     category_ar = EXCLUDED.category_ar,
@@ -73,7 +81,7 @@ INSERT INTO web_role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM web_roles r
 JOIN web_permissions p ON p.code IN (
-    'dashboard.view', 'home_sections.manage', 'company_settings.manage', 'images.upload', 'site_media.manage'
+    'dashboard.view', 'home_sections.manage', 'special_offers.manage', 'company_settings.manage', 'images.upload', 'site_media.manage'
 )
 WHERE r.code = 'content'
 ON CONFLICT DO NOTHING;
@@ -85,6 +93,21 @@ JOIN web_permissions p ON p.code IN (
     'dashboard.view', 'web_customers.view', 'web_customers.approve', 'web_customers.manage'
 )
 WHERE r.code = 'customers_admin'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO web_role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM web_roles r
+JOIN web_permissions p ON p.code IN (
+    'dashboard.view',
+    'accounting.view',
+    'accounting.customers.view',
+    'accounting.documents.view',
+    'accounting.statement.view',
+    'accounting.sync.view',
+    'accounting.reports.view'
+)
+WHERE r.code = 'accountant'
 ON CONFLICT DO NOTHING;
 
 -- Default store guest policy (متجر عام)
@@ -103,7 +126,9 @@ VALUES
     ('company_address', 'دمشق - حريقة - شارع المأمون'),
     ('company_logo', ''),
     ('about_us_title_ar', 'من نحن'),
-    ('about_us_ar', '')
+    ('about_us_ar', ''),
+    ('material_images_dir', ''),
+    ('material_thumbnails_dir', '')
 ON CONFLICT (key) DO NOTHING;
 
 -- Example homepage sections (inactive until configured)
