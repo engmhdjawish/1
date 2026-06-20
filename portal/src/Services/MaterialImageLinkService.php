@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Database;
+use Portal\Support\Text;
 use PDO;
 use Throwable;
 
@@ -64,10 +65,10 @@ final class MaterialImageLinkService
             $all = array_values(array_filter($all, static fn (array $item): bool => empty($item['is_linked_to_material'])));
         }
         if ($materialQuery !== '') {
-            $needle = mb_strtolower($materialQuery);
+            $needle = Text::lower($materialQuery);
             $all = array_values(array_filter($all, static function (array $item) use ($needle): bool {
-                $name = mb_strtolower((string) ($item['linked_material_name'] ?? ''));
-                $code = mb_strtolower((string) ($item['linked_material_code'] ?? ''));
+                $name = Text::lower((string) ($item['linked_material_name'] ?? ''));
+                $code = Text::lower((string) ($item['linked_material_code'] ?? ''));
 
                 return str_contains($name, $needle) || str_contains($code, $needle);
             }));
