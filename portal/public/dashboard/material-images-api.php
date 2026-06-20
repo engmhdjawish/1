@@ -124,7 +124,35 @@ if ($method === 'POST') {
         exit;
     }
 
+    if ($action === 'scan-local-init') {
+        @set_time_limit(120);
+        $init = MaterialImageSyncService::scanLocalInit();
+        echo json_encode([
+            'ok' => !($init['offline'] ?? false),
+            'message' => (string) ($init['message'] ?? ''),
+            'init' => $init,
+            'sync' => MaterialImageSyncService::stats(),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'scan-local-chunk') {
+        @set_time_limit(120);
+        $offset = max(0, (int) ($_POST['offset'] ?? 0));
+        $chunkSize = max(10, min(200, (int) ($_POST['chunk_size'] ?? MaterialImageSyncService::SCAN_CHUNK_SIZE)));
+        $scan = MaterialImageSyncService::scanLocalChunk($offset, $chunkSize, $userId);
+        echo json_encode([
+            'ok' => !($scan['offline'] ?? false),
+            'message' => (string) ($scan['message'] ?? ''),
+            'scan' => $scan,
+            'sync' => MaterialImageSyncService::stats(),
+            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     if ($action === 'scan-local') {
+        @set_time_limit(0);
         $scan = MaterialImageSyncService::scanLocalFiles($userId);
         echo json_encode([
             'ok' => !($scan['offline'] ?? false),

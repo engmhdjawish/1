@@ -15,9 +15,9 @@ final class ApiClient
         return self::request('GET', $path, null, $query);
     }
 
-    public static function postJson(string $path, array $body = []): array
+    public static function postJson(string $path, array $body = [], int $timeoutSeconds = 60): array
     {
-        return self::request('POST', $path, json_encode($body, JSON_UNESCAPED_UNICODE));
+        return self::request('POST', $path, json_encode($body, JSON_UNESCAPED_UNICODE), [], $timeoutSeconds);
     }
 
     public static function putJson(string $path, array $body = []): array
@@ -129,7 +129,7 @@ final class ApiClient
         ];
     }
 
-    private static function request(string $method, string $path, ?string $body = null, array $query = []): array
+    private static function request(string $method, string $path, ?string $body = null, array $query = [], int $timeoutSeconds = 60): array
     {
         $base = rtrim(Config::get('AMINE_API_BASE_URL', 'http://127.0.0.1:5000') ?? '', '/');
         $url = $base . $path;
@@ -151,7 +151,7 @@ final class ApiClient
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CUSTOMREQUEST => $method,
             CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_TIMEOUT => 60,
+            CURLOPT_TIMEOUT => max(15, $timeoutSeconds),
             CURLOPT_SSL_VERIFYPEER => false,
         ]);
         if ($body !== null) {

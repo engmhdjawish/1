@@ -346,6 +346,7 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
 
   let syncRunning = false;
   let syncPaused = false;
+  let scanRunning = false;
   let autoSyncAfterUpload = true;
   let syncQueuePage = <?= (int) ($queuePage['page'] ?? 1) ?>;
   let syncQueuePageSize = <?= (int) ($queuePage['page_size'] ?? 20) ?>;
@@ -1070,14 +1071,102 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   });
 
   scanLocalBtn?.addEventListener('click', async () => {
-    const form = new FormData();
-    form.append('action', 'scan-local');
-    form.append('queue_page', String(syncQueuePage));
-    form.append('queue_page_size', String(syncQueuePageSize));
-    const res = await fetch(API_URL, { method: 'POST', body: form });
-    const data = await res.json();
-    if (syncStatus) syncStatus.textContent = data.message || '';
-    await refreshOverview();
+    if (scanRunning) {
+      return;
+    }
+
+    scanRunning = true;
+    scanLocalBtn.disabled = true;
+    startSyncBtn && (startSyncBtn.disabled = true);
+    syncProgressWrap?.classList.remove('hidden');
+
+    const totals = { added: 0, skipped: 0, reconciled: 0, content_changed: 0 };
+    let offset = 0;
+    let totalFiles = 0;
+    let chunkSize = 100;
+
+    try {
+      const initForm = new FormData();
+      initForm.append('action', 'scan-local-init');
+      const initRes = await fetch(API_URL, { method: 'POST', body: initForm });
+      const initData = await initRes.json();
+      if (!initData.ok) {
+        if (syncStatus) syncStatus.textContent = initData.message || 'تعذّر بدء الفحص.';
+        return;
+      }
+
+      totalFiles = Number(initData.init?.total_files || 0);
+      chunkSize = Number(initData.init?.chunk_size || 100);
+      totals.reconciled += Number(initData.init?.reconcile?.reconciled || 0);
+      totals.content_changed += Number(initData.init?.reconcile?.content_changed || 0);
+
+      if (totalFiles === 0) {
+        if (syncStatus) {
+          syncStatus.textContent = initData.message || 'لا توجد ملفات محلية للفحص.';
+        }
+        await refreshOverview();
+        return;
+      }
+
+      while (offset < totalFiles) {
+        const pct = Math.min(100, Math.round((offset / totalFiles) * 100));
+        if (syncProgressLabel) {
+          syncProgressLabel.textContent = `فحص محلي: ${offset} / ${totalFiles}`;
+        }
+        if (syncProgressBar) {
+          syncProgressBar.style.width = `${pct}%`;
+        }
+        if (syncStatus) {
+          syncStatus.textContent = `جاري فحص الملفات المحلية (${offset} / ${totalFiles})...`;
+        }
+
+        const form = new FormData();
+        form.append('action', 'scan-local-chunk');
+        form.append('offset', String(offset));
+        form.append('chunk_size', String(chunkSize));
+        form.append('queue_page', String(syncQueuePage));
+        form.append('queue_page_size', String(syncQueuePageSize));
+
+        const res = await fetch(API_URL, { method: 'POST', body: form });
+        const data = await res.json();
+        if (!data.ok) {
+          if (syncStatus) syncStatus.textContent = data.message || 'توقّف الفحص بسبب خطأ.';
+          break;
+        }
+
+        const scan = data.scan || {};
+        totals.added += Number(scan.added || 0);
+        totals.skipped += Number(scan.skipped || 0);
+        totals.reconciled += Number(scan.reconciled || 0);
+        totals.content_changed += Number(scan.content_changed || 0);
+        offset = Number(scan.offset || (offset + chunkSize));
+
+        if (scan.done) {
+          break;
+        }
+      }
+
+      const parts = [];
+      if (totals.reconciled > 0) parts.push(`تطابقت ${totals.reconciled} مع الأمين`);
+      if (totals.added > 0) parts.push(`أُضيف ${totals.added} للطابور`);
+      if (totals.content_changed > 0) parts.push(`${totals.content_changed} بمحتوى مختلف`);
+      if (totals.skipped > 0) parts.push(`تُخطّى ${totals.skipped}`);
+      if (syncStatus) {
+        syncStatus.textContent = parts.length > 0
+          ? `اكتمل الفحص: ${parts.join('، ')}.`
+          : 'اكتمل الفحص — لا تغييرات.';
+      }
+      if (syncProgressLabel) syncProgressLabel.textContent = `فحص محلي: ${totalFiles} / ${totalFiles}`;
+      if (syncProgressBar) syncProgressBar.style.width = '100%';
+
+      await refreshOverview();
+    } catch (error) {
+      if (syncStatus) syncStatus.textContent = 'تعذّر إكمال الفحص المحلي.';
+    } finally {
+      scanRunning = false;
+      scanLocalBtn.disabled = false;
+      startSyncBtn && (startSyncBtn.disabled = false);
+    }
   });
 
   syncQueuePrevBtn?.addEventListener('click', () => {

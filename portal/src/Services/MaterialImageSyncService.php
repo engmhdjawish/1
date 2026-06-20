@@ -10,6 +10,9 @@ use Throwable;
 
 final class MaterialImageSyncService
 {
+    public const BATCH_LOOKUP_SIZE = 200;
+    public const SCAN_CHUNK_SIZE = 100;
+
     public static function ensureTable(): void
     {
         Database::pdo()->exec(
@@ -209,8 +212,6 @@ final class MaterialImageSyncService
             ];
         }
 
-        $reconciled = 0;
-        $contentChanged = 0;
         $stmt = Database::pdo()->query(
             "SELECT
                 id::text AS id,
@@ -221,51 +222,123 @@ final class MaterialImageSyncService
              FROM material_image_sync_queue
              WHERE sync_status IN ('pending', 'failed', 'syncing')"
         );
-
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
-            $outcome = self::reconcileQueueRow($row);
-            if ($outcome === 'reconciled') {
-                $reconciled++;
-            } elseif ($outcome === 'content_changed') {
-                $contentChanged++;
-            }
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        if ($rows === []) {
+            return [
+                'reconciled' => 0,
+                'content_changed' => 0,
+                'offline' => false,
+                'message' => 'لا تغييرات.',
+            ];
         }
 
+        return self::reconcileQueueRows($rows);
+    }
+
+    /** @return array{total_files: int, chunk_size: int, reconcile: array<string, mixed>, offline?: bool, message: string} */
+    public static function scanLocalInit(): array
+    {
+        self::ensureTable();
+        $reconcile = self::reconcileQueueWithAmine();
+        if ($reconcile['offline'] ?? false) {
+            return [
+                'total_files' => 0,
+                'chunk_size' => self::SCAN_CHUNK_SIZE,
+                'reconcile' => $reconcile,
+                'offline' => true,
+                'message' => (string) ($reconcile['message'] ?? 'الأمين غير متصل.'),
+            ];
+        }
+
+        $totalFiles = count(MaterialImageStorageService::listLocalFiles());
+
         return [
-            'reconciled' => $reconciled,
-            'content_changed' => $contentChanged,
+            'total_files' => $totalFiles,
+            'chunk_size' => self::SCAN_CHUNK_SIZE,
+            'reconcile' => $reconcile,
             'offline' => false,
-            'message' => self::reconcileMessage($reconciled, $contentChanged, 0, 0),
+            'message' => $totalFiles > 0
+                ? ('جاهز لفحص ' . $totalFiles . ' ملف على دفعات.')
+                : 'لا توجد ملفات محلية للفحص.',
         ];
     }
 
-    /** @return array{added: int, skipped: int, reconciled: int, content_changed: int, offline?: bool, message: string} */
-    public static function scanLocalFiles(?string $uploadedByUserId = null): array
+    /**
+     * @return array{
+     *   offset: int,
+     *   processed: int,
+     *   total_files: int,
+     *   done: bool,
+     *   added: int,
+     *   skipped: int,
+     *   reconciled: int,
+     *   content_changed: int,
+     *   offline?: bool,
+     *   message: string
+     * }
+     */
+    public static function scanLocalChunk(int $offset, int $chunkSize, ?string $uploadedByUserId = null): array
     {
         self::ensureTable();
-        $added = 0;
-        $skipped = 0;
-        $reconciled = 0;
-        $contentChanged = 0;
+        $offset = max(0, $offset);
+        $chunkSize = max(10, min(200, $chunkSize > 0 ? $chunkSize : self::SCAN_CHUNK_SIZE));
 
-        $queueReconcile = self::reconcileQueueWithAmine();
-        if ($queueReconcile['offline'] ?? false) {
+        if (!(PortalSettingsService::apiHealth()['ok'] ?? false)) {
             return [
+                'offset' => $offset,
+                'processed' => 0,
+                'total_files' => 0,
+                'done' => true,
                 'added' => 0,
                 'skipped' => 0,
                 'reconciled' => 0,
                 'content_changed' => 0,
                 'offline' => true,
-                'message' => (string) ($queueReconcile['message'] ?? 'الأمين غير متصل.'),
+                'message' => 'الأمين غير متصل.',
             ];
         }
-        $reconciled += (int) ($queueReconcile['reconciled'] ?? 0);
-        $contentChanged += (int) ($queueReconcile['content_changed'] ?? 0);
 
-        foreach (MaterialImageStorageService::listLocalFiles() as $file) {
+        $allFiles = MaterialImageStorageService::listLocalFiles();
+        $totalFiles = count($allFiles);
+        $slice = array_slice($allFiles, $offset, $chunkSize);
+        if ($slice === []) {
+            return [
+                'offset' => $offset,
+                'processed' => 0,
+                'total_files' => $totalFiles,
+                'done' => true,
+                'added' => 0,
+                'skipped' => 0,
+                'reconciled' => 0,
+                'content_changed' => 0,
+                'message' => self::reconcileMessage(0, 0, 0, 0),
+            ];
+        }
+
+        $fileNames = array_values(array_filter(array_map(
+            static fn (array $file): string => (string) ($file['file_name'] ?? ''),
+            $slice
+        )));
+        $queueMap = self::getQueueRowsByFileNames($fileNames);
+
+        $lookupCandidates = [];
+        $prepared = [];
+        foreach ($slice as $file) {
             $fileName = (string) ($file['file_name'] ?? '');
             $localPath = (string) ($file['local_path'] ?? '');
             if ($fileName === '' || $localPath === '') {
+                continue;
+            }
+
+            $existing = $queueMap[$fileName] ?? null;
+            if ($existing !== null && (string) ($existing['sync_status'] ?? '') === 'synced') {
+                $prepared[] = [
+                    'file_name' => $fileName,
+                    'local_path' => $localPath,
+                    'existing' => $existing,
+                    'fingerprint' => null,
+                    'skip' => true,
+                ];
                 continue;
             }
 
@@ -274,9 +347,40 @@ final class MaterialImageSyncService
                 continue;
             }
 
-            $existing = self::getQueueRowByFileName($fileName);
+            $prepared[] = [
+                'file_name' => $fileName,
+                'local_path' => $localPath,
+                'existing' => $existing,
+                'fingerprint' => $fingerprint,
+                'skip' => false,
+            ];
+            $lookupCandidates[] = [
+                'file_name' => $fileName,
+                'fingerprint' => $fingerprint,
+            ];
+        }
+
+        $amineMap = self::lookupOnAmineBatch($lookupCandidates);
+        $added = 0;
+        $skipped = 0;
+        $reconciled = 0;
+        $contentChanged = 0;
+
+        foreach ($prepared as $item) {
+            if ($item['skip']) {
+                $skipped++;
+                continue;
+            }
+
+            $fileName = (string) $item['file_name'];
+            $localPath = (string) $item['local_path'];
+            /** @var array{size_bytes: int, sha256: string} $fingerprint */
+            $fingerprint = $item['fingerprint'];
+            $existing = $item['existing'];
+            $amine = $amineMap[self::lookupKey($fileName)] ?? null;
+
             if ($existing !== null) {
-                $outcome = self::reconcileQueueRow($existing);
+                $outcome = self::applyAmineLookupToRow($existing, $fingerprint, $amine);
                 if ($outcome === 'reconciled') {
                     $reconciled++;
                     $skipped++;
@@ -287,15 +391,10 @@ final class MaterialImageSyncService
                     $skipped++;
                     continue;
                 }
-                if ((string) ($existing['sync_status'] ?? '') === 'synced') {
-                    $skipped++;
-                    continue;
-                }
                 $skipped++;
                 continue;
             }
 
-            $amine = self::lookupOnAmine($fileName);
             if ($amine !== null && self::fingerprintsMatch($fingerprint, $amine)) {
                 self::upsertSyncedMatch($fileName, $localPath, null, $amine, $fingerprint, $uploadedByUserId);
                 $reconciled++;
@@ -313,12 +412,133 @@ final class MaterialImageSyncService
             $added++;
         }
 
+        $processed = count($slice);
+        $nextOffset = $offset + $processed;
+
         return [
+            'offset' => $nextOffset,
+            'processed' => $processed,
+            'total_files' => $totalFiles,
+            'done' => $nextOffset >= $totalFiles,
             'added' => $added,
             'skipped' => $skipped,
             'reconciled' => $reconciled,
             'content_changed' => $contentChanged,
             'message' => self::reconcileMessage($reconciled, $contentChanged, $added, $skipped),
+        ];
+    }
+
+    /** @return array{added: int, skipped: int, reconciled: int, content_changed: int, offline?: bool, message: string} */
+    public static function scanLocalFiles(?string $uploadedByUserId = null): array
+    {
+        $init = self::scanLocalInit();
+        if ($init['offline'] ?? false) {
+            return [
+                'added' => 0,
+                'skipped' => 0,
+                'reconciled' => (int) (($init['reconcile']['reconciled'] ?? 0)),
+                'content_changed' => (int) (($init['reconcile']['content_changed'] ?? 0)),
+                'offline' => true,
+                'message' => (string) ($init['message'] ?? 'الأمين غير متصل.'),
+            ];
+        }
+
+        $totals = [
+            'added' => 0,
+            'skipped' => 0,
+            'reconciled' => (int) (($init['reconcile']['reconciled'] ?? 0)),
+            'content_changed' => (int) (($init['reconcile']['content_changed'] ?? 0)),
+        ];
+        $offset = 0;
+        $chunkSize = self::SCAN_CHUNK_SIZE;
+        $totalFiles = (int) ($init['total_files'] ?? 0);
+
+        while ($offset < $totalFiles) {
+            $chunk = self::scanLocalChunk($offset, $chunkSize, $uploadedByUserId);
+            if ($chunk['offline'] ?? false) {
+                return array_merge($totals, [
+                    'offline' => true,
+                    'message' => (string) ($chunk['message'] ?? 'الأمين غير متصل.'),
+                ]);
+            }
+
+            $totals['added'] += (int) ($chunk['added'] ?? 0);
+            $totals['skipped'] += (int) ($chunk['skipped'] ?? 0);
+            $totals['reconciled'] += (int) ($chunk['reconciled'] ?? 0);
+            $totals['content_changed'] += (int) ($chunk['content_changed'] ?? 0);
+            $offset = (int) ($chunk['offset'] ?? ($offset + $chunkSize));
+            if ($chunk['done'] ?? false) {
+                break;
+            }
+        }
+
+        return array_merge($totals, [
+            'message' => self::reconcileMessage(
+                $totals['reconciled'],
+                $totals['content_changed'],
+                $totals['added'],
+                $totals['skipped']
+            ),
+        ]);
+    }
+
+    /**
+     * @return array{
+     *   reconciled: int,
+     *   content_changed: int,
+     *   offline: bool,
+     *   message: string
+     * }
+     */
+    private static function reconcileQueueRows(array $rows): array
+    {
+        $lookupCandidates = [];
+        $prepared = [];
+        foreach ($rows as $row) {
+            $fileName = (string) ($row['file_name'] ?? '');
+            $localPath = (string) ($row['local_file_path'] ?? '');
+            if ($fileName === '' || $localPath === '' || !is_file($localPath)) {
+                continue;
+            }
+
+            $fingerprint = self::fileFingerprint($localPath);
+            if ($fingerprint === null) {
+                continue;
+            }
+
+            $prepared[] = [
+                'row' => $row,
+                'fingerprint' => $fingerprint,
+            ];
+            $lookupCandidates[] = [
+                'file_name' => $fileName,
+                'fingerprint' => $fingerprint,
+            ];
+        }
+
+        $amineMap = self::lookupOnAmineBatch($lookupCandidates);
+        $reconciled = 0;
+        $contentChanged = 0;
+
+        foreach ($prepared as $item) {
+            $row = $item['row'];
+            $fileName = (string) ($row['file_name'] ?? '');
+            /** @var array{size_bytes: int, sha256: string} $fingerprint */
+            $fingerprint = $item['fingerprint'];
+            $amine = $amineMap[self::lookupKey($fileName)] ?? null;
+            $outcome = self::applyAmineLookupToRow($row, $fingerprint, $amine);
+            if ($outcome === 'reconciled') {
+                $reconciled++;
+            } elseif ($outcome === 'content_changed') {
+                $contentChanged++;
+            }
+        }
+
+        return [
+            'reconciled' => $reconciled,
+            'content_changed' => $contentChanged,
+            'offline' => false,
+            'message' => self::reconcileMessage($reconciled, $contentChanged, 0, 0),
         ];
     }
 
@@ -502,60 +722,109 @@ final class MaterialImageSyncService
     /** @return array<string, mixed>|null */
     private static function lookupOnAmine(string $fileName): ?array
     {
-        try {
-            $response = ApiClient::get('/api/material-images/lookup', ['fileName' => $fileName]);
-            if (($response['status'] ?? 0) === 404) {
-                return null;
-            }
-            if (!($response['ok'] ?? false)) {
-                return null;
-            }
+        $map = self::lookupOnAmineBatch([
+            ['file_name' => $fileName, 'fingerprint' => null],
+        ]);
 
-            $data = is_array($response['data'] ?? null) ? $response['data'] : null;
-
-            return $data;
-        } catch (Throwable) {
-            return null;
-        }
+        return $map[self::lookupKey($fileName)] ?? null;
     }
 
-    /** @param array{size_bytes: int, sha256: string} $local */
-    /** @param array<string, mixed> $amine */
-    private static function fingerprintsMatch(array $local, array $amine): bool
+    /**
+     * @param list<array{file_name: string, fingerprint: ?array{size_bytes: int, sha256: string}}> $candidates
+     * @return array<string, array<string, mixed>>
+     */
+    private static function lookupOnAmineBatch(array $candidates): array
     {
-        $existsOnDisk = (bool) ($amine['fileExistsOnDisk'] ?? $amine['FileExistsOnDisk'] ?? false);
-        if (!$existsOnDisk) {
-            return false;
+        if ($candidates === []) {
+            return [];
         }
 
-        $localSha = strtolower(trim((string) ($local['sha256'] ?? '')));
-        $amineSha = strtolower(trim((string) ($amine['sha256'] ?? $amine['Sha256'] ?? '')));
-        if ($localSha !== '' && $amineSha !== '') {
-            return hash_equals($amineSha, $localSha);
+        $results = [];
+        foreach (array_chunk($candidates, self::BATCH_LOOKUP_SIZE) as $chunk) {
+            $items = [];
+            foreach ($chunk as $candidate) {
+                $fileName = (string) ($candidate['file_name'] ?? '');
+                if ($fileName === '') {
+                    continue;
+                }
+
+                $fingerprint = $candidate['fingerprint'] ?? null;
+                $items[] = [
+                    'fileName' => $fileName,
+                    'sha256' => is_array($fingerprint) ? ($fingerprint['sha256'] ?? null) : null,
+                    'sizeBytes' => is_array($fingerprint) ? ($fingerprint['size_bytes'] ?? null) : null,
+                ];
+            }
+            if ($items === []) {
+                continue;
+            }
+
+            try {
+                $response = ApiClient::postJson('/api/material-images/lookup-batch', ['items' => $items], 120);
+                if (!($response['ok'] ?? false)) {
+                    continue;
+                }
+
+                $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+                $batchItems = is_array($data['items'] ?? null)
+                    ? $data['items']
+                    : (is_array($data['Items'] ?? null) ? $data['Items'] : []);
+                foreach ($batchItems as $item) {
+                    if (!is_array($item)) {
+                        continue;
+                    }
+
+                    $fileName = (string) ($item['fileName'] ?? $item['storedFileName'] ?? $item['StoredFileName'] ?? '');
+                    if ($fileName === '') {
+                        continue;
+                    }
+
+                    $normalized = self::normalizeAmineLookupItem($item);
+                    if ($normalized !== null) {
+                        $results[self::lookupKey($fileName)] = $normalized;
+                    }
+                }
+            } catch (Throwable) {
+                continue;
+            }
         }
 
-        $localSize = (int) ($local['size_bytes'] ?? 0);
-        $amineSize = (int) ($amine['sizeBytes'] ?? $amine['SizeBytes'] ?? 0);
+        return $results;
+    }
 
-        return $localSize > 0 && $localSize === $amineSize;
+    /** @return array<string, mixed>|null */
+    private static function normalizeAmineLookupItem(array $item): ?array
+    {
+        $found = (bool) ($item['found'] ?? $item['Found'] ?? false);
+        if (!$found) {
+            return null;
+        }
+
+        return [
+            'id' => $item['id'] ?? $item['Id'] ?? null,
+            'fileExistsOnDisk' => (bool) ($item['fileExistsOnDisk'] ?? $item['FileExistsOnDisk'] ?? false),
+            'sha256' => (string) ($item['sha256'] ?? $item['Sha256'] ?? ''),
+            'sizeBytes' => (int) ($item['sizeBytes'] ?? $item['SizeBytes'] ?? 0),
+        ];
+    }
+
+    private static function lookupKey(string $fileName): string
+    {
+        return strtolower($fileName);
     }
 
     /** @param array<string, mixed> $row */
-    private static function reconcileQueueRow(array $row): ?string
+    /** @param array{size_bytes: int, sha256: string} $fingerprint */
+  /** @param array<string, mixed>|null $amine */
+    private static function applyAmineLookupToRow(array $row, array $fingerprint, ?array $amine): ?string
     {
         $fileName = (string) ($row['file_name'] ?? '');
         $localPath = (string) ($row['local_file_path'] ?? '');
         $id = (string) ($row['id'] ?? '');
-        if ($fileName === '' || $localPath === '' || !is_file($localPath)) {
+        if ($fileName === '' || $localPath === '') {
             return null;
         }
 
-        $fingerprint = self::fileFingerprint($localPath);
-        if ($fingerprint === null) {
-            return null;
-        }
-
-        $amine = self::lookupOnAmine($fileName);
         if ($amine === null) {
             return null;
         }
@@ -577,11 +846,73 @@ final class MaterialImageSyncService
             return 'reconciled';
         }
 
-        if ($id !== '' && (string) ($row['sync_status'] ?? '') !== 'pending') {
-            self::markPendingWithFingerprint($id, $fingerprint, 'المحتوى على الموقع يختلف عن نسخة الأمين — ستُعاد المزامنة.');
+        if ($id !== '') {
+            self::markPendingWithFingerprint(
+                $id,
+                $fingerprint,
+                'المحتوى على الموقع يختلف عن نسخة الأمين — ستُعاد المزامنة.'
+            );
         }
 
         return 'content_changed';
+    }
+
+    /** @param list<string> $fileNames */
+    /** @return array<string, array<string, mixed>> */
+    private static function getQueueRowsByFileNames(array $fileNames): array
+    {
+        $fileNames = array_values(array_filter(array_unique($fileNames)));
+        if ($fileNames === []) {
+            return [];
+        }
+
+        $placeholders = [];
+        $params = [];
+        foreach ($fileNames as $index => $fileName) {
+            $key = 'f' . $index;
+            $placeholders[] = ':' . $key;
+            $params[$key] = $fileName;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT
+                id::text AS id,
+                file_name,
+                local_file_path,
+                local_thumb_path,
+                sync_status::text AS sync_status
+             FROM material_image_sync_queue
+             WHERE file_name IN (' . implode(', ', $placeholders) . ')'
+        );
+        $stmt->execute($params);
+
+        $map = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+            $map[(string) ($row['file_name'] ?? '')] = $row;
+        }
+
+        return $map;
+    }
+
+    /** @param array{size_bytes: int, sha256: string} $local */
+    /** @param array<string, mixed> $amine */
+    private static function fingerprintsMatch(array $local, array $amine): bool
+    {
+        $existsOnDisk = (bool) ($amine['fileExistsOnDisk'] ?? $amine['FileExistsOnDisk'] ?? false);
+        if (!$existsOnDisk) {
+            return false;
+        }
+
+        $localSha = strtolower(trim((string) ($local['sha256'] ?? '')));
+        $amineSha = strtolower(trim((string) ($amine['sha256'] ?? $amine['Sha256'] ?? '')));
+        if ($localSha !== '' && $amineSha !== '') {
+            return hash_equals($amineSha, $localSha);
+        }
+
+        $localSize = (int) ($local['size_bytes'] ?? 0);
+        $amineSize = (int) ($amine['sizeBytes'] ?? $amine['SizeBytes'] ?? 0);
+
+        return $localSize > 0 && $localSize === $amineSize;
     }
 
     /** @param array<string, mixed> $amine */

@@ -100,42 +100,110 @@ public sealed class MaterialImagesController(
             .FirstOrDefault(candidate =>
                 string.Equals(ExtractFileName(candidate.Name), fileName, StringComparison.OrdinalIgnoreCase));
 
-        if (image is null)
+        var dbByFileName = image is null
+            ? new Dictionary<string, MaterialImageRecord>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, MaterialImageRecord>(StringComparer.OrdinalIgnoreCase)
+            {
+                [fileName] = image
+            };
+
+        var batchItem = LookupFileOnAmine(fileName, settings.ImagesDirectory, dbByFileName);
+        if (!batchItem.Found)
+        {
+            return NotFound();
+        }
+
+        return Ok(new MaterialImageLookupResponse(
+            batchItem.Id,
+            batchItem.StoredFileName,
+            batchItem.SizeBytes,
+            batchItem.Sha256,
+            batchItem.FileExistsOnDisk));
+    }
+
+    [HttpPost("lookup-batch")]
+    [RequirePermission("materials.read")]
+    public async Task<ActionResult<MaterialImageLookupBatchResponse>> LookupBatch(
+        [FromBody] MaterialImageLookupBatchRequest request,
+        CancellationToken cancellationToken)
+    {
+        var items = (request.Items ?? [])
+            .Where(item => !string.IsNullOrWhiteSpace(item.FileName))
+            .Take(250)
+            .ToArray();
+        if (items.Length == 0)
+        {
+            return BadRequest(new { message = "At least one fileName is required." });
+        }
+
+        var settings = await imageSettingsService.GetAsync(cancellationToken);
+        var requestedNames = items
+            .Select(item => Path.GetFileName(item.FileName.Trim()))
+            .Where(name => name is not "")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var namesNeedingDb = new List<string>(requestedNames.Length);
+        var responsesByFile = new Dictionary<string, MaterialImageLookupBatchItemResponse>(StringComparer.OrdinalIgnoreCase);
+        foreach (var fileName in requestedNames)
         {
             var directPath = Path.GetFullPath(Path.Combine(settings.ImagesDirectory, fileName));
             if (!System.IO.File.Exists(directPath))
             {
-                return NotFound();
+                namesNeedingDb.Add(fileName);
+                continue;
             }
 
             var directInfo = new FileInfo(directPath);
-            return Ok(new MaterialImageLookupResponse(
-                null,
+            responsesByFile[fileName] = new MaterialImageLookupBatchItemResponse(
                 fileName,
+                null,
                 directInfo.Length,
                 ComputeSha256Hex(directPath),
-                true));
+                true,
+                true);
         }
 
-        var imagePath = ResolveExistingImagePath(image.Name, settings.ImagesDirectory)
-            ?? ResolveImagePath(image.Name, settings.ImagesDirectory);
-        if (!System.IO.File.Exists(imagePath))
+        var dbByFileName = new Dictionary<string, MaterialImageRecord>(StringComparer.OrdinalIgnoreCase);
+        if (namesNeedingDb.Count > 0)
         {
-            return Ok(new MaterialImageLookupResponse(
-                image.Guid,
-                fileName,
-                0,
-                string.Empty,
-                false));
+            var dbImages = await mainDbContext.MaterialImages
+                .AsNoTracking()
+                .Where(image => image.Name != null)
+                .ToListAsync(cancellationToken);
+
+            foreach (var dbImage in dbImages)
+            {
+                var extracted = ExtractFileName(dbImage.Name);
+                if (string.IsNullOrWhiteSpace(extracted) || !namesNeedingDb.Contains(extracted, StringComparer.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                dbByFileName.TryAdd(extracted, dbImage);
+            }
+
+            foreach (var fileName in namesNeedingDb)
+            {
+                responsesByFile[fileName] = LookupFileOnAmine(fileName, settings.ImagesDirectory, dbByFileName);
+            }
         }
 
-        var fileInfo = new FileInfo(imagePath);
-        return Ok(new MaterialImageLookupResponse(
-            image.Guid,
-            fileName,
-            fileInfo.Length,
-            ComputeSha256Hex(imagePath),
-            true));
+        var responses = new List<MaterialImageLookupBatchItemResponse>(items.Length);
+        foreach (var item in items)
+        {
+            var fileName = Path.GetFileName(item.FileName.Trim());
+            if (fileName is "")
+            {
+                continue;
+            }
+
+            responses.Add(responsesByFile.TryGetValue(fileName, out var response)
+                ? response
+                : new MaterialImageLookupBatchItemResponse(fileName, null, 0, string.Empty, false, false));
+        }
+
+        return Ok(new MaterialImageLookupBatchResponse(responses));
     }
 
     [HttpGet("{id:guid}")]
@@ -889,6 +957,58 @@ public sealed class MaterialImagesController(
             ".webp" => "image/webp",
             _ => "application/octet-stream"
         };
+    }
+
+    private static MaterialImageLookupBatchItemResponse LookupFileOnAmine(
+        string fileName,
+        string imagesDirectory,
+        IReadOnlyDictionary<string, MaterialImageRecord> dbByFileName)
+    {
+        if (dbByFileName.TryGetValue(fileName, out var image))
+        {
+            var imagePath = ResolveExistingImagePath(image.Name, imagesDirectory)
+                ?? ResolveImagePath(image.Name, imagesDirectory);
+            if (!System.IO.File.Exists(imagePath))
+            {
+                return new MaterialImageLookupBatchItemResponse(
+                    fileName,
+                    image.Guid,
+                    0,
+                    string.Empty,
+                    false,
+                    true);
+            }
+
+            var fileInfo = new FileInfo(imagePath);
+            return new MaterialImageLookupBatchItemResponse(
+                fileName,
+                image.Guid,
+                fileInfo.Length,
+                ComputeSha256Hex(imagePath),
+                true,
+                true);
+        }
+
+        var directPath = Path.GetFullPath(Path.Combine(imagesDirectory, fileName));
+        if (!System.IO.File.Exists(directPath))
+        {
+            return new MaterialImageLookupBatchItemResponse(
+                fileName,
+                null,
+                0,
+                string.Empty,
+                false,
+                false);
+        }
+
+        var directInfo = new FileInfo(directPath);
+        return new MaterialImageLookupBatchItemResponse(
+            fileName,
+            null,
+            directInfo.Length,
+            ComputeSha256Hex(directPath),
+            true,
+            true);
     }
 
     private static string ComputeSha256Hex(string path)
