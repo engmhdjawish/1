@@ -29,46 +29,67 @@ final class MaterialImageTemplateService
 
     /**
      * @param array<string, mixed>|null $material
-     * @return array{product_name: string, manufacturer: string, packaging: string}
+     * @return array{product_name: string, packaging: string}
      */
     public static function materialFieldValues(?array $material, string $line1Override = '', string $line2Override = ''): array
     {
+        return [
+            'product_name' => self::formatProductName($material, $line1Override),
+            'packaging' => self::formatPackagingLabel($material, $line2Override),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed>|null $material
+     */
+    public static function formatProductName(?array $material, string $override = ''): string
+    {
+        $override = trim($override);
+        if ($override !== '') {
+            return $override;
+        }
+
+        if (!is_array($material)) {
+            return '';
+        }
+
         $code = trim((string) ($material['material_code'] ?? $material['materialCode'] ?? $material['code'] ?? ''));
         $name = trim((string) ($material['name'] ?? $material['Name'] ?? ''));
-        $productName = trim($line1Override);
-        if ($productName === '') {
-            $productName = trim($code . ' ' . $name);
+
+        if ($code !== '' && $name !== '') {
+            return $code . ' ' . $name;
         }
 
-        $manufacturer = trim((string) (
-            $material['company']
-            ?? $material['Company']
-            ?? $material['manufacturer']
-            ?? $material['Manufacturer']
-            ?? $material['provenance']
-            ?? $material['Provenance']
-            ?? ''
-        ));
+        return $code !== '' ? $code : $name;
+    }
 
-        $packaging = trim($line2Override);
-        if ($packaging === '' && is_array($material)) {
-            $packQty = ShareCartService::packaging($material);
-            $primaryUnit = ShareCartService::primaryUnitLabel($material);
-            $packageUnit = ShareCartService::packageUnitLabel($material);
-            if ($packQty > 1) {
-                $packaging = rtrim(rtrim(number_format($packQty, 2, '.', ''), '0'), '.')
-                    . ' '
-                    . $primaryUnit
-                    . ' / '
-                    . $packageUnit;
+    /**
+     * @param array<string, mixed>|null $material
+     */
+    public static function formatPackagingLabel(?array $material, string $override = ''): string
+    {
+        $override = trim($override);
+        if ($override !== '') {
+            if (preg_match('/^التعبئة\s*:/u', $override) === 1) {
+                return $override;
             }
+
+            return 'التعبئة : ' . $override;
         }
 
-        return [
-            'product_name' => $productName,
-            'manufacturer' => $manufacturer,
-            'packaging' => $packaging,
-        ];
+        if (!is_array($material)) {
+            return '';
+        }
+
+        $packQty = ShareCartService::packaging($material);
+        if ($packQty <= 0) {
+            return '';
+        }
+
+        $primaryUnit = ShareCartService::primaryUnitLabel($material);
+        $qty = rtrim(rtrim(number_format($packQty, 2, '.', ''), '0'), '.');
+
+        return 'التعبئة : ' . $qty . ' ' . $primaryUnit;
     }
 
     /**

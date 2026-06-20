@@ -105,20 +105,14 @@ $white = imagecolorallocate($overlay, 255, 255, 255);
 $divider = imagecolorallocate($overlay, 220, 220, 220);
 
 if ($font !== null) {
-    drawCenteredLabel($overlay, $font, 24, 'الكمية', 40, $footerY + 42, 250, $white);
-    drawCenteredLabel($overlay, $font, 24, 'الطرد', 40, $footerY + 72, 250, $white);
-    drawCenteredLabel($overlay, $font, 24, 'الشركة', 330, $footerY + 42, 280, $white);
-    drawCenteredLabel($overlay, $font, 24, 'المصنعة', 330, $footerY + 72, 280, $white);
-    drawCenteredLabel($overlay, $font, 24, 'اسم', 650, $footerY + 42, 360, $white);
-    drawCenteredLabel($overlay, $font, 24, 'المنتج', 650, $footerY + 72, 360, $white);
+    drawCenteredLabel($overlay, $font, 24, 'التعبئة', 40, $footerY + 52, 340, $white);
+    drawCenteredLabel($overlay, $font, 22, 'رمز و اسم المنتج', 420, $footerY + 52, 420, $white);
 } else {
-    imagestring($overlay, 4, 120, $footerY + 30, 'Qty / Pack', $white);
-    imagestring($overlay, 4, 390, $footerY + 30, 'Manufacturer', $white);
-    imagestring($overlay, 4, 760, $footerY + 30, 'Product Name', $white);
+    imagestring($overlay, 4, 120, $footerY + 30, 'Packaging', $white);
+    imagestring($overlay, 4, 520, $footerY + 30, 'Code + Name', $white);
 }
 
-imageline($overlay, 322, $footerY + 24, 322, $footerY + 286, $divider);
-imageline($overlay, 642, $footerY + 24, 642, $footerY + 286, $divider);
+imageline($overlay, 412, $footerY + 24, 412, $footerY + 286, $divider);
 savePng($overlay, $dir . DIRECTORY_SEPARATOR . 'footer-overlay.png');
 
 echo "Generated template assets in {$dir}\n";

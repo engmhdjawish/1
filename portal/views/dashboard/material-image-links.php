@@ -709,14 +709,14 @@ declare(strict_types=1);
             <div class="details-fields hidden space-y-2">
               <button type="button" class="fill-details-btn h-7 px-2 rounded-lg border border-border-subtle bg-white text-[11px] font-bold w-full">تعبئة من المواد المختارة</button>
               <div>
-                <label class="text-[10px] text-text-muted">اسم المنتج:</label>
-                <input type="text" class="detail-line1 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: شحاطة فلكسة...">
+                <label class="text-[10px] text-text-muted">رمز و اسم المنتج:</label>
+                <input type="text" class="detail-line1 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: 1234 شحاطة فلكسة — أو يُملأ تلقائياً">
               </div>
               <div>
                 <label class="text-[10px] text-text-muted">التعبئة (اختياري):</label>
-                <input type="text" class="detail-line2 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: 8 زوج / طرد — أو تُملأ تلقائياً">
+                <input type="text" class="detail-line2 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: 8 زوج — أو تُولَّد: التعبئة : 8 زوج">
               </div>
-              <p class="text-[10px] text-text-muted leading-relaxed">يُعبَّأ اسم المنتج والشركة المصنعة والتعبئة من بيانات المادة. يمكنك تعديل الاسم والتعبئة قبل الربط.</p>
+              <p class="text-[10px] text-text-muted leading-relaxed">يُعبَّأ الرمز والاسم من المادة، والتعبئة من معامل التحويل (Unit2Fact) لكل صنف. يمكنك تعديلهما قبل الربط.</p>
             </div>
           </div>
           <button type="button" class="assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>

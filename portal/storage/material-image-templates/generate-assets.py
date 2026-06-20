@@ -93,9 +93,8 @@ def generate_footer_overlay() -> None:
     divider = (220, 220, 220, 255)
     footer_y = 770
     columns = [
-        (40, 250, ["Qty", "Pack"]),
-        (330, 280, ["Company", "Maker"]),
-        (650, 360, ["Product", "Name"]),
+        (40, 340, ["Packaging", "التعبئة"]),
+        (420, 420, ["Code + Name", "رمز و اسم"]),
     ]
     for x, col_w, labels in columns:
         cx = x + col_w // 2
@@ -106,7 +105,7 @@ def generate_footer_overlay() -> None:
                 for dy in range(0, 12):
                     for dx in range(0, 8):
                         set_pixel(px, w, text_x + ch_idx * 8 + dx, text_y + dy, white)
-    for x in (322, 642):
+    for x in (412,):
         for y in range(footer_y + 24, footer_y + 286):
             set_pixel(px, w, x, y, divider)
             set_pixel(px, w, x + 1, y, divider)
