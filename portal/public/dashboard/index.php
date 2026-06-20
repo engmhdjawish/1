@@ -25,55 +25,47 @@ $currentRoute = '/dashboard/index.php';
 
 ob_start();
 ?>
+<section class="mb-6">
+  <h1 class="text-2xl font-extrabold text-slate-900">لوحة العمل</h1>
+  <p class="text-sm text-text-muted mt-1">متابعة سريعة للطلبات والعملاء والمزامنة — ابدأ من هنا كل يوم.</p>
+</section>
 <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
-  <article class="bg-red-50 border border-red-100 rounded-2xl p-5 hover:shadow-md transition">
-    <div class="flex items-center justify-between">
-      <div class="w-11 h-11 rounded-xl bg-red-100 text-red-700 flex items-center justify-center">
-        <span class="material-symbols-outlined">person_add</span>
-      </div>
-      <span class="text-xs text-red-700 font-bold">+8%</span>
+  <a href="/dashboard/customers.php?status=pending" class="bg-red-50 border border-red-100 rounded-2xl p-5 hover:shadow-md transition block no-underline text-inherit">
+    <div class="w-11 h-11 rounded-xl bg-red-100 text-red-700 flex items-center justify-center">
+      <span class="material-symbols-outlined">person_add</span>
     </div>
     <div class="mt-4">
       <p class="text-3xl font-extrabold"><?= (int) $pendingCustomers ?></p>
       <p class="text-sm text-text-muted mt-1">عملاء بانتظار الموافقة</p>
     </div>
-  </article>
-  <article class="bg-amber-50 border border-amber-100 rounded-2xl p-5 hover:shadow-md transition">
-    <div class="flex items-center justify-between">
-      <div class="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
-        <span class="material-symbols-outlined">shopping_basket</span>
-      </div>
-      <span class="text-xs text-emerald-700 font-bold">+12%</span>
+  </a>
+  <a href="/dashboard/orders.php" class="bg-amber-50 border border-amber-100 rounded-2xl p-5 hover:shadow-md transition block no-underline text-inherit">
+    <div class="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+      <span class="material-symbols-outlined">shopping_basket</span>
     </div>
     <div class="mt-4">
       <p class="text-3xl font-extrabold"><?= (int) (($orderCounts['pending'] ?? 0) + ($orderCounts['confirmed'] ?? 0)) ?></p>
       <p class="text-sm text-text-muted mt-1">طلبات جديدة / قيد التأكيد</p>
     </div>
-  </article>
-  <article class="bg-white border border-border-subtle rounded-2xl p-5 hover:shadow-md transition">
-    <div class="flex items-center justify-between">
-      <div class="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
-        <span class="material-symbols-outlined">link</span>
-      </div>
-      <span class="text-xs text-text-muted font-bold">0%</span>
+  </a>
+  <a href="/dashboard/share-links.php" class="bg-white border border-border-subtle rounded-2xl p-5 hover:shadow-md transition block no-underline text-inherit">
+    <div class="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+      <span class="material-symbols-outlined">link</span>
     </div>
     <div class="mt-4">
       <p class="text-3xl font-extrabold"><?= (int) $activeLinks ?></p>
       <p class="text-sm text-text-muted mt-1">روابط مشاركة نشطة</p>
     </div>
-  </article>
-  <article class="bg-white border border-border-subtle rounded-2xl p-5 hover:shadow-md transition">
-    <div class="flex items-center justify-between">
-      <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
-        <span class="material-symbols-outlined">sync_problem</span>
-      </div>
-      <span class="text-xs text-red-700 font-bold"><?= (int) ($syncCounts['failed'] ?? 0) ?></span>
+  </a>
+  <a href="/dashboard/accounting-sync.php?sync=failed" class="bg-white border border-border-subtle rounded-2xl p-5 hover:shadow-md transition block no-underline text-inherit">
+    <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
+      <span class="material-symbols-outlined">sync_problem</span>
     </div>
     <div class="mt-4">
       <p class="text-3xl font-extrabold"><?= (int) (($syncCounts['pending'] ?? 0) + ($syncCounts['failed'] ?? 0)) ?></p>
       <p class="text-sm text-text-muted mt-1">طابور مزامنة الأمين</p>
     </div>
-  </article>
+  </a>
 </section>
 
 <section class="mb-6">
@@ -189,5 +181,5 @@ ob_start();
 </section>
 <?php
 $content = ob_get_clean();
-$title = 'لوحة التحكم';
+$title = 'لوحة العمل';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';
