@@ -1,0 +1,46 @@
+{
+  "width": 1080,
+  "height": 1080,
+  "photo": {
+    "x": 40,
+    "y": 40,
+    "width": 1000,
+    "height": 730,
+    "background": "#ffffff"
+  },
+  "footer": {
+    "y": 770,
+    "height": 310,
+    "color": "#3f3f3f",
+    "round_right_radius": 155
+  },
+  "layers": {
+    "accent": "accent.png",
+    "logo": "logo.png",
+    "footer_overlay": "footer-overlay.png"
+  },
+  "columns": [
+    {
+      "key": "packaging",
+      "x": 40,
+      "width": 250,
+      "font_size": 34
+    },
+    {
+      "key": "manufacturer",
+      "x": 330,
+      "width": 280,
+      "font_size": 34
+    },
+    {
+      "key": "product_name",
+      "x": 650,
+      "width": 360,
+      "font_size": 38
+    }
+  ],
+  "layer_positions": {
+    "accent": { "x": 0, "y": 700, "max_width": 260 },
+    "logo": { "x": 860, "y": 860, "max_width": 200 }
+  }
+}

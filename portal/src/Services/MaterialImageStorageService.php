@@ -358,6 +358,42 @@ final class MaterialImageStorageService
             && self::resolveDetailsFontPath() !== null;
     }
 
+    public static function canProcessImageDetails(): bool
+    {
+        return MaterialImageTemplateService::isAvailable() || self::canRenderDetailsBanner();
+    }
+
+    public static function resolveDetailsFontPath(): ?string
+    {
+        $candidates = [
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+            'C:\\Windows\\Fonts\\tahoma.ttf',
+            'C:\\Windows\\Fonts\\arial.ttf',
+            'C:\\Windows\\Fonts\\trado.ttf',
+        ];
+        foreach ($candidates as $path) {
+            if (is_file($path)) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
+    /** @return \GdImage|false */
+    public static function loadGdImagePublic(string $sourcePath)
+    {
+        return self::loadGdImage($sourcePath);
+    }
+
+    /** @return list<string> */
+    public static function wrapTtfTextLinesPublic(string $font, float $fontSize, string $text, int $maxWidth): array
+    {
+        return self::wrapTtfTextLines($font, $fontSize, $text, $maxWidth);
+    }
+
     /** @return list<string> */
     private static function wrapTtfTextLines(string $font, float $fontSize, string $text, int $maxWidth): array
     {
@@ -385,25 +421,6 @@ final class MaterialImageStorageService
         }
 
         return $lines;
-    }
-
-    private static function resolveDetailsFontPath(): ?string
-    {
-        $candidates = [
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-            'C:\\Windows\\Fonts\\tahoma.ttf',
-            'C:\\Windows\\Fonts\\arial.ttf',
-            'C:\\Windows\\Fonts\\trado.ttf',
-        ];
-        foreach ($candidates as $path) {
-            if (is_file($path)) {
-                return $path;
-            }
-        }
-
-        return null;
     }
 
     /** @return \GdImage|false */

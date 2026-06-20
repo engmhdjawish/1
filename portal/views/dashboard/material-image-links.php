@@ -410,9 +410,6 @@ declare(strict_types=1);
       form.append('add_details', '1');
       for (const mat of items) {
         const lines = getDetailLines(card, mat);
-        if (!lines.line1 && !lines.line2) {
-          throw new Error('أدخل تفاصيل المادة أو استخدم «تعبئة من المواد المختارة».');
-        }
         form.append(`detail_line1[${mat.guid}]`, lines.line1);
         form.append(`detail_line2[${mat.guid}]`, lines.line2);
       }
@@ -439,8 +436,8 @@ declare(strict_types=1);
       return;
     }
     button.disabled = true;
-    linkStatus.textContent = cardWantsDetails(card) ? 'جاري إضافة التفاصيل والربط...' : 'جاري الربط...';
-    if (statusEl) statusEl.textContent = cardWantsDetails(card) ? 'جاري إضافة التفاصيل والربط...' : 'جاري الربط...';
+    linkStatus.textContent = cardWantsDetails(card) ? 'جاري تجهيز القالب والربط...' : 'جاري الربط...';
+    if (statusEl) statusEl.textContent = cardWantsDetails(card) ? 'جاري تجهيز القالب والربط...' : 'جاري الربط...';
     try {
       ensureDetailLinesBeforeAssign(card, cardKey(item), items);
       const payload = await postAssignForm('assign-materials', item, items, card);
@@ -707,19 +704,19 @@ declare(strict_types=1);
           <div class="rounded-lg border border-border-subtle bg-surface-low/40 p-2 space-y-2">
             <label class="flex items-start gap-2 text-xs cursor-pointer">
               <input type="checkbox" class="add-details-checkbox mt-0.5 rounded border-border-subtle">
-              <span class="font-bold leading-snug">إضافة تفاصيل المادة أسفل الصورة؟ (اختياري)</span>
+              <span class="font-bold leading-snug">وضع الصورة ضمن قالب JAWISH مع التفاصيل؟ (اختياري)</span>
             </label>
             <div class="details-fields hidden space-y-2">
               <button type="button" class="fill-details-btn h-7 px-2 rounded-lg border border-border-subtle bg-white text-[11px] font-bold w-full">تعبئة من المواد المختارة</button>
               <div>
-                <label class="text-[10px] text-text-muted">السطر الأول (الاسم):</label>
+                <label class="text-[10px] text-text-muted">اسم المنتج:</label>
                 <input type="text" class="detail-line1 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: شحاطة فلكسة...">
               </div>
               <div>
-                <label class="text-[10px] text-text-muted">السطر الثاني (تعبئة/معلومة إضافية):</label>
-                <input type="text" class="detail-line2 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: التعبئة 8 زوج">
+                <label class="text-[10px] text-text-muted">التعبئة (اختياري):</label>
+                <input type="text" class="detail-line2 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: 8 زوج / طرد — أو تُملأ تلقائياً">
               </div>
-              <p class="text-[10px] text-text-muted leading-relaxed">إذا تُركت الحقول فارغة واختيرت عدة مواد، يُولَّد السطر الأول تلقائياً لكل مادة عند الربط.</p>
+              <p class="text-[10px] text-text-muted leading-relaxed">يُعبَّأ اسم المنتج والشركة المصنعة والتعبئة من بيانات المادة. يمكنك تعديل الاسم والتعبئة قبل الربط.</p>
             </div>
           </div>
           <button type="button" class="assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>

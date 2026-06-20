@@ -978,7 +978,7 @@ final class MaterialImageLinkService
         ];
     }
 
-    /** @return array{name: string, material_code: string}|null */
+    /** @return array<string, mixed>|null */
     private static function fetchMaterial(string $materialGuid): ?array
     {
         try {
@@ -992,10 +992,34 @@ final class MaterialImageLinkService
                 return null;
             }
 
-            return [
-                'name' => trim((string) ($data['name'] ?? $data['Name'] ?? '')),
-                'material_code' => trim((string) ($data['materialCode'] ?? $data['MaterialCode'] ?? '')),
-            ];
+            $code = trim((string) ($data['materialCode'] ?? $data['MaterialCode'] ?? ''));
+            $name = trim((string) ($data['name'] ?? $data['Name'] ?? ''));
+            $manufacturer = trim((string) (
+                $data['manufacturer']
+                ?? $data['Manufacturer']
+                ?? $data['company']
+                ?? $data['Company']
+                ?? ''
+            ));
+
+            return array_merge($data, [
+                'name' => $name,
+                'Name' => $name,
+                'material_code' => $code,
+                'materialCode' => $code,
+                'MaterialCode' => $code,
+                'code' => $code,
+                'company' => $manufacturer,
+                'Company' => $manufacturer,
+                'manufacturer' => $manufacturer,
+                'Manufacturer' => $manufacturer,
+                'unity' => trim((string) ($data['primaryUnit'] ?? $data['PrimaryUnit'] ?? $data['unity'] ?? $data['Unity'] ?? '')),
+                'Unity' => trim((string) ($data['primaryUnit'] ?? $data['PrimaryUnit'] ?? $data['unity'] ?? $data['Unity'] ?? '')),
+                'unit2' => trim((string) ($data['packageUnit'] ?? $data['PackageUnit'] ?? $data['unit2'] ?? $data['Unit2'] ?? '')),
+                'Unit2' => trim((string) ($data['packageUnit'] ?? $data['PackageUnit'] ?? $data['unit2'] ?? $data['Unit2'] ?? '')),
+                'unit2Fact' => $data['packageConversionFactor'] ?? $data['PackageConversionFactor'] ?? $data['unit2Fact'] ?? $data['Unit2Fact'] ?? null,
+                'Unit2Fact' => $data['packageConversionFactor'] ?? $data['PackageConversionFactor'] ?? $data['unit2Fact'] ?? $data['Unit2Fact'] ?? null,
+            ]);
         } catch (Throwable) {
             return null;
         }
@@ -1026,7 +1050,7 @@ final class MaterialImageLinkService
         array $line1ByMaterial,
         array $line2ByMaterial
     ): array {
-        if (!MaterialImageStorageService::canRenderDetailsBanner()) {
+        if (!MaterialImageStorageService::canProcessImageDetails()) {
             return [];
         }
 
@@ -1035,6 +1059,7 @@ final class MaterialImageLinkService
             return [];
         }
 
+        $useTemplate = MaterialImageTemplateService::isAvailable();
         $map = [];
         foreach ($materialGuids as $materialGuid) {
             $materialGuid = trim((string) $materialGuid);
@@ -1044,17 +1069,20 @@ final class MaterialImageLinkService
 
             $line1 = self::detailLineForMaterial($line1ByMaterial, $materialGuid);
             $line2 = self::detailLineForMaterial($line2ByMaterial, $materialGuid);
-            if ($line1 === '') {
-                $material = self::fetchMaterial($materialGuid);
-                if ($material !== null) {
-                    $line1 = trim((string) ($material['material_code'] ?? '') . ' ' . (string) ($material['name'] ?? ''));
-                }
-            }
-            if ($line1 === '' && $line2 === '') {
-                continue;
+            $material = self::fetchMaterial($materialGuid);
+            if ($line1 === '' && $material !== null) {
+                $line1 = trim((string) ($material['material_code'] ?? '') . ' ' . (string) ($material['name'] ?? ''));
             }
 
-            $processed = MaterialImageStorageService::renderImageWithDetailsBanner($tempSource, $line1, $line2);
+            if ($useTemplate) {
+                $processed = MaterialImageTemplateService::render($tempSource, $material, $line1, $line2);
+            } else {
+                if ($line1 === '' && $line2 === '') {
+                    continue;
+                }
+                $processed = MaterialImageStorageService::renderImageWithDetailsBanner($tempSource, $line1, $line2);
+            }
+
             if ($processed !== null) {
                 $map[strtolower($materialGuid)] = $processed;
             }
@@ -1168,10 +1196,14 @@ final class MaterialImageLinkService
     /** @return array{ok: bool, message: string, items: list<array<string, mixed>>} */
     public static function detailsProcessingError(): array
     {
-        if (!MaterialImageStorageService::canRenderDetailsBanner()) {
+        if (!MaterialImageStorageService::canProcessImageDetails()) {
             return self::assignError(
                 'تفاصيل الصورة تتطلب GD وخط TrueType (مثل Tahoma أو DejaVu) على سيرفر الموقع.'
             );
+        }
+
+        if (MaterialImageTemplateService::isAvailable()) {
+            return self::assignError('تعذر تجهيز الصورة ضمن القالب. تحقق من الصورة وملفات القالب في material-image-templates.');
         }
 
         return self::assignError('تعذر تجهيز الصورة مع تفاصيل المادة. تحقق من الصورة والنصوص.');
