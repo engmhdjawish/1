@@ -579,7 +579,7 @@ public sealed class MaterialImagesController(
         }
 
         var linkedMaterials = await linkedMaterialsQuery
-            .Where(material => material.PictureGuid.HasValue)
+            .Where(material => material.PictureGuid != null && material.PictureGuid != MaterialPictureGuid.Cleared)
             .ToListAsync(cancellationToken);
 
         if (linkedMaterials.Count == 0)
@@ -589,7 +589,7 @@ public sealed class MaterialImagesController(
 
         foreach (var material in linkedMaterials)
         {
-            material.PictureGuid = null;
+            material.PictureGuid = MaterialPictureGuid.Cleared;
         }
 
         await mainDbContext.SaveChangesAsync(cancellationToken);
@@ -612,7 +612,7 @@ public sealed class MaterialImagesController(
             .ToListAsync(cancellationToken);
         foreach (var material in linkedMaterials)
         {
-            material.PictureGuid = null;
+            material.PictureGuid = MaterialPictureGuid.Cleared;
         }
 
         mainDbContext.MaterialImages.Remove(image);
@@ -702,7 +702,7 @@ public sealed class MaterialImagesController(
         var selectedGroupGuids = ParseGuids(groupGuid, groupGuids);
         var materialQuery = mainDbContext.Materials
             .AsNoTracking()
-            .Where(material => material.PictureGuid.HasValue);
+            .Where(material => material.PictureGuid != null && material.PictureGuid != MaterialPictureGuid.Cleared);
 
         materialQuery = ApplyStoreAndQuantityFilters(
             materialQuery,
@@ -782,7 +782,7 @@ public sealed class MaterialImagesController(
 
         var imageGuids = await mainDbContext.Materials
             .AsNoTracking()
-            .Where(material => materialGuids.Contains(material.Guid) && material.PictureGuid.HasValue)
+            .Where(material => materialGuids.Contains(material.Guid) && material.PictureGuid != null && material.PictureGuid != MaterialPictureGuid.Cleared)
             .Select(material => material.PictureGuid!.Value)
             .Distinct()
             .ToListAsync(cancellationToken);
@@ -803,7 +803,7 @@ public sealed class MaterialImagesController(
         var query = mainDbContext.MaterialImages.AsNoTracking();
         var linkedImageGuids = mainDbContext.Materials
             .AsNoTracking()
-            .Where(material => material.PictureGuid.HasValue)
+            .Where(material => material.PictureGuid != null && material.PictureGuid != MaterialPictureGuid.Cleared)
             .Select(material => material.PictureGuid!.Value);
 
         if (materialGuid is not null)
@@ -838,7 +838,7 @@ public sealed class MaterialImagesController(
         var imageGuids = images.Select(image => image.Guid).ToArray();
         var links = await mainDbContext.Materials
             .AsNoTracking()
-            .Where(material => material.PictureGuid.HasValue && imageGuids.Contains(material.PictureGuid.Value))
+            .Where(material => material.PictureGuid != null && material.PictureGuid != MaterialPictureGuid.Cleared && imageGuids.Contains(material.PictureGuid.Value))
             .Select(material => new { ImageGuid = material.PictureGuid!.Value, MaterialGuid = (Guid?)material.Guid })
             .ToListAsync(cancellationToken);
 
@@ -866,7 +866,7 @@ public sealed class MaterialImagesController(
             .ToListAsync(cancellationToken);
         foreach (var linkedMaterial in linkedMaterials)
         {
-            linkedMaterial.PictureGuid = null;
+            linkedMaterial.PictureGuid = MaterialPictureGuid.Cleared;
         }
 
         material.PictureGuid = imageGuid;
@@ -1170,7 +1170,7 @@ public sealed class MaterialImagesController(
 
         var rows = await mainDbContext.Materials
             .AsNoTracking()
-            .Where(material => material.PictureGuid.HasValue && imageGuids.Contains(material.PictureGuid.Value))
+            .Where(material => material.PictureGuid != null && material.PictureGuid != MaterialPictureGuid.Cleared && imageGuids.Contains(material.PictureGuid.Value))
             .Select(material => new
             {
                 ImageGuid = material.PictureGuid!.Value,
