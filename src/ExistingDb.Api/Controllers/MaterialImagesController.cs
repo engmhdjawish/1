@@ -366,6 +366,11 @@ public sealed class MaterialImagesController(
             throw;
         }
 
+        if (responses.Count == orderedMaterials.Count)
+        {
+            await TryDeleteStagingSourceAfterAssignAsync(sourceImageGuid, cancellationToken);
+        }
+
         return Ok(new MaterialImageAssignResponse(sourceImageGuid, responses));
     }
 
@@ -687,6 +692,45 @@ public sealed class MaterialImagesController(
         imageStorageService.DeleteFile(imagePath);
 
         return NoContent();
+    }
+
+    private async Task TryDeleteStagingSourceAfterAssignAsync(
+        Guid sourceImageGuid,
+        CancellationToken cancellationToken)
+    {
+        var stillLinked = await mainDbContext.Materials
+            .AsNoTracking()
+            .AnyAsync(material => material.PictureGuid == sourceImageGuid, cancellationToken);
+        if (stillLinked)
+        {
+            return;
+        }
+
+        var staging = await mainDbContext.MaterialImages
+            .SingleOrDefaultAsync(image => image.Guid == sourceImageGuid, cancellationToken);
+        if (staging is null)
+        {
+            return;
+        }
+
+        var imageName = staging.Name;
+        mainDbContext.MaterialImages.Remove(staging);
+        await mainDbContext.SaveChangesAsync(cancellationToken);
+
+        var stillExists = await mainDbContext.MaterialImages
+            .AsNoTracking()
+            .AnyAsync(item => item.Guid == sourceImageGuid, cancellationToken);
+        if (stillExists)
+        {
+            await mainDbContext.Database.ExecuteSqlRawAsync(
+                "DELETE FROM bm000 WHERE [GUID] = {0}",
+                sourceImageGuid);
+        }
+
+        var settings = await imageSettingsService.GetAsync(cancellationToken);
+        var imagePath = ResolveExistingImagePath(imageName, settings.ImagesDirectory)
+            ?? ResolveImagePath(imageName, settings.ImagesDirectory);
+        imageStorageService.DeleteFile(imagePath);
     }
 
     [HttpGet("/api/materials/{materialGuid:guid}/images")]

@@ -587,12 +587,16 @@ final class MaterialImageLinkService
         }
 
         if ($processedPathsByMaterial !== []) {
-            return self::assignViaUpload(
-                $hasLocal ? (string) $sourcePath : '',
+            return self::finalizeAssignResult(
+                self::assignViaUpload(
+                    $hasLocal ? (string) $sourcePath : '',
+                    $sourceFileName,
+                    $materialGuids,
+                    $uploadedByUserId,
+                    $processedPathsByMaterial
+                ),
                 $sourceFileName,
-                $materialGuids,
-                $uploadedByUserId,
-                $processedPathsByMaterial
+                $amineSourceGuid
             );
         }
 
@@ -606,13 +610,13 @@ final class MaterialImageLinkService
                 $uploadedByUserId
             );
             if (($amineResult['linked'] ?? 0) > 0) {
-                return $amineResult;
+                return self::finalizeAssignResult($amineResult, $sourceFileName, $amineSourceGuid);
             }
 
             if ($hasLocal) {
                 $uploadResult = self::assignViaUpload($sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId);
                 if (($uploadResult['linked'] ?? 0) > 0) {
-                    return $uploadResult;
+                    return self::finalizeAssignResult($uploadResult, $sourceFileName, $amineSourceGuid);
                 }
 
                 return self::combineAssignFailures($amineResult, $uploadResult);
@@ -625,7 +629,39 @@ final class MaterialImageLinkService
             return self::assignError('الصورة غير موجودة على الموقع ولا يمكن رفعها للأمين.');
         }
 
-        return self::assignViaUpload($sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId);
+        return self::finalizeAssignResult(
+            self::assignViaUpload($sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId),
+            $sourceFileName,
+            $amineSourceGuid
+        );
+    }
+
+    /**
+     * @param array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>} $result
+     * @return array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>}
+     */
+    private static function finalizeAssignResult(array $result, string $sourceFileName, string $amineSourceGuid): array
+    {
+        if (($result['linked'] ?? 0) > 0 && ($result['failed'] ?? 0) === 0) {
+            self::cleanupStagingSourceAfterAssign($sourceFileName, $amineSourceGuid);
+        }
+
+        return $result;
+    }
+
+    private static function cleanupStagingSourceAfterAssign(string $sourceFileName, string $amineSourceGuid): void
+    {
+        $sourceFileName = basename(str_replace('\\', '/', trim($sourceFileName)));
+        $amineSourceGuid = trim($amineSourceGuid);
+
+        if ($amineSourceGuid !== '') {
+            self::deleteOnAmine($amineSourceGuid, $sourceFileName);
+        }
+
+        MaterialImageSyncService::purgeImageRecords($amineSourceGuid, $sourceFileName);
+        if ($sourceFileName !== '') {
+            MaterialImageStorageService::deleteLocalFile($sourceFileName);
+        }
     }
 
     private static function resolveAmineSourceGuidWithoutLocal(string $fileName): string
