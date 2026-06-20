@@ -360,7 +360,7 @@ final class MaterialImageStorageService
 
     public static function canProcessImageDetails(): bool
     {
-        return MaterialImageTemplateService::isAvailable() || self::canRenderDetailsBanner();
+        return self::canRenderDetailsBanner();
     }
 
     public static function resolveDetailsFontPath(): ?string

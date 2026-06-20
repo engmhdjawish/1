@@ -12,7 +12,7 @@ declare(strict_types=1);
     <div>
       <h1 class="text-2xl font-extrabold">ربط الصور بالمواد</h1>
       <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
-        اضغط على الصورة للتكبير والتحقق قبل الربط. يمكن اختيار عدة مواد لإنشاء نسخة مستقلة لكل مادة، مع إمكانية إضافة اسم المادة وتفاصيلها أسفل الصورة اختيارياً.
+        اضغط على الصورة للتكبير والتحقق قبل الربط. يمكن اختيار عدة مواد لإنشاء نسخة مستقلة لكل مادة، مع إمكانية إضافة بانر تفاصيل أسفل الصورة اختيارياً.
       </p>
     </div>
     <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white text-xs">
@@ -454,8 +454,8 @@ declare(strict_types=1);
       return;
     }
     button.disabled = true;
-    linkStatus.textContent = cardWantsDetails(card) ? 'جاري تجهيز القالب والربط...' : 'جاري الربط...';
-    if (statusEl) statusEl.textContent = cardWantsDetails(card) ? 'جاري تجهيز القالب والربط...' : 'جاري الربط...';
+    linkStatus.textContent = cardWantsDetails(card) ? 'جاري إضافة البانر والربط...' : 'جاري الربط...';
+    if (statusEl) statusEl.textContent = cardWantsDetails(card) ? 'جاري إضافة البانر والربط...' : 'جاري الربط...';
     try {
       ensureDetailLinesBeforeAssign(card, cardKey(item), items);
       const payload = await postAssignForm('assign-materials', item, items, card);
@@ -722,19 +722,19 @@ declare(strict_types=1);
           <div class="rounded-lg border border-border-subtle bg-surface-low/40 p-2 space-y-2">
             <label class="flex items-start gap-2 text-xs cursor-pointer">
               <input type="checkbox" class="add-details-checkbox mt-0.5 rounded border-border-subtle">
-              <span class="font-bold leading-snug">وضع الصورة ضمن قالب JAWISH مع التفاصيل؟ (اختياري)</span>
+              <span class="font-bold leading-snug">إضافة بانر تفاصيل أسفل الصورة؟ (اختياري)</span>
             </label>
             <div class="details-fields hidden space-y-2">
               <button type="button" class="fill-details-btn h-7 px-2 rounded-lg border border-border-subtle bg-white text-[11px] font-bold w-full">تعبئة من المواد المختارة</button>
               <div>
-                <label class="text-[10px] text-text-muted">رمز و اسم المنتج:</label>
+                <label class="text-[10px] text-text-muted">السطر الأول — رمز و اسم المنتج:</label>
                 <input type="text" class="detail-line1 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: 1234 شحاطة فلكسة — أو يُملأ تلقائياً">
               </div>
               <div>
-                <label class="text-[10px] text-text-muted">التعبئة (اختياري):</label>
-                <input type="text" class="detail-line2 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: 8 زوج — أو تُولَّد: التعبئة : 8 زوج">
+                <label class="text-[10px] text-text-muted">السطر الثاني — التعبئة (اختياري):</label>
+                <input type="text" class="detail-line2 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: 8 زوج — أو يُولَّد: التعبئة : 8 زوج">
               </div>
-              <p class="text-[10px] text-text-muted leading-relaxed">يُعبَّأ الرمز والاسم من المادة، والتعبئة من معامل التحويل (Unit2Fact) لكل صنف. يمكنك تعديلهما قبل الربط.</p>
+              <p class="text-[10px] text-text-muted leading-relaxed">يُضاف بانر أبيض أسفل الصورة. يُعبَّأ الرمز والاسم والتعبئة من بيانات المادة لكل صنف، ويمكن تعديلهما قبل الربط.</p>
             </div>
           </div>
           <button type="button" class="assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>

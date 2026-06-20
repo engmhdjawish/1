@@ -1059,7 +1059,6 @@ final class MaterialImageLinkService
             return [];
         }
 
-        $useTemplate = MaterialImageTemplateService::isAvailable();
         $map = [];
         foreach ($materialGuids as $materialGuid) {
             $materialGuid = trim((string) $materialGuid);
@@ -1067,26 +1066,18 @@ final class MaterialImageLinkService
                 continue;
             }
 
-            $line1 = self::detailLineForMaterial($line1ByMaterial, $materialGuid);
-            $line2 = self::detailLineForMaterial($line2ByMaterial, $materialGuid);
             $material = self::fetchMaterial($materialGuid);
+            $line1 = self::detailLineForMaterial($line1ByMaterial, $materialGuid);
+            $line2Override = self::detailLineForMaterial($line2ByMaterial, $materialGuid);
             if ($line1 === '' && $material !== null) {
                 $line1 = trim((string) ($material['material_code'] ?? '') . ' ' . (string) ($material['name'] ?? ''));
             }
-
-            if ($useTemplate) {
-                try {
-                    $processed = MaterialImageTemplateService::render($tempSource, $material, $line1, $line2);
-                } catch (Throwable) {
-                    $processed = null;
-                }
-            } else {
-                if ($line1 === '' && $line2 === '') {
-                    continue;
-                }
-                $processed = MaterialImageStorageService::renderImageWithDetailsBanner($tempSource, $line1, $line2);
+            $line2 = self::buildPackagingBannerLine($material, $line2Override);
+            if ($line1 === '' && $line2 === '') {
+                continue;
             }
 
+            $processed = MaterialImageStorageService::renderImageWithDetailsBanner($tempSource, $line1, $line2);
             if ($processed !== null) {
                 $map[strtolower($materialGuid)] = $processed;
             }
@@ -1202,15 +1193,38 @@ final class MaterialImageLinkService
     {
         if (!MaterialImageStorageService::canProcessImageDetails()) {
             return self::assignError(
-                'تفاصيل الصورة تتطلب GD وخط TrueType (مثل Tahoma أو DejaVu) على سيرفر الموقع.'
+                'البانر السفلي يتطلب GD وخط TrueType (مثل Tahoma أو DejaVu) على سيرفر الموقع.'
             );
         }
 
-        if (MaterialImageTemplateService::isAvailable()) {
-            return self::assignError('تعذر تجهيز الصورة ضمن القالب. تحقق من الصورة وملفات القالب في material-image-templates.');
+        return self::assignError('تعذر تجهيز الصورة مع البانر السفلي. تحقق من الصورة والنصوص.');
+    }
+
+    /** @param array<string, mixed>|null $material */
+    private static function buildPackagingBannerLine(?array $material, string $override = ''): string
+    {
+        $override = trim($override);
+        if ($override !== '') {
+            if (preg_match('/^التعبئة\s*:/u', $override) === 1) {
+                return $override;
+            }
+
+            return 'التعبئة : ' . $override;
         }
 
-        return self::assignError('تعذر تجهيز الصورة مع تفاصيل المادة. تحقق من الصورة والنصوص.');
+        if (!is_array($material)) {
+            return '';
+        }
+
+        $packQty = ShareCartService::packaging($material);
+        if ($packQty <= 0) {
+            return '';
+        }
+
+        $qty = rtrim(rtrim(number_format($packQty, 2, '.', ''), '0'), '.');
+        $unit = ShareCartService::primaryUnitLabel($material);
+
+        return 'التعبئة : ' . $qty . ' ' . $unit;
     }
 
     /** @return array<string, array<string, mixed>> */
