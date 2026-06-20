@@ -80,24 +80,17 @@ final class MaterialImageSyncService
                 local_thumb_path = EXCLUDED.local_thumb_path,
                 local_size_bytes = EXCLUDED.local_size_bytes,
                 local_sha256 = EXCLUDED.local_sha256,
-                sync_status = CASE
-                    WHEN material_image_sync_queue.sync_status = \'synced\'::material_image_sync_status
-                         AND material_image_sync_queue.amine_image_guid IS NOT NULL
-                         AND material_image_sync_queue.local_sha256 IS NOT NULL
+                sync_status = \'pending\'::material_image_sync_status,
+                amine_image_guid = CASE
+                    WHEN material_image_sync_queue.local_sha256 IS NOT NULL
                          AND EXCLUDED.local_sha256 IS NOT NULL
                          AND material_image_sync_queue.local_sha256 = EXCLUDED.local_sha256
-                    THEN \'synced\'::material_image_sync_status
-                    ELSE \'pending\'::material_image_sync_status
-                END,
-                amine_sync_error_ar = CASE
-                    WHEN material_image_sync_queue.sync_status = \'synced\'::material_image_sync_status
                          AND material_image_sync_queue.amine_image_guid IS NOT NULL
-                         AND material_image_sync_queue.local_sha256 IS NOT NULL
-                         AND EXCLUDED.local_sha256 IS NOT NULL
-                         AND material_image_sync_queue.local_sha256 = EXCLUDED.local_sha256
-                    THEN material_image_sync_queue.amine_sync_error_ar
+                    THEN material_image_sync_queue.amine_image_guid
                     ELSE NULL
                 END,
+                amine_sync_error_ar = NULL,
+                synced_to_amine_at = NULL,
                 updated_at = NOW()'
         );
         $stmt->execute([
@@ -747,22 +740,6 @@ final class MaterialImageSyncService
         }
 
         $fingerprint = self::fileFingerprint($localPath);
-        $amine = self::lookupOnAmine($fileName);
-        if (
-            $fingerprint !== null
-            && $amine !== null
-            && self::amineHasDbRecord($amine)
-            && self::fingerprintsMatch($fingerprint, $amine)
-        ) {
-            self::markSyncedFromMatch($id, $amine, $fingerprint);
-
-            return [
-                'ok' => true,
-                'skipped' => true,
-                'message' => 'الصورة موجودة مسبقاً على الأمين بنفس المحتوى — تم اعتبارها متزامنة: ' . $fileName,
-                'item' => self::getById($id),
-            ];
-        }
 
         try {
             $response = ApiClient::postMultipart('/api/material-images', [], [[
@@ -805,13 +782,66 @@ final class MaterialImageSyncService
             ];
         }
 
-        self::markSynced($id, $amineGuid, $fingerprint);
+        $storedFileName = trim((string) (
+            $data['storedFileName']
+            ?? $data['StoredFileName']
+            ?? $data['fileName']
+            ?? $data['FileName']
+            ?? ''
+        ));
+        if ($storedFileName === '') {
+            $storedFileName = $fileName;
+        }
+
+        if (strcasecmp($storedFileName, $fileName) !== 0) {
+            MaterialImageStorageService::renameLocalCopy($fileName, $storedFileName);
+        }
+
+        self::markSyncedWithStoredName($id, $amineGuid, $fingerprint, $storedFileName, $localPath);
+
+        $message = strcasecmp($storedFileName, $fileName) === 0
+            ? 'تمت مزامنة ' . $fileName . ' مع الأمين.'
+            : 'تمت مزامنة ' . $fileName . ' مع الأمين باسم «' . $storedFileName . '».';
 
         return [
             'ok' => true,
-            'message' => 'تمت مزامنة ' . $fileName . ' مع الأمين.',
+            'message' => $message,
             'item' => self::getById($id),
         ];
+    }
+
+    public static function resolveLocalPathByAmineGuid(string $amineImageGuid, bool $thumb = false): ?string
+    {
+        $amineImageGuid = trim($amineImageGuid);
+        if ($amineImageGuid === '') {
+            return null;
+        }
+
+        self::ensureTable();
+        $stmt = Database::pdo()->prepare(
+            'SELECT file_name, local_file_path, local_thumb_path
+             FROM material_image_sync_queue
+             WHERE amine_image_guid::text = :amine_image_guid
+               AND sync_status = \'synced\'::material_image_sync_status
+             ORDER BY synced_to_amine_at DESC NULLS LAST, updated_at DESC
+             LIMIT 1'
+        );
+        $stmt->execute(['amine_image_guid' => $amineImageGuid]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row === false) {
+            return null;
+        }
+
+        $path = $thumb
+            ? (string) ($row['local_thumb_path'] ?? '')
+            : (string) ($row['local_file_path'] ?? '');
+        if ($path !== '' && is_file($path)) {
+            return $path;
+        }
+
+        $fileName = (string) ($row['file_name'] ?? '');
+
+        return $fileName !== '' ? MaterialImageStorageService::resolveLocalPath($fileName, $thumb) : null;
     }
 
     public static function resetFailedToPending(): int
@@ -1289,6 +1319,46 @@ final class MaterialImageSyncService
             'amine_image_guid' => $amineGuid,
             'local_size_bytes' => $fingerprint['size_bytes'],
             'local_sha256' => $fingerprint['sha256'],
+        ]);
+    }
+
+    /** @param array{size_bytes: int, sha256: string}|null $fingerprint */
+    private static function markSyncedWithStoredName(
+        string $id,
+        string $amineGuid,
+        ?array $fingerprint,
+        string $storedFileName,
+        string $localFilePath
+    ): void {
+        $storedFileName = basename(str_replace('\\', '/', trim($storedFileName)));
+        $resolvedLocal = MaterialImageStorageService::resolveLocalPath($storedFileName, false);
+        $resolvedThumb = MaterialImageStorageService::resolveLocalPath($storedFileName, true);
+        if ($resolvedLocal !== null) {
+            $localFilePath = $resolvedLocal;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            "UPDATE material_image_sync_queue
+             SET sync_status = 'synced',
+                 file_name = :file_name,
+                 local_file_path = :local_file_path,
+                 local_thumb_path = :local_thumb_path,
+                 amine_image_guid = :amine_image_guid,
+                 local_size_bytes = COALESCE(:local_size_bytes, local_size_bytes),
+                 local_sha256 = COALESCE(:local_sha256, local_sha256),
+                 synced_to_amine_at = NOW(),
+                 amine_sync_error_ar = NULL,
+                 updated_at = NOW()
+             WHERE id = :id"
+        );
+        $stmt->execute([
+            'id' => $id,
+            'file_name' => $storedFileName,
+            'local_file_path' => $localFilePath,
+            'local_thumb_path' => $resolvedThumb,
+            'amine_image_guid' => $amineGuid,
+            'local_size_bytes' => $fingerprint['size_bytes'] ?? null,
+            'local_sha256' => $fingerprint['sha256'] ?? null,
         ]);
     }
 

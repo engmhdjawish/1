@@ -107,9 +107,13 @@ final class MaterialImageStorageService
 
         return [
             'ok' => true,
-            'message' => 'تم حفظ الصورة على الموقع وإضافتها لطابور مزامنة الأمين.',
+            'message' => ($result['renamed'] ?? false)
+                ? ('تم حفظ الصورة باسم «' . $fileName . '» (تعارض الاسم) وإضافتها لطابور مزامنة الأمين.')
+                : 'تم حفظ الصورة على الموقع وإضافتها لطابور مزامنة الأمين.',
             'file_name' => $fileName,
-            'replaced' => (bool) ($result['replaced'] ?? false),
+            'replaced' => false,
+            'renamed' => (bool) ($result['renamed'] ?? false),
+            'requested_name' => (string) ($result['requested_name'] ?? $fileName),
             'local_path' => $localPath,
         ];
     }
@@ -146,11 +150,7 @@ final class MaterialImageStorageService
                 continue;
             }
 
-            if ($result['replaced']) {
-                $replaced[] = $result['file_name'];
-            } else {
-                $uploaded[] = $result['file_name'];
-            }
+            $uploaded[] = (string) ($result['file_name'] ?? '');
         }
 
         if ($uploaded === [] && $replaced === [] && $failed !== []) {
@@ -361,6 +361,11 @@ final class MaterialImageStorageService
             return null;
         }
 
+        $fromQueue = MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, $thumb);
+        if ($fromQueue !== null) {
+            return $fromQueue;
+        }
+
         foreach (self::fileNamesFromAmineApi($imageGuid) as $fileName) {
             $path = self::resolveLocalPath($fileName, $thumb);
             if ($path !== null) {
@@ -464,10 +469,13 @@ final class MaterialImageStorageService
             return ['ok' => false, 'message' => 'الحجم يجب أن يكون أقل من 10 ميجابايت.'];
         }
 
-        $fileName = self::sanitizeFileName((string) ($file['name'] ?? ''));
-        if ($fileName === '' || !self::isAllowedFileName($fileName)) {
+        $requestedName = self::sanitizeFileName((string) ($file['name'] ?? ''));
+        if ($requestedName === '' || !self::isAllowedFileName($requestedName)) {
             return ['ok' => false, 'message' => 'اسم الملف أو الامتداد غير مدعوم.'];
         }
+
+        $fileName = self::availableFileName($imagesDir, $requestedName);
+        $renamed = strcasecmp($fileName, $requestedName) !== 0;
 
         $targetPath = self::safeJoin($imagesDir, $fileName);
         $thumbPath = self::safeJoin($thumbnailsDir, $fileName);
@@ -475,7 +483,6 @@ final class MaterialImageStorageService
             return ['ok' => false, 'message' => 'مسار الملف غير آمن.'];
         }
 
-        $replaced = is_file($targetPath);
         if (!move_uploaded_file($tmpPath, $targetPath)) {
             return ['ok' => false, 'message' => 'تعذر حفظ الملف.'];
         }
@@ -484,7 +491,70 @@ final class MaterialImageStorageService
             @copy($targetPath, $thumbPath);
         }
 
-        return ['ok' => true, 'message' => 'تم', 'file_name' => $fileName, 'replaced' => $replaced];
+        return [
+            'ok' => true,
+            'message' => 'تم',
+            'file_name' => $fileName,
+            'replaced' => false,
+            'renamed' => $renamed,
+            'requested_name' => $requestedName,
+        ];
+    }
+
+    public static function renameLocalCopy(string $fromFileName, string $toFileName): bool
+    {
+        $fromFileName = self::sanitizeFileName($fromFileName);
+        $toFileName = self::sanitizeFileName($toFileName);
+        if ($fromFileName === '' || $toFileName === '' || strcasecmp($fromFileName, $toFileName) === 0) {
+            return true;
+        }
+
+        $settings = self::settings();
+        $ok = true;
+        foreach ([
+            [$settings['images_dir'], false],
+            [$settings['thumbnails_dir'], true],
+        ] as [$directory, $thumb]) {
+            $fromPath = self::safeJoin($directory, $fromFileName);
+            $toPath = self::safeJoin($directory, $toFileName);
+            if ($fromPath === null || $toPath === null || !is_file($fromPath)) {
+                continue;
+            }
+            if (is_file($toPath)) {
+                continue;
+            }
+            if (!@rename($fromPath, $toPath)) {
+                $ok = @copy($fromPath, $toPath) && @unlink($fromPath);
+            }
+        }
+
+        return $ok;
+    }
+
+    private static function availableFileName(string $directory, string $fileName): string
+    {
+        $fileName = self::sanitizeFileName($fileName);
+        if ($fileName === '') {
+            return $fileName;
+        }
+
+        $base = pathinfo($fileName, PATHINFO_FILENAME);
+        $extension = pathinfo($fileName, PATHINFO_EXTENSION);
+        $candidate = $fileName;
+        $counter = 1;
+
+        while (true) {
+            $path = self::safeJoin($directory, $candidate);
+            if ($path === null || !is_file($path)) {
+                return $candidate;
+            }
+
+            $suffix = '_' . $counter;
+            $candidate = $extension !== ''
+                ? $base . $suffix . '.' . $extension
+                : $base . $suffix;
+            $counter++;
+        }
     }
 
     /** @return list<string> */
