@@ -73,7 +73,7 @@ final class MaterialImageSyncService
                 uploaded_by_web_user_id, sync_status
              ) VALUES (
                 :file_name, :local_file_path, :local_thumb_path, :local_size_bytes, :local_sha256,
-                :uploaded_by_web_user_id, \'pending\'
+                :uploaded_by_web_user_id, \'pending\'::material_image_sync_status
              )
              ON CONFLICT (file_name) DO UPDATE SET
                 local_file_path = EXCLUDED.local_file_path,
@@ -81,16 +81,16 @@ final class MaterialImageSyncService
                 local_size_bytes = EXCLUDED.local_size_bytes,
                 local_sha256 = EXCLUDED.local_sha256,
                 sync_status = CASE
-                    WHEN material_image_sync_queue.sync_status = \'synced\'
+                    WHEN material_image_sync_queue.sync_status = \'synced\'::material_image_sync_status
                          AND material_image_sync_queue.amine_image_guid IS NOT NULL
                          AND material_image_sync_queue.local_sha256 IS NOT NULL
                          AND EXCLUDED.local_sha256 IS NOT NULL
                          AND material_image_sync_queue.local_sha256 = EXCLUDED.local_sha256
-                    THEN \'synced\'
-                    ELSE \'pending\'
+                    THEN \'synced\'::material_image_sync_status
+                    ELSE \'pending\'::material_image_sync_status
                 END,
                 amine_sync_error_ar = CASE
-                    WHEN material_image_sync_queue.sync_status = \'synced\'
+                    WHEN material_image_sync_queue.sync_status = \'synced\'::material_image_sync_status
                          AND material_image_sync_queue.amine_image_guid IS NOT NULL
                          AND material_image_sync_queue.local_sha256 IS NOT NULL
                          AND EXCLUDED.local_sha256 IS NOT NULL
