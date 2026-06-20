@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Database;
-use Portal\Support\Text;
 use PDO;
 use Throwable;
 
@@ -16,35 +15,9 @@ final class MaterialImageLinkService
      */
     public static function listSources(): array
     {
-        MaterialImageSyncService::ensureTable();
-        $queueByFile = self::queueByFileName();
+        $page = self::fetchLinkFilesPage(1, 100, 'unlinked', '');
 
-        $sources = [];
-        foreach (MaterialImageStorageService::listLocalFiles() as $file) {
-            $fileName = (string) ($file['file_name'] ?? '');
-            if ($fileName === '') {
-                continue;
-            }
-
-            $queue = $queueByFile[$fileName] ?? null;
-            $amineGuid = trim((string) ($queue['amine_image_guid'] ?? ''));
-            $sources[] = [
-                'file_name' => $fileName,
-                'local_path' => (string) ($file['local_path'] ?? ''),
-                'local_sha256' => strtolower(trim((string) ($queue['local_sha256'] ?? ''))),
-                'preview_url' => (string) ($file['preview_thumb_url'] ?? $file['preview_url'] ?? ''),
-                'amine_image_guid' => $amineGuid,
-                'is_synced' => (string) ($queue['sync_status'] ?? '') === 'synced'
-                    && ($amineGuid !== '' || trim((string) ($queue['local_sha256'] ?? '')) !== ''),
-                'is_linked_to_material' => false,
-                'link_hint' => false,
-                'linked_material_guid' => '',
-                'linked_material_name' => '',
-                'linked_material_code' => '',
-            ];
-        }
-
-        return $sources;
+        return $page['items'] ?? [];
     }
 
     /**
@@ -63,165 +36,127 @@ final class MaterialImageLinkService
         string $materialQuery = ''
     ): array
     {
-        $all = self::listSources();
-        $materialQuery = trim($materialQuery);
-        $needsFullLinkScan = $linkFilter !== 'all' || $materialQuery !== '';
-        if ($needsFullLinkScan) {
-            $all = self::applyAmineLinkInfo($all);
-        }
-
-        if ($linkFilter === 'linked') {
-            $all = array_values(array_filter($all, static fn (array $item): bool => !empty($item['is_linked_to_material'])));
-        } elseif ($linkFilter === 'unlinked') {
-            $all = array_values(array_filter($all, static fn (array $item): bool => empty($item['is_linked_to_material'])));
-        }
-
-        if ($materialQuery !== '') {
-            $needle = Text::lower($materialQuery);
-            $all = array_values(array_filter(
-                $all,
-                static fn (array $item): bool => self::matchesMaterialQuery($item, $needle)
-            ));
-        }
-
-        $page = max(1, $page);
-        $pageSize = max(6, min(60, $pageSize));
-        $totalCount = count($all);
-        $offset = ($page - 1) * $pageSize;
-        $items = array_slice($all, $offset, $pageSize);
-        if (!$needsFullLinkScan) {
-            $items = self::applyAmineLinkInfo($items);
-        }
-
-        return [
-            'items' => $items,
-            'page' => $page,
-            'page_size' => $pageSize,
-            'total_count' => $totalCount,
-            'has_more' => ($offset + count($items)) < $totalCount,
-        ];
+        return self::fetchLinkFilesPage($page, $pageSize, $linkFilter, trim($materialQuery));
     }
 
     /**
-     * Resolve bm000 + PictureGUID links from Amine API (one material per image file).
-     *
-     * @param list<array<string, mixed>> $items
-     * @return list<array<string, mixed>>
+     * @return array{
+     *   items: list<array<string, mixed>>,
+     *   page: int,
+     *   page_size: int,
+     *   total_count: int,
+     *   has_more: bool
+     * }
      */
-    private static function applyAmineLinkInfo(array $items): array
-    {
-        if ($items === []) {
-            return [];
+    private static function fetchLinkFilesPage(
+        int $page,
+        int $pageSize,
+        string $linkFilter,
+        string $materialQuery
+    ): array {
+        $page = max(1, $page);
+        $pageSize = max(6, min(60, $pageSize));
+        $empty = [
+            'items' => [],
+            'page' => $page,
+            'page_size' => $pageSize,
+            'total_count' => 0,
+            'has_more' => false,
+        ];
+
+        if (!(PortalSettingsService::apiHealth()['ok'] ?? false)) {
+            return $empty;
         }
 
-        $queueByFile = self::queueByFileName();
-        foreach (array_chunk($items, MaterialImageSyncService::BATCH_LOOKUP_SIZE, true) as $chunk) {
-            $candidates = [];
-            foreach ($chunk as $item) {
-                $fileName = (string) ($item['file_name'] ?? '');
-                if ($fileName === '') {
-                    continue;
-                }
-
-                $fingerprint = null;
-                $sha = strtolower(trim((string) ($item['local_sha256'] ?? '')));
-                if ($sha !== '') {
-                    $fingerprint = [
-                        'size_bytes' => (int) ($queueByFile[$fileName]['local_size_bytes'] ?? 0),
-                        'sha256' => $sha,
-                    ];
-                } else {
-                    $localPath = (string) ($item['local_path'] ?? '');
-                    if ($localPath !== '' && is_file($localPath)) {
-                        $fingerprint = MaterialImageSyncService::fileFingerprint($localPath);
-                    }
-                }
-
-                $candidates[] = ['file_name' => $fileName, 'fingerprint' => $fingerprint];
-            }
-
-            $lookups = MaterialImageSyncService::lookupFilesOnAmine($candidates);
-            foreach ($chunk as $index => $item) {
-                $fileName = (string) ($item['file_name'] ?? '');
-                $lookup = $lookups[self::lookupKey($fileName)] ?? null;
-                $imageGuid = trim((string) ($lookup['id'] ?? ''));
-                if ($imageGuid === '') {
-                    $imageGuid = trim((string) ($item['amine_image_guid'] ?? ''));
-                }
-
-                $materialGuid = trim((string) ($lookup['materialGuid'] ?? ''));
-                $materialName = trim((string) ($lookup['materialName'] ?? ''));
-                $materialCode = trim((string) ($lookup['materialCode'] ?? ''));
-
-                if ($materialGuid === '' && $imageGuid !== '') {
-                    $fallback = self::materialLinkedToImageGuid($imageGuid);
-                    if ($fallback !== null) {
-                        $materialGuid = (string) ($fallback['material_guid'] ?? '');
-                        $materialName = (string) ($fallback['name'] ?? '');
-                        $materialCode = (string) ($fallback['code'] ?? '');
-                    }
-                }
-
-                $items[$index]['amine_image_guid'] = $imageGuid;
-                $items[$index]['is_linked_to_material'] = $materialGuid !== '';
-                $items[$index]['link_hint'] = $materialGuid !== '';
-                $items[$index]['linked_material_guid'] = $materialGuid;
-                $items[$index]['linked_material_name'] = $materialName;
-                $items[$index]['linked_material_code'] = $materialCode;
-                $items[$index]['linked_material_count'] = $materialGuid !== '' ? 1 : 0;
-                $items[$index]['linked_materials'] = $materialGuid !== ''
-                    ? [[
-                        'material_guid' => $materialGuid,
-                        'name' => $materialName,
-                        'code' => $materialCode,
-                    ]]
-                    : [];
-            }
+        $query = [
+            'page' => $page,
+            'pageSize' => $pageSize,
+        ];
+        if ($linkFilter === 'linked') {
+            $query['linked'] = 'true';
+        } elseif ($linkFilter === 'unlinked') {
+            $query['linked'] = 'false';
+        }
+        if ($materialQuery !== '') {
+            $query['materialSearch'] = $materialQuery;
         }
 
-        return $items;
-    }
-
-    private static function matchesMaterialQuery(array $item, string $needle): bool
-    {
-        $name = Text::lower((string) ($item['linked_material_name'] ?? ''));
-        $code = Text::lower((string) ($item['linked_material_code'] ?? ''));
-
-        return str_contains($name, $needle) || str_contains($code, $needle);
-    }
-
-    /** @return array{material_guid: string, name: string, code: string}|null */
-    private static function materialLinkedToImageGuid(string $imageGuid): ?array
-    {
         try {
-            $response = ApiClient::get('/api/material-images/' . rawurlencode($imageGuid));
-            if (!($response['ok'] ?? false)) {
-                return null;
-            }
+            $response = ApiClient::get('/api/material-images/link-files', $query);
+        } catch (Throwable $exception) {
+            return $empty;
+        }
 
-            $data = is_array($response['data'] ?? null) ? $response['data'] : [];
-            $materialGuid = trim((string) ($data['materialGuid'] ?? $data['MaterialGuid'] ?? ''));
-            if ($materialGuid === '') {
-                return null;
-            }
+        if (!($response['ok'] ?? false)) {
+            return $empty;
+        }
 
-            $material = self::fetchMaterial($materialGuid);
-            if ($material === null) {
-                return [
-                    'material_guid' => $materialGuid,
-                    'name' => '',
-                    'code' => '',
-                ];
+        $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+        $rows = is_array($data['items'] ?? null) ? $data['items'] : [];
+        $items = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
             }
+            $mapped = self::mapLinkFileRow($row);
+            if ($mapped !== null) {
+                $items[] = $mapped;
+            }
+        }
 
-            return [
-                'material_guid' => $materialGuid,
-                'name' => (string) ($material['name'] ?? ''),
-                'code' => (string) ($material['material_code'] ?? ''),
-            ];
-        } catch (Throwable) {
+        $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+        $responsePage = max(1, (int) ($data['page'] ?? $data['Page'] ?? $page));
+        $responsePageSize = max(1, (int) ($data['pageSize'] ?? $data['PageSize'] ?? $pageSize));
+
+        return [
+            'items' => $items,
+            'page' => $responsePage,
+            'page_size' => $responsePageSize,
+            'total_count' => $totalCount,
+            'has_more' => ($responsePage * $responsePageSize) < $totalCount,
+        ];
+    }
+
+    /** @param array<string, mixed> $row */
+    private static function mapLinkFileRow(array $row): ?array
+    {
+        $fileName = trim((string) ($row['fileName'] ?? $row['FileName'] ?? ''));
+        if ($fileName === '') {
             return null;
         }
+
+        $imageGuid = trim((string) ($row['imageGuid'] ?? $row['ImageGuid'] ?? ''));
+        $materialGuid = trim((string) ($row['materialGuid'] ?? $row['MaterialGuid'] ?? ''));
+        $materialName = trim((string) ($row['materialName'] ?? $row['MaterialName'] ?? ''));
+        $materialCode = trim((string) ($row['materialCode'] ?? $row['MaterialCode'] ?? ''));
+        $isLinked = (bool) ($row['isLinkedToMaterial'] ?? $row['IsLinkedToMaterial'] ?? ($materialGuid !== ''));
+
+        $localPath = MaterialImageStorageService::resolveLocalPath($fileName, false);
+        $hasLocal = $localPath !== null && is_file($localPath);
+        $previewUrl = $hasLocal
+            ? MaterialImageStorageService::publicUrl($fileName, true)
+            : ($imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '');
+
+        return [
+            'file_name' => $fileName,
+            'local_path' => $hasLocal ? (string) $localPath : '',
+            'preview_url' => $previewUrl,
+            'amine_image_guid' => $imageGuid,
+            'is_synced' => $imageGuid !== '',
+            'is_linked_to_material' => $isLinked,
+            'link_hint' => $isLinked,
+            'linked_material_guid' => $materialGuid,
+            'linked_material_name' => $materialName,
+            'linked_material_code' => $materialCode,
+            'linked_material_count' => $isLinked ? 1 : 0,
+            'linked_materials' => $isLinked
+                ? [[
+                    'material_guid' => $materialGuid,
+                    'name' => $materialName,
+                    'code' => $materialCode,
+                ]]
+                : [],
+        ];
     }
 
     /**

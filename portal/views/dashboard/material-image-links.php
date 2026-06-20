@@ -12,8 +12,8 @@ declare(strict_types=1);
     <div>
       <h1 class="text-2xl font-extrabold">ربط الصور بالمواد</h1>
       <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
-        صفحة مستقلة للربط: كل صورة تعرض المادة المرتبطة بها من الأمين (جدول bm000 + PictureGUID).
-        عند الربط تُنشأ نسخة في bm000 ويُحدَّث PictureGUID للمادة.
+        صفحة مستقلة للربط: القائمة والفلاتر تُجلب مباشرة من API الأمين (bm000 + PictureGUID) مع ترقيم صفحات.
+        كل صورة تعرض المادة المرتبطة بها فقط — استعلام واحد لكل صفحة بدون فحص صورة صورة.
       </p>
     </div>
     <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white text-xs">

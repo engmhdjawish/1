@@ -202,6 +202,58 @@ public sealed class MaterialImagesController(
         return Ok(new MaterialImageLookupBatchResponse(responses));
     }
 
+    [HttpGet("link-files")]
+    [RequirePermission("materials.read")]
+    public async Task<ActionResult<PagedResponse<MaterialImageLinkFileResponse>>> GetLinkFiles(
+        [FromQuery] bool? linked = null,
+        [FromQuery] string? materialSearch = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 24,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 6, 60);
+
+        var query = BuildImageQuery(linked, null);
+        if (!string.IsNullOrWhiteSpace(materialSearch))
+        {
+            var term = materialSearch.Trim();
+            query = query.Where(image =>
+                mainDbContext.Materials.Any(material =>
+                    material.PictureGuid == image.Guid &&
+                    ((material.Name != null && material.Name.Contains(term)) ||
+                     (material.Code != null && material.Code.Contains(term)))));
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var images = await query
+            .OrderBy(image => image.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        var materialByImage = await GetLinkedMaterialDetailsByImageAsync(
+            images.Select(image => image.Guid).ToArray(),
+            cancellationToken);
+
+        var items = images
+            .Select(image =>
+            {
+                var fileName = ExtractFileName(image.Name) ?? string.Empty;
+                var hasMaterial = materialByImage.TryGetValue(image.Guid, out var link);
+                return new MaterialImageLinkFileResponse(
+                    image.Guid,
+                    fileName,
+                    hasMaterial,
+                    hasMaterial ? link.MaterialGuid : null,
+                    hasMaterial ? link.MaterialName : null,
+                    hasMaterial ? link.MaterialCode : null);
+            })
+            .ToArray();
+
+        return Ok(new PagedResponse<MaterialImageLinkFileResponse>(items, page, pageSize, totalCount));
+    }
+
     [HttpPost("{sourceImageGuid:guid}/assign-to-materials")]
     [RequirePermission("materials.update")]
     public async Task<ActionResult<MaterialImageAssignResponse>> AssignToMaterials(
