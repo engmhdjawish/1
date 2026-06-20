@@ -834,6 +834,46 @@ final class MaterialImageSyncService
         return $stmt->rowCount();
     }
 
+    public static function recordAssignedCopy(
+        string $fileName,
+        string $localPath,
+        string $amineImageGuid,
+        ?string $uploadedByUserId = null
+    ): void {
+        self::ensureTable();
+        $fingerprint = self::fileFingerprint($localPath);
+        if ($fingerprint === null) {
+            return;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'INSERT INTO material_image_sync_queue (
+                file_name, local_file_path, local_thumb_path, local_size_bytes, local_sha256,
+                amine_image_guid, uploaded_by_web_user_id, sync_status, synced_to_amine_at
+             ) VALUES (
+                :file_name, :local_file_path, NULL, :local_size_bytes, :local_sha256,
+                :amine_image_guid, :uploaded_by_web_user_id, \'synced\', NOW()
+             )
+             ON CONFLICT (file_name) DO UPDATE SET
+                local_file_path = EXCLUDED.local_file_path,
+                local_size_bytes = EXCLUDED.local_size_bytes,
+                local_sha256 = EXCLUDED.local_sha256,
+                amine_image_guid = EXCLUDED.amine_image_guid,
+                sync_status = \'synced\',
+                amine_sync_error_ar = NULL,
+                synced_to_amine_at = NOW(),
+                updated_at = NOW()'
+        );
+        $stmt->execute([
+            'file_name' => $fileName,
+            'local_file_path' => $localPath,
+            'local_size_bytes' => $fingerprint['size_bytes'],
+            'local_sha256' => $fingerprint['sha256'],
+            'amine_image_guid' => $amineImageGuid,
+            'uploaded_by_web_user_id' => $uploadedByUserId !== null && $uploadedByUserId !== '' ? $uploadedByUserId : null,
+        ]);
+    }
+
     /** @return array{size_bytes: int, sha256: string}|null */
     public static function fileFingerprint(string $path): ?array
     {

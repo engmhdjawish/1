@@ -43,6 +43,47 @@ public sealed class ImageStorageService(IImageSettingsService settingsService) :
             file.Length);
     }
 
+    public async Task<StoredImageFile> CopyFromPathAsync(
+        string sourcePath,
+        string preferredFileName,
+        CancellationToken cancellationToken = default)
+    {
+        if (!File.Exists(sourcePath))
+        {
+            throw new InvalidOperationException("Source image file was not found.");
+        }
+
+        var extension = Path.GetExtension(preferredFileName);
+        if (!AllowedExtensions.Contains(extension))
+        {
+            extension = Path.GetExtension(sourcePath);
+            if (!AllowedExtensions.Contains(extension))
+            {
+                throw new InvalidOperationException("Unsupported image extension.");
+            }
+        }
+
+        var settings = await settingsService.GetAsync(cancellationToken);
+        Directory.CreateDirectory(settings.ImagesDirectory);
+
+        var baseName = SanitizeFileName(Path.GetFileNameWithoutExtension(preferredFileName) + extension);
+        var storedFileName = GetAvailableFileName(settings.ImagesDirectory, baseName);
+        var imagePath = Path.GetFullPath(Path.Combine(settings.ImagesDirectory, storedFileName));
+
+        await using (var sourceStream = File.OpenRead(sourcePath))
+        await using (var targetStream = File.Create(imagePath))
+        {
+            await sourceStream.CopyToAsync(targetStream, cancellationToken);
+        }
+
+        var fileInfo = new FileInfo(imagePath);
+        return new StoredImageFile(
+            imagePath,
+            storedFileName,
+            GetContentType(imagePath),
+            fileInfo.Length);
+    }
+
     public void DeleteFile(string imagePath)
     {
         TryDelete(imagePath);
@@ -86,5 +127,17 @@ public sealed class ImageStorageService(IImageSettingsService settingsService) :
         {
             // File cleanup is best effort; database consistency is handled separately.
         }
+    }
+
+    private static string GetContentType(string path)
+    {
+        return Path.GetExtension(path).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            _ => "application/octet-stream",
+        };
     }
 }

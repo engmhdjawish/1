@@ -43,6 +43,7 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
         <strong>①</strong> رفع على الموقع مع استئناف من المتصفح.
         <strong class="mr-1">②</strong> مزامنة الأمين صورة تلو الأخرى — يتوقف عند انقطاع الاتصال ويُستأنف لاحقاً.
         <strong class="mr-1">③</strong> تصفح مواد محددة للتحقق من توفر الصور.
+        <strong class="mr-1">④</strong> ربط صورة أساسية بعدة مواد — نسخة مستقلة لكل مادة.
       </p>
     </div>
     <div class="flex flex-wrap gap-2 text-xs" id="statsPills">
@@ -174,6 +175,47 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     <button type="button" id="syncQueueNextBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold disabled:opacity-40" disabled>التالي</button>
   </div>
 </article>
+
+<section class="rounded-xl border border-border-subtle bg-white overflow-hidden mb-6" id="linkSection">
+  <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60">
+    <h2 class="font-bold">④ ربط الصور بالمواد</h2>
+    <p class="text-xs text-text-muted mt-0.5">اختر صورة أساسية من الموقع، ثم حدّد مواداً — يُولَّد لكل مادة ملف باسمها ويُربط على الأمين دون رفع يدوي مكرر.</p>
+  </div>
+
+  <div class="grid gap-4 lg:grid-cols-2 p-4">
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-bold">الصور الأساسية</h3>
+        <button type="button" id="linkReloadSourcesBtn" class="text-xs text-primary font-bold">تحديث</button>
+      </div>
+      <div id="linkSourceEmpty" class="text-xs text-text-muted rounded-lg border border-dashed border-border-subtle p-4 text-center">
+        لا توجد صور على الموقع بعد — ارفع صوراً في الخطوة ①.
+      </div>
+      <div id="linkSourceList" class="hidden max-h-[360px] overflow-auto space-y-2"></div>
+    </div>
+
+    <div>
+      <h3 class="text-sm font-bold mb-2">مواد للربط</h3>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+        <input type="search" id="linkMaterialSearch" class="h-9 rounded-lg border border-border-subtle px-3 text-sm sm:col-span-2" placeholder="بحث بالاسم أو الكود">
+        <select id="linkHasImage" class="h-9 rounded-lg border border-border-subtle px-2 text-sm">
+          <option value="0" selected>بدون صورة في الأمين</option>
+          <option value="">كل المواد</option>
+          <option value="1">مع صورة</option>
+        </select>
+        <button type="button" id="linkSearchMaterialsBtn" class="h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold">بحث</button>
+      </div>
+      <div id="linkMaterialLoading" class="hidden text-xs text-text-muted py-4 text-center">جاري التحميل...</div>
+      <div id="linkMaterialEmpty" class="hidden text-xs text-text-muted rounded-lg border border-dashed border-border-subtle p-4 text-center">لا توجد مواد مطابقة.</div>
+      <div id="linkMaterialList" class="hidden max-h-[260px] overflow-auto divide-y divide-border-subtle border border-border-subtle rounded-lg"></div>
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" id="linkAssignBtn" class="h-9 px-4 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-40" disabled>ربط وتوليد نسخ</button>
+        <span id="linkSelectionSummary" class="text-xs text-text-muted">اختر صورة أساسية ومادة واحدة على الأقل.</span>
+      </div>
+      <p id="linkStatus" class="text-xs text-text-muted mt-2"></p>
+    </div>
+  </div>
+</section>
 
 <details class="rounded-xl border border-border-subtle bg-white p-4 mb-6">
   <summary class="font-bold cursor-pointer">مسارات التخزين (متقدم)</summary>
@@ -343,6 +385,23 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   const syncQueueNextBtn = document.getElementById('syncQueueNextBtn');
   const syncQueuePageLabel = document.getElementById('syncQueuePageLabel');
   const statusLabels = <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE) ?>;
+
+  const linkReloadSourcesBtn = document.getElementById('linkReloadSourcesBtn');
+  const linkSourceList = document.getElementById('linkSourceList');
+  const linkSourceEmpty = document.getElementById('linkSourceEmpty');
+  const linkMaterialSearch = document.getElementById('linkMaterialSearch');
+  const linkHasImage = document.getElementById('linkHasImage');
+  const linkSearchMaterialsBtn = document.getElementById('linkSearchMaterialsBtn');
+  const linkMaterialLoading = document.getElementById('linkMaterialLoading');
+  const linkMaterialEmpty = document.getElementById('linkMaterialEmpty');
+  const linkMaterialList = document.getElementById('linkMaterialList');
+  const linkAssignBtn = document.getElementById('linkAssignBtn');
+  const linkSelectionSummary = document.getElementById('linkSelectionSummary');
+  const linkStatus = document.getElementById('linkStatus');
+
+  let selectedSourceFile = '';
+  let linkMaterialItems = [];
+  const selectedMaterialGuids = new Set();
 
   let syncRunning = false;
   let syncPaused = false;
@@ -922,6 +981,190 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     return params;
   }
 
+  function updateLinkAssignState() {
+    const count = selectedMaterialGuids.size;
+    if (linkAssignBtn) {
+      linkAssignBtn.disabled = selectedSourceFile === '' || count === 0;
+    }
+    if (linkSelectionSummary) {
+      if (selectedSourceFile === '') {
+        linkSelectionSummary.textContent = 'اختر صورة أساسية.';
+      } else if (count === 0) {
+        linkSelectionSummary.textContent = 'اختر مادة واحدة على الأقل.';
+      } else {
+        linkSelectionSummary.textContent = `${count} مادة محددة للربط.`;
+      }
+    }
+  }
+
+  function renderLinkSources(items) {
+    if (!linkSourceList || !linkSourceEmpty) return;
+    if (!items.length) {
+      linkSourceList.classList.add('hidden');
+      linkSourceList.innerHTML = '';
+      linkSourceEmpty.classList.remove('hidden');
+      return;
+    }
+
+    linkSourceEmpty.classList.add('hidden');
+    linkSourceList.innerHTML = items.map((item) => {
+      const fileName = item.file_name || '';
+      const checked = selectedSourceFile === fileName ? 'checked' : '';
+      const syncedBadge = item.is_synced
+        ? '<span class="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">متزامنة</span>'
+        : '<span class="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">لم تُزامَن بعد</span>';
+      const preview = item.preview_url
+        ? `<img src="${escapeHtml(item.preview_url)}" alt="" class="w-14 h-14 rounded-lg object-cover border border-border-subtle">`
+        : '<div class="w-14 h-14 rounded-lg bg-surface-low border border-border-subtle"></div>';
+
+      return `
+        <label class="flex items-center gap-3 p-2 rounded-lg border border-border-subtle hover:bg-surface-low/60 cursor-pointer">
+          <input type="radio" name="linkSource" value="${escapeHtml(fileName)}" ${checked}>
+          ${preview}
+          <span class="flex-1 min-w-0">
+            <span class="block text-xs font-bold truncate" dir="ltr">${escapeHtml(fileName)}</span>
+            ${syncedBadge}
+          </span>
+        </label>
+      `;
+    }).join('');
+    linkSourceList.classList.remove('hidden');
+
+    linkSourceList.querySelectorAll('input[name="linkSource"]').forEach((input) => {
+      input.addEventListener('change', () => {
+        if (input.checked) {
+          selectedSourceFile = input.value;
+          updateLinkAssignState();
+        }
+      });
+    });
+  }
+
+  async function loadLinkSources() {
+    try {
+      const response = await fetch(`${API_URL}?action=link-sources`);
+      const payload = await response.json();
+      renderLinkSources(payload.items || []);
+    } catch {
+      if (linkStatus) linkStatus.textContent = 'تعذر تحميل الصور الأساسية.';
+    }
+  }
+
+  function renderLinkMaterialItem(item) {
+    const guid = item.material_guid || '';
+    const checked = selectedMaterialGuids.has(guid) ? 'checked' : '';
+    const name = item.name || 'بدون اسم';
+    const code = item.material_code ? ` (${item.material_code})` : '';
+    const meta = [item.material_type, item.manufacturer].filter(Boolean).join(' · ');
+
+    return `
+      <label class="flex items-start gap-2 p-3 hover:bg-surface-low/40 cursor-pointer">
+        <input type="checkbox" class="link-material-check mt-1" value="${escapeHtml(guid)}" ${checked}>
+        <span class="min-w-0">
+          <span class="block text-sm font-bold truncate">${escapeHtml(name)}${escapeHtml(code)}</span>
+          ${meta ? `<span class="block text-[11px] text-text-muted mt-0.5">${escapeHtml(meta)}</span>` : ''}
+        </span>
+      </label>
+    `;
+  }
+
+  function bindLinkMaterialChecks() {
+    linkMaterialList?.querySelectorAll('.link-material-check').forEach((input) => {
+      input.addEventListener('change', () => {
+        if (input.checked) {
+          selectedMaterialGuids.add(input.value);
+        } else {
+          selectedMaterialGuids.delete(input.value);
+        }
+        updateLinkAssignState();
+      });
+    });
+  }
+
+  async function loadLinkMaterials() {
+    linkMaterialLoading?.classList.remove('hidden');
+    linkMaterialEmpty?.classList.add('hidden');
+    linkMaterialList?.classList.add('hidden');
+
+    const params = new URLSearchParams();
+    params.set('action', 'browse');
+    params.set('page', '1');
+    params.set('page_size', '48');
+    params.set('local_status', 'all');
+    const search = linkMaterialSearch?.value.trim() || '';
+    if (search) params.set('search', search);
+    if (linkHasImage?.value !== '') params.set('has_image', linkHasImage.value);
+
+    try {
+      const response = await fetch(`${API_URL}?${params.toString()}`);
+      const payload = await response.json();
+      linkMaterialLoading?.classList.add('hidden');
+      if (!payload.ok) {
+        if (linkStatus) linkStatus.textContent = payload.message || 'تعذر تحميل المواد.';
+        return;
+      }
+
+      linkMaterialItems = payload.items || [];
+      if (!linkMaterialItems.length) {
+        linkMaterialEmpty?.classList.remove('hidden');
+        return;
+      }
+
+      if (linkMaterialList) {
+        linkMaterialList.innerHTML = linkMaterialItems.map(renderLinkMaterialItem).join('');
+        linkMaterialList.classList.remove('hidden');
+        bindLinkMaterialChecks();
+      }
+    } catch {
+      linkMaterialLoading?.classList.add('hidden');
+      if (linkStatus) linkStatus.textContent = 'تعذر الاتصال أثناء تحميل المواد.';
+    }
+  }
+
+  async function assignSelectedMaterials() {
+    if (!selectedSourceFile || selectedMaterialGuids.size === 0) {
+      return;
+    }
+
+    if (!confirm(`ربط ${selectedMaterialGuids.size} مادة بالصورة «${selectedSourceFile}» وتوليد نسخ مستقلة؟`)) {
+      return;
+    }
+
+    if (linkAssignBtn) linkAssignBtn.disabled = true;
+    if (linkStatus) linkStatus.textContent = 'جاري الربط وتوليد النسخ...';
+
+    const form = new FormData();
+    form.append('action', 'assign-materials');
+    form.append('source_file_name', selectedSourceFile);
+    selectedMaterialGuids.forEach((guid) => form.append('material_guids[]', guid));
+
+    try {
+      const response = await fetch(API_URL, { method: 'POST', body: form });
+      const payload = await response.json();
+      if (linkStatus) linkStatus.textContent = payload.message || '';
+      if (payload.ok) {
+        selectedMaterialGuids.clear();
+        await loadLinkSources();
+        await loadLinkMaterials();
+        await refreshOverview();
+      }
+    } catch {
+      if (linkStatus) linkStatus.textContent = 'تعذر إكمال عملية الربط.';
+    } finally {
+      updateLinkAssignState();
+    }
+  }
+
+  linkReloadSourcesBtn?.addEventListener('click', () => loadLinkSources());
+  linkSearchMaterialsBtn?.addEventListener('click', () => loadLinkMaterials());
+  linkMaterialSearch?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      loadLinkMaterials();
+    }
+  });
+  linkAssignBtn?.addEventListener('click', () => assignSelectedMaterials());
+
   function renderBrowseItem(item) {
     const name = item.name || 'بدون اسم';
     const code = item.material_code ? ` (${item.material_code})` : '';
@@ -1223,5 +1466,7 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
 
   restoreQueueFromStorage();
   refreshOverview();
+  loadLinkSources();
+  loadLinkMaterials();
 })();
 </script>

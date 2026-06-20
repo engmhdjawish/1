@@ -224,6 +224,42 @@ final class MaterialImageStorageService
         return $rows;
     }
 
+    /**
+     * @return array{ok: bool, message: string, file_name?: string}
+     */
+    public static function copyLocalFromSource(string $sourcePath, string $targetFileName): array
+    {
+        if (!is_file($sourcePath)) {
+            return ['ok' => false, 'message' => 'الصورة المصدر غير موجودة على الموقع.'];
+        }
+
+        $settings = self::settings();
+        $targetFileName = self::sanitizeFileName($targetFileName);
+        if ($targetFileName === '' || !self::isAllowedFileName($targetFileName)) {
+            return ['ok' => false, 'message' => 'اسم الملف المستهدف غير صالح.'];
+        }
+
+        $targetPath = self::safeJoin($settings['images_dir'], $targetFileName);
+        $thumbPath = self::safeJoin($settings['thumbnails_dir'], $targetFileName);
+        if ($targetPath === null || $thumbPath === null) {
+            return ['ok' => false, 'message' => 'مسار الملف غير آمن.'];
+        }
+
+        if (!self::ensureDirectory($settings['images_dir']) || !self::ensureDirectory($settings['thumbnails_dir'])) {
+            return ['ok' => false, 'message' => 'تعذر إنشاء مجلدات التخزين.'];
+        }
+
+        if (!@copy($sourcePath, $targetPath)) {
+            return ['ok' => false, 'message' => 'تعذر نسخ الصورة محلياً.'];
+        }
+
+        if (!self::generateThumbnail($targetPath, $thumbPath)) {
+            @copy($targetPath, $thumbPath);
+        }
+
+        return ['ok' => true, 'message' => 'تم', 'file_name' => $targetFileName];
+    }
+
     public static function publicUrl(string $fileName, bool $thumb = true): string
     {
         return '/media/material.php?file=' . rawurlencode(self::lookupFileName($fileName))

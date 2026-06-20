@@ -5,6 +5,7 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
+use Portal\Services\MaterialImageLinkService;
 use Portal\Services\MaterialImageStorageService;
 use Portal\Services\MaterialImageSyncService;
 use Portal\Services\PortalSettingsService;
@@ -53,6 +54,14 @@ if ($method === 'GET') {
             ['ok' => true, 'sync' => MaterialImageSyncService::stats()],
             MaterialImageSyncService::listQueuePage($page, $pageSize)
         ), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'link-sources') {
+        echo json_encode([
+            'ok' => true,
+            'items' => MaterialImageLinkService::listSources(),
+        ], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -121,6 +130,20 @@ if ($method === 'POST') {
             'sync' => MaterialImageSyncService::stats(),
             'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
         ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'assign-materials') {
+        @set_time_limit(120);
+        $sourceFileName = trim((string) ($_POST['source_file_name'] ?? ''));
+        $materialGuids = $_POST['material_guids'] ?? ($_POST['material_guids[]'] ?? []);
+        if (!is_array($materialGuids)) {
+            $materialGuids = [$materialGuids];
+        }
+        $result = MaterialImageLinkService::assign($sourceFileName, $materialGuids, $userId);
+        echo json_encode(array_merge($result, [
+            'sync' => MaterialImageSyncService::stats(),
+        ]), JSON_UNESCAPED_UNICODE);
         exit;
     }
 
