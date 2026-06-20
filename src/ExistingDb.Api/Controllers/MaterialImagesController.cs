@@ -78,6 +78,66 @@ public sealed class MaterialImagesController(
         return Ok(new PagedResponse<MaterialImageResponse>(responseItems, page, pageSize, totalCount));
     }
 
+    [HttpGet("lookup")]
+    [RequirePermission("materials.read")]
+    public async Task<ActionResult<MaterialImageLookupResponse>> LookupByFileName(
+        [FromQuery] string fileName,
+        CancellationToken cancellationToken)
+    {
+        fileName = Path.GetFileName(fileName.Trim());
+        if (fileName is "")
+        {
+            return BadRequest(new { message = "fileName is required." });
+        }
+
+        var settings = await imageSettingsService.GetAsync(cancellationToken);
+        var candidates = await mainDbContext.MaterialImages
+            .AsNoTracking()
+            .Where(image => image.Name != null && image.Name.Contains(fileName))
+            .ToListAsync(cancellationToken);
+
+        var image = candidates
+            .FirstOrDefault(candidate =>
+                string.Equals(ExtractFileName(candidate.Name), fileName, StringComparison.OrdinalIgnoreCase));
+
+        if (image is null)
+        {
+            var directPath = Path.GetFullPath(Path.Combine(settings.ImagesDirectory, fileName));
+            if (!System.IO.File.Exists(directPath))
+            {
+                return NotFound();
+            }
+
+            var directInfo = new FileInfo(directPath);
+            return Ok(new MaterialImageLookupResponse(
+                null,
+                fileName,
+                directInfo.Length,
+                ComputeSha256Hex(directPath),
+                true));
+        }
+
+        var imagePath = ResolveExistingImagePath(image.Name, settings.ImagesDirectory)
+            ?? ResolveImagePath(image.Name, settings.ImagesDirectory);
+        if (!System.IO.File.Exists(imagePath))
+        {
+            return Ok(new MaterialImageLookupResponse(
+                image.Guid,
+                fileName,
+                0,
+                string.Empty,
+                false));
+        }
+
+        var fileInfo = new FileInfo(imagePath);
+        return Ok(new MaterialImageLookupResponse(
+            image.Guid,
+            fileName,
+            fileInfo.Length,
+            ComputeSha256Hex(imagePath),
+            true));
+    }
+
     [HttpGet("{id:guid}")]
     [RequirePermission("materials.read")]
     public async Task<ActionResult<MaterialImageResponse>> GetImage(Guid id, CancellationToken cancellationToken)
@@ -829,5 +889,12 @@ public sealed class MaterialImagesController(
             ".webp" => "image/webp",
             _ => "application/octet-stream"
         };
+    }
+
+    private static string ComputeSha256Hex(string path)
+    {
+        using var stream = System.IO.File.OpenRead(path);
+        var hash = System.Security.Cryptography.SHA256.HashData(stream);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }

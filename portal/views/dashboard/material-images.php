@@ -110,7 +110,7 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
 
   <article class="rounded-xl border border-border-subtle bg-white p-4">
     <h2 class="font-bold mb-1">② مزامنة الأمين</h2>
-    <p class="text-xs text-text-muted mb-3">يرسل الطابور صورة واحدة في كل مرة. عند فصل الاتصال يتوقف — اضغط «استئناف» عند عودة الأمين.</p>
+    <p class="text-xs text-text-muted mb-3">يرسل الطابور صورة واحدة في كل مرة. «فحص الملفات المحلية» يقارن كل صورة مع الأمين عبر SHA256 والحجم — إن تطابقت تُعلَّم متزامنة دون رفع. عند فصل الاتصال يتوقف — اضغط «استئناف» عند عودة الأمين.</p>
     <div class="flex flex-wrap gap-2 mb-3">
       <button type="button" id="startSyncBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold">بدء / استئناف المزامنة</button>
       <button type="button" id="pauseSyncBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">إيقاف مؤقت</button>

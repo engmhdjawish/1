@@ -127,9 +127,21 @@ if ($method === 'POST') {
     if ($action === 'scan-local') {
         $scan = MaterialImageSyncService::scanLocalFiles($userId);
         echo json_encode([
-            'ok' => true,
-            'message' => 'أُضيف ' . $scan['added'] . ' ملف للطابور، وتُخطّى ' . $scan['skipped'] . '.',
+            'ok' => !($scan['offline'] ?? false),
+            'message' => (string) ($scan['message'] ?? ''),
             'scan' => $scan,
+            'sync' => MaterialImageSyncService::stats(),
+            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'reconcile-amine') {
+        $reconcile = MaterialImageSyncService::reconcileQueueWithAmine();
+        echo json_encode([
+            'ok' => !($reconcile['offline'] ?? false),
+            'message' => (string) ($reconcile['message'] ?? ''),
+            'reconcile' => $reconcile,
             'sync' => MaterialImageSyncService::stats(),
             'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
         ], JSON_UNESCAPED_UNICODE);
