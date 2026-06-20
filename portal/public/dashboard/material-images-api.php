@@ -6,11 +6,19 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
 use Portal\Services\MaterialImageStorageService;
+use Portal\Services\MaterialImageSyncService;
+use Portal\Services\PortalSettingsService;
 
 header('Content-Type: application/json; charset=utf-8');
 
 WebSession::requirePermission('images.upload');
 MaterialImageStorageService::ensureSettings();
+
+$user = WebSession::user();
+$userId = isset($user['id']) ? (string) $user['id'] : null;
+
+MaterialImageSyncService::ensureTable();
+MaterialImageSyncService::recoverStaleSyncing();
 
 $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 
@@ -21,6 +29,26 @@ if ($method === 'GET') {
         echo json_encode([
             'ok' => true,
             'stats' => MaterialImageStorageService::stats(),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'overview') {
+        echo json_encode([
+            'ok' => true,
+            'local' => MaterialImageStorageService::stats(),
+            'sync' => MaterialImageSyncService::stats(),
+            'api' => PortalSettingsService::apiHealth(),
+            'queue' => MaterialImageSyncService::listQueue(60),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'queue') {
+        echo json_encode([
+            'ok' => true,
+            'items' => MaterialImageSyncService::listQueue(100),
+            'sync' => MaterialImageSyncService::stats(),
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -52,14 +80,59 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
+    $action = trim((string) ($_POST['action'] ?? ($_GET['action'] ?? '')));
     $file = is_array($_FILES['file'] ?? null) ? $_FILES['file'] : [];
-    $result = MaterialImageStorageService::uploadSingle($file);
-    echo json_encode([
-        'ok' => (bool) ($result['ok'] ?? false),
-        'message' => (string) ($result['message'] ?? ''),
-        'file_name' => (string) ($result['file_name'] ?? ''),
-        'replaced' => (bool) ($result['replaced'] ?? false),
-    ], JSON_UNESCAPED_UNICODE);
+
+    if ($action === '' && $file !== []) {
+        $action = 'upload';
+    }
+
+    if ($action === 'upload') {
+        $result = MaterialImageStorageService::uploadSingle($file, $userId);
+        echo json_encode([
+            'ok' => (bool) ($result['ok'] ?? false),
+            'message' => (string) ($result['message'] ?? ''),
+            'file_name' => (string) ($result['file_name'] ?? ''),
+            'replaced' => (bool) ($result['replaced'] ?? false),
+            'sync' => MaterialImageSyncService::stats(),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'sync-next') {
+        $result = MaterialImageSyncService::syncNext();
+        echo json_encode(array_merge($result, [
+            'sync' => MaterialImageSyncService::stats(),
+            'queue' => MaterialImageSyncService::listQueue(60),
+        ]), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'retry-failed') {
+        $count = MaterialImageSyncService::resetFailedToPending();
+        echo json_encode([
+            'ok' => true,
+            'message' => $count > 0 ? ('أُعيدت ' . $count . ' صورة للانتظار.') : 'لا توجد صور فاشلة.',
+            'sync' => MaterialImageSyncService::stats(),
+            'queue' => MaterialImageSyncService::listQueue(60),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'scan-local') {
+        $scan = MaterialImageSyncService::scanLocalFiles($userId);
+        echo json_encode([
+            'ok' => true,
+            'message' => 'أُضيف ' . $scan['added'] . ' ملف للطابور، وتُخطّى ' . $scan['skipped'] . '.',
+            'scan' => $scan,
+            'sync' => MaterialImageSyncService::stats(),
+            'queue' => MaterialImageSyncService::listQueue(60),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'message' => 'إجراء غير معروف.'], JSON_UNESCAPED_UNICODE);
     exit;
 }
 

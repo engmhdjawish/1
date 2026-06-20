@@ -75,16 +75,43 @@ final class MaterialImageStorageService
 
     /**
      * @param array<string, mixed> $file single $_FILES entry
-     * @return array{ok: bool, message: string, file_name?: string, replaced?: bool}
+     * @return array{ok: bool, message: string, file_name?: string, replaced?: bool, local_path?: string}
      */
-    public static function uploadSingle(array $file): array
+    public static function uploadSingle(array $file, ?string $uploadedByUserId = null): array
     {
         $settings = self::settings();
         if (!self::ensureDirectory($settings['images_dir']) || !self::ensureDirectory($settings['thumbnails_dir'])) {
             return ['ok' => false, 'message' => 'تعذر إنشاء مجلدات التخزين.'];
         }
 
-        return self::uploadOne($file, $settings['images_dir'], $settings['thumbnails_dir']);
+        $result = self::uploadOne($file, $settings['images_dir'], $settings['thumbnails_dir']);
+        if (!($result['ok'] ?? false)) {
+            return $result;
+        }
+
+        $fileName = (string) ($result['file_name'] ?? '');
+        $localPath = self::safeJoin($settings['images_dir'], $fileName) ?? '';
+        $thumbPath = self::safeJoin($settings['thumbnails_dir'], $fileName);
+
+        try {
+            MaterialImageSyncService::enqueue($fileName, $localPath, $thumbPath, $uploadedByUserId);
+        } catch (Throwable $exception) {
+            return [
+                'ok' => true,
+                'message' => 'تم حفظ الصورة محلياً لكن تعذر إضافتها لطابور المزامنة: ' . $exception->getMessage(),
+                'file_name' => $fileName,
+                'replaced' => (bool) ($result['replaced'] ?? false),
+                'local_path' => $localPath,
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'message' => 'تم حفظ الصورة على الموقع وإضافتها لطابور مزامنة الأمين.',
+            'file_name' => $fileName,
+            'replaced' => (bool) ($result['replaced'] ?? false),
+            'local_path' => $localPath,
+        ];
     }
 
     /**
@@ -182,6 +209,7 @@ final class MaterialImageStorageService
             $fullPreviewPath = self::findFileInDirectory($settings['images_dir'], $entry);
             $rows[] = [
                 'file_name' => $entry,
+                'local_path' => $path,
                 'size_bytes' => filesize($path) ?: 0,
                 'modified_at' => date('Y-m-d H:i:s', (int) filemtime($path)),
                 'has_thumbnail' => $thumbPath !== null,
@@ -200,6 +228,11 @@ final class MaterialImageStorageService
     {
         return '/media/material.php?file=' . rawurlencode(self::lookupFileName($fileName))
             . ($thumb ? '&thumb=1' : '&thumb=0');
+    }
+
+    public static function mimeForPath(string $path): string
+    {
+        return self::detectMime($path);
     }
 
     public static function resolveLocalPath(string $fileName, bool $thumb = false): ?string

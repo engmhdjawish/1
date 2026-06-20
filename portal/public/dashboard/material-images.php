@@ -7,12 +7,15 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Auth\WebSession;
 use Portal\Services\ApiClient;
 use Portal\Services\MaterialImageStorageService;
+use Portal\Services\MaterialImageSyncService;
 use Portal\Services\PortalSettingsService;
 
 WebSession::requirePermission('images.upload');
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 MaterialImageStorageService::ensureSettings();
+MaterialImageSyncService::ensureTable();
+MaterialImageSyncService::recoverStaleSyncing();
 
 $flash = null;
 $flashType = 'success';
@@ -39,6 +42,9 @@ if (isset($_GET['saved']) && $_GET['saved'] === '1' && $flash === null) {
 $company = PortalSettingsService::companySettings();
 $paths = MaterialImageStorageService::settings();
 $stats = MaterialImageStorageService::stats();
+$syncStats = MaterialImageSyncService::stats();
+$apiHealth = PortalSettingsService::apiHealth();
+$queue = MaterialImageSyncService::listQueue(60);
 $materialFilterOptions = [
     'materialTypes' => [],
     'ageCategories' => [],

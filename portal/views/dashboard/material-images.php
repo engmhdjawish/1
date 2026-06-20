@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 /** @var array{images_dir: string, thumbnails_dir: string} $paths */
 /** @var array{local_count: int, thumbnail_count: int} $stats */
+/** @var array{pending: int, syncing: int, synced: int, failed: int, total: int} $syncStats */
+/** @var array{base_url: string, ok: bool, status: int, message: string} $apiHealth */
+/** @var list<array<string, mixed>> $queue */
 /** @var array<string, mixed> $materialFilterOptions */
 /** @var string|null $materialFilterOptionsError */
 /** @var string|null $flash */
@@ -12,8 +15,17 @@ declare(strict_types=1);
 
 $paths = is_array($paths ?? null) ? $paths : ['images_dir' => '', 'thumbnails_dir' => ''];
 $stats = is_array($stats ?? null) ? $stats : ['local_count' => 0, 'thumbnail_count' => 0];
+$syncStats = is_array($syncStats ?? null) ? $syncStats : ['pending' => 0, 'syncing' => 0, 'synced' => 0, 'failed' => 0, 'total' => 0];
+$apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'message' => ''];
+$queue = is_array($queue ?? null) ? $queue : [];
 $materialFilterOptions = is_array($materialFilterOptions ?? null) ? $materialFilterOptions : [];
 $settingsForm = is_array($settingsForm ?? null) ? $settingsForm : [];
+$statusLabels = [
+    'pending' => ['label' => 'بانتظار الأمين', 'class' => 'bg-amber-100 text-amber-800'],
+    'syncing' => ['label' => 'جاري المزامنة', 'class' => 'bg-blue-100 text-blue-800'],
+    'synced' => ['label' => 'تمت على الأمين', 'class' => 'bg-green-100 text-green-800'],
+    'failed' => ['label' => 'فشل', 'class' => 'bg-red-100 text-red-800'],
+];
 $materialTypeOptions = array_values($materialFilterOptions['materialTypes'] ?? []);
 $ageCategoryOptions = array_values($materialFilterOptions['ageCategories'] ?? []);
 $manufacturerOptions = array_values($materialFilterOptions['manufacturers'] ?? []);
@@ -24,8 +36,12 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
 <section class="mb-6">
   <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
     <div>
-      <h1 class="text-2xl font-extrabold">صور المواد على الموقع</h1>
-      <p class="text-sm text-text-muted mt-1">ارفع الصور وتحقق من توفرها على الموقع عبر تصفح مواد محددة بالفلاتر — بدون تحميل آلاف الصور دفعة واحدة.</p>
+      <h1 class="text-2xl font-extrabold">صور المواد — رفع ومزامنة</h1>
+      <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
+        <strong>①</strong> رفع على الموقع مع استئناف من المتصفح.
+        <strong class="mr-1">②</strong> مزامنة الأمين صورة تلو الأخرى — يتوقف عند انقطاع الاتصال ويُستأنف لاحقاً.
+        <strong class="mr-1">③</strong> تصفح مواد محددة للتحقق من توفر الصور.
+      </p>
     </div>
     <div class="flex flex-wrap gap-2 text-xs" id="statsPills">
       <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">
@@ -33,6 +49,20 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
       </span>
       <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">
         ثامبنيل: <strong id="statThumbCount"><?= (int) ($stats['thumbnail_count'] ?? 0) ?></strong>
+      </span>
+      <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">
+        بانتظار الأمين: <strong id="statPendingCount"><?= (int) ($syncStats['pending'] ?? 0) ?></strong>
+      </span>
+      <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">
+        تمت: <strong id="statSyncedCount"><?= (int) ($syncStats['synced'] ?? 0) ?></strong>
+      </span>
+      <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white" id="apiStatusPill">
+        API الأمين:
+        <?php if (!empty($apiHealth['ok'])): ?>
+          <strong class="text-status-active">متصل</strong>
+        <?php else: ?>
+          <strong class="text-status-rejected">غير متصل</strong>
+        <?php endif; ?>
       </span>
     </div>
   </div>
@@ -46,28 +76,7 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
 
 <section class="grid gap-4 lg:grid-cols-2 mb-6">
   <article class="rounded-xl border border-border-subtle bg-white p-4">
-    <h2 class="font-bold mb-2">مسارات التخزين</h2>
-    <p class="text-xs text-text-muted mb-3">اترك الحقول فارغة لاستخدام <code dir="ltr">portal/storage/material-images</code>.</p>
-    <form method="post" class="space-y-3">
-      <input type="hidden" name="action" value="save_settings">
-      <label class="text-xs block">
-        <span class="text-text-muted">مجلد الصور الأصلية</span>
-        <input name="material_images_dir" value="<?= h((string) ($settingsForm['material_images_dir'] ?? '')) ?>" class="mt-1 h-9 w-full rounded-lg border border-border-subtle px-3 text-sm font-mono" dir="ltr">
-      </label>
-      <label class="text-xs block">
-        <span class="text-text-muted">مجلد الثامبنيل</span>
-        <input name="material_thumbnails_dir" value="<?= h((string) ($settingsForm['material_thumbnails_dir'] ?? '')) ?>" class="mt-1 h-9 w-full rounded-lg border border-border-subtle px-3 text-sm font-mono" dir="ltr">
-      </label>
-      <button class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold">حفظ المسارات</button>
-    </form>
-    <dl class="mt-4 text-[11px] text-text-muted space-y-1">
-      <div><dt class="inline font-bold">الصور:</dt> <dd class="inline font-mono" dir="ltr"><?= h((string) ($paths['images_dir'] ?? '')) ?></dd></div>
-      <div><dt class="inline font-bold">الثامبنيل:</dt> <dd class="inline font-mono" dir="ltr"><?= h((string) ($paths['thumbnails_dir'] ?? '')) ?></dd></div>
-    </dl>
-  </article>
-
-  <article class="rounded-xl border border-border-subtle bg-white p-4">
-    <h2 class="font-bold mb-2">رفع متسلسل مع استئناف</h2>
+    <h2 class="font-bold mb-2">① رفع على الموقع</h2>
     <p class="text-xs text-text-muted mb-3">اختر عدة صور — تُرفع واحدة تلو الأخرى مع شريط تقدم. عند انقطاع الاتصال أو إغلاق المتصفح يمكن الاستئناف من حيث توقفت.</p>
 
     <div id="uploadPickPanel" class="space-y-3">
@@ -96,15 +105,87 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
       </div>
     </div>
   </article>
+
+  <article class="rounded-xl border border-border-subtle bg-white p-4">
+    <h2 class="font-bold mb-1">② مزامنة الأمين</h2>
+    <p class="text-xs text-text-muted mb-3">يرسل الطابور صورة واحدة في كل مرة. عند فصل الاتصال يتوقف — اضغط «استئناف» عند عودة الأمين.</p>
+    <div class="flex flex-wrap gap-2 mb-3">
+      <button type="button" id="startSyncBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold">بدء / استئناف المزامنة</button>
+      <button type="button" id="pauseSyncBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">إيقاف مؤقت</button>
+      <button type="button" id="retryFailedBtn" class="h-9 px-4 rounded-lg border border-amber-200 bg-amber-50 text-xs font-bold text-amber-900">إعادة المحاولة للفاشلة</button>
+      <button type="button" id="scanLocalBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">فحص الملفات المحلية</button>
+    </div>
+    <div id="syncProgressWrap" class="hidden">
+      <div class="flex justify-between text-xs text-text-muted mb-1">
+        <span id="syncProgressLabel">مزامنة...</span>
+      </div>
+      <div class="h-2 rounded-full bg-surface-low overflow-hidden">
+        <div id="syncProgressBar" class="h-full bg-emerald-600 transition-all" style="width:0%"></div>
+      </div>
+    </div>
+    <p id="syncStatus" class="text-xs text-text-muted mt-2"><?= !empty($apiHealth['ok']) ? 'جاهز للمزامنة.' : h((string) ($apiHealth['message'] ?? 'الأمين غير متصل.')) ?></p>
+  </article>
 </section>
 
 <section id="uploadQueueSection" class="hidden rounded-xl border border-border-subtle bg-white overflow-hidden mb-6">
   <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60 flex items-center justify-between">
     <h2 class="font-bold">طابور الرفع</h2>
-    <span id="queueSummary" class="text-xs text-text-muted"></span>
+    <span id="uploadQueueSummary" class="text-xs text-text-muted"></span>
   </div>
   <div id="uploadQueueList" class="divide-y divide-border-subtle max-h-[420px] overflow-auto"></div>
 </section>
+
+<article class="rounded-xl border border-border-subtle bg-white overflow-hidden mb-6">
+  <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60 flex items-center justify-between">
+    <h2 class="font-bold">طابور المزامنة مع الأمين</h2>
+    <span class="text-xs text-text-muted" id="syncQueueSummary"><?= (int) ($syncStats['total'] ?? 0) ?> عنصر</span>
+  </div>
+  <div class="overflow-auto">
+    <table class="w-full text-sm min-w-[720px]">
+      <thead class="bg-surface-low text-text-muted border-b border-border-subtle">
+        <tr>
+          <th class="text-right p-3">الملف</th>
+          <th class="text-right p-3">الحالة</th>
+          <th class="text-right p-3">معرف الأمين</th>
+          <th class="text-right p-3">ملاحظة</th>
+        </tr>
+      </thead>
+      <tbody id="syncQueueBody" class="divide-y divide-border-subtle">
+        <?php if ($queue === []): ?>
+          <tr><td colspan="4" class="p-6 text-center text-text-muted">لا توجد عناصر في الطابور بعد. ارفع صوراً أو اضغط «فحص الملفات المحلية».</td></tr>
+        <?php endif; ?>
+        <?php foreach ($queue as $row): ?>
+          <?php $status = (string) ($row['sync_status'] ?? 'pending'); $meta = $statusLabels[$status] ?? $statusLabels['pending']; ?>
+          <tr>
+            <td class="p-3 font-mono text-xs" dir="ltr"><?= h((string) ($row['file_name'] ?? '')) ?></td>
+            <td class="p-3"><span class="text-xs px-2 py-0.5 rounded-full <?= h($meta['class']) ?>"><?= h($meta['label']) ?></span></td>
+            <td class="p-3 font-mono text-xs" dir="ltr"><?= h((string) ($row['amine_image_guid'] ?? '—')) ?></td>
+            <td class="p-3 text-xs text-text-muted"><?= h((string) ($row['amine_sync_error_ar'] ?? '')) ?></td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</article>
+
+<details class="rounded-xl border border-border-subtle bg-white p-4 mb-6">
+  <summary class="font-bold cursor-pointer">مسارات التخزين (متقدم)</summary>
+  <form method="post" class="grid gap-3 mt-4 lg:grid-cols-2">
+    <input type="hidden" name="action" value="save_settings">
+    <label class="text-xs block">
+      <span class="text-text-muted">مجلد الصور على الموقع</span>
+      <input name="material_images_dir" value="<?= h((string) ($settingsForm['material_images_dir'] ?? '')) ?>" class="mt-1 h-9 w-full rounded-lg border border-border-subtle px-3 text-sm font-mono" dir="ltr" placeholder="اتركه فارغاً للافتراضي">
+    </label>
+    <label class="text-xs block">
+      <span class="text-text-muted">مجلد الثامبنيل</span>
+      <input name="material_thumbnails_dir" value="<?= h((string) ($settingsForm['material_thumbnails_dir'] ?? '')) ?>" class="mt-1 h-9 w-full rounded-lg border border-border-subtle px-3 text-sm font-mono" dir="ltr">
+    </label>
+    <div class="lg:col-span-2 text-[11px] text-text-muted font-mono" dir="ltr">
+      images: <?= h((string) ($paths['images_dir'] ?? '')) ?> · thumbs: <?= h((string) ($paths['thumbnails_dir'] ?? '')) ?>
+    </div>
+    <button class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold lg:col-span-2 lg:justify-self-start">حفظ المسارات</button>
+  </form>
+</details>
 
 <section class="rounded-xl border border-border-subtle bg-white overflow-hidden">
   <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60">
@@ -211,7 +292,7 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   const pauseBtn = document.getElementById('pauseUploadBtn');
   const queueSection = document.getElementById('uploadQueueSection');
   const queueList = document.getElementById('uploadQueueList');
-  const queueSummary = document.getElementById('queueSummary');
+  const uploadQueueSummary = document.getElementById('uploadQueueSummary');
   const overallWrap = document.getElementById('overallProgressWrap');
   const overallLabel = document.getElementById('overallProgressLabel');
   const remainingLabel = document.getElementById('remainingLabel');
@@ -239,6 +320,22 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   const browsePrevBtn = document.getElementById('browsePrevBtn');
   const browseNextBtn = document.getElementById('browseNextBtn');
   const browsePageLabel = document.getElementById('browsePageLabel');
+
+  const startSyncBtn = document.getElementById('startSyncBtn');
+  const pauseSyncBtn = document.getElementById('pauseSyncBtn');
+  const retryFailedBtn = document.getElementById('retryFailedBtn');
+  const scanLocalBtn = document.getElementById('scanLocalBtn');
+  const syncProgressWrap = document.getElementById('syncProgressWrap');
+  const syncProgressLabel = document.getElementById('syncProgressLabel');
+  const syncProgressBar = document.getElementById('syncProgressBar');
+  const syncStatus = document.getElementById('syncStatus');
+  const syncQueueBody = document.getElementById('syncQueueBody');
+  const syncQueueSummary = document.getElementById('syncQueueSummary');
+  const statusLabels = <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE) ?>;
+
+  let syncRunning = false;
+  let syncPaused = false;
+  let autoSyncAfterUpload = true;
 
   let queue = null;
   let browsePage = 1;
@@ -403,7 +500,7 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     const done = queue.items.filter((item) => item.status === 'done').length;
     const total = queue.items.length;
     const remaining = queue.items.filter((item) => item.status === 'pending' || item.status === 'uploading' || item.status === 'error').length;
-    queueSummary.textContent = `${done} مكتمل من ${total}`;
+    uploadQueueSummary.textContent = `${done} مكتمل من ${total}`;
     overallWrap.classList.remove('hidden');
     overallLabel.textContent = `${done} / ${total}`;
     remainingLabel.textContent = `متبقي: ${remaining}`;
@@ -547,6 +644,10 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
       uploadSessionStarted = false;
       updateUploadControls();
       await refreshStats();
+      if (autoSyncAfterUpload) {
+        syncPaused = false;
+        processSyncQueue();
+      }
       if (browseResults && !browseResults.classList.contains('hidden')) {
         await loadBrowseResults(browsePage);
       }
@@ -621,17 +722,117 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
 
   async function refreshStats() {
     try {
-      const response = await fetch(`${API_URL}?action=stats`);
+      const response = await fetch(`${API_URL}?action=overview`);
       const payload = await response.json();
       if (!payload.ok) return;
 
       const statLocal = document.getElementById('statLocalCount');
       const statThumb = document.getElementById('statThumbCount');
-      if (statLocal) statLocal.textContent = String(payload.stats?.local_count ?? 0);
-      if (statThumb) statThumb.textContent = String(payload.stats?.thumbnail_count ?? 0);
+      if (statLocal) statLocal.textContent = String(payload.local?.local_count ?? 0);
+      if (statThumb) statThumb.textContent = String(payload.local?.thumbnail_count ?? 0);
+      renderSyncOverview(payload);
     } catch {
       // ignore
     }
+  }
+
+  function renderSyncOverview(data) {
+    const pendingEl = document.getElementById('statPendingCount');
+    const syncedEl = document.getElementById('statSyncedCount');
+    if (pendingEl) pendingEl.textContent = String(data.sync?.pending ?? 0);
+    if (syncedEl) syncedEl.textContent = String(data.sync?.synced ?? 0);
+    const apiPill = document.getElementById('apiStatusPill');
+    if (apiPill) {
+      apiPill.innerHTML = data.api?.ok
+        ? 'API الأمين: <strong class="text-status-active">متصل</strong>'
+        : 'API الأمين: <strong class="text-status-rejected">غير متصل</strong>';
+    }
+    renderSyncQueue(data.queue || [], data.sync || {});
+  }
+
+  function renderSyncQueue(items, sync) {
+    if (!syncQueueSummary || !syncQueueBody) return;
+    syncQueueSummary.textContent = `${sync?.total ?? items.length} عنصر`;
+    if (!items.length) {
+      syncQueueBody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-text-muted">الطابور فارغ.</td></tr>';
+      return;
+    }
+    syncQueueBody.innerHTML = items.map((row) => {
+      const status = row.sync_status || 'pending';
+      const meta = statusLabels[status] || statusLabels.pending;
+      return `<tr>
+        <td class="p-3 font-mono text-xs" dir="ltr">${escapeHtml(row.file_name || '')}</td>
+        <td class="p-3"><span class="text-xs px-2 py-0.5 rounded-full ${meta.class}">${meta.label}</span></td>
+        <td class="p-3 font-mono text-xs" dir="ltr">${escapeHtml(row.amine_image_guid || '—')}</td>
+        <td class="p-3 text-xs text-text-muted">${escapeHtml(row.amine_sync_error_ar || '')}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function refreshOverview() {
+    try {
+      const response = await fetch(`${API_URL}?action=overview`);
+      const payload = await response.json();
+      if (payload.ok) {
+        renderSyncOverview(payload);
+      }
+      return payload;
+    } catch {
+      return { ok: false };
+    }
+  }
+
+  async function syncNextOnce() {
+    const form = new FormData();
+    form.append('action', 'sync-next');
+    const res = await fetch(API_URL, { method: 'POST', body: form });
+    return res.json();
+  }
+
+  async function processSyncQueue() {
+    if (syncRunning) return;
+    syncRunning = true;
+    syncPaused = false;
+    syncProgressWrap?.classList.remove('hidden');
+    if (syncStatus) syncStatus.textContent = 'جاري مزامنة الأمين...';
+
+    while (!syncPaused) {
+      let result;
+      try {
+        result = await syncNextOnce();
+      } catch {
+        if (syncStatus) syncStatus.textContent = 'انقطع الاتصال — سيتم الاستئناف عند الضغط على «استئناف».';
+        break;
+      }
+
+      if (result.sync) {
+        const total = Math.max(1, (result.sync.synced ?? 0) + (result.sync.pending ?? 0) + (result.sync.failed ?? 0));
+        const done = result.sync.synced ?? 0;
+        if (syncProgressBar) syncProgressBar.style.width = `${Math.round((done / total) * 100)}%`;
+        if (syncProgressLabel) syncProgressLabel.textContent = `تم ${done} — متبقي ${(result.sync.pending ?? 0) + (result.sync.failed ?? 0)}`;
+      }
+
+      if (result.queue || result.sync) {
+        renderSyncQueue(result.queue || [], result.sync || {});
+        renderSyncOverview({ sync: result.sync, api: { ok: !result.offline }, queue: result.queue });
+      }
+
+      if (result.done) {
+        if (syncStatus) syncStatus.textContent = result.message || 'اكتملت المزامنة.';
+        break;
+      }
+
+      if (result.offline || !result.ok) {
+        if (syncStatus) syncStatus.textContent = result.message || 'توقف بسبب انقطاع الأمين — اضغط «استئناف» لاحقاً.';
+        break;
+      }
+
+      if (syncStatus) syncStatus.textContent = result.message || 'تمت مزامنة صورة.';
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+
+    syncRunning = false;
+    await refreshOverview();
   }
 
   function selectedValues(selectEl) {
@@ -782,6 +983,35 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     if (browseHasMore) loadBrowseResults(browsePage + 1);
   });
 
+  startSyncBtn?.addEventListener('click', () => {
+    syncPaused = false;
+    processSyncQueue();
+  });
+
+  pauseSyncBtn?.addEventListener('click', () => {
+    syncPaused = true;
+    if (syncStatus) syncStatus.textContent = 'مزامنة الأمين متوقفة مؤقتاً.';
+  });
+
+  retryFailedBtn?.addEventListener('click', async () => {
+    const form = new FormData();
+    form.append('action', 'retry-failed');
+    const res = await fetch(API_URL, { method: 'POST', body: form });
+    const data = await res.json();
+    if (syncStatus) syncStatus.textContent = data.message || '';
+    await refreshOverview();
+  });
+
+  scanLocalBtn?.addEventListener('click', async () => {
+    const form = new FormData();
+    form.append('action', 'scan-local');
+    const res = await fetch(API_URL, { method: 'POST', body: form });
+    const data = await res.json();
+    if (syncStatus) syncStatus.textContent = data.message || '';
+    await refreshOverview();
+  });
+
   restoreQueueFromStorage();
+  refreshOverview();
 })();
 </script>

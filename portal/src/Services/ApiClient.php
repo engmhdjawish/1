@@ -20,6 +20,66 @@ final class ApiClient
         return self::request('POST', $path, json_encode($body, JSON_UNESCAPED_UNICODE));
     }
 
+    /**
+     * @param array<string, string> $fields
+     * @param list<array{name?: string, path?: string, mime?: string, filename?: string}> $files
+     */
+    public static function postMultipart(string $path, array $fields, array $files): array
+    {
+        $base = rtrim(Config::get('AMINE_API_BASE_URL', 'http://127.0.0.1:5000') ?? '', '/');
+        $url = $base . $path;
+        $token = self::accessToken();
+
+        $postFields = $fields;
+        foreach ($files as $file) {
+            $fieldName = (string) ($file['name'] ?? 'Files');
+            $filePath = (string) ($file['path'] ?? '');
+            if ($filePath === '' || !is_file($filePath)) {
+                return ['ok' => false, 'status' => 0, 'error' => 'ملف الرفع غير موجود على الخادم.'];
+            }
+            $postFields[$fieldName] = new \CURLFile(
+                $filePath,
+                (string) ($file['mime'] ?? 'application/octet-stream'),
+                (string) ($file['filename'] ?? basename($filePath))
+            );
+        }
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/json',
+                'Authorization: Bearer ' . $token,
+            ],
+            CURLOPT_POSTFIELDS => $postFields,
+            CURLOPT_TIMEOUT => 120,
+            CURLOPT_SSL_VERIFYPEER => false,
+        ]);
+
+        $response = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($response === false) {
+            return ['ok' => false, 'status' => 0, 'error' => $error ?: 'فشل الاتصال بالـ API'];
+        }
+
+        $decoded = json_decode($response, true);
+        if ($status === 401) {
+            self::clearToken();
+        }
+
+        return [
+            'ok' => $status >= 200 && $status < 300,
+            'status' => $status,
+            'data' => is_array($decoded) ? $decoded : null,
+            'raw' => $response,
+            'error' => is_array($decoded) ? (string) ($decoded['message'] ?? '') : '',
+        ];
+    }
+
     public static function getBinary(string $path, array $query = []): array
     {
         $base = rtrim(Config::get('AMINE_API_BASE_URL', 'http://127.0.0.1:5000') ?? '', '/');
