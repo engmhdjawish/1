@@ -596,20 +596,6 @@ public sealed class MaterialImagesController(
         return NoContent();
     }
 
-    [HttpDelete("{id:guid}")]
-    [RequirePermission("materials.update")]
-    public async Task<IActionResult> DeleteImage(Guid id, CancellationToken cancellationToken)
-    {
-        var image = await mainDbContext.MaterialImages
-            .SingleOrDefaultAsync(item => item.Guid == id, cancellationToken);
-        if (image is null)
-        {
-            return NotFound();
-        }
-
-        return await DeleteImageRecordAsync(image, cancellationToken);
-    }
-
     [HttpDelete("by-file")]
     [RequirePermission("materials.update")]
     public async Task<IActionResult> DeleteImageByFileName(
@@ -623,9 +609,30 @@ public sealed class MaterialImagesController(
         }
 
         var dbByFile = await LoadDbImagesByFileNamesAsync([fileName], cancellationToken);
-        if (!dbByFile.TryGetValue(fileName, out var image))
+        if (!dbByFile.TryGetValue(fileName, out var stub))
         {
             return NotFound(new { message = "Image file was not found in bm000.", fileName });
+        }
+
+        var image = await mainDbContext.MaterialImages
+            .SingleOrDefaultAsync(item => item.Guid == stub.Guid, cancellationToken);
+        if (image is null)
+        {
+            return NotFound(new { message = "Image file was not found in bm000.", fileName });
+        }
+
+        return await DeleteImageRecordAsync(image, cancellationToken);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [RequirePermission("materials.update")]
+    public async Task<IActionResult> DeleteImage(Guid id, CancellationToken cancellationToken)
+    {
+        var image = await mainDbContext.MaterialImages
+            .SingleOrDefaultAsync(item => item.Guid == id, cancellationToken);
+        if (image is null)
+        {
+            return NotFound();
         }
 
         return await DeleteImageRecordAsync(image, cancellationToken);
