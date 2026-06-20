@@ -200,6 +200,14 @@ if ($method === 'POST') {
         exit;
     }
 
+    if ($action === 'delete-unlinked-batch') {
+        @set_time_limit(300);
+        $maxImages = max(1, min(500, (int) ($_POST['max_images'] ?? 200)));
+        $result = MaterialImageLinkService::deleteAllUnlinked($maxImages);
+        echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     if ($action === 'reassign-materials') {
         @set_time_limit(120);
         $sourceFileName = trim((string) ($_POST['source_file_name'] ?? ''));

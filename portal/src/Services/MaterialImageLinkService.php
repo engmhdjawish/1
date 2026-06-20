@@ -283,6 +283,95 @@ final class MaterialImageLinkService
     }
 
     /**
+     * @return array{ok: bool, message: string, deleted: int, failed: int, items: list<array<string, mixed>>}
+     */
+    public static function deleteAllUnlinked(int $maxImages = 200): array
+    {
+        $maxImages = max(1, min(500, $maxImages));
+        $deleted = 0;
+        $failed = 0;
+        $items = [];
+
+        if (!(PortalSettingsService::apiHealth()['ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'message' => 'الأمين غير متصل.',
+                'deleted' => 0,
+                'failed' => 0,
+                'items' => [],
+            ];
+        }
+
+        while ($deleted + $failed < $maxImages) {
+            $page = self::listSourcesPage(1, min(30, $maxImages - $deleted - $failed), 'unlinked', '');
+            $rows = $page['items'] ?? [];
+            if ($rows === []) {
+                break;
+            }
+
+            foreach ($rows as $row) {
+                if ($deleted + $failed >= $maxImages) {
+                    break 2;
+                }
+
+                $imageGuid = trim((string) ($row['amine_image_guid'] ?? ''));
+                $fileName = trim((string) ($row['file_name'] ?? ''));
+                if ($imageGuid === '') {
+                    $failed++;
+                    $items[] = [
+                        'file_name' => $fileName,
+                        'ok' => false,
+                        'message' => 'لا يوجد GUID للصورة.',
+                    ];
+                    continue;
+                }
+
+                $result = self::deleteImage($imageGuid, $fileName);
+                if ($result['ok'] ?? false) {
+                    $deleted++;
+                    $items[] = [
+                        'image_guid' => $imageGuid,
+                        'file_name' => $fileName,
+                        'ok' => true,
+                    ];
+                } else {
+                    $failed++;
+                    $items[] = [
+                        'image_guid' => $imageGuid,
+                        'file_name' => $fileName,
+                        'ok' => false,
+                        'message' => (string) ($result['message'] ?? 'فشل الحذف.'),
+                    ];
+                }
+            }
+
+            if (count($rows) < 30) {
+                break;
+            }
+        }
+
+        if ($deleted === 0 && $failed === 0) {
+            return [
+                'ok' => true,
+                'message' => 'لا توجد صور غير مرتبطة للحذف.',
+                'deleted' => 0,
+                'failed' => 0,
+                'items' => [],
+            ];
+        }
+
+        return [
+            'ok' => $deleted > 0,
+            'message' => $deleted > 0
+                ? ('تم حذف ' . $deleted . ' صورة غير مرتبطة.' . ($failed > 0 ? (' فشل ' . $failed . '.') : ''))
+                : 'لم يُحذف أي صورة غير مرتبطة.',
+            'deleted' => $deleted,
+            'failed' => $failed,
+            'items' => $items,
+        ];
+    }
+
+    /**
      * @return array{ok: bool, message: string, image_guid?: string}
      */
     private static function deleteOnAmine(string $imageGuid, string $fileName): array

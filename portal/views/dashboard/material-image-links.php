@@ -39,14 +39,18 @@ declare(strict_types=1);
     </div>
   </div>
   <div class="p-4">
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
-      <select id="sourceLinkFilter" class="h-9 rounded-lg border border-border-subtle px-2 text-sm">
-        <option value="all">كل الصور</option>
-        <option value="linked">المرتبطة فقط</option>
-        <option value="unlinked">غير المرتبطة فقط</option>
-      </select>
-      <input type="search" id="sourceMaterialSearch" class="h-9 rounded-lg border border-border-subtle px-3 text-sm" placeholder="بحث مادة (كلمات بأي ترتيب)">
-      <button type="button" id="applySourceFiltersBtn" class="h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold">تطبيق الفلاتر</button>
+    <div class="flex flex-col gap-3 mb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-xs text-text-muted font-bold">عرض:</span>
+        <button type="button" class="link-filter-btn h-9 px-3 rounded-lg border border-primary bg-primary text-white text-xs font-bold" data-filter="all">كل الصور</button>
+        <button type="button" class="link-filter-btn h-9 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold" data-filter="linked">المرتبطة</button>
+        <button type="button" class="link-filter-btn h-9 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold" data-filter="unlinked">غير المرتبطة</button>
+      </div>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <input type="search" id="sourceMaterialSearch" class="h-9 flex-1 rounded-lg border border-border-subtle px-3 text-sm" placeholder="بحث مادة (كلمات بأي ترتيب)">
+        <button type="button" id="applySourceFiltersBtn" class="h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold">بحث</button>
+        <button type="button" id="deleteAllUnlinkedBtn" class="h-9 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hidden">حذف كل غير المرتبطة</button>
+      </div>
     </div>
     <div id="sourceCards" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
     <div class="mt-3 flex items-center justify-between">
@@ -75,9 +79,10 @@ declare(strict_types=1);
   const sourcePrevBtn = document.getElementById('sourcePrevBtn');
   const sourceNextBtn = document.getElementById('sourceNextBtn');
   const reloadSourcesBtn = document.getElementById('reloadSourcesBtn');
-  const sourceLinkFilter = document.getElementById('sourceLinkFilter');
   const sourceMaterialSearch = document.getElementById('sourceMaterialSearch');
   const applySourceFiltersBtn = document.getElementById('applySourceFiltersBtn');
+  const deleteAllUnlinkedBtn = document.getElementById('deleteAllUnlinkedBtn');
+  const linkFilterButtons = document.querySelectorAll('.link-filter-btn');
   const linkStatus = document.getElementById('linkStatus');
   const imageLightbox = document.getElementById('imageLightbox');
   const lightboxImg = document.getElementById('lightboxImg');
@@ -85,8 +90,85 @@ declare(strict_types=1);
   const lightboxCloseBtn = document.getElementById('lightboxCloseBtn');
   let page = 1;
   let hasMore = false;
+  let totalCount = 0;
   const pageSize = 12;
   const sourceMaterialMap = new Map();
+
+  function currentLinkFilter() {
+    const active = document.querySelector('.link-filter-btn.border-primary.bg-primary');
+    return active?.getAttribute('data-filter') || 'all';
+  }
+
+  function setLinkFilter(filter) {
+    linkFilterButtons.forEach((btn) => {
+      const isActive = btn.getAttribute('data-filter') === filter;
+      btn.classList.toggle('border-primary', isActive);
+      btn.classList.toggle('bg-primary', isActive);
+      btn.classList.toggle('text-white', isActive);
+      btn.classList.toggle('border-border-subtle', !isActive);
+      btn.classList.toggle('bg-white', !isActive);
+    });
+    syncBulkDeleteButton();
+  }
+
+  function syncBulkDeleteButton() {
+    if (!deleteAllUnlinkedBtn) return;
+    deleteAllUnlinkedBtn.classList.toggle('hidden', currentLinkFilter() !== 'unlinked');
+  }
+
+  function updatePageLabel() {
+    if (!sourcePageLabel) return;
+    sourcePageLabel.textContent = `صفحة ${page} — ${totalCount} صورة`;
+  }
+
+  function ensureCardsPlaceholder() {
+    if (!sourceCards) return;
+    if (!sourceCards.querySelector('article')) {
+      sourceCards.innerHTML = '<div class="text-xs text-text-muted">لا توجد صور في هذه الصفحة.</div>';
+    }
+  }
+
+  function removeCard(card, item) {
+    if (!card) return;
+    sourceMaterialMap.delete(cardKey(item));
+    card.remove();
+    totalCount = Math.max(0, totalCount - 1);
+    updatePageLabel();
+    ensureCardsPlaceholder();
+  }
+
+  function updateCardToUnlinked(card, item) {
+    item.is_linked_to_material = false;
+    item.linked_material_guid = '';
+    item.linked_material_name = '';
+    item.linked_material_code = '';
+
+    const badge = card.querySelector('.link-badge');
+    if (badge) {
+      badge.className = 'link-badge text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full';
+      badge.textContent = 'غير مرتبطة';
+    }
+    const title = card.querySelector('.material-title');
+    if (title) {
+      title.innerHTML = '<span class="text-text-muted">غير مرتبطة بمادة</span>';
+    }
+    card.querySelector('.material-code')?.remove();
+    card.querySelector('.reassign-btn')?.remove();
+    card.querySelector('.unlink-btn')?.remove();
+  }
+
+  function handleCardAfterDelete(card, item) {
+    removeCard(card, item);
+  }
+
+  function handleCardAfterUnlink(card, item) {
+    const filter = currentLinkFilter();
+    if (filter === 'linked') {
+      removeCard(card, item);
+      return;
+    }
+    updateCardToUnlinked(card, item);
+  }
 
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[c]));
@@ -252,7 +334,7 @@ declare(strict_types=1);
     }
   }
 
-  async function unlink(item, button, statusEl) {
+  async function unlink(item, card, button, statusEl) {
     if (!confirm('فك ربط هذه الصورة بالمادة الحالية؟')) return;
     button.disabled = true;
     if (statusEl) statusEl.textContent = 'جاري فك الربط...';
@@ -263,7 +345,7 @@ declare(strict_types=1);
       });
       if (statusEl) statusEl.textContent = payload.message || '';
       linkStatus.textContent = payload.message || '';
-      if (payload.ok) await loadSources(page);
+      if (payload.ok) handleCardAfterUnlink(card, item);
     } catch {
       if (statusEl) statusEl.textContent = 'تعذر فك الربط.';
     } finally {
@@ -287,11 +369,29 @@ declare(strict_types=1);
       });
       if (statusEl) statusEl.textContent = payload.message || '';
       linkStatus.textContent = payload.message || '';
-      if (payload.ok) await loadSources(page);
+      if (payload.ok) handleCardAfterDelete(card, item);
     } catch {
       if (statusEl) statusEl.textContent = 'تعذر حذف الصورة.';
     } finally {
       button.disabled = false;
+    }
+  }
+
+  async function deleteAllUnlinked() {
+    if (currentLinkFilter() !== 'unlinked') return;
+    if (!confirm('حذف جميع الصور غير المرتبطة من bm000 والموقع؟ لا يمكن التراجع.')) return;
+    if (deleteAllUnlinkedBtn) deleteAllUnlinkedBtn.disabled = true;
+    linkStatus.textContent = 'جاري حذف الصور غير المرتبطة...';
+    try {
+      const payload = await postAction('delete-unlinked-batch', { max_images: 500 });
+      linkStatus.textContent = payload.message || '';
+      if (payload.ok || (payload.deleted || 0) > 0) {
+        await loadSources(1);
+      }
+    } catch {
+      linkStatus.textContent = 'تعذر حذف الصور غير المرتبطة.';
+    } finally {
+      if (deleteAllUnlinkedBtn) deleteAllUnlinkedBtn.disabled = false;
     }
   }
 
@@ -383,7 +483,7 @@ declare(strict_types=1);
 
     unlinkBtn?.addEventListener('click', async () => {
       closeSuggestions(card);
-      await unlink(item, unlinkBtn, cardStatus);
+      await unlink(item, card, unlinkBtn, cardStatus);
     });
 
     deleteBtn?.addEventListener('click', async () => {
@@ -404,11 +504,11 @@ declare(strict_types=1);
           ? escapeHtml(item.linked_material_name || 'مادة مرتبطة')
           : '<span class="text-text-muted">غير مرتبطة بمادة</span>';
         const materialCode = item.linked_material_code
-          ? `<span class="text-xs text-text-muted font-mono" dir="ltr">${escapeHtml(item.linked_material_code)}</span>`
+          ? `<span class="material-code text-xs text-text-muted font-mono" dir="ltr">${escapeHtml(item.linked_material_code)}</span>`
           : '';
         const linkBadge = isLinked
-          ? '<span class="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">مرتبطة</span>'
-          : '<span class="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">غير مرتبطة</span>';
+          ? '<span class="link-badge text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">مرتبطة</span>'
+          : '<span class="link-badge text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">غير مرتبطة</span>';
         const preview = item.preview_url
           ? `<button type="button" class="preview-btn group relative w-full h-48 rounded-lg border border-border-subtle bg-surface-low overflow-hidden" title="تكبير الصورة">
               <img src="${escapeHtml(item.preview_url)}" class="w-full h-full object-contain" alt="">
@@ -422,17 +522,12 @@ declare(strict_types=1);
           ? `<button type="button" class="unlink-btn h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold w-full">فك الربط</button>`
           : '';
 
-        const guidLine = item.amine_image_guid
-          ? `<p class="text-[10px] text-text-muted font-mono break-all" dir="ltr" title="معرف bm000">${escapeHtml(item.amine_image_guid)}</p>`
-          : '';
-
-        return `<article class="rounded-xl border border-border-subtle p-3 bg-white space-y-2" data-key="${escapeHtml(key)}" data-image-guid="${escapeHtml(item.amine_image_guid || '')}" data-file-name="${escapeHtml(item.file_name || '')}">
+        return `<article class="rounded-xl border border-border-subtle p-3 bg-white space-y-2" data-key="${escapeHtml(key)}" data-image-guid="${escapeHtml(item.amine_image_guid || '')}" data-file-name="${escapeHtml(item.file_name || '')}" data-linked="${isLinked ? '1' : '0'}">
           ${preview}
           <div class="space-y-1">
             <div class="flex items-center justify-between gap-2">${linkBadge}</div>
-            <p class="text-sm font-bold leading-snug">${materialTitle}</p>
+            <p class="material-title text-sm font-bold leading-snug">${materialTitle}</p>
             ${materialCode}
-            ${guidLine}
           </div>
           <div class="relative">
             <input class="material-input h-9 w-full rounded-lg border border-border-subtle px-3 text-xs" placeholder="ابحث عن مادة (كلمات بأي ترتيب)...">
@@ -455,14 +550,15 @@ declare(strict_types=1);
 
     page = Number(payload.page || 1);
     hasMore = !!payload.has_more;
-    const total = Number(payload.total_count || 0);
-    sourcePageLabel.textContent = `صفحة ${page} — ${total} صورة`;
+    totalCount = Number(payload.total_count || 0);
+    updatePageLabel();
     sourcePrevBtn.disabled = page <= 1;
     sourceNextBtn.disabled = !hasMore;
+    syncBulkDeleteButton();
   }
 
   async function loadSources(targetPage = 1) {
-    const linkFilter = sourceLinkFilter?.value || 'all';
+    const linkFilter = currentLinkFilter();
     const materialQuery = sourceMaterialSearch?.value.trim() || '';
     const response = await fetch(`${API_URL}?action=link-sources-page&page=${targetPage}&page_size=${pageSize}&link_filter=${encodeURIComponent(linkFilter)}&material_query=${encodeURIComponent(materialQuery)}`);
     const payload = await response.json();
@@ -497,12 +593,21 @@ declare(strict_types=1);
   sourceNextBtn?.addEventListener('click', () => { if (hasMore) loadSources(page + 1); });
   reloadSourcesBtn?.addEventListener('click', () => loadSources(page));
   applySourceFiltersBtn?.addEventListener('click', () => loadSources(1));
+  deleteAllUnlinkedBtn?.addEventListener('click', deleteAllUnlinked);
+  linkFilterButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const filter = btn.getAttribute('data-filter') || 'all';
+      setLinkFilter(filter);
+      loadSources(1);
+    });
+  });
   sourceMaterialSearch?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
       loadSources(1);
     }
   });
+  setLinkFilter('all');
   loadSources(1);
 })();
 </script>
