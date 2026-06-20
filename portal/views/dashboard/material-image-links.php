@@ -162,7 +162,12 @@ declare(strict_types=1);
     });
 
     assignBtn.addEventListener('click', async () => {
-      await assign(fileName, sourceMaterialMap.get(fileName) || [], assignBtn);
+      const selected = sourceMaterialMap.get(fileName) || [];
+      if (!selected.length) {
+        linkStatus.textContent = `الصورة «${fileName}»: أضف مادة واحدة على الأقل قبل الربط.`;
+        return;
+      }
+      await assign(fileName, selected, assignBtn);
     });
   }
 
@@ -173,12 +178,16 @@ declare(strict_types=1);
     } else {
       sourceCards.innerHTML = items.map((item) => {
         const fileName = item.file_name || '';
+        const linkBadge = item.is_linked_to_material
+          ? '<span class="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">مرتبطة بمادة</span>'
+          : '<span class="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">غير مرتبطة</span>';
         const preview = item.preview_url
           ? `<img src="${escapeHtml(item.preview_url)}" class="w-full h-44 object-contain rounded-lg border border-border-subtle bg-surface-low" alt="">`
           : '<div class="w-full h-44 rounded-lg border border-border-subtle bg-surface-low"></div>';
         return `<article class="rounded-xl border border-border-subtle p-3 bg-white space-y-2" data-file="${escapeHtml(fileName)}">
           ${preview}
           <p class="text-xs font-mono truncate" dir="ltr">${escapeHtml(fileName)}</p>
+          <div>${linkBadge}</div>
           <div class="relative">
             <input class="material-input h-9 w-full rounded-lg border border-border-subtle px-3 text-xs" placeholder="ابحث عن مادة...">
             <div class="suggestions hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow"></div>

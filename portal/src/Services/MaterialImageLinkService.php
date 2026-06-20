@@ -56,6 +56,7 @@ final class MaterialImageLinkService
         $totalCount = count($all);
         $offset = ($page - 1) * $pageSize;
         $items = array_slice($all, $offset, $pageSize);
+        $items = self::enrichLinkState($items);
 
         return [
             'items' => $items,
@@ -64,6 +65,39 @@ final class MaterialImageLinkService
             'total_count' => $totalCount,
             'has_more' => ($offset + count($items)) < $totalCount,
         ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $items
+     * @return list<array<string, mixed>>
+     */
+    private static function enrichLinkState(array $items): array
+    {
+        foreach ($items as $index => $item) {
+            $amineGuid = trim((string) ($item['amine_image_guid'] ?? ''));
+            $items[$index]['is_linked_to_material'] = false;
+            $items[$index]['linked_material_guid'] = '';
+            if ($amineGuid === '') {
+                continue;
+            }
+
+            try {
+                $response = ApiClient::get('/api/material-images/' . rawurlencode($amineGuid));
+                if (!($response['ok'] ?? false)) {
+                    continue;
+                }
+                $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+                $materialGuid = trim((string) ($data['materialGuid'] ?? $data['MaterialGuid'] ?? ''));
+                if ($materialGuid !== '') {
+                    $items[$index]['is_linked_to_material'] = true;
+                    $items[$index]['linked_material_guid'] = $materialGuid;
+                }
+            } catch (Throwable) {
+                continue;
+            }
+        }
+
+        return $items;
     }
 
     /**
