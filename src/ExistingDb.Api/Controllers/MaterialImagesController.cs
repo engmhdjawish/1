@@ -115,7 +115,7 @@ public sealed class MaterialImagesController(
 
         return Ok(new MaterialImageLookupResponse(
             batchItem.Id,
-            batchItem.StoredFileName,
+            batchItem.FileName,
             batchItem.SizeBytes,
             batchItem.Sha256,
             batchItem.FileExistsOnDisk));
