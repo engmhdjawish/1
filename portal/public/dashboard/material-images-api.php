@@ -5,6 +5,7 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
+use Portal\Services\MaterialImageLinkService;
 use Portal\Services\MaterialImageStorageService;
 use Portal\Services\MaterialImageSyncService;
 use Portal\Services\PortalSettingsService;
@@ -52,6 +53,37 @@ if ($method === 'GET') {
         echo json_encode(array_merge(
             ['ok' => true, 'sync' => MaterialImageSyncService::stats()],
             MaterialImageSyncService::listQueuePage($page, $pageSize)
+        ), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'link-sources') {
+        echo json_encode([
+            'ok' => true,
+            'items' => MaterialImageLinkService::listSources(),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'link-sources-page') {
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $pageSize = max(6, min(60, (int) ($_GET['page_size'] ?? 24)));
+        $linkFilter = trim((string) ($_GET['link_filter'] ?? 'all'));
+        if (!in_array($linkFilter, ['all', 'linked', 'unlinked'], true)) {
+            $linkFilter = 'all';
+        }
+        $materialQuery = trim((string) ($_GET['material_query'] ?? ''));
+        echo json_encode(array_merge(
+            ['ok' => true],
+            MaterialImageLinkService::listSourcesPage($page, $pageSize, $linkFilter, $materialQuery)
+        ), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'material-search') {
+        echo json_encode(MaterialImageLinkService::searchMaterials(
+            (string) ($_GET['q'] ?? ''),
+            max(10, min(60, (int) ($_GET['page_size'] ?? 40)))
         ), JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -121,6 +153,101 @@ if ($method === 'POST') {
             'sync' => MaterialImageSyncService::stats(),
             'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
         ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'assign-materials') {
+        @set_time_limit(120);
+        $sourceFileName = trim((string) ($_POST['source_file_name'] ?? ''));
+        $amineSourceGuid = trim((string) ($_POST['amine_image_guid'] ?? ''));
+        $materialGuids = $_POST['material_guids'] ?? ($_POST['material_guids[]'] ?? []);
+        if (!is_array($materialGuids)) {
+            $materialGuids = [$materialGuids];
+        }
+        $processed = MaterialImageLinkService::collectProcessedUploads(
+            is_array($_FILES['processed_image'] ?? null) ? $_FILES['processed_image'] : null
+        );
+        try {
+            $result = MaterialImageLinkService::assign(
+                $sourceFileName,
+                $materialGuids,
+                $userId,
+                $amineSourceGuid !== '' ? $amineSourceGuid : null,
+                $processed
+            );
+        } finally {
+            foreach ($processed as $path) {
+                MaterialImageStorageService::deleteTempProcessedFile($path);
+            }
+        }
+        echo json_encode(array_merge($result, [
+            'sync' => MaterialImageSyncService::stats(),
+        ]), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'unlink-image') {
+        $imageGuid = trim((string) ($_POST['image_guid'] ?? ''));
+        $materialGuid = trim((string) ($_POST['material_guid'] ?? ''));
+        $result = MaterialImageLinkService::unlinkImage(
+            $imageGuid,
+            $materialGuid !== '' ? $materialGuid : null
+        );
+        echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'delete-image') {
+        $imageGuid = trim((string) ($_POST['image_guid'] ?? ''));
+        $fileName = trim((string) ($_POST['file_name'] ?? ''));
+        $materialGuid = trim((string) ($_POST['material_guid'] ?? ''));
+        $result = MaterialImageLinkService::deleteImage(
+            $imageGuid,
+            $fileName,
+            $materialGuid !== '' ? $materialGuid : null
+        );
+        echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'delete-unlinked-batch') {
+        @set_time_limit(300);
+        $maxImages = max(1, min(500, (int) ($_POST['max_images'] ?? 200)));
+        $result = MaterialImageLinkService::deleteAllUnlinked($maxImages);
+        echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'reassign-materials') {
+        @set_time_limit(120);
+        $sourceFileName = trim((string) ($_POST['source_file_name'] ?? ''));
+        $imageGuid = trim((string) ($_POST['image_guid'] ?? ''));
+        $materialGuid = trim((string) ($_POST['material_guid'] ?? ''));
+        $amineSourceGuid = trim((string) ($_POST['amine_image_guid'] ?? ''));
+        $materialGuids = $_POST['material_guids'] ?? ($_POST['material_guids[]'] ?? []);
+        if (!is_array($materialGuids)) {
+            $materialGuids = [$materialGuids];
+        }
+        $processed = MaterialImageLinkService::collectProcessedUploads(
+            is_array($_FILES['processed_image'] ?? null) ? $_FILES['processed_image'] : null
+        );
+        try {
+            $result = MaterialImageLinkService::reassign(
+                $sourceFileName,
+                $amineSourceGuid !== '' ? $amineSourceGuid : $imageGuid,
+                $materialGuid !== '' ? $materialGuid : null,
+                $materialGuids,
+                $userId,
+                $processed
+            );
+        } finally {
+            foreach ($processed as $path) {
+                MaterialImageStorageService::deleteTempProcessedFile($path);
+            }
+        }
+        echo json_encode(array_merge($result, [
+            'sync' => MaterialImageSyncService::stats(),
+        ]), JSON_UNESCAPED_UNICODE);
         exit;
     }
 

@@ -6,7 +6,10 @@ public sealed record MaterialImageLookupBatchItemResponse(
     long SizeBytes,
     string Sha256,
     bool FileExistsOnDisk,
-    bool Found);
+    bool Found,
+    Guid? MaterialGuid = null,
+    string? MaterialName = null,
+    string? MaterialCode = null);
 
 public sealed record MaterialImageLookupBatchResponse(
     IReadOnlyList<MaterialImageLookupBatchItemResponse> Items);

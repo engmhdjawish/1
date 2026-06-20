@@ -11,7 +11,7 @@ use Throwable;
 
 final class MaterialImageSyncService
 {
-    public const BATCH_LOOKUP_SIZE = 15;
+    public const BATCH_LOOKUP_SIZE = 50;
     public const SCAN_CHUNK_SIZE = 15;
     public const RECONCILE_CHUNK_SIZE = 15;
 
@@ -53,7 +53,8 @@ final class MaterialImageSyncService
         Database::pdo()->exec(
             'ALTER TABLE material_image_sync_queue
                 ADD COLUMN IF NOT EXISTS local_size_bytes BIGINT,
-                ADD COLUMN IF NOT EXISTS local_sha256 VARCHAR(64)'
+                ADD COLUMN IF NOT EXISTS local_sha256 VARCHAR(64),
+                ADD COLUMN IF NOT EXISTS assigned_from_file_name VARCHAR(255)'
         );
     }
 
@@ -834,6 +835,112 @@ final class MaterialImageSyncService
         return $stmt->rowCount();
     }
 
+    public static function removeByFileNameOrGuid(string $fileName, string $amineImageGuid): void
+    {
+        self::purgeImageRecords($amineImageGuid, $fileName);
+    }
+
+    /**
+     * Delete local files and all matching sync-queue rows for an Amine image.
+     *
+     * @return list<string> file names removed from disk
+     */
+    public static function purgeImageRecords(string $amineImageGuid, string $fileName = ''): array
+    {
+        self::ensureTable();
+        $amineImageGuid = trim($amineImageGuid);
+        $fileName = basename(str_replace('\\', '/', trim($fileName)));
+
+        $conditions = [];
+        $params = [];
+        if ($amineImageGuid !== '') {
+            $conditions[] = 'amine_image_guid::text = :amine_image_guid';
+            $params['amine_image_guid'] = $amineImageGuid;
+        }
+        if ($fileName !== '' && !str_contains($fileName, '..')) {
+            $conditions[] = 'file_name = :file_name';
+            $params['file_name'] = $fileName;
+        }
+        if ($conditions === []) {
+            return [];
+        }
+
+        $where = implode(' OR ', $conditions);
+        $select = Database::pdo()->prepare(
+            "SELECT file_name FROM material_image_sync_queue WHERE {$where}"
+        );
+        $select->execute($params);
+        $fileNames = [];
+        foreach ($select->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+            $name = trim((string) ($row['file_name'] ?? ''));
+            if ($name !== '') {
+                $fileNames[] = $name;
+            }
+        }
+        if ($fileName !== '' && !in_array($fileName, $fileNames, true)) {
+            $fileNames[] = $fileName;
+        }
+
+        foreach ($fileNames as $name) {
+            MaterialImageStorageService::deleteLocalFile($name);
+        }
+
+        $delete = Database::pdo()->prepare("DELETE FROM material_image_sync_queue WHERE {$where}");
+        $delete->execute($params);
+
+        return $fileNames;
+    }
+
+    public static function recordAssignedCopy(
+        string $fileName,
+        string $localPath,
+        string $amineImageGuid,
+        ?string $uploadedByUserId = null,
+        ?string $assignedFromFileName = null
+    ): void {
+        self::ensureTable();
+        $fingerprint = self::fileFingerprint($localPath);
+        if ($fingerprint === null) {
+            return;
+        }
+
+        $assignedFromFileName = basename(str_replace('\\', '/', trim((string) $assignedFromFileName)));
+        if ($assignedFromFileName === '' || str_contains($assignedFromFileName, '..')) {
+            $assignedFromFileName = null;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'INSERT INTO material_image_sync_queue (
+                file_name, local_file_path, local_thumb_path, local_size_bytes, local_sha256,
+                amine_image_guid, uploaded_by_web_user_id, sync_status, synced_to_amine_at,
+                assigned_from_file_name
+             ) VALUES (
+                :file_name, :local_file_path, NULL, :local_size_bytes, :local_sha256,
+                :amine_image_guid, :uploaded_by_web_user_id, \'synced\', NOW(),
+                :assigned_from_file_name
+             )
+             ON CONFLICT (file_name) DO UPDATE SET
+                local_file_path = EXCLUDED.local_file_path,
+                local_size_bytes = EXCLUDED.local_size_bytes,
+                local_sha256 = EXCLUDED.local_sha256,
+                amine_image_guid = EXCLUDED.amine_image_guid,
+                sync_status = \'synced\',
+                amine_sync_error_ar = NULL,
+                synced_to_amine_at = NOW(),
+                assigned_from_file_name = COALESCE(EXCLUDED.assigned_from_file_name, material_image_sync_queue.assigned_from_file_name),
+                updated_at = NOW()'
+        );
+        $stmt->execute([
+            'file_name' => $fileName,
+            'local_file_path' => $localPath,
+            'local_size_bytes' => $fingerprint['size_bytes'],
+            'local_sha256' => $fingerprint['sha256'],
+            'amine_image_guid' => $amineImageGuid,
+            'uploaded_by_web_user_id' => $uploadedByUserId !== null && $uploadedByUserId !== '' ? $uploadedByUserId : null,
+            'assigned_from_file_name' => $assignedFromFileName,
+        ]);
+    }
+
     /** @return array{size_bytes: int, sha256: string}|null */
     public static function fileFingerprint(string $path): ?array
     {
@@ -850,6 +957,15 @@ final class MaterialImageSyncService
             'size_bytes' => (int) (filesize($path) ?: 0),
             'sha256' => strtolower($hash),
         ];
+    }
+
+    /**
+     * @param list<array{file_name: string, fingerprint: ?array{size_bytes: int, sha256: string}}> $candidates
+     * @return array<string, array<string, mixed>>
+     */
+    public static function lookupFilesOnAmine(array $candidates): array
+    {
+        return self::lookupOnAmineBatch($candidates);
     }
 
     /** @return array<string, mixed>|null */
@@ -938,6 +1054,9 @@ final class MaterialImageSyncService
             'fileExistsOnDisk' => (bool) ($item['fileExistsOnDisk'] ?? $item['FileExistsOnDisk'] ?? false),
             'sha256' => (string) ($item['sha256'] ?? $item['Sha256'] ?? ''),
             'sizeBytes' => (int) ($item['sizeBytes'] ?? $item['SizeBytes'] ?? 0),
+            'materialGuid' => $item['materialGuid'] ?? $item['MaterialGuid'] ?? null,
+            'materialName' => (string) ($item['materialName'] ?? $item['MaterialName'] ?? ''),
+            'materialCode' => (string) ($item['materialCode'] ?? $item['MaterialCode'] ?? ''),
         ];
     }
 

@@ -224,6 +224,106 @@ final class MaterialImageStorageService
         return $rows;
     }
 
+    /**
+     * @return array{ok: bool, message: string, file_name?: string}
+     */
+    public static function saveProcessedUpload(string $tmpPath, string $originalName = 'linked.jpg'): ?string
+    {
+        if ($tmpPath === '' || !is_file($tmpPath)) {
+            return null;
+        }
+
+        $mime = self::detectMime($tmpPath);
+        if (!str_starts_with($mime, 'image/')) {
+            return null;
+        }
+
+        $settings = self::settings();
+        $directory = $settings['images_dir'] . DIRECTORY_SEPARATOR . '_processed';
+        if (!self::ensureDirectory($directory)) {
+            return null;
+        }
+
+        $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        if ($extension === '' || !in_array($extension, self::ALLOWED_EXTENSIONS, true)) {
+            $extension = 'jpg';
+        }
+
+        $dest = $directory . DIRECTORY_SEPARATOR . ('proc_' . bin2hex(random_bytes(8)) . '.' . $extension);
+        if (is_uploaded_file($tmpPath)) {
+            if (!@move_uploaded_file($tmpPath, $dest)) {
+                return null;
+            }
+        } elseif (!@copy($tmpPath, $dest)) {
+            return null;
+        }
+
+        return $dest;
+    }
+
+    public static function deleteTempProcessedFile(string $path): void
+    {
+        $path = str_replace('\\', '/', $path);
+        if ($path === '' || !str_contains($path, '/_processed/')) {
+            return;
+        }
+
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    }
+
+    /**
+     * @return array{ok: bool, message: string, file_name?: string}
+     */
+    public static function copyLocalFromSource(string $sourcePath, string $targetFileName): array
+    {
+        if (!is_file($sourcePath)) {
+            return ['ok' => false, 'message' => 'الصورة المصدر غير موجودة على الموقع.'];
+        }
+
+        $settings = self::settings();
+        $targetFileName = self::sanitizeFileName($targetFileName);
+        if ($targetFileName === '' || !self::isAllowedFileName($targetFileName)) {
+            return ['ok' => false, 'message' => 'اسم الملف المستهدف غير صالح.'];
+        }
+
+        $targetPath = self::safeJoin($settings['images_dir'], $targetFileName);
+        $thumbPath = self::safeJoin($settings['thumbnails_dir'], $targetFileName);
+        if ($targetPath === null || $thumbPath === null) {
+            return ['ok' => false, 'message' => 'مسار الملف غير آمن.'];
+        }
+
+        if (!self::ensureDirectory($settings['images_dir']) || !self::ensureDirectory($settings['thumbnails_dir'])) {
+            return ['ok' => false, 'message' => 'تعذر إنشاء مجلدات التخزين.'];
+        }
+
+        if (!@copy($sourcePath, $targetPath)) {
+            return ['ok' => false, 'message' => 'تعذر نسخ الصورة محلياً.'];
+        }
+
+        if (!self::generateThumbnail($targetPath, $thumbPath)) {
+            @copy($targetPath, $thumbPath);
+        }
+
+        return ['ok' => true, 'message' => 'تم', 'file_name' => $targetFileName];
+    }
+
+    public static function deleteLocalFile(string $fileName): void
+    {
+        $fileName = basename(str_replace('\\', '/', trim($fileName)));
+        if ($fileName === '' || str_contains($fileName, '..')) {
+            return;
+        }
+
+        foreach ([false, true] as $thumb) {
+            $path = self::resolveLocalPath($fileName, $thumb);
+            if ($path !== null && is_file($path)) {
+                @unlink($path);
+            }
+        }
+    }
+
     public static function publicUrl(string $fileName, bool $thumb = true): string
     {
         return '/media/material.php?file=' . rawurlencode(self::lookupFileName($fileName))

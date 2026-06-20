@@ -43,6 +43,7 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
         <strong>①</strong> رفع على الموقع مع استئناف من المتصفح.
         <strong class="mr-1">②</strong> مزامنة الأمين صورة تلو الأخرى — يتوقف عند انقطاع الاتصال ويُستأنف لاحقاً.
         <strong class="mr-1">③</strong> تصفح مواد محددة للتحقق من توفر الصور.
+        <strong class="mr-1">④</strong> ربط صورة أساسية بعدة مواد — نسخة مستقلة لكل مادة.
       </p>
     </div>
     <div class="flex flex-wrap gap-2 text-xs" id="statsPills">
@@ -69,6 +70,11 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     </div>
   </div>
 </section>
+
+<p class="mb-4 rounded-xl border border-blue-200 bg-blue-50 text-blue-800 px-4 py-3 text-sm">
+  تم نقل الربط إلى صفحة مستقلة:
+  <a href="/dashboard/material-image-links.php" class="font-bold underline">ربط الصور بالمواد</a>.
+</p>
 
 <?php if (!empty($flash)): ?>
   <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= ($flashType ?? 'success') === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700' ?>">
@@ -174,6 +180,55 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     <button type="button" id="syncQueueNextBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold disabled:opacity-40" disabled>التالي</button>
   </div>
 </article>
+
+<section class="rounded-xl border border-border-subtle bg-white overflow-hidden mb-6" id="linkSection">
+  <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60">
+    <h2 class="font-bold">④ ربط الصور بالمواد</h2>
+    <p class="text-xs text-text-muted mt-0.5">اختر صورة أساسية من الموقع، ثم حدّد مواداً — يُولَّد لكل مادة ملف باسمها ويُربط على الأمين دون رفع يدوي مكرر.</p>
+  </div>
+
+  <div class="grid gap-4 lg:grid-cols-2 p-4">
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-bold">الصور الأساسية</h3>
+        <button type="button" id="linkReloadSourcesBtn" class="text-xs text-primary font-bold">تحديث</button>
+      </div>
+      <div id="linkSourceEmpty" class="text-xs text-text-muted rounded-lg border border-dashed border-border-subtle p-4 text-center">
+        لا توجد صور على الموقع بعد — ارفع صوراً في الخطوة ①.
+      </div>
+      <div id="linkSourceList" class="hidden max-h-[360px] overflow-auto space-y-2"></div>
+    </div>
+
+    <div>
+      <h3 class="text-sm font-bold mb-2">مواد للربط</h3>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+        <input type="search" id="linkMaterialSearch" class="h-9 rounded-lg border border-border-subtle px-3 text-sm sm:col-span-2" placeholder="بحث بالاسم أو الكود">
+        <select id="linkHasImage" class="h-9 rounded-lg border border-border-subtle px-2 text-sm">
+          <option value="0" selected>بدون صورة في الأمين</option>
+          <option value="">كل المواد</option>
+          <option value="1">مع صورة</option>
+        </select>
+        <button type="button" id="linkSearchMaterialsBtn" class="h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold">بحث</button>
+      </div>
+      <div id="linkMaterialLoading" class="hidden text-xs text-text-muted py-4 text-center">جاري التحميل...</div>
+      <div id="linkMaterialEmpty" class="hidden text-xs text-text-muted rounded-lg border border-dashed border-border-subtle p-4 text-center">لا توجد مواد مطابقة.</div>
+      <div id="linkMaterialList" class="hidden max-h-[260px] overflow-auto divide-y divide-border-subtle border border-border-subtle rounded-lg"></div>
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" id="linkAssignBtn" class="h-9 px-4 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-40" disabled>ربط وتوليد نسخ</button>
+        <span id="linkSelectionSummary" class="text-xs text-text-muted">اختر صورة أساسية ومادة واحدة على الأقل.</span>
+      </div>
+      <p id="linkStatus" class="text-xs text-text-muted mt-2"></p>
+    </div>
+  </div>
+
+  <div class="px-4 pb-4">
+    <div class="rounded-xl border border-border-subtle p-3">
+      <h3 class="text-sm font-bold mb-2">نمط بطاقات (مثل النظام القديم)</h3>
+      <p class="text-xs text-text-muted mb-3">لكل صورة: ابحث عن مادة وأضفها، ويمكنك إضافة أكثر من مادة ثم تنفيذ الربط دفعة واحدة.</p>
+      <div id="legacyLinkCards" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
+    </div>
+  </div>
+</section>
 
 <details class="rounded-xl border border-border-subtle bg-white p-4 mb-6">
   <summary class="font-bold cursor-pointer">مسارات التخزين (متقدم)</summary>
@@ -343,6 +398,23 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   const syncQueueNextBtn = document.getElementById('syncQueueNextBtn');
   const syncQueuePageLabel = document.getElementById('syncQueuePageLabel');
   const statusLabels = <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE) ?>;
+
+  const linkReloadSourcesBtn = document.getElementById('linkReloadSourcesBtn');
+  const linkSourceList = document.getElementById('linkSourceList');
+  const linkSourceEmpty = document.getElementById('linkSourceEmpty');
+  const linkMaterialSearch = document.getElementById('linkMaterialSearch');
+  const linkHasImage = document.getElementById('linkHasImage');
+  const linkSearchMaterialsBtn = document.getElementById('linkSearchMaterialsBtn');
+  const linkMaterialLoading = document.getElementById('linkMaterialLoading');
+  const linkMaterialEmpty = document.getElementById('linkMaterialEmpty');
+  const linkMaterialList = document.getElementById('linkMaterialList');
+  const linkAssignBtn = document.getElementById('linkAssignBtn');
+  const linkSelectionSummary = document.getElementById('linkSelectionSummary');
+  const linkStatus = document.getElementById('linkStatus');
+
+  let selectedSourceFile = '';
+  let linkMaterialItems = [];
+  const selectedMaterialGuids = new Set();
 
   let syncRunning = false;
   let syncPaused = false;
@@ -922,6 +994,353 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     return params;
   }
 
+  function updateLinkAssignState() {
+    const count = selectedMaterialGuids.size;
+    if (linkAssignBtn) {
+      linkAssignBtn.disabled = selectedSourceFile === '' || count === 0;
+    }
+    if (linkSelectionSummary) {
+      if (selectedSourceFile === '') {
+        linkSelectionSummary.textContent = 'اختر صورة أساسية.';
+      } else if (count === 0) {
+        linkSelectionSummary.textContent = 'اختر مادة واحدة على الأقل.';
+      } else {
+        linkSelectionSummary.textContent = `${count} مادة محددة للربط.`;
+      }
+    }
+  }
+
+  function renderLinkSources(items) {
+    if (!linkSourceList || !linkSourceEmpty) return;
+    if (!items.length) {
+      linkSourceList.classList.add('hidden');
+      linkSourceList.innerHTML = '';
+      linkSourceEmpty.classList.remove('hidden');
+      return;
+    }
+
+    linkSourceEmpty.classList.add('hidden');
+    linkSourceList.innerHTML = items.map((item) => {
+      const fileName = item.file_name || '';
+      const checked = selectedSourceFile === fileName ? 'checked' : '';
+      const syncedBadge = item.is_synced
+        ? '<span class="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">متزامنة</span>'
+        : '<span class="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">لم تُزامَن بعد</span>';
+      const preview = item.preview_url
+        ? `<img src="${escapeHtml(item.preview_url)}" alt="" class="w-14 h-14 rounded-lg object-cover border border-border-subtle">`
+        : '<div class="w-14 h-14 rounded-lg bg-surface-low border border-border-subtle"></div>';
+
+      return `
+        <label class="flex items-center gap-3 p-2 rounded-lg border border-border-subtle hover:bg-surface-low/60 cursor-pointer">
+          <input type="radio" name="linkSource" value="${escapeHtml(fileName)}" ${checked}>
+          ${preview}
+          <span class="flex-1 min-w-0">
+            <span class="block text-xs font-bold truncate" dir="ltr">${escapeHtml(fileName)}</span>
+            ${syncedBadge}
+          </span>
+        </label>
+      `;
+    }).join('');
+    linkSourceList.classList.remove('hidden');
+
+    linkSourceList.querySelectorAll('input[name="linkSource"]').forEach((input) => {
+      input.addEventListener('change', () => {
+        if (input.checked) {
+          selectedSourceFile = input.value;
+          updateLinkAssignState();
+        }
+      });
+    });
+  }
+
+  async function loadLinkSources() {
+    try {
+      const response = await fetch(`${API_URL}?action=link-sources`);
+      const payload = await response.json();
+      const items = payload.items || [];
+      renderLinkSources(items);
+      renderLegacyCards(items);
+    } catch {
+      if (linkStatus) linkStatus.textContent = 'تعذر تحميل الصور الأساسية.';
+    }
+  }
+
+  function renderLinkMaterialItem(item) {
+    const guid = item.material_guid || '';
+    const checked = selectedMaterialGuids.has(guid) ? 'checked' : '';
+    const name = item.name || 'بدون اسم';
+    const code = item.material_code ? ` (${item.material_code})` : '';
+    const meta = [item.material_type, item.manufacturer].filter(Boolean).join(' · ');
+
+    return `
+      <label class="flex items-start gap-2 p-3 hover:bg-surface-low/40 cursor-pointer">
+        <input type="checkbox" class="link-material-check mt-1" value="${escapeHtml(guid)}" ${checked}>
+        <span class="min-w-0">
+          <span class="block text-sm font-bold truncate">${escapeHtml(name)}${escapeHtml(code)}</span>
+          ${meta ? `<span class="block text-[11px] text-text-muted mt-0.5">${escapeHtml(meta)}</span>` : ''}
+        </span>
+      </label>
+    `;
+  }
+
+  function bindLinkMaterialChecks() {
+    linkMaterialList?.querySelectorAll('.link-material-check').forEach((input) => {
+      input.addEventListener('change', () => {
+        if (input.checked) {
+          selectedMaterialGuids.add(input.value);
+        } else {
+          selectedMaterialGuids.delete(input.value);
+        }
+        updateLinkAssignState();
+      });
+    });
+  }
+
+  async function loadLinkMaterials() {
+    linkMaterialLoading?.classList.remove('hidden');
+    linkMaterialEmpty?.classList.add('hidden');
+    linkMaterialList?.classList.add('hidden');
+
+    const params = new URLSearchParams();
+    params.set('action', 'browse');
+    params.set('page', '1');
+    params.set('page_size', '48');
+    params.set('local_status', 'all');
+    const search = linkMaterialSearch?.value.trim() || '';
+    if (search) params.set('search', search);
+    if (linkHasImage?.value !== '') params.set('has_image', linkHasImage.value);
+
+    try {
+      const response = await fetch(`${API_URL}?${params.toString()}`);
+      const payload = await response.json();
+      linkMaterialLoading?.classList.add('hidden');
+      if (!payload.ok) {
+        if (linkStatus) linkStatus.textContent = payload.message || 'تعذر تحميل المواد.';
+        return;
+      }
+
+      linkMaterialItems = payload.items || [];
+      if (!linkMaterialItems.length) {
+        linkMaterialEmpty?.classList.remove('hidden');
+        return;
+      }
+
+      if (linkMaterialList) {
+        linkMaterialList.innerHTML = linkMaterialItems.map(renderLinkMaterialItem).join('');
+        linkMaterialList.classList.remove('hidden');
+        bindLinkMaterialChecks();
+      }
+    } catch {
+      linkMaterialLoading?.classList.add('hidden');
+      if (linkStatus) linkStatus.textContent = 'تعذر الاتصال أثناء تحميل المواد.';
+    }
+  }
+
+  async function assignSelectedMaterials() {
+    if (!selectedSourceFile || selectedMaterialGuids.size === 0) {
+      return;
+    }
+
+    if (!confirm(`ربط ${selectedMaterialGuids.size} مادة بالصورة «${selectedSourceFile}» وتوليد نسخ مستقلة؟`)) {
+      return;
+    }
+
+    if (linkAssignBtn) linkAssignBtn.disabled = true;
+    if (linkStatus) linkStatus.textContent = 'جاري الربط وتوليد النسخ...';
+
+    const form = new FormData();
+    form.append('action', 'assign-materials');
+    form.append('source_file_name', selectedSourceFile);
+    selectedMaterialGuids.forEach((guid) => form.append('material_guids[]', guid));
+
+    try {
+      const response = await fetch(API_URL, { method: 'POST', body: form });
+      const payload = await response.json();
+      if (linkStatus) linkStatus.textContent = payload.message || '';
+      if (payload.ok) {
+        selectedMaterialGuids.clear();
+        await loadLinkSources();
+        await loadLinkMaterials();
+        await refreshOverview();
+      }
+    } catch {
+      if (linkStatus) linkStatus.textContent = 'تعذر إكمال عملية الربط.';
+    } finally {
+      updateLinkAssignState();
+    }
+  }
+
+  linkReloadSourcesBtn?.addEventListener('click', () => loadLinkSources());
+  linkSearchMaterialsBtn?.addEventListener('click', () => loadLinkMaterials());
+  linkMaterialSearch?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      loadLinkMaterials();
+    }
+  });
+  linkAssignBtn?.addEventListener('click', () => assignSelectedMaterials());
+
+  const sourceMaterialMap = new Map();
+
+  function getSourceMaterials(fileName) {
+    if (!sourceMaterialMap.has(fileName)) sourceMaterialMap.set(fileName, []);
+    return sourceMaterialMap.get(fileName);
+  }
+
+  function renderLegacyChips(fileName) {
+    const items = getSourceMaterials(fileName);
+    if (!items.length) {
+      return '<span class="text-[11px] text-text-muted">لا توجد مواد مضافة بعد.</span>';
+    }
+
+    return items.map((item, index) => `
+      <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-surface-low text-[11px]">
+        ${escapeHtml(item.label)}
+        <button type="button" class="text-red-600" data-remove-index="${index}" data-file-name="${escapeHtml(fileName)}">×</button>
+      </span>
+    `).join('');
+  }
+
+  async function fetchMaterialSuggestions(keyword) {
+    const response = await fetch(`${API_URL}?action=material-search&q=${encodeURIComponent(keyword)}&has_image=0`);
+    const payload = await response.json();
+    return payload.items || [];
+  }
+
+  async function assignFromLegacyCard(fileName, materialItems, button) {
+    if (!materialItems.length) {
+      if (linkStatus) linkStatus.textContent = 'أضف مادة واحدة على الأقل قبل الربط.';
+      return;
+    }
+
+    const form = new FormData();
+    form.append('action', 'assign-materials');
+    form.append('source_file_name', fileName);
+    materialItems.forEach((item) => form.append('material_guids[]', item.guid));
+
+    button.disabled = true;
+    try {
+      const response = await fetch(API_URL, { method: 'POST', body: form });
+      const payload = await response.json();
+      if (linkStatus) linkStatus.textContent = payload.message || '';
+      if (payload.ok) {
+        sourceMaterialMap.set(fileName, []);
+        await loadLinkSources();
+        await refreshOverview();
+      }
+    } catch {
+      if (linkStatus) linkStatus.textContent = 'تعذر الربط من بطاقة الصورة.';
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function renderLegacyCards(items) {
+    const container = document.getElementById('legacyLinkCards');
+    if (!container) return;
+    if (!items.length) {
+      container.innerHTML = '<div class="text-xs text-text-muted">لا توجد صور متاحة للربط.</div>';
+      return;
+    }
+
+    container.innerHTML = items.map((item) => {
+      const fileName = item.file_name || '';
+      const preview = item.preview_url
+        ? `<img src="${escapeHtml(item.preview_url)}" alt="" class="w-full h-44 object-contain rounded-lg border border-border-subtle bg-surface-low">`
+        : '<div class="w-full h-44 rounded-lg border border-border-subtle bg-surface-low"></div>';
+
+      return `
+        <article class="rounded-xl border border-border-subtle p-3 bg-white space-y-2" data-file-name="${escapeHtml(fileName)}">
+          ${preview}
+          <p class="text-xs font-mono truncate" dir="ltr">${escapeHtml(fileName)}</p>
+          <div class="relative">
+            <input type="search" class="legacy-material-input h-9 w-full rounded-lg border border-border-subtle px-3 text-xs" placeholder="ابحث عن مادة..." data-file-name="${escapeHtml(fileName)}">
+            <div class="legacy-suggestions hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow"></div>
+          </div>
+          <div class="flex flex-wrap gap-1 legacy-chip-list">${renderLegacyChips(fileName)}</div>
+          <button type="button" class="legacy-assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>
+        </article>
+      `;
+    }).join('');
+
+    container.querySelectorAll('article[data-file-name]').forEach((card) => {
+      const fileName = card.getAttribute('data-file-name') || '';
+      const input = card.querySelector('.legacy-material-input');
+      const suggestions = card.querySelector('.legacy-suggestions');
+      const chips = card.querySelector('.legacy-chip-list');
+      const assignBtn = card.querySelector('.legacy-assign-btn');
+
+      if (!(input instanceof HTMLInputElement) || !(suggestions instanceof HTMLElement) || !(chips instanceof HTMLElement) || !(assignBtn instanceof HTMLButtonElement)) {
+        return;
+      }
+
+      input.addEventListener('input', async () => {
+        const keyword = input.value.trim();
+        if (keyword.length < 2) {
+          suggestions.classList.add('hidden');
+          suggestions.innerHTML = '';
+          return;
+        }
+
+        try {
+          const rows = await fetchMaterialSuggestions(keyword);
+          if (!rows.length) {
+            suggestions.innerHTML = '<div class="p-2 text-xs text-text-muted">لا نتائج</div>';
+            suggestions.classList.remove('hidden');
+            return;
+          }
+
+          suggestions.innerHTML = rows.map((row) => {
+            const guid = row.material_guid || '';
+            const label = `${row.material_code || ''} ${row.name || ''}`.trim();
+            return `<button type="button" class="block w-full text-right px-3 py-2 text-xs hover:bg-surface-low legacy-add-material" data-guid="${escapeHtml(guid)}" data-label="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
+          }).join('');
+          suggestions.classList.remove('hidden');
+        } catch {
+          suggestions.classList.add('hidden');
+        }
+      });
+
+      suggestions.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const button = target.closest('.legacy-add-material');
+        if (!(button instanceof HTMLButtonElement)) return;
+
+        const guid = button.getAttribute('data-guid') || '';
+        const label = button.getAttribute('data-label') || '';
+        if (!guid) return;
+
+        const list = getSourceMaterials(fileName);
+        if (!list.some((item) => item.guid === guid)) {
+          list.push({ guid, label });
+        }
+        chips.innerHTML = renderLegacyChips(fileName);
+        suggestions.classList.add('hidden');
+        suggestions.innerHTML = '';
+        input.value = '';
+      });
+
+      chips.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const button = target.closest('button[data-remove-index]');
+        if (!(button instanceof HTMLButtonElement)) return;
+
+        const index = Number(button.getAttribute('data-remove-index') || -1);
+        const list = getSourceMaterials(fileName);
+        if (index >= 0) {
+          list.splice(index, 1);
+          chips.innerHTML = renderLegacyChips(fileName);
+        }
+      });
+
+      assignBtn.addEventListener('click', async () => {
+        await assignFromLegacyCard(fileName, getSourceMaterials(fileName), assignBtn);
+      });
+    });
+  }
+
   function renderBrowseItem(item) {
     const name = item.name || 'بدون اسم';
     const code = item.material_code ? ` (${item.material_code})` : '';
@@ -1223,5 +1642,7 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
 
   restoreQueueFromStorage();
   refreshOverview();
+  loadLinkSources();
+  loadLinkMaterials();
 })();
 </script>

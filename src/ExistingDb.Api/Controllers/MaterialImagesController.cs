@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Linq.Expressions;
 using ExistingDb.Api.Authorization;
@@ -130,7 +129,7 @@ public sealed class MaterialImagesController(
     {
         var items = (request.Items ?? [])
             .Where(item => !string.IsNullOrWhiteSpace(item.FileName))
-            .Take(30)
+            .Take(50)
             .ToArray();
         if (items.Length == 0)
         {
@@ -149,62 +148,27 @@ public sealed class MaterialImagesController(
             .ToDictionary(group => group.Key, group => group.First().Item, StringComparer.OrdinalIgnoreCase);
 
         var requestedNames = requestByFile.Keys.ToArray();
-        var responsesByFile = new ConcurrentDictionary<string, MaterialImageLookupBatchItemResponse>(StringComparer.OrdinalIgnoreCase);
-        var namesNeedingDb = new ConcurrentBag<string>();
+        var dbByFile = await LoadDbImagesByFileNamesAsync(requestedNames, cancellationToken);
+        var responsesByFile = new Dictionary<string, MaterialImageLookupBatchItemResponse>(StringComparer.OrdinalIgnoreCase);
 
-        Parallel.ForEach(requestedNames, fileName =>
+        foreach (var fileName in requestedNames)
         {
-            var directPath = Path.GetFullPath(Path.Combine(settings.ImagesDirectory, fileName));
-            if (!System.IO.File.Exists(directPath))
-            {
-                namesNeedingDb.Add(fileName);
-                return;
-            }
-
-            var directInfo = new FileInfo(directPath);
-            if (requestByFile.TryGetValue(fileName, out var requestItem)
-                && requestItem.SizeBytes is > 0
-                && directInfo.Length != requestItem.SizeBytes.Value)
-            {
-                responsesByFile[fileName] = new MaterialImageLookupBatchItemResponse(
-                    fileName,
-                    null,
-                    directInfo.Length,
-                    string.Empty,
-                    true,
-                    true);
-                return;
-            }
-
-            responsesByFile[fileName] = new MaterialImageLookupBatchItemResponse(
-                fileName,
-                null,
-                directInfo.Length,
-                ComputeSha256Hex(directPath),
-                true,
-                true);
-        });
-
-        foreach (var fileName in namesNeedingDb.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            var candidates = await mainDbContext.MaterialImages
-                .AsNoTracking()
-                .Where(image => image.Name != null && image.Name.Contains(fileName))
-                .ToListAsync(cancellationToken);
-
-            var image = candidates
-                .FirstOrDefault(candidate =>
-                    string.Equals(ExtractFileName(candidate.Name), fileName, StringComparison.OrdinalIgnoreCase));
-
-            var dbByFileName = image is null
+            var dbByFileName = dbByFile.TryGetValue(fileName, out var image)
                 ? new Dictionary<string, MaterialImageRecord>(StringComparer.OrdinalIgnoreCase)
-                : new Dictionary<string, MaterialImageRecord>(StringComparer.OrdinalIgnoreCase)
                 {
-                    [fileName] = image
-                };
+                    [fileName] = image,
+                }
+                : new Dictionary<string, MaterialImageRecord>(StringComparer.OrdinalIgnoreCase);
 
             responsesByFile[fileName] = LookupFileOnAmine(fileName, settings.ImagesDirectory, dbByFileName);
         }
+
+        var imageGuids = responsesByFile.Values
+            .Where(response => response.Id is Guid id && id != Guid.Empty)
+            .Select(response => response.Id!.Value)
+            .Distinct()
+            .ToArray();
+        var materialByImage = await GetLinkedMaterialDetailsByImageAsync(imageGuids, cancellationToken);
 
         var responses = new List<MaterialImageLookupBatchItemResponse>(items.Length);
         foreach (var item in items)
@@ -215,12 +179,186 @@ public sealed class MaterialImagesController(
                 continue;
             }
 
-            responses.Add(responsesByFile.TryGetValue(fileName, out var response)
-                ? response
-                : new MaterialImageLookupBatchItemResponse(fileName, null, 0, string.Empty, false, false));
+            if (!responsesByFile.TryGetValue(fileName, out var baseResponse))
+            {
+                responses.Add(new MaterialImageLookupBatchItemResponse(fileName, null, 0, string.Empty, false, false));
+                continue;
+            }
+
+            if (baseResponse.Id is Guid imageGuid && materialByImage.TryGetValue(imageGuid, out var link))
+            {
+                responses.Add(baseResponse with
+                {
+                    MaterialGuid = link.MaterialGuid,
+                    MaterialName = link.MaterialName,
+                    MaterialCode = link.MaterialCode,
+                });
+                continue;
+            }
+
+            responses.Add(baseResponse);
         }
 
         return Ok(new MaterialImageLookupBatchResponse(responses));
+    }
+
+    [HttpGet("link-files")]
+    [RequirePermission("materials.read")]
+    public async Task<ActionResult<PagedResponse<MaterialImageLinkFileResponse>>> GetLinkFiles(
+        [FromQuery] bool? linked = null,
+        [FromQuery] string? materialSearch = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 24,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 6, 60);
+
+        var query = BuildImageQuery(linked, null);
+        var searchTokens = SplitSearchTokens(materialSearch);
+        foreach (var token in searchTokens)
+        {
+            var term = token;
+            query = query.Where(image =>
+                mainDbContext.Materials.Any(material =>
+                    material.PictureGuid == image.Guid &&
+                    ((material.Name != null && material.Name.Contains(term)) ||
+                     (material.Code != null && material.Code.Contains(term)))));
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var images = await query
+            .OrderBy(image => image.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        var materialByImage = await GetLinkedMaterialDetailsByImageAsync(
+            images.Select(image => image.Guid).ToArray(),
+            cancellationToken);
+
+        var items = images
+            .Select(image =>
+            {
+                var fileName = ExtractFileName(image.Name) ?? string.Empty;
+                var hasMaterial = materialByImage.TryGetValue(image.Guid, out var link);
+                return new MaterialImageLinkFileResponse(
+                    image.Guid,
+                    fileName,
+                    hasMaterial,
+                    hasMaterial ? link.MaterialGuid : null,
+                    hasMaterial ? link.MaterialName : null,
+                    hasMaterial ? link.MaterialCode : null);
+            })
+            .ToArray();
+
+        return Ok(new PagedResponse<MaterialImageLinkFileResponse>(items, page, pageSize, totalCount));
+    }
+
+    [HttpPost("{sourceImageGuid:guid}/assign-to-materials")]
+    [RequirePermission("materials.update")]
+    public async Task<ActionResult<MaterialImageAssignResponse>> AssignToMaterials(
+        Guid sourceImageGuid,
+        [FromBody] MaterialImageAssignRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (sourceImageGuid == Guid.Empty)
+        {
+            return BadRequest(new { message = "Source image GUID is required." });
+        }
+
+        var materialGuids = (request.MaterialGuids ?? [])
+            .Where(guid => guid != Guid.Empty)
+            .Distinct()
+            .Take(50)
+            .ToArray();
+        if (materialGuids.Length == 0)
+        {
+            return BadRequest(new { message = "At least one material GUID is required." });
+        }
+
+        var sourceImage = await mainDbContext.MaterialImages
+            .AsNoTracking()
+            .SingleOrDefaultAsync(image => image.Guid == sourceImageGuid, cancellationToken);
+        if (sourceImage is null)
+        {
+            return NotFound(new { message = "Source image was not found." });
+        }
+
+        var settings = await imageSettingsService.GetAsync(cancellationToken);
+        var sourcePath = ResolveExistingImagePath(sourceImage.Name, settings.ImagesDirectory);
+        if (string.IsNullOrWhiteSpace(sourcePath) || !System.IO.File.Exists(sourcePath))
+        {
+            return BadRequest(new { message = "Source image file was not found on disk." });
+        }
+
+        var materials = await mainDbContext.Materials
+            .Where(material => materialGuids.Contains(material.Guid))
+            .ToListAsync(cancellationToken);
+        if (materials.Count == 0)
+        {
+            return BadRequest(new { message = "No valid materials were found for assignment." });
+        }
+
+        var extension = Path.GetExtension(sourcePath);
+        var orderedMaterials = materials.OrderBy(material => material.Name).ToList();
+        var createdImages = new List<MaterialImageRecord>(orderedMaterials.Count);
+        var savedFiles = new List<string>(orderedMaterials.Count);
+        var responses = new List<MaterialImageAssignItemResponse>(orderedMaterials.Count);
+
+        try
+        {
+            foreach (var material in orderedMaterials)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var preferredFileName = BuildMaterialImageFileName(material, extension);
+                var storedFile = await imageStorageService.CopyFromPathAsync(
+                    sourcePath,
+                    preferredFileName,
+                    cancellationToken);
+
+                savedFiles.Add(storedFile.ImagePath);
+                var image = new MaterialImageRecord
+                {
+                    Guid = Guid.NewGuid(),
+                    Name = storedFile.ImagePath,
+                };
+                createdImages.Add(image);
+            }
+
+            mainDbContext.MaterialImages.AddRange(createdImages);
+            await mainDbContext.SaveChangesAsync(cancellationToken);
+
+            for (var index = 0; index < orderedMaterials.Count; index++)
+            {
+                var material = orderedMaterials[index];
+                var image = createdImages[index];
+                var linked = await LinkImageToMaterialInternalAsync(image.Guid, material.Guid, cancellationToken);
+                if (!linked)
+                {
+                    return NotFound(new { message = "Material was not found during linking.", materialGuid = material.Guid });
+                }
+
+                responses.Add(new MaterialImageAssignItemResponse(
+                    material.Guid,
+                    material.Name ?? string.Empty,
+                    material.Code,
+                    image.Guid,
+                    Path.GetFileName(image.Name ?? string.Empty)));
+            }
+        }
+        catch
+        {
+            foreach (var savedFile in savedFiles)
+            {
+                imageStorageService.DeleteFile(savedFile);
+            }
+
+            throw;
+        }
+
+        return Ok(new MaterialImageAssignResponse(sourceImageGuid, responses));
     }
 
     [HttpGet("{id:guid}")]
@@ -441,7 +579,7 @@ public sealed class MaterialImagesController(
         }
 
         var linkedMaterials = await linkedMaterialsQuery
-            .Where(material => material.PictureGuid.HasValue)
+            .Where(material => material.PictureGuid != null && material.PictureGuid != MaterialPictureGuid.Cleared)
             .ToListAsync(cancellationToken);
 
         if (linkedMaterials.Count == 0)
@@ -451,11 +589,39 @@ public sealed class MaterialImagesController(
 
         foreach (var material in linkedMaterials)
         {
-            material.PictureGuid = null;
+            material.PictureGuid = MaterialPictureGuid.Cleared;
         }
 
         await mainDbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
+    }
+
+    [HttpDelete("by-file")]
+    [RequirePermission("materials.update")]
+    public async Task<IActionResult> DeleteImageByFileName(
+        [FromQuery] string fileName,
+        CancellationToken cancellationToken)
+    {
+        fileName = Path.GetFileName(fileName.Trim());
+        if (fileName is "")
+        {
+            return BadRequest(new { message = "fileName is required." });
+        }
+
+        var dbByFile = await LoadDbImagesByFileNamesAsync([fileName], cancellationToken);
+        if (!dbByFile.TryGetValue(fileName, out var stub))
+        {
+            return NotFound(new { message = "Image file was not found in bm000.", fileName });
+        }
+
+        var image = await mainDbContext.MaterialImages
+            .SingleOrDefaultAsync(item => item.Guid == stub.Guid, cancellationToken);
+        if (image is null)
+        {
+            return NotFound(new { message = "Image file was not found in bm000.", fileName });
+        }
+
+        return await DeleteImageRecordAsync(image, cancellationToken);
     }
 
     [HttpDelete("{id:guid}")]
@@ -469,19 +635,47 @@ public sealed class MaterialImagesController(
             return NotFound();
         }
 
+        return await DeleteImageRecordAsync(image, cancellationToken);
+    }
+
+    private async Task<IActionResult> DeleteImageRecordAsync(
+        MaterialImageRecord image,
+        CancellationToken cancellationToken)
+    {
+        var id = image.Guid;
+        var imageName = image.Name;
+
         var linkedMaterials = await mainDbContext.Materials
             .Where(material => material.PictureGuid == id)
             .ToListAsync(cancellationToken);
         foreach (var material in linkedMaterials)
         {
-            material.PictureGuid = null;
+            material.PictureGuid = MaterialPictureGuid.Cleared;
         }
 
         mainDbContext.MaterialImages.Remove(image);
         await mainDbContext.SaveChangesAsync(cancellationToken);
 
+        var stillExists = await mainDbContext.MaterialImages
+            .AsNoTracking()
+            .AnyAsync(item => item.Guid == id, cancellationToken);
+        if (stillExists)
+        {
+            await mainDbContext.Database.ExecuteSqlRawAsync(
+                "DELETE FROM bm000 WHERE [GUID] = {0}",
+                id);
+        }
+
+        stillExists = await mainDbContext.MaterialImages
+            .AsNoTracking()
+            .AnyAsync(item => item.Guid == id, cancellationToken);
+        if (stillExists)
+        {
+            return StatusCode(500, new { message = "Failed to delete image record from bm000." });
+        }
+
         var settings = await imageSettingsService.GetAsync(cancellationToken);
-        var imagePath = ResolveImagePath(image.Name, settings.ImagesDirectory);
+        var imagePath = ResolveImagePath(imageName, settings.ImagesDirectory);
         imageStorageService.DeleteFile(imagePath);
 
         return NoContent();
@@ -564,7 +758,7 @@ public sealed class MaterialImagesController(
         var selectedGroupGuids = ParseGuids(groupGuid, groupGuids);
         var materialQuery = mainDbContext.Materials
             .AsNoTracking()
-            .Where(material => material.PictureGuid.HasValue);
+            .Where(material => material.PictureGuid != null && material.PictureGuid != MaterialPictureGuid.Cleared);
 
         materialQuery = ApplyStoreAndQuantityFilters(
             materialQuery,
@@ -644,7 +838,7 @@ public sealed class MaterialImagesController(
 
         var imageGuids = await mainDbContext.Materials
             .AsNoTracking()
-            .Where(material => materialGuids.Contains(material.Guid) && material.PictureGuid.HasValue)
+            .Where(material => materialGuids.Contains(material.Guid) && material.PictureGuid != null && material.PictureGuid != MaterialPictureGuid.Cleared)
             .Select(material => material.PictureGuid!.Value)
             .Distinct()
             .ToListAsync(cancellationToken);
@@ -665,7 +859,7 @@ public sealed class MaterialImagesController(
         var query = mainDbContext.MaterialImages.AsNoTracking();
         var linkedImageGuids = mainDbContext.Materials
             .AsNoTracking()
-            .Where(material => material.PictureGuid.HasValue)
+            .Where(material => material.PictureGuid != null && material.PictureGuid != MaterialPictureGuid.Cleared)
             .Select(material => material.PictureGuid!.Value);
 
         if (materialGuid is not null)
@@ -700,7 +894,7 @@ public sealed class MaterialImagesController(
         var imageGuids = images.Select(image => image.Guid).ToArray();
         var links = await mainDbContext.Materials
             .AsNoTracking()
-            .Where(material => material.PictureGuid.HasValue && imageGuids.Contains(material.PictureGuid.Value))
+            .Where(material => material.PictureGuid != null && material.PictureGuid != MaterialPictureGuid.Cleared && imageGuids.Contains(material.PictureGuid.Value))
             .Select(material => new { ImageGuid = material.PictureGuid!.Value, MaterialGuid = (Guid?)material.Guid })
             .ToListAsync(cancellationToken);
 
@@ -728,7 +922,7 @@ public sealed class MaterialImagesController(
             .ToListAsync(cancellationToken);
         foreach (var linkedMaterial in linkedMaterials)
         {
-            linkedMaterial.PictureGuid = null;
+            linkedMaterial.PictureGuid = MaterialPictureGuid.Cleared;
         }
 
         material.PictureGuid = imageGuid;
@@ -975,6 +1169,91 @@ public sealed class MaterialImagesController(
             _ => "application/octet-stream"
         };
     }
+
+    private static string BuildMaterialImageFileName(MaterialRecord material, string extension)
+    {
+        var code = SanitizeFileName(material.Code ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            code = "mat_" + material.Guid.ToString("N")[..8];
+        }
+
+        if (string.IsNullOrWhiteSpace(extension) || extension is ".")
+        {
+            extension = ".jpg";
+        }
+
+        return $"{code}{extension}";
+    }
+
+    private async Task<Dictionary<string, MaterialImageRecord>> LoadDbImagesByFileNamesAsync(
+        string[] fileNames,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<string, MaterialImageRecord>(StringComparer.OrdinalIgnoreCase);
+        foreach (var fileName in fileNames.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var candidates = await mainDbContext.MaterialImages
+                .AsNoTracking()
+                .Where(image => image.Name != null && image.Name.Contains(fileName))
+                .ToListAsync(cancellationToken);
+
+            var image = candidates
+                .FirstOrDefault(candidate =>
+                    string.Equals(ExtractFileName(candidate.Name), fileName, StringComparison.OrdinalIgnoreCase));
+            if (image is not null)
+            {
+                result[fileName] = image;
+            }
+        }
+
+        return result;
+    }
+
+    private sealed record MaterialLinkDetails(
+        Guid MaterialGuid,
+        string MaterialName,
+        string? MaterialCode);
+
+    private async Task<Dictionary<Guid, MaterialLinkDetails>> GetLinkedMaterialDetailsByImageAsync(
+        Guid[] imageGuids,
+        CancellationToken cancellationToken)
+    {
+        if (imageGuids.Length == 0)
+        {
+            return [];
+        }
+
+        var rows = await mainDbContext.Materials
+            .AsNoTracking()
+            .Where(material => material.PictureGuid != null && material.PictureGuid != MaterialPictureGuid.Cleared && imageGuids.Contains(material.PictureGuid.Value))
+            .Select(material => new
+            {
+                ImageGuid = material.PictureGuid!.Value,
+                MaterialGuid = material.Guid,
+                material.Name,
+                material.Code,
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(row => row.ImageGuid)
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                {
+                    var first = group.OrderBy(item => item.MaterialGuid).First();
+                    return new MaterialLinkDetails(
+                        first.MaterialGuid,
+                        first.Name ?? string.Empty,
+                        first.Code);
+                });
+    }
+
+    private static string[] SplitSearchTokens(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static MaterialImageLookupBatchItemResponse LookupFileOnAmine(
         string fileName,

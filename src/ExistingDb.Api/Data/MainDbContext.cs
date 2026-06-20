@@ -96,7 +96,7 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
 
         modelBuilder.Entity<MaterialImageRecord>(entity =>
         {
-            entity.ToTable("bm000");
+            entity.ToTable("bm000", tableBuilder => tableBuilder.UseSqlOutputClause(false));
             entity.HasKey(image => image.Guid);
 
             entity.Property(image => image.Guid).HasColumnName("GUID");

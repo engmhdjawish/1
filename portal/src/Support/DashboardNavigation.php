@@ -26,6 +26,7 @@ final class DashboardNavigation
         '/dashboard/amine-api.php',
         '/dashboard/home-sections.php',
         '/dashboard/material-images.php',
+        '/dashboard/material-image-links.php',
         '/dashboard/users.php',
         '/dashboard/settings.php',
     ];
@@ -233,6 +234,13 @@ final class DashboardNavigation
                     'icon' => 'inventory_2',
                     'permission' => 'images.upload',
                     'description' => 'ربط صور المواد من مجلدات الأمين أو رفعها للمتجر.',
+                ],
+                [
+                    'route' => '/dashboard/material-image-links.php',
+                    'label' => 'ربط الصور بالمواد',
+                    'icon' => 'linked_services',
+                    'permission' => 'images.upload',
+                    'description' => 'صفحة مستقلة لربط صورة أساسية بعدة مواد مع توليد نسخة لكل مادة.',
                 ],
             ],
             'إدارة النظام' => [
