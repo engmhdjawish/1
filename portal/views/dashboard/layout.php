@@ -14,17 +14,13 @@ require_once __DIR__ . '/../helpers.php';
 $user ??= null;
 $currentRoute ??= parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: '/dashboard/index.php';
 $navArea = DashboardNavigation::areaForRoute($currentRoute);
-$operationsGroups = DashboardNavigation::operationsGroups($user);
-$configurationGroups = DashboardNavigation::configurationGroups($user);
+$areaMeta = DashboardNavigation::areaMeta($navArea);
 $hasConfigurationAccess = DashboardNavigation::hasConfigurationAccess($user);
+$hasAccountingAccess = DashboardNavigation::canAccessAccounting($user);
 $headerQuickLinks = DashboardNavigation::headerQuickLinks($user);
-$sidebarGroups = $navArea === DashboardNavigation::AREA_CONFIGURATION
-    ? DashboardNavigation::configurationSidebarGroups($user)
-    : $operationsGroups;
-$sidebarTitle = $navArea === DashboardNavigation::AREA_CONFIGURATION ? 'الإعدادات والتهيئة' : 'العمل اليومي';
-$sidebarSubtitle = $navArea === DashboardNavigation::AREA_CONFIGURATION
-    ? 'إعدادات لا تُستخدم يومياً'
-    : 'مهامك اليومية في البوابة';
+$sidebarGroups = DashboardNavigation::sidebarGroupsForArea($navArea, $user);
+$sidebarTitle = $areaMeta['title'];
+$sidebarSubtitle = $areaMeta['subtitle'];
 
 $renderNavLink = static function (array $item, string $currentRoute, bool $compact = false): void {
     $route = (string) ($item['route'] ?? '#');
@@ -105,7 +101,11 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         <a href="/dashboard/index.php" class="font-extrabold text-primary text-lg truncate">Jawish Trading</a>
         <nav class="hidden lg:flex items-center gap-1 text-sm mr-2">
           <?php foreach ($headerQuickLinks as $item): ?>
-            <?php $isActive = $currentRoute === (string) ($item['route'] ?? ''); ?>
+            <?php
+              $itemRoute = (string) ($item['route'] ?? '');
+              $isActive = $currentRoute === $itemRoute
+                  || ($itemRoute === '/dashboard/accounting.php' && $navArea === DashboardNavigation::AREA_ACCOUNTING);
+            ?>
             <a
               href="<?= h((string) ($item['route'] ?? '#')) ?>"
               class="px-3 py-1.5 rounded-lg <?= $isActive ? 'bg-primary/10 text-primary font-bold' : 'text-text-muted hover:bg-surface-low hover:text-primary' ?>"
@@ -116,18 +116,33 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         </nav>
       </div>
       <div class="flex items-center gap-2 shrink-0">
-        <?php if ($hasConfigurationAccess): ?>
-          <a
-            href="<?= $navArea === DashboardNavigation::AREA_CONFIGURATION ? '/dashboard/index.php' : '/dashboard/configuration.php' ?>"
-            class="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-surface-low"
-          >
-            <span class="material-symbols-outlined text-base"><?= $navArea === DashboardNavigation::AREA_CONFIGURATION ? 'work' : 'tune' ?></span>
-            <?= $navArea === DashboardNavigation::AREA_CONFIGURATION ? 'العمل اليومي' : 'الإعدادات' ?>
+        <?php if ($navArea === DashboardNavigation::AREA_OPERATIONS): ?>
+          <?php if ($hasAccountingAccess): ?>
+            <a href="/dashboard/accounting.php" class="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-surface-low">
+              <span class="material-symbols-outlined text-base">account_balance</span>
+              أمين
+            </a>
+          <?php endif; ?>
+          <?php if ($hasConfigurationAccess): ?>
+            <a href="/dashboard/configuration.php" class="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-surface-low">
+              <span class="material-symbols-outlined text-base">tune</span>
+              الإعدادات
+            </a>
+          <?php endif; ?>
+        <?php elseif ($navArea === DashboardNavigation::AREA_ACCOUNTING): ?>
+          <a href="/dashboard/index.php" class="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-surface-low">
+            <span class="material-symbols-outlined text-base">work</span>
+            العمل اليومي
+          </a>
+        <?php else: ?>
+          <a href="/dashboard/index.php" class="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-surface-low">
+            <span class="material-symbols-outlined text-base">work</span>
+            العمل اليومي
           </a>
         <?php endif; ?>
         <div class="hidden md:flex flex-col items-end">
           <span class="text-sm font-bold"><?= h($user['display_name_ar'] ?? '') ?></span>
-          <span class="text-xs text-text-muted"><?= $navArea === DashboardNavigation::AREA_CONFIGURATION ? 'إعدادات' : 'لوحة العمل' ?></span>
+          <span class="text-xs text-text-muted"><?= h($sidebarTitle) ?></span>
         </div>
         <a href="/logout.php" class="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-red-50 text-red-600 transition" aria-label="تسجيل الخروج">
           <span class="material-symbols-outlined">logout</span>
@@ -159,15 +174,23 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
       <?php endforeach; ?>
     </div>
     <div class="pt-4 border-t border-border-subtle space-y-2">
-      <?php if ($navArea === DashboardNavigation::AREA_CONFIGURATION): ?>
+      <?php if ($navArea === DashboardNavigation::AREA_OPERATIONS): ?>
+        <?php if ($hasAccountingAccess): ?>
+          <a href="/dashboard/accounting.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low" data-dashboard-nav-link>
+            <span class="material-symbols-outlined">account_balance</span>
+            أمين — المحاسبة
+          </a>
+        <?php endif; ?>
+        <?php if ($hasConfigurationAccess): ?>
+          <a href="/dashboard/configuration.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low" data-dashboard-nav-link>
+            <span class="material-symbols-outlined">tune</span>
+            الإعدادات والتهيئة
+          </a>
+        <?php endif; ?>
+      <?php else: ?>
         <a href="/dashboard/index.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low" data-dashboard-nav-link>
           <span class="material-symbols-outlined">arrow_forward</span>
           العودة للعمل اليومي
-        </a>
-      <?php elseif ($hasConfigurationAccess): ?>
-        <a href="/dashboard/configuration.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low" data-dashboard-nav-link>
-          <span class="material-symbols-outlined">tune</span>
-          الإعدادات والتهيئة
         </a>
       <?php endif; ?>
       <a href="/index.php" class="flex items-center justify-center gap-2 bg-primary text-white rounded-xl py-2.5 font-bold hover:brightness-110 transition" data-dashboard-nav-link>
@@ -196,15 +219,23 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         <?php endforeach; ?>
       </div>
       <div class="mt-auto pt-4 border-t border-border-subtle space-y-2">
-        <?php if ($navArea === DashboardNavigation::AREA_CONFIGURATION): ?>
+        <?php if ($navArea === DashboardNavigation::AREA_OPERATIONS): ?>
+          <?php if ($hasAccountingAccess): ?>
+            <a href="/dashboard/accounting.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low transition">
+              <span class="material-symbols-outlined">account_balance</span>
+              أمين — المحاسبة
+            </a>
+          <?php endif; ?>
+          <?php if ($hasConfigurationAccess): ?>
+            <a href="/dashboard/configuration.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low transition">
+              <span class="material-symbols-outlined">tune</span>
+              الإعدادات والتهيئة
+            </a>
+          <?php endif; ?>
+        <?php else: ?>
           <a href="/dashboard/index.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low transition">
             <span class="material-symbols-outlined">arrow_forward</span>
             العودة للعمل اليومي
-          </a>
-        <?php elseif ($hasConfigurationAccess): ?>
-          <a href="/dashboard/configuration.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low transition">
-            <span class="material-symbols-outlined">tune</span>
-            الإعدادات والتهيئة
           </a>
         <?php endif; ?>
         <a href="/index.php" class="flex items-center justify-center gap-2 bg-primary text-white rounded-xl py-2.5 font-bold hover:brightness-110 transition">
@@ -219,6 +250,13 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
           <a href="/dashboard/configuration.php" class="inline-flex items-center gap-1 text-sm font-bold text-text-muted hover:text-primary">
             <span class="material-symbols-outlined text-base">chevron_right</span>
             العودة إلى الإعدادات
+          </a>
+        </nav>
+      <?php elseif ($navArea === DashboardNavigation::AREA_ACCOUNTING && $currentRoute !== '/dashboard/accounting.php'): ?>
+        <nav class="mb-4">
+          <a href="/dashboard/accounting.php" class="inline-flex items-center gap-1 text-sm font-bold text-text-muted hover:text-primary">
+            <span class="material-symbols-outlined text-base">chevron_right</span>
+            العودة إلى لوحة أمين
           </a>
         </nav>
       <?php endif; ?>

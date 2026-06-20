@@ -12,6 +12,7 @@ declare(strict_types=1);
 /** @var string $flashType */
 /** @var bool $canApproveCustomers */
 /** @var bool $canManageCustomers */
+/** @var bool $canViewAmineCustomers */
 /** @var array<string, mixed>|null $editCustomer */
 /** @var array<string, mixed>|null $detailsCustomer */
 
@@ -46,8 +47,15 @@ $editing = $editCustomer !== null;
 <section class="mb-6">
   <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-extrabold text-slate-900">إدارة العملاء</h1>
-      <p class="text-sm text-text-muted mt-1">عرض التفاصيل، إضافة عميل جديد، وتعديل بيانات العملاء الحاليين.</p>
+      <h1 class="text-2xl font-extrabold text-slate-900">عملاء الموقع</h1>
+      <p class="text-sm text-text-muted mt-1">
+        تسجيلات وعملاء البوابة الإلكترونية
+        <?php if (!empty($canViewAmineCustomers)): ?>
+          — مختلف عن <a href="/dashboard/accounting-customers.php" class="text-primary font-bold hover:underline">عملاء الأمين</a>.
+        <?php else: ?>
+          .
+        <?php endif; ?>
+      </p>
     </div>
     <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-3 w-full md:w-auto">
       <input type="hidden" name="status" value="<?= h($statusFilter) ?>">

@@ -27,7 +27,7 @@ ob_start();
 ?>
 <section class="mb-6">
   <h1 class="text-2xl font-extrabold text-slate-900">لوحة العمل</h1>
-  <p class="text-sm text-text-muted mt-1">متابعة سريعة للطلبات والعملاء والمزامنة — ابدأ من هنا كل يوم.</p>
+      <p class="text-sm text-text-muted mt-1">متابعة الطلبات و<strong>عملاء الموقع</strong> والمزامنة — للمحاسبة انتقل إلى <a href="/dashboard/accounting.php" class="text-primary font-bold hover:underline">لوحة أمين</a>.</p>
 </section>
 <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
   <a href="/dashboard/customers.php?status=pending" class="bg-red-50 border border-red-100 rounded-2xl p-5 hover:shadow-md transition block no-underline text-inherit">

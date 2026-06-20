@@ -9,9 +9,11 @@ declare(strict_types=1);
     <div>
       <h1 class="text-2xl font-extrabold text-slate-900">الإعدادات والتهيئة</h1>
       <p class="text-sm text-text-muted mt-1 max-w-2xl">
-        إعدادات لا تُستخدم يومياً: محتوى الموقع، صلاحيات الموظفين، وبيانات الشركة. ارجع إلى
+        إعدادات لا تُستخدم يومياً: محتوى الموقع، صور المواد، صلاحيات الموظفين، وبيانات الشركة.
+        للمهام اليومية ارجع إلى
         <a href="/dashboard/index.php" class="text-primary font-bold hover:underline">لوحة العمل</a>
-        للمهام اليومية.
+        أو
+        <a href="/dashboard/accounting.php" class="text-primary font-bold hover:underline">لوحة أمين</a>.
       </p>
     </div>
     <a href="/dashboard/index.php" class="h-10 px-4 inline-flex items-center gap-2 rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-700 hover:bg-slate-50">
