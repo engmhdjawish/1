@@ -636,20 +636,51 @@ public sealed class MaterialImagesController(
         CancellationToken cancellationToken)
     {
         var id = image.Guid;
+        var imageName = image.Name;
 
-        var linkedMaterials = await mainDbContext.Materials
-            .Where(material => material.PictureGuid == id)
-            .ToListAsync(cancellationToken);
-        foreach (var material in linkedMaterials)
+        await using var transaction = await mainDbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            material.PictureGuid = MaterialPictureGuid.Cleared;
+            var linkedMaterials = await mainDbContext.Materials
+                .Where(material => material.PictureGuid == id)
+                .ToListAsync(cancellationToken);
+            foreach (var material in linkedMaterials)
+            {
+                material.PictureGuid = MaterialPictureGuid.Cleared;
+            }
+
+            mainDbContext.MaterialImages.Remove(image);
+            await mainDbContext.SaveChangesAsync(cancellationToken);
+
+            var stillExists = await mainDbContext.MaterialImages
+                .AsNoTracking()
+                .AnyAsync(item => item.Guid == id, cancellationToken);
+            if (stillExists)
+            {
+                await mainDbContext.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM bm000 WHERE [GUID] = {0}",
+                    id);
+            }
+
+            stillExists = await mainDbContext.MaterialImages
+                .AsNoTracking()
+                .AnyAsync(item => item.Guid == id, cancellationToken);
+            if (stillExists)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return StatusCode(500, new { message = "Failed to delete image record from bm000." });
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
         }
 
-        mainDbContext.MaterialImages.Remove(image);
-        await mainDbContext.SaveChangesAsync(cancellationToken);
-
         var settings = await imageSettingsService.GetAsync(cancellationToken);
-        var imagePath = ResolveImagePath(image.Name, settings.ImagesDirectory);
+        var imagePath = ResolveImagePath(imageName, settings.ImagesDirectory);
         imageStorageService.DeleteFile(imagePath);
 
         return NoContent();
