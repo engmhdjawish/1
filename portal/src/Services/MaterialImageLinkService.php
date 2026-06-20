@@ -1075,7 +1075,11 @@ final class MaterialImageLinkService
             }
 
             if ($useTemplate) {
-                $processed = MaterialImageTemplateService::render($tempSource, $material, $line1, $line2);
+                try {
+                    $processed = MaterialImageTemplateService::render($tempSource, $material, $line1, $line2);
+                } catch (Throwable) {
+                    $processed = null;
+                }
             } else {
                 if ($line1 === '' && $line2 === '') {
                     continue;
@@ -1293,7 +1297,7 @@ final class MaterialImageLinkService
     }
 
     /** @return array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>} */
-    private static function assignError(string $message): array
+    public static function assignError(string $message): array
     {
         return [
             'ok' => false,

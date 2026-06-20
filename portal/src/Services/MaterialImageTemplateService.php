@@ -101,6 +101,18 @@ final class MaterialImageTemplateService
             return null;
         }
 
+        try {
+            return self::renderInternal($sourcePath, $material, $line1Override, $line2Override);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * @param array<string, mixed>|null $material
+     */
+    private static function renderInternal(string $sourcePath, ?array $material, string $line1Override = '', string $line2Override = ''): ?string
+    {
         $font = MaterialImageStorageService::resolveDetailsFontPath();
         if ($font === null) {
             return null;

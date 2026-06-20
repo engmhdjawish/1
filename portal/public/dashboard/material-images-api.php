@@ -9,8 +9,34 @@ use Portal\Services\MaterialImageLinkService;
 use Portal\Services\MaterialImageStorageService;
 use Portal\Services\MaterialImageSyncService;
 use Portal\Services\PortalSettingsService;
+use Throwable;
 
 header('Content-Type: application/json; charset=utf-8');
+
+/** @param array<string, mixed> $payload */
+function materialImagesApiJson(array $payload, int $status = 200): never
+{
+    if (!headers_sent()) {
+        http_response_code($status);
+        header('Content-Type: application/json; charset=utf-8');
+    }
+
+    $flags = JSON_UNESCAPED_UNICODE;
+    if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) {
+        $flags |= JSON_INVALID_UTF8_SUBSTITUTE;
+    }
+
+    $encoded = json_encode($payload, $flags);
+    if ($encoded === false) {
+        $encoded = json_encode([
+            'ok' => false,
+            'message' => 'تعذر ترميز استجابة الخادم.',
+        ], JSON_UNESCAPED_UNICODE) ?: '{"ok":false,"message":"json encode failed"}';
+    }
+
+    echo $encoded;
+    exit;
+}
 
 WebSession::requirePermission('images.upload');
 MaterialImageStorageService::ensureSettings();
@@ -166,33 +192,39 @@ if ($method === 'POST') {
             $materialGuids = [$materialGuids];
         }
         $addDetails = (string) ($_POST['add_details'] ?? '') === '1';
-        $processed = MaterialImageLinkService::collectProcessedUploads(
-            is_array($_FILES['processed_image'] ?? null) ? $_FILES['processed_image'] : null
-        );
-        if ($addDetails && $processed === []) {
-            $processed = MaterialImageLinkService::buildProcessedImagesFromDetails(
-                $sourceFileName,
-                $amineSourceGuid !== '' ? $amineSourceGuid : null,
-                $materialGuids,
-                is_array($_POST['detail_line1'] ?? null) ? $_POST['detail_line1'] : [],
-                is_array($_POST['detail_line2'] ?? null) ? $_POST['detail_line2'] : [],
-            );
-        }
-        if ($addDetails && $processed === []) {
-            echo json_encode(array_merge(
-                MaterialImageLinkService::detailsProcessingError(),
-                ['sync' => MaterialImageSyncService::stats()]
-            ), JSON_UNESCAPED_UNICODE);
-            exit;
-        }
-        if ($addDetails && count($processed) < count($materialGuids)) {
-            echo json_encode(array_merge(
-                MaterialImageLinkService::detailsProcessingError(),
-                ['sync' => MaterialImageSyncService::stats()]
-            ), JSON_UNESCAPED_UNICODE);
-            exit;
-        }
+        $processed = [];
+        $result = MaterialImageLinkService::assignError('خطأ غير متوقع أثناء الربط.');
+
         try {
+            $processed = MaterialImageLinkService::collectProcessedUploads(
+                is_array($_FILES['processed_image'] ?? null) ? $_FILES['processed_image'] : null
+            );
+            if ($addDetails && $processed === []) {
+                $processed = MaterialImageLinkService::buildProcessedImagesFromDetails(
+                    $sourceFileName,
+                    $amineSourceGuid !== '' ? $amineSourceGuid : null,
+                    $materialGuids,
+                    is_array($_POST['detail_line1'] ?? null) ? $_POST['detail_line1'] : [],
+                    is_array($_POST['detail_line2'] ?? null) ? $_POST['detail_line2'] : [],
+                );
+            }
+            if ($addDetails && $processed === []) {
+                materialImagesApiJson(array_merge(
+                    MaterialImageLinkService::detailsProcessingError(),
+                    ['sync' => MaterialImageSyncService::stats()]
+                ));
+            }
+            $validMaterialCount = count(array_values(array_filter(array_map(
+                static fn (mixed $value): string => trim((string) $value),
+                $materialGuids
+            ))));
+            if ($addDetails && count($processed) < $validMaterialCount) {
+                materialImagesApiJson(array_merge(
+                    MaterialImageLinkService::detailsProcessingError(),
+                    ['sync' => MaterialImageSyncService::stats()]
+                ));
+            }
+
             $result = MaterialImageLinkService::assign(
                 $sourceFileName,
                 $materialGuids,
@@ -201,15 +233,19 @@ if ($method === 'POST') {
                 $processed,
                 $addDetails
             );
+        } catch (Throwable $exception) {
+            $result = MaterialImageLinkService::assignError(
+                'خطأ أثناء الربط: ' . $exception->getMessage()
+            );
         } finally {
             foreach ($processed as $path) {
                 MaterialImageStorageService::deleteTempProcessedFile($path);
             }
         }
-        echo json_encode(array_merge($result, [
+
+        materialImagesApiJson(array_merge($result, [
             'sync' => MaterialImageSyncService::stats(),
-        ]), JSON_UNESCAPED_UNICODE);
-        exit;
+        ]));
     }
 
     if ($action === 'unlink-image') {
@@ -255,33 +291,39 @@ if ($method === 'POST') {
             $materialGuids = [$materialGuids];
         }
         $addDetails = (string) ($_POST['add_details'] ?? '') === '1';
-        $processed = MaterialImageLinkService::collectProcessedUploads(
-            is_array($_FILES['processed_image'] ?? null) ? $_FILES['processed_image'] : null
-        );
-        if ($addDetails && $processed === []) {
-            $processed = MaterialImageLinkService::buildProcessedImagesFromDetails(
-                $sourceFileName,
-                $amineSourceGuid !== '' ? $amineSourceGuid : $imageGuid,
-                $materialGuids,
-                is_array($_POST['detail_line1'] ?? null) ? $_POST['detail_line1'] : [],
-                is_array($_POST['detail_line2'] ?? null) ? $_POST['detail_line2'] : [],
-            );
-        }
-        if ($addDetails && $processed === []) {
-            echo json_encode(array_merge(
-                MaterialImageLinkService::detailsProcessingError(),
-                ['sync' => MaterialImageSyncService::stats()]
-            ), JSON_UNESCAPED_UNICODE);
-            exit;
-        }
-        if ($addDetails && count($processed) < count($materialGuids)) {
-            echo json_encode(array_merge(
-                MaterialImageLinkService::detailsProcessingError(),
-                ['sync' => MaterialImageSyncService::stats()]
-            ), JSON_UNESCAPED_UNICODE);
-            exit;
-        }
+        $processed = [];
+        $result = MaterialImageLinkService::assignError('خطأ غير متوقع أثناء الاستبدال.');
+
         try {
+            $processed = MaterialImageLinkService::collectProcessedUploads(
+                is_array($_FILES['processed_image'] ?? null) ? $_FILES['processed_image'] : null
+            );
+            if ($addDetails && $processed === []) {
+                $processed = MaterialImageLinkService::buildProcessedImagesFromDetails(
+                    $sourceFileName,
+                    $amineSourceGuid !== '' ? $amineSourceGuid : $imageGuid,
+                    $materialGuids,
+                    is_array($_POST['detail_line1'] ?? null) ? $_POST['detail_line1'] : [],
+                    is_array($_POST['detail_line2'] ?? null) ? $_POST['detail_line2'] : [],
+                );
+            }
+            if ($addDetails && $processed === []) {
+                materialImagesApiJson(array_merge(
+                    MaterialImageLinkService::detailsProcessingError(),
+                    ['sync' => MaterialImageSyncService::stats()]
+                ));
+            }
+            $validMaterialCount = count(array_values(array_filter(array_map(
+                static fn (mixed $value): string => trim((string) $value),
+                $materialGuids
+            ))));
+            if ($addDetails && count($processed) < $validMaterialCount) {
+                materialImagesApiJson(array_merge(
+                    MaterialImageLinkService::detailsProcessingError(),
+                    ['sync' => MaterialImageSyncService::stats()]
+                ));
+            }
+
             $result = MaterialImageLinkService::reassign(
                 $sourceFileName,
                 $amineSourceGuid !== '' ? $amineSourceGuid : $imageGuid,
@@ -291,15 +333,19 @@ if ($method === 'POST') {
                 $processed,
                 $addDetails
             );
+        } catch (Throwable $exception) {
+            $result = MaterialImageLinkService::assignError(
+                'خطأ أثناء الاستبدال: ' . $exception->getMessage()
+            );
         } finally {
             foreach ($processed as $path) {
                 MaterialImageStorageService::deleteTempProcessedFile($path);
             }
         }
-        echo json_encode(array_merge($result, [
+
+        materialImagesApiJson(array_merge($result, [
             'sync' => MaterialImageSyncService::stats(),
-        ]), JSON_UNESCAPED_UNICODE);
-        exit;
+        ]));
     }
 
     if ($action === 'scan-local-init') {

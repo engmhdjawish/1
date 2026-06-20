@@ -74,6 +74,27 @@ declare(strict_types=1);
 <script>
 (() => {
   const API_URL = '/dashboard/material-images-api.php';
+  const API_HEADERS = {
+    Accept: 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
+  };
+
+  async function fetchJson(url, options = {}) {
+    const response = await fetch(url, {
+      ...options,
+      headers: { ...API_HEADERS, ...(options.headers || {}) },
+    });
+    const text = await response.text();
+    if (!text.trim()) {
+      throw new Error('استجابة فارغة من الخادم. تحقق من GD والخط (Tahoma) أو سجل أخطاء PHP.');
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(`استجابة غير صالحة من الخادم: ${text.slice(0, 180)}`);
+    }
+  }
+
   const sourceCards = document.getElementById('sourceCards');
   const sourcePageLabel = document.getElementById('sourcePageLabel');
   const sourcePrevBtn = document.getElementById('sourcePrevBtn');
@@ -246,8 +267,7 @@ declare(strict_types=1);
   }
 
   async function searchMaterials(keyword) {
-    const response = await fetch(`${API_URL}?action=material-search&q=${encodeURIComponent(keyword)}&page_size=40`);
-    const payload = await response.json();
+    const payload = await fetchJson(`${API_URL}?action=material-search&q=${encodeURIComponent(keyword)}&page_size=40`);
     return payload.items || [];
   }
 
@@ -261,8 +281,7 @@ declare(strict_types=1);
         form.append(key, value);
       }
     });
-    const response = await fetch(API_URL, { method: 'POST', body: form });
-    return response.json();
+    return fetchJson(API_URL, { method: 'POST', body: form });
   }
 
   function cardWantsDetails(card) {
@@ -415,8 +434,7 @@ declare(strict_types=1);
       }
     }
 
-    const response = await fetch(API_URL, { method: 'POST', body: form });
-    return response.json();
+    return fetchJson(API_URL, { method: 'POST', body: form });
   }
 
   function handleCardAfterAssign(card, item) {
@@ -745,8 +763,7 @@ declare(strict_types=1);
   async function loadSources(targetPage = 1) {
     const linkFilter = currentLinkFilter();
     const materialQuery = sourceMaterialSearch?.value.trim() || '';
-    const response = await fetch(`${API_URL}?action=link-sources-page&page=${targetPage}&page_size=${pageSize}&link_filter=${encodeURIComponent(linkFilter)}&material_query=${encodeURIComponent(materialQuery)}`);
-    const payload = await response.json();
+    const payload = await fetchJson(`${API_URL}?action=link-sources-page&page=${targetPage}&page_size=${pageSize}&link_filter=${encodeURIComponent(linkFilter)}&material_query=${encodeURIComponent(materialQuery)}`);
     if (!payload.ok) {
       linkStatus.textContent = 'تعذر تحميل الصور.';
       return;
