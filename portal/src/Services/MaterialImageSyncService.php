@@ -103,10 +103,25 @@ final class MaterialImageSyncService
         return $counts;
     }
 
-    /** @return list<array<string, mixed>> */
-    public static function listQueue(int $limit = 80): array
+    /**
+     * @return array{
+     *   items: list<array<string, mixed>>,
+     *   page: int,
+     *   page_size: int,
+     *   total_count: int,
+     *   has_more: bool
+     * }
+     */
+    public static function listQueuePage(int $page = 1, int $pageSize = 20): array
     {
         self::ensureTable();
+        $page = max(1, $page);
+        $pageSize = max(5, min(100, $pageSize));
+        $offset = ($page - 1) * $pageSize;
+
+        $totalStmt = Database::pdo()->query('SELECT COUNT(*)::int FROM material_image_sync_queue');
+        $totalCount = (int) ($totalStmt->fetchColumn() ?: 0);
+
         $stmt = Database::pdo()->prepare(
             'SELECT
                 id::text AS id,
@@ -127,12 +142,26 @@ final class MaterialImageSyncService
                     ELSE 3
                 END,
                 created_at ASC
-             LIMIT :limit'
+             LIMIT :limit OFFSET :offset'
         );
-        $stmt->bindValue('limit', max(1, min(200, $limit)), PDO::PARAM_INT);
+        $stmt->bindValue('limit', $pageSize, PDO::PARAM_INT);
+        $stmt->bindValue('offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
+        $items = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        return [
+            'items' => $items,
+            'page' => $page,
+            'page_size' => $pageSize,
+            'total_count' => $totalCount,
+            'has_more' => ($offset + count($items)) < $totalCount,
+        ];
+    }
+
+    /** @return list<array<string, mixed>> */
+    public static function listQueue(int $limit = 80): array
+    {
+        return self::listQueuePage(1, max(1, min(200, $limit)))['items'];
     }
 
     /** @return array{ok: bool, offline?: bool, done?: bool, message: string, item?: array<string, mixed>} */

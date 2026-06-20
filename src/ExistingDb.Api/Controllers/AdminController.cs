@@ -3,6 +3,7 @@ using ExistingDb.Api.Authorization;
 using ExistingDb.Api.Contracts.Admin;
 using ExistingDb.Api.Data;
 using ExistingDb.Api.Data.Entities;
+using ExistingDb.Api.Images;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,8 +15,25 @@ namespace ExistingDb.Api.Controllers;
 [Route("api/admin")]
 public sealed class AdminController(
     ApiManagementDbContext dbContext,
-    IPasswordHasher passwordHasher) : ControllerBase
+    IPasswordHasher passwordHasher,
+    IServiceSettingsService serviceSettingsService) : ControllerBase
 {
+    [HttpGet("service")]
+    [RequirePermission("admin.permissions.read")]
+    public async Task<ActionResult<ServiceStatusResponse>> GetServiceStatus(CancellationToken cancellationToken)
+    {
+        var settings = await serviceSettingsService.GetAsync(cancellationToken);
+        return Ok(new ServiceStatusResponse(settings.Enabled));
+    }
+
+    [HttpPut("service")]
+    [RequirePermission("admin.roles.manage")]
+    public async Task<IActionResult> UpdateServiceStatus(UpdateServiceStatusRequest request, CancellationToken cancellationToken)
+    {
+        await serviceSettingsService.UpdateAsync(request.Enabled, cancellationToken);
+        return NoContent();
+    }
+
     [HttpGet("users")]
     [RequirePermission("admin.users.manage")]
     public async Task<ActionResult<IReadOnlyCollection<UserResponse>>> GetUsers(CancellationToken cancellationToken)
@@ -104,6 +122,64 @@ public sealed class AdminController(
         return NoContent();
     }
 
+    [HttpPut("users/{userId:guid}")]
+    [RequirePermission("admin.users.manage")]
+    public async Task<ActionResult<UserResponse>> UpdateUser(
+        Guid userId,
+        UpdateUserRequest request,
+        CancellationToken cancellationToken)
+    {
+        var user = await dbContext.Users
+            .Include(apiUser => apiUser.UserRoles)
+            .ThenInclude(userRole => userRole.Role)
+            .SingleOrDefaultAsync(apiUser => apiUser.Id == userId, cancellationToken);
+        if (user is null)
+        {
+            return NotFound();
+        }
+
+        if (request.DisplayName is not null)
+        {
+            user.DisplayName = request.DisplayName.Trim();
+        }
+
+        if (request.Email is not null)
+        {
+            user.Email = request.Email.Trim();
+            user.NormalizedEmail = Normalize(request.Email);
+        }
+
+        if (request.IsActive.HasValue)
+        {
+            user.IsActive = request.IsActive.Value;
+        }
+
+        if (request.RoleIds is not null)
+        {
+            var roleIds = request.RoleIds.Distinct().ToArray();
+            var validRoleCount = await dbContext.Roles.CountAsync(role => roleIds.Contains(role.Id), cancellationToken);
+            if (validRoleCount != roleIds.Length)
+            {
+                return BadRequest(new { message = "One or more role IDs are invalid." });
+            }
+
+            var existingRoles = await dbContext.UserRoles
+                .Where(userRole => userRole.UserId == userId)
+                .ToListAsync(cancellationToken);
+            dbContext.UserRoles.RemoveRange(existingRoles);
+            dbContext.UserRoles.AddRange(roleIds.Select(roleId => new ApiUserRole
+            {
+                UserId = userId,
+                RoleId = roleId,
+            }));
+        }
+
+        user.UpdatedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(ToUserResponse(user));
+    }
+
     [HttpGet("roles")]
     [RequirePermission("admin.permissions.read")]
     public async Task<ActionResult<IReadOnlyCollection<RoleResponse>>> GetRoles(CancellationToken cancellationToken)
@@ -114,6 +190,25 @@ public sealed class AdminController(
             .ToListAsync(cancellationToken);
 
         return Ok(roles);
+    }
+
+    [HttpGet("roles/{roleId:int}/permissions")]
+    [RequirePermission("admin.permissions.read")]
+    public async Task<ActionResult<RolePermissionsResponse>> GetRolePermissions(int roleId, CancellationToken cancellationToken)
+    {
+        var roleExists = await dbContext.Roles.AnyAsync(role => role.Id == roleId, cancellationToken);
+        if (!roleExists)
+        {
+            return NotFound();
+        }
+
+        var permissionIds = await dbContext.RolePermissions
+            .Where(rolePermission => rolePermission.RoleId == roleId)
+            .Select(rolePermission => rolePermission.PermissionId)
+            .OrderBy(id => id)
+            .ToArrayAsync(cancellationToken);
+
+        return Ok(new RolePermissionsResponse(roleId, permissionIds));
     }
 
     [HttpGet("permissions")]

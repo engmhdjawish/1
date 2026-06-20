@@ -34,22 +34,25 @@ if ($method === 'GET') {
     }
 
     if ($action === 'overview') {
+        $queuePage = max(1, (int) ($_GET['queue_page'] ?? 1));
+        $queuePageSize = max(5, min(50, (int) ($_GET['queue_page_size'] ?? 20)));
         echo json_encode([
             'ok' => true,
             'local' => MaterialImageStorageService::stats(),
             'sync' => MaterialImageSyncService::stats(),
             'api' => PortalSettingsService::apiHealth(),
-            'queue' => MaterialImageSyncService::listQueue(60),
+            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
     if ($action === 'queue') {
-        echo json_encode([
-            'ok' => true,
-            'items' => MaterialImageSyncService::listQueue(100),
-            'sync' => MaterialImageSyncService::stats(),
-        ], JSON_UNESCAPED_UNICODE);
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $pageSize = max(5, min(100, (int) ($_GET['page_size'] ?? 20)));
+        echo json_encode(array_merge(
+            ['ok' => true, 'sync' => MaterialImageSyncService::stats()],
+            MaterialImageSyncService::listQueuePage($page, $pageSize)
+        ), JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -82,6 +85,8 @@ if ($method === 'GET') {
 if ($method === 'POST') {
     $action = trim((string) ($_POST['action'] ?? ($_GET['action'] ?? '')));
     $file = is_array($_FILES['file'] ?? null) ? $_FILES['file'] : [];
+    $queuePage = max(1, (int) ($_POST['queue_page'] ?? $_GET['queue_page'] ?? 1));
+    $queuePageSize = max(5, min(50, (int) ($_POST['queue_page_size'] ?? $_GET['queue_page_size'] ?? 20)));
 
     if ($action === '' && $file !== []) {
         $action = 'upload';
@@ -103,7 +108,7 @@ if ($method === 'POST') {
         $result = MaterialImageSyncService::syncNext();
         echo json_encode(array_merge($result, [
             'sync' => MaterialImageSyncService::stats(),
-            'queue' => MaterialImageSyncService::listQueue(60),
+            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
         ]), JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -114,7 +119,7 @@ if ($method === 'POST') {
             'ok' => true,
             'message' => $count > 0 ? ('أُعيدت ' . $count . ' صورة للانتظار.') : 'لا توجد صور فاشلة.',
             'sync' => MaterialImageSyncService::stats(),
-            'queue' => MaterialImageSyncService::listQueue(60),
+            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -126,7 +131,7 @@ if ($method === 'POST') {
             'message' => 'أُضيف ' . $scan['added'] . ' ملف للطابور، وتُخطّى ' . $scan['skipped'] . '.',
             'scan' => $scan,
             'sync' => MaterialImageSyncService::stats(),
-            'queue' => MaterialImageSyncService::listQueue(60),
+            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }

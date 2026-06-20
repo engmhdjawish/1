@@ -26,20 +26,20 @@ public sealed class MaterialImagesController(
     public async Task<ActionResult<ImageSettingsResponse>> GetSettings(CancellationToken cancellationToken)
     {
         var settings = await imageSettingsService.GetAsync(cancellationToken);
-        return Ok(new ImageSettingsResponse(settings.ImagesDirectory, settings.ThumbnailsDirectory));
+        return Ok(new ImageSettingsResponse(settings.ImagesDirectory));
     }
 
     [HttpPut("settings")]
     [RequirePermission("materials.update")]
     public async Task<IActionResult> UpdateSettings(ImageSettingsRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.ImagesDirectory) || string.IsNullOrWhiteSpace(request.ThumbnailsDirectory))
+        if (string.IsNullOrWhiteSpace(request.ImagesDirectory))
         {
-            return BadRequest(new { message = "Image and thumbnail directories are required." });
+            return BadRequest(new { message = "Images directory is required." });
         }
 
         await imageSettingsService.UpdateAsync(
-            new ImageStorageSettings(request.ImagesDirectory.Trim(), request.ThumbnailsDirectory.Trim()),
+            new ImageStorageSettings(request.ImagesDirectory.Trim()),
             cancellationToken);
 
         return NoContent();
@@ -126,25 +126,8 @@ public sealed class MaterialImagesController(
 
     [HttpGet("{id:guid}/thumbnail")]
     [RequirePermission("materials.read")]
-    public async Task<IActionResult> GetThumbnail(Guid id, CancellationToken cancellationToken)
-    {
-        var image = await mainDbContext.MaterialImages
-            .AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Guid == id, cancellationToken);
-        if (image is null)
-        {
-            return NotFound();
-        }
-
-        var settings = await imageSettingsService.GetAsync(cancellationToken);
-        var thumbnailPath = ResolveExistingImagePath(Path.GetFileName(image.Name), settings.ThumbnailsDirectory);
-        if (string.IsNullOrWhiteSpace(thumbnailPath) || !System.IO.File.Exists(thumbnailPath))
-        {
-            return NotFound();
-        }
-
-        return PhysicalFile(thumbnailPath, GetContentType(thumbnailPath), Path.GetFileName(thumbnailPath));
-    }
+    public Task<IActionResult> GetThumbnail(Guid id, CancellationToken cancellationToken) =>
+        GetImageFile(id, cancellationToken);
 
     [HttpPost]
     [RequirePermission("materials.update")]
@@ -180,7 +163,7 @@ public sealed class MaterialImagesController(
         }
 
         var createdImages = new List<MaterialImageRecord>(files.Count);
-        var savedFiles = new List<(string ImagePath, string? ThumbnailPath)>(files.Count);
+        var savedFiles = new List<string>(files.Count);
         foreach (var file in files)
         {
             StoredImageFile storedFile;
@@ -192,13 +175,13 @@ public sealed class MaterialImagesController(
             {
                 foreach (var savedFile in savedFiles)
                 {
-                    imageStorageService.DeleteFiles(savedFile.ImagePath, savedFile.ThumbnailPath);
+                    imageStorageService.DeleteFile(savedFile);
                 }
 
                 return BadRequest(new { message = exception.Message, fileName = file.FileName });
             }
 
-            savedFiles.Add((storedFile.ImagePath, storedFile.ThumbnailPath));
+            savedFiles.Add(storedFile.ImagePath);
             var image = new MaterialImageRecord
             {
                 Guid = Guid.NewGuid(),
@@ -217,7 +200,7 @@ public sealed class MaterialImagesController(
         {
             foreach (var savedFile in savedFiles)
             {
-                imageStorageService.DeleteFiles(savedFile.ImagePath, savedFile.ThumbnailPath);
+                imageStorageService.DeleteFile(savedFile);
             }
 
             throw;
@@ -354,8 +337,7 @@ public sealed class MaterialImagesController(
 
         var settings = await imageSettingsService.GetAsync(cancellationToken);
         var imagePath = ResolveImagePath(image.Name, settings.ImagesDirectory);
-        var thumbnailPath = ResolveThumbnailPath(image.Name, settings.ThumbnailsDirectory);
-        imageStorageService.DeleteFiles(imagePath, thumbnailPath);
+        imageStorageService.DeleteFile(imagePath);
 
         return NoContent();
     }
@@ -676,8 +658,6 @@ public sealed class MaterialImagesController(
     {
         var imagePath = ResolveExistingImagePath(image.Name, settings.ImagesDirectory)
             ?? ResolveImagePath(image.Name, settings.ImagesDirectory);
-        var thumbnailPath = ResolveExistingThumbnailPath(image.Name, settings.ThumbnailsDirectory)
-            ?? ResolveThumbnailPath(image.Name, settings.ThumbnailsDirectory);
         var imageExists = System.IO.File.Exists(imagePath);
         var storedFileName = ExtractFileName(image.Name) ?? Path.GetFileName(imagePath);
         var createdAt = imageExists
@@ -690,7 +670,7 @@ public sealed class MaterialImagesController(
         return new MaterialImageResponse(
             image.Guid,
             imagePath,
-            System.IO.File.Exists(thumbnailPath) ? thumbnailPath : null,
+            null,
             storedFileName,
             storedFileName,
             GetContentType(string.IsNullOrWhiteSpace(imagePath) ? storedFileName : imagePath),
@@ -812,18 +792,6 @@ public sealed class MaterialImagesController(
         return candidates.FirstOrDefault(System.IO.File.Exists);
     }
 
-    private static string? ResolveExistingThumbnailPath(string? name, string thumbnailsDirectory)
-    {
-        var fileName = ExtractFileName(name);
-        if (!string.IsNullOrWhiteSpace(fileName))
-        {
-            var candidate = Path.GetFullPath(Path.Combine(thumbnailsDirectory, fileName));
-            return System.IO.File.Exists(candidate) ? candidate : null;
-        }
-
-        return null;
-    }
-
     private static IReadOnlyCollection<string> BuildImagePathCandidates(string? name, string imagesDirectory)
     {
         var fileName = ExtractFileName(name);
@@ -848,17 +816,6 @@ public sealed class MaterialImagesController(
         return lastSeparator >= 0
             ? normalized[(lastSeparator + 1)..]
             : normalized;
-    }
-
-    private static string ResolveThumbnailPath(string? name, string thumbnailsDirectory)
-    {
-        var fileName = ExtractFileName(name);
-        if (string.IsNullOrWhiteSpace(fileName))
-        {
-            return string.Empty;
-        }
-
-        return Path.GetFullPath(Path.Combine(thumbnailsDirectory, fileName));
     }
 
     private static string GetContentType(string path)

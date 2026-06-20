@@ -20,6 +20,11 @@ final class ApiClient
         return self::request('POST', $path, json_encode($body, JSON_UNESCAPED_UNICODE));
     }
 
+    public static function putJson(string $path, array $body = []): array
+    {
+        return self::request('PUT', $path, json_encode($body, JSON_UNESCAPED_UNICODE));
+    }
+
     /**
      * @param array<string, string> $fields
      * @param list<array{name?: string, path?: string, mime?: string, filename?: string}> $files

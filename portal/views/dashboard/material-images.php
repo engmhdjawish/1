@@ -7,6 +7,7 @@ declare(strict_types=1);
 /** @var array{pending: int, syncing: int, synced: int, failed: int, total: int} $syncStats */
 /** @var array{base_url: string, ok: bool, status: int, message: string} $apiHealth */
 /** @var list<array<string, mixed>> $queue */
+/** @var array{items: list<array<string, mixed>>, page: int, page_size: int, total_count: int, has_more: bool} $queuePage */
 /** @var array<string, mixed> $materialFilterOptions */
 /** @var string|null $materialFilterOptionsError */
 /** @var string|null $flash */
@@ -17,7 +18,8 @@ $paths = is_array($paths ?? null) ? $paths : ['images_dir' => '', 'thumbnails_di
 $stats = is_array($stats ?? null) ? $stats : ['local_count' => 0, 'thumbnail_count' => 0];
 $syncStats = is_array($syncStats ?? null) ? $syncStats : ['pending' => 0, 'syncing' => 0, 'synced' => 0, 'failed' => 0, 'total' => 0];
 $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'message' => ''];
-$queue = is_array($queue ?? null) ? $queue : [];
+$queuePage = is_array($queuePage ?? null) ? $queuePage : ['items' => [], 'page' => 1, 'page_size' => 20, 'total_count' => 0, 'has_more' => false];
+$queue = is_array($queue ?? null) ? $queue : ($queuePage['items'] ?? []);
 $materialFilterOptions = is_array($materialFilterOptions ?? null) ? $materialFilterOptions : [];
 $settingsForm = is_array($settingsForm ?? null) ? $settingsForm : [];
 $statusLabels = [
@@ -138,7 +140,7 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
 <article class="rounded-xl border border-border-subtle bg-white overflow-hidden mb-6">
   <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60 flex items-center justify-between">
     <h2 class="font-bold">طابور المزامنة مع الأمين</h2>
-    <span class="text-xs text-text-muted" id="syncQueueSummary"><?= (int) ($syncStats['total'] ?? 0) ?> عنصر</span>
+    <span class="text-xs text-text-muted" id="syncQueueSummary"><?= (int) ($queuePage['total_count'] ?? $syncStats['total'] ?? 0) ?> عنصر</span>
   </div>
   <div class="overflow-auto">
     <table class="w-full text-sm min-w-[720px]">
@@ -165,6 +167,11 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
         <?php endforeach; ?>
       </tbody>
     </table>
+  </div>
+  <div id="syncQueuePagination" class="px-4 py-3 border-t border-border-subtle bg-surface-low/40 flex items-center justify-between gap-2">
+    <button type="button" id="syncQueuePrevBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold disabled:opacity-40" disabled>السابق</button>
+    <span class="text-xs text-text-muted" id="syncQueuePageLabel">صفحة 1</span>
+    <button type="button" id="syncQueueNextBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold disabled:opacity-40" disabled>التالي</button>
   </div>
 </article>
 
@@ -331,11 +338,19 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   const syncStatus = document.getElementById('syncStatus');
   const syncQueueBody = document.getElementById('syncQueueBody');
   const syncQueueSummary = document.getElementById('syncQueueSummary');
+  const syncQueuePagination = document.getElementById('syncQueuePagination');
+  const syncQueuePrevBtn = document.getElementById('syncQueuePrevBtn');
+  const syncQueueNextBtn = document.getElementById('syncQueueNextBtn');
+  const syncQueuePageLabel = document.getElementById('syncQueuePageLabel');
   const statusLabels = <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE) ?>;
 
   let syncRunning = false;
   let syncPaused = false;
   let autoSyncAfterUpload = true;
+  let syncQueuePage = <?= (int) ($queuePage['page'] ?? 1) ?>;
+  let syncQueuePageSize = <?= (int) ($queuePage['page_size'] ?? 20) ?>;
+  let syncQueueHasMore = <?= !empty($queuePage['has_more']) ? 'true' : 'false' ?>;
+  let syncQueueTotalCount = <?= (int) ($queuePage['total_count'] ?? 0) ?>;
 
   let queue = null;
   let browsePage = 1;
@@ -747,12 +762,46 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
         ? 'API الأمين: <strong class="text-status-active">متصل</strong>'
         : 'API الأمين: <strong class="text-status-rejected">غير متصل</strong>';
     }
-    renderSyncQueue(data.queue || [], data.sync || {});
+    renderSyncQueue(data.queue || {}, data.sync || {});
   }
 
-  function renderSyncQueue(items, sync) {
+  function normalizeQueuePayload(queuePayload) {
+    if (Array.isArray(queuePayload)) {
+      return {
+        items: queuePayload,
+        page: syncQueuePage,
+        page_size: syncQueuePageSize,
+        total_count: queuePayload.length,
+        has_more: false,
+      };
+    }
+    return {
+      items: queuePayload?.items || [],
+      page: queuePayload?.page || syncQueuePage,
+      page_size: queuePayload?.page_size || syncQueuePageSize,
+      total_count: queuePayload?.total_count ?? (queuePayload?.items?.length || 0),
+      has_more: !!queuePayload?.has_more,
+    };
+  }
+
+  function updateSyncQueuePagination(meta) {
+    syncQueuePage = meta.page;
+    syncQueuePageSize = meta.page_size;
+    syncQueueTotalCount = meta.total_count;
+    syncQueueHasMore = meta.has_more;
+    if (syncQueuePageLabel) {
+      syncQueuePageLabel.textContent = `صفحة ${syncQueuePage} — ${syncQueueTotalCount} عنصر`;
+    }
+    if (syncQueuePrevBtn) syncQueuePrevBtn.disabled = syncQueuePage <= 1;
+    if (syncQueueNextBtn) syncQueueNextBtn.disabled = !syncQueueHasMore;
+  }
+
+  function renderSyncQueue(queuePayload, sync) {
     if (!syncQueueSummary || !syncQueueBody) return;
-    syncQueueSummary.textContent = `${sync?.total ?? items.length} عنصر`;
+    const meta = normalizeQueuePayload(queuePayload);
+    const items = meta.items;
+    updateSyncQueuePagination(meta);
+    syncQueueSummary.textContent = `${syncQueueTotalCount} عنصر`;
     if (!items.length) {
       syncQueueBody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-text-muted">الطابور فارغ.</td></tr>';
       return;
@@ -771,7 +820,7 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
 
   async function refreshOverview() {
     try {
-      const response = await fetch(`${API_URL}?action=overview`);
+      const response = await fetch(`${API_URL}?action=overview&queue_page=${syncQueuePage}&queue_page_size=${syncQueuePageSize}`);
       const payload = await response.json();
       if (payload.ok) {
         renderSyncOverview(payload);
@@ -782,9 +831,25 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     }
   }
 
+  async function loadSyncQueuePage(page) {
+    syncQueuePage = Math.max(1, page);
+    try {
+      const response = await fetch(`${API_URL}?action=queue&page=${syncQueuePage}&page_size=${syncQueuePageSize}`);
+      const payload = await response.json();
+      if (payload.ok) {
+        renderSyncQueue(payload, payload.sync || {});
+      }
+      return payload;
+    } catch {
+      return { ok: false };
+    }
+  }
+
   async function syncNextOnce() {
     const form = new FormData();
     form.append('action', 'sync-next');
+    form.append('queue_page', String(syncQueuePage));
+    form.append('queue_page_size', String(syncQueuePageSize));
     const res = await fetch(API_URL, { method: 'POST', body: form });
     return res.json();
   }
@@ -813,7 +878,7 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
       }
 
       if (result.queue || result.sync) {
-        renderSyncQueue(result.queue || [], result.sync || {});
+        renderSyncQueue(result.queue || {}, result.sync || {});
         renderSyncOverview({ sync: result.sync, api: { ok: !result.offline }, queue: result.queue });
       }
 
@@ -996,6 +1061,8 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   retryFailedBtn?.addEventListener('click', async () => {
     const form = new FormData();
     form.append('action', 'retry-failed');
+    form.append('queue_page', String(syncQueuePage));
+    form.append('queue_page_size', String(syncQueuePageSize));
     const res = await fetch(API_URL, { method: 'POST', body: form });
     const data = await res.json();
     if (syncStatus) syncStatus.textContent = data.message || '';
@@ -1005,11 +1072,28 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   scanLocalBtn?.addEventListener('click', async () => {
     const form = new FormData();
     form.append('action', 'scan-local');
+    form.append('queue_page', String(syncQueuePage));
+    form.append('queue_page_size', String(syncQueuePageSize));
     const res = await fetch(API_URL, { method: 'POST', body: form });
     const data = await res.json();
     if (syncStatus) syncStatus.textContent = data.message || '';
     await refreshOverview();
   });
+
+  syncQueuePrevBtn?.addEventListener('click', () => {
+    if (syncQueuePage > 1) loadSyncQueuePage(syncQueuePage - 1);
+  });
+  syncQueueNextBtn?.addEventListener('click', () => {
+    if (syncQueueHasMore) loadSyncQueuePage(syncQueuePage + 1);
+  });
+
+  updateSyncQueuePagination(normalizeQueuePayload({
+    items: <?= json_encode($queue, JSON_UNESCAPED_UNICODE) ?>,
+    page: <?= (int) ($queuePage['page'] ?? 1) ?>,
+    page_size: <?= (int) ($queuePage['page_size'] ?? 20) ?>,
+    total_count: <?= (int) ($queuePage['total_count'] ?? 0) ?>,
+    has_more: <?= !empty($queuePage['has_more']) ? 'true' : 'false' ?>,
+  }));
 
   restoreQueueFromStorage();
   refreshOverview();

@@ -23,6 +23,7 @@ final class DashboardNavigation
     /** @var list<string> */
     private const CONFIGURATION_ROUTES = [
         '/dashboard/configuration.php',
+        '/dashboard/amine-api.php',
         '/dashboard/home-sections.php',
         '/dashboard/material-images.php',
         '/dashboard/users.php',
@@ -248,6 +249,13 @@ final class DashboardNavigation
                     'icon' => 'settings',
                     'permission' => null,
                     'description' => 'بيانات الشركة، سياسات الوصول، وإعدادات ربط الأمين.',
+                ],
+                [
+                    'route' => '/dashboard/amine-api.php',
+                    'label' => 'إدارة API الأمين',
+                    'icon' => 'dns',
+                    'permission' => 'company_settings.manage',
+                    'description' => 'حالة الخدمة، مسار صور الأمين، حسابات API، والصلاحيات.',
                 ],
             ],
         ];
