@@ -892,6 +892,15 @@ final class MaterialImageSyncService
         ];
     }
 
+    /**
+     * @param list<array{file_name: string, fingerprint: ?array{size_bytes: int, sha256: string}}> $candidates
+     * @return array<string, array<string, mixed>>
+     */
+    public static function lookupFilesOnAmine(array $candidates): array
+    {
+        return self::lookupOnAmineBatch($candidates);
+    }
+
     /** @return array<string, mixed>|null */
     private static function lookupOnAmine(string $fileName): ?array
     {

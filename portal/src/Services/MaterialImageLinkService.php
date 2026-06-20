@@ -17,7 +17,7 @@ final class MaterialImageLinkService
     public static function listSources(): array
     {
         MaterialImageSyncService::ensureTable();
-        $queueByFile = self::syncedQueueByFileName();
+        $queueByFile = self::queueByFileName();
 
         $sources = [];
         foreach (MaterialImageStorageService::listLocalFiles() as $file) {
@@ -27,13 +27,15 @@ final class MaterialImageLinkService
             }
 
             $queue = $queueByFile[$fileName] ?? null;
+            $amineGuid = trim((string) ($queue['amine_image_guid'] ?? ''));
             $sources[] = [
                 'file_name' => $fileName,
                 'local_path' => (string) ($file['local_path'] ?? ''),
+                'local_sha256' => strtolower(trim((string) ($queue['local_sha256'] ?? ''))),
                 'preview_url' => (string) ($file['preview_thumb_url'] ?? $file['preview_url'] ?? ''),
-                'amine_image_guid' => (string) ($queue['amine_image_guid'] ?? ''),
+                'amine_image_guid' => $amineGuid,
                 'is_synced' => (string) ($queue['sync_status'] ?? '') === 'synced'
-                    && trim((string) ($queue['amine_image_guid'] ?? '')) !== '',
+                    && ($amineGuid !== '' || trim((string) ($queue['local_sha256'] ?? '')) !== ''),
             ];
         }
 
@@ -57,27 +59,30 @@ final class MaterialImageLinkService
     ): array
     {
         $all = self::listSources();
-        $all = self::enrichLinkState($all);
+        $all = self::applyLinkHints($all);
         $materialQuery = trim($materialQuery);
+        $materialContext = $materialQuery !== '' ? self::materialSearchContext($materialQuery) : [];
+
         if ($linkFilter === 'linked') {
-            $all = array_values(array_filter($all, static fn (array $item): bool => !empty($item['is_linked_to_material'])));
+            $all = array_values(array_filter($all, static fn (array $item): bool => !empty($item['link_hint'])));
         } elseif ($linkFilter === 'unlinked') {
-            $all = array_values(array_filter($all, static fn (array $item): bool => empty($item['is_linked_to_material'])));
+            $all = array_values(array_filter($all, static fn (array $item): bool => empty($item['link_hint'])));
         }
+
         if ($materialQuery !== '') {
             $needle = Text::lower($materialQuery);
-            $all = array_values(array_filter($all, static function (array $item) use ($needle): bool {
-                $name = Text::lower((string) ($item['linked_material_name'] ?? ''));
-                $code = Text::lower((string) ($item['linked_material_code'] ?? ''));
-
-                return str_contains($name, $needle) || str_contains($code, $needle);
-            }));
+            $all = array_values(array_filter(
+                $all,
+                static fn (array $item): bool => self::matchesMaterialQuery($item, $needle, $materialContext)
+            ));
         }
+
         $page = max(1, $page);
         $pageSize = max(6, min(60, $pageSize));
         $totalCount = count($all);
         $offset = ($page - 1) * $pageSize;
         $items = array_slice($all, $offset, $pageSize);
+        $items = self::enrichLinkState($items);
 
         return [
             'items' => $items,
@@ -92,45 +97,273 @@ final class MaterialImageLinkService
      * @param list<array<string, mixed>> $items
      * @return list<array<string, mixed>>
      */
-    private static function enrichLinkState(array $items): array
+    private static function applyLinkHints(array $items): array
     {
+        $shaIndex = self::queueSha256Index();
         foreach ($items as $index => $item) {
-            $amineGuid = trim((string) ($item['amine_image_guid'] ?? ''));
-            $items[$index]['is_linked_to_material'] = false;
-            $items[$index]['linked_material_guid'] = '';
-            $items[$index]['linked_material_name'] = '';
-            $items[$index]['linked_material_code'] = '';
-            if ($amineGuid === '') {
+            $fileName = (string) ($item['file_name'] ?? '');
+            $sha = strtolower(trim((string) ($item['local_sha256'] ?? '')));
+            $items[$index]['link_hint'] = false;
+            if ($fileName === '' || $sha === '') {
                 continue;
             }
 
-            try {
-                $response = ApiClient::get('/api/material-images/' . rawurlencode($amineGuid));
-                if (!($response['ok'] ?? false)) {
+            foreach ($shaIndex[$sha] ?? [] as $row) {
+                $relatedName = (string) ($row['file_name'] ?? '');
+                if ($relatedName === '' || strcasecmp($relatedName, $fileName) === 0) {
                     continue;
                 }
-                $data = is_array($response['data'] ?? null) ? $response['data'] : [];
-                $materialGuid = trim((string) ($data['materialGuid'] ?? $data['MaterialGuid'] ?? ''));
-                if ($materialGuid !== '') {
-                    $items[$index]['is_linked_to_material'] = true;
-                    $items[$index]['linked_material_guid'] = $materialGuid;
-                    try {
-                        $materialResponse = ApiClient::get('/api/materials/' . rawurlencode($materialGuid));
-                        if ($materialResponse['ok'] ?? false) {
-                            $materialData = is_array($materialResponse['data'] ?? null) ? $materialResponse['data'] : [];
-                            $items[$index]['linked_material_name'] = trim((string) ($materialData['name'] ?? $materialData['Name'] ?? ''));
-                            $items[$index]['linked_material_code'] = trim((string) ($materialData['materialCode'] ?? $materialData['MaterialCode'] ?? ''));
-                        }
-                    } catch (Throwable) {
-                        // ignore material metadata fetch failure
-                    }
+                if (trim((string) ($row['amine_image_guid'] ?? '')) !== '') {
+                    $items[$index]['link_hint'] = true;
+                    break;
                 }
-            } catch (Throwable) {
-                continue;
             }
         }
 
         return $items;
+    }
+
+    /**
+     * @return list<array{material_guid: string, name: string, code: string, image_guid: string, stored_file_name: string}>
+     */
+    private static function materialSearchContext(string $query): array
+    {
+        try {
+            $response = MaterialImageStorageService::browseMaterials([
+                'page' => 1,
+                'page_size' => 48,
+                'search' => $query,
+                'has_image' => '',
+                'local_status' => 'all',
+            ]);
+        } catch (Throwable) {
+            return [];
+        }
+
+        if (!($response['ok'] ?? false)) {
+            return [];
+        }
+
+        $context = [];
+        foreach ($response['items'] ?? [] as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $materialGuid = trim((string) ($row['material_guid'] ?? ''));
+            $imageGuid = trim((string) ($row['image_guid'] ?? ''));
+            if ($materialGuid === '') {
+                continue;
+            }
+
+            $storedFileName = trim((string) ($row['stored_file_name'] ?? ''));
+            if ($storedFileName === '' && $imageGuid !== '') {
+                $storedFileName = self::storedFileNameForImageGuid($imageGuid);
+            }
+
+            $context[] = [
+                'material_guid' => $materialGuid,
+                'name' => trim((string) ($row['name'] ?? '')),
+                'code' => trim((string) ($row['material_code'] ?? '')),
+                'image_guid' => $imageGuid,
+                'stored_file_name' => $storedFileName,
+            ];
+        }
+
+        return $context;
+    }
+
+    /**
+     * @param list<array{material_guid: string, name: string, code: string, image_guid: string, stored_file_name: string}> $context
+     */
+    private static function matchesMaterialQuery(array $item, string $needle, array $context): bool
+    {
+        foreach ($context as $material) {
+            $name = Text::lower((string) ($material['name'] ?? ''));
+            $code = Text::lower((string) ($material['code'] ?? ''));
+            if (!str_contains($name, $needle) && !str_contains($code, $needle)) {
+                continue;
+            }
+
+            $sourceName = strtolower((string) ($item['file_name'] ?? ''));
+            $storedFileName = strtolower((string) ($material['stored_file_name'] ?? ''));
+            if ($storedFileName !== '' && $storedFileName === $sourceName) {
+                return true;
+            }
+
+            $sourceSha = strtolower(trim((string) ($item['local_sha256'] ?? '')));
+            if ($sourceSha !== '' && $storedFileName !== '') {
+                $queue = self::queueByFileName();
+                $relatedSha = strtolower(trim((string) ($queue[$storedFileName]['local_sha256'] ?? '')));
+                if ($relatedSha !== '' && $relatedSha === $sourceSha) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $items
+     * @return list<array<string, mixed>>
+     */
+    private static function enrichLinkState(array $items): array
+    {
+        if ($items === []) {
+            return [];
+        }
+
+        $queueByFile = self::queueByFileName();
+        $shaIndex = self::queueSha256Index();
+        $lookupCandidates = [];
+        foreach ($items as $item) {
+            $fileName = (string) ($item['file_name'] ?? '');
+            if ($fileName === '') {
+                continue;
+            }
+
+            $fingerprint = null;
+            $sha = strtolower(trim((string) ($item['local_sha256'] ?? '')));
+            if ($sha !== '') {
+                $size = (int) ($queueByFile[$fileName]['local_size_bytes'] ?? 0);
+                $fingerprint = ['size_bytes' => $size, 'sha256' => $sha];
+            } else {
+                $localPath = (string) ($item['local_path'] ?? '');
+                if ($localPath !== '' && is_file($localPath)) {
+                    $fingerprint = MaterialImageSyncService::fileFingerprint($localPath);
+                }
+            }
+
+            $lookupCandidates[] = ['file_name' => $fileName, 'fingerprint' => $fingerprint];
+        }
+
+        $amineLookups = MaterialImageSyncService::lookupFilesOnAmine($lookupCandidates);
+        $materialByImageGuid = [];
+
+        foreach ($items as $index => $item) {
+            $fileName = (string) ($item['file_name'] ?? '');
+            $items[$index]['is_linked_to_material'] = false;
+            $items[$index]['linked_material_guid'] = '';
+            $items[$index]['linked_material_name'] = '';
+            $items[$index]['linked_material_code'] = '';
+            $items[$index]['linked_material_count'] = 0;
+            $items[$index]['linked_materials'] = [];
+
+            if ($fileName === '') {
+                continue;
+            }
+
+            $candidateGuids = [];
+            $queueGuid = trim((string) ($item['amine_image_guid'] ?? ''));
+            if ($queueGuid !== '') {
+                $candidateGuids[] = $queueGuid;
+            }
+
+            $lookup = $amineLookups[self::lookupKey($fileName)] ?? null;
+            $lookupGuid = trim((string) ($lookup['id'] ?? ''));
+            if ($lookupGuid !== '') {
+                $candidateGuids[] = $lookupGuid;
+                $items[$index]['amine_image_guid'] = $lookupGuid;
+            }
+
+            $sha = strtolower(trim((string) ($item['local_sha256'] ?? '')));
+            if ($sha === '') {
+                $localPath = (string) ($item['local_path'] ?? '');
+                if ($localPath !== '' && is_file($localPath)) {
+                    $fp = MaterialImageSyncService::fileFingerprint($localPath);
+                    $sha = strtolower((string) ($fp['sha256'] ?? ''));
+                }
+            }
+
+            foreach ($shaIndex[$sha] ?? [] as $row) {
+                $relatedGuid = trim((string) ($row['amine_image_guid'] ?? ''));
+                if ($relatedGuid !== '') {
+                    $candidateGuids[] = $relatedGuid;
+                }
+            }
+
+            $linkedMaterials = [];
+            foreach (array_values(array_unique($candidateGuids)) as $imageGuid) {
+                $material = $materialByImageGuid[$imageGuid] ?? self::materialLinkedToImageGuid($imageGuid);
+                $materialByImageGuid[$imageGuid] = $material;
+                if ($material === null) {
+                    continue;
+                }
+
+                $materialGuid = (string) ($material['material_guid'] ?? '');
+                if ($materialGuid === '' || isset($linkedMaterials[$materialGuid])) {
+                    continue;
+                }
+
+                $linkedMaterials[$materialGuid] = $material;
+            }
+
+            if ($linkedMaterials === []) {
+                continue;
+            }
+
+            $linkedList = array_values($linkedMaterials);
+            $first = $linkedList[0];
+            $items[$index]['is_linked_to_material'] = true;
+            $items[$index]['link_hint'] = true;
+            $items[$index]['linked_material_guid'] = (string) ($first['material_guid'] ?? '');
+            $items[$index]['linked_material_name'] = (string) ($first['name'] ?? '');
+            $items[$index]['linked_material_code'] = (string) ($first['code'] ?? '');
+            $items[$index]['linked_material_count'] = count($linkedList);
+            $items[$index]['linked_materials'] = $linkedList;
+        }
+
+        return $items;
+    }
+
+    /** @return array{material_guid: string, name: string, code: string}|null */
+    private static function materialLinkedToImageGuid(string $imageGuid): ?array
+    {
+        try {
+            $response = ApiClient::get('/api/material-images/' . rawurlencode($imageGuid));
+            if (!($response['ok'] ?? false)) {
+                return null;
+            }
+
+            $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+            $materialGuid = trim((string) ($data['materialGuid'] ?? $data['MaterialGuid'] ?? ''));
+            if ($materialGuid === '') {
+                return null;
+            }
+
+            $material = self::fetchMaterial($materialGuid);
+            if ($material === null) {
+                return [
+                    'material_guid' => $materialGuid,
+                    'name' => '',
+                    'code' => '',
+                ];
+            }
+
+            return [
+                'material_guid' => $materialGuid,
+                'name' => (string) ($material['name'] ?? ''),
+                'code' => (string) ($material['material_code'] ?? ''),
+            ];
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private static function storedFileNameForImageGuid(string $imageGuid): string
+    {
+        try {
+            $response = ApiClient::get('/api/material-images/' . rawurlencode($imageGuid));
+            if (!($response['ok'] ?? false)) {
+                return '';
+            }
+
+            $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+
+            return trim((string) ($data['storedFileName'] ?? $data['StoredFileName'] ?? ''));
+        } catch (Throwable) {
+            return '';
+        }
     }
 
     /**
@@ -168,20 +401,65 @@ final class MaterialImageLinkService
             return self::assignError('الأمين غير متصل.');
         }
 
-        $settings = MaterialImageStorageService::settings();
         $sourcePath = MaterialImageStorageService::resolveLocalPath($sourceFileName, false);
         if ($sourcePath === null || !is_file($sourcePath)) {
             return self::assignError('الصورة الأساسية غير موجودة على الموقع.');
         }
 
-        $queueRow = self::queueRowByFileName($sourceFileName);
-        $amineSourceGuid = trim((string) ($queueRow['amine_image_guid'] ?? ''));
-
+        $amineSourceGuid = self::resolveAmineSourceGuid($sourceFileName, $sourcePath);
         if ($amineSourceGuid !== '') {
-            return self::assignViaAmine($sourcePath, $sourceFileName, $amineSourceGuid, $materialGuids, $uploadedByUserId);
+            $amineResult = self::assignViaAmine(
+                $sourcePath,
+                $sourceFileName,
+                $amineSourceGuid,
+                $materialGuids,
+                $uploadedByUserId
+            );
+            if (($amineResult['linked'] ?? 0) > 0) {
+                return $amineResult;
+            }
+
+            $uploadResult = self::assignViaUpload($sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId);
+            if (($uploadResult['linked'] ?? 0) > 0) {
+                return $uploadResult;
+            }
+
+            return self::combineAssignFailures($amineResult, $uploadResult);
         }
 
         return self::assignViaUpload($sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId);
+    }
+
+    private static function resolveAmineSourceGuid(string $fileName, string $sourcePath): string
+    {
+        $queueRow = self::queueRowByFileName($fileName);
+        $queueGuid = trim((string) ($queueRow['amine_image_guid'] ?? ''));
+        if ($queueGuid !== '' && self::imageGuidExistsOnAmine($queueGuid)) {
+            return $queueGuid;
+        }
+
+        $fingerprint = MaterialImageSyncService::fileFingerprint($sourcePath);
+        $lookup = MaterialImageSyncService::lookupFilesOnAmine([
+            ['file_name' => $fileName, 'fingerprint' => $fingerprint],
+        ]);
+        $found = $lookup[self::lookupKey($fileName)] ?? null;
+        $lookupGuid = trim((string) ($found['id'] ?? ''));
+        if ($lookupGuid !== '' && self::imageGuidExistsOnAmine($lookupGuid)) {
+            return $lookupGuid;
+        }
+
+        return '';
+    }
+
+    private static function imageGuidExistsOnAmine(string $imageGuid): bool
+    {
+        try {
+            $response = ApiClient::get('/api/material-images/' . rawurlencode($imageGuid));
+
+            return (bool) ($response['ok'] ?? false);
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**
@@ -213,6 +491,10 @@ final class MaterialImageLinkService
 
         $data = is_array($response['data'] ?? null) ? $response['data'] : [];
         $items = is_array($data['items'] ?? null) ? $data['items'] : (is_array($data['Items'] ?? null) ? $data['Items'] : []);
+        if ($items === []) {
+            return self::assignError('لم يُرجع API الأمين أي نتائج ربط للصورة «' . $sourceFileName . '».');
+        }
+
         $linked = 0;
         $failed = 0;
         $results = [];
@@ -229,6 +511,13 @@ final class MaterialImageLinkService
             $storedFileName = trim((string) ($item['storedFileName'] ?? $item['StoredFileName'] ?? ''));
             if ($materialGuid === '' || $imageGuid === '' || $storedFileName === '') {
                 $failed++;
+                $results[] = [
+                    'material_guid' => $materialGuid,
+                    'material_name' => $materialName,
+                    'material_code' => $materialCode,
+                    'ok' => false,
+                    'message' => 'استجابة API ناقصة لإحدى المواد.',
+                ];
                 continue;
             }
 
@@ -271,7 +560,7 @@ final class MaterialImageLinkService
             'ok' => $linked > 0,
             'message' => $linked > 0
                 ? ('تم ربط ' . $linked . ' مادة من الصورة «' . $sourceFileName . '».')
-                : 'لم يُربط أي مادة.',
+                : self::formatAssignFailureMessage($results, $sourceFileName),
             'linked' => $linked,
             'failed' => $failed,
             'items' => $results,
@@ -305,13 +594,14 @@ final class MaterialImageLinkService
                 continue;
             }
 
-            $targetFileName = self::buildTargetFileName($material, $extension !== '' ? $extension : '.jpg');
+            $targetFileName = self::buildTargetFileName($material, $extension !== '' ? '.' . $extension : '.jpg');
             $copy = MaterialImageStorageService::copyLocalFromSource($sourcePath, $targetFileName);
             if (!($copy['ok'] ?? false)) {
                 $failed++;
                 $results[] = [
                     'material_guid' => $materialGuid,
                     'material_name' => (string) ($material['name'] ?? ''),
+                    'material_code' => (string) ($material['material_code'] ?? ''),
                     'ok' => false,
                     'message' => (string) ($copy['message'] ?? 'فشل النسخ المحلي.'),
                 ];
@@ -335,6 +625,7 @@ final class MaterialImageLinkService
                 $results[] = [
                     'material_guid' => $materialGuid,
                     'material_name' => (string) ($material['name'] ?? ''),
+                    'material_code' => (string) ($material['material_code'] ?? ''),
                     'ok' => false,
                     'message' => $exception->getMessage(),
                 ];
@@ -343,11 +634,14 @@ final class MaterialImageLinkService
 
             if (!($response['ok'] ?? false)) {
                 $failed++;
+                $status = (int) ($response['status'] ?? 0);
+                $apiMessage = (string) ($response['error'] ?? ($response['data']['message'] ?? 'فشل الرفع للأمين.'));
                 $results[] = [
                     'material_guid' => $materialGuid,
                     'material_name' => (string) ($material['name'] ?? ''),
+                    'material_code' => (string) ($material['material_code'] ?? ''),
                     'ok' => false,
-                    'message' => (string) ($response['error'] ?? ($response['data']['message'] ?? 'فشل الرفع للأمين.')),
+                    'message' => $status > 0 ? ('[' . $status . '] ' . $apiMessage) : $apiMessage,
                 ];
                 continue;
             }
@@ -374,7 +668,7 @@ final class MaterialImageLinkService
             'ok' => $linked > 0,
             'message' => $linked > 0
                 ? ('تم رفع وربط ' . $linked . ' مادة من الصورة «' . $sourceFileName . '».')
-                : 'لم يُربط أي مادة.',
+                : self::formatAssignFailureMessage($results, $sourceFileName),
             'linked' => $linked,
             'failed' => $failed,
             'items' => $results,
@@ -417,13 +711,15 @@ final class MaterialImageLinkService
     }
 
     /** @return array<string, array<string, mixed>> */
-    private static function syncedQueueByFileName(): array
+    private static function queueByFileName(): array
     {
         $stmt = Database::pdo()->query(
             "SELECT
                 file_name,
                 amine_image_guid::text AS amine_image_guid,
-                sync_status::text AS sync_status
+                sync_status::text AS sync_status,
+                local_sha256,
+                local_size_bytes
              FROM material_image_sync_queue"
         );
 
@@ -435,6 +731,21 @@ final class MaterialImageLinkService
         return $map;
     }
 
+    /** @return array<string, list<array<string, mixed>>> */
+    private static function queueSha256Index(): array
+    {
+        $index = [];
+        foreach (self::queueByFileName() as $fileName => $row) {
+            $sha = strtolower(trim((string) ($row['local_sha256'] ?? '')));
+            if ($sha === '' || $fileName === '') {
+                continue;
+            }
+            $index[$sha][] = array_merge($row, ['file_name' => $fileName]);
+        }
+
+        return $index;
+    }
+
     /** @return array<string, mixed>|null */
     private static function queueRowByFileName(string $fileName): ?array
     {
@@ -442,7 +753,9 @@ final class MaterialImageLinkService
             'SELECT
                 file_name,
                 amine_image_guid::text AS amine_image_guid,
-                sync_status::text AS sync_status
+                sync_status::text AS sync_status,
+                local_sha256,
+                local_size_bytes
              FROM material_image_sync_queue
              WHERE file_name = :file_name
              LIMIT 1'
@@ -451,6 +764,46 @@ final class MaterialImageLinkService
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $row === false ? null : $row;
+    }
+
+    /** @param list<array<string, mixed>> $items */
+    private static function formatAssignFailureMessage(array $items, string $sourceFileName): string
+    {
+        foreach ($items as $item) {
+            if (!is_array($item) || ($item['ok'] ?? false)) {
+                continue;
+            }
+            $label = trim((string) (($item['material_code'] ?? '') . ' ' . ($item['material_name'] ?? '')));
+            $detail = trim((string) ($item['message'] ?? ''));
+            if ($detail !== '') {
+                return 'لم يُربط أي مادة من «' . $sourceFileName . '». ' . ($label !== '' ? ($label . ': ') : '') . $detail;
+            }
+        }
+
+        return 'لم يُربط أي مادة من «' . $sourceFileName . '». تحقق من صلاحيات حساب API (materials.update) واتصال الأمين.';
+    }
+
+    /** @param array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>} $amineResult */
+    /** @param array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>} $uploadResult */
+    /** @return array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>} */
+    private static function combineAssignFailures(array $amineResult, array $uploadResult): array
+    {
+        $items = array_merge($uploadResult['items'] ?? [], $amineResult['items'] ?? []);
+        $message = self::formatAssignFailureMessage($items, '');
+        if ($message === 'لم يُربط أي مادة من «». تحقق من صلاحيات حساب API (materials.update) واتصال الأمين.') {
+            $message = trim((string) ($uploadResult['message'] ?? ''));
+            if ($message === '' || str_starts_with($message, 'تم ')) {
+                $message = (string) ($amineResult['message'] ?? 'لم يُربط أي مادة.');
+            }
+        }
+
+        return [
+            'ok' => false,
+            'message' => $message,
+            'linked' => 0,
+            'failed' => max((int) ($amineResult['failed'] ?? 0), (int) ($uploadResult['failed'] ?? 0)),
+            'items' => $items,
+        ];
     }
 
     /** @return array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>} */
@@ -463,5 +816,10 @@ final class MaterialImageLinkService
             'failed' => 0,
             'items' => [],
         ];
+    }
+
+    private static function lookupKey(string $fileName): string
+    {
+        return strtolower($fileName);
     }
 }

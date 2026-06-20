@@ -111,6 +111,15 @@ declare(strict_types=1);
       const payload = await response.json();
       linkStatus.textContent = payload.message || '';
       if (statusEl) statusEl.textContent = payload.message || '';
+      if (payload.items && payload.items.length && !payload.ok) {
+        const firstFail = payload.items.find((row) => row && row.ok === false);
+        if (firstFail?.message) {
+          const extra = `${firstFail.material_code || ''} ${firstFail.material_name || ''}`.trim();
+          const detail = extra ? `${extra}: ${firstFail.message}` : firstFail.message;
+          linkStatus.textContent = detail;
+          if (statusEl) statusEl.textContent = detail;
+        }
+      }
       if (payload.ok) {
         sourceMaterialMap.set(fileName, []);
         await loadSources(page);
@@ -199,10 +208,13 @@ declare(strict_types=1);
       sourceCards.innerHTML = items.map((item) => {
         const fileName = item.file_name || '';
         const linkBadge = item.is_linked_to_material
-          ? '<span class="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">مرتبطة بمادة</span>'
+          ? `<span class="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">مرتبطة بمادة${Number(item.linked_material_count || 0) > 1 ? ` (${item.linked_material_count})` : ''}</span>`
           : '<span class="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">غير مرتبطة</span>';
+        const linkedMaterials = Array.isArray(item.linked_materials) ? item.linked_materials : [];
         const linkedMeta = item.is_linked_to_material
-          ? `<p class="text-[11px] text-text-muted">${escapeHtml(item.linked_material_code || '')} ${escapeHtml(item.linked_material_name || '')}</p>`
+          ? (linkedMaterials.length > 0
+            ? linkedMaterials.map((mat) => `<p class="text-[11px] text-text-muted">${escapeHtml(mat.code || mat.material_code || '')} ${escapeHtml(mat.name || mat.material_name || '')}</p>`).join('')
+            : `<p class="text-[11px] text-text-muted">${escapeHtml(item.linked_material_code || '')} ${escapeHtml(item.linked_material_name || '')}</p>`)
           : '';
         const preview = item.preview_url
           ? `<img src="${escapeHtml(item.preview_url)}" class="w-full h-44 object-contain rounded-lg border border-border-subtle bg-surface-low" alt="">`
