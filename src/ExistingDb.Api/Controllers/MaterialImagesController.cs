@@ -107,7 +107,11 @@ public sealed class MaterialImagesController(
                 [fileName] = image
             };
 
-        var batchItem = LookupFileOnAmine(fileName, settings.ImagesDirectory, dbByFileName);
+        var batchItem = await LookupFileOnAmineAsync(
+            fileName,
+            settings.ImagesDirectory,
+            dbByFileName,
+            cancellationToken);
         if (!batchItem.Found)
         {
             return NotFound();
@@ -245,14 +249,14 @@ public sealed class MaterialImagesController(
             .Select(image =>
             {
                 var fileName = ExtractFileName(image.Name) ?? string.Empty;
-                var hasMaterial = materialByImage.TryGetValue(image.Guid, out var link);
+                materialByImage.TryGetValue(image.Guid, out var link);
                 return new MaterialImageLinkFileResponse(
                     image.Guid,
                     fileName,
-                    hasMaterial,
-                    hasMaterial ? link.MaterialGuid : null,
-                    hasMaterial ? link.MaterialName : null,
-                    hasMaterial ? link.MaterialCode : null);
+                    link is not null,
+                    link?.MaterialGuid,
+                    link?.MaterialName,
+                    link?.MaterialCode);
             })
             .ToArray();
 
