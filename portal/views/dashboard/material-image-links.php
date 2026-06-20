@@ -265,6 +265,12 @@ declare(strict_types=1);
   }
 
   async function deleteImage(item, button, statusEl) {
+    if (!item.amine_image_guid) {
+      const message = 'لا يوجد معرف صورة (GUID) — تعذر الحذف من bm000.';
+      if (statusEl) statusEl.textContent = message;
+      linkStatus.textContent = message;
+      return;
+    }
     const linkedNote = item.is_linked_to_material
       ? ' سيتم أيضاً فك ربطها بالمادة وحذف سجلها من قواعد البيانات.'
       : ' سيتم أيضاً حذف سجلها من قواعد البيانات.';
