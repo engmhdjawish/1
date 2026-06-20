@@ -16,9 +16,11 @@ final class ArabicGdText
             return $text;
         }
 
-        $engine = new FarsiGd();
+        if (!function_exists('mb_strlen')) {
+            return $text;
+        }
 
-        return $engine->persianText($text, 'fa', 'tahoma', false);
+        return ArabicGlyphsEngine::shape($text, true);
     }
 
     public static function containsArabic(string $text): bool

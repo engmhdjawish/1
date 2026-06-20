@@ -356,6 +356,7 @@ final class MaterialImageStorageService
     {
         return function_exists('imagettftext')
             && function_exists('imagecreatetruecolor')
+            && function_exists('mb_strlen')
             && self::resolveDetailsFontPath() !== null;
     }
 

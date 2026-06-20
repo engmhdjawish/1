@@ -1193,7 +1193,7 @@ final class MaterialImageLinkService
     {
         if (!MaterialImageStorageService::canProcessImageDetails()) {
             return self::assignError(
-                'البانر السفلي يتطلب GD وخط TrueType (مثل Tahoma أو DejaVu) على سيرفر الموقع.'
+                'البانر السفلي يتطلب GD و mbstring وخط TrueType (مثل Tahoma) على سيرفر الموقع.'
             );
         }
 
