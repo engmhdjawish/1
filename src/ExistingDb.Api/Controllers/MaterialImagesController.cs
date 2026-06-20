@@ -160,7 +160,11 @@ public sealed class MaterialImagesController(
                 }
                 : new Dictionary<string, MaterialImageRecord>(StringComparer.OrdinalIgnoreCase);
 
-            responsesByFile[fileName] = LookupFileOnAmine(fileName, settings.ImagesDirectory, dbByFileName);
+            responsesByFile[fileName] = await LookupFileOnAmineAsync(
+                fileName,
+                settings.ImagesDirectory,
+                dbByFileName,
+                cancellationToken);
         }
 
         var imageGuids = responsesByFile.Values
@@ -1255,10 +1259,11 @@ public sealed class MaterialImagesController(
             ? []
             : value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    private static MaterialImageLookupBatchItemResponse LookupFileOnAmine(
+    private async Task<MaterialImageLookupBatchItemResponse> LookupFileOnAmineAsync(
         string fileName,
         string imagesDirectory,
-        IReadOnlyDictionary<string, MaterialImageRecord> dbByFileName)
+        IReadOnlyDictionary<string, MaterialImageRecord> dbByFileName,
+        CancellationToken cancellationToken)
     {
         if (dbByFileName.TryGetValue(fileName, out var image))
         {
@@ -1298,9 +1303,18 @@ public sealed class MaterialImagesController(
         }
 
         var directInfo = new FileInfo(directPath);
+        var storedFileName = Path.GetFileName(directPath);
+        var registered = new MaterialImageRecord
+        {
+            Guid = Guid.NewGuid(),
+            Name = storedFileName,
+        };
+        mainDbContext.MaterialImages.Add(registered);
+        await mainDbContext.SaveChangesAsync(cancellationToken);
+
         return new MaterialImageLookupBatchItemResponse(
             fileName,
-            null,
+            registered.Guid,
             directInfo.Length,
             ComputeSha256Hex(directPath),
             true,

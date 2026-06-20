@@ -20,6 +20,7 @@ $userId = isset($user['id']) ? (string) $user['id'] : null;
 
 MaterialImageSyncService::ensureTable();
 MaterialImageSyncService::recoverStaleSyncing();
+MaterialImageSyncService::recoverSyncedWithoutGuid();
 
 $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 

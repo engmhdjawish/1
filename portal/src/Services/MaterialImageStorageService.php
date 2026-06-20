@@ -97,7 +97,7 @@ final class MaterialImageStorageService
             MaterialImageSyncService::enqueue($fileName, $localPath, $thumbPath, $uploadedByUserId);
         } catch (Throwable $exception) {
             return [
-                'ok' => true,
+                'ok' => false,
                 'message' => 'تم حفظ الصورة محلياً لكن تعذر إضافتها لطابور المزامنة: ' . $exception->getMessage(),
                 'file_name' => $fileName,
                 'replaced' => (bool) ($result['replaced'] ?? false),

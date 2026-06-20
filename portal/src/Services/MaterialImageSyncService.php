@@ -82,16 +82,16 @@ final class MaterialImageSyncService
                 local_sha256 = EXCLUDED.local_sha256,
                 sync_status = CASE
                     WHEN material_image_sync_queue.sync_status = \'synced\'
+                         AND material_image_sync_queue.amine_image_guid IS NOT NULL
                          AND material_image_sync_queue.local_sha256 IS NOT NULL
                          AND EXCLUDED.local_sha256 IS NOT NULL
                          AND material_image_sync_queue.local_sha256 = EXCLUDED.local_sha256
                     THEN \'synced\'
-                    WHEN material_image_sync_queue.sync_status = \'synced\'
-                    THEN \'pending\'
                     ELSE \'pending\'
                 END,
                 amine_sync_error_ar = CASE
                     WHEN material_image_sync_queue.sync_status = \'synced\'
+                         AND material_image_sync_queue.amine_image_guid IS NOT NULL
                          AND material_image_sync_queue.local_sha256 IS NOT NULL
                          AND EXCLUDED.local_sha256 IS NOT NULL
                          AND material_image_sync_queue.local_sha256 = EXCLUDED.local_sha256
@@ -505,7 +505,7 @@ final class MaterialImageSyncService
                 continue;
             }
 
-            if ($amine !== null && self::fingerprintsMatch($fingerprint, $amine)) {
+            if ($amine !== null && self::amineHasDbRecord($amine) && self::fingerprintsMatch($fingerprint, $amine)) {
                 self::upsertSyncedMatch($fileName, $localPath, null, $amine, $fingerprint, $uploadedByUserId);
                 $reconciled++;
                 continue;
@@ -680,6 +680,7 @@ final class MaterialImageSyncService
     public static function syncNext(): array
     {
         self::ensureTable();
+        self::recoverSyncedWithoutGuid();
 
         $health = PortalSettingsService::apiHealth();
         if (!$health['ok']) {
@@ -747,7 +748,12 @@ final class MaterialImageSyncService
 
         $fingerprint = self::fileFingerprint($localPath);
         $amine = self::lookupOnAmine($fileName);
-        if ($fingerprint !== null && $amine !== null && self::fingerprintsMatch($fingerprint, $amine)) {
+        if (
+            $fingerprint !== null
+            && $amine !== null
+            && self::amineHasDbRecord($amine)
+            && self::fingerprintsMatch($fingerprint, $amine)
+        ) {
             self::markSyncedFromMatch($id, $amine, $fingerprint);
 
             return [
@@ -829,6 +835,23 @@ final class MaterialImageSyncService
              SET sync_status = 'pending', updated_at = NOW()
              WHERE sync_status = 'syncing'
                AND updated_at < NOW() - INTERVAL '10 minutes'"
+        );
+        $stmt->execute();
+
+        return $stmt->rowCount();
+    }
+
+    public static function recoverSyncedWithoutGuid(): int
+    {
+        self::ensureTable();
+        $stmt = Database::pdo()->prepare(
+            "UPDATE material_image_sync_queue
+             SET sync_status = 'pending',
+                 amine_sync_error_ar = 'لا يوجد سجل bm000 — ستُعاد المزامنة.',
+                 synced_to_amine_at = NULL,
+                 updated_at = NOW()
+             WHERE sync_status = 'synced'
+               AND amine_image_guid IS NULL"
         );
         $stmt->execute();
 
@@ -1092,6 +1115,20 @@ final class MaterialImageSyncService
         }
 
         if (self::fingerprintsMatch($fingerprint, $amine)) {
+            if (!self::amineHasDbRecord($amine)) {
+                if ($id !== '') {
+                    self::markPendingWithFingerprint(
+                        $id,
+                        $fingerprint,
+                        'الملف على الأمين بدون سجل bm000 — ستُعاد المزامنة.'
+                    );
+
+                    return 'missing_on_amine';
+                }
+
+                return null;
+            }
+
             if ($id !== '') {
                 self::markSyncedFromMatch($id, $amine, $fingerprint);
             } else {
@@ -1160,6 +1197,12 @@ final class MaterialImageSyncService
         }
 
         return $map;
+    }
+
+    /** @param array<string, mixed> $amine */
+    private static function amineHasDbRecord(array $amine): bool
+    {
+        return self::normalizeAmineGuid($amine['id'] ?? $amine['Id'] ?? null) !== null;
     }
 
     /** @param array{size_bytes: int, sha256: string} $local */
