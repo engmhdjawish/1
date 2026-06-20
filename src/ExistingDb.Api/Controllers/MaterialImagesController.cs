@@ -638,45 +638,33 @@ public sealed class MaterialImagesController(
         var id = image.Guid;
         var imageName = image.Name;
 
-        await using var transaction = await mainDbContext.Database.BeginTransactionAsync(cancellationToken);
-        try
+        var linkedMaterials = await mainDbContext.Materials
+            .Where(material => material.PictureGuid == id)
+            .ToListAsync(cancellationToken);
+        foreach (var material in linkedMaterials)
         {
-            var linkedMaterials = await mainDbContext.Materials
-                .Where(material => material.PictureGuid == id)
-                .ToListAsync(cancellationToken);
-            foreach (var material in linkedMaterials)
-            {
-                material.PictureGuid = MaterialPictureGuid.Cleared;
-            }
-
-            mainDbContext.MaterialImages.Remove(image);
-            await mainDbContext.SaveChangesAsync(cancellationToken);
-
-            var stillExists = await mainDbContext.MaterialImages
-                .AsNoTracking()
-                .AnyAsync(item => item.Guid == id, cancellationToken);
-            if (stillExists)
-            {
-                await mainDbContext.Database.ExecuteSqlRawAsync(
-                    "DELETE FROM bm000 WHERE [GUID] = {0}",
-                    id);
-            }
-
-            stillExists = await mainDbContext.MaterialImages
-                .AsNoTracking()
-                .AnyAsync(item => item.Guid == id, cancellationToken);
-            if (stillExists)
-            {
-                await transaction.RollbackAsync(cancellationToken);
-                return StatusCode(500, new { message = "Failed to delete image record from bm000." });
-            }
-
-            await transaction.CommitAsync(cancellationToken);
+            material.PictureGuid = MaterialPictureGuid.Cleared;
         }
-        catch
+
+        mainDbContext.MaterialImages.Remove(image);
+        await mainDbContext.SaveChangesAsync(cancellationToken);
+
+        var stillExists = await mainDbContext.MaterialImages
+            .AsNoTracking()
+            .AnyAsync(item => item.Guid == id, cancellationToken);
+        if (stillExists)
         {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
+            await mainDbContext.Database.ExecuteSqlRawAsync(
+                "DELETE FROM bm000 WHERE [GUID] = {0}",
+                id);
+        }
+
+        stillExists = await mainDbContext.MaterialImages
+            .AsNoTracking()
+            .AnyAsync(item => item.Guid == id, cancellationToken);
+        if (stillExists)
+        {
+            return StatusCode(500, new { message = "Failed to delete image record from bm000." });
         }
 
         var settings = await imageSettingsService.GetAsync(cancellationToken);
