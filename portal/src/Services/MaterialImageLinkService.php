@@ -257,11 +257,16 @@ final class MaterialImageLinkService
     {
         $imageGuid = trim($imageGuid);
         $fileName = basename(str_replace('\\', '/', trim($fileName)));
-        if ($imageGuid === '' && ($fileName === '' || str_contains($fileName, '..'))) {
-            return ['ok' => false, 'message' => 'معرف الصورة أو اسم الملف مطلوب.'];
+
+        if ($imageGuid === '' && $fileName !== '' && !str_contains($fileName, '..')) {
+            $imageGuid = self::resolveAmineImageGuidForDelete('', $fileName);
         }
 
-        $amineDelete = self::deleteOnAmine($imageGuid, $fileName);
+        if ($imageGuid === '') {
+            return ['ok' => false, 'message' => 'معرف الصورة (GUID) مطلوب للحذف من bm000.'];
+        }
+
+        $amineDelete = self::deleteOnAmine($imageGuid);
         if (!($amineDelete['ok'] ?? false)) {
             return [
                 'ok' => false,
@@ -269,8 +274,7 @@ final class MaterialImageLinkService
             ];
         }
 
-        $resolvedGuid = trim((string) ($amineDelete['image_guid'] ?? $imageGuid));
-        MaterialImageSyncService::purgeImageRecords($resolvedGuid, $fileName);
+        MaterialImageSyncService::purgeImageRecords($imageGuid, $fileName);
 
         return [
             'ok' => true,
@@ -281,68 +285,50 @@ final class MaterialImageLinkService
     /**
      * @return array{ok: bool, message: string, image_guid?: string}
      */
-    private static function deleteOnAmine(string $imageGuid, string $fileName): array
+    private static function deleteOnAmine(string $imageGuid): array
     {
-        $resolvedGuid = self::resolveAmineImageGuidForDelete($imageGuid, $fileName);
-        $errors = [];
-
-        if ($fileName !== '' && !str_contains($fileName, '..')) {
-            $byFile = self::attemptAmineDelete('by-file', $resolvedGuid, $fileName);
-            if (($byFile['ok'] ?? false) && !self::imageStillExistsInBm000($resolvedGuid, $fileName)) {
-                return [
-                    'ok' => true,
-                    'message' => '',
-                    'image_guid' => $resolvedGuid !== '' ? $resolvedGuid : $imageGuid,
-                ];
-            }
-            if (!($byFile['ok'] ?? false)) {
-                $errors[] = (string) ($byFile['message'] ?? 'فشل الحذف من bm000 باسم الملف.');
-            } elseif (self::imageStillExistsInBm000($resolvedGuid, $fileName)) {
-                $errors[] = 'لا يزال سجل الصورة في bm000 بعد الحذف باسم الملف.';
-            }
+        $imageGuid = trim($imageGuid);
+        if ($imageGuid === '') {
+            return ['ok' => false, 'message' => 'معرف الصورة (GUID) مطلوب.'];
         }
 
-        $guidToDelete = $resolvedGuid !== '' ? $resolvedGuid : $imageGuid;
-        if ($guidToDelete !== '') {
-            $byGuid = self::attemptAmineDelete('by-guid', $guidToDelete, $fileName);
-            if (($byGuid['ok'] ?? false) && !self::imageStillExistsInBm000($guidToDelete, $fileName)) {
-                return ['ok' => true, 'message' => '', 'image_guid' => $guidToDelete];
-            }
-            if (!($byGuid['ok'] ?? false)) {
-                $errors[] = (string) ($byGuid['message'] ?? 'فشل الحذف من bm000 بالمعرف.');
-            } elseif (self::imageStillExistsInBm000($guidToDelete, $fileName)) {
-                $errors[] = 'لا يزال سجل الصورة في bm000 بعد الحذف بالمعرف.';
-            }
+        $result = self::attemptAmineDeleteByGuid($imageGuid);
+        if (($result['ok'] ?? false) || self::isAmineDeleteAlreadyApplied($result, $imageGuid)) {
+            return ['ok' => true, 'message' => '', 'image_guid' => $imageGuid];
         }
 
         return [
             'ok' => false,
-            'message' => $errors !== []
-                ? implode(' ', array_unique($errors))
-                : 'فشل حذف الصورة من bm000.',
+            'message' => (string) ($result['message'] ?? 'فشل حذف الصورة من bm000 بالمعرف.'),
         ];
     }
 
     /**
-     * @return array{ok: bool, message: string}
+     * @param array{ok?: bool, status?: int, message?: string} $result
      */
-    private static function attemptAmineDelete(string $mode, string $imageGuid, string $fileName): array
+    private static function isAmineDeleteAlreadyApplied(array $result, string $imageGuid): bool
+    {
+        if ((int) ($result['status'] ?? 0) !== 404) {
+            return false;
+        }
+
+        return !self::imageGuidExistsOnAmine(trim($imageGuid));
+    }
+
+    /**
+     * @return array{ok: bool, message: string, status?: int}
+     */
+    private static function attemptAmineDeleteByGuid(string $imageGuid): array
     {
         try {
-            if ($mode === 'by-file') {
-                $response = ApiClient::delete(
-                    '/api/material-images/by-file?fileName=' . rawurlencode($fileName)
-                );
-            } else {
-                $response = ApiClient::delete('/api/material-images/' . rawurlencode($imageGuid));
-            }
+            $response = ApiClient::delete('/api/material-images/' . rawurlencode($imageGuid));
         } catch (Throwable $exception) {
-            return ['ok' => false, 'message' => $exception->getMessage()];
+            return ['ok' => false, 'message' => $exception->getMessage(), 'status' => 0];
         }
 
         $status = (int) ($response['status'] ?? 0);
         if (($response['ok'] ?? false) || $status === 204) {
-            return ['ok' => true, 'message' => ''];
+            return ['ok' => true, 'message' => '', 'status' => $status];
         }
 
         $message = (string) ($response['error'] ?? ($response['data']['message'] ?? 'فشل طلب الحذف.'));
@@ -350,7 +336,7 @@ final class MaterialImageLinkService
             $message = '[' . $status . '] ' . $message;
         }
 
-        return ['ok' => false, 'message' => $message];
+        return ['ok' => false, 'message' => $message, 'status' => $status];
     }
 
     private static function resolveAmineImageGuidForDelete(string $imageGuid, string $fileName): string
@@ -378,33 +364,6 @@ final class MaterialImageLinkService
         $lookupGuid = trim((string) ($data['id'] ?? $data['Id'] ?? ''));
 
         return $lookupGuid !== '' ? $lookupGuid : $imageGuid;
-    }
-
-    private static function imageStillExistsInBm000(string $imageGuid, string $fileName): bool
-    {
-        $imageGuid = trim($imageGuid);
-        if ($imageGuid !== '' && self::imageGuidExistsOnAmine($imageGuid)) {
-            return true;
-        }
-
-        if ($fileName === '' || str_contains($fileName, '..')) {
-            return false;
-        }
-
-        try {
-            $response = ApiClient::get('/api/material-images/lookup', ['fileName' => $fileName]);
-        } catch (Throwable) {
-            return false;
-        }
-
-        if (!($response['ok'] ?? false)) {
-            return false;
-        }
-
-        $data = is_array($response['data'] ?? null) ? $response['data'] : [];
-        $lookupGuid = trim((string) ($data['id'] ?? $data['Id'] ?? ''));
-
-        return $lookupGuid !== '';
     }
 
     /**
