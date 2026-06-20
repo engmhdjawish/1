@@ -215,6 +215,14 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
       <p id="linkStatus" class="text-xs text-text-muted mt-2"></p>
     </div>
   </div>
+
+  <div class="px-4 pb-4">
+    <div class="rounded-xl border border-border-subtle p-3">
+      <h3 class="text-sm font-bold mb-2">نمط بطاقات (مثل النظام القديم)</h3>
+      <p class="text-xs text-text-muted mb-3">لكل صورة: ابحث عن مادة وأضفها، ويمكنك إضافة أكثر من مادة ثم تنفيذ الربط دفعة واحدة.</p>
+      <div id="legacyLinkCards" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
+    </div>
+  </div>
 </section>
 
 <details class="rounded-xl border border-border-subtle bg-white p-4 mb-6">
@@ -1044,7 +1052,9 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     try {
       const response = await fetch(`${API_URL}?action=link-sources`);
       const payload = await response.json();
-      renderLinkSources(payload.items || []);
+      const items = payload.items || [];
+      renderLinkSources(items);
+      renderLegacyCards(items);
     } catch {
       if (linkStatus) linkStatus.textContent = 'تعذر تحميل الصور الأساسية.';
     }
@@ -1164,6 +1174,167 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     }
   });
   linkAssignBtn?.addEventListener('click', () => assignSelectedMaterials());
+
+  const sourceMaterialMap = new Map();
+
+  function getSourceMaterials(fileName) {
+    if (!sourceMaterialMap.has(fileName)) sourceMaterialMap.set(fileName, []);
+    return sourceMaterialMap.get(fileName);
+  }
+
+  function renderLegacyChips(fileName) {
+    const items = getSourceMaterials(fileName);
+    if (!items.length) {
+      return '<span class="text-[11px] text-text-muted">لا توجد مواد مضافة بعد.</span>';
+    }
+
+    return items.map((item, index) => `
+      <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-surface-low text-[11px]">
+        ${escapeHtml(item.label)}
+        <button type="button" class="text-red-600" data-remove-index="${index}" data-file-name="${escapeHtml(fileName)}">×</button>
+      </span>
+    `).join('');
+  }
+
+  async function fetchMaterialSuggestions(keyword) {
+    const response = await fetch(`${API_URL}?action=material-search&q=${encodeURIComponent(keyword)}&has_image=0`);
+    const payload = await response.json();
+    return payload.items || [];
+  }
+
+  async function assignFromLegacyCard(fileName, materialItems, button) {
+    if (!materialItems.length) {
+      if (linkStatus) linkStatus.textContent = 'أضف مادة واحدة على الأقل قبل الربط.';
+      return;
+    }
+
+    const form = new FormData();
+    form.append('action', 'assign-materials');
+    form.append('source_file_name', fileName);
+    materialItems.forEach((item) => form.append('material_guids[]', item.guid));
+
+    button.disabled = true;
+    try {
+      const response = await fetch(API_URL, { method: 'POST', body: form });
+      const payload = await response.json();
+      if (linkStatus) linkStatus.textContent = payload.message || '';
+      if (payload.ok) {
+        sourceMaterialMap.set(fileName, []);
+        await loadLinkSources();
+        await refreshOverview();
+      }
+    } catch {
+      if (linkStatus) linkStatus.textContent = 'تعذر الربط من بطاقة الصورة.';
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function renderLegacyCards(items) {
+    const container = document.getElementById('legacyLinkCards');
+    if (!container) return;
+    if (!items.length) {
+      container.innerHTML = '<div class="text-xs text-text-muted">لا توجد صور متاحة للربط.</div>';
+      return;
+    }
+
+    container.innerHTML = items.map((item) => {
+      const fileName = item.file_name || '';
+      const preview = item.preview_url
+        ? `<img src="${escapeHtml(item.preview_url)}" alt="" class="w-full h-44 object-contain rounded-lg border border-border-subtle bg-surface-low">`
+        : '<div class="w-full h-44 rounded-lg border border-border-subtle bg-surface-low"></div>';
+
+      return `
+        <article class="rounded-xl border border-border-subtle p-3 bg-white space-y-2" data-file-name="${escapeHtml(fileName)}">
+          ${preview}
+          <p class="text-xs font-mono truncate" dir="ltr">${escapeHtml(fileName)}</p>
+          <div class="relative">
+            <input type="search" class="legacy-material-input h-9 w-full rounded-lg border border-border-subtle px-3 text-xs" placeholder="ابحث عن مادة..." data-file-name="${escapeHtml(fileName)}">
+            <div class="legacy-suggestions hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow"></div>
+          </div>
+          <div class="flex flex-wrap gap-1 legacy-chip-list">${renderLegacyChips(fileName)}</div>
+          <button type="button" class="legacy-assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>
+        </article>
+      `;
+    }).join('');
+
+    container.querySelectorAll('article[data-file-name]').forEach((card) => {
+      const fileName = card.getAttribute('data-file-name') || '';
+      const input = card.querySelector('.legacy-material-input');
+      const suggestions = card.querySelector('.legacy-suggestions');
+      const chips = card.querySelector('.legacy-chip-list');
+      const assignBtn = card.querySelector('.legacy-assign-btn');
+
+      if (!(input instanceof HTMLInputElement) || !(suggestions instanceof HTMLElement) || !(chips instanceof HTMLElement) || !(assignBtn instanceof HTMLButtonElement)) {
+        return;
+      }
+
+      input.addEventListener('input', async () => {
+        const keyword = input.value.trim();
+        if (keyword.length < 2) {
+          suggestions.classList.add('hidden');
+          suggestions.innerHTML = '';
+          return;
+        }
+
+        try {
+          const rows = await fetchMaterialSuggestions(keyword);
+          if (!rows.length) {
+            suggestions.innerHTML = '<div class="p-2 text-xs text-text-muted">لا نتائج</div>';
+            suggestions.classList.remove('hidden');
+            return;
+          }
+
+          suggestions.innerHTML = rows.map((row) => {
+            const guid = row.material_guid || '';
+            const label = `${row.material_code || ''} ${row.name || ''}`.trim();
+            return `<button type="button" class="block w-full text-right px-3 py-2 text-xs hover:bg-surface-low legacy-add-material" data-guid="${escapeHtml(guid)}" data-label="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
+          }).join('');
+          suggestions.classList.remove('hidden');
+        } catch {
+          suggestions.classList.add('hidden');
+        }
+      });
+
+      suggestions.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const button = target.closest('.legacy-add-material');
+        if (!(button instanceof HTMLButtonElement)) return;
+
+        const guid = button.getAttribute('data-guid') || '';
+        const label = button.getAttribute('data-label') || '';
+        if (!guid) return;
+
+        const list = getSourceMaterials(fileName);
+        if (!list.some((item) => item.guid === guid)) {
+          list.push({ guid, label });
+        }
+        chips.innerHTML = renderLegacyChips(fileName);
+        suggestions.classList.add('hidden');
+        suggestions.innerHTML = '';
+        input.value = '';
+      });
+
+      chips.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const button = target.closest('button[data-remove-index]');
+        if (!(button instanceof HTMLButtonElement)) return;
+
+        const index = Number(button.getAttribute('data-remove-index') || -1);
+        const list = getSourceMaterials(fileName);
+        if (index >= 0) {
+          list.splice(index, 1);
+          chips.innerHTML = renderLegacyChips(fileName);
+        }
+      });
+
+      assignBtn.addEventListener('click', async () => {
+        await assignFromLegacyCard(fileName, getSourceMaterials(fileName), assignBtn);
+      });
+    });
+  }
 
   function renderBrowseItem(item) {
     const name = item.name || 'بدون اسم';

@@ -65,6 +65,19 @@ if ($method === 'GET') {
         exit;
     }
 
+    if ($action === 'material-search') {
+        $result = MaterialImageStorageService::browseMaterials([
+            'page' => 1,
+            'page_size' => 10,
+            'search' => (string) ($_GET['q'] ?? ''),
+            'has_image' => $_GET['has_image'] ?? '',
+            'local_status' => 'all',
+        ]);
+
+        echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     if ($action === 'browse') {
         $result = MaterialImageStorageService::browseMaterials([
             'page' => (int) ($_GET['page'] ?? 1),
