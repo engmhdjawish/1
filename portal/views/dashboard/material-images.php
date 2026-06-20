@@ -71,6 +71,11 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   </div>
 </section>
 
+<p class="mb-4 rounded-xl border border-blue-200 bg-blue-50 text-blue-800 px-4 py-3 text-sm">
+  تم نقل الربط إلى صفحة مستقلة:
+  <a href="/dashboard/material-image-links.php" class="font-bold underline">ربط الصور بالمواد</a>.
+</p>
+
 <?php if (!empty($flash)): ?>
   <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= ($flashType ?? 'success') === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700' ?>">
     <?= h((string) $flash) ?>

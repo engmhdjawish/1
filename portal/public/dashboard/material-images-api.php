@@ -65,6 +65,16 @@ if ($method === 'GET') {
         exit;
     }
 
+    if ($action === 'link-sources-page') {
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $pageSize = max(6, min(60, (int) ($_GET['page_size'] ?? 24)));
+        echo json_encode(array_merge(
+            ['ok' => true],
+            MaterialImageLinkService::listSourcesPage($page, $pageSize)
+        ), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     if ($action === 'material-search') {
         $result = MaterialImageStorageService::browseMaterials([
             'page' => 1,

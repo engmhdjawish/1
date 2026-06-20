@@ -40,6 +40,33 @@ final class MaterialImageLinkService
     }
 
     /**
+     * @return array{
+     *   items: list<array<string, mixed>>,
+     *   page: int,
+     *   page_size: int,
+     *   total_count: int,
+     *   has_more: bool
+     * }
+     */
+    public static function listSourcesPage(int $page = 1, int $pageSize = 24): array
+    {
+        $all = self::listSources();
+        $page = max(1, $page);
+        $pageSize = max(6, min(60, $pageSize));
+        $totalCount = count($all);
+        $offset = ($page - 1) * $pageSize;
+        $items = array_slice($all, $offset, $pageSize);
+
+        return [
+            'items' => $items,
+            'page' => $page,
+            'page_size' => $pageSize,
+            'total_count' => $totalCount,
+            'has_more' => ($offset + count($items)) < $totalCount,
+        ];
+    }
+
+    /**
      * @param list<string> $materialGuids
      * @return array{
      *   ok: bool,
