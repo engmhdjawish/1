@@ -999,10 +999,10 @@ namespace ExistingDb.Api.Data.Migrations
                         },
                         new
                         {
-                            Key = "Images:ThumbnailsDirectory",
+                            Key = "Service:Enabled",
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Description = "Directory where generated material image thumbnails are saved.",
-                            Value = "C:\\images\\thumbnails"
+                            Description = "When false, the API returns 503 for operational endpoints.",
+                            Value = "true"
                         });
                 });
 
