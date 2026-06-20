@@ -126,7 +126,10 @@ final class MaterialImageLinkService
             return null;
         }
 
-        $imageGuid = trim((string) ($row['imageGuid'] ?? $row['ImageGuid'] ?? ''));
+        $imageGuid = self::extractImageGuidFromRow($row);
+        if ($imageGuid === '' && $fileName !== '') {
+            $imageGuid = self::lookupAmineImageGuidByFileName($fileName);
+        }
         $materialGuid = trim((string) ($row['materialGuid'] ?? $row['MaterialGuid'] ?? ''));
         $materialName = trim((string) ($row['materialName'] ?? $row['MaterialName'] ?? ''));
         $materialCode = trim((string) ($row['materialCode'] ?? $row['MaterialCode'] ?? ''));
@@ -134,12 +137,12 @@ final class MaterialImageLinkService
 
         $localPath = MaterialImageStorageService::resolveLocalPath($fileName, false);
         $hasLocal = $localPath !== null && is_file($localPath);
-        $previewUrl = $hasLocal
-            ? MaterialImageStorageService::publicUrl($fileName, true)
-            : ($imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '');
-        $previewFullUrl = $hasLocal
-            ? MaterialImageStorageService::publicUrl($fileName, false)
-            : ($imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) : '');
+        $previewUrl = $imageGuid !== ''
+            ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1'
+            : ($hasLocal ? MaterialImageStorageService::publicUrl($fileName, true) : '');
+        $previewFullUrl = $imageGuid !== ''
+            ? '/api/image.php?id=' . rawurlencode($imageGuid)
+            : ($hasLocal ? MaterialImageStorageService::publicUrl($fileName, false) : '');
 
         return [
             'file_name' => $fileName,
@@ -258,15 +261,12 @@ final class MaterialImageLinkService
         $imageGuid = trim($imageGuid);
         $fileName = basename(str_replace('\\', '/', trim($fileName)));
 
-        if ($imageGuid === '' && $fileName !== '' && !str_contains($fileName, '..')) {
-            $imageGuid = self::resolveAmineImageGuidForDelete('', $fileName);
-        }
-
+        $imageGuid = self::resolveAmineImageGuidForDelete($imageGuid, $fileName);
         if ($imageGuid === '') {
-            return ['ok' => false, 'message' => 'معرف الصورة (GUID) مطلوب للحذف من bm000.'];
+            return ['ok' => false, 'message' => 'تعذر تحديد معرف الصورة (GUID) في bm000.'];
         }
 
-        $amineDelete = self::deleteOnAmine($imageGuid);
+        $amineDelete = self::deleteOnAmine($imageGuid, $fileName);
         if (!($amineDelete['ok'] ?? false)) {
             return [
                 'ok' => false,
@@ -285,7 +285,7 @@ final class MaterialImageLinkService
     /**
      * @return array{ok: bool, message: string, image_guid?: string}
      */
-    private static function deleteOnAmine(string $imageGuid): array
+    private static function deleteOnAmine(string $imageGuid, string $fileName): array
     {
         $imageGuid = trim($imageGuid);
         if ($imageGuid === '') {
@@ -293,7 +293,7 @@ final class MaterialImageLinkService
         }
 
         $result = self::attemptAmineDeleteByGuid($imageGuid);
-        if (($result['ok'] ?? false) || self::isAmineDeleteAlreadyApplied($result, $imageGuid)) {
+        if (($result['ok'] ?? false) || self::isAmineDeleteAlreadyApplied($result, $imageGuid, $fileName)) {
             return ['ok' => true, 'message' => '', 'image_guid' => $imageGuid];
         }
 
@@ -306,13 +306,30 @@ final class MaterialImageLinkService
     /**
      * @param array{ok?: bool, status?: int, message?: string} $result
      */
-    private static function isAmineDeleteAlreadyApplied(array $result, string $imageGuid): bool
+    private static function isAmineDeleteAlreadyApplied(array $result, string $imageGuid, string $fileName): bool
     {
         if ((int) ($result['status'] ?? 0) !== 404) {
             return false;
         }
 
-        return !self::imageGuidExistsOnAmine(trim($imageGuid));
+        $imageGuid = trim($imageGuid);
+        if ($imageGuid === '') {
+            return false;
+        }
+
+        if (self::imageGuidExistsOnAmine($imageGuid)) {
+            return false;
+        }
+
+        $fileName = basename(str_replace('\\', '/', trim($fileName)));
+        if ($fileName !== '' && !str_contains($fileName, '..')) {
+            $stillByFile = self::lookupAmineImageGuidByFileName($fileName);
+            if ($stillByFile !== '') {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -339,31 +356,72 @@ final class MaterialImageLinkService
         return ['ok' => false, 'message' => $message, 'status' => $status];
     }
 
-    private static function resolveAmineImageGuidForDelete(string $imageGuid, string $fileName): string
+    /** @param array<string, mixed> $row */
+    private static function extractImageGuidFromRow(array $row): string
     {
-        $imageGuid = trim($imageGuid);
-        if ($imageGuid !== '' && self::imageGuidExistsOnAmine($imageGuid)) {
-            return $imageGuid;
+        $raw = $row['imageGuid']
+            ?? $row['ImageGuid']
+            ?? $row['id']
+            ?? $row['Id']
+            ?? $row['guid']
+            ?? $row['Guid']
+            ?? '';
+        $imageGuid = strtolower(trim((string) $raw));
+        if ($imageGuid === '' || $imageGuid === '00000000-0000-0000-0000-000000000000') {
+            return '';
         }
 
+        return $imageGuid;
+    }
+
+    private static function lookupAmineImageGuidByFileName(string $fileName): string
+    {
+        $fileName = basename(str_replace('\\', '/', trim($fileName)));
         if ($fileName === '' || str_contains($fileName, '..')) {
-            return $imageGuid;
+            return '';
         }
 
         try {
             $response = ApiClient::get('/api/material-images/lookup', ['fileName' => $fileName]);
         } catch (Throwable) {
-            return $imageGuid;
+            return '';
         }
 
         if (!($response['ok'] ?? false)) {
-            return $imageGuid;
+            return '';
         }
 
         $data = is_array($response['data'] ?? null) ? $response['data'] : [];
-        $lookupGuid = trim((string) ($data['id'] ?? $data['Id'] ?? ''));
 
-        return $lookupGuid !== '' ? $lookupGuid : $imageGuid;
+        return self::normalizeImageGuid((string) ($data['id'] ?? $data['Id'] ?? ''));
+    }
+
+    private static function normalizeImageGuid(string $imageGuid): string
+    {
+        $imageGuid = strtolower(trim($imageGuid));
+        if ($imageGuid === '' || $imageGuid === '00000000-0000-0000-0000-000000000000') {
+            return '';
+        }
+
+        return $imageGuid;
+    }
+
+    private static function resolveAmineImageGuidForDelete(string $imageGuid, string $fileName): string
+    {
+        $fileName = basename(str_replace('\\', '/', trim($fileName)));
+        if ($fileName !== '' && !str_contains($fileName, '..')) {
+            $fromFile = self::lookupAmineImageGuidByFileName($fileName);
+            if ($fromFile !== '') {
+                return $fromFile;
+            }
+        }
+
+        $imageGuid = self::normalizeImageGuid($imageGuid);
+        if ($imageGuid !== '' && self::imageGuidExistsOnAmine($imageGuid)) {
+            return $imageGuid;
+        }
+
+        return $imageGuid;
     }
 
     /**

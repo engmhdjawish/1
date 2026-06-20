@@ -96,6 +96,13 @@ declare(strict_types=1);
     return item.amine_image_guid || item.file_name || '';
   }
 
+  function itemImageGuid(item, card = null) {
+    const fromItem = String(item?.amine_image_guid || '').trim();
+    if (fromItem) return fromItem;
+    const fromCard = String(card?.dataset?.imageGuid || '').trim();
+    return fromCard;
+  }
+
   function chipsHtml(key) {
     const items = sourceMaterialMap.get(key) || [];
     if (!items.length) {
@@ -264,22 +271,17 @@ declare(strict_types=1);
     }
   }
 
-  async function deleteImage(item, button, statusEl) {
-    if (!item.amine_image_guid) {
-      const message = 'لا يوجد معرف صورة (GUID) — تعذر الحذف من bm000.';
-      if (statusEl) statusEl.textContent = message;
-      linkStatus.textContent = message;
-      return;
-    }
+  async function deleteImage(item, card, button, statusEl) {
+    const imageGuid = itemImageGuid(item, card);
     const linkedNote = item.is_linked_to_material
       ? ' سيتم أيضاً فك ربطها بالمادة وحذف سجلها من قواعد البيانات.'
       : ' سيتم أيضاً حذف سجلها من قواعد البيانات.';
-    if (!confirm(`حذف الصورة من الأمين والموقع نهائياً؟${linkedNote}`)) return;
+    if (!confirm(`حذف الصورة من bm000 والموقع نهائياً؟${linkedNote}`)) return;
     button.disabled = true;
     if (statusEl) statusEl.textContent = 'جاري الحذف...';
     try {
       const payload = await postAction('delete-image', {
-        image_guid: item.amine_image_guid,
+        image_guid: imageGuid,
         file_name: item.file_name,
         material_guid: item.linked_material_guid,
       });
@@ -386,7 +388,7 @@ declare(strict_types=1);
 
     deleteBtn?.addEventListener('click', async () => {
       closeSuggestions(card);
-      await deleteImage(item, deleteBtn, cardStatus);
+      await deleteImage(item, card, deleteBtn, cardStatus);
     });
   }
 
@@ -420,12 +422,17 @@ declare(strict_types=1);
           ? `<button type="button" class="unlink-btn h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold w-full">فك الربط</button>`
           : '';
 
-        return `<article class="rounded-xl border border-border-subtle p-3 bg-white space-y-2" data-key="${escapeHtml(key)}">
+        const guidLine = item.amine_image_guid
+          ? `<p class="text-[10px] text-text-muted font-mono break-all" dir="ltr" title="معرف bm000">${escapeHtml(item.amine_image_guid)}</p>`
+          : '';
+
+        return `<article class="rounded-xl border border-border-subtle p-3 bg-white space-y-2" data-key="${escapeHtml(key)}" data-image-guid="${escapeHtml(item.amine_image_guid || '')}" data-file-name="${escapeHtml(item.file_name || '')}">
           ${preview}
           <div class="space-y-1">
             <div class="flex items-center justify-between gap-2">${linkBadge}</div>
             <p class="text-sm font-bold leading-snug">${materialTitle}</p>
             ${materialCode}
+            ${guidLine}
           </div>
           <div class="relative">
             <input class="material-input h-9 w-full rounded-lg border border-border-subtle px-3 text-xs" placeholder="ابحث عن مادة (كلمات بأي ترتيب)...">
