@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Portal\Services;
 
+use Portal\Support\ArabicGdText;
 use Portal\Config;
 use Portal\Database;
 use Throwable;
@@ -329,10 +330,10 @@ final class MaterialImageStorageService
                 $y += 10;
                 continue;
             }
-            $box = imagettfbbox($fontSize, 0, $font, $line) ?: [0, 0, 0, 0, 0, 0, 0, 0];
-            $textWidth = abs($box[2] - $box[0]);
+            $shaped = ArabicGdText::shape($line);
+            $textWidth = self::ttfLineWidth($font, (float) $fontSize, $shaped);
             $x = max(20, $width - 20 - $textWidth);
-            imagettftext($canvas, $fontSize, 0, $x, $y, $black, $font, $line);
+            imagettftext($canvas, $fontSize, 0, $x, $y, $black, $font, $shaped);
             $y += $lineHeight;
         }
 
@@ -366,12 +367,12 @@ final class MaterialImageStorageService
     public static function resolveDetailsFontPath(): ?string
     {
         $candidates = [
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
             'C:\\Windows\\Fonts\\tahoma.ttf',
-            'C:\\Windows\\Fonts\\arial.ttf',
             'C:\\Windows\\Fonts\\trado.ttf',
+            'C:\\Windows\\Fonts\\arial.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
         ];
         foreach ($candidates as $path) {
             if (is_file($path)) {
@@ -407,8 +408,7 @@ final class MaterialImageStorageService
         $current = '';
         foreach ($words as $word) {
             $candidate = $current === '' ? $word : $current . ' ' . $word;
-            $box = imagettfbbox($fontSize, 0, $font, $candidate) ?: [0, 0, 0, 0, 0, 0, 0, 0];
-            $width = abs($box[2] - $box[0]);
+            $width = self::ttfLineWidth($font, $fontSize, ArabicGdText::shape($candidate));
             if ($width <= $maxWidth || $current === '') {
                 $current = $candidate;
             } else {
@@ -421,6 +421,17 @@ final class MaterialImageStorageService
         }
 
         return $lines;
+    }
+
+    private static function ttfLineWidth(string $font, float $fontSize, string $text): int
+    {
+        if ($text === '') {
+            return 0;
+        }
+
+        $box = imagettfbbox($fontSize, 0, $font, $text) ?: [0, 0, 0, 0, 0, 0, 0, 0];
+
+        return (int) abs($box[2] - $box[0]);
     }
 
     /** @return \GdImage|false */
