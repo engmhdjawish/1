@@ -18,7 +18,6 @@ final class MaterialImageLinkService
     {
         MaterialImageSyncService::ensureTable();
         $queueByFile = self::queueByFileName();
-        $shaIndex = self::queueSha256Index();
 
         $sources = [];
         foreach (MaterialImageStorageService::listLocalFiles() as $file) {
@@ -28,10 +27,6 @@ final class MaterialImageLinkService
             }
 
             $queue = $queueByFile[$fileName] ?? null;
-            if (self::isProbablyMaterialCopy($fileName, is_array($queue) ? $queue : null, $shaIndex)) {
-                continue;
-            }
-
             $amineGuid = trim((string) ($queue['amine_image_guid'] ?? ''));
             $sources[] = [
                 'file_name' => $fileName,
@@ -41,6 +36,11 @@ final class MaterialImageLinkService
                 'amine_image_guid' => $amineGuid,
                 'is_synced' => (string) ($queue['sync_status'] ?? '') === 'synced'
                     && ($amineGuid !== '' || trim((string) ($queue['local_sha256'] ?? '')) !== ''),
+                'is_linked_to_material' => false,
+                'link_hint' => false,
+                'linked_material_guid' => '',
+                'linked_material_name' => '',
+                'linked_material_code' => '',
             ];
         }
 
@@ -64,21 +64,23 @@ final class MaterialImageLinkService
     ): array
     {
         $all = self::listSources();
-        $all = self::applyLinkHints($all);
         $materialQuery = trim($materialQuery);
-        $materialContext = $materialQuery !== '' ? self::materialSearchContext($materialQuery) : [];
+        $needsFullLinkScan = $linkFilter !== 'all' || $materialQuery !== '';
+        if ($needsFullLinkScan) {
+            $all = self::applyAmineLinkInfo($all);
+        }
 
         if ($linkFilter === 'linked') {
-            $all = array_values(array_filter($all, static fn (array $item): bool => !empty($item['link_hint'])));
+            $all = array_values(array_filter($all, static fn (array $item): bool => !empty($item['is_linked_to_material'])));
         } elseif ($linkFilter === 'unlinked') {
-            $all = array_values(array_filter($all, static fn (array $item): bool => empty($item['link_hint'])));
+            $all = array_values(array_filter($all, static fn (array $item): bool => empty($item['is_linked_to_material'])));
         }
 
         if ($materialQuery !== '') {
             $needle = Text::lower($materialQuery);
             $all = array_values(array_filter(
                 $all,
-                static fn (array $item): bool => self::matchesMaterialQuery($item, $needle, $materialContext)
+                static fn (array $item): bool => self::matchesMaterialQuery($item, $needle)
             ));
         }
 
@@ -87,7 +89,9 @@ final class MaterialImageLinkService
         $totalCount = count($all);
         $offset = ($page - 1) * $pageSize;
         $items = array_slice($all, $offset, $pageSize);
-        $items = self::enrichLinkState($items);
+        if (!$needsFullLinkScan) {
+            $items = self::applyAmineLinkInfo($items);
+        }
 
         return [
             'items' => $items,
@@ -99,247 +103,91 @@ final class MaterialImageLinkService
     }
 
     /**
+     * Resolve bm000 + PictureGUID links from Amine API (one material per image file).
+     *
      * @param list<array<string, mixed>> $items
      * @return list<array<string, mixed>>
      */
-    private static function applyLinkHints(array $items): array
-    {
-        $shaIndex = self::queueSha256Index();
-        foreach ($items as $index => $item) {
-            $fileName = (string) ($item['file_name'] ?? '');
-            $sha = strtolower(trim((string) ($item['local_sha256'] ?? '')));
-            $items[$index]['link_hint'] = false;
-            if ($fileName === '' || $sha === '') {
-                continue;
-            }
-
-            foreach ($shaIndex[$sha] ?? [] as $row) {
-                $relatedName = (string) ($row['file_name'] ?? '');
-                if ($relatedName === '' || strcasecmp($relatedName, $fileName) === 0) {
-                    continue;
-                }
-                if (!self::isProbablyMaterialCopy($relatedName, $row, $shaIndex)) {
-                    continue;
-                }
-                if (trim((string) ($row['amine_image_guid'] ?? '')) !== '') {
-                    $items[$index]['link_hint'] = true;
-                    break;
-                }
-            }
-        }
-
-        return $items;
-    }
-
-    /**
-     * @return list<array{material_guid: string, name: string, code: string, image_guid: string, stored_file_name: string}>
-     */
-    private static function materialSearchContext(string $query): array
-    {
-        try {
-            $response = MaterialImageStorageService::browseMaterials([
-                'page' => 1,
-                'page_size' => 48,
-                'search' => $query,
-                'has_image' => '',
-                'local_status' => 'all',
-            ]);
-        } catch (Throwable) {
-            return [];
-        }
-
-        if (!($response['ok'] ?? false)) {
-            return [];
-        }
-
-        $context = [];
-        foreach ($response['items'] ?? [] as $row) {
-            if (!is_array($row)) {
-                continue;
-            }
-            $materialGuid = trim((string) ($row['material_guid'] ?? ''));
-            $imageGuid = trim((string) ($row['image_guid'] ?? ''));
-            if ($materialGuid === '') {
-                continue;
-            }
-
-            $storedFileName = trim((string) ($row['stored_file_name'] ?? ''));
-            if ($storedFileName === '' && $imageGuid !== '') {
-                $storedFileName = self::storedFileNameForImageGuid($imageGuid);
-            }
-
-            $context[] = [
-                'material_guid' => $materialGuid,
-                'name' => trim((string) ($row['name'] ?? '')),
-                'code' => trim((string) ($row['material_code'] ?? '')),
-                'image_guid' => $imageGuid,
-                'stored_file_name' => $storedFileName,
-            ];
-        }
-
-        return $context;
-    }
-
-    /**
-     * @param list<array{material_guid: string, name: string, code: string, image_guid: string, stored_file_name: string}> $context
-     */
-    private static function matchesMaterialQuery(array $item, string $needle, array $context): bool
-    {
-        foreach ($context as $material) {
-            $name = Text::lower((string) ($material['name'] ?? ''));
-            $code = Text::lower((string) ($material['code'] ?? ''));
-            if (!str_contains($name, $needle) && !str_contains($code, $needle)) {
-                continue;
-            }
-
-            $sourceName = strtolower((string) ($item['file_name'] ?? ''));
-            $storedFileName = strtolower((string) ($material['stored_file_name'] ?? ''));
-            if ($storedFileName !== '' && $storedFileName === $sourceName) {
-                return true;
-            }
-
-            $sourceSha = strtolower(trim((string) ($item['local_sha256'] ?? '')));
-            if ($sourceSha !== '' && $storedFileName !== '') {
-                $queue = self::queueByFileName();
-                $relatedSha = strtolower(trim((string) ($queue[$storedFileName]['local_sha256'] ?? '')));
-                if ($relatedSha !== '' && $relatedSha === $sourceSha) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * @param list<array<string, mixed>> $items
-     * @return list<array<string, mixed>>
-     */
-    private static function enrichLinkState(array $items): array
+    private static function applyAmineLinkInfo(array $items): array
     {
         if ($items === []) {
             return [];
         }
 
         $queueByFile = self::queueByFileName();
-        $shaIndex = self::queueSha256Index();
-        $lookupCandidates = [];
-        foreach ($items as $item) {
-            $fileName = (string) ($item['file_name'] ?? '');
-            if ($fileName === '') {
-                continue;
-            }
-
-            $fingerprint = null;
-            $sha = strtolower(trim((string) ($item['local_sha256'] ?? '')));
-            if ($sha !== '') {
-                $size = (int) ($queueByFile[$fileName]['local_size_bytes'] ?? 0);
-                $fingerprint = ['size_bytes' => $size, 'sha256' => $sha];
-            } else {
-                $localPath = (string) ($item['local_path'] ?? '');
-                if ($localPath !== '' && is_file($localPath)) {
-                    $fingerprint = MaterialImageSyncService::fileFingerprint($localPath);
-                }
-            }
-
-            $lookupCandidates[] = ['file_name' => $fileName, 'fingerprint' => $fingerprint];
-        }
-
-        $amineLookups = MaterialImageSyncService::lookupFilesOnAmine($lookupCandidates);
-        $materialByImageGuid = [];
-
-        foreach ($items as $index => $item) {
-            $fileName = (string) ($item['file_name'] ?? '');
-            $items[$index]['is_linked_to_material'] = false;
-            $items[$index]['linked_material_guid'] = '';
-            $items[$index]['linked_material_name'] = '';
-            $items[$index]['linked_material_code'] = '';
-            $items[$index]['linked_material_count'] = 0;
-            $items[$index]['linked_materials'] = [];
-
-            if ($fileName === '') {
-                continue;
-            }
-
-            $sha = strtolower(trim((string) ($item['local_sha256'] ?? '')));
-            if ($sha === '') {
-                $localPath = (string) ($item['local_path'] ?? '');
-                if ($localPath !== '' && is_file($localPath)) {
-                    $fp = MaterialImageSyncService::fileFingerprint($localPath);
-                    $sha = strtolower((string) ($fp['sha256'] ?? ''));
-                }
-            }
-
-            $linkedMaterials = [];
-            foreach ($shaIndex[$sha] ?? [] as $row) {
-                $relatedName = (string) ($row['file_name'] ?? '');
-                if ($relatedName === '' || strcasecmp($relatedName, $fileName) === 0) {
-                    continue;
-                }
-                if (!self::isMaterialCopyFile($relatedName, $row, $shaIndex, $materialByImageGuid)) {
+        foreach (array_chunk($items, MaterialImageSyncService::BATCH_LOOKUP_SIZE, true) as $chunk) {
+            $candidates = [];
+            foreach ($chunk as $item) {
+                $fileName = (string) ($item['file_name'] ?? '');
+                if ($fileName === '') {
                     continue;
                 }
 
-                $relatedGuid = trim((string) ($row['amine_image_guid'] ?? ''));
-                if ($relatedGuid === '') {
-                    continue;
-                }
-
-                $material = $materialByImageGuid[$relatedGuid] ?? self::materialLinkedToImageGuid($relatedGuid);
-                $materialByImageGuid[$relatedGuid] = $material;
-                if ($material === null) {
-                    continue;
-                }
-
-                $materialGuid = (string) ($material['material_guid'] ?? '');
-                if ($materialGuid === '' || isset($linkedMaterials[$materialGuid])) {
-                    continue;
-                }
-
-                $linkedMaterials[$materialGuid] = $material;
-            }
-
-            $queueGuid = trim((string) ($item['amine_image_guid'] ?? ''));
-            $lookup = $amineLookups[self::lookupKey($fileName)] ?? null;
-            $lookupGuid = trim((string) ($lookup['id'] ?? ''));
-            if ($lookupGuid !== '') {
-                $items[$index]['amine_image_guid'] = $lookupGuid;
-            }
-
-            $sourceQueueRow = $queueByFile[$fileName] ?? [];
-            if (!self::isProbablyMaterialCopy($fileName, is_array($sourceQueueRow) ? $sourceQueueRow : null, $shaIndex)) {
-                foreach (array_values(array_unique(array_filter([$queueGuid, $lookupGuid]))) as $imageGuid) {
-                    $material = $materialByImageGuid[$imageGuid] ?? self::materialLinkedToImageGuid($imageGuid);
-                    $materialByImageGuid[$imageGuid] = $material;
-                    if ($material === null) {
-                        continue;
+                $fingerprint = null;
+                $sha = strtolower(trim((string) ($item['local_sha256'] ?? '')));
+                if ($sha !== '') {
+                    $fingerprint = [
+                        'size_bytes' => (int) ($queueByFile[$fileName]['local_size_bytes'] ?? 0),
+                        'sha256' => $sha,
+                    ];
+                } else {
+                    $localPath = (string) ($item['local_path'] ?? '');
+                    if ($localPath !== '' && is_file($localPath)) {
+                        $fingerprint = MaterialImageSyncService::fileFingerprint($localPath);
                     }
-
-                    $materialGuid = (string) ($material['material_guid'] ?? '');
-                    if ($materialGuid === '' || isset($linkedMaterials[$materialGuid])) {
-                        continue;
-                    }
-
-                    $linkedMaterials[$materialGuid] = $material;
                 }
+
+                $candidates[] = ['file_name' => $fileName, 'fingerprint' => $fingerprint];
             }
 
-            if ($linkedMaterials === []) {
-                continue;
-            }
+            $lookups = MaterialImageSyncService::lookupFilesOnAmine($candidates);
+            foreach ($chunk as $index => $item) {
+                $fileName = (string) ($item['file_name'] ?? '');
+                $lookup = $lookups[self::lookupKey($fileName)] ?? null;
+                $imageGuid = trim((string) ($lookup['id'] ?? ''));
+                if ($imageGuid === '') {
+                    $imageGuid = trim((string) ($item['amine_image_guid'] ?? ''));
+                }
 
-            $linkedList = array_values($linkedMaterials);
-            $first = $linkedList[0];
-            $items[$index]['is_linked_to_material'] = true;
-            $items[$index]['link_hint'] = true;
-            $items[$index]['linked_material_guid'] = (string) ($first['material_guid'] ?? '');
-            $items[$index]['linked_material_name'] = (string) ($first['name'] ?? '');
-            $items[$index]['linked_material_code'] = (string) ($first['code'] ?? '');
-            $items[$index]['linked_material_count'] = count($linkedList);
-            $items[$index]['linked_materials'] = $linkedList;
+                $materialGuid = trim((string) ($lookup['materialGuid'] ?? ''));
+                $materialName = trim((string) ($lookup['materialName'] ?? ''));
+                $materialCode = trim((string) ($lookup['materialCode'] ?? ''));
+
+                if ($materialGuid === '' && $imageGuid !== '') {
+                    $fallback = self::materialLinkedToImageGuid($imageGuid);
+                    if ($fallback !== null) {
+                        $materialGuid = (string) ($fallback['material_guid'] ?? '');
+                        $materialName = (string) ($fallback['name'] ?? '');
+                        $materialCode = (string) ($fallback['code'] ?? '');
+                    }
+                }
+
+                $items[$index]['amine_image_guid'] = $imageGuid;
+                $items[$index]['is_linked_to_material'] = $materialGuid !== '';
+                $items[$index]['link_hint'] = $materialGuid !== '';
+                $items[$index]['linked_material_guid'] = $materialGuid;
+                $items[$index]['linked_material_name'] = $materialName;
+                $items[$index]['linked_material_code'] = $materialCode;
+                $items[$index]['linked_material_count'] = $materialGuid !== '' ? 1 : 0;
+                $items[$index]['linked_materials'] = $materialGuid !== ''
+                    ? [[
+                        'material_guid' => $materialGuid,
+                        'name' => $materialName,
+                        'code' => $materialCode,
+                    ]]
+                    : [];
+            }
         }
 
         return $items;
+    }
+
+    private static function matchesMaterialQuery(array $item, string $needle): bool
+    {
+        $name = Text::lower((string) ($item['linked_material_name'] ?? ''));
+        $code = Text::lower((string) ($item['linked_material_code'] ?? ''));
+
+        return str_contains($name, $needle) || str_contains($code, $needle);
     }
 
     /** @return array{material_guid: string, name: string, code: string}|null */
@@ -373,22 +221,6 @@ final class MaterialImageLinkService
             ];
         } catch (Throwable) {
             return null;
-        }
-    }
-
-    private static function storedFileNameForImageGuid(string $imageGuid): string
-    {
-        try {
-            $response = ApiClient::get('/api/material-images/' . rawurlencode($imageGuid));
-            if (!($response['ok'] ?? false)) {
-                return '';
-            }
-
-            $data = is_array($response['data'] ?? null) ? $response['data'] : [];
-
-            return trim((string) ($data['storedFileName'] ?? $data['StoredFileName'] ?? ''));
-        } catch (Throwable) {
-            return '';
         }
     }
 
@@ -693,7 +525,7 @@ final class MaterialImageLinkService
                 'image_guid' => $imageGuid,
                 'file_name' => $fileName,
                 'ok' => true,
-                'message' => 'تم الرفع والربط.',
+                'message' => 'تم الرفع والربط (bm000 + PictureGUID).',
             ];
         }
 
@@ -763,21 +595,6 @@ final class MaterialImageLinkService
         }
 
         return $map;
-    }
-
-    /** @return array<string, list<array<string, mixed>>> */
-    private static function queueSha256Index(): array
-    {
-        $index = [];
-        foreach (self::queueByFileName() as $fileName => $row) {
-            $sha = strtolower(trim((string) ($row['local_sha256'] ?? '')));
-            if ($sha === '' || $fileName === '') {
-                continue;
-            }
-            $index[$sha][] = array_merge($row, ['file_name' => $fileName]);
-        }
-
-        return $index;
     }
 
     /** @return array<string, mixed>|null */
@@ -856,102 +673,5 @@ final class MaterialImageLinkService
     private static function lookupKey(string $fileName): string
     {
         return strtolower($fileName);
-    }
-
-    /** @param array<string, mixed>|null $queueRow */
-    /** @param array<string, list<array<string, mixed>>> $shaIndex */
-    private static function isProbablyMaterialCopy(?string $fileName, ?array $queueRow, array $shaIndex): bool
-    {
-        $fileName = trim((string) $fileName);
-        if ($fileName === '') {
-            return false;
-        }
-
-        $queueRow ??= [];
-        if (trim((string) ($queueRow['assigned_from_file_name'] ?? '')) !== '') {
-            return true;
-        }
-
-        $sha = strtolower(trim((string) ($queueRow['local_sha256'] ?? '')));
-        if ($sha === '') {
-            return false;
-        }
-
-        $stem = self::fileStem($fileName);
-        if ($stem === '') {
-            return false;
-        }
-
-        foreach ($shaIndex[$sha] ?? [] as $row) {
-            $siblingName = (string) ($row['file_name'] ?? '');
-            if ($siblingName === '' || strcasecmp($siblingName, $fileName) === 0) {
-                continue;
-            }
-
-            if (self::looksLikeSourceImageName($siblingName, $stem)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * @param array<string, mixed> $queueRow
-     * @param array<string, list<array<string, mixed>>> $shaIndex
-     * @param array<string, array{material_guid: string, name: string, code: string}|null> $materialByImageGuid
-     */
-    private static function isMaterialCopyFile(
-        string $fileName,
-        array $queueRow,
-        array $shaIndex,
-        array &$materialByImageGuid
-    ): bool {
-        if (self::isProbablyMaterialCopy($fileName, $queueRow, $shaIndex)) {
-            return true;
-        }
-
-        $guid = trim((string) ($queueRow['amine_image_guid'] ?? ''));
-        if ($guid === '') {
-            return false;
-        }
-
-        $material = $materialByImageGuid[$guid] ?? self::materialLinkedToImageGuid($guid);
-        $materialByImageGuid[$guid] = $material;
-        if ($material === null) {
-            return false;
-        }
-
-        return self::fileStemMatchesMaterialCode($fileName, (string) ($material['code'] ?? ''));
-    }
-
-    private static function fileStem(string $fileName): string
-    {
-        return trim((string) pathinfo($fileName, PATHINFO_FILENAME));
-    }
-
-    private static function fileStemMatchesMaterialCode(string $fileName, string $materialCode): bool
-    {
-        $stem = self::fileStem($fileName);
-        $code = trim($materialCode);
-
-        return $stem !== '' && $code !== '' && strcasecmp($stem, $code) === 0;
-    }
-
-    private static function looksLikeSourceImageName(string $fileName, string $copyStem): bool
-    {
-        $stem = self::fileStem($fileName);
-        if ($stem === '' || strcasecmp($stem, $copyStem) === 0) {
-            return false;
-        }
-
-        $copyStemLower = Text::lower($copyStem);
-        $stemLower = Text::lower($stem);
-
-        return strlen($stemLower) > strlen($copyStemLower) + 2
-            || str_contains($stemLower, 'wa')
-            || str_contains($stemLower, 'img')
-            || str_contains($stemLower, '_')
-            || str_contains($stemLower, '.');
     }
 }

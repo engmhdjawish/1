@@ -11,7 +11,7 @@ use Throwable;
 
 final class MaterialImageSyncService
 {
-    public const BATCH_LOOKUP_SIZE = 15;
+    public const BATCH_LOOKUP_SIZE = 50;
     public const SCAN_CHUNK_SIZE = 15;
     public const RECONCILE_CHUNK_SIZE = 15;
 
@@ -998,6 +998,9 @@ final class MaterialImageSyncService
             'fileExistsOnDisk' => (bool) ($item['fileExistsOnDisk'] ?? $item['FileExistsOnDisk'] ?? false),
             'sha256' => (string) ($item['sha256'] ?? $item['Sha256'] ?? ''),
             'sizeBytes' => (int) ($item['sizeBytes'] ?? $item['SizeBytes'] ?? 0),
+            'materialGuid' => $item['materialGuid'] ?? $item['MaterialGuid'] ?? null,
+            'materialName' => (string) ($item['materialName'] ?? $item['MaterialName'] ?? ''),
+            'materialCode' => (string) ($item['materialCode'] ?? $item['MaterialCode'] ?? ''),
         ];
     }
 

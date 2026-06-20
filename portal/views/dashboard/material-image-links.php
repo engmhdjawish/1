@@ -12,9 +12,8 @@ declare(strict_types=1);
     <div>
       <h1 class="text-2xl font-extrabold">ربط الصور بالمواد</h1>
       <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
-        صفحة مستقلة للربط فقط: اختر صورة أساسية، أضف مادة أو أكثر، ثم نفّذ الربط.
-        لكل مادة سيتم إنشاء نسخة مستقلة من الصورة وربطها بالمادة.
-        نسخ المواد (مثل <span dir="ltr">52012.jpg</span>) لا تظهر هنا — فقط الصور الأساسية.
+        صفحة مستقلة للربط: كل صورة تعرض المادة المرتبطة بها من الأمين (جدول bm000 + PictureGUID).
+        عند الربط تُنشأ نسخة في bm000 ويُحدَّث PictureGUID للمادة.
       </p>
     </div>
     <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white text-xs">
@@ -209,13 +208,10 @@ declare(strict_types=1);
       sourceCards.innerHTML = items.map((item) => {
         const fileName = item.file_name || '';
         const linkBadge = item.is_linked_to_material
-          ? `<span class="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">مرتبطة بمادة${Number(item.linked_material_count || 0) > 1 ? ` (${item.linked_material_count})` : ''}</span>`
+          ? '<span class="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">مرتبطة بمادة</span>'
           : '<span class="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">غير مرتبطة</span>';
-        const linkedMaterials = Array.isArray(item.linked_materials) ? item.linked_materials : [];
         const linkedMeta = item.is_linked_to_material
-          ? (linkedMaterials.length > 0
-            ? linkedMaterials.map((mat) => `<p class="text-[11px] text-text-muted">${escapeHtml(mat.code || mat.material_code || '')} ${escapeHtml(mat.name || mat.material_name || '')}</p>`).join('')
-            : `<p class="text-[11px] text-text-muted">${escapeHtml(item.linked_material_code || '')} ${escapeHtml(item.linked_material_name || '')}</p>`)
+          ? `<p class="text-[11px] text-text-muted">${escapeHtml(item.linked_material_code || '')} ${escapeHtml(item.linked_material_name || '')}</p>`
           : '';
         const preview = item.preview_url
           ? `<img src="${escapeHtml(item.preview_url)}" class="w-full h-44 object-contain rounded-lg border border-border-subtle bg-surface-low" alt="">`
