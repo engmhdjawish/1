@@ -1192,9 +1192,7 @@ final class MaterialImageLinkService
     public static function detailsProcessingError(): array
     {
         if (!MaterialImageStorageService::canProcessImageDetails()) {
-            return self::assignError(
-                'البانر السفلي يتطلب GD و mbstring وخط TrueType (مثل Tahoma) على سيرفر الموقع.'
-            );
+            return self::assignError(MaterialImageStorageService::detailsBannerRequirements()['message']);
         }
 
         return self::assignError('تعذر تجهيز الصورة مع البانر السفلي. تحقق من الصورة والنصوص.');

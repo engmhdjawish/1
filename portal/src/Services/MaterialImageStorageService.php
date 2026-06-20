@@ -354,10 +354,7 @@ final class MaterialImageStorageService
 
     public static function canRenderDetailsBanner(): bool
     {
-        return function_exists('imagettftext')
-            && function_exists('imagecreatetruecolor')
-            && function_exists('mb_strlen')
-            && self::resolveDetailsFontPath() !== null;
+        return self::detailsBannerRequirements()['ok'];
     }
 
     public static function canProcessImageDetails(): bool
@@ -365,23 +362,111 @@ final class MaterialImageStorageService
         return self::canRenderDetailsBanner();
     }
 
+    /**
+     * @return array{
+     *   ok: bool,
+     *   gd: bool,
+     *   freetype: bool,
+     *   mbstring: bool,
+     *   font_path: string|null,
+     *   message: string
+     * }
+     */
+    public static function detailsBannerRequirements(): array
+    {
+        $gd = function_exists('imagecreatetruecolor');
+        $freetype = function_exists('imagettftext');
+        $mbstring = function_exists('mb_strlen');
+        $fontPath = self::resolveDetailsFontPath();
+
+        $missing = [];
+        if (!$gd) {
+            $missing[] = 'امتداد GD (imagecreatetruecolor)';
+        }
+        if (!$freetype) {
+            $missing[] = 'GD مع دعم FreeType (imagettftext) — فعّل php_gd2 مع freetype في php.ini';
+        }
+        if (!$mbstring) {
+            $missing[] = 'امتداد mbstring';
+        }
+        if ($fontPath === null) {
+            $missing[] = 'خط TrueType readable من PHP — انسخ tahoma.ttf إلى portal/storage/fonts/ أو عيّن PORTAL_DETAILS_FONT_PATH';
+        }
+
+        $message = $missing === []
+            ? 'جاهز'
+            : ('البانر السفلي يتطلب: ' . implode('، ', $missing) . '.');
+
+        return [
+            'ok' => $gd && $freetype && $mbstring && $fontPath !== null,
+            'gd' => $gd,
+            'freetype' => $freetype,
+            'mbstring' => $mbstring,
+            'font_path' => $fontPath,
+            'message' => $message,
+        ];
+    }
+
     public static function resolveDetailsFontPath(): ?string
     {
-        $candidates = [
+        $configured = trim((string) (Config::get('PORTAL_DETAILS_FONT_PATH') ?? ''));
+        if ($configured !== '' && is_file($configured) && is_readable($configured)) {
+            return $configured;
+        }
+
+        $candidates = [];
+
+        $storageFontsDir = rtrim(Config::storagePath(), '/\\') . DIRECTORY_SEPARATOR . 'fonts';
+        foreach (['tahoma.ttf', 'Tahoma.ttf', 'tahomabd.ttf', 'arial.ttf', 'trado.ttf', 'DejaVuSans.ttf'] as $fileName) {
+            $candidates[] = $storageFontsDir . DIRECTORY_SEPARATOR . $fileName;
+        }
+
+        $windowsFonts = self::windowsFontsDirectory();
+        if ($windowsFonts !== null) {
+            foreach (['tahoma.ttf', 'tahomabd.ttf', 'arial.ttf', 'trado.ttf', 'TAHOMA.TTF', 'TAHOMABD.TTF'] as $fileName) {
+                $candidates[] = $windowsFonts . DIRECTORY_SEPARATOR . $fileName;
+            }
+        }
+
+        $candidates = array_merge($candidates, [
             'C:\\Windows\\Fonts\\tahoma.ttf',
+            'C:\\Windows\\Fonts\\tahomabd.ttf',
+            'C:\\Windows\\Fonts\\TAHOMA.TTF',
             'C:\\Windows\\Fonts\\trado.ttf',
             'C:\\Windows\\Fonts\\arial.ttf',
             '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
             '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
             '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-        ];
+        ]);
+
         foreach ($candidates as $path) {
-            if (is_file($path)) {
+            if ($path !== '' && is_file($path) && is_readable($path)) {
                 return $path;
             }
         }
 
+        if ($storageFontsDir !== '' && is_dir($storageFontsDir)) {
+            $matches = glob($storageFontsDir . DIRECTORY_SEPARATOR . '*.ttf') ?: [];
+            foreach ($matches as $path) {
+                if (is_readable($path)) {
+                    return $path;
+                }
+            }
+        }
+
         return null;
+    }
+
+    private static function windowsFontsDirectory(): ?string
+    {
+        $windir = trim((string) (getenv('WINDIR') ?: getenv('SystemRoot') ?: ''));
+        if ($windir === '') {
+            return null;
+        }
+
+        $dir = rtrim(str_replace('/', '\\', $windir), '\\') . '\\Fonts';
+
+        return is_dir($dir) ? $dir : null;
     }
 
     /** @return \GdImage|false */

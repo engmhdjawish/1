@@ -57,6 +57,7 @@ if ($method === 'GET') {
         echo json_encode([
             'ok' => true,
             'stats' => MaterialImageStorageService::stats(),
+            'banner' => MaterialImageStorageService::detailsBannerRequirements(),
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }

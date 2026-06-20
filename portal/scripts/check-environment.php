@@ -7,7 +7,7 @@ declare(strict_types=1);
  *   php scripts/check-environment.php
  */
 
-$extensions = ['pdo_pgsql', 'curl', 'mbstring', 'openssl'];
+$extensions = ['pdo_pgsql', 'curl', 'mbstring', 'openssl', 'gd'];
 $extensionStatus = [];
 foreach ($extensions as $extension) {
     $extensionStatus[$extension] = extension_loaded($extension);
@@ -51,6 +51,9 @@ $report = [
     'php_version' => PHP_VERSION,
     'sapi' => PHP_SAPI,
     'extensions' => $extensionStatus,
+    'image_banner' => class_exists(\Portal\Services\MaterialImageStorageService::class)
+        ? \Portal\Services\MaterialImageStorageService::detailsBannerRequirements()
+        : ['ok' => false, 'message' => 'MaterialImageStorageService not loaded'],
     'password_algorithms' => [
         'bcrypt' => defined('PASSWORD_BCRYPT'),
         'argon2id' => defined('PASSWORD_ARGON2ID'),
