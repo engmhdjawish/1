@@ -386,6 +386,14 @@ declare(strict_types=1);
     });
   }
 
+  function ensureDetailLinesBeforeAssign(card, key, items) {
+    if (!cardWantsDetails(card)) return;
+    const line1Input = card?.querySelector('.detail-line1');
+    if (line1Input && !line1Input.value.trim() && items.length) {
+      fillDetailsFromSelection(card, key);
+    }
+  }
+
   async function postAssignForm(action, item, items, card) {
     const form = new FormData();
     form.append('action', action);
@@ -400,12 +408,13 @@ declare(strict_types=1);
 
     if (cardWantsDetails(card)) {
       form.append('add_details', '1');
-      const imageUrl = item.preview_full_url || item.preview_url;
-      if (!imageUrl) throw new Error('لا توجد معاينة للصورة.');
       for (const mat of items) {
         const lines = getDetailLines(card, mat);
-        const blob = await buildImageWithDetails(imageUrl, lines.line1, lines.line2);
-        form.append(`processed_image[${mat.guid}]`, blob, 'linked.jpg');
+        if (!lines.line1 && !lines.line2) {
+          throw new Error('أدخل تفاصيل المادة أو استخدم «تعبئة من المواد المختارة».');
+        }
+        form.append(`detail_line1[${mat.guid}]`, lines.line1);
+        form.append(`detail_line2[${mat.guid}]`, lines.line2);
       }
     }
 
@@ -430,9 +439,10 @@ declare(strict_types=1);
       return;
     }
     button.disabled = true;
-    linkStatus.textContent = 'جاري الربط...';
-    if (statusEl) statusEl.textContent = 'جاري الربط...';
+    linkStatus.textContent = cardWantsDetails(card) ? 'جاري إضافة التفاصيل والربط...' : 'جاري الربط...';
+    if (statusEl) statusEl.textContent = cardWantsDetails(card) ? 'جاري إضافة التفاصيل والربط...' : 'جاري الربط...';
     try {
+      ensureDetailLinesBeforeAssign(card, cardKey(item), items);
       const payload = await postAssignForm('assign-materials', item, items, card);
       linkStatus.textContent = payload.message || '';
       if (statusEl) statusEl.textContent = payload.message || '';
@@ -628,6 +638,9 @@ declare(strict_types=1);
         linkStatus.textContent = message;
         cardStatus.textContent = message;
         return;
+      }
+      if (cardWantsDetails(card)) {
+        ensureDetailLinesBeforeAssign(card, key, selected);
       }
       await assign(item, selected, card, assignBtn, cardStatus);
     });

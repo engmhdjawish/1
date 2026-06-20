@@ -165,16 +165,41 @@ if ($method === 'POST') {
         if (!is_array($materialGuids)) {
             $materialGuids = [$materialGuids];
         }
+        $addDetails = (string) ($_POST['add_details'] ?? '') === '1';
         $processed = MaterialImageLinkService::collectProcessedUploads(
             is_array($_FILES['processed_image'] ?? null) ? $_FILES['processed_image'] : null
         );
+        if ($addDetails && $processed === []) {
+            $processed = MaterialImageLinkService::buildProcessedImagesFromDetails(
+                $sourceFileName,
+                $amineSourceGuid !== '' ? $amineSourceGuid : null,
+                $materialGuids,
+                is_array($_POST['detail_line1'] ?? null) ? $_POST['detail_line1'] : [],
+                is_array($_POST['detail_line2'] ?? null) ? $_POST['detail_line2'] : [],
+            );
+        }
+        if ($addDetails && $processed === []) {
+            echo json_encode(array_merge(
+                MaterialImageLinkService::detailsProcessingError(),
+                ['sync' => MaterialImageSyncService::stats()]
+            ), JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if ($addDetails && count($processed) < count($materialGuids)) {
+            echo json_encode(array_merge(
+                MaterialImageLinkService::detailsProcessingError(),
+                ['sync' => MaterialImageSyncService::stats()]
+            ), JSON_UNESCAPED_UNICODE);
+            exit;
+        }
         try {
             $result = MaterialImageLinkService::assign(
                 $sourceFileName,
                 $materialGuids,
                 $userId,
                 $amineSourceGuid !== '' ? $amineSourceGuid : null,
-                $processed
+                $processed,
+                $addDetails
             );
         } finally {
             foreach ($processed as $path) {
@@ -229,9 +254,33 @@ if ($method === 'POST') {
         if (!is_array($materialGuids)) {
             $materialGuids = [$materialGuids];
         }
+        $addDetails = (string) ($_POST['add_details'] ?? '') === '1';
         $processed = MaterialImageLinkService::collectProcessedUploads(
             is_array($_FILES['processed_image'] ?? null) ? $_FILES['processed_image'] : null
         );
+        if ($addDetails && $processed === []) {
+            $processed = MaterialImageLinkService::buildProcessedImagesFromDetails(
+                $sourceFileName,
+                $amineSourceGuid !== '' ? $amineSourceGuid : $imageGuid,
+                $materialGuids,
+                is_array($_POST['detail_line1'] ?? null) ? $_POST['detail_line1'] : [],
+                is_array($_POST['detail_line2'] ?? null) ? $_POST['detail_line2'] : [],
+            );
+        }
+        if ($addDetails && $processed === []) {
+            echo json_encode(array_merge(
+                MaterialImageLinkService::detailsProcessingError(),
+                ['sync' => MaterialImageSyncService::stats()]
+            ), JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if ($addDetails && count($processed) < count($materialGuids)) {
+            echo json_encode(array_merge(
+                MaterialImageLinkService::detailsProcessingError(),
+                ['sync' => MaterialImageSyncService::stats()]
+            ), JSON_UNESCAPED_UNICODE);
+            exit;
+        }
         try {
             $result = MaterialImageLinkService::reassign(
                 $sourceFileName,
@@ -239,7 +288,8 @@ if ($method === 'POST') {
                 $materialGuid !== '' ? $materialGuid : null,
                 $materialGuids,
                 $userId,
-                $processed
+                $processed,
+                $addDetails
             );
         } finally {
             foreach ($processed as $path) {

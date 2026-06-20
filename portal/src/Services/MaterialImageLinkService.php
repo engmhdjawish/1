@@ -523,14 +523,22 @@ final class MaterialImageLinkService
         ?string $currentMaterialGuid,
         array $materialGuids,
         ?string $uploadedByUserId = null,
-        array $processedPathsByMaterial = []
+        array $processedPathsByMaterial = [],
+        bool $requireProcessedImages = false
     ): array {
         $unlink = self::unlinkImage($imageGuid, $currentMaterialGuid !== null && $currentMaterialGuid !== '' ? $currentMaterialGuid : null);
         if (!($unlink['ok'] ?? false) && $currentMaterialGuid !== null && $currentMaterialGuid !== '') {
             return self::assignError((string) ($unlink['message'] ?? 'فشل فك الربط قبل الاستبدال.'));
         }
 
-        return self::assign($sourceFileName, $materialGuids, $uploadedByUserId, $imageGuid, $processedPathsByMaterial);
+        return self::assign(
+            $sourceFileName,
+            $materialGuids,
+            $uploadedByUserId,
+            $imageGuid,
+            $processedPathsByMaterial,
+            $requireProcessedImages
+        );
     }
 
     /**
@@ -548,7 +556,8 @@ final class MaterialImageLinkService
         array $materialGuids,
         ?string $uploadedByUserId = null,
         ?string $knownAmineSourceGuid = null,
-        array $processedPathsByMaterial = []
+        array $processedPathsByMaterial = [],
+        bool $requireProcessedImages = false
     ): array {
         MaterialImageSyncService::ensureTable();
         MaterialImageStorageService::ensureSettings();
@@ -598,6 +607,10 @@ final class MaterialImageLinkService
                 $sourceFileName,
                 $amineSourceGuid
             );
+        }
+
+        if ($requireProcessedImages) {
+            return self::assignError('تعذر تجهيز الصورة مع تفاصيل المادة.');
         }
 
         $effectiveSourcePath = $hasLocal ? $sourcePath : '';
@@ -863,7 +876,10 @@ final class MaterialImageLinkService
             }
 
             $targetFileName = self::buildTargetFileName($material, $extension !== '' ? '.' . $extension : '.jpg');
-            $effectiveSource = $processedPathsByMaterial[$materialGuid] ?? $sourcePath;
+            $guidKey = strtolower($materialGuid);
+            $effectiveSource = $processedPathsByMaterial[$guidKey]
+                ?? $processedPathsByMaterial[$materialGuid]
+                ?? $sourcePath;
             if ($effectiveSource === '' || !is_file($effectiveSource)) {
                 $failed++;
                 $results[] = [
@@ -998,6 +1014,121 @@ final class MaterialImageLinkService
     }
 
     /**
+     * @param list<string> $materialGuids
+     * @param array<string, mixed> $line1ByMaterial
+     * @param array<string, mixed> $line2ByMaterial
+     * @return array<string, string>
+     */
+    public static function buildProcessedImagesFromDetails(
+        string $sourceFileName,
+        ?string $amineSourceGuid,
+        array $materialGuids,
+        array $line1ByMaterial,
+        array $line2ByMaterial
+    ): array {
+        if (!MaterialImageStorageService::canRenderDetailsBanner()) {
+            return [];
+        }
+
+        $tempSource = self::resolveSourcePathForProcessing($sourceFileName, $amineSourceGuid);
+        if ($tempSource === null) {
+            return [];
+        }
+
+        $map = [];
+        foreach ($materialGuids as $materialGuid) {
+            $materialGuid = trim((string) $materialGuid);
+            if ($materialGuid === '') {
+                continue;
+            }
+
+            $line1 = self::detailLineForMaterial($line1ByMaterial, $materialGuid);
+            $line2 = self::detailLineForMaterial($line2ByMaterial, $materialGuid);
+            if ($line1 === '') {
+                $material = self::fetchMaterial($materialGuid);
+                if ($material !== null) {
+                    $line1 = trim((string) ($material['material_code'] ?? '') . ' ' . (string) ($material['name'] ?? ''));
+                }
+            }
+            if ($line1 === '' && $line2 === '') {
+                continue;
+            }
+
+            $processed = MaterialImageStorageService::renderImageWithDetailsBanner($tempSource, $line1, $line2);
+            if ($processed !== null) {
+                $map[strtolower($materialGuid)] = $processed;
+            }
+        }
+
+        if (self::isTempProcessingSource($tempSource)) {
+            MaterialImageStorageService::deleteTempProcessedFile($tempSource);
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param array<string, mixed> $lines
+     */
+    private static function detailLineForMaterial(array $lines, string $materialGuid): string
+    {
+        if (isset($lines[$materialGuid])) {
+            return trim((string) $lines[$materialGuid]);
+        }
+
+        foreach ($lines as $key => $value) {
+            if (strcasecmp((string) $key, $materialGuid) === 0) {
+                return trim((string) $value);
+            }
+        }
+
+        return '';
+    }
+
+    private static function isTempProcessingSource(string $path): bool
+    {
+        $path = str_replace('\\', '/', $path);
+
+        return str_contains($path, '/_processed/src_');
+    }
+
+    private static function resolveSourcePathForProcessing(string $sourceFileName, ?string $amineSourceGuid): ?string
+    {
+        $local = MaterialImageStorageService::resolveLocalPath($sourceFileName, false);
+        if ($local !== null && is_file($local)) {
+            return $local;
+        }
+
+        $amineSourceGuid = trim((string) $amineSourceGuid);
+        if ($amineSourceGuid === '') {
+            return null;
+        }
+
+        try {
+            $download = ApiClient::getBinary('/api/material-images/' . rawurlencode($amineSourceGuid) . '/file');
+        } catch (Throwable) {
+            return null;
+        }
+
+        if (!($download['ok'] ?? false)) {
+            return null;
+        }
+
+        $settings = MaterialImageStorageService::settings();
+        $directory = $settings['images_dir'] . DIRECTORY_SEPARATOR . '_processed';
+        if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
+            return null;
+        }
+
+        $dest = $directory . DIRECTORY_SEPARATOR . ('src_' . bin2hex(random_bytes(6)) . '.jpg');
+        if (@file_put_contents($dest, $download['body'] ?? '') === false) {
+            return null;
+        }
+
+        return $dest;
+    }
+
+    /**
      * @param array<string, mixed>|null $files
      * @return array<string, string>
      */
@@ -1027,11 +1158,23 @@ final class MaterialImageLinkService
             $originalName = (string) ($files['name'][$materialGuid] ?? 'linked.jpg');
             $saved = MaterialImageStorageService::saveProcessedUpload($tmpPath, $originalName);
             if ($saved !== null) {
-                $map[$materialGuid] = $saved;
+                $map[strtolower($materialGuid)] = $saved;
             }
         }
 
         return $map;
+    }
+
+    /** @return array{ok: bool, message: string, items: list<array<string, mixed>>} */
+    public static function detailsProcessingError(): array
+    {
+        if (!MaterialImageStorageService::canRenderDetailsBanner()) {
+            return self::assignError(
+                'تفاصيل الصورة تتطلب GD وخط TrueType (مثل Tahoma أو DejaVu) على سيرفر الموقع.'
+            );
+        }
+
+        return self::assignError('تعذر تجهيز الصورة مع تفاصيل المادة. تحقق من الصورة والنصوص.');
     }
 
     /** @return array<string, array<string, mixed>> */

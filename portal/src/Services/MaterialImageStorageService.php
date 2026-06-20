@@ -261,6 +261,165 @@ final class MaterialImageStorageService
         return $dest;
     }
 
+    public static function renderImageWithDetailsBanner(string $sourcePath, string $line1, string $line2): ?string
+    {
+        if (!is_file($sourcePath) || !function_exists('imagecreatetruecolor') || !function_exists('imagettftext')) {
+            return null;
+        }
+
+        $font = self::resolveDetailsFontPath();
+        if ($font === null) {
+            return null;
+        }
+
+        $line1 = trim($line1);
+        $line2 = trim($line2);
+        if ($line1 === '' && $line2 === '') {
+            return null;
+        }
+
+        $image = self::loadGdImage($sourcePath);
+        if ($image === false) {
+            return null;
+        }
+
+        $width = imagesx($image);
+        $height = imagesy($image);
+        if ($width <= 0 || $height <= 0) {
+            imagedestroy($image);
+
+            return null;
+        }
+
+        $fontSize = (int) max(14, min(36, (int) floor($width / 25)));
+        $lineHeight = (int) round($fontSize * 1.5);
+        $maxWidth = $width - 40;
+        $lines1 = self::wrapTtfTextLines($font, (float) $fontSize, $line1, $maxWidth);
+        $lines2 = self::wrapTtfTextLines($font, (float) $fontSize, $line2, $maxWidth);
+        $allLines = $lines1;
+        if ($lines1 !== [] && $lines2 !== []) {
+            $allLines[] = '';
+        }
+        $allLines = array_merge($allLines, $lines2);
+
+        $textLineCount = count(array_filter($allLines, static fn (string $line): bool => $line !== ''));
+        $bannerHeight = $textLineCount > 0 ? ($textLineCount * $lineHeight) + 60 : 0;
+        if ($bannerHeight <= 0) {
+            imagedestroy($image);
+
+            return null;
+        }
+
+        $canvas = imagecreatetruecolor($width, $height + $bannerHeight);
+        if ($canvas === false) {
+            imagedestroy($image);
+
+            return null;
+        }
+
+        $white = imagecolorallocate($canvas, 255, 255, 255);
+        $black = imagecolorallocate($canvas, 0, 0, 0);
+        imagecopy($canvas, $image, 0, 0, 0, 0, $width, $height);
+        imagedestroy($image);
+        imagefilledrectangle($canvas, 0, $height, $width, $height + $bannerHeight, $white);
+
+        $y = $height + 20 + $fontSize;
+        foreach ($allLines as $line) {
+            if ($line === '') {
+                $y += 10;
+                continue;
+            }
+            $box = imagettfbbox($fontSize, 0, $font, $line) ?: [0, 0, 0, 0, 0, 0, 0, 0];
+            $textWidth = abs($box[2] - $box[0]);
+            $x = max(20, $width - 20 - $textWidth);
+            imagettftext($canvas, $fontSize, 0, $x, $y, $black, $font, $line);
+            $y += $lineHeight;
+        }
+
+        $settings = self::settings();
+        $directory = $settings['images_dir'] . DIRECTORY_SEPARATOR . '_processed';
+        if (!self::ensureDirectory($directory)) {
+            imagedestroy($canvas);
+
+            return null;
+        }
+
+        $dest = $directory . DIRECTORY_SEPARATOR . ('detail_' . bin2hex(random_bytes(8)) . '.jpg');
+        $saved = imagejpeg($canvas, $dest, 90);
+        imagedestroy($canvas);
+
+        return $saved ? $dest : null;
+    }
+
+    public static function canRenderDetailsBanner(): bool
+    {
+        return function_exists('imagettftext')
+            && function_exists('imagecreatetruecolor')
+            && self::resolveDetailsFontPath() !== null;
+    }
+
+    /** @return list<string> */
+    private static function wrapTtfTextLines(string $font, float $fontSize, string $text, int $maxWidth): array
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return [];
+        }
+
+        $words = preg_split('/\s+/u', $text) ?: [];
+        $lines = [];
+        $current = '';
+        foreach ($words as $word) {
+            $candidate = $current === '' ? $word : $current . ' ' . $word;
+            $box = imagettfbbox($fontSize, 0, $font, $candidate) ?: [0, 0, 0, 0, 0, 0, 0, 0];
+            $width = abs($box[2] - $box[0]);
+            if ($width <= $maxWidth || $current === '') {
+                $current = $candidate;
+            } else {
+                $lines[] = $current;
+                $current = $word;
+            }
+        }
+        if ($current !== '') {
+            $lines[] = $current;
+        }
+
+        return $lines;
+    }
+
+    private static function resolveDetailsFontPath(): ?string
+    {
+        $candidates = [
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+            'C:\\Windows\\Fonts\\tahoma.ttf',
+            'C:\\Windows\\Fonts\\arial.ttf',
+            'C:\\Windows\\Fonts\\trado.ttf',
+        ];
+        foreach ($candidates as $path) {
+            if (is_file($path)) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
+    /** @return \GdImage|false */
+    private static function loadGdImage(string $sourcePath)
+    {
+        $mime = self::detectMime($sourcePath);
+
+        return match ($mime) {
+            'image/jpeg' => @imagecreatefromjpeg($sourcePath),
+            'image/png' => @imagecreatefrompng($sourcePath),
+            'image/gif' => @imagecreatefromgif($sourcePath),
+            'image/webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($sourcePath) : false,
+            default => false,
+        };
+    }
+
     public static function deleteTempProcessedFile(string $path): void
     {
         $path = str_replace('\\', '/', $path);
