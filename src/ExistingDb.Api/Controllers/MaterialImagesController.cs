@@ -607,6 +607,36 @@ public sealed class MaterialImagesController(
             return NotFound();
         }
 
+        return await DeleteImageRecordAsync(image, cancellationToken);
+    }
+
+    [HttpDelete("by-file")]
+    [RequirePermission("materials.update")]
+    public async Task<IActionResult> DeleteImageByFileName(
+        [FromQuery] string fileName,
+        CancellationToken cancellationToken)
+    {
+        fileName = Path.GetFileName(fileName.Trim());
+        if (fileName is "")
+        {
+            return BadRequest(new { message = "fileName is required." });
+        }
+
+        var dbByFile = await LoadDbImagesByFileNamesAsync([fileName], cancellationToken);
+        if (!dbByFile.TryGetValue(fileName, out var image))
+        {
+            return NotFound(new { message = "Image file was not found in bm000.", fileName });
+        }
+
+        return await DeleteImageRecordAsync(image, cancellationToken);
+    }
+
+    private async Task<IActionResult> DeleteImageRecordAsync(
+        MaterialImageRecord image,
+        CancellationToken cancellationToken)
+    {
+        var id = image.Guid;
+
         var linkedMaterials = await mainDbContext.Materials
             .Where(material => material.PictureGuid == id)
             .ToListAsync(cancellationToken);

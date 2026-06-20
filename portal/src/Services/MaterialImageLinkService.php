@@ -256,42 +256,84 @@ final class MaterialImageLinkService
     public static function deleteImage(string $imageGuid, string $fileName = '', ?string $materialGuid = null): array
     {
         $imageGuid = trim($imageGuid);
-        if ($imageGuid === '') {
-            return ['ok' => false, 'message' => 'معرف الصورة مطلوب.'];
+        $fileName = basename(str_replace('\\', '/', trim($fileName)));
+        if ($imageGuid === '' && ($fileName === '' || str_contains($fileName, '..'))) {
+            return ['ok' => false, 'message' => 'معرف الصورة أو اسم الملف مطلوب.'];
         }
 
         $materialGuid = trim((string) $materialGuid);
-        $unlink = self::unlinkImage(
-            $imageGuid,
-            $materialGuid !== '' ? $materialGuid : null
-        );
-        if ($materialGuid !== '' && !($unlink['ok'] ?? false)) {
+        if ($imageGuid !== '') {
+            self::unlinkImage(
+                $imageGuid,
+                $materialGuid !== '' ? $materialGuid : null
+            );
+        }
+
+        $amineDelete = self::deleteOnAmine($imageGuid, $fileName);
+        if (!($amineDelete['ok'] ?? false)) {
             return [
                 'ok' => false,
-                'message' => (string) ($unlink['message'] ?? 'فشل فك الربط بالمادة قبل الحذف.'),
+                'message' => (string) ($amineDelete['message'] ?? 'فشل حذف الصورة من الأمين (bm000).'),
             ];
         }
 
+        $resolvedGuid = trim((string) ($amineDelete['image_guid'] ?? $imageGuid));
+        MaterialImageSyncService::purgeImageRecords($resolvedGuid, $fileName);
+
+        return [
+            'ok' => true,
+            'message' => 'تم حذف الصورة من bm000 والسيرفر والموقع، وفك ارتباطها بالمادة، وإزالة سجلات المزامنة.',
+        ];
+    }
+
+    /**
+     * @return array{ok: bool, message: string, image_guid?: string}
+     */
+    private static function deleteOnAmine(string $imageGuid, string $fileName): array
+    {
+        $response = null;
+        if ($imageGuid !== '') {
+            try {
+                $response = ApiClient::delete('/api/material-images/' . rawurlencode($imageGuid));
+            } catch (Throwable $exception) {
+                return ['ok' => false, 'message' => $exception->getMessage()];
+            }
+
+            $status = (int) ($response['status'] ?? 0);
+            if (($response['ok'] ?? false) || $status === 204) {
+                return ['ok' => true, 'message' => '', 'image_guid' => $imageGuid];
+            }
+        }
+
+        if ($fileName === '' || str_contains($fileName, '..')) {
+            $detail = is_array($response)
+                ? (string) ($response['error'] ?? ($response['data']['message'] ?? 'لم يُعثر على الصورة في bm000 بهذا المعرف.'))
+                : 'اسم الملف مطلوب لحذف الصورة من bm000.';
+
+            return ['ok' => false, 'message' => $detail];
+        }
+
         try {
-            $response = ApiClient::delete('/api/material-images/' . rawurlencode($imageGuid));
+            $fallback = ApiClient::delete(
+                '/api/material-images/by-file?fileName=' . rawurlencode($fileName)
+            );
         } catch (Throwable $exception) {
             return ['ok' => false, 'message' => $exception->getMessage()];
         }
 
-        $status = (int) ($response['status'] ?? 0);
-        $amineDeleted = (bool) ($response['ok'] ?? false) || $status === 204 || $status === 404;
-        if (!$amineDeleted) {
-            return [
-                'ok' => false,
-                'message' => (string) ($response['error'] ?? ($response['data']['message'] ?? 'فشل حذف الصورة من الأمين.')),
-            ];
+        $fallbackStatus = (int) ($fallback['status'] ?? 0);
+        if (($fallback['ok'] ?? false) || $fallbackStatus === 204) {
+            return ['ok' => true, 'message' => '', 'image_guid' => $imageGuid];
         }
 
-        MaterialImageSyncService::purgeImageRecords($imageGuid, $fileName);
+        $fallbackMessage = (string) ($fallback['error'] ?? ($fallback['data']['message'] ?? 'فشل حذف الصورة من bm000.'));
+        if ($fallbackStatus > 0) {
+            $fallbackMessage = '[' . $fallbackStatus . '] ' . $fallbackMessage;
+        }
 
         return [
-            'ok' => true,
-            'message' => 'تم حذف الصورة من الأمين والموقع، وفك ارتباطها بالمادة، وإزالة سجلاتها من قواعد البيانات.',
+            'ok' => false,
+            'message' => $fallbackMessage,
         ];
     }
 
