@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Linq.Expressions;
 using ExistingDb.Api.Authorization;
@@ -129,7 +130,7 @@ public sealed class MaterialImagesController(
     {
         var items = (request.Items ?? [])
             .Where(item => !string.IsNullOrWhiteSpace(item.FileName))
-            .Take(250)
+            .Take(30)
             .ToArray();
         if (items.Length == 0)
         {
@@ -137,24 +138,44 @@ public sealed class MaterialImagesController(
         }
 
         var settings = await imageSettingsService.GetAsync(cancellationToken);
-        var requestedNames = items
-            .Select(item => Path.GetFileName(item.FileName.Trim()))
-            .Where(name => name is not "")
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var requestByFile = items
+            .Select(item => new
+            {
+                FileName = Path.GetFileName(item.FileName.Trim()),
+                Item = item,
+            })
+            .Where(entry => entry.FileName is not "")
+            .GroupBy(entry => entry.FileName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Item, StringComparer.OrdinalIgnoreCase);
 
-        var namesNeedingDb = new List<string>(requestedNames.Length);
-        var responsesByFile = new Dictionary<string, MaterialImageLookupBatchItemResponse>(StringComparer.OrdinalIgnoreCase);
-        foreach (var fileName in requestedNames)
+        var requestedNames = requestByFile.Keys.ToArray();
+        var responsesByFile = new ConcurrentDictionary<string, MaterialImageLookupBatchItemResponse>(StringComparer.OrdinalIgnoreCase);
+        var namesNeedingDb = new ConcurrentBag<string>();
+
+        Parallel.ForEach(requestedNames, fileName =>
         {
             var directPath = Path.GetFullPath(Path.Combine(settings.ImagesDirectory, fileName));
             if (!System.IO.File.Exists(directPath))
             {
                 namesNeedingDb.Add(fileName);
-                continue;
+                return;
             }
 
             var directInfo = new FileInfo(directPath);
+            if (requestByFile.TryGetValue(fileName, out var requestItem)
+                && requestItem.SizeBytes is > 0
+                && directInfo.Length != requestItem.SizeBytes.Value)
+            {
+                responsesByFile[fileName] = new MaterialImageLookupBatchItemResponse(
+                    fileName,
+                    null,
+                    directInfo.Length,
+                    string.Empty,
+                    true,
+                    true);
+                return;
+            }
+
             responsesByFile[fileName] = new MaterialImageLookupBatchItemResponse(
                 fileName,
                 null,
@@ -162,31 +183,27 @@ public sealed class MaterialImagesController(
                 ComputeSha256Hex(directPath),
                 true,
                 true);
-        }
+        });
 
-        var dbByFileName = new Dictionary<string, MaterialImageRecord>(StringComparer.OrdinalIgnoreCase);
-        if (namesNeedingDb.Count > 0)
+        foreach (var fileName in namesNeedingDb.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var dbImages = await mainDbContext.MaterialImages
+            var candidates = await mainDbContext.MaterialImages
                 .AsNoTracking()
-                .Where(image => image.Name != null)
+                .Where(image => image.Name != null && image.Name.Contains(fileName))
                 .ToListAsync(cancellationToken);
 
-            foreach (var dbImage in dbImages)
-            {
-                var extracted = ExtractFileName(dbImage.Name);
-                if (string.IsNullOrWhiteSpace(extracted) || !namesNeedingDb.Contains(extracted, StringComparer.OrdinalIgnoreCase))
+            var image = candidates
+                .FirstOrDefault(candidate =>
+                    string.Equals(ExtractFileName(candidate.Name), fileName, StringComparison.OrdinalIgnoreCase));
+
+            var dbByFileName = image is null
+                ? new Dictionary<string, MaterialImageRecord>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, MaterialImageRecord>(StringComparer.OrdinalIgnoreCase)
                 {
-                    continue;
-                }
+                    [fileName] = image
+                };
 
-                dbByFileName.TryAdd(extracted, dbImage);
-            }
-
-            foreach (var fileName in namesNeedingDb)
-            {
-                responsesByFile[fileName] = LookupFileOnAmine(fileName, settings.ImagesDirectory, dbByFileName);
-            }
+            responsesByFile[fileName] = LookupFileOnAmine(fileName, settings.ImagesDirectory, dbByFileName);
         }
 
         var responses = new List<MaterialImageLookupBatchItemResponse>(items.Length);

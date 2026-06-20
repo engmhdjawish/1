@@ -125,7 +125,7 @@ if ($method === 'POST') {
     }
 
     if ($action === 'scan-local-init') {
-        @set_time_limit(120);
+        @set_time_limit(60);
         $init = MaterialImageSyncService::scanLocalInit();
         echo json_encode([
             'ok' => !($init['offline'] ?? false),
@@ -136,10 +136,25 @@ if ($method === 'POST') {
         exit;
     }
 
-    if ($action === 'scan-local-chunk') {
-        @set_time_limit(120);
+    if ($action === 'reconcile-queue-chunk') {
+        @set_time_limit(60);
         $offset = max(0, (int) ($_POST['offset'] ?? 0));
-        $chunkSize = max(10, min(200, (int) ($_POST['chunk_size'] ?? MaterialImageSyncService::SCAN_CHUNK_SIZE)));
+        $chunkSize = max(5, min(30, (int) ($_POST['chunk_size'] ?? MaterialImageSyncService::RECONCILE_CHUNK_SIZE)));
+        $reconcile = MaterialImageSyncService::reconcileQueueChunk($offset, $chunkSize);
+        echo json_encode([
+            'ok' => !($reconcile['offline'] ?? false),
+            'message' => (string) ($reconcile['message'] ?? ''),
+            'reconcile' => $reconcile,
+            'sync' => MaterialImageSyncService::stats(),
+            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'scan-local-chunk') {
+        @set_time_limit(60);
+        $offset = max(0, (int) ($_POST['offset'] ?? 0));
+        $chunkSize = max(5, min(30, (int) ($_POST['chunk_size'] ?? MaterialImageSyncService::SCAN_CHUNK_SIZE)));
         $scan = MaterialImageSyncService::scanLocalChunk($offset, $chunkSize, $userId);
         echo json_encode([
             'ok' => !($scan['offline'] ?? false),
@@ -148,6 +163,12 @@ if ($method === 'POST') {
             'sync' => MaterialImageSyncService::stats(),
             'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
         ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'scan-local-finish') {
+        MaterialImageSyncService::clearScanCache();
+        echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
         exit;
     }
 

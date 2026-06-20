@@ -1079,11 +1079,21 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     scanLocalBtn.disabled = true;
     startSyncBtn && (startSyncBtn.disabled = true);
     syncProgressWrap?.classList.remove('hidden');
+    if (syncProgressLabel) syncProgressLabel.textContent = 'فحص محلي: 0%';
+    if (syncProgressBar) syncProgressBar.style.width = '1%';
+    if (syncStatus) syncStatus.textContent = 'جاري تهيئة الفحص...';
 
     const totals = { added: 0, skipped: 0, reconciled: 0, content_changed: 0 };
     let offset = 0;
     let totalFiles = 0;
-    let chunkSize = 100;
+    let chunkSize = 15;
+
+    const updateScanProgress = (current, total, label) => {
+      const safeTotal = Math.max(1, total);
+      const pct = Math.min(100, Math.round((current / safeTotal) * 100));
+      if (syncProgressLabel) syncProgressLabel.textContent = label || `فحص محلي: ${current} / ${total}`;
+      if (syncProgressBar) syncProgressBar.style.width = `${Math.max(1, pct)}%`;
+    };
 
     try {
       const initForm = new FormData();
@@ -1096,9 +1106,35 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
       }
 
       totalFiles = Number(initData.init?.total_files || 0);
-      chunkSize = Number(initData.init?.chunk_size || 100);
-      totals.reconciled += Number(initData.init?.reconcile?.reconciled || 0);
-      totals.content_changed += Number(initData.init?.reconcile?.content_changed || 0);
+      chunkSize = Number(initData.init?.chunk_size || 15);
+      const pendingQueue = Number(initData.init?.pending_queue_count || 0);
+
+      if (pendingQueue > 0) {
+        let reconcileOffset = 0;
+        if (syncStatus) syncStatus.textContent = `مطابقة الطابور المعلّق (0 / ${pendingQueue})...`;
+        while (reconcileOffset < pendingQueue) {
+          updateScanProgress(reconcileOffset, pendingQueue, `مطابقة الطابور: ${reconcileOffset} / ${pendingQueue}`);
+          const reconcileForm = new FormData();
+          reconcileForm.append('action', 'reconcile-queue-chunk');
+          reconcileForm.append('offset', String(reconcileOffset));
+          reconcileForm.append('chunk_size', String(chunkSize));
+          reconcileForm.append('queue_page', String(syncQueuePage));
+          reconcileForm.append('queue_page_size', String(syncQueuePageSize));
+          const reconcileRes = await fetch(API_URL, { method: 'POST', body: reconcileForm });
+          const reconcileData = await reconcileRes.json();
+          if (!reconcileData.ok) {
+            if (syncStatus) syncStatus.textContent = reconcileData.message || 'توقّفت مطابقة الطابور.';
+            return;
+          }
+          const reconcile = reconcileData.reconcile || {};
+          totals.reconciled += Number(reconcile.reconciled || 0);
+          totals.content_changed += Number(reconcile.content_changed || 0);
+          reconcileOffset = Number(reconcile.offset || (reconcileOffset + chunkSize));
+          if (reconcile.done) {
+            break;
+          }
+        }
+      }
 
       if (totalFiles === 0) {
         if (syncStatus) {
@@ -1108,14 +1144,9 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
         return;
       }
 
+      offset = 0;
       while (offset < totalFiles) {
-        const pct = Math.min(100, Math.round((offset / totalFiles) * 100));
-        if (syncProgressLabel) {
-          syncProgressLabel.textContent = `فحص محلي: ${offset} / ${totalFiles}`;
-        }
-        if (syncProgressBar) {
-          syncProgressBar.style.width = `${pct}%`;
-        }
+        updateScanProgress(offset, totalFiles);
         if (syncStatus) {
           syncStatus.textContent = `جاري فحص الملفات المحلية (${offset} / ${totalFiles})...`;
         }
@@ -1156,12 +1187,18 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
           ? `اكتمل الفحص: ${parts.join('، ')}.`
           : 'اكتمل الفحص — لا تغييرات.';
       }
-      if (syncProgressLabel) syncProgressLabel.textContent = `فحص محلي: ${totalFiles} / ${totalFiles}`;
-      if (syncProgressBar) syncProgressBar.style.width = '100%';
+      updateScanProgress(totalFiles, totalFiles, `فحص محلي: ${totalFiles} / ${totalFiles}`);
+
+      const finishForm = new FormData();
+      finishForm.append('action', 'scan-local-finish');
+      await fetch(API_URL, { method: 'POST', body: finishForm });
 
       await refreshOverview();
     } catch (error) {
       if (syncStatus) syncStatus.textContent = 'تعذّر إكمال الفحص المحلي.';
+      const failForm = new FormData();
+      failForm.append('action', 'scan-local-finish');
+      await fetch(API_URL, { method: 'POST', body: failForm });
     } finally {
       scanRunning = false;
       scanLocalBtn.disabled = false;

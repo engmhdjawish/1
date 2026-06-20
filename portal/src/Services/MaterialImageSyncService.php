@@ -4,14 +4,16 @@ declare(strict_types=1);
 
 namespace Portal\Services;
 
+use Portal\Config;
 use Portal\Database;
 use PDO;
 use Throwable;
 
 final class MaterialImageSyncService
 {
-    public const BATCH_LOOKUP_SIZE = 200;
-    public const SCAN_CHUNK_SIZE = 100;
+    public const BATCH_LOOKUP_SIZE = 15;
+    public const SCAN_CHUNK_SIZE = 15;
+    public const RECONCILE_CHUNK_SIZE = 15;
 
     public static function ensureTable(): void
     {
@@ -235,32 +237,140 @@ final class MaterialImageSyncService
         return self::reconcileQueueRows($rows);
     }
 
-    /** @return array{total_files: int, chunk_size: int, reconcile: array<string, mixed>, offline?: bool, message: string} */
-    public static function scanLocalInit(): array
+    public static function countPendingQueue(): int
     {
         self::ensureTable();
-        $reconcile = self::reconcileQueueWithAmine();
-        if ($reconcile['offline'] ?? false) {
+        $stmt = Database::pdo()->query(
+            "SELECT COUNT(*)::int
+             FROM material_image_sync_queue
+             WHERE sync_status IN ('pending', 'failed', 'syncing')"
+        );
+
+        return (int) ($stmt->fetchColumn() ?: 0);
+    }
+
+    /**
+     * @return array{
+     *   offset: int,
+     *   processed: int,
+     *   total_pending: int,
+     *   done: bool,
+     *   reconciled: int,
+     *   content_changed: int,
+     *   offline?: bool,
+     *   message: string
+     * }
+     */
+    public static function reconcileQueueChunk(int $offset, int $chunkSize): array
+    {
+        self::ensureTable();
+        $offset = max(0, $offset);
+        $chunkSize = max(5, min(30, $chunkSize > 0 ? $chunkSize : self::RECONCILE_CHUNK_SIZE));
+        $totalPending = self::countPendingQueue();
+
+        if (!(PortalSettingsService::apiHealth()['ok'] ?? false)) {
             return [
-                'total_files' => 0,
-                'chunk_size' => self::SCAN_CHUNK_SIZE,
-                'reconcile' => $reconcile,
+                'offset' => $offset,
+                'processed' => 0,
+                'total_pending' => $totalPending,
+                'done' => true,
+                'reconciled' => 0,
+                'content_changed' => 0,
                 'offline' => true,
-                'message' => (string) ($reconcile['message'] ?? 'الأمين غير متصل.'),
+                'message' => 'الأمين غير متصل.',
             ];
         }
 
-        $totalFiles = count(MaterialImageStorageService::listLocalFiles());
+        if ($totalPending === 0 || $offset >= $totalPending) {
+            return [
+                'offset' => $totalPending,
+                'processed' => 0,
+                'total_pending' => $totalPending,
+                'done' => true,
+                'reconciled' => 0,
+                'content_changed' => 0,
+                'offline' => false,
+                'message' => 'لا عناصر معلّقة في الطابور.',
+            ];
+        }
+
+        $stmt = Database::pdo()->prepare(
+            "SELECT
+                id::text AS id,
+                file_name,
+                local_file_path,
+                local_thumb_path,
+                sync_status::text AS sync_status
+             FROM material_image_sync_queue
+             WHERE sync_status IN ('pending', 'failed', 'syncing')
+             ORDER BY created_at ASC
+             LIMIT :limit OFFSET :offset"
+        );
+        $stmt->bindValue('limit', $chunkSize, PDO::PARAM_INT);
+        $stmt->bindValue('offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        if ($rows === []) {
+            return [
+                'offset' => $totalPending,
+                'processed' => 0,
+                'total_pending' => $totalPending,
+                'done' => true,
+                'reconciled' => 0,
+                'content_changed' => 0,
+                'offline' => false,
+                'message' => 'لا تغييرات.',
+            ];
+        }
+
+        $result = self::reconcileQueueRows($rows);
+        $processed = count($rows);
+        $nextOffset = $offset + $processed;
+
+        return array_merge($result, [
+            'offset' => $nextOffset,
+            'processed' => $processed,
+            'total_pending' => $totalPending,
+            'done' => $nextOffset >= $totalPending,
+        ]);
+    }
+
+    /** @return array{total_files: int, chunk_size: int, pending_queue_count: int, offline?: bool, message: string} */
+    public static function scanLocalInit(): array
+    {
+        self::ensureTable();
+        if (!(PortalSettingsService::apiHealth()['ok'] ?? false)) {
+            return [
+                'total_files' => 0,
+                'chunk_size' => self::SCAN_CHUNK_SIZE,
+                'pending_queue_count' => self::countPendingQueue(),
+                'offline' => true,
+                'message' => 'الأمين غير متصل.',
+            ];
+        }
+
+        $files = MaterialImageStorageService::listLocalFiles();
+        self::writeScanCache($files);
+        $totalFiles = count($files);
+        $pendingQueueCount = self::countPendingQueue();
 
         return [
             'total_files' => $totalFiles,
             'chunk_size' => self::SCAN_CHUNK_SIZE,
-            'reconcile' => $reconcile,
+            'pending_queue_count' => $pendingQueueCount,
             'offline' => false,
             'message' => $totalFiles > 0
                 ? ('جاهز لفحص ' . $totalFiles . ' ملف على دفعات.')
                 : 'لا توجد ملفات محلية للفحص.',
         ];
+    }
+
+    public static function clearScanCache(): void
+    {
+        $path = self::scanCachePath();
+        if (is_file($path)) {
+            unlink($path);
+        }
     }
 
     /**
@@ -281,7 +391,7 @@ final class MaterialImageSyncService
     {
         self::ensureTable();
         $offset = max(0, $offset);
-        $chunkSize = max(10, min(200, $chunkSize > 0 ? $chunkSize : self::SCAN_CHUNK_SIZE));
+        $chunkSize = max(5, min(30, $chunkSize > 0 ? $chunkSize : self::SCAN_CHUNK_SIZE));
 
         if (!(PortalSettingsService::apiHealth()['ok'] ?? false)) {
             return [
@@ -298,7 +408,22 @@ final class MaterialImageSyncService
             ];
         }
 
-        $allFiles = MaterialImageStorageService::listLocalFiles();
+        $allFiles = self::readScanCache();
+        if ($allFiles === null) {
+            return [
+                'offset' => $offset,
+                'processed' => 0,
+                'total_files' => 0,
+                'done' => true,
+                'added' => 0,
+                'skipped' => 0,
+                'reconciled' => 0,
+                'content_changed' => 0,
+                'offline' => false,
+                'message' => 'انتهت جلسة الفحص — أعد الضغط على «فحص الملفات المحلية».',
+            ];
+        }
+
         $totalFiles = count($allFiles);
         $slice = array_slice($allFiles, $offset, $chunkSize);
         if ($slice === []) {
@@ -436,8 +561,8 @@ final class MaterialImageSyncService
             return [
                 'added' => 0,
                 'skipped' => 0,
-                'reconciled' => (int) (($init['reconcile']['reconciled'] ?? 0)),
-                'content_changed' => (int) (($init['reconcile']['content_changed'] ?? 0)),
+                'reconciled' => 0,
+                'content_changed' => 0,
                 'offline' => true,
                 'message' => (string) ($init['message'] ?? 'الأمين غير متصل.'),
             ];
@@ -446,9 +571,29 @@ final class MaterialImageSyncService
         $totals = [
             'added' => 0,
             'skipped' => 0,
-            'reconciled' => (int) (($init['reconcile']['reconciled'] ?? 0)),
-            'content_changed' => (int) (($init['reconcile']['content_changed'] ?? 0)),
+            'reconciled' => 0,
+            'content_changed' => 0,
         ];
+        $pendingTotal = (int) ($init['pending_queue_count'] ?? 0);
+        $reconcileOffset = 0;
+        while ($reconcileOffset < $pendingTotal) {
+            $reconcile = self::reconcileQueueChunk($reconcileOffset, self::RECONCILE_CHUNK_SIZE);
+            if ($reconcile['offline'] ?? false) {
+                self::clearScanCache();
+
+                return array_merge($totals, [
+                    'offline' => true,
+                    'message' => (string) ($reconcile['message'] ?? 'الأمين غير متصل.'),
+                ]);
+            }
+            $totals['reconciled'] += (int) ($reconcile['reconciled'] ?? 0);
+            $totals['content_changed'] += (int) ($reconcile['content_changed'] ?? 0);
+            $reconcileOffset = (int) ($reconcile['offset'] ?? ($reconcileOffset + self::RECONCILE_CHUNK_SIZE));
+            if ($reconcile['done'] ?? false) {
+                break;
+            }
+        }
+
         $offset = 0;
         $chunkSize = self::SCAN_CHUNK_SIZE;
         $totalFiles = (int) ($init['total_files'] ?? 0);
@@ -456,6 +601,8 @@ final class MaterialImageSyncService
         while ($offset < $totalFiles) {
             $chunk = self::scanLocalChunk($offset, $chunkSize, $uploadedByUserId);
             if ($chunk['offline'] ?? false) {
+                self::clearScanCache();
+
                 return array_merge($totals, [
                     'offline' => true,
                     'message' => (string) ($chunk['message'] ?? 'الأمين غير متصل.'),
@@ -471,6 +618,8 @@ final class MaterialImageSyncService
                 break;
             }
         }
+
+        self::clearScanCache();
 
         return array_merge($totals, [
             'message' => self::reconcileMessage(
@@ -760,7 +909,7 @@ final class MaterialImageSyncService
             }
 
             try {
-                $response = ApiClient::postJson('/api/material-images/lookup-batch', ['items' => $items], 120);
+                $response = ApiClient::postJson('/api/material-images/lookup-batch', ['items' => $items], 45);
                 if (!($response['ok'] ?? false)) {
                     continue;
                 }
@@ -1082,6 +1231,59 @@ final class MaterialImageSyncService
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $row === false ? null : $row;
+    }
+
+    private static function scanCachePath(): string
+    {
+        $dir = Config::storagePath();
+        if (!is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+
+        return $dir . '/material-image-scan-cache.json';
+    }
+
+    /** @param list<array<string, mixed>> $files */
+    private static function writeScanCache(array $files): void
+    {
+        $payload = array_values(array_map(static fn (array $file): array => [
+            'file_name' => (string) ($file['file_name'] ?? ''),
+            'local_path' => (string) ($file['local_path'] ?? ''),
+        ], $files));
+
+        file_put_contents(self::scanCachePath(), json_encode($payload, JSON_UNESCAPED_UNICODE));
+    }
+
+    /** @return list<array{file_name: string, local_path: string}>|null */
+    private static function readScanCache(): ?array
+    {
+        $path = self::scanCachePath();
+        if (!is_file($path)) {
+            return null;
+        }
+
+        $decoded = json_decode((string) file_get_contents($path), true);
+        if (!is_array($decoded)) {
+            return null;
+        }
+
+        $rows = [];
+        foreach ($decoded as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $fileName = (string) ($row['file_name'] ?? '');
+            $localPath = (string) ($row['local_path'] ?? '');
+            if ($fileName === '' || $localPath === '') {
+                continue;
+            }
+            $rows[] = [
+                'file_name' => $fileName,
+                'local_path' => $localPath,
+            ];
+        }
+
+        return $rows;
     }
 
     private static function normalizeAmineGuid(mixed $value): ?string
