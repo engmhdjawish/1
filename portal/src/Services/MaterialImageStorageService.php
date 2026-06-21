@@ -1746,9 +1746,9 @@ final class MaterialImageStorageService
     {
         $query = [];
 
-        $search = trim((string) ($filters['search'] ?? ''));
+        $search = trim((string) ($filters['search'] ?? ($filters['keyword'] ?? '')));
         if ($search !== '') {
-            $query['search'] = $search;
+            $query['keyword'] = $search;
         }
 
         foreach ([
