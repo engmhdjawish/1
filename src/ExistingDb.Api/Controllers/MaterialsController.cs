@@ -26,7 +26,8 @@ public sealed class MaterialsController(
 
     [HttpGet]
     public async Task<ActionResult<MaterialPagedResponse>> GetMaterials(
-        [FromQuery] string? search = null,
+        [FromQuery] string? keyword = null,
+        [FromQuery(Name = "search")] string? legacySearch = null,
         [FromQuery] Guid? storeGuid = null,
         [FromQuery] string? storeGuids = null,
         [FromQuery] string? countryOfOrigin = null,
@@ -62,7 +63,8 @@ public sealed class MaterialsController(
         pageSize = Math.Clamp(pageSize, 1, 200);
 
         var filters = MaterialListFilters.FromQuery(
-            search,
+            keyword,
+            legacySearch,
             storeGuid,
             storeGuids,
             countryOfOrigin,
