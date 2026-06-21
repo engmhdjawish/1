@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Portal\Services\CatalogSectionResolver;
+
 /** @var array<string, string> $company */
 /** @var list<array<string, mixed>> $policies */
 /** @var string|null $guestPolicyId */
@@ -18,14 +20,83 @@ declare(strict_types=1);
 /** @var bool $policyIsNew */
 /** @var array<string, mixed>|null $editPolicy */
 /** @var array<string, array{guest_default: bool, share_links: int, customers: int}> $policyUsage */
+/** @var array $materialFilterOptions */
+/** @var string|null $materialFilterOptionsError */
 /** @var string|null $flash */
 /** @var string $flashType */
 
 require __DIR__ . '/partials/media-picker.php';
+require __DIR__ . '/partials/token-picker.php';
 
 $tab = $tab ?? 'company';
 $policyShowForm = $policyShowForm ?? false;
 $editPolicy = is_array($editPolicy ?? null) ? $editPolicy : [];
+$materialFilterOptions = is_array($materialFilterOptions ?? null) ? $materialFilterOptions : [];
+$materialFilterOptionsError = $materialFilterOptionsError ?? null;
+$policyFilterRules = is_array($editPolicy['filter_rules'] ?? null) ? $editPolicy['filter_rules'] : [];
+$selectedPolicyMaterialTypes = array_map('strval', $policyFilterRules['material_types'] ?? []);
+$selectedPolicyAgeCategories = array_map('strval', $policyFilterRules['age_categories'] ?? []);
+$selectedPolicyManufacturers = array_map('strval', $policyFilterRules['manufacturers'] ?? []);
+$selectedPolicySizeRanges = array_map('strval', $policyFilterRules['size_ranges'] ?? []);
+$selectedPolicyCountryOrigins = array_map('strval', $policyFilterRules['country_origins'] ?? []);
+$selectedPolicyStoreGuids = array_map('strval', $policyFilterRules['store_guids'] ?? []);
+$selectedPolicyGroupGuids = array_map('strval', $policyFilterRules['group_guids'] ?? []);
+$filterPolicyIsAvailable = array_key_exists('is_available', $policyFilterRules) ? $policyFilterRules['is_available'] : null;
+$filterPolicyHasImage = array_key_exists('has_image', $policyFilterRules) ? $policyFilterRules['has_image'] : null;
+
+$toOptionObjects = static function (array $values): array {
+    $result = [];
+    foreach ($values as $value) {
+        $item = trim((string) $value);
+        if ($item !== '') {
+            $result[] = ['value' => $item, 'label' => $item];
+        }
+    }
+
+    return array_values(array_unique($result, SORT_REGULAR));
+};
+
+$policyMaterialTypeOptions = array_values(array_unique(array_merge($materialFilterOptions['materialTypes'] ?? [], $selectedPolicyMaterialTypes)));
+$policyAgeCategoryOptions = array_values(array_unique(array_merge($materialFilterOptions['ageCategories'] ?? [], $selectedPolicyAgeCategories)));
+$policyManufacturerOptions = array_values(array_unique(array_merge($materialFilterOptions['manufacturers'] ?? [], $selectedPolicyManufacturers)));
+$policySizeRangeOptions = array_values(array_unique(array_merge($materialFilterOptions['sizeRanges'] ?? [], $selectedPolicySizeRanges)));
+$policyCountryOriginOptions = array_values(array_unique(array_merge($materialFilterOptions['countryOfOrigins'] ?? [], $selectedPolicyCountryOrigins)));
+
+$policyStoreOptionObjects = [];
+foreach ($materialFilterOptions['stores'] ?? [] as $store) {
+    if (!is_array($store)) {
+        continue;
+    }
+    $guid = trim((string) ($store['guid'] ?? $store['Guid'] ?? ''));
+    if ($guid === '') {
+        continue;
+    }
+    $label = trim((string) ($store['name'] ?? $store['Name'] ?? '')) ?: $guid;
+    $policyStoreOptionObjects[] = ['value' => $guid, 'label' => $label];
+}
+foreach ($selectedPolicyStoreGuids as $guid) {
+    if (!in_array($guid, array_column($policyStoreOptionObjects, 'value'), true)) {
+        $policyStoreOptionObjects[] = ['value' => $guid, 'label' => $guid];
+    }
+}
+
+$policyGroupOptionObjects = [];
+foreach ($materialFilterOptions['groups'] ?? [] as $group) {
+    if (!is_array($group)) {
+        continue;
+    }
+    $guid = trim((string) ($group['guid'] ?? $group['Guid'] ?? ''));
+    if ($guid === '') {
+        continue;
+    }
+    $label = trim((string) ($group['name'] ?? $group['Name'] ?? '')) ?: $guid;
+    $policyGroupOptionObjects[] = ['value' => $guid, 'label' => $label];
+}
+foreach ($selectedPolicyGroupGuids as $guid) {
+    if (!in_array($guid, array_column($policyGroupOptionObjects, 'value'), true)) {
+        $policyGroupOptionObjects[] = ['value' => $guid, 'label' => $guid];
+    }
+}
 
 $tabs = [];
 if ($canManageCompany) {
@@ -284,6 +355,92 @@ $tabUrl = static function (string $key) use ($tab): string {
         </div>
       </div>
     </article>
+
+    <article class="bg-white border border-border-subtle rounded-xl p-3">
+      <details open class="group">
+        <summary class="font-bold text-sm cursor-pointer list-none flex items-center justify-between gap-2">
+          <span>فلاتر المواد المعروضة</span>
+          <span class="text-xs text-text-muted font-normal">مثل روابط المشاركة — تحدّد ما يظهر في المتجر لهذه السياسة</span>
+        </summary>
+        <div class="mt-2 space-y-2">
+          <?php if (!empty($materialFilterOptionsError)): ?>
+            <p class="rounded-lg border border-amber-200 bg-amber-50 text-amber-700 px-2 py-1.5 text-xs"><?= h((string) $materialFilterOptionsError) ?></p>
+          <?php endif; ?>
+
+          <label class="text-xs block">
+            <span class="text-text-muted block mb-0.5">كلمة بحث افتراضية</span>
+            <input name="filter_keyword" value="<?= h((string) ($policyFilterRules['keyword'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="مثال: صيف">
+          </label>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div class="md:col-span-2"><?php $renderTokenPicker('نوع المادة', 'filter_material_types[]', $toOptionObjects($policyMaterialTypeOptions), $selectedPolicyMaterialTypes, 'policy-material-types', true, false, false, 4); ?></div>
+            <div class="md:col-span-2"><?php $renderTokenPicker('الفئة العمرية', 'filter_age_categories[]', $toOptionObjects($policyAgeCategoryOptions), $selectedPolicyAgeCategories, 'policy-age-categories', true, false, false, 4); ?></div>
+            <div><?php $renderTokenPicker('الشركة', 'filter_manufacturers[]', $toOptionObjects($policyManufacturerOptions), $selectedPolicyManufacturers, 'policy-manufacturers', true, false, false, 4); ?></div>
+            <div><?php $renderTokenPicker('القياس', 'filter_size_ranges[]', $toOptionObjects($policySizeRangeOptions), $selectedPolicySizeRanges, 'policy-size-ranges', true, false, false, 4); ?></div>
+            <div class="md:col-span-2"><?php $renderTokenPicker('بلد المنشأ', 'filter_country_origins[]', $toOptionObjects($policyCountryOriginOptions), $selectedPolicyCountryOrigins, 'policy-country-origins', true, false, false, 4); ?></div>
+            <div class="md:col-span-2"><?php $renderTokenPicker('المخازن', 'filter_store_guids[]', $policyStoreOptionObjects, $selectedPolicyStoreGuids, 'policy-store-guids', false, false, false, 4); ?></div>
+            <div class="md:col-span-2"><?php $renderTokenPicker('المجموعات', 'filter_group_guids[]', $policyGroupOptionObjects, $selectedPolicyGroupGuids, 'policy-group-guids', false, false, false, 4); ?></div>
+          </div>
+
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 pt-1">
+            <label class="text-xs">
+              <span class="text-text-muted block mb-0.5">التوفر</span>
+              <select name="filter_is_available" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+                <option value="" <?= $filterPolicyIsAvailable === null ? 'selected' : '' ?>>بدون قيد</option>
+                <option value="1" <?= $filterPolicyIsAvailable === true ? 'selected' : '' ?>>متوفر</option>
+                <option value="0" <?= $filterPolicyIsAvailable === false ? 'selected' : '' ?>>غير متوفر</option>
+              </select>
+            </label>
+            <label class="text-xs">
+              <span class="text-text-muted block mb-0.5">الصورة</span>
+              <select name="filter_has_image" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+                <option value="" <?= $filterPolicyHasImage === null ? 'selected' : '' ?>>بدون قيد</option>
+                <option value="1" <?= $filterPolicyHasImage === true ? 'selected' : '' ?>>مع صورة</option>
+                <option value="0" <?= $filterPolicyHasImage === false ? 'selected' : '' ?>>بدون صورة</option>
+              </select>
+            </label>
+          </div>
+
+          <details class="rounded-lg border border-border-subtle bg-surface-low">
+            <summary class="px-3 py-2 text-xs font-bold cursor-pointer">مخزون وأسعار (متقدم)</summary>
+            <div class="px-3 pb-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+              <label class="text-xs">
+                <span class="text-text-muted block mb-0.5">أدنى مخزون</span>
+                <input type="number" step="0.01" min="0" name="filter_min_warehouse_quantity" value="<?= h((string) ($policyFilterRules['min_warehouse_quantity'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+              </label>
+              <label class="text-xs">
+                <span class="text-text-muted block mb-0.5">أعلى مخزون</span>
+                <input type="number" step="0.01" min="0" name="filter_max_warehouse_quantity" value="<?= h((string) ($policyFilterRules['max_warehouse_quantity'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+              </label>
+              <label class="text-xs">
+                <span class="text-text-muted block mb-0.5">أدنى بيع ل.س</span>
+                <input type="number" step="0.01" min="0" name="filter_min_unit_sale_price_syp" value="<?= h((string) ($policyFilterRules['min_unit_sale_price_syp'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+              </label>
+              <label class="text-xs">
+                <span class="text-text-muted block mb-0.5">أعلى بيع ل.س</span>
+                <input type="number" step="0.01" min="0" name="filter_max_unit_sale_price_syp" value="<?= h((string) ($policyFilterRules['max_unit_sale_price_syp'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+              </label>
+              <label class="text-xs">
+                <span class="text-text-muted block mb-0.5">أدنى بيع $</span>
+                <input type="number" step="0.01" min="0" name="filter_min_unit_sale_price_usd" value="<?= h((string) ($policyFilterRules['min_unit_sale_price_usd'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+              </label>
+              <label class="text-xs">
+                <span class="text-text-muted block mb-0.5">أعلى بيع $</span>
+                <input type="number" step="0.01" min="0" name="filter_max_unit_sale_price_usd" value="<?= h((string) ($policyFilterRules['max_unit_sale_price_usd'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+              </label>
+              <label class="text-xs">
+                <span class="text-text-muted block mb-0.5">أدنى شراء $</span>
+                <input type="number" step="0.01" min="0" name="filter_min_unit_purchase_price_usd" value="<?= h((string) ($policyFilterRules['min_unit_purchase_price_usd'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+              </label>
+              <label class="text-xs">
+                <span class="text-text-muted block mb-0.5">أعلى شراء $</span>
+                <input type="number" step="0.01" min="0" name="filter_max_unit_purchase_price_usd" value="<?= h((string) ($policyFilterRules['max_unit_purchase_price_usd'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+              </label>
+            </div>
+          </details>
+        </div>
+      </details>
+    </article>
   </form>
   <script>
   (() => {
@@ -337,6 +494,8 @@ $tabUrl = static function (string $key) use ($tab): string {
               $usage = $policyUsage[$pid] ?? ['guest_default' => false, 'share_links' => 0, 'customers' => 0];
               $isDefault = $guestPolicyId === $pid;
               $usageTotal = (int) $usage['share_links'] + (int) $usage['customers'];
+              $policyFilters = CatalogSectionResolver::filterSummaryLabels(is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : []);
+              $policyFilterCount = count($policyFilters);
             ?>
             <tr class="hover:bg-slate-50 <?= $isDefault ? 'bg-primary/5' : '' ?>">
               <td class="px-4 py-3">
@@ -344,6 +503,9 @@ $tabUrl = static function (string $key) use ($tab): string {
                 <div class="text-xs text-text-muted font-mono" dir="ltr"><?= h((string) ($policy['code'] ?? '')) ?></div>
                 <?php if (trim((string) ($policy['description_ar'] ?? '')) !== ''): ?>
                   <div class="text-[11px] text-text-muted mt-0.5"><?= h((string) $policy['description_ar']) ?></div>
+                <?php endif; ?>
+                <?php if ($policyFilterCount > 0): ?>
+                  <div class="text-[11px] text-emerald-700 font-bold mt-1"><?= $policyFilterCount ?> فلتر مواد</div>
                 <?php endif; ?>
               </td>
               <td class="px-4 py-3 text-xs"><?= (int) ($policy['show_price'] ?? 0) === 1 ? 'نعم' : 'لا' ?></td>

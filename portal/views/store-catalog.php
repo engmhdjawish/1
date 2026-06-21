@@ -13,6 +13,7 @@ $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
 $filters = is_array($catalog['filters'] ?? null) ? $catalog['filters'] : [];
 $sectionContext = is_array($catalog['section_context'] ?? null) ? $catalog['section_context'] : null;
 $sectionFilterSummary = is_array($catalog['section_filter_summary'] ?? null) ? $catalog['section_filter_summary'] : [];
+$policyFilterSummary = is_array($catalog['policy_filter_summary'] ?? null) ? $catalog['policy_filter_summary'] : [];
 $isSectionBrowse = $sectionContext !== null;
 $products = is_array($catalog['products'] ?? null) ? $catalog['products'] : [];
 $resultFilters = is_array($catalog['resultFilters'] ?? null) ? $catalog['resultFilters'] : [];
@@ -120,6 +121,22 @@ if ($sectionContext !== null) {
       </div>
     </div>
   </div>
+
+  <?php if (!$isSectionBrowse && $policyFilterSummary !== []): ?>
+    <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+      <p class="text-sm font-bold text-gray-700 mb-2">قيود سياسة الوصول على المواد</p>
+      <div class="flex flex-wrap gap-2">
+        <?php foreach ($policyFilterSummary as $chip): ?>
+          <?php if (!is_array($chip)) continue; ?>
+          <span class="inline-flex items-center gap-1 rounded-full bg-white border border-emerald-200 px-3 py-1.5 text-xs font-bold text-slate-800">
+            <span class="text-emerald-700"><?= h((string) ($chip['label'] ?? '')) ?>:</span>
+            <?= h((string) ($chip['value'] ?? '')) ?>
+          </span>
+        <?php endforeach; ?>
+      </div>
+      <p class="text-xs text-gray-600 mt-2">تُطبَّق هذه القيود تلقائياً على كل زائر أو عميل مرتبط بهذه السياسة.</p>
+    </div>
+  <?php endif; ?>
 
   <?php if ($isSectionBrowse && $sectionFilterSummary !== []): ?>
     <div class="rounded-xl border border-primary/20 bg-white p-3">

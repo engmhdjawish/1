@@ -8,6 +8,7 @@ use Portal\Auth\WebSession;
 use Portal\Config;
 use Portal\Database;
 use Portal\Services\AccessPolicyService;
+use Portal\Services\ApiClient;
 use Portal\Services\EnvConfigService;
 use Portal\Services\PortalSettingsService;
 use Portal\Services\StorePolicyService;
@@ -44,6 +45,65 @@ if ($tab === 'policies' && !$canManageGuestPolicy && !$canManagePolicies) {
 $policyEditId = trim((string) ($_GET['policy_edit'] ?? ''));
 $policyIsNew = ($_GET['policy_new'] ?? '') === '1';
 $policyShowForm = $tab === 'policies' && ($policyEditId !== '' || $policyIsNew);
+
+$parseValues = static function (mixed $value): array {
+    if (is_array($value)) {
+        $parts = $value;
+    } else {
+        $parts = preg_split('/[,|\n]+/u', (string) $value) ?: [];
+    }
+    $result = [];
+    foreach ($parts as $part) {
+        $item = trim((string) $part);
+        if ($item !== '') {
+            $result[] = $item;
+        }
+    }
+
+    return array_values(array_unique($result));
+};
+$parseNullableFloat = static function (mixed $value): ?float {
+    if (is_array($value)) {
+        return null;
+    }
+    $text = trim((string) $value);
+
+    return $text !== '' && is_numeric($text) ? (float) $text : null;
+};
+$parseNullableBool = static function (mixed $value): ?bool {
+    if (is_array($value)) {
+        return null;
+    }
+    $text = trim(strtolower((string) $value));
+
+    return match ($text) {
+        '1', 'true', 'yes', 'on' => true,
+        '0', 'false', 'no', 'off' => false,
+        default => null,
+    };
+};
+$buildPolicyFilterPayload = static function () use ($parseValues, $parseNullableFloat, $parseNullableBool): array {
+    return [
+        'keyword' => trim((string) ($_POST['filter_keyword'] ?? '')),
+        'material_types' => $parseValues($_POST['filter_material_types'] ?? []),
+        'age_categories' => $parseValues($_POST['filter_age_categories'] ?? []),
+        'manufacturers' => $parseValues($_POST['filter_manufacturers'] ?? []),
+        'size_ranges' => $parseValues($_POST['filter_size_ranges'] ?? []),
+        'country_origins' => $parseValues($_POST['filter_country_origins'] ?? []),
+        'store_guids' => $parseValues($_POST['filter_store_guids'] ?? []),
+        'group_guids' => $parseValues($_POST['filter_group_guids'] ?? []),
+        'is_available' => $parseNullableBool($_POST['filter_is_available'] ?? null),
+        'has_image' => $parseNullableBool($_POST['filter_has_image'] ?? null),
+        'min_warehouse_quantity' => $parseNullableFloat($_POST['filter_min_warehouse_quantity'] ?? null),
+        'max_warehouse_quantity' => $parseNullableFloat($_POST['filter_max_warehouse_quantity'] ?? null),
+        'min_unit_sale_price_syp' => $parseNullableFloat($_POST['filter_min_unit_sale_price_syp'] ?? null),
+        'max_unit_sale_price_syp' => $parseNullableFloat($_POST['filter_max_unit_sale_price_syp'] ?? null),
+        'min_unit_sale_price_usd' => $parseNullableFloat($_POST['filter_min_unit_sale_price_usd'] ?? null),
+        'max_unit_sale_price_usd' => $parseNullableFloat($_POST['filter_max_unit_sale_price_usd'] ?? null),
+        'min_unit_purchase_price_usd' => $parseNullableFloat($_POST['filter_min_unit_purchase_price_usd'] ?? null),
+        'max_unit_purchase_price_usd' => $parseNullableFloat($_POST['filter_max_unit_purchase_price_usd'] ?? null),
+    ];
+};
 
 $flash = null;
 $flashType = 'success';
@@ -149,7 +209,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 isset($_POST['show_quantity']),
                 isset($_POST['allow_cart']),
                 isset($_POST['allow_order']),
-                isset($_POST['is_active'])
+                isset($_POST['is_active']),
+                $buildPolicyFilterPayload()
             );
             $flash = $result['message'];
             $flashType = $result['ok'] ? 'success' : 'error';
@@ -161,6 +222,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $policyShowForm = true;
             $policyEditId = trim((string) ($_POST['id'] ?? ''));
             $policyIsNew = $policyEditId === '';
+            $editPolicy = [
+                'id' => $policyEditId,
+                'code' => trim((string) ($_POST['code'] ?? '')),
+                'name_ar' => trim((string) ($_POST['name_ar'] ?? '')),
+                'description_ar' => trim((string) ($_POST['description_ar'] ?? '')),
+                'show_price' => isset($_POST['show_price']) ? 1 : 0,
+                'show_quantity' => isset($_POST['show_quantity']) ? 1 : 0,
+                'allow_cart' => isset($_POST['allow_cart']) ? 1 : 0,
+                'allow_order' => isset($_POST['allow_order']) ? 1 : 0,
+                'is_active' => isset($_POST['is_active']) ? 1 : 0,
+                'filter_rules' => $buildPolicyFilterPayload(),
+            ];
         }
     } elseif ($action === 'toggle_policy') {
         if (!$canManagePolicies) {
@@ -223,7 +296,42 @@ if ($policyShowForm) {
             'allow_cart' => 1,
             'allow_order' => 1,
             'is_active' => 1,
+            'filter_rules' => AccessPolicyService::defaultFilterRules(),
         ];
+    }
+}
+
+$materialFilterOptions = [
+    'materialTypes' => [],
+    'ageCategories' => [],
+    'manufacturers' => [],
+    'sizeRanges' => [],
+    'countryOfOrigins' => [],
+    'stores' => [],
+    'groups' => [],
+];
+$materialFilterOptionsError = null;
+if ($policyShowForm) {
+    try {
+        $filtersResponse = ApiClient::get('/api/materials/filter-options');
+        if ($filtersResponse['ok']) {
+            $data = is_array($filtersResponse['data']) ? $filtersResponse['data'] : [];
+            $stores = is_array($data['stores'] ?? null) ? $data['stores'] : (is_array($data['Stores'] ?? null) ? $data['Stores'] : []);
+            $groups = is_array($data['groups'] ?? null) ? $data['groups'] : (is_array($data['Groups'] ?? null) ? $data['Groups'] : []);
+            $materialFilterOptions = [
+                'materialTypes' => array_values(array_map('strval', is_array($data['materialTypes'] ?? null) ? $data['materialTypes'] : ($data['MaterialTypes'] ?? []))),
+                'ageCategories' => array_values(array_map('strval', is_array($data['ageCategories'] ?? null) ? $data['ageCategories'] : ($data['AgeCategories'] ?? []))),
+                'manufacturers' => array_values(array_map('strval', is_array($data['manufacturers'] ?? null) ? $data['manufacturers'] : ($data['Manufacturers'] ?? []))),
+                'sizeRanges' => array_values(array_map('strval', is_array($data['sizeRanges'] ?? null) ? $data['sizeRanges'] : ($data['SizeRanges'] ?? []))),
+                'countryOfOrigins' => array_values(array_map('strval', is_array($data['countryOfOrigins'] ?? null) ? $data['countryOfOrigins'] : ($data['CountryOfOrigins'] ?? []))),
+                'stores' => $stores,
+                'groups' => $groups,
+            ];
+        } else {
+            $materialFilterOptionsError = 'تعذر جلب خيارات الفلاتر من API.';
+        }
+    } catch (\Throwable $exception) {
+        $materialFilterOptionsError = $exception->getMessage();
     }
 }
 

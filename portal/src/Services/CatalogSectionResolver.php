@@ -76,6 +76,8 @@ final class CatalogSectionResolver
 
         if (($rules['has_image'] ?? null) === true) {
             $items[] = ['label' => 'الصورة', 'value' => 'مع صورة فقط'];
+        } elseif (($rules['has_image'] ?? null) === false) {
+            $items[] = ['label' => 'الصورة', 'value' => 'بدون صورة فقط'];
         }
 
         foreach ([
