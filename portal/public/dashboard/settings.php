@@ -232,7 +232,7 @@ foreach ($policies as $policy) {
     $policyUsage[(string) ($policy['id'] ?? '')] = AccessPolicyService::usageSummary((string) ($policy['id'] ?? ''));
 }
 
-$currentRoute = '/dashboard/settings.php';
+$currentRoute = '/dashboard/settings.php?tab=' . rawurlencode($tab);
 
 ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/settings.php';
