@@ -306,10 +306,14 @@ final class MaterialImageStorageService
         $contentLeft = $paddingX + ($brandBlockWidth > 0 ? $brandBlockWidth + 14 : 0);
         $contentRight = $width - $accentWidth - $paddingX;
         $contentWidth = max(120, $contentRight - $contentLeft);
+        $brandNameLines = self::detailsBannerBrandNameLines($font, $brandNameSize, $branding, $brandBlockWidth);
 
         $nameLines = [];
+        $nameIndent = $contentLeft;
         if ($productParts !== null) {
-            $prefixWidth = self::ttfLineWidth($font, $titleSize, $productParts['code'] . ' - ');
+            $prefix = $productParts['code'] . ' - ';
+            $prefixWidth = self::ttfLineWidth($font, $titleSize, $prefix);
+            $nameIndent = $contentLeft + $prefixWidth;
             $nameLines = self::wrapTtfTextLines(
                 $font,
                 $titleSize,
@@ -326,7 +330,7 @@ final class MaterialImageStorageService
             : ($line1 !== '' ? count(self::wrapTtfTextLines($font, $titleSize, $line1, $contentWidth)) : 0);
         $subtitleLines = $line2 !== '' ? self::wrapTtfTextLines($font, $subtitleSize, $line2, $contentWidth) : [];
 
-        $brandBlockHeight = self::detailsBannerBrandBlockHeight($branding, $brandNameSize, $brandPhoneSize);
+        $brandBlockHeight = self::detailsBannerBrandBlockHeight($branding, $brandNameSize, $brandPhoneSize, $brandNameLines);
         $titleBlockHeight = $titleLineCount > 0 ? (int) round($titleLineCount * $titleSize * 1.35) : 0;
         $subtitleBlockHeight = $subtitleLines !== [] ? (int) round(count($subtitleLines) * $subtitleSize * 1.3) : 0;
         $betweenBlocks = ($titleBlockHeight > 0 && $subtitleBlockHeight > 0) ? $lineGap : 0;
@@ -360,10 +364,13 @@ final class MaterialImageStorageService
             $brandNameSize,
             $brandPhoneSize,
             $paddingX,
-            $baseY
+            $baseY,
+            $brandBlockWidth,
+            $brandNameLines
         );
 
         $productY = $baseY + (int) $titleSize;
+        $drewProduct = false;
         if ($productParts !== null) {
             foreach ($nameLines as $index => $nameLine) {
                 if ($index === 0) {
@@ -374,7 +381,8 @@ final class MaterialImageStorageService
                         $productParts['code'],
                         $nameLine,
                         $contentLeft,
-                        $productY
+                        $productY,
+                        $contentRight
                     );
                 } else {
                     self::drawBannerTextLeft(
@@ -382,29 +390,28 @@ final class MaterialImageStorageService
                         $font,
                         $titleSize,
                         $nameLine,
-                        $contentLeft,
+                        $nameIndent,
                         $productY,
                         true,
                         true
                     );
                 }
                 $productY += (int) round($titleSize * 1.35);
+                $drewProduct = true;
             }
         } elseif ($line1 !== '') {
             $titleLines = self::wrapTtfTextLines($font, $titleSize, $line1, $contentWidth);
             foreach ($titleLines as $line) {
                 self::drawBannerTextLeft($canvas, $font, $titleSize, $line, $contentLeft, $productY, true, true);
                 $productY += (int) round($titleSize * 1.35);
+                $drewProduct = true;
             }
         }
 
         if ($subtitleLines !== []) {
-            $phoneBaseline = $branding['phone'] !== ''
-                ? $baseY + (int) round($brandNameSize * 1.15) + (int) $brandPhoneSize
-                : 0;
-            $packY = $phoneBaseline > 0
-                ? $phoneBaseline
-                : ($productY + (int) round($subtitleSize * 0.2));
+            $packY = $drewProduct
+                ? $productY + $lineGap
+                : $baseY + (int) $subtitleSize;
             foreach ($subtitleLines as $line) {
                 self::drawDetailsBannerTextLine(
                     $canvas,
@@ -498,38 +505,68 @@ final class MaterialImageStorageService
             return 0;
         }
 
-        $nameWidth = $branding['name'] !== ''
-            ? self::ttfLineWidth($font, $brandNameSize, ArabicGdText::shape($branding['name']))
-            : 0.0;
         $phoneWidth = $branding['phone'] !== ''
             ? self::ttfLineWidth($font, $brandPhoneSize, $branding['phone'])
             : 0.0;
+        $maxColumn = (int) max(120, round($canvasWidth * 0.4));
+        $minForPhone = (int) ceil($phoneWidth) + 12;
 
-        return (int) min(
-            max(96, (int) round($canvasWidth * 0.34)),
-            (int) ceil(max($nameWidth, $phoneWidth)) + 6
-        );
+        return min($maxColumn, max(120, $minForPhone));
     }
 
-    /** @param array{name: string, phone: string} $branding */
-    private static function detailsBannerBrandBlockHeight(array $branding, float $brandNameSize, float $brandPhoneSize): int
-    {
+    /**
+     * @param array{name: string, phone: string} $branding
+     * @return list<string>
+     */
+    private static function detailsBannerBrandNameLines(
+        string $font,
+        float $brandNameSize,
+        array $branding,
+        int $brandColumnWidth
+    ): array {
+        if ($branding['name'] === '' || $brandColumnWidth <= 0) {
+            return [];
+        }
+
+        $wrapWidth = max(72, $brandColumnWidth - 8);
+        $lines = self::wrapTtfTextLines($font, $brandNameSize, $branding['name'], $wrapWidth);
+
+        return $lines !== [] ? $lines : [$branding['name']];
+    }
+
+    /**
+     * @param array{name: string, phone: string} $branding
+     * @param list<string> $brandNameLines
+     */
+    private static function detailsBannerBrandBlockHeight(
+        array $branding,
+        float $brandNameSize,
+        float $brandPhoneSize,
+        array $brandNameLines
+    ): int {
         if ($branding['name'] === '' && $branding['phone'] === '') {
             return 0;
         }
 
-        $height = $branding['name'] !== '' ? (int) round($brandNameSize * 1.35) : 0;
+        $lineHeight = (int) round($brandNameSize * 1.2);
+        $height = $brandNameLines !== []
+            ? $lineHeight * count($brandNameLines)
+            : ($branding['name'] !== '' ? (int) round($brandNameSize * 1.35) : 0);
+
         if ($branding['phone'] !== '') {
-            $height += (int) round($brandPhoneSize * 1.35);
-            if ($branding['name'] !== '') {
-                $height += (int) round($brandNameSize * 0.15);
+            if ($height > 0) {
+                $height += (int) round($brandNameSize * 0.2);
             }
+            $height += (int) round($brandPhoneSize * 1.35);
         }
 
         return $height;
     }
 
-    /** @param array{name: string, phone: string} $branding */
+    /**
+     * @param array{name: string, phone: string} $branding
+     * @param list<string> $brandNameLines
+     */
     private static function drawDetailsBannerBranding(
         \GdImage $canvas,
         string $font,
@@ -537,10 +574,28 @@ final class MaterialImageStorageService
         float $brandNameSize,
         float $brandPhoneSize,
         int $paddingLeft,
-        int $baseY
+        int $baseY,
+        int $brandColumnWidth,
+        array $brandNameLines
     ): void {
         $baseline = $baseY + (int) $brandNameSize;
-        if ($branding['name'] !== '') {
+        $lineStep = (int) round($brandNameSize * 1.2);
+
+        if ($brandNameLines !== []) {
+            foreach ($brandNameLines as $nameLine) {
+                self::drawBannerTextLeft(
+                    $canvas,
+                    $font,
+                    $brandNameSize,
+                    $nameLine,
+                    $paddingLeft,
+                    $baseline,
+                    true,
+                    true
+                );
+                $baseline += $lineStep;
+            }
+        } elseif ($branding['name'] !== '') {
             self::drawBannerTextLeft(
                 $canvas,
                 $font,
@@ -551,10 +606,13 @@ final class MaterialImageStorageService
                 true,
                 true
             );
-            $baseline += (int) round($brandNameSize * 1.15);
+            $baseline += $lineStep;
         }
 
         if ($branding['phone'] !== '') {
+            if ($brandNameLines !== [] || $branding['name'] !== '') {
+                $baseline += (int) round($brandNameSize * 0.15);
+            }
             self::drawBannerTextLeft(
                 $canvas,
                 $font,
@@ -623,11 +681,28 @@ final class MaterialImageStorageService
         string $code,
         string $name,
         int $startX,
-        int $baselineY
+        int $baselineY,
+        int $maxRightX
     ): void {
         $separator = ' - ';
         $shapedName = ArabicGdText::shape($name);
         $color = imagecolorallocate($canvas, 255, 255, 255);
+        $maxWidth = max(80, $maxRightX - $startX);
+        $lineWidth = self::ttfLineWidth($font, $fontSize, $code)
+            + self::ttfLineWidth($font, $fontSize, $separator)
+            + self::ttfLineWidth($font, $fontSize, $shapedName);
+
+        if ($lineWidth > $maxWidth) {
+            $availableForName = max(
+                40,
+                $maxWidth
+                    - self::ttfLineWidth($font, $fontSize, $code)
+                    - self::ttfLineWidth($font, $fontSize, $separator)
+            );
+            $wrappedName = self::wrapTtfTextLines($font, $fontSize, $name, $availableForName);
+            $shapedName = ArabicGdText::shape($wrappedName[0] ?? $name);
+        }
+
         $x = $startX;
 
         imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $color, $font, $code);
