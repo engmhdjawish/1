@@ -292,34 +292,37 @@ final class MaterialImageStorageService
             return null;
         }
 
-        $titleSize = (float) max(20, min(42, (int) floor($width / 20)));
-        $subtitleSize = (float) max(16, min(34, (int) floor($width / 26)));
+        $titleSize = (float) max(20, min(40, (int) floor($width / 21)));
+        $subtitleSize = (float) max(15, min(28, (int) floor($width / 28)));
+        $codeBadgeSize = (float) max(14, min(24, round($titleSize * 0.68)));
         $paddingX = (int) max(18, min(36, (int) floor($width / 28)));
-        $paddingY = (int) max(16, min(28, (int) floor($width / 36)));
-        $accentWidth = (int) max(5, min(10, (int) floor($width / 120)));
-        $lineGap = (int) max(8, min(16, (int) round($titleSize * 0.35)));
+        $paddingY = (int) max(18, min(30, (int) floor($width / 34)));
+        $accentWidth = (int) max(4, min(8, (int) floor($width / 140)));
+        $lineGap = (int) max(10, min(18, (int) round($titleSize * 0.4)));
         $productParts = $line1 !== '' ? self::splitProductBannerLine($line1) : null;
         $branding = self::detailsBannerBranding();
-        $brandNameSize = (float) max(14, min(28, $subtitleSize * 0.9));
-        $brandPhoneSize = (float) max(13, min(24, $subtitleSize * 0.78));
+        $brandNameSize = (float) max(14, min(26, $subtitleSize * 0.92));
+        $brandPhoneSize = (float) max(13, min(22, $subtitleSize * 0.82));
         $brandBlockWidth = self::detailsBannerBrandColumnWidth($font, $brandNameSize, $brandPhoneSize, $branding, $width);
         $brandColumnRight = $paddingX + $brandBlockWidth;
-        $contentLeft = $brandBlockWidth > 0 ? $brandColumnRight + 16 : $paddingX;
+        $contentLeft = $brandBlockWidth > 0 ? $brandColumnRight + 18 : $paddingX;
         $contentRight = $width - $accentWidth - $paddingX;
         $contentWidth = max(120, $contentRight - $contentLeft);
         $brandNameLines = self::detailsBannerBrandNameLines($font, $brandNameSize, $branding, $brandBlockWidth);
-        $titleLineStep = (int) round($titleSize * 1.35);
-        $subtitleLineStep = (int) round($subtitleSize * 1.3);
+        $titleLineStep = (int) round($titleSize * 1.28);
+        $subtitleLineStep = (int) round($subtitleSize * 1.25);
+        $codeBadgeWidth = $productParts !== null
+            ? self::detailsBannerCodeBadgeWidth($font, $codeBadgeSize, $productParts['code'])
+            : 0;
 
         $nameLines = [];
         if ($productParts !== null) {
-            $suffix = ' - ' . $productParts['code'];
-            $suffixWidth = self::ttfLineWidth($font, $titleSize, $suffix);
+            $nameWrapWidth = max(80, (int) round($contentWidth - $codeBadgeWidth - ($codeBadgeWidth > 0 ? 12 : 0)));
             $nameLines = self::wrapTtfTextLines(
                 $font,
                 $titleSize,
                 $productParts['name'],
-                max(80, (int) round($contentWidth - $suffixWidth))
+                $nameWrapWidth
             );
             if ($nameLines === []) {
                 $nameLines = [$productParts['name']];
@@ -361,21 +364,14 @@ final class MaterialImageStorageService
         imagedestroy($image);
 
         self::fillDetailsBannerBackground($canvas, 0, $height, $width, $bannerHeight);
+        self::drawDetailsBannerTopAccent($canvas, 0, $height, $width);
+        self::drawDetailsBannerBrandPanel($canvas, 0, $height, $brandColumnRight + 12, $bannerHeight);
         self::drawDetailsBannerAccent($canvas, $width - $accentWidth, $height, $accentWidth, $bannerHeight);
 
         $footerTop = $height;
         $innerTop = $footerTop + $paddingY;
         $brandStartY = $innerTop + (int) floor(max(0, $innerBlockHeight - $brandBlockHeight) / 2);
         $contentStartY = $innerTop + (int) floor(max(0, $innerBlockHeight - $contentBlockHeight) / 2);
-
-        if ($brandBlockWidth > 0) {
-            self::drawDetailsBannerColumnDivider(
-                $canvas,
-                $brandColumnRight + 7,
-                $innerTop,
-                $innerTop + $innerBlockHeight
-            );
-        }
 
         self::drawDetailsBannerBranding(
             $canvas,
@@ -394,31 +390,32 @@ final class MaterialImageStorageService
         if ($productParts !== null) {
             foreach ($nameLines as $index => $nameLine) {
                 $productBaseline = $contentRowTop + (int) $titleSize;
-                if ($index === 0) {
-                    self::drawProductBannerTitleLine(
+                $nameRight = $index === 0 && $codeBadgeWidth > 0
+                    ? $contentRight - $codeBadgeWidth - 10
+                    : $contentRight;
+                self::drawBannerColoredTextRight(
+                    $canvas,
+                    $font,
+                    $titleSize,
+                    $nameLine,
+                    $contentLeft,
+                    $nameRight,
+                    $productBaseline,
+                    250,
+                    250,
+                    252,
+                    true,
+                    true
+                );
+                if ($index === 0 && $codeBadgeWidth > 0) {
+                    self::drawDetailsBannerCodeBadge(
                         $canvas,
                         $font,
-                        $titleSize,
+                        $codeBadgeSize,
                         $productParts['code'],
-                        $nameLine,
-                        $contentLeft,
-                        $contentRight,
-                        $productBaseline
-                    );
-                } else {
-                    self::drawBannerColoredTextRight(
-                        $canvas,
-                        $font,
-                        $titleSize,
-                        $nameLine,
-                        $contentLeft,
-                        $contentRight,
+                        $contentRight - $codeBadgeWidth,
                         $productBaseline,
-                        255,
-                        255,
-                        255,
-                        true,
-                        true
+                        $codeBadgeWidth
                     );
                 }
                 $contentRowTop += $titleLineStep;
@@ -436,9 +433,9 @@ final class MaterialImageStorageService
                     $contentLeft,
                     $contentRight,
                     $productBaseline,
-                    255,
-                    255,
-                    255,
+                    250,
+                    250,
+                    252,
                     true,
                     true
                 );
@@ -665,6 +662,87 @@ final class MaterialImageStorageService
         }
     }
 
+    private static function detailsBannerCodeBadgeWidth(string $font, float $fontSize, string $code): int
+    {
+        $code = trim($code);
+        if ($code === '') {
+            return 0;
+        }
+
+        return (int) ceil(self::ttfLineWidth($font, $fontSize, $code)) + 18;
+    }
+
+    private static function drawDetailsBannerBrandPanel(\GdImage $canvas, int $x, int $y, int $width, int $height): void
+    {
+        if ($width <= 0 || $height <= 0) {
+            return;
+        }
+
+        $panel = imagecolorallocatealpha($canvas, 196, 28, 38, 108);
+        imagefilledrectangle($canvas, $x, $y, $x + $width - 1, $y + $height - 1, $panel);
+        $edge = imagecolorallocatealpha($canvas, 255, 255, 255, 112);
+        imageline($canvas, $x + $width - 1, $y, $x + $width - 1, $y + $height - 1, $edge);
+    }
+
+    private static function drawDetailsBannerTopAccent(\GdImage $canvas, int $x, int $y, int $width): void
+    {
+        $lineHeight = 3;
+        for ($row = 0; $row < $lineHeight; $row++) {
+            for ($col = 0; $col < $width; $col++) {
+                $ratio = $width > 1 ? $col / ($width - 1) : 0.0;
+                $color = imagecolorallocate(
+                    $canvas,
+                    (int) round(232 + (176 - 232) * $ratio),
+                    (int) round(52 + (18 - 52) * $ratio),
+                    (int) round(64 + (32 - 64) * $ratio)
+                );
+                imagesetpixel($canvas, $x + $col, $y + $row, $color);
+            }
+        }
+    }
+
+    private static function fillBannerPill(\GdImage $canvas, int $left, int $top, int $right, int $bottom, int $color): void
+    {
+        if ($right <= $left || $bottom <= $top) {
+            return;
+        }
+
+        $radius = (int) max(2, floor(($bottom - $top) / 2));
+        imagefilledrectangle($canvas, $left + $radius, $top, $right - $radius, $bottom, $color);
+        imagefilledellipse($canvas, $left + $radius, (int) floor(($top + $bottom) / 2), $radius * 2, $bottom - $top, $color);
+        imagefilledellipse($canvas, $right - $radius, (int) floor(($top + $bottom) / 2), $radius * 2, $bottom - $top, $color);
+    }
+
+    private static function drawDetailsBannerCodeBadge(
+        \GdImage $canvas,
+        string $font,
+        float $fontSize,
+        string $code,
+        int $left,
+        int $baselineY,
+        int $badgeWidth
+    ): void {
+        $code = trim($code);
+        if ($code === '') {
+            return;
+        }
+
+        $size = (int) $fontSize;
+        $textWidth = self::ttfLineWidth($font, $fontSize, $code);
+        $badgeHeight = (int) max(22, round($fontSize * 1.45));
+        $badgeTop = $baselineY - (int) round($fontSize * 0.92);
+        $badgeBottom = $badgeTop + $badgeHeight;
+        $fill = imagecolorallocate($canvas, 214, 32, 45);
+        $border = imagecolorallocate($canvas, 255, 120, 128);
+        $textColor = imagecolorallocate($canvas, 255, 255, 255);
+
+        self::fillBannerPill($canvas, $left, $badgeTop, $left + $badgeWidth - 1, $badgeBottom, $fill);
+        imagerectangle($canvas, $left, $badgeTop, $left + $badgeWidth - 1, $badgeBottom, $border);
+        $textX = $left + (int) floor(($badgeWidth - $textWidth) / 2);
+        imagettftext($canvas, $size, 0, $textX + 1, $baselineY, $textColor, $font, $code);
+        imagettftext($canvas, $size, 0, $textX, $baselineY, $textColor, $font, $code);
+    }
+
     private static function drawDetailsBannerColumnDivider(\GdImage $canvas, int $x, int $topY, int $bottomY): void
     {
         $divider = imagecolorallocatealpha($canvas, 255, 255, 255, 105);
@@ -674,12 +752,12 @@ final class MaterialImageStorageService
     /** @return array{0: int, 1: int, 2: int} */
     private static function bannerAccentRgb(): array
     {
-        return [216, 25, 33];
+        return [244, 86, 96];
     }
 
     private static function bannerAccentStrokeWidth(float $fontSize): int
     {
-        return $fontSize >= 22.0 ? 2 : 1;
+        return 1;
     }
 
     private static function drawBannerOutlinedTtfText(
@@ -698,7 +776,7 @@ final class MaterialImageStorageService
             return;
         }
 
-        $outline = imagecolorallocate($canvas, 255, 255, 255);
+        $outline = imagecolorallocatealpha($canvas, 255, 255, 255, 28);
         $fill = imagecolorallocate($canvas, $fillRed, $fillGreen, $fillBlue);
         $size = (int) $fontSize;
         $stroke = self::bannerAccentStrokeWidth($fontSize);
@@ -711,6 +789,7 @@ final class MaterialImageStorageService
                 imagettftext($canvas, $size, 0, $x + $dx, $baselineY + $dy, $outline, $font, $drawText);
             }
         }
+        imagettftext($canvas, $size, 0, $x + 1, $baselineY + 1, imagecolorallocatealpha($canvas, 0, 0, 0, 55), $font, $drawText);
 
         if ($boldFill) {
             imagettftext($canvas, $size, 0, $x + 1, $baselineY, $fill, $font, $drawText);
@@ -813,8 +892,8 @@ final class MaterialImageStorageService
 
     private static function fillDetailsBannerBackground(\GdImage $canvas, int $x, int $y, int $width, int $height): void
     {
-        $top = [58, 58, 58];
-        $bottom = [42, 42, 42];
+        $top = [48, 49, 54];
+        $bottom = [24, 25, 28];
         for ($row = 0; $row < $height; $row++) {
             $ratio = $height > 1 ? $row / ($height - 1) : 0.0;
             $color = imagecolorallocate(
@@ -825,65 +904,12 @@ final class MaterialImageStorageService
             );
             imagefilledrectangle($canvas, $x, $y + $row, $x + $width - 1, $y + $row, $color);
         }
-
-        $border = imagecolorallocatealpha($canvas, 255, 255, 255, 110);
-        imageline($canvas, $x, $y, $x + $width - 1, $y, $border);
     }
 
     private static function drawDetailsBannerAccent(\GdImage $canvas, int $x, int $y, int $width, int $height): void
     {
-        $accent = imagecolorallocate($canvas, 216, 25, 33);
+        $accent = imagecolorallocate($canvas, 196, 28, 38);
         imagefilledrectangle($canvas, $x, $y, $x + $width - 1, $y + $height - 1, $accent);
-    }
-
-    private static function drawProductBannerTitleLine(
-        \GdImage $canvas,
-        string $font,
-        float $fontSize,
-        string $code,
-        string $name,
-        int $minX,
-        int $maxRightX,
-        int $baselineY
-    ): void {
-        $separator = ' - ';
-        $shapedName = ArabicGdText::shape($name);
-        $maxWidth = max(80, $maxRightX - $minX);
-        $codeWidth = self::ttfLineWidth($font, $fontSize, $code);
-        $separatorWidth = self::ttfLineWidth($font, $fontSize, $separator);
-        $nameWidth = self::ttfLineWidth($font, $fontSize, $shapedName);
-        $lineWidth = $nameWidth + $separatorWidth + $codeWidth;
-
-        if ($lineWidth > $maxWidth) {
-            $availableForName = max(40, $maxWidth - $codeWidth - $separatorWidth);
-            $wrappedName = self::wrapTtfTextLines($font, $fontSize, $name, $availableForName);
-            $shapedName = ArabicGdText::shape($wrappedName[0] ?? $name);
-            $nameWidth = self::ttfLineWidth($font, $fontSize, $shapedName);
-            $lineWidth = $nameWidth + $separatorWidth + $codeWidth;
-        }
-
-        $x = max($minX, $maxRightX - $lineWidth);
-        $nameColor = imagecolorallocate($canvas, 255, 255, 255);
-        $separatorColor = imagecolorallocate($canvas, 168, 168, 168);
-
-        imagettftext($canvas, (int) $fontSize, 0, $x + 1, $baselineY, $nameColor, $font, $shapedName);
-        imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $nameColor, $font, $shapedName);
-        $x += (int) round($nameWidth);
-        imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $separatorColor, $font, $separator);
-        $x += (int) round($separatorWidth);
-        [$accentRed, $accentGreen, $accentBlue] = self::bannerAccentRgb();
-        self::drawBannerOutlinedTtfText(
-            $canvas,
-            $font,
-            $fontSize,
-            $code,
-            $x,
-            $baselineY,
-            $accentRed,
-            $accentGreen,
-            $accentBlue,
-            true
-        );
     }
 
     /** @return array{label: string, value: string}|null */
@@ -901,7 +927,7 @@ final class MaterialImageStorageService
             }
 
             return [
-                'label' => 'التعبئة : ',
+                'label' => 'التعبئة',
                 'value' => $value,
             ];
         }
@@ -945,34 +971,30 @@ final class MaterialImageStorageService
         $shapedValue = ArabicGdText::shape($value);
         $labelWidth = self::ttfLineWidth($font, $fontSize, $shapedLabel);
         $valueWidth = self::ttfLineWidth($font, $fontSize, $shapedValue);
-        $lineWidth = $labelWidth + $valueWidth;
+        $dot = ArabicGdText::shape(' · ');
+        $dotWidth = self::ttfLineWidth($font, $fontSize, $dot);
+        $lineWidth = $valueWidth + $dotWidth + $labelWidth;
 
         if ($lineWidth > $maxWidth) {
-            $availableForValue = max(40, $maxWidth - $labelWidth);
+            $availableForValue = max(40, $maxWidth - $labelWidth - $dotWidth);
             $wrappedValue = self::wrapTtfTextLines($font, $fontSize, $value, $availableForValue);
             $shapedValue = ArabicGdText::shape($wrappedValue[0] ?? $value);
             $valueWidth = self::ttfLineWidth($font, $fontSize, $shapedValue);
-            $lineWidth = $labelWidth + $valueWidth;
+            $lineWidth = $valueWidth + $dotWidth + $labelWidth;
         }
 
-        $valueColor = imagecolorallocate($canvas, 236, 236, 236);
+        $valueColor = imagecolorallocate($canvas, 186, 188, 196);
+        $dotColor = imagecolorallocate($canvas, 118, 120, 128);
+        [$accentRed, $accentGreen, $accentBlue] = self::bannerAccentRgb();
+        $labelColor = imagecolorallocate($canvas, $accentRed, $accentGreen, $accentBlue);
         $valueX = max($minX, $maxRightX - $lineWidth);
-        $labelX = $valueX + (int) round($valueWidth);
+        $dotX = $valueX + (int) round($valueWidth);
+        $labelX = $dotX + (int) round($dotWidth);
 
         imagettftext($canvas, (int) $fontSize, 0, $valueX, $baselineY, $valueColor, $font, $shapedValue);
-        [$accentRed, $accentGreen, $accentBlue] = self::bannerAccentRgb();
-        self::drawBannerOutlinedTtfText(
-            $canvas,
-            $font,
-            $fontSize,
-            $shapedLabel,
-            $labelX,
-            $baselineY,
-            $accentRed,
-            $accentGreen,
-            $accentBlue,
-            false
-        );
+        imagettftext($canvas, (int) $fontSize, 0, $dotX, $baselineY, $dotColor, $font, $dot);
+        imagettftext($canvas, (int) $fontSize, 0, $labelX + 1, $baselineY, $labelColor, $font, $shapedLabel);
+        imagettftext($canvas, (int) $fontSize, 0, $labelX, $baselineY, $labelColor, $font, $shapedLabel);
     }
 
     private static function drawDetailsBannerTextLine(
