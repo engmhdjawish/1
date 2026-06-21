@@ -1209,74 +1209,22 @@ final class MaterialImageLinkService
             return '';
         }
 
-        $name = trim((string) ($material['name'] ?? $material['Name'] ?? ''));
-        $fromName = self::extractProductCodeToken($name);
-
-        $candidates = [
-            trim((string) ($material['material_code'] ?? '')),
-            trim((string) ($material['materialCode'] ?? '')),
-            trim((string) ($material['MaterialCode'] ?? '')),
-            trim((string) ($material['barcode'] ?? $material['Barcode'] ?? '')),
-            trim((string) ($material['latinName'] ?? $material['LatinName'] ?? '')),
-            $fromName,
-            trim((string) ($material['code'] ?? '')),
-        ];
-
-        foreach ($candidates as $candidate) {
-            if ($candidate !== '' && self::isPreferredProductCode($candidate)) {
-                return $candidate;
-            }
-        }
-
-        foreach ($candidates as $candidate) {
-            if ($candidate !== '') {
-                return $candidate;
-            }
-        }
-
-        return '';
-    }
-
-    private static function isPreferredProductCode(string $code): bool
-    {
-        return preg_match('/[A-Za-z]/', $code) === 1;
-    }
-
-    private static function extractProductCodeToken(string $text): string
-    {
-        $text = trim($text);
-        if ($text === '') {
-            return '';
-        }
-
-        if (preg_match('/\b([A-Z]{2,}[A-Z0-9\-]*\d[A-Z0-9\-]*)\b/u', $text, $matches) === 1) {
-            return trim((string) ($matches[1] ?? ''));
-        }
-
-        return '';
+        return trim((string) (
+            $material['material_code']
+            ?? $material['materialCode']
+            ?? $material['MaterialCode']
+            ?? ''
+        ));
     }
 
     /** @param array<string, mixed>|null $material */
-    private static function resolveMaterialBannerName(?array $material, string $code): string
+    private static function resolveMaterialBannerName(?array $material): string
     {
         if (!is_array($material)) {
             return '';
         }
 
-        $name = trim((string) ($material['name'] ?? $material['Name'] ?? ''));
-        if ($name === '') {
-            return '';
-        }
-
-        if ($code !== '') {
-            $pattern = '/(?<!\w)' . preg_quote($code, '/') . '(?!\w)/iu';
-            $name = preg_replace($pattern, ' ', $name) ?? $name;
-        }
-
-        $name = preg_replace('/^\d+\s+/u', '', $name) ?? $name;
-        $name = preg_replace('/\s+/u', ' ', $name) ?? $name;
-
-        return trim($name, " \t-—–·");
+        return trim((string) ($material['name'] ?? $material['Name'] ?? ''));
     }
 
     /** @param array<string, mixed>|null $material */
@@ -1292,7 +1240,7 @@ final class MaterialImageLinkService
         }
 
         $code = self::resolveMaterialBannerCode($material);
-        $name = self::resolveMaterialBannerName($material, $code);
+        $name = self::resolveMaterialBannerName($material);
 
         if ($code !== '' && $name !== '') {
             return $name . ' - ' . $code;
