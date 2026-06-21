@@ -46,51 +46,6 @@ public sealed class MaterialQueryBuilder(MainDbContext mainDbContext)
 
         var keywords = KeywordSearchTerms.Parse(search);
         if (keywords.Count == 0)
-<<<<<<< HEAD
-        {
-            return query;
-        }
-
-        if (keywords.Count == 1)
-        {
-            var keyword = keywords[0];
-            var exactCodeExists = await mainDbContext.Materials
-                .AsNoTracking()
-                .AnyAsync(material => material.Code == keyword, cancellationToken);
-
-            if (exactCodeExists)
-            {
-                return query.Where(material => material.Code == keyword);
-            }
-        }
-
-        foreach (var keyword in keywords)
-        {
-            query = ApplyKeywordContainsFilter(query, keyword);
-        }
-
-        return query;
-    }
-
-    private static IQueryable<MaterialRecord> ApplyKeywordContainsFilter(
-        IQueryable<MaterialRecord> query,
-        string keyword) =>
-        query.Where(material =>
-            (material.Name != null && material.Name.Contains(keyword)) ||
-            (material.LatinName != null && material.LatinName.Contains(keyword)) ||
-            (material.Code != null && material.Code.Contains(keyword)) ||
-            (material.BarCode != null && material.BarCode.Contains(keyword)) ||
-            (material.BarCode2 != null && material.BarCode2.Contains(keyword)) ||
-            (material.BarCode3 != null && material.BarCode3.Contains(keyword)));
-
-    private IQueryable<MaterialRecord> ApplyStoreAndQuantityFilters(
-        IQueryable<MaterialRecord> query,
-        MaterialListFilters filters)
-    {
-        var selectedStoreGuids = filters.StoreGuids;
-        if (selectedStoreGuids.Count == 0)
-=======
->>>>>>> origin/cursor/material-image-link-search-f03f
         {
             return query;
         }
