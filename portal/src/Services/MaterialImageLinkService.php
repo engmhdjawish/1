@@ -1197,6 +1197,73 @@ final class MaterialImageLinkService
     }
 
     /** @param array<string, mixed>|null $material */
+    private static function resolveMaterialBannerCode(?array $material): string
+    {
+        if (!is_array($material)) {
+            return '';
+        }
+
+        $candidates = [
+            trim((string) ($material['material_code'] ?? '')),
+            trim((string) ($material['materialCode'] ?? '')),
+            trim((string) ($material['MaterialCode'] ?? '')),
+            trim((string) ($material['barcode'] ?? $material['Barcode'] ?? '')),
+            trim((string) ($material['latinName'] ?? $material['LatinName'] ?? '')),
+            trim((string) ($material['code'] ?? '')),
+        ];
+        $best = '';
+        foreach ($candidates as $candidate) {
+            if ($candidate === '') {
+                continue;
+            }
+            if (preg_match('/[A-Za-z]/', $candidate) === 1) {
+                return $candidate;
+            }
+            if ($best === '' || strlen($candidate) > strlen($best)) {
+                $best = $candidate;
+            }
+        }
+
+        return $best;
+    }
+
+    /** @param array<string, mixed>|null $material */
+    private static function resolveMaterialBannerName(?array $material, string $code): string
+    {
+        if (!is_array($material)) {
+            return '';
+        }
+
+        $name = trim((string) ($material['name'] ?? $material['Name'] ?? ''));
+        if ($name === '') {
+            return '';
+        }
+
+        $scrub = [$code];
+        foreach (['material_code', 'materialCode', 'MaterialCode', 'barcode', 'Barcode', 'latinName', 'LatinName', 'code'] as $field) {
+            $value = trim((string) ($material[$field] ?? ''));
+            if ($value !== '') {
+                $scrub[] = $value;
+            }
+        }
+        $manufacturer = trim((string) ($material['manufacturer'] ?? $material['Manufacturer'] ?? $material['company'] ?? $material['Company'] ?? ''));
+        if ($manufacturer !== '') {
+            $scrub[] = $manufacturer;
+        }
+
+        foreach (array_unique($scrub) as $token) {
+            if ($token === '') {
+                continue;
+            }
+            $name = str_ireplace($token, '', $name);
+        }
+
+        $name = preg_replace('/\s+/u', ' ', $name) ?? $name;
+
+        return trim($name, " \t-—–·");
+    }
+
+    /** @param array<string, mixed>|null $material */
     private static function buildProductBannerLine(?array $material, string $override = ''): string
     {
         $override = trim($override);
@@ -1208,8 +1275,8 @@ final class MaterialImageLinkService
             return '';
         }
 
-        $code = trim((string) ($material['material_code'] ?? $material['materialCode'] ?? $material['code'] ?? ''));
-        $name = trim((string) ($material['name'] ?? $material['Name'] ?? ''));
+        $code = self::resolveMaterialBannerCode($material);
+        $name = self::resolveMaterialBannerName($material, $code);
 
         if ($code !== '' && $name !== '') {
             return $name . ' - ' . $code;
