@@ -138,10 +138,10 @@ final class MaterialImageLinkService
         $localPath = MaterialImageStorageService::resolveLocalPath($fileName, false);
         $hasLocal = $localPath !== null && is_file($localPath);
         $previewUrl = $imageGuid !== ''
-            ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1'
+            ? MaterialImageStorageService::imageGuidUrl($imageGuid, true)
             : ($hasLocal ? MaterialImageStorageService::publicUrl($fileName, true) : '');
         $previewFullUrl = $imageGuid !== ''
-            ? '/api/image.php?id=' . rawurlencode($imageGuid)
+            ? MaterialImageStorageService::imageGuidUrl($imageGuid, false)
             : ($hasLocal ? MaterialImageStorageService::publicUrl($fileName, false) : '');
 
         return [

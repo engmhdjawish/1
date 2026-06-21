@@ -162,6 +162,11 @@ function material_image_guid(array $item): string
     return trim((string) ($item['productImageGuid'] ?? $item['ProductImageGuid'] ?? ''));
 }
 
+function material_image_api_url(string $imageGuid, bool $thumb = true): string
+{
+    return \Portal\Services\MaterialImageStorageService::imageGuidUrl($imageGuid, $thumb);
+}
+
 function product_url(string $guid, ?string $return = null, ?string $offer = null): string
 {
     $guid = trim($guid);
