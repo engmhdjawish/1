@@ -122,6 +122,9 @@ declare(strict_types=1);
   let totalCount = 0;
   const pageSize = 12;
   const sourceMaterialMap = new Map();
+  const MATERIAL_SEARCH_DEBOUNCE_MS = 420;
+  const SOURCE_FILTER_DEBOUNCE_MS = 500;
+  const MIN_MATERIAL_SEARCH_LEN = 2;
 
   function currentLinkFilter() {
     const active = document.querySelector('.link-filter-btn.border-primary.bg-primary');
@@ -449,17 +452,10 @@ declare(strict_types=1);
     const previewBtn = card.querySelector('.preview-btn');
     if (!input || !sug || !chips || !assignBtn || !cardStatus) return;
 
-    previewBtn?.addEventListener('click', () => {
-      openLightbox(item.preview_full_url || item.preview_url, item.linked_material_name || '');
-    });
+    let searchTimer = null;
+    let searchRequestId = 0;
 
-    input.addEventListener('input', async () => {
-      const q = input.value.trim();
-      if (q.length < 2) {
-        closeSuggestions(card);
-        return;
-      }
-      const rows = await searchMaterials(q);
+    const renderSuggestionRows = (rows) => {
       if (!rows.length) {
         sug.innerHTML = '<div class="p-2 text-xs text-text-muted">لا نتائج</div>';
         sug.classList.remove('hidden');
@@ -473,6 +469,59 @@ declare(strict_types=1);
         return `<button type="button" class="block w-full text-right px-3 py-2 text-xs hover:bg-surface-low add-mat" data-guid="${escapeHtml(guid)}" data-label="${escapeHtml(label)}" data-code="${escapeHtml(code)}" data-name="${escapeHtml(name)}">${escapeHtml(label)}</button>`;
       }).join('');
       sug.classList.remove('hidden');
+    };
+
+    const runMaterialLookup = async (query) => {
+      const requestId = ++searchRequestId;
+      sug.innerHTML = '<div class="p-2 text-xs text-text-muted">جاري البحث...</div>';
+      sug.classList.remove('hidden');
+      try {
+        const rows = await searchMaterials(query);
+        if (requestId !== searchRequestId) return;
+        renderSuggestionRows(rows);
+      } catch (error) {
+        if (requestId !== searchRequestId) return;
+        const message = error instanceof Error ? error.message : 'تعذر البحث.';
+        sug.innerHTML = `<div class="p-2 text-xs text-red-600">${escapeHtml(message)}</div>`;
+        sug.classList.remove('hidden');
+      }
+    };
+
+    const scheduleMaterialLookup = () => {
+      if (searchTimer) clearTimeout(searchTimer);
+      const q = input.value.trim();
+      if (q.length < MIN_MATERIAL_SEARCH_LEN) {
+        searchRequestId += 1;
+        closeSuggestions(card);
+        return;
+      }
+      searchTimer = setTimeout(() => {
+        searchTimer = null;
+        runMaterialLookup(q);
+      }, MATERIAL_SEARCH_DEBOUNCE_MS);
+    };
+
+    previewBtn?.addEventListener('click', () => {
+      openLightbox(item.preview_full_url || item.preview_url, item.linked_material_name || '');
+    });
+
+    input.addEventListener('input', scheduleMaterialLookup);
+
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        if (searchTimer) clearTimeout(searchTimer);
+        const q = input.value.trim();
+        if (q.length >= MIN_MATERIAL_SEARCH_LEN) {
+          runMaterialLookup(q);
+        }
+        return;
+      }
+      if (event.key === 'Escape') {
+        if (searchTimer) clearTimeout(searchTimer);
+        searchRequestId += 1;
+        closeSuggestions(card);
+      }
     });
 
     sug.addEventListener('click', (event) => {
@@ -656,9 +705,20 @@ declare(strict_types=1);
       loadSources(1);
     });
   });
+  let sourceSearchTimer = null;
+
+  sourceMaterialSearch?.addEventListener('input', () => {
+    if (sourceSearchTimer) clearTimeout(sourceSearchTimer);
+    sourceSearchTimer = setTimeout(() => {
+      sourceSearchTimer = null;
+      loadSources(1);
+    }, SOURCE_FILTER_DEBOUNCE_MS);
+  });
+
   sourceMaterialSearch?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
+      if (sourceSearchTimer) clearTimeout(sourceSearchTimer);
       loadSources(1);
     }
   });
