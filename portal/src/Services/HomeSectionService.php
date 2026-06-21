@@ -646,7 +646,7 @@ final class HomeSectionService
 
         $keyword = trim((string) ($rules['keyword'] ?? ''));
         if ($keyword !== '') {
-            $query['search'] = $keyword;
+            $query['keyword'] = $keyword;
         }
 
         $appendCsv = static function (?string $existing, string $value): string {

@@ -35,7 +35,7 @@ try {
     $response = ApiClient::get('/api/materials', [
         'page' => $page,
         'pageSize' => $pageSize,
-        'search' => $q,
+        'keyword' => $q,
     ]);
     if ($response['ok']) {
         $data = is_array($response['data'] ?? null) ? $response['data'] : [];

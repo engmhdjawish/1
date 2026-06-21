@@ -318,7 +318,7 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
         $params = array_filter([
             'page' => $page,
             'pageSize' => 24,
-            'search' => $search,
+            'keyword' => $search,
             'storeGuids' => $queryStoreGuids !== [] ? implode(',', $queryStoreGuids) : null,
             'materialTypes' => $queryMaterialTypes !== [] ? implode(',', $queryMaterialTypes) : null,
             'ageCategories' => $queryAgeCategories !== [] ? implode(',', $queryAgeCategories) : null,
@@ -347,7 +347,7 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
             $fallbackParams = array_filter([
                 'page' => $page,
                 'pageSize' => 24,
-                'search' => $search,
+                'keyword' => $search,
                 'materialTypes' => $queryMaterialTypes !== [] ? implode(',', $queryMaterialTypes) : null,
                 'ageCategories' => $queryAgeCategories !== [] ? implode(',', $queryAgeCategories) : null,
                 'manufacturers' => $queryManufacturers !== [] ? implode(',', $queryManufacturers) : null,
