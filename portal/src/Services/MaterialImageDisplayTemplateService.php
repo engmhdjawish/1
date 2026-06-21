@@ -18,7 +18,7 @@ final class MaterialImageDisplayTemplateService
     public static function defaultTemplate(): array
     {
         return [
-            'version' => 1,
+            'version' => 2,
             'enabled' => true,
             'photo' => [
                 'background' => '#f3f4f6',
@@ -29,6 +29,8 @@ final class MaterialImageDisplayTemplateService
                 'accent_color' => '#d81921',
                 'accent_width_rem' => 0.28,
                 'padding_rem' => 0.6,
+                'min_height_rem' => 3.2,
+                'font_base_rem' => 1,
             ],
             'elements' => [
                 [
@@ -45,9 +47,10 @@ final class MaterialImageDisplayTemplateService
                     'valign' => 'center',
                     'style' => [
                         'color' => '#ffffff',
-                        'font_size_rem' => 0.78,
+                        'font_size_em' => 0.95,
                         'font_weight' => 800,
                         'nowrap' => true,
+                        'direction' => 'rtl',
                     ],
                 ],
                 [
@@ -64,9 +67,10 @@ final class MaterialImageDisplayTemplateService
                     'valign' => 'start',
                     'style' => [
                         'color' => 'rgba(255,255,255,0.88)',
-                        'font_size_rem' => 0.68,
+                        'font_size_em' => 0.82,
                         'font_weight' => 400,
                         'nowrap' => true,
+                        'direction' => 'rtl',
                     ],
                 ],
                 [
@@ -86,6 +90,9 @@ final class MaterialImageDisplayTemplateService
                         'background' => 'rgba(255,255,255,0.95)',
                         'border_radius_rem' => 0.35,
                         'padding_rem' => 0.12,
+                        'image_scale' => 1,
+                        'crop_x_pct' => 50,
+                        'crop_y_pct' => 50,
                     ],
                 ],
                 [
@@ -102,9 +109,10 @@ final class MaterialImageDisplayTemplateService
                     'valign' => 'center',
                     'style' => [
                         'color' => '#ffffff',
-                        'font_size_rem' => 0.62,
+                        'font_size_em' => 0.72,
                         'font_weight' => 800,
                         'nowrap' => true,
+                        'direction' => 'rtl',
                     ],
                 ],
                 [
@@ -121,7 +129,7 @@ final class MaterialImageDisplayTemplateService
                     'valign' => 'start',
                     'style' => [
                         'color' => 'rgba(255,255,255,0.82)',
-                        'font_size_rem' => 0.6,
+                        'font_size_em' => 0.68,
                         'font_weight' => 700,
                         'nowrap' => true,
                         'direction' => 'ltr',
@@ -139,6 +147,7 @@ final class MaterialImageDisplayTemplateService
                 ['key' => 'material.product_line', 'label' => 'رمز - اسم المنتج', 'type' => 'text'],
                 ['key' => 'material.packaging_line', 'label' => 'سطر التعبئة', 'type' => 'text'],
                 ['key' => 'material.code', 'label' => 'رمز المادة', 'type' => 'text'],
+                ['key' => 'material.code', 'label' => 'رمز المادة (باركود)', 'type' => 'barcode'],
                 ['key' => 'material.name', 'label' => 'اسم المادة', 'type' => 'text'],
                 ['key' => 'material.manufacturer', 'label' => 'الشركة المصنعة', 'type' => 'text'],
                 ['key' => 'material.material_type', 'label' => 'نوع المادة', 'type' => 'text'],
@@ -156,6 +165,18 @@ final class MaterialImageDisplayTemplateService
                 ['key' => 'business.company_address', 'label' => 'العنوان', 'type' => 'text'],
                 ['key' => 'business.company_logo', 'label' => 'شعار الشركة (من الإعدادات)', 'type' => 'image'],
             ],
+        ];
+    }
+
+    /** @return list<array{key: string, label: string}> */
+    public static function qrTargetCatalog(): array
+    {
+        return [
+            ['key' => 'business.whatsapp', 'label' => 'واتساب الشركة'],
+            ['key' => 'business.website', 'label' => 'الموقع الرئيسي'],
+            ['key' => 'business.store', 'label' => 'صفحة المتجر'],
+            ['key' => 'material.product_url', 'label' => 'صفحة المادة في المتجر'],
+            ['key' => 'custom', 'label' => 'رابط مخصص'],
         ];
     }
 
@@ -240,7 +261,7 @@ final class MaterialImageDisplayTemplateService
         usort($elements, static fn (array $a, array $b): int => ((int) ($a['z_index'] ?? 0)) <=> ((int) ($b['z_index'] ?? 0)));
 
         return [
-            'version' => 1,
+            'version' => 2,
             'enabled' => (bool) ($template['enabled'] ?? true),
             'photo' => [
                 'background' => self::sanitizeColor((string) ($photo['background'] ?? $default['photo']['background'])),
@@ -251,6 +272,8 @@ final class MaterialImageDisplayTemplateService
                 'accent_color' => self::sanitizeColor((string) ($footer['accent_color'] ?? $default['footer']['accent_color'])),
                 'accent_width_rem' => self::clampFloat($footer['accent_width_rem'] ?? $default['footer']['accent_width_rem'], 0, 1),
                 'padding_rem' => self::clampFloat($footer['padding_rem'] ?? $default['footer']['padding_rem'], 0, 2),
+                'min_height_rem' => self::clampFloat($footer['min_height_rem'] ?? $default['footer']['min_height_rem'], 2, 8),
+                'font_base_rem' => self::clampFloat($footer['font_base_rem'] ?? $default['footer']['font_base_rem'], 0.75, 1.5),
             ],
             'elements' => $elements,
         ];
@@ -263,17 +286,20 @@ final class MaterialImageDisplayTemplateService
     private static function normalizeElement(array $element): ?array
     {
         $type = (string) ($element['type'] ?? '');
-        if (!in_array($type, ['text', 'image'], true)) {
+        if (!in_array($type, ['text', 'image', 'barcode', 'qrcode'], true)) {
             return null;
         }
 
         $region = (string) ($element['region'] ?? 'footer');
-        if (!in_array($region, ['photo', 'footer'], true)) {
+        if (!in_array($region, ['photo', 'footer', 'frame'], true)) {
             $region = 'footer';
         }
 
         $field = trim((string) ($element['field'] ?? ''));
         $imageUrl = trim((string) ($element['image_url'] ?? ''));
+        $qrTarget = trim((string) ($element['qr_target'] ?? 'business.whatsapp'));
+        $qrCustomUrl = trim((string) ($element['qr_custom_url'] ?? ''));
+
         if ($type === 'image' && $field === 'image.fixed' && $imageUrl === '') {
             return null;
         }
@@ -281,6 +307,12 @@ final class MaterialImageDisplayTemplateService
             return null;
         }
         if ($type === 'image' && $field === '' && $imageUrl === '') {
+            return null;
+        }
+        if ($type === 'barcode' && $field === '') {
+            $field = 'material.code';
+        }
+        if ($type === 'qrcode' && $qrTarget === 'custom' && $qrCustomUrl === '') {
             return null;
         }
 
@@ -293,8 +325,15 @@ final class MaterialImageDisplayTemplateService
         return [
             'id' => preg_replace('/[^a-zA-Z0-9_-]/', '', $id) ?: ('el_' . bin2hex(random_bytes(4))),
             'type' => $type,
-            'field' => $field !== '' ? $field : ($type === 'image' ? 'image.fixed' : 'material.product_line'),
+            'field' => $field !== '' ? $field : match ($type) {
+                'image' => 'image.fixed',
+                'barcode' => 'material.code',
+                'qrcode' => '',
+                default => 'material.product_line',
+            },
             'image_url' => $imageUrl,
+            'qr_target' => $qrTarget !== '' ? $qrTarget : 'business.whatsapp',
+            'qr_custom_url' => $qrCustomUrl,
             'region' => $region,
             'x_pct' => self::clampFloat($element['x_pct'] ?? 0, 0, 100),
             'y_pct' => self::clampFloat($element['y_pct'] ?? 0, 0, 100),
@@ -315,6 +354,22 @@ final class MaterialImageDisplayTemplateService
     /** @return array<string, mixed> */
     private static function normalizeStyle(array $style, string $type): array
     {
+        if ($type === 'barcode') {
+            return [
+                'foreground' => self::sanitizeColor((string) ($style['foreground'] ?? '#000000')),
+                'background' => trim((string) ($style['background'] ?? '#ffffff')),
+                'opacity' => self::clampFloat($style['opacity'] ?? 1, 0, 1),
+            ];
+        }
+
+        if ($type === 'qrcode') {
+            return [
+                'foreground' => self::sanitizeColor((string) ($style['foreground'] ?? '#000000')),
+                'background' => self::sanitizeColor((string) ($style['background'] ?? '#ffffff')),
+                'opacity' => self::clampFloat($style['opacity'] ?? 1, 0, 1),
+            ];
+        }
+
         $base = $type === 'image'
             ? [
                 'object_fit' => 'contain',
@@ -322,10 +377,13 @@ final class MaterialImageDisplayTemplateService
                 'border_radius_rem' => 0,
                 'padding_rem' => 0,
                 'opacity' => 1,
+                'image_scale' => 1,
+                'crop_x_pct' => 50,
+                'crop_y_pct' => 50,
             ]
             : [
                 'color' => '#ffffff',
-                'font_size_rem' => 0.72,
+                'font_size_em' => 0.78,
                 'font_weight' => 700,
                 'background' => '',
                 'border_radius_rem' => 0,
@@ -334,6 +392,10 @@ final class MaterialImageDisplayTemplateService
                 'nowrap' => true,
                 'direction' => 'rtl',
             ];
+
+        if ($type === 'text' && isset($style['font_size_rem']) && !isset($style['font_size_em'])) {
+            $style['font_size_em'] = $style['font_size_rem'];
+        }
 
         foreach ($base as $key => $defaultValue) {
             if (!array_key_exists($key, $style)) {
@@ -348,6 +410,12 @@ final class MaterialImageDisplayTemplateService
                 $base[$key] = self::clampFloat($style[$key], 0, 1);
             } elseif (str_ends_with($key, '_rem')) {
                 $base[$key] = self::clampFloat($style[$key], 0, 4);
+            } elseif (str_ends_with($key, '_em')) {
+                $base[$key] = self::clampFloat($style[$key], 0.4, 2.5);
+            } elseif (in_array($key, ['image_scale'], true)) {
+                $base[$key] = self::clampFloat($style[$key], 0.5, 4);
+            } elseif (in_array($key, ['crop_x_pct', 'crop_y_pct'], true)) {
+                $base[$key] = self::clampFloat($style[$key], 0, 100);
             } elseif ($key === 'direction') {
                 $base[$key] = in_array($style[$key], ['rtl', 'ltr'], true) ? (string) $style[$key] : 'rtl';
             } elseif ($key === 'object_fit') {
@@ -386,6 +454,11 @@ final class MaterialImageDisplayTemplateService
         $code = trim((string) ($material['materialCode'] ?? $material['code'] ?? $material['material_code'] ?? ''));
         $name = trim((string) ($material['name'] ?? $material['Name'] ?? ''));
         $productLine = $code !== '' && $name !== '' ? $code . ' - ' . $name : ($code !== '' ? $code : $name);
+        $guid = trim((string) ($material['guid'] ?? $material['Guid'] ?? $material['materialGuid'] ?? ''));
+        $productUrl = $guid !== '' ? '/store.php?guid=' . rawurlencode($guid) : '/store.php';
+
+        $whatsapp = preg_replace('/\D+/', '', trim((string) ($company['company_whatsapp'] ?? '')));
+        $whatsappUrl = $whatsapp !== '' ? 'https://wa.me/' . $whatsapp : '';
 
         return [
             'material.product_line' => $productLine,
@@ -398,6 +471,7 @@ final class MaterialImageDisplayTemplateService
             'material.size_range' => trim((string) ($material['sizeRange'] ?? $material['size_range'] ?? '')),
             'material.country_of_origin' => trim((string) ($material['countryOfOrigin'] ?? $material['country_of_origin'] ?? '')),
             'material.group_name' => trim((string) ($material['groupName'] ?? $material['group_name'] ?? '')),
+            'material.product_url' => $productUrl,
             'business.company_name' => trim((string) ($company['company_name'] ?? '')) ?: 'جاويش للتجارة',
             'business.company_phone' => $phone,
             'business.company_mobile' => trim((string) ($company['company_mobile'] ?? '')),
@@ -405,6 +479,9 @@ final class MaterialImageDisplayTemplateService
             'business.company_email' => trim((string) ($company['company_email'] ?? '')),
             'business.company_address' => trim((string) ($company['company_address'] ?? '')),
             'business.company_logo' => $logoUrl,
+            'business.website' => '/index.php',
+            'business.store' => '/store.php',
+            'business.whatsapp' => $whatsappUrl,
         ];
     }
 
@@ -469,7 +546,149 @@ final class MaterialImageDisplayTemplateService
             return array_merge($element, ['image_url' => $url]);
         }
 
+        if ($type === 'barcode') {
+            $code = trim((string) ($fieldMap[$field] ?? $fieldMap['material.code'] ?? ''));
+            if ($code === '') {
+                return null;
+            }
+
+            return array_merge($element, ['barcode_value' => $code]);
+        }
+
+        if ($type === 'qrcode') {
+            $url = self::resolveQrUrl($element, $fieldMap);
+            if ($url === '') {
+                return null;
+            }
+
+            return array_merge($element, ['qr_url' => $url]);
+        }
+
         return null;
+    }
+
+    /**
+     * @param array<string, mixed> $element
+     * @param array<string, string> $fieldMap
+     */
+    public static function resolveQrUrl(array $element, array $fieldMap): string
+    {
+        $target = trim((string) ($element['qr_target'] ?? 'business.whatsapp'));
+        if ($target === 'custom') {
+            return trim((string) ($element['qr_custom_url'] ?? ''));
+        }
+
+        $value = trim((string) ($fieldMap[$target] ?? ''));
+        if ($value === '') {
+            return '';
+        }
+
+        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
+            return $value;
+        }
+
+        if (str_starts_with($value, '/')) {
+            $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
+            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            if ($host === '') {
+                return $value;
+            }
+
+            return $scheme . '://' . $host . $value;
+        }
+
+        return $value;
+    }
+
+    public static function barcodeImageUrl(string $code, int $height = 48, string $foreground = '#000000', string $background = '#ffffff'): string
+    {
+        return '/api/barcode.php?' . http_build_query([
+            'code' => $code,
+            'h' => $height,
+            'fg' => $foreground,
+            'bg' => $background,
+        ]);
+    }
+
+    public static function qrImageUrl(string $url, int $size = 120, string $foreground = '#000000', string $background = '#ffffff'): string
+    {
+        return '/api/qr.php?' . http_build_query([
+            'd' => $url,
+            's' => $size,
+            'fg' => $foreground,
+            'bg' => $background,
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $element
+     */
+    public static function renderElementInnerHtml(array $element): string
+    {
+        $type = (string) ($element['type'] ?? '');
+        if ($type === 'text') {
+            return '<div class="material-image-frame__el-text">' . htmlspecialchars((string) ($element['text'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</div>';
+        }
+
+        if ($type === 'image') {
+            $style = is_array($element['style'] ?? null) ? $element['style'] : [];
+            $imgStyle = self::cssMapToString(self::imageInnerStyle($style));
+
+            return '<div class="material-image-frame__el-imagebox"><img class="material-image-frame__el-image" src="'
+                . htmlspecialchars((string) ($element['image_url'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                . '" alt="" style="' . htmlspecialchars($imgStyle, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"></div>';
+        }
+
+        if ($type === 'barcode') {
+            $style = is_array($element['style'] ?? null) ? $element['style'] : [];
+            $src = self::barcodeImageUrl(
+                (string) ($element['barcode_value'] ?? ''),
+                64,
+                (string) ($style['foreground'] ?? '#000000'),
+                (string) ($style['background'] ?? '#ffffff')
+            );
+
+            return '<img class="material-image-frame__el-barcode" src="'
+                . htmlspecialchars($src, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                . '" alt="" loading="lazy">';
+        }
+
+        if ($type === 'qrcode') {
+            $style = is_array($element['style'] ?? null) ? $element['style'] : [];
+            $src = self::qrImageUrl(
+                (string) ($element['qr_url'] ?? ''),
+                128,
+                (string) ($style['foreground'] ?? '#000000'),
+                (string) ($style['background'] ?? '#ffffff')
+            );
+
+            return '<img class="material-image-frame__el-qrcode" src="'
+                . htmlspecialchars($src, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                . '" alt="" loading="lazy" data-mif-qrcode-fallback="'
+                . htmlspecialchars((string) ($element['qr_url'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                . '">';
+        }
+
+        return '';
+    }
+
+    /** @param array<string, mixed> $style */
+    /** @return array<string, string> */
+    public static function imageInnerStyle(array $style): array
+    {
+        $scale = self::clampFloat($style['image_scale'] ?? 1, 0.5, 4);
+        $cropX = self::clampFloat($style['crop_x_pct'] ?? 50, 0, 100);
+        $cropY = self::clampFloat($style['crop_y_pct'] ?? 50, 0, 100);
+        $fit = (string) ($style['object_fit'] ?? 'contain');
+
+        return [
+            'width' => '100%',
+            'height' => '100%',
+            'object-fit' => in_array($fit, ['contain', 'cover', 'fill'], true) ? $fit : 'contain',
+            'object-position' => self::formatPct($cropX) . ' ' . self::formatPct($cropY),
+            'transform' => 'scale(' . rtrim(rtrim(number_format($scale, 3, '.', ''), '0'), '.') . ')',
+            'transform-origin' => self::formatPct($cropX) . ' ' . self::formatPct($cropY),
+        ];
     }
 
     /** @return array<string, string> */
@@ -478,6 +697,7 @@ final class MaterialImageDisplayTemplateService
         return self::resolveFieldMap([
             'materialCode' => 'A-1024',
             'name' => 'حذاء رياضي أطفال',
+            'guid' => '00000000-0000-0000-0000-000000000001',
             'manufacturer' => 'JAWISH',
             'materialType' => 'أحذية',
             'ageCategory' => '3-6 سنوات',
@@ -506,13 +726,20 @@ final class MaterialImageDisplayTemplateService
         ];
 
         $align = (string) ($element['align'] ?? 'start');
+        $direction = (string) ($style['direction'] ?? 'rtl');
+        $css['direction'] = $direction;
         $css['text-align'] = match ($align) {
             'center' => 'center',
-            'end' => 'right',
-            default => 'left',
+            'end' => 'end',
+            default => 'start',
         };
 
         $valign = (string) ($element['valign'] ?? 'center');
+        $css['align-items'] = match ($align) {
+            'center' => 'center',
+            'end' => 'flex-end',
+            default => 'flex-start',
+        };
         $css['justify-content'] = match ($valign) {
             'start' => 'flex-start',
             'end' => 'flex-end',
@@ -520,21 +747,18 @@ final class MaterialImageDisplayTemplateService
         };
 
         if (($element['type'] ?? '') === 'text') {
+            $fontEm = (float) ($style['font_size_em'] ?? $style['font_size_rem'] ?? 0.78);
+            $css['--mif-el-font-em'] = rtrim(rtrim(number_format($fontEm, 3, '.', ''), '0'), '.');
             $css['color'] = (string) ($style['color'] ?? '#ffffff');
-            $css['font-size'] = self::formatRem((float) ($style['font_size_rem'] ?? 0.72));
             $css['font-weight'] = (string) ((int) ($style['font_weight'] ?? 700));
             if (!empty($style['nowrap'])) {
                 $css['white-space'] = 'nowrap';
                 $css['overflow'] = 'hidden';
                 $css['text-overflow'] = 'ellipsis';
             }
-            if (!empty($style['direction'])) {
-                $css['direction'] = (string) $style['direction'];
-            }
         }
 
         if (($element['type'] ?? '') === 'image') {
-            $css['object-fit'] = (string) ($style['object_fit'] ?? 'contain');
             if (!empty($style['background'])) {
                 $css['background'] = (string) $style['background'];
             }
@@ -544,6 +768,12 @@ final class MaterialImageDisplayTemplateService
             if ((float) ($style['padding_rem'] ?? 0) > 0) {
                 $css['padding'] = self::formatRem((float) $style['padding_rem']);
             }
+        }
+
+        if (($element['type'] ?? '') === 'barcode' || ($element['type'] ?? '') === 'qrcode') {
+            $css['display'] = 'flex';
+            $css['align-items'] = 'center';
+            $css['justify-content'] = 'center';
         }
 
         if (!empty($style['background']) && ($element['type'] ?? '') === 'text') {

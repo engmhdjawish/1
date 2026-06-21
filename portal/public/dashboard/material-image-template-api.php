@@ -39,6 +39,7 @@ try {
                 'template' => MaterialImageDisplayTemplateService::getTemplate(),
                 'defaultTemplate' => MaterialImageDisplayTemplateService::defaultTemplate(),
                 'fieldCatalog' => MaterialImageDisplayTemplateService::fieldCatalog(),
+                'qrTargetCatalog' => MaterialImageDisplayTemplateService::qrTargetCatalog(),
                 'sampleFields' => MaterialImageDisplayTemplateService::sampleFieldMap(),
                 'companyLogoUrl' => PortalSettingsService::companyLogoUrl(),
             ]);

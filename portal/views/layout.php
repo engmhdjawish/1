@@ -211,6 +211,7 @@ $materialImageTemplateJson = json_encode($materialImageDisplayTemplate, JSON_UNE
   })();
 </script>
 <script>window.__materialImageTemplate = <?= $materialImageTemplateJson ?: '{}' ?>;</script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js" defer></script>
 <script src="/assets/material-image-frame.js" defer></script>
 <?php require __DIR__ . '/partials/product-quick-view.php'; ?>
 </body>

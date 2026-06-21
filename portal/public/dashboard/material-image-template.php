@@ -14,6 +14,7 @@ require dirname(__DIR__, 2) . '/views/helpers.php';
 $user = WebSession::user();
 $template = MaterialImageDisplayTemplateService::getTemplate();
 $fieldCatalog = MaterialImageDisplayTemplateService::fieldCatalog();
+$qrTargetCatalog = MaterialImageDisplayTemplateService::qrTargetCatalog();
 $sampleFields = MaterialImageDisplayTemplateService::sampleFieldMap();
 $companyLogoUrl = PortalSettingsService::companyLogoUrl() ?? '';
 $currentRoute = '/dashboard/material-image-template.php';
@@ -24,6 +25,7 @@ $content = ob_get_clean();
 $title = 'محرر قالب عرض صور المواد';
 $extraHead = '<link href="/css/material-image-frame.css" rel="stylesheet">'
     . '<link href="/assets/dashboard/material-image-template-editor.css" rel="stylesheet">';
-$extraScripts = '<script src="/assets/dashboard/media-picker.js" defer></script>'
+$extraScripts = '<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js" defer></script>'
+    . '<script src="/assets/dashboard/media-picker.js" defer></script>'
     . '<script src="/assets/dashboard/material-image-template-editor.js" defer></script>';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

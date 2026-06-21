@@ -47,6 +47,8 @@ if ($useTemplate) {
         '--mif-accent-width' => rtrim(rtrim(number_format((float) ($footer['accent_width_rem'] ?? 0.28), 3, '.', ''), '0'), '.') . 'rem',
         '--mif-footer-bg' => (string) ($footer['background'] ?? 'linear-gradient(180deg, #454545 0%, #3a3a3a 100%)'),
         '--mif-footer-padding' => rtrim(rtrim(number_format((float) ($footer['padding_rem'] ?? 0.6), 3, '.', ''), '0'), '.') . 'rem',
+        '--mif-footer-min-height' => rtrim(rtrim(number_format((float) ($footer['min_height_rem'] ?? 3.2), 3, '.', ''), '0'), '.') . 'rem',
+        '--mif-footer-font-base' => rtrim(rtrim(number_format((float) ($footer['font_base_rem'] ?? 1), 3, '.', ''), '0'), '.') . 'rem',
         '--mif-photo-bg' => (string) ($photo['background'] ?? '#f3f4f6'),
     ]);
 }
@@ -67,14 +69,9 @@ $renderLayer = static function (array $elements, string $region): void {
           $inlineStyle = MaterialImageDisplayTemplateService::cssMapToString(
               MaterialImageDisplayTemplateService::elementInlineStyle($element)
           );
-          $type = (string) ($element['type'] ?? '');
         ?>
-        <div class="material-image-frame__el" style="<?= h($inlineStyle) ?>">
-          <?php if ($type === 'text'): ?>
-            <div class="material-image-frame__el-text"><?= h((string) ($element['text'] ?? '')) ?></div>
-          <?php elseif ($type === 'image'): ?>
-            <img class="material-image-frame__el-image" src="<?= h((string) ($element['image_url'] ?? '')) ?>" alt="" style="object-fit: <?= h((string) (($element['style']['object_fit'] ?? 'contain'))) ?>">
-          <?php endif; ?>
+        <div class="material-image-frame__el material-image-frame__el--<?= h((string) ($element['type'] ?? 'text')) ?>" style="<?= h($inlineStyle) ?>">
+          <?= MaterialImageDisplayTemplateService::renderElementInnerHtml($element) ?>
         </div>
       <?php endforeach; ?>
     </div>
@@ -82,22 +79,31 @@ $renderLayer = static function (array $elements, string $region): void {
 };
 ?>
 <div class="<?= $frameClasses ?>"<?= $frameStyle !== '' ? ' style="' . h($frameStyle) . '"' : '' ?>>
-  <div class="material-image-frame__photo">
-    <?php if ($imageSrc !== ''): ?>
-      <img src="<?= h($imageSrc) ?>" alt="<?= h($imageAlt) ?>" loading="lazy">
-    <?php else: ?>
-      <span class="material-symbols-outlined material-image-frame__placeholder" aria-hidden="true">inventory_2</span>
-    <?php endif; ?>
-    <?php if ($useTemplate): ?>
-      <?php $renderLayer($resolvedElements, 'photo'); ?>
-    <?php endif; ?>
-  </div>
-
-  <?php if ($useTemplate && $footerEnabled): ?>
-    <div class="material-image-frame__footer">
-      <?php $renderLayer($resolvedElements, 'footer'); ?>
+  <?php if ($useTemplate): ?>
+    <div class="material-image-frame__stack">
+      <div class="material-image-frame__photo">
+        <?php if ($imageSrc !== ''): ?>
+          <img src="<?= h($imageSrc) ?>" alt="<?= h($imageAlt) ?>" loading="lazy">
+        <?php else: ?>
+          <span class="material-symbols-outlined material-image-frame__placeholder" aria-hidden="true">inventory_2</span>
+        <?php endif; ?>
+        <?php $renderLayer($resolvedElements, 'photo'); ?>
+      </div>
+      <?php if ($footerEnabled): ?>
+        <div class="material-image-frame__footer">
+          <?php $renderLayer($resolvedElements, 'footer'); ?>
+        </div>
+      <?php endif; ?>
+      <?php $renderLayer($resolvedElements, 'frame'); ?>
     </div>
-  <?php elseif (!$useTemplate): ?>
+  <?php else: ?>
+    <div class="material-image-frame__photo">
+      <?php if ($imageSrc !== ''): ?>
+        <img src="<?= h($imageSrc) ?>" alt="<?= h($imageAlt) ?>" loading="lazy">
+      <?php else: ?>
+        <span class="material-symbols-outlined material-image-frame__placeholder" aria-hidden="true">inventory_2</span>
+      <?php endif; ?>
+    </div>
     <?php
       $branding = material_image_branding($companyContext, isset($companyLogoUrl) ? (string) $companyLogoUrl : null);
       $productLine = material_product_line($material);
