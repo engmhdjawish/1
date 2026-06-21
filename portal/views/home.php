@@ -174,20 +174,14 @@ if ($aboutSnippet !== '') {
               <?php endif; ?>
             >
               <?php if ($showImages): ?>
-                <div class="h-32 bg-gray-100 flex items-center justify-center overflow-hidden">
-                  <?php if ($imageGuid !== ''): ?>
-                    <img src="/api/image.php?id=<?= urlencode($imageGuid) ?>&thumb=1" alt="<?= h((string) ($item['name'] ?? '')) ?>" class="h-32 w-full object-cover" loading="lazy">
-                  <?php else: ?>
-                    <span class="material-symbols-outlined text-gray-300 text-4xl" aria-hidden="true">inventory_2</span>
-                  <?php endif; ?>
-                </div>
+                <?php
+                  $material = $item;
+                  $variant = 'strip';
+                  require __DIR__ . '/partials/material-image-frame.php';
+                ?>
               <?php endif; ?>
               <div class="p-3 flex flex-col flex-1">
                 <div class="font-bold text-sm line-clamp-2 min-h-[2.5rem]"><?= h((string) ($item['name'] ?? '-')) ?></div>
-                <div class="text-xs text-gray-500 mt-1"><?= h((string) ($item['materialCode'] ?? '')) ?></div>
-                <div class="mt-2 text-xs font-bold text-gray-600 rounded-full bg-gray-100 px-2 py-0.5 inline-block w-fit">
-                  <?= h(format_packaging($packaging)) ?> <?= h($primaryUnit) ?>/<?= h($packageUnit) ?>
-                </div>
                 <?php if ($showAnyPrice): ?>
                   <?php
                     $showPriceSypBlock = $showPriceSyp;

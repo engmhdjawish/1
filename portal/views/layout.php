@@ -39,6 +39,7 @@ $whatsappLink = $whatsapp !== '' ? 'https://wa.me/' . $whatsapp : '';
     <title><?= h($title) ?> — <?= h($siteName) ?></title>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&display=swap" rel="stylesheet">
+    <link href="/css/material-image-frame.css" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {

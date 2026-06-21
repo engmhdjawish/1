@@ -59,6 +59,39 @@
     return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
   };
 
+  const renderMaterialFrame = (p) => {
+    const imageHtml = p.showImages
+      ? (p.imageGuid
+        ? `<img src="/api/image.php?id=${encodeURIComponent(p.imageGuid)}" alt="${esc(p.name)}">`
+        : `<span class="material-symbols-outlined material-image-frame__placeholder" aria-hidden="true">inventory_2</span>`)
+      : '';
+    const logoHtml = p.branding && p.branding.logoUrl
+      ? `<img class="material-image-frame__logo" src="${esc(p.branding.logoUrl)}" alt="">`
+      : '';
+    const phoneHtml = p.branding && p.branding.phone
+      ? `<div class="material-image-frame__phone" dir="ltr">${esc(p.branding.phone)}</div>`
+      : '';
+    const productLine = p.productLine || p.code || p.name || '';
+    const packagingLine = p.packagingLine || '';
+    return `
+      <div class="material-image-frame material-image-frame--detail">
+        <div class="material-image-frame__photo">${imageHtml}</div>
+        <div class="material-image-frame__footer">
+          <div class="material-image-frame__details">
+            ${productLine ? `<div class="material-image-frame__product">${esc(productLine)}</div>` : ''}
+            ${packagingLine ? `<div class="material-image-frame__packaging">${esc(packagingLine)}</div>` : ''}
+          </div>
+          <div class="material-image-frame__brand">
+            ${logoHtml}
+            <div class="material-image-frame__brand-text">
+              <div class="material-image-frame__business">${esc((p.branding && p.branding.name) || '')}</div>
+              ${phoneHtml}
+            </div>
+          </div>
+        </div>
+      </div>`;
+  };
+
   const renderProduct = (p) => {
     const specs = p.specs || {};
     const specHtml = Object.keys(specs).map((label) => (
@@ -95,11 +128,7 @@
         </div>`);
     }
 
-    const imageHtml = p.showImages
-      ? (p.imageGuid
-        ? `<img src="/api/image.php?id=${encodeURIComponent(p.imageGuid)}" alt="${esc(p.name)}" class="w-full max-h-72 object-contain mx-auto">`
-        : `<span class="material-symbols-outlined text-gray-300 text-7xl" aria-hidden="true">inventory_2</span>`)
-      : '';
+    const imageHtml = p.showImages ? renderMaterialFrame(p) : '';
 
     const badge = p.offerBadge
       ? `<span class="inline-flex mb-2 px-2.5 py-1 rounded-full bg-red-600 text-white text-xs font-extrabold">${esc(p.offerBadge)}</span>` : '';
@@ -112,15 +141,11 @@
 
   body.innerHTML = `
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <div class="bg-gray-100 rounded-2xl min-h-[200px] flex items-center justify-center overflow-hidden">${imageHtml}</div>
+      <div class="overflow-hidden rounded-2xl">${imageHtml}</div>
       <div class="space-y-3">
         <div>
-          <p class="text-xs text-gray-500">${esc(p.code)}</p>
           <h2 id="productQuickViewTitle" class="text-xl font-extrabold text-slate-900">${esc(p.name)}</h2>
           ${p.manufacturer ? `<p class="text-sm text-gray-600 mt-1">${esc(p.manufacturer)}</p>` : ''}
-        </div>
-        <div class="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 text-sm font-bold text-gray-700">
-          التعبئة: ${esc(String(p.packaging))} ${esc(p.primaryUnit)} / ${esc(p.packageUnit)}
         </div>
         ${p.showPrice ? `<div class="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-2">${badge}${priceBlocks.join('')}${limits}</div>` : '<p class="text-sm text-gray-500 border border-dashed rounded-xl px-4 py-3">الأسعار غير متاحة لحسابك.</p>'}
         ${qtyHtml}

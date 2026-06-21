@@ -1,0 +1,153 @@
+.material-image-frame {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: #fff;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.material-image-frame__photo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+  overflow: hidden;
+}
+
+.material-image-frame__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.material-image-frame--card .material-image-frame__photo {
+  height: 9.5rem;
+}
+
+.material-image-frame--strip .material-image-frame__photo {
+  height: 8rem;
+}
+
+.material-image-frame--detail .material-image-frame__photo {
+  min-height: 17.5rem;
+  max-height: 32rem;
+}
+
+.material-image-frame__footer {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem 0.75rem;
+  align-items: center;
+  padding: 0.55rem 0.7rem 0.6rem 0.85rem;
+  background: linear-gradient(180deg, #454545 0%, #3a3a3a 100%);
+  color: #fff;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.material-image-frame__footer::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 0.28rem;
+  background: #d81921;
+}
+
+.material-image-frame__details {
+  min-width: 0;
+  text-align: start;
+}
+
+.material-image-frame__product {
+  font-weight: 800;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.material-image-frame__packaging {
+  margin-top: 0.12rem;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.88);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.material-image-frame__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  justify-self: end;
+}
+
+.material-image-frame__logo {
+  width: 2rem;
+  height: 2rem;
+  object-fit: contain;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 0.35rem;
+  padding: 0.12rem;
+}
+
+.material-image-frame__brand-text {
+  min-width: 0;
+  text-align: end;
+}
+
+.material-image-frame__business {
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 6.5rem;
+}
+
+.material-image-frame__phone {
+  margin-top: 0.08rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+}
+
+.material-image-frame--detail .material-image-frame__product {
+  font-size: 0.95rem;
+}
+
+.material-image-frame--detail .material-image-frame__packaging {
+  font-size: 0.82rem;
+}
+
+.material-image-frame--detail .material-image-frame__logo {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.material-image-frame--detail .material-image-frame__business {
+  font-size: 0.72rem;
+  max-width: 8rem;
+}
+
+.material-image-frame--detail .material-image-frame__phone {
+  font-size: 0.68rem;
+}
+
+.material-image-frame__placeholder {
+  color: #d1d5db;
+  font-size: 3rem;
+  line-height: 1;
+}

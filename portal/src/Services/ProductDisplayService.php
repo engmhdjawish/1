@@ -41,12 +41,21 @@ final class ProductDisplayService
 
         $offer = is_array($product['offer'] ?? null) ? $product['offer'] : null;
 
+        $branding = \material_image_branding();
+
         return [
             'guid' => \material_guid($product),
             'name' => (string) ($product['name'] ?? ''),
             'code' => (string) ($product['materialCode'] ?? $product['code'] ?? ''),
+            'productLine' => \material_product_line($product),
+            'packagingLine' => \material_packaging_line($product),
             'manufacturer' => (string) ($product['manufacturer'] ?? ''),
             'imageGuid' => \material_image_guid($product),
+            'branding' => [
+                'name' => $branding['name'],
+                'phone' => $branding['phone'],
+                'logoUrl' => $branding['logo_url'],
+            ],
             'packaging' => $packaging,
             'primaryUnit' => $primaryUnit,
             'packageUnit' => $packageUnit,

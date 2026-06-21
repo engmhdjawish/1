@@ -12,7 +12,7 @@ declare(strict_types=1);
     <div>
       <h1 class="text-2xl font-extrabold">ربط الصور بالمواد</h1>
       <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
-        اضغط على الصورة للتكبير والتحقق قبل الربط. يمكن اختيار عدة مواد لإنشاء نسخة مستقلة لكل مادة، مع إمكانية إضافة بانر تفاصيل أسفل الصورة اختيارياً.
+        اضغط على الصورة للتكبير والتحقق قبل الربط. يمكن اختيار عدة مواد لإنشاء نسخة مستقلة لكل مادة. التفاصيل والشعار تظهر تلقائياً على الموقع عند العرض دون تعديل ملف الصورة.
       </p>
     </div>
     <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white text-xs">
@@ -284,139 +284,7 @@ declare(strict_types=1);
     return fetchJson(API_URL, { method: 'POST', body: form });
   }
 
-  function cardWantsDetails(card) {
-    return !!card?.querySelector('.add-details-checkbox')?.checked;
-  }
-
-  function formatMaterialLine1(code, name, fallbackLabel = '') {
-    const trimmedCode = String(code || '').trim();
-    const trimmedName = String(name || '').trim();
-    if (trimmedCode && trimmedName) return `${trimmedCode} - ${trimmedName}`;
-    return `${trimmedCode} ${trimmedName}`.trim() || fallbackLabel || '';
-  }
-
-  function getDetailLines(card, mat) {
-    const line1Input = card?.querySelector('.detail-line1');
-    const line2Input = card?.querySelector('.detail-line2');
-    const customLine1 = line1Input?.value.trim() || '';
-    const customLine2 = line2Input?.value.trim() || '';
-    const autoLine1 = formatMaterialLine1(mat.code, mat.name, mat.label || '');
-    return {
-      line1: customLine1 || autoLine1,
-      line2: customLine2,
-    };
-  }
-
-  function loadImageElement(url) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error('تعذر تحميل الصورة للمعالجة.'));
-      img.src = url;
-    });
-  }
-
-  function toggleDetailsFields(card) {
-    const checkbox = card?.querySelector('.add-details-checkbox');
-    const fields = card?.querySelector('.details-fields');
-    if (!checkbox || !fields) return;
-    fields.classList.toggle('hidden', !checkbox.checked);
-  }
-
-  function fillDetailsFromSelection(card, key) {
-    const selected = sourceMaterialMap.get(key) || [];
-    if (!selected.length) {
-      const message = 'أضف مادة واحدة على الأقل لتعبئة التفاصيل.';
-      card?.querySelector('.card-status')?.replaceChildren(document.createTextNode(message));
-      return;
-    }
-    const first = selected[0];
-    const label = formatMaterialLine1(first.code, first.name, first.label || '');
-    const line1 = card?.querySelector('.detail-line1');
-    const line2 = card?.querySelector('.detail-line2');
-    if (line1) line1.value = label;
-    if (line2 && !line2.value.trim()) line2.value = '';
-  }
-
-  function wrapTextLines(ctx, text, maxWidth) {
-    if (!text) return [];
-    const words = String(text).split(/\s+/).filter(Boolean);
-    if (!words.length) return [];
-    const lines = [];
-    let current = words[0];
-    for (let i = 1; i < words.length; i += 1) {
-      const candidate = `${current} ${words[i]}`;
-      if (ctx.measureText(candidate).width < maxWidth) {
-        current = candidate;
-      } else {
-        lines.push(current);
-        current = words[i];
-      }
-    }
-    lines.push(current);
-    return lines;
-  }
-
-  async function buildImageWithDetails(imageUrl, line1, line2) {
-    const img = await loadImageElement(imageUrl);
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('تعذر تجهيز الصورة.');
-
-    const width = img.naturalWidth || img.width;
-    const height = img.naturalHeight || img.height;
-    let fontSize = Math.floor(width / 25);
-    if (fontSize > 36) fontSize = 36;
-    if (fontSize < 14) fontSize = 14;
-    const lineHeight = fontSize * 1.5;
-    const maxWidth = width - 40;
-
-    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-    const lines1 = wrapTextLines(ctx, line1, maxWidth);
-    const lines2 = wrapTextLines(ctx, line2, maxWidth);
-    const totalLines = lines1.length + lines2.length;
-    const bannerHeight = totalLines > 0 ? (totalLines * lineHeight) + 60 : 0;
-
-    canvas.width = width;
-    canvas.height = height + bannerHeight;
-    ctx.drawImage(img, 0, 0, width, height);
-
-    if (bannerHeight > 0) {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, height, width, bannerHeight);
-      ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-      ctx.fillStyle = '#000000';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'top';
-      let y = height + 20;
-      lines1.forEach((line) => {
-        ctx.fillText(line, width - 20, y);
-        y += lineHeight;
-      });
-      if (lines1.length && lines2.length) y += 10;
-      lines2.forEach((line) => {
-        ctx.fillText(line, width - 20, y);
-        y += lineHeight;
-      });
-    }
-
-    return new Promise((resolve, reject) => {
-      canvas.toBlob((blob) => {
-        if (!blob) reject(new Error('تعذر إنشاء ملف الصورة.'));
-        else resolve(blob);
-      }, 'image/jpeg', 0.9);
-    });
-  }
-
-  function ensureDetailLinesBeforeAssign(card, key, items) {
-    if (!cardWantsDetails(card)) return;
-    const line1Input = card?.querySelector('.detail-line1');
-    if (line1Input && !line1Input.value.trim() && items.length) {
-      fillDetailsFromSelection(card, key);
-    }
-  }
-
-  async function postAssignForm(action, item, items, card) {
+  async function postAssignForm(action, item, items) {
     const form = new FormData();
     form.append('action', action);
     form.append('source_file_name', item.file_name || '');
@@ -426,15 +294,6 @@ declare(strict_types=1);
     if (action === 'reassign-materials') {
       form.append('image_guid', item.amine_image_guid || '');
       form.append('material_guid', item.linked_material_guid || '');
-    }
-
-    if (cardWantsDetails(card)) {
-      form.append('add_details', '1');
-      for (const mat of items) {
-        const lines = getDetailLines(card, mat);
-        form.append(`detail_line1[${mat.guid}]`, lines.line1);
-        form.append(`detail_line2[${mat.guid}]`, lines.line2);
-      }
     }
 
     return fetchJson(API_URL, { method: 'POST', body: form });
@@ -457,11 +316,10 @@ declare(strict_types=1);
       return;
     }
     button.disabled = true;
-    linkStatus.textContent = cardWantsDetails(card) ? 'جاري إضافة البانر والربط...' : 'جاري الربط...';
-    if (statusEl) statusEl.textContent = cardWantsDetails(card) ? 'جاري إضافة البانر والربط...' : 'جاري الربط...';
+    linkStatus.textContent = 'جاري الربط...';
+    if (statusEl) statusEl.textContent = 'جاري الربط...';
     try {
-      ensureDetailLinesBeforeAssign(card, cardKey(item), items);
-      const payload = await postAssignForm('assign-materials', item, items, card);
+      const payload = await postAssignForm('assign-materials', item, items);
       linkStatus.textContent = payload.message || '';
       if (statusEl) statusEl.textContent = payload.message || '';
       if (payload.items && payload.items.length && !payload.ok) {
@@ -493,7 +351,7 @@ declare(strict_types=1);
     button.disabled = true;
     if (statusEl) statusEl.textContent = 'جاري الاستبدال...';
     try {
-      const payload = await postAssignForm('reassign-materials', item, items, card);
+      const payload = await postAssignForm('reassign-materials', item, items);
       if (statusEl) statusEl.textContent = payload.message || '';
       linkStatus.textContent = payload.message || '';
       if (payload.ok) handleCardAfterAssign(card, item);
@@ -640,14 +498,6 @@ declare(strict_types=1);
       chips.innerHTML = chipsHtml(key);
     });
 
-    card.querySelector('.add-details-checkbox')?.addEventListener('change', () => {
-      toggleDetailsFields(card);
-    });
-
-    card.querySelector('.fill-details-btn')?.addEventListener('click', () => {
-      fillDetailsFromSelection(card, key);
-    });
-
     assignBtn.addEventListener('click', async () => {
       closeSuggestions(card);
       const selected = sourceMaterialMap.get(key) || [];
@@ -656,9 +506,6 @@ declare(strict_types=1);
         linkStatus.textContent = message;
         cardStatus.textContent = message;
         return;
-      }
-      if (cardWantsDetails(card)) {
-        ensureDetailLinesBeforeAssign(card, key, selected);
       }
       await assign(item, selected, card, assignBtn, cardStatus);
     });
@@ -722,24 +569,7 @@ declare(strict_types=1);
             <div class="suggestions hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow max-h-48 overflow-auto"></div>
           </div>
           <div class="chips flex flex-wrap gap-1">${chipsHtml(key)}</div>
-          <div class="rounded-lg border border-border-subtle bg-surface-low/40 p-2 space-y-2">
-            <label class="flex items-start gap-2 text-xs cursor-pointer">
-              <input type="checkbox" class="add-details-checkbox mt-0.5 rounded border-border-subtle">
-              <span class="font-bold leading-snug">إضافة بانر تفاصيل أسفل الصورة؟ (اختياري)</span>
-            </label>
-            <div class="details-fields hidden space-y-2">
-              <button type="button" class="fill-details-btn h-7 px-2 rounded-lg border border-border-subtle bg-white text-[11px] font-bold w-full">تعبئة من المواد المختارة</button>
-              <div>
-                <label class="text-[10px] text-text-muted">السطر الأول — رمز و اسم المنتج:</label>
-                <input type="text" class="detail-line1 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: 796 - مخيط طبي بني — أو يُملأ تلقائياً">
-              </div>
-              <div>
-                <label class="text-[10px] text-text-muted">السطر الثاني — التعبئة (اختياري):</label>
-                <input type="text" class="detail-line2 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs mt-0.5" placeholder="مثال: 8 زوج — أو يُولَّد: التعبئة : 8 زوج">
-              </div>
-              <p class="text-[10px] text-text-muted leading-relaxed">يُضاف بانر أبيض أسفل الصورة. يُعبَّأ الرمز والاسم والتعبئة من بيانات المادة لكل صنف، ويمكن تعديلهما قبل الربط.</p>
-            </div>
-          </div>
+          <p class="text-[10px] text-text-muted leading-relaxed rounded-lg border border-border-subtle bg-surface-low/40 px-2 py-1.5">على الموقع تُعرض الصورة مع إطار يتضمن رمز المادة واسمها والتعبئة وشعار الشركة والهاتف.</p>
           <button type="button" class="assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>
           ${reassignBlock}
           ${unlinkBlock}

@@ -72,17 +72,12 @@ $imageGuid = material_image_guid($product);
 <article class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-0">
     <?php if ($showImages): ?>
-      <div class="bg-gray-100 min-h-[280px] lg:min-h-[420px] flex items-center justify-center">
-        <?php if ($imageGuid !== ''): ?>
-          <img
-            src="/api/image.php?id=<?= urlencode($imageGuid) ?>"
-            alt="<?= h((string) ($product['name'] ?? '')) ?>"
-            class="w-full h-full max-h-[520px] object-contain"
-          >
-        <?php else: ?>
-          <span class="material-symbols-outlined text-gray-300 text-7xl" aria-hidden="true">inventory_2</span>
-        <?php endif; ?>
-      </div>
+      <?php
+        $material = $product;
+        $variant = 'detail';
+        $thumb = false;
+        require __DIR__ . '/partials/material-image-frame.php';
+      ?>
     <?php endif; ?>
     <div class="p-6 md:p-8 flex flex-col gap-4">
       <div>
