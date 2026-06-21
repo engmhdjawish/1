@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Portal\Auth\CustomerSession;
 use Portal\Auth\WebSession;
+use Portal\Services\MaterialImageDisplayTemplateService;
 use Portal\Services\PortalSettingsService;
 
 /** @var string $title */
@@ -30,6 +31,8 @@ $navLinks = [
 
 $whatsapp = preg_replace('/\D+/', '', (string) ($companyContext['company_whatsapp'] ?? ''));
 $whatsappLink = $whatsapp !== '' ? 'https://wa.me/' . $whatsapp : '';
+$materialImageDisplayTemplate = MaterialImageDisplayTemplateService::getTemplate();
+$materialImageTemplateJson = json_encode($materialImageDisplayTemplate, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 ?>
 <!DOCTYPE html>
 <html class="light" lang="ar" dir="rtl">
@@ -207,6 +210,8 @@ $whatsappLink = $whatsapp !== '' ? 'https://wa.me/' . $whatsapp : '';
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape') setOpen(false); });
   })();
 </script>
+<script>window.__materialImageTemplate = <?= $materialImageTemplateJson ?: '{}' ?>;</script>
+<script src="/assets/material-image-frame.js" defer></script>
 <?php require __DIR__ . '/partials/product-quick-view.php'; ?>
 </body>
 </html>

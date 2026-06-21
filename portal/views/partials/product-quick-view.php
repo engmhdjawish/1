@@ -60,6 +60,10 @@
   };
 
   const renderMaterialFrame = (p) => {
+    if (typeof window.renderMaterialImageFrame === 'function') {
+      const templated = window.renderMaterialImageFrame(p, 'detail');
+      if (templated) return templated;
+    }
     const imageHtml = p.showImages
       ? (p.imageGuid
         ? `<img src="/api/image.php?id=${encodeURIComponent(p.imageGuid)}" alt="${esc(p.name)}">`

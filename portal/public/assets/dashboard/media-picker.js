@@ -14,7 +14,11 @@
   const setPreview = (fieldId, url) => {
     const input = qs(fieldId + '-input');
     const preview = qs(fieldId + '-preview');
-    if (input) input.value = url || '';
+    if (input) {
+      input.value = url || '';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
     if (!preview) return;
     if (!url) {
       preview.innerHTML = 'بدون صورة';

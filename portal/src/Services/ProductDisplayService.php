@@ -49,6 +49,7 @@ final class ProductDisplayService
             'code' => (string) ($product['materialCode'] ?? $product['code'] ?? ''),
             'productLine' => \material_product_line($product),
             'packagingLine' => \material_packaging_line($product),
+            'displayFields' => MaterialImageDisplayTemplateService::resolveFieldMap($product),
             'manufacturer' => (string) ($product['manufacturer'] ?? ''),
             'imageGuid' => \material_image_guid($product),
             'branding' => [

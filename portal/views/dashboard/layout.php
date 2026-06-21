@@ -83,6 +83,9 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
     #dashboardNavDrawer.is-open { transform: translateX(0); }
     #dashboardNavOverlay.is-open { opacity: 1; pointer-events: auto; }
   </style>
+  <?php if (!empty($extraHead ?? '')): ?>
+    <?= $extraHead ?>
+  <?php endif; ?>
 </head>
 <body class="min-h-screen text-slate-900">
   <header class="sticky top-0 z-50 h-16 bg-surface-white shadow-sm border-b border-border-subtle">
@@ -244,7 +247,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         </a>
       </div>
     </aside>
-    <main class="flex-1 lg:mr-64 p-4 md:p-6 lg:p-8 min-w-0">
+    <main class="flex-1 lg:mr-64 p-4 md:p-6 lg:p-8 min-w-0" data-dashboard-main>
       <?php if ($navArea === DashboardNavigation::AREA_CONFIGURATION && $currentRoute !== '/dashboard/configuration.php'): ?>
         <nav class="mb-4">
           <a href="/dashboard/configuration.php" class="inline-flex items-center gap-1 text-sm font-bold text-text-muted hover:text-primary">
@@ -288,5 +291,8 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
       });
     })();
   </script>
+  <?php if (!empty($extraScripts ?? '')): ?>
+    <?= $extraScripts ?>
+  <?php endif; ?>
 </body>
 </html>
