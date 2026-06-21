@@ -27,7 +27,6 @@ final class DashboardNavigation
         '/dashboard/home-sections.php',
         '/dashboard/material-images.php',
         '/dashboard/material-image-links.php',
-        '/dashboard/material-image-template.php',
         '/dashboard/users.php',
         '/dashboard/settings.php',
     ];
@@ -242,13 +241,6 @@ final class DashboardNavigation
                     'icon' => 'linked_services',
                     'permission' => 'images.upload',
                     'description' => 'صفحة مستقلة لربط صورة أساسية بعدة مواد مع توليد نسخة لكل مادة.',
-                ],
-                [
-                    'route' => '/dashboard/material-image-template.php',
-                    'label' => 'قالب عرض الصور',
-                    'icon' => 'design_services',
-                    'permission' => 'images.upload',
-                    'description' => 'محرر تصميم إطار عرض صور المواد على الموقع مع عدة شعارات وحقول ديناميكية.',
                 ],
             ],
             'إدارة النظام' => [

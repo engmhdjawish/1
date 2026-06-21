@@ -250,55 +250,6 @@ function format_packaging(float $value): string
 }
 
 /** @param array<string, mixed> $item */
-function material_product_line(array $item): string
-{
-    $code = trim((string) ($item['materialCode'] ?? $item['code'] ?? $item['material_code'] ?? ''));
-    $name = trim((string) ($item['name'] ?? $item['Name'] ?? ''));
-    if ($code !== '' && $name !== '') {
-        return $code . ' - ' . $name;
-    }
-
-    return $code !== '' ? $code : $name;
-}
-
-/** @param array<string, mixed> $item */
-function material_packaging_line(array $item): string
-{
-    $packaging = ShareCartService::packaging($item);
-    if ($packaging <= 0) {
-        return '';
-    }
-
-    $unit = ShareCartService::primaryUnitLabel($item);
-    $qty = format_packaging($packaging);
-
-    return 'التعبئة : ' . $qty . ' ' . $unit;
-}
-
-/** @return array{name: string, phone: string, logo_url: ?string} */
-function material_image_branding(?array $companyContext = null, ?string $companyLogoUrl = null): array
-{
-    $companyContext ??= \Portal\Services\PortalSettingsService::companySettings();
-    $companyLogoUrl ??= \Portal\Services\PortalSettingsService::companyLogoUrl($companyContext);
-
-    $name = trim((string) ($companyContext['company_name'] ?? ''));
-    if ($name === '') {
-        $name = 'جاويش للتجارة';
-    }
-
-    $phone = trim((string) ($companyContext['company_phone'] ?? ''));
-    if ($phone === '') {
-        $phone = trim((string) ($companyContext['company_mobile'] ?? ''));
-    }
-
-    return [
-        'name' => $name,
-        'phone' => $phone,
-        'logo_url' => $companyLogoUrl !== null && $companyLogoUrl !== '' ? $companyLogoUrl : null,
-    ];
-}
-
-/** @param array<string, mixed> $item */
 function packages_available_display(array $item): float
 {
     $packaging = ShareCartService::packaging($item);

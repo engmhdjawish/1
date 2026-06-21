@@ -60,40 +60,13 @@
   };
 
   const renderMaterialFrame = (p) => {
-    if (typeof window.renderMaterialImageFrame === 'function') {
-      const templated = window.renderMaterialImageFrame(p, 'detail');
-      if (templated) return templated;
+    if (!p.showImages) {
+      return '';
     }
-    const imageHtml = p.showImages
-      ? (p.imageGuid
-        ? `<img src="/api/image.php?id=${encodeURIComponent(p.imageGuid)}" alt="${esc(p.name)}">`
-        : `<span class="material-symbols-outlined material-image-frame__placeholder" aria-hidden="true">inventory_2</span>`)
-      : '';
-    const logoHtml = p.branding && p.branding.logoUrl
-      ? `<img class="material-image-frame__logo" src="${esc(p.branding.logoUrl)}" alt="">`
-      : '';
-    const phoneHtml = p.branding && p.branding.phone
-      ? `<div class="material-image-frame__phone" dir="ltr">${esc(p.branding.phone)}</div>`
-      : '';
-    const productLine = p.productLine || p.code || p.name || '';
-    const packagingLine = p.packagingLine || '';
-    return `
-      <div class="material-image-frame material-image-frame--detail">
-        <div class="material-image-frame__photo">${imageHtml}</div>
-        <div class="material-image-frame__footer">
-          <div class="material-image-frame__details">
-            ${productLine ? `<div class="material-image-frame__product">${esc(productLine)}</div>` : ''}
-            ${packagingLine ? `<div class="material-image-frame__packaging">${esc(packagingLine)}</div>` : ''}
-          </div>
-          <div class="material-image-frame__brand">
-            ${logoHtml}
-            <div class="material-image-frame__brand-text">
-              <div class="material-image-frame__business">${esc((p.branding && p.branding.name) || '')}</div>
-              ${phoneHtml}
-            </div>
-          </div>
-        </div>
-      </div>`;
+    if (p.imageGuid) {
+      return `<div class="material-image-frame material-image-frame--detail"><div class="material-image-frame__photo"><img src="/api/image.php?id=${encodeURIComponent(p.imageGuid)}" alt="${esc(p.name)}"></div></div>`;
+    }
+    return `<div class="material-image-frame material-image-frame--detail"><div class="material-image-frame__photo"><span class="material-symbols-outlined material-image-frame__placeholder" aria-hidden="true">inventory_2</span></div></div>`;
   };
 
   const renderProduct = (p) => {
