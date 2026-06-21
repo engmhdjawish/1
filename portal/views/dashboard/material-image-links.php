@@ -585,9 +585,9 @@ declare(strict_types=1);
             <input type="checkbox" class="add-details-check mt-0.5 shrink-0" ${CAN_ADD_DETAILS ? 'checked' : 'disabled'}>
             <span>
               هامش سفلي في الصورة:
-              <strong dir="ltr">رمز - اسم</strong>
-              و
-              <strong>التعبئة : الكمية الوحدة</strong>
+              <strong dir="ltr">رمز - اسم</strong>،
+              <strong>التعبئة : الكمية الوحدة</strong>،
+              و<strong>اسم الشركة + الموبايل</strong> في الزاوية اليسار
             </span>
           </label>
           <button type="button" class="assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>
