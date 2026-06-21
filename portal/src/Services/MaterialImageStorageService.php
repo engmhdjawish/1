@@ -312,11 +312,9 @@ final class MaterialImageStorageService
         $subtitleLineStep = (int) round($subtitleSize * 1.3);
 
         $nameLines = [];
-        $nameIndent = $contentLeft;
         if ($productParts !== null) {
             $prefix = $productParts['code'] . ' - ';
             $prefixWidth = self::ttfLineWidth($font, $titleSize, $prefix);
-            $nameIndent = $contentLeft + $prefixWidth;
             $nameLines = self::wrapTtfTextLines(
                 $font,
                 $titleSize,
@@ -404,16 +402,17 @@ final class MaterialImageStorageService
                         $productParts['code'],
                         $nameLine,
                         $contentLeft,
-                        $productBaseline,
-                        $contentRight
+                        $contentRight,
+                        $productBaseline
                     );
                 } else {
-                    self::drawBannerColoredText(
+                    self::drawBannerColoredTextRight(
                         $canvas,
                         $font,
                         $titleSize,
                         $nameLine,
-                        $nameIndent,
+                        $contentLeft,
+                        $contentRight,
                         $productBaseline,
                         255,
                         255,
@@ -429,12 +428,13 @@ final class MaterialImageStorageService
             $titleLines = self::wrapTtfTextLines($font, $titleSize, $line1, $contentWidth);
             foreach ($titleLines as $line) {
                 $productBaseline = $contentRowTop + (int) $titleSize;
-                self::drawBannerColoredText(
+                self::drawBannerColoredTextRight(
                     $canvas,
                     $font,
                     $titleSize,
                     $line,
                     $contentLeft,
+                    $contentRight,
                     $productBaseline,
                     255,
                     255,
@@ -459,8 +459,8 @@ final class MaterialImageStorageService
                     $subtitleSize,
                     $line,
                     $contentLeft,
-                    $packBaseline,
-                    $contentRight
+                    $contentRight,
+                    $packBaseline
                 );
                 $contentRowTop += $subtitleLineStep;
             }
@@ -720,6 +720,33 @@ final class MaterialImageStorageService
         imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $color, $font, $drawText);
     }
 
+    private static function drawBannerColoredTextRight(
+        \GdImage $canvas,
+        string $font,
+        float $fontSize,
+        string $text,
+        int $minX,
+        int $maxRightX,
+        int $baselineY,
+        int $red,
+        int $green,
+        int $blue,
+        bool $bold,
+        bool $shapeArabic
+    ): void {
+        $drawText = $shapeArabic && ArabicGdText::containsArabic($text)
+            ? ArabicGdText::shape($text)
+            : $text;
+        $textWidth = self::ttfLineWidth($font, $fontSize, $drawText);
+        $x = max($minX, $maxRightX - $textWidth);
+        $color = imagecolorallocate($canvas, $red, $green, $blue);
+
+        if ($bold) {
+            imagettftext($canvas, (int) $fontSize, 0, $x + 1, $baselineY, $color, $font, $drawText);
+        }
+        imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $color, $font, $drawText);
+    }
+
     private static function fillDetailsBannerBackground(\GdImage $canvas, int $x, int $y, int $width, int $height): void
     {
         $top = [58, 58, 58];
@@ -751,38 +778,36 @@ final class MaterialImageStorageService
         float $fontSize,
         string $code,
         string $name,
-        int $startX,
-        int $baselineY,
-        int $maxRightX
+        int $minX,
+        int $maxRightX,
+        int $baselineY
     ): void {
         $separator = ' - ';
         $shapedName = ArabicGdText::shape($name);
-        $maxWidth = max(80, $maxRightX - $startX);
-        $lineWidth = self::ttfLineWidth($font, $fontSize, $code)
-            + self::ttfLineWidth($font, $fontSize, $separator)
-            + self::ttfLineWidth($font, $fontSize, $shapedName);
+        $maxWidth = max(80, $maxRightX - $minX);
+        $codeWidth = self::ttfLineWidth($font, $fontSize, $code);
+        $separatorWidth = self::ttfLineWidth($font, $fontSize, $separator);
+        $nameWidth = self::ttfLineWidth($font, $fontSize, $shapedName);
+        $lineWidth = $codeWidth + $separatorWidth + $nameWidth;
 
         if ($lineWidth > $maxWidth) {
-            $availableForName = max(
-                40,
-                $maxWidth
-                    - self::ttfLineWidth($font, $fontSize, $code)
-                    - self::ttfLineWidth($font, $fontSize, $separator)
-            );
+            $availableForName = max(40, $maxWidth - $codeWidth - $separatorWidth);
             $wrappedName = self::wrapTtfTextLines($font, $fontSize, $name, $availableForName);
             $shapedName = ArabicGdText::shape($wrappedName[0] ?? $name);
+            $nameWidth = self::ttfLineWidth($font, $fontSize, $shapedName);
+            $lineWidth = $codeWidth + $separatorWidth + $nameWidth;
         }
 
-        $x = $startX;
+        $x = max($minX, $maxRightX - $lineWidth);
         $codeColor = imagecolorallocate($canvas, 255, 213, 90);
         $separatorColor = imagecolorallocate($canvas, 168, 168, 168);
         $nameColor = imagecolorallocate($canvas, 255, 255, 255);
 
         imagettftext($canvas, (int) $fontSize, 0, $x + 1, $baselineY, $codeColor, $font, $code);
         imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $codeColor, $font, $code);
-        $x += (int) round(self::ttfLineWidth($font, $fontSize, $code));
+        $x += (int) round($codeWidth);
         imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $separatorColor, $font, $separator);
-        $x += (int) round(self::ttfLineWidth($font, $fontSize, $separator));
+        $x += (int) round($separatorWidth);
         imagettftext($canvas, (int) $fontSize, 0, $x + 1, $baselineY, $nameColor, $font, $shapedName);
         imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $nameColor, $font, $shapedName);
     }
@@ -815,18 +840,19 @@ final class MaterialImageStorageService
         string $font,
         float $fontSize,
         string $line,
-        int $startX,
-        int $baselineY,
-        int $maxRightX
+        int $minX,
+        int $maxRightX,
+        int $baselineY
     ): void {
         $parts = self::splitPackagingBannerLine($line);
         if ($parts === null) {
-            self::drawBannerColoredText(
+            self::drawBannerColoredTextRight(
                 $canvas,
                 $font,
                 $fontSize,
                 $line,
-                $startX,
+                $minX,
+                $maxRightX,
                 $baselineY,
                 228,
                 228,
@@ -838,30 +864,30 @@ final class MaterialImageStorageService
             return;
         }
 
-        $maxWidth = max(80, $maxRightX - $startX);
+        $maxWidth = max(80, $maxRightX - $minX);
         $label = $parts['label'];
         $value = $parts['value'];
+        $shapedLabel = ArabicGdText::shape($label);
         $shapedValue = ArabicGdText::shape($value);
-        $lineWidth = self::ttfLineWidth($font, $fontSize, ArabicGdText::shape($label))
-            + self::ttfLineWidth($font, $fontSize, $shapedValue);
+        $labelWidth = self::ttfLineWidth($font, $fontSize, $shapedLabel);
+        $valueWidth = self::ttfLineWidth($font, $fontSize, $shapedValue);
+        $lineWidth = $labelWidth + $valueWidth;
 
         if ($lineWidth > $maxWidth) {
-            $availableForValue = max(
-                40,
-                $maxWidth - self::ttfLineWidth($font, $fontSize, ArabicGdText::shape($label))
-            );
+            $availableForValue = max(40, $maxWidth - $labelWidth);
             $wrappedValue = self::wrapTtfTextLines($font, $fontSize, $value, $availableForValue);
             $shapedValue = ArabicGdText::shape($wrappedValue[0] ?? $value);
+            $valueWidth = self::ttfLineWidth($font, $fontSize, $shapedValue);
+            $lineWidth = $labelWidth + $valueWidth;
         }
 
         $labelColor = imagecolorallocate($canvas, 255, 213, 90);
         $valueColor = imagecolorallocate($canvas, 236, 236, 236);
-        $x = $startX;
-        $shapedLabel = ArabicGdText::shape($label);
+        $valueX = max($minX, $maxRightX - $lineWidth);
+        $labelX = $valueX + (int) round($valueWidth);
 
-        imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $labelColor, $font, $shapedLabel);
-        $x += (int) round(self::ttfLineWidth($font, $fontSize, $shapedLabel));
-        imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $valueColor, $font, $shapedValue);
+        imagettftext($canvas, (int) $fontSize, 0, $valueX, $baselineY, $valueColor, $font, $shapedValue);
+        imagettftext($canvas, (int) $fontSize, 0, $labelX, $baselineY, $labelColor, $font, $shapedLabel);
     }
 
     private static function drawDetailsBannerTextLine(
