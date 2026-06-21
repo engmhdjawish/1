@@ -127,21 +127,14 @@ final class DashboardNavigation
                 'label' => 'الطلبات',
                 'icon' => 'shopping_cart',
                 'permission' => 'orders.view',
-                'description' => 'متابعة طلبات الموقع وتأكيدها ومزامنتها مع الأمين.',
+                'description' => 'متابعة طلبات الموقع الجديدة وتأكيدها ومزامنتها مع الأمين.',
             ],
             [
                 'route' => '/dashboard/material-images.php',
-                'label' => 'رفع صور المواد',
-                'icon' => 'cloud_upload',
+                'label' => 'صور المواد',
+                'icon' => 'perm_media',
                 'permission' => 'images.upload',
-                'description' => 'رفع صور جديدة من الجهاز وتوليد المصغرات للمتجر.',
-            ],
-            [
-                'route' => '/dashboard/material-image-links.php',
-                'label' => 'ربط الصور بالمواد',
-                'icon' => 'linked_services',
-                'permission' => 'images.upload',
-                'description' => 'ربط صورة مصدر بمواد الأمين وإنشاء نسخة لكل مادة.',
+                'description' => 'رفع الصور، مزامنة الأمين، وربطها بالمواد من صفحة واحدة.',
             ],
         ]);
     }
@@ -381,7 +374,7 @@ final class DashboardNavigation
     {
         $candidates = [
             ['route' => '/dashboard/orders.php', 'label' => 'الطلبات', 'permission' => 'orders.view'],
-            ['route' => '/dashboard/material-image-links.php', 'label' => 'ربط الصور', 'permission' => 'images.upload'],
+            ['route' => '/dashboard/material-images.php', 'label' => 'صور المواد', 'permission' => 'images.upload'],
             ['route' => '/dashboard/customers.php', 'label' => 'عملاء الموقع', 'permission' => 'web_customers.view'],
             ['route' => '/dashboard/accounting.php', 'label' => 'أمين', 'permission' => 'orders.view'],
         ];

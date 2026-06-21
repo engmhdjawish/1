@@ -1,38 +1,3 @@
-<?php
-
-declare(strict_types=1);
-
-/** @var array{base_url: string, ok: bool, status: int, message: string} $apiHealth */
-/** @var array<string, mixed> $materialFilterOptions */
-/** @var string|null $materialFilterOptionsError */
-/** @var array{ok: bool, message: string} $detailsBanner */
-?>
-
-<section class="mb-6">
-  <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-    <div>
-      <h1 class="text-2xl font-extrabold">ربط الصور بالمواد</h1>
-      <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
-        اضغط على الصورة للتكبير والتحقق قبل الربط. يمكن اختيار عدة مواد لإنشاء نسخة مستقلة لكل مادة.
-        لكل صورة يمكن تفعيل <strong>هامش سفلي</strong> يُدمج في ملف الصورة عند الربط.
-      </p>
-      <?php if (empty($detailsBanner['ok'])): ?>
-        <p class="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 max-w-3xl">
-          <?= h((string) ($detailsBanner['message'] ?? 'البانر السفلي غير متاح على هذا السيرفر.')) ?>
-        </p>
-      <?php endif; ?>
-    </div>
-    <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white text-xs">
-      API الأمين:
-      <?php if (!empty($apiHealth['ok'])): ?>
-        <strong class="text-status-active">متصل</strong>
-      <?php else: ?>
-        <strong class="text-status-rejected">غير متصل</strong>
-      <?php endif; ?>
-    </span>
-  </div>
-</section>
-
 <?php if (!empty($materialFilterOptionsError)): ?>
   <p class="mb-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 px-4 py-3 text-sm"><?= h((string) $materialFilterOptionsError) ?></p>
 <?php endif; ?>

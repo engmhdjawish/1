@@ -11,9 +11,7 @@ declare(strict_types=1);
       <p class="text-sm text-text-muted mt-1 max-w-2xl">
         إعدادات لا تُستخدم يومياً: محتوى الموقع (أقسام الرئيسية والعروض)، صلاحيات الموظفين، وبيانات الشركة.
         لرفع وربط صور المواد انتقل إلى
-        <a href="/dashboard/material-images.php" class="text-primary font-bold hover:underline">رفع الصور</a>
-        أو
-        <a href="/dashboard/material-image-links.php" class="text-primary font-bold hover:underline">ربط الصور</a>
+        <a href="/dashboard/material-images.php" class="text-primary font-bold hover:underline">صور المواد</a>
         ضمن
         <a href="/dashboard/index.php" class="text-primary font-bold hover:underline">لوحة العمل</a>.
       </p>
