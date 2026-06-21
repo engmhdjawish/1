@@ -120,11 +120,6 @@ final class DashboardNavigation
         return $result;
     }
 
-    public static function canAccessCompanyContent(?array $user): bool
-    {
-        return self::userCan($user, 'company_settings.manage') || self::canAccessSettings($user);
-    }
-
     /** @return array{title: string, subtitle: string} */
     public static function areaMeta(string $area): array
     {
