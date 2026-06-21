@@ -992,9 +992,11 @@ final class MaterialImageLinkService
                 return null;
             }
 
-            $code = trim((string) ($data['materialCode'] ?? $data['MaterialCode'] ?? ''));
-            $name = trim((string) ($data['name'] ?? $data['Name'] ?? ''));
-            $manufacturer = trim((string) (
+        $code = trim((string) ($data['materialCode'] ?? $data['MaterialCode'] ?? ''));
+        $name = trim((string) ($data['name'] ?? $data['Name'] ?? ''));
+        $latinName = trim((string) ($data['latinName'] ?? $data['LatinName'] ?? ''));
+        $barcode = trim((string) ($data['barcode'] ?? $data['Barcode'] ?? ''));
+        $manufacturer = trim((string) (
                 $data['manufacturer']
                 ?? $data['Manufacturer']
                 ?? $data['company']
@@ -1008,6 +1010,10 @@ final class MaterialImageLinkService
                 'material_code' => $code,
                 'materialCode' => $code,
                 'MaterialCode' => $code,
+                'latinName' => $latinName,
+                'LatinName' => $latinName,
+                'barcode' => $barcode,
+                'Barcode' => $barcode,
                 'code' => $code,
                 'company' => $manufacturer,
                 'Company' => $manufacturer,
@@ -1203,28 +1209,51 @@ final class MaterialImageLinkService
             return '';
         }
 
+        $name = trim((string) ($material['name'] ?? $material['Name'] ?? ''));
+        $fromName = self::extractProductCodeToken($name);
+
         $candidates = [
             trim((string) ($material['material_code'] ?? '')),
             trim((string) ($material['materialCode'] ?? '')),
             trim((string) ($material['MaterialCode'] ?? '')),
             trim((string) ($material['barcode'] ?? $material['Barcode'] ?? '')),
             trim((string) ($material['latinName'] ?? $material['LatinName'] ?? '')),
+            $fromName,
             trim((string) ($material['code'] ?? '')),
         ];
-        $best = '';
+
         foreach ($candidates as $candidate) {
-            if ($candidate === '') {
-                continue;
-            }
-            if (preg_match('/[A-Za-z]/', $candidate) === 1) {
+            if ($candidate !== '' && self::isPreferredProductCode($candidate)) {
                 return $candidate;
-            }
-            if ($best === '' || strlen($candidate) > strlen($best)) {
-                $best = $candidate;
             }
         }
 
-        return $best;
+        foreach ($candidates as $candidate) {
+            if ($candidate !== '') {
+                return $candidate;
+            }
+        }
+
+        return '';
+    }
+
+    private static function isPreferredProductCode(string $code): bool
+    {
+        return preg_match('/[A-Za-z]/', $code) === 1;
+    }
+
+    private static function extractProductCodeToken(string $text): string
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return '';
+        }
+
+        if (preg_match('/\b([A-Z]{2,}[A-Z0-9\-]*\d[A-Z0-9\-]*)\b/u', $text, $matches) === 1) {
+            return trim((string) ($matches[1] ?? ''));
+        }
+
+        return '';
     }
 
     /** @param array<string, mixed>|null $material */
@@ -1239,25 +1268,12 @@ final class MaterialImageLinkService
             return '';
         }
 
-        $scrub = [$code];
-        foreach (['material_code', 'materialCode', 'MaterialCode', 'barcode', 'Barcode', 'latinName', 'LatinName', 'code'] as $field) {
-            $value = trim((string) ($material[$field] ?? ''));
-            if ($value !== '') {
-                $scrub[] = $value;
-            }
-        }
-        $manufacturer = trim((string) ($material['manufacturer'] ?? $material['Manufacturer'] ?? $material['company'] ?? $material['Company'] ?? ''));
-        if ($manufacturer !== '') {
-            $scrub[] = $manufacturer;
+        if ($code !== '') {
+            $pattern = '/(?<!\w)' . preg_quote($code, '/') . '(?!\w)/iu';
+            $name = preg_replace($pattern, ' ', $name) ?? $name;
         }
 
-        foreach (array_unique($scrub) as $token) {
-            if ($token === '') {
-                continue;
-            }
-            $name = str_ireplace($token, '', $name);
-        }
-
+        $name = preg_replace('/^\d+\s+/u', '', $name) ?? $name;
         $name = preg_replace('/\s+/u', ' ', $name) ?? $name;
 
         return trim($name, " \t-—–·");
