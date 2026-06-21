@@ -8,8 +8,6 @@ declare(strict_types=1);
 /** @var array{base_url: string, ok: bool, status: int, message: string} $apiHealth */
 /** @var list<array<string, mixed>> $queue */
 /** @var array{items: list<array<string, mixed>>, page: int, page_size: int, total_count: int, has_more: bool} $queuePage */
-/** @var array<string, mixed> $materialFilterOptions */
-/** @var string|null $materialFilterOptionsError */
 /** @var string|null $flash */
 /** @var string $flashType */
 /** @var array<string, string> $settingsForm */
@@ -20,7 +18,6 @@ $syncStats = is_array($syncStats ?? null) ? $syncStats : ['pending' => 0, 'synci
 $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'message' => ''];
 $queuePage = is_array($queuePage ?? null) ? $queuePage : ['items' => [], 'page' => 1, 'page_size' => 20, 'total_count' => 0, 'has_more' => false];
 $queue = is_array($queue ?? null) ? $queue : ($queuePage['items'] ?? []);
-$materialFilterOptions = is_array($materialFilterOptions ?? null) ? $materialFilterOptions : [];
 $settingsForm = is_array($settingsForm ?? null) ? $settingsForm : [];
 $statusLabels = [
     'pending' => ['label' => 'بانتظار الأمين', 'class' => 'bg-amber-100 text-amber-800'],
@@ -28,12 +25,6 @@ $statusLabels = [
     'synced' => ['label' => 'تمت على الأمين', 'class' => 'bg-green-100 text-green-800'],
     'failed' => ['label' => 'فشل', 'class' => 'bg-red-100 text-red-800'],
 ];
-$materialTypeOptions = array_values($materialFilterOptions['materialTypes'] ?? []);
-$ageCategoryOptions = array_values($materialFilterOptions['ageCategories'] ?? []);
-$manufacturerOptions = array_values($materialFilterOptions['manufacturers'] ?? []);
-$sizeRangeOptions = array_values($materialFilterOptions['sizeRanges'] ?? []);
-$countryOriginOptions = array_values($materialFilterOptions['countryOfOrigins'] ?? []);
-$groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? [], static fn ($row) => is_array($row)));
 ?>
 <section class="mb-6">
   <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -42,8 +33,8 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
       <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
         <strong>①</strong> رفع على الموقع مع استئناف من المتصفح.
         <strong class="mr-1">②</strong> مزامنة الأمين صورة تلو الأخرى — يتوقف عند انقطاع الاتصال ويُستأنف لاحقاً.
-        <strong class="mr-1">③</strong> تصفح مواد محددة للتحقق من توفر الصور.
-        <strong class="mr-1">④</strong> ربط صورة أساسية بعدة مواد — نسخة مستقلة لكل مادة.
+        لربط الصور بالمواد استخدم
+        <a href="/dashboard/material-image-links.php" class="text-primary font-bold hover:underline">صفحة الربط المستقلة</a>.
       </p>
     </div>
     <div class="flex flex-wrap gap-2 text-xs" id="statsPills">
@@ -70,11 +61,6 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     </div>
   </div>
 </section>
-
-<p class="mb-4 rounded-xl border border-blue-200 bg-blue-50 text-blue-800 px-4 py-3 text-sm">
-  تم نقل الربط إلى صفحة مستقلة:
-  <a href="/dashboard/material-image-links.php" class="font-bold underline">ربط الصور بالمواد</a>.
-</p>
 
 <?php if (!empty($flash)): ?>
   <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= ($flashType ?? 'success') === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700' ?>">
@@ -181,55 +167,6 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   </div>
 </article>
 
-<section class="rounded-xl border border-border-subtle bg-white overflow-hidden mb-6" id="linkSection">
-  <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60">
-    <h2 class="font-bold">④ ربط الصور بالمواد</h2>
-    <p class="text-xs text-text-muted mt-0.5">اختر صورة أساسية من الموقع، ثم حدّد مواداً — يُولَّد لكل مادة ملف باسمها ويُربط على الأمين دون رفع يدوي مكرر.</p>
-  </div>
-
-  <div class="grid gap-4 lg:grid-cols-2 p-4">
-    <div>
-      <div class="flex items-center justify-between mb-2">
-        <h3 class="text-sm font-bold">الصور الأساسية</h3>
-        <button type="button" id="linkReloadSourcesBtn" class="text-xs text-primary font-bold">تحديث</button>
-      </div>
-      <div id="linkSourceEmpty" class="text-xs text-text-muted rounded-lg border border-dashed border-border-subtle p-4 text-center">
-        لا توجد صور على الموقع بعد — ارفع صوراً في الخطوة ①.
-      </div>
-      <div id="linkSourceList" class="hidden max-h-[360px] overflow-auto space-y-2"></div>
-    </div>
-
-    <div>
-      <h3 class="text-sm font-bold mb-2">مواد للربط</h3>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-        <input type="search" id="linkMaterialSearch" class="h-9 rounded-lg border border-border-subtle px-3 text-sm sm:col-span-2" placeholder="بحث بالاسم أو الكود">
-        <select id="linkHasImage" class="h-9 rounded-lg border border-border-subtle px-2 text-sm">
-          <option value="0" selected>بدون صورة في الأمين</option>
-          <option value="">كل المواد</option>
-          <option value="1">مع صورة</option>
-        </select>
-        <button type="button" id="linkSearchMaterialsBtn" class="h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold">بحث</button>
-      </div>
-      <div id="linkMaterialLoading" class="hidden text-xs text-text-muted py-4 text-center">جاري التحميل...</div>
-      <div id="linkMaterialEmpty" class="hidden text-xs text-text-muted rounded-lg border border-dashed border-border-subtle p-4 text-center">لا توجد مواد مطابقة.</div>
-      <div id="linkMaterialList" class="hidden max-h-[260px] overflow-auto divide-y divide-border-subtle border border-border-subtle rounded-lg"></div>
-      <div class="mt-3 flex flex-wrap items-center gap-2">
-        <button type="button" id="linkAssignBtn" class="h-9 px-4 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-40" disabled>ربط وتوليد نسخ</button>
-        <span id="linkSelectionSummary" class="text-xs text-text-muted">اختر صورة أساسية ومادة واحدة على الأقل.</span>
-      </div>
-      <p id="linkStatus" class="text-xs text-text-muted mt-2"></p>
-    </div>
-  </div>
-
-  <div class="px-4 pb-4">
-    <div class="rounded-xl border border-border-subtle p-3">
-      <h3 class="text-sm font-bold mb-2">نمط بطاقات (مثل النظام القديم)</h3>
-      <p class="text-xs text-text-muted mb-3">لكل صورة: ابحث عن مادة وأضفها، ويمكنك إضافة أكثر من مادة ثم تنفيذ الربط دفعة واحدة.</p>
-      <div id="legacyLinkCards" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
-    </div>
-  </div>
-</section>
-
 <details class="rounded-xl border border-border-subtle bg-white p-4 mb-6">
   <summary class="font-bold cursor-pointer">مسارات التخزين (متقدم)</summary>
   <form method="post" class="grid gap-3 mt-4 lg:grid-cols-2">
@@ -248,98 +185,6 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     <button class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold lg:col-span-2 lg:justify-self-start">حفظ المسارات</button>
   </form>
 </details>
-
-<section class="rounded-xl border border-border-subtle bg-white overflow-hidden">
-  <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60">
-    <h2 class="font-bold">تصفح صور المواد</h2>
-    <p class="text-xs text-text-muted mt-0.5">ابحث عن مواد محددة وتحقق هل صورتها موجودة على سيرفر الموقع أم لا.</p>
-  </div>
-
-  <form id="browseFiltersForm" class="p-4 border-b border-border-subtle space-y-3">
-    <?php if (!empty($materialFilterOptionsError)): ?>
-      <p class="rounded-lg border border-amber-200 bg-amber-50 text-amber-700 px-3 py-2 text-xs"><?= h($materialFilterOptionsError) ?></p>
-    <?php endif; ?>
-
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-      <label class="text-xs lg:col-span-2">
-        <span class="text-text-muted block mb-1">بحث بالاسم أو الكود</span>
-        <input type="search" id="browseSearch" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="مثال: صيف 2026">
-      </label>
-      <label class="text-xs">
-        <span class="text-text-muted block mb-1">حالة الصورة على الموقع</span>
-        <select id="browseLocalStatus" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
-          <option value="all">الكل</option>
-          <option value="missing" selected>ناقصة على الموقع</option>
-          <option value="on_site">موجودة على الموقع</option>
-        </select>
-      </label>
-      <label class="text-xs">
-        <span class="text-text-muted block mb-1">صورة في الأمين</span>
-        <select id="browseHasImage" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
-          <option value="1" selected>مع صورة فقط</option>
-          <option value="">بدون قيد</option>
-          <option value="0">بدون صورة</option>
-        </select>
-      </label>
-      <label class="text-xs">
-        <span class="text-text-muted block mb-1">نوع المادة</span>
-        <select id="browseMaterialTypes" multiple class="h-20 w-full rounded-lg border border-border-subtle px-2 text-sm">
-          <?php foreach ($materialTypeOptions as $option): ?>
-            <option value="<?= h($option) ?>"><?= h($option) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </label>
-      <label class="text-xs">
-        <span class="text-text-muted block mb-1">الفئة العمرية</span>
-        <select id="browseAgeCategories" multiple class="h-20 w-full rounded-lg border border-border-subtle px-2 text-sm">
-          <?php foreach ($ageCategoryOptions as $option): ?>
-            <option value="<?= h($option) ?>"><?= h($option) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </label>
-      <label class="text-xs">
-        <span class="text-text-muted block mb-1">الشركة</span>
-        <select id="browseManufacturers" multiple class="h-20 w-full rounded-lg border border-border-subtle px-2 text-sm">
-          <?php foreach ($manufacturerOptions as $option): ?>
-            <option value="<?= h($option) ?>"><?= h($option) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </label>
-      <label class="text-xs">
-        <span class="text-text-muted block mb-1">المجموعة</span>
-        <select id="browseGroupGuids" multiple class="h-20 w-full rounded-lg border border-border-subtle px-2 text-sm">
-          <?php foreach ($groupOptions as $group): ?>
-            <?php
-              $groupGuid = trim((string) ($group['guid'] ?? $group['Guid'] ?? ''));
-              $groupName = trim((string) ($group['name'] ?? $group['Name'] ?? $groupGuid));
-            ?>
-            <?php if ($groupGuid !== ''): ?>
-              <option value="<?= h($groupGuid) ?>"><?= h($groupName) ?></option>
-            <?php endif; ?>
-          <?php endforeach; ?>
-        </select>
-      </label>
-    </div>
-
-    <div class="flex flex-wrap items-center gap-2">
-      <button type="submit" id="browseSubmitBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold">عرض النتائج</button>
-      <button type="button" id="browseResetBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">مسح الفلاتر</button>
-      <span class="text-xs text-text-muted" id="browseSummary">اختر الفلاتر ثم اضغط «عرض النتائج».</span>
-    </div>
-  </form>
-
-  <div id="browseLoading" class="hidden px-4 py-8 text-center text-sm text-text-muted">جاري التحميل...</div>
-  <div id="browseError" class="hidden px-4 py-3 text-sm text-red-700 bg-red-50 border-b border-red-100"></div>
-  <div id="browseEmpty" class="hidden px-4 py-8 text-center text-sm text-text-muted">لا توجد مواد مطابقة للفلاتر.</div>
-
-  <div id="browseResults" class="hidden divide-y divide-border-subtle"></div>
-
-  <div id="browsePagination" class="hidden px-4 py-3 border-t border-border-subtle bg-surface-low/40 flex items-center justify-between gap-2">
-    <button type="button" id="browsePrevBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold disabled:opacity-40" disabled>السابق</button>
-    <span class="text-xs text-text-muted" id="browsePageLabel">صفحة 1</span>
-    <button type="button" id="browseNextBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold disabled:opacity-40" disabled>التالي</button>
-  </div>
-</section>
 
 <script>
 (() => {
@@ -364,24 +209,6 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   const uploadActiveStatus = document.getElementById('uploadActiveStatus');
   const resumeBtn = document.getElementById('resumeUploadBtn');
   const discardBtn = document.getElementById('discardQueueBtn');
-  const browseForm = document.getElementById('browseFiltersForm');
-  const browseSearch = document.getElementById('browseSearch');
-  const browseLocalStatus = document.getElementById('browseLocalStatus');
-  const browseHasImage = document.getElementById('browseHasImage');
-  const browseMaterialTypes = document.getElementById('browseMaterialTypes');
-  const browseAgeCategories = document.getElementById('browseAgeCategories');
-  const browseManufacturers = document.getElementById('browseManufacturers');
-  const browseGroupGuids = document.getElementById('browseGroupGuids');
-  const browseResetBtn = document.getElementById('browseResetBtn');
-  const browseSummary = document.getElementById('browseSummary');
-  const browseLoading = document.getElementById('browseLoading');
-  const browseError = document.getElementById('browseError');
-  const browseEmpty = document.getElementById('browseEmpty');
-  const browseResults = document.getElementById('browseResults');
-  const browsePagination = document.getElementById('browsePagination');
-  const browsePrevBtn = document.getElementById('browsePrevBtn');
-  const browseNextBtn = document.getElementById('browseNextBtn');
-  const browsePageLabel = document.getElementById('browsePageLabel');
 
   const startSyncBtn = document.getElementById('startSyncBtn');
   const pauseSyncBtn = document.getElementById('pauseSyncBtn');
@@ -399,23 +226,6 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   const syncQueuePageLabel = document.getElementById('syncQueuePageLabel');
   const statusLabels = <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE) ?>;
 
-  const linkReloadSourcesBtn = document.getElementById('linkReloadSourcesBtn');
-  const linkSourceList = document.getElementById('linkSourceList');
-  const linkSourceEmpty = document.getElementById('linkSourceEmpty');
-  const linkMaterialSearch = document.getElementById('linkMaterialSearch');
-  const linkHasImage = document.getElementById('linkHasImage');
-  const linkSearchMaterialsBtn = document.getElementById('linkSearchMaterialsBtn');
-  const linkMaterialLoading = document.getElementById('linkMaterialLoading');
-  const linkMaterialEmpty = document.getElementById('linkMaterialEmpty');
-  const linkMaterialList = document.getElementById('linkMaterialList');
-  const linkAssignBtn = document.getElementById('linkAssignBtn');
-  const linkSelectionSummary = document.getElementById('linkSelectionSummary');
-  const linkStatus = document.getElementById('linkStatus');
-
-  let selectedSourceFile = '';
-  let linkMaterialItems = [];
-  const selectedMaterialGuids = new Set();
-
   let syncRunning = false;
   let syncPaused = false;
   let scanRunning = false;
@@ -426,9 +236,6 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   let syncQueueTotalCount = <?= (int) ($queuePage['total_count'] ?? 0) ?>;
 
   let queue = null;
-  let browsePage = 1;
-  let browseHasMore = false;
-  let browseTotalCount = null;
   let paused = false;
   let uploading = false;
   let uploadSessionStarted = false;
@@ -736,9 +543,6 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
         syncPaused = false;
         processSyncQueue();
       }
-      if (browseResults && !browseResults.classList.contains('hidden')) {
-        await loadBrowseResults(browsePage);
-      }
       setTimeout(() => {
         if (queue && queue.items.every((item) => item.status === 'done')) {
           queue = null;
@@ -973,477 +777,6 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
     await refreshOverview();
   }
 
-  function selectedValues(selectEl) {
-    if (!selectEl) return [];
-    return Array.from(selectEl.selectedOptions).map((option) => option.value).filter(Boolean);
-  }
-
-  function buildBrowseParams(page) {
-    const params = new URLSearchParams();
-    params.set('action', 'browse');
-    params.set('page', String(page));
-    params.set('page_size', '24');
-    const search = browseSearch?.value.trim() || '';
-    if (search) params.set('search', search);
-    if (browseLocalStatus?.value) params.set('local_status', browseLocalStatus.value);
-    if (browseHasImage?.value !== '') params.set('has_image', browseHasImage.value);
-    selectedValues(browseMaterialTypes).forEach((value) => params.append('material_types[]', value));
-    selectedValues(browseAgeCategories).forEach((value) => params.append('age_categories[]', value));
-    selectedValues(browseManufacturers).forEach((value) => params.append('manufacturers[]', value));
-    selectedValues(browseGroupGuids).forEach((value) => params.append('group_guids[]', value));
-    return params;
-  }
-
-  function updateLinkAssignState() {
-    const count = selectedMaterialGuids.size;
-    if (linkAssignBtn) {
-      linkAssignBtn.disabled = selectedSourceFile === '' || count === 0;
-    }
-    if (linkSelectionSummary) {
-      if (selectedSourceFile === '') {
-        linkSelectionSummary.textContent = 'اختر صورة أساسية.';
-      } else if (count === 0) {
-        linkSelectionSummary.textContent = 'اختر مادة واحدة على الأقل.';
-      } else {
-        linkSelectionSummary.textContent = `${count} مادة محددة للربط.`;
-      }
-    }
-  }
-
-  function renderLinkSources(items) {
-    if (!linkSourceList || !linkSourceEmpty) return;
-    if (!items.length) {
-      linkSourceList.classList.add('hidden');
-      linkSourceList.innerHTML = '';
-      linkSourceEmpty.classList.remove('hidden');
-      return;
-    }
-
-    linkSourceEmpty.classList.add('hidden');
-    linkSourceList.innerHTML = items.map((item) => {
-      const fileName = item.file_name || '';
-      const checked = selectedSourceFile === fileName ? 'checked' : '';
-      const syncedBadge = item.is_synced
-        ? '<span class="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">متزامنة</span>'
-        : '<span class="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">لم تُزامَن بعد</span>';
-      const preview = item.preview_url
-        ? `<img src="${escapeHtml(item.preview_url)}" alt="" class="w-14 h-14 rounded-lg object-cover border border-border-subtle">`
-        : '<div class="w-14 h-14 rounded-lg bg-surface-low border border-border-subtle"></div>';
-
-      return `
-        <label class="flex items-center gap-3 p-2 rounded-lg border border-border-subtle hover:bg-surface-low/60 cursor-pointer">
-          <input type="radio" name="linkSource" value="${escapeHtml(fileName)}" ${checked}>
-          ${preview}
-          <span class="flex-1 min-w-0">
-            <span class="block text-xs font-bold truncate" dir="ltr">${escapeHtml(fileName)}</span>
-            ${syncedBadge}
-          </span>
-        </label>
-      `;
-    }).join('');
-    linkSourceList.classList.remove('hidden');
-
-    linkSourceList.querySelectorAll('input[name="linkSource"]').forEach((input) => {
-      input.addEventListener('change', () => {
-        if (input.checked) {
-          selectedSourceFile = input.value;
-          updateLinkAssignState();
-        }
-      });
-    });
-  }
-
-  async function loadLinkSources() {
-    try {
-      const response = await fetch(`${API_URL}?action=link-sources`);
-      const payload = await response.json();
-      const items = payload.items || [];
-      renderLinkSources(items);
-      renderLegacyCards(items);
-    } catch {
-      if (linkStatus) linkStatus.textContent = 'تعذر تحميل الصور الأساسية.';
-    }
-  }
-
-  function renderLinkMaterialItem(item) {
-    const guid = item.material_guid || '';
-    const checked = selectedMaterialGuids.has(guid) ? 'checked' : '';
-    const name = item.name || 'بدون اسم';
-    const code = item.material_code ? ` (${item.material_code})` : '';
-    const meta = [item.material_type, item.manufacturer].filter(Boolean).join(' · ');
-
-    return `
-      <label class="flex items-start gap-2 p-3 hover:bg-surface-low/40 cursor-pointer">
-        <input type="checkbox" class="link-material-check mt-1" value="${escapeHtml(guid)}" ${checked}>
-        <span class="min-w-0">
-          <span class="block text-sm font-bold truncate">${escapeHtml(name)}${escapeHtml(code)}</span>
-          ${meta ? `<span class="block text-[11px] text-text-muted mt-0.5">${escapeHtml(meta)}</span>` : ''}
-        </span>
-      </label>
-    `;
-  }
-
-  function bindLinkMaterialChecks() {
-    linkMaterialList?.querySelectorAll('.link-material-check').forEach((input) => {
-      input.addEventListener('change', () => {
-        if (input.checked) {
-          selectedMaterialGuids.add(input.value);
-        } else {
-          selectedMaterialGuids.delete(input.value);
-        }
-        updateLinkAssignState();
-      });
-    });
-  }
-
-  async function loadLinkMaterials() {
-    linkMaterialLoading?.classList.remove('hidden');
-    linkMaterialEmpty?.classList.add('hidden');
-    linkMaterialList?.classList.add('hidden');
-
-    const params = new URLSearchParams();
-    params.set('action', 'browse');
-    params.set('page', '1');
-    params.set('page_size', '48');
-    params.set('local_status', 'all');
-    const search = linkMaterialSearch?.value.trim() || '';
-    if (search) params.set('search', search);
-    if (linkHasImage?.value !== '') params.set('has_image', linkHasImage.value);
-
-    try {
-      const response = await fetch(`${API_URL}?${params.toString()}`);
-      const payload = await response.json();
-      linkMaterialLoading?.classList.add('hidden');
-      if (!payload.ok) {
-        if (linkStatus) linkStatus.textContent = payload.message || 'تعذر تحميل المواد.';
-        return;
-      }
-
-      linkMaterialItems = payload.items || [];
-      if (!linkMaterialItems.length) {
-        linkMaterialEmpty?.classList.remove('hidden');
-        return;
-      }
-
-      if (linkMaterialList) {
-        linkMaterialList.innerHTML = linkMaterialItems.map(renderLinkMaterialItem).join('');
-        linkMaterialList.classList.remove('hidden');
-        bindLinkMaterialChecks();
-      }
-    } catch {
-      linkMaterialLoading?.classList.add('hidden');
-      if (linkStatus) linkStatus.textContent = 'تعذر الاتصال أثناء تحميل المواد.';
-    }
-  }
-
-  async function assignSelectedMaterials() {
-    if (!selectedSourceFile || selectedMaterialGuids.size === 0) {
-      return;
-    }
-
-    if (!confirm(`ربط ${selectedMaterialGuids.size} مادة بالصورة «${selectedSourceFile}» وتوليد نسخ مستقلة؟`)) {
-      return;
-    }
-
-    if (linkAssignBtn) linkAssignBtn.disabled = true;
-    if (linkStatus) linkStatus.textContent = 'جاري الربط وتوليد النسخ...';
-
-    const form = new FormData();
-    form.append('action', 'assign-materials');
-    form.append('source_file_name', selectedSourceFile);
-    selectedMaterialGuids.forEach((guid) => form.append('material_guids[]', guid));
-
-    try {
-      const response = await fetch(API_URL, { method: 'POST', body: form });
-      const payload = await response.json();
-      if (linkStatus) linkStatus.textContent = payload.message || '';
-      if (payload.ok) {
-        selectedMaterialGuids.clear();
-        await loadLinkSources();
-        await loadLinkMaterials();
-        await refreshOverview();
-      }
-    } catch {
-      if (linkStatus) linkStatus.textContent = 'تعذر إكمال عملية الربط.';
-    } finally {
-      updateLinkAssignState();
-    }
-  }
-
-  linkReloadSourcesBtn?.addEventListener('click', () => loadLinkSources());
-  linkSearchMaterialsBtn?.addEventListener('click', () => loadLinkMaterials());
-  linkMaterialSearch?.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      loadLinkMaterials();
-    }
-  });
-  linkAssignBtn?.addEventListener('click', () => assignSelectedMaterials());
-
-  const sourceMaterialMap = new Map();
-
-  function getSourceMaterials(fileName) {
-    if (!sourceMaterialMap.has(fileName)) sourceMaterialMap.set(fileName, []);
-    return sourceMaterialMap.get(fileName);
-  }
-
-  function renderLegacyChips(fileName) {
-    const items = getSourceMaterials(fileName);
-    if (!items.length) {
-      return '<span class="text-[11px] text-text-muted">لا توجد مواد مضافة بعد.</span>';
-    }
-
-    return items.map((item, index) => `
-      <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-surface-low text-[11px]">
-        ${escapeHtml(item.label)}
-        <button type="button" class="text-red-600" data-remove-index="${index}" data-file-name="${escapeHtml(fileName)}">×</button>
-      </span>
-    `).join('');
-  }
-
-  async function fetchMaterialSuggestions(keyword) {
-    const response = await fetch(`${API_URL}?action=material-search&q=${encodeURIComponent(keyword)}&has_image=0`);
-    const payload = await response.json();
-    return payload.items || [];
-  }
-
-  async function assignFromLegacyCard(fileName, materialItems, button) {
-    if (!materialItems.length) {
-      if (linkStatus) linkStatus.textContent = 'أضف مادة واحدة على الأقل قبل الربط.';
-      return;
-    }
-
-    const form = new FormData();
-    form.append('action', 'assign-materials');
-    form.append('source_file_name', fileName);
-    materialItems.forEach((item) => form.append('material_guids[]', item.guid));
-
-    button.disabled = true;
-    try {
-      const response = await fetch(API_URL, { method: 'POST', body: form });
-      const payload = await response.json();
-      if (linkStatus) linkStatus.textContent = payload.message || '';
-      if (payload.ok) {
-        sourceMaterialMap.set(fileName, []);
-        await loadLinkSources();
-        await refreshOverview();
-      }
-    } catch {
-      if (linkStatus) linkStatus.textContent = 'تعذر الربط من بطاقة الصورة.';
-    } finally {
-      button.disabled = false;
-    }
-  }
-
-  function renderLegacyCards(items) {
-    const container = document.getElementById('legacyLinkCards');
-    if (!container) return;
-    if (!items.length) {
-      container.innerHTML = '<div class="text-xs text-text-muted">لا توجد صور متاحة للربط.</div>';
-      return;
-    }
-
-    container.innerHTML = items.map((item) => {
-      const fileName = item.file_name || '';
-      const preview = item.preview_url
-        ? `<img src="${escapeHtml(item.preview_url)}" alt="" class="w-full h-44 object-contain rounded-lg border border-border-subtle bg-surface-low">`
-        : '<div class="w-full h-44 rounded-lg border border-border-subtle bg-surface-low"></div>';
-
-      return `
-        <article class="rounded-xl border border-border-subtle p-3 bg-white space-y-2" data-file-name="${escapeHtml(fileName)}">
-          ${preview}
-          <p class="text-xs font-mono truncate" dir="ltr">${escapeHtml(fileName)}</p>
-          <div class="relative">
-            <input type="search" class="legacy-material-input h-9 w-full rounded-lg border border-border-subtle px-3 text-xs" placeholder="ابحث عن مادة..." data-file-name="${escapeHtml(fileName)}">
-            <div class="legacy-suggestions hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow"></div>
-          </div>
-          <div class="flex flex-wrap gap-1 legacy-chip-list">${renderLegacyChips(fileName)}</div>
-          <button type="button" class="legacy-assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>
-        </article>
-      `;
-    }).join('');
-
-    container.querySelectorAll('article[data-file-name]').forEach((card) => {
-      const fileName = card.getAttribute('data-file-name') || '';
-      const input = card.querySelector('.legacy-material-input');
-      const suggestions = card.querySelector('.legacy-suggestions');
-      const chips = card.querySelector('.legacy-chip-list');
-      const assignBtn = card.querySelector('.legacy-assign-btn');
-
-      if (!(input instanceof HTMLInputElement) || !(suggestions instanceof HTMLElement) || !(chips instanceof HTMLElement) || !(assignBtn instanceof HTMLButtonElement)) {
-        return;
-      }
-
-      input.addEventListener('input', async () => {
-        const keyword = input.value.trim();
-        if (keyword.length < 2) {
-          suggestions.classList.add('hidden');
-          suggestions.innerHTML = '';
-          return;
-        }
-
-        try {
-          const rows = await fetchMaterialSuggestions(keyword);
-          if (!rows.length) {
-            suggestions.innerHTML = '<div class="p-2 text-xs text-text-muted">لا نتائج</div>';
-            suggestions.classList.remove('hidden');
-            return;
-          }
-
-          suggestions.innerHTML = rows.map((row) => {
-            const guid = row.material_guid || '';
-            const label = `${row.material_code || ''} ${row.name || ''}`.trim();
-            return `<button type="button" class="block w-full text-right px-3 py-2 text-xs hover:bg-surface-low legacy-add-material" data-guid="${escapeHtml(guid)}" data-label="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
-          }).join('');
-          suggestions.classList.remove('hidden');
-        } catch {
-          suggestions.classList.add('hidden');
-        }
-      });
-
-      suggestions.addEventListener('click', (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLElement)) return;
-        const button = target.closest('.legacy-add-material');
-        if (!(button instanceof HTMLButtonElement)) return;
-
-        const guid = button.getAttribute('data-guid') || '';
-        const label = button.getAttribute('data-label') || '';
-        if (!guid) return;
-
-        const list = getSourceMaterials(fileName);
-        if (!list.some((item) => item.guid === guid)) {
-          list.push({ guid, label });
-        }
-        chips.innerHTML = renderLegacyChips(fileName);
-        suggestions.classList.add('hidden');
-        suggestions.innerHTML = '';
-        input.value = '';
-      });
-
-      chips.addEventListener('click', (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLElement)) return;
-        const button = target.closest('button[data-remove-index]');
-        if (!(button instanceof HTMLButtonElement)) return;
-
-        const index = Number(button.getAttribute('data-remove-index') || -1);
-        const list = getSourceMaterials(fileName);
-        if (index >= 0) {
-          list.splice(index, 1);
-          chips.innerHTML = renderLegacyChips(fileName);
-        }
-      });
-
-      assignBtn.addEventListener('click', async () => {
-        await assignFromLegacyCard(fileName, getSourceMaterials(fileName), assignBtn);
-      });
-    });
-  }
-
-  function renderBrowseItem(item) {
-    const name = item.name || 'بدون اسم';
-    const code = item.material_code ? ` (${item.material_code})` : '';
-    const meta = [item.material_type, item.manufacturer, item.age_category].filter(Boolean).join(' · ');
-    const statusClass = item.has_local ? 'text-status-active' : 'text-status-pending';
-    const statusLabel = item.has_local ? 'موجودة على الموقع' : (item.image_guid ? 'ناقصة على الموقع' : 'بدون صورة في الأمين');
-    const preview = item.preview_url || '';
-    const fileName = item.stored_file_name || '';
-
-    return `
-      <article class="p-4 flex flex-col sm:flex-row gap-3 sm:items-center">
-        <div class="shrink-0">
-          ${preview
-            ? `<img src="${escapeHtml(preview)}" alt="" class="browse-preview w-20 h-20 rounded-xl object-cover bg-surface-low border border-border-subtle" loading="lazy">`
-            : '<div class="w-20 h-20 rounded-xl bg-surface-low border border-border-subtle flex items-center justify-center text-[11px] text-text-muted">لا صورة</div>'}
-        </div>
-        <div class="flex-1 min-w-0">
-          <h3 class="font-bold text-sm truncate">${escapeHtml(name)}${escapeHtml(code)}</h3>
-          ${meta ? `<p class="text-xs text-text-muted mt-0.5">${escapeHtml(meta)}</p>` : ''}
-          ${fileName ? `<p class="text-[11px] font-mono text-text-muted mt-1 truncate" dir="ltr">${escapeHtml(fileName)}</p>` : ''}
-        </div>
-        <div class="text-left sm:text-center shrink-0">
-          <span class="text-xs font-bold ${statusClass}">${escapeHtml(statusLabel)}</span>
-        </div>
-      </article>
-    `;
-  }
-
-  function updateBrowsePagination() {
-    if (!browsePagination || !browsePageLabel || !browsePrevBtn || !browseNextBtn) return;
-    const totalText = browseTotalCount === null ? '' : ` من ${browseTotalCount}`;
-    browsePageLabel.textContent = `صفحة ${browsePage}${totalText}`;
-    browsePrevBtn.disabled = browsePage <= 1;
-    browseNextBtn.disabled = !browseHasMore;
-    browsePagination.classList.toggle('hidden', browseResults?.classList.contains('hidden'));
-  }
-
-  async function loadBrowseResults(page = 1) {
-    browsePage = Math.max(1, page);
-    browseLoading?.classList.remove('hidden');
-    browseError?.classList.add('hidden');
-    browseEmpty?.classList.add('hidden');
-    browseResults?.classList.add('hidden');
-    browsePagination?.classList.add('hidden');
-
-    try {
-      const response = await fetch(`${API_URL}?${buildBrowseParams(browsePage).toString()}`);
-      const payload = await response.json();
-      browseLoading?.classList.add('hidden');
-
-      if (!payload.ok) {
-        if (browseError) {
-          browseError.textContent = payload.message || 'تعذر تحميل النتائج.';
-          browseError.classList.remove('hidden');
-        }
-        return;
-      }
-
-      const items = payload.items || [];
-      browseHasMore = !!payload.has_more;
-      browseTotalCount = payload.total_count ?? null;
-
-      if (items.length === 0) {
-        browseEmpty?.classList.remove('hidden');
-        if (browseSummary) browseSummary.textContent = 'لا توجد مواد مطابقة.';
-        return;
-      }
-
-      if (browseResults) {
-        browseResults.innerHTML = items.map(renderBrowseItem).join('');
-        browseResults.classList.remove('hidden');
-      }
-      if (browseSummary) {
-        const countLabel = browseTotalCount === null
-          ? `${items.length} مادة في هذه الصفحة`
-          : `${items.length} من ${browseTotalCount} مادة`;
-        browseSummary.textContent = countLabel;
-      }
-      updateBrowsePagination();
-    } catch {
-      browseLoading?.classList.add('hidden');
-      if (browseError) {
-        browseError.textContent = 'تعذر الاتصال بالخادم.';
-        browseError.classList.remove('hidden');
-      }
-    }
-  }
-
-  function resetBrowseFilters() {
-    if (browseSearch) browseSearch.value = '';
-    if (browseLocalStatus) browseLocalStatus.value = 'missing';
-    if (browseHasImage) browseHasImage.value = '1';
-    [browseMaterialTypes, browseAgeCategories, browseManufacturers, browseGroupGuids].forEach((selectEl) => {
-      if (!selectEl) return;
-      Array.from(selectEl.options).forEach((option) => { option.selected = false; });
-    });
-    browseResults?.classList.add('hidden');
-    browsePagination?.classList.add('hidden');
-    browseEmpty?.classList.add('hidden');
-    browseError?.classList.add('hidden');
-    if (browseSummary) browseSummary.textContent = 'اختر الفلاتر ثم اضغط «عرض النتائج».';
-  }
-
   picker?.addEventListener('change', async () => {
     await buildQueueFromFiles(picker.files);
   });
@@ -1455,18 +788,6 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
   });
   resumeBtn?.addEventListener('click', () => processQueue());
   discardBtn?.addEventListener('click', () => discardQueue());
-
-  browseForm?.addEventListener('submit', (event) => {
-    event.preventDefault();
-    loadBrowseResults(1);
-  });
-  browseResetBtn?.addEventListener('click', () => resetBrowseFilters());
-  browsePrevBtn?.addEventListener('click', () => {
-    if (browsePage > 1) loadBrowseResults(browsePage - 1);
-  });
-  browseNextBtn?.addEventListener('click', () => {
-    if (browseHasMore) loadBrowseResults(browsePage + 1);
-  });
 
   startSyncBtn?.addEventListener('click', () => {
     syncPaused = false;
@@ -1642,7 +963,5 @@ $groupOptions = array_values(array_filter($materialFilterOptions['groups'] ?? []
 
   restoreQueueFromStorage();
   refreshOverview();
-  loadLinkSources();
-  loadLinkMaterials();
 })();
 </script>
