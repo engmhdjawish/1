@@ -216,8 +216,16 @@
     return html;
   };
 
+  const resolveEditor = (root) => {
+    if (!root) return null;
+    if (root.matches && root.matches('[data-about-editor]')) {
+      return root;
+    }
+    return root.querySelector('[data-about-editor]');
+  };
+
   const bindEditor = (root) => {
-    const editor = root.querySelector('[data-about-editor]');
+    const editor = resolveEditor(root);
     if (!editor || editor.dataset.bound === '1') return;
     editor.dataset.bound = '1';
 
@@ -303,29 +311,36 @@
     };
 
     editor.querySelectorAll('[data-insert]').forEach((button) => {
-      button.addEventListener('click', () => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
         insertAtCursor(button.getAttribute('data-insert') || '');
       });
     });
 
     editor.querySelectorAll('[data-wrap]').forEach((button) => {
-      button.addEventListener('click', () => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
         insertAtCursor('', button.getAttribute('data-wrap') || '');
       });
     });
 
-    editor.querySelector('[data-insert-card]')?.addEventListener('click', () => {
+    editor.querySelector('[data-insert-card]')?.addEventListener('click', (event) => {
+      event.preventDefault();
       insertAtCursor('\n\n*عنوان البطاقة*\nاكتب وصف البطاقة هنا...\n');
     });
 
     tabButtons.forEach((button) => {
-      button.addEventListener('click', () => setTab(button.getAttribute('data-tab') || 'edit'));
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        setTab(button.getAttribute('data-tab') || 'edit');
+      });
     });
 
     textarea?.addEventListener('input', schedulePreview);
     pageTitleInput?.addEventListener('input', schedulePreview);
 
-    defaultButton?.addEventListener('click', () => {
+    defaultButton?.addEventListener('click', (event) => {
+      event.preventDefault();
       const sample = editor.getAttribute('data-default-content') || '';
       if (!sample || !window.confirm('استبدال المحتوى الحالي بالنموذج الافتراضي؟')) return;
       textarea.value = sample;

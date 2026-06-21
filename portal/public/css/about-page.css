@@ -5,14 +5,49 @@
 }
 
 .about-hero {
+  color: #ffffff;
   background: linear-gradient(135deg, #b51218 0%, #D81921 45%, #ef4444 100%);
 }
 
-.about-hero-pattern {
-  background-image:
+.about-hero.about-hero-pattern {
+  background:
     radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.14) 1px, transparent 1px),
-    radial-gradient(circle at 80% 60%, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
-  background-size: 28px 28px, 36px 36px;
+    radial-gradient(circle at 80% 60%, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(135deg, #b51218 0%, #D81921 45%, #ef4444 100%);
+  background-size: 28px 28px, 36px 36px, auto;
+}
+
+.about-hero h1,
+.about-hero p,
+.about-hero .about-hero-kicker,
+.about-hero a.about-hero-link {
+  color: #ffffff;
+}
+
+.about-hero .about-hero-intro {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.about-hero .about-hero-intro strong {
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.about-hero .about-hero-intro em {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.about-hero-pattern {
+  background-size: 28px 28px, 36px 36px, auto;
+}
+
+.about-content-editor [data-panel="preview"]:not(.hidden) {
+  display: block;
+  min-height: 22rem;
+}
+
+.about-page-preview section {
+  margin-bottom: 0.75rem;
 }
 
 .about-intro p + p {

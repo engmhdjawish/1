@@ -26,4 +26,5 @@ $content = ob_get_clean();
 $title = $aboutTitle;
 $companyContext = $company;
 $companyLogoUrl = $logoUrl;
+$extraHead = '<link href="/css/about-page.css" rel="stylesheet">';
 require dirname(__DIR__) . '/views/layout.php';

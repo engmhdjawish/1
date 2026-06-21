@@ -32,22 +32,20 @@ if (trim((string) ($company['company_address'] ?? '')) !== '') {
 
 $hasContent = $introParagraphs !== [] || $sections !== [];
 ?>
-<link href="/css/about-page.css" rel="stylesheet">
-
 <div class="about-page max-w-6xl mx-auto space-y-10 md:space-y-14">
   <section class="about-hero about-hero-pattern relative overflow-hidden rounded-[2rem] text-white shadow-xl">
     <div class="absolute -left-16 top-0 h-56 w-56 rounded-full bg-white/10 blur-3xl"></div>
     <div class="absolute -right-10 bottom-0 h-44 w-44 rounded-full bg-black/10 blur-2xl"></div>
     <div class="relative px-6 py-10 md:px-12 md:py-14 grid gap-8 lg:grid-cols-[1.15fr_0.85fr] items-center">
       <div>
-        <p class="text-white/75 text-sm font-bold tracking-wide mb-3">من نحن</p>
+        <p class="about-hero-kicker text-sm font-bold tracking-wide mb-3 opacity-90">من نحن</p>
         <h1 class="text-3xl md:text-5xl font-extrabold leading-tight"><?= h($aboutTitle) ?></h1>
         <?php if ($companyName !== ''): ?>
-          <p class="mt-4 text-lg md:text-xl text-white/90 font-semibold"><?= h($companyName) ?></p>
+          <p class="mt-4 text-lg md:text-xl font-semibold opacity-95"><?= h($companyName) ?></p>
         <?php endif; ?>
         <?php if ($introParagraphs !== []): ?>
-          <p class="mt-5 text-white/85 leading-8 text-base md:text-lg max-w-2xl">
-            <?= format_about_inline((string) $introParagraphs[0]) ?>
+          <p class="about-hero-intro mt-5 leading-8 text-base md:text-lg max-w-2xl">
+            <?= format_about_inline((string) $introParagraphs[0], true) ?>
           </p>
         <?php endif; ?>
         <div class="mt-8 flex flex-wrap gap-3">
@@ -56,7 +54,7 @@ $hasContent = $introParagraphs !== [] || $sections !== [];
             تصفّح المتجر
           </a>
           <?php if ($contactItems !== []): ?>
-            <a href="#about-contact" class="h-11 inline-flex items-center gap-2 rounded-xl border border-white/35 px-5 font-bold hover:bg-white/10 transition">
+            <a href="#about-contact" class="about-hero-link h-11 inline-flex items-center gap-2 rounded-xl border border-white/50 px-5 font-bold hover:bg-white/10 transition">
               <span class="material-symbols-outlined text-base" aria-hidden="true">support_agent</span>
               تواصل معنا
             </a>

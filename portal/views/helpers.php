@@ -295,9 +295,16 @@ function default_about_content(): string
 TEXT;
 }
 
-function format_about_inline(string $text): string
+function format_about_inline(string $text, bool $onDark = false): string
 {
     $text = h($text);
+    if ($onDark) {
+        $text = (string) preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $text);
+        $text = (string) preg_replace('/(?<!\*)\*([^*]+?)\*(?!\*)/', '<em>$1</em>', $text);
+
+        return $text;
+    }
+
     $text = (string) preg_replace('/\*\*(.+?)\*\*/', '<strong class="font-extrabold text-slate-900">$1</strong>', $text);
     $text = (string) preg_replace('/(?<!\*)\*([^*]+?)\*(?!\*)/', '<em class="text-slate-600">$1</em>', $text);
 
