@@ -622,32 +622,26 @@ final class MaterialImageStorageService
 
         if ($brandNameLines !== []) {
             foreach ($brandNameLines as $nameLine) {
-                self::drawBannerColoredText(
+                self::drawBannerAccentText(
                     $canvas,
                     $font,
                     $brandNameSize,
                     $nameLine,
                     $paddingLeft,
                     $baseline,
-                    216,
-                    25,
-                    33,
                     true,
                     true
                 );
                 $baseline += $lineStep;
             }
         } elseif ($branding['name'] !== '') {
-            self::drawBannerColoredText(
+            self::drawBannerAccentText(
                 $canvas,
                 $font,
                 $brandNameSize,
                 $branding['name'],
                 $paddingLeft,
                 $baseline,
-                216,
-                25,
-                33,
                 true,
                 true
             );
@@ -658,18 +652,15 @@ final class MaterialImageStorageService
             if ($brandNameLines !== [] || $branding['name'] !== '') {
                 $baseline += (int) round($brandNameSize * 0.15);
             }
-            self::drawBannerColoredText(
+            self::drawBannerAccentText(
                 $canvas,
                 $font,
                 $brandPhoneSize,
                 $branding['phone'],
                 $paddingLeft,
                 $baseline + (int) $brandPhoneSize,
-                216,
-                25,
-                33,
-                true,
-                false
+                false,
+                true
             );
         }
     }
@@ -678,6 +669,70 @@ final class MaterialImageStorageService
     {
         $divider = imagecolorallocatealpha($canvas, 255, 255, 255, 105);
         imageline($canvas, $x, $topY, $x, $bottomY, $divider);
+    }
+
+    /** @return array{0: int, 1: int, 2: int} */
+    private static function bannerAccentRgb(): array
+    {
+        return [216, 25, 33];
+    }
+
+    private static function bannerAccentStrokeWidth(float $fontSize): int
+    {
+        return $fontSize >= 22.0 ? 2 : 1;
+    }
+
+    private static function drawBannerOutlinedTtfText(
+        \GdImage $canvas,
+        string $font,
+        float $fontSize,
+        string $drawText,
+        int $x,
+        int $baselineY,
+        int $fillRed,
+        int $fillGreen,
+        int $fillBlue,
+        bool $boldFill = false
+    ): void {
+        if ($drawText === '') {
+            return;
+        }
+
+        $outline = imagecolorallocate($canvas, 255, 255, 255);
+        $fill = imagecolorallocate($canvas, $fillRed, $fillGreen, $fillBlue);
+        $size = (int) $fontSize;
+        $stroke = self::bannerAccentStrokeWidth($fontSize);
+
+        for ($dx = -$stroke; $dx <= $stroke; $dx++) {
+            for ($dy = -$stroke; $dy <= $stroke; $dy++) {
+                if ($dx === 0 && $dy === 0) {
+                    continue;
+                }
+                imagettftext($canvas, $size, 0, $x + $dx, $baselineY + $dy, $outline, $font, $drawText);
+            }
+        }
+
+        if ($boldFill) {
+            imagettftext($canvas, $size, 0, $x + 1, $baselineY, $fill, $font, $drawText);
+        }
+        imagettftext($canvas, $size, 0, $x, $baselineY, $fill, $font, $drawText);
+    }
+
+    private static function drawBannerAccentText(
+        \GdImage $canvas,
+        string $font,
+        float $fontSize,
+        string $text,
+        int $x,
+        int $baselineY,
+        bool $shapeArabic,
+        bool $bold = true
+    ): void {
+        $drawText = $shapeArabic && ArabicGdText::containsArabic($text)
+            ? ArabicGdText::shape($text)
+            : $text;
+        [$red, $green, $blue] = self::bannerAccentRgb();
+        self::drawBannerOutlinedTtfText($canvas, $font, $fontSize, $drawText, $x, $baselineY, $red, $green, $blue, $bold);
     }
 
     private static function drawBannerTextLeft(
@@ -810,15 +865,25 @@ final class MaterialImageStorageService
         $x = max($minX, $maxRightX - $lineWidth);
         $nameColor = imagecolorallocate($canvas, 255, 255, 255);
         $separatorColor = imagecolorallocate($canvas, 168, 168, 168);
-        $codeColor = imagecolorallocate($canvas, 216, 25, 33);
 
         imagettftext($canvas, (int) $fontSize, 0, $x + 1, $baselineY, $nameColor, $font, $shapedName);
         imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $nameColor, $font, $shapedName);
         $x += (int) round($nameWidth);
         imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $separatorColor, $font, $separator);
         $x += (int) round($separatorWidth);
-        imagettftext($canvas, (int) $fontSize, 0, $x + 1, $baselineY, $codeColor, $font, $code);
-        imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $codeColor, $font, $code);
+        [$accentRed, $accentGreen, $accentBlue] = self::bannerAccentRgb();
+        self::drawBannerOutlinedTtfText(
+            $canvas,
+            $font,
+            $fontSize,
+            $code,
+            $x,
+            $baselineY,
+            $accentRed,
+            $accentGreen,
+            $accentBlue,
+            true
+        );
     }
 
     /** @return array{label: string, value: string}|null */
@@ -890,13 +955,21 @@ final class MaterialImageStorageService
             $lineWidth = $labelWidth + $valueWidth;
         }
 
-        $labelColor = imagecolorallocate($canvas, 216, 25, 33);
         $valueColor = imagecolorallocate($canvas, 236, 236, 236);
         $valueX = max($minX, $maxRightX - $lineWidth);
         $labelX = $valueX + (int) round($valueWidth);
 
         imagettftext($canvas, (int) $fontSize, 0, $valueX, $baselineY, $valueColor, $font, $shapedValue);
-        imagettftext($canvas, (int) $fontSize, 0, $labelX, $baselineY, $labelColor, $font, $shapedLabel);
+        self::drawBannerOutlinedTtfText(
+            $canvas,
+            $font,
+            $fontSize,
+            $shapedLabel,
+            $labelX,
+            $baselineY,
+            ...self::bannerAccentRgb(),
+            false
+        );
     }
 
     private static function drawDetailsBannerTextLine(
