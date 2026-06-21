@@ -331,6 +331,9 @@
     if (typeof window.portalMediaPickerInit === 'function') {
       window.portalMediaPickerInit();
     }
+    if (typeof window.portalAboutEditorInit === 'function') {
+      window.portalAboutEditorInit(root);
+    }
   }
 
   function init() {

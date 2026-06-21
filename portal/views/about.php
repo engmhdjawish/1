@@ -4,157 +4,227 @@ declare(strict_types=1);
 
 /** @var array<string, string> $company */
 /** @var string $aboutTitle */
-/** @var array{intro: string, sections: list<array{title: string, items: list<array{title: string, body: string}>, paragraphs: list<string>}>} $aboutContent */
+/** @var array{intro_paragraphs: list<string>, sections: list<array<string, mixed>>} $aboutContent */
 /** @var string|null $companyLogoUrl */
 
-$commitmentIcons = about_commitment_icons();
-$hasContact = trim((string) ($company['company_address'] ?? '')) !== ''
-    || trim((string) ($company['company_phone'] ?? '')) !== ''
-    || trim((string) ($company['company_mobile'] ?? '')) !== ''
-    || trim((string) ($company['company_whatsapp'] ?? '')) !== ''
-    || trim((string) ($company['company_email'] ?? '')) !== '';
-?>
-<section class="max-w-5xl mx-auto">
-  <header class="relative overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm mb-8">
-    <div class="absolute inset-0 bg-gradient-to-br from-primary/10 via-white to-amber-50"></div>
-    <div class="absolute -left-10 -top-10 h-40 w-40 rounded-full bg-primary/10 blur-2xl"></div>
-    <div class="absolute -right-8 bottom-0 h-32 w-32 rounded-full bg-amber-200/40 blur-2xl"></div>
-    <div class="relative px-6 py-10 md:px-10 md:py-12 text-center">
-      <?php if (!empty($companyLogoUrl)): ?>
-        <img src="<?= h((string) $companyLogoUrl) ?>" alt="<?= h((string) ($company['company_name'] ?? '')) ?>" class="h-20 w-auto mx-auto mb-5 object-contain drop-shadow-sm">
-      <?php endif; ?>
-      <p class="text-xs font-bold tracking-wide text-primary mb-2">تعرف علينا</p>
-      <h1 class="text-3xl md:text-4xl font-extrabold text-slate-900"><?= h($aboutTitle) ?></h1>
-      <?php if (trim((string) ($company['company_name'] ?? '')) !== ''): ?>
-        <p class="text-text-muted mt-3 text-base md:text-lg"><?= h((string) $company['company_name']) ?></p>
-      <?php endif; ?>
-    </div>
-  </header>
+$sectionIcons = about_section_icons();
+$introParagraphs = is_array($aboutContent['intro_paragraphs'] ?? null) ? $aboutContent['intro_paragraphs'] : [];
+$sections = is_array($aboutContent['sections'] ?? null) ? $aboutContent['sections'] : [];
+$companyName = trim((string) ($company['company_name'] ?? ''));
 
-  <?php if (($aboutContent['intro'] ?? '') !== ''): ?>
-    <article class="mb-8 rounded-2xl border border-gray-200 bg-white p-6 md:p-8 shadow-sm">
-      <div class="flex items-start gap-4">
-        <span class="hidden sm:flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-          <span class="material-symbols-outlined text-2xl" aria-hidden="true">storefront</span>
-        </span>
-        <p class="text-slate-700 leading-8 text-base md:text-lg"><?= nl2br(h((string) $aboutContent['intro'])) ?></p>
+$contactItems = [];
+if (trim((string) ($company['company_phone'] ?? '')) !== '') {
+    $contactItems[] = ['icon' => 'call', 'label' => 'الهاتف', 'value' => (string) $company['company_phone'], 'href' => 'tel:' . preg_replace('/\D+/', '', (string) $company['company_phone']), 'dir' => 'ltr'];
+}
+if (trim((string) ($company['company_mobile'] ?? '')) !== '') {
+    $contactItems[] = ['icon' => 'smartphone', 'label' => 'الموبايل', 'value' => (string) $company['company_mobile'], 'href' => 'tel:' . preg_replace('/\D+/', '', (string) $company['company_mobile']), 'dir' => 'ltr'];
+}
+if (trim((string) ($company['company_whatsapp'] ?? '')) !== '') {
+    $wa = preg_replace('/\D+/', '', (string) $company['company_whatsapp']);
+    $contactItems[] = ['icon' => 'chat', 'label' => 'واتساب', 'value' => (string) $company['company_whatsapp'], 'href' => 'https://wa.me/' . $wa, 'dir' => 'ltr'];
+}
+if (trim((string) ($company['company_email'] ?? '')) !== '') {
+    $contactItems[] = ['icon' => 'mail', 'label' => 'البريد', 'value' => (string) $company['company_email'], 'href' => 'mailto:' . (string) $company['company_email'], 'dir' => 'ltr'];
+}
+if (trim((string) ($company['company_address'] ?? '')) !== '') {
+    $contactItems[] = ['icon' => 'location_on', 'label' => 'العنوان', 'value' => (string) $company['company_address'], 'href' => null, 'dir' => 'rtl'];
+}
+
+$hasContent = $introParagraphs !== [] || $sections !== [];
+?>
+<link href="/css/about-page.css" rel="stylesheet">
+
+<div class="about-page max-w-6xl mx-auto space-y-10 md:space-y-14">
+  <section class="about-hero about-hero-pattern relative overflow-hidden rounded-[2rem] text-white shadow-xl">
+    <div class="absolute -left-16 top-0 h-56 w-56 rounded-full bg-white/10 blur-3xl"></div>
+    <div class="absolute -right-10 bottom-0 h-44 w-44 rounded-full bg-black/10 blur-2xl"></div>
+    <div class="relative px-6 py-10 md:px-12 md:py-14 grid gap-8 lg:grid-cols-[1.15fr_0.85fr] items-center">
+      <div>
+        <p class="text-white/75 text-sm font-bold tracking-wide mb-3">من نحن</p>
+        <h1 class="text-3xl md:text-5xl font-extrabold leading-tight"><?= h($aboutTitle) ?></h1>
+        <?php if ($companyName !== ''): ?>
+          <p class="mt-4 text-lg md:text-xl text-white/90 font-semibold"><?= h($companyName) ?></p>
+        <?php endif; ?>
+        <?php if ($introParagraphs !== []): ?>
+          <p class="mt-5 text-white/85 leading-8 text-base md:text-lg max-w-2xl">
+            <?= format_about_inline((string) $introParagraphs[0]) ?>
+          </p>
+        <?php endif; ?>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a href="/store.php" class="h-11 inline-flex items-center gap-2 rounded-xl bg-white text-primary px-5 font-extrabold shadow-md hover:brightness-105 transition">
+            <span class="material-symbols-outlined text-base" aria-hidden="true">storefront</span>
+            تصفّح المتجر
+          </a>
+          <?php if ($contactItems !== []): ?>
+            <a href="#about-contact" class="h-11 inline-flex items-center gap-2 rounded-xl border border-white/35 px-5 font-bold hover:bg-white/10 transition">
+              <span class="material-symbols-outlined text-base" aria-hidden="true">support_agent</span>
+              تواصل معنا
+            </a>
+          <?php endif; ?>
+        </div>
       </div>
-    </article>
+
+      <div class="rounded-2xl border border-white/20 bg-white/10 backdrop-blur-md p-6 md:p-8">
+        <?php if (!empty($companyLogoUrl)): ?>
+          <img src="<?= h((string) $companyLogoUrl) ?>" alt="<?= h($companyName) ?>" class="h-24 w-auto mx-auto object-contain mb-5 drop-shadow">
+        <?php else: ?>
+          <div class="h-24 w-24 mx-auto mb-5 rounded-2xl bg-white/15 flex items-center justify-center">
+            <span class="material-symbols-outlined text-4xl" aria-hidden="true">storefront</span>
+          </div>
+        <?php endif; ?>
+        <div class="grid grid-cols-3 gap-3 text-center text-sm">
+          <div class="rounded-xl bg-white/10 px-2 py-3 border border-white/10">
+            <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>
+            <p class="font-bold mt-1">تشكيلة</p>
+          </div>
+          <div class="rounded-xl bg-white/10 px-2 py-3 border border-white/10">
+            <span class="material-symbols-outlined" aria-hidden="true">verified</span>
+            <p class="font-bold mt-1">جودة</p>
+          </div>
+          <div class="rounded-xl bg-white/10 px-2 py-3 border border-white/10">
+            <span class="material-symbols-outlined" aria-hidden="true">handshake</span>
+            <p class="font-bold mt-1">ثقة</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <?php if (count($introParagraphs) > 1): ?>
+    <section class="about-intro rounded-3xl border border-gray-200 bg-white px-6 py-8 md:px-10 md:py-10 shadow-sm">
+      <?php foreach (array_slice($introParagraphs, 1) as $paragraph): ?>
+        <p class="text-slate-700 leading-8 text-base md:text-lg"><?= format_about_inline((string) $paragraph) ?></p>
+      <?php endforeach; ?>
+    </section>
   <?php endif; ?>
 
-  <?php foreach ($aboutContent['sections'] as $section): ?>
+  <?php foreach ($sections as $sectionIndex => $section): ?>
     <?php
-      $sectionTitle = (string) ($section['title'] ?? '');
-      $items = is_array($section['items'] ?? null) ? $section['items'] : [];
+      $sectionTitle = trim((string) ($section['title'] ?? ''));
+      $sectionSubtitle = trim((string) ($section['subtitle'] ?? ''));
+      $cards = is_array($section['cards'] ?? null) ? $section['cards'] : [];
       $paragraphs = is_array($section['paragraphs'] ?? null) ? $section['paragraphs'] : [];
+      $listItems = is_array($section['list_items'] ?? null) ? $section['list_items'] : [];
+      $quote = trim((string) ($section['quote'] ?? ''));
+      $isQuoteSection = $quote !== '' && $cards === [] && $paragraphs === [] && $listItems === [];
     ?>
-    <section class="mb-8">
-      <?php if ($sectionTitle !== ''): ?>
-        <div class="mb-5 flex items-center gap-3">
-          <span class="h-10 w-1.5 rounded-full bg-primary"></span>
-          <h2 class="text-2xl font-extrabold text-slate-900"><?= h($sectionTitle) ?></h2>
-        </div>
+
+    <section class="<?= $isQuoteSection ? '' : 'rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden' ?>">
+      <?php if (!$isQuoteSection && $sectionTitle !== ''): ?>
+        <header class="px-6 md:px-10 pt-8 md:pt-10 pb-4 border-b border-gray-100">
+          <div class="flex items-center gap-3">
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary font-extrabold text-sm">
+              <?= str_pad((string) ($sectionIndex + 1), 2, '0', STR_PAD_LEFT) ?>
+            </span>
+            <div>
+              <h2 class="text-2xl md:text-3xl font-extrabold text-slate-900"><?= h($sectionTitle) ?></h2>
+              <?php if ($sectionSubtitle !== ''): ?>
+                <p class="text-sm md:text-base text-slate-500 mt-1"><?= format_about_inline($sectionSubtitle) ?></p>
+              <?php endif; ?>
+            </div>
+          </div>
+        </header>
       <?php endif; ?>
 
-      <?php if ($items !== []): ?>
-        <?php
-          $gridClass = match (min(3, count($items))) {
-              1 => 'md:grid-cols-1',
-              2 => 'md:grid-cols-2',
-              default => 'md:grid-cols-3',
-          };
-        ?>
-        <div class="grid grid-cols-1 <?= $gridClass ?> gap-4">
-          <?php foreach ($items as $index => $item): ?>
+      <?php if ($cards !== []): ?>
+        <div class="px-6 md:px-10 py-8 md:py-10 space-y-0">
+          <?php foreach ($cards as $cardIndex => $card): ?>
             <?php
-              $itemTitle = trim((string) ($item['title'] ?? ''));
-              $itemBody = trim((string) ($item['body'] ?? ''));
-              $icon = $commitmentIcons[$index % count($commitmentIcons)];
+              $cardTitle = trim((string) ($card['title'] ?? ''));
+              $cardBody = trim((string) ($card['body'] ?? ''));
+              $icon = $sectionIcons[$cardIndex % count($sectionIcons)];
             ?>
-            <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm hover:shadow-md transition">
-              <div class="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <span class="material-symbols-outlined" aria-hidden="true"><?= h($icon) ?></span>
+            <article class="about-value-row grid grid-cols-1 md:grid-cols-[4.5rem_1fr] gap-4 md:gap-6 pb-8 md:pb-10">
+              <div class="relative z-10 flex md:flex-col items-center md:items-start gap-3">
+                <span class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-md">
+                  <span class="material-symbols-outlined" aria-hidden="true"><?= h($icon) ?></span>
+                </span>
+                <span class="text-xs font-extrabold text-primary/70 md:mt-1"><?= str_pad((string) ($cardIndex + 1), 2, '0', STR_PAD_LEFT) ?></span>
               </div>
-              <?php if ($itemTitle !== ''): ?>
-                <h3 class="font-extrabold text-slate-900 mb-2"><?= h($itemTitle) ?></h3>
-              <?php endif; ?>
-              <?php if ($itemBody !== ''): ?>
-                <p class="text-sm md:text-base text-slate-600 leading-7"><?= h($itemBody) ?></p>
-              <?php endif; ?>
+              <div class="md:pt-1">
+                <?php if ($cardTitle !== ''): ?>
+                  <h3 class="text-xl md:text-2xl font-extrabold text-slate-900 mb-2"><?= h($cardTitle) ?></h3>
+                <?php endif; ?>
+                <?php if ($cardBody !== ''): ?>
+                  <p class="text-slate-600 leading-8 text-base md:text-lg"><?= format_about_inline($cardBody) ?></p>
+                <?php endif; ?>
+              </div>
             </article>
           <?php endforeach; ?>
         </div>
       <?php endif; ?>
 
-      <?php foreach ($paragraphs as $paragraph): ?>
-        <?php $paragraph = trim((string) $paragraph); ?>
-        <?php if ($paragraph === '') continue; ?>
-        <article class="mt-4 rounded-2xl border border-primary/20 bg-gradient-to-l from-primary/5 to-white p-6 md:p-7 shadow-sm">
-          <p class="text-slate-700 leading-8 text-base md:text-lg"><?= h($paragraph) ?></p>
-        </article>
-      <?php endforeach; ?>
+      <?php if ($paragraphs !== []): ?>
+        <div class="px-6 md:px-10 <?= $cards !== [] ? 'pb-8 md:pb-10 border-t border-gray-100 pt-6' : 'py-8 md:py-10' ?> space-y-4">
+          <?php foreach ($paragraphs as $paragraph): ?>
+            <p class="text-slate-700 leading-8 text-base md:text-lg"><?= format_about_inline((string) $paragraph) ?></p>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+
+      <?php if ($listItems !== []): ?>
+        <ul class="px-6 md:px-10 pb-8 md:pb-10 space-y-3 <?= ($cards !== [] || $paragraphs !== []) ? 'border-t border-gray-100 pt-6' : 'py-8 md:py-10' ?>">
+          <?php foreach ($listItems as $item): ?>
+            <li class="flex items-start gap-3 text-slate-700 leading-7">
+              <span class="mt-2 h-2 w-2 rounded-full bg-primary shrink-0"></span>
+              <span><?= format_about_inline((string) $item) ?></span>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      <?php endif; ?>
+
+      <?php if ($quote !== ''): ?>
+        <blockquote class="about-quote mx-6 md:mx-10 mb-8 md:mb-10 rounded-2xl border border-primary/15 bg-gradient-to-l from-primary/5 via-white to-white px-6 py-8 md:px-10 md:py-10">
+          <?php if ($isQuoteSection && $sectionTitle !== ''): ?>
+            <p class="text-sm font-bold text-primary mb-3"><?= h($sectionTitle) ?></p>
+          <?php endif; ?>
+          <p class="text-xl md:text-2xl font-bold text-slate-800 leading-10 relative z-10"><?= format_about_inline($quote) ?></p>
+        </blockquote>
+      <?php endif; ?>
     </section>
   <?php endforeach; ?>
 
-  <?php if (($aboutContent['intro'] ?? '') === '' && ($aboutContent['sections'] ?? []) === []): ?>
-    <p class="text-center text-text-muted mb-8 rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-10">
+  <?php if (!$hasContent): ?>
+    <section class="rounded-3xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center text-slate-500">
       لم يُضف محتوى تعريفي بعد. يمكن إدارته من لوحة التحكم → الإعدادات → الشركة ومن نحن.
-    </p>
+    </section>
   <?php endif; ?>
 
-  <div class="mb-8 flex flex-wrap items-center justify-center gap-3">
-    <a href="/store.php" class="inline-flex h-11 items-center gap-2 rounded-xl bg-primary text-white px-6 font-bold hover:brightness-110 transition">
-      <span class="material-symbols-outlined text-base" aria-hidden="true">storefront</span>
-      تصفّح المتجر
-    </a>
-    <?php if ($hasContact): ?>
-      <a href="#about-contact" class="inline-flex h-11 items-center gap-2 rounded-xl border border-gray-300 bg-white px-6 font-bold text-slate-700 hover:border-primary hover:text-primary transition">
-        <span class="material-symbols-outlined text-base" aria-hidden="true">call</span>
-        تواصل معنا
-      </a>
-    <?php endif; ?>
-  </div>
-
-  <?php if ($hasContact): ?>
-    <aside id="about-contact" class="rounded-2xl border border-gray-200 bg-white p-6 md:p-8 shadow-sm">
-      <div class="mb-5 flex items-center gap-3">
-        <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-          <span class="material-symbols-outlined" aria-hidden="true">contact_phone</span>
-        </span>
-        <h2 class="font-extrabold text-xl text-slate-900">تواصل معنا</h2>
+  <?php if ($contactItems !== []): ?>
+    <section id="about-contact" class="rounded-3xl border border-gray-200 bg-white px-6 py-8 md:px-10 md:py-10 shadow-sm">
+      <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+        <div>
+          <p class="text-sm font-bold text-primary mb-1">تواصل معنا</p>
+          <h2 class="text-2xl font-extrabold text-slate-900">نرحّب بتواصلكم</h2>
+        </div>
+        <a href="/store.php" class="h-10 inline-flex items-center gap-2 self-start md:self-auto rounded-xl border border-gray-200 px-4 text-sm font-bold text-slate-700 hover:border-primary hover:text-primary transition">
+          <span class="material-symbols-outlined text-base" aria-hidden="true">storefront</span>
+          زيارة المتجر
+        </a>
       </div>
-      <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-        <?php if (trim((string) ($company['company_address'] ?? '')) !== ''): ?>
-          <div class="rounded-xl border border-gray-100 bg-surface-bg p-4">
-            <dt class="text-text-muted text-xs mb-1">العنوان</dt>
-            <dd class="font-semibold leading-relaxed"><?= h((string) $company['company_address']) ?></dd>
-          </div>
-        <?php endif; ?>
-        <?php if (trim((string) ($company['company_phone'] ?? '')) !== ''): ?>
-          <div class="rounded-xl border border-gray-100 bg-surface-bg p-4">
-            <dt class="text-text-muted text-xs mb-1">الهاتف</dt>
-            <dd class="font-semibold" dir="ltr"><?= h((string) $company['company_phone']) ?></dd>
-          </div>
-        <?php endif; ?>
-        <?php if (trim((string) ($company['company_mobile'] ?? '')) !== ''): ?>
-          <div class="rounded-xl border border-gray-100 bg-surface-bg p-4">
-            <dt class="text-text-muted text-xs mb-1">الموبايل</dt>
-            <dd class="font-semibold" dir="ltr"><?= h((string) $company['company_mobile']) ?></dd>
-          </div>
-        <?php endif; ?>
-        <?php if (trim((string) ($company['company_whatsapp'] ?? '')) !== ''): ?>
-          <div class="rounded-xl border border-gray-100 bg-surface-bg p-4">
-            <dt class="text-text-muted text-xs mb-1">واتساب</dt>
-            <dd class="font-semibold" dir="ltr"><?= h((string) $company['company_whatsapp']) ?></dd>
-          </div>
-        <?php endif; ?>
-        <?php if (trim((string) ($company['company_email'] ?? '')) !== ''): ?>
-          <div class="rounded-xl border border-gray-100 bg-surface-bg p-4 sm:col-span-2">
-            <dt class="text-text-muted text-xs mb-1">البريد</dt>
-            <dd><a href="mailto:<?= h((string) $company['company_email']) ?>" class="font-semibold text-primary hover:underline" dir="ltr"><?= h((string) $company['company_email']) ?></a></dd>
-          </div>
-        <?php endif; ?>
-      </dl>
-    </aside>
+      <div class="grid grid-cols-1 sm:grid-cols-2 <?= match (min(4, count($contactItems))) { 1 => 'xl:grid-cols-1', 2 => 'xl:grid-cols-2', 3 => 'xl:grid-cols-3', default => 'xl:grid-cols-4' } ?> gap-3">
+        <?php foreach ($contactItems as $item): ?>
+          <?php if ($item['href'] !== null): ?>
+            <a href="<?= h((string) $item['href']) ?>" <?= str_starts_with((string) $item['href'], 'http') ? 'target="_blank" rel="noopener"' : '' ?> class="about-contact-chip rounded-2xl border border-gray-200 bg-surface-bg p-4 no-underline text-inherit block">
+          <?php else: ?>
+            <div class="about-contact-chip rounded-2xl border border-gray-200 bg-surface-bg p-4">
+          <?php endif; ?>
+            <div class="flex items-center gap-3">
+              <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white border border-gray-200 text-primary">
+                <span class="material-symbols-outlined" aria-hidden="true"><?= h((string) $item['icon']) ?></span>
+              </span>
+              <div class="min-w-0">
+                <p class="text-xs text-slate-500 mb-0.5"><?= h((string) $item['label']) ?></p>
+                <p class="font-bold text-slate-900 truncate" dir="<?= h((string) $item['dir']) ?>"><?= h((string) $item['value']) ?></p>
+              </div>
+            </div>
+          <?php if ($item['href'] !== null): ?>
+            </a>
+          <?php else: ?>
+            </div>
+          <?php endif; ?>
+        <?php endforeach; ?>
+      </div>
+    </section>
   <?php endif; ?>
-</section>
+</div>
