@@ -295,6 +295,184 @@ body.store-filters-drawer-open {
   text-decoration: underline;
 }
 
+.store-filter-toggle-more[hidden] {
+  display: none;
+}
+
+.store-active-filters {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 1rem;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.store-active-filters-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.store-active-filters-title {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: #334155;
+}
+
+.store-active-filters-clear {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--color-primary, #dc2626);
+  text-decoration: none;
+}
+
+.store-active-filters-clear:hover {
+  text-decoration: underline;
+}
+
+.store-active-filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.store-active-filter-group-label {
+  flex: 0 0 auto;
+  min-width: 5.5rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #64748b;
+}
+
+.store-active-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.store-active-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  max-width: 100%;
+  padding: 0.28rem 0.55rem 0.28rem 0.7rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-decoration: none;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.store-active-chip:hover {
+  filter: brightness(0.96);
+  transform: translateY(-1px);
+}
+
+.store-active-chip span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.store-active-chip-remove {
+  font-size: 0.95rem;
+  line-height: 1;
+  opacity: 0.75;
+}
+
+.store-active-filter-group--search .store-active-chip {
+  background: #e0f2fe;
+  border-color: #bae6fd;
+  color: #0369a1;
+}
+
+.store-active-filter-group--material .store-active-chip {
+  background: #ffe4e6;
+  border-color: #fecdd3;
+  color: #be123c;
+}
+
+.store-active-filter-group--age .store-active-chip {
+  background: #ede9fe;
+  border-color: #ddd6fe;
+  color: #6d28d9;
+}
+
+.store-active-filter-group--manufacturer .store-active-chip {
+  background: #fef3c7;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+.store-active-filter-group--size .store-active-chip {
+  background: #e0f2fe;
+  border-color: #bae6fd;
+  color: #075985;
+}
+
+.store-active-filter-group--country .store-active-chip {
+  background: #d1fae5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
+.store-active-filter-group--stores .store-active-chip {
+  background: #e0e7ff;
+  border-color: #c7d2fe;
+  color: #4338ca;
+}
+
+.store-active-filter-group--groups .store-active-chip {
+  background: #f3e8ff;
+  border-color: #e9d5ff;
+  color: #7e22ce;
+}
+
+.store-active-filter-group--availability .store-active-chip {
+  background: #dcfce7;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+
+.store-active-filter-group--warehouse .store-active-chip {
+  background: #ffedd5;
+  border-color: #fed7aa;
+  color: #c2410c;
+}
+
+.store-active-filter-group--price-syp .store-active-chip {
+  background: #ccfbf1;
+  border-color: #99f6e4;
+  color: #0f766e;
+}
+
+.store-active-filter-group--price-usd .store-active-chip {
+  background: #cffafe;
+  border-color: #a5f3fc;
+  color: #0e7490;
+}
+
+.store-active-filter-group--price-purchase .store-active-chip {
+  background: #ecfccb;
+  border-color: #d9f99d;
+  color: #4d7c0f;
+}
+
+.store-active-filter-group--group-by .store-active-chip {
+  background: #fae8ff;
+  border-color: #f5d0fe;
+  color: #a21caf;
+}
+
 .store-sort-bar {
   display: flex;
   flex-wrap: wrap;

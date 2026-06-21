@@ -91,6 +91,242 @@ if ($isClientFilterVisible('availability') && $availabilityValue !== '') {
     $activeFilterCount++;
 }
 
+$buildFilterRemoveUrl = static function (
+    array $removeScalarKeys = [],
+    ?string $arrayParam = null,
+    ?string $arrayValue = null
+): string {
+    $params = $_GET;
+    foreach ($removeScalarKeys as $key) {
+        unset($params[$key]);
+    }
+    if ($arrayParam !== null && $arrayValue !== null) {
+        $raw = $params[$arrayParam] ?? [];
+        if (!is_array($raw)) {
+            $raw = [(string) $raw];
+        }
+        $remaining = array_values(array_filter(
+            array_map('strval', $raw),
+            static fn (string $item): bool => $item !== $arrayValue
+        ));
+        if ($remaining === []) {
+            unset($params[$arrayParam]);
+        } else {
+            $params[$arrayParam] = $remaining;
+        }
+    }
+    $params['page'] = 1;
+
+    return store_url($params);
+};
+
+$storeLabelByGuid = [];
+foreach ($filterOptions['stores'] ?? [] as $storeRow) {
+    if (!is_array($storeRow)) {
+        continue;
+    }
+    $guid = trim((string) ($storeRow['guid'] ?? ''));
+    if ($guid === '') {
+        continue;
+    }
+    $storeLabelByGuid[$guid] = trim((string) ($storeRow['name'] ?? ''))
+        ?: (trim((string) ($storeRow['code'] ?? '')) ?: $guid);
+}
+
+$groupLabelByGuid = [];
+foreach ($filterOptions['groups'] ?? [] as $groupRow) {
+    if (!is_array($groupRow)) {
+        continue;
+    }
+    $guid = trim((string) ($groupRow['guid'] ?? ''));
+    if ($guid === '') {
+        continue;
+    }
+    $groupLabelByGuid[$guid] = trim((string) ($groupRow['name'] ?? ''))
+        ?: (trim((string) ($groupRow['code'] ?? '')) ?: $guid);
+}
+foreach (is_array($resultFilters['groups'] ?? null) ? $resultFilters['groups'] : [] as $groupFacet) {
+    if (!is_array($groupFacet)) {
+        continue;
+    }
+    $guid = trim((string) ($groupFacet['guid'] ?? ''));
+    if ($guid === '') {
+        continue;
+    }
+    $groupLabelByGuid[$guid] = trim((string) ($groupFacet['name'] ?? ''))
+        ?: (trim((string) ($groupFacet['code'] ?? '')) ?: $guid);
+}
+
+$activeFilterChipGroups = [];
+$pushChipGroup = static function (
+    string $code,
+    string $label,
+    string $tone,
+    array $chips
+) use (&$activeFilterChipGroups): void {
+    $normalizedChips = [];
+    foreach ($chips as $chip) {
+        if (!is_array($chip)) {
+            continue;
+        }
+        $text = trim((string) ($chip['text'] ?? ''));
+        $url = trim((string) ($chip['url'] ?? ''));
+        if ($text === '' || $url === '') {
+            continue;
+        }
+        $normalizedChips[] = ['text' => $text, 'url' => $url];
+    }
+    if ($normalizedChips === []) {
+        return;
+    }
+    $activeFilterChipGroups[] = [
+        'code' => $code,
+        'label' => $label,
+        'tone' => $tone,
+        'chips' => $normalizedChips,
+    ];
+};
+
+if (!$isSectionBrowse && $isClientFilterVisible('search') && trim((string) ($filters['q'] ?? '')) !== '') {
+    $pushChipGroup('search', 'بحث', 'search', [[
+        'text' => (string) $filters['q'],
+        'url' => $buildFilterRemoveUrl(['q']),
+    ]]);
+} elseif ($isSectionBrowse && trim((string) ($filters['q'] ?? '')) !== '') {
+    $pushChipGroup('search', 'بحث', 'search', [[
+        'text' => (string) $filters['q'],
+        'url' => $buildFilterRemoveUrl(['q']),
+    ]]);
+}
+
+if (!$isSectionBrowse) {
+    $facetChipMap = [
+        'materialTypes' => ['param' => 'materialTypes', 'label' => 'نوع المادة', 'tone' => 'material', 'selected' => $selectedMaterialTypes],
+        'ageCategories' => ['param' => 'ageCategories', 'label' => 'الفئة العمرية', 'tone' => 'age', 'selected' => $selectedAgeCategories],
+        'manufacturers' => ['param' => 'manufacturers', 'label' => 'الشركة', 'tone' => 'manufacturer', 'selected' => $selectedManufacturers],
+        'sizeRanges' => ['param' => 'sizeRanges', 'label' => 'القياس', 'tone' => 'size', 'selected' => $selectedSizeRanges],
+        'countryOfOrigins' => ['param' => 'countryOfOrigins', 'label' => 'بلد المنشأ', 'tone' => 'country', 'selected' => $selectedCountryOrigins],
+    ];
+    foreach ($facetChipMap as $code => $config) {
+        if (!$isClientFilterVisible($code)) {
+            continue;
+        }
+        $chips = [];
+        foreach ((array) $config['selected'] as $value) {
+            $value = trim((string) $value);
+            if ($value === '') {
+                continue;
+            }
+            $chips[] = [
+                'text' => $value,
+                'url' => $buildFilterRemoveUrl([], (string) $config['param'], $value),
+            ];
+        }
+        $pushChipGroup($code, (string) $config['label'], (string) $config['tone'], $chips);
+    }
+
+    if ($isClientFilterVisible('stores') && $selectedStoreGuids !== []) {
+        $chips = [];
+        foreach ($selectedStoreGuids as $guid) {
+            $guid = trim((string) $guid);
+            if ($guid === '') {
+                continue;
+            }
+            $chips[] = [
+                'text' => $storeLabelByGuid[$guid] ?? $guid,
+                'url' => $buildFilterRemoveUrl([], 'storeGuids', $guid),
+            ];
+        }
+        $pushChipGroup('stores', 'المخازن', 'stores', $chips);
+    }
+
+    if ($isClientFilterVisible('groups') && $selectedGroupGuids !== []) {
+        $chips = [];
+        foreach ($selectedGroupGuids as $guid) {
+            $guid = trim((string) $guid);
+            if ($guid === '') {
+                continue;
+            }
+            $chips[] = [
+                'text' => $groupLabelByGuid[$guid] ?? $guid,
+                'url' => $buildFilterRemoveUrl([], 'groupGuids', $guid),
+            ];
+        }
+        $pushChipGroup('groups', 'المجموعات', 'groups', $chips);
+    }
+
+    if ($isClientFilterVisible('availability') && $availabilityValue !== '') {
+        $pushChipGroup('availability', 'التوفر', 'availability', [[
+            'text' => $availabilityValue === '1' ? 'متوفر' : 'غير متوفر',
+            'url' => $buildFilterRemoveUrl(['isAvailable']),
+        ]]);
+    }
+
+    $minWarehouseQuantity = trim((string) ($filters['minWarehouseQuantity'] ?? ''));
+    $maxWarehouseQuantity = trim((string) ($filters['maxWarehouseQuantity'] ?? ''));
+    if ($isClientFilterVisible('warehouseRange') && ($minWarehouseQuantity !== '' || $maxWarehouseQuantity !== '')) {
+        $rangeText = 'من ' . ($minWarehouseQuantity !== '' ? $minWarehouseQuantity : '…')
+            . ' إلى ' . ($maxWarehouseQuantity !== '' ? $maxWarehouseQuantity : '…');
+        $pushChipGroup('warehouseRange', 'مدى الكمية', 'warehouse', [[
+            'text' => $rangeText,
+            'url' => $buildFilterRemoveUrl(['minWarehouseQuantity', 'maxWarehouseQuantity']),
+        ]]);
+    }
+
+    if ($isClientFilterVisible('priceSaleSyp')) {
+        $min = trim((string) ($filters['minUnitSalePriceSyp'] ?? ''));
+        $max = trim((string) ($filters['maxUnitSalePriceSyp'] ?? ''));
+        if ($min !== '' || $max !== '') {
+            $pushChipGroup('priceSaleSyp', 'سعر البيع ل.س', 'price-syp', [[
+                'text' => 'من ' . ($min !== '' ? $min : '…') . ' إلى ' . ($max !== '' ? $max : '…'),
+                'url' => $buildFilterRemoveUrl(['minUnitSalePriceSyp', 'maxUnitSalePriceSyp']),
+            ]]);
+        }
+    }
+
+    if ($isClientFilterVisible('priceSaleUsd')) {
+        $min = trim((string) ($filters['minUnitSalePriceUsd'] ?? ''));
+        $max = trim((string) ($filters['maxUnitSalePriceUsd'] ?? ''));
+        if ($min !== '' || $max !== '') {
+            $pushChipGroup('priceSaleUsd', 'سعر البيع $', 'price-usd', [[
+                'text' => 'من ' . ($min !== '' ? $min : '…') . ' إلى ' . ($max !== '' ? $max : '…'),
+                'url' => $buildFilterRemoveUrl(['minUnitSalePriceUsd', 'maxUnitSalePriceUsd']),
+            ]]);
+        }
+    }
+
+    if ($isClientFilterVisible('pricePurchaseUsd')) {
+        $min = trim((string) ($filters['minUnitPurchasePriceUsd'] ?? ''));
+        $max = trim((string) ($filters['maxUnitPurchasePriceUsd'] ?? ''));
+        if ($min !== '' || $max !== '') {
+            $pushChipGroup('pricePurchaseUsd', 'سعر الشراء $', 'price-purchase', [[
+                'text' => 'من ' . ($min !== '' ? $min : '…') . ' إلى ' . ($max !== '' ? $max : '…'),
+                'url' => $buildFilterRemoveUrl(['minUnitPurchasePriceUsd', 'maxUnitPurchasePriceUsd']),
+            ]]);
+        }
+    }
+
+    if ($isClientFilterVisible('groupBy') && $selectedGroupBy !== 'none') {
+        $groupByLabels = [
+            'ageCategory' => 'الفئة العمرية',
+            'sizeRange' => 'القياس',
+            'materialType' => 'النوع',
+            'manufacturer' => 'الشركة',
+            'countryOfOrigin' => 'بلد المنشأ',
+            'group' => 'المجموعة',
+        ];
+        $pushChipGroup('groupBy', 'التجميع', 'group-by', [[
+            'text' => $groupByLabels[$selectedGroupBy] ?? $selectedGroupBy,
+            'url' => $buildFilterRemoveUrl(['groupBy']),
+        ]]);
+    }
+}
+
+$clearAllFiltersUrl = store_url(array_filter([
+    'section' => (string) ($filters['section'] ?? ''),
+    'offer' => (string) ($filters['offer'] ?? ''),
+], static fn (string $value): bool => trim($value) !== ''));
+
 $buildStoreUrl = static function (int $targetPage) use ($filters, $isSectionBrowse): string {
     $params = $_GET;
     $params['page'] = max(1, $targetPage);
@@ -382,6 +618,8 @@ require __DIR__ . '/partials/store-filter-group.php';
   <?php endif; ?>
 
   <div class="store-results">
+    <?php require __DIR__ . '/partials/store-active-filter-chips.php'; ?>
+
     <div class="store-results-toolbar">
       <?php if ($allowClientFilters || $isSectionBrowse): ?>
         <button type="button" id="store-filters-open" class="store-filters-open-btn lg:hidden">

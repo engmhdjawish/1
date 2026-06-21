@@ -24,61 +24,60 @@
     }
   });
 
-  root.querySelectorAll('[data-filter-search]').forEach((input) => {
-    const groupId = input.getAttribute('data-filter-search');
-    const list = root.querySelector(`[data-filter-list="${groupId}"]`);
-    if (!list) {
-      return;
-    }
-    input.addEventListener('input', () => {
-      const query = input.value.trim().toLowerCase();
-      list.querySelectorAll('.store-filter-option').forEach((row) => {
-        const label = (row.getAttribute('data-filter-label') || '').toLowerCase();
-        const matches = query === '' || label.includes(query);
-        row.classList.toggle('is-search-hidden', !matches);
-      });
-    });
-  });
-
-  root.querySelectorAll('[data-filter-toggle]').forEach((button) => {
-    const groupId = button.getAttribute('data-filter-toggle');
-    const list = root.querySelector(`[data-filter-list="${groupId}"]`);
-    if (!list) {
-      return;
-    }
+  const setupFilterList = (list, input, toggleBtn) => {
     const initialVisible = Number.parseInt(list.getAttribute('data-initial-visible') || '6', 10);
     let expanded = false;
 
-    const syncToggle = () => {
-      list.querySelectorAll('.store-filter-option.is-collapsed').forEach((row) => {
-        if (expanded || row.querySelector('input')?.checked) {
-          row.classList.remove('is-collapsed');
-        } else {
-          row.classList.add('is-collapsed');
+    const applyVisibility = () => {
+      const query = (input?.value || '').trim().toLowerCase();
+      const searching = query !== '';
+
+      list.querySelectorAll('.store-filter-option').forEach((row, index) => {
+        const label = (row.getAttribute('data-filter-label') || '').toLowerCase();
+        const matchesSearch = !searching || label.includes(query);
+        row.classList.toggle('is-search-hidden', !matchesSearch);
+
+        if (!matchesSearch) {
+          return;
         }
+
+        const checked = Boolean(row.querySelector('input')?.checked);
+        const shouldCollapse = !searching && !expanded && !checked && index >= initialVisible;
+        row.classList.toggle('is-collapsed', shouldCollapse);
       });
+
+      if (!toggleBtn) {
+        return;
+      }
+
+      if (searching) {
+        toggleBtn.hidden = true;
+        return;
+      }
+
+      toggleBtn.hidden = false;
       const hiddenCount = list.querySelectorAll('.store-filter-option.is-collapsed:not(.is-search-hidden)').length;
-      button.textContent = expanded ? 'عرض أقل' : (hiddenCount > 0 ? `عرض المزيد (${hiddenCount})` : 'عرض أقل');
-      button.classList.toggle('is-expanded', expanded);
+      toggleBtn.textContent = expanded ? 'عرض أقل' : (hiddenCount > 0 ? `عرض المزيد (${hiddenCount})` : 'عرض أقل');
+      toggleBtn.classList.toggle('is-expanded', expanded);
     };
 
-    button.addEventListener('click', () => {
+    input?.addEventListener('input', applyVisibility);
+
+    toggleBtn?.addEventListener('click', () => {
       expanded = !expanded;
-      if (!expanded) {
-        list.querySelectorAll('.store-filter-option').forEach((row, index) => {
-          const checked = row.querySelector('input')?.checked;
-          if (!checked && index >= initialVisible) {
-            row.classList.add('is-collapsed');
-          }
-        });
-      } else {
-        list.querySelectorAll('.store-filter-option.is-collapsed').forEach((row) => {
-          row.classList.remove('is-collapsed');
-        });
-      }
-      syncToggle();
+      applyVisibility();
     });
 
-    syncToggle();
+    applyVisibility();
+  };
+
+  root.querySelectorAll('[data-filter-list]').forEach((list) => {
+    const groupId = list.getAttribute('data-filter-list');
+    if (!groupId) {
+      return;
+    }
+    const input = root.querySelector(`[data-filter-search="${groupId}"]`);
+    const toggleBtn = root.querySelector(`[data-filter-toggle="${groupId}"]`);
+    setupFilterList(list, input, toggleBtn);
   });
 })();
