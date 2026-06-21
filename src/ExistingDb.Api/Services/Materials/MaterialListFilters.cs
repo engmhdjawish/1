@@ -22,7 +22,8 @@ public sealed class MaterialListFilters
     public double? MaxUnitPurchasePriceUsd { get; init; }
 
     public static MaterialListFilters FromQuery(
-        string? search,
+        string? keyword,
+        string? legacySearch,
         Guid? storeGuid,
         string? storeGuids,
         string? countryOfOrigin,
@@ -49,7 +50,7 @@ public sealed class MaterialListFilters
         double? maxUnitPurchasePriceUsd) =>
         new()
         {
-            Search = string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
+            Search = ResolveSearch(keyword, legacySearch),
             StoreGuids = ParseGuids(storeGuid, storeGuids),
             CountryOfOrigins = ParseTextValues(countryOfOrigin, countryOfOrigins),
             Manufacturers = ParseTextValues(manufacturer, manufacturers),
@@ -98,4 +99,11 @@ public sealed class MaterialListFilters
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+    private static string? ResolveSearch(string? keyword, string? legacySearch)
+    {
+        var text = !string.IsNullOrWhiteSpace(keyword) ? keyword : legacySearch;
+
+        return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+    }
 }
