@@ -27,8 +27,27 @@ if (trim((string) ($company['company_email'] ?? '')) !== '') {
     $contactItems[] = ['icon' => 'mail', 'label' => 'البريد', 'value' => (string) $company['company_email'], 'href' => 'mailto:' . (string) $company['company_email'], 'dir' => 'ltr'];
 }
 if (trim((string) ($company['company_address'] ?? '')) !== '') {
-    $contactItems[] = ['icon' => 'location_on', 'label' => 'العنوان', 'value' => (string) $company['company_address'], 'href' => null, 'dir' => 'rtl'];
+    $contactItems[] = ['icon' => 'location_on', 'label' => 'العنوان', 'value' => (string) $company['company_address'], 'href' => null, 'dir' => 'rtl', 'kind' => 'address'];
 }
+
+$contactChannels = array_values(array_filter($contactItems, static fn (array $item): bool => ($item['kind'] ?? '') !== 'address'));
+$contactAddress = null;
+foreach ($contactItems as $item) {
+    if (($item['kind'] ?? '') === 'address') {
+        $contactAddress = $item;
+        break;
+    }
+}
+
+$whatsappItem = null;
+foreach ($contactChannels as $index => $item) {
+    if ($item['icon'] === 'chat') {
+        $whatsappItem = $item;
+        unset($contactChannels[$index]);
+        break;
+    }
+}
+$contactChannels = array_values($contactChannels);
 
 $hasContent = $introParagraphs !== [] || $sections !== [];
 ?>
@@ -189,40 +208,89 @@ $hasContent = $introParagraphs !== [] || $sections !== [];
   <?php endif; ?>
 
   <?php if ($contactItems !== []): ?>
-    <section id="about-contact" class="rounded-3xl border border-gray-200 bg-white px-6 py-8 md:px-10 md:py-10 shadow-sm">
-      <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
-        <div>
-          <p class="text-sm font-bold text-primary mb-1">تواصل معنا</p>
-          <h2 class="text-2xl font-extrabold text-slate-900">نرحّب بتواصلكم</h2>
-        </div>
-        <a href="/store.php" class="h-10 inline-flex items-center gap-2 self-start md:self-auto rounded-xl border border-gray-200 px-4 text-sm font-bold text-slate-700 hover:border-primary hover:text-primary transition">
-          <span class="material-symbols-outlined text-base" aria-hidden="true">storefront</span>
-          زيارة المتجر
-        </a>
-      </div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 <?= match (min(4, count($contactItems))) { 1 => 'xl:grid-cols-1', 2 => 'xl:grid-cols-2', 3 => 'xl:grid-cols-3', default => 'xl:grid-cols-4' } ?> gap-3">
-        <?php foreach ($contactItems as $item): ?>
-          <?php if ($item['href'] !== null): ?>
-            <a href="<?= h((string) $item['href']) ?>" <?= str_starts_with((string) $item['href'], 'http') ? 'target="_blank" rel="noopener"' : '' ?> class="about-contact-chip rounded-2xl border border-gray-200 bg-surface-bg p-4 no-underline text-inherit block">
-          <?php else: ?>
-            <div class="about-contact-chip rounded-2xl border border-gray-200 bg-surface-bg p-4">
-          <?php endif; ?>
-            <div class="flex items-center gap-3">
-              <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white border border-gray-200 text-primary">
-                <span class="material-symbols-outlined" aria-hidden="true"><?= h((string) $item['icon']) ?></span>
+    <section id="about-contact" class="about-contact-section overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-sm">
+      <div class="about-contact-layout grid grid-cols-1 lg:grid-cols-[1fr_1.15fr]">
+        <div class="about-contact-intro px-6 py-8 md:px-10 md:py-10 lg:border-l border-gray-100">
+          <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-extrabold text-primary mb-4">
+            <span class="material-symbols-outlined text-base" aria-hidden="true">support_agent</span>
+            تواصل معنا
+          </span>
+          <h2 class="text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight">نرحّب بتواصلكم</h2>
+          <p class="mt-3 text-slate-600 leading-8 text-sm md:text-base max-w-md">
+            <?php if ($companyName !== ''): ?>
+              فريق <strong class="text-slate-900"><?= h($companyName) ?></strong> جاهز للرد على استفساراتكم ومساعدتكم في الطلبات وتفاصيل المنتجات.
+            <?php else: ?>
+              نحن جاهزون للرد على استفساراتكم ومساعدتكم في الطلبات وتفاصيل المنتجات.
+            <?php endif; ?>
+          </p>
+
+          <?php if ($whatsappItem !== null): ?>
+            <a
+              href="<?= h((string) $whatsappItem['href']) ?>"
+              target="_blank"
+              rel="noopener"
+              class="about-contact-whatsapp mt-6 inline-flex h-12 items-center gap-3 rounded-2xl bg-emerald-600 px-5 text-white font-extrabold shadow-md hover:bg-emerald-700 transition no-underline"
+            >
+              <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+                <span class="material-symbols-outlined" aria-hidden="true">chat</span>
               </span>
-              <div class="min-w-0">
-                <p class="text-xs text-slate-500 mb-0.5"><?= h((string) $item['label']) ?></p>
-                <p class="font-bold text-slate-900 truncate" dir="<?= h((string) $item['dir']) ?>"><?= h((string) $item['value']) ?></p>
-              </div>
-            </div>
-          <?php if ($item['href'] !== null): ?>
+              <span>
+                <span class="block text-[11px] font-bold text-emerald-100">تواصل سريع عبر واتساب</span>
+                <span class="block text-sm" dir="ltr"><?= h((string) $whatsappItem['value']) ?></span>
+              </span>
             </a>
-          <?php else: ?>
-            </div>
           <?php endif; ?>
-        <?php endforeach; ?>
+
+          <a href="/store.php" class="mt-4 inline-flex h-10 items-center gap-2 rounded-xl border border-gray-200 px-4 text-sm font-bold text-slate-700 hover:border-primary hover:text-primary transition no-underline">
+            <span class="material-symbols-outlined text-base" aria-hidden="true">storefront</span>
+            تصفّح المتجر
+          </a>
+        </div>
+
+        <div class="about-contact-methods px-6 py-8 md:px-10 md:py-10 bg-slate-50/80">
+          <p class="text-xs font-bold text-slate-500 mb-4">قنوات التواصل</p>
+          <div class="space-y-3">
+            <?php foreach ($contactChannels as $item): ?>
+              <?php if ($item['href'] !== null): ?>
+                <a
+                  href="<?= h((string) $item['href']) ?>"
+                  <?= str_starts_with((string) $item['href'], 'http') ? 'target="_blank" rel="noopener"' : '' ?>
+                  class="about-contact-row group flex items-center gap-4 rounded-2xl border border-gray-200 bg-white px-4 py-4 no-underline text-inherit hover:border-primary/30 hover:shadow-md transition"
+                >
+              <?php else: ?>
+                <div class="about-contact-row flex items-center gap-4 rounded-2xl border border-gray-200 bg-white px-4 py-4">
+              <?php endif; ?>
+                <span class="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition">
+                  <span class="material-symbols-outlined" aria-hidden="true"><?= h((string) $item['icon']) ?></span>
+                </span>
+                <div class="min-w-0 flex-1">
+                  <p class="text-xs font-bold text-slate-500 mb-1"><?= h((string) $item['label']) ?></p>
+                  <p class="text-base md:text-lg font-extrabold text-slate-900 break-words" dir="<?= h((string) $item['dir']) ?>"><?= h((string) $item['value']) ?></p>
+                </div>
+                <?php if ($item['href'] !== null): ?>
+                  <span class="material-symbols-outlined text-slate-300 group-hover:text-primary transition shrink-0" aria-hidden="true">chevron_left</span>
+                <?php endif; ?>
+              <?php if ($item['href'] !== null): ?>
+                </a>
+              <?php else: ?>
+                </div>
+              <?php endif; ?>
+            <?php endforeach; ?>
+          </div>
+        </div>
       </div>
+
+      <?php if ($contactAddress !== null): ?>
+        <div class="about-contact-address border-t border-gray-100 px-6 py-5 md:px-10 md:py-6 bg-white flex flex-col sm:flex-row sm:items-start gap-3">
+          <span class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+            <span class="material-symbols-outlined" aria-hidden="true">location_on</span>
+          </span>
+          <div>
+            <p class="text-xs font-bold text-slate-500 mb-1"><?= h((string) $contactAddress['label']) ?></p>
+            <p class="text-sm md:text-base font-bold text-slate-800 leading-7"><?= h((string) $contactAddress['value']) ?></p>
+          </div>
+        </div>
+      <?php endif; ?>
     </section>
   <?php endif; ?>
 </div>

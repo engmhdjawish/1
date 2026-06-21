@@ -87,12 +87,35 @@
   font-weight: 800;
 }
 
-.about-contact-chip {
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+.about-contact-section {
+  background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
 }
 
-.about-contact-chip:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-  border-color: rgba(216, 25, 33, 0.25);
+.about-contact-intro {
+  position: relative;
+}
+
+.about-contact-intro::after {
+  content: '';
+  position: absolute;
+  left: -2rem;
+  top: 2rem;
+  width: 12rem;
+  height: 12rem;
+  border-radius: 9999px;
+  background: rgba(216, 25, 33, 0.06);
+  filter: blur(24px);
+  pointer-events: none;
+}
+
+.about-contact-whatsapp {
+  max-width: 100%;
+}
+
+.about-contact-row:hover .about-contact-row {
+  border-color: rgba(216, 25, 33, 0.2);
+}
+
+.about-contact-address {
+  background-image: linear-gradient(to left, rgba(216, 25, 33, 0.03), transparent);
 }
