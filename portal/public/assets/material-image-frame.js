@@ -145,6 +145,31 @@
     });
   };
 
+  const variantProfiles = {
+    detail: { footer_scale: 1, font_scale: 1.125 },
+    strip: { footer_scale: 0.68, font_scale: 0.72 },
+    card: { footer_scale: 0.74, font_scale: 0.78 },
+  };
+
+  const frameCssVars = (variantKey) => {
+    const footer = template.footer || {};
+    const photo = template.photo || {};
+    const profile = variantProfiles[variantKey] || variantProfiles.card;
+    const minHeight = (Number(footer.min_height_rem) || 3.2) * profile.footer_scale;
+    const fontBase = (Number(footer.font_base_rem) || 1) * profile.font_scale;
+    const padding = (Number(footer.padding_rem) || 0.6) * profile.footer_scale;
+    const accentWidth = (Number(footer.accent_width_rem) || 0.28) * Math.max(0.75, profile.footer_scale);
+    return [
+      `--mif-accent-color:${footer.accent_color || '#d81921'}`,
+      `--mif-accent-width:${accentWidth}rem`,
+      `--mif-footer-bg:${footer.background || 'linear-gradient(180deg, #454545 0%, #3a3a3a 100%)'}`,
+      `--mif-footer-padding:${padding}rem`,
+      `--mif-footer-min-height:${minHeight}rem`,
+      `--mif-footer-font-base:${fontBase}rem`,
+      `--mif-photo-bg:${photo.background || '#f3f4f6'}`,
+    ].join(';');
+  };
+
   window.renderMaterialImageFrame = (product, variant = 'detail') => {
     const fields = product.displayFields || {};
     const elements = Array.isArray(template.elements) ? template.elements : [];
@@ -152,21 +177,12 @@
     if (!resolved.length) return null;
 
     const footer = template.footer || {};
-    const photo = template.photo || {};
     const footerEnabled = footer.enabled !== false;
-    const frameStyle = [
-      `--mif-accent-color:${footer.accent_color || '#d81921'}`,
-      `--mif-accent-width:${footer.accent_width_rem || 0.28}rem`,
-      `--mif-footer-bg:${footer.background || 'linear-gradient(180deg, #454545 0%, #3a3a3a 100%)'}`,
-      `--mif-footer-padding:${footer.padding_rem || 0.6}rem`,
-      `--mif-footer-min-height:${footer.min_height_rem || 3.2}rem`,
-      `--mif-footer-font-base:${footer.font_base_rem || 1}rem`,
-      `--mif-photo-bg:${photo.background || '#f3f4f6'}`,
-    ].join(';');
+    const frameStyle = frameCssVars(variant);
 
     const imageHtml = product.showImages
       ? (product.imageGuid
-        ? `<img src="/api/image.php?id=${encodeURIComponent(product.imageGuid)}" alt="${esc(product.name)}">`
+        ? `<div class="material-image-frame__photo-media"><img src="/api/image.php?id=${encodeURIComponent(product.imageGuid)}" alt="${esc(product.name)}"></div>`
         : '<span class="material-symbols-outlined material-image-frame__placeholder" aria-hidden="true">inventory_2</span>')
       : '';
 

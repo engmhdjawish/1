@@ -28,6 +28,11 @@ $resolvedElements = $useTemplate
     : [];
 $useTemplate = $useTemplate && $resolvedElements !== [];
 
+// Use full image when template overlay is active so small thumbs don't crush the layout.
+if ($useTemplate && $variant !== 'detail') {
+    $thumb = false;
+}
+
 $footer = is_array($template['footer'] ?? null) ? $template['footer'] : [];
 $photo = is_array($template['photo'] ?? null) ? $template['photo'] : [];
 $footerEnabled = $useTemplate ? (bool) ($footer['enabled'] ?? true) : true;
@@ -35,6 +40,9 @@ $footerEnabled = $useTemplate ? (bool) ($footer['enabled'] ?? true) : true;
 $frameClasses = 'material-image-frame material-image-frame--' . h($variant);
 if ($useTemplate) {
     $frameClasses .= ' material-image-frame--template';
+    if ($thumb) {
+        $frameClasses .= ' material-image-frame--thumb';
+    }
     if (!$footerEnabled) {
         $frameClasses .= ' material-image-frame--no-footer';
     }
@@ -42,15 +50,9 @@ if ($useTemplate) {
 
 $frameStyle = '';
 if ($useTemplate) {
-    $frameStyle = MaterialImageDisplayTemplateService::cssMapToString([
-        '--mif-accent-color' => (string) ($footer['accent_color'] ?? '#d81921'),
-        '--mif-accent-width' => rtrim(rtrim(number_format((float) ($footer['accent_width_rem'] ?? 0.28), 3, '.', ''), '0'), '.') . 'rem',
-        '--mif-footer-bg' => (string) ($footer['background'] ?? 'linear-gradient(180deg, #454545 0%, #3a3a3a 100%)'),
-        '--mif-footer-padding' => rtrim(rtrim(number_format((float) ($footer['padding_rem'] ?? 0.6), 3, '.', ''), '0'), '.') . 'rem',
-        '--mif-footer-min-height' => rtrim(rtrim(number_format((float) ($footer['min_height_rem'] ?? 3.2), 3, '.', ''), '0'), '.') . 'rem',
-        '--mif-footer-font-base' => rtrim(rtrim(number_format((float) ($footer['font_base_rem'] ?? 1), 3, '.', ''), '0'), '.') . 'rem',
-        '--mif-photo-bg' => (string) ($photo['background'] ?? '#f3f4f6'),
-    ]);
+    $frameStyle = MaterialImageDisplayTemplateService::cssMapToString(
+        MaterialImageDisplayTemplateService::frameCssVars($template, $variant, $thumb)
+    );
 }
 
 /** @param list<array<string, mixed>> $elements */
@@ -83,7 +85,9 @@ $renderLayer = static function (array $elements, string $region): void {
     <div class="material-image-frame__stack">
       <div class="material-image-frame__photo">
         <?php if ($imageSrc !== ''): ?>
-          <img src="<?= h($imageSrc) ?>" alt="<?= h($imageAlt) ?>" loading="lazy">
+          <div class="material-image-frame__photo-media">
+            <img src="<?= h($imageSrc) ?>" alt="<?= h($imageAlt) ?>" loading="lazy">
+          </div>
         <?php else: ?>
           <span class="material-symbols-outlined material-image-frame__placeholder" aria-hidden="true">inventory_2</span>
         <?php endif; ?>

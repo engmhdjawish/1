@@ -139,6 +139,53 @@ final class MaterialImageDisplayTemplateService
         ];
     }
 
+    /** @return array{footer_scale: float, font_scale: float} */
+    public static function variantProfile(string $variant, bool $thumb = false): array
+    {
+        $variant = in_array($variant, ['card', 'detail', 'strip'], true) ? $variant : 'card';
+
+        return match ($variant) {
+            'detail' => [
+                'footer_scale' => 1.0,
+                'font_scale' => 1.125,
+            ],
+            'strip' => [
+                'footer_scale' => $thumb ? 0.62 : 0.68,
+                'font_scale' => $thumb ? 0.68 : 0.72,
+            ],
+            default => [
+                'footer_scale' => $thumb ? 0.68 : 0.74,
+                'font_scale' => $thumb ? 0.72 : 0.78,
+            ],
+        };
+    }
+
+    /**
+     * @param array<string, mixed> $template
+     * @return array<string, string>
+     */
+    public static function frameCssVars(array $template, string $variant, bool $thumb = false): array
+    {
+        $footer = is_array($template['footer'] ?? null) ? $template['footer'] : [];
+        $photo = is_array($template['photo'] ?? null) ? $template['photo'] : [];
+        $profile = self::variantProfile($variant, $thumb);
+
+        $minHeight = self::clampFloat($footer['min_height_rem'] ?? 3.2, 2, 8) * $profile['footer_scale'];
+        $fontBase = self::clampFloat($footer['font_base_rem'] ?? 1, 0.75, 1.5) * $profile['font_scale'];
+        $padding = self::clampFloat($footer['padding_rem'] ?? 0.6, 0, 2) * $profile['footer_scale'];
+        $accentWidth = self::clampFloat($footer['accent_width_rem'] ?? 0.28, 0, 1) * max(0.75, $profile['footer_scale']);
+
+        return [
+            '--mif-accent-color' => (string) ($footer['accent_color'] ?? '#d81921'),
+            '--mif-accent-width' => self::formatRem($accentWidth),
+            '--mif-footer-bg' => (string) ($footer['background'] ?? 'linear-gradient(180deg, #454545 0%, #3a3a3a 100%)'),
+            '--mif-footer-padding' => self::formatRem($padding),
+            '--mif-footer-min-height' => self::formatRem($minHeight),
+            '--mif-footer-font-base' => self::formatRem($fontBase),
+            '--mif-photo-bg' => (string) ($photo['background'] ?? '#f3f4f6'),
+        ];
+    }
+
     /** @return array<string, list<array{key: string, label: string, type: string}>> */
     public static function fieldCatalog(): array
     {
