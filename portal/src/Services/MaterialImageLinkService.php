@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Database;
-use Portal\Support\Text;
 use PDO;
 use Throwable;
 
@@ -177,111 +176,25 @@ final class MaterialImageLinkService
             return ['ok' => true, 'message' => '', 'items' => []];
         }
 
-        $tokens = self::materialSearchTokens($query);
-        if ($tokens === []) {
-            return ['ok' => true, 'message' => '', 'items' => []];
-        }
-
-        $apiSearch = self::materialSearchApiTerm($tokens);
         $pageSize = max(20, min(60, $pageSize));
-        $items = [];
 
         try {
-            for ($page = 1; $page <= 3; $page++) {
-                $result = MaterialImageStorageService::browseMaterials([
-                    'page' => $page,
-                    'page_size' => $pageSize,
-                    'search' => $apiSearch,
-                    'has_image' => '',
-                    'local_status' => 'all',
-                ]);
+            $result = MaterialImageStorageService::browseMaterials([
+                'page' => 1,
+                'page_size' => $pageSize,
+                'search' => $query,
+                'has_image' => '',
+                'local_status' => 'all',
+            ]);
 
-                if (!($result['ok'] ?? false)) {
-                    if ($items === []) {
-                        return ['ok' => false, 'message' => (string) ($result['message'] ?? 'تعذر البحث.'), 'items' => []];
-                    }
-                    break;
-                }
-
-                $pageItems = self::filterMaterialsByTokens($result['items'] ?? [], $tokens);
-                foreach ($pageItems as $row) {
-                    $guid = strtolower(trim((string) ($row['material_guid'] ?? '')));
-                    if ($guid === '') {
-                        continue;
-                    }
-                    if (!isset($items[$guid])) {
-                        $items[$guid] = $row;
-                    }
-                }
-
-                if (count($items) >= $pageSize || !($result['has_more'] ?? false)) {
-                    break;
-                }
+            if (!($result['ok'] ?? false)) {
+                return ['ok' => false, 'message' => (string) ($result['message'] ?? 'تعذر البحث.'), 'items' => []];
             }
+
+            return ['ok' => true, 'message' => '', 'items' => $result['items'] ?? []];
         } catch (Throwable $exception) {
             return ['ok' => false, 'message' => $exception->getMessage(), 'items' => []];
         }
-
-        return ['ok' => true, 'message' => '', 'items' => array_values($items)];
-    }
-
-    /** @return list<string> */
-    private static function materialSearchTokens(string $query): array
-    {
-        $tokens = preg_split('/\s+/u', trim($query), -1, PREG_SPLIT_NO_EMPTY) ?: [];
-
-        return array_values(array_filter(array_map(
-            static fn (string $token): string => trim($token),
-            $tokens
-        ), static fn (string $token): bool => $token !== ''));
-    }
-
-    /**
-     * @param list<string> $tokens
-     */
-    private static function materialSearchApiTerm(array $tokens): string
-    {
-        if ($tokens === []) {
-            return '';
-        }
-
-        if (count($tokens) === 1) {
-            return $tokens[0];
-        }
-
-        usort($tokens, static fn (string $left, string $right): int => strlen($right) <=> strlen($left));
-
-        return $tokens[0];
-    }
-
-    /**
-     * @param list<array<string, mixed>> $items
-     * @param list<string> $tokens
-     * @return list<array<string, mixed>>
-     */
-    private static function filterMaterialsByTokens(array $items, array $tokens): array
-    {
-        if ($tokens === []) {
-            return $items;
-        }
-
-        return array_values(array_filter($items, static function (array $row) use ($tokens): bool {
-            $haystack = Text::lower(trim(implode(' ', [
-                (string) ($row['name'] ?? ''),
-                (string) ($row['material_code'] ?? ''),
-                (string) ($row['manufacturer'] ?? ''),
-                (string) ($row['material_type'] ?? ''),
-                (string) ($row['age_category'] ?? ''),
-            ])));
-            foreach ($tokens as $token) {
-                $needle = Text::lower(trim($token));
-                if ($needle === '' || !str_contains($haystack, $needle)) {
-                    return false;
-                }
-            }
-
-            return true;
-        }));
     }
 
     /** @return array{ok: bool, message: string} */
