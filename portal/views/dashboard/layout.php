@@ -69,6 +69,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
       }
     };
   </script>
+  <link href="/assets/dashboard/dashboard.css" rel="stylesheet">
   <style>
     body { font-family: 'Manrope', sans-serif; background-color: #f6f6f8; }
     .material-symbols-outlined {
@@ -247,7 +248,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         </a>
       </div>
     </aside>
-    <main class="flex-1 lg:mr-64 p-4 md:p-6 lg:p-8 min-w-0" data-dashboard-main>
+    <main class="flex-1 lg:mr-64 p-4 md:p-6 lg:p-8 min-w-0" data-dashboard-main data-current-route="<?= h($currentRoute) ?>">
       <?php if ($navArea === DashboardNavigation::AREA_CONFIGURATION && $currentRoute !== '/dashboard/configuration.php'): ?>
         <nav class="mb-4">
           <a href="/dashboard/configuration.php" class="inline-flex items-center gap-1 text-sm font-bold text-text-muted hover:text-primary">
@@ -291,6 +292,17 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
       });
     })();
   </script>
+  <div id="dashboard-page-loader" aria-hidden="true"><div class="dash-spinner" role="status" aria-label="جاري التحميل"></div></div>
+  <div id="dashboard-toast-root" aria-live="polite"></div>
+  <?php
+  require_once __DIR__ . '/partials/media-picker.php';
+  portal_render_media_picker_modal();
+  ?>
+  <script src="/assets/dashboard/dashboard.js" defer></script>
+  <script src="/assets/dashboard/media-picker.js" defer></script>
+  <script src="/assets/dashboard/token-picker.js" defer></script>
+  <script src="/assets/dashboard/home-sections.js" defer></script>
+  <script src="/assets/dashboard/special-offers.js" defer></script>
   <?php if (!empty($extraScripts ?? '')): ?>
     <?= $extraScripts ?>
   <?php endif; ?>

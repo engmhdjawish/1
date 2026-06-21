@@ -15,6 +15,10 @@ if ($aboutTitle === '') {
     $aboutTitle = 'من نحن';
 }
 $aboutText = trim((string) ($company['about_us_ar'] ?? ''));
+if ($aboutText === '') {
+    $aboutText = default_about_content();
+}
+$aboutContent = parse_about_content($aboutText);
 
 ob_start();
 require dirname(__DIR__) . '/views/about.php';

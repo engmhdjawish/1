@@ -26,6 +26,7 @@ final class DashboardNavigation
         '/dashboard/amine-api.php',
         '/dashboard/home-sections.php',
         '/dashboard/special-offers.php',
+        '/dashboard/site-media.php',
         '/dashboard/users.php',
         '/dashboard/settings.php',
     ];
@@ -168,9 +169,6 @@ final class DashboardNavigation
                 ['route' => '/dashboard/customers.php', 'label' => 'عملاء الموقع', 'icon' => 'group', 'permission' => 'web_customers.view'],
                 ['route' => '/dashboard/share-links.php', 'label' => 'روابط المشاركة', 'icon' => 'share', 'permission' => 'share_links.manage'],
             ],
-            'الوسائط' => [
-                ['route' => '/dashboard/site-media.php', 'label' => 'مكتبة الوسائط', 'icon' => 'photo_library', 'permission' => 'site_media.manage'],
-            ],
         ];
 
         $filtered = [];
@@ -275,6 +273,13 @@ final class DashboardNavigation
                     'icon' => 'sell',
                     'permission' => 'special_offers.manage',
                     'description' => 'إنشاء عروض مخفّضة وعرضها في الرئيسية والمتجر.',
+                ],
+                [
+                    'route' => '/dashboard/site-media.php',
+                    'label' => 'مكتبة الوسائط',
+                    'icon' => 'photo_library',
+                    'permission' => 'site_media.manage',
+                    'description' => 'رفع وإدارة صور الشعار والبنرات ومحتوى الموقع.',
                 ],
             ],
             'إدارة النظام' => [

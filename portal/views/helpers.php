@@ -272,3 +272,94 @@ function packages_available_display(array $item): float
 
     return max(0.0, floor($warehouseQty / $packaging));
 }
+
+function default_about_content(): string
+{
+    return <<<'TEXT'
+جاويش لتجارة الأحذية هي شركة متخصصة في تجارة كافة أنواع الأحذية المحلية والمستوردة. نعمل على تلبية احتياجات السوق من خلال توفير تشكيلة متنوعة تشمل الأحذية الرسمية، الكاجوال، والرياضية، التي تجمع بين التصاميم العملية والجودة المناسبة للاستخدام اليومي.
+
+## أعمالنا وبماذا نلتزم
+- تنوع المنتجات: نوفر خيارات متعددة من الأحذية المصنوعة محلياً لدعم الإنتاج الوطني، بالإضافة إلى خطوط الأحذية المستوردة لتلبية كافة الأذواق والمتطلبات.
+- الجودة والمواد: نحرص على اختيار بضائعنا بعناية، مع التركيز على جودة الخامات المستخدمة مثل الجلود الطبيعية والنوبوك لضمان راحة العميل ومتانة المنتج.
+- الالتزام والموثوقية: نعتمد على تنظيم داخلي دقيق وأنظمة رقمية لبرمجة الطلبيات وإدارة المستودعات، مما يضمن لعملائنا وتجار الجملة دقة في المواعيد وسلاسة في التعامل والتسليم.
+
+## هدفنا
+أن نكون المورد الموثوق والشريك الدائم لعملائنا في قطاع الأحذية، من خلال تقديم منتج جيد بسعر عادل، وتعامل قائم على الشفافية والوضوح.
+TEXT;
+}
+
+/**
+ * @return array{
+ *   intro: string,
+ *   sections: list<array{
+ *     title: string,
+ *     items: list<array{title: string, body: string}>,
+ *     paragraphs: list<string>
+ *   }>
+ * }
+ */
+function parse_about_content(string $text): array
+{
+    $text = trim($text);
+    if ($text === '') {
+        return ['intro' => '', 'sections' => []];
+    }
+
+    $chunks = preg_split('/^##\s+/m', $text, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $intro = trim((string) array_shift($chunks));
+    $sections = [];
+
+    foreach ($chunks as $chunk) {
+        $chunk = trim($chunk);
+        if ($chunk === '') {
+            continue;
+        }
+
+        $lines = preg_split('/\r\n|\n|\r/', $chunk) ?: [];
+        $title = trim((string) array_shift($lines));
+        $items = [];
+        $paragraphs = [];
+
+        foreach ($lines as $line) {
+            $line = trim((string) $line);
+            if ($line === '') {
+                continue;
+            }
+
+            if (preg_match('/^-\s+(.+)$/', $line, $matches)) {
+                $itemText = trim((string) $matches[1]);
+                $colonPos = strpos($itemText, ':');
+                if ($colonPos !== false) {
+                    $items[] = [
+                        'title' => trim(substr($itemText, 0, $colonPos)),
+                        'body' => trim(substr($itemText, $colonPos + 1)),
+                    ];
+                } else {
+                    $paragraphs[] = $itemText;
+                }
+                continue;
+            }
+
+            $paragraphs[] = $line;
+        }
+
+        if ($title !== '') {
+            $sections[] = [
+                'title' => $title,
+                'items' => $items,
+                'paragraphs' => $paragraphs,
+            ];
+        }
+    }
+
+    return [
+        'intro' => $intro,
+        'sections' => $sections,
+    ];
+}
+
+/** @return list<string> */
+function about_commitment_icons(): array
+{
+    return ['category', 'verified', 'schedule', 'handshake', 'inventory_2', 'support_agent'];
+}

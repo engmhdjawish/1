@@ -120,9 +120,20 @@ $tabUrl = static function (string $key) use ($tab): string {
       </label>
       <label class="text-xs">
         <span class="text-text-muted block mb-0.5">النص التعريفي</span>
-        <textarea name="about_us_ar" rows="8" class="w-full rounded-lg border border-border-subtle px-3 py-2 text-sm" placeholder="اكتب نبذة عن الشركة، رؤيتها، وخدماتها..."><?= h($company['about_us_ar'] ?? '') ?></textarea>
+        <textarea name="about_us_ar" rows="14" class="w-full rounded-lg border border-border-subtle px-3 py-2 text-sm font-mono leading-relaxed" placeholder="فقرة تمهيدية...
+
+## عنوان قسم
+- عنوان البند: وصف البند
+- عنوان البند: وصف البند
+
+## قسم آخر
+نص الفقرة"><?= h($company['about_us_ar'] ?? '') ?></textarea>
       </label>
-      <p class="text-[11px] text-text-muted">يظهر هذا المحتوى في صفحة <a href="/about.php" target="_blank" class="text-primary font-bold hover:underline">/about.php</a> مع بيانات التواصل والشعار.</p>
+      <p class="text-[11px] text-text-muted leading-relaxed">
+        يظهر المحتوى في صفحة <a href="/about.php" target="_blank" class="text-primary font-bold hover:underline">/about.php</a>.
+        استخدم <code dir="ltr">##</code> لعناوين الأقسام و<code dir="ltr">- العنوان: الوصف</code> لبطاقات الالتزامات.
+        إذا تُرك الحقل فارغاً تُعرض نبذة جاويش الافتراضية.
+      </p>
     </div>
   </article>
 </form>
