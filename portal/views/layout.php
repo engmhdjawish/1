@@ -27,9 +27,6 @@ $navLinks = [
     ['href' => '/store.php', 'label' => 'المتجر'],
     ['href' => '/about.php', 'label' => 'من نحن'],
 ];
-
-$whatsapp = preg_replace('/\D+/', '', (string) ($companyContext['company_whatsapp'] ?? ''));
-$whatsappLink = $whatsapp !== '' ? 'https://wa.me/' . $whatsapp : '';
 ?>
 <!DOCTYPE html>
 <html class="light" lang="ar" dir="rtl">
@@ -40,6 +37,7 @@ $whatsappLink = $whatsapp !== '' ? 'https://wa.me/' . $whatsapp : '';
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&display=swap" rel="stylesheet">
     <link href="/css/material-image-frame.css" rel="stylesheet">
+    <link href="/css/site-footer.css" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -148,45 +146,7 @@ $whatsappLink = $whatsapp !== '' ? 'https://wa.me/' . $whatsapp : '';
   <?= $content ?>
 </main>
 
-<footer class="bg-white border-t border-gray-200 mt-auto">
-  <div class="max-w-7xl mx-auto px-4 py-8 grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
-    <div>
-      <h2 class="font-extrabold text-primary mb-2"><?= h($siteName) ?></h2>
-      <p class="text-gray-600 leading-relaxed">متجر إلكتروني لتصفح المواد والطلب حسب سياسة حسابك.</p>
-    </div>
-    <div>
-      <h3 class="font-bold mb-2">روابط سريعة</h3>
-      <div class="space-y-1">
-        <a href="/index.php" class="block site-link">الرئيسية</a>
-        <a href="/store.php" class="block site-link">المتجر</a>
-        <a href="/about.php" class="block site-link">من نحن</a>
-        <?php if (!$customer): ?>
-          <a href="/register.php" class="block site-link">تسجيل عميل</a>
-        <?php endif; ?>
-      </div>
-    </div>
-    <div>
-      <h3 class="font-bold mb-2">تواصل</h3>
-      <div class="space-y-1 text-gray-600">
-        <?php if (trim((string) ($companyContext['company_phone'] ?? '')) !== ''): ?>
-          <div dir="ltr"><?= h((string) $companyContext['company_phone']) ?></div>
-        <?php endif; ?>
-        <?php if (trim((string) ($companyContext['company_mobile'] ?? '')) !== ''): ?>
-          <div dir="ltr"><?= h((string) $companyContext['company_mobile']) ?></div>
-        <?php endif; ?>
-        <?php if ($whatsappLink !== ''): ?>
-          <a href="<?= h($whatsappLink) ?>" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-emerald-700 font-bold mt-2">
-            <span class="material-symbols-outlined text-base" aria-hidden="true">chat</span>
-            واتساب
-          </a>
-        <?php endif; ?>
-      </div>
-    </div>
-  </div>
-  <div class="border-t border-gray-100 py-4 text-center text-xs text-gray-500">
-    © <?= date('Y') ?> <?= h($siteName) ?>
-  </div>
-</footer>
+<?php require __DIR__ . '/partials/site-footer.php'; ?>
 
 <script>
   (() => {
