@@ -960,6 +960,7 @@ final class MaterialImageStorageService
         $labelX = $valueX + (int) round($valueWidth);
 
         imagettftext($canvas, (int) $fontSize, 0, $valueX, $baselineY, $valueColor, $font, $shapedValue);
+        [$accentRed, $accentGreen, $accentBlue] = self::bannerAccentRgb();
         self::drawBannerOutlinedTtfText(
             $canvas,
             $font,
@@ -967,7 +968,9 @@ final class MaterialImageStorageService
             $shapedLabel,
             $labelX,
             $baselineY,
-            ...self::bannerAccentRgb(),
+            $accentRed,
+            $accentGreen,
+            $accentBlue,
             false
         );
     }
