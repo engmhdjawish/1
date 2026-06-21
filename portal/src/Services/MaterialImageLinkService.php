@@ -1212,7 +1212,7 @@ final class MaterialImageLinkService
         $name = trim((string) ($material['name'] ?? $material['Name'] ?? ''));
 
         if ($code !== '' && $name !== '') {
-            return $code . ' - ' . $name;
+            return $name . ' - ' . $code;
         }
 
         return $code !== '' ? $code : $name;

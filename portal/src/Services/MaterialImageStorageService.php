@@ -313,13 +313,13 @@ final class MaterialImageStorageService
 
         $nameLines = [];
         if ($productParts !== null) {
-            $prefix = $productParts['code'] . ' - ';
-            $prefixWidth = self::ttfLineWidth($font, $titleSize, $prefix);
+            $suffix = ' - ' . $productParts['code'];
+            $suffixWidth = self::ttfLineWidth($font, $titleSize, $suffix);
             $nameLines = self::wrapTtfTextLines(
                 $font,
                 $titleSize,
                 $productParts['name'],
-                max(80, (int) round($contentWidth - $prefixWidth))
+                max(80, (int) round($contentWidth - $suffixWidth))
             );
             if ($nameLines === []) {
                 $nameLines = [$productParts['name']];
@@ -502,14 +502,14 @@ final class MaterialImageStorageService
             return null;
         }
 
-        [$code, $name] = explode(' - ', $line, 2);
-        $code = trim($code);
+        [$name, $code] = explode(' - ', $line, 2);
         $name = trim($name);
-        if ($code === '' || $name === '') {
+        $code = trim($code);
+        if ($name === '' || $code === '') {
             return null;
         }
 
-        return ['code' => $code, 'name' => $name];
+        return ['name' => $name, 'code' => $code];
     }
 
     /** @return array{name: string, phone: string} */
@@ -622,26 +622,32 @@ final class MaterialImageStorageService
 
         if ($brandNameLines !== []) {
             foreach ($brandNameLines as $nameLine) {
-                self::drawBannerTextLeft(
+                self::drawBannerColoredText(
                     $canvas,
                     $font,
                     $brandNameSize,
                     $nameLine,
                     $paddingLeft,
                     $baseline,
+                    216,
+                    25,
+                    33,
                     true,
                     true
                 );
                 $baseline += $lineStep;
             }
         } elseif ($branding['name'] !== '') {
-            self::drawBannerTextLeft(
+            self::drawBannerColoredText(
                 $canvas,
                 $font,
                 $brandNameSize,
                 $branding['name'],
                 $paddingLeft,
                 $baseline,
+                216,
+                25,
+                33,
                 true,
                 true
             );
@@ -652,14 +658,17 @@ final class MaterialImageStorageService
             if ($brandNameLines !== [] || $branding['name'] !== '') {
                 $baseline += (int) round($brandNameSize * 0.15);
             }
-            self::drawBannerTextLeft(
+            self::drawBannerColoredText(
                 $canvas,
                 $font,
                 $brandPhoneSize,
                 $branding['phone'],
                 $paddingLeft,
                 $baseline + (int) $brandPhoneSize,
-                false,
+                216,
+                25,
+                33,
+                true,
                 false
             );
         }
@@ -788,28 +797,28 @@ final class MaterialImageStorageService
         $codeWidth = self::ttfLineWidth($font, $fontSize, $code);
         $separatorWidth = self::ttfLineWidth($font, $fontSize, $separator);
         $nameWidth = self::ttfLineWidth($font, $fontSize, $shapedName);
-        $lineWidth = $codeWidth + $separatorWidth + $nameWidth;
+        $lineWidth = $nameWidth + $separatorWidth + $codeWidth;
 
         if ($lineWidth > $maxWidth) {
             $availableForName = max(40, $maxWidth - $codeWidth - $separatorWidth);
             $wrappedName = self::wrapTtfTextLines($font, $fontSize, $name, $availableForName);
             $shapedName = ArabicGdText::shape($wrappedName[0] ?? $name);
             $nameWidth = self::ttfLineWidth($font, $fontSize, $shapedName);
-            $lineWidth = $codeWidth + $separatorWidth + $nameWidth;
+            $lineWidth = $nameWidth + $separatorWidth + $codeWidth;
         }
 
         $x = max($minX, $maxRightX - $lineWidth);
-        $codeColor = imagecolorallocate($canvas, 255, 213, 90);
-        $separatorColor = imagecolorallocate($canvas, 168, 168, 168);
         $nameColor = imagecolorallocate($canvas, 255, 255, 255);
+        $separatorColor = imagecolorallocate($canvas, 168, 168, 168);
+        $codeColor = imagecolorallocate($canvas, 216, 25, 33);
 
-        imagettftext($canvas, (int) $fontSize, 0, $x + 1, $baselineY, $codeColor, $font, $code);
-        imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $codeColor, $font, $code);
-        $x += (int) round($codeWidth);
-        imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $separatorColor, $font, $separator);
-        $x += (int) round($separatorWidth);
         imagettftext($canvas, (int) $fontSize, 0, $x + 1, $baselineY, $nameColor, $font, $shapedName);
         imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $nameColor, $font, $shapedName);
+        $x += (int) round($nameWidth);
+        imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $separatorColor, $font, $separator);
+        $x += (int) round($separatorWidth);
+        imagettftext($canvas, (int) $fontSize, 0, $x + 1, $baselineY, $codeColor, $font, $code);
+        imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $codeColor, $font, $code);
     }
 
     /** @return array{label: string, value: string}|null */
@@ -881,7 +890,7 @@ final class MaterialImageStorageService
             $lineWidth = $labelWidth + $valueWidth;
         }
 
-        $labelColor = imagecolorallocate($canvas, 255, 213, 90);
+        $labelColor = imagecolorallocate($canvas, 216, 25, 33);
         $valueColor = imagecolorallocate($canvas, 236, 236, 236);
         $valueX = max($minX, $maxRightX - $lineWidth);
         $labelX = $valueX + (int) round($valueWidth);
