@@ -34,7 +34,8 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
     ?>
     <a
       href="<?= h($route) ?>"
-      class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition <?= $classes ?>"
+      data-dashboard-route="<?= h($route) ?>"
+      class="dashboard-sidebar-link flex items-center gap-3 rounded-lg px-3 py-2.5 transition <?= $classes ?>"
       <?= $compact ? 'data-dashboard-nav-link' : '' ?>
     >
       <span class="material-symbols-outlined <?= $isActive ? 'fill' : '' ?>"><?= h((string) ($item['icon'] ?? 'circle')) ?></span>
@@ -172,7 +173,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         <?php endif; ?>
         <div class="hidden md:flex flex-col items-end">
           <span class="text-sm font-bold"><?= h($user['display_name_ar'] ?? '') ?></span>
-          <span class="text-xs text-text-muted"><?= h($sidebarTitle) ?></span>
+          <span class="text-xs text-text-muted" data-dashboard-header-area><?= h($sidebarTitle) ?></span>
         </div>
         <a href="/logout.php" class="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-red-50 text-red-600 transition" aria-label="تسجيل الخروج">
           <span class="material-symbols-outlined">logout</span>
@@ -187,11 +188,11 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
     class="lg:hidden fixed top-16 right-0 h-[calc(100vh-64px)] w-72 max-w-[85vw] bg-surface-white border-l border-border-subtle z-50 flex flex-col p-4 translate-x-full"
     aria-hidden="true"
   >
-    <div class="px-2 py-3 border-b border-border-subtle mb-3">
+    <div class="px-2 py-3 border-b border-border-subtle mb-3" data-dashboard-sidebar-meta>
       <h2 class="font-bold text-primary"><?= h($sidebarTitle) ?></h2>
       <p class="text-xs text-text-muted mt-1"><?= h($sidebarSubtitle) ?></p>
     </div>
-    <div class="flex-1 overflow-y-auto space-y-4">
+    <div class="flex-1 overflow-y-auto space-y-4" data-dashboard-sidebar-nav>
       <?php foreach ($sidebarGroups as $groupTitle => $items): ?>
         <section>
           <h3 class="text-xs text-text-muted mb-2 px-2"><?= h($groupTitle) ?></h3>
@@ -203,7 +204,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         </section>
       <?php endforeach; ?>
     </div>
-    <div class="pt-4 border-t border-border-subtle space-y-2">
+    <div class="pt-4 border-t border-border-subtle space-y-2" data-dashboard-sidebar-footer>
       <?php if ($navArea === DashboardNavigation::AREA_OPERATIONS): ?>
         <?php if ($hasAccountingAccess): ?>
           <a href="/dashboard/accounting.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low" data-dashboard-nav-link>
@@ -255,11 +256,11 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
 
   <div class="flex">
     <aside class="hidden lg:flex fixed top-16 right-0 h-[calc(100vh-64px)] w-64 bg-surface-white border-l border-border-subtle flex-col p-4 z-40">
-      <div class="px-2 py-4 border-b border-border-subtle mb-4">
+      <div class="px-2 py-4 border-b border-border-subtle mb-4" data-dashboard-sidebar-meta>
         <h2 class="font-bold text-primary"><?= h($sidebarTitle) ?></h2>
         <p class="text-xs text-text-muted mt-1"><?= h($sidebarSubtitle) ?></p>
       </div>
-      <div class="flex-1 overflow-y-auto">
+      <div class="flex-1 overflow-y-auto" data-dashboard-sidebar-nav>
         <?php foreach ($sidebarGroups as $groupTitle => $items): ?>
           <section class="mb-4">
             <h3 class="text-xs text-text-muted mb-2 px-2"><?= h($groupTitle) ?></h3>
@@ -271,7 +272,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
           </section>
         <?php endforeach; ?>
       </div>
-      <div class="mt-auto pt-4 border-t border-border-subtle space-y-2">
+      <div class="mt-auto pt-4 border-t border-border-subtle space-y-2" data-dashboard-sidebar-footer>
         <?php if ($navArea === DashboardNavigation::AREA_OPERATIONS): ?>
           <?php if ($hasAccountingAccess): ?>
             <a href="/dashboard/accounting.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low transition">
