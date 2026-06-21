@@ -137,7 +137,7 @@ final class StoreCatalogService
                 $storeOptions,
                 $requestFilters,
                 $sectionContext,
-                CatalogSectionResolver::filterSummaryLabels($policyRules)
+                self::lockedClientFilters($policyRules)
             );
         }
 
@@ -151,7 +151,7 @@ final class StoreCatalogService
         $storeGuids = $mergedFilters['storeGuids'];
         $isAvailable = $mergedFilters['isAvailable'];
         $hasImage = $mergedFilters['hasImage'];
-        $policyFilterSummary = CatalogSectionResolver::filterSummaryLabels($policyRules);
+        $lockedClientFilters = self::lockedClientFilters($policyRules);
 
         try {
             $materials = self::fetchMaterialsExtended(
@@ -243,7 +243,7 @@ final class StoreCatalogService
             'filterOptions' => $filterOptions,
             'apiError' => $apiError,
             'section_context' => $sectionContext,
-            'policy_filter_summary' => $policyFilterSummary,
+            'locked_client_filters' => $lockedClientFilters,
             'store_options' => $storeOptions,
             'allow_client_filters' => $allowClientFilters,
             'filters' => $displayFilters,
@@ -549,7 +549,7 @@ final class StoreCatalogService
         ?array $storeOptions = null,
         array $requestFilters = [],
         ?array $sectionContext = null,
-        array $policyFilterSummary = []
+        array $lockedClientFilters = []
     ): array {
         return [
             'products' => [],
@@ -563,7 +563,7 @@ final class StoreCatalogService
             'filterOptions' => ['stores' => [], 'groups' => []],
             'apiError' => $error,
             'section_context' => $sectionContext,
-            'policy_filter_summary' => $policyFilterSummary,
+            'locked_client_filters' => $lockedClientFilters,
             'store_options' => $storeOptions ?? AccessPolicyService::defaultStoreOptions(),
             'allow_client_filters' => $storeOptions !== null && ($storeOptions['visible_client_filters'] ?? []) !== [],
             'filters' => [
@@ -1275,5 +1275,16 @@ final class StoreCatalogService
         }
 
         return is_numeric((string) $value) ? (float) $value : null;
+    }
+
+    /** @param array<string, mixed> $policyRules @return list<string> */
+    private static function lockedClientFilters(array $policyRules): array
+    {
+        $locked = [];
+        if (array_key_exists('is_available', $policyRules) && $policyRules['is_available'] !== null) {
+            $locked[] = 'availability';
+        }
+
+        return $locked;
     }
 }

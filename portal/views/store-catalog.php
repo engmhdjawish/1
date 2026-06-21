@@ -13,9 +13,9 @@ $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
 $filters = is_array($catalog['filters'] ?? null) ? $catalog['filters'] : [];
 $sectionContext = is_array($catalog['section_context'] ?? null) ? $catalog['section_context'] : null;
 $sectionFilterSummary = is_array($catalog['section_filter_summary'] ?? null) ? $catalog['section_filter_summary'] : [];
-$policyFilterSummary = is_array($catalog['policy_filter_summary'] ?? null) ? $catalog['policy_filter_summary'] : [];
 $storeOptions = is_array($catalog['store_options'] ?? null) ? $catalog['store_options'] : [];
 $filterOptions = is_array($catalog['filterOptions'] ?? null) ? $catalog['filterOptions'] : ['stores' => [], 'groups' => []];
+$lockedClientFilters = array_map('strval', is_array($catalog['locked_client_filters'] ?? null) ? $catalog['locked_client_filters'] : []);
 $allowClientFilters = (bool) ($catalog['allow_client_filters'] ?? false);
 $isSectionBrowse = $sectionContext !== null;
 $products = is_array($catalog['products'] ?? null) ? $catalog['products'] : [];
@@ -24,7 +24,13 @@ $resultFilters = is_array($catalog['resultFilters'] ?? null) ? $catalog['resultF
 $visibleClientFilters = array_map('strval', $storeOptions['visible_client_filters'] ?? []);
 $allowSorting = (bool) ($storeOptions['allow_sorting'] ?? true);
 $clientSortFields = array_map('strval', $storeOptions['client_sort_fields'] ?? ['number', 'materialType', 'manufacturer']);
-$isClientFilterVisible = static fn (string $code): bool => in_array($code, $visibleClientFilters, true);
+$isClientFilterVisible = static function (string $code) use ($visibleClientFilters, $lockedClientFilters): bool {
+    if (in_array($code, $lockedClientFilters, true)) {
+        return false;
+    }
+
+    return in_array($code, $visibleClientFilters, true);
+};
 
 $selectedMaterialTypes = is_array($filters['materialTypes'] ?? null) ? $filters['materialTypes'] : [];
 $selectedManufacturers = is_array($filters['manufacturers'] ?? null) ? $filters['manufacturers'] : [];
@@ -74,6 +80,17 @@ $buildNextSortValue = static function (string $field) use ($activeSort, $parseSo
 };
 $activeSortParsed = $parseSortClause($activeSort);
 
+$activeFilterCount = 0;
+if (trim((string) ($filters['q'] ?? '')) !== '') {
+    $activeFilterCount++;
+}
+foreach ([$selectedMaterialTypes, $selectedManufacturers, $selectedAgeCategories, $selectedSizeRanges, $selectedCountryOrigins, $selectedStoreGuids, $selectedGroupGuids] as $group) {
+    $activeFilterCount += count($group);
+}
+if ($isClientFilterVisible('availability') && $availabilityValue !== '') {
+    $activeFilterCount++;
+}
+
 $buildStoreUrl = static function (int $targetPage) use ($filters, $isSectionBrowse): string {
     $params = $_GET;
     $params['page'] = max(1, $targetPage);
@@ -100,7 +117,7 @@ if ($sectionContext !== null) {
     }
 }
 
-require __DIR__ . '/partials/store-filter-chips.php';
+require __DIR__ . '/partials/store-filter-group.php';
 ?>
 <link href="/css/store-filters.css" rel="stylesheet">
 
@@ -119,11 +136,11 @@ require __DIR__ . '/partials/store-filter-chips.php';
   </section>
 <?php endif; ?>
 
-<section class="mb-6">
+<section class="mb-4">
   <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
     <div>
       <h1 class="text-3xl font-extrabold text-slate-900">المتجر</h1>
-      <p class="text-sm text-gray-600 mt-1">تصفّح المواد، ابحث بالاسم أو الكود، وافتح تفاصيل كل مادة.</p>
+      <p class="text-sm text-gray-600 mt-1">تصفّح المواد واختر ما يناسبك بسهولة.</p>
     </div>
     <?php if ($isCustomer): ?>
       <span class="inline-flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2 text-sm font-bold">
@@ -138,333 +155,321 @@ require __DIR__ . '/partials/store-filter-chips.php';
   <p class="mb-4 rounded-xl border bg-red-50 border-red-200 text-red-700 px-4 py-3 text-sm"><?= h((string) $catalog['apiError']) ?></p>
 <?php endif; ?>
 
-<?php if ($allowClientFilters || $isSectionBrowse): ?>
-<form method="get" class="store-filters-panel mb-6 p-4 md:p-5 space-y-4">
-  <input type="hidden" name="page" value="1">
-  <?php if (!empty($filters['section'])): ?><input type="hidden" name="section" value="<?= h((string) $filters['section']) ?>"><?php endif; ?>
-  <?php if (!empty($filters['offer'])): ?><input type="hidden" name="offer" value="<?= h((string) $filters['offer']) ?>"><?php endif; ?>
+<div class="store-layout <?= ($allowClientFilters || $isSectionBrowse) ? 'has-sidebar' : '' ?>" id="store-filters-root">
+  <?php if ($allowClientFilters || $isSectionBrowse): ?>
+    <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
+      <aside class="store-filters-sidebar">
+        <form method="get" class="store-filters-sidebar-inner">
+          <input type="hidden" name="page" value="1">
+          <?php if (!empty($filters['section'])): ?><input type="hidden" name="section" value="<?= h((string) $filters['section']) ?>"><?php endif; ?>
+          <?php if (!empty($filters['offer'])): ?><input type="hidden" name="offer" value="<?= h((string) $filters['offer']) ?>"><?php endif; ?>
 
-  <?php if (!$isSectionBrowse && $policyFilterSummary !== []): ?>
-    <div class="store-policy-chips p-3">
-      <p class="text-sm font-bold text-gray-700 mb-2">قيود سياسة الوصول (ثابتة)</p>
-      <div class="flex flex-wrap gap-2">
-        <?php foreach ($policyFilterSummary as $chip): ?>
-          <?php if (!is_array($chip)) continue; ?>
-          <span class="store-policy-chip">
-            <span><?= h((string) ($chip['label'] ?? '')) ?>:</span>
-            <?= h((string) ($chip['value'] ?? '')) ?>
-          </span>
-        <?php endforeach; ?>
-      </div>
+          <div class="store-filters-sidebar-header">
+            <h2 class="store-filters-sidebar-title">تصفية النتائج</h2>
+            <button type="button" id="store-filters-close" class="store-filters-close-btn" aria-label="إغلاق الفلاتر">
+              <span class="material-symbols-outlined text-base" aria-hidden="true">close</span>
+            </button>
+          </div>
+
+          <?php if ($isSectionBrowse && $sectionFilterSummary !== []): ?>
+            <p class="text-xs text-text-muted mb-3">تصفح ضمن قسم محدد — بعض الفلاتر مقيّدة بهذا القسم.</p>
+          <?php endif; ?>
+
+          <?php if (!$isSectionBrowse && $isClientFilterVisible('search')): ?>
+            <div class="store-inline-field">
+              <label for="store-search-q">بحث</label>
+              <input id="store-search-q" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" placeholder="اسم المادة أو الكود">
+            </div>
+          <?php endif; ?>
+
+          <?php if ($isSectionBrowse): ?>
+            <div class="store-inline-field">
+              <label for="store-section-sort">الترتيب</label>
+              <select id="store-section-sort" name="sort">
+                <?php foreach ([
+                    'number:asc' => 'الرقم تصاعدي',
+                    'number:desc' => 'الرقم تنازلي',
+                    'name:asc' => 'الاسم',
+                    '-unitSalePriceSyp' => 'السعر',
+                ] as $value => $label): ?>
+                  <option value="<?= h($value) ?>" <?= ((string) ($filters['sort'] ?? '') === $value) ? 'selected' : '' ?>><?= h($label) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+          <?php endif; ?>
+
+          <?php if (!$isSectionBrowse): ?>
+            <?php
+              $facetMap = [
+                  'materialTypes' => ['param' => 'materialTypes', 'code' => 'materialTypes', 'label' => 'نوع المادة', 'selected' => $selectedMaterialTypes],
+                  'ageCategories' => ['param' => 'ageCategories', 'code' => 'ageCategories', 'label' => 'الفئة العمرية', 'selected' => $selectedAgeCategories],
+                  'manufacturers' => ['param' => 'manufacturers', 'code' => 'manufacturers', 'label' => 'الشركة', 'selected' => $selectedManufacturers],
+                  'sizeRanges' => ['param' => 'sizeRanges', 'code' => 'sizeRanges', 'label' => 'القياس', 'selected' => $selectedSizeRanges],
+                  'countryOfOrigins' => ['param' => 'countryOfOrigins', 'code' => 'countryOfOrigins', 'label' => 'بلد المنشأ', 'selected' => $selectedCountryOrigins],
+              ];
+            ?>
+            <?php foreach ($facetMap as $facetKey => $facetConfig): ?>
+              <?php
+                if (!$isClientFilterVisible((string) $facetConfig['code'])) {
+                    continue;
+                }
+                $values = is_array($resultFilters[$facetKey] ?? null) ? $resultFilters[$facetKey] : [];
+                $groupOptions = [];
+                foreach ($values as $facet) {
+                    if (!is_array($facet)) {
+                        continue;
+                    }
+                    $value = trim((string) ($facet['value'] ?? ''));
+                    if ($value === '') {
+                        continue;
+                    }
+                    $groupOptions[] = [
+                        'value' => $value,
+                        'label' => $value,
+                        'count' => $facet['count'] ?? null,
+                    ];
+                }
+                $renderStoreFilterGroup(
+                    (string) $facetConfig['param'],
+                    (string) $facetConfig['label'],
+                    $groupOptions,
+                    (array) $facetConfig['selected'],
+                    (string) $facetConfig['code'],
+                    (string) $facetConfig['code'] === 'manufacturers' ? 6 : 8,
+                    (string) $facetConfig['code'] === 'manufacturers' ? 8 : 6
+                );
+              ?>
+            <?php endforeach; ?>
+
+            <?php if ($isClientFilterVisible('stores')): ?>
+              <?php
+                $storeGroupOptions = [];
+                foreach ($filterOptions['stores'] ?? [] as $store) {
+                    if (!is_array($store)) {
+                        continue;
+                    }
+                    $guid = trim((string) ($store['guid'] ?? ''));
+                    if ($guid === '') {
+                        continue;
+                    }
+                    $label = trim((string) ($store['name'] ?? '')) ?: (trim((string) ($store['code'] ?? '')) ?: $guid);
+                    $storeGroupOptions[] = ['value' => $guid, 'label' => $label];
+                }
+                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, $selectedStoreGuids, 'stores');
+              ?>
+            <?php endif; ?>
+
+            <?php if ($isClientFilterVisible('groups')): ?>
+              <?php
+                $groupGroupOptions = [];
+                $groupFacets = is_array($resultFilters['groups'] ?? null) ? $resultFilters['groups'] : [];
+                if ($groupFacets !== []) {
+                    foreach ($groupFacets as $groupFacet) {
+                        if (!is_array($groupFacet)) {
+                            continue;
+                        }
+                        $guid = trim((string) ($groupFacet['guid'] ?? ''));
+                        if ($guid === '') {
+                            continue;
+                        }
+                        $label = trim((string) ($groupFacet['name'] ?? '')) ?: (trim((string) ($groupFacet['code'] ?? '')) ?: $guid);
+                        $groupGroupOptions[] = [
+                            'value' => $guid,
+                            'label' => $label,
+                            'count' => $groupFacet['count'] ?? null,
+                        ];
+                    }
+                } else {
+                    foreach ($filterOptions['groups'] ?? [] as $group) {
+                        if (!is_array($group)) {
+                            continue;
+                        }
+                        $guid = trim((string) ($group['guid'] ?? ''));
+                        if ($guid === '') {
+                            continue;
+                        }
+                        $label = trim((string) ($group['name'] ?? '')) ?: (trim((string) ($group['code'] ?? '')) ?: $guid);
+                        $groupGroupOptions[] = ['value' => $guid, 'label' => $label];
+                    }
+                }
+                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, $selectedGroupGuids, 'groups');
+              ?>
+            <?php endif; ?>
+
+            <?php if ($isClientFilterVisible('availability')): ?>
+              <details class="store-filter-accordion" <?= $availabilityValue !== '' ? 'open' : '' ?>>
+                <summary class="store-filter-accordion-summary"><span>التوفر</span></summary>
+                <div class="store-filter-accordion-body store-filter-options">
+                  <?php foreach (['' => 'الكل', '1' => 'متوفر', '0' => 'غير متوفر'] as $value => $label): ?>
+                    <?php $isActive = $availabilityValue === (string) $value; ?>
+                    <label class="store-filter-option">
+                      <input type="radio" name="isAvailable" value="<?= h((string) $value) ?>" <?= $isActive ? 'checked' : '' ?>>
+                      <span class="store-filter-option-text"><?= h($label) ?></span>
+                    </label>
+                  <?php endforeach; ?>
+                </div>
+              </details>
+            <?php endif; ?>
+
+            <?php if ($isClientFilterVisible('warehouseRange')): ?>
+              <details class="store-filter-accordion">
+                <summary class="store-filter-accordion-summary"><span>مدى الكمية</span></summary>
+                <div class="store-filter-accordion-body grid grid-cols-2 gap-2">
+                  <div class="store-inline-field mb-0">
+                    <label>من</label>
+                    <input type="number" step="0.01" min="0" name="minWarehouseQuantity" value="<?= h((string) ($filters['minWarehouseQuantity'] ?? '')) ?>">
+                  </div>
+                  <div class="store-inline-field mb-0">
+                    <label>إلى</label>
+                    <input type="number" step="0.01" min="0" name="maxWarehouseQuantity" value="<?= h((string) ($filters['maxWarehouseQuantity'] ?? '')) ?>">
+                  </div>
+                </div>
+              </details>
+            <?php endif; ?>
+
+            <?php if ($isClientFilterVisible('priceSaleSyp') || $isClientFilterVisible('priceSaleUsd') || $isClientFilterVisible('pricePurchaseUsd')): ?>
+              <details class="store-filter-accordion">
+                <summary class="store-filter-accordion-summary"><span>المدى السعري</span></summary>
+                <div class="store-filter-accordion-body space-y-2">
+                  <?php if ($isClientFilterVisible('priceSaleSyp')): ?>
+                    <div class="grid grid-cols-2 gap-2">
+                      <div class="store-inline-field mb-0"><label>بيع ل.س من</label><input type="number" step="0.01" min="0" name="minUnitSalePriceSyp" value="<?= h((string) ($filters['minUnitSalePriceSyp'] ?? '')) ?>"></div>
+                      <div class="store-inline-field mb-0"><label>إلى</label><input type="number" step="0.01" min="0" name="maxUnitSalePriceSyp" value="<?= h((string) ($filters['maxUnitSalePriceSyp'] ?? '')) ?>"></div>
+                    </div>
+                  <?php endif; ?>
+                  <?php if ($isClientFilterVisible('priceSaleUsd')): ?>
+                    <div class="grid grid-cols-2 gap-2">
+                      <div class="store-inline-field mb-0"><label>بيع $ من</label><input type="number" step="0.01" min="0" name="minUnitSalePriceUsd" value="<?= h((string) ($filters['minUnitSalePriceUsd'] ?? '')) ?>"></div>
+                      <div class="store-inline-field mb-0"><label>إلى</label><input type="number" step="0.01" min="0" name="maxUnitSalePriceUsd" value="<?= h((string) ($filters['maxUnitSalePriceUsd'] ?? '')) ?>"></div>
+                    </div>
+                  <?php endif; ?>
+                  <?php if ($isClientFilterVisible('pricePurchaseUsd')): ?>
+                    <div class="grid grid-cols-2 gap-2">
+                      <div class="store-inline-field mb-0"><label>شراء $ من</label><input type="number" step="0.01" min="0" name="minUnitPurchasePriceUsd" value="<?= h((string) ($filters['minUnitPurchasePriceUsd'] ?? '')) ?>"></div>
+                      <div class="store-inline-field mb-0"><label>إلى</label><input type="number" step="0.01" min="0" name="maxUnitPurchasePriceUsd" value="<?= h((string) ($filters['maxUnitPurchasePriceUsd'] ?? '')) ?>"></div>
+                    </div>
+                  <?php endif; ?>
+                </div>
+              </details>
+            <?php endif; ?>
+
+            <?php if ($isClientFilterVisible('groupBy')): ?>
+              <div class="store-inline-field">
+                <label for="store-group-by">التجميع</label>
+                <select id="store-group-by" name="groupBy">
+                  <option value="none" <?= $selectedGroupBy === 'none' ? 'selected' : '' ?>>بدون</option>
+                  <option value="ageCategory" <?= $selectedGroupBy === 'ageCategory' ? 'selected' : '' ?>>الفئة العمرية</option>
+                  <option value="sizeRange" <?= $selectedGroupBy === 'sizeRange' ? 'selected' : '' ?>>القياس</option>
+                  <option value="materialType" <?= $selectedGroupBy === 'materialType' ? 'selected' : '' ?>>النوع</option>
+                  <option value="manufacturer" <?= $selectedGroupBy === 'manufacturer' ? 'selected' : '' ?>>الشركة</option>
+                  <option value="countryOfOrigin" <?= $selectedGroupBy === 'countryOfOrigin' ? 'selected' : '' ?>>بلد المنشأ</option>
+                  <option value="group" <?= $selectedGroupBy === 'group' ? 'selected' : '' ?>>المجموعة</option>
+                </select>
+              </div>
+            <?php endif; ?>
+          <?php endif; ?>
+
+          <div class="store-filter-actions">
+            <button type="submit" class="store-btn-primary">تطبيق</button>
+            <a href="<?= h(store_url(array_filter([
+                'section' => (string) ($filters['section'] ?? ''),
+                'offer' => (string) ($filters['offer'] ?? ''),
+            ], static fn (string $value): bool => trim($value) !== ''))) ?>" class="store-btn-secondary inline-flex items-center">مسح</a>
+          </div>
+        </form>
+      </aside>
     </div>
   <?php endif; ?>
 
-  <?php if ($isSectionBrowse && $sectionFilterSummary !== []): ?>
-    <div class="rounded-xl border border-primary/20 bg-white p-3">
-      <p class="text-sm font-bold text-gray-700 mb-2">فلاتر هذا القسم (ثابتة)</p>
-      <div class="flex flex-wrap gap-2">
-        <?php foreach ($sectionFilterSummary as $chip): ?>
-          <?php if (!is_array($chip)) continue; ?>
-          <span class="store-policy-chip border-red-100">
-            <span class="text-primary"><?= h((string) ($chip['label'] ?? '')) ?>:</span>
-            <?= h((string) ($chip['value'] ?? '')) ?>
-          </span>
-        <?php endforeach; ?>
-      </div>
-    </div>
-  <?php endif; ?>
+  <div class="store-results">
+    <div class="store-results-toolbar">
+      <?php if ($allowClientFilters || $isSectionBrowse): ?>
+        <button type="button" id="store-filters-open" class="store-filters-open-btn lg:hidden">
+          <span class="material-symbols-outlined text-base" aria-hidden="true">tune</span>
+          فلاتر
+          <?php if ($activeFilterCount > 0): ?>
+            <span class="badge"><?= (int) $activeFilterCount ?></span>
+          <?php endif; ?>
+        </button>
+      <?php endif; ?>
 
-  <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-    <?php if (!$isSectionBrowse && $isClientFilterVisible('search')): ?>
-      <label class="text-sm md:col-span-2">
-        <span class="text-gray-600 block mb-1 font-medium">بحث</span>
-        <input name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-gray-300 px-3 focus:border-primary focus:ring-primary" placeholder="اسم المادة أو الكود">
-      </label>
-    <?php endif; ?>
+      <?php if ((int) ($catalog['totalCount'] ?? 0) > 0): ?>
+        <p class="store-results-meta">
+          عرض <?= (int) ($catalog['rangeStart'] ?? 0) ?>–<?= (int) ($catalog['rangeEnd'] ?? 0) ?> من <?= (int) ($catalog['totalCount'] ?? 0) ?> مادة
+          <?php if ((int) ($catalog['totalPages'] ?? 1) > 1): ?>
+            <span class="text-gray-400">(صفحة <?= (int) ($catalog['page'] ?? 1) ?> من <?= (int) ($catalog['totalPages'] ?? 1) ?>)</span>
+          <?php endif; ?>
+        </p>
+      <?php else: ?>
+        <p class="store-results-meta">لا توجد نتائج مطابقة</p>
+      <?php endif; ?>
 
-    <?php if (!$isSectionBrowse && $isClientFilterVisible('warehouseRange')): ?>
-      <label class="text-sm">
-        <span class="text-gray-600 block mb-1 font-medium">أقل كمية</span>
-        <input type="number" step="0.01" min="0" name="minWarehouseQuantity" value="<?= h((string) ($filters['minWarehouseQuantity'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-gray-300 px-3">
-      </label>
-      <label class="text-sm">
-        <span class="text-gray-600 block mb-1 font-medium">أعلى كمية</span>
-        <input type="number" step="0.01" min="0" name="maxWarehouseQuantity" value="<?= h((string) ($filters['maxWarehouseQuantity'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-gray-300 px-3">
-      </label>
-    <?php endif; ?>
-
-    <?php if (!$isSectionBrowse && $isClientFilterVisible('availability')): ?>
-      <div class="text-sm md:col-span-2">
-        <span class="text-gray-600 block mb-1 font-medium">التوفر</span>
-        <div class="flex flex-wrap gap-2">
-          <?php foreach (['' => 'الكل', '1' => 'متوفر', '0' => 'غير متوفر'] as $value => $label): ?>
-            <?php $isActive = $availabilityValue === (string) $value; ?>
-            <label class="cursor-pointer">
-              <input type="radio" class="peer sr-only" name="isAvailable" value="<?= h((string) $value) ?>" <?= $isActive ? 'checked' : '' ?>>
-              <span class="store-filter-chip"><?= h($label) ?></span>
-            </label>
+      <?php if (!$isSectionBrowse && $allowSorting && $isClientFilterVisible('sort') && $clientSortFields !== []): ?>
+        <form method="get" class="store-sort-bar">
+          <?php foreach ($_GET as $key => $value): ?>
+            <?php if ($key === 'sort' || $key === 'page') continue; ?>
+            <?php if (is_array($value)): ?>
+              <?php foreach ($value as $item): ?>
+                <input type="hidden" name="<?= h((string) $key) ?>[]" value="<?= h((string) $item) ?>">
+              <?php endforeach; ?>
+            <?php else: ?>
+              <input type="hidden" name="<?= h((string) $key) ?>" value="<?= h((string) $value) ?>">
+            <?php endif; ?>
           <?php endforeach; ?>
-        </div>
-      </div>
-    <?php endif; ?>
-  </div>
-
-  <?php if (!$isSectionBrowse && $allowSorting && $isClientFilterVisible('sort') && $clientSortFields !== []): ?>
-    <div class="store-filter-section">
-      <p class="store-filter-title mb-2">الترتيب</p>
-      <div class="flex flex-wrap gap-2">
-        <?php foreach ($clientSortFields as $sortField): ?>
-          <?php
-            $isActiveSort = $activeSortParsed['field'] === $sortField;
-            $sortLabel = $sortFieldLabels[$sortField] ?? $sortField;
-            $sortArrow = $isActiveSort ? ($activeSortParsed['dir'] === 'asc' ? ' ↑' : ' ↓') : '';
-            $nextSortValue = $buildNextSortValue($sortField);
-          ?>
-          <button
-            type="submit"
-            name="sort"
-            value="<?= h($nextSortValue) ?>"
-            class="store-filter-chip <?= $isActiveSort ? 'is-active' : '' ?>"
-          ><?= h($sortLabel . $sortArrow) ?></button>
-        <?php endforeach; ?>
-      </div>
-      <p class="text-xs text-gray-500 mt-2">اضغط على الخيار للتبديل بين تصاعدي وتنازلي.</p>
+          <input type="hidden" name="page" value="1">
+          <?php foreach ($clientSortFields as $sortField): ?>
+            <?php
+              $isActiveSort = $activeSortParsed['field'] === $sortField;
+              $sortLabel = $sortFieldLabels[$sortField] ?? $sortField;
+              $sortArrow = $isActiveSort ? ($activeSortParsed['dir'] === 'asc' ? ' ↑' : ' ↓') : '';
+            ?>
+            <button
+              type="submit"
+              name="sort"
+              value="<?= h($buildNextSortValue($sortField)) ?>"
+              class="store-sort-chip <?= $isActiveSort ? 'is-active' : '' ?>"
+            ><?= h($sortLabel . $sortArrow) ?></button>
+          <?php endforeach; ?>
+        </form>
+      <?php endif; ?>
     </div>
-  <?php elseif ($isSectionBrowse): ?>
-    <label class="text-sm block max-w-xs">
-      <span class="text-gray-600 block mb-1 font-medium">الترتيب</span>
-      <select name="sort" class="h-11 w-full rounded-xl border border-gray-300 px-3">
-        <?php foreach ([
-            'number:asc' => 'الرقم تصاعدي',
-            'number:desc' => 'الرقم تنازلي',
-            'name:asc' => 'الاسم',
-            '-unitSalePriceSyp' => 'السعر',
-        ] as $value => $label): ?>
-          <option value="<?= h($value) ?>" <?= ((string) ($filters['sort'] ?? '') === $value) ? 'selected' : '' ?>><?= h($label) ?></option>
+
+    <?php if ($products === [] && empty($catalog['apiError'])): ?>
+      <div class="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center text-gray-500">
+        لا توجد نتائج مطابقة لبحثك أو الفلاتر المحددة.
+      </div>
+    <?php else: ?>
+      <?php
+        $quickViewGuids = array_values(array_filter(array_map(
+            static fn ($row): string => is_array($row) ? material_guid($row) : '',
+            $products
+        ), static fn (string $g): bool => $g !== ''));
+      ?>
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <?php foreach ($products as $item): ?>
+          <?php if (!is_array($item)) continue; ?>
+          <?php require __DIR__ . '/partials/product-card.php'; ?>
         <?php endforeach; ?>
-      </select>
-    </label>
-  <?php endif; ?>
+      </div>
+      <script>
+        window.__productQuickView = <?= json_encode([
+            'guids' => $quickViewGuids,
+            'offer' => (string) ($productOfferSlug ?? ''),
+            'return' => (string) ($productReturnUrl ?? ''),
+        ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+      </script>
+    <?php endif; ?>
 
-  <?php if (!$isSectionBrowse && $isClientFilterVisible('groupBy')): ?>
-    <label class="text-sm block max-w-xs">
-      <span class="text-gray-600 block mb-1 font-medium">التجميع</span>
-      <select name="groupBy" class="h-11 w-full rounded-xl border border-gray-300 px-3">
-        <option value="none" <?= $selectedGroupBy === 'none' ? 'selected' : '' ?>>بدون</option>
-        <option value="ageCategory" <?= $selectedGroupBy === 'ageCategory' ? 'selected' : '' ?>>الفئة العمرية</option>
-        <option value="sizeRange" <?= $selectedGroupBy === 'sizeRange' ? 'selected' : '' ?>>القياس</option>
-        <option value="materialType" <?= $selectedGroupBy === 'materialType' ? 'selected' : '' ?>>النوع</option>
-        <option value="manufacturer" <?= $selectedGroupBy === 'manufacturer' ? 'selected' : '' ?>>الشركة</option>
-        <option value="countryOfOrigin" <?= $selectedGroupBy === 'countryOfOrigin' ? 'selected' : '' ?>>بلد المنشأ</option>
-        <option value="group" <?= $selectedGroupBy === 'group' ? 'selected' : '' ?>>المجموعة</option>
-      </select>
-    </label>
-  <?php endif; ?>
-
-  <?php if (!$isSectionBrowse): ?>
     <?php
-      $facetMap = [
-          'materialTypes' => ['param' => 'materialTypes', 'label' => 'نوع المادة', 'selected' => $selectedMaterialTypes],
-          'ageCategories' => ['param' => 'ageCategories', 'label' => 'الفئة العمرية', 'selected' => $selectedAgeCategories],
-          'manufacturers' => ['param' => 'manufacturers', 'label' => 'الشركة', 'selected' => $selectedManufacturers],
-          'sizeRanges' => ['param' => 'sizeRanges', 'label' => 'القياس', 'selected' => $selectedSizeRanges],
-          'countryOfOrigins' => ['param' => 'countryOfOrigins', 'label' => 'بلد المنشأ', 'selected' => $selectedCountryOrigins],
-      ];
+    $page = (int) ($catalog['page'] ?? 1);
+    $totalPages = (int) ($catalog['totalPages'] ?? 1);
+    $buildUrl = static fn (int $targetPage): string => $buildStoreUrl($targetPage);
+    require __DIR__ . '/partials/catalog-pagination.php';
     ?>
-    <?php foreach ($facetMap as $facetKey => $facetConfig): ?>
-      <?php
-        $code = match ($facetKey) {
-            'materialTypes' => 'materialTypes',
-            'ageCategories' => 'ageCategories',
-            'manufacturers' => 'manufacturers',
-            'sizeRanges' => 'sizeRanges',
-            'countryOfOrigins' => 'countryOfOrigins',
-            default => '',
-        };
-        if (!$isClientFilterVisible($code)) {
-            continue;
-        }
-        $values = is_array($resultFilters[$facetKey] ?? null) ? $resultFilters[$facetKey] : [];
-        if ($values === []) {
-            continue;
-        }
-        $chipOptions = [];
-        foreach ($values as $facet) {
-            if (!is_array($facet)) {
-                continue;
-            }
-            $value = trim((string) ($facet['value'] ?? ''));
-            if ($value === '') {
-                continue;
-            }
-            $chipOptions[] = [
-                'value' => $value,
-                'label' => $value,
-                'count' => $facet['count'] ?? null,
-            ];
-        }
-      ?>
-      <fieldset class="store-filter-section">
-        <legend><?= h((string) $facetConfig['label']) ?></legend>
-        <?php $renderStoreFilterChips((string) $facetConfig['param'], $chipOptions, (array) $facetConfig['selected']); ?>
-      </fieldset>
-    <?php endforeach; ?>
-
-    <?php if ($isClientFilterVisible('stores')): ?>
-      <?php
-        $storeChipOptions = [];
-        foreach ($filterOptions['stores'] ?? [] as $store) {
-            if (!is_array($store)) {
-                continue;
-            }
-            $guid = trim((string) ($store['guid'] ?? ''));
-            if ($guid === '') {
-                continue;
-            }
-            $label = trim((string) ($store['name'] ?? '')) ?: (trim((string) ($store['code'] ?? '')) ?: $guid);
-            $storeChipOptions[] = ['value' => $guid, 'label' => $label];
-        }
-      ?>
-      <?php if ($storeChipOptions !== []): ?>
-        <fieldset class="store-filter-section">
-          <legend>المخازن</legend>
-          <?php $renderStoreFilterChips('storeGuids', $storeChipOptions, $selectedStoreGuids); ?>
-        </fieldset>
-      <?php endif; ?>
-    <?php endif; ?>
-
-    <?php if ($isClientFilterVisible('groups')): ?>
-      <?php
-        $groupChipOptions = [];
-        $groupFacets = is_array($resultFilters['groups'] ?? null) ? $resultFilters['groups'] : [];
-        if ($groupFacets !== []) {
-            foreach ($groupFacets as $groupFacet) {
-                if (!is_array($groupFacet)) {
-                    continue;
-                }
-                $guid = trim((string) ($groupFacet['guid'] ?? ''));
-                if ($guid === '') {
-                    continue;
-                }
-                $label = trim((string) ($groupFacet['name'] ?? '')) ?: (trim((string) ($groupFacet['code'] ?? '')) ?: $guid);
-                $groupChipOptions[] = [
-                    'value' => $guid,
-                    'label' => $label,
-                    'count' => $groupFacet['count'] ?? null,
-                ];
-            }
-        } else {
-            foreach ($filterOptions['groups'] ?? [] as $group) {
-                if (!is_array($group)) {
-                    continue;
-                }
-                $guid = trim((string) ($group['guid'] ?? ''));
-                if ($guid === '') {
-                    continue;
-                }
-                $label = trim((string) ($group['name'] ?? '')) ?: (trim((string) ($group['code'] ?? '')) ?: $guid);
-                $groupChipOptions[] = ['value' => $guid, 'label' => $label];
-            }
-        }
-      ?>
-      <?php if ($groupChipOptions !== []): ?>
-        <fieldset class="store-filter-section">
-          <legend>المجموعات</legend>
-          <?php $renderStoreFilterChips('groupGuids', $groupChipOptions, $selectedGroupGuids); ?>
-        </fieldset>
-      <?php endif; ?>
-    <?php endif; ?>
-
-    <?php if ($isClientFilterVisible('priceSaleSyp') || $isClientFilterVisible('priceSaleUsd') || $isClientFilterVisible('pricePurchaseUsd')): ?>
-      <fieldset class="store-filter-section">
-        <legend>المدى السعري (اختياري)</legend>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
-          <?php if ($isClientFilterVisible('priceSaleSyp')): ?>
-            <label class="text-sm">
-              <span class="text-gray-600 block mb-1">سعر البيع ل.س (من)</span>
-              <input type="number" step="0.01" min="0" name="minUnitSalePriceSyp" value="<?= h((string) ($filters['minUnitSalePriceSyp'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-gray-300 px-3">
-            </label>
-            <label class="text-sm">
-              <span class="text-gray-600 block mb-1">سعر البيع ل.س (إلى)</span>
-              <input type="number" step="0.01" min="0" name="maxUnitSalePriceSyp" value="<?= h((string) ($filters['maxUnitSalePriceSyp'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-gray-300 px-3">
-            </label>
-          <?php endif; ?>
-          <?php if ($isClientFilterVisible('priceSaleUsd')): ?>
-            <label class="text-sm">
-              <span class="text-gray-600 block mb-1">سعر البيع $ (من)</span>
-              <input type="number" step="0.01" min="0" name="minUnitSalePriceUsd" value="<?= h((string) ($filters['minUnitSalePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-gray-300 px-3">
-            </label>
-            <label class="text-sm">
-              <span class="text-gray-600 block mb-1">سعر البيع $ (إلى)</span>
-              <input type="number" step="0.01" min="0" name="maxUnitSalePriceUsd" value="<?= h((string) ($filters['maxUnitSalePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-gray-300 px-3">
-            </label>
-          <?php endif; ?>
-          <?php if ($isClientFilterVisible('pricePurchaseUsd')): ?>
-            <label class="text-sm">
-              <span class="text-gray-600 block mb-1">سعر الشراء $ (من)</span>
-              <input type="number" step="0.01" min="0" name="minUnitPurchasePriceUsd" value="<?= h((string) ($filters['minUnitPurchasePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-gray-300 px-3">
-            </label>
-            <label class="text-sm">
-              <span class="text-gray-600 block mb-1">سعر الشراء $ (إلى)</span>
-              <input type="number" step="0.01" min="0" name="maxUnitPurchasePriceUsd" value="<?= h((string) ($filters['maxUnitPurchasePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-gray-300 px-3">
-            </label>
-          <?php endif; ?>
-        </div>
-      </fieldset>
-    <?php endif; ?>
-  <?php endif; ?>
-
-  <div class="store-filter-actions flex flex-wrap gap-2 justify-end pt-1">
-    <button type="submit" class="store-btn-primary h-11 px-6">تطبيق الفلاتر</button>
-    <a href="<?= h(store_url(array_filter([
-        'section' => (string) ($filters['section'] ?? ''),
-        'offer' => (string) ($filters['offer'] ?? ''),
-    ], static fn (string $value): bool => trim($value) !== ''))) ?>" class="store-btn-secondary h-11 inline-flex items-center px-6 text-sm">إعادة ضبط</a>
   </div>
-</form>
-<?php endif; ?>
+</div>
 
-<?php if ((int) ($catalog['totalCount'] ?? 0) > 0): ?>
-  <p class="text-sm text-gray-600 mb-4">
-    عرض <?= (int) ($catalog['rangeStart'] ?? 0) ?>–<?= (int) ($catalog['rangeEnd'] ?? 0) ?> من <?= (int) ($catalog['totalCount'] ?? 0) ?> مادة
-    <?php if ((int) ($catalog['totalPages'] ?? 1) > 1): ?>
-      <span class="text-gray-400">(صفحة <?= (int) ($catalog['page'] ?? 1) ?> من <?= (int) ($catalog['totalPages'] ?? 1) ?>)</span>
-    <?php endif; ?>
-  </p>
-<?php endif; ?>
-
-<?php if ($products === [] && empty($catalog['apiError'])): ?>
-  <div class="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center text-gray-500">
-    لا توجد نتائج مطابقة لبحثك أو الفلاتر المحددة.
-  </div>
-<?php else: ?>
-  <?php
-    $quickViewGuids = array_values(array_filter(array_map(
-        static fn ($row): string => is_array($row) ? material_guid($row) : '',
-        $products
-    ), static fn (string $g): bool => $g !== ''));
-  ?>
-  <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-    <?php foreach ($products as $item): ?>
-      <?php if (!is_array($item)) continue; ?>
-      <?php require __DIR__ . '/partials/product-card.php'; ?>
-    <?php endforeach; ?>
-  </div>
-  <script>
-    window.__productQuickView = <?= json_encode([
-        'guids' => $quickViewGuids,
-        'offer' => (string) ($productOfferSlug ?? ''),
-        'return' => (string) ($productReturnUrl ?? ''),
-    ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-  </script>
-<?php endif; ?>
-
-<?php
-$page = (int) ($catalog['page'] ?? 1);
-$totalPages = (int) ($catalog['totalPages'] ?? 1);
-$buildUrl = static fn (int $targetPage): string => $buildStoreUrl($targetPage);
-require __DIR__ . '/partials/catalog-pagination.php';
-?>
+<script src="/assets/store-filters.js" defer></script>
 
 <style>
   .line-clamp-2 {
