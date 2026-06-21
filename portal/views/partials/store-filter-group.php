@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Portal\Support\Text;
+
 /**
  * @param string $paramName
  * @param string $title
@@ -81,7 +83,7 @@ $renderStoreFilterGroup = static function (
             ?>
             <label
               class="store-filter-option<?= $isHidden ? ' is-collapsed' : '' ?>"
-              data-filter-label="<?= h(mb_strtolower($item['label'], 'UTF-8')) ?>"
+              data-filter-label="<?= h(Text::lower($item['label'])) ?>"
             >
               <input
                 type="checkbox"

@@ -1068,6 +1068,7 @@ final class StoreCatalogService
     private static function scopeResultFiltersForPolicy(array $resultFilters, array $policyRules): array
     {
         $scopeStringFacets = static function (array $facets, array $forced): array {
+            $facets = array_values(array_filter($facets, static fn (mixed $facet): bool => is_array($facet)));
             $withResults = array_values(array_filter($facets, static function (array $facet): bool {
                 $count = $facet['count'] ?? null;
 
@@ -1087,6 +1088,7 @@ final class StoreCatalogService
         };
 
         $scopeGroupFacets = static function (array $facets, array $forcedGuids): array {
+            $facets = array_values(array_filter($facets, static fn (mixed $facet): bool => is_array($facet)));
             $withResults = array_values(array_filter($facets, static function (array $facet): bool {
                 $count = $facet['count'] ?? null;
 
