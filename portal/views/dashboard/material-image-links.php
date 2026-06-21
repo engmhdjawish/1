@@ -14,22 +14,8 @@ declare(strict_types=1);
       <h1 class="text-2xl font-extrabold">ربط الصور بالمواد</h1>
       <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
         اضغط على الصورة للتكبير والتحقق قبل الربط. يمكن اختيار عدة مواد لإنشاء نسخة مستقلة لكل مادة.
+        لكل صورة يمكن تفعيل <strong>هامش سفلي</strong> يُدمج في ملف الصورة عند الربط.
       </p>
-      <label class="mt-3 inline-flex items-start gap-2 text-sm text-text-main cursor-pointer select-none">
-        <input
-          type="checkbox"
-          id="addDetailsBanner"
-          class="mt-1"
-          <?= !empty($detailsBanner['ok']) ? 'checked' : 'disabled' ?>
-        >
-        <span>
-          إضافة هامش أسفل الصورة عند الربط يحوي:
-          <strong>رمز المادة — اسم المادة</strong>
-          و
-          <strong>التعبئة : الكمية الوحدة</strong>
-          (يُدمج في ملف الصورة المحفوظ)
-        </span>
-      </label>
       <?php if (empty($detailsBanner['ok'])): ?>
         <p class="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 max-w-3xl">
           <?= h((string) ($detailsBanner['message'] ?? 'البانر السفلي غير متاح على هذا السيرفر.')) ?>
@@ -126,7 +112,7 @@ declare(strict_types=1);
   const deleteAllUnlinkedBtn = document.getElementById('deleteAllUnlinkedBtn');
   const linkFilterButtons = document.querySelectorAll('.link-filter-btn');
   const linkStatus = document.getElementById('linkStatus');
-  const addDetailsBanner = document.getElementById('addDetailsBanner');
+  const CAN_ADD_DETAILS = <?= !empty($detailsBanner['ok']) ? 'true' : 'false' ?>;
   const imageLightbox = document.getElementById('imageLightbox');
   const lightboxImg = document.getElementById('lightboxImg');
   const lightboxCaption = document.getElementById('lightboxCaption');
@@ -306,13 +292,14 @@ declare(strict_types=1);
     return fetchJson(API_URL, { method: 'POST', body: form });
   }
 
-  async function postAssignForm(action, item, items) {
+  async function postAssignForm(action, item, items, card) {
     const form = new FormData();
     form.append('action', action);
     form.append('source_file_name', item.file_name || '');
     form.append('amine_image_guid', item.amine_image_guid || '');
     items.forEach((row) => form.append('material_guids[]', row.guid));
-    if (addDetailsBanner instanceof HTMLInputElement && addDetailsBanner.checked && !addDetailsBanner.disabled) {
+    const detailsCheck = card?.querySelector('.add-details-check');
+    if (detailsCheck instanceof HTMLInputElement && detailsCheck.checked && !detailsCheck.disabled) {
       form.append('add_details', '1');
     }
 
@@ -344,7 +331,7 @@ declare(strict_types=1);
     linkStatus.textContent = 'جاري الربط...';
     if (statusEl) statusEl.textContent = 'جاري الربط...';
     try {
-      const payload = await postAssignForm('assign-materials', item, items);
+      const payload = await postAssignForm('assign-materials', item, items, card);
       linkStatus.textContent = payload.message || '';
       if (statusEl) statusEl.textContent = payload.message || '';
       if (payload.items && payload.items.length && !payload.ok) {
@@ -376,7 +363,7 @@ declare(strict_types=1);
     button.disabled = true;
     if (statusEl) statusEl.textContent = 'جاري الاستبدال...';
     try {
-      const payload = await postAssignForm('reassign-materials', item, items);
+      const payload = await postAssignForm('reassign-materials', item, items, card);
       if (statusEl) statusEl.textContent = payload.message || '';
       linkStatus.textContent = payload.message || '';
       if (payload.ok) handleCardAfterAssign(card, item);
@@ -594,6 +581,15 @@ declare(strict_types=1);
             <div class="suggestions hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow max-h-48 overflow-auto"></div>
           </div>
           <div class="chips flex flex-wrap gap-1">${chipsHtml(key)}</div>
+          <label class="add-details-wrap flex items-start gap-2 rounded-lg border border-border-subtle bg-surface-low/50 px-2.5 py-2 text-[11px] leading-relaxed cursor-pointer select-none">
+            <input type="checkbox" class="add-details-check mt-0.5 shrink-0" ${CAN_ADD_DETAILS ? 'checked' : 'disabled'}>
+            <span>
+              هامش سفلي في الصورة:
+              <strong dir="ltr">رمز - اسم</strong>
+              و
+              <strong>التعبئة : الكمية الوحدة</strong>
+            </span>
+          </label>
           <button type="button" class="assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>
           ${reassignBlock}
           ${unlinkBlock}

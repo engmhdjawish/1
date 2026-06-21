@@ -1201,7 +1201,7 @@ final class MaterialImageLinkService
     {
         $override = trim($override);
         if ($override !== '') {
-            return $override;
+            return MaterialImageStorageService::normalizeProductBannerLine($override);
         }
 
         if (!is_array($material)) {
