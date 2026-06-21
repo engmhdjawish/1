@@ -52,6 +52,9 @@ final class StoreCatalogService
                 'filter_rules' => $policyId !== ''
                     ? AccessPolicyService::filterRulesForPolicyId($policyId)
                     : AccessPolicyService::defaultFilterRules(),
+                'store_options' => $policyId !== ''
+                    ? AccessPolicyService::storeOptionsForPolicyId($policyId)
+                    : AccessPolicyService::defaultStoreOptions(),
             ];
         }
 
@@ -64,6 +67,9 @@ final class StoreCatalogService
         $guestPolicy['filter_rules'] = $policyId !== ''
             ? AccessPolicyService::filterRulesForPolicyId($policyId)
             : AccessPolicyService::defaultFilterRules();
+        $guestPolicy['store_options'] = $policyId !== ''
+            ? AccessPolicyService::storeOptionsForPolicyId($policyId)
+            : AccessPolicyService::defaultStoreOptions();
 
         return $guestPolicy;
     }
@@ -73,30 +79,46 @@ final class StoreCatalogService
     {
         $page = max(1, (int) ($query['page'] ?? 1));
         $pageSize = 24;
-        $search = trim((string) ($query['q'] ?? $query['search'] ?? ''));
-        $sort = self::normalizeSort($query['sort'] ?? 'number:asc');
         $sectionContext = CatalogSectionResolver::resolve(
             trim((string) ($query['section'] ?? '')),
             trim((string) ($query['offer'] ?? ''))
         );
 
-        $materialTypes = self::parseList($query['materialTypes'] ?? []);
-        $manufacturers = self::parseList($query['manufacturers'] ?? []);
-        $ageCategories = self::parseList($query['ageCategories'] ?? []);
-        $sizeRanges = self::parseList($query['sizeRanges'] ?? []);
-        $countryOfOrigins = self::parseList($query['countryOfOrigins'] ?? []);
-        $groupGuids = self::parseList($query['groupGuids'] ?? []);
-        $storeGuids = self::parseList($query['storeGuids'] ?? []);
-        $isAvailable = self::parseNullableBool($query['isAvailable'] ?? null);
-        $hasImage = self::parseNullableBool($query['hasImage'] ?? null);
-
         if ($sectionContext !== null) {
+            $search = trim((string) ($query['q'] ?? $query['search'] ?? ''));
+            $sort = self::normalizeSort($query['sort'] ?? 'number:asc');
+            $isAvailable = self::parseNullableBool($query['isAvailable'] ?? null);
             if ((string) ($sectionContext['selection_mode'] ?? '') === 'manual') {
                 return self::catalogFromManualSection($sectionContext, $page, $pageSize, $sort, $search);
             }
 
             return self::catalogFromFilterSection($sectionContext, $page, $pageSize, $sort, $search, $isAvailable);
         }
+
+        $policy = self::activePolicy();
+        if ($policy === null) {
+            return self::emptyCatalogResult($page, $pageSize, 'لم تُضبط سياسة عرض المتجر بعد.');
+        }
+
+        $storeOptions = is_array($policy['store_options'] ?? null)
+            ? $policy['store_options']
+            : AccessPolicyService::defaultStoreOptions();
+        $visibleClientFilters = array_map('strval', $storeOptions['visible_client_filters'] ?? []);
+        $allowClientFilters = $visibleClientFilters !== [];
+        $isClientFilterVisible = static fn (string $code): bool => in_array($code, $visibleClientFilters, true);
+
+        $requestFilters = self::parseRequestFilters($query, $storeOptions, $isClientFilterVisible);
+        $search = $requestFilters['search'];
+        $sort = $requestFilters['sort'];
+        $materialTypes = $requestFilters['materialTypes'];
+        $manufacturers = $requestFilters['manufacturers'];
+        $ageCategories = $requestFilters['ageCategories'];
+        $sizeRanges = $requestFilters['sizeRanges'];
+        $countryOfOrigins = $requestFilters['countryOfOrigins'];
+        $groupGuids = $requestFilters['groupGuids'];
+        $storeGuids = $requestFilters['storeGuids'];
+        $isAvailable = $requestFilters['isAvailable'];
+        $hasImage = $requestFilters['hasImage'];
 
         $contextOfferSlug = self::contextOfferSlug($sectionContext);
 
@@ -105,26 +127,18 @@ final class StoreCatalogService
         $resultFilters = [];
         $apiError = null;
 
-        $policy = self::activePolicy();
-        if ($policy === null) {
-            return self::emptyCatalogResult($page, $pageSize, 'لم تُضبط سياسة عرض المتجر بعد.');
-        }
-
         $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
-        $mergedFilters = self::mergeCatalogFilters($policyRules, [
-            'search' => $search,
-            'materialTypes' => $materialTypes,
-            'manufacturers' => $manufacturers,
-            'ageCategories' => $ageCategories,
-            'sizeRanges' => $sizeRanges,
-            'countryOfOrigins' => $countryOfOrigins,
-            'groupGuids' => $groupGuids,
-            'storeGuids' => $storeGuids,
-            'isAvailable' => $isAvailable,
-            'hasImage' => $hasImage,
-        ]);
+        $mergedFilters = self::mergeCatalogFilters($policyRules, $requestFilters);
         if ($mergedFilters['has_conflict']) {
-            return self::emptyCatalogResult($page, $pageSize, 'لا توجد مواد مطابقة لسياسة الوصول والفلاتر المحددة.');
+            return self::emptyCatalogResult(
+                $page,
+                $pageSize,
+                'لا توجد مواد مطابقة لسياسة الوصول والفلاتر المحددة.',
+                $storeOptions,
+                $requestFilters,
+                $sectionContext,
+                CatalogSectionResolver::filterSummaryLabels($policyRules)
+            );
         }
 
         $search = $mergedFilters['search'];
@@ -176,21 +190,46 @@ final class StoreCatalogService
                 $page = max(1, (int) ($data['page'] ?? $page));
                 $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
                 $resultFilters = is_array($data['resultFilters'] ?? null) ? $data['resultFilters'] : [];
+                $resultFilters = self::scopeResultFiltersForPolicy($resultFilters, $policyRules);
             } else {
                 $apiError = self::extractApiError($materials);
             }
-
-            if ($resultFilters === []) {
-                $resultFilters = self::loadStaticResultFilters();
-            }
         } catch (\Throwable $exception) {
             $apiError = $exception->getMessage();
+        }
+
+        $filterOptions = self::loadFilterOptions();
+        if ($storeGuids !== [] || self::parseList($policyRules['store_guids'] ?? []) !== []) {
+            $forcedStoreGuids = self::parseList($policyRules['store_guids'] ?? []);
+            if ($forcedStoreGuids !== []) {
+                $forcedStoreMap = array_flip(array_map('strtolower', $forcedStoreGuids));
+                $filterOptions['stores'] = array_values(array_filter(
+                    $filterOptions['stores'],
+                    static fn (array $store): bool => isset($forcedStoreMap[strtolower((string) ($store['guid'] ?? ''))])
+                ));
+            }
         }
 
         $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
         if ($page > $totalPages) {
             $page = $totalPages;
         }
+
+        $displayFilters = self::buildFiltersState(
+            $search,
+            $sort,
+            $materialTypes,
+            $manufacturers,
+            $ageCategories,
+            $sizeRanges,
+            $countryOfOrigins,
+            $groupGuids,
+            $storeGuids,
+            $isAvailable,
+            $hasImage,
+            $sectionContext,
+            $requestFilters
+        );
 
         return [
             'products' => $products,
@@ -201,23 +240,13 @@ final class StoreCatalogService
             'rangeStart' => $totalCount === 0 ? 0 : (($page - 1) * $pageSize + 1),
             'rangeEnd' => min($totalCount, $page * $pageSize),
             'resultFilters' => $resultFilters,
+            'filterOptions' => $filterOptions,
             'apiError' => $apiError,
             'section_context' => $sectionContext,
             'policy_filter_summary' => $policyFilterSummary,
-            'filters' => self::buildFiltersState(
-                $search,
-                $sort,
-                $materialTypes,
-                $manufacturers,
-                $ageCategories,
-                $sizeRanges,
-                $countryOfOrigins,
-                $groupGuids,
-                $storeGuids,
-                $isAvailable,
-                $hasImage,
-                $sectionContext
-            ),
+            'store_options' => $storeOptions,
+            'allow_client_filters' => $allowClientFilters,
+            'filters' => $displayFilters,
         ];
     }
 
@@ -409,6 +438,7 @@ final class StoreCatalogService
 
     /**
      * @param array<string, mixed> $sectionContext
+     * @param array<string, mixed> $requestFilters
      */
     private static function buildFiltersState(
         string $search,
@@ -422,7 +452,8 @@ final class StoreCatalogService
         array $storeGuids,
         ?bool $isAvailable,
         ?bool $hasImage,
-        ?array $sectionContext
+        ?array $sectionContext,
+        array $requestFilters = []
     ): array {
         $state = [
             'q' => $search,
@@ -436,6 +467,15 @@ final class StoreCatalogService
             'storeGuids' => $storeGuids,
             'isAvailable' => $isAvailable,
             'hasImage' => $hasImage,
+            'minWarehouseQuantity' => $requestFilters['minWarehouseQuantity'] ?? null,
+            'maxWarehouseQuantity' => $requestFilters['maxWarehouseQuantity'] ?? null,
+            'minUnitSalePriceSyp' => $requestFilters['minUnitSalePriceSyp'] ?? null,
+            'maxUnitSalePriceSyp' => $requestFilters['maxUnitSalePriceSyp'] ?? null,
+            'minUnitSalePriceUsd' => $requestFilters['minUnitSalePriceUsd'] ?? null,
+            'maxUnitSalePriceUsd' => $requestFilters['maxUnitSalePriceUsd'] ?? null,
+            'minUnitPurchasePriceUsd' => $requestFilters['minUnitPurchasePriceUsd'] ?? null,
+            'maxUnitPurchasePriceUsd' => $requestFilters['maxUnitPurchasePriceUsd'] ?? null,
+            'groupBy' => (string) ($requestFilters['groupBy'] ?? 'none'),
         ];
 
         if ($sectionContext !== null) {
@@ -501,9 +541,16 @@ final class StoreCatalogService
         return $slug !== '' ? $slug : null;
     }
 
-    /** @return array{products: list<array<string, mixed>>, totalCount: int, page: int, pageSize: int, totalPages: int, rangeStart: int, rangeEnd: int, resultFilters: array<string, mixed>, apiError: string|null, filters: array<string, mixed>} */
-    private static function emptyCatalogResult(int $page, int $pageSize, string $error): array
-    {
+    /** @return array{products: list<array<string, mixed>>, totalCount: int, page: int, pageSize: int, totalPages: int, rangeStart: int, rangeEnd: int, resultFilters: array<string, mixed>, apiError: string|null, filters: array<string, mixed>, store_options?: array<string, mixed>, allow_client_filters?: bool} */
+    private static function emptyCatalogResult(
+        int $page,
+        int $pageSize,
+        string $error,
+        ?array $storeOptions = null,
+        array $requestFilters = [],
+        ?array $sectionContext = null,
+        array $policyFilterSummary = []
+    ): array {
         return [
             'products' => [],
             'totalCount' => 0,
@@ -513,21 +560,26 @@ final class StoreCatalogService
             'rangeStart' => 0,
             'rangeEnd' => 0,
             'resultFilters' => [],
+            'filterOptions' => ['stores' => [], 'groups' => []],
             'apiError' => $error,
+            'section_context' => $sectionContext,
+            'policy_filter_summary' => $policyFilterSummary,
+            'store_options' => $storeOptions ?? AccessPolicyService::defaultStoreOptions(),
+            'allow_client_filters' => $storeOptions !== null && ($storeOptions['visible_client_filters'] ?? []) !== [],
             'filters' => [
-                'q' => '',
-                'sort' => 'number:asc',
-                'materialTypes' => [],
-                'manufacturers' => [],
-                'ageCategories' => [],
-                'sizeRanges' => [],
-                'countryOfOrigins' => [],
-                'groupGuids' => [],
-                'storeGuids' => [],
-                'isAvailable' => null,
-                'hasImage' => null,
+                'q' => (string) ($requestFilters['search'] ?? ''),
+                'sort' => (string) ($requestFilters['sort'] ?? 'number:asc'),
+                'materialTypes' => self::parseList($requestFilters['materialTypes'] ?? []),
+                'manufacturers' => self::parseList($requestFilters['manufacturers'] ?? []),
+                'ageCategories' => self::parseList($requestFilters['ageCategories'] ?? []),
+                'sizeRanges' => self::parseList($requestFilters['sizeRanges'] ?? []),
+                'countryOfOrigins' => self::parseList($requestFilters['countryOfOrigins'] ?? []),
+                'groupGuids' => self::parseList($requestFilters['groupGuids'] ?? []),
+                'storeGuids' => self::parseList($requestFilters['storeGuids'] ?? []),
+                'isAvailable' => $requestFilters['isAvailable'] ?? null,
+                'hasImage' => $requestFilters['hasImage'] ?? null,
+                'groupBy' => (string) ($requestFilters['groupBy'] ?? 'none'),
             ],
-            'section_context' => null,
         ];
     }
 
@@ -902,18 +954,7 @@ final class StoreCatalogService
 
     /**
      * @param array<string, mixed> $policyRules
-     * @param array{
-     *   search: string,
-     *   materialTypes: list<string>,
-     *   manufacturers: list<string>,
-     *   ageCategories: list<string>,
-     *   sizeRanges: list<string>,
-     *   countryOfOrigins: list<string>,
-     *   groupGuids: list<string>,
-     *   storeGuids: list<string>,
-     *   isAvailable: bool|null,
-     *   hasImage: bool|null
-     * } $userFilters
+     * @param array<string, mixed> $userFilters
      * @return array{
      *   has_conflict: bool,
      *   search: string,
@@ -949,6 +990,14 @@ final class StoreCatalogService
         $overlayRules['store_guids'] = $userFilters['storeGuids'] ?? [];
         $overlayRules['is_available'] = $userFilters['isAvailable'] ?? null;
         $overlayRules['has_image'] = $userFilters['hasImage'] ?? null;
+        $overlayRules['min_warehouse_quantity'] = $userFilters['minWarehouseQuantity'] ?? null;
+        $overlayRules['max_warehouse_quantity'] = $userFilters['maxWarehouseQuantity'] ?? null;
+        $overlayRules['min_unit_sale_price_syp'] = $userFilters['minUnitSalePriceSyp'] ?? null;
+        $overlayRules['max_unit_sale_price_syp'] = $userFilters['maxUnitSalePriceSyp'] ?? null;
+        $overlayRules['min_unit_sale_price_usd'] = $userFilters['minUnitSalePriceUsd'] ?? null;
+        $overlayRules['max_unit_sale_price_usd'] = $userFilters['maxUnitSalePriceUsd'] ?? null;
+        $overlayRules['min_unit_purchase_price_usd'] = $userFilters['minUnitPurchasePriceUsd'] ?? null;
+        $overlayRules['max_unit_purchase_price_usd'] = $userFilters['maxUnitPurchasePriceUsd'] ?? null;
 
         $merged = self::mergeFilterRuleSets($policyRules, $overlayRules);
         $hasConflict = trim((string) ($merged['keyword'] ?? '')) === '__conflict__';
@@ -974,6 +1023,163 @@ final class StoreCatalogService
             'minUnitPurchasePriceUsd' => self::nullableFloat($merged['min_unit_purchase_price_usd'] ?? null),
             'maxUnitPurchasePriceUsd' => self::nullableFloat($merged['max_unit_purchase_price_usd'] ?? null),
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $query
+     * @param array<string, mixed> $storeOptions
+     * @param callable(string): bool $isClientFilterVisible
+     * @return array<string, mixed>
+     */
+    private static function parseRequestFilters(array $query, array $storeOptions, callable $isClientFilterVisible): array
+    {
+        $defaultSort = (string) ($storeOptions['default_sort'] ?? 'number:asc');
+        $allowSorting = (bool) ($storeOptions['allow_sorting'] ?? true);
+
+        return [
+            'search' => $isClientFilterVisible('search') ? trim((string) ($query['q'] ?? $query['search'] ?? '')) : '',
+            'sort' => ($isClientFilterVisible('sort') && $allowSorting)
+                ? self::normalizeSort($query['sort'] ?? $defaultSort)
+                : self::normalizeSort($defaultSort),
+            'materialTypes' => $isClientFilterVisible('materialTypes') ? self::parseList($query['materialTypes'] ?? []) : [],
+            'manufacturers' => $isClientFilterVisible('manufacturers') ? self::parseList($query['manufacturers'] ?? []) : [],
+            'ageCategories' => $isClientFilterVisible('ageCategories') ? self::parseList($query['ageCategories'] ?? []) : [],
+            'sizeRanges' => $isClientFilterVisible('sizeRanges') ? self::parseList($query['sizeRanges'] ?? []) : [],
+            'countryOfOrigins' => $isClientFilterVisible('countryOfOrigins') ? self::parseList($query['countryOfOrigins'] ?? []) : [],
+            'groupGuids' => $isClientFilterVisible('groups') ? self::parseList($query['groupGuids'] ?? []) : [],
+            'storeGuids' => $isClientFilterVisible('stores') ? self::parseList($query['storeGuids'] ?? []) : [],
+            'isAvailable' => $isClientFilterVisible('availability') ? self::parseNullableBool($query['isAvailable'] ?? null) : null,
+            'hasImage' => null,
+            'minWarehouseQuantity' => $isClientFilterVisible('warehouseRange') ? self::parseNullableFloat($query['minWarehouseQuantity'] ?? null) : null,
+            'maxWarehouseQuantity' => $isClientFilterVisible('warehouseRange') ? self::parseNullableFloat($query['maxWarehouseQuantity'] ?? null) : null,
+            'minUnitSalePriceSyp' => $isClientFilterVisible('priceSaleSyp') ? self::parseNullableFloat($query['minUnitSalePriceSyp'] ?? null) : null,
+            'maxUnitSalePriceSyp' => $isClientFilterVisible('priceSaleSyp') ? self::parseNullableFloat($query['maxUnitSalePriceSyp'] ?? null) : null,
+            'minUnitSalePriceUsd' => $isClientFilterVisible('priceSaleUsd') ? self::parseNullableFloat($query['minUnitSalePriceUsd'] ?? null) : null,
+            'maxUnitSalePriceUsd' => $isClientFilterVisible('priceSaleUsd') ? self::parseNullableFloat($query['maxUnitSalePriceUsd'] ?? null) : null,
+            'minUnitPurchasePriceUsd' => $isClientFilterVisible('pricePurchaseUsd') ? self::parseNullableFloat($query['minUnitPurchasePriceUsd'] ?? null) : null,
+            'maxUnitPurchasePriceUsd' => $isClientFilterVisible('pricePurchaseUsd') ? self::parseNullableFloat($query['maxUnitPurchasePriceUsd'] ?? null) : null,
+            'groupBy' => $isClientFilterVisible('groupBy')
+                ? trim((string) ($query['groupBy'] ?? 'none'))
+                : 'none',
+        ];
+    }
+
+    /** @param array<string, mixed> $resultFilters @param array<string, mixed> $policyRules @return array<string, mixed> */
+    private static function scopeResultFiltersForPolicy(array $resultFilters, array $policyRules): array
+    {
+        $scopeStringFacets = static function (array $facets, array $forced): array {
+            $withResults = array_values(array_filter($facets, static function (array $facet): bool {
+                $count = $facet['count'] ?? null;
+
+                return $count !== null && (int) $count > 0;
+            }));
+            if ($forced === []) {
+                return $withResults;
+            }
+            $allowed = [];
+            foreach ($forced as $value) {
+                $allowed[strtolower((string) $value)] = true;
+            }
+
+            return array_values(array_filter($withResults, static function (array $facet) use ($allowed): bool {
+                return isset($allowed[strtolower((string) ($facet['value'] ?? ''))]);
+            }));
+        };
+
+        $scopeGroupFacets = static function (array $facets, array $forcedGuids): array {
+            $withResults = array_values(array_filter($facets, static function (array $facet): bool {
+                $count = $facet['count'] ?? null;
+
+                return $count !== null && (int) $count > 0;
+            }));
+            if ($forcedGuids === []) {
+                return $withResults;
+            }
+            $allowed = array_flip(array_map('strtolower', $forcedGuids));
+
+            return array_values(array_filter($withResults, static function (array $facet) use ($allowed): bool {
+                $guid = strtolower((string) ($facet['guid'] ?? ''));
+
+                return $guid !== '' && isset($allowed[$guid]);
+            }));
+        };
+
+        $resultFilters['materialTypes'] = $scopeStringFacets(
+            is_array($resultFilters['materialTypes'] ?? null) ? $resultFilters['materialTypes'] : [],
+            self::parseList($policyRules['material_types'] ?? [])
+        );
+        $resultFilters['ageCategories'] = $scopeStringFacets(
+            is_array($resultFilters['ageCategories'] ?? null) ? $resultFilters['ageCategories'] : [],
+            self::parseList($policyRules['age_categories'] ?? [])
+        );
+        $resultFilters['manufacturers'] = $scopeStringFacets(
+            is_array($resultFilters['manufacturers'] ?? null) ? $resultFilters['manufacturers'] : [],
+            self::parseList($policyRules['manufacturers'] ?? [])
+        );
+        $resultFilters['sizeRanges'] = $scopeStringFacets(
+            is_array($resultFilters['sizeRanges'] ?? null) ? $resultFilters['sizeRanges'] : [],
+            self::parseList($policyRules['size_ranges'] ?? [])
+        );
+        $resultFilters['countryOfOrigins'] = $scopeStringFacets(
+            is_array($resultFilters['countryOfOrigins'] ?? null) ? $resultFilters['countryOfOrigins'] : [],
+            self::parseList($policyRules['country_origins'] ?? [])
+        );
+        $resultFilters['groups'] = $scopeGroupFacets(
+            is_array($resultFilters['groups'] ?? null) ? $resultFilters['groups'] : [],
+            self::parseList($policyRules['group_guids'] ?? [])
+        );
+
+        return $resultFilters;
+    }
+
+    /** @return array{stores: list<array<string, mixed>>, groups: list<array<string, mixed>>} */
+    private static function loadFilterOptions(): array
+    {
+        try {
+            $response = ApiClient::get('/api/materials/filter-options');
+            if (!$response['ok'] || !is_array($response['data'] ?? null)) {
+                return ['stores' => [], 'groups' => []];
+            }
+            $data = $response['data'];
+            $stores = is_array($data['stores'] ?? null) ? $data['stores'] : (is_array($data['Stores'] ?? null) ? $data['Stores'] : []);
+            $groups = is_array($data['groups'] ?? null) ? $data['groups'] : (is_array($data['Groups'] ?? null) ? $data['Groups'] : []);
+            $normalizeGuidRows = static function (array $rows): array {
+                $items = [];
+                foreach ($rows as $row) {
+                    if (!is_array($row)) {
+                        continue;
+                    }
+                    $guid = trim((string) ($row['guid'] ?? $row['Guid'] ?? ''));
+                    if ($guid === '') {
+                        continue;
+                    }
+                    $items[] = [
+                        'guid' => $guid,
+                        'name' => trim((string) ($row['name'] ?? $row['Name'] ?? '')),
+                        'code' => trim((string) ($row['code'] ?? $row['Code'] ?? '')),
+                    ];
+                }
+
+                return $items;
+            };
+
+            return [
+                'stores' => $normalizeGuidRows($stores),
+                'groups' => $normalizeGuidRows($groups),
+            ];
+        } catch (\Throwable) {
+            return ['stores' => [], 'groups' => []];
+        }
+    }
+
+    private static function parseNullableFloat(mixed $value): ?float
+    {
+        if (is_array($value)) {
+            return null;
+        }
+        $text = trim((string) $value);
+
+        return $text !== '' && is_numeric($text) ? (float) $text : null;
     }
 
     /** @param list<string> $forced @param list<string> $selected */

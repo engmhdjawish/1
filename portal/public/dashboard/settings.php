@@ -105,6 +105,17 @@ $buildPolicyFilterPayload = static function () use ($parseValues, $parseNullable
     ];
 };
 
+$buildPolicyStoreOptions = static function () use ($parseValues): array {
+    $visibleClientFilters = AccessPolicyService::normalizeVisibleClientFilters($parseValues($_POST['option_visible_client_filters'] ?? []));
+
+    return [
+        'visible_client_filters' => $visibleClientFilters,
+        'allow_sorting' => isset($_POST['option_allow_sorting']),
+        'client_sort_fields' => $parseValues($_POST['option_client_sort_fields'] ?? []),
+        'default_sort' => trim((string) ($_POST['option_default_sort'] ?? 'number:asc')),
+    ];
+};
+
 $flash = null;
 $flashType = 'success';
 
@@ -210,7 +221,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 isset($_POST['allow_cart']),
                 isset($_POST['allow_order']),
                 isset($_POST['is_active']),
-                $buildPolicyFilterPayload()
+                $buildPolicyFilterPayload(),
+                $buildPolicyStoreOptions()
             );
             $flash = $result['message'];
             $flashType = $result['ok'] ? 'success' : 'error';
@@ -233,6 +245,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'allow_order' => isset($_POST['allow_order']) ? 1 : 0,
                 'is_active' => isset($_POST['is_active']) ? 1 : 0,
                 'filter_rules' => $buildPolicyFilterPayload(),
+                'store_options' => $buildPolicyStoreOptions(),
             ];
         }
     } elseif ($action === 'toggle_policy') {
@@ -297,6 +310,7 @@ if ($policyShowForm) {
             'allow_order' => 1,
             'is_active' => 1,
             'filter_rules' => AccessPolicyService::defaultFilterRules(),
+            'store_options' => AccessPolicyService::defaultStoreOptions(),
         ];
     }
 }

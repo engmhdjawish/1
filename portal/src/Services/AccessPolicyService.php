@@ -28,6 +28,42 @@ final class AccessPolicyService
     private const FILTER_MIN_UNIT_PURCHASE_PRICE_USD = 'min_unit_purchase_price_usd';
     private const FILTER_MAX_UNIT_PURCHASE_PRICE_USD = 'max_unit_purchase_price_usd';
 
+    private const OPTION_ALLOW_SORTING = 'option_allow_sorting';
+    private const OPTION_DEFAULT_SORT = 'option_default_sort';
+    private const OPTION_VISIBLE_CLIENT_FILTER = 'option_visible_client_filter';
+    private const OPTION_CLIENT_SORT_FIELD = 'option_client_sort_field';
+
+    /** @var list<string> */
+    public const ALLOWED_VISIBLE_CLIENT_FILTERS = [
+        'search',
+        'availability',
+        'warehouseRange',
+        'priceSaleSyp',
+        'priceSaleUsd',
+        'pricePurchaseUsd',
+        'materialTypes',
+        'ageCategories',
+        'manufacturers',
+        'sizeRanges',
+        'countryOfOrigins',
+        'stores',
+        'groups',
+        'sort',
+        'groupBy',
+    ];
+
+    /** @var list<string> */
+    private const ALLOWED_CLIENT_SORT_FIELDS = [
+        'number',
+        'materialType',
+        'ageCategory',
+        'manufacturer',
+        'sizeRange',
+        'countryOfOrigin',
+        'unitSalePriceSyp',
+        'unitSalePriceUsd',
+    ];
+
     public static function ensureTable(): void
     {
         Database::pdo()->exec(
@@ -66,7 +102,9 @@ final class AccessPolicyService
 
         $rows = Database::pdo()->query($sql)->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as &$row) {
-            $row['filter_rules'] = self::filterRulesForPolicyId((string) ($row['id'] ?? ''));
+            $parsed = self::parseAllFilterRows(self::loadPolicyFilterRows((string) ($row['id'] ?? '')));
+            $row['filter_rules'] = $parsed['rules'];
+            $row['store_options'] = $parsed['store_options'];
         }
         unset($row);
 
@@ -99,7 +137,9 @@ final class AccessPolicyService
             return null;
         }
 
-        $row['filter_rules'] = self::filterRulesForPolicyId($id);
+        $parsed = self::parseAllFilterRows(self::loadPolicyFilterRows($id));
+        $row['filter_rules'] = $parsed['rules'];
+        $row['store_options'] = $parsed['store_options'];
 
         return $row;
     }
@@ -107,10 +147,85 @@ final class AccessPolicyService
     /** @return array<string, mixed> */
     public static function filterRulesForPolicyId(string $policyId): array
     {
+        return self::parseAllFilterRows(self::loadPolicyFilterRows($policyId))['rules'];
+    }
+
+    /** @return array{
+     *   visible_client_filters: list<string>,
+     *   allow_sorting: bool,
+     *   client_sort_fields: list<string>,
+     *   default_sort: string
+     * } */
+    public static function storeOptionsForPolicyId(string $policyId): array
+    {
+        return self::parseAllFilterRows(self::loadPolicyFilterRows($policyId))['store_options'];
+    }
+
+    /**
+     * @param list<array{filter_type: string, value_ar: string}> $rows
+     * @return array{rules: array<string, mixed>, store_options: array<string, mixed>}
+     */
+    private static function parseAllFilterRows(array $rows): array
+    {
+        $parsed = self::parseFilterRows($rows);
+        $storeOptions = self::defaultStoreOptions();
+        $hasStoreOptions = false;
+        $hasVisibleClientFilters = false;
+
+        foreach ($rows as $row) {
+            $type = trim((string) ($row['filter_type'] ?? ''));
+            $value = trim((string) ($row['value_ar'] ?? ''));
+            if ($type === '' || $value === '' || !str_starts_with($type, 'option_')) {
+                continue;
+            }
+            $hasStoreOptions = true;
+
+            switch ($type) {
+                case self::OPTION_ALLOW_SORTING:
+                    $storeOptions['allow_sorting'] = self::toBool($value, true);
+                    break;
+                case self::OPTION_DEFAULT_SORT:
+                    $storeOptions['default_sort'] = $value;
+                    break;
+                case self::OPTION_VISIBLE_CLIENT_FILTER:
+                    $hasVisibleClientFilters = true;
+                    if ($value === '*') {
+                        $storeOptions['visible_client_filters'] = [];
+                    } else {
+                        $storeOptions['visible_client_filters'][] = $value;
+                    }
+                    break;
+                case self::OPTION_CLIENT_SORT_FIELD:
+                    $storeOptions['client_sort_fields'][] = $value;
+                    break;
+            }
+        }
+
+        if ($hasVisibleClientFilters) {
+            $storeOptions['visible_client_filters'] = self::normalizeVisibleClientFilters($storeOptions['visible_client_filters']);
+        } elseif ($hasStoreOptions) {
+            $storeOptions['visible_client_filters'] = [];
+        }
+
+        $storeOptions['client_sort_fields'] = self::normalizeClientSortFields($storeOptions['client_sort_fields']);
+        if ($storeOptions['client_sort_fields'] === []) {
+            $storeOptions['client_sort_fields'] = self::clientSortFieldsFromDefaultSort((string) $storeOptions['default_sort']);
+        }
+        $storeOptions['default_sort'] = self::normalizeDefaultSort((string) $storeOptions['default_sort']);
+
+        return [
+            'rules' => $parsed['rules'],
+            'store_options' => $storeOptions,
+        ];
+    }
+
+    /** @return list<array{filter_type: string, value_ar: string}> */
+    private static function loadPolicyFilterRows(string $policyId): array
+    {
         self::ensureTable();
         $policyId = trim($policyId);
         if ($policyId === '') {
-            return self::defaultFilterRules();
+            return [];
         }
 
         $stmt = Database::pdo()->prepare(
@@ -121,11 +236,12 @@ final class AccessPolicyService
         );
         $stmt->execute(['policy_id' => $policyId]);
 
-        return self::parseFilterRows($stmt->fetchAll(PDO::FETCH_ASSOC))['rules'];
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
      * @param array<string, mixed> $filterRules
+     * @param array<string, mixed> $storeOptions
      * @return array{ok: bool, message: string, id?: string}
      */
     public static function save(
@@ -138,7 +254,8 @@ final class AccessPolicyService
         bool $allowCart,
         bool $allowOrder,
         bool $isActive,
-        array $filterRules = []
+        array $filterRules = [],
+        array $storeOptions = []
     ): array {
         self::ensureTable();
 
@@ -200,7 +317,7 @@ final class AccessPolicyService
                 'allow_order' => $allowOrder ? 1 : 0,
                 'is_active' => $isActive ? 1 : 0,
             ]);
-            self::syncFilters($id, $filterRules);
+            self::syncFilters($id, $filterRules, $storeOptions);
 
             return ['ok' => true, 'message' => 'تم تحديث السياسة.', 'id' => $id];
         }
@@ -229,13 +346,15 @@ final class AccessPolicyService
             'is_active' => $isActive ? 1 : 0,
         ]);
         $newId = (string) $stmt->fetchColumn();
-        self::syncFilters($newId, $filterRules);
+        self::syncFilters($newId, $filterRules, $storeOptions);
 
         return ['ok' => true, 'message' => 'تم إنشاء السياسة.', 'id' => $newId];
     }
 
-    /** @param array<string, mixed> $payload */
-    public static function syncFilters(string $policyId, array $payload): void
+    /** @param array<string, mixed> $payload
+     * @param array<string, mixed> $storeOptions
+     */
+    public static function syncFilters(string $policyId, array $payload, array $storeOptions = []): void
     {
         self::ensureTable();
         $pdo = Database::pdo();
@@ -298,6 +417,35 @@ final class AccessPolicyService
         $insertNumber(self::FILTER_MAX_UNIT_SALE_PRICE_USD, $payload['max_unit_sale_price_usd'] ?? null);
         $insertNumber(self::FILTER_MIN_UNIT_PURCHASE_PRICE_USD, $payload['min_unit_purchase_price_usd'] ?? null);
         $insertNumber(self::FILTER_MAX_UNIT_PURCHASE_PRICE_USD, $payload['max_unit_purchase_price_usd'] ?? null);
+
+        $visibleClientFilters = self::normalizeVisibleClientFilters($storeOptions['visible_client_filters'] ?? []);
+        if ($visibleClientFilters === []) {
+            $insert->execute([
+                'policy_id' => $policyId,
+                'filter_type' => self::OPTION_VISIBLE_CLIENT_FILTER,
+                'value_ar' => '*',
+            ]);
+        } else {
+            $insertValues(self::OPTION_VISIBLE_CLIENT_FILTER, $visibleClientFilters);
+        }
+
+        $insert->execute([
+            'policy_id' => $policyId,
+            'filter_type' => self::OPTION_ALLOW_SORTING,
+            'value_ar' => !empty($storeOptions['allow_sorting']) ? '1' : '0',
+        ]);
+
+        $defaultSort = self::normalizeDefaultSort((string) ($storeOptions['default_sort'] ?? 'number:asc'));
+        $insert->execute([
+            'policy_id' => $policyId,
+            'filter_type' => self::OPTION_DEFAULT_SORT,
+            'value_ar' => $defaultSort,
+        ]);
+
+        $insertValues(
+            self::OPTION_CLIENT_SORT_FIELD,
+            self::normalizeClientSortFields($storeOptions['client_sort_fields'] ?? [])
+        );
     }
 
     public static function setActive(string $id, bool $active): bool
@@ -460,5 +608,111 @@ final class AccessPolicyService
     private static function toNullableFloat(string $value): ?float
     {
         return is_numeric($value) ? (float) $value : null;
+    }
+
+    /** @return array{
+     *   visible_client_filters: list<string>,
+     *   allow_sorting: bool,
+     *   client_sort_fields: list<string>,
+     *   default_sort: string
+     * } */
+    public static function defaultStoreOptions(): array
+    {
+        return [
+            'visible_client_filters' => ['search', 'materialTypes', 'manufacturers', 'availability', 'sort'],
+            'allow_sorting' => true,
+            'client_sort_fields' => ['number', 'materialType', 'manufacturer'],
+            'default_sort' => 'number:asc',
+        ];
+    }
+
+    /** @param array<int, mixed> $values @return list<string> */
+    public static function normalizeVisibleClientFilters(array $values): array
+    {
+        $normalized = self::normalizeFilterValues($values);
+        $allowed = array_flip(self::ALLOWED_VISIBLE_CLIENT_FILTERS);
+        $filtered = [];
+        foreach ($normalized as $value) {
+            if (isset($allowed[$value])) {
+                $filtered[] = $value;
+            }
+        }
+
+        return array_values(array_unique($filtered));
+    }
+
+    /** @param array<int, mixed> $values @return list<string> */
+    private static function normalizeClientSortFields(array $values): array
+    {
+        $normalized = self::normalizeFilterValues($values);
+        $allowed = array_flip(self::ALLOWED_CLIENT_SORT_FIELDS);
+        $filtered = [];
+        foreach ($normalized as $value) {
+            if (isset($allowed[$value])) {
+                $filtered[] = $value;
+            }
+        }
+
+        return array_values(array_unique($filtered));
+    }
+
+    /** @return list<string> */
+    private static function clientSortFieldsFromDefaultSort(string $defaultSort): array
+    {
+        $fields = [];
+        foreach (array_filter(array_map('trim', explode(',', $defaultSort))) as $clause) {
+            if ($clause === '') {
+                continue;
+            }
+            $field = str_starts_with($clause, '-') ? substr($clause, 1) : explode(':', $clause, 2)[0];
+            $field = trim((string) $field);
+            if ($field !== '') {
+                $fields[] = $field;
+            }
+        }
+
+        $fields = self::normalizeClientSortFields($fields);
+
+        return $fields !== [] ? $fields : ['number', 'materialType', 'manufacturer'];
+    }
+
+    private static function normalizeDefaultSort(string $value): string
+    {
+        $value = trim($value);
+        $allowed = [
+            'number:asc',
+            'number:desc',
+            'name:asc',
+            'name:desc',
+            '-unitSalePriceSyp',
+            'unitSalePriceSyp:desc',
+            '-unitSalePriceUsd',
+            'unitSalePriceUsd:desc',
+        ];
+
+        return in_array($value, $allowed, true) ? $value : 'number:asc';
+    }
+
+    private static function toBool(string $value, bool $default): bool
+    {
+        return match (strtolower(trim($value))) {
+            '1', 'true', 'yes', 'on' => true,
+            '0', 'false', 'no', 'off' => false,
+            default => $default,
+        };
+    }
+
+    /** @param array<int, mixed> $values @return list<string> */
+    private static function normalizeFilterValues(array $values): array
+    {
+        $result = [];
+        foreach ($values as $value) {
+            $item = trim((string) $value);
+            if ($item !== '') {
+                $result[] = $item;
+            }
+        }
+
+        return array_values(array_unique($result));
     }
 }

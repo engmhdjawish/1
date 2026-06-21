@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Portal\Services\CatalogSectionResolver;
+use Portal\Services\AccessPolicyService;
 
 /** @var array<string, string> $company */
 /** @var list<array<string, mixed>> $policies */
@@ -34,6 +35,40 @@ $editPolicy = is_array($editPolicy ?? null) ? $editPolicy : [];
 $materialFilterOptions = is_array($materialFilterOptions ?? null) ? $materialFilterOptions : [];
 $materialFilterOptionsError = $materialFilterOptionsError ?? null;
 $policyFilterRules = is_array($editPolicy['filter_rules'] ?? null) ? $editPolicy['filter_rules'] : [];
+$policyStoreOptions = is_array($editPolicy['store_options'] ?? null) ? $editPolicy['store_options'] : AccessPolicyService::defaultStoreOptions();
+$visibleClientFilters = array_map('strval', $policyStoreOptions['visible_client_filters'] ?? []);
+$policyClientSortFields = array_map('strval', $policyStoreOptions['client_sort_fields'] ?? []);
+$policyAllowSorting = array_key_exists('allow_sorting', $policyStoreOptions) ? (bool) $policyStoreOptions['allow_sorting'] : true;
+$policyDefaultSort = (string) ($policyStoreOptions['default_sort'] ?? 'number:asc');
+
+$visibleFilterOptions = [
+    ['value' => 'search', 'label' => 'بحث نصي'],
+    ['value' => 'materialTypes', 'label' => 'نوع المادة'],
+    ['value' => 'ageCategories', 'label' => 'الفئة العمرية'],
+    ['value' => 'manufacturers', 'label' => 'الشركة'],
+    ['value' => 'sizeRanges', 'label' => 'القياس'],
+    ['value' => 'countryOfOrigins', 'label' => 'بلد المنشأ'],
+    ['value' => 'stores', 'label' => 'المخازن'],
+    ['value' => 'groups', 'label' => 'المجموعات'],
+    ['value' => 'availability', 'label' => 'التوفر'],
+    ['value' => 'warehouseRange', 'label' => 'مدى الكمية'],
+    ['value' => 'priceSaleSyp', 'label' => 'مدى سعر البيع ل.س'],
+    ['value' => 'priceSaleUsd', 'label' => 'مدى سعر البيع $'],
+    ['value' => 'pricePurchaseUsd', 'label' => 'مدى سعر الشراء $'],
+    ['value' => 'sort', 'label' => 'الترتيب'],
+    ['value' => 'groupBy', 'label' => 'التجميع'],
+];
+$sortFieldOptions = [
+    ['value' => 'number', 'label' => 'رقم المادة'],
+    ['value' => 'materialType', 'label' => 'نوع المادة'],
+    ['value' => 'ageCategory', 'label' => 'الفئة العمرية'],
+    ['value' => 'manufacturer', 'label' => 'الشركة'],
+    ['value' => 'sizeRange', 'label' => 'القياس'],
+    ['value' => 'countryOfOrigin', 'label' => 'بلد المنشأ'],
+    ['value' => 'unitSalePriceSyp', 'label' => 'سعر البيع ل.س'],
+    ['value' => 'unitSalePriceUsd', 'label' => 'سعر البيع $'],
+];
+
 $selectedPolicyMaterialTypes = array_map('strval', $policyFilterRules['material_types'] ?? []);
 $selectedPolicyAgeCategories = array_map('strval', $policyFilterRules['age_categories'] ?? []);
 $selectedPolicyManufacturers = array_map('strval', $policyFilterRules['manufacturers'] ?? []);
@@ -441,6 +476,40 @@ $tabUrl = static function (string $key) use ($tab): string {
         </div>
       </details>
     </article>
+
+    <article class="bg-white border border-border-subtle rounded-xl p-3">
+      <details open class="group">
+        <summary class="font-bold text-sm cursor-pointer list-none flex items-center justify-between gap-2">
+          <span>فلاتر المتجر المعروضة للعميل</span>
+          <span class="text-xs text-text-muted font-normal">عناوين الفلاتر وشكل الـ chips في صفحة المتجر</span>
+        </summary>
+        <div class="mt-2 space-y-2">
+          <div class="text-xs">
+            <?php $renderTokenPicker('عناوين الفلاتر الظاهرة', 'option_visible_client_filters[]', $visibleFilterOptions, $visibleClientFilters, 'policy-visible-client-filters', true, false, false, 4); ?>
+            <p class="mt-1 text-[11px] text-text-muted">اختر عناوين الفلاتر التي يراها الزائر/العميل. قيم كل فلتر تُجلب من المواد المعروضة فعلياً — مثلاً «نسواني» فقط إذا كانت ضمن النتائج.</p>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <label class="text-xs inline-flex items-center gap-1.5 pt-1">
+              <input type="checkbox" name="option_allow_sorting" <?= $policyAllowSorting ? 'checked' : '' ?> class="rounded border-border-subtle text-primary">
+              <span>السماح بأزرار الترتيب</span>
+            </label>
+            <label class="text-xs">
+              <span class="text-text-muted block mb-0.5">الترتيب الافتراضي</span>
+              <select name="option_default_sort" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+                <option value="number:asc" <?= $policyDefaultSort === 'number:asc' ? 'selected' : '' ?>>الرقم تصاعدي</option>
+                <option value="number:desc" <?= $policyDefaultSort === 'number:desc' ? 'selected' : '' ?>>الرقم تنازلي</option>
+                <option value="name:asc" <?= $policyDefaultSort === 'name:asc' ? 'selected' : '' ?>>الاسم</option>
+                <option value="-unitSalePriceSyp" <?= $policyDefaultSort === '-unitSalePriceSyp' ? 'selected' : '' ?>>السعر ل.س</option>
+                <option value="-unitSalePriceUsd" <?= $policyDefaultSort === '-unitSalePriceUsd' ? 'selected' : '' ?>>السعر $</option>
+              </select>
+            </label>
+            <div class="text-xs md:col-span-2">
+              <?php $renderTokenPicker('حقول الترتيب المتاحة', 'option_client_sort_fields[]', $sortFieldOptions, $policyClientSortFields, 'policy-client-sort-fields', false, false, false, 4); ?>
+            </div>
+          </div>
+        </div>
+      </details>
+    </article>
   </form>
   <script>
   (() => {
@@ -496,6 +565,7 @@ $tabUrl = static function (string $key) use ($tab): string {
               $usageTotal = (int) $usage['share_links'] + (int) $usage['customers'];
               $policyFilters = CatalogSectionResolver::filterSummaryLabels(is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : []);
               $policyFilterCount = count($policyFilters);
+              $visibleFilterCount = count(is_array($policy['store_options']['visible_client_filters'] ?? null) ? $policy['store_options']['visible_client_filters'] : []);
             ?>
             <tr class="hover:bg-slate-50 <?= $isDefault ? 'bg-primary/5' : '' ?>">
               <td class="px-4 py-3">
@@ -505,7 +575,10 @@ $tabUrl = static function (string $key) use ($tab): string {
                   <div class="text-[11px] text-text-muted mt-0.5"><?= h((string) $policy['description_ar']) ?></div>
                 <?php endif; ?>
                 <?php if ($policyFilterCount > 0): ?>
-                  <div class="text-[11px] text-emerald-700 font-bold mt-1"><?= $policyFilterCount ?> فلتر مواد</div>
+                  <div class="text-[11px] text-emerald-700 font-bold mt-1"><?= $policyFilterCount ?> قيد مواد</div>
+                <?php endif; ?>
+                <?php if ($visibleFilterCount > 0): ?>
+                  <div class="text-[11px] text-sky-700 font-bold mt-0.5"><?= $visibleFilterCount ?> فلتر متجر</div>
                 <?php endif; ?>
               </td>
               <td class="px-4 py-3 text-xs"><?= (int) ($policy['show_price'] ?? 0) === 1 ? 'نعم' : 'لا' ?></td>
