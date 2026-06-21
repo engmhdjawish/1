@@ -24,6 +24,7 @@ $materialFilterOptions = [
     'groups' => [],
 ];
 $materialFilterOptionsError = null;
+$detailsBanner = MaterialImageStorageService::detailsBannerRequirements();
 try {
     $filtersResponse = ApiClient::get('/api/materials/filter-options');
     if ($filtersResponse['ok']) {

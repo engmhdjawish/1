@@ -138,10 +138,10 @@ final class MaterialImageLinkService
         $localPath = MaterialImageStorageService::resolveLocalPath($fileName, false);
         $hasLocal = $localPath !== null && is_file($localPath);
         $previewUrl = $imageGuid !== ''
-            ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1'
+            ? MaterialImageStorageService::imageGuidUrl($imageGuid, true)
             : ($hasLocal ? MaterialImageStorageService::publicUrl($fileName, true) : '');
         $previewFullUrl = $imageGuid !== ''
-            ? '/api/image.php?id=' . rawurlencode($imageGuid)
+            ? MaterialImageStorageService::imageGuidUrl($imageGuid, false)
             : ($hasLocal ? MaterialImageStorageService::publicUrl($fileName, false) : '');
 
         return [
@@ -992,9 +992,11 @@ final class MaterialImageLinkService
                 return null;
             }
 
-            $code = trim((string) ($data['materialCode'] ?? $data['MaterialCode'] ?? ''));
-            $name = trim((string) ($data['name'] ?? $data['Name'] ?? ''));
-            $manufacturer = trim((string) (
+        $code = trim((string) ($data['materialCode'] ?? $data['MaterialCode'] ?? ''));
+        $name = trim((string) ($data['name'] ?? $data['Name'] ?? ''));
+        $latinName = trim((string) ($data['latinName'] ?? $data['LatinName'] ?? ''));
+        $barcode = trim((string) ($data['barcode'] ?? $data['Barcode'] ?? ''));
+        $manufacturer = trim((string) (
                 $data['manufacturer']
                 ?? $data['Manufacturer']
                 ?? $data['company']
@@ -1008,6 +1010,10 @@ final class MaterialImageLinkService
                 'material_code' => $code,
                 'materialCode' => $code,
                 'MaterialCode' => $code,
+                'latinName' => $latinName,
+                'LatinName' => $latinName,
+                'barcode' => $barcode,
+                'Barcode' => $barcode,
                 'code' => $code,
                 'company' => $manufacturer,
                 'Company' => $manufacturer,
@@ -1197,22 +1203,47 @@ final class MaterialImageLinkService
     }
 
     /** @param array<string, mixed>|null $material */
+    private static function resolveMaterialBannerCode(?array $material): string
+    {
+        if (!is_array($material)) {
+            return '';
+        }
+
+        return trim((string) (
+            $material['material_code']
+            ?? $material['materialCode']
+            ?? $material['MaterialCode']
+            ?? ''
+        ));
+    }
+
+    /** @param array<string, mixed>|null $material */
+    private static function resolveMaterialBannerName(?array $material): string
+    {
+        if (!is_array($material)) {
+            return '';
+        }
+
+        return trim((string) ($material['name'] ?? $material['Name'] ?? ''));
+    }
+
+    /** @param array<string, mixed>|null $material */
     private static function buildProductBannerLine(?array $material, string $override = ''): string
     {
         $override = trim($override);
         if ($override !== '') {
-            return $override;
+            return MaterialImageStorageService::normalizeProductBannerLine($override);
         }
 
         if (!is_array($material)) {
             return '';
         }
 
-        $code = trim((string) ($material['material_code'] ?? $material['materialCode'] ?? $material['code'] ?? ''));
-        $name = trim((string) ($material['name'] ?? $material['Name'] ?? ''));
+        $code = self::resolveMaterialBannerCode($material);
+        $name = self::resolveMaterialBannerName($material);
 
         if ($code !== '' && $name !== '') {
-            return $code . ' - ' . $name;
+            return $name . ' - ' . $code;
         }
 
         return $code !== '' ? $code : $name;

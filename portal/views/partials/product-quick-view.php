@@ -64,7 +64,7 @@
       return '';
     }
     if (p.imageGuid) {
-      return `<div class="material-image-frame material-image-frame--detail"><div class="material-image-frame__photo"><img src="/api/image.php?id=${encodeURIComponent(p.imageGuid)}" alt="${esc(p.name)}"></div></div>`;
+      return `<div class="material-image-frame material-image-frame--detail"><div class="material-image-frame__photo"><img src="/api/image.php?id=${encodeURIComponent(p.imageGuid)}&thumb=0" alt="${esc(p.name)}"></div></div>`;
     }
     return `<div class="material-image-frame material-image-frame--detail"><div class="material-image-frame__photo"><span class="material-symbols-outlined material-image-frame__placeholder" aria-hidden="true">inventory_2</span></div></div>`;
   };

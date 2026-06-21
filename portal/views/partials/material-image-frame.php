@@ -15,9 +15,7 @@ if ($imageGuid === '') {
 $variant = in_array(($variant ?? 'card'), ['card', 'detail', 'strip'], true) ? (string) $variant : 'card';
 $thumb = (bool) ($thumb ?? ($variant !== 'detail'));
 $imageAlt = trim((string) ($material['name'] ?? ''));
-$imageSrc = $imageGuid !== ''
-    ? '/api/image.php?id=' . rawurlencode($imageGuid) . ($thumb ? '&thumb=1' : '')
-    : '';
+$imageSrc = $imageGuid !== '' ? material_image_api_url($imageGuid, $thumb) : '';
 ?>
 <div class="material-image-frame material-image-frame--<?= h($variant) ?>">
   <div class="material-image-frame__photo">
