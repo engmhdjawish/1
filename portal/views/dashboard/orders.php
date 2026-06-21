@@ -27,10 +27,19 @@ $syncLabels = [
 
 $statusClass = static function (string $status): string {
     return match ($status) {
-        'completed' => 'bg-green-100 text-green-700',
-        'confirmed' => 'bg-blue-100 text-blue-700',
-        'cancelled' => 'bg-red-100 text-red-700',
-        default => 'bg-amber-100 text-amber-700',
+        'completed' => 'bg-emerald-100 text-emerald-800',
+        'confirmed' => 'bg-blue-100 text-blue-800',
+        'cancelled' => 'bg-red-100 text-red-800',
+        default => 'bg-amber-100 text-amber-800',
+    };
+};
+
+$syncClass = static function (string $sync): string {
+    return match ($sync) {
+        'failed' => 'bg-red-100 text-red-800',
+        'pending' => 'bg-amber-100 text-amber-800',
+        'synced' => 'bg-emerald-100 text-emerald-800',
+        default => 'bg-slate-100 text-slate-700',
     };
 };
 
@@ -40,128 +49,166 @@ $buildOrdersUrl = static function (array $params): string {
         static fn ($value) => $value !== null && $value !== ''
     ));
 };
+
+$formatUsd = static function (float $amount): string {
+    return '$' . number_format($amount, 2, '.', ',');
+};
+
+$formatPackages = static function (float $amount): string {
+    $formatted = number_format($amount, 2, '.', ',');
+    return rtrim(rtrim($formatted, '0'), '.');
+};
+
+$customerName = static function (array $row): string {
+    $name = trim((string) ($row['customer_name_ar'] ?? ''));
+    if ($name !== '') {
+        return $name;
+    }
+    $guest = trim((string) ($row['guest_name_ar'] ?? ''));
+    return $guest !== '' ? $guest : '—';
+};
+
+$customerPhone = static function (array $row): string {
+    $phone = trim((string) ($row['customer_phone'] ?? ''));
+    if ($phone !== '') {
+        return $phone;
+    }
+    $guest = trim((string) ($row['guest_phone'] ?? ''));
+    return $guest !== '' ? $guest : '—';
+};
+
+$truncate = static function (string $text, int $max = 48): string {
+    if (text_length($text) <= $max) {
+        return $text;
+    }
+    if (function_exists('mb_substr')) {
+        return mb_substr($text, 0, $max) . '…';
+    }
+
+    return substr($text, 0, $max) . '…';
+};
 ?>
-<section class="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
+<section class="flex flex-col md:flex-row justify-between md:items-center gap-3 mb-4">
   <div>
-    <h1 class="text-2xl font-extrabold text-slate-900">إدارة الطلبات</h1>
-    <p class="text-sm text-text-muted mt-1">متابعة ومعالجة طلبات الجملة مع حالة مزامنة الأمين.</p>
+    <h1 class="text-xl font-extrabold text-slate-900">إدارة الطلبات</h1>
+    <p class="text-sm text-text-muted mt-1">متابعة طلبات الجملة — الأصناف والطرود والإجمالي بالدولار.</p>
   </div>
-  <div class="flex gap-3 flex-wrap">
-    <div class="bg-white border border-border-subtle rounded-xl px-4 py-3 text-center min-w-28">
-      <p class="text-2xl font-extrabold text-primary"><?= (int) ($statusCounts['pending'] ?? 0) ?></p>
-      <p class="text-xs text-text-muted">طلبات جديدة</p>
-    </div>
-    <div class="bg-white border border-border-subtle rounded-xl px-4 py-3 text-center min-w-28">
-      <p class="text-2xl font-extrabold text-amber-600"><?= (int) ($syncCounts['pending'] ?? 0) ?></p>
-      <p class="text-xs text-text-muted">بانتظار مزامنة</p>
-    </div>
-    <div class="bg-white border border-border-subtle rounded-xl px-4 py-3 text-center min-w-28">
-      <p class="text-2xl font-extrabold text-green-700"><?= (int) ($statusCounts['completed'] ?? 0) ?></p>
-      <p class="text-xs text-text-muted">طلبات مكتملة</p>
-    </div>
+  <div class="flex gap-2 flex-wrap">
+    <article class="bg-white border border-border-subtle rounded-xl px-3 py-2 text-center min-w-24">
+      <p class="text-lg font-extrabold text-primary"><?= (int) ($statusCounts['pending'] ?? 0) ?></p>
+      <p class="text-[11px] text-text-muted">جديدة</p>
+    </article>
+    <article class="bg-white border border-border-subtle rounded-xl px-3 py-2 text-center min-w-24">
+      <p class="text-lg font-extrabold text-amber-600"><?= (int) ($syncCounts['pending'] ?? 0) ?></p>
+      <p class="text-[11px] text-text-muted">بانتظار مزامنة</p>
+    </article>
+    <article class="bg-white border border-border-subtle rounded-xl px-3 py-2 text-center min-w-24">
+      <p class="text-lg font-extrabold text-emerald-700"><?= (int) ($statusCounts['completed'] ?? 0) ?></p>
+      <p class="text-[11px] text-text-muted">مكتملة</p>
+    </article>
   </div>
 </section>
 
-<?php if ($flash): ?>
-  <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $flashType === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700' ?>">
-    <?= h($flash) ?>
-  </p>
-<?php endif; ?>
+<?php require __DIR__ . '/partials/flash.php'; ?>
 
-<section class="bg-white border border-border-subtle rounded-2xl p-5 mb-5">
-  <form method="get" class="grid grid-cols-1 lg:grid-cols-5 gap-4 items-end">
-    <label class="text-sm">
-      <span class="text-text-muted block mb-1">البحث</span>
-      <input type="text" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary" placeholder="رقم الطلب، اسم العميل...">
+<section class="bg-white border border-border-subtle rounded-xl p-3 mb-3">
+  <form method="get" data-dashboard-filter class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2 items-end">
+    <label class="text-xs lg:col-span-2">
+      <span class="text-text-muted block mb-0.5">البحث</span>
+      <input type="text" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm focus:border-primary focus:ring-primary" placeholder="رقم الطلب، اسم، هاتف...">
     </label>
-    <label class="text-sm">
-      <span class="text-text-muted block mb-1">حالة الطلب</span>
-      <select name="status" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+    <label class="text-xs">
+      <span class="text-text-muted block mb-0.5">حالة الطلب</span>
+      <select name="status" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
         <option value="">الكل</option>
         <?php foreach ($statusLabels as $key => $label): ?>
           <option value="<?= h($key) ?>" <?= ($filters['status'] ?? '') === $key ? 'selected' : '' ?>><?= h($label) ?></option>
         <?php endforeach; ?>
       </select>
     </label>
-    <label class="text-sm">
-      <span class="text-text-muted block mb-1">حالة المزامنة</span>
-      <select name="sync" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+    <label class="text-xs">
+      <span class="text-text-muted block mb-0.5">المزامنة</span>
+      <select name="sync" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
         <option value="">الكل</option>
         <?php foreach ($syncLabels as $key => $label): ?>
           <option value="<?= h($key) ?>" <?= ($filters['sync'] ?? '') === $key ? 'selected' : '' ?>><?= h($label) ?></option>
         <?php endforeach; ?>
       </select>
     </label>
-    <label class="text-sm">
-      <span class="text-text-muted block mb-1">تاريخ من</span>
-      <input type="date" name="fromDate" value="<?= h((string) ($filters['fromDate'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+    <label class="text-xs">
+      <span class="text-text-muted block mb-0.5">من</span>
+      <input type="date" name="fromDate" value="<?= h((string) ($filters['fromDate'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
     </label>
-    <label class="text-sm">
-      <span class="text-text-muted block mb-1">تاريخ إلى</span>
-      <input type="date" name="toDate" value="<?= h((string) ($filters['toDate'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-3 focus:border-primary focus:ring-primary">
+    <label class="text-xs">
+      <span class="text-text-muted block mb-0.5">إلى</span>
+      <input type="date" name="toDate" value="<?= h((string) ($filters['toDate'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
     </label>
-    <div class="lg:col-span-5 flex justify-end">
-      <button class="h-11 bg-primary text-white rounded-xl px-6 font-bold hover:brightness-110 transition">تطبيق الفلاتر</button>
+    <div class="lg:col-span-6 flex justify-end">
+      <button class="dashboard-btn h-9 bg-primary text-white rounded-lg px-5 text-xs font-bold hover:brightness-110 transition">تطبيق الفلاتر</button>
     </div>
   </form>
 </section>
 
-<section class="bg-white border border-border-subtle rounded-2xl overflow-hidden">
+<section class="bg-white border border-border-subtle rounded-xl overflow-hidden">
   <?php if ($orders === []): ?>
-    <p class="p-6 text-sm text-text-muted text-center">لا توجد طلبات مطابقة للفلاتر الحالية.</p>
+    <p class="p-5 text-sm text-text-muted text-center">لا توجد طلبات مطابقة للفلاتر الحالية.</p>
   <?php else: ?>
     <div class="overflow-auto">
-      <table class="w-full text-sm min-w-[1060px]">
+      <table class="w-full text-sm min-w-[1180px]">
         <thead class="bg-surface-low text-text-muted border-b border-border-subtle">
           <tr>
-            <th class="text-right px-5 py-4 font-bold">رقم الطلب</th>
-            <th class="text-right px-5 py-4 font-bold">العميل</th>
-            <th class="text-right px-5 py-4 font-bold text-center">الأصناف</th>
-            <th class="text-right px-5 py-4 font-bold">الإجمالي</th>
-            <th class="text-right px-5 py-4 font-bold">الحالة</th>
-            <th class="text-right px-5 py-4 font-bold">المزامنة</th>
-            <th class="text-right px-5 py-4 font-bold">تاريخ الإنشاء</th>
-            <th class="text-right px-5 py-4 font-bold text-left">إجراءات</th>
+            <th class="text-right px-4 py-3 font-bold">رقم الطلب</th>
+            <th class="text-right px-4 py-3 font-bold">العميل</th>
+            <th class="text-right px-4 py-3 font-bold">الهاتف</th>
+            <th class="text-right px-4 py-3 font-bold">ملاحظات</th>
+            <th class="text-center px-4 py-3 font-bold">أصناف</th>
+            <th class="text-center px-4 py-3 font-bold">طرود</th>
+            <th class="text-right px-4 py-3 font-bold">الإجمالي $</th>
+            <th class="text-right px-4 py-3 font-bold">الحالة</th>
+            <th class="text-right px-4 py-3 font-bold">المزامنة</th>
+            <th class="text-right px-4 py-3 font-bold">التاريخ</th>
+            <th class="text-left px-4 py-3 font-bold">إجراءات</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border-subtle">
           <?php foreach ($orders as $row): ?>
-            <tr class="hover:bg-slate-50 transition">
-              <td class="px-5 py-4">
+            <?php
+              $rowStatus = (string) ($row['status'] ?? 'pending');
+              $sync = (string) ($row['amine_sync_status'] ?? 'none');
+              $notes = trim((string) ($row['notes_ar'] ?? ''));
+              $name = $customerName($row);
+              $phone = $customerPhone($row);
+            ?>
+            <tr class="hover:bg-slate-50/80 transition align-top">
+              <td class="px-4 py-3">
                 <div class="font-extrabold text-primary"><?= h((string) ($row['order_number'] ?? '')) ?></div>
-                <div class="text-xs text-text-muted mt-1"><?= h((string) ($row['share_link_name'] ?? 'طلب مباشر')) ?></div>
+                <div class="text-[11px] text-text-muted mt-0.5"><?= h((string) ($row['share_link_name'] ?? 'طلب مباشر')) ?></div>
               </td>
-              <td class="px-5 py-4">
-                <div class="font-bold"><?= h((string) ($row['customer_name_ar'] ?: $row['guest_name_ar'] ?: '—')) ?></div>
+              <td class="px-4 py-3 font-bold"><?= h($name) ?></td>
+              <td class="px-4 py-3 whitespace-nowrap" dir="ltr"><?= h($phone) ?></td>
+              <td class="px-4 py-3 text-xs text-text-muted max-w-[180px]">
+                <?php if ($notes !== ''): ?>
+                  <span title="<?= h($notes) ?>"><?= h($truncate($notes, 42)) ?></span>
+                <?php else: ?>
+                  <span class="text-slate-400">—</span>
+                <?php endif; ?>
               </td>
-              <td class="px-5 py-4 text-center"><?= (int) ($row['items_count'] ?? 0) ?></td>
-              <td class="px-5 py-4 font-bold"><?= number_format((float) ($row['total_sp'] ?? 0), 0, '.', ',') ?> ل.س</td>
-              <td class="px-5 py-4">
-                <?php $rowStatus = (string) ($row['status'] ?? 'pending'); ?>
-                <span class="px-3 py-1 rounded-full text-xs font-bold <?= $statusClass($rowStatus) ?>">
+              <td class="px-4 py-3 text-center font-bold"><?= (int) ($row['items_count'] ?? 0) ?></td>
+              <td class="px-4 py-3 text-center font-bold"><?= h($formatPackages((float) ($row['packages_count'] ?? 0))) ?></td>
+              <td class="px-4 py-3 font-extrabold text-emerald-700 whitespace-nowrap"><?= h($formatUsd((float) ($row['total_usd'] ?? 0))) ?></td>
+              <td class="px-4 py-3">
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $statusClass($rowStatus) ?>">
                   <?= h($statusLabels[$rowStatus] ?? $rowStatus) ?>
                 </span>
               </td>
-              <td class="px-5 py-4">
-                <?php $sync = (string) ($row['amine_sync_status'] ?? 'none'); ?>
-                <span class="px-3 py-1 rounded-full text-xs font-bold <?= $sync === 'failed' ? 'bg-red-100 text-red-700' : ($sync === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700') ?>">
+              <td class="px-4 py-3">
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $syncClass($sync) ?>">
                   <?= h($syncLabels[$sync] ?? $sync) ?>
                 </span>
               </td>
-              <td class="px-5 py-4 text-xs text-text-muted"><?= h((string) ($row['created_at'] ?? '')) ?></td>
-              <td class="px-5 py-4">
-                <div class="flex items-center justify-end gap-2">
-                  <?php if ($canManageOrders): ?>
-                    <form method="post" class="flex items-center gap-2">
-                      <input type="hidden" name="order_id" value="<?= h((string) ($row['id'] ?? '')) ?>">
-                      <select name="next_status" class="h-9 rounded-lg border border-border-subtle px-2 text-xs">
-                        <?php foreach ($statusLabels as $statusKey => $statusLabel): ?>
-                          <option value="<?= h($statusKey) ?>" <?= ($row['status'] ?? '') === $statusKey ? 'selected' : '' ?>><?= h($statusLabel) ?></option>
-                        <?php endforeach; ?>
-                      </select>
-                      <button class="h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold">حفظ</button>
-                    </form>
-                  <?php endif; ?>
+              <td class="px-4 py-3 text-[11px] text-text-muted whitespace-nowrap"><?= h((string) ($row['created_at'] ?? '')) ?></td>
+              <td class="px-4 py-3">
+                <div class="flex items-center justify-end gap-1.5 flex-wrap">
                   <a
                     href="<?= h($buildOrdersUrl([
                         'q' => $filters['q'] ?? '',
@@ -172,11 +219,19 @@ $buildOrdersUrl = static function (array $params): string {
                         'limit' => $filters['limit'] ?? 50,
                         'details' => (string) ($row['id'] ?? ''),
                     ])) ?>"
-                    class="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border-subtle text-text-muted hover:bg-surface-low"
-                    title="تفاصيل الطلب"
-                  >
-                    <span class="material-symbols-outlined">visibility</span>
-                  </a>
+                    class="h-8 px-3 inline-flex items-center rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  >تفاصيل</a>
+                  <?php if ($canManageOrders): ?>
+                    <form method="post" data-dashboard-ajax data-dashboard-reload class="flex items-center gap-1">
+                      <input type="hidden" name="order_id" value="<?= h((string) ($row['id'] ?? '')) ?>">
+                      <select name="next_status" class="h-8 rounded-lg border border-border-subtle px-2 text-[11px]">
+                        <?php foreach ($statusLabels as $statusKey => $statusLabel): ?>
+                          <option value="<?= h($statusKey) ?>" <?= ($row['status'] ?? '') === $statusKey ? 'selected' : '' ?>><?= h($statusLabel) ?></option>
+                        <?php endforeach; ?>
+                      </select>
+                      <button type="submit" class="dashboard-btn h-8 px-2.5 rounded-lg bg-primary text-white text-[11px] font-bold">حفظ</button>
+                    </form>
+                  <?php endif; ?>
                 </div>
               </td>
             </tr>
@@ -188,100 +243,133 @@ $buildOrdersUrl = static function (array $params): string {
 </section>
 
 <?php if ($orderDetails): ?>
-  <div class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm"></div>
-  <aside class="fixed top-0 left-0 z-50 h-screen w-full max-w-2xl bg-white shadow-2xl overflow-y-auto">
-    <div class="sticky top-0 bg-white border-b border-border-subtle px-5 py-4 flex items-center justify-between">
-      <div>
-        <h2 class="text-lg font-extrabold text-slate-900">تفاصيل الطلب #<?= h((string) ($orderDetails['order_number'] ?? '')) ?></h2>
-        <p class="text-xs text-text-muted mt-1">
-          <?= h((string) (($orderDetails['customer_name_ar'] ?? '') !== '' ? $orderDetails['customer_name_ar'] : ($orderDetails['guest_name_ar'] ?? 'ضيف'))) ?>
-        </p>
+  <?php
+    $summary = is_array($orderDetails['summary'] ?? null) ? $orderDetails['summary'] : [];
+    $detailItems = is_array($orderDetails['items'] ?? null) ? $orderDetails['items'] : [];
+    $detailNotes = trim((string) ($orderDetails['notes_ar'] ?? ''));
+    $detailName = (string) ($orderDetails['display_name'] ?? '—');
+    $detailPhone = (string) ($orderDetails['display_phone'] ?? '—');
+    $detailStatus = (string) ($orderDetails['status'] ?? 'pending');
+    $detailSync = (string) ($orderDetails['amine_sync_status'] ?? 'none');
+  ?>
+  <div class="fixed inset-0 z-50 bg-slate-900/40" aria-hidden="true"></div>
+  <aside class="fixed top-0 left-0 z-50 h-screen w-full max-w-2xl bg-white shadow-2xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby="order-details-title">
+    <header class="shrink-0 border-b border-border-subtle px-4 py-3">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-[11px] text-text-muted">تفاصيل الطلب</p>
+          <h2 id="order-details-title" class="text-lg font-extrabold text-slate-900 truncate"><?= h((string) ($orderDetails['order_number'] ?? '')) ?></h2>
+          <p class="text-xs text-text-muted mt-0.5"><?= h((string) ($orderDetails['share_link_name'] ?? 'طلب مباشر')) ?> · <?= h((string) ($orderDetails['created_at'] ?? '')) ?></p>
+        </div>
+        <a href="<?= h($buildOrdersUrl($filters)) ?>" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-border-subtle hover:bg-surface-low shrink-0" aria-label="إغلاق">
+          <span class="material-symbols-outlined">close</span>
+        </a>
       </div>
-      <a href="<?= h($buildOrdersUrl($filters)) ?>" class="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-surface-low">
-        <span class="material-symbols-outlined">close</span>
-      </a>
-    </div>
+      <div class="flex flex-wrap gap-1.5 mt-2">
+        <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $statusClass($detailStatus) ?>"><?= h($statusLabels[$detailStatus] ?? $detailStatus) ?></span>
+        <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $syncClass($detailSync) ?>"><?= h($syncLabels[$detailSync] ?? $detailSync) ?></span>
+      </div>
+    </header>
 
-    <div class="p-5 space-y-5">
-      <section class="grid grid-cols-2 gap-3 text-sm">
-        <article class="rounded-xl border border-border-subtle p-3">
-          <p class="text-text-muted text-xs">الحالة</p>
-          <p class="font-bold mt-1"><?= h((string) ($statusLabels[(string) ($orderDetails['status'] ?? 'pending')] ?? ($orderDetails['status'] ?? 'pending'))) ?></p>
-        </article>
-        <article class="rounded-xl border border-border-subtle p-3">
-          <p class="text-text-muted text-xs">حالة المزامنة</p>
-          <p class="font-bold mt-1"><?= h((string) ($syncLabels[(string) ($orderDetails['amine_sync_status'] ?? 'none')] ?? ($orderDetails['amine_sync_status'] ?? 'none'))) ?></p>
-        </article>
-        <article class="rounded-xl border border-border-subtle p-3">
-          <p class="text-text-muted text-xs">الإجمالي (ل.س)</p>
-          <p class="font-bold mt-1"><?= number_format((float) ($orderDetails['total_sp'] ?? 0), 0, '.', ',') ?></p>
-        </article>
-        <article class="rounded-xl border border-border-subtle p-3">
-          <p class="text-text-muted text-xs">الإجمالي (USD)</p>
-          <p class="font-bold mt-1"><?= number_format((float) ($orderDetails['total_usd'] ?? 0), 2, '.', ',') ?></p>
-        </article>
-      </section>
-
-      <section>
-        <h3 class="font-bold text-slate-900 mb-2">العناصر</h3>
-        <?php $items = $orderDetails['items'] ?? []; ?>
-        <?php if ($items === []): ?>
-          <p class="text-sm text-text-muted rounded-xl border border-border-subtle p-3">لا توجد عناصر مرتبطة بهذا الطلب.</p>
-        <?php else: ?>
-          <div class="rounded-xl border border-border-subtle overflow-hidden">
-            <table class="w-full text-sm">
-              <thead class="bg-surface-low text-text-muted">
-                <tr>
-                  <th class="px-3 py-2 text-right font-bold">المادة</th>
-                  <th class="px-3 py-2 text-right font-bold">الكمية</th>
-                  <th class="px-3 py-2 text-right font-bold">سعر SP</th>
-                  <th class="px-3 py-2 text-right font-bold">سعر USD</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-border-subtle">
-                <?php foreach ($items as $item): ?>
-                  <tr>
-                    <td class="px-3 py-2">
-                      <div class="font-semibold"><?= h((string) ($item['material_name_ar'] ?? '—')) ?></div>
-                      <div class="text-xs text-text-muted"><?= h((string) ($item['material_code'] ?? '')) ?></div>
-                    </td>
-                    <td class="px-3 py-2"><?= number_format((float) ($item['quantity'] ?? 0), 2, '.', ',') ?></td>
-                    <td class="px-3 py-2"><?= number_format((float) ($item['sale_price_sp'] ?? 0), 0, '.', ',') ?></td>
-                    <td class="px-3 py-2"><?= number_format((float) ($item['sale_price_usd'] ?? 0), 2, '.', ',') ?></td>
-                  </tr>
-                <?php endforeach; ?>
-              </tbody>
-            </table>
+    <div class="flex-1 overflow-y-auto">
+      <section class="px-4 py-3 border-b border-border-subtle bg-surface-low/50">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div>
+            <p class="text-[11px] text-text-muted mb-0.5">العميل</p>
+            <p class="font-bold"><?= h($detailName) ?></p>
+          </div>
+          <div>
+            <p class="text-[11px] text-text-muted mb-0.5">الهاتف</p>
+            <p class="font-bold" dir="ltr"><?= h($detailPhone) ?></p>
+          </div>
+        </div>
+        <?php if ($detailNotes !== ''): ?>
+          <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+            <p class="text-[11px] font-bold text-amber-800">ملاحظات</p>
+            <p class="text-sm text-amber-900 mt-0.5 whitespace-pre-wrap leading-relaxed"><?= h($detailNotes) ?></p>
           </div>
         <?php endif; ?>
       </section>
 
-      <section>
-        <h3 class="font-bold text-slate-900 mb-2">الخط الزمني</h3>
-        <?php $timeline = $orderDetails['timeline'] ?? []; ?>
-        <ol class="space-y-2">
-          <?php foreach ($timeline as $entry): ?>
-            <li class="rounded-xl border border-border-subtle p-3 text-sm">
-              <p class="font-semibold"><?= h((string) ($entry['label'] ?? 'حدث')) ?></p>
-              <p class="text-xs text-text-muted mt-1"><?= h((string) ($entry['at'] ?? '')) ?></p>
-            </li>
-          <?php endforeach; ?>
-        </ol>
+      <section class="px-4 py-3">
+        <?php if ($detailItems === []): ?>
+          <p class="text-sm text-text-muted text-center py-8">لا توجد أصناف في هذا الطلب.</p>
+        <?php else: ?>
+          <div class="rounded-xl border border-border-subtle overflow-hidden">
+            <div class="hidden sm:grid sm:grid-cols-[minmax(0,1fr)_72px_88px_96px] gap-2 px-3 py-2 bg-surface-low text-[11px] font-bold text-text-muted border-b border-border-subtle">
+              <span>المادة</span>
+              <span class="text-center">طرود</span>
+              <span class="text-left">سعر الزوج</span>
+              <span class="text-left">الإجمالي</span>
+            </div>
+            <ul class="divide-y divide-border-subtle">
+              <?php foreach ($detailItems as $item): ?>
+                <?php
+                  $imageUrl = trim((string) ($item['image_url'] ?? ''));
+                  $packages = (float) ($item['packages_count'] ?? $item['quantity'] ?? 0);
+                  $unitUsd = (float) ($item['unit_sale_price_usd'] ?? 0);
+                  $lineUsd = (float) ($item['line_total_usd'] ?? 0);
+                ?>
+                <li class="px-3 py-3 hover:bg-slate-50/60">
+                  <div class="sm:grid sm:grid-cols-[minmax(0,1fr)_72px_88px_96px] sm:items-center gap-2 sm:gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <?php if ($imageUrl !== ''): ?>
+                        <img src="<?= h($imageUrl) ?>" alt="" class="w-14 h-14 rounded-lg object-cover bg-surface-low shrink-0 border border-border-subtle" loading="lazy">
+                      <?php else: ?>
+                        <div class="w-14 h-14 rounded-lg bg-surface-low shrink-0 border border-border-subtle flex items-center justify-center text-text-muted">
+                          <span class="material-symbols-outlined text-xl">inventory_2</span>
+                        </div>
+                      <?php endif; ?>
+                      <div class="min-w-0">
+                        <p class="font-bold text-sm leading-snug line-clamp-2"><?= h((string) ($item['material_name_ar'] ?? '—')) ?></p>
+                        <?php if (trim((string) ($item['material_code'] ?? '')) !== ''): ?>
+                          <p class="text-xs text-text-muted mt-0.5 font-mono"><?= h((string) $item['material_code']) ?></p>
+                        <?php endif; ?>
+                      </div>
+                    </div>
+                    <div class="mt-2 sm:mt-0 flex sm:block items-center justify-between sm:text-center">
+                      <span class="sm:hidden text-[11px] text-text-muted">طرود</span>
+                      <span class="font-extrabold text-sm"><?= h($formatPackages($packages)) ?></span>
+                    </div>
+                    <div class="flex sm:block items-center justify-between sm:text-left">
+                      <span class="sm:hidden text-[11px] text-text-muted">سعر الزوج</span>
+                      <span class="font-bold text-sm text-slate-700"><?= h($formatUsd($unitUsd)) ?></span>
+                    </div>
+                    <div class="flex sm:block items-center justify-between sm:text-left">
+                      <span class="sm:hidden text-[11px] text-text-muted">الإجمالي</span>
+                      <span class="font-extrabold text-sm text-emerald-700"><?= h($formatUsd($lineUsd)) ?></span>
+                    </div>
+                  </div>
+                </li>
+              <?php endforeach; ?>
+            </ul>
+          </div>
+        <?php endif; ?>
       </section>
 
-      <?php if ((string) ($orderDetails['notes_ar'] ?? '') !== ''): ?>
-        <section class="rounded-xl border border-border-subtle p-3">
-          <h3 class="font-bold text-slate-900 mb-1">ملاحظات الطلب</h3>
-          <p class="text-sm text-text-muted"><?= h((string) ($orderDetails['notes_ar'] ?? '')) ?></p>
-        </section>
-      <?php endif; ?>
-
       <?php if ((string) ($orderDetails['amine_sync_error_ar'] ?? '') !== ''): ?>
-        <section class="rounded-xl border border-red-200 bg-red-50 p-3">
-          <h3 class="font-bold text-red-700 mb-1">خطأ مزامنة الأمين</h3>
-          <p class="text-sm text-red-700"><?= h((string) ($orderDetails['amine_sync_error_ar'] ?? '')) ?></p>
+        <section class="px-4 pb-3">
+          <div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p class="font-bold text-xs mb-0.5">خطأ مزامنة الأمين</p>
+            <?= h((string) ($orderDetails['amine_sync_error_ar'] ?? '')) ?>
+          </div>
         </section>
       <?php endif; ?>
     </div>
+
+    <footer class="shrink-0 border-t border-border-subtle bg-white px-4 py-3 space-y-2">
+      <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-text-muted">
+        <span><strong class="text-slate-900"><?= h($formatPackages((float) ($summary['packages_count'] ?? 0))) ?></strong> طرد</span>
+        <span class="text-slate-300">|</span>
+        <span><strong class="text-slate-900"><?= (int) ($summary['items_count'] ?? 0) ?></strong> صنف</span>
+      </div>
+      <div class="flex items-center justify-between rounded-xl bg-slate-900 text-white px-4 py-3">
+        <span class="text-sm font-bold">إجمالي الحساب</span>
+        <span class="text-2xl font-extrabold tracking-tight"><?= h($formatUsd((float) ($orderDetails['total_usd'] ?? 0))) ?></span>
+      </div>
+      <?php if ((float) ($orderDetails['total_sp'] ?? 0) > 0): ?>
+        <p class="text-[11px] text-text-muted text-center">ما يعادل <?= number_format((float) ($orderDetails['total_sp'] ?? 0), 0, '.', ',') ?> ل.س</p>
+      <?php endif; ?>
+    </footer>
   </aside>
 <?php endif; ?>

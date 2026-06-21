@@ -133,21 +133,17 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
   </div>
 </section>
 
-<?php if ($flash): ?>
-  <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $flashType === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700' ?>">
-    <?= h($flash) ?>
-  </p>
-<?php endif; ?>
+<?php require __DIR__ . '/partials/flash.php'; ?>
 
 <?php if ($showForm): ?>
 <?php if ($editId !== ''): ?>
-  <form method="post" id="hs-delete-form" class="hidden" onsubmit="return confirm('هل أنت متأكد من حذف هذا القسم؟')">
+  <form method="post" id="hs-delete-form" class="hidden" data-dashboard-confirm="هل أنت متأكد من حذف هذا القسم؟">
     <input type="hidden" name="action" value="delete_section">
     <input type="hidden" name="id" value="<?= h($editId) ?>">
   </form>
 <?php endif; ?>
 
-<form method="post" id="home-section-form" class="space-y-3 mb-4">
+<form method="post" id="home-section-form" data-dashboard-explicit-save class="space-y-3 mb-4">
   <input type="hidden" name="action" value="save_section">
   <input type="hidden" name="id" value="<?= h((string) ($editSection['id'] ?? '')) ?>">
 
@@ -158,7 +154,7 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
       <?php if ($editId !== ''): ?>
         <button type="submit" form="hs-delete-form" class="h-9 px-4 rounded-lg border border-red-300 bg-white text-xs font-bold text-red-700 hover:bg-red-50">حذف</button>
       <?php endif; ?>
-      <button type="submit" id="home-section-save-btn" class="h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">
+      <button type="submit" id="home-section-save-btn" data-dashboard-save-btn class="dashboard-btn h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">
         <?= $editId !== '' ? 'حفظ التعديلات' : 'إنشاء القسم' ?>
       </button>
     </div>
@@ -355,7 +351,6 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
     </details>
   <?php endif; ?>
 </form>
-<?php portal_render_media_picker_modal(); ?>
 <?php endif; ?>
 
 <section class="bg-white border border-border-subtle rounded-xl overflow-hidden">
@@ -392,17 +387,17 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
               <td class="px-4 py-3">
                 <div class="flex justify-end gap-1.5 flex-wrap">
                   <a href="/dashboard/home-sections.php?edit=<?= urlencode((string) $section['id']) ?>" class="h-8 px-3 inline-flex items-center rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">تعديل</a>
-                  <form method="post">
+                  <form method="post" data-dashboard-ajax data-dashboard-reload>
                     <input type="hidden" name="action" value="toggle_section">
                     <input type="hidden" name="id" value="<?= h((string) $section['id']) ?>">
                     <input type="hidden" name="next_active" value="<?= !empty($section['is_active']) ? '0' : '1' ?>">
                     <?php if (!empty($section['is_active'])): ?>
-                      <button class="h-8 px-3 rounded-lg text-xs font-bold bg-slate-600 text-white hover:bg-slate-700">إيقاف</button>
+                      <button type="submit" class="dashboard-btn h-8 px-3 rounded-lg text-xs font-bold bg-slate-600 text-white hover:bg-slate-700">إيقاف</button>
                     <?php else: ?>
-                      <button class="h-8 px-3 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">تفعيل</button>
+                      <button type="submit" class="dashboard-btn h-8 px-3 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">تفعيل</button>
                     <?php endif; ?>
                   </form>
-                  <form method="post" onsubmit="return confirm('حذف القسم؟')">
+                  <form method="post" data-dashboard-confirm="حذف القسم؟">
                     <input type="hidden" name="action" value="delete_section">
                     <input type="hidden" name="id" value="<?= h((string) $section['id']) ?>">
                     <button class="h-8 px-3 rounded-lg border border-red-300 bg-white text-xs font-bold text-red-700 hover:bg-red-50">حذف</button>
@@ -416,287 +411,3 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
     </div>
   <?php endif; ?>
 </section>
-
-<?php if ($showForm): ?>
-<?php portal_render_token_picker_script(); ?>
-<?php portal_render_media_picker_script(); ?>
-<script>
-(() => {
-  const mainForm = document.getElementById('home-section-form');
-  const saveBtn = document.getElementById('home-section-save-btn');
-  let explicitSave = false;
-
-  saveBtn?.addEventListener('click', () => {
-    explicitSave = true;
-  });
-
-  mainForm?.addEventListener('submit', (event) => {
-    if (!explicitSave) {
-      event.preventDefault();
-      return false;
-    }
-    explicitSave = false;
-  });
-
-  mainForm?.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter') return;
-    const target = event.target;
-    if (!target || target.tagName === 'TEXTAREA') return;
-    if (target.id === 'home-section-save-btn') return;
-    event.preventDefault();
-  }, true);
-
-  const modeSelect = document.getElementById('display_mode');
-  const filterPanel = document.getElementById('filter-mode-panel');
-  const manualPanel = document.getElementById('manual-mode-panel');
-  const syncPanels = () => {
-    const isManual = modeSelect?.value === 'manual';
-    filterPanel?.classList.toggle('hidden', isManual);
-    manualPanel?.classList.toggle('hidden', !isManual);
-  };
-  modeSelect?.addEventListener('change', syncPanels);
-  syncPanels();
-
-  const searchInput = document.getElementById('hs-material-search');
-  const resultsEl = document.getElementById('hs-material-search-results');
-  const searchWrap = document.getElementById('hs-material-search-wrap');
-  const statusEl = document.getElementById('hs-material-search-status');
-  const MANUAL_PICKER_ID = 'hs-manual-materials';
-  const PAGE_SIZE = 24;
-
-  let searchItems = [];
-  let activeResultIndex = -1;
-  let searchQuery = '';
-  let searchPage = 1;
-  let searchTotal = 0;
-  let searchHasMore = false;
-  let searchLoading = false;
-  let searchTimer = null;
-  let searchRequestId = 0;
-
-  const getSelectedMaterialIds = () => {
-    if (typeof window.portalTokenPickerGetSelected === 'function') {
-      return new Set(window.portalTokenPickerGetSelected(MANUAL_PICKER_ID));
-    }
-    return new Set();
-  };
-
-  const hideResults = () => {
-    if (!resultsEl) return;
-    resultsEl.classList.add('hidden');
-    resultsEl.innerHTML = '';
-    searchInput?.setAttribute('aria-expanded', 'false');
-    activeResultIndex = -1;
-    searchItems = [];
-    searchQuery = '';
-    searchPage = 1;
-    searchTotal = 0;
-    searchHasMore = false;
-    searchLoading = false;
-  };
-
-  const updateStatus = () => {
-    if (!statusEl) return;
-    if (searchItems.length === 0) {
-      statusEl.textContent = 'لا توجد نتائج.';
-      return;
-    }
-    const shown = searchItems.length;
-    const totalText = searchTotal > 0 ? ' من ' + searchTotal : '';
-    statusEl.textContent = shown + totalText + ' — اختر من القائمة (↑↓ Enter) — مرّر للأسفل للمزيد';
-  };
-
-  const highlightResult = () => {
-    if (!resultsEl) return;
-    const activeNode = resultsEl.querySelector('[data-result-index="' + activeResultIndex + '"]');
-    Array.from(resultsEl.querySelectorAll('[data-result-index]')).forEach((node) => {
-      const index = Number(node.getAttribute('data-result-index'));
-      node.classList.toggle('bg-primary/10', index === activeResultIndex);
-      node.classList.toggle('font-bold', index === activeResultIndex);
-    });
-    activeNode?.scrollIntoView({ block: 'nearest' });
-  };
-
-  const appendResultRow = (item, index) => {
-    if (!resultsEl || !item) return;
-    const li = document.createElement('li');
-    li.setAttribute('role', 'option');
-    li.setAttribute('data-result-index', String(index));
-    li.className = 'px-3 py-2.5 cursor-pointer hover:bg-surface-low text-right';
-    li.textContent = item.label || item.value || '';
-    li.addEventListener('mousedown', (event) => {
-      event.preventDefault();
-      addMaterialItem(item);
-    });
-    resultsEl.appendChild(li);
-  };
-
-  const addMaterialItem = (item) => {
-    if (!item || typeof window.portalTokenPickerAdd !== 'function') return;
-    const added = window.portalTokenPickerAdd(MANUAL_PICKER_ID, [item]);
-    if (added > 0 && statusEl) {
-      statusEl.textContent = 'تمت إضافة: ' + (item.label || item.value);
-    }
-    if (searchInput) searchInput.value = '';
-    hideResults();
-  };
-
-  const renderResultList = (items, append) => {
-    if (!resultsEl) return;
-    if (!append) {
-      resultsEl.innerHTML = '';
-      searchItems = [];
-    }
-    const selected = getSelectedMaterialIds();
-    items.forEach((item) => {
-      if (!item || !item.value || selected.has(item.value)) return;
-      if (searchItems.some((row) => row.value === item.value)) return;
-      searchItems.push(item);
-      appendResultRow(item, searchItems.length - 1);
-    });
-
-    if (searchItems.length === 0) {
-      hideResults();
-      if (statusEl) statusEl.textContent = 'لا توجد نتائج جديدة.';
-      return;
-    }
-
-    resultsEl.classList.remove('hidden');
-    searchInput?.setAttribute('aria-expanded', 'true');
-    if (activeResultIndex < 0) activeResultIndex = 0;
-    highlightResult();
-    updateStatus();
-
-    const sentinel = resultsEl.querySelector('[data-role="load-sentinel"]');
-    if (sentinel) sentinel.remove();
-    if (searchHasMore) {
-      const loadingRow = document.createElement('li');
-      loadingRow.setAttribute('data-role', 'load-sentinel');
-      loadingRow.className = 'px-3 py-2 text-center text-xs text-text-muted';
-      loadingRow.textContent = searchLoading ? 'جاري تحميل المزيد...' : 'مرّر للأسفل للمزيد';
-      resultsEl.appendChild(loadingRow);
-    }
-  };
-
-  const fetchMaterialPage = async (page, append) => {
-    const q = (searchInput?.value || '').trim();
-    if (q === '') {
-      hideResults();
-      if (statusEl) statusEl.textContent = '';
-      return;
-    }
-    if (searchLoading) return;
-
-    const requestId = ++searchRequestId;
-    searchLoading = true;
-    if (!append && statusEl) statusEl.textContent = 'جاري البحث...';
-
-    try {
-      const url = '/dashboard/home-sections-api.php?q=' + encodeURIComponent(q)
-        + '&page=' + encodeURIComponent(String(page))
-        + '&pageSize=' + encodeURIComponent(String(PAGE_SIZE));
-      const response = await fetch(url, {
-        headers: { Accept: 'application/json' },
-        credentials: 'same-origin',
-      });
-      if (requestId !== searchRequestId) return;
-      const data = await response.json();
-      if (!data.ok) {
-        if (!append) hideResults();
-        if (statusEl) statusEl.textContent = data.message || 'تعذر البحث.';
-        return;
-      }
-
-      searchQuery = q;
-      searchPage = Number(data.page) || page;
-      searchTotal = Number(data.total) || 0;
-      searchHasMore = !!data.hasMore;
-      const items = Array.isArray(data.items) ? data.items : [];
-      renderResultList(items, append);
-    } catch (_) {
-      if (requestId !== searchRequestId) return;
-      if (!append) hideResults();
-      if (statusEl) statusEl.textContent = 'تعذر الاتصال بالخادم.';
-    } finally {
-      if (requestId === searchRequestId) {
-        searchLoading = false;
-      }
-    }
-  };
-
-  const runMaterialSearch = (append = false) => {
-    if (append) {
-      if (!searchHasMore || searchLoading) return;
-      fetchMaterialPage(searchPage + 1, true);
-      return;
-    }
-    searchPage = 1;
-    searchHasMore = false;
-    searchTotal = 0;
-    fetchMaterialPage(1, false);
-  };
-
-  const scheduleMaterialSearch = (delayMs = 280) => {
-    if (searchTimer) clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
-      searchTimer = null;
-      runMaterialSearch(false);
-    }, delayMs);
-  };
-
-  searchInput?.addEventListener('input', () => {
-    const q = (searchInput?.value || '').trim();
-    if (q === '') {
-      if (searchTimer) clearTimeout(searchTimer);
-      hideResults();
-      if (statusEl) statusEl.textContent = '';
-      return;
-    }
-    scheduleMaterialSearch();
-  });
-
-  resultsEl?.addEventListener('scroll', () => {
-    if (!searchHasMore || searchLoading) return;
-    const nearBottom = resultsEl.scrollTop + resultsEl.clientHeight >= resultsEl.scrollHeight - 48;
-    if (nearBottom) {
-      runMaterialSearch(true);
-    }
-  });
-
-  searchInput?.addEventListener('keydown', (event) => {
-    const hasList = resultsEl && !resultsEl.classList.contains('hidden') && searchItems.length > 0;
-    if (event.key === 'ArrowDown' && hasList) {
-      event.preventDefault();
-      activeResultIndex = Math.min(activeResultIndex + 1, searchItems.length - 1);
-      highlightResult();
-      return;
-    }
-    if (event.key === 'ArrowUp' && hasList) {
-      event.preventDefault();
-      activeResultIndex = Math.max(activeResultIndex - 1, 0);
-      highlightResult();
-      return;
-    }
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      event.stopPropagation();
-      if (searchTimer) clearTimeout(searchTimer);
-      if (hasList && activeResultIndex >= 0 && searchItems[activeResultIndex]) {
-        addMaterialItem(searchItems[activeResultIndex]);
-        return;
-      }
-      runMaterialSearch(false);
-      return;
-    }
-    if (event.key === 'Escape') {
-      hideResults();
-    }
-  });
-
-  document.addEventListener('click', (event) => {
-    if (!searchWrap || searchWrap.contains(event.target)) return;
-    hideResults();
-  });
-})();
-</script>
-<?php endif; ?>

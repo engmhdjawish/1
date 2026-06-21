@@ -301,43 +301,46 @@ public sealed class MaterialsController(
     private async Task<IReadOnlyCollection<MaterialGroupingCount>> GetGroupingCountsAsync(
         MaterialGroupBy grouping,
         IQueryable<MaterialRecord> query,
-        CancellationToken cancellationToken)
-    {
-        return grouping switch
+        CancellationToken cancellationToken) =>
+        grouping switch
         {
-            MaterialGroupBy.AgeCategory => await query
-                .Where(material => material.Provenance != null && material.Provenance != string.Empty)
-                .GroupBy(material => material.Provenance!)
-                .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count()))
-                .OrderBy(group => group.DisplayName)
-                .ToListAsync(cancellationToken),
-            MaterialGroupBy.SizeRange => await query
-                .Where(material => material.Dim != null && material.Dim != string.Empty)
-                .GroupBy(material => material.Dim!)
-                .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count()))
-                .OrderBy(group => group.DisplayName)
-                .ToListAsync(cancellationToken),
-            MaterialGroupBy.MaterialType => await query
-                .Where(material => material.Color != null && material.Color != string.Empty)
-                .GroupBy(material => material.Color!)
-                .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count()))
-                .OrderBy(group => group.DisplayName)
-                .ToListAsync(cancellationToken),
-            MaterialGroupBy.Manufacturer => await query
-                .Where(material => material.Company != null && material.Company != string.Empty)
-                .GroupBy(material => material.Company!)
-                .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count()))
-                .OrderBy(group => group.DisplayName)
-                .ToListAsync(cancellationToken),
-            MaterialGroupBy.CountryOfOrigin => await query
-                .Where(material => material.Origin != null && material.Origin != string.Empty)
-                .GroupBy(material => material.Origin!)
-                .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count()))
-                .OrderBy(group => group.DisplayName)
-                .ToListAsync(cancellationToken),
+            MaterialGroupBy.AgeCategory => await GetStringFieldGroupingCountsAsync(
+                query, material => material.Provenance, cancellationToken),
+            MaterialGroupBy.SizeRange => await GetStringFieldGroupingCountsAsync(
+                query, material => material.Dim, cancellationToken),
+            MaterialGroupBy.MaterialType => await GetStringFieldGroupingCountsAsync(
+                query, material => material.Color, cancellationToken),
+            MaterialGroupBy.Manufacturer => await GetStringFieldGroupingCountsAsync(
+                query, material => material.Company, cancellationToken),
+            MaterialGroupBy.CountryOfOrigin => await GetStringFieldGroupingCountsAsync(
+                query, material => material.Origin, cancellationToken),
             MaterialGroupBy.Group => await GetGroupGuidCountsAsync(query, cancellationToken),
             _ => []
         };
+
+    private static async Task<IReadOnlyCollection<MaterialGroupingCount>> GetStringFieldGroupingCountsAsync(
+        IQueryable<MaterialRecord> query,
+        Expression<Func<MaterialRecord, string?>> fieldSelector,
+        CancellationToken cancellationToken)
+    {
+        var parameter = fieldSelector.Parameters[0];
+        var property = fieldSelector.Body;
+        var notNull = Expression.NotEqual(property, Expression.Constant(null, typeof(string)));
+        var notEmpty = Expression.NotEqual(property, Expression.Constant(string.Empty, typeof(string)));
+        var hasValue = Expression.Lambda<Func<MaterialRecord, bool>>(
+            Expression.AndAlso(notNull, notEmpty),
+            parameter);
+
+        var rows = await query
+            .Where(hasValue)
+            .GroupBy(fieldSelector)
+            .Select(group => new { Key = group.Key!, Count = group.Count() })
+            .OrderBy(group => group.Key)
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(group => new MaterialGroupingCount(group.Key, group.Key, group.Count))
+            .ToList();
     }
 
     private async Task<IReadOnlyCollection<MaterialGroupingCount>> GetGroupGuidCountsAsync(
@@ -624,7 +627,7 @@ public sealed class MaterialsController(
             material.Color,
             material.Provenance,
             material.GroupGuid,
-            material.PictureGuid,
+            MaterialPictureGuid.Normalize(material.PictureGuid),
             material.CurrencyGuid,
             material.Type,
             material.Security,
@@ -685,6 +688,7 @@ public sealed class MaterialsController(
     {
         var stores = await mainDbContext.Stores
             .AsNoTracking()
+            .Where(store => store.IsActive == null || store.IsActive == true)
             .OrderBy(store => store.Number)
             .ThenBy(store => store.Name)
             .Take(MaxFilterOptions)
@@ -747,76 +751,14 @@ public sealed class MaterialsController(
         IReadOnlyCollection<Guid> selectedStoreGuids,
         double? minWarehouseQuantity,
         double? maxWarehouseQuantity,
-        bool? isAvailable)
-    {
-        if (selectedStoreGuids.Count == 0)
-        {
-            if (isAvailable is true)
-            {
-                query = query.Where(material => (material.Qty ?? 0) > 0);
-            }
-            else if (isAvailable is false)
-            {
-                query = query.Where(material => (material.Qty ?? 0) <= 0);
-            }
-
-            if (minWarehouseQuantity is not null)
-            {
-                query = query.Where(material => (material.Qty ?? 0) >= minWarehouseQuantity.Value);
-            }
-
-            if (maxWarehouseQuantity is not null)
-            {
-                query = query.Where(material => (material.Qty ?? 0) <= maxWarehouseQuantity.Value);
-            }
-
-            return query;
-        }
-
-        var storeQuantities = mainDbContext.MaterialInventory
-            .AsNoTracking()
-            .Where(inventory => inventory.MaterialGuid.HasValue)
-            .Where(inventory => inventory.StoreGuid.HasValue && selectedStoreGuids.Contains(inventory.StoreGuid.Value))
-            .GroupBy(inventory => inventory.MaterialGuid!.Value)
-            .Select(group => new
-            {
-                MaterialGuid = group.Key,
-                Quantity = group.Sum(inventory => inventory.Qty ?? 0)
-            });
-
-        if (isAvailable is true)
-        {
-            query = query.Where(material => storeQuantities.Any(quantity =>
-                quantity.MaterialGuid == material.Guid &&
-                quantity.Quantity > 0));
-        }
-        else if (isAvailable is false)
-        {
-            query = query.Where(material => !storeQuantities.Any(quantity =>
-                quantity.MaterialGuid == material.Guid &&
-                quantity.Quantity > 0));
-        }
-        else
-        {
-            query = query.Where(material => storeQuantities.Any(quantity => quantity.MaterialGuid == material.Guid));
-        }
-
-        if (minWarehouseQuantity is not null)
-        {
-            query = query.Where(material => storeQuantities.Any(quantity =>
-                quantity.MaterialGuid == material.Guid &&
-                quantity.Quantity >= minWarehouseQuantity.Value));
-        }
-
-        if (maxWarehouseQuantity is not null)
-        {
-            query = query.Where(material => storeQuantities.Any(quantity =>
-                quantity.MaterialGuid == material.Guid &&
-                quantity.Quantity <= maxWarehouseQuantity.Value));
-        }
-
-        return query;
-    }
+        bool? isAvailable) =>
+        MaterialStoreInventoryQuery.ApplyStoreAndQuantityFilters(
+            mainDbContext,
+            query,
+            selectedStoreGuids,
+            minWarehouseQuantity,
+            maxWarehouseQuantity,
+            isAvailable);
 
     private static IQueryable<MaterialRecord> ApplyTextFilters(
         IQueryable<MaterialRecord> query,

@@ -29,6 +29,8 @@ final class PortalSettingsService
             'company_logo' => '',
             'about_us_title_ar' => '',
             'about_us_ar' => '',
+            'material_images_dir' => '',
+            'material_thumbnails_dir' => '',
         ];
 
         foreach ($rows as $row) {
@@ -55,6 +57,8 @@ final class PortalSettingsService
             'company_logo',
             'about_us_title_ar',
             'about_us_ar',
+            'material_images_dir',
+            'material_thumbnails_dir',
         ];
 
         $stmt = Database::pdo()->prepare(

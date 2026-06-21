@@ -741,7 +741,9 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
                     price,
                     discount,
                     additions,
-                    lineTotal);
+                    lineTotal,
+                    material?.Unity,
+                    material?.Unit2);
             })
             .ToArray();
 

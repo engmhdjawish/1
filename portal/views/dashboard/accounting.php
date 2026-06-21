@@ -13,8 +13,8 @@ $statusCounts = is_array($statusCounts ?? null) ? $statusCounts : [];
 <section class="mb-6">
   <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
     <div>
-      <h1 class="text-2xl font-extrabold text-slate-900">لوحة المحاسبة</h1>
-      <p class="text-sm text-text-muted mt-1">ملخص بيانات الأمين (عملاء، فواتير، سندات) مع متابعة طلبات الموقع.</p>
+      <h1 class="text-2xl font-extrabold text-slate-900">لوحة أمين</h1>
+      <p class="text-sm text-text-muted mt-1">عملاء الأمين، الفواتير، السندات، وكشوف الحساب — منفصلة عن عملاء تسجيل الموقع.</p>
     </div>
     <div class="flex flex-wrap gap-2 text-xs">
       <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">

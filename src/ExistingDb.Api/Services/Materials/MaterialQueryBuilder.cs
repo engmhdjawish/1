@@ -17,11 +17,13 @@ public sealed class MaterialQueryBuilder(MainDbContext mainDbContext)
 
         if (filters.HasImage is true)
         {
-            query = query.Where(material => material.PictureGuid != null);
+            query = query.Where(material =>
+                material.PictureGuid != null && material.PictureGuid != Guid.Empty);
         }
         else if (filters.HasImage is false)
         {
-            query = query.Where(material => material.PictureGuid == null);
+            query = query.Where(material =>
+                material.PictureGuid == null || material.PictureGuid == Guid.Empty);
         }
 
         query = ApplyStoreAndQuantityFilters(query, filters);
@@ -44,6 +46,7 @@ public sealed class MaterialQueryBuilder(MainDbContext mainDbContext)
 
         var keywords = KeywordSearchTerms.Parse(search);
         if (keywords.Count == 0)
+<<<<<<< HEAD
         {
             return query;
         }
@@ -86,73 +89,54 @@ public sealed class MaterialQueryBuilder(MainDbContext mainDbContext)
     {
         var selectedStoreGuids = filters.StoreGuids;
         if (selectedStoreGuids.Count == 0)
+=======
+>>>>>>> origin/cursor/material-image-link-search-f03f
         {
-            if (filters.IsAvailable is true)
-            {
-                query = query.Where(material => (material.Qty ?? 0) > 0);
-            }
-            else if (filters.IsAvailable is false)
-            {
-                query = query.Where(material => (material.Qty ?? 0) <= 0);
-            }
-
-            if (filters.MinWarehouseQuantity is not null)
-            {
-                query = query.Where(material => (material.Qty ?? 0) >= filters.MinWarehouseQuantity.Value);
-            }
-
-            if (filters.MaxWarehouseQuantity is not null)
-            {
-                query = query.Where(material => (material.Qty ?? 0) <= filters.MaxWarehouseQuantity.Value);
-            }
-
             return query;
         }
 
-        var storeQuantities = mainDbContext.MaterialInventory
-            .AsNoTracking()
-            .Where(inventory => inventory.MaterialGuid.HasValue)
-            .Where(inventory => inventory.StoreGuid.HasValue && selectedStoreGuids.Contains(inventory.StoreGuid.Value))
-            .GroupBy(inventory => inventory.MaterialGuid!.Value)
-            .Select(group => new
+        if (keywords.Count == 1)
+        {
+            var keyword = keywords[0];
+            var exactCodeExists = await mainDbContext.Materials
+                .AsNoTracking()
+                .AnyAsync(material => material.Code == keyword, cancellationToken);
+
+            if (exactCodeExists)
             {
-                MaterialGuid = group.Key,
-                Quantity = group.Sum(inventory => inventory.Qty ?? 0)
-            });
-
-        if (filters.IsAvailable is true)
-        {
-            query = query.Where(material => storeQuantities.Any(quantity =>
-                quantity.MaterialGuid == material.Guid &&
-                quantity.Quantity > 0));
-        }
-        else if (filters.IsAvailable is false)
-        {
-            query = query.Where(material => !storeQuantities.Any(quantity =>
-                quantity.MaterialGuid == material.Guid &&
-                quantity.Quantity > 0));
-        }
-        else
-        {
-            query = query.Where(material => storeQuantities.Any(quantity => quantity.MaterialGuid == material.Guid));
+                return query.Where(material => material.Code == keyword);
+            }
         }
 
-        if (filters.MinWarehouseQuantity is not null)
+        foreach (var keyword in keywords)
         {
-            query = query.Where(material => storeQuantities.Any(quantity =>
-                quantity.MaterialGuid == material.Guid &&
-                quantity.Quantity >= filters.MinWarehouseQuantity.Value));
-        }
-
-        if (filters.MaxWarehouseQuantity is not null)
-        {
-            query = query.Where(material => storeQuantities.Any(quantity =>
-                quantity.MaterialGuid == material.Guid &&
-                quantity.Quantity <= filters.MaxWarehouseQuantity.Value));
+            query = ApplyKeywordContainsFilter(query, keyword);
         }
 
         return query;
     }
+
+    private static IQueryable<MaterialRecord> ApplyKeywordContainsFilter(
+        IQueryable<MaterialRecord> query,
+        string keyword) =>
+        query.Where(material =>
+            (material.Name != null && material.Name.Contains(keyword)) ||
+            (material.LatinName != null && material.LatinName.Contains(keyword)) ||
+            (material.Code != null && material.Code.Contains(keyword)) ||
+            (material.BarCode != null && material.BarCode.Contains(keyword)) ||
+            (material.BarCode2 != null && material.BarCode2.Contains(keyword)) ||
+            (material.BarCode3 != null && material.BarCode3.Contains(keyword)));
+
+    private IQueryable<MaterialRecord> ApplyStoreAndQuantityFilters(
+        IQueryable<MaterialRecord> query,
+        MaterialListFilters filters) =>
+        MaterialStoreInventoryQuery.ApplyStoreAndQuantityFilters(
+            mainDbContext,
+            query,
+            filters.StoreGuids,
+            filters.MinWarehouseQuantity,
+            filters.MaxWarehouseQuantity,
+            filters.IsAvailable);
 
     private static IQueryable<MaterialRecord> ApplyTextFilters(
         IQueryable<MaterialRecord> query,

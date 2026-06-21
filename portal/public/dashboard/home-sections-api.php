@@ -9,7 +9,7 @@ use Portal\Services\ApiClient;
 
 header('Content-Type: application/json; charset=utf-8');
 
-WebSession::requirePermission('home_sections.manage');
+WebSession::requireAnyPermission(['home_sections.manage', 'special_offers.manage']);
 
 $q = trim((string) ($_GET['q'] ?? ''));
 $page = max(1, (int) ($_GET['page'] ?? 1));

@@ -300,9 +300,9 @@ public sealed class ApiManagementDbContext(DbContextOptions<ApiManagementDbConte
             },
             new ApiSetting
             {
-                Key = ImageSettingsKeys.ThumbnailsDirectory,
-                Value = @"C:\images\thumbnails",
-                Description = "Directory where generated material image thumbnails are saved.",
+                Key = ServiceSettingsKeys.Enabled,
+                Value = "true",
+                Description = "When false, the API returns 503 for operational endpoints.",
                 CreatedAt = seedDate
             });
     }

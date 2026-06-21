@@ -87,6 +87,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddSingleton<IFieldMasker, FieldMasker>();
 builder.Services.AddScoped<IImageSettingsService, ImageSettingsService>();
+builder.Services.AddScoped<IServiceSettingsService, ServiceSettingsService>();
 builder.Services.AddScoped<IImageStorageService, ImageStorageService>();
 builder.Services.AddScoped<MaterialQueryBuilder>();
 builder.Services.AddScoped<MaterialResultFiltersService>();
@@ -142,6 +143,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseStaticFiles();
 app.UseAuthentication();
+app.UseMiddleware<ServiceMaintenanceMiddleware>();
 app.UseMiddleware<AuditLoggingMiddleware>();
 app.UseAuthorization();
 

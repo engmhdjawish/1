@@ -6,6 +6,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
 use Portal\Services\WebCustomerService;
+use Portal\Support\DashboardNavigation;
 
 WebSession::requirePermission('web_customers.view');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -15,6 +16,7 @@ $permissions = array_map('strval', $user['permissions'] ?? []);
 $isSuper = in_array('*', $permissions, true);
 $canApproveCustomers = $isSuper || in_array('web_customers.approve', $permissions, true);
 $canManageCustomers = $isSuper || in_array('web_customers.manage', $permissions, true);
+$canViewAmineCustomers = DashboardNavigation::canAccessAccounting($user);
 
 $flash = null;
 $flashType = 'success';
@@ -86,5 +88,5 @@ $currentRoute = '/dashboard/customers.php';
 ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/customers.php';
 $content = ob_get_clean();
-$title = 'عملاء الويب';
+$title = 'عملاء الموقع';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

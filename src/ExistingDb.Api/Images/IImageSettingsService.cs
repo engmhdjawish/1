@@ -6,5 +6,4 @@ public interface IImageSettingsService
     Task UpdateAsync(ImageStorageSettings settings, CancellationToken cancellationToken = default);
 }
 
-public sealed record ImageStorageSettings(string ImagesDirectory, string ThumbnailsDirectory);
-
+public sealed record ImageStorageSettings(string ImagesDirectory);

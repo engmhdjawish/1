@@ -36,17 +36,10 @@ final class ShareLinkService
     private const OPTION_DEFAULT_SORT = 'option_default_sort';
     private const OPTION_DEFAULT_GROUP_BY = 'option_default_group_by';
     private const OPTION_VISIBLE_CLIENT_FILTER = 'option_visible_client_filter';
+    private const OPTION_CLIENT_SORT_FIELD = 'option_client_sort_field';
 
     /** @var list<string> */
-    private const DEFAULT_VISIBLE_CLIENT_FILTERS = [
-        'search',
-        'materialTypes',
-        'ageCategories',
-        'manufacturers',
-        'sizeRanges',
-        'countryOfOrigins',
-        'sort',
-    ];
+    private const DEFAULT_VISIBLE_CLIENT_FILTERS = [];
 
     /** @var list<string> */
     private const ALLOWED_VISIBLE_CLIENT_FILTERS = [
@@ -65,6 +58,18 @@ final class ShareLinkService
         'groups',
         'sort',
         'groupBy',
+    ];
+
+    /** @var list<string> */
+    private const ALLOWED_CLIENT_SORT_FIELDS = [
+        'number',
+        'materialType',
+        'ageCategory',
+        'manufacturer',
+        'sizeRange',
+        'countryOfOrigin',
+        'unitSalePriceSyp',
+        'unitSalePriceUsd',
     ];
 
     /** @param array{active?: string, q?: string, limit?: int} $filters */
@@ -272,6 +277,7 @@ final class ShareLinkService
      *   allow_sorting: bool,
      *   include_result_filters: bool,
      *   visible_client_filters: list<string>,
+     *   client_sort_fields: list<string>,
      *   default_sort: string,
      *   default_group_by: string
      * } */
@@ -284,6 +290,7 @@ final class ShareLinkService
             'allow_sorting' => true,
             'include_result_filters' => true,
             'visible_client_filters' => self::DEFAULT_VISIBLE_CLIENT_FILTERS,
+            'client_sort_fields' => ['number', 'materialType', 'manufacturer'],
             'default_sort' => 'number:asc',
             'default_group_by' => 'none',
         ];
@@ -336,6 +343,7 @@ final class ShareLinkService
         bool $allowSorting = true,
         bool $includeResultFilters = true,
         array $visibleClientFilters = [],
+        array $clientSortFields = [],
         ?string $defaultSort = null,
         ?string $defaultGroupBy = null
     ): array {
@@ -363,6 +371,8 @@ final class ShareLinkService
         $defaultGroupBy = in_array($defaultGroupBy, ['ageCategory', 'sizeRange', 'materialType', 'manufacturer', 'countryOfOrigin', 'group'], true)
             ? $defaultGroupBy
             : null;
+        $clientSortFields = self::normalizeClientSortFields($clientSortFields);
+        $includeResultFilters = $allowClientFilters && $includeResultFilters;
 
         if ($requirePassword && $accessUsername === '') {
             return ['ok' => false, 'message' => 'اسم مستخدم الوصول مطلوب عند تفعيل كلمة المرور.'];
@@ -476,6 +486,7 @@ final class ShareLinkService
                 $allowSorting,
                 $includeResultFilters,
                 $visibleClientFilters,
+                $clientSortFields,
                 $defaultSort,
                 $defaultGroupBy
             );
@@ -558,6 +569,7 @@ final class ShareLinkService
                 $allowSorting,
                 $includeResultFilters,
                 $visibleClientFilters,
+                $clientSortFields,
                 $defaultSort,
                 $defaultGroupBy
             );
@@ -676,6 +688,7 @@ final class ShareLinkService
      *      allow_sorting: bool,
      *      include_result_filters: bool,
      *      visible_client_filters: list<string>,
+     *      client_sort_fields: list<string>,
      *      default_sort: string,
      *      default_group_by: string
      *   }
@@ -690,6 +703,7 @@ final class ShareLinkService
             'allow_sorting' => true,
             'include_result_filters' => true,
             'visible_client_filters' => self::DEFAULT_VISIBLE_CLIENT_FILTERS,
+            'client_sort_fields' => ['number', 'materialType', 'manufacturer'],
             'default_sort' => 'number:asc',
             'default_group_by' => 'none',
         ];
@@ -739,6 +753,7 @@ final class ShareLinkService
             'options' => $defaults,
         ];
         $hasVisibleClientFilters = false;
+        $hasClientSortFields = false;
 
         foreach ($rows as $row) {
             $type = trim((string) ($row['filter_type'] ?? ''));
@@ -827,6 +842,15 @@ final class ShareLinkService
                 case self::OPTION_DEFAULT_SORT:
                     $result['options']['default_sort'] = $value;
                     break;
+                case self::OPTION_CLIENT_SORT_FIELD:
+                    if (!$hasClientSortFields) {
+                        $result['options']['client_sort_fields'] = [];
+                        $hasClientSortFields = true;
+                    }
+                    if (in_array($value, self::ALLOWED_CLIENT_SORT_FIELDS, true)) {
+                        $result['options']['client_sort_fields'][] = $value;
+                    }
+                    break;
                 case self::OPTION_DEFAULT_GROUP_BY:
                     $result['options']['default_group_by'] = in_array($value, ['none', 'ageCategory', 'sizeRange', 'materialType', 'manufacturer', 'countryOfOrigin', 'group'], true)
                         ? $value
@@ -843,6 +867,10 @@ final class ShareLinkService
         $result['forced_store_guids'] = self::normalizeGuidFilterValues($result['forced_store_guids']);
         $result['forced_group_guids'] = self::normalizeGuidFilterValues($result['forced_group_guids']);
         $result['options']['visible_client_filters'] = self::normalizeVisibleClientFilters($result['options']['visible_client_filters'] ?? []);
+        $result['options']['client_sort_fields'] = self::normalizeClientSortFields($result['options']['client_sort_fields'] ?? []);
+        if (!$hasClientSortFields) {
+            $result['options']['client_sort_fields'] = self::clientSortFieldsFromDefaultSort((string) ($result['options']['default_sort'] ?? 'number:asc'));
+        }
 
         return $result;
     }
@@ -872,6 +900,7 @@ final class ShareLinkService
         bool $allowSorting,
         bool $includeResultFilters,
         array $visibleClientFilters,
+        array $clientSortFields,
         ?string $defaultSort,
         ?string $defaultGroupBy
     ): void {
@@ -938,6 +967,7 @@ final class ShareLinkService
         $insertNumber(self::FILTER_MIN_UNIT_PURCHASE_PRICE_USD, $forcedMinUnitPurchasePriceUsd);
         $insertNumber(self::FILTER_MAX_UNIT_PURCHASE_PRICE_USD, $forcedMaxUnitPurchasePriceUsd);
         $insertValues(self::OPTION_VISIBLE_CLIENT_FILTER, $visibleClientFilters);
+        $insertValues(self::OPTION_CLIENT_SORT_FIELD, $clientSortFields);
 
         $optionValues = [
             self::OPTION_SHOW_IMAGES => $showImages ? '1' : '0',
@@ -1062,11 +1092,50 @@ final class ShareLinkService
             }
         }
 
+        return array_values(array_unique($filtered));
+    }
+
+    /** @param array<int, mixed> $values
+     *  @return list<string>
+     */
+    private static function normalizeClientSortFields(array $values): array
+    {
+        $normalized = self::normalizeFilterValues($values);
+        $allowed = array_flip(self::ALLOWED_CLIENT_SORT_FIELDS);
+        $filtered = [];
+        foreach ($normalized as $value) {
+            if (isset($allowed[$value])) {
+                $filtered[] = $value;
+            }
+        }
+
         if ($filtered === []) {
-            return self::DEFAULT_VISIBLE_CLIENT_FILTERS;
+            return ['number', 'materialType', 'manufacturer'];
         }
 
         return array_values(array_unique($filtered));
+    }
+
+    /** @return list<string> */
+    private static function clientSortFieldsFromDefaultSort(string $defaultSort): array
+    {
+        $fields = [];
+        foreach (array_filter(array_map('trim', explode(',', $defaultSort))) as $clause) {
+            if ($clause === '') {
+                continue;
+            }
+            if (str_starts_with($clause, '-')) {
+                $field = trim(substr($clause, 1));
+            } else {
+                $parts = explode(':', $clause, 2);
+                $field = trim($parts[0]);
+            }
+            if ($field !== '' && in_array($field, self::ALLOWED_CLIENT_SORT_FIELDS, true)) {
+                $fields[] = $field;
+            }
+        }
+
+        return self::normalizeClientSortFields($fields);
     }
 
     private static function toBool(string $value, bool $default): bool

@@ -52,21 +52,35 @@ final class ShareCartService
     }
 
     /** @param array<string, mixed> $line */
-    public static function add(string $token, string $shareLinkId, array $line, float $quantity = 1.0): void
+    public static function add(string $token, string $shareLinkId, array $line, float $quantity = 1.0): array
     {
         $token = trim($token);
         $shareLinkId = trim($shareLinkId);
         $line = self::normalizeLine($line);
         $materialGuid = trim((string) ($line['material_guid'] ?? ''));
         if ($token === '' || $shareLinkId === '' || $materialGuid === '') {
-            return;
+            return ['ok' => false, 'message' => 'بيانات غير صالحة.', 'quantity' => 0.0];
         }
 
         if (!isset($_SESSION[self::SESSION_KEY]) || !is_array($_SESSION[self::SESSION_KEY])) {
             $_SESSION[self::SESSION_KEY] = [];
         }
 
+        $existingQty = 0.0;
+        if (isset($_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid])) {
+            $existingQty = (float) ($_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]['quantity'] ?? 0);
+        }
         $quantity = max(1.0, round($quantity));
+        $targetQty = $existingQty > 0 ? $existingQty + $quantity : $quantity;
+        $validation = SpecialOfferService::validatePackageQuantity($materialGuid, $targetQty, null);
+        if (!$validation['ok']) {
+            return $validation;
+        }
+        $quantity = $existingQty > 0 ? ($validation['quantity'] - $existingQty) : $validation['quantity'];
+        if ($quantity <= 0) {
+            return $validation;
+        }
+
         if (!isset($_SESSION[self::SESSION_KEY][$token]) || !is_array($_SESSION[self::SESSION_KEY][$token])) {
             $_SESSION[self::SESSION_KEY][$token] = [
                 'share_link_id' => $shareLinkId,
@@ -83,37 +97,48 @@ final class ShareCartService
         if (isset($items[$materialGuid]) && is_array($items[$materialGuid])) {
             $items[$materialGuid] = self::normalizeLine(array_merge($items[$materialGuid], $line));
             $items[$materialGuid]['quantity'] = (float) ($items[$materialGuid]['quantity'] ?? 0) + $quantity;
-            return;
+
+            return ['ok' => true, 'message' => '', 'quantity' => (float) $items[$materialGuid]['quantity']];
         }
 
         $line['material_guid'] = $materialGuid;
         $line['quantity'] = $quantity;
         $items[$materialGuid] = $line;
+
+        return ['ok' => true, 'message' => '', 'quantity' => $quantity];
     }
 
-    public static function updateQuantity(string $token, string $materialGuid, float $quantity): bool
+    /** @return array{ok: bool, message: string, quantity: float} */
+    public static function updateQuantity(string $token, string $materialGuid, float $quantity): array
     {
         $token = trim($token);
         $materialGuid = trim($materialGuid);
         if ($token === '' || $materialGuid === '') {
-            return false;
+            return ['ok' => false, 'message' => 'بيانات غير صالحة.', 'quantity' => 0.0];
         }
 
         $items = self::items($token);
         if (!isset($items[$materialGuid])) {
-            return false;
+            return ['ok' => false, 'message' => 'المادة غير موجودة في السلة.', 'quantity' => 0.0];
         }
 
         if ($quantity <= 0) {
             unset($_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]);
-            return true;
+
+            return ['ok' => true, 'message' => '', 'quantity' => 0.0];
         }
 
-        $_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]['quantity'] = max(1.0, round($quantity));
+        $validation = SpecialOfferService::validatePackageQuantity($materialGuid, $quantity, null);
+        if (!$validation['ok']) {
+            return $validation;
+        }
+
+        $_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]['quantity'] = $validation['quantity'];
         $_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid] = self::normalizeLine(
             $_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]
         );
-        return true;
+
+        return $validation;
     }
 
     public static function remove(string $token, string $materialGuid): bool
