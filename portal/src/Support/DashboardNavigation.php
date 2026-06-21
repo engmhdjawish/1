@@ -25,8 +25,7 @@ final class DashboardNavigation
         '/dashboard/configuration.php',
         '/dashboard/amine-api.php',
         '/dashboard/home-sections.php',
-        '/dashboard/material-images.php',
-        '/dashboard/material-image-links.php',
+        '/dashboard/special-offers.php',
         '/dashboard/users.php',
         '/dashboard/settings.php',
     ];
@@ -112,23 +111,72 @@ final class DashboardNavigation
             ],
             default => [
                 'title' => 'العمل اليومي',
-                'subtitle' => 'الموقع والطلبات والمبيعات',
+                'subtitle' => 'الطلبات وصور المواد والمبيعات',
             ],
         };
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function dailyTaskItems(?array $user): array
+    {
+        return self::filterItems($user, [
+            [
+                'route' => '/dashboard/orders.php',
+                'label' => 'الطلبات',
+                'icon' => 'shopping_cart',
+                'permission' => 'orders.view',
+                'description' => 'متابعة طلبات الموقع وتأكيدها ومزامنتها مع الأمين.',
+            ],
+            [
+                'route' => '/dashboard/material-images.php',
+                'label' => 'رفع صور المواد',
+                'icon' => 'cloud_upload',
+                'permission' => 'images.upload',
+                'description' => 'رفع صور جديدة من الجهاز وتوليد المصغرات للمتجر.',
+            ],
+            [
+                'route' => '/dashboard/material-image-links.php',
+                'label' => 'ربط الصور بالمواد',
+                'icon' => 'linked_services',
+                'permission' => 'images.upload',
+                'description' => 'ربط صورة مصدر بمواد الأمين وإنشاء نسخة لكل مادة.',
+            ],
+        ]);
     }
 
     /** @return array<string, list<array<string, mixed>>> */
     public static function operationsGroups(?array $user): array
     {
+        $dailyTasks = self::dailyTaskItems($user);
+        $dailyNav = array_map(
+            static fn (array $item): array => [
+                'route' => $item['route'],
+                'label' => $item['label'],
+                'icon' => $item['icon'],
+                'permission' => $item['permission'] ?? null,
+            ],
+            $dailyTasks
+        );
+
         $groups = [
             'البداية' => [
                 ['route' => '/dashboard/index.php', 'label' => 'لوحة العمل', 'icon' => 'dashboard', 'permission' => null],
             ],
-            'الموقع والمبيعات' => [
-                ['route' => '/dashboard/orders.php', 'label' => 'الطلبات', 'icon' => 'shopping_cart', 'permission' => 'orders.view'],
+        ];
+
+        if ($dailyNav !== []) {
+            $groups['المهام اليومية'] = $dailyNav;
+        }
+
+        $groups += [
+            'العملاء والمبيعات' => [
                 ['route' => '/dashboard/customers.php', 'label' => 'عملاء الموقع', 'icon' => 'group', 'permission' => 'web_customers.view'],
                 ['route' => '/dashboard/share-links.php', 'label' => 'روابط المشاركة', 'icon' => 'share', 'permission' => 'share_links.manage'],
-                ['route' => '/dashboard/site-media.php', 'label' => 'مكتبة الصور', 'icon' => 'photo_library', 'permission' => 'site_media.manage'],
+            ],
+            'الوسائط' => [
+                ['route' => '/dashboard/site-media.php', 'label' => 'مكتبة الوسائط', 'icon' => 'photo_library', 'permission' => 'site_media.manage'],
             ],
         ];
 
@@ -229,18 +277,11 @@ final class DashboardNavigation
                     'description' => 'تنظيم أقسام الصفحة الرئيسية والمنتجات المعروضة فيها.',
                 ],
                 [
-                    'route' => '/dashboard/material-images.php',
-                    'label' => 'صور المواد',
-                    'icon' => 'inventory_2',
-                    'permission' => 'images.upload',
-                    'description' => 'ربط صور المواد من مجلدات الأمين أو رفعها للمتجر.',
-                ],
-                [
-                    'route' => '/dashboard/material-image-links.php',
-                    'label' => 'ربط الصور بالمواد',
-                    'icon' => 'linked_services',
-                    'permission' => 'images.upload',
-                    'description' => 'صفحة مستقلة لربط صورة أساسية بعدة مواد مع توليد نسخة لكل مادة.',
+                    'route' => '/dashboard/special-offers.php',
+                    'label' => 'العروض الخاصة',
+                    'icon' => 'sell',
+                    'permission' => 'special_offers.manage',
+                    'description' => 'إنشاء عروض مخفّضة وعرضها في الرئيسية والمتجر.',
                 ],
             ],
             'إدارة النظام' => [
@@ -340,6 +381,7 @@ final class DashboardNavigation
     {
         $candidates = [
             ['route' => '/dashboard/orders.php', 'label' => 'الطلبات', 'permission' => 'orders.view'],
+            ['route' => '/dashboard/material-image-links.php', 'label' => 'ربط الصور', 'permission' => 'images.upload'],
             ['route' => '/dashboard/customers.php', 'label' => 'عملاء الموقع', 'permission' => 'web_customers.view'],
             ['route' => '/dashboard/accounting.php', 'label' => 'أمين', 'permission' => 'orders.view'],
         ];

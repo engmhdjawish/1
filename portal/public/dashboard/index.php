@@ -8,6 +8,7 @@ use Portal\Auth\WebSession;
 use Portal\Services\OrderService;
 use Portal\Services\ShareLinkService;
 use Portal\Services\WebCustomerService;
+use Portal\Support\DashboardNavigation;
 
 WebSession::requirePermission('dashboard.view');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -21,14 +22,46 @@ $reviewOrders = OrderService::list(['status' => 'pending', 'limit' => 3]);
 $syncQueue = OrderService::list(['sync' => 'failed', 'limit' => 3]);
 $activeLinks = ShareLinkService::countActive();
 $user = WebSession::user();
+$dailyTasks = DashboardNavigation::dailyTaskItems($user);
 $currentRoute = '/dashboard/index.php';
 
 ob_start();
 ?>
 <section class="mb-6">
   <h1 class="text-2xl font-extrabold text-slate-900">لوحة العمل</h1>
-      <p class="text-sm text-text-muted mt-1">متابعة الطلبات و<strong>عملاء الموقع</strong> والمزامنة — للمحاسبة انتقل إلى <a href="/dashboard/accounting.php" class="text-primary font-bold hover:underline">لوحة أمين</a>.</p>
+      <p class="text-sm text-text-muted mt-1">متابعة الطلبات و<strong>صور المواد</strong> و<strong>عملاء الموقع</strong> — للمحاسبة انتقل إلى <a href="/dashboard/accounting.php" class="text-primary font-bold hover:underline">لوحة أمين</a>.</p>
 </section>
+
+<?php if ($dailyTasks !== []): ?>
+<section class="mb-8">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-xl font-bold">المهام اليومية</h2>
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <?php foreach ($dailyTasks as $task): ?>
+      <a
+        href="<?= h((string) ($task['route'] ?? '#')) ?>"
+        class="group bg-white border border-border-subtle rounded-2xl p-5 hover:border-primary/30 hover:shadow-md transition flex flex-col gap-3 no-underline text-inherit"
+      >
+        <div class="flex items-center gap-3">
+          <span class="w-11 h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition">
+            <span class="material-symbols-outlined"><?= h((string) ($task['icon'] ?? 'task')) ?></span>
+          </span>
+          <h3 class="font-bold text-slate-900"><?= h((string) ($task['label'] ?? '')) ?></h3>
+        </div>
+        <?php if (!empty($task['description'])): ?>
+          <p class="text-sm text-text-muted leading-relaxed"><?= h((string) $task['description']) ?></p>
+        <?php endif; ?>
+        <span class="text-sm text-primary font-bold mt-auto inline-flex items-center gap-1">
+          فتح
+          <span class="material-symbols-outlined text-base">chevron_left</span>
+        </span>
+      </a>
+    <?php endforeach; ?>
+  </div>
+</section>
+<?php endif; ?>
+
 <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
   <a href="/dashboard/customers.php?status=pending" class="bg-red-50 border border-red-100 rounded-2xl p-5 hover:shadow-md transition block no-underline text-inherit">
     <div class="w-11 h-11 rounded-xl bg-red-100 text-red-700 flex items-center justify-center">

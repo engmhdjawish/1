@@ -9,11 +9,13 @@ declare(strict_types=1);
     <div>
       <h1 class="text-2xl font-extrabold text-slate-900">الإعدادات والتهيئة</h1>
       <p class="text-sm text-text-muted mt-1 max-w-2xl">
-        إعدادات لا تُستخدم يومياً: محتوى الموقع، صور المواد، صلاحيات الموظفين، وبيانات الشركة.
-        للمهام اليومية ارجع إلى
-        <a href="/dashboard/index.php" class="text-primary font-bold hover:underline">لوحة العمل</a>
+        إعدادات لا تُستخدم يومياً: محتوى الموقع (أقسام الرئيسية والعروض)، صلاحيات الموظفين، وبيانات الشركة.
+        لرفع وربط صور المواد انتقل إلى
+        <a href="/dashboard/material-images.php" class="text-primary font-bold hover:underline">رفع الصور</a>
         أو
-        <a href="/dashboard/accounting.php" class="text-primary font-bold hover:underline">لوحة أمين</a>.
+        <a href="/dashboard/material-image-links.php" class="text-primary font-bold hover:underline">ربط الصور</a>
+        ضمن
+        <a href="/dashboard/index.php" class="text-primary font-bold hover:underline">لوحة العمل</a>.
       </p>
     </div>
     <a href="/dashboard/index.php" class="h-10 px-4 inline-flex items-center gap-2 rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-700 hover:bg-slate-50">
