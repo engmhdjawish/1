@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Database;
-use Portal\Support\Text;
 use PDO;
 use Throwable;
 
@@ -177,54 +176,25 @@ final class MaterialImageLinkService
             return ['ok' => true, 'message' => '', 'items' => []];
         }
 
-        $tokens = preg_split('/\s+/u', $query, -1, PREG_SPLIT_NO_EMPTY) ?: [];
-        $apiSearch = $tokens[0] ?? $query;
+        $pageSize = max(20, min(60, $pageSize));
 
         try {
             $result = MaterialImageStorageService::browseMaterials([
                 'page' => 1,
-                'page_size' => max(10, min(60, $pageSize)),
-                'search' => $apiSearch,
+                'page_size' => $pageSize,
+                'search' => $query,
                 'has_image' => '',
                 'local_status' => 'all',
             ]);
+
+            if (!($result['ok'] ?? false)) {
+                return ['ok' => false, 'message' => (string) ($result['message'] ?? 'تعذر البحث.'), 'items' => []];
+            }
+
+            return ['ok' => true, 'message' => '', 'items' => $result['items'] ?? []];
         } catch (Throwable $exception) {
             return ['ok' => false, 'message' => $exception->getMessage(), 'items' => []];
         }
-
-        if (!($result['ok'] ?? false)) {
-            return ['ok' => false, 'message' => (string) ($result['message'] ?? 'تعذر البحث.'), 'items' => []];
-        }
-
-        $items = self::filterMaterialsByTokens($result['items'] ?? [], $tokens);
-
-        return ['ok' => true, 'message' => '', 'items' => $items];
-    }
-
-    /**
-     * @param list<array<string, mixed>> $items
-     * @param list<string> $tokens
-     * @return list<array<string, mixed>>
-     */
-    private static function filterMaterialsByTokens(array $items, array $tokens): array
-    {
-        if ($tokens === []) {
-            return $items;
-        }
-
-        return array_values(array_filter($items, static function (array $row) use ($tokens): bool {
-            $haystack = Text::lower(trim(
-                (string) ($row['name'] ?? '') . ' ' . (string) ($row['material_code'] ?? '')
-            ));
-            foreach ($tokens as $token) {
-                $needle = Text::lower(trim($token));
-                if ($needle === '' || !str_contains($haystack, $needle)) {
-                    return false;
-                }
-            }
-
-            return true;
-        }));
     }
 
     /** @return array{ok: bool, message: string} */
