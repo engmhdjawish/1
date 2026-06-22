@@ -19,7 +19,7 @@ $stats = is_array($stats ?? null) ? $stats : ['local_count' => 0, 'thumbnail_cou
 $syncStats = is_array($syncStats ?? null) ? $syncStats : ['pending' => 0, 'syncing' => 0, 'synced' => 0, 'failed' => 0, 'total' => 0];
 $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'message' => ''];
 ?>
-<section class="mb-6">
+<section class="mb-6" data-material-images-workspace>
   <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
     <div>
       <h1 class="text-2xl font-extrabold">صور المواد</h1>

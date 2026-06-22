@@ -431,6 +431,9 @@
     if (typeof window.portalAccountingStatementInit === 'function') {
       window.portalAccountingStatementInit(root);
     }
+    if (typeof window.portalMaterialImagesLinkInit === 'function') {
+      window.portalMaterialImagesLinkInit(root);
+    }
   }
 
   function init() {
