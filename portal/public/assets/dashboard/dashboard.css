@@ -124,42 +124,54 @@ body.dashboard-app {
   opacity: 1;
   visibility: visible;
 }
-#dashboard-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  z-index: 70;
-  width: min(88vw, 20rem);
-  height: 100dvh;
-  background: var(--dash-surface);
-  border-left: 1px solid var(--dash-border);
-  transform: translateX(100%);
-  transition: transform 0.25s ease;
-  overflow-y: auto;
-  padding: 0;
-  padding-top: calc(var(--dash-header) + var(--dash-area-tabs));
-  display: flex;
-  flex-direction: column;
-}
-#dashboard-drawer.is-open {
-  transform: translateX(0);
+
+/* Mobile-only: drawer + bottom nav (ID rules must not override Tailwind lg:hidden) */
+@media (max-width: 1023px) {
+  #dashboard-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 70;
+    width: min(88vw, 20rem);
+    height: 100dvh;
+    background: var(--dash-surface);
+    border-left: 1px solid var(--dash-border);
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    overflow-y: auto;
+    padding: 0;
+    padding-top: calc(var(--dash-header) + var(--dash-area-tabs));
+    display: flex;
+    flex-direction: column;
+  }
+  #dashboard-drawer.is-open {
+    transform: translateX(0);
+  }
+
+  #dashboard-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 55;
+    height: var(--dash-bottom-nav);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    background: var(--dash-surface);
+    border-top: 1px solid var(--dash-border);
+    display: flex;
+    align-items: stretch;
+    justify-content: space-around;
+  }
 }
 
-/* Bottom nav (mobile) */
-#dashboard-bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 55;
-  height: var(--dash-bottom-nav);
-  padding-bottom: env(safe-area-inset-bottom, 0);
-  background: var(--dash-surface);
-  border-top: 1px solid var(--dash-border);
-  display: flex;
-  align-items: stretch;
-  justify-content: space-around;
+@media (min-width: 1024px) {
+  #dashboard-drawer,
+  #dashboard-drawer-backdrop,
+  #dashboard-bottom-nav {
+    display: none !important;
+  }
 }
+
 #dashboard-bottom-nav a,
 #dashboard-bottom-nav button {
   flex: 1;

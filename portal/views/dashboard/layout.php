@@ -28,6 +28,23 @@ $sidebarGroups = DashboardNavigation::sidebarGroupsForArea($navArea, $user);
 $sidebarTitle = $areaMeta['title'];
 $sidebarSubtitle = $areaMeta['subtitle'];
 
+$renderSidebarFooter = static function () use ($navArea): void {
+    if ($navArea !== DashboardNavigation::AREA_OPERATIONS) {
+        ?>
+        <a href="/dashboard/index.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low transition" data-dashboard-nav-link>
+          <span class="material-symbols-outlined">arrow_forward</span>
+          العودة للعمل اليومي
+        </a>
+        <?php
+    }
+    ?>
+    <a href="/index.php" data-dashboard-no-nav class="flex items-center justify-center gap-2 bg-primary text-white rounded-xl py-2.5 font-bold hover:brightness-110 transition">
+      <span class="material-symbols-outlined">public</span>
+      عرض الموقع
+    </a>
+    <?php
+};
+
 $renderNavLink = static function (array $item, string $currentRoute, bool $compact = false): void {
     $route = (string) ($item['route'] ?? '#');
     $isActive = DashboardNavigation::isNavItemActive($currentRoute, $item);
@@ -145,6 +162,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
           <span class="material-symbols-outlined">menu</span>
         </button>
         <a href="/dashboard/index.php" class="font-extrabold text-primary text-lg truncate">Jawish Trading</a>
+        <?php if (!$hasAreaTabs && $headerQuickLinks !== []): ?>
         <nav class="hidden lg:flex items-center gap-1 text-sm mr-2">
           <?php foreach ($headerQuickLinks as $item): ?>
             <?php
@@ -160,6 +178,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
             </a>
           <?php endforeach; ?>
         </nav>
+        <?php endif; ?>
       </div>
       <div class="flex items-center gap-2 shrink-0">
         <div class="hidden md:flex flex-col items-end">
@@ -212,40 +231,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
       <?php endforeach; ?>
     </div>
     <div class="p-4 border-t border-border-subtle space-y-2" data-dashboard-sidebar-footer>
-      <?php if ($navArea === DashboardNavigation::AREA_OPERATIONS): ?>
-        <?php if ($hasAccountingAccess): ?>
-          <a href="/dashboard/accounting.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low" data-dashboard-nav-link>
-            <span class="material-symbols-outlined">account_balance</span>
-            أمين — المحاسبة
-          </a>
-        <?php endif; ?>
-        <?php if ($hasSiteContentAccess): ?>
-          <a href="/dashboard/site-content.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low" data-dashboard-nav-link>
-            <span class="material-symbols-outlined">web</span>
-            محتوى الموقع
-          </a>
-        <?php endif; ?>
-        <?php if ($hasConfigurationAccess): ?>
-          <a href="/dashboard/configuration.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low" data-dashboard-nav-link>
-            <span class="material-symbols-outlined">tune</span>
-            إدارة النظام
-          </a>
-        <?php endif; ?>
-      <?php elseif ($navArea === DashboardNavigation::AREA_SITE_CONTENT): ?>
-        <a href="/dashboard/index.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low" data-dashboard-nav-link>
-          <span class="material-symbols-outlined">arrow_forward</span>
-          العودة للعمل اليومي
-        </a>
-      <?php else: ?>
-        <a href="/dashboard/index.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low" data-dashboard-nav-link>
-          <span class="material-symbols-outlined">arrow_forward</span>
-          العودة للعمل اليومي
-        </a>
-      <?php endif; ?>
-      <a href="/index.php" data-dashboard-no-nav class="flex items-center justify-center gap-2 bg-primary text-white rounded-xl py-2.5 font-bold hover:brightness-110 transition">
-        <span class="material-symbols-outlined">public</span>
-        عرض الموقع
-      </a>
+      <?php $renderSidebarFooter(); ?>
     </div>
   </nav>
 
@@ -268,52 +254,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         <?php endforeach; ?>
       </div>
       <div class="mt-auto pt-4 border-t border-border-subtle space-y-2" data-dashboard-sidebar-footer>
-        <?php if ($navArea === DashboardNavigation::AREA_OPERATIONS): ?>
-          <?php if ($hasAccountingAccess): ?>
-            <a href="/dashboard/accounting.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low transition">
-              <span class="material-symbols-outlined">account_balance</span>
-              أمين — المحاسبة
-            </a>
-          <?php endif; ?>
-          <?php if ($hasSiteContentAccess): ?>
-            <a href="/dashboard/site-content.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low transition">
-              <span class="material-symbols-outlined">web</span>
-              محتوى الموقع
-            </a>
-          <?php endif; ?>
-          <?php if ($hasConfigurationAccess): ?>
-            <a href="/dashboard/configuration.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low transition">
-              <span class="material-symbols-outlined">tune</span>
-              إدارة النظام
-            </a>
-          <?php endif; ?>
-        <?php elseif ($navArea === DashboardNavigation::AREA_SITE_CONTENT): ?>
-          <a href="/dashboard/index.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low transition">
-            <span class="material-symbols-outlined">arrow_forward</span>
-            العودة للعمل اليومي
-          </a>
-          <?php if ($hasConfigurationAccess): ?>
-            <a href="/dashboard/configuration.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low transition">
-              <span class="material-symbols-outlined">tune</span>
-              إدارة النظام
-            </a>
-          <?php endif; ?>
-        <?php else: ?>
-          <a href="/dashboard/index.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low transition">
-            <span class="material-symbols-outlined">arrow_forward</span>
-            العودة للعمل اليومي
-          </a>
-          <?php if ($navArea === DashboardNavigation::AREA_CONFIGURATION && $hasSiteContentAccess): ?>
-            <a href="/dashboard/site-content.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low transition">
-              <span class="material-symbols-outlined">web</span>
-              محتوى الموقع
-            </a>
-          <?php endif; ?>
-        <?php endif; ?>
-        <a href="/index.php" class="flex items-center justify-center gap-2 bg-primary text-white rounded-xl py-2.5 font-bold hover:brightness-110 transition">
-          <span class="material-symbols-outlined">public</span>
-          عرض الموقع
-        </a>
+        <?php $renderSidebarFooter(); ?>
       </div>
     </aside>
     <main class="flex-1 lg:mr-64 p-3 sm:p-4 md:p-6 lg:p-8 min-w-0 w-full max-w-[1600px] dashboard-main-content" data-dashboard-main data-current-route="<?= h($currentRoute) ?>">

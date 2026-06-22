@@ -434,7 +434,10 @@
   }
 
   function init() {
-    document.body.classList.add('dashboard-app', 'has-bottom-nav');
+    document.body.classList.add('dashboard-app');
+    if (window.matchMedia('(max-width: 1023px)').matches && qs('#dashboard-bottom-nav')) {
+      document.body.classList.add('has-bottom-nav');
+    }
     bindMobileNav();
     bindHistory();
     bindPage(document);

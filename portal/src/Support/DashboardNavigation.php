@@ -208,39 +208,6 @@ final class DashboardNavigation
             ],
         ];
 
-        if (self::hasSiteContentAccess($user)) {
-            $groups['أقسام أخرى'] = [
-                [
-                    'route' => '/dashboard/site-content.php',
-                    'label' => 'محتوى الموقع',
-                    'icon' => 'web',
-                    'permission' => null,
-                ],
-            ];
-        }
-
-        if (self::canAccessAccounting($user)) {
-            $groups['أقسام أخرى'] = array_merge($groups['أقسام أخرى'] ?? [], [
-                [
-                    'route' => '/dashboard/accounting.php',
-                    'label' => 'أمين — المحاسبة',
-                    'icon' => 'account_balance',
-                    'permission' => ['accounting.view', 'orders.view'],
-                ],
-            ]);
-        }
-
-        if (self::hasConfigurationAccess($user)) {
-            $groups['أقسام أخرى'] = array_merge($groups['أقسام أخرى'] ?? [], [
-                [
-                    'route' => '/dashboard/configuration.php',
-                    'label' => 'إدارة النظام',
-                    'icon' => 'dashboard_customize',
-                    'permission' => null,
-                ],
-            ]);
-        }
-
         $filtered = [];
         foreach ($groups as $title => $items) {
             $visible = self::filterItems($user, $items);
