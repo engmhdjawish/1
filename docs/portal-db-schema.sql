@@ -23,6 +23,14 @@ CREATE TABLE access_policies (
 
 CREATE INDEX ix_access_policies_active ON access_policies (is_active) WHERE is_active = TRUE;
 
+CREATE TABLE access_policy_filters (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    policy_id       UUID NOT NULL REFERENCES access_policies (id) ON DELETE CASCADE,
+    filter_type     VARCHAR(50) NOT NULL,
+    value_ar        VARCHAR(500) NOT NULL,
+    CONSTRAINT uq_access_policy_filter UNIQUE (policy_id, filter_type, value_ar)
+);
+
 -- ---------------------------------------------------------------------------
 -- Website staff users (NOT ApiUsers)
 -- ---------------------------------------------------------------------------
