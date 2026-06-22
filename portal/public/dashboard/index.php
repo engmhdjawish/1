@@ -23,10 +23,6 @@ $syncQueue = OrderService::list(['sync' => 'failed', 'limit' => 3]);
 $activeLinks = ShareLinkService::countActive();
 $user = WebSession::user();
 $dailyTasks = DashboardNavigation::dailyTaskItems($user);
-$siteContentGroups = DashboardNavigation::siteContentGroups($user);
-$configurationGroups = DashboardNavigation::systemConfigurationGroups($user);
-$accountingGroups = DashboardNavigation::accountingGroups($user);
-$hasAccountingAccess = DashboardNavigation::canAccessAccounting($user);
 $currentRoute = '/dashboard/index.php';
 
 ob_start();
@@ -61,102 +57,6 @@ ob_start();
           <span class="material-symbols-outlined text-base">chevron_left</span>
         </span>
       </a>
-    <?php endforeach; ?>
-  </div>
-</section>
-<?php endif; ?>
-
-<?php if ($siteContentGroups !== []): ?>
-<section class="mb-8">
-  <div class="flex items-center justify-between mb-4 gap-3">
-    <div>
-      <h2 class="text-xl font-bold">محتوى الموقع</h2>
-      <p class="text-sm text-text-muted mt-1">الرئيسية، العروض، الوسائط، وصفحة من نحن.</p>
-    </div>
-    <a href="/dashboard/site-content.php" class="text-sm text-primary font-bold hover:underline shrink-0">عرض الكل</a>
-  </div>
-  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-    <?php foreach ($siteContentGroups as $items): ?>
-      <?php foreach ($items as $task): ?>
-        <a
-          href="<?= h((string) ($task['route'] ?? '#')) ?>"
-          class="group bg-white border border-border-subtle rounded-2xl p-5 hover:border-primary/30 hover:shadow-md transition flex flex-col gap-3 no-underline text-inherit"
-        >
-          <div class="flex items-center gap-3">
-            <span class="w-11 h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition">
-              <span class="material-symbols-outlined"><?= h((string) ($task['icon'] ?? 'web')) ?></span>
-            </span>
-            <h3 class="font-bold text-slate-900"><?= h((string) ($task['label'] ?? '')) ?></h3>
-          </div>
-          <?php if (!empty($task['description'])): ?>
-            <p class="text-sm text-text-muted leading-relaxed"><?= h((string) $task['description']) ?></p>
-          <?php endif; ?>
-        </a>
-      <?php endforeach; ?>
-    <?php endforeach; ?>
-  </div>
-</section>
-<?php endif; ?>
-
-<?php if ($configurationGroups !== []): ?>
-<section class="mb-8">
-  <div class="flex items-center justify-between mb-4 gap-3">
-    <div>
-      <h2 class="text-xl font-bold">إدارة النظام</h2>
-      <p class="text-sm text-text-muted mt-1">المستخدمون، الاتصال، السياسات، وAPI الأمين.</p>
-    </div>
-    <a href="/dashboard/configuration.php" class="text-sm text-primary font-bold hover:underline shrink-0">عرض الكل</a>
-  </div>
-  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-    <?php foreach ($configurationGroups as $items): ?>
-      <?php foreach ($items as $task): ?>
-        <a
-          href="<?= h((string) ($task['route'] ?? '#')) ?>"
-          class="group bg-white border border-border-subtle rounded-2xl p-5 hover:border-primary/30 hover:shadow-md transition flex flex-col gap-3 no-underline text-inherit"
-        >
-          <div class="flex items-center gap-3">
-            <span class="w-11 h-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition">
-              <span class="material-symbols-outlined"><?= h((string) ($task['icon'] ?? 'tune')) ?></span>
-            </span>
-            <h3 class="font-bold text-slate-900"><?= h((string) ($task['label'] ?? '')) ?></h3>
-          </div>
-          <?php if (!empty($task['description'])): ?>
-            <p class="text-sm text-text-muted leading-relaxed"><?= h((string) $task['description']) ?></p>
-          <?php endif; ?>
-        </a>
-      <?php endforeach; ?>
-    <?php endforeach; ?>
-  </div>
-</section>
-<?php endif; ?>
-
-<?php if ($hasAccountingAccess && $accountingGroups !== []): ?>
-<section class="mb-8">
-  <div class="flex items-center justify-between mb-4 gap-3">
-    <div>
-      <h2 class="text-xl font-bold">أمين — المحاسبة</h2>
-      <p class="text-sm text-text-muted mt-1">عملاء الأمين، الفواتير، كشف الحساب، ومزامنة الطلبات.</p>
-    </div>
-    <a href="/dashboard/accounting.php" class="text-sm text-primary font-bold hover:underline shrink-0">عرض الكل</a>
-  </div>
-  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-    <?php foreach ($accountingGroups as $items): ?>
-      <?php foreach ($items as $task): ?>
-        <a
-          href="<?= h((string) ($task['route'] ?? '#')) ?>"
-          class="group bg-white border border-border-subtle rounded-2xl p-5 hover:border-primary/30 hover:shadow-md transition flex flex-col gap-3 no-underline text-inherit"
-        >
-          <div class="flex items-center gap-3">
-            <span class="w-11 h-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition">
-              <span class="material-symbols-outlined"><?= h((string) ($task['icon'] ?? 'account_balance')) ?></span>
-            </span>
-            <h3 class="font-bold text-slate-900"><?= h((string) ($task['label'] ?? '')) ?></h3>
-          </div>
-          <?php if (!empty($task['description'])): ?>
-            <p class="text-sm text-text-muted leading-relaxed"><?= h((string) $task['description']) ?></p>
-          <?php endif; ?>
-        </a>
-      <?php endforeach; ?>
     <?php endforeach; ?>
   </div>
 </section>

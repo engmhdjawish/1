@@ -581,8 +581,6 @@ final class DashboardNavigation
             ['route' => '/dashboard/orders.php', 'label' => 'الطلبات', 'permission' => 'orders.view'],
             ['route' => '/dashboard/material-images.php', 'label' => 'صور المواد', 'permission' => 'images.upload'],
             ['route' => '/dashboard/customers.php', 'label' => 'عملاء الموقع', 'permission' => 'web_customers.view'],
-            ['route' => '/dashboard/site-content.php', 'label' => 'محتوى الموقع', 'permission' => null, 'visible' => self::hasSiteContentAccess($user)],
-            ['route' => '/dashboard/configuration.php', 'label' => 'إدارة النظام', 'permission' => null, 'visible' => self::hasConfigurationAccess($user)],
             ['route' => '/dashboard/accounting.php', 'label' => 'أمين', 'permission' => null, 'visible' => self::canAccessAccounting($user)],
         ];
 
