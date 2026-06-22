@@ -105,7 +105,12 @@
     const normalized = normalizeDashboardRoute(route);
     qsa('[data-dashboard-route]').forEach((link) => {
       const itemRoute = link.getAttribute('data-dashboard-route') || '';
-      setSidebarLinkActive(link, routesMatch(normalized, itemRoute));
+      const active = routesMatch(normalized, itemRoute);
+      if (link.closest('#dashboard-bottom-nav')) {
+        link.classList.toggle('is-active', active);
+        return;
+      }
+      setSidebarLinkActive(link, active);
     });
   }
 
@@ -153,12 +158,14 @@
   function closeDrawer() {
     qs('#dashboard-drawer')?.classList.remove('is-open');
     qs('#dashboard-drawer-backdrop')?.classList.remove('is-open');
+    qs('#dashboard-menu-btn')?.setAttribute('aria-expanded', 'false');
     document.body.style.overflow = '';
   }
 
   function openDrawer() {
     qs('#dashboard-drawer')?.classList.add('is-open');
     qs('#dashboard-drawer-backdrop')?.classList.add('is-open');
+    qs('#dashboard-menu-btn')?.setAttribute('aria-expanded', 'true');
     document.body.style.overflow = 'hidden';
   }
 
@@ -371,18 +378,25 @@
         event.preventDefault();
         const params = new URLSearchParams(new FormData(form));
         const url = formActionUrl(form).replace(/\?.*$/, '') + '?' + params.toString();
+        closeDrawer();
         navigate(url);
       });
     });
   }
 
   function bindMobileNav() {
+    if (document.body.dataset.mobileNavBound === '1') return;
+    document.body.dataset.mobileNavBound = '1';
+
     qs('#dashboard-menu-btn')?.addEventListener('click', openDrawer);
     qs('#dashboard-drawer-backdrop')?.addEventListener('click', closeDrawer);
     qs('#dashboard-drawer-close')?.addEventListener('click', closeDrawer);
     qs('#dashboard-bottom-menu-btn')?.addEventListener('click', (e) => {
       e.preventDefault();
       openDrawer();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeDrawer();
     });
   }
 

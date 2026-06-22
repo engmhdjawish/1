@@ -18,7 +18,7 @@ if (!isset($renderMediaPickerField)) {
         $previewBoxClass = $isLogoField
             ? 'h-24 w-40 rounded-lg border border-border-subtle bg-white overflow-hidden flex items-center justify-center text-[10px] text-text-muted'
             : 'h-16 w-28 rounded-lg border border-border-subtle bg-surface-low overflow-hidden flex items-center justify-center text-[10px] text-text-muted';
-        $previewImgClass = $isLogoField ? 'site-logo-img max-h-[5.5rem] max-w-full' : 'h-full w-full object-cover';
+        $previewImgClass = $isLogoField ? 'dashboard-logo-preview-img' : 'h-full w-full object-cover';
         ?>
         <div class="text-xs" id="<?= h($fieldId) ?>-wrap" data-media-field="<?= h($fieldId) ?>" data-default-category="<?= h($defaultCategory) ?>" data-media-preview-logo="<?= $isLogoField ? '1' : '0' ?>">
           <span class="text-text-muted block mb-0.5"><?= h($label) ?></span>

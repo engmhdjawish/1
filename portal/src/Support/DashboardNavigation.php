@@ -562,6 +562,19 @@ final class DashboardNavigation
     }
 
     /** @return list<array<string, mixed>> */
+    public static function bottomNavLinks(?array $user): array
+    {
+        $candidates = [
+            ['route' => '/dashboard/index.php', 'label' => 'الرئيسية', 'icon' => 'dashboard', 'permission' => null],
+            ['route' => '/dashboard/orders.php', 'label' => 'الطلبات', 'icon' => 'shopping_cart', 'permission' => 'orders.view'],
+            ['route' => '/dashboard/material-images.php', 'label' => 'الصور', 'icon' => 'perm_media', 'permission' => 'images.upload'],
+            ['route' => '/dashboard/customers.php', 'label' => 'العملاء', 'icon' => 'group', 'permission' => 'web_customers.view'],
+        ];
+
+        return array_slice(self::filterItems($user, $candidates), 0, 3);
+    }
+
+    /** @return list<array<string, mixed>> */
     public static function headerQuickLinks(?array $user): array
     {
         $candidates = [

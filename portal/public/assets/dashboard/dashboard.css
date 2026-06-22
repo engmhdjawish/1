@@ -8,7 +8,41 @@
   --dash-muted: #5d3f3c;
   --dash-sidebar: 16rem;
   --dash-header: 4rem;
+  --dash-area-tabs: 0px;
   --dash-bottom-nav: 4.25rem;
+}
+
+body.dashboard-app.has-area-tabs {
+  --dash-area-tabs: 2.85rem;
+}
+
+.dashboard-area-tabs {
+  top: var(--dash-header);
+}
+
+.dashboard-desktop-sidebar {
+  top: calc(var(--dash-header) + var(--dash-area-tabs));
+  height: calc(100vh - var(--dash-header) - var(--dash-area-tabs));
+  height: calc(100dvh - var(--dash-header) - var(--dash-area-tabs));
+}
+
+.dashboard-main-content {
+  padding-bottom: calc(var(--dash-bottom-nav) + 1rem);
+}
+
+@media (min-width: 1024px) {
+  .dashboard-main-content {
+    padding-bottom: 2rem;
+  }
+}
+
+.dashboard-logo-preview-img {
+  display: block;
+  max-height: 5.5rem;
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 
 body.dashboard-app {
@@ -50,7 +84,7 @@ body.dashboard-app {
 /* Toast */
 #dashboard-toast-root {
   position: fixed;
-  top: calc(var(--dash-header) + 0.75rem);
+  top: calc(var(--dash-header) + var(--dash-area-tabs) + 0.75rem);
   left: 50%;
   transform: translateX(-50%);
   z-index: 90;
@@ -102,8 +136,10 @@ body.dashboard-app {
   transform: translateX(100%);
   transition: transform 0.25s ease;
   overflow-y: auto;
-  padding: 1rem;
-  padding-top: calc(var(--dash-header) + 0.5rem);
+  padding: 0;
+  padding-top: calc(var(--dash-header) + var(--dash-area-tabs));
+  display: flex;
+  flex-direction: column;
 }
 #dashboard-drawer.is-open {
   transform: translateX(0);
