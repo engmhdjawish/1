@@ -11,7 +11,6 @@ use Portal\Services\SpecialOfferService;
 $ads ??= [];
 
 $company = PortalSettingsService::companySettings();
-$companyLogoUrl = PortalSettingsService::companyLogoUrl($company);
 $siteName = trim((string) ($company['company_name'] ?? '')) !== '' ? (string) $company['company_name'] : 'جاويش للتجارة';
 $aboutSnippet = trim((string) ($company['about_us_ar'] ?? ''));
 if ($aboutSnippet !== '') {
@@ -47,13 +46,6 @@ if ($aboutSnippet !== '') {
       </div>
 
       <div class="rounded-2xl border border-white/20 bg-white/10 backdrop-blur-md p-5 md:p-6">
-        <?php if (!empty($companyLogoUrl)): ?>
-          <?php
-            $siteLogoVariant = 'hero-home';
-            $siteLogoAlt = $siteName;
-            require __DIR__ . '/partials/site-logo.php';
-          ?>
-        <?php endif; ?>
         <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-3">
           <article class="home-feature-card rounded-xl px-4 py-4">
             <span class="material-symbols-outlined text-2xl" aria-hidden="true">inventory_2</span>

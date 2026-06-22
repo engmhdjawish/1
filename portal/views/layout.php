@@ -83,7 +83,7 @@ $navLinks = [
       >
         <span class="material-symbols-outlined">menu</span>
       </button>
-      <a href="/index.php" class="font-extrabold text-primary text-base sm:text-lg inline-flex items-center gap-2.5 min-w-0">
+      <a href="/index.php" class="site-brand-link font-extrabold text-primary text-base sm:text-lg inline-flex items-center gap-3 min-w-0">
         <?php if (!empty($companyLogoUrl)): ?>
           <?php
             $siteLogoVariant = 'header';
@@ -91,7 +91,10 @@ $navLinks = [
             require __DIR__ . '/partials/site-logo.php';
           ?>
         <?php endif; ?>
-        <span class="truncate"><?= h($siteName) ?></span>
+        <span class="site-brand-name truncate hidden lg:block max-w-[18rem]"><?= h($siteName) ?></span>
+        <?php if (empty($companyLogoUrl)): ?>
+          <span class="truncate"><?= h($siteName) ?></span>
+        <?php endif; ?>
       </a>
     </div>
 

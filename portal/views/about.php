@@ -82,17 +82,6 @@ $hasContent = $introParagraphs !== [] || $sections !== [];
       </div>
 
       <div class="rounded-2xl border border-white/20 bg-white/10 backdrop-blur-md p-6 md:p-8">
-        <?php if (!empty($companyLogoUrl)): ?>
-          <?php
-            $siteLogoVariant = 'hero-home';
-            $siteLogoAlt = $companyName;
-            require __DIR__ . '/partials/site-logo.php';
-          ?>
-        <?php else: ?>
-          <div class="h-24 w-24 mx-auto mb-5 rounded-2xl bg-white/15 flex items-center justify-center">
-            <span class="material-symbols-outlined text-4xl" aria-hidden="true">storefront</span>
-          </div>
-        <?php endif; ?>
         <div class="grid grid-cols-3 gap-3 text-center text-sm">
           <div class="rounded-xl bg-white/10 px-2 py-3 border border-white/10">
             <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>

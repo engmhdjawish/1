@@ -35,7 +35,11 @@ $address = trim((string) ($companyContext['company_address'] ?? ''));
       <div class="xl:col-span-1">
         <div class="site-footer-brand mb-4">
           <?php if (!empty($companyLogoUrl)): ?>
-            <img src="<?= h((string) $companyLogoUrl) ?>" alt="" class="site-footer-logo">
+            <?php
+              $siteLogoVariant = 'footer';
+              $siteLogoAlt = $siteName;
+              require __DIR__ . '/site-logo.php';
+            ?>
           <?php endif; ?>
           <h2 class="text-lg font-extrabold text-white"><?= h($siteName) ?></h2>
         </div>

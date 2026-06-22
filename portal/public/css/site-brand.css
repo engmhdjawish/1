@@ -1,3 +1,13 @@
+.site-brand-link {
+  text-decoration: none;
+}
+
+.site-brand-link:focus-visible {
+  outline: 2px solid #d81921;
+  outline-offset: 3px;
+  border-radius: 0.5rem;
+}
+
 .site-logo-wrap {
   display: inline-flex;
   align-items: center;
@@ -5,10 +15,11 @@
   flex-shrink: 0;
 }
 
+/* الهيدر: شعار واحد واضح على خلفية بيضاء */
 .site-logo-wrap--header {
-  height: 3.75rem;
+  height: 3.5rem;
   min-width: 2.5rem;
-  max-width: 15rem;
+  max-width: 14rem;
   padding: 0;
   background: transparent;
   border: none;
@@ -16,6 +27,16 @@
 }
 
 .site-logo-wrap--drawer {
+  height: 3.25rem;
+  min-width: 2.5rem;
+  max-width: 12rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.site-logo-wrap--footer {
   height: 3.25rem;
   min-width: 2.5rem;
   max-width: 12rem;
@@ -58,10 +79,21 @@
   image-rendering: auto;
 }
 
+/* ظل متعدد الطبقات لإبراز الشعارات الفاتحة على خلفية بيضاء */
 .site-logo-wrap--header .site-logo-img,
 .site-logo-wrap--drawer .site-logo-img {
-  max-height: 3.75rem;
-  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.22));
+  max-height: 3.5rem;
+  filter:
+    drop-shadow(0 0 1px rgba(15, 23, 42, 0.75))
+    drop-shadow(0 0 2px rgba(15, 23, 42, 0.45))
+    drop-shadow(0 2px 6px rgba(15, 23, 42, 0.28));
+}
+
+.site-logo-wrap--footer .site-logo-img {
+  max-height: 3.25rem;
+  filter:
+    drop-shadow(0 1px 4px rgba(0, 0, 0, 0.45))
+    drop-shadow(0 0 1px rgba(0, 0, 0, 0.35));
 }
 
 .site-logo-wrap--hero .site-logo-img {
@@ -83,18 +115,27 @@
 
 @media (min-width: 640px) {
   .site-logo-wrap--header {
-    height: 4.5rem;
-    max-width: 18rem;
+    height: 4rem;
+    max-width: 16rem;
   }
 
   .site-logo-wrap--header .site-logo-img,
   .site-logo-wrap--drawer .site-logo-img {
-    max-height: 4.5rem;
+    max-height: 4rem;
   }
 
   .site-logo-wrap--drawer {
     height: 3.5rem;
     max-width: 14rem;
+  }
+
+  .site-logo-wrap--footer {
+    height: 3.5rem;
+    max-width: 13rem;
+  }
+
+  .site-logo-wrap--footer .site-logo-img {
+    max-height: 3.5rem;
   }
 
   .site-logo-wrap--hero .site-logo-img {
@@ -104,5 +145,25 @@
   .site-logo-wrap--hero-dark .site-logo-img,
   .site-logo-wrap--hero-home .site-logo-img {
     max-height: 12rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .site-logo-wrap--header {
+    height: 4.25rem;
+    max-width: 18rem;
+  }
+
+  .site-logo-wrap--header .site-logo-img {
+    max-height: 4.25rem;
+  }
+
+  .site-logo-wrap--footer {
+    height: 3.75rem;
+    max-width: 14rem;
+  }
+
+  .site-logo-wrap--footer .site-logo-img {
+    max-height: 3.75rem;
   }
 }
