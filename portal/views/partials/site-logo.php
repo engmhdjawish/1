@@ -14,7 +14,7 @@ if ($url === '') {
 }
 
 $variant = (string) ($siteLogoVariant ?? 'header');
-if (!in_array($variant, ['header', 'drawer', 'hero', 'hero-dark'], true)) {
+if (!in_array($variant, ['header', 'drawer', 'hero', 'hero-dark', 'hero-home'], true)) {
     $variant = 'header';
 }
 

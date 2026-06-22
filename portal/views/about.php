@@ -84,7 +84,7 @@ $hasContent = $introParagraphs !== [] || $sections !== [];
       <div class="rounded-2xl border border-white/20 bg-white/10 backdrop-blur-md p-6 md:p-8">
         <?php if (!empty($companyLogoUrl)): ?>
           <?php
-            $siteLogoVariant = 'hero-dark';
+            $siteLogoVariant = 'hero-home';
             $siteLogoAlt = $companyName;
             require __DIR__ . '/partials/site-logo.php';
           ?>
