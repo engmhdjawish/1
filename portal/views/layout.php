@@ -70,8 +70,8 @@ $navLinks = [
     <?php endif; ?>
 </head>
 <body class="min-h-screen text-text-main bg-surface-bg flex flex-col">
-<header class="bg-surface-card border-b border-gray-200 sticky top-0 z-30 shadow-sm">
-  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+<header class="site-header bg-surface-card border-b border-gray-200 sticky top-0 z-30 shadow-sm">
+  <div class="max-w-7xl mx-auto px-4 py-2.5 sm:py-3 flex items-center justify-between gap-3 min-h-[4.75rem] sm:min-h-[5.25rem] lg:min-h-[5.75rem]">
     <div class="flex items-center gap-2 min-w-0">
       <button
         type="button"
@@ -83,16 +83,15 @@ $navLinks = [
       >
         <span class="material-symbols-outlined">menu</span>
       </button>
-      <a href="/index.php" class="site-brand-link font-extrabold text-primary text-base sm:text-lg inline-flex items-center gap-3 min-w-0">
+      <a href="/index.php" class="site-brand-link font-extrabold text-primary text-base sm:text-lg inline-flex items-center gap-3 min-w-0" aria-label="<?= h($siteName) ?>">
         <?php if (!empty($companyLogoUrl)): ?>
           <?php
             $siteLogoVariant = 'header';
             $siteLogoAlt = $siteName;
             require __DIR__ . '/partials/site-logo.php';
           ?>
-        <?php endif; ?>
-        <span class="site-brand-name truncate hidden lg:block max-w-[18rem]"><?= h($siteName) ?></span>
-        <?php if (empty($companyLogoUrl)): ?>
+          <span class="sr-only"><?= h($siteName) ?></span>
+        <?php else: ?>
           <span class="truncate"><?= h($siteName) ?></span>
         <?php endif; ?>
       </a>
