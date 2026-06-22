@@ -16,9 +16,9 @@ if (!isset($renderMediaPickerField)) {
         $defaultCategory = in_array($defaultCategory, SiteMediaService::CATEGORIES, true) ? $defaultCategory : 'banner';
         $isLogoField = $defaultCategory === 'logo';
         $previewBoxClass = $isLogoField
-            ? 'h-20 w-36 rounded-lg border border-border-subtle overflow-hidden flex items-center justify-center text-[10px] text-text-muted site-logo-wrap site-logo-wrap--drawer !max-w-none'
+            ? 'h-24 w-40 rounded-lg border border-border-subtle bg-white overflow-hidden flex items-center justify-center text-[10px] text-text-muted'
             : 'h-16 w-28 rounded-lg border border-border-subtle bg-surface-low overflow-hidden flex items-center justify-center text-[10px] text-text-muted';
-        $previewImgClass = $isLogoField ? 'site-logo-img max-h-[3.25rem]' : 'h-full w-full object-cover';
+        $previewImgClass = $isLogoField ? 'site-logo-img max-h-[5.5rem] max-w-full' : 'h-full w-full object-cover';
         ?>
         <div class="text-xs" id="<?= h($fieldId) ?>-wrap" data-media-field="<?= h($fieldId) ?>" data-default-category="<?= h($defaultCategory) ?>" data-media-preview-logo="<?= $isLogoField ? '1' : '0' ?>">
           <span class="text-text-muted block mb-0.5"><?= h($label) ?></span>

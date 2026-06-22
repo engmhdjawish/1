@@ -30,7 +30,7 @@
     const img = document.createElement('img');
     img.src = url;
     img.alt = '';
-    img.className = isLogoField ? 'site-logo-img max-h-[3.25rem]' : 'h-full w-full object-cover';
+    img.className = isLogoField ? 'site-logo-img max-h-[5.5rem] max-w-full' : 'h-full w-full object-cover';
     preview.appendChild(img);
   };
 
