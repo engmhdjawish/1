@@ -257,20 +257,7 @@ function format_packaging(float $value): string
 /** @param array<string, mixed> $item */
 function packages_available_display(array $item): float
 {
-    $packaging = ShareCartService::packaging($item);
-    if ($packaging <= 0) {
-        return 0.0;
-    }
-
-    $warehouseQty = (float) (
-        $item['warehouseQuantity']
-        ?? $item['WarehouseQuantity']
-        ?? $item['qty']
-        ?? $item['Qty']
-        ?? 0
-    );
-
-    return max(0.0, floor($warehouseQty / $packaging));
+    return \Portal\Services\StockReservationService::displayPackagesAvailable($item);
 }
 
 function default_about_content(): string

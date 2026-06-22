@@ -28,7 +28,6 @@ $editOffer = is_array($editOffer ?? null) ? $editOffer : [
     'material_guids' => [],
     'manual_products' => [],
 ];
-
 $rules = is_array($editOffer['filter_rules'] ?? null) ? $editOffer['filter_rules'] : [];
 $displayOptions = is_array($editOffer['display_options'] ?? null)
     ? $editOffer['display_options']

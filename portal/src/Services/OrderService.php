@@ -22,7 +22,13 @@ final class OrderService
      *   sale_price_usd?: float,
      *   image_url?: string|null
      * }> $items
-     * @return array{id: string, order_number: string, quote_access_token: string, total_sp: float, total_usd: float}|null
+     * @return array{
+     *   ok: bool,
+     *   order?: array{id: string, order_number: string, quote_access_token: string, total_sp: float, total_usd: float},
+     *   unavailable_items?: list<array<string, mixed>>,
+     *   notices?: list<string>,
+     *   message?: string
+     * }
      */
     public static function createGuestShareOrder(
         string $shareLinkId,
@@ -30,21 +36,35 @@ final class OrderService
         string $guestPhone,
         ?string $notesAr,
         array $items
-    ): ?array {
+    ): array {
         $shareLinkId = trim($shareLinkId);
         $guestNameAr = trim($guestNameAr);
         $guestPhone = trim($guestPhone);
         $notesAr = $notesAr !== null ? trim($notesAr) : null;
 
         if ($shareLinkId === '' || $guestNameAr === '' || $guestPhone === '' || $items === []) {
-            return null;
+            return ['ok' => false, 'message' => 'بيانات الطلب غير مكتملة.'];
+        }
+
+        $split = StockReservationService::splitCartByAvailability($items, true);
+        $availableItems = $split['available'];
+        $unavailableItems = $split['unavailable'];
+        $notices = $split['notices'];
+
+        if ($availableItems === []) {
+            return [
+                'ok' => false,
+                'message' => 'لا توجد أصناف متاحة للطلب. راجع قسم «غير المتوفرة» في السلة.',
+                'unavailable_items' => $unavailableItems,
+                'notices' => $notices,
+            ];
         }
 
         $normalizedItems = [];
         $totalSp = 0.0;
         $totalUsd = 0.0;
         $sortOrder = 0;
-        foreach ($items as $item) {
+        foreach ($availableItems as $item) {
             $materialGuid = trim((string) ($item['material_guid'] ?? ''));
             $name = trim((string) ($item['material_name_ar'] ?? ''));
             $quantity = (float) ($item['quantity'] ?? 0);
@@ -74,7 +94,7 @@ final class OrderService
         }
 
         if ($normalizedItems === []) {
-            return null;
+            return ['ok' => false, 'message' => 'لا توجد أصناف صالحة في الطلب.'];
         }
 
         $pdo = Database::pdo();
@@ -83,6 +103,59 @@ final class OrderService
 
         try {
             $pdo->beginTransaction();
+
+            StockReservationService::lockMaterialsForOrder(
+                $pdo,
+                array_map(static fn (array $line): string => (string) $line['material_guid'], $normalizedItems)
+            );
+
+            $recheck = StockReservationService::splitCartByAvailability($normalizedItems, true);
+            if ($recheck['available'] === []) {
+                $pdo->rollBack();
+
+                return [
+                    'ok' => false,
+                    'message' => 'نفدت كمية أحد الأصناف أثناء إرسال الطلب. راجع السلة وحاول مجدداً.',
+                    'unavailable_items' => array_merge($unavailableItems, $recheck['unavailable']),
+                    'notices' => array_values(array_unique(array_merge($notices, $recheck['notices']))),
+                ];
+            }
+
+            $normalizedItems = [];
+            $totalSp = 0.0;
+            $totalUsd = 0.0;
+            $sortOrder = 0;
+            foreach ($recheck['available'] as $item) {
+                $materialGuid = trim((string) ($item['material_guid'] ?? ''));
+                $name = trim((string) ($item['material_name_ar'] ?? ''));
+                $quantity = (float) ($item['quantity'] ?? 0);
+                if ($materialGuid === '' || $name === '' || $quantity <= 0) {
+                    continue;
+                }
+
+                $saleSp = (float) ($item['sale_price_sp'] ?? 0);
+                $saleUsd = (float) ($item['sale_price_usd'] ?? 0);
+                $totalSp += $quantity * $saleSp;
+                $totalUsd += $quantity * $saleUsd;
+
+                $normalizedItems[] = [
+                    'material_guid' => $materialGuid,
+                    'material_code' => trim((string) ($item['material_code'] ?? '')),
+                    'material_name_ar' => $name,
+                    'quantity' => $quantity,
+                    'pcs_per_box' => max(1, (int) ($item['pcs_per_box'] ?? 1)),
+                    'sale_price_sp' => $saleSp,
+                    'sale_price_usd' => $saleUsd,
+                    'original_sale_price_sp' => isset($item['original_sale_price_sp']) ? (float) $item['original_sale_price_sp'] : null,
+                    'original_sale_price_usd' => isset($item['original_sale_price_usd']) ? (float) $item['original_sale_price_usd'] : null,
+                    'special_offer_id' => trim((string) ($item['special_offer_id'] ?? '')) ?: null,
+                    'image_url' => isset($item['image_url']) && is_string($item['image_url']) ? trim($item['image_url']) : null,
+                    'sort_order' => $sortOrder++,
+                ];
+            }
+
+            $unavailableItems = array_merge($unavailableItems, $recheck['unavailable']);
+            $notices = array_values(array_unique(array_merge($notices, $recheck['notices'])));
 
             $orderStmt = $pdo->prepare(
                 'INSERT INTO orders (
@@ -122,7 +195,8 @@ final class OrderService
             $orderId = (string) $orderStmt->fetchColumn();
             if ($orderId === '') {
                 $pdo->rollBack();
-                return null;
+
+                return ['ok' => false, 'message' => 'تعذر إنشاء الطلب.'];
             }
 
             $itemStmt = $pdo->prepare(
@@ -181,15 +255,24 @@ final class OrderService
                 $pdo->rollBack();
             }
 
-            return null;
+            return ['ok' => false, 'message' => 'تعذر حفظ الطلب. حاول مرة أخرى.'];
         }
 
         return [
-            'id' => $orderId,
-            'order_number' => $orderNumber,
-            'quote_access_token' => $quoteToken,
-            'total_sp' => $totalSp,
-            'total_usd' => $totalUsd,
+            'ok' => true,
+            'order' => [
+                'id' => $orderId,
+                'order_number' => $orderNumber,
+                'quote_access_token' => $quoteToken,
+                'total_sp' => $totalSp,
+                'total_usd' => $totalUsd,
+            ],
+            'submitted_material_guids' => array_map(
+                static fn (array $line): string => (string) $line['material_guid'],
+                $normalizedItems
+            ),
+            'unavailable_items' => $unavailableItems,
+            'notices' => $notices,
         ];
     }
 
