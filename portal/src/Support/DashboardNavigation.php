@@ -166,6 +166,19 @@ final class DashboardNavigation
         ]);
     }
 
+    /** @return list<array<string, mixed>> */
+    private static function flattenGroupItems(array $groups): array
+    {
+        $items = [];
+        foreach ($groups as $groupItems) {
+            foreach ($groupItems as $item) {
+                $items[] = $item;
+            }
+        }
+
+        return $items;
+    }
+
     /** @return array<string, list<array<string, mixed>>> */
     public static function operationsGroups(?array $user): array
     {
@@ -196,6 +209,36 @@ final class DashboardNavigation
                 ['route' => '/dashboard/share-links.php', 'label' => 'روابط المشاركة', 'icon' => 'share', 'permission' => 'share_links.manage'],
             ],
         ];
+
+        $siteContentItems = self::flattenGroupItems(self::siteContentGroups($user));
+        if ($siteContentItems !== []) {
+            $groups['محتوى الموقع'] = array_merge(
+                [
+                    [
+                        'route' => '/dashboard/site-content.php',
+                        'label' => 'نظرة عامة — المحتوى',
+                        'icon' => 'web',
+                        'permission' => null,
+                    ],
+                ],
+                $siteContentItems
+            );
+        }
+
+        $configurationItems = self::flattenGroupItems(self::systemConfigurationGroups($user));
+        if ($configurationItems !== []) {
+            $groups['إدارة النظام'] = array_merge(
+                [
+                    [
+                        'route' => '/dashboard/configuration.php',
+                        'label' => 'نظرة عامة — النظام',
+                        'icon' => 'dashboard_customize',
+                        'permission' => null,
+                    ],
+                ],
+                $configurationItems
+            );
+        }
 
         $filtered = [];
         foreach ($groups as $title => $items) {
@@ -524,9 +567,70 @@ final class DashboardNavigation
             ['route' => '/dashboard/orders.php', 'label' => 'الطلبات', 'permission' => 'orders.view'],
             ['route' => '/dashboard/material-images.php', 'label' => 'صور المواد', 'permission' => 'images.upload'],
             ['route' => '/dashboard/customers.php', 'label' => 'عملاء الموقع', 'permission' => 'web_customers.view'],
+            ['route' => '/dashboard/site-content.php', 'label' => 'محتوى الموقع', 'permission' => null, 'visible' => self::hasSiteContentAccess($user)],
+            ['route' => '/dashboard/configuration.php', 'label' => 'إدارة النظام', 'permission' => null, 'visible' => self::hasConfigurationAccess($user)],
             ['route' => '/dashboard/accounting.php', 'label' => 'أمين', 'permission' => 'orders.view'],
         ];
 
-        return self::filterItems($user, $candidates);
+        $links = self::filterItems($user, $candidates);
+
+        return array_values(array_filter($links, static function (array $item): bool {
+            if (!array_key_exists('visible', $item)) {
+                return true;
+            }
+
+            return (bool) $item['visible'];
+        }));
+    }
+
+    /**
+     * @return list<array{route: string, label: string, icon: string, area: string, active: bool}>
+     */
+    public static function areaTabs(?array $user, string $currentArea): array
+    {
+        $tabs = [
+            [
+                'route' => '/dashboard/index.php',
+                'label' => 'العمل اليومي',
+                'icon' => 'work',
+                'area' => self::AREA_OPERATIONS,
+            ],
+        ];
+
+        if (self::hasSiteContentAccess($user)) {
+            $tabs[] = [
+                'route' => '/dashboard/site-content.php',
+                'label' => 'محتوى الموقع',
+                'icon' => 'web',
+                'area' => self::AREA_SITE_CONTENT,
+            ];
+        }
+
+        if (self::hasConfigurationAccess($user)) {
+            $tabs[] = [
+                'route' => '/dashboard/configuration.php',
+                'label' => 'إدارة النظام',
+                'icon' => 'tune',
+                'area' => self::AREA_CONFIGURATION,
+            ];
+        }
+
+        if (self::canAccessAccounting($user)) {
+            $tabs[] = [
+                'route' => '/dashboard/accounting.php',
+                'label' => 'أمين',
+                'icon' => 'account_balance',
+                'area' => self::AREA_ACCOUNTING,
+            ];
+        }
+
+        return array_map(
+            static function (array $tab) use ($currentArea): array {
+                $tab['active'] = $tab['area'] === $currentArea;
+
+                return $tab;
+            },
+            $tabs
+        );
     }
 }

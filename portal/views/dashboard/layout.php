@@ -21,6 +21,7 @@ $hasSiteContentAccess = DashboardNavigation::hasSiteContentAccess($user);
 $hasConfigurationAccess = DashboardNavigation::hasConfigurationAccess($user);
 $hasAccountingAccess = DashboardNavigation::canAccessAccounting($user);
 $headerQuickLinks = DashboardNavigation::headerQuickLinks($user);
+$areaTabs = DashboardNavigation::areaTabs($user, $navArea);
 $sidebarGroups = DashboardNavigation::sidebarGroupsForArea($navArea, $user);
 $sidebarTitle = $areaMeta['title'];
 $sidebarSubtitle = $areaMeta['subtitle'];
@@ -88,6 +89,41 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
     #dashboardNavDrawer { transition: transform 0.25s ease; }
     #dashboardNavDrawer.is-open { transform: translateX(0); }
     #dashboardNavOverlay.is-open { opacity: 1; pointer-events: auto; }
+    .dashboard-area-tabs {
+      display: flex;
+      gap: 0.35rem;
+      overflow-x: auto;
+      padding: 0.5rem 1rem;
+      background: #ffffff;
+      border-bottom: 1px solid #E5E7EB;
+    }
+    .dashboard-area-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      white-space: nowrap;
+      border-radius: 0.75rem;
+      padding: 0.45rem 0.85rem;
+      font-size: 0.75rem;
+      font-weight: 800;
+      color: #5d3f3c;
+      border: 1px solid #E5E7EB;
+      background: #fff;
+      text-decoration: none;
+      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+    .dashboard-area-tab:hover {
+      background: #f3f3f5;
+      color: #D81921;
+    }
+    .dashboard-area-tab.is-active {
+      background: rgba(216, 25, 33, 0.1);
+      border-color: rgba(216, 25, 33, 0.25);
+      color: #D81921;
+    }
+    .dashboard-area-tab .material-symbols-outlined {
+      font-size: 1rem;
+    }
   </style>
   <?php if (!empty($extraHead ?? '')): ?>
     <?= $extraHead ?>
@@ -133,15 +169,15 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
             </a>
           <?php endif; ?>
           <?php if ($hasSiteContentAccess): ?>
-            <a href="/dashboard/site-content.php" class="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-surface-low">
+            <a href="/dashboard/site-content.php" class="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-surface-low">
               <span class="material-symbols-outlined text-base">web</span>
-              محتوى الموقع
+              <span class="hidden sm:inline">محتوى الموقع</span>
             </a>
           <?php endif; ?>
           <?php if ($hasConfigurationAccess): ?>
-            <a href="/dashboard/configuration.php" class="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-surface-low">
+            <a href="/dashboard/configuration.php" class="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-surface-low">
               <span class="material-symbols-outlined text-base">tune</span>
-              إدارة النظام
+              <span class="hidden sm:inline">إدارة النظام</span>
             </a>
           <?php endif; ?>
         <?php elseif ($navArea === DashboardNavigation::AREA_ACCOUNTING): ?>
@@ -182,6 +218,21 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
       </div>
     </div>
   </header>
+
+  <?php if (count($areaTabs) > 1): ?>
+    <nav class="dashboard-area-tabs sticky top-16 z-40" aria-label="أقسام لوحة التحكم" data-dashboard-area-tabs>
+      <?php foreach ($areaTabs as $tab): ?>
+        <a
+          href="<?= h((string) ($tab['route'] ?? '#')) ?>"
+          class="dashboard-area-tab <?= !empty($tab['active']) ? 'is-active' : '' ?>"
+          data-dashboard-nav-link
+        >
+          <span class="material-symbols-outlined" aria-hidden="true"><?= h((string) ($tab['icon'] ?? 'circle')) ?></span>
+          <?= h((string) ($tab['label'] ?? '')) ?>
+        </a>
+      <?php endforeach; ?>
+    </nav>
+  <?php endif; ?>
 
   <div id="dashboardNavOverlay" class="lg:hidden fixed inset-0 bg-black/40 opacity-0 pointer-events-none z-40 transition" aria-hidden="true"></div>
   <aside
