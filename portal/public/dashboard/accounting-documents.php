@@ -7,7 +7,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Auth\WebSession;
 use Portal\Services\AccountingApiService;
 
-WebSession::requirePermission('orders.view');
+WebSession::requireAnyPermission(['accounting.documents.view', 'orders.view']);
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 $kind = trim((string) ($_GET['kind'] ?? 'invoices'));

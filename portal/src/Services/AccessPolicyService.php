@@ -203,8 +203,6 @@ final class AccessPolicyService
 
         if ($hasVisibleClientFilters) {
             $storeOptions['visible_client_filters'] = self::normalizeVisibleClientFilters($storeOptions['visible_client_filters']);
-        } elseif ($hasStoreOptions) {
-            $storeOptions['visible_client_filters'] = [];
         }
 
         $storeOptions['client_sort_fields'] = self::normalizeClientSortFields($storeOptions['client_sort_fields']);

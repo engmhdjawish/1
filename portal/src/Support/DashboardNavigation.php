@@ -12,6 +12,17 @@ final class DashboardNavigation
     public const AREA_CONFIGURATION = 'configuration';
 
     /** @var list<string> */
+    private const ACCOUNTING_ACCESS_PERMISSIONS = [
+        'accounting.view',
+        'accounting.customers.view',
+        'accounting.documents.view',
+        'accounting.statement.view',
+        'accounting.sync.view',
+        'accounting.reports.view',
+        'orders.view',
+    ];
+
+    /** @var list<string> */
     private const ACCOUNTING_ROUTES = [
         '/dashboard/accounting.php',
         '/dashboard/accounting-customers.php',
@@ -80,7 +91,7 @@ final class DashboardNavigation
 
     public static function canAccessAccounting(?array $user): bool
     {
-        return self::userCan($user, 'orders.view');
+        return self::userCan($user, self::ACCOUNTING_ACCESS_PERMISSIONS);
     }
 
     /**
@@ -240,6 +251,21 @@ final class DashboardNavigation
             );
         }
 
+        $accountingItems = self::flattenGroupItems(self::accountingGroups($user));
+        if ($accountingItems !== []) {
+            $groups['أمين — المحاسبة'] = array_merge(
+                [
+                    [
+                        'route' => '/dashboard/accounting.php',
+                        'label' => 'نظرة عامة — أمين',
+                        'icon' => 'account_balance',
+                        'permission' => ['accounting.view', 'orders.view'],
+                    ],
+                ],
+                $accountingItems
+            );
+        }
+
         $filtered = [];
         foreach ($groups as $title => $items) {
             $visible = self::filterItems($user, $items);
@@ -264,14 +290,14 @@ final class DashboardNavigation
                     'route' => '/dashboard/accounting-customers.php',
                     'label' => 'عملاء الأمين',
                     'icon' => 'groups',
-                    'permission' => 'orders.view',
+                    'permission' => ['accounting.customers.view', 'orders.view'],
                     'description' => 'دليل عملاء نظام الأمين مع ملخص الحساب — مختلف عن عملاء تسجيل الموقع.',
                 ],
                 [
                     'route' => '/dashboard/accounting-statement.php',
                     'label' => 'كشف حساب عميل',
                     'icon' => 'account_balance_wallet',
-                    'permission' => 'orders.view',
+                    'permission' => 'accounting.statement.view',
                     'description' => 'بحث بالاسم أو الهاتف وعرض حركات الحساب مع فتح الفواتير والسندات.',
                 ],
             ],
@@ -280,21 +306,21 @@ final class DashboardNavigation
                     'route' => '/dashboard/accounting-documents.php',
                     'label' => 'الفواتير والسندات',
                     'icon' => 'receipt_long',
-                    'permission' => 'orders.view',
+                    'permission' => ['accounting.documents.view', 'orders.view'],
                     'description' => 'تصفّح فواتير وقبض ودفع الأمين مع التفاصيل والفلترة.',
                 ],
                 [
                     'route' => '/dashboard/accounting-sync.php',
                     'label' => 'مزامنة طلبات الموقع',
                     'icon' => 'sync',
-                    'permission' => 'orders.view',
+                    'permission' => ['accounting.sync.view', 'orders.view'],
                     'description' => 'متابعة إرسال طلبات البوابة إلى نظام الأمين.',
                 ],
                 [
                     'route' => '/dashboard/accounting-reports.php',
                     'label' => 'ملخص طلبات الموقع',
                     'icon' => 'analytics',
-                    'permission' => 'orders.view',
+                    'permission' => ['accounting.reports.view', 'orders.view'],
                     'description' => 'تجميع مالي لطلبات البوابة حسب الحالة.',
                 ],
             ],
@@ -316,7 +342,7 @@ final class DashboardNavigation
                         'route' => '/dashboard/accounting.php',
                         'label' => 'نظرة عامة',
                         'icon' => 'account_balance',
-                        'permission' => 'orders.view',
+                        'permission' => ['accounting.view', 'orders.view'],
                     ],
                 ],
             ],
@@ -569,7 +595,7 @@ final class DashboardNavigation
             ['route' => '/dashboard/customers.php', 'label' => 'عملاء الموقع', 'permission' => 'web_customers.view'],
             ['route' => '/dashboard/site-content.php', 'label' => 'محتوى الموقع', 'permission' => null, 'visible' => self::hasSiteContentAccess($user)],
             ['route' => '/dashboard/configuration.php', 'label' => 'إدارة النظام', 'permission' => null, 'visible' => self::hasConfigurationAccess($user)],
-            ['route' => '/dashboard/accounting.php', 'label' => 'أمين', 'permission' => 'orders.view'],
+            ['route' => '/dashboard/accounting.php', 'label' => 'أمين', 'permission' => null, 'visible' => self::canAccessAccounting($user)],
         ];
 
         $links = self::filterItems($user, $candidates);

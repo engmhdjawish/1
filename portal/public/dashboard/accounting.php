@@ -8,7 +8,7 @@ use Portal\Auth\WebSession;
 use Portal\Services\AccountingApiService;
 use Portal\Services\OrderService;
 
-WebSession::requirePermission('orders.view');
+WebSession::requireAnyPermission(['accounting.view', 'orders.view']);
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 $syncCounts = OrderService::syncCounts();
