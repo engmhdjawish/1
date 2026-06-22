@@ -136,6 +136,12 @@
     if (srcHeaderArea && headerArea) {
       headerArea.textContent = srcHeaderArea.textContent;
     }
+
+    const srcAreaTabs = doc.querySelector('[data-dashboard-area-tabs]');
+    const areaTabs = qs('[data-dashboard-area-tabs]');
+    if (srcAreaTabs && areaTabs) {
+      areaTabs.innerHTML = srcAreaTabs.innerHTML;
+    }
   }
 
   function currentDashboardRoute() {
@@ -407,6 +413,9 @@
     }
     if (typeof window.portalAboutEditorInit === 'function') {
       window.portalAboutEditorInit(root);
+    }
+    if (typeof window.portalAccountingStatementInit === 'function') {
+      window.portalAccountingStatementInit(root);
     }
   }
 

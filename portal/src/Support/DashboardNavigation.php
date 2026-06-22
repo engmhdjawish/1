@@ -177,19 +177,6 @@ final class DashboardNavigation
         ]);
     }
 
-    /** @return list<array<string, mixed>> */
-    private static function flattenGroupItems(array $groups): array
-    {
-        $items = [];
-        foreach ($groups as $groupItems) {
-            foreach ($groupItems as $item) {
-                $items[] = $item;
-            }
-        }
-
-        return $items;
-    }
-
     /** @return array<string, list<array<string, mixed>>> */
     public static function operationsGroups(?array $user): array
     {
@@ -221,49 +208,37 @@ final class DashboardNavigation
             ],
         ];
 
-        $siteContentItems = self::flattenGroupItems(self::siteContentGroups($user));
-        if ($siteContentItems !== []) {
-            $groups['محتوى الموقع'] = array_merge(
+        if (self::hasSiteContentAccess($user)) {
+            $groups['أقسام أخرى'] = [
                 [
-                    [
-                        'route' => '/dashboard/site-content.php',
-                        'label' => 'نظرة عامة — المحتوى',
-                        'icon' => 'web',
-                        'permission' => null,
-                    ],
+                    'route' => '/dashboard/site-content.php',
+                    'label' => 'محتوى الموقع',
+                    'icon' => 'web',
+                    'permission' => null,
                 ],
-                $siteContentItems
-            );
+            ];
         }
 
-        $configurationItems = self::flattenGroupItems(self::systemConfigurationGroups($user));
-        if ($configurationItems !== []) {
-            $groups['إدارة النظام'] = array_merge(
+        if (self::canAccessAccounting($user)) {
+            $groups['أقسام أخرى'] = array_merge($groups['أقسام أخرى'] ?? [], [
                 [
-                    [
-                        'route' => '/dashboard/configuration.php',
-                        'label' => 'نظرة عامة — النظام',
-                        'icon' => 'dashboard_customize',
-                        'permission' => null,
-                    ],
+                    'route' => '/dashboard/accounting.php',
+                    'label' => 'أمين — المحاسبة',
+                    'icon' => 'account_balance',
+                    'permission' => ['accounting.view', 'orders.view'],
                 ],
-                $configurationItems
-            );
+            ]);
         }
 
-        $accountingItems = self::flattenGroupItems(self::accountingGroups($user));
-        if ($accountingItems !== []) {
-            $groups['أمين — المحاسبة'] = array_merge(
+        if (self::hasConfigurationAccess($user)) {
+            $groups['أقسام أخرى'] = array_merge($groups['أقسام أخرى'] ?? [], [
                 [
-                    [
-                        'route' => '/dashboard/accounting.php',
-                        'label' => 'نظرة عامة — أمين',
-                        'icon' => 'account_balance',
-                        'permission' => ['accounting.view', 'orders.view'],
-                    ],
+                    'route' => '/dashboard/configuration.php',
+                    'label' => 'إدارة النظام',
+                    'icon' => 'dashboard_customize',
+                    'permission' => null,
                 ],
-                $accountingItems
-            );
+            ]);
         }
 
         $filtered = [];
