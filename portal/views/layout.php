@@ -40,6 +40,7 @@ $whatsappLink = $whatsapp !== '' ? 'https://wa.me/' . $whatsapp : '';
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&display=swap" rel="stylesheet">
     <link href="/css/material-image-frame.css" rel="stylesheet">
+    <link href="/css/site-brand.css" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -81,9 +82,13 @@ $whatsappLink = $whatsapp !== '' ? 'https://wa.me/' . $whatsapp : '';
       >
         <span class="material-symbols-outlined">menu</span>
       </button>
-      <a href="/index.php" class="font-extrabold text-primary text-base sm:text-lg inline-flex items-center gap-2 min-w-0">
+      <a href="/index.php" class="font-extrabold text-primary text-base sm:text-lg inline-flex items-center gap-2.5 min-w-0">
         <?php if (!empty($companyLogoUrl)): ?>
-          <img src="<?= h((string) $companyLogoUrl) ?>" alt="" class="h-9 w-9 rounded-lg object-contain bg-white border border-gray-100 shrink-0">
+          <?php
+            $siteLogoVariant = 'header';
+            $siteLogoAlt = $siteName;
+            require __DIR__ . '/partials/site-logo.php';
+          ?>
         <?php endif; ?>
         <span class="truncate"><?= h($siteName) ?></span>
       </a>
@@ -118,8 +123,17 @@ $whatsappLink = $whatsapp !== '' ? 'https://wa.me/' . $whatsapp : '';
 
 <div id="publicNavOverlay" class="md:hidden fixed inset-0 z-40 bg-black/40 opacity-0 pointer-events-none transition" aria-hidden="true"></div>
 <aside id="publicNavDrawer" class="md:hidden fixed top-0 right-0 z-50 h-full w-[min(88vw,300px)] bg-white border-l border-gray-200 shadow-2xl flex flex-col translate-x-full" aria-hidden="true">
-  <div class="flex items-center justify-between px-4 py-4 border-b border-gray-200">
-    <span class="font-bold text-primary"><?= h($siteName) ?></span>
+  <div class="flex items-center justify-between gap-2 px-4 py-4 border-b border-gray-200 min-w-0">
+    <div class="inline-flex items-center gap-2 min-w-0">
+      <?php if (!empty($companyLogoUrl)): ?>
+        <?php
+          $siteLogoVariant = 'drawer';
+          $siteLogoAlt = $siteName;
+          require __DIR__ . '/partials/site-logo.php';
+        ?>
+      <?php endif; ?>
+      <span class="font-bold text-primary truncate"><?= h($siteName) ?></span>
+    </div>
     <button type="button" id="closePublicNavBtn" class="w-9 h-9 rounded-full hover:bg-red-50 inline-flex items-center justify-center" aria-label="إغلاق">
       <span class="material-symbols-outlined">close</span>
     </button>

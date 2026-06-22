@@ -14,14 +14,22 @@ if (!isset($renderMediaPickerField)) {
     ): void {
         $currentUrl = trim($currentUrl);
         $defaultCategory = in_array($defaultCategory, SiteMediaService::CATEGORIES, true) ? $defaultCategory : 'banner';
+        $isLogoField = $defaultCategory === 'logo';
+        $previewBoxClass = $isLogoField
+            ? 'h-20 w-36 rounded-lg border border-border-subtle overflow-hidden flex items-center justify-center text-[10px] text-text-muted site-logo-wrap site-logo-wrap--drawer !max-w-none'
+            : 'h-16 w-28 rounded-lg border border-border-subtle bg-surface-low overflow-hidden flex items-center justify-center text-[10px] text-text-muted';
+        $previewImgClass = $isLogoField ? 'site-logo-img max-h-[3.25rem]' : 'h-full w-full object-cover';
         ?>
-        <div class="text-xs" id="<?= h($fieldId) ?>-wrap" data-media-field="<?= h($fieldId) ?>" data-default-category="<?= h($defaultCategory) ?>">
+        <div class="text-xs" id="<?= h($fieldId) ?>-wrap" data-media-field="<?= h($fieldId) ?>" data-default-category="<?= h($defaultCategory) ?>" data-media-preview-logo="<?= $isLogoField ? '1' : '0' ?>">
           <span class="text-text-muted block mb-0.5"><?= h($label) ?></span>
+          <?php if ($isLogoField): ?>
+            <p class="text-[11px] text-text-muted mb-1.5">يفضّل PNG بخلفية شفافة. إن كان الشعار أبيض يُعرض على خلفية رمادية فاتحة ليكون أوضح.</p>
+          <?php endif; ?>
           <input type="hidden" name="<?= h($inputName) ?>" id="<?= h($fieldId) ?>-input" value="<?= h($currentUrl) ?>">
           <div class="flex flex-wrap items-center gap-2">
-            <div id="<?= h($fieldId) ?>-preview" class="h-16 w-28 rounded-lg border border-border-subtle bg-surface-low overflow-hidden flex items-center justify-center text-[10px] text-text-muted">
+            <div id="<?= h($fieldId) ?>-preview" class="<?= h($previewBoxClass) ?>">
               <?php if ($currentUrl !== ''): ?>
-                <img src="<?= h($currentUrl) ?>" alt="" class="h-full w-full object-cover">
+                <img src="<?= h($currentUrl) ?>" alt="" class="<?= h($previewImgClass) ?>">
               <?php else: ?>
                 بدون صورة
               <?php endif; ?>

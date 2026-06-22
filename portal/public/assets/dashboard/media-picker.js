@@ -14,6 +14,8 @@
   const setPreview = (fieldId, url) => {
     const input = qs(fieldId + '-input');
     const preview = qs(fieldId + '-preview');
+    const wrap = qs(fieldId + '-wrap');
+    const isLogoField = wrap?.getAttribute('data-media-preview-logo') === '1';
     if (input) {
       input.value = url || '';
       input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -28,7 +30,7 @@
     const img = document.createElement('img');
     img.src = url;
     img.alt = '';
-    img.className = 'h-full w-full object-cover';
+    img.className = isLogoField ? 'site-logo-img max-h-[3.25rem]' : 'h-full w-full object-cover';
     preview.appendChild(img);
   };
 

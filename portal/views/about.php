@@ -9,7 +9,11 @@ declare(strict_types=1);
 <section class="max-w-3xl mx-auto">
   <header class="mb-8 text-center">
     <?php if (!empty($companyLogoUrl)): ?>
-      <img src="<?= h((string) $companyLogoUrl) ?>" alt="<?= h((string) ($company['company_name'] ?? '')) ?>" class="h-20 w-auto mx-auto mb-4 object-contain">
+      <?php
+        $siteLogoVariant = 'hero';
+        $siteLogoAlt = (string) ($company['company_name'] ?? '');
+        require __DIR__ . '/partials/site-logo.php';
+      ?>
     <?php endif; ?>
     <h1 class="text-3xl font-extrabold text-slate-900"><?= h($aboutTitle) ?></h1>
     <?php if (trim((string) ($company['company_name'] ?? '')) !== ''): ?>
