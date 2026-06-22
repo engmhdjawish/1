@@ -32,7 +32,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $filters = [
-    'status' => trim((string) ($_GET['status'] ?? '')),
+    'status' => array_key_exists('status', $_GET)
+        ? trim((string) $_GET['status'])
+        : 'pending',
     'sync' => trim((string) ($_GET['sync'] ?? '')),
     'q' => trim((string) ($_GET['q'] ?? '')),
     'fromDate' => trim((string) ($_GET['fromDate'] ?? '')),

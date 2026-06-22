@@ -272,3 +272,191 @@ function packages_available_display(array $item): float
 
     return max(0.0, floor($warehouseQty / $packaging));
 }
+
+function default_about_content(): string
+{
+    return <<<'TEXT'
+جاويش لتجارة الأحذية هي شركة متخصصة في تجارة كافة أنواع الأحذية المحلية والمستوردة. نعمل على تلبية احتياجات السوق من خلال توفير تشكيلة متنوعة تشمل الأحذية الرسمية، الكاجوال، والرياضية، التي تجمع بين التصاميم العملية والجودة المناسبة للاستخدام اليومي.
+
+## أعمالنا وبماذا نلتزم
+
+*تنوع المنتجات*
+نوفر خيارات متعددة من الأحذية المصنوعة محلياً لدعم الإنتاج الوطني، بالإضافة إلى خطوط الأحذية المستوردة لتلبية كافة الأذواق والمتطلبات.
+
+*الجودة والمواد*
+نحرص على اختيار بضائعنا بعناية، مع التركيز على جودة الخامات المستخدمة مثل **الجلود الطبيعية** و**النوبوك** لضمان راحة العميل ومتانة المنتج.
+
+*الالتزام والموثوقية*
+نعتمد على تنظيم داخلي دقيق وأنظمة رقمية لبرمجة الطلبيات وإدارة المستودعات، مما يضمن لعملائنا وتجار الجملة دقة في المواعيد وسلاسة في التعامل والتسليم.
+
+## هدفنا
+
+> أن نكون **المورد الموثوق** والشريك الدائم لعملائنا في قطاع الأحذية، من خلال تقديم منتج جيد بسعر عادل، وتعامل قائم على الشفافية والوضوح.
+TEXT;
+}
+
+function format_about_inline(string $text, bool $onDark = false): string
+{
+    $text = h($text);
+    if ($onDark) {
+        $text = (string) preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $text);
+        $text = (string) preg_replace('/(?<!\*)\*([^*]+?)\*(?!\*)/', '<em>$1</em>', $text);
+
+        return $text;
+    }
+
+    $text = (string) preg_replace('/\*\*(.+?)\*\*/', '<strong class="font-extrabold text-slate-900">$1</strong>', $text);
+    $text = (string) preg_replace('/(?<!\*)\*([^*]+?)\*(?!\*)/', '<em class="text-slate-600">$1</em>', $text);
+
+    return $text;
+}
+
+/**
+ * @return array{
+ *   intro_paragraphs: list<string>,
+ *   sections: list<array{
+ *     title: string,
+ *     subtitle: string,
+ *     cards: list<array{title: string, body: string}>,
+ *     paragraphs: list<string>,
+ *     quote: string,
+ *     list_items: list<string>
+ *   }>
+ * }
+ */
+function parse_about_content(string $text): array
+{
+    $text = trim(str_replace(["\r\n", "\r"], "\n", $text));
+    if ($text === '') {
+        return ['intro_paragraphs' => [], 'sections' => []];
+    }
+
+    $chunks = preg_split('/\n(?=##\s+)/', $text) ?: [];
+    $introChunk = trim((string) array_shift($chunks));
+    $introParagraphs = $introChunk === ''
+        ? []
+        : array_values(array_filter(array_map('trim', preg_split('/\n\s*\n/', $introChunk) ?: [])));
+
+    $sections = [];
+    foreach ($chunks as $chunk) {
+        $chunk = preg_replace('/^##\s+/', '', trim($chunk));
+        if ($chunk === '') {
+            continue;
+        }
+
+        $lines = explode("\n", $chunk);
+        $title = trim((string) array_shift($lines));
+        $section = [
+            'title' => $title,
+            'subtitle' => '',
+            'cards' => [],
+            'paragraphs' => [],
+            'quote' => '',
+            'list_items' => [],
+        ];
+
+        $pendingCardTitle = null;
+        $paragraphBuffer = [];
+
+        $flushParagraph = static function () use (&$paragraphBuffer, &$section): void {
+            if ($paragraphBuffer === []) {
+                return;
+            }
+            $section['paragraphs'][] = trim(implode("\n", $paragraphBuffer));
+            $paragraphBuffer = [];
+        };
+
+        foreach ($lines as $rawLine) {
+            $line = trim($rawLine);
+            if ($line === '') {
+                if ($pendingCardTitle !== null) {
+                    $section['cards'][] = ['title' => $pendingCardTitle, 'body' => ''];
+                    $pendingCardTitle = null;
+                }
+                $flushParagraph();
+                continue;
+            }
+
+            if ($line === '---') {
+                if ($pendingCardTitle !== null) {
+                    $section['cards'][] = ['title' => $pendingCardTitle, 'body' => ''];
+                    $pendingCardTitle = null;
+                }
+                $flushParagraph();
+                continue;
+            }
+
+            if (preg_match('/^###\s+(.+)$/', $line, $matches)) {
+                if ($pendingCardTitle !== null) {
+                    $section['cards'][] = ['title' => $pendingCardTitle, 'body' => ''];
+                    $pendingCardTitle = null;
+                }
+                $flushParagraph();
+                $section['subtitle'] = trim((string) $matches[1]);
+                continue;
+            }
+
+            if (preg_match('/^>\s+(.+)$/', $line, $matches)) {
+                if ($pendingCardTitle !== null) {
+                    $section['cards'][] = ['title' => $pendingCardTitle, 'body' => ''];
+                    $pendingCardTitle = null;
+                }
+                $flushParagraph();
+                $section['quote'] = trim((string) $matches[1]);
+                continue;
+            }
+
+            if (preg_match('/^\*\s*(.+?)\s*\*$/', $line, $matches)) {
+                $flushParagraph();
+                $pendingCardTitle = trim((string) $matches[1]);
+                continue;
+            }
+
+            if (preg_match('/^-\s+(.+)$/', $line, $matches)) {
+                $flushParagraph();
+                $itemText = trim((string) $matches[1]);
+                $colonPos = strpos($itemText, ':');
+                if ($colonPos !== false && $colonPos < 80) {
+                    $section['cards'][] = [
+                        'title' => trim(substr($itemText, 0, $colonPos)),
+                        'body' => trim(substr($itemText, $colonPos + 1)),
+                    ];
+                } else {
+                    $section['list_items'][] = $itemText;
+                }
+                continue;
+            }
+
+            if ($pendingCardTitle !== null) {
+                $section['cards'][] = [
+                    'title' => $pendingCardTitle,
+                    'body' => $line,
+                ];
+                $pendingCardTitle = null;
+                continue;
+            }
+
+            $paragraphBuffer[] = $line;
+        }
+
+        if ($pendingCardTitle !== null) {
+            $section['cards'][] = ['title' => $pendingCardTitle, 'body' => ''];
+        }
+        $flushParagraph();
+
+        if ($section['title'] !== '') {
+            $sections[] = $section;
+        }
+    }
+
+    return [
+        'intro_paragraphs' => $introParagraphs,
+        'sections' => $sections,
+    ];
+}
+
+/** @return list<string> */
+function about_section_icons(): array
+{
+    return ['category', 'verified', 'schedule', 'handshake', 'inventory_2', 'support_agent'];
+}

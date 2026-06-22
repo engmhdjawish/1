@@ -11,17 +11,17 @@ WebSession::requireLogin();
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 $user = WebSession::user();
-if (!DashboardNavigation::hasConfigurationAccess($user)) {
+if (!DashboardNavigation::hasSiteContentAccess($user)) {
     http_response_code(403);
-    echo 'غير مصرح لك بالوصول إلى الإعدادات.';
+    echo 'غير مصرح لك بالوصول إلى محتوى الموقع.';
     exit;
 }
 
-$configurationGroups = DashboardNavigation::configurationGroups($user);
-$currentRoute = '/dashboard/configuration.php';
+$siteContentGroups = DashboardNavigation::siteContentGroups($user);
+$currentRoute = '/dashboard/site-content.php';
 
 ob_start();
-require dirname(__DIR__, 2) . '/views/dashboard/configuration.php';
+require dirname(__DIR__, 2) . '/views/dashboard/site-content.php';
 $content = ob_get_clean();
-$title = 'إدارة النظام';
+$title = 'محتوى الموقع';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

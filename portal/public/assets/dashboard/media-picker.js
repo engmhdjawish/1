@@ -162,11 +162,9 @@
 
   const bindMainOnce = () => {
     if (mainBound) return;
-    const main = document.querySelector('[data-dashboard-main]');
-    if (!main) return;
     mainBound = true;
 
-    main.addEventListener('click', (event) => {
+    document.addEventListener('click', (event) => {
       const openBtn = event.target.closest('[data-media-open]');
       if (openBtn) {
         event.preventDefault();

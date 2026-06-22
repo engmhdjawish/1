@@ -35,6 +35,23 @@
   margin-bottom: 1rem;
 }
 
+.site-logo-wrap--hero-dark {
+  display: flex;
+  width: 100%;
+  min-height: 6rem;
+  margin: 0 auto 1.25rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.site-logo-wrap--hero-dark .site-logo-img {
+  max-height: 6rem;
+  margin-inline: auto;
+  filter: drop-shadow(0 4px 14px rgba(15, 23, 42, 0.28));
+}
+
 @media (min-width: 640px) {
   .site-logo-wrap--header {
     height: 3.5rem;
@@ -48,6 +65,10 @@
     min-height: 7.5rem;
     width: min(100%, 20rem);
     padding: 1.1rem 1.5rem;
+  }
+
+  .site-logo-wrap--hero-dark .site-logo-img {
+    max-height: 7rem;
   }
 }
 

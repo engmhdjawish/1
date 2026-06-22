@@ -61,14 +61,87 @@
     return new URL(raw, window.location.href).href;
   }
 
+  function normalizeDashboardRoute(route) {
+    if (!route) return '';
+    try {
+      const url = new URL(route, window.location.origin);
+      return url.pathname + url.search;
+    } catch {
+      return route;
+    }
+  }
+
+  function routesMatch(currentRoute, itemRoute) {
+    const current = normalizeDashboardRoute(currentRoute);
+    const item = normalizeDashboardRoute(itemRoute);
+    if (!current || !item) return false;
+
+    try {
+      const currentUrl = new URL(current, window.location.origin);
+      const itemUrl = new URL(item, window.location.origin);
+      if (currentUrl.pathname !== itemUrl.pathname) return false;
+      for (const [key, value] of itemUrl.searchParams.entries()) {
+        if (currentUrl.searchParams.get(key) !== value) return false;
+      }
+      return true;
+    } catch {
+      return current === item;
+    }
+  }
+
+  function setSidebarLinkActive(link, active) {
+    link.classList.toggle('bg-primary/10', active);
+    link.classList.toggle('text-primary', active);
+    link.classList.toggle('font-bold', active);
+    link.classList.toggle('border-r-4', active);
+    link.classList.toggle('border-primary', active);
+    link.classList.toggle('text-text-muted', !active);
+    link.classList.toggle('hover:bg-surface-low', !active);
+    const icon = link.querySelector('.material-symbols-outlined');
+    if (icon) icon.classList.toggle('fill', active);
+  }
+
   function updateActiveNav(route) {
-    qsa('[data-dashboard-route]').forEach((el) => {
-      const match = el.getAttribute('data-dashboard-route') === route;
-      el.classList.toggle('is-active', match);
-      el.classList.toggle('bg-primary/10', match && el.tagName === 'A');
-      el.classList.toggle('text-primary', match && el.tagName === 'A');
-      el.classList.toggle('font-bold', match && el.tagName === 'A');
+    const normalized = normalizeDashboardRoute(route);
+    qsa('[data-dashboard-route]').forEach((link) => {
+      const itemRoute = link.getAttribute('data-dashboard-route') || '';
+      setSidebarLinkActive(link, routesMatch(normalized, itemRoute));
     });
+  }
+
+  function syncDashboardChrome(doc) {
+    const srcMeta = doc.querySelector('[data-dashboard-sidebar-meta]');
+    if (srcMeta) {
+      qsa('[data-dashboard-sidebar-meta]').forEach((node) => {
+        node.innerHTML = srcMeta.innerHTML;
+      });
+    }
+
+    const srcNav = doc.querySelector('[data-dashboard-sidebar-nav]');
+    if (srcNav) {
+      qsa('[data-dashboard-sidebar-nav]').forEach((node) => {
+        node.innerHTML = srcNav.innerHTML;
+      });
+    }
+
+    const srcFooter = doc.querySelector('[data-dashboard-sidebar-footer]');
+    if (srcFooter) {
+      qsa('[data-dashboard-sidebar-footer]').forEach((node) => {
+        node.innerHTML = srcFooter.innerHTML;
+      });
+    }
+
+    const srcHeaderArea = doc.querySelector('[data-dashboard-header-area]');
+    const headerArea = qs('[data-dashboard-header-area]');
+    if (srcHeaderArea && headerArea) {
+      headerArea.textContent = srcHeaderArea.textContent;
+    }
+  }
+
+  function currentDashboardRoute() {
+    const mainRoute = qs('[data-dashboard-main]')?.getAttribute('data-current-route');
+    if (mainRoute) return mainRoute;
+    return window.location.pathname + window.location.search;
   }
 
   function closeDrawer() {
@@ -161,14 +234,15 @@
         return;
       }
       main.innerHTML = newMain.innerHTML;
-      const route = newMain.getAttribute('data-current-route') || '';
+      syncDashboardChrome(doc);
+      const route = newMain.getAttribute('data-current-route') || normalizeDashboardRoute(url);
       if (route) {
         main.setAttribute('data-current-route', route);
         updateActiveNav(route);
       }
       if (doc.title) document.title = doc.title;
       if (push) history.pushState({ dashboardUrl: url }, '', url);
-      bindPage(main);
+      bindPage(document);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       showToast(err.message || 'تعذر التنقل.', 'error');
@@ -331,6 +405,9 @@
     if (typeof window.portalMediaPickerInit === 'function') {
       window.portalMediaPickerInit();
     }
+    if (typeof window.portalAboutEditorInit === 'function') {
+      window.portalAboutEditorInit(root);
+    }
   }
 
   function init() {
@@ -339,8 +416,7 @@
     bindHistory();
     bindPage(document);
     history.replaceState({ dashboardUrl: window.location.href }, '', window.location.href);
-    const route = qs('[data-dashboard-main]')?.getAttribute('data-current-route');
-    if (route) updateActiveNav(route);
+    updateActiveNav(currentDashboardRoute());
     const flash = qs('[data-dashboard-flash]');
     if (flash) {
       showToast(flash.textContent.trim(), flash.getAttribute('data-type') || 'success');
