@@ -9,8 +9,8 @@
 }
 
 .site-header {
-  --site-header-logo-height: 4rem;
-  --site-header-logo-max-width: 12rem;
+  --site-header-logo-height: 4.75rem;
+  --site-header-logo-max-width: 14rem;
 }
 
 .site-logo-wrap {
@@ -123,8 +123,8 @@
 
 @media (min-width: 640px) {
   .site-header {
-    --site-header-logo-height: 5rem;
-    --site-header-logo-max-width: 18rem;
+    --site-header-logo-height: 5.75rem;
+    --site-header-logo-max-width: 20rem;
   }
 
   .site-logo-wrap--drawer {
@@ -157,8 +157,8 @@
 
 @media (min-width: 1024px) {
   .site-header {
-    --site-header-logo-height: 5.75rem;
-    --site-header-logo-max-width: 22rem;
+    --site-header-logo-height: 6.5rem;
+    --site-header-logo-max-width: 26rem;
   }
 
   .site-logo-wrap--footer {
@@ -173,7 +173,7 @@
 
 @media (min-width: 1280px) {
   .site-header {
-    --site-header-logo-height: 6.25rem;
-    --site-header-logo-max-width: 28rem;
+    --site-header-logo-height: 7rem;
+    --site-header-logo-max-width: 32rem;
   }
 }

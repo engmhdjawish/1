@@ -12,8 +12,15 @@
     return host;
   };
 
+  let lastToastMessage = '';
+  let lastToastAt = 0;
+
   const showToast = (message, level = 'success') => {
     if (!message) return;
+    const now = Date.now();
+    if (message === lastToastMessage && now - lastToastAt < 2500) return;
+    lastToastMessage = message;
+    lastToastAt = now;
     const el = document.createElement('div');
     el.className = `store-cart-toast store-cart-toast--${level}`;
     const icon = level === 'error' ? 'error' : level === 'warning' ? 'warning' : 'check_circle';
@@ -555,8 +562,11 @@
     }
 
     if (Array.isArray(data.stock_notices) && data.stock_notices.length > 0 && stockEl) {
-      stockEl.classList.remove('hidden');
-      stockEl.innerHTML = `<div class="rounded-xl border bg-amber-50 border-amber-200 text-amber-900 px-4 py-3 text-sm"><p class="font-bold mb-1">تنبيه المخزون</p>${data.stock_notices.map((n) => `<p>${escapeHtml(n)}</p>`).join('')}</div>`;
+      const uniqueNotices = [...new Set(data.stock_notices.map((n) => String(n || '').trim()).filter(Boolean))];
+      if (uniqueNotices.length > 0) {
+        stockEl.classList.remove('hidden');
+        stockEl.innerHTML = `<div class="rounded-xl border bg-amber-50 border-amber-200 text-amber-900 px-4 py-3 text-sm"><p class="font-bold mb-1">تنبيه المخزون</p>${uniqueNotices.map((n) => `<p>${escapeHtml(n)}</p>`).join('')}</div>`;
+      }
     }
   };
 
@@ -572,18 +582,32 @@
     });
   };
 
-  const bindCartLineControls = (root, max) => {
+  const bindCartLineControls = (root, maxPackages) => {
     root.querySelectorAll('[data-bump]').forEach((btn) => {
+      if (btn.dataset.bumpBound === '1') return;
+      btn.dataset.bumpBound = '1';
       btn.addEventListener('click', async () => {
         const wrap = btn.closest('[data-cart-qty-control]');
         const guid = wrap?.dataset.guid || '';
         const delta = parseInt(btn.dataset.bump || '0', 10);
         if (!guid || !delta) return;
+        const input = wrap?.querySelector('[data-qty-input]');
+        const current = parseFloat(input?.value || '1') || 1;
+        if (delta > 0 && maxPackages !== null && maxPackages !== undefined) {
+          const max = parseFloat(String(maxPackages));
+          if (Number.isFinite(max) && current + delta > max + 0.0001) {
+            const maxLabel = String(maxPackages);
+            showToast(`الحد الأقصى للطلب هو ${maxLabel} طرد لهذه المادة.`, 'error');
+            return;
+          }
+        }
         const data = await apiRequest({ action: 'bump', material_guid: guid, delta });
         applyCartResponse(data);
       });
     });
     root.querySelectorAll('[data-qty-input]').forEach((input) => {
+      if (input.dataset.qtyBound === '1') return;
+      input.dataset.qtyBound = '1';
       let timer;
       input.addEventListener('change', () => {
         clearTimeout(timer);

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use Portal\Services\PortalSettingsService;
 use Portal\Services\SpecialOfferService;
+use Portal\Services\StoreCatalogService;
+use Portal\Support\StorePricePreference;
 
 /** @var list<array<string, mixed>> $sections */
 /** @var list<array<string, mixed>> $ads */
@@ -20,6 +22,8 @@ if ($aboutSnippet !== '') {
 }
 $sectionCount = count($sections);
 $offerCount = count(array_filter($sections, static fn (array $s): bool => !empty($s['is_offer_section'])));
+$storeCatalogDisplay = StoreCatalogService::displayOptions();
+$storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
 ?>
 <div class="home-page">
   <section class="home-hero home-hero--premium" aria-label="ترحيب">
@@ -138,10 +142,23 @@ $offerCount = count(array_filter($sections, static fn (array $s): bool => !empty
         $sectionId = (string) ($section['slug'] ?? $section['id'] ?? '');
         $displayOptions = is_array($section['display_options'] ?? null) ? $section['display_options'] : [];
         $showImages = array_key_exists('show_images', $displayOptions) ? (bool) $displayOptions['show_images'] : true;
-        $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
-        $showPriceSyp = $priceMode === 'both' || $priceMode === 'syp';
-        $showPriceUsd = $priceMode === 'both' || $priceMode === 'usd';
-        $showAnyPrice = $showPriceSyp || $showPriceUsd;
+        $sectionPriceMode = (string) ($displayOptions['price_mode'] ?? 'both');
+        $sectionShowPrice = array_key_exists('show_price', $displayOptions)
+            ? (bool) $displayOptions['show_price']
+            : $storeShowPrice;
+        if (!$sectionShowPrice || $sectionPriceMode === 'none') {
+            $showAnyPrice = false;
+            $showPriceSyp = false;
+            $showPriceUsd = false;
+        } elseif ($sectionPriceMode === 'both') {
+            $showPriceSyp = StorePricePreference::current() === StorePricePreference::SYP;
+            $showPriceUsd = StorePricePreference::current() === StorePricePreference::USD;
+            $showAnyPrice = $showPriceSyp || $showPriceUsd;
+        } else {
+            $showPriceSyp = $sectionPriceMode === 'syp';
+            $showPriceUsd = $sectionPriceMode === 'usd';
+            $showAnyPrice = $showPriceSyp || $showPriceUsd;
+        }
         $isOfferSection = !empty($section['is_offer_section']);
       ?>
       <section

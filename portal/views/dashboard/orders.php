@@ -11,6 +11,8 @@ declare(strict_types=1);
 /** @var bool $canManageOrders */
 /** @var bool $itemEditSchemaReady */
 /** @var string $staffEditBlockReason */
+/** @var string $ordersListUrl */
+/** @var string $orderPriceCurrency */
 /** @var array<string, mixed>|null $orderDetails */
 
 $statusLabels = [
@@ -264,13 +266,17 @@ $truncate = static function (string $text, int $max = 48): string {
           <h2 id="order-details-title" class="text-lg font-extrabold text-slate-900 truncate"><?= h((string) ($orderDetails['order_number'] ?? '')) ?></h2>
           <p class="text-xs text-text-muted mt-0.5"><?= h((string) ($orderDetails['share_link_name'] ?? 'طلب مباشر')) ?> · <?= h((string) ($orderDetails['created_at'] ?? '')) ?></p>
         </div>
-        <a href="<?= h($buildOrdersUrl($filters)) ?>" data-dashboard-no-nav class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-border-subtle hover:bg-surface-low shrink-0" aria-label="إغلاق">
+        <a href="<?= h($ordersListUrl) ?>" data-dashboard-no-nav class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-border-subtle hover:bg-surface-low shrink-0" aria-label="إغلاق">
           <span class="material-symbols-outlined">close</span>
         </a>
       </div>
-      <div class="flex flex-wrap gap-1.5 mt-2">
+      <div class="flex flex-wrap gap-1.5 mt-2 items-center">
         <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $statusClass($detailStatus) ?>"><?= h($statusLabels[$detailStatus] ?? $detailStatus) ?></span>
         <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $syncClass($detailSync) ?>"><?= h($syncLabels[$detailSync] ?? $detailSync) ?></span>
+        <div class="store-currency-toggle store-currency-toggle--drawer ms-auto" role="group" aria-label="عملة عرض الطلب">
+          <button type="button" class="store-currency-toggle__btn <?= $orderPriceCurrency === 'syp' ? 'is-active' : '' ?>" data-dashboard-order-currency="syp" title="عرض بالليرة">ل.س</button>
+          <button type="button" class="store-currency-toggle__btn <?= $orderPriceCurrency === 'usd' ? 'is-active' : '' ?>" data-dashboard-order-currency="usd" title="عرض بالدولار">$</button>
+        </div>
       </div>
     </header>
 
@@ -310,8 +316,8 @@ $truncate = static function (string $text, int $max = 48): string {
           <div class="store-order-lines">
             <?php foreach ($detailItems as $item): ?>
               <?php
-                $showPriceUsd = (float) ($item['sale_price_usd'] ?? 0) > 0;
-                $showPriceSyp = !$showPriceUsd && (float) ($item['sale_price_sp'] ?? 0) > 0;
+                $showPriceUsd = $orderPriceCurrency === 'usd';
+                $showPriceSyp = $orderPriceCurrency === 'syp';
                 $orderId = (string) ($orderDetails['id'] ?? '');
                 require dirname(__DIR__) . '/partials/dashboard-order-line-edit.php';
               ?>
@@ -338,11 +344,20 @@ $truncate = static function (string $text, int $max = 48): string {
       </div>
       <div class="flex items-center justify-between rounded-xl bg-slate-900 text-white px-4 py-3">
         <span class="text-sm font-bold">إجمالي الحساب</span>
-        <span class="text-2xl font-extrabold tracking-tight"><?= h($formatUsd((float) ($orderDetails['total_usd'] ?? 0))) ?></span>
+        <span class="text-2xl font-extrabold tracking-tight">
+          <?php if ($orderPriceCurrency === 'syp'): ?>
+            <?= number_format((float) ($orderDetails['total_sp'] ?? 0), 0, '.', ',') ?> ل.س
+          <?php else: ?>
+            <?= h($formatUsd((float) ($orderDetails['total_usd'] ?? 0))) ?>
+          <?php endif; ?>
+        </span>
       </div>
-      <?php if ((float) ($orderDetails['total_sp'] ?? 0) > 0): ?>
+      <?php if ($orderPriceCurrency === 'usd' && (float) ($orderDetails['total_sp'] ?? 0) > 0): ?>
         <p class="text-[11px] text-text-muted text-center">ما يعادل <?= number_format((float) ($orderDetails['total_sp'] ?? 0), 0, '.', ',') ?> ل.س</p>
+      <?php elseif ($orderPriceCurrency === 'syp' && (float) ($orderDetails['total_usd'] ?? 0) > 0): ?>
+        <p class="text-[11px] text-text-muted text-center">ما يعادل <?= h($formatUsd((float) ($orderDetails['total_usd'] ?? 0))) ?></p>
       <?php endif; ?>
+      <p class="text-[10px] text-text-muted text-center">عند مزامنة الأمين يُرسل سعر الدولار للصنف.</p>
     </footer>
   </aside>
 <?php endif; ?>

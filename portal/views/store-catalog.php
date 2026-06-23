@@ -408,6 +408,13 @@ require __DIR__ . '/partials/store-filter-group.php';
   </div>
 </section>
 
+<?php if ($storeShowPrice && StorePricePreference::current() === StorePricePreference::SYP): ?>
+  <p class="store-syp-disclaimer" role="note">
+    <span class="material-symbols-outlined" aria-hidden="true">info</span>
+    الأسعار بالليرة السورية تقريبية وقد تتغيّر حسب سعر الصرف وقت إتمام الطلب.
+  </p>
+<?php endif; ?>
+
 <?php if (!empty($catalog['apiError'])): ?>
   <p class="mb-4 rounded-xl border bg-red-50 border-red-200 text-red-700 px-4 py-3 text-sm"><?= h((string) $catalog['apiError']) ?></p>
 <?php endif; ?>

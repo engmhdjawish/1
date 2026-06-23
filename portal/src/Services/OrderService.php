@@ -779,6 +779,36 @@ final class OrderService
     }
 
     /**
+     * سعر الطرد بالدولار المُرسل لمزامنة الأمين (دائماً USD).
+     *
+     * @param array<string, mixed> $item
+     */
+    public static function amineSyncPackagePriceUsd(array $item): float
+    {
+        $usd = (float) ($item['sale_price_usd'] ?? 0);
+        if ($usd > 0) {
+            return $usd;
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * @return array{material_guid: string, material_code: string, quantity: float, sale_price_usd: float}
+     *
+     * @param array<string, mixed> $item
+     */
+    public static function amineSyncLinePayload(array $item): array
+    {
+        return [
+            'material_guid' => (string) ($item['material_guid'] ?? ''),
+            'material_code' => (string) ($item['material_code'] ?? ''),
+            'quantity' => (float) ($item['quantity'] ?? 0),
+            'sale_price_usd' => self::amineSyncPackagePriceUsd($item),
+        ];
+    }
+
+    /**
      * @return array{ok: bool, message: string}
      */
     public static function updateItemQuantity(

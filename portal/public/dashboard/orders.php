@@ -8,6 +8,8 @@ use Portal\Auth\WebSession;
 use Portal\Services\OrderService;
 use Portal\Support\DashboardHttp;
 
+use Portal\Support\DashboardOrderPricePreference;
+
 WebSession::requirePermission('orders.view');
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
@@ -78,6 +80,12 @@ $filters = [
     'limit' => (int) ($_GET['limit'] ?? 50),
 ];
 $detailsId = trim((string) ($_GET['details'] ?? ''));
+DashboardOrderPricePreference::applyFromRequest($_GET);
+$orderPriceCurrency = DashboardOrderPricePreference::current();
+
+$ordersListQuery = $_GET;
+unset($ordersListQuery['details']);
+$ordersListUrl = '/dashboard/orders.php' . ($ordersListQuery !== [] ? '?' . http_build_query($ordersListQuery) : '');
 
 $orders = OrderService::list($filters);
 $orderDetails = $detailsId !== '' ? OrderService::getOrderDetails($detailsId) : null;
@@ -92,4 +100,7 @@ require dirname(__DIR__, 2) . '/views/dashboard/orders.php';
 $content = ob_get_clean();
 $title = 'إدارة الطلبات';
 $dashboardPageAssets = 'orders';
+$extraFooter = $orderDetails !== null
+    ? '<script src="/assets/dashboard-order-price-pref.js" defer></script>'
+    : '';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';
