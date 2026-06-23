@@ -3,6 +3,9 @@
   --home-ink: #0f172a;
   --home-muted: #64748b;
   --home-scroll-offset: 9.5rem;
+  --home-banner-ratio: 21 / 9;
+  --home-ad-max-height: 16rem;
+  --home-section-banner-max-height: 14rem;
   display: flex;
   flex-direction: column;
   gap: 2rem;
@@ -214,8 +217,8 @@
   border-radius: 1.25rem;
   border: 1px solid #e5e7eb;
   background: #f3f4f6;
-  aspect-ratio: 21 / 9;
-  max-height: 16rem;
+  aspect-ratio: var(--home-banner-ratio);
+  max-height: var(--home-ad-max-height);
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
 }
 
@@ -333,17 +336,20 @@
   box-shadow: 0 10px 28px rgba(216, 25, 33, 0.08);
 }
 
-.home-section__banner img {
-  width: 100%;
-  height: 10rem;
-  object-fit: cover;
-  display: block;
+.home-section__banner {
+  position: relative;
+  overflow: hidden;
+  background: #f3f4f6;
+  aspect-ratio: var(--home-banner-ratio);
+  max-height: var(--home-section-banner-max-height);
 }
 
-@media (min-width: 768px) {
-  .home-section__banner img {
-    height: 11.5rem;
-  }
+.home-section__banner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
 }
 
 .home-section__body {
@@ -535,6 +541,10 @@
 
   .home-ad-frame {
     max-height: 11rem;
+  }
+
+  .home-page {
+    --home-section-banner-max-height: 10rem;
   }
 
   .home-section-nav--sticky {
