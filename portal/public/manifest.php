@@ -5,6 +5,7 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Services\PortalSettingsService;
+use Portal\Support\Utf8Text;
 
 require dirname(__DIR__) . '/views/helpers.php';
 
@@ -12,7 +13,7 @@ $company = PortalSettingsService::companySettings();
 $siteName = trim((string) ($company['company_name'] ?? '')) !== ''
     ? (string) $company['company_name']
     : 'جاويش للتجارة';
-$shortName = mb_strlen($siteName) > 12 ? mb_substr($siteName, 0, 12) : $siteName;
+$shortName = Utf8Text::length($siteName) > 12 ? Utf8Text::substr($siteName, 0, 12) : $siteName;
 $logoUrl = PortalSettingsService::companyLogoUrl($company);
 $icon192 = portal_absolute_url('/icons/icon-png.php?size=192');
 $icon512 = portal_absolute_url('/icons/icon-png.php?size=512');

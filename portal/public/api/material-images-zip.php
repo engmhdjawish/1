@@ -62,28 +62,7 @@ try {
         exit;
     }
 
-  /** @var array<string, scalar|null> $query */
-    $query = [];
-    $allowed = [
-        'search', 'storeGuid', 'storeGuids', 'countryOfOrigin', 'countryOfOrigins',
-        'manufacturer', 'manufacturers', 'sizeRange', 'sizeRanges', 'materialType',
-        'materialTypes', 'ageCategory', 'ageCategories', 'groupGuid', 'groupGuids',
-        'minWarehouseQuantity', 'maxWarehouseQuantity', 'isAvailable',
-    ];
-    foreach ($allowed as $key) {
-        if (!isset($_GET[$key])) {
-            continue;
-        }
-        $value = $_GET[$key];
-        if (is_array($value)) {
-            continue;
-        }
-        $text = trim((string) $value);
-        if ($text !== '') {
-            $query[$key] = $text;
-        }
-    }
-
+    $query = MaterialImageZipService::buildMaterialFilterQuery($_GET);
     MaterialImageZipService::streamApiZip('/api/material-images/download/materials', $query, 'filtered-material-images');
 } catch (\Throwable $exception) {
     if (!headers_sent()) {

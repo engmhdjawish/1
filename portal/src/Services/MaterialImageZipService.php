@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Portal\Services;
 
+use Portal\Support\Utf8Text;
+
 final class MaterialImageZipService
 {
     public const MAX_ORDER_IMAGES = 200;
@@ -314,6 +316,88 @@ final class MaterialImageZipService
             return 'images';
         }
 
-        return mb_substr($value, 0, 80);
+        return Utf8Text::substr($value, 0, 80);
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @return array<string, scalar>
+     */
+    public static function buildMaterialFilterQuery(array $input): array
+    {
+        /** @var array<string, scalar> $query */
+        $query = [];
+
+        $search = trim((string) ($input['search'] ?? ''));
+        if ($search !== '') {
+            $query['search'] = $search;
+        }
+
+        $scalarKeys = [
+            'minWarehouseQuantity' => ['minWarehouseQuantity'],
+            'maxWarehouseQuantity' => ['maxWarehouseQuantity'],
+        ];
+        foreach ($scalarKeys as $apiKey => $sourceKeys) {
+            foreach ($sourceKeys as $sourceKey) {
+                if (!isset($input[$sourceKey])) {
+                    continue;
+                }
+                $text = trim((string) $input[$sourceKey]);
+                if ($text !== '') {
+                    $query[$apiKey] = is_numeric($text) ? (float) $text : $text;
+                }
+                break;
+            }
+        }
+
+        if (isset($input['isAvailable'])) {
+            $availability = trim((string) $input['isAvailable']);
+            if ($availability === '1' || strtolower($availability) === 'true') {
+                $query['isAvailable'] = 'true';
+            } elseif ($availability === '0' || strtolower($availability) === 'false') {
+                $query['isAvailable'] = 'false';
+            }
+        }
+
+        $multiMap = [
+            'materialTypes' => ['materialTypes', 'materialType'],
+            'ageCategories' => ['ageCategories', 'ageCategory'],
+            'manufacturers' => ['manufacturers', 'manufacturer'],
+            'sizeRanges' => ['sizeRanges', 'sizeRange'],
+            'countryOfOrigins' => ['countryOfOrigins', 'countryOfOrigin'],
+            'storeGuids' => ['storeGuids', 'storeGuid'],
+            'groupGuids' => ['groupGuids', 'groupGuid'],
+        ];
+
+        foreach ($multiMap as $apiKey => $sourceKeys) {
+            $values = [];
+            foreach ($sourceKeys as $sourceKey) {
+                if (!isset($input[$sourceKey])) {
+                    continue;
+                }
+                $raw = $input[$sourceKey];
+                if (is_array($raw)) {
+                    foreach ($raw as $item) {
+                        $text = trim((string) $item);
+                        if ($text !== '') {
+                            $values[] = $text;
+                        }
+                    }
+                } else {
+                    foreach (explode(',', (string) $raw) as $item) {
+                        $text = trim($item);
+                        if ($text !== '') {
+                            $values[] = $text;
+                        }
+                    }
+                }
+            }
+            $values = array_values(array_unique($values));
+            if ($values !== []) {
+                $query[$apiKey] = implode(',', $values);
+            }
+        }
+
+        return $query;
     }
 }
