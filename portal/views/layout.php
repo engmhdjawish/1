@@ -58,9 +58,11 @@ $navLinks = [
     <link href="/css/site-footer.css" rel="stylesheet">
     <link href="/css/pwa-install.css" rel="stylesheet">
     <link href="/css/store-ui.css" rel="stylesheet">
+    <link href="/css/notifications.css" rel="stylesheet">
     <?php if ($storeAllowCart): ?>
       <link href="/css/store-cart.css" rel="stylesheet">
     <?php endif; ?>
+    <link href="/css/notifications.css" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -127,6 +129,7 @@ $navLinks = [
   <script src="/assets/store-cart.js" defer></script>
 <?php endif; ?>
 <script src="/assets/pwa.js" defer></script>
+<script src="/assets/notifications.js" defer></script>
 <?php if (!empty($extraFooter ?? '')): ?>
   <?= $extraFooter ?>
 <?php endif; ?>

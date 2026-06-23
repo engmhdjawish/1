@@ -87,6 +87,9 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
             </div>
           <?php endif; ?>
 
+          <span class="site-header__divider" aria-hidden="true"></span>
+          <?php require __DIR__ . '/notification-bell.php'; ?>
+
           <?php if ($storeAllowCart): ?>
             <?php if ($storeShowPrice): ?>
               <span class="site-header__divider" aria-hidden="true"></span>

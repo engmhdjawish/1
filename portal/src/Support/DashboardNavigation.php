@@ -204,6 +204,7 @@ final class DashboardNavigation
         $groups += [
             'العملاء والمبيعات' => [
                 ['route' => '/dashboard/customers.php', 'label' => 'عملاء الموقع', 'icon' => 'group', 'permission' => 'web_customers.view'],
+                ['route' => '/dashboard/notifications.php', 'label' => 'الإشعارات', 'icon' => 'notifications', 'permission' => 'notifications.manage'],
                 ['route' => '/dashboard/share-links.php', 'label' => 'روابط المشاركة', 'icon' => 'share', 'permission' => 'share_links.manage'],
             ],
         ];

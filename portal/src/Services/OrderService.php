@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Database;
+use Portal\Services\NotificationService;
 use PDO;
 
 final class OrderService
@@ -441,6 +442,14 @@ final class OrderService
             'id' => $orderId,
             'status' => $nextStatus,
         ]);
+
+        if ($stmt->rowCount() > 0) {
+            try {
+                NotificationService::notifyOrderStatusChanged($orderId, $nextStatus);
+            } catch (\Throwable) {
+                // Notification failure must not block order updates.
+            }
+        }
 
         return $stmt->rowCount() > 0;
     }
