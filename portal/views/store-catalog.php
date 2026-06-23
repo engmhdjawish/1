@@ -3,16 +3,25 @@
 declare(strict_types=1);
 
 use Portal\Services\CatalogSectionResolver;
+use Portal\Services\SpecialOfferService;
+use Portal\Services\StorePolicyService;
 
 /** @var array<string, mixed> $catalog */
 /** @var array<string, mixed> $displayOptions */
 /** @var bool $isCustomer */
 
-/** @var string|null $cartNotice */
+/** @var array{ok?: bool, message?: string}|string|null $cartNotice */
 
 $catalog = is_array($catalog ?? null) ? $catalog : [];
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
-$cartNotice = isset($cartNotice) ? (string) $cartNotice : '';
+$cartNoticeMessage = '';
+$cartNoticeOk = true;
+if (is_array($cartNotice ?? null)) {
+    $cartNoticeMessage = (string) ($cartNotice['message'] ?? '');
+    $cartNoticeOk = (bool) ($cartNotice['ok'] ?? false);
+} elseif (isset($cartNotice) && is_string($cartNotice)) {
+    $cartNoticeMessage = $cartNotice;
+}
 $filters = is_array($catalog['filters'] ?? null) ? $catalog['filters'] : [];
 $sectionContext = is_array($catalog['section_context'] ?? null) ? $catalog['section_context'] : null;
 $sectionFilterSummary = is_array($catalog['section_filter_summary'] ?? null) ? $catalog['section_filter_summary'] : [];
@@ -375,14 +384,23 @@ require __DIR__ . '/partials/store-filter-group.php';
   </section>
 <?php endif; ?>
 
-<section class="mb-4">
-  <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+<section class="store-hero">
+  <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
     <div>
-      <h1 class="text-3xl font-extrabold text-slate-900">المتجر</h1>
-      <p class="text-sm text-gray-600 mt-1">تصفّح المواد واختر ما يناسبك بسهولة.</p>
+      <h1 class="store-hero__title">المتجر</h1>
+      <p class="store-hero__subtitle">اكتشف منتجاتنا واطلب بسهولة — تجربة تسوق سريعة وآمنة.</p>
+      <?php
+        $storeMaxPackages = StorePolicyService::maxPackagesPerMaterial();
+        $storeAllowCart = (bool) ($displayOptions['allow_cart'] ?? false);
+      ?>
+      <?php if ($storeAllowCart && $storeMaxPackages !== null): ?>
+        <p class="store-hero__meta">الحد الأقصى للطلب: <strong><?= h(SpecialOfferService::formatQuantityLabel($storeMaxPackages)) ?></strong> طرد لكل مادة — استخدم أيقونة السلة في الأعلى لمتابعة مشترياتك.</p>
+      <?php elseif ($storeAllowCart): ?>
+        <p class="store-hero__meta">استخدم أيقونة السلة في أعلى الصفحة لمتابعة مشترياتك.</p>
+      <?php endif; ?>
     </div>
     <?php if ($isCustomer): ?>
-      <span class="inline-flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2 text-sm font-bold">
+      <span class="store-hero__badge">
         <span class="material-symbols-outlined text-base" aria-hidden="true">verified_user</span>
         حساب عميل مفعّل
       </span>
@@ -394,8 +412,8 @@ require __DIR__ . '/partials/store-filter-group.php';
   <p class="mb-4 rounded-xl border bg-red-50 border-red-200 text-red-700 px-4 py-3 text-sm"><?= h((string) $catalog['apiError']) ?></p>
 <?php endif; ?>
 
-<?php if ($cartNotice !== ''): ?>
-  <p class="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm"><?= h($cartNotice) ?></p>
+<?php if ($cartNoticeMessage !== ''): ?>
+  <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $cartNoticeOk ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700' ?>"><?= h($cartNoticeMessage) ?></p>
 <?php endif; ?>
 
 <div class="store-layout <?= ($allowClientFilters || $isSectionBrowse) ? 'has-sidebar' : '' ?>" id="store-filters-root">
@@ -680,7 +698,7 @@ require __DIR__ . '/partials/store-filter-group.php';
     </div>
 
     <?php if ($products === [] && empty($catalog['apiError'])): ?>
-      <div class="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center text-gray-500">
+      <div class="store-empty-state">
         لا توجد نتائج مطابقة لبحثك أو الفلاتر المحددة.
       </div>
     <?php else: ?>
@@ -690,7 +708,7 @@ require __DIR__ . '/partials/store-filter-group.php';
             $products
         ), static fn (string $g): bool => $g !== ''));
       ?>
-      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div class="store-product-grid">
         <?php foreach ($products as $item): ?>
           <?php if (!is_array($item)) continue; ?>
           <?php require __DIR__ . '/partials/product-card.php'; ?>

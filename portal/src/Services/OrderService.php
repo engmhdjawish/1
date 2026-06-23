@@ -466,6 +466,26 @@ final class OrderService
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** @return array<string, mixed>|null */
+    public static function getOrderByQuoteToken(string $token): ?array
+    {
+        $token = trim($token);
+        if ($token === '' || strlen($token) < 16) {
+            return null;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT id::text FROM orders WHERE quote_access_token = :token LIMIT 1'
+        );
+        $stmt->execute(['token' => $token]);
+        $orderId = (string) $stmt->fetchColumn();
+        if ($orderId === '') {
+            return null;
+        }
+
+        return self::getOrderDetails($orderId);
+    }
+
     public static function getOrderForCustomer(string $orderId, string $customerId, string $phone): ?array
     {
         $order = self::getOrderDetails($orderId);

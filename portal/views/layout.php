@@ -44,6 +44,10 @@ $navLinks = [
     <link href="/css/material-image-frame.css" rel="stylesheet">
     <link href="/css/site-brand.css" rel="stylesheet">
     <link href="/css/site-footer.css" rel="stylesheet">
+    <link href="/css/store-ui.css" rel="stylesheet">
+    <?php if ($storeAllowCart): ?>
+      <link href="/css/store-cart.css" rel="stylesheet">
+    <?php endif; ?>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -115,9 +119,10 @@ $navLinks = [
       <?php if ($storeAllowCart): ?>
         <a href="/store-cart.php" class="relative inline-flex items-center justify-center w-10 h-10 rounded-xl border border-gray-200 hover:border-primary" title="السلة" aria-label="السلة">
           <span class="material-symbols-outlined">shopping_cart</span>
-          <?php if ($storeCartCount > 0): ?>
-            <span class="absolute -top-1 -left-1 min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-primary text-white text-[10px] font-bold inline-flex items-center justify-center"><?= (int) $storeCartCount ?></span>
-          <?php endif; ?>
+          <span
+            data-store-cart-badge
+            class="absolute -top-1 -left-1 min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-primary text-white text-[10px] font-bold inline-flex items-center justify-center <?= $storeCartCount > 0 ? '' : 'hidden' ?>"
+          ><?= (int) $storeCartCount ?></span>
         </a>
       <?php endif; ?>
       <?php if ($customer): ?>
@@ -202,5 +207,11 @@ $navLinks = [
   })();
 </script>
 <?php require __DIR__ . '/partials/product-quick-view.php'; ?>
+<?php if ($storeAllowCart): ?>
+  <script src="/assets/store-cart.js" defer></script>
+<?php endif; ?>
+<?php if (!empty($extraFooter ?? '')): ?>
+  <?= $extraFooter ?>
+<?php endif; ?>
 </body>
 </html>

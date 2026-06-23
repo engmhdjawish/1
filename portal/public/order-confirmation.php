@@ -67,6 +67,18 @@ ob_start();
         <div><span class="text-gray-500">الإجمالي ($):</span> <strong>$<?= number_format((float) ($order['total_usd'] ?? 0), 2, '.', ',') ?></strong></div>
       <?php endif; ?>
     </div>
+    <?php
+      $quoteToken = trim((string) ($order['quote_access_token'] ?? ''));
+      $trackingUrl = $quoteToken !== '' ? absolute_order_tracking_url($quoteToken) : '';
+    ?>
+    <?php if ($trackingUrl !== ''): ?>
+      <div class="rounded-lg border border-red-100 bg-red-50 p-4 text-right text-sm mb-6">
+        <p class="font-bold text-primary mb-1">رابط متابعة الطلب</p>
+        <p class="text-xs text-gray-600 mb-2">احفظ هذا الرابط لمتابعة حالة طلبك.</p>
+        <input type="text" readonly value="<?= h($trackingUrl) ?>" class="w-full h-10 rounded-lg border border-gray-300 px-3 text-xs font-mono mb-2" dir="ltr">
+        <a href="<?= h(order_tracking_url($quoteToken)) ?>" class="h-10 inline-flex items-center rounded-lg bg-primary text-white px-4 text-sm font-bold">متابعة الطلب</a>
+      </div>
+    <?php endif; ?>
     <div class="flex flex-wrap gap-2 justify-center">
       <a href="/share.php?token=<?= urlencode($token) ?>" class="h-11 inline-flex items-center rounded bg-primary text-white px-6 font-bold">متابعة التصفح</a>
       <?php if (!empty($order['had_unavailable_items'])): ?>
