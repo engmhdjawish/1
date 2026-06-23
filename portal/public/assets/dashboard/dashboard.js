@@ -164,6 +164,54 @@
     return window.location.pathname + window.location.search;
   }
 
+  const PAGE_ASSETS = {
+    orders: {
+      styles: [
+        '/css/store-ui.css',
+        '/css/store-cart.css',
+        '/css/customer-portal.css',
+      ],
+    },
+  };
+
+  function loadStylesheet(href) {
+    const existing = document.querySelector(`link[rel="stylesheet"][href="${href}"]`);
+    if (existing) {
+      if (existing.sheet) {
+        return Promise.resolve();
+      }
+      return new Promise((resolve, reject) => {
+        existing.addEventListener('load', () => resolve(), { once: true });
+        existing.addEventListener('error', () => reject(new Error(href)), { once: true });
+      });
+    }
+
+    return new Promise((resolve, reject) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      link.onload = () => resolve();
+      link.onerror = () => reject(new Error(href));
+      document.head.appendChild(link);
+    });
+  }
+
+  function ensureStylesheet(href) {
+    loadStylesheet(href).catch(() => {});
+  }
+
+  async function ensurePageAssets(key) {
+    const bundle = PAGE_ASSETS[key];
+    if (!bundle) return;
+    await Promise.all((bundle.styles || []).map((href) => loadStylesheet(href)));
+  }
+
+  function bindOrderImageZoom(root) {
+    if (typeof window.StoreImageZoom?.bind === 'function') {
+      window.StoreImageZoom.bind(root);
+    }
+  }
+
   function closeDrawer() {
     qs('#dashboard-drawer')?.classList.remove('is-open');
     qs('#dashboard-drawer-backdrop')?.classList.remove('is-open');
@@ -257,10 +305,17 @@
       }
       main.innerHTML = newMain.innerHTML;
       syncDashboardChrome(doc);
+      await ensurePageAssets(newMain.getAttribute('data-dashboard-page-assets') || '');
       const route = newMain.getAttribute('data-current-route') || normalizeDashboardRoute(url);
       if (route) {
         main.setAttribute('data-current-route', route);
         updateActiveNav(route);
+      }
+      const pageAssets = newMain.getAttribute('data-dashboard-page-assets') || '';
+      if (pageAssets) {
+        main.setAttribute('data-dashboard-page-assets', pageAssets);
+      } else {
+        main.removeAttribute('data-dashboard-page-assets');
       }
       if (doc.title) document.title = doc.title;
       if (push) history.pushState({ dashboardUrl: url }, '', url);
@@ -274,6 +329,11 @@
   }
 
   async function submitAjaxForm(form, submitter) {
+    const confirmMsg = form.getAttribute('data-dashboard-confirm');
+    if (confirmMsg && !window.confirm(confirmMsg)) {
+      return;
+    }
+
     const reload = form.hasAttribute('data-dashboard-reload');
     const redirect = form.getAttribute('data-dashboard-redirect');
     setButtonLoading(submitter, true);
@@ -371,6 +431,7 @@
       form.dataset.confirmBound = '1';
       const msg = form.getAttribute('data-dashboard-confirm') || 'هل أنت متأكد؟';
       form.addEventListener('submit', (event) => {
+        if (form.hasAttribute('data-dashboard-ajax')) return;
         if (!confirm(msg)) {
           event.preventDefault();
         }
@@ -443,10 +504,12 @@
     if (typeof window.portalMaterialImagesLinkInit === 'function') {
       window.portalMaterialImagesLinkInit(root);
     }
+    bindOrderImageZoom(root);
   }
 
-  function init() {
+  async function init() {
     document.body.classList.add('dashboard-app');
+    await ensurePageAssets(qs('[data-dashboard-main]')?.getAttribute('data-dashboard-page-assets') || '');
     if (window.matchMedia('(max-width: 1023px)').matches && qs('#dashboard-bottom-nav')) {
       document.body.classList.add('has-bottom-nav');
     }

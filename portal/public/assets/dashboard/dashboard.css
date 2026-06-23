@@ -255,3 +255,7 @@ button.is-loading::after,
     top: calc(var(--dash-header) - 0.25rem) !important;
   }
 }
+
+.dashboard-app .store-image-lightbox {
+  z-index: 300;
+}

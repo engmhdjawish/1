@@ -15,6 +15,10 @@ $flash = null;
 $flashType = 'success';
 $permissions = WebSession::user()['permissions'] ?? [];
 $canManageOrders = in_array('orders.manage', $permissions, true) || in_array('*', $permissions, true);
+if ($canManageOrders) {
+    OrderService::ensureItemEditSchema();
+}
+$itemEditSchemaReady = OrderService::hasItemEditSchema();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$canManageOrders) {
         $flash = 'ليس لديك صلاحية تعديل الطلب.';
@@ -77,6 +81,7 @@ $detailsId = trim((string) ($_GET['details'] ?? ''));
 
 $orders = OrderService::list($filters);
 $orderDetails = $detailsId !== '' ? OrderService::getOrderDetails($detailsId) : null;
+$staffEditBlockReason = is_array($orderDetails) ? OrderService::staffEditBlockReason($orderDetails) : '';
 $statusCounts = OrderService::statusCounts();
 $syncCounts = OrderService::syncCounts();
 $user = WebSession::user();
@@ -86,10 +91,5 @@ ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/orders.php';
 $content = ob_get_clean();
 $title = 'إدارة الطلبات';
-$extraHead = $orderDetails !== null
-    ? '<link href="/css/store-ui.css" rel="stylesheet"><link href="/css/store-cart.css" rel="stylesheet"><link href="/css/customer-portal.css" rel="stylesheet">'
-    : '';
-$extraFooter = $orderDetails !== null
-    ? '<script src="/assets/store-image-zoom.js" defer></script>'
-    : '';
+$dashboardPageAssets = 'orders';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

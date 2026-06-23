@@ -73,6 +73,9 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
   <link href="/assets/dashboard/dashboard.css" rel="stylesheet">
+  <link href="/css/store-ui.css" rel="stylesheet">
+  <link href="/css/store-cart.css" rel="stylesheet">
+  <link href="/css/customer-portal.css" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -260,7 +263,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         <?php $renderSidebarFooter(); ?>
       </div>
     </aside>
-    <main class="flex-1 lg:mr-64 p-3 sm:p-4 md:p-6 lg:p-8 min-w-0 w-full max-w-[1600px] dashboard-main-content" data-dashboard-main data-current-route="<?= h($currentRoute) ?>">
+    <main class="flex-1 lg:mr-64 p-3 sm:p-4 md:p-6 lg:p-8 min-w-0 w-full max-w-[1600px] dashboard-main-content" data-dashboard-main data-current-route="<?= h($currentRoute) ?>"<?php if (!empty($dashboardPageAssets ?? '')): ?> data-dashboard-page-assets="<?= h((string) $dashboardPageAssets) ?>"<?php endif; ?>>
       <?php if ($navArea === DashboardNavigation::AREA_SITE_CONTENT && $currentRoute !== '/dashboard/site-content.php'): ?>
         <nav class="mb-4">
           <a href="/dashboard/site-content.php" class="inline-flex items-center gap-1 text-sm font-bold text-text-muted hover:text-primary">
@@ -308,7 +311,9 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <?php
   require_once __DIR__ . '/partials/media-picker.php';
   portal_render_media_picker_modal();
+  require __DIR__ . '/../partials/store-image-lightbox.php';
   ?>
+  <script src="/assets/store-image-zoom.js" defer></script>
   <script src="/assets/dashboard/dashboard.js" defer></script>
   <script src="/assets/dashboard/media-picker.js" defer></script>
   <script src="/assets/dashboard/token-picker.js" defer></script>
