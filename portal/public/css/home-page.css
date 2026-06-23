@@ -343,19 +343,26 @@
 }
 
 .home-section__banner {
-  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--home-section-banner-max-height);
+  max-height: var(--home-section-banner-max-height);
   overflow: hidden;
   background: #f3f4f6;
-  aspect-ratio: var(--home-banner-ratio);
-  max-height: var(--home-section-banner-max-height);
 }
 
 .home-section__banner img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
   display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: var(--home-section-banner-max-height);
+  aspect-ratio: var(--home-banner-ratio);
+  object-fit: contain;
+  object-position: center center;
+  margin-inline: auto;
 }
 
 .home-section__body {
