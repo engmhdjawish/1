@@ -39,8 +39,13 @@ $mapJson = json_encode($mapPoints, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_
 
 <?php if (!$schemaReady): ?>
   <div class="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-    جدول <code class="font-mono text-xs">visitor_logs</code> غير متوفر في قاعدة البيانات. شغّل سكربت المخطط من
-    <code class="font-mono text-xs">docs/portal-db-schema.sql</code> لتفعيل التتبع.
+    جدول <code class="font-mono text-xs">visitor_logs</code> غير متوفر. شغّل على قاعدة البيانات الحالية:
+    <code class="font-mono text-xs">docs/portal-migrations/005-visitor-logs.sql</code>
+  </div>
+<?php elseif (($summary['page_views'] ?? 0) === 0 && $recent === []): ?>
+  <div class="mb-6 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+    الجدول جاهز لكن لا توجد زيارات مسجّلة بعد. افتح الصفحة الرئيسية في نافذة خاصة، ثم من أدوات المطوّر (Network) تأكد أن طلب
+    <code class="font-mono text-xs">POST /api/site-analytics.php</code> يعيد <code class="font-mono text-xs">{"ok":true}</code>.
   </div>
 <?php endif; ?>
 

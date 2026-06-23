@@ -66,8 +66,30 @@ final class VisitorLogService
         }
 
         $ip = self::clientIp();
-        $geo = self::resolveGeo($ip);
+        $geo = self::cachedGeo($ip) ?? [];
+        if ($geo === [] && $ip !== '' && !self::isPrivateIp($ip)) {
+            $geo = self::fetchGeo($ip);
+        }
         $webCustomerId = $customer !== null ? trim((string) ($customer['id'] ?? '')) : '';
+
+        $params = [
+            'session_id' => substr($sessionId, 0, 120),
+            'action' => substr($action, 0, 80),
+            'ip' => $ip !== '' ? substr($ip, 0, 45) : null,
+            'country' => self::nullableString($geo['country_ar'] ?? null),
+            'city' => self::nullableString($geo['city_ar'] ?? null),
+            'lat' => isset($geo['latitude']) ? (float) $geo['latitude'] : null,
+            'lng' => isset($geo['longitude']) ? (float) $geo['longitude'] : null,
+            'ua' => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500),
+            'referer' => $referer !== '' ? substr($referer, 0, 1000) : null,
+            'details' => substr($details, 0, 2000),
+        ];
+
+        $customerSql = 'NULL';
+        if ($webCustomerId !== '') {
+            $customerSql = ':customer_id';
+            $params['customer_id'] = $webCustomerId;
+        }
 
         try {
             Database::pdo()->prepare(
@@ -77,26 +99,21 @@ final class VisitorLogService
                  ) VALUES (
                     :session_id, :action, :ip, :country, :city,
                     :lat, :lng, :ua, :referer, :details,
-                    ' . ($webCustomerId !== '' ? ':customer_id' : 'NULL') . '
+                    ' . $customerSql . '
                  )'
-            )->execute(array_filter([
-                'session_id' => substr($sessionId, 0, 120),
-                'action' => substr($action, 0, 80),
-                'ip' => $ip !== '' ? substr($ip, 0, 45) : null,
-                'country' => $geo['country_ar'] ?? null,
-                'city' => $geo['city_ar'] ?? null,
-                'lat' => $geo['latitude'] ?? null,
-                'lng' => $geo['longitude'] ?? null,
-                'ua' => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500),
-                'referer' => $referer !== '' ? substr($referer, 0, 1000) : null,
-                'details' => substr($details, 0, 2000),
-                'customer_id' => $webCustomerId !== '' ? $webCustomerId : null,
-            ], static fn ($v) => $v !== null));
-        } catch (\Throwable) {
+            )->execute($params);
+        } catch (\Throwable $exception) {
             return ['ok' => false, 'message' => 'db_error'];
         }
 
         return ['ok' => true];
+    }
+
+    private static function nullableString(mixed $value): ?string
+    {
+        $text = trim((string) $value);
+
+        return $text !== '' ? $text : null;
     }
 
     /** @return array{page_views: int, unique_sessions: int, unique_ips: int, registered_hits: int} */
@@ -242,19 +259,14 @@ final class VisitorLogService
     }
 
     /** @return array{country_ar?: string, city_ar?: string, latitude?: float, longitude?: float} */
-    private static function resolveGeo(string $ip): array
+    private static function fetchGeo(string $ip): array
     {
         if ($ip === '' || self::isPrivateIp($ip)) {
             return [];
         }
 
-        $cached = self::cachedGeo($ip);
-        if ($cached !== null) {
-            return $cached;
-        }
-
         $url = 'http://ip-api.com/json/' . rawurlencode($ip) . '?fields=status,country,city,lat,lon&lang=ar';
-        $context = stream_context_create(['http' => ['timeout' => 2.5]]);
+        $context = stream_context_create(['http' => ['timeout' => 1.5]]);
         $raw = @file_get_contents($url, false, $context);
         if ($raw === false) {
             return [];

@@ -31,4 +31,7 @@ $result = VisitorLogService::recordEvent(
     $customer
 );
 
-echo json_encode(['ok' => (bool) ($result['ok'] ?? false)]);
+echo json_encode([
+    'ok' => (bool) ($result['ok'] ?? false),
+    'message' => (string) ($result['message'] ?? ''),
+], JSON_UNESCAPED_UNICODE);

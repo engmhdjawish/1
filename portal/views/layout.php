@@ -198,7 +198,7 @@ if ($customer) {
   <script src="<?= h(portal_asset_url('/assets/site-onboarding.js')) ?>" defer></script>
 <?php endif; ?>
 <?php if ($enableSiteAnalytics): ?>
-  <script src="<?= h(portal_asset_url('/assets/site-analytics.js')) ?>" defer></script>
+  <script src="<?= h(portal_asset_url('/assets/site-analytics.js')) ?>" data-endpoint="/api/site-analytics.php" defer></script>
 <?php endif; ?>
 <?php if (!empty($extraFooter ?? '')): ?>
   <?= $extraFooter ?>
