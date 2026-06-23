@@ -58,6 +58,11 @@
       body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
+    if (!res.ok && !data.message) {
+      data.ok = false;
+      data.message = 'تعذر تنفيذ العملية.';
+      data.level = 'error';
+    }
     return data;
   };
 
@@ -179,6 +184,7 @@
         const formData = new FormData(form);
         const payload = { action: 'add' };
         formData.forEach((value, key) => {
+          if (key === 'action') return;
           payload[key] = value;
         });
         try {

@@ -39,7 +39,7 @@ final class StoreCartApi
         }
 
         return match ($action) {
-            'add' => self::add($input, $display),
+            'add', 'add_to_cart' => self::add($input, $display),
             'update' => self::update($input),
             'bump' => self::bump($input),
             'remove' => self::remove($input),
@@ -55,7 +55,9 @@ final class StoreCartApi
         $quantity = max(1, (int) round((float) ($input['quantity'] ?? 1)));
         $materialGuid = trim((string) ($input['material_guid'] ?? ''));
         if ($materialGuid !== '') {
-            $clientCheck = self::clientQuantityCheck($materialGuid, $quantity, 0);
+            $cartItems = StoreCartService::items();
+            $currentQty = (int) round((float) ($cartItems[$materialGuid]['quantity'] ?? 0));
+            $clientCheck = self::clientQuantityCheck($materialGuid, $quantity, $currentQty);
             if (!$clientCheck['ok']) {
                 return self::payload($clientCheck['message'], false);
             }
