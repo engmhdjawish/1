@@ -56,6 +56,10 @@ $navLinks = [
     <title><?= h($title) ?> — <?= h($siteName) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
+    <?php if ($pagePath === '/index.php'): ?>
+      <link rel="prefetch" href="/store.php" as="document">
+    <?php endif; ?>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&display=swap" rel="stylesheet">
     <link href="<?= h(portal_asset_url('/css/material-image-frame.css')) ?>" rel="stylesheet">
@@ -129,6 +133,7 @@ $navLinks = [
       openBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
       document.body.style.overflow = open ? 'hidden' : '';
     };
+    window.PublicNav = { setOpen };
     openBtn.addEventListener('click', () => setOpen(true));
     closeBtn.addEventListener('click', () => setOpen(false));
     overlay.addEventListener('click', () => setOpen(false));
