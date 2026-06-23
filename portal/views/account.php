@@ -21,10 +21,23 @@ $statusOptions = [
     'completed' => OrderService::statusLabel('completed'),
     'cancelled' => OrderService::statusLabel('cancelled'),
 ];
+$customerName = trim((string) ($profile['name_ar'] ?? $customer['name_ar'] ?? 'عميل'));
+$initial = function_exists('mb_substr') ? mb_substr($customerName, 0, 1) : substr($customerName, 0, 1);
 ?>
-<div class="max-w-4xl mx-auto">
-  <h1 class="text-2xl md:text-3xl font-extrabold mb-1">حسابي</h1>
-  <p class="text-sm text-gray-600 mb-6">إدارة بياناتك ومتابعة طلباتك.</p>
+<div class="customer-portal">
+  <header class="customer-portal__hero">
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="customer-portal__avatar" aria-hidden="true"><?= h($initial) ?></div>
+      <div class="min-w-0">
+        <h1 class="customer-portal__title">مرحباً، <?= h($customerName) ?></h1>
+        <p class="customer-portal__subtitle" dir="ltr"><?= h((string) ($customer['phone'] ?? '')) ?></p>
+      </div>
+    </div>
+    <a href="/store.php" class="store-btn store-btn--secondary shrink-0">
+      <span class="material-symbols-outlined text-base" aria-hidden="true">storefront</span>
+      المتجر
+    </a>
+  </header>
 
   <?php if ($flash): ?>
     <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $flashType === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700' ?>">
@@ -32,107 +45,92 @@ $statusOptions = [
     </p>
   <?php endif; ?>
 
-  <nav class="inline-flex flex-wrap gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm mb-6" aria-label="أقسام الحساب">
-    <a href="/account.php?tab=profile" class="h-10 px-4 inline-flex items-center rounded-lg text-sm font-bold <?= $tab === 'profile' ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-50' ?>">الملف الشخصي</a>
-    <a href="/account.php?tab=orders" class="h-10 px-4 inline-flex items-center rounded-lg text-sm font-bold <?= $tab === 'orders' ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-50' ?>">طلباتي</a>
+  <nav class="customer-portal-tabs" aria-label="أقسام الحساب">
+    <a href="/account.php?tab=profile" class="customer-portal-tab <?= $tab === 'profile' ? 'is-active' : '' ?>">
+      <span class="material-symbols-outlined text-base" aria-hidden="true">person</span>
+      الملف الشخصي
+    </a>
+    <a href="/account.php?tab=orders" class="customer-portal-tab <?= $tab === 'orders' ? 'is-active' : '' ?>">
+      <span class="material-symbols-outlined text-base" aria-hidden="true">receipt_long</span>
+      طلباتي
+    </a>
   </nav>
 
   <?php if ($tab === 'profile'): ?>
-    <div class="grid gap-6 lg:grid-cols-2">
-      <form method="post" class="rounded-2xl border border-gray-200 bg-white p-5 space-y-4 shadow-sm">
+    <div class="customer-profile-grid">
+      <form method="post" class="customer-form-card">
         <input type="hidden" name="action" value="update_profile">
-        <h2 class="font-bold text-lg">بيانات الحساب</h2>
-        <label class="block text-sm font-medium">
+        <h2 class="customer-form-card__title">
+          <span class="material-symbols-outlined" aria-hidden="true">badge</span>
+          بيانات الحساب
+        </h2>
+        <label>
           الاسم
-          <input name="name_ar" value="<?= h((string) ($profile['name_ar'] ?? $customer['name_ar'] ?? '')) ?>" required class="mt-1 h-11 w-full rounded-xl border border-gray-300 px-4">
+          <input name="name_ar" value="<?= h((string) ($profile['name_ar'] ?? $customer['name_ar'] ?? '')) ?>" required>
         </label>
-        <label class="block text-sm font-medium">
+        <label>
           رقم الهاتف
-          <input value="<?= h((string) ($customer['phone'] ?? '')) ?>" disabled class="mt-1 h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 text-gray-500" dir="ltr">
+          <input value="<?= h((string) ($customer['phone'] ?? '')) ?>" disabled dir="ltr">
         </label>
-        <label class="block text-sm font-medium">
+        <label>
           البريد الإلكتروني
-          <input type="email" name="email" value="<?= h((string) ($profile['email'] ?? '')) ?>" class="mt-1 h-11 w-full rounded-xl border border-gray-300 px-4" dir="ltr">
+          <input type="email" name="email" value="<?= h((string) ($profile['email'] ?? '')) ?>" dir="ltr">
         </label>
-        <button type="submit" class="h-11 px-5 rounded-xl bg-primary text-white font-bold hover:brightness-110">حفظ التغييرات</button>
+        <button type="submit" class="store-btn store-btn--primary">حفظ التغييرات</button>
       </form>
 
-      <form method="post" class="rounded-2xl border border-gray-200 bg-white p-5 space-y-4 shadow-sm">
+      <form method="post" class="customer-form-card">
         <input type="hidden" name="action" value="change_password">
-        <h2 class="font-bold text-lg">تغيير كلمة المرور</h2>
-        <label class="block text-sm font-medium">
+        <h2 class="customer-form-card__title">
+          <span class="material-symbols-outlined" aria-hidden="true">lock</span>
+          كلمة المرور
+        </h2>
+        <label>
           كلمة المرور الحالية
-          <input type="password" name="current_password" required autocomplete="current-password" class="mt-1 h-11 w-full rounded-xl border border-gray-300 px-4">
+          <input type="password" name="current_password" required autocomplete="current-password">
         </label>
-        <label class="block text-sm font-medium">
+        <label>
           كلمة المرور الجديدة
-          <input type="password" name="new_password" required minlength="6" autocomplete="new-password" class="mt-1 h-11 w-full rounded-xl border border-gray-300 px-4">
+          <input type="password" name="new_password" required minlength="6" autocomplete="new-password">
         </label>
-        <button type="submit" class="h-11 px-5 rounded-xl border border-gray-300 font-bold hover:bg-gray-50">تحديث كلمة المرور</button>
+        <button type="submit" class="store-btn store-btn--secondary">تحديث كلمة المرور</button>
       </form>
     </div>
   <?php else: ?>
     <?php if ($orderDetails !== null): ?>
+      <a href="/account.php?tab=orders<?= $statusFilter !== '' ? '&status=' . rawurlencode($statusFilter) : '' ?>" class="customer-back-link">
+        <span class="material-symbols-outlined text-base" aria-hidden="true">chevron_right</span>
+        العودة إلى الطلبات
+      </a>
       <?php
-        $detailStatus = (string) ($orderDetails['status'] ?? 'pending');
-        $items = is_array($orderDetails['items'] ?? null) ? $orderDetails['items'] : [];
+        $order = $orderDetails;
+        $showTrackingLink = true;
+        $trackingUrl = absolute_order_tracking_url((string) ($orderDetails['quote_access_token'] ?? ''));
+        require __DIR__ . '/partials/customer-order-detail.php';
       ?>
-      <div class="mb-4">
-        <a href="/account.php?tab=orders<?= $statusFilter !== '' ? '&status=' . rawurlencode($statusFilter) : '' ?>" class="inline-flex items-center gap-1 text-sm font-bold text-primary hover:underline">
-          <span class="material-symbols-outlined text-base">chevron_right</span>
-          العودة إلى الطلبات
-        </a>
-      </div>
-      <section class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 class="text-xl font-extrabold"><?= h((string) ($orderDetails['order_number'] ?? '')) ?></h2>
-            <p class="text-sm text-gray-500 mt-1"><?= h((string) ($orderDetails['created_at'] ?? '')) ?></p>
-          </div>
-          <span class="inline-flex rounded-full px-3 py-1 text-xs font-bold bg-primary/10 text-primary">
-            <?= h(OrderService::statusLabel($detailStatus)) ?>
-          </span>
-        </div>
-        <?php if (!empty($orderDetails['notes_ar'])): ?>
-          <p class="text-sm text-gray-600 rounded-lg bg-gray-50 px-3 py-2"><?= h((string) $orderDetails['notes_ar']) ?></p>
-        <?php endif; ?>
-        <?php
-          $showPriceSyp = (float) ($orderDetails['total_sp'] ?? 0) > 0;
-          $showPriceUsd = !$showPriceSyp && (float) ($orderDetails['total_usd'] ?? 0) > 0;
-        ?>
-        <div class="store-order-lines">
-          <?php foreach ($items as $item): ?>
-            <?php require __DIR__ . '/partials/store-order-line-card.php'; ?>
-          <?php endforeach; ?>
-        </div>
-        <div class="flex flex-wrap gap-4 text-sm font-bold border-t pt-4">
-          <span>الإجمالي: <span class="store-num" dir="ltr"><?= format_money((float) ($orderDetails['total_sp'] ?? 0), true) ?> ل.س</span></span>
-          <?php if ((float) ($orderDetails['total_usd'] ?? 0) > 0): ?>
-            <span class="text-emerald-700 store-num" dir="ltr">$<?= number_format((float) $orderDetails['total_usd'], 2, '.', ',') ?></span>
-          <?php endif; ?>
-        </div>
-      </section>
       <?php require __DIR__ . '/partials/store-image-lightbox.php'; ?>
     <?php else: ?>
-      <form method="get" class="mb-4 flex flex-wrap items-end gap-2">
+      <form method="get" class="customer-orders-toolbar">
         <input type="hidden" name="tab" value="orders">
         <label class="text-sm">
-          <span class="text-gray-600">الحالة</span>
-          <select name="status" class="mt-1 h-10 rounded-xl border border-gray-300 px-3 text-sm">
+          <span class="text-gray-500 text-xs block mb-1">تصفية حسب الحالة</span>
+          <select name="status" class="h-10 rounded-xl border border-gray-300 px-3 text-sm min-w-40">
             <?php foreach ($statusOptions as $value => $label): ?>
               <option value="<?= h($value) ?>" <?= $statusFilter === $value ? 'selected' : '' ?>><?= h($label) ?></option>
             <?php endforeach; ?>
           </select>
         </label>
-        <button type="submit" class="h-10 px-4 rounded-xl bg-primary text-white text-sm font-bold">تصفية</button>
+        <button type="submit" class="store-btn store-btn--primary h-10">تصفية</button>
       </form>
 
       <?php if ($orders === []): ?>
-        <div class="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center text-gray-500">
-          لا توجد طلبات مرتبطة بحسابك حتى الآن.
+        <div class="customer-form-card text-center py-10 text-gray-500">
+          <span class="material-symbols-outlined text-4xl text-gray-300" aria-hidden="true">shopping_bag</span>
+          <p class="mt-3">لا توجد طلبات مرتبطة بحسابك حتى الآن.</p>
+          <a href="/store.php" class="store-btn store-btn--primary mt-4">تصفح المتجر</a>
         </div>
       <?php else: ?>
-        <div class="space-y-3">
+        <div class="customer-order-list">
           <?php foreach ($orders as $row): ?>
             <?php
               $rowStatus = (string) ($row['status'] ?? 'pending');
@@ -140,19 +138,17 @@ $statusOptions = [
               $detailUrl = '/account.php?tab=orders&order=' . rawurlencode($rowId)
                   . ($statusFilter !== '' ? '&status=' . rawurlencode($statusFilter) : '');
             ?>
-            <a href="<?= h($detailUrl) ?>" class="block rounded-2xl border border-gray-200 bg-white p-4 shadow-sm hover:border-primary/40 transition">
-              <div class="flex flex-wrap items-center justify-between gap-2">
+            <a href="<?= h($detailUrl) ?>" class="customer-order-row">
+              <div class="customer-order-row__top">
                 <div>
-                  <div class="font-extrabold"><?= h((string) ($row['order_number'] ?? '')) ?></div>
-                  <div class="text-xs text-gray-500 mt-1"><?= h((string) ($row['created_at'] ?? '')) ?></div>
+                  <div class="customer-order-row__number" dir="ltr"><?= h((string) ($row['order_number'] ?? '')) ?></div>
+                  <div class="customer-order-row__date"><?= h(accounting_format_date($row['created_at'] ?? '')) ?></div>
                 </div>
-                <span class="inline-flex rounded-full px-3 py-1 text-xs font-bold bg-gray-100 text-gray-700">
-                  <?= h(OrderService::statusLabel($rowStatus)) ?>
-                </span>
+                <?php $status = $rowStatus; $size = 'sm'; require __DIR__ . '/partials/order-status-badge.php'; ?>
               </div>
-              <div class="mt-2 flex flex-wrap gap-4 text-sm text-gray-600">
-                <span><?= (int) ($row['items_count'] ?? 0) ?> صنف</span>
-                <span class="font-bold text-gray-900"><?= format_money((float) ($row['total_sp'] ?? 0), true) ?> ل.س</span>
+              <div class="customer-order-row__meta">
+                <span><strong><?= (int) ($row['items_count'] ?? 0) ?></strong> صنف</span>
+                <span>الإجمالي: <strong class="store-num" dir="ltr"><?= format_money((float) ($row['total_sp'] ?? 0), true) ?> ل.س</strong></span>
               </div>
             </a>
           <?php endforeach; ?>
@@ -161,3 +157,23 @@ $statusOptions = [
     <?php endif; ?>
   <?php endif; ?>
 </div>
+
+<script>
+  (() => {
+    document.querySelectorAll('[data-copy-tracking-url]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const url = btn.getAttribute('data-copy-tracking-url') || '';
+        if (!url) return;
+        try {
+          await navigator.clipboard.writeText(url);
+          const prev = btn.textContent;
+          btn.textContent = 'تم النسخ';
+          setTimeout(() => { btn.textContent = prev; }, 2000);
+        } catch {
+          const field = document.getElementById('orderTrackingUrlField');
+          if (field) { field.select(); document.execCommand('copy'); }
+        }
+      });
+    });
+  })();
+</script>

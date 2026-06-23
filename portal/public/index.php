@@ -31,4 +31,6 @@ ob_start();
 require dirname(__DIR__) . '/views/home.php';
 $content = ob_get_clean();
 $title = 'الرئيسية';
+$extraHead = '<link href="/css/home-page.css" rel="stylesheet">';
+$extraFooter = count($ads) > 1 ? '<script src="/assets/home-page.js" defer></script>' : '';
 require dirname(__DIR__) . '/views/layout.php';

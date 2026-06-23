@@ -11,6 +11,29 @@ final class OrderService
 {
     private const ALLOWED_STATUSES = ['pending', 'confirmed', 'completed', 'cancelled'];
 
+    private static ?bool $hasItemEditSchema = null;
+
+    public static function hasItemEditSchema(): bool
+    {
+        if (self::$hasItemEditSchema !== null) {
+            return self::$hasItemEditSchema;
+        }
+
+        try {
+            $stmt = Database::pdo()->query(
+                "SELECT 1
+                 FROM information_schema.tables
+                 WHERE table_schema = 'public' AND table_name = 'order_item_changes'
+                 LIMIT 1"
+            );
+            self::$hasItemEditSchema = (bool) $stmt->fetchColumn();
+        } catch (\Throwable) {
+            self::$hasItemEditSchema = false;
+        }
+
+        return self::$hasItemEditSchema;
+    }
+
     /**
      * @param list<array{
      *   material_guid: string,
@@ -575,6 +598,8 @@ final class OrderService
             return null;
         }
 
+        $statusSelect = self::hasItemEditSchema() ? 'oi.status::text AS item_status,' : '\'active\'::text AS item_status,';
+
         $itemsStmt = Database::pdo()->prepare(
             'SELECT
                 oi.id::text AS id,
@@ -590,6 +615,7 @@ final class OrderService
                 oi.special_offer_id::text AS special_offer_id,
                 oi.image_url,
                 oi.sort_order,
+                ' . $statusSelect . '
                 so.badge_text_ar AS offer_badge,
                 so.title_ar AS offer_title_ar
              FROM order_items oi
@@ -602,12 +628,17 @@ final class OrderService
 
         $totalPackages = 0.0;
         $totalPieces = 0.0;
+        $activeCount = 0;
         foreach ($items as &$item) {
-            $quantity = max(0.0, (float) ($item['quantity'] ?? 0));
+            $itemStatus = (string) ($item['item_status'] ?? 'active');
+            $isCancelled = $itemStatus === 'cancelled';
+            $quantity = $isCancelled ? 0.0 : max(0.0, (float) ($item['quantity'] ?? 0));
             $packaging = max(1, (int) ($item['pcs_per_box'] ?? 1));
             $packagePriceUsd = max(0.0, (float) ($item['sale_price_usd'] ?? 0));
             $packagePriceSp = max(0.0, (float) ($item['sale_price_sp'] ?? 0));
 
+            $item['status'] = $itemStatus;
+            $item['is_cancelled'] = $isCancelled;
             $item['packages_count'] = $quantity;
             $item['packaging'] = $packaging;
             $item['unit_sale_price_usd'] = $packaging > 0 ? $packagePriceUsd / $packaging : 0.0;
@@ -623,13 +654,16 @@ final class OrderService
             $item['primary_unit'] = 'زوج';
             $item['package_unit'] = 'طرد';
 
-            $totalPackages += $quantity;
-            $totalPieces += $quantity * $packaging;
+            if (!$isCancelled) {
+                $activeCount++;
+                $totalPackages += $quantity;
+                $totalPieces += $quantity * $packaging;
+            }
         }
         unset($item);
 
         $order['summary'] = [
-            'items_count' => count($items),
+            'items_count' => $activeCount,
             'packages_count' => $totalPackages,
             'pieces_count' => $totalPieces,
         ];
@@ -658,9 +692,411 @@ final class OrderService
             ];
         }
 
+        $changes = self::listItemChanges($orderId, true);
+        foreach ($changes as $change) {
+            $timeline[] = [
+                'label' => (string) ($change['label_ar'] ?? ''),
+                'at' => (string) ($change['created_at'] ?? ''),
+                'detail' => (string) ($change['reason_ar'] ?? ''),
+                'type' => 'staff_edit',
+            ];
+        }
+        usort($timeline, static function (array $a, array $b): int {
+            return strcmp((string) ($a['at'] ?? ''), (string) ($b['at'] ?? ''));
+        });
+
+        $order['item_changes'] = $changes;
+        $order['can_staff_edit'] = self::canStaffEditOrder($order);
         $order['items'] = $items;
         $order['timeline'] = $timeline;
         return $order;
+    }
+
+    /** @param array<string, mixed> $order */
+    public static function canStaffEditOrder(array $order): bool
+    {
+        if (!self::hasItemEditSchema()) {
+            return false;
+        }
+
+        $status = (string) ($order['status'] ?? '');
+        if (in_array($status, ['completed', 'cancelled'], true)) {
+            return false;
+        }
+
+        $sync = (string) ($order['amine_sync_status'] ?? 'none');
+
+        return $sync !== 'synced';
+    }
+
+    /**
+     * @return array{ok: bool, message: string}
+     */
+    public static function updateItemQuantity(
+        string $orderId,
+        string $itemId,
+        float $quantity,
+        string $reasonAr,
+        ?string $staffUserId = null
+    ): array {
+        if (!self::hasItemEditSchema()) {
+            return ['ok' => false, 'message' => 'شغّل ملف الترحيل docs/portal-migration-order-item-edits.sql على قاعدة البيانات.'];
+        }
+
+        $reasonAr = trim($reasonAr);
+        if ($reasonAr === '') {
+            return ['ok' => false, 'message' => 'يرجى ذكر سبب تعديل الكمية.'];
+        }
+        if ($quantity <= 0) {
+            return ['ok' => false, 'message' => 'الكمية يجب أن تكون أكبر من صفر.'];
+        }
+
+        $order = self::getOrderDetails($orderId);
+        if ($order === null) {
+            return ['ok' => false, 'message' => 'الطلب غير موجود.'];
+        }
+        if (!self::canStaffEditOrder($order)) {
+            return ['ok' => false, 'message' => 'لا يمكن تعديل هذا الطلب (مكتمل أو تمت مزامنته).'];
+        }
+
+        $item = self::findOrderItem($order, $itemId);
+        if ($item === null) {
+            return ['ok' => false, 'message' => 'الصنف غير موجود في الطلب.'];
+        }
+        if (!empty($item['is_cancelled'])) {
+            return ['ok' => false, 'message' => 'هذا الصنف ملغى ولا يمكن تعديله.'];
+        }
+
+        $oldQty = (float) ($item['quantity'] ?? 0);
+        if (abs($oldQty - $quantity) < 0.0001) {
+            return ['ok' => false, 'message' => 'الكمية لم تتغير.'];
+        }
+
+        if ($quantity > $oldQty) {
+            $materialGuid = (string) ($item['material_guid'] ?? '');
+            $packaging = max(1, (int) ($item['pcs_per_box'] ?? 1));
+            $warehouse = StockReservationService::fetchWarehousePrimary($materialGuid);
+            if ($warehouse !== null) {
+                $reserved = StockReservationService::reservedPrimaryFor($materialGuid);
+                $currentHold = $oldQty * $packaging;
+                $available = max(0.0, $warehouse - $reserved + $currentHold);
+                $maxPackages = $packaging > 0 ? $available / $packaging : 0.0;
+                if ($quantity > $maxPackages + 0.0001) {
+                    return [
+                        'ok' => false,
+                        'message' => 'الكمية المطلوبة تتجاوز المتوفر في المخزون.',
+                    ];
+                }
+            }
+        }
+
+        $pdo = Database::pdo();
+        try {
+            $pdo->beginTransaction();
+            $pdo->prepare(
+                'UPDATE order_items SET quantity = :qty WHERE id = :id AND order_id = :order_id'
+            )->execute([
+                'qty' => $quantity,
+                'id' => $itemId,
+                'order_id' => $orderId,
+            ]);
+            self::logItemChange(
+                $pdo,
+                $orderId,
+                $itemId,
+                'quantity',
+                (string) $oldQty,
+                (string) $quantity,
+                $reasonAr,
+                $staffUserId
+            );
+            self::recalculateOrderTotals($pdo, $orderId);
+            $pdo->commit();
+        } catch (\Throwable) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            return ['ok' => false, 'message' => 'تعذر حفظ تعديل الكمية.'];
+        }
+
+        return ['ok' => true, 'message' => 'تم تحديث كمية الصنف.'];
+    }
+
+    /**
+     * @return array{ok: bool, message: string}
+     */
+    public static function updateItemPrice(
+        string $orderId,
+        string $itemId,
+        ?float $salePriceSp,
+        ?float $salePriceUsd,
+        string $reasonAr,
+        ?string $staffUserId = null
+    ): array {
+        if (!self::hasItemEditSchema()) {
+            return ['ok' => false, 'message' => 'شغّل ملف الترحيل docs/portal-migration-order-item-edits.sql على قاعدة البيانات.'];
+        }
+
+        $reasonAr = trim($reasonAr);
+        if ($reasonAr === '') {
+            return ['ok' => false, 'message' => 'يرجى ذكر سبب تعديل السعر.'];
+        }
+
+        $order = self::getOrderDetails($orderId);
+        if ($order === null) {
+            return ['ok' => false, 'message' => 'الطلب غير موجود.'];
+        }
+        if (!self::canStaffEditOrder($order)) {
+            return ['ok' => false, 'message' => 'لا يمكن تعديل هذا الطلب.'];
+        }
+
+        $item = self::findOrderItem($order, $itemId);
+        if ($item === null || !empty($item['is_cancelled'])) {
+            return ['ok' => false, 'message' => 'الصنف غير قابل للتعديل.'];
+        }
+
+        $oldSp = (float) ($item['sale_price_sp'] ?? 0);
+        $oldUsd = (float) ($item['sale_price_usd'] ?? 0);
+        $newSp = $salePriceSp !== null ? max(0.0, $salePriceSp) : $oldSp;
+        $newUsd = $salePriceUsd !== null ? max(0.0, $salePriceUsd) : $oldUsd;
+
+        if (abs($oldSp - $newSp) < 0.009 && abs($oldUsd - $newUsd) < 0.0001) {
+            return ['ok' => false, 'message' => 'السعر لم يتغير.'];
+        }
+
+        $pdo = Database::pdo();
+        try {
+            $pdo->beginTransaction();
+            $pdo->prepare(
+                'UPDATE order_items
+                 SET sale_price_sp = :sp, sale_price_usd = :usd
+                 WHERE id = :id AND order_id = :order_id'
+            )->execute([
+                'sp' => $newSp,
+                'usd' => $newUsd,
+                'id' => $itemId,
+                'order_id' => $orderId,
+            ]);
+            if (abs($oldSp - $newSp) >= 0.009) {
+                self::logItemChange($pdo, $orderId, $itemId, 'price_sp', (string) $oldSp, (string) $newSp, $reasonAr, $staffUserId);
+            }
+            if (abs($oldUsd - $newUsd) >= 0.0001) {
+                self::logItemChange($pdo, $orderId, $itemId, 'price_usd', (string) $oldUsd, (string) $newUsd, $reasonAr, $staffUserId);
+            }
+            self::recalculateOrderTotals($pdo, $orderId);
+            $pdo->commit();
+        } catch (\Throwable) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            return ['ok' => false, 'message' => 'تعذر حفظ تعديل السعر.'];
+        }
+
+        return ['ok' => true, 'message' => 'تم تحديث سعر الصنف.'];
+    }
+
+    /**
+     * @return array{ok: bool, message: string}
+     */
+    public static function cancelOrderItem(
+        string $orderId,
+        string $itemId,
+        string $reasonAr,
+        ?string $staffUserId = null
+    ): array {
+        if (!self::hasItemEditSchema()) {
+            return ['ok' => false, 'message' => 'شغّل ملف الترحيل docs/portal-migration-order-item-edits.sql على قاعدة البيانات.'];
+        }
+
+        $reasonAr = trim($reasonAr);
+        if ($reasonAr === '') {
+            return ['ok' => false, 'message' => 'يرجى ذكر سبب إلغاء الصنف.'];
+        }
+
+        $order = self::getOrderDetails($orderId);
+        if ($order === null) {
+            return ['ok' => false, 'message' => 'الطلب غير موجود.'];
+        }
+        if (!self::canStaffEditOrder($order)) {
+            return ['ok' => false, 'message' => 'لا يمكن تعديل هذا الطلب.'];
+        }
+
+        $item = self::findOrderItem($order, $itemId);
+        if ($item === null) {
+            return ['ok' => false, 'message' => 'الصنف غير موجود.'];
+        }
+        if (!empty($item['is_cancelled'])) {
+            return ['ok' => false, 'message' => 'الصنف ملغى مسبقاً.'];
+        }
+
+        $activeCount = 0;
+        foreach ($order['items'] as $row) {
+            if (empty($row['is_cancelled'])) {
+                $activeCount++;
+            }
+        }
+        if ($activeCount <= 1) {
+            return ['ok' => false, 'message' => 'لا يمكن إلغاء آخر صنف في الطلب.'];
+        }
+
+        $pdo = Database::pdo();
+        try {
+            $pdo->beginTransaction();
+            $pdo->prepare(
+                'UPDATE order_items SET status = \'cancelled\' WHERE id = :id AND order_id = :order_id'
+            )->execute(['id' => $itemId, 'order_id' => $orderId]);
+            self::logItemChange(
+                $pdo,
+                $orderId,
+                $itemId,
+                'cancel',
+                (string) ($item['material_name_ar'] ?? ''),
+                'cancelled',
+                $reasonAr,
+                $staffUserId
+            );
+            self::recalculateOrderTotals($pdo, $orderId);
+            $pdo->commit();
+        } catch (\Throwable) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            return ['ok' => false, 'message' => 'تعذر إلغاء الصنف.'];
+        }
+
+        return ['ok' => true, 'message' => 'تم إلغاء الصنف من الطلب.'];
+    }
+
+    /** @return list<array<string, mixed>> */
+    public static function listItemChanges(string $orderId, bool $customerVisibleOnly = false): array
+    {
+        $orderId = trim($orderId);
+        if ($orderId === '') {
+            return [];
+        }
+
+        try {
+            $sql = 'SELECT
+                        c.id::text AS id,
+                        c.order_item_id::text AS order_item_id,
+                        c.change_type::text AS change_type,
+                        c.old_value,
+                        c.new_value,
+                        c.reason_ar,
+                        c.created_at,
+                        oi.material_name_ar
+                    FROM order_item_changes c
+                    INNER JOIN order_items oi ON oi.id = c.order_item_id
+                    WHERE c.order_id = :order_id';
+            if ($customerVisibleOnly) {
+                $sql .= ' AND c.visible_to_customer = TRUE';
+            }
+            $sql .= ' ORDER BY c.created_at ASC';
+            $stmt = Database::pdo()->prepare($sql);
+            $stmt->execute(['order_id' => $orderId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable) {
+            return [];
+        }
+
+        return array_map(static function (array $row): array {
+            $row['label_ar'] = self::changeLabel($row);
+
+            return $row;
+        }, $rows);
+    }
+
+    /** @param array<string, mixed> $change */
+    private static function changeLabel(array $change): string
+    {
+        $name = trim((string) ($change['material_name_ar'] ?? 'الصنف'));
+        $type = (string) ($change['change_type'] ?? '');
+        $old = (string) ($change['old_value'] ?? '');
+        $new = (string) ($change['new_value'] ?? '');
+
+        return match ($type) {
+            'quantity' => 'تعديل كمية «' . $name . '»: ' . $old . ' ← ' . $new . ' طرد',
+            'price_sp' => 'تعديل سعر «' . $name . '»: ' . number_format((float) $old, 0, '.', ',') . ' ← ' . number_format((float) $new, 0, '.', ',') . ' ل.س',
+            'price_usd' => 'تعديل سعر «' . $name . '»: $' . number_format((float) $old, 2, '.', ',') . ' ← $' . number_format((float) $new, 2, '.', ','),
+            'cancel' => 'إلغاء الصنف «' . $name . '»',
+            default => 'تحديث على «' . $name . '»',
+        };
+    }
+
+    /** @param array<string, mixed> $order @return array<string, mixed>|null */
+    private static function findOrderItem(array $order, string $itemId): ?array
+    {
+        $itemId = trim($itemId);
+        foreach ($order['items'] as $item) {
+            if ((string) ($item['id'] ?? '') === $itemId) {
+                return $item;
+            }
+        }
+
+        return null;
+    }
+
+    private static function logItemChange(
+        PDO $pdo,
+        string $orderId,
+        string $itemId,
+        string $changeType,
+        ?string $oldValue,
+        ?string $newValue,
+        string $reasonAr,
+        ?string $staffUserId
+    ): void {
+        $pdo->prepare(
+            'INSERT INTO order_item_changes (
+                order_id, order_item_id, change_type, old_value, new_value, reason_ar, changed_by_web_user_id
+             ) VALUES (
+                :order_id, :item_id, :change_type, :old_value, :new_value, :reason, :user_id
+             )'
+        )->execute([
+            'order_id' => $orderId,
+            'item_id' => $itemId,
+            'change_type' => $changeType,
+            'old_value' => $oldValue,
+            'new_value' => $newValue,
+            'reason' => $reasonAr,
+            'user_id' => $staffUserId !== null && $staffUserId !== '' ? $staffUserId : null,
+        ]);
+
+        $pdo->prepare('UPDATE orders SET updated_at = NOW() WHERE id = :id')->execute(['id' => $orderId]);
+    }
+
+    private static function recalculateOrderTotals(PDO $pdo, string $orderId): void
+    {
+        if (self::hasItemEditSchema()) {
+            $stmt = $pdo->prepare(
+                'SELECT
+                    COALESCE(SUM(CASE WHEN status = \'active\' THEN quantity * sale_price_sp ELSE 0 END), 0)::float8 AS total_sp,
+                    COALESCE(SUM(CASE WHEN status = \'active\' THEN quantity * sale_price_usd ELSE 0 END), 0)::float8 AS total_usd
+                 FROM order_items
+                 WHERE order_id = :order_id'
+            );
+        } else {
+            $stmt = $pdo->prepare(
+                'SELECT
+                    COALESCE(SUM(quantity * sale_price_sp), 0)::float8 AS total_sp,
+                    COALESCE(SUM(quantity * sale_price_usd), 0)::float8 AS total_usd
+                 FROM order_items
+                 WHERE order_id = :order_id'
+            );
+        }
+        $stmt->execute(['order_id' => $orderId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['total_sp' => 0, 'total_usd' => 0];
+
+        $pdo->prepare(
+            'UPDATE orders SET total_sp = :sp, total_usd = :usd, updated_at = NOW() WHERE id = :id'
+        )->execute([
+            'sp' => (float) ($row['total_sp'] ?? 0),
+            'usd' => (float) ($row['total_usd'] ?? 0),
+            'id' => $orderId,
+        ]);
     }
 
     /** @return list<array{status: string, orders_count: int, total_sp: float, total_usd: float}> */

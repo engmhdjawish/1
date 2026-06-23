@@ -13,6 +13,26 @@ use PDO;
  */
 final class StockReservationService
 {
+    private static ?bool $hasActiveItemStatus = null;
+
+    private static function activeOrderItemsFilter(): string
+    {
+        if (self::$hasActiveItemStatus === null) {
+            try {
+                $stmt = Database::pdo()->query(
+                    "SELECT 1 FROM information_schema.columns
+                     WHERE table_schema = 'public' AND table_name = 'order_items' AND column_name = 'status'
+                     LIMIT 1"
+                );
+                self::$hasActiveItemStatus = (bool) $stmt->fetchColumn();
+            } catch (\Throwable) {
+                self::$hasActiveItemStatus = false;
+            }
+        }
+
+        return self::$hasActiveItemStatus ? " AND oi.status = 'active'" : '';
+    }
+
     /** @param array<string, mixed> $material */
     public static function warehousePrimaryUnits(array $material): float
     {
@@ -47,7 +67,7 @@ final class StockReservationService
                        COALESCE(SUM(oi.quantity * oi.pcs_per_box), 0)::float8 AS reserved_primary
                 FROM order_items oi
                 INNER JOIN orders o ON o.id = oi.order_id
-                WHERE o.status IN ('pending', 'confirmed')";
+                WHERE o.status IN ('pending', 'confirmed')" . self::activeOrderItemsFilter();
         $params = [];
         if ($materialGuids !== []) {
             $placeholders = [];
