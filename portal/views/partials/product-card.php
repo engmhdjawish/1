@@ -61,12 +61,13 @@ $guid = material_guid($item);
 $imageGuid = material_image_guid($item);
 $detailUrl = $guid !== '' ? product_url($guid, $productReturnUrl, $productOfferSlug) : '';
 $quickViewGuidsJson = $quickViewGuids !== [] ? json_encode($quickViewGuids, JSON_UNESCAPED_UNICODE) : '';
+$materialCode = trim((string) ($item['materialCode'] ?? $item['code'] ?? ''));
 ?>
-<article class="product-card border border-gray-200 rounded-2xl bg-white shadow-sm overflow-hidden flex flex-col h-full transition hover:shadow-md hover:-translate-y-0.5">
+<article class="store-product-card">
   <?php if ($linkToDetail && $detailUrl !== ''): ?>
     <a
       href="<?= h($detailUrl) ?>"
-      class="flex flex-col flex-1 text-inherit no-underline"
+      class="store-product-card__link"
       <?php if ($useQuickView): ?>
         data-quick-view="1"
         data-product-guid="<?= h($guid) ?>"
@@ -77,48 +78,49 @@ $quickViewGuidsJson = $quickViewGuids !== [] ? json_encode($quickViewGuids, JSON
     >
   <?php endif; ?>
     <?php if ($showImages): ?>
-      <?php
-        $material = $item;
-        $variant = 'card';
-        require __DIR__ . '/material-image-frame.php';
-      ?>
+      <div class="store-product-card__media">
+        <?php
+          $material = $item;
+          $variant = 'card';
+          require __DIR__ . '/material-image-frame.php';
+        ?>
+      </div>
     <?php endif; ?>
-    <div class="p-4 flex flex-col flex-1">
-      <div class="font-bold text-sm line-clamp-2 min-h-[2.5rem]"><?= h((string) ($item['name'] ?? '-')) ?></div>
+    <div class="store-product-card__body">
+      <?php if ($materialCode !== ''): ?>
+        <div class="store-product-card__code"><?= h($materialCode) ?></div>
+      <?php endif; ?>
+      <h3 class="store-product-card__title"><?= h((string) ($item['name'] ?? '-')) ?></h3>
       <?php if (!empty($item['manufacturer']) || !empty($item['materialType'])): ?>
-        <div class="text-xs text-gray-500 mt-1">
-          <?= h((string) ($item['manufacturer'] ?? '')) ?><?= !empty($item['materialType']) ? ' • ' . h((string) $item['materialType']) : '' ?>
+        <div class="store-product-card__meta">
+          <?= h((string) ($item['manufacturer'] ?? '')) ?><?= !empty($item['materialType']) ? ' · ' . h((string) $item['materialType']) : '' ?>
         </div>
       <?php endif; ?>
-      <?php if ($showPriceSyp && ($packageSaleSp > 0 || $unitSaleSp > 0)): ?>
-        <?php
-          $showPriceSypBlock = true;
-          $showPriceUsdBlock = false;
-          require __DIR__ . '/offer-price-block.php';
-        ?>
-      <?php endif; ?>
-      <?php if ($showPriceUsd && ($packageSaleUsd > 0 || $unitSaleUsd > 0)): ?>
-        <?php
-          $showPriceSypBlock = false;
-          $showPriceUsdBlock = true;
-          require __DIR__ . '/offer-price-block.php';
-        ?>
-      <?php endif; ?>
+      <div class="store-product-card__price">
+        <?php if ($showPriceSyp && ($packageSaleSp > 0 || $unitSaleSp > 0)): ?>
+          <?php
+            $showPriceSypBlock = true;
+            $showPriceUsdBlock = false;
+            require __DIR__ . '/offer-price-block.php';
+          ?>
+        <?php endif; ?>
+        <?php if ($showPriceUsd && ($packageSaleUsd > 0 || $unitSaleUsd > 0)): ?>
+          <?php
+            $showPriceSypBlock = false;
+            $showPriceUsdBlock = true;
+            require __DIR__ . '/offer-price-block.php';
+          ?>
+        <?php endif; ?>
+      </div>
       <?php if ($showQuantity): ?>
-        <div class="text-xs text-gray-500 mt-2">
+        <div class="store-product-card__stock">
           متاح: <?= number_format($packagesAvailable, 0, '.', ',') ?> <?= h($packageUnit) ?>
         </div>
-      <?php endif; ?>
-      <?php if ($linkToDetail && $detailUrl !== ''): ?>
-        <span class="mt-auto pt-3 text-primary text-xs font-bold inline-flex items-center gap-1">
-          عرض التفاصيل
-          <span class="material-symbols-outlined text-base" aria-hidden="true">arrow_back</span>
-        </span>
       <?php endif; ?>
     </div>
   <?php if ($linkToDetail && $detailUrl !== ''): ?></a><?php endif; ?>
   <?php if ($allowCart): ?>
-    <div class="px-4 pb-4">
+    <div class="store-product-card__footer">
       <?php
         $cartItems = StoreCartService::items();
         $cartQtyForItem = $guid !== '' ? (int) round((float) ($cartItems[$guid]['quantity'] ?? 0)) : 0;

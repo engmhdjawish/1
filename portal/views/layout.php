@@ -44,6 +44,7 @@ $navLinks = [
     <link href="/css/material-image-frame.css" rel="stylesheet">
     <link href="/css/site-brand.css" rel="stylesheet">
     <link href="/css/site-footer.css" rel="stylesheet">
+    <link href="/css/store-ui.css" rel="stylesheet">
     <?php if ($storeAllowCart): ?>
       <link href="/css/store-cart.css" rel="stylesheet">
     <?php endif; ?>
@@ -163,12 +164,6 @@ $navLinks = [
     <?php foreach ($navLinks as $link): ?>
       <a href="<?= h($link['href']) ?>" data-public-nav-link="1" class="block rounded-xl px-3 py-3 hover:bg-gray-50"><?= h($link['label']) ?></a>
     <?php endforeach; ?>
-    <?php if ($storeAllowCart): ?>
-      <a href="/store-cart.php" data-public-nav-link="1" class="block rounded-xl px-3 py-3 hover:bg-gray-50 inline-flex items-center justify-between gap-2">
-        <span>السلة</span>
-        <span data-store-cart-badge class="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-primary text-white text-[10px] font-bold inline-flex items-center justify-center <?= $storeCartCount > 0 ? '' : 'hidden' ?>"><?= (int) $storeCartCount ?></span>
-      </a>
-    <?php endif; ?>
     <?php if ($customer): ?>
       <a href="/account.php" data-public-nav-link="1" class="block rounded-xl px-3 py-3 hover:bg-gray-50">حسابي</a>
       <div class="pt-3 mt-3 border-t border-gray-100 text-gray-600 px-3"><?= h((string) ($customer['name_ar'] ?? '')) ?></div>
