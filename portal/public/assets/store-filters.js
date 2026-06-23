@@ -1,30 +1,79 @@
 (() => {
+  const DESKTOP_MIN = 1024;
+  const PIN_GAP_PX = 8;
+
   const syncHeaderStickyOffset = () => {
     const header = document.querySelector('.site-header');
     if (!header) {
-      return;
+      return 0;
     }
     const height = Math.ceil(header.getBoundingClientRect().height);
     document.documentElement.style.setProperty('--site-header-sticky-offset', `${height}px`);
+    return height;
   };
 
-  syncHeaderStickyOffset();
-  window.addEventListener('resize', syncHeaderStickyOffset, { passive: true });
-  window.addEventListener('load', syncHeaderStickyOffset, { passive: true });
+  const clearDesktopPin = (sidebar) => {
+    sidebar.classList.remove('is-desktop-pinned');
+    sidebar.style.removeProperty('top');
+    sidebar.style.removeProperty('right');
+    sidebar.style.removeProperty('left');
+    sidebar.style.removeProperty('width');
+    sidebar.style.removeProperty('max-height');
+  };
+
+  const pinDesktopFilters = () => {
+    const headerHeight = syncHeaderStickyOffset();
+    const backdrop = document.getElementById('store-filters-backdrop');
+    const sidebar = backdrop?.querySelector('.store-filters-sidebar');
+    if (!sidebar) {
+      return;
+    }
+
+    if (window.innerWidth < DESKTOP_MIN) {
+      clearDesktopPin(sidebar);
+      return;
+    }
+
+    if (!backdrop) {
+      clearDesktopPin(sidebar);
+      return;
+    }
+
+    const anchor = backdrop.getBoundingClientRect();
+    const top = headerHeight + PIN_GAP_PX;
+    sidebar.classList.add('is-desktop-pinned');
+    sidebar.style.top = `${top}px`;
+    sidebar.style.width = `${Math.max(240, Math.round(anchor.width))}px`;
+    sidebar.style.right = `${Math.max(0, Math.round(window.innerWidth - anchor.right))}px`;
+    sidebar.style.left = 'auto';
+    sidebar.style.maxHeight = `calc(100vh - ${top + PIN_GAP_PX}px)`;
+  };
+
+  const schedulePin = () => {
+    requestAnimationFrame(() => requestAnimationFrame(pinDesktopFilters));
+  };
+
+  const root = document.getElementById('store-filters-root');
+  const backdrop = document.getElementById('store-filters-backdrop');
+  const openBtn = document.getElementById('store-filters-open');
+  const closeBtn = document.getElementById('store-filters-close');
+
+  schedulePin();
+  window.addEventListener('resize', schedulePin, { passive: true });
+  window.addEventListener('load', schedulePin, { passive: true });
 
   const header = document.querySelector('.site-header');
   if (header && typeof ResizeObserver !== 'undefined') {
-    new ResizeObserver(syncHeaderStickyOffset).observe(header);
+    new ResizeObserver(schedulePin).observe(header);
   }
 
-  const root = document.getElementById('store-filters-root');
+  if (backdrop && typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(schedulePin).observe(backdrop);
+  }
+
   if (!root) {
     return;
   }
-
-  const openBtn = document.getElementById('store-filters-open');
-  const closeBtn = document.getElementById('store-filters-close');
-  const backdrop = document.getElementById('store-filters-backdrop');
 
   const setDrawerOpen = (open) => {
     document.body.classList.toggle('store-filters-drawer-open', open);
