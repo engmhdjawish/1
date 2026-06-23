@@ -71,6 +71,17 @@ final class SiteMediaService
         return $rows;
     }
 
+    /** @return list<array<string, mixed>> */
+    public static function listAdsForHome(): array
+    {
+        $rows = self::listAssets('ad');
+
+        return array_values(array_filter(
+            $rows,
+            static fn (array $row): bool => str_starts_with((string) ($row['mime_type'] ?? ''), 'image/')
+        ));
+    }
+
     public static function getById(string $id): ?array
     {
         $id = trim($id);

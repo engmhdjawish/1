@@ -7,12 +7,15 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Auth\WebSession;
 use Portal\Services\ApiClient;
 use Portal\Services\MaterialImageStorageService;
+use Portal\Services\MaterialImageSyncService;
 use Portal\Services\PortalSettingsService;
 
 WebSession::requirePermission('images.upload');
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 MaterialImageStorageService::ensureSettings();
+MaterialImageSyncService::ensureTable();
+MaterialImageSyncService::recoverStaleSyncing();
 
 $flash = null;
 $flashType = 'success';
@@ -27,18 +30,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'material_images_dir' => trim((string) ($_POST['material_images_dir'] ?? '')),
             'material_thumbnails_dir' => trim((string) ($_POST['material_thumbnails_dir'] ?? '')),
         ], $userId);
-        header('Location: /dashboard/material-images.php?saved=1');
+        header('Location: /dashboard/material-images.php?tab=upload&saved=1');
         exit;
     }
-
 }
 
 if (isset($_GET['saved']) && $_GET['saved'] === '1' && $flash === null) {
     $flash = 'تم حفظ مسارات التخزين.';
 }
+
+$workspaceTab = trim((string) ($_GET['tab'] ?? 'link'));
+if (!in_array($workspaceTab, ['link', 'upload'], true)) {
+    $workspaceTab = 'link';
+}
+
 $company = PortalSettingsService::companySettings();
 $paths = MaterialImageStorageService::settings();
 $stats = MaterialImageStorageService::stats();
+$syncStats = MaterialImageSyncService::stats();
+$apiHealth = PortalSettingsService::apiHealth();
+$queuePage = MaterialImageSyncService::listQueuePage(1, 20);
+$queue = $queuePage['items'];
+$settingsForm = [
+    'material_images_dir' => (string) ($company['material_images_dir'] ?? ''),
+    'material_thumbnails_dir' => (string) ($company['material_thumbnails_dir'] ?? ''),
+];
+$detailsBanner = MaterialImageStorageService::detailsBannerRequirements();
+
 $materialFilterOptions = [
     'materialTypes' => [],
     'ageCategories' => [],
@@ -49,6 +67,7 @@ $materialFilterOptions = [
     'groups' => [],
 ];
 $materialFilterOptionsError = null;
+
 try {
     $filtersResponse = ApiClient::get('/api/materials/filter-options');
     if ($filtersResponse['ok']) {
@@ -70,14 +89,11 @@ try {
 } catch (\Throwable $exception) {
     $materialFilterOptionsError = $exception->getMessage();
 }
-$settingsForm = [
-    'material_images_dir' => (string) ($company['material_images_dir'] ?? ''),
-    'material_thumbnails_dir' => (string) ($company['material_thumbnails_dir'] ?? ''),
-];
+
 $currentRoute = '/dashboard/material-images.php';
 
 ob_start();
-require dirname(__DIR__, 2) . '/views/dashboard/material-images.php';
+require dirname(__DIR__, 2) . '/views/dashboard/material-images-workspace.php';
 $content = ob_get_clean();
 $title = 'صور المواد';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

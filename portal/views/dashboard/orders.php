@@ -9,6 +9,10 @@ declare(strict_types=1);
 /** @var string|null $flash */
 /** @var string $flashType */
 /** @var bool $canManageOrders */
+/** @var bool $itemEditSchemaReady */
+/** @var string $staffEditBlockReason */
+/** @var string $ordersListUrl */
+/** @var string $orderPriceCurrency */
 /** @var array<string, mixed>|null $orderDetails */
 
 $statusLabels = [
@@ -219,6 +223,7 @@ $truncate = static function (string $text, int $max = 48): string {
                         'limit' => $filters['limit'] ?? 50,
                         'details' => (string) ($row['id'] ?? ''),
                     ])) ?>"
+                    data-dashboard-no-nav
                     class="h-8 px-3 inline-flex items-center rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"
                   >تفاصيل</a>
                   <?php if ($canManageOrders): ?>
@@ -261,13 +266,17 @@ $truncate = static function (string $text, int $max = 48): string {
           <h2 id="order-details-title" class="text-lg font-extrabold text-slate-900 truncate"><?= h((string) ($orderDetails['order_number'] ?? '')) ?></h2>
           <p class="text-xs text-text-muted mt-0.5"><?= h((string) ($orderDetails['share_link_name'] ?? 'طلب مباشر')) ?> · <?= h((string) ($orderDetails['created_at'] ?? '')) ?></p>
         </div>
-        <a href="<?= h($buildOrdersUrl($filters)) ?>" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-border-subtle hover:bg-surface-low shrink-0" aria-label="إغلاق">
+        <a href="<?= h($ordersListUrl) ?>" data-dashboard-no-nav class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-border-subtle hover:bg-surface-low shrink-0" aria-label="إغلاق">
           <span class="material-symbols-outlined">close</span>
         </a>
       </div>
-      <div class="flex flex-wrap gap-1.5 mt-2">
+      <div class="flex flex-wrap gap-1.5 mt-2 items-center">
         <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $statusClass($detailStatus) ?>"><?= h($statusLabels[$detailStatus] ?? $detailStatus) ?></span>
         <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $syncClass($detailSync) ?>"><?= h($syncLabels[$detailSync] ?? $detailSync) ?></span>
+        <div class="store-currency-toggle store-currency-toggle--drawer ms-auto" role="group" aria-label="عملة عرض الطلب">
+          <button type="button" class="store-currency-toggle__btn <?= $orderPriceCurrency === 'syp' ? 'is-active' : '' ?>" data-dashboard-order-currency="syp" title="عرض بالليرة">ل.س</button>
+          <button type="button" class="store-currency-toggle__btn <?= $orderPriceCurrency === 'usd' ? 'is-active' : '' ?>" data-dashboard-order-currency="usd" title="عرض بالدولار">$</button>
+        </div>
       </div>
     </header>
 
@@ -295,54 +304,24 @@ $truncate = static function (string $text, int $max = 48): string {
         <?php if ($detailItems === []): ?>
           <p class="text-sm text-text-muted text-center py-8">لا توجد أصناف في هذا الطلب.</p>
         <?php else: ?>
-          <div class="rounded-xl border border-border-subtle overflow-hidden">
-            <div class="hidden sm:grid sm:grid-cols-[minmax(0,1fr)_72px_88px_96px] gap-2 px-3 py-2 bg-surface-low text-[11px] font-bold text-text-muted border-b border-border-subtle">
-              <span>المادة</span>
-              <span class="text-center">طرود</span>
-              <span class="text-left">سعر الزوج</span>
-              <span class="text-left">الإجمالي</span>
-            </div>
-            <ul class="divide-y divide-border-subtle">
-              <?php foreach ($detailItems as $item): ?>
-                <?php
-                  $imageUrl = trim((string) ($item['image_url'] ?? ''));
-                  $packages = (float) ($item['packages_count'] ?? $item['quantity'] ?? 0);
-                  $unitUsd = (float) ($item['unit_sale_price_usd'] ?? 0);
-                  $lineUsd = (float) ($item['line_total_usd'] ?? 0);
-                ?>
-                <li class="px-3 py-3 hover:bg-slate-50/60">
-                  <div class="sm:grid sm:grid-cols-[minmax(0,1fr)_72px_88px_96px] sm:items-center gap-2 sm:gap-3">
-                    <div class="flex items-center gap-3 min-w-0">
-                      <?php if ($imageUrl !== ''): ?>
-                        <img src="<?= h($imageUrl) ?>" alt="" class="w-14 h-14 rounded-lg object-cover bg-surface-low shrink-0 border border-border-subtle" loading="lazy">
-                      <?php else: ?>
-                        <div class="w-14 h-14 rounded-lg bg-surface-low shrink-0 border border-border-subtle flex items-center justify-center text-text-muted">
-                          <span class="material-symbols-outlined text-xl">inventory_2</span>
-                        </div>
-                      <?php endif; ?>
-                      <div class="min-w-0">
-                        <p class="font-bold text-sm leading-snug line-clamp-2"><?= h((string) ($item['material_name_ar'] ?? '—')) ?></p>
-                        <?php if (trim((string) ($item['material_code'] ?? '')) !== ''): ?>
-                          <p class="text-xs text-text-muted mt-0.5 font-mono"><?= h((string) $item['material_code']) ?></p>
-                        <?php endif; ?>
-                      </div>
-                    </div>
-                    <div class="mt-2 sm:mt-0 flex sm:block items-center justify-between sm:text-center">
-                      <span class="sm:hidden text-[11px] text-text-muted">طرود</span>
-                      <span class="font-extrabold text-sm"><?= h($formatPackages($packages)) ?></span>
-                    </div>
-                    <div class="flex sm:block items-center justify-between sm:text-left">
-                      <span class="sm:hidden text-[11px] text-text-muted">سعر الزوج</span>
-                      <span class="font-bold text-sm text-slate-700"><?= h($formatUsd($unitUsd)) ?></span>
-                    </div>
-                    <div class="flex sm:block items-center justify-between sm:text-left">
-                      <span class="sm:hidden text-[11px] text-text-muted">الإجمالي</span>
-                      <span class="font-extrabold text-sm text-emerald-700"><?= h($formatUsd($lineUsd)) ?></span>
-                    </div>
-                  </div>
-                </li>
-              <?php endforeach; ?>
-            </ul>
+          <?php if ($canManageOrders && $staffEditBlockReason !== ''): ?>
+            <p class="text-[11px] text-red-800 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
+              <?= h($staffEditBlockReason) ?>
+            </p>
+          <?php elseif ($canManageOrders && !empty($orderDetails['can_staff_edit'])): ?>
+            <p class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+              يمكنك تعديل الأصناف قبل إتمام الطلب — سيظهر السبب لصاحب الطلب.
+            </p>
+          <?php endif; ?>
+          <div class="store-order-lines">
+            <?php foreach ($detailItems as $item): ?>
+              <?php
+                $showPriceUsd = $orderPriceCurrency === 'usd';
+                $showPriceSyp = $orderPriceCurrency === 'syp';
+                $orderId = (string) ($orderDetails['id'] ?? '');
+                require dirname(__DIR__) . '/partials/dashboard-order-line-edit.php';
+              ?>
+            <?php endforeach; ?>
           </div>
         <?php endif; ?>
       </section>
@@ -365,11 +344,20 @@ $truncate = static function (string $text, int $max = 48): string {
       </div>
       <div class="flex items-center justify-between rounded-xl bg-slate-900 text-white px-4 py-3">
         <span class="text-sm font-bold">إجمالي الحساب</span>
-        <span class="text-2xl font-extrabold tracking-tight"><?= h($formatUsd((float) ($orderDetails['total_usd'] ?? 0))) ?></span>
+        <span class="text-2xl font-extrabold tracking-tight">
+          <?php if ($orderPriceCurrency === 'syp'): ?>
+            <?= number_format((float) ($orderDetails['total_sp'] ?? 0), 0, '.', ',') ?> ل.س
+          <?php else: ?>
+            <?= h($formatUsd((float) ($orderDetails['total_usd'] ?? 0))) ?>
+          <?php endif; ?>
+        </span>
       </div>
-      <?php if ((float) ($orderDetails['total_sp'] ?? 0) > 0): ?>
+      <?php if ($orderPriceCurrency === 'usd' && (float) ($orderDetails['total_sp'] ?? 0) > 0): ?>
         <p class="text-[11px] text-text-muted text-center">ما يعادل <?= number_format((float) ($orderDetails['total_sp'] ?? 0), 0, '.', ',') ?> ل.س</p>
+      <?php elseif ($orderPriceCurrency === 'syp' && (float) ($orderDetails['total_usd'] ?? 0) > 0): ?>
+        <p class="text-[11px] text-text-muted text-center">ما يعادل <?= h($formatUsd((float) ($orderDetails['total_usd'] ?? 0))) ?></p>
       <?php endif; ?>
+      <p class="text-[10px] text-text-muted text-center">عند مزامنة الأمين يُرسل سعر الدولار للصنف.</p>
     </footer>
   </aside>
 <?php endif; ?>

@@ -24,6 +24,9 @@ final class WebSession
     public static function requireLogin(): void
     {
         if (!self::check()) {
+            if (\Portal\Support\DashboardHttp::wantsJson()) {
+                \Portal\Support\DashboardHttp::json(false, 'انتهت جلسة الدخول. سجّل الدخول مجدداً.', ['login' => true]);
+            }
             header('Location: /login.php?type=staff');
             exit;
         }
@@ -33,6 +36,9 @@ final class WebSession
     {
         self::requireLogin();
         if (!self::hasPermission($permissionCode)) {
+            if (\Portal\Support\DashboardHttp::wantsJson()) {
+                \Portal\Support\DashboardHttp::json(false, 'غير مصرح لك بهذه العملية.');
+            }
             http_response_code(403);
             echo 'غير مصرح لك بهذه العملية.';
             exit;
@@ -44,6 +50,9 @@ final class WebSession
     {
         self::requireLogin();
         if (!self::hasAnyPermission($permissionCodes)) {
+            if (\Portal\Support\DashboardHttp::wantsJson()) {
+                \Portal\Support\DashboardHttp::json(false, 'غير مصرح لك بهذه العملية.');
+            }
             http_response_code(403);
             echo 'غير مصرح لك بهذه العملية.';
             exit;
@@ -118,6 +127,8 @@ final class WebSession
 
             return false;
         }
+
+        CustomerSession::logout();
 
         $permissions = self::loadPermissions($user['id']);
         $roles = self::loadRoleLabels($user['id']);

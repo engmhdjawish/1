@@ -52,26 +52,193 @@
     return form.querySelector('[type="submit"]:not([disabled])');
   }
 
+  /** Resolved POST/GET URL — form.action is shadowed when a control is named "action". */
+  function formActionUrl(form) {
+    const raw = form.getAttribute('action');
+    if (!raw) {
+      return window.location.href;
+    }
+    return new URL(raw, window.location.href).href;
+  }
+
+  function normalizeDashboardRoute(route) {
+    if (!route) return '';
+    try {
+      const url = new URL(route, window.location.origin);
+      return url.pathname + url.search;
+    } catch {
+      return route;
+    }
+  }
+
+  function routesMatch(currentRoute, itemRoute) {
+    const current = normalizeDashboardRoute(currentRoute);
+    const item = normalizeDashboardRoute(itemRoute);
+    if (!current || !item) return false;
+
+    try {
+      const currentUrl = new URL(current, window.location.origin);
+      const itemUrl = new URL(item, window.location.origin);
+      if (currentUrl.pathname !== itemUrl.pathname) return false;
+      for (const [key, value] of itemUrl.searchParams.entries()) {
+        if (currentUrl.searchParams.get(key) !== value) return false;
+      }
+      return true;
+    } catch {
+      return current === item;
+    }
+  }
+
+  function setSidebarLinkActive(link, active) {
+    link.classList.toggle('bg-primary/10', active);
+    link.classList.toggle('text-primary', active);
+    link.classList.toggle('font-bold', active);
+    link.classList.toggle('border-r-4', active);
+    link.classList.toggle('border-primary', active);
+    link.classList.toggle('text-text-muted', !active);
+    link.classList.toggle('hover:bg-surface-low', !active);
+    const icon = link.querySelector('.material-symbols-outlined');
+    if (icon) icon.classList.toggle('fill', active);
+  }
+
   function updateActiveNav(route) {
-    qsa('[data-dashboard-route]').forEach((el) => {
-      const match = el.getAttribute('data-dashboard-route') === route;
-      el.classList.toggle('is-active', match);
-      el.classList.toggle('bg-primary/10', match && el.tagName === 'A');
-      el.classList.toggle('text-primary', match && el.tagName === 'A');
-      el.classList.toggle('font-bold', match && el.tagName === 'A');
+    const normalized = normalizeDashboardRoute(route);
+    qsa('[data-dashboard-route]').forEach((link) => {
+      const itemRoute = link.getAttribute('data-dashboard-route') || '';
+      const active = routesMatch(normalized, itemRoute);
+      if (link.closest('#dashboard-bottom-nav')) {
+        link.classList.toggle('is-active', active);
+        return;
+      }
+      setSidebarLinkActive(link, active);
     });
+  }
+
+  function syncSidebarMeta(srcMeta, targetMeta) {
+    const srcTitle = srcMeta.querySelector('h2');
+    const srcSubtitle = srcMeta.querySelector('p');
+    const targetTitle = targetMeta.querySelector('h2');
+    const targetSubtitle = targetMeta.querySelector('p');
+    if (srcTitle && targetTitle) targetTitle.textContent = srcTitle.textContent;
+    if (srcSubtitle && targetSubtitle) targetSubtitle.textContent = srcSubtitle.textContent;
+  }
+
+  function syncDashboardChrome(doc) {
+    const srcMeta = doc.querySelector('[data-dashboard-sidebar-meta]');
+    if (srcMeta) {
+      qsa('[data-dashboard-sidebar-meta]').forEach((node) => {
+        syncSidebarMeta(srcMeta, node);
+      });
+    }
+
+    const srcNav = doc.querySelector('[data-dashboard-sidebar-nav]');
+    if (srcNav) {
+      qsa('[data-dashboard-sidebar-nav]').forEach((node) => {
+        node.innerHTML = srcNav.innerHTML;
+      });
+    }
+
+    const srcFooter = doc.querySelector('[data-dashboard-sidebar-footer]');
+    if (srcFooter) {
+      qsa('[data-dashboard-sidebar-footer]').forEach((node) => {
+        node.innerHTML = srcFooter.innerHTML;
+      });
+    }
+
+    const srcHeaderArea = doc.querySelector('[data-dashboard-header-area]');
+    const headerArea = qs('[data-dashboard-header-area]');
+    if (srcHeaderArea && headerArea) {
+      headerArea.textContent = srcHeaderArea.textContent;
+    }
+
+    const srcAreaTabs = doc.querySelector('[data-dashboard-area-tabs]');
+    const areaTabs = qs('[data-dashboard-area-tabs]');
+    if (srcAreaTabs && areaTabs) {
+      areaTabs.innerHTML = srcAreaTabs.innerHTML;
+    }
+  }
+
+  function currentDashboardRoute() {
+    const mainRoute = qs('[data-dashboard-main]')?.getAttribute('data-current-route');
+    if (mainRoute) return mainRoute;
+    return window.location.pathname + window.location.search;
+  }
+
+  const PAGE_ASSETS = {
+    orders: {
+      styles: [
+        '/css/store-ui.css',
+        '/css/store-cart.css',
+        '/css/customer-portal.css',
+      ],
+    },
+  };
+
+  function loadStylesheet(href) {
+    const existing = document.querySelector(`link[rel="stylesheet"][href="${href}"]`);
+    if (existing) {
+      if (existing.sheet) {
+        return Promise.resolve();
+      }
+      return new Promise((resolve, reject) => {
+        existing.addEventListener('load', () => resolve(), { once: true });
+        existing.addEventListener('error', () => reject(new Error(href)), { once: true });
+      });
+    }
+
+    return new Promise((resolve, reject) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      link.onload = () => resolve();
+      link.onerror = () => reject(new Error(href));
+      document.head.appendChild(link);
+    });
+  }
+
+  function ensureStylesheet(href) {
+    loadStylesheet(href).catch(() => {});
+  }
+
+  async function ensurePageAssets(key) {
+    const bundle = PAGE_ASSETS[key];
+    if (!bundle) return;
+    await Promise.all((bundle.styles || []).map((href) => loadStylesheet(href)));
+  }
+
+  function bindOrderImageZoom(root) {
+    if (typeof window.StoreImageZoom?.bind === 'function') {
+      window.StoreImageZoom.bind(root);
+    }
   }
 
   function closeDrawer() {
     qs('#dashboard-drawer')?.classList.remove('is-open');
     qs('#dashboard-drawer-backdrop')?.classList.remove('is-open');
+    qs('#dashboard-menu-btn')?.setAttribute('aria-expanded', 'false');
     document.body.style.overflow = '';
   }
 
   function openDrawer() {
     qs('#dashboard-drawer')?.classList.add('is-open');
     qs('#dashboard-drawer-backdrop')?.classList.add('is-open');
+    qs('#dashboard-menu-btn')?.setAttribute('aria-expanded', 'true');
     document.body.style.overflow = 'hidden';
+  }
+
+  function describeInvalidJsonResponse(res, raw) {
+    const preview = String(raw || '').replace(/\s+/g, ' ').trim();
+    const short = preview.slice(0, 220);
+    if (res.redirected && /login\.php/i.test(res.url || '')) {
+      return 'انتهت جلسة الدخول — أعد تسجيل الدخول ثم جرّب مجدداً.';
+    }
+    if (short.startsWith('<') || /<!DOCTYPE/i.test(short)) {
+      return 'الخادم أعاد صفحة HTML بدل JSON (غالباً خطأ PHP أو إعادة توجيه). افتح Network في المتصفح واطّلع على Response.';
+    }
+    if (short) {
+      return short;
+    }
+    return 'رد فارغ من الخادم.';
   }
 
   async function fetchJson(url, options = {}) {
@@ -84,14 +251,34 @@
       },
       ...options,
     });
+    const raw = await res.text();
     let data = null;
-    try {
-      data = await res.json();
-    } catch {
-      data = { ok: false, message: 'استجابة غير صالحة من الخادم.' };
+    if (raw) {
+      try {
+        data = JSON.parse(raw);
+      } catch (parseError) {
+        const detail = describeInvalidJsonResponse(res, raw);
+        console.error('[dashboard] invalid JSON response', {
+          url,
+          status: res.status,
+          redirected: res.redirected,
+          finalUrl: res.url,
+          contentType: res.headers.get('content-type'),
+          bodyPreview: raw.slice(0, 1200),
+          parseError,
+        });
+        throw new Error(`استجابة غير صالحة [HTTP ${res.status}]: ${detail}`);
+      }
+    }
+    if (!data) {
+      throw new Error(`استجابة فارغة من الخادم [HTTP ${res.status}]`);
     }
     if (!res.ok || data.ok === false) {
-      throw new Error(data.message || ('خطأ ' + res.status));
+      const err = new Error(data.message || ('خطأ ' + res.status));
+      if (data.login) {
+        err.loginRequired = true;
+      }
+      throw err;
     }
     return data;
   }
@@ -117,14 +304,22 @@
         return;
       }
       main.innerHTML = newMain.innerHTML;
-      const route = newMain.getAttribute('data-current-route') || '';
+      syncDashboardChrome(doc);
+      await ensurePageAssets(newMain.getAttribute('data-dashboard-page-assets') || '');
+      const route = newMain.getAttribute('data-current-route') || normalizeDashboardRoute(url);
       if (route) {
         main.setAttribute('data-current-route', route);
         updateActiveNav(route);
       }
+      const pageAssets = newMain.getAttribute('data-dashboard-page-assets') || '';
+      if (pageAssets) {
+        main.setAttribute('data-dashboard-page-assets', pageAssets);
+      } else {
+        main.removeAttribute('data-dashboard-page-assets');
+      }
       if (doc.title) document.title = doc.title;
       if (push) history.pushState({ dashboardUrl: url }, '', url);
-      bindPage(main);
+      bindPage(document);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       showToast(err.message || 'تعذر التنقل.', 'error');
@@ -134,6 +329,11 @@
   }
 
   async function submitAjaxForm(form, submitter) {
+    const confirmMsg = form.getAttribute('data-dashboard-confirm');
+    if (confirmMsg && !window.confirm(confirmMsg)) {
+      return;
+    }
+
     const reload = form.hasAttribute('data-dashboard-reload');
     const redirect = form.getAttribute('data-dashboard-redirect');
     setButtonLoading(submitter, true);
@@ -142,18 +342,24 @@
       if (submitter && submitter.name) {
         body.set(submitter.name, submitter.value);
       }
-      const data = await fetchJson(form.action || window.location.href, {
+      const data = await fetchJson(formActionUrl(form), {
         method: (form.method || 'POST').toUpperCase(),
         body,
       });
       showToast(data.message || 'تم التنفيذ.', data.ok === false ? 'error' : 'success');
-      if (redirect) {
-        await navigate(redirect);
+      const target = redirect || data.redirect;
+      if (target) {
+        await navigate(target);
       } else if (reload || data.reload) {
         await navigate(window.location.href, false);
       }
     } catch (err) {
       showToast(err.message || 'تعذر تنفيذ العملية.', 'error');
+      if (err.loginRequired) {
+        setTimeout(() => {
+          window.location.href = '/login.php?type=staff';
+        }, 900);
+      }
     } finally {
       setButtonLoading(submitter, false);
     }
@@ -197,12 +403,15 @@
       form.addEventListener('submit', (event) => {
         if (!explicit) {
           event.preventDefault();
+          event.stopImmediatePropagation();
           return;
         }
         explicit = false;
-        if (form.hasAttribute('data-dashboard-ajax')) return;
+        if (form.hasAttribute('data-dashboard-ajax')) {
+          return;
+        }
         setButtonLoading(getSubmitter(form, event), true);
-      });
+      }, true);
       form.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter') return;
         const target = event.target;
@@ -222,6 +431,7 @@
       form.dataset.confirmBound = '1';
       const msg = form.getAttribute('data-dashboard-confirm') || 'هل أنت متأكد؟';
       form.addEventListener('submit', (event) => {
+        if (form.hasAttribute('data-dashboard-ajax')) return;
         if (!confirm(msg)) {
           event.preventDefault();
         }
@@ -237,19 +447,26 @@
         if (form.method.toLowerCase() !== 'get') return;
         event.preventDefault();
         const params = new URLSearchParams(new FormData(form));
-        const url = (form.action || window.location.pathname) + '?' + params.toString();
+        const url = formActionUrl(form).replace(/\?.*$/, '') + '?' + params.toString();
+        closeDrawer();
         navigate(url);
       });
     });
   }
 
   function bindMobileNav() {
+    if (document.body.dataset.mobileNavBound === '1') return;
+    document.body.dataset.mobileNavBound = '1';
+
     qs('#dashboard-menu-btn')?.addEventListener('click', openDrawer);
     qs('#dashboard-drawer-backdrop')?.addEventListener('click', closeDrawer);
     qs('#dashboard-drawer-close')?.addEventListener('click', closeDrawer);
     qs('#dashboard-bottom-menu-btn')?.addEventListener('click', (e) => {
       e.preventDefault();
       openDrawer();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeDrawer();
     });
   }
 
@@ -272,16 +489,35 @@
     if (typeof window.portalHomeSectionsInit === 'function') {
       window.portalHomeSectionsInit(root);
     }
+    if (typeof window.portalSpecialOffersInit === 'function') {
+      window.portalSpecialOffersInit(root);
+    }
+    if (typeof window.portalMediaPickerInit === 'function') {
+      window.portalMediaPickerInit();
+    }
+    if (typeof window.portalAboutEditorInit === 'function') {
+      window.portalAboutEditorInit(root);
+    }
+    if (typeof window.portalAccountingStatementInit === 'function') {
+      window.portalAccountingStatementInit(root);
+    }
+    if (typeof window.portalMaterialImagesLinkInit === 'function') {
+      window.portalMaterialImagesLinkInit(root);
+    }
+    bindOrderImageZoom(root);
   }
 
-  function init() {
-    document.body.classList.add('dashboard-app', 'has-bottom-nav');
+  async function init() {
+    document.body.classList.add('dashboard-app');
+    await ensurePageAssets(qs('[data-dashboard-main]')?.getAttribute('data-dashboard-page-assets') || '');
+    if (window.matchMedia('(max-width: 1023px)').matches && qs('#dashboard-bottom-nav')) {
+      document.body.classList.add('has-bottom-nav');
+    }
     bindMobileNav();
     bindHistory();
     bindPage(document);
     history.replaceState({ dashboardUrl: window.location.href }, '', window.location.href);
-    const route = qs('[data-dashboard-main]')?.getAttribute('data-current-route');
-    if (route) updateActiveNav(route);
+    updateActiveNav(currentDashboardRoute());
     const flash = qs('[data-dashboard-flash]');
     if (flash) {
       showToast(flash.textContent.trim(), flash.getAttribute('data-type') || 'success');

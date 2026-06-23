@@ -8,7 +8,7 @@ use Portal\Auth\WebSession;
 use Portal\Services\AccountingApiService;
 use Portal\Services\OrderService;
 
-WebSession::requirePermission('accounting.view');
+WebSession::requireAnyPermission(['accounting.view', 'orders.view']);
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 $syncCounts = OrderService::syncCounts();
@@ -21,5 +21,5 @@ $currentRoute = '/dashboard/accounting.php';
 ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/accounting.php';
 $content = ob_get_clean();
-$title = 'لوحة المحاسبة';
+$title = 'لوحة أمين';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

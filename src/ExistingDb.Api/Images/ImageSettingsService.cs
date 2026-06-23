@@ -9,7 +9,8 @@ public sealed class ImageSettingsService(ApiManagementDbContext dbContext) : IIm
     public async Task<ImageStorageSettings> GetAsync(CancellationToken cancellationToken = default)
     {
         var settings = await dbContext.Settings
-            .Where(setting => setting.Key == ImageSettingsKeys.ImagesDirectory || setting.Key == ImageSettingsKeys.ThumbnailsDirectory)
+            .AsNoTracking()
+            .Where(setting => setting.Key == ImageSettingsKeys.ImagesDirectory)
             .ToDictionaryAsync(setting => setting.Key, setting => setting.Value, cancellationToken);
 
         var imagesDirectory = settings.GetValueOrDefault(ImageSettingsKeys.ImagesDirectory);
@@ -18,13 +19,7 @@ public sealed class ImageSettingsService(ApiManagementDbContext dbContext) : IIm
             imagesDirectory = Path.Combine(AppContext.BaseDirectory, "images");
         }
 
-        var thumbnailsDirectory = settings.GetValueOrDefault(ImageSettingsKeys.ThumbnailsDirectory);
-        if (string.IsNullOrWhiteSpace(thumbnailsDirectory))
-        {
-            thumbnailsDirectory = Path.Combine(imagesDirectory, "thumbnails");
-        }
-
-        return new ImageStorageSettings(imagesDirectory, thumbnailsDirectory);
+        return new ImageStorageSettings(imagesDirectory);
     }
 
     public async Task UpdateAsync(ImageStorageSettings settings, CancellationToken cancellationToken = default)
@@ -33,11 +28,6 @@ public sealed class ImageSettingsService(ApiManagementDbContext dbContext) : IIm
             ImageSettingsKeys.ImagesDirectory,
             settings.ImagesDirectory,
             "Directory where original material image files are uploaded.",
-            cancellationToken);
-        await UpsertAsync(
-            ImageSettingsKeys.ThumbnailsDirectory,
-            settings.ThumbnailsDirectory,
-            "Directory where generated material image thumbnails are saved.",
             cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
@@ -62,4 +52,3 @@ public sealed class ImageSettingsService(ApiManagementDbContext dbContext) : IIm
         setting.UpdatedAt = DateTimeOffset.UtcNow;
     }
 }
-

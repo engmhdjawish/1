@@ -45,6 +45,19 @@ ob_start();
     <div class="text-5xl mb-3" aria-hidden="true">✓</div>
     <h1 class="text-2xl font-extrabold text-primary mb-2">تم استلام طلبك</h1>
     <p class="text-sm text-gray-600 mb-6">شكراً لك. سيتواصل معك فريقنا قريباً.</p>
+    <?php if (!empty($order['had_unavailable_items'])): ?>
+      <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-right text-sm text-amber-900 mb-4">
+        <p class="font-bold mb-1">تم إرسال الأصناف المتوفرة فقط</p>
+        <p>بعض الأصناف في سلتك لم تعد متاحة ولم تُدرج في هذا الطلب. راجع السلة لمعرفة التفاصيل.</p>
+        <?php if (!empty($order['partial_notices']) && is_array($order['partial_notices'])): ?>
+          <ul class="mt-2 space-y-1 list-disc list-inside">
+            <?php foreach ($order['partial_notices'] as $partialNotice): ?>
+              <li><?= h((string) $partialNotice) ?></li>
+            <?php endforeach; ?>
+          </ul>
+        <?php endif; ?>
+      </div>
+    <?php endif; ?>
     <div class="rounded-lg border bg-gray-50 p-4 text-right text-sm space-y-2 mb-6">
       <div><span class="text-gray-500">رقم الطلب:</span> <strong><?= h((string) ($order['order_number'] ?? '')) ?></strong></div>
       <?php if (!empty($order['total_sp'])): ?>
@@ -54,8 +67,23 @@ ob_start();
         <div><span class="text-gray-500">الإجمالي ($):</span> <strong>$<?= number_format((float) ($order['total_usd'] ?? 0), 2, '.', ',') ?></strong></div>
       <?php endif; ?>
     </div>
+    <?php
+      $quoteToken = trim((string) ($order['quote_access_token'] ?? ''));
+      $trackingUrl = $quoteToken !== '' ? absolute_order_tracking_url($quoteToken) : '';
+    ?>
+    <?php if ($trackingUrl !== ''): ?>
+      <div class="rounded-lg border border-red-100 bg-red-50 p-4 text-right text-sm mb-6">
+        <p class="font-bold text-primary mb-1">رابط متابعة الطلب</p>
+        <p class="text-xs text-gray-600 mb-2">احفظ هذا الرابط لمتابعة حالة طلبك.</p>
+        <input type="text" readonly value="<?= h($trackingUrl) ?>" class="w-full h-10 rounded-lg border border-gray-300 px-3 text-xs font-mono mb-2" dir="ltr">
+        <a href="<?= h(order_tracking_url($quoteToken)) ?>" class="h-10 inline-flex items-center rounded-lg bg-primary text-white px-4 text-sm font-bold">متابعة الطلب</a>
+      </div>
+    <?php endif; ?>
     <div class="flex flex-wrap gap-2 justify-center">
       <a href="/share.php?token=<?= urlencode($token) ?>" class="h-11 inline-flex items-center rounded bg-primary text-white px-6 font-bold">متابعة التصفح</a>
+      <?php if (!empty($order['had_unavailable_items'])): ?>
+        <a href="/cart.php?token=<?= urlencode($token) ?>" class="h-11 inline-flex items-center rounded border border-amber-300 bg-amber-50 text-amber-900 px-6 text-sm font-bold">مراجعة السلة</a>
+      <?php endif; ?>
       <a href="/index.php" class="h-11 inline-flex items-center rounded border border-gray-300 px-6 text-sm font-bold">الرئيسية</a>
     </div>
   <?php endif; ?>

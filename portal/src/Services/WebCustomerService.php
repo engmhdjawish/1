@@ -146,12 +146,13 @@ final class WebCustomerService
             "SELECT 1
              FROM web_customers
              WHERE phone = :phone
-               AND (:exclude_id = '' OR id::text <> :exclude_id)
+               AND (:exclude_id_is_empty = '' OR id::text <> :exclude_id_value)
              LIMIT 1"
         );
         $duplicate->execute([
             'phone' => $phone,
-            'exclude_id' => $customerId,
+            'exclude_id_is_empty' => $customerId,
+            'exclude_id_value' => $customerId,
         ]);
         if ($duplicate->fetchColumn()) {
             return ['ok' => false, 'message' => 'رقم الهاتف مسجّل مسبقاً لعميل آخر.'];
@@ -502,5 +503,77 @@ final class WebCustomerService
         return Database::pdo()->query(
             'SELECT id::text AS id, code, name_ar FROM access_policies WHERE is_active = TRUE ORDER BY name_ar'
         )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** @return array{ok: bool, message: string} */
+    public static function updateOwnProfile(string $customerId, string $nameAr, ?string $email): array
+    {
+        $customerId = trim($customerId);
+        $nameAr = trim($nameAr);
+        $email = trim((string) $email);
+
+        if ($customerId === '' || $nameAr === '') {
+            return ['ok' => false, 'message' => 'الاسم مطلوب.'];
+        }
+
+        $pdo = Database::pdo();
+        $stmt = $pdo->prepare(
+            'UPDATE web_customers
+             SET name_ar = :name_ar,
+                 email = :email,
+                 updated_at = NOW()
+             WHERE id = :id
+               AND status = \'active\''
+        );
+        $stmt->execute([
+            'id' => $customerId,
+            'name_ar' => $nameAr,
+            'email' => $email !== '' ? $email : null,
+        ]);
+
+        if ($stmt->rowCount() < 1) {
+            return ['ok' => false, 'message' => 'تعذر تحديث الملف الشخصي.'];
+        }
+
+        return ['ok' => true, 'message' => 'تم حفظ بيانات الحساب.'];
+    }
+
+    /** @return array{ok: bool, message: string} */
+    public static function changeOwnPassword(string $customerId, string $currentPassword, string $newPassword): array
+    {
+        $customerId = trim($customerId);
+        $currentPassword = trim($currentPassword);
+        $newPassword = trim($newPassword);
+
+        if ($customerId === '' || $currentPassword === '' || $newPassword === '') {
+            return ['ok' => false, 'message' => 'جميع حقول كلمة المرور مطلوبة.'];
+        }
+        if (strlen($newPassword) < 6) {
+            return ['ok' => false, 'message' => 'كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل.'];
+        }
+
+        $pdo = Database::pdo();
+        $stmt = $pdo->prepare('SELECT password_hash FROM web_customers WHERE id = :id AND status = \'active\' LIMIT 1');
+        $stmt->execute(['id' => $customerId]);
+        $hash = $stmt->fetchColumn();
+        if ($hash === false || $hash === '') {
+            return ['ok' => false, 'message' => 'تعذر العثور على الحساب.'];
+        }
+        if (!Password::verify($currentPassword, (string) $hash)) {
+            return ['ok' => false, 'message' => 'كلمة المرور الحالية غير صحيحة.'];
+        }
+
+        try {
+            $newHash = Password::hash($newPassword);
+        } catch (\Throwable $exception) {
+            return ['ok' => false, 'message' => $exception->getMessage()];
+        }
+
+        $update = $pdo->prepare(
+            'UPDATE web_customers SET password_hash = :hash, updated_at = NOW() WHERE id = :id'
+        );
+        $update->execute(['hash' => $newHash, 'id' => $customerId]);
+
+        return ['ok' => true, 'message' => 'تم تحديث كلمة المرور بنجاح.'];
     }
 }

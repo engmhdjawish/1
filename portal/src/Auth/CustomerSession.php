@@ -22,6 +22,14 @@ final class CustomerSession
         return $customer !== null && ($customer['status'] ?? '') === 'active';
     }
 
+    public static function requireLogin(): void
+    {
+        if (!self::check()) {
+            header('Location: /login.php?type=customer');
+            exit;
+        }
+    }
+
     public static function login(string $phone, string $password): bool
     {
         $pdo = Database::pdo();
@@ -39,6 +47,8 @@ final class CustomerSession
         if (!Password::verify($password, $row['password_hash'])) {
             return false;
         }
+
+        WebSession::logout();
 
         $_SESSION[self::SESSION_KEY] = self::mapCustomer($row);
         $pdo->prepare('UPDATE web_customers SET last_login_at = NOW() WHERE id = :id')
@@ -59,6 +69,7 @@ final class CustomerSession
             'id' => $row['id'],
             'name_ar' => $row['name_ar'],
             'phone' => $row['phone'],
+            'email' => $row['email'] ?? null,
             'status' => $row['status'],
             'access_policy_id' => $row['access_policy_id'],
             'show_price' => (bool) ($row['show_price'] ?? false),
@@ -66,5 +77,31 @@ final class CustomerSession
             'allow_cart' => (bool) ($row['allow_cart'] ?? false),
             'allow_order' => (bool) ($row['allow_order'] ?? false),
         ];
+    }
+
+    public static function refresh(): void
+    {
+        $customer = self::customer();
+        if ($customer === null) {
+            return;
+        }
+
+        $pdo = Database::pdo();
+        $stmt = $pdo->prepare(
+            'SELECT c.*, ap.show_price, ap.show_quantity, ap.allow_cart, ap.allow_order
+             FROM web_customers c
+             LEFT JOIN access_policies ap ON ap.id = c.access_policy_id
+             WHERE c.id = :id
+             LIMIT 1'
+        );
+        $stmt->execute(['id' => $customer['id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row || ($row['status'] ?? '') !== 'active') {
+            self::logout();
+
+            return;
+        }
+
+        $_SESSION[self::SESSION_KEY] = self::mapCustomer($row);
     }
 }

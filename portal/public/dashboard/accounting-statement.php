@@ -7,7 +7,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Auth\WebSession;
 use Portal\Services\AccountingApiService;
 
-WebSession::requirePermission('accounting.statement.view');
+WebSession::requireAnyPermission(['accounting.statement.view', 'orders.view']);
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 $query = [

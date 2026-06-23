@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Portal\Services;
 
+use Portal\Support\ArabicGdText;
 use Portal\Config;
 use Portal\Database;
 use Throwable;
@@ -75,16 +76,47 @@ final class MaterialImageStorageService
 
     /**
      * @param array<string, mixed> $file single $_FILES entry
-     * @return array{ok: bool, message: string, file_name?: string, replaced?: bool}
+     * @return array{ok: bool, message: string, file_name?: string, replaced?: bool, local_path?: string}
      */
-    public static function uploadSingle(array $file): array
+    public static function uploadSingle(array $file, ?string $uploadedByUserId = null): array
     {
         $settings = self::settings();
         if (!self::ensureDirectory($settings['images_dir']) || !self::ensureDirectory($settings['thumbnails_dir'])) {
             return ['ok' => false, 'message' => 'تعذر إنشاء مجلدات التخزين.'];
         }
 
-        return self::uploadOne($file, $settings['images_dir'], $settings['thumbnails_dir']);
+        $result = self::uploadOne($file, $settings['images_dir'], $settings['thumbnails_dir']);
+        if (!($result['ok'] ?? false)) {
+            return $result;
+        }
+
+        $fileName = (string) ($result['file_name'] ?? '');
+        $localPath = self::safeJoin($settings['images_dir'], $fileName) ?? '';
+        $thumbPath = self::safeJoin($settings['thumbnails_dir'], $fileName);
+
+        try {
+            MaterialImageSyncService::enqueue($fileName, $localPath, $thumbPath, $uploadedByUserId);
+        } catch (Throwable $exception) {
+            return [
+                'ok' => false,
+                'message' => 'تم حفظ الصورة محلياً لكن تعذر إضافتها لطابور المزامنة: ' . $exception->getMessage(),
+                'file_name' => $fileName,
+                'replaced' => (bool) ($result['replaced'] ?? false),
+                'local_path' => $localPath,
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'message' => ($result['renamed'] ?? false)
+                ? ('تم حفظ الصورة باسم «' . $fileName . '» (تعارض الاسم) وإضافتها لطابور مزامنة الأمين.')
+                : 'تم حفظ الصورة على الموقع وإضافتها لطابور مزامنة الأمين.',
+            'file_name' => $fileName,
+            'replaced' => false,
+            'renamed' => (bool) ($result['renamed'] ?? false),
+            'requested_name' => (string) ($result['requested_name'] ?? $fileName),
+            'local_path' => $localPath,
+        ];
     }
 
     /**
@@ -119,11 +151,7 @@ final class MaterialImageStorageService
                 continue;
             }
 
-            if ($result['replaced']) {
-                $replaced[] = $result['file_name'];
-            } else {
-                $uploaded[] = $result['file_name'];
-            }
+            $uploaded[] = (string) ($result['file_name'] ?? '');
         }
 
         if ($uploaded === [] && $replaced === [] && $failed !== []) {
@@ -182,6 +210,7 @@ final class MaterialImageStorageService
             $fullPreviewPath = self::findFileInDirectory($settings['images_dir'], $entry);
             $rows[] = [
                 'file_name' => $entry,
+                'local_path' => $path,
                 'size_bytes' => filesize($path) ?: 0,
                 'modified_at' => date('Y-m-d H:i:s', (int) filemtime($path)),
                 'has_thumbnail' => $thumbPath !== null,
@@ -196,10 +225,1056 @@ final class MaterialImageStorageService
         return $rows;
     }
 
+    /**
+     * @return array{ok: bool, message: string, file_name?: string}
+     */
+    public static function saveProcessedUpload(string $tmpPath, string $originalName = 'linked.jpg'): ?string
+    {
+        if ($tmpPath === '' || !is_file($tmpPath)) {
+            return null;
+        }
+
+        $mime = self::detectMime($tmpPath);
+        if (!str_starts_with($mime, 'image/')) {
+            return null;
+        }
+
+        $settings = self::settings();
+        $directory = $settings['images_dir'] . DIRECTORY_SEPARATOR . '_processed';
+        if (!self::ensureDirectory($directory)) {
+            return null;
+        }
+
+        $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        if ($extension === '' || !in_array($extension, self::ALLOWED_EXTENSIONS, true)) {
+            $extension = 'jpg';
+        }
+
+        $dest = $directory . DIRECTORY_SEPARATOR . ('proc_' . bin2hex(random_bytes(8)) . '.' . $extension);
+        if (is_uploaded_file($tmpPath)) {
+            if (!@move_uploaded_file($tmpPath, $dest)) {
+                return null;
+            }
+        } elseif (!@copy($tmpPath, $dest)) {
+            return null;
+        }
+
+        return $dest;
+    }
+
+    public static function renderImageWithDetailsBanner(string $sourcePath, string $line1, string $line2): ?string
+    {
+        if (!is_file($sourcePath) || !function_exists('imagecreatetruecolor') || !function_exists('imagettftext')) {
+            return null;
+        }
+
+        $font = self::resolveDetailsFontPath();
+        if ($font === null) {
+            return null;
+        }
+
+        $line1 = self::normalizeProductBannerLine($line1);
+        $line2 = trim($line2);
+        if ($line1 === '' && $line2 === '') {
+            return null;
+        }
+
+        $image = self::loadGdImage($sourcePath);
+        if ($image === false) {
+            return null;
+        }
+
+        $width = imagesx($image);
+        $height = imagesy($image);
+        if ($width <= 0 || $height <= 0) {
+            imagedestroy($image);
+
+            return null;
+        }
+
+        $titleSize = (float) max(17, min(28, (int) floor($width / 26)));
+        $codeSize = (float) max(13, min(20, round($titleSize * 0.78)));
+        $subtitleSize = (float) max(13, min(18, (int) floor($width / 34)));
+        $paddingX = (int) max(18, min(30, (int) floor($width / 32)));
+        $paddingY = (int) max(16, min(22, (int) floor($width / 40)));
+        $lineGap = (int) max(6, min(10, (int) round($subtitleSize * 0.45)));
+        $productParts = $line1 !== '' ? self::splitProductBannerLine($line1) : null;
+        $branding = self::detailsBannerBranding();
+        $brandNameSize = (float) max(13, min(22, $subtitleSize * 0.95));
+        $brandPhoneSize = (float) max(12, min(19, $subtitleSize * 0.86));
+        $brandBlockWidth = self::detailsBannerBrandColumnWidth($font, $brandNameSize, $brandPhoneSize, $branding, $width);
+        $brandColumnRight = $paddingX + $brandBlockWidth;
+        $contentLeft = $brandBlockWidth > 0 ? $brandColumnRight + 20 : $paddingX;
+        $contentRight = $width - $paddingX;
+        $contentWidth = max(120, $contentRight - $contentLeft);
+        $brandNameLines = self::detailsBannerBrandNameLines($font, $brandNameSize, $branding, $brandBlockWidth);
+        $titleLineStep = (int) round($titleSize * 1.22);
+        $subtitleLineStep = (int) round($subtitleSize * 1.2);
+        $codeFrameWidth = 0;
+        if ($productParts !== null && $productParts['code'] !== '') {
+            $codeFrameWidth = self::bannerFramedTextWidth($font, $codeSize, $productParts['code'], false);
+        }
+
+        $nameLines = [];
+        if ($productParts !== null) {
+            $nameWrapWidth = max(
+                80,
+                (int) round($contentWidth - $codeFrameWidth - ($codeFrameWidth > 0 ? 12 : 0))
+            );
+            $nameLines = self::wrapTtfTextLines(
+                $font,
+                $titleSize,
+                $productParts['name'],
+                $nameWrapWidth
+            );
+            if ($nameLines === []) {
+                $nameLines = [$productParts['name']];
+            }
+        }
+
+        $titleLineCount = $productParts !== null
+            ? max(1, count($nameLines))
+            : ($line1 !== '' ? count(self::wrapTtfTextLines($font, $titleSize, $line1, $contentWidth)) : 0);
+        $subtitleLines = $line2 !== '' ? [$line2] : [];
+
+        $brandBlockHeight = self::detailsBannerBrandBlockHeight($branding, $brandNameSize, $brandPhoneSize, $brandNameLines);
+        $contentBlockHeight = 0;
+        if ($titleLineCount > 0) {
+            $contentBlockHeight += $titleLineCount * $titleLineStep;
+        }
+        if ($subtitleLines !== []) {
+            if ($contentBlockHeight > 0) {
+                $contentBlockHeight += $lineGap;
+            }
+            $contentBlockHeight += count($subtitleLines) * $subtitleLineStep;
+        }
+        $innerBlockHeight = max($brandBlockHeight, $contentBlockHeight, (int) round($titleSize * 1.1));
+        $bannerHeight = $paddingY * 2 + $innerBlockHeight;
+        if ($bannerHeight <= 0) {
+            imagedestroy($image);
+
+            return null;
+        }
+
+        $canvas = imagecreatetruecolor($width, $height + $bannerHeight);
+        if ($canvas === false) {
+            imagedestroy($image);
+
+            return null;
+        }
+
+        imagecopy($canvas, $image, 0, 0, 0, 0, $width, $height);
+        imagedestroy($image);
+
+        self::fillDetailsBannerBackground($canvas, 0, $height, $width, $bannerHeight);
+        self::drawDetailsBannerHairline($canvas, 0, $height, $width);
+
+        $footerTop = $height;
+        $innerTop = $footerTop + $paddingY;
+        $brandStartY = $innerTop + (int) floor(max(0, $innerBlockHeight - $brandBlockHeight) / 2);
+        $contentStartY = $innerTop + (int) floor(max(0, $innerBlockHeight - $contentBlockHeight) / 2);
+
+        if ($brandBlockWidth > 0) {
+            self::drawDetailsBannerColumnDivider(
+                $canvas,
+                $brandColumnRight + 9,
+                $innerTop,
+                $innerTop + $innerBlockHeight
+            );
+        }
+
+        self::drawDetailsBannerBranding(
+            $canvas,
+            $font,
+            $branding,
+            $brandNameSize,
+            $brandPhoneSize,
+            $paddingX,
+            $brandStartY,
+            $brandBlockWidth,
+            $brandNameLines
+        );
+
+        $contentRowTop = $contentStartY;
+        $drewProduct = false;
+        if ($productParts !== null) {
+            foreach ($nameLines as $index => $nameLine) {
+                $productBaseline = $contentRowTop + (int) $titleSize;
+                $nameRight = $index === 0 && $codeFrameWidth > 0
+                    ? $contentRight - $codeFrameWidth - 10
+                    : $contentRight;
+                self::drawBannerColoredTextRight(
+                    $canvas,
+                    $font,
+                    $titleSize,
+                    $nameLine,
+                    $contentLeft,
+                    $nameRight,
+                    $productBaseline,
+                    245,
+                    245,
+                    247,
+                    true,
+                    true
+                );
+                if ($index === 0 && $productParts['code'] !== '') {
+                    self::drawBannerSoftBadgeRight(
+                        $canvas,
+                        $font,
+                        $codeSize,
+                        $productParts['code'],
+                        $contentLeft,
+                        $contentRight,
+                        $productBaseline
+                    );
+                }
+                $contentRowTop += $titleLineStep;
+                $drewProduct = true;
+            }
+        } elseif ($line1 !== '') {
+            $titleLines = self::wrapTtfTextLines($font, $titleSize, $line1, $contentWidth);
+            foreach ($titleLines as $line) {
+                $productBaseline = $contentRowTop + (int) $titleSize;
+                self::drawBannerColoredTextRight(
+                    $canvas,
+                    $font,
+                    $titleSize,
+                    $line,
+                    $contentLeft,
+                    $contentRight,
+                    $productBaseline,
+                    245,
+                    245,
+                    247,
+                    true,
+                    true
+                );
+                $contentRowTop += $titleLineStep;
+                $drewProduct = true;
+            }
+        }
+
+        if ($subtitleLines !== []) {
+            if ($drewProduct) {
+                $contentRowTop += $lineGap;
+            }
+            foreach ($subtitleLines as $line) {
+                $packBaseline = $contentRowTop + (int) $subtitleSize;
+                self::drawPackagingBannerLine(
+                    $canvas,
+                    $font,
+                    $subtitleSize,
+                    $line,
+                    $contentLeft,
+                    $contentRight,
+                    $packBaseline
+                );
+                $contentRowTop += $subtitleLineStep;
+            }
+        }
+
+        $settings = self::settings();
+        $directory = $settings['images_dir'] . DIRECTORY_SEPARATOR . '_processed';
+        if (!self::ensureDirectory($directory)) {
+            imagedestroy($canvas);
+
+            return null;
+        }
+
+        $dest = $directory . DIRECTORY_SEPARATOR . ('detail_' . bin2hex(random_bytes(8)) . '.jpg');
+        $saved = imagejpeg($canvas, $dest, 92);
+        imagedestroy($canvas);
+
+        return $saved ? $dest : null;
+    }
+
+    public static function normalizeProductBannerLine(string $line): string
+    {
+        $line = trim($line);
+        if ($line === '') {
+            return '';
+        }
+
+        $line = preg_replace('/\s*[—–−]\s*/u', ' - ', $line) ?? $line;
+        $line = preg_replace('/\s+-\s+/u', ' - ', $line) ?? $line;
+
+        return trim($line);
+    }
+
+    /** @return array{code: string, name: string}|null */
+    public static function splitProductBannerLine(string $line): ?array
+    {
+        $line = self::normalizeProductBannerLine($line);
+        if ($line === '' || !str_contains($line, ' - ')) {
+            return null;
+        }
+
+        [$name, $code] = explode(' - ', $line, 2);
+        $name = trim($name);
+        $code = trim($code);
+        if ($name === '' || $code === '') {
+            return null;
+        }
+
+        return ['name' => $name, 'code' => $code];
+    }
+
+    /** @return array{name: string, phone: string} */
+    public static function detailsBannerBranding(): array
+    {
+        $company = PortalSettingsService::companySettings();
+        $name = trim((string) ($company['company_name'] ?? ''));
+        if ($name === '') {
+            $name = 'جاويش للتجارة';
+        }
+
+        $phone = trim((string) ($company['company_mobile'] ?? ''));
+        if ($phone === '') {
+            $phone = trim((string) ($company['company_phone'] ?? ''));
+        }
+
+        return [
+            'name' => $name,
+            'phone' => $phone,
+        ];
+    }
+
+    /** @param array{name: string, phone: string} $branding */
+    private static function detailsBannerBrandColumnWidth(
+        string $font,
+        float $brandNameSize,
+        float $brandPhoneSize,
+        array $branding,
+        int $canvasWidth
+    ): int {
+        if ($branding['name'] === '' && $branding['phone'] === '') {
+            return 0;
+        }
+
+        $phoneWidth = $branding['phone'] !== ''
+            ? self::ttfLineWidth($font, $brandPhoneSize, $branding['phone'])
+            : 0.0;
+        $maxColumn = (int) max(120, round($canvasWidth * 0.4));
+        $minForPhone = (int) ceil($phoneWidth) + 12;
+
+        return min($maxColumn, max(120, $minForPhone));
+    }
+
+    /**
+     * @param array{name: string, phone: string} $branding
+     * @return list<string>
+     */
+    private static function detailsBannerBrandNameLines(
+        string $font,
+        float $brandNameSize,
+        array $branding,
+        int $brandColumnWidth
+    ): array {
+        if ($branding['name'] === '' || $brandColumnWidth <= 0) {
+            return [];
+        }
+
+        $wrapWidth = max(72, $brandColumnWidth - 8);
+        $lines = self::wrapTtfTextLines($font, $brandNameSize, $branding['name'], $wrapWidth);
+
+        return $lines !== [] ? $lines : [$branding['name']];
+    }
+
+    /**
+     * @param array{name: string, phone: string} $branding
+     * @param list<string> $brandNameLines
+     */
+    private static function detailsBannerBrandBlockHeight(
+        array $branding,
+        float $brandNameSize,
+        float $brandPhoneSize,
+        array $brandNameLines
+    ): int {
+        if ($branding['name'] === '' && $branding['phone'] === '') {
+            return 0;
+        }
+
+        $lineHeight = (int) round($brandNameSize * 1.2);
+        $height = $brandNameLines !== []
+            ? $lineHeight * count($brandNameLines)
+            : ($branding['name'] !== '' ? (int) round($brandNameSize * 1.35) : 0);
+
+        if ($branding['phone'] !== '') {
+            if ($height > 0) {
+                $height += (int) round($brandNameSize * 0.2);
+            }
+            $height += (int) round($brandPhoneSize * 1.35);
+        }
+
+        return $height;
+    }
+
+    /**
+     * @param array{name: string, phone: string} $branding
+     * @param list<string> $brandNameLines
+     */
+    private static function drawDetailsBannerBranding(
+        \GdImage $canvas,
+        string $font,
+        array $branding,
+        float $brandNameSize,
+        float $brandPhoneSize,
+        int $paddingLeft,
+        int $baseY,
+        int $brandColumnWidth,
+        array $brandNameLines
+    ): void {
+        $baseline = $baseY + (int) $brandNameSize;
+        $lineStep = (int) round($brandNameSize * 1.2);
+
+        if ($brandNameLines !== []) {
+            foreach ($brandNameLines as $nameLine) {
+                self::drawBannerColoredText(
+                    $canvas,
+                    $font,
+                    $brandNameSize,
+                    $nameLine,
+                    $paddingLeft,
+                    $baseline,
+                    232,
+                    62,
+                    72,
+                    true,
+                    true
+                );
+                $baseline += $lineStep;
+            }
+        } elseif ($branding['name'] !== '') {
+            self::drawBannerColoredText(
+                $canvas,
+                $font,
+                $brandNameSize,
+                $branding['name'],
+                $paddingLeft,
+                $baseline,
+                232,
+                62,
+                72,
+                true,
+                true
+            );
+            $baseline += $lineStep;
+        }
+
+        if ($branding['phone'] !== '') {
+            if ($brandNameLines !== [] || $branding['name'] !== '') {
+                $baseline += (int) round($brandNameSize * 0.15);
+            }
+            self::drawBannerColoredText(
+                $canvas,
+                $font,
+                $brandPhoneSize,
+                $branding['phone'],
+                $paddingLeft,
+                $baseline + (int) $brandPhoneSize,
+                210,
+                58,
+                66,
+                false,
+                false
+            );
+        }
+    }
+
+    private static function bannerFramePaddingX(float $fontSize): int
+    {
+        return (int) max(6, round($fontSize * 0.34));
+    }
+
+    private static function bannerFramePaddingY(float $fontSize): int
+    {
+        return (int) max(3, round($fontSize * 0.18));
+    }
+
+    private static function bannerFramedTextWidth(string $font, float $fontSize, string $text, bool $shapeArabic): int
+    {
+        $drawText = $shapeArabic && ArabicGdText::containsArabic($text)
+            ? ArabicGdText::shape($text)
+            : $text;
+
+        return self::ttfLineWidth($font, $fontSize, $drawText) + self::bannerFramePaddingX($fontSize) * 2;
+    }
+
+    private static function fillBannerRoundedRect(
+        \GdImage $canvas,
+        int $left,
+        int $top,
+        int $right,
+        int $bottom,
+        int $color
+    ): void {
+        if ($right <= $left || $bottom <= $top) {
+            return;
+        }
+
+        $radius = (int) max(2, floor(($bottom - $top) / 2));
+        imagefilledrectangle($canvas, $left + $radius, $top, $right - $radius, $bottom, $color);
+        imagefilledellipse($canvas, $left + $radius, (int) floor(($top + $bottom) / 2), $radius * 2, $bottom - $top, $color);
+        imagefilledellipse($canvas, $right - $radius, (int) floor(($top + $bottom) / 2), $radius * 2, $bottom - $top, $color);
+    }
+
+    private static function drawBannerSoftBadgeRight(
+        \GdImage $canvas,
+        string $font,
+        float $fontSize,
+        string $text,
+        int $minX,
+        int $maxRightX,
+        int $baselineY
+    ): int {
+        return self::drawBannerFramedTextRight(
+            $canvas,
+            $font,
+            $fontSize,
+            $text,
+            $minX,
+            $maxRightX,
+            $baselineY,
+            52,
+            54,
+            60,
+            255,
+            255,
+            255,
+            216,
+            25,
+            33,
+            false,
+            true
+        );
+    }
+
+    private static function drawBannerFramedTextRight(
+        \GdImage $canvas,
+        string $font,
+        float $fontSize,
+        string $text,
+        int $minX,
+        int $maxRightX,
+        int $baselineY,
+        int $fillRed,
+        int $fillGreen,
+        int $fillBlue,
+        int $textRed,
+        int $textGreen,
+        int $textBlue,
+        int $borderRed,
+        int $borderGreen,
+        int $borderBlue,
+        bool $shapeArabic,
+        bool $boldText = true
+    ): int {
+        $drawText = $shapeArabic && ArabicGdText::containsArabic($text)
+            ? ArabicGdText::shape($text)
+            : $text;
+        if ($drawText === '') {
+            return 0;
+        }
+
+        $textWidth = self::ttfLineWidth($font, $fontSize, $drawText);
+        $padX = self::bannerFramePaddingX($fontSize);
+        $padY = self::bannerFramePaddingY($fontSize);
+        $frameWidth = $textWidth + $padX * 2;
+        $frameHeight = (int) round($fontSize * 1.12) + $padY * 2;
+        $frameRight = $maxRightX;
+        $frameLeft = max($minX, $frameRight - $frameWidth);
+        $frameTop = $baselineY - (int) round($fontSize * 0.82) - $padY;
+        $frameBottom = $frameTop + $frameHeight;
+
+        $fill = imagecolorallocate($canvas, $fillRed, $fillGreen, $fillBlue);
+        $border = imagecolorallocate($canvas, $borderRed, $borderGreen, $borderBlue);
+        self::fillBannerRoundedRect($canvas, $frameLeft, $frameTop, $frameRight, $frameBottom, $fill);
+        if ($borderRed !== $fillRed || $borderGreen !== $fillGreen || $borderBlue !== $fillBlue) {
+            imagerectangle($canvas, $frameLeft, $frameTop, $frameRight, $frameBottom, $border);
+        }
+
+        self::drawBannerColoredText(
+            $canvas,
+            $font,
+            $fontSize,
+            $text,
+            $frameLeft + $padX,
+            $baselineY,
+            $textRed,
+            $textGreen,
+            $textBlue,
+            $boldText,
+            $shapeArabic
+        );
+
+        return $frameRight - $frameLeft;
+    }
+
+    private static function drawDetailsBannerHairline(\GdImage $canvas, int $x, int $y, int $width): void
+    {
+        $line = imagecolorallocate($canvas, 228, 62, 72);
+        imageline($canvas, $x, $y, $x + $width - 1, $y, $line);
+    }
+
+    private static function drawDetailsBannerColumnDivider(\GdImage $canvas, int $x, int $topY, int $bottomY): void
+    {
+        $divider = imagecolorallocate($canvas, 70, 71, 76);
+        imageline($canvas, $x, $topY, $x, $bottomY, $divider);
+    }
+
+    /** @return array{0: int, 1: int, 2: int} */
+    private static function bannerAccentRgb(): array
+    {
+        return [232, 62, 72];
+    }
+
+    private static function drawBannerTextLeft(
+        \GdImage $canvas,
+        string $font,
+        float $fontSize,
+        string $text,
+        int $x,
+        int $baselineY,
+        bool $bold,
+        bool $shapeArabic
+    ): void {
+        self::drawBannerColoredText(
+            $canvas,
+            $font,
+            $fontSize,
+            $text,
+            $x,
+            $baselineY,
+            $bold ? 255 : 220,
+            $bold ? 255 : 220,
+            $bold ? 255 : 220,
+            $bold,
+            $shapeArabic
+        );
+    }
+
+    private static function drawBannerColoredText(
+        \GdImage $canvas,
+        string $font,
+        float $fontSize,
+        string $text,
+        int $x,
+        int $baselineY,
+        int $red,
+        int $green,
+        int $blue,
+        bool $bold,
+        bool $shapeArabic
+    ): void {
+        $drawText = $shapeArabic && ArabicGdText::containsArabic($text)
+            ? ArabicGdText::shape($text)
+            : $text;
+        $color = imagecolorallocate($canvas, $red, $green, $blue);
+
+        if ($bold) {
+            imagettftext($canvas, (int) $fontSize, 0, $x + 1, $baselineY, $color, $font, $drawText);
+        }
+        imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $color, $font, $drawText);
+    }
+
+    private static function drawBannerColoredTextRight(
+        \GdImage $canvas,
+        string $font,
+        float $fontSize,
+        string $text,
+        int $minX,
+        int $maxRightX,
+        int $baselineY,
+        int $red,
+        int $green,
+        int $blue,
+        bool $bold,
+        bool $shapeArabic
+    ): void {
+        $drawText = $shapeArabic && ArabicGdText::containsArabic($text)
+            ? ArabicGdText::shape($text)
+            : $text;
+        $textWidth = self::ttfLineWidth($font, $fontSize, $drawText);
+        $x = max($minX, $maxRightX - $textWidth);
+        $color = imagecolorallocate($canvas, $red, $green, $blue);
+
+        if ($bold) {
+            imagettftext($canvas, (int) $fontSize, 0, $x + 1, $baselineY, $color, $font, $drawText);
+        }
+        imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $color, $font, $drawText);
+    }
+
+    private static function fillDetailsBannerBackground(\GdImage $canvas, int $x, int $y, int $width, int $height): void
+    {
+        $fill = imagecolorallocate($canvas, 38, 39, 43);
+        imagefilledrectangle($canvas, $x, $y, $x + $width - 1, $y + $height - 1, $fill);
+    }
+
+    /** @return array{label: string, value: string}|null */
+    private static function splitPackagingBannerLine(string $line): ?array
+    {
+        $line = trim($line);
+        if ($line === '') {
+            return null;
+        }
+
+        if (preg_match('/^(التعبئة\s*:\s*)(.*)$/u', $line, $matches) === 1) {
+            $value = trim((string) ($matches[2] ?? ''));
+            if ($value === '') {
+                return null;
+            }
+
+            return [
+                'label' => 'التعبئة',
+                'value' => $value,
+            ];
+        }
+
+        return null;
+    }
+
+    private static function drawPackagingBannerLine(
+        \GdImage $canvas,
+        string $font,
+        float $fontSize,
+        string $line,
+        int $minX,
+        int $maxRightX,
+        int $baselineY
+    ): void {
+        $parts = self::splitPackagingBannerLine($line);
+        if ($parts === null) {
+            self::drawBannerColoredTextRight(
+                $canvas,
+                $font,
+                $fontSize,
+                $line,
+                $minX,
+                $maxRightX,
+                $baselineY,
+                228,
+                228,
+                228,
+                false,
+                true
+            );
+
+            return;
+        }
+
+        $maxWidth = max(80, $maxRightX - $minX);
+        $label = $parts['label'];
+        $value = $parts['value'];
+        $shapedLabel = ArabicGdText::shape($label);
+        $shapedValue = ArabicGdText::shape($value);
+        $labelWidth = self::ttfLineWidth($font, $fontSize, $shapedLabel);
+        $valueWidth = self::ttfLineWidth($font, $fontSize, $shapedValue);
+        $gap = 8;
+        $lineWidth = $valueWidth + $gap + $labelWidth;
+
+        if ($lineWidth > $maxWidth) {
+            $availableForValue = max(40, $maxWidth - $labelWidth - $gap);
+            $wrappedValue = self::wrapTtfTextLines($font, $fontSize, $value, $availableForValue);
+            $shapedValue = ArabicGdText::shape($wrappedValue[0] ?? $value);
+            $valueWidth = self::ttfLineWidth($font, $fontSize, $shapedValue);
+            $lineWidth = $valueWidth + $gap + $labelWidth;
+        }
+
+        $labelColor = imagecolorallocate($canvas, 216, 25, 33);
+        $valueColor = imagecolorallocate($canvas, 196, 198, 206);
+        $valueRight = max($minX + $valueWidth, $maxRightX - $labelWidth - $gap);
+        $valueX = $valueRight - $valueWidth;
+        $labelX = $maxRightX - $labelWidth;
+
+        imagettftext($canvas, (int) $fontSize, 0, $valueX, $baselineY, $valueColor, $font, $shapedValue);
+        imagettftext($canvas, (int) $fontSize, 0, $labelX, $baselineY, $labelColor, $font, $shapedLabel . ' :');
+    }
+
+    private static function drawDetailsBannerTextLine(
+        \GdImage $canvas,
+        string $font,
+        float $fontSize,
+        string $line,
+        int $paddingLeft,
+        int $textRight,
+        int $baselineY,
+        bool $bold
+    ): void {
+        $shaped = ArabicGdText::shape($line);
+        $textWidth = self::ttfLineWidth($font, $fontSize, $shaped);
+        $x = max($paddingLeft, $textRight - (int) round($textWidth));
+        $color = $bold
+            ? imagecolorallocate($canvas, 255, 255, 255)
+            : imagecolorallocate($canvas, 228, 228, 228);
+
+        if ($bold) {
+            imagettftext($canvas, (int) $fontSize, 0, $x + 1, $baselineY, $color, $font, $shaped);
+        }
+        imagettftext($canvas, (int) $fontSize, 0, $x, $baselineY, $color, $font, $shaped);
+    }
+
+    public static function canRenderDetailsBanner(): bool
+    {
+        return self::detailsBannerRequirements()['ok'];
+    }
+
+    public static function canProcessImageDetails(): bool
+    {
+        return self::canRenderDetailsBanner();
+    }
+
+    /**
+     * @return array{
+     *   ok: bool,
+     *   gd: bool,
+     *   freetype: bool,
+     *   mbstring: bool,
+     *   font_path: string|null,
+     *   message: string
+     * }
+     */
+    public static function detailsBannerRequirements(): array
+    {
+        $gd = function_exists('imagecreatetruecolor');
+        $freetype = function_exists('imagettftext');
+        $fontPath = self::resolveDetailsFontPath();
+
+        $missing = [];
+        if (!$gd) {
+            $missing[] = 'امتداد GD (imagecreatetruecolor)';
+        }
+        if (!$freetype) {
+            $missing[] = 'GD مع دعم FreeType (imagettftext) — فعّل php_gd2 مع freetype في php.ini';
+        }
+        if ($fontPath === null) {
+            $missing[] = 'خط TrueType readable من PHP — انسخ tahoma.ttf إلى portal/storage/fonts/ أو عيّن PORTAL_DETAILS_FONT_PATH';
+        }
+
+        $message = $missing === []
+            ? 'جاهز'
+            : ('البانر السفلي يتطلب: ' . implode('، ', $missing) . '.');
+
+        return [
+            'ok' => $gd && $freetype && $fontPath !== null,
+            'gd' => $gd,
+            'freetype' => $freetype,
+            'mbstring' => function_exists('mb_strlen'),
+            'font_path' => $fontPath,
+            'message' => $message,
+        ];
+    }
+
+    public static function resolveDetailsFontPath(): ?string
+    {
+        $configured = trim((string) (Config::get('PORTAL_DETAILS_FONT_PATH') ?? ''));
+        if ($configured !== '' && is_file($configured) && is_readable($configured)) {
+            return $configured;
+        }
+
+        $candidates = [];
+
+        $storageFontsDir = rtrim(Config::storagePath(), '/\\') . DIRECTORY_SEPARATOR . 'fonts';
+        foreach (['tahomabd.ttf', 'TahomaBd.ttf', 'tahoma.ttf', 'Tahoma.ttf', 'arialbd.ttf', 'arial.ttf', 'trado.ttf', 'DejaVuSans-Bold.ttf', 'DejaVuSans.ttf'] as $fileName) {
+            $candidates[] = $storageFontsDir . DIRECTORY_SEPARATOR . $fileName;
+        }
+
+        $windowsFonts = self::windowsFontsDirectory();
+        if ($windowsFonts !== null) {
+            foreach (['tahomabd.ttf', 'TAHOMABD.TTF', 'tahoma.ttf', 'TAHOMA.TTF', 'arialbd.ttf', 'arial.ttf', 'trado.ttf'] as $fileName) {
+                $candidates[] = $windowsFonts . DIRECTORY_SEPARATOR . $fileName;
+            }
+        }
+
+        $candidates = array_merge($candidates, [
+            'C:\\Windows\\Fonts\\tahomabd.ttf',
+            'C:\\Windows\\Fonts\\TAHOMABD.TTF',
+            'C:\\Windows\\Fonts\\tahoma.ttf',
+            'C:\\Windows\\Fonts\\TAHOMA.TTF',
+            'C:\\Windows\\Fonts\\arialbd.ttf',
+            'C:\\Windows\\Fonts\\arial.ttf',
+            'C:\\Windows\\Fonts\\trado.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+        ]);
+
+        foreach ($candidates as $path) {
+            if ($path !== '' && is_file($path) && is_readable($path)) {
+                return $path;
+            }
+        }
+
+        if ($storageFontsDir !== '' && is_dir($storageFontsDir)) {
+            $matches = glob($storageFontsDir . DIRECTORY_SEPARATOR . '*.ttf') ?: [];
+            foreach ($matches as $path) {
+                if (is_readable($path)) {
+                    return $path;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static function windowsFontsDirectory(): ?string
+    {
+        $windir = trim((string) (getenv('WINDIR') ?: getenv('SystemRoot') ?: ''));
+        if ($windir === '') {
+            return null;
+        }
+
+        $dir = rtrim(str_replace('/', '\\', $windir), '\\') . '\\Fonts';
+
+        return is_dir($dir) ? $dir : null;
+    }
+
+    /** @return \GdImage|false */
+    public static function loadGdImagePublic(string $sourcePath)
+    {
+        return self::loadGdImage($sourcePath);
+    }
+
+    /** @return list<string> */
+    public static function wrapTtfTextLinesPublic(string $font, float $fontSize, string $text, int $maxWidth): array
+    {
+        return self::wrapTtfTextLines($font, $fontSize, $text, $maxWidth);
+    }
+
+    /** @return list<string> */
+    private static function wrapTtfTextLines(string $font, float $fontSize, string $text, int $maxWidth): array
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return [];
+        }
+
+        $words = preg_split('/\s+/u', $text) ?: [];
+        $lines = [];
+        $current = '';
+        foreach ($words as $word) {
+            $candidate = $current === '' ? $word : $current . ' ' . $word;
+            $width = self::ttfLineWidth($font, $fontSize, ArabicGdText::shape($candidate));
+            if ($width <= $maxWidth || $current === '') {
+                $current = $candidate;
+            } else {
+                $lines[] = $current;
+                $current = $word;
+            }
+        }
+        if ($current !== '') {
+            $lines[] = $current;
+        }
+
+        return $lines;
+    }
+
+    private static function ttfLineWidth(string $font, float $fontSize, string $text): int
+    {
+        if ($text === '') {
+            return 0;
+        }
+
+        $box = imagettfbbox($fontSize, 0, $font, $text) ?: [0, 0, 0, 0, 0, 0, 0, 0];
+
+        return (int) abs($box[2] - $box[0]);
+    }
+
+    /** @return \GdImage|false */
+    private static function loadGdImage(string $sourcePath)
+    {
+        $mime = self::detectMime($sourcePath);
+
+        return match ($mime) {
+            'image/jpeg' => @imagecreatefromjpeg($sourcePath),
+            'image/png' => @imagecreatefrompng($sourcePath),
+            'image/gif' => @imagecreatefromgif($sourcePath),
+            'image/webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($sourcePath) : false,
+            default => false,
+        };
+    }
+
+    public static function deleteTempProcessedFile(string $path): void
+    {
+        $path = str_replace('\\', '/', $path);
+        if ($path === '' || !str_contains($path, '/_processed/')) {
+            return;
+        }
+
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    }
+
+    /**
+     * @return array{ok: bool, message: string, file_name?: string}
+     */
+    public static function copyLocalFromSource(string $sourcePath, string $targetFileName): array
+    {
+        if (!is_file($sourcePath)) {
+            return ['ok' => false, 'message' => 'الصورة المصدر غير موجودة على الموقع.'];
+        }
+
+        $settings = self::settings();
+        $targetFileName = self::sanitizeFileName($targetFileName);
+        if ($targetFileName === '' || !self::isAllowedFileName($targetFileName)) {
+            return ['ok' => false, 'message' => 'اسم الملف المستهدف غير صالح.'];
+        }
+
+        $targetPath = self::safeJoin($settings['images_dir'], $targetFileName);
+        $thumbPath = self::safeJoin($settings['thumbnails_dir'], $targetFileName);
+        if ($targetPath === null || $thumbPath === null) {
+            return ['ok' => false, 'message' => 'مسار الملف غير آمن.'];
+        }
+
+        if (!self::ensureDirectory($settings['images_dir']) || !self::ensureDirectory($settings['thumbnails_dir'])) {
+            return ['ok' => false, 'message' => 'تعذر إنشاء مجلدات التخزين.'];
+        }
+
+        if (!@copy($sourcePath, $targetPath)) {
+            return ['ok' => false, 'message' => 'تعذر نسخ الصورة محلياً.'];
+        }
+
+        if (!self::generateThumbnail($targetPath, $thumbPath)) {
+            @copy($targetPath, $thumbPath);
+        }
+
+        return ['ok' => true, 'message' => 'تم', 'file_name' => $targetFileName];
+    }
+
+    public static function deleteLocalFile(string $fileName): void
+    {
+        $fileName = basename(str_replace('\\', '/', trim($fileName)));
+        if ($fileName === '' || str_contains($fileName, '..')) {
+            return;
+        }
+
+        foreach ([false, true] as $thumb) {
+            $path = self::resolveLocalPath($fileName, $thumb);
+            if ($path !== null && is_file($path)) {
+                @unlink($path);
+            }
+        }
+    }
+
+    public static function imageGuidUrl(string $imageGuid, bool $thumb = true): string
+    {
+        $imageGuid = trim($imageGuid);
+        if ($imageGuid === '') {
+            return '';
+        }
+
+        return '/api/image.php?id=' . rawurlencode($imageGuid) . ($thumb ? '&thumb=1' : '&thumb=0');
+    }
+
     public static function publicUrl(string $fileName, bool $thumb = true): string
     {
         return '/media/material.php?file=' . rawurlencode(self::lookupFileName($fileName))
             . ($thumb ? '&thumb=1' : '&thumb=0');
+    }
+
+    public static function mimeForPath(string $path): string
+    {
+        return self::detectMime($path);
     }
 
     public static function resolveLocalPath(string $fileName, bool $thumb = false): ?string
@@ -226,6 +1301,11 @@ final class MaterialImageStorageService
         $imageGuid = trim($imageGuid);
         if ($imageGuid === '') {
             return null;
+        }
+
+        $fromQueue = MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, $thumb);
+        if ($fromQueue !== null) {
+            return $fromQueue;
         }
 
         foreach (self::fileNamesFromAmineApi($imageGuid) as $fileName) {
@@ -331,10 +1411,13 @@ final class MaterialImageStorageService
             return ['ok' => false, 'message' => 'الحجم يجب أن يكون أقل من 10 ميجابايت.'];
         }
 
-        $fileName = self::sanitizeFileName((string) ($file['name'] ?? ''));
-        if ($fileName === '' || !self::isAllowedFileName($fileName)) {
+        $requestedName = self::sanitizeFileName((string) ($file['name'] ?? ''));
+        if ($requestedName === '' || !self::isAllowedFileName($requestedName)) {
             return ['ok' => false, 'message' => 'اسم الملف أو الامتداد غير مدعوم.'];
         }
+
+        $fileName = self::availableFileName($imagesDir, $requestedName);
+        $renamed = strcasecmp($fileName, $requestedName) !== 0;
 
         $targetPath = self::safeJoin($imagesDir, $fileName);
         $thumbPath = self::safeJoin($thumbnailsDir, $fileName);
@@ -342,7 +1425,6 @@ final class MaterialImageStorageService
             return ['ok' => false, 'message' => 'مسار الملف غير آمن.'];
         }
 
-        $replaced = is_file($targetPath);
         if (!move_uploaded_file($tmpPath, $targetPath)) {
             return ['ok' => false, 'message' => 'تعذر حفظ الملف.'];
         }
@@ -351,7 +1433,70 @@ final class MaterialImageStorageService
             @copy($targetPath, $thumbPath);
         }
 
-        return ['ok' => true, 'message' => 'تم', 'file_name' => $fileName, 'replaced' => $replaced];
+        return [
+            'ok' => true,
+            'message' => 'تم',
+            'file_name' => $fileName,
+            'replaced' => false,
+            'renamed' => $renamed,
+            'requested_name' => $requestedName,
+        ];
+    }
+
+    public static function renameLocalCopy(string $fromFileName, string $toFileName): bool
+    {
+        $fromFileName = self::sanitizeFileName($fromFileName);
+        $toFileName = self::sanitizeFileName($toFileName);
+        if ($fromFileName === '' || $toFileName === '' || strcasecmp($fromFileName, $toFileName) === 0) {
+            return true;
+        }
+
+        $settings = self::settings();
+        $ok = true;
+        foreach ([
+            [$settings['images_dir'], false],
+            [$settings['thumbnails_dir'], true],
+        ] as [$directory, $thumb]) {
+            $fromPath = self::safeJoin($directory, $fromFileName);
+            $toPath = self::safeJoin($directory, $toFileName);
+            if ($fromPath === null || $toPath === null || !is_file($fromPath)) {
+                continue;
+            }
+            if (is_file($toPath)) {
+                continue;
+            }
+            if (!@rename($fromPath, $toPath)) {
+                $ok = @copy($fromPath, $toPath) && @unlink($fromPath);
+            }
+        }
+
+        return $ok;
+    }
+
+    private static function availableFileName(string $directory, string $fileName): string
+    {
+        $fileName = self::sanitizeFileName($fileName);
+        if ($fileName === '') {
+            return $fileName;
+        }
+
+        $base = pathinfo($fileName, PATHINFO_FILENAME);
+        $extension = pathinfo($fileName, PATHINFO_EXTENSION);
+        $candidate = $fileName;
+        $counter = 1;
+
+        while (true) {
+            $path = self::safeJoin($directory, $candidate);
+            if ($path === null || !is_file($path)) {
+                return $candidate;
+            }
+
+            $suffix = '_' . $counter;
+            $candidate = $extension !== ''
+                ? $base . $suffix . '.' . $extension
+                : $base . $suffix;
+            $counter++;
+        }
     }
 
     /** @return list<string> */
@@ -607,9 +1752,9 @@ final class MaterialImageStorageService
     {
         $query = [];
 
-        $search = trim((string) ($filters['search'] ?? ''));
+        $search = trim((string) ($filters['search'] ?? ($filters['keyword'] ?? '')));
         if ($search !== '') {
-            $query['search'] = $search;
+            $query['keyword'] = $search;
         }
 
         foreach ([
@@ -756,7 +1901,7 @@ final class MaterialImageStorageService
             'age_category' => trim((string) ($row['ageCategory'] ?? $row['AgeCategory'] ?? '')),
             'has_local' => $localPath !== null,
             'stored_file_name' => $storedFileName,
-            'preview_url' => $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '',
+            'preview_url' => $imageGuid !== '' ? self::imageGuidUrl($imageGuid, true) : '',
             'local_preview_url' => $storedFileName !== '' ? self::publicUrl($storedFileName, true) : '',
         ];
     }

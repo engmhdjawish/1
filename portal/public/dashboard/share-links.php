@@ -31,8 +31,9 @@ if (isset($_GET['deleted']) && $_GET['deleted'] === '1') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = trim((string) ($_POST['action'] ?? ''));
-    if ($action === 'save') {
+    try {
+        $action = trim((string) ($_POST['action'] ?? ''));
+        if ($action === 'save') {
         $parseValues = static function (mixed $value): array {
             if (is_array($value)) {
                 $parts = $value;
@@ -111,6 +112,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             trim((string) ($_POST['option_default_group_by'] ?? 'none'))
         );
         if ($result['ok']) {
+            $flash = $result['message'];
+            $flashType = 'success';
+            if (DashboardHttp::wantsJson()) {
+                DashboardHttp::json(true, $flash, [
+                    'reload' => true,
+                    'id' => $result['id'] ?? null,
+                ]);
+            }
             header('Location: /dashboard/share-links.php?saved=1');
             exit;
         }
@@ -126,17 +135,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         $flash = $ok ? 'تم تحديث حالة الرابط.' : 'تعذر تحديث حالة الرابط.';
         $flashType = $ok ? 'success' : 'error';
-        if (DashboardHttp::wantsJson()) {
-            DashboardHttp::json($ok, $flash, ['reload' => true]);
-        }
     } elseif ($action === 'delete') {
         $deleteResult = ShareLinkService::delete(trim((string) ($_POST['id'] ?? '')));
         $flash = $deleteResult['message'];
         $flashType = $deleteResult['ok'] ? 'success' : 'error';
         if ($deleteResult['ok']) {
+            if (DashboardHttp::wantsJson()) {
+                DashboardHttp::json(true, $flash, ['reload' => true]);
+            }
             header('Location: /dashboard/share-links.php?deleted=1');
             exit;
         }
+    } else {
+        $flash = 'إجراء غير معروف.';
+        $flashType = 'error';
+    }
+    } catch (\Throwable $exception) {
+        $flash = 'تعذر تنفيذ العملية: ' . $exception->getMessage();
+        $flashType = 'error';
+    }
+
+    if (DashboardHttp::wantsJson()) {
+        DashboardHttp::json(
+            $flashType === 'success',
+            (string) ($flash ?? 'تعذر تنفيذ العملية.'),
+            ['reload' => $flashType === 'success']
+        );
     }
 }
 

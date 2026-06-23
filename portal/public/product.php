@@ -5,11 +5,15 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Services\StoreCatalogService;
+use Portal\Support\StoreCartRequest;
 
 require dirname(__DIR__) . '/views/helpers.php';
 
+$cartNotice = StoreCartRequest::handleAddToCartPost();
 $guid = trim((string) ($_GET['guid'] ?? ''));
-$product = $guid !== '' ? StoreCatalogService::findMaterial($guid) : null;
+$returnUrl = trim((string) ($_GET['return'] ?? ''));
+$offerSlug = trim((string) ($_GET['offer'] ?? ''));
+$product = $guid !== '' ? StoreCatalogService::findMaterial($guid, $offerSlug !== '' ? $offerSlug : null) : null;
 
 if ($product === null) {
     http_response_code(404);
