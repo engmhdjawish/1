@@ -295,12 +295,22 @@ $truncate = static function (string $text, int $max = 48): string {
         <?php if ($detailItems === []): ?>
           <p class="text-sm text-text-muted text-center py-8">لا توجد أصناف في هذا الطلب.</p>
         <?php else: ?>
+          <?php if ($canManageOrders && !empty($orderDetails['can_staff_edit'])): ?>
+            <p class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+              يمكنك تعديل الأصناف قبل المزامنة — سيظهر السبب لصاحب الطلب.
+            </p>
+          <?php elseif ($canManageOrders && empty($orderDetails['can_staff_edit'])): ?>
+            <p class="text-[11px] text-text-muted bg-surface-low border border-border-subtle rounded-lg px-3 py-2 mb-3">
+              لا يمكن تعديل الأصناف (الطلب مكتمل أو تمت مزامنته).
+            </p>
+          <?php endif; ?>
           <div class="store-order-lines">
             <?php foreach ($detailItems as $item): ?>
               <?php
                 $showPriceUsd = (float) ($item['sale_price_usd'] ?? 0) > 0;
                 $showPriceSyp = !$showPriceUsd && (float) ($item['sale_price_sp'] ?? 0) > 0;
-                require dirname(__DIR__) . '/partials/store-order-line-card.php';
+                $orderId = (string) ($orderDetails['id'] ?? '');
+                require dirname(__DIR__) . '/partials/dashboard-order-line-edit.php';
               ?>
             <?php endforeach; ?>
           </div>

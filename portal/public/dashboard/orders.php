@@ -17,16 +17,48 @@ $permissions = WebSession::user()['permissions'] ?? [];
 $canManageOrders = in_array('orders.manage', $permissions, true) || in_array('*', $permissions, true);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$canManageOrders) {
-        $flash = 'ليس لديك صلاحية تعديل حالة الطلب.';
+        $flash = 'ليس لديك صلاحية تعديل الطلب.';
         $flashType = 'error';
     } else {
         $orderId = trim((string) ($_POST['order_id'] ?? ''));
-        $nextStatus = trim((string) ($_POST['next_status'] ?? ''));
-        $ok = $orderId !== '' && $nextStatus !== '' && OrderService::updateStatus($orderId, $nextStatus);
-        $flash = $ok ? 'تم تحديث حالة الطلب.' : 'تعذر تحديث حالة الطلب.';
-        $flashType = $ok ? 'success' : 'error';
-        if (DashboardHttp::wantsJson()) {
-            DashboardHttp::json($ok, $flash, ['reload' => true]);
+        $itemAction = trim((string) ($_POST['item_action'] ?? ''));
+        $staffUserId = (string) (WebSession::user()['id'] ?? '');
+
+        if ($itemAction !== '' && $orderId !== '') {
+            $itemId = trim((string) ($_POST['item_id'] ?? ''));
+            $reason = trim((string) ($_POST['reason_ar'] ?? ''));
+            $result = match ($itemAction) {
+                'update_qty' => OrderService::updateItemQuantity(
+                    $orderId,
+                    $itemId,
+                    (float) ($_POST['quantity'] ?? 0),
+                    $reason,
+                    $staffUserId
+                ),
+                'update_price' => OrderService::updateItemPrice(
+                    $orderId,
+                    $itemId,
+                    isset($_POST['sale_price_sp']) ? (float) $_POST['sale_price_sp'] : null,
+                    isset($_POST['sale_price_usd']) ? (float) $_POST['sale_price_usd'] : null,
+                    $reason,
+                    $staffUserId
+                ),
+                'cancel_item' => OrderService::cancelOrderItem($orderId, $itemId, $reason, $staffUserId),
+                default => ['ok' => false, 'message' => 'إجراء غير معروف.'],
+            };
+            $flash = $result['message'];
+            $flashType = $result['ok'] ? 'success' : 'error';
+            if (DashboardHttp::wantsJson()) {
+                DashboardHttp::json($result['ok'], $flash, ['reload' => $result['ok']]);
+            }
+        } else {
+            $nextStatus = trim((string) ($_POST['next_status'] ?? ''));
+            $ok = $orderId !== '' && $nextStatus !== '' && OrderService::updateStatus($orderId, $nextStatus);
+            $flash = $ok ? 'تم تحديث حالة الطلب.' : 'تعذر تحديث حالة الطلب.';
+            $flashType = $ok ? 'success' : 'error';
+            if (DashboardHttp::wantsJson()) {
+                DashboardHttp::json($ok, $flash, ['reload' => true]);
+            }
         }
     }
 }
@@ -55,7 +87,7 @@ require dirname(__DIR__, 2) . '/views/dashboard/orders.php';
 $content = ob_get_clean();
 $title = 'إدارة الطلبات';
 $extraHead = $orderDetails !== null
-    ? '<link href="/css/store-ui.css" rel="stylesheet"><link href="/css/store-cart.css" rel="stylesheet">'
+    ? '<link href="/css/store-ui.css" rel="stylesheet"><link href="/css/store-cart.css" rel="stylesheet"><link href="/css/customer-portal.css" rel="stylesheet">'
     : '';
 $extraFooter = $orderDetails !== null
     ? '<script src="/assets/store-image-zoom.js" defer></script>'

@@ -159,7 +159,14 @@ function material_guid(array $item): string
 
 function material_image_guid(array $item): string
 {
-    return trim((string) ($item['productImageGuid'] ?? $item['ProductImageGuid'] ?? ''));
+    foreach (['productImageGuid', 'ProductImageGuid', 'imageGuid', 'ImageGuid', 'pictureGuid', 'PictureGUID'] as $key) {
+        $value = trim((string) ($item[$key] ?? ''));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    return '';
 }
 
 function material_image_api_url(string $imageGuid, bool $thumb = true): string
