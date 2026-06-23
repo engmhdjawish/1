@@ -114,11 +114,20 @@
     });
   }
 
+  function syncSidebarMeta(srcMeta, targetMeta) {
+    const srcTitle = srcMeta.querySelector('h2');
+    const srcSubtitle = srcMeta.querySelector('p');
+    const targetTitle = targetMeta.querySelector('h2');
+    const targetSubtitle = targetMeta.querySelector('p');
+    if (srcTitle && targetTitle) targetTitle.textContent = srcTitle.textContent;
+    if (srcSubtitle && targetSubtitle) targetSubtitle.textContent = srcSubtitle.textContent;
+  }
+
   function syncDashboardChrome(doc) {
     const srcMeta = doc.querySelector('[data-dashboard-sidebar-meta]');
     if (srcMeta) {
       qsa('[data-dashboard-sidebar-meta]').forEach((node) => {
-        node.innerHTML = srcMeta.innerHTML;
+        syncSidebarMeta(srcMeta, node);
       });
     }
 

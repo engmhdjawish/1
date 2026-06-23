@@ -209,12 +209,12 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
 
   <div id="dashboard-drawer-backdrop" aria-hidden="true"></div>
   <nav id="dashboard-drawer" class="lg:hidden" aria-label="قائمة لوحة التحكم">
-    <div class="px-4 py-4 border-b border-border-subtle mb-3 flex items-center justify-between gap-3" data-dashboard-sidebar-meta>
-      <div>
+    <div class="px-4 py-4 border-b border-border-subtle mb-3 flex items-center justify-between gap-3">
+      <div data-dashboard-sidebar-meta>
         <h2 class="font-bold text-primary"><?= h($sidebarTitle) ?></h2>
         <p class="text-xs text-text-muted mt-0.5"><?= h($sidebarSubtitle) ?></p>
       </div>
-      <button type="button" id="dashboard-drawer-close" class="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-surface-low text-gray-600" aria-label="إغلاق القائمة">
+      <button type="button" id="dashboard-drawer-close" class="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-surface-low text-gray-600 shrink-0" aria-label="إغلاق القائمة">
         <span class="material-symbols-outlined">close</span>
       </button>
     </div>
