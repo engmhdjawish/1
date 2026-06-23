@@ -527,5 +527,5 @@
     init();
   }
 
-  window.StoreCart = { showToast, updateBadge, applyCartResponse, apiRequest };
+  window.StoreCart = { showToast, updateBadge, applyCartResponse, apiRequest, bindAddForms, bindQtySteppers };
 })();

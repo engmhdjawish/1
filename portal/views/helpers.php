@@ -184,6 +184,86 @@ function material_image_zoom_url(string $imageUrl): string
     return $imageUrl;
 }
 
+/**
+ * بيانات معاينة صورة المادة في المتجر (lightbox مع أسعار وسلة).
+ *
+ * @param array<string, mixed> $item
+ * @param array<string, mixed> $displayOptions
+ * @return array<string, mixed>
+ */
+function product_preview_payload(
+    array $item,
+    array $displayOptions,
+    int $cartQtyForItem = 0,
+    ?string $returnUrl = null,
+    ?string $offerSlug = null
+): array {
+    $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
+    $showPriceSyp = in_array($priceMode, ['both', 'syp'], true);
+    $showPriceUsd = in_array($priceMode, ['both', 'usd'], true);
+    $showPrice = (bool) ($displayOptions['show_price'] ?? false);
+    $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
+    $allowCart = (bool) ($displayOptions['allow_cart'] ?? false);
+    $hasOffer = !empty($item['has_offer']);
+
+    $packaging = \Portal\Services\ShareCartService::packaging($item);
+    $primaryUnit = \Portal\Services\ShareCartService::primaryUnitLabel($item);
+    $packageUnit = \Portal\Services\ShareCartService::packageUnitLabel($item);
+    $unitSaleSp = \Portal\Services\ShareCartService::unitSalePriceSp($item);
+    $unitSaleUsd = \Portal\Services\ShareCartService::unitSalePriceUsd($item);
+    $packageSaleSp = \Portal\Services\ShareCartService::packageSalePriceSp($item);
+    $packageSaleUsd = \Portal\Services\ShareCartService::packageSalePriceUsd($item);
+
+    $imageGuid = material_image_guid($item);
+    $thumbUrl = $imageGuid !== '' ? material_image_api_url($imageGuid, true) : '';
+    $zoomUrl = $thumbUrl !== '' ? material_image_zoom_url($thumbUrl) : '';
+
+    $guid = material_guid($item);
+    $returnUrl = $returnUrl ?? ($_SERVER['REQUEST_URI'] ?? '/store.php');
+    $maxPackages = \Portal\Services\StorePolicyService::maxPackagesPerMaterial();
+    $maxLabel = $maxPackages !== null
+        ? \Portal\Services\SpecialOfferService::formatQuantityLabel($maxPackages)
+        : null;
+    $remaining = $maxPackages !== null ? max(0, (int) floor($maxPackages - $cartQtyForItem)) : null;
+    $atLimit = $maxPackages !== null && $remaining <= 0;
+
+    return [
+        'guid' => $guid,
+        'name' => (string) ($item['name'] ?? ''),
+        'code' => (string) ($item['materialCode'] ?? $item['code'] ?? ''),
+        'manufacturer' => (string) ($item['manufacturer'] ?? ''),
+        'materialType' => (string) ($item['materialType'] ?? ''),
+        'thumbUrl' => $thumbUrl,
+        'zoomUrl' => $zoomUrl,
+        'detailUrl' => $guid !== '' ? product_url($guid, $returnUrl, $offerSlug) : '',
+        'showPrice' => $showPrice,
+        'showPriceSyp' => $showPriceSyp,
+        'showPriceUsd' => $showPriceUsd,
+        'showQuantity' => $showQuantity,
+        'packagesAvailable' => $showQuantity ? packages_available_display($item) : 0.0,
+        'packaging' => $packaging,
+        'primaryUnit' => $primaryUnit,
+        'packageUnit' => $packageUnit,
+        'hasOffer' => $hasOffer,
+        'offerBadge' => trim((string) ($item['offer_badge'] ?? '')),
+        'unitSaleSp' => $unitSaleSp,
+        'unitSaleUsd' => $unitSaleUsd,
+        'packageSaleSp' => $packageSaleSp,
+        'packageSaleUsd' => $packageSaleUsd,
+        'originalUnitSp' => $hasOffer ? (float) ($item['original_unit_sale_price_sp'] ?? 0) : 0.0,
+        'originalUnitUsd' => $hasOffer ? (float) ($item['original_unit_sale_price_usd'] ?? 0) : 0.0,
+        'originalPackSp' => $hasOffer ? (float) ($item['original_package_sale_price_sp'] ?? 0) : 0.0,
+        'originalPackUsd' => $hasOffer ? (float) ($item['original_package_sale_price_usd'] ?? 0) : 0.0,
+        'allowCart' => $allowCart,
+        'cartQty' => max(0, $cartQtyForItem),
+        'maxPackages' => $maxPackages,
+        'maxLabel' => $maxLabel,
+        'remaining' => $remaining,
+        'atLimit' => $atLimit,
+        'returnUrl' => strtok((string) $returnUrl, '#'),
+    ];
+}
+
 function product_url(string $guid, ?string $return = null, ?string $offer = null): string
 {
     $guid = trim($guid);
