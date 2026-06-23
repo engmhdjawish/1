@@ -71,6 +71,113 @@ function portal_absolute_url(string $pathOrUrl = ''): string
     return $scheme . '://' . $host . $path;
 }
 
+function portal_image_mime_from_url(string $url): string
+{
+    $path = (string) (parse_url($url, PHP_URL_PATH) ?: $url);
+    $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+    return match ($ext) {
+        'png' => 'image/png',
+        'jpg', 'jpeg' => 'image/jpeg',
+        'webp' => 'image/webp',
+        'svg' => 'image/svg+xml',
+        'gif' => 'image/gif',
+        'ico' => 'image/x-icon',
+        default => 'image/png',
+    };
+}
+
+/**
+ * @return array{
+ *   uses_company_logo: bool,
+ *   favicon_ico: string,
+ *   favicon_svg: string,
+ *   favicon_png_32: string,
+ *   apple_touch: string,
+ *   manifest_icons: list<array{src: string, sizes: string, type: string, purpose: string}>
+ * }
+ */
+function portal_site_icons(?string $companyLogoUrl = null): array
+{
+    $companyLogoUrl = trim((string) $companyLogoUrl);
+    $usesCompanyLogo = $companyLogoUrl !== '';
+    $logoAbs = $usesCompanyLogo
+        ? (str_starts_with($companyLogoUrl, 'http://') || str_starts_with($companyLogoUrl, 'https://')
+            ? $companyLogoUrl
+            : portal_absolute_url($companyLogoUrl))
+        : '';
+
+    $iconPng = static fn (int $size): string => portal_absolute_url('/icons/icon-png.php?size=' . $size);
+    $iconSvg = portal_absolute_url(portal_asset_url('/icons/app-icon.svg'));
+    $faviconIco = portal_absolute_url(portal_asset_url('/favicon.ico'));
+
+    if ($usesCompanyLogo) {
+        $logoMime = portal_image_mime_from_url($logoAbs);
+
+        return [
+            'uses_company_logo' => true,
+            'favicon_ico' => $faviconIco,
+            'favicon_svg' => $iconSvg,
+            'favicon_png_32' => $logoAbs,
+            'apple_touch' => $logoAbs,
+            'manifest_icons' => [
+                [
+                    'src' => $logoAbs,
+                    'sizes' => '192x192',
+                    'type' => $logoMime,
+                    'purpose' => 'any',
+                ],
+                [
+                    'src' => $logoAbs,
+                    'sizes' => '512x512',
+                    'type' => $logoMime,
+                    'purpose' => 'any',
+                ],
+                [
+                    'src' => $iconPng(192),
+                    'sizes' => '192x192',
+                    'type' => 'image/png',
+                    'purpose' => 'any',
+                ],
+                [
+                    'src' => $iconPng(512),
+                    'sizes' => '512x512',
+                    'type' => 'image/png',
+                    'purpose' => 'maskable',
+                ],
+            ],
+        ];
+    }
+
+    return [
+        'uses_company_logo' => false,
+        'favicon_ico' => $faviconIco,
+        'favicon_svg' => $iconSvg,
+        'favicon_png_32' => $iconPng(32),
+        'apple_touch' => $iconPng(180),
+        'manifest_icons' => [
+            [
+                'src' => $iconPng(192),
+                'sizes' => '192x192',
+                'type' => 'image/png',
+                'purpose' => 'any',
+            ],
+            [
+                'src' => $iconPng(512),
+                'sizes' => '512x512',
+                'type' => 'image/png',
+                'purpose' => 'any',
+            ],
+            [
+                'src' => $iconPng(512),
+                'sizes' => '512x512',
+                'type' => 'image/png',
+                'purpose' => 'maskable',
+            ],
+        ],
+    ];
+}
+
 function portal_canonical_url(?string $override = null): string
 {
     $override = trim((string) $override);

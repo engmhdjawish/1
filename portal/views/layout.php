@@ -77,13 +77,7 @@ if ($customer) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#D81921">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="<?= h($siteName) ?>">
-    <link rel="manifest" href="/manifest.php">
-    <link rel="apple-touch-icon" href="<?= h($companyLogoUrl !== '' ? portal_absolute_url($companyLogoUrl) : portal_absolute_url('/icons/icon-png.php?size=192')) ?>">
+    <?php require __DIR__ . '/partials/head-icons.php'; ?>
     <title><?= h($title) ?> — <?= h($siteName) ?></title>
     <meta name="description" content="<?= h($metaDescription) ?>">
     <meta name="robots" content="<?= h((string) ($metaRobots ?? 'index, follow')) ?>">

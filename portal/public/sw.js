@@ -1,10 +1,11 @@
 /**
  * Jawish store PWA — cache static assets, network-first for pages.
  */
-const CACHE_VERSION = 'jawish-v1';
+const CACHE_VERSION = 'jawish-v2';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 
 const PRECACHE_URLS = [
+  '/favicon.ico',
   '/icons/app-icon.svg',
   '/css/site-brand.css',
   '/css/site-header.css',

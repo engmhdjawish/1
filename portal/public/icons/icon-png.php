@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 $size = (int) ($_GET['size'] ?? 192);
-$size = in_array($size, [192, 512], true) ? $size : 192;
+$allowedSizes = [16, 32, 48, 180, 192, 512];
+$size = in_array($size, $allowedSizes, true) ? $size : 192;
 
 if (!function_exists('imagecreatetruecolor')) {
     header('Content-Type: image/svg+xml; charset=utf-8');

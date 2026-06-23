@@ -69,6 +69,16 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <?php
+  use Portal\Services\PortalSettingsService;
+
+  $dashboardCompany = PortalSettingsService::companySettings();
+  $companyLogoUrl = PortalSettingsService::companyLogoUrl($dashboardCompany);
+  $siteName = trim((string) ($dashboardCompany['company_name'] ?? '')) !== ''
+      ? (string) $dashboardCompany['company_name']
+      : 'جاويش للتجارة';
+  require dirname(__DIR__) . '/partials/head-icons.php';
+  ?>
   <title><?= h($title) ?> — لوحة التحكم</title>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
