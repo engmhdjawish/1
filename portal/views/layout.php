@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Portal\Auth\CustomerSession;
 use Portal\Auth\WebSession;
 use Portal\Services\PortalSettingsService;
+use Portal\Services\StoreCartService;
+use Portal\Services\StoreCatalogService;
 
 /** @var string $title */
 /** @var string $content */
@@ -21,6 +23,9 @@ $siteName = trim((string) ($companyContext['company_name'] ?? '')) !== ''
 
 $customer = CustomerSession::check() ? CustomerSession::customer() : null;
 $staffLoggedIn = WebSession::check();
+$storeDisplay = StoreCatalogService::displayOptions();
+$storeAllowCart = (bool) ($storeDisplay['allow_cart'] ?? false);
+$storeCartCount = $storeAllowCart ? StoreCartService::itemCount() : 0;
 
 $navLinks = [
     ['href' => '/index.php', 'label' => 'الرئيسية'],
@@ -107,6 +112,14 @@ $navLinks = [
     </nav>
 
     <div class="flex items-center gap-2 shrink-0">
+      <?php if ($storeAllowCart): ?>
+        <a href="/store-cart.php" class="relative inline-flex items-center justify-center w-10 h-10 rounded-xl border border-gray-200 hover:border-primary" title="السلة" aria-label="السلة">
+          <span class="material-symbols-outlined">shopping_cart</span>
+          <?php if ($storeCartCount > 0): ?>
+            <span class="absolute -top-1 -left-1 min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-primary text-white text-[10px] font-bold inline-flex items-center justify-center"><?= (int) $storeCartCount ?></span>
+          <?php endif; ?>
+        </a>
+      <?php endif; ?>
       <?php if ($customer): ?>
         <a href="/account.php" class="hidden sm:inline-flex h-10 items-center rounded-xl border border-gray-200 px-3 text-sm font-bold hover:border-primary">حسابي</a>
         <span class="hidden sm:inline text-sm font-bold text-gray-700 max-w-[140px] truncate"><?= h((string) ($customer['name_ar'] ?? '')) ?></span>

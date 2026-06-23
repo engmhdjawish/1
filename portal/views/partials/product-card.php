@@ -29,6 +29,8 @@ $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
 $showPriceSyp = in_array($priceMode, ['both', 'syp'], true);
 $showPriceUsd = in_array($priceMode, ['both', 'usd'], true);
 $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
+$allowCart = (bool) ($displayOptions['allow_cart'] ?? false);
+$capturePrices = (bool) ($displayOptions['show_price'] ?? false);
 
 $contextOffer = null;
 if ($productOfferSlug !== null) {
@@ -114,4 +116,9 @@ $quickViewGuidsJson = $quickViewGuids !== [] ? json_encode($quickViewGuids, JSON
       <?php endif; ?>
     </div>
   <?php if ($linkToDetail && $detailUrl !== ''): ?></a><?php endif; ?>
+  <?php if ($allowCart): ?>
+    <div class="px-4 pb-4">
+      <?php require __DIR__ . '/store-add-to-cart-form.php'; ?>
+    </div>
+  <?php endif; ?>
 </article>

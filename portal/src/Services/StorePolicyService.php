@@ -12,9 +12,20 @@ final class StorePolicyService
     public static function guestPolicy(): ?array
     {
         $row = Database::pdo()->query(
-            'SELECT ap.*, s.max_packages_per_material
+            'SELECT
+                ap.id,
+                ap.code,
+                ap.name_ar,
+                ap.description_ar,
+                CASE WHEN ap.show_price THEN 1 ELSE 0 END AS show_price,
+                CASE WHEN ap.show_quantity THEN 1 ELSE 0 END AS show_quantity,
+                CASE WHEN ap.allow_cart THEN 1 ELSE 0 END AS allow_cart,
+                CASE WHEN ap.allow_order THEN 1 ELSE 0 END AS allow_order,
+                CASE WHEN ap.is_active THEN 1 ELSE 0 END AS is_active,
+                s.max_packages_per_material
              FROM store_guest_settings s
              INNER JOIN access_policies ap ON ap.id = s.access_policy_id
+             WHERE s.id = 1
              LIMIT 1'
         )->fetch();
 

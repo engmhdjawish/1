@@ -59,7 +59,8 @@ final class ShareCartService
         $shareLinkId = trim($shareLinkId);
         $line = self::normalizeLine($line);
         $materialGuid = trim((string) ($line['material_guid'] ?? ''));
-        if ($token === '' || $shareLinkId === '' || $materialGuid === '') {
+        $isStoreCart = $token === StoreCartService::TOKEN;
+        if ($token === '' || $materialGuid === '' || (!$isStoreCart && $shareLinkId === '')) {
             return ['ok' => false, 'message' => 'بيانات غير صالحة.', 'quantity' => 0.0];
         }
 
@@ -101,12 +102,14 @@ final class ShareCartService
 
         if (!isset($_SESSION[self::SESSION_KEY][$token]) || !is_array($_SESSION[self::SESSION_KEY][$token])) {
             $_SESSION[self::SESSION_KEY][$token] = [
-                'share_link_id' => $shareLinkId,
+                'share_link_id' => $shareLinkId !== '' ? $shareLinkId : null,
                 'items' => [],
             ];
         }
 
-        $_SESSION[self::SESSION_KEY][$token]['share_link_id'] = $shareLinkId;
+        if ($shareLinkId !== '') {
+            $_SESSION[self::SESSION_KEY][$token]['share_link_id'] = $shareLinkId;
+        }
         $items = &$_SESSION[self::SESSION_KEY][$token]['items'];
         if (!is_array($items)) {
             $items = [];
