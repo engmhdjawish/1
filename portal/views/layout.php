@@ -108,6 +108,7 @@ $navLinks = [
 
     <div class="flex items-center gap-2 shrink-0">
       <?php if ($customer): ?>
+        <a href="/account.php" class="hidden sm:inline-flex h-10 items-center rounded-xl border border-gray-200 px-3 text-sm font-bold hover:border-primary">حسابي</a>
         <span class="hidden sm:inline text-sm font-bold text-gray-700 max-w-[140px] truncate"><?= h((string) ($customer['name_ar'] ?? '')) ?></span>
         <a href="/logout.php" class="h-10 inline-flex items-center gap-1 rounded-xl border border-gray-200 px-3 text-sm font-bold hover:border-primary" title="تسجيل الخروج">
           <span class="material-symbols-outlined text-base" aria-hidden="true">logout</span>
@@ -117,7 +118,7 @@ $navLinks = [
         <a href="/login.php?type=customer" class="hidden sm:inline-flex h-10 items-center rounded-xl border border-gray-200 px-3 text-sm font-bold hover:border-primary">دخول</a>
         <a href="/register.php" class="h-10 inline-flex items-center rounded-xl bg-primary text-white px-3 text-sm font-bold hover:brightness-110">تسجيل</a>
       <?php endif; ?>
-      <?php if ($staffLoggedIn): ?>
+      <?php if ($staffLoggedIn && !$customer): ?>
         <a href="/dashboard/index.php" class="hidden lg:inline-flex h-10 items-center rounded-xl border border-gray-200 px-3 text-xs font-bold text-gray-600 hover:border-primary">لوحة التحكم</a>
       <?php endif; ?>
     </div>
@@ -146,13 +147,14 @@ $navLinks = [
       <a href="<?= h($link['href']) ?>" data-public-nav-link="1" class="block rounded-xl px-3 py-3 hover:bg-gray-50"><?= h($link['label']) ?></a>
     <?php endforeach; ?>
     <?php if ($customer): ?>
+      <a href="/account.php" data-public-nav-link="1" class="block rounded-xl px-3 py-3 hover:bg-gray-50">حسابي</a>
       <div class="pt-3 mt-3 border-t border-gray-100 text-gray-600 px-3"><?= h((string) ($customer['name_ar'] ?? '')) ?></div>
       <a href="/logout.php" data-public-nav-link="1" class="block rounded-xl px-3 py-3 text-red-600 hover:bg-red-50">تسجيل الخروج</a>
     <?php else: ?>
       <a href="/login.php?type=customer" data-public-nav-link="1" class="block rounded-xl px-3 py-3 hover:bg-gray-50">دخول العملاء</a>
       <a href="/register.php" data-public-nav-link="1" class="block rounded-xl px-3 py-3 text-primary hover:bg-red-50">تسجيل عميل جديد</a>
     <?php endif; ?>
-    <?php if ($staffLoggedIn): ?>
+    <?php if ($staffLoggedIn && !$customer): ?>
       <a href="/dashboard/index.php" data-public-nav-link="1" class="block rounded-xl px-3 py-3 text-gray-600 hover:bg-gray-50">لوحة التحكم</a>
     <?php endif; ?>
   </nav>

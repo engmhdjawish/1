@@ -128,6 +128,8 @@ final class WebSession
             return false;
         }
 
+        CustomerSession::logout();
+
         $permissions = self::loadPermissions($user['id']);
         $roles = self::loadRoleLabels($user['id']);
         $_SESSION[self::SESSION_KEY] = [

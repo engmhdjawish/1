@@ -200,6 +200,45 @@ final class WebUserService
         return $row;
     }
 
+    /** @return array{ok: bool, message: string} */
+    public static function changeOwnPassword(string $userId, string $currentPassword, string $newPassword): array
+    {
+        $userId = trim($userId);
+        $currentPassword = trim($currentPassword);
+        $newPassword = trim($newPassword);
+
+        if ($userId === '' || $currentPassword === '' || $newPassword === '') {
+            return ['ok' => false, 'message' => 'جميع حقول كلمة المرور مطلوبة.'];
+        }
+        if (strlen($newPassword) < 6) {
+            return ['ok' => false, 'message' => 'كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل.'];
+        }
+
+        $pdo = Database::pdo();
+        $stmt = $pdo->prepare('SELECT password_hash FROM web_users WHERE id = :id LIMIT 1');
+        $stmt->execute(['id' => $userId]);
+        $hash = $stmt->fetchColumn();
+        if ($hash === false || $hash === '') {
+            return ['ok' => false, 'message' => 'تعذر العثور على الحساب.'];
+        }
+        if (!Password::verify($currentPassword, (string) $hash)) {
+            return ['ok' => false, 'message' => 'كلمة المرور الحالية غير صحيحة.'];
+        }
+
+        try {
+            $newHash = Password::hash($newPassword);
+        } catch (\Throwable $exception) {
+            return ['ok' => false, 'message' => $exception->getMessage()];
+        }
+
+        $update = $pdo->prepare(
+            'UPDATE web_users SET password_hash = :hash, updated_at = NOW() WHERE id = :id'
+        );
+        $update->execute(['hash' => $newHash, 'id' => $userId]);
+
+        return ['ok' => true, 'message' => 'تم تحديث كلمة المرور بنجاح.'];
+    }
+
     /** @return list<string> */
     public static function userRoleIds(string $userId): array
     {

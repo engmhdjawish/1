@@ -185,6 +185,9 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
           <span class="text-sm font-bold"><?= h($user['display_name_ar'] ?? '') ?></span>
           <span class="text-xs text-text-muted" data-dashboard-header-area><?= h($sidebarTitle) ?></span>
         </div>
+        <a href="/dashboard/profile.php" data-dashboard-nav-link class="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-surface-low text-gray-600 transition" aria-label="حسابي" title="حسابي">
+          <span class="material-symbols-outlined">person</span>
+        </a>
         <a href="/logout.php" data-dashboard-no-nav class="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-red-50 text-red-600 transition" aria-label="تسجيل الخروج">
           <span class="material-symbols-outlined">logout</span>
         </a>

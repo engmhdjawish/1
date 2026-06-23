@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+use Portal\Auth\CustomerSession;
 use Portal\Services\OrderService;
 use Portal\Services\ShareCartService;
 use Portal\Services\ShareLinkService;
@@ -23,6 +24,9 @@ $policy = SharePageAccess::policyFlags($shareLink);
 $allowCart = $policy['allow_cart'];
 $allowOrder = $policy['allow_order'];
 $showPrice = $policy['show_price'];
+$loggedInCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
+$defaultGuestName = (string) ($loggedInCustomer['name_ar'] ?? '');
+$defaultGuestPhone = (string) ($loggedInCustomer['phone'] ?? '');
 
 if ($token === '') {
     $error = 'يرجى فتح السلة من رابط مشاركة صحيح.';
@@ -112,7 +116,8 @@ if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] =
                 $guestName,
                 $guestPhone,
                 $notes !== '' ? $notes : null,
-                $cartItems
+                $cartItems,
+                $loggedInCustomer !== null ? (string) ($loggedInCustomer['id'] ?? '') : null
             );
             if (!$result['ok']) {
                 ShareCartService::stashUnavailableLines($token, is_array($result['unavailable_items'] ?? null) ? $result['unavailable_items'] : []);
@@ -424,12 +429,12 @@ ob_start();
               <form method="post" class="space-y-3 border-t border-gray-100 pt-4">
                 <input type="hidden" name="token" value="<?= h($token) ?>">
                 <input type="hidden" name="action" value="submit_order">
-                <p class="text-xs font-bold text-gray-600">إرسال الطلب بدون تسجيل دخول</p>
+                <p class="text-xs font-bold text-gray-600"><?= $loggedInCustomer ? 'إرسال الطلب بحسابك' : 'إرسال الطلب بدون تسجيل دخول' ?></p>
                 <label class="block text-sm font-bold">الاسم الكامل *
-                  <input name="guest_name_ar" required class="h-11 w-full rounded-lg border border-gray-300 px-3 mt-1">
+                  <input name="guest_name_ar" required value="<?= h($defaultGuestName) ?>" class="h-11 w-full rounded-lg border border-gray-300 px-3 mt-1">
                 </label>
                 <label class="block text-sm font-bold">رقم الهاتف *
-                  <input name="guest_phone" required dir="ltr" class="h-11 w-full rounded-lg border border-gray-300 px-3 mt-1 text-left" placeholder="09xxxxxxxx">
+                  <input name="guest_phone" required dir="ltr" value="<?= h($defaultGuestPhone) ?>" class="h-11 w-full rounded-lg border border-gray-300 px-3 mt-1 text-left" placeholder="09xxxxxxxx">
                 </label>
                 <label class="block text-sm font-bold">ملاحظات
                   <textarea name="notes_ar" rows="3" class="w-full rounded-lg border border-gray-300 px-3 py-2 mt-1 text-sm" placeholder="اختياري"></textarea>

@@ -10,7 +10,7 @@ declare(strict_types=1);
   <section class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
     <header class="px-6 py-5 border-b bg-gray-50">
       <h1 class="text-2xl font-extrabold text-gray-900">تسجيل الدخول</h1>
-      <p class="text-sm text-gray-600 mt-1">اختر نوع الحساب ثم أدخل بيانات الدخول.</p>
+      <p class="text-sm text-gray-600 mt-1">اختر نوع الحساب ثم أدخل بيانات الدخول. لا يمكن البقاء مسجّل دخول كموظف وعميل في آن واحد.</p>
     </header>
 
     <div class="p-6">

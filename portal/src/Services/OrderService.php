@@ -35,7 +35,8 @@ final class OrderService
         string $guestNameAr,
         string $guestPhone,
         ?string $notesAr,
-        array $items
+        array $items,
+        ?string $webCustomerId = null
     ): array {
         $shareLinkId = trim($shareLinkId);
         $guestNameAr = trim($guestNameAr);
@@ -161,6 +162,7 @@ final class OrderService
                 'INSERT INTO orders (
                     order_number,
                     share_link_id,
+                    web_customer_id,
                     guest_name_ar,
                     guest_phone,
                     status,
@@ -171,6 +173,7 @@ final class OrderService
                  ) VALUES (
                     :order_number,
                     :share_link_id,
+                    :web_customer_id,
                     :guest_name_ar,
                     :guest_phone,
                     :status,
@@ -184,6 +187,7 @@ final class OrderService
             $orderStmt->execute([
                 'order_number' => $orderNumber,
                 'share_link_id' => $shareLinkId,
+                'web_customer_id' => $webCustomerId !== null && trim($webCustomerId) !== '' ? trim($webCustomerId) : null,
                 'guest_name_ar' => $guestNameAr,
                 'guest_phone' => $guestPhone,
                 'status' => 'pending',
@@ -402,6 +406,96 @@ final class OrderService
         return $counts;
     }
 
+    /** @param array{status?: string, limit?: int} $filters */
+    public static function listForCustomer(string $customerId, string $phone, array $filters = []): array
+    {
+        $customerId = trim($customerId);
+        $phone = trim($phone);
+        if ($customerId === '' && $phone === '') {
+            return [];
+        }
+
+        $status = trim((string) ($filters['status'] ?? ''));
+        $limit = max(1, min(100, (int) ($filters['limit'] ?? 50)));
+
+        $sql = 'SELECT
+                    o.id::text AS id,
+                    o.order_number,
+                    o.status::text AS status,
+                    o.total_sp,
+                    o.total_usd,
+                    o.created_at,
+                    o.updated_at,
+                    o.notes_ar,
+                    sl.name_ar AS share_link_name,
+                    COALESCE(items.items_count, 0) AS items_count
+                FROM orders o
+                LEFT JOIN share_links sl ON sl.id = o.share_link_id
+                LEFT JOIN (
+                    SELECT order_id, COUNT(*)::int AS items_count
+                    FROM order_items
+                    GROUP BY order_id
+                ) items ON items.order_id = o.id
+                WHERE (
+                    (:customer_id <> \'\' AND o.web_customer_id::text = :customer_id)
+                    OR (
+                        :phone <> \'\'
+                        AND o.guest_phone = :phone
+                    )
+                )';
+        $params = [
+            'customer_id' => $customerId,
+            'phone' => $phone,
+        ];
+
+        if ($status !== '' && in_array($status, self::ALLOWED_STATUSES, true)) {
+            $sql .= ' AND o.status = :status';
+            $params['status'] = $status;
+        }
+
+        $sql .= ' ORDER BY o.created_at DESC LIMIT :limit';
+        $stmt = Database::pdo()->prepare($sql);
+        foreach ($params as $name => $value) {
+            $stmt->bindValue(':' . $name, $value);
+        }
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function getOrderForCustomer(string $orderId, string $customerId, string $phone): ?array
+    {
+        $order = self::getOrderDetails($orderId);
+        if ($order === null) {
+            return null;
+        }
+
+        $customerId = trim($customerId);
+        $phone = trim($phone);
+        $orderCustomerId = trim((string) ($order['web_customer_id'] ?? ''));
+        $guestPhone = trim((string) ($order['guest_phone'] ?? ''));
+
+        $allowed = ($customerId !== '' && $orderCustomerId === $customerId)
+            || ($phone !== '' && $guestPhone === $phone);
+        if (!$allowed) {
+            return null;
+        }
+
+        return $order;
+    }
+
+    public static function statusLabel(string $status): string
+    {
+        return match ($status) {
+            'pending' => 'قيد المراجعة',
+            'confirmed' => 'مؤكد',
+            'completed' => 'مكتمل',
+            'cancelled' => 'ملغى',
+            default => $status,
+        };
+    }
+
     public static function syncCounts(): array
     {
         $rows = Database::pdo()->query(
@@ -430,6 +524,7 @@ final class OrderService
             'SELECT
                 o.id::text AS id,
                 o.order_number,
+                o.web_customer_id::text AS web_customer_id,
                 o.status::text AS status,
                 o.amine_sync_status::text AS amine_sync_status,
                 o.total_sp,

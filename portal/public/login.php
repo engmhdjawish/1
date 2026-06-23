@@ -10,15 +10,33 @@ use Portal\Auth\WebSession;
 require dirname(__DIR__) . '/views/helpers.php';
 
 $type = $_GET['type'] ?? $_POST['type'] ?? 'staff';
+$type = $type === 'customer' ? 'customer' : 'staff';
 $error = null;
 $message = $_GET['message'] ?? null;
+
+if ($type === 'customer' && WebSession::check()) {
+    WebSession::logout();
+} elseif ($type === 'staff' && CustomerSession::check()) {
+    CustomerSession::logout();
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    if ($type === 'staff' && WebSession::check()) {
+        header('Location: /dashboard/index.php');
+        exit;
+    }
+    if ($type === 'customer' && CustomerSession::check()) {
+        header('Location: /account.php');
+        exit;
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = trim((string) ($_POST['password'] ?? ''));
     if ($type === 'customer') {
         $ok = CustomerSession::login(trim($_POST['phone'] ?? ''), $password);
         if ($ok) {
-            header('Location: /store.php');
+            header('Location: /account.php');
             exit;
         }
         $error = 'فشل الدخول. تأكد من التفعيل بعد موافقة الإدارة.';
