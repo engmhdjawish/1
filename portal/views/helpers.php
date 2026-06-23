@@ -47,9 +47,17 @@ function portal_is_catalog_page(string $path): bool
     return in_array($path, ['/index.php', '/store.php', '/product.php', '/share.php'], true);
 }
 
-function portal_absolute_url(string $path = ''): string
+function portal_absolute_url(string $pathOrUrl = ''): string
 {
-    $path = '/' . ltrim($path, '/');
+    $value = trim($pathOrUrl);
+    if ($value === '') {
+        return '';
+    }
+    if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
+        return $value;
+    }
+
+    $path = '/' . ltrim($value, '/');
     if ($path === '//') {
         $path = '/';
     }
@@ -504,25 +512,6 @@ function absolute_order_tracking_url(string $token): string
     }
 
     return portal_absolute_url($path);
-}
-
-function portal_absolute_url(string $pathOrUrl): string
-{
-    $value = trim($pathOrUrl);
-    if ($value === '') {
-        return '';
-    }
-    if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
-        return $value;
-    }
-
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
-    if ($host === '') {
-        return $value;
-    }
-
-    return $scheme . '://' . $host . (str_starts_with($value, '/') ? $value : '/' . $value);
 }
 
 function format_packaging(float $value): string
