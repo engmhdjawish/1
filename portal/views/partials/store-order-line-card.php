@@ -30,36 +30,42 @@ $zoomUrl = $imageUrl !== '' ? material_image_zoom_url($imageUrl) : '';
   </div>
 
   <div class="store-order-line-card__body">
-    <?php if ($hasOffer): ?>
-      <?php $badge = store_line_offer_badge($item); $size = 'sm'; require __DIR__ . '/offer-item-badge.php'; ?>
-    <?php endif; ?>
-
-    <h3 class="store-order-line-card__title"><?= h((string) ($item['material_name_ar'] ?? '—')) ?></h3>
-    <?php if (!empty($item['material_code'])): ?>
-      <div class="store-order-line-card__code store-num" dir="ltr"><?= h((string) $item['material_code']) ?></div>
-    <?php endif; ?>
-
-    <div class="store-order-line-card__qty">
-      <span class="material-symbols-outlined text-sm" aria-hidden="true">inventory_2</span>
-      <span class="store-num" dir="ltr"><?= h(format_packages_display($prices['quantity'])) ?></span>
-      <?= h($prices['package_unit']) ?>
+    <div class="store-order-line-card__head">
+      <div class="store-order-line-card__head-main">
+        <?php if ($hasOffer): ?>
+          <?php $badge = store_line_offer_badge($item); $size = 'sm'; require __DIR__ . '/offer-item-badge.php'; ?>
+        <?php endif; ?>
+        <h3 class="store-order-line-card__title"><?= h((string) ($item['material_name_ar'] ?? '—')) ?></h3>
+      </div>
     </div>
 
-    <?php if ($showPriceSyp || $showPriceUsd): ?>
-      <?php require __DIR__ . '/store-order-line-prices.php'; ?>
-    <?php endif; ?>
+    <div class="store-order-line-card__meta">
+      <?php if (!empty($item['material_code'])): ?>
+        <span class="store-order-line-card__code store-num" dir="ltr"><?= h((string) $item['material_code']) ?></span>
+      <?php endif; ?>
+      <span class="store-order-line-card__qty">
+        <span class="store-num" dir="ltr"><?= h(format_packages_display($prices['quantity'])) ?></span>
+        <?= h($prices['package_unit']) ?>
+      </span>
+    </div>
 
-    <?php if ($showLineTotal && ($showPriceSyp || $showPriceUsd)): ?>
-      <div class="store-order-line-card__total">
-        <span>إجمالي السطر</span>
-        <strong class="store-num" dir="ltr">
-          <?php if ($showPriceSyp): ?>
-            <?= format_money($prices['line_total_sp'], true) ?> ل.س
-          <?php else: ?>
-            $<?= number_format($prices['line_total_usd'], 2, '.', ',') ?>
-          <?php endif; ?>
-        </strong>
-      </div>
-    <?php endif; ?>
+    <div class="store-order-line-card__foot">
+      <?php if ($showPriceSyp || $showPriceUsd): ?>
+        <?php $size = 'compact'; require __DIR__ . '/store-order-line-prices.php'; ?>
+      <?php endif; ?>
+
+      <?php if ($showLineTotal && ($showPriceSyp || $showPriceUsd)): ?>
+        <div class="store-order-line-card__total">
+          <span>الإجمالي</span>
+          <strong class="store-num" dir="ltr">
+            <?php if ($showPriceSyp): ?>
+              <?= format_money($prices['line_total_sp'], true) ?> ل.س
+            <?php else: ?>
+              $<?= number_format($prices['line_total_usd'], 2, '.', ',') ?>
+            <?php endif; ?>
+          </strong>
+        </div>
+      <?php endif; ?>
+    </div>
   </div>
 </article>

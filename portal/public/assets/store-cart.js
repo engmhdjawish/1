@@ -162,17 +162,17 @@
     if (showPriceSyp && (prices.packSp > 0 || prices.origPackSp > 0)) {
       let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
       html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
-        <span class="store-order-line-prices__label">سعر ${escapeHtml(prices.packageUnit)}</span>
+        <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
         <div class="store-order-line-prices__values">
-          ${hasOffer && prices.origPackSp > prices.packSp ? `<span class="store-order-line-prices__old store-num" dir="ltr">${formatMoney(prices.origPackSp)} ل.س</span>` : ''}
+          ${hasOffer && prices.origPackSp > prices.packSp ? `<span class="store-order-line-prices__old store-num" dir="ltr">${formatMoney(prices.origPackSp)}</span>` : ''}
           <span class="store-order-line-prices__amount store-num" dir="ltr">${formatMoney(prices.packSp)} <small>ل.س</small></span>
         </div>
       </div>`;
       if (prices.unitSp > 0) {
         html += `<div class="store-order-line-prices__row">
-          <span class="store-order-line-prices__label">سعر ${escapeHtml(prices.primaryUnit)}</span>
+          <span class="store-order-line-prices__label">${escapeHtml(prices.primaryUnit)}</span>
           <div class="store-order-line-prices__values">
-            ${hasOffer && prices.origUnitSp > prices.unitSp ? `<span class="store-order-line-prices__old store-num" dir="ltr">${formatMoney(prices.origUnitSp)} ل.س</span>` : ''}
+            ${hasOffer && prices.origUnitSp > prices.unitSp ? `<span class="store-order-line-prices__old store-num" dir="ltr">${formatMoney(prices.origUnitSp)}</span>` : ''}
             <span class="store-order-line-prices__amount store-order-line-prices__amount--unit store-num" dir="ltr">${formatMoney(prices.unitSp)} <small>ل.س</small></span>
           </div>
         </div>`;
@@ -183,7 +183,7 @@
     if (showPriceUsd && (prices.packUsd > 0 || prices.origPackUsd > 0)) {
       let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
       html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
-        <span class="store-order-line-prices__label">سعر ${escapeHtml(prices.packageUnit)}</span>
+        <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
         <div class="store-order-line-prices__values">
           ${hasOffer && prices.origPackUsd > prices.packUsd ? `<span class="store-order-line-prices__old store-num" dir="ltr">$${formatUsd(prices.origPackUsd)}</span>` : ''}
           <span class="store-order-line-prices__amount store-num" dir="ltr">$${formatUsd(prices.packUsd)}</span>
@@ -191,7 +191,7 @@
       </div>`;
       if (prices.unitUsd > 0) {
         html += `<div class="store-order-line-prices__row">
-          <span class="store-order-line-prices__label">سعر ${escapeHtml(prices.primaryUnit)}</span>
+          <span class="store-order-line-prices__label">${escapeHtml(prices.primaryUnit)}</span>
           <div class="store-order-line-prices__values">
             ${hasOffer && prices.origUnitUsd > prices.unitUsd ? `<span class="store-order-line-prices__old store-num" dir="ltr">$${formatUsd(prices.origUnitUsd)}</span>` : ''}
             <span class="store-order-line-prices__amount store-order-line-prices__amount--unit store-num" dir="ltr">$${formatUsd(prices.unitUsd)}</span>
@@ -224,27 +224,28 @@
       <div class="store-order-line-card__media">${img}</div>
       <div class="store-order-line-card__body">
         <div class="store-cart-line-card__head">
-          <div class="min-w-0">
+          <div class="store-order-line-card__head-main min-w-0">
             ${offerBadgeHtml(line)}
             <h3 class="store-order-line-card__title">${escapeHtml(line.material_name_ar || '')}</h3>
-            ${line.material_code ? `<div class="store-order-line-card__code store-num" dir="ltr">${escapeHtml(line.material_code)}</div>` : ''}
+            ${line.material_code ? `<span class="store-order-line-card__code store-num" dir="ltr">${escapeHtml(line.material_code)}</span>` : ''}
           </div>
           <button type="button" class="store-cart-line-card__remove" data-remove-item="${escapeHtml(guid)}" aria-label="حذف من السلة">
             <span class="material-symbols-outlined" aria-hidden="true">delete</span>
           </button>
         </div>
-        ${showPriceSyp || showPriceUsd ? linePricesHtml(line, showPriceSyp, showPriceUsd) : ''}
-        <div class="store-cart-line-card__actions">
-          <div class="store-cart-line-card__qty-wrap">
-            <span class="store-cart-line-card__qty-label">الكمية</span>
-            <div class="store-qty-stepper" data-cart-qty-control data-guid="${escapeHtml(guid)}">
-              <button type="button" data-bump="-1" aria-label="إنقاص">−</button>
-              <input type="number" class="store-num" dir="ltr" min="0.01" step="0.01" ${max ? `max="${max}"` : ''} value="${formatQty(prices.quantity)}" data-qty-input>
-              <button type="button" data-bump="1" aria-label="زيادة">+</button>
+        <div class="store-cart-line-card__foot">
+          ${showPriceSyp || showPriceUsd ? linePricesHtml(line, showPriceSyp, showPriceUsd) : ''}
+          <div class="store-cart-line-card__controls">
+            <div class="store-cart-line-card__qty-row">
+              <div class="store-qty-stepper store-qty-stepper--compact" data-cart-qty-control data-guid="${escapeHtml(guid)}">
+                <button type="button" data-bump="-1" aria-label="إنقاص">−</button>
+                <input type="number" class="store-num" dir="ltr" min="0.01" step="0.01" ${max ? `max="${max}"` : ''} value="${formatQty(prices.quantity)}" data-qty-input>
+                <button type="button" data-bump="1" aria-label="زيادة">+</button>
+              </div>
+              <span class="store-cart-line-card__unit">${escapeHtml(prices.packageUnit)}</span>
             </div>
-            <span class="store-cart-line-card__unit">${escapeHtml(prices.packageUnit)}</span>
+            ${lineTotalCell ? `<div class="store-order-line-card__total store-cart-line-card__total"><span>الإجمالي</span><strong class="store-num" dir="ltr">${lineTotalCell}</strong></div>` : ''}
           </div>
-          ${lineTotalCell ? `<div class="store-order-line-card__total store-cart-line-card__total"><span>إجمالي السطر</span><strong class="store-num" dir="ltr">${lineTotalCell}</strong></div>` : ''}
         </div>
       </div>
     </article>`;
