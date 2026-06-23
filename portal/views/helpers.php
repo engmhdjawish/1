@@ -503,13 +503,26 @@ function absolute_order_tracking_url(string $token): string
         return '';
     }
 
+    return portal_absolute_url($path);
+}
+
+function portal_absolute_url(string $pathOrUrl): string
+{
+    $value = trim($pathOrUrl);
+    if ($value === '') {
+        return '';
+    }
+    if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
+        return $value;
+    }
+
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
     if ($host === '') {
-        return $path;
+        return $value;
     }
 
-    return $scheme . '://' . $host . $path;
+    return $scheme . '://' . $host . (str_starts_with($value, '/') ? $value : '/' . $value);
 }
 
 function format_packaging(float $value): string

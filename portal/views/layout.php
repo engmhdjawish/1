@@ -76,7 +76,14 @@ if ($customer) {
 <html class="light" lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#D81921">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="<?= h($siteName) ?>">
+    <link rel="manifest" href="/manifest.php">
+    <link rel="apple-touch-icon" href="<?= h($companyLogoUrl !== '' ? $companyLogoUrl : '/icons/app-icon.svg') ?>">
     <title><?= h($title) ?> — <?= h($siteName) ?></title>
     <meta name="description" content="<?= h($metaDescription) ?>">
     <meta name="robots" content="<?= h((string) ($metaRobots ?? 'index, follow')) ?>">
@@ -109,6 +116,8 @@ if ($customer) {
     <link href="<?= h(portal_asset_url('/css/site-brand.css')) ?>" rel="stylesheet">
     <link href="<?= h(portal_asset_url('/css/site-header.css')) ?>" rel="stylesheet">
     <link href="<?= h(portal_asset_url('/css/site-footer.css')) ?>" rel="stylesheet">
+    <link href="<?= h(portal_asset_url('/css/pwa-install.css')) ?>" rel="stylesheet">
+    <link href="<?= h(portal_asset_url('/css/notifications.css')) ?>" rel="stylesheet">
     <?php if (!$isLightPage): ?>
       <link href="<?= h(portal_asset_url('/css/store-ui.css')) ?>" rel="stylesheet">
     <?php endif; ?>
@@ -200,6 +209,8 @@ if ($customer) {
 <?php if ($enableSiteAnalytics): ?>
   <script src="<?= h(portal_asset_url('/assets/site-analytics.js')) ?>" data-endpoint="/api/site-analytics.php" defer></script>
 <?php endif; ?>
+<script src="<?= h(portal_asset_url('/assets/pwa.js')) ?>" defer></script>
+<script src="<?= h(portal_asset_url('/assets/notifications.js')) ?>" defer></script>
 <?php if (!empty($extraFooter ?? '')): ?>
   <?= $extraFooter ?>
 <?php endif; ?>

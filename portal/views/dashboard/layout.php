@@ -73,6 +73,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
   <link href="/assets/dashboard/dashboard.css" rel="stylesheet">
+  <link href="/css/notifications.css" rel="stylesheet">
   <link href="/css/store-ui.css" rel="stylesheet">
   <link href="/css/store-cart.css" rel="stylesheet">
   <link href="/css/customer-portal.css" rel="stylesheet">
@@ -184,6 +185,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         <?php endif; ?>
       </div>
       <div class="flex items-center gap-2 shrink-0">
+        <?php require __DIR__ . '/../partials/notification-bell.php'; ?>
         <div class="hidden md:flex flex-col items-end">
           <span class="text-sm font-bold"><?= h($user['display_name_ar'] ?? '') ?></span>
           <span class="text-xs text-text-muted" data-dashboard-header-area><?= h($sidebarTitle) ?></span>
@@ -322,6 +324,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <script src="/assets/dashboard/about-editor.js" defer></script>
   <script src="/assets/dashboard/accounting-statement.js" defer></script>
   <script src="/assets/dashboard/material-images-link.js" defer></script>
+  <script src="/assets/notifications.js" defer></script>
   <?php if (!empty($extraScripts ?? '')): ?>
     <?= $extraScripts ?>
   <?php endif; ?>
