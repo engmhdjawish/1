@@ -1,4 +1,22 @@
 (() => {
+  const syncHeaderStickyOffset = () => {
+    const header = document.querySelector('.site-header');
+    if (!header) {
+      return;
+    }
+    const height = Math.ceil(header.getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--site-header-sticky-offset', `${height}px`);
+  };
+
+  syncHeaderStickyOffset();
+  window.addEventListener('resize', syncHeaderStickyOffset, { passive: true });
+  window.addEventListener('load', syncHeaderStickyOffset, { passive: true });
+
+  const header = document.querySelector('.site-header');
+  if (header && typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncHeaderStickyOffset).observe(header);
+  }
+
   const root = document.getElementById('store-filters-root');
   if (!root) {
     return;

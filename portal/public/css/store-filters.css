@@ -1,3 +1,7 @@
+:root {
+  --site-header-sticky-offset: 5.5rem;
+}
+
 .store-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -126,9 +130,11 @@
 
   .store-filters-sidebar {
     position: sticky;
-    top: 5.5rem;
-    max-height: calc(100vh - 6.5rem);
+    top: var(--site-header-sticky-offset, 5.5rem);
+    z-index: 20;
+    max-height: calc(100vh - var(--site-header-sticky-offset, 5.5rem) - 1rem);
     overflow: auto;
+    overscroll-behavior: contain;
   }
 
   .store-filters-close-btn,
