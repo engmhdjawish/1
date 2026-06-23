@@ -11,7 +11,7 @@
 @media (min-width: 1024px) {
   .store-layout.has-sidebar {
     grid-template-columns: 280px minmax(0, 1fr);
-    align-items: start;
+    align-items: stretch;
   }
 }
 
@@ -124,8 +124,9 @@
     position: static;
     inset: auto;
     width: 280px;
-    flex-shrink: 0;
-    align-self: start;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
     background: transparent;
     opacity: 1;
     pointer-events: auto;
@@ -133,16 +134,14 @@
   }
 
   .store-filters-sidebar {
-    z-index: 25;
-  }
-
-  .store-filters-sidebar.is-desktop-pinned {
-    position: fixed;
+    position: sticky;
     top: calc(var(--site-header-sticky-offset, 5.5rem) + 0.5rem);
-    width: 280px;
+    z-index: 15;
+    width: 100%;
     max-height: calc(100vh - var(--site-header-sticky-offset, 5.5rem) - 1rem);
     overflow: auto;
     overscroll-behavior: contain;
+    flex-shrink: 0;
   }
 
   .store-filters-close-btn,
