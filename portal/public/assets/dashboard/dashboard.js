@@ -555,6 +555,9 @@
     if (typeof window.portalMaterialImagesLinkInit === 'function') {
       window.portalMaterialImagesLinkInit(root);
     }
+    if (typeof window.portalMaterialZipDownloadInit === 'function') {
+      window.portalMaterialZipDownloadInit(root);
+    }
     bindOrderImageZoom(root);
   }
 

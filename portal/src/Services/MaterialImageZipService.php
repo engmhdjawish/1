@@ -9,6 +9,117 @@ use Portal\Support\Utf8Text;
 final class MaterialImageZipService
 {
     public const MAX_ORDER_IMAGES = 200;
+    public const MAX_SPLIT_PACKAGES = 40;
+
+    /**
+     * @return array<string, list<string>>
+     */
+    public static function splitDimensionKeys(): array
+    {
+        return [
+            'materialTypes' => ['materialTypes', 'materialType'],
+            'ageCategories' => ['ageCategories', 'ageCategory'],
+            'manufacturers' => ['manufacturers', 'manufacturer'],
+            'sizeRanges' => ['sizeRanges', 'sizeRange'],
+            'countryOfOrigins' => ['countryOfOrigins', 'countryOfOrigin'],
+            'storeGuids' => ['storeGuids', 'storeGuid'],
+            'groupGuids' => ['groupGuids', 'groupGuid'],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     */
+    public static function streamSplitMaterialZips(array $input): void
+    {
+        if (headers_sent()) {
+            throw new \RuntimeException('لا يمكن بدء التحميل بعد إرسال المخرجات.');
+        }
+
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        $splitBy = trim((string) ($input['splitBy'] ?? ''));
+        $dimensions = self::splitDimensionKeys();
+        if (!isset($dimensions[$splitBy])) {
+            throw new \RuntimeException('بُعد التقسيم غير مدعوم.');
+        }
+
+        $splitValues = self::extractFilterValues($input, $dimensions[$splitBy]);
+        if ($splitValues === []) {
+            throw new \RuntimeException('اختر قيمة واحدة على الأقل (تشيب) في فلتر التقسيم المختار.');
+        }
+        if (count($splitValues) > self::MAX_SPLIT_PACKAGES) {
+            throw new \RuntimeException('الحد الأقصى للتقسيم ' . self::MAX_SPLIT_PACKAGES . ' ملف داخل الأرشيف.');
+        }
+
+        $baseInput = $input;
+        unset($baseInput['splitBy'], $baseInput['archiveName']);
+        foreach ($dimensions[$splitBy] as $key) {
+            unset($baseInput[$key]);
+        }
+        $baseQuery = self::buildMaterialFilterQuery($baseInput);
+
+        $masterPath = tempnam(sys_get_temp_dir(), 'splitzip_');
+        if ($masterPath === false) {
+            throw new \RuntimeException('تعذر إنشاء ملف مؤقت للتقسيم.');
+        }
+
+        $childPaths = [];
+        $zip = new \ZipArchive();
+        if ($zip->open($masterPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            @unlink($masterPath);
+            throw new \RuntimeException('تعذر إنشاء أرشيف التقسيم.');
+        }
+
+        $usedNames = [];
+        $added = 0;
+
+        try {
+            foreach ($splitValues as $value) {
+                $childQuery = $baseQuery;
+                $childQuery[$splitBy] = $value;
+
+                $childPath = tempnam(sys_get_temp_dir(), 'childzip_');
+                if ($childPath === false) {
+                    continue;
+                }
+                $childPaths[] = $childPath;
+
+                $result = ApiClient::downloadToFile('/api/material-images/download/materials', $childQuery, $childPath, 900);
+                if (!($result['ok'] ?? false)) {
+                    continue;
+                }
+
+                $childSize = filesize($childPath);
+                if ($childSize === false || $childSize < 22) {
+                    continue;
+                }
+
+                $entryName = self::uniqueEntryName(self::sanitizeFilename($value) . '.zip', $usedNames);
+                $zip->addFile($childPath, $entryName);
+                $added++;
+            }
+
+            $zip->close();
+
+            if ($added === 0) {
+                throw new \RuntimeException('لا توجد صور مطابقة لخيارات التقسيم المحددة.');
+            }
+
+            self::streamLocalZipFile($masterPath, 'split-material-images');
+        } finally {
+            foreach ($childPaths as $childPath) {
+                if (is_file($childPath)) {
+                    @unlink($childPath);
+                }
+            }
+            if (is_file($masterPath)) {
+                @unlink($masterPath);
+            }
+        }
+    }
 
     /**
      * @param array<string, scalar|null> $query
@@ -48,29 +159,39 @@ final class MaterialImageZipService
                 throw new \RuntimeException('ملف ZIP فارغ أو لا توجد صور مطابقة.');
             }
 
-            header('Cache-Control: no-store, no-cache, must-revalidate');
-            header('X-Accel-Buffering: no');
-            header('Content-Type: application/zip');
-            header('Content-Disposition: attachment; filename="' . $filename . '.zip"');
-            header('Content-Length: ' . (string) $size);
-
-            $handle = fopen($tempPath, 'rb');
-            if ($handle === false) {
-                throw new \RuntimeException('تعذر قراءة ملف ZIP.');
-            }
-            while (!feof($handle)) {
-                $chunk = fread($handle, 65536);
-                if ($chunk === false) {
-                    break;
-                }
-                echo $chunk;
-            }
-            fclose($handle);
+            self::streamLocalZipFile($tempPath, $filename);
         } finally {
             if (is_file($tempPath)) {
                 @unlink($tempPath);
             }
         }
+    }
+
+    private static function streamLocalZipFile(string $path, string $filename): void
+    {
+        $size = filesize($path);
+        if ($size === false || $size < 22) {
+            throw new \RuntimeException('ملف ZIP فارغ أو تالف.');
+        }
+
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        header('X-Accel-Buffering: no');
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . self::sanitizeFilename($filename) . '.zip"');
+        header('Content-Length: ' . (string) $size);
+
+        $handle = fopen($path, 'rb');
+        if ($handle === false) {
+            throw new \RuntimeException('تعذر قراءة ملف ZIP.');
+        }
+        while (!feof($handle)) {
+            $chunk = fread($handle, 65536);
+            if ($chunk === false) {
+                break;
+            }
+            echo $chunk;
+        }
+        fclose($handle);
     }
 
     private static function readApiZipErrorMessage(string $path, int $status, string $fallback): string
@@ -471,5 +592,38 @@ final class MaterialImageZipService
         }
 
         return $query;
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @param list<string> $keys
+     * @return list<string>
+     */
+    private static function extractFilterValues(array $input, array $keys): array
+    {
+        $values = [];
+        foreach ($keys as $key) {
+            if (!isset($input[$key])) {
+                continue;
+            }
+            $raw = $input[$key];
+            if (is_array($raw)) {
+                foreach ($raw as $item) {
+                    $text = trim((string) $item);
+                    if ($text !== '') {
+                        $values[] = $text;
+                    }
+                }
+            } else {
+                foreach (explode(',', (string) $raw) as $item) {
+                    $text = trim($item);
+                    if ($text !== '') {
+                        $values[] = $text;
+                    }
+                }
+            }
+        }
+
+        return array_values(array_unique($values));
     }
 }

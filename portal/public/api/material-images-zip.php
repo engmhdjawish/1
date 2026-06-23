@@ -62,6 +62,12 @@ try {
         exit;
     }
 
+    $splitBy = trim((string) ($_GET['splitBy'] ?? ''));
+    if ($splitBy !== '') {
+        MaterialImageZipService::streamSplitMaterialZips($_GET);
+        exit;
+    }
+
     $query = MaterialImageZipService::buildMaterialFilterQuery($_GET);
     $archiveName = trim((string) ($_GET['archiveName'] ?? ''));
     if ($archiveName !== '') {

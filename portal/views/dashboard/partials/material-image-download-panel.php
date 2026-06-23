@@ -114,15 +114,15 @@ foreach ($materialFilterOptions['groups'] ?? [] as $group) {
             <span class="font-bold text-slate-700">تقسيم التحميل (اختياري)</span>
             <select name="splitBy" data-zip-split-by class="mt-1 h-10 w-full rounded-lg border border-border-subtle px-3 text-sm">
               <option value="">ملف ZIP واحد لكل النتائج</option>
-              <option value="materialTypes">ملف لكل نوع مادة (من التشيبس المختارة)</option>
-              <option value="ageCategories">ملف لكل فئة عمرية</option>
-              <option value="manufacturers">ملف لكل شركة مصنعة</option>
-              <option value="sizeRanges">ملف لكل قياس</option>
-              <option value="countryOfOrigins">ملف لكل بلد منشأ</option>
-              <option value="storeGuids">ملف لكل مخزن</option>
-              <option value="groupGuids">ملف لكل مجموعة</option>
+              <option value="materialTypes">تقسيم حسب نوع المادة</option>
+              <option value="ageCategories">تقسيم حسب الفئة العمرية</option>
+              <option value="manufacturers">تقسيم حسب الشركة المصنعة</option>
+              <option value="sizeRanges">تقسيم حسب القياس</option>
+              <option value="countryOfOrigins">تقسيم حسب بلد المنشأ</option>
+              <option value="storeGuids">تقسيم حسب المخزن</option>
+              <option value="groupGuids">تقسيم حسب المجموعة</option>
             </select>
-            <span class="text-xs text-text-muted mt-1 block">عند التقسيم: يُحمَّل ملف منفصل لكل تشيب في الفلتر المختار أعلاه.</span>
+            <span class="text-xs text-text-muted mt-1 block">يُحمَّل ملف <strong>split-material-images.zip</strong> يحتوي عدة ملفات ZIP داخلية — ملف لكل تشيب في الفلتر المختار.</span>
           </label>
         </div>
 
@@ -133,7 +133,7 @@ foreach ($materialFilterOptions['groups'] ?? [] as $group) {
             <span class="material-symbols-outlined text-lg">download</span>
             تحميل ZIP للنتائج
           </button>
-          <p class="text-xs text-text-muted">ملف واحد: يفتح تبويب تحميل مع شريط تقدم. التقسيم: عدة ملفات متتالية (1.2 ثانية بين كل ملف).</p>
+          <p class="text-xs text-text-muted">بدون تقسيم: ملف واحد. مع التقسيم: أرشيف رئيسي فيه عدة ZIP — فك الضغط لاستخراجها.</p>
         </div>
       </form>
     </section>
@@ -193,4 +193,3 @@ foreach ($materialFilterOptions['groups'] ?? [] as $group) {
     </section>
   </div>
 </div>
-<script src="<?= h(portal_asset_url('/assets/dashboard/material-image-zip-download.js')) ?>" defer></script>
