@@ -47,6 +47,10 @@ $navLinks = [
     ['href' => '/store.php', 'label' => 'المتجر'],
     ['href' => '/about.php', 'label' => 'من نحن'],
 ];
+if ($customer) {
+    $navLinks[] = ['href' => '/my-orders.php', 'label' => 'طلباتي'];
+    $navLinks[] = ['href' => '/my-profile.php', 'label' => 'الملف الشخصي'];
+}
 ?>
 <!DOCTYPE html>
 <html class="light" lang="ar" dir="rtl">

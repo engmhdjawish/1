@@ -58,11 +58,19 @@
       openDrawerOnMobile: true,
       guestOnly: true,
     },
-    account: {
-      icon: 'account_circle',
-      title: 'حسابي',
-      text: 'بعد تسجيل الدخول يمكنك متابعة طلباتك وتحديث بياناتك من هنا.',
-      target: 'account',
+    myOrders: {
+      icon: 'receipt_long',
+      title: 'طلباتي',
+      text: 'بعد تسجيل الدخول تظهر «طلباتي» في القائمة — لمتابعة حالة طلباتك وتفاصيلها أو إلغائها قبل مراجعتها.',
+      target: 'my-orders',
+      openDrawerOnMobile: true,
+      customerOnly: true,
+    },
+    myProfile: {
+      icon: 'person',
+      title: 'الملف الشخصي',
+      text: 'من «الملف الشخصي» يمكنك تحديث اسمك وبريدك وكلمة المرور — منفصلة عن صفحة الطلبات.',
+      target: 'my-profile',
       openDrawerOnMobile: true,
       customerOnly: true,
     },
@@ -92,7 +100,7 @@
     if (isGuest()) {
       order.push('register', 'login');
     } else {
-      order.push('account');
+      order.push('myOrders', 'myProfile');
     }
     if (hasCart()) order.push('cart');
     if (hasCurrency()) order.push('currency');

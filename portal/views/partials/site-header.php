@@ -60,6 +60,8 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
               href="<?= h($link['href']) ?>"
               class="site-header__nav-link <?= $isNavActive($link['href']) ? 'is-active' : '' ?>"
               <?php if (str_contains($link['href'], 'store.php')): ?>data-guide="nav-store"<?php endif; ?>
+              <?php if (str_contains($link['href'], 'my-orders.php')): ?>data-guide="my-orders"<?php endif; ?>
+              <?php if (str_contains($link['href'], 'my-profile.php')): ?>data-guide="my-profile"<?php endif; ?>
             >
               <?= h($link['label']) ?>
             </a>
@@ -106,14 +108,13 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
 
           <div class="site-header__auth" data-guide="auth">
             <?php if ($customer): ?>
-              <a href="/account.php" class="site-header__btn site-header__btn--ghost hidden sm:inline-flex" data-guide="account">حسابي</a>
               <span class="site-header__user"><?= h((string) ($customer['name_ar'] ?? '')) ?></span>
               <a href="/logout.php" class="site-header__btn site-header__btn--ghost site-header__btn--compact" title="تسجيل الخروج">
                 <span class="material-symbols-outlined text-base" aria-hidden="true">logout</span>
                 <span class="hidden sm:inline">خروج</span>
               </a>
             <?php else: ?>
-              <a href="/login.php?type=customer" class="site-header__btn site-header__btn--ghost hidden sm:inline-flex" data-guide="login">دخول</a>
+              <a href="<?= h(portal_login_url('customer')) ?>" class="site-header__btn site-header__btn--ghost hidden sm:inline-flex" data-guide="login">دخول</a>
               <a href="/register.php" class="site-header__btn site-header__btn--primary" data-guide="register">تسجيل</a>
             <?php endif; ?>
           </div>
@@ -154,6 +155,8 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
         data-public-nav-link="1"
         class="site-drawer__link <?= $isNavActive($link['href']) ? 'is-active' : '' ?>"
         <?php if (str_contains($link['href'], 'store.php')): ?>data-guide="nav-store"<?php endif; ?>
+        <?php if (str_contains($link['href'], 'my-orders.php')): ?>data-guide="my-orders"<?php endif; ?>
+        <?php if (str_contains($link['href'], 'my-profile.php')): ?>data-guide="my-profile"<?php endif; ?>
       ><?= h($link['label']) ?></a>
     <?php endforeach; ?>
 
@@ -171,11 +174,10 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
 
     <div class="site-drawer__section">
       <?php if ($customer): ?>
-        <a href="/account.php" data-public-nav-link="1" class="site-drawer__link" data-guide="account">حسابي</a>
         <div class="site-drawer__user"><?= h((string) ($customer['name_ar'] ?? '')) ?></div>
         <a href="/logout.php" data-public-nav-link="1" class="site-drawer__link site-drawer__link--danger">تسجيل الخروج</a>
       <?php else: ?>
-        <a href="/login.php?type=customer" data-public-nav-link="1" class="site-drawer__link" data-guide="login">دخول العملاء</a>
+        <a href="<?= h(portal_login_url('customer')) ?>" data-public-nav-link="1" class="site-drawer__link" data-guide="login">دخول العملاء</a>
         <a href="/register.php" data-public-nav-link="1" class="site-drawer__link is-active" data-guide="register">تسجيل عميل جديد</a>
       <?php endif; ?>
       <?php if ($staffLoggedIn && !$customer): ?>

@@ -194,7 +194,7 @@ $specs = array_filter([
       <?= h($backLabel) ?>
     </a>
     <?php if (!CustomerSession::check()): ?>
-      <p class="text-xs text-gray-500">لديك حساب؟ <a href="/login.php?type=customer" class="text-primary font-bold">سجّل دخولك</a> لمتابعة طلباتك.</p>
+      <p class="text-xs text-gray-500">لديك حساب؟ <a href="<?= h(portal_login_url('customer')) ?>" class="text-primary font-bold">سجّل دخولك</a> لمتابعة طلباتك.</p>
     <?php endif; ?>
   </div>
   </div>
