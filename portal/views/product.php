@@ -10,9 +10,13 @@ use Portal\Services\SpecialOfferService;
 /** @var array<string, mixed> $displayOptions */
 /** @var string|null $returnUrl */
 /** @var string|null $offerSlug */
+/** @var string|null $cartNotice */
 
 $product = is_array($product ?? null) ? $product : [];
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
+$cartNotice = isset($cartNotice) ? (string) $cartNotice : '';
+$allowCart = (bool) ($displayOptions['allow_cart'] ?? false);
+$capturePrices = (bool) ($displayOptions['show_price'] ?? false);
 $offerSlug = trim((string) ($offerSlug ?? $_GET['offer'] ?? ''));
 $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
 $showPriceSyp = in_array($priceMode, ['both', 'syp'], true);
@@ -68,6 +72,10 @@ $imageGuid = material_image_guid($product);
     <?= h($backLabel) ?>
   </a>
 </section>
+
+<?php if ($cartNotice !== ''): ?>
+  <p class="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm"><?= h($cartNotice) ?></p>
+<?php endif; ?>
 
 <article class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-0">
@@ -145,10 +153,18 @@ $imageGuid = material_image_guid($product);
 
       <div class="flex flex-wrap gap-2 pt-2">
         <a href="<?= h($returnUrl) ?>" class="h-11 inline-flex items-center justify-center rounded-xl border border-gray-300 px-5 text-sm font-bold"><?= h($backLabel) ?></a>
+        <?php if ($allowCart): ?>
+          <a href="/store-cart.php" class="h-11 inline-flex items-center justify-center rounded-xl border border-primary text-primary px-5 text-sm font-bold">السلة</a>
+        <?php endif; ?>
         <?php if (!CustomerSession::check()): ?>
           <a href="/login.php?type=customer" class="h-11 inline-flex items-center justify-center rounded-xl bg-primary text-white px-5 text-sm font-bold">دخول العملاء</a>
         <?php endif; ?>
       </div>
+      <?php if ($allowCart): ?>
+        <div class="pt-2 border-t border-gray-100">
+          <?php require __DIR__ . '/partials/store-add-to-cart-form.php'; ?>
+        </div>
+      <?php endif; ?>
     </div>
   </div>
 

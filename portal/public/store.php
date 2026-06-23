@@ -6,9 +6,11 @@ require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Auth\CustomerSession;
 use Portal\Services\StoreCatalogService;
+use Portal\Support\StoreCartRequest;
 
 require dirname(__DIR__) . '/views/helpers.php';
 
+$cartNotice = StoreCartRequest::handleAddToCartPost();
 $catalog = StoreCatalogService::catalogFromRequest($_GET);
 $displayOptions = StoreCatalogService::displayOptions();
 $isCustomer = CustomerSession::check();

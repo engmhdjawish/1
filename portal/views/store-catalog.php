@@ -8,8 +8,11 @@ use Portal\Services\CatalogSectionResolver;
 /** @var array<string, mixed> $displayOptions */
 /** @var bool $isCustomer */
 
+/** @var string|null $cartNotice */
+
 $catalog = is_array($catalog ?? null) ? $catalog : [];
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
+$cartNotice = isset($cartNotice) ? (string) $cartNotice : '';
 $filters = is_array($catalog['filters'] ?? null) ? $catalog['filters'] : [];
 $sectionContext = is_array($catalog['section_context'] ?? null) ? $catalog['section_context'] : null;
 $sectionFilterSummary = is_array($catalog['section_filter_summary'] ?? null) ? $catalog['section_filter_summary'] : [];
@@ -389,6 +392,10 @@ require __DIR__ . '/partials/store-filter-group.php';
 
 <?php if (!empty($catalog['apiError'])): ?>
   <p class="mb-4 rounded-xl border bg-red-50 border-red-200 text-red-700 px-4 py-3 text-sm"><?= h((string) $catalog['apiError']) ?></p>
+<?php endif; ?>
+
+<?php if ($cartNotice !== ''): ?>
+  <p class="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm"><?= h($cartNotice) ?></p>
 <?php endif; ?>
 
 <div class="store-layout <?= ($allowClientFilters || $isSectionBrowse) ? 'has-sidebar' : '' ?>" id="store-filters-root">

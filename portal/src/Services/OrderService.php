@@ -43,9 +43,11 @@ final class OrderService
         $guestPhone = trim($guestPhone);
         $notesAr = $notesAr !== null ? trim($notesAr) : null;
 
-        if ($shareLinkId === '' || $guestNameAr === '' || $guestPhone === '' || $items === []) {
+        if ($guestNameAr === '' || $guestPhone === '' || $items === []) {
             return ['ok' => false, 'message' => 'بيانات الطلب غير مكتملة.'];
         }
+
+        $shareLinkId = trim($shareLinkId);
 
         $split = StockReservationService::splitCartByAvailability($items, true);
         $availableItems = $split['available'];
@@ -186,7 +188,7 @@ final class OrderService
             );
             $orderStmt->execute([
                 'order_number' => $orderNumber,
-                'share_link_id' => $shareLinkId,
+                'share_link_id' => $shareLinkId !== '' ? $shareLinkId : null,
                 'web_customer_id' => $webCustomerId !== null && trim($webCustomerId) !== '' ? trim($webCustomerId) : null,
                 'guest_name_ar' => $guestNameAr,
                 'guest_phone' => $guestPhone,
