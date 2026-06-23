@@ -391,6 +391,38 @@ function format_packages_display(float $qty): string
     return \Portal\Services\StockReservationService::formatPackages($qty);
 }
 
+/** @param array<string, mixed> $line */
+function store_line_has_offer(array $line): bool
+{
+    if (!empty($line['has_offer']) || !empty($line['special_offer_id'])) {
+        return true;
+    }
+
+    $origSp = (float) ($line['original_sale_price_sp'] ?? $line['original_package_sale_price_sp'] ?? 0);
+    $saleSp = (float) ($line['sale_price_sp'] ?? 0);
+    if ($origSp > 0 && $saleSp > 0 && $origSp > $saleSp + 0.009) {
+        return true;
+    }
+
+    $origUsd = (float) ($line['original_sale_price_usd'] ?? $line['original_package_sale_price_usd'] ?? 0);
+    $saleUsd = (float) ($line['sale_price_usd'] ?? 0);
+
+    return $origUsd > 0 && $saleUsd > 0 && $origUsd > $saleUsd + 0.009;
+}
+
+/** @param array<string, mixed> $line */
+function store_line_offer_badge(array $line): string
+{
+    $badge = trim((string) ($line['offer_badge'] ?? ''));
+    if ($badge !== '') {
+        return $badge;
+    }
+
+    $title = trim((string) ($line['offer_title_ar'] ?? ''));
+
+    return $title !== '' ? $title : 'عرض خاص';
+}
+
 /**
  * @return array{
  *   policyRemaining: float|null,

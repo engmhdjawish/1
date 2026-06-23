@@ -90,40 +90,55 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
                   <?php foreach ($cartItems as $line): ?>
                     <?php
                       $materialGuid = (string) ($line['material_guid'] ?? '');
-                      $qty = max(1, (int) round((float) ($line['quantity'] ?? 1)));
+                      $qty = max(0.01, (float) ($line['quantity'] ?? 1));
                       $packageUnit = (string) ($line['package_unit'] ?? 'طرد');
                       $priceSp = (float) ($line['sale_price_sp'] ?? 0);
                       $priceUsd = (float) ($line['sale_price_usd'] ?? 0);
+                      $origSp = (float) ($line['original_sale_price_sp'] ?? 0);
+                      $origUsd = (float) ($line['original_sale_price_usd'] ?? 0);
+                      $lineHasOffer = store_line_has_offer($line);
                       $lineTotalSp = $qty * $priceSp;
                       $lineTotalUsd = $qty * $priceUsd;
                     ?>
-                    <tr data-cart-line="<?= h($materialGuid) ?>">
+                    <tr data-cart-line="<?= h($materialGuid) ?>" class="<?= $lineHasOffer ? 'store-cart-table__row--offer' : '' ?>">
                       <td>
                         <div class="store-cart-product">
                           <?php if (!empty($line['image_url'])): ?>
                             <?php $zoomUrl = material_image_zoom_url((string) $line['image_url']); ?>
-                            <button type="button" class="store-cart-product__thumb" data-cart-image-zoom="<?= h($zoomUrl) ?>" title="تكبير الصورة للتدقيق">
+                            <button type="button" class="store-cart-product__thumb<?= $lineHasOffer ? ' store-cart-product__thumb--offer' : '' ?>" data-cart-image-zoom="<?= h($zoomUrl) ?>" title="تكبير الصورة للتدقيق">
                               <img src="<?= h((string) $line['image_url']) ?>" alt="">
+                              <?php if ($lineHasOffer): ?>
+                                <span class="store-cart-product__offer-dot" aria-hidden="true"></span>
+                              <?php endif; ?>
                               <span class="store-cart-product__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span>
                             </button>
                           <?php else: ?>
-                            <div class="store-cart-product__placeholder">
+                            <div class="store-cart-product__placeholder<?= $lineHasOffer ? ' store-cart-product__placeholder--offer' : '' ?>">
                               <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>
                             </div>
                           <?php endif; ?>
                           <div>
+                            <?php if ($lineHasOffer): ?>
+                              <?php $badge = store_line_offer_badge($line); require __DIR__ . '/partials/offer-item-badge.php'; ?>
+                            <?php endif; ?>
                             <div class="font-bold text-sm"><?= h((string) ($line['material_name_ar'] ?? '')) ?></div>
                             <?php if (!empty($line['material_code'])): ?>
-                              <div class="text-xs text-gray-500 font-mono" dir="ltr"><?= h((string) $line['material_code']) ?></div>
+                              <div class="text-xs text-gray-500 font-mono store-num" dir="ltr"><?= h((string) $line['material_code']) ?></div>
                             <?php endif; ?>
                           </div>
                         </div>
                       </td>
                       <td class="text-sm whitespace-nowrap">
                         <?php if ($showPriceSyp && $priceSp > 0): ?>
-                          <span class="font-bold text-primary"><?= format_money($priceSp, true) ?> ل.س</span>
+                          <?php if ($lineHasOffer && $origSp > $priceSp): ?>
+                            <div class="text-xs text-gray-400 line-through store-num" dir="ltr"><?= format_money($origSp, true) ?> ل.س</div>
+                          <?php endif; ?>
+                          <span class="font-bold text-primary store-num" dir="ltr"><?= format_money($priceSp, true) ?> ل.س</span>
                         <?php elseif ($showPriceUsd && $priceUsd > 0): ?>
-                          <span class="font-bold text-emerald-700">$<?= number_format($priceUsd, 2, '.', ',') ?></span>
+                          <?php if ($lineHasOffer && $origUsd > $priceUsd): ?>
+                            <div class="text-xs text-gray-400 line-through store-num" dir="ltr">$<?= number_format($origUsd, 2, '.', ',') ?></div>
+                          <?php endif; ?>
+                          <span class="font-bold text-emerald-700 store-num" dir="ltr">$<?= number_format($priceUsd, 2, '.', ',') ?></span>
                         <?php else: ?>
                           —
                         <?php endif; ?>
@@ -133,16 +148,19 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
                           <button type="button" data-bump="-1" aria-label="إنقاص">−</button>
                           <input
                             type="number"
-                            min="1"
-                            <?php if ($maxPackagesPerMaterial !== null): ?>max="<?= (int) $maxPackagesPerMaterial ?>"<?php endif; ?>
-                            value="<?= (int) $qty ?>"
+                            class="store-num"
+                            dir="ltr"
+                            min="0.01"
+                            step="0.01"
+                            <?php if ($maxPackagesPerMaterial !== null): ?>max="<?= h((string) $maxPackagesPerMaterial) ?>"<?php endif; ?>
+                            value="<?= h(format_packages_display($qty)) ?>"
                             data-qty-input
                           >
                           <button type="button" data-bump="1" aria-label="زيادة">+</button>
                         </div>
                         <div class="text-xs text-gray-500 mt-1"><?= h($packageUnit) ?></div>
                       </td>
-                      <td class="font-bold text-sm whitespace-nowrap">
+                      <td class="font-bold text-sm whitespace-nowrap store-num" dir="ltr">
                         <?php if ($showPriceSyp): ?>
                           <?= format_money($lineTotalSp, true) ?> ل.س
                         <?php elseif ($showPriceUsd): ?>

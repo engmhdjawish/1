@@ -531,6 +531,8 @@ final class SpecialOfferService
         $line['sale_price_usd'] = $pricing['effective_package_sale_price_usd'];
         $line['special_offer_id'] = (string) ($offer['id'] ?? '');
         $line['offer_badge'] = trim((string) ($offer['badge_text_ar'] ?? '')) ?: self::defaultBadge($offer);
+        $line['has_offer'] = true;
+        $line['offer_title_ar'] = trim((string) ($offer['title_ar'] ?? ''));
 
         return ShareCartService::normalizeLine($line);
     }

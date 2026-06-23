@@ -505,6 +505,39 @@ final class ShareCartService
         return $line;
     }
 
+    /** @param array<string, mixed> $line */
+    public static function enrichLineWithOffer(array $line): array
+    {
+        if (!empty($line['has_offer']) && trim((string) ($line['offer_badge'] ?? '')) !== '') {
+            return $line;
+        }
+
+        $guid = trim((string) ($line['material_guid'] ?? ''));
+        if ($guid === '') {
+            return $line;
+        }
+
+        $product = StoreCatalogService::findMaterial($guid);
+        if ($product === null) {
+            return $line;
+        }
+
+        $overlay = SpecialOfferService::pricingOverlay($product);
+        if (empty($overlay['has_offer']) || !is_array($overlay['offer'] ?? null)) {
+            return $line;
+        }
+
+        $baseLine = array_merge(self::lineFromApiItem($product, true), $line);
+        $baseLine['quantity'] = (float) ($line['quantity'] ?? 1);
+        $enriched = SpecialOfferService::applyToCartLine($baseLine, $overlay['offer']);
+        $enriched['quantity'] = (float) ($line['quantity'] ?? 1);
+        if (!empty($line['image_url'])) {
+            $enriched['image_url'] = (string) $line['image_url'];
+        }
+
+        return $enriched;
+    }
+
     /** @param array<string, mixed> $apiItem */
     public static function lineFromApiItem(array $apiItem, bool $capturePrices): array
     {

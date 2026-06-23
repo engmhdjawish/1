@@ -577,19 +577,25 @@ final class OrderService
 
         $itemsStmt = Database::pdo()->prepare(
             'SELECT
-                id::text AS id,
-                material_guid::text AS material_guid,
-                material_code,
-                material_name_ar,
-                quantity,
-                pcs_per_box,
-                sale_price_sp,
-                sale_price_usd,
-                image_url,
-                sort_order
-             FROM order_items
-             WHERE order_id = :order_id
-             ORDER BY sort_order ASC, material_name_ar ASC'
+                oi.id::text AS id,
+                oi.material_guid::text AS material_guid,
+                oi.material_code,
+                oi.material_name_ar,
+                oi.quantity,
+                oi.pcs_per_box,
+                oi.sale_price_sp,
+                oi.sale_price_usd,
+                oi.original_sale_price_sp,
+                oi.original_sale_price_usd,
+                oi.special_offer_id::text AS special_offer_id,
+                oi.image_url,
+                oi.sort_order,
+                so.badge_text_ar AS offer_badge,
+                so.title_ar AS offer_title_ar
+             FROM order_items oi
+             LEFT JOIN special_offers so ON so.id = oi.special_offer_id
+             WHERE oi.order_id = :order_id
+             ORDER BY oi.sort_order ASC, oi.material_name_ar ASC'
         );
         $itemsStmt->execute(['order_id' => $orderId]);
         $items = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -609,6 +615,11 @@ final class OrderService
             $item['line_total_usd'] = $quantity * $packagePriceUsd;
             $item['line_total_sp'] = $quantity * $packagePriceSp;
             $item['pieces_count'] = $quantity * $packaging;
+            $item['has_offer'] = !empty($item['special_offer_id'])
+                || (
+                    (float) ($item['original_sale_price_sp'] ?? 0) > 0
+                    && (float) ($item['original_sale_price_sp'] ?? 0) > $packagePriceSp + 0.009
+                );
 
             $totalPackages += $quantity;
             $totalPieces += $quantity * $packaging;

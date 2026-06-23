@@ -70,23 +70,42 @@ $timeline = is_array($order['timeline'] ?? null) ? $order['timeline'] : [];
         <h2 class="font-bold mb-4">الأصناف (<?= count($items) ?>)</h2>
         <ul class="divide-y divide-gray-100">
           <?php foreach ($items as $item): ?>
-            <li class="py-3 flex gap-3 items-start">
+            <?php
+              $itemHasOffer = store_line_has_offer($item);
+              $itemBadge = store_line_offer_badge($item);
+            ?>
+            <li class="py-3 flex gap-3 items-start<?= $itemHasOffer ? ' store-order-item--offer' : '' ?>">
               <?php if (!empty($item['image_url'])): ?>
-                <img src="<?= h((string) $item['image_url']) ?>" alt="" class="w-14 h-14 rounded-lg object-cover bg-gray-100 shrink-0">
+                <div class="relative shrink-0">
+                  <img src="<?= h((string) $item['image_url']) ?>" alt="" class="w-14 h-14 rounded-lg object-cover bg-gray-100<?= $itemHasOffer ? ' ring-2 ring-primary/40' : '' ?>">
+                  <?php if ($itemHasOffer): ?>
+                    <span class="store-order-item__offer-dot" aria-hidden="true"></span>
+                  <?php endif; ?>
+                </div>
               <?php else: ?>
-                <div class="w-14 h-14 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-400">
+                <div class="w-14 h-14 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-400<?= $itemHasOffer ? ' ring-2 ring-primary/30' : '' ?>">
                   <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>
                 </div>
               <?php endif; ?>
               <div class="flex-1 min-w-0">
+                <?php if ($itemHasOffer): ?>
+                  <?php $badge = $itemBadge; $size = 'sm'; require __DIR__ . '/partials/offer-item-badge.php'; ?>
+                <?php endif; ?>
                 <div class="font-bold text-sm"><?= h((string) ($item['material_name_ar'] ?? '')) ?></div>
                 <?php if (!empty($item['material_code'])): ?>
-                  <div class="text-xs text-gray-500 font-mono" dir="ltr"><?= h((string) $item['material_code']) ?></div>
+                  <div class="text-xs text-gray-500 font-mono store-num" dir="ltr"><?= h((string) $item['material_code']) ?></div>
                 <?php endif; ?>
-                <div class="text-xs text-gray-600 mt-1">
-                  <?= (int) round((float) ($item['quantity'] ?? 0)) ?> طرد
+                <div class="text-xs text-gray-600 mt-1 store-num" dir="ltr">
+                  <?= h(format_packages_display((float) ($item['quantity'] ?? 0))) ?> طرد
                   <?php if (!empty($item['line_total_sp'])): ?>
                     · <?= format_money((float) $item['line_total_sp'], true) ?> ل.س
+                  <?php endif; ?>
+                  <?php
+                    $origSp = (float) ($item['original_sale_price_sp'] ?? 0);
+                    $saleSp = (float) ($item['sale_price_sp'] ?? 0);
+                  ?>
+                  <?php if ($itemHasOffer && $origSp > $saleSp): ?>
+                    <span class="text-gray-400 line-through ms-1"><?= format_money($origSp, true) ?> ل.س</span>
                   <?php endif; ?>
                 </div>
               </div>

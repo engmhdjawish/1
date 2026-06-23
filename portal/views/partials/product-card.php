@@ -60,6 +60,8 @@ $materialCode = trim((string) ($item['materialCode'] ?? $item['code'] ?? ''));
 $materialType = trim((string) ($item['materialType'] ?? ''));
 $manufacturer = trim((string) ($item['manufacturer'] ?? ''));
 $showAnyPrice = ($showPriceSyp || $showPriceUsd) && (bool) ($displayOptions['show_price'] ?? false);
+$hasOffer = !empty($item['has_offer']);
+$offerBadge = trim((string) ($item['offer_badge'] ?? ''));
 $cartItems = $allowCart ? StoreCartService::items() : [];
 $cartQtyForItem = $guid !== '' ? (float) ($cartItems[$guid]['quantity'] ?? 0) : 0.0;
 $previewPayload = $useImagePreview
@@ -70,7 +72,7 @@ $previewJson = $previewPayload !== null
     : '';
 ?>
 <article
-  class="store-product-card"
+  class="store-product-card<?= $hasOffer ? ' store-product-card--offer' : '' ?>"
   <?php if ($useImagePreview && $guid !== ''): ?>
     data-store-preview-card
     data-preview-guid="<?= h($guid) ?>"
@@ -79,6 +81,12 @@ $previewJson = $previewPayload !== null
 >
   <?php if ($useImagePreview && $showImages): ?>
     <button type="button" class="store-product-card__media store-product-card__media--preview" data-store-product-preview title="معاينة الصورة والأسعار">
+      <?php if ($hasOffer): ?>
+        <span class="store-product-card__offer-ribbon">
+          <span class="material-symbols-outlined text-sm" aria-hidden="true">local_offer</span>
+          <?= h($offerBadge !== '' ? $offerBadge : 'عرض') ?>
+        </span>
+      <?php endif; ?>
       <?php if ($materialType !== ''): ?>
         <span class="store-product-card__chip"><?= h($materialType) ?></span>
       <?php endif; ?>
@@ -108,6 +116,12 @@ $previewJson = $previewPayload !== null
   <?php endif; ?>
     <?php if ($showImages && !$useImagePreview): ?>
       <div class="store-product-card__media">
+        <?php if ($hasOffer): ?>
+          <span class="store-product-card__offer-ribbon">
+            <span class="material-symbols-outlined text-sm" aria-hidden="true">local_offer</span>
+            <?= h($offerBadge !== '' ? $offerBadge : 'عرض') ?>
+          </span>
+        <?php endif; ?>
         <?php if ($materialType !== ''): ?>
           <span class="store-product-card__chip"><?= h($materialType) ?></span>
         <?php endif; ?>

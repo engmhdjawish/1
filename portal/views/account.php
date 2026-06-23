@@ -107,15 +107,28 @@ $statusOptions = [
             </thead>
             <tbody class="divide-y">
               <?php foreach ($items as $item): ?>
-                <tr>
+                <?php $itemHasOffer = store_line_has_offer($item); ?>
+                <tr class="<?= $itemHasOffer ? 'store-order-item-row--offer' : '' ?>">
                   <td class="py-2">
+                    <?php if ($itemHasOffer): ?>
+                      <?php $badge = store_line_offer_badge($item); $size = 'sm'; require __DIR__ . '/partials/offer-item-badge.php'; ?>
+                    <?php endif; ?>
                     <div class="font-bold"><?= h((string) ($item['material_name_ar'] ?? '')) ?></div>
                     <?php if (!empty($item['material_code'])): ?>
-                      <div class="text-xs text-gray-500 font-mono" dir="ltr"><?= h((string) $item['material_code']) ?></div>
+                      <div class="text-xs text-gray-500 font-mono store-num" dir="ltr"><?= h((string) $item['material_code']) ?></div>
                     <?php endif; ?>
                   </td>
-                  <td class="py-2"><?= h((string) ($item['quantity'] ?? '0')) ?></td>
-                  <td class="py-2 font-bold"><?= format_money((float) ($item['line_total_sp'] ?? 0), true) ?></td>
+                  <td class="py-2 store-num" dir="ltr"><?= h(format_packages_display((float) ($item['quantity'] ?? 0))) ?></td>
+                  <td class="py-2 font-bold">
+                    <?= format_money((float) ($item['line_total_sp'] ?? 0), true) ?> ل.س
+                    <?php
+                      $origSp = (float) ($item['original_sale_price_sp'] ?? 0);
+                      $saleSp = (float) ($item['sale_price_sp'] ?? 0);
+                    ?>
+                    <?php if ($itemHasOffer && $origSp > $saleSp): ?>
+                      <div class="text-xs text-gray-400 line-through font-normal store-num" dir="ltr"><?= format_money($origSp * (float) ($item['quantity'] ?? 0), true) ?> ل.س</div>
+                    <?php endif; ?>
+                  </td>
                 </tr>
               <?php endforeach; ?>
             </tbody>

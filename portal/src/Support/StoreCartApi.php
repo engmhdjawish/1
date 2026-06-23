@@ -198,7 +198,10 @@ final class StoreCartApi
     ): array {
         $display = StoreCatalogService::displayOptions();
         $maxPackages = StorePolicyService::maxPackagesPerMaterial();
-        $items = array_values(StoreCartService::items());
+        $items = array_values(array_map(
+            static fn (array $line): array => ShareCartService::enrichLineWithOffer($line),
+            StoreCartService::items()
+        ));
         $unavailable = array_values(StoreCartService::unavailableItems());
         $totals = StoreCartService::totals();
         $cartQtyByGuid = [];

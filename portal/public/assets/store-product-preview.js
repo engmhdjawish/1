@@ -234,6 +234,8 @@
 
   const render = (p) => {
     const item = syncCartQtyFromDom(p);
+    const panel = modal.querySelector('.store-product-preview__panel');
+    if (panel) panel.classList.toggle('store-product-preview__panel--offer', !!item.hasOffer);
     const imageSrc = item.zoomUrl || item.thumbUrl || '';
     if (imgEl) {
       imgEl.src = imageSrc;
@@ -242,6 +244,21 @@
     }
 
     if (titleEl) titleEl.textContent = item.name || '—';
+
+    const imageWrap = modal.querySelector('.store-product-preview__image-wrap');
+    if (imageWrap) {
+      let banner = imageWrap.querySelector('.store-product-preview__offer-banner');
+      if (item.hasOffer) {
+        if (!banner) {
+          banner = document.createElement('div');
+          banner.className = 'store-product-preview__offer-banner';
+          imageWrap.insertBefore(banner, imageWrap.firstChild);
+        }
+        banner.innerHTML = `<span class="material-symbols-outlined text-base" aria-hidden="true">local_offer</span>${esc(item.offerBadge || 'عرض خاص')}`;
+      } else if (banner) {
+        banner.remove();
+      }
+    }
 
     if (subtitleEl) {
       const parts = [

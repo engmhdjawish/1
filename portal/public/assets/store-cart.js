@@ -86,6 +86,34 @@
     return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   };
 
+  const formatQty = (amount) => {
+    const n = Number(amount) || 0;
+    return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  };
+
+  const lineHasOffer = (line) => {
+    if (!line || typeof line !== 'object') return false;
+    if (line.has_offer || line.special_offer_id) return true;
+    const origSp = Number(line.original_sale_price_sp) || 0;
+    const saleSp = Number(line.sale_price_sp) || 0;
+    if (origSp > 0 && saleSp > 0 && origSp > saleSp + 0.009) return true;
+    const origUsd = Number(line.original_sale_price_usd) || 0;
+    const saleUsd = Number(line.sale_price_usd) || 0;
+    return origUsd > 0 && saleUsd > 0 && origUsd > saleUsd + 0.009;
+  };
+
+  const lineOfferBadge = (line) => {
+    const badge = String(line?.offer_badge || '').trim();
+    if (badge) return badge;
+    const title = String(line?.offer_title_ar || '').trim();
+    return title || 'عرض خاص';
+  };
+
+  const offerBadgeHtml = (line) => {
+    if (!lineHasOffer(line)) return '';
+    return `<span class="store-offer-badge store-offer-badge--sm"><span class="material-symbols-outlined" aria-hidden="true">sell</span>${escapeHtml(lineOfferBadge(line))}</span>`;
+  };
+
   const updateBadge = (count) => {
     document.querySelectorAll('[data-store-cart-badge]').forEach((badge) => {
       const n = Math.max(0, parseInt(count, 10) || 0);
@@ -341,17 +369,21 @@
           html += '<th>المنتج</th><th>سعر الطرد</th><th>الكمية</th><th>الإجمالي</th><th></th></tr></thead><tbody>';
           items.forEach((line) => {
             const guid = line.material_guid || '';
-            const qty = Math.max(1, Math.round(Number(line.quantity) || 1));
+            const qty = Math.max(0.01, Number(line.quantity) || 1);
             const packageUnit = line.package_unit || 'طرد';
             const priceSp = Number(line.sale_price_sp) || 0;
             const priceUsd = Number(line.sale_price_usd) || 0;
+            const origSp = Number(line.original_sale_price_sp) || 0;
+            const origUsd = Number(line.original_sale_price_usd) || 0;
+            const hasOffer = lineHasOffer(line);
             const lineTotalSp = qty * priceSp;
             const lineTotalUsd = qty * priceUsd;
-            const unitPriceCell = showPriceSyp && priceSp > 0
-              ? `<span class="font-bold text-primary">${formatMoney(priceSp)} ل.س</span>`
-              : showPriceUsd && priceUsd > 0
-                ? `<span class="font-bold text-emerald-700">$${formatUsd(priceUsd)}</span>`
-                : '—';
+            let unitPriceCell = '—';
+            if (showPriceSyp && priceSp > 0) {
+              unitPriceCell = `${hasOffer && origSp > priceSp ? `<div class="text-xs text-gray-400 line-through store-num" dir="ltr">${formatMoney(origSp)} ل.س</div>` : ''}<span class="font-bold text-primary store-num" dir="ltr">${formatMoney(priceSp)} ل.س</span>`;
+            } else if (showPriceUsd && priceUsd > 0) {
+              unitPriceCell = `${hasOffer && origUsd > priceUsd ? `<div class="text-xs text-gray-400 line-through store-num" dir="ltr">$${formatUsd(origUsd)}</div>` : ''}<span class="font-bold text-emerald-700 store-num" dir="ltr">$${formatUsd(priceUsd)}</span>`;
+            }
             const lineTotalCell = showPriceSyp
               ? `${formatMoney(lineTotalSp)} ل.س`
               : showPriceUsd
@@ -361,24 +393,25 @@
               ? (() => {
                   const thumb = escapeHtml(line.image_url);
                   const zoom = escapeHtml(imageZoomUrl(line.image_url));
-                  return `<button type="button" class="store-cart-product__thumb" data-cart-image-zoom="${zoom}" title="تكبير الصورة للتدقيق"><img src="${thumb}" alt=""><span class="store-cart-product__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span></button>`;
+                  return `<button type="button" class="store-cart-product__thumb${hasOffer ? ' store-cart-product__thumb--offer' : ''}" data-cart-image-zoom="${zoom}" title="تكبير الصورة للتدقيق"><img src="${thumb}" alt="">${hasOffer ? '<span class="store-cart-product__offer-dot" aria-hidden="true"></span>' : ''}<span class="store-cart-product__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span></button>`;
                 })()
-              : '<div class="store-cart-product__placeholder"><span class="material-symbols-outlined">inventory_2</span></div>';
-            html += `<tr data-cart-line="${escapeHtml(guid)}">
+              : `<div class="store-cart-product__placeholder${hasOffer ? ' store-cart-product__placeholder--offer' : ''}"><span class="material-symbols-outlined">inventory_2</span></div>`;
+            html += `<tr data-cart-line="${escapeHtml(guid)}" class="${hasOffer ? 'store-cart-table__row--offer' : ''}">
               <td><div class="store-cart-product">${img}<div>
+                ${offerBadgeHtml(line)}
                 <div class="font-bold text-sm">${escapeHtml(line.material_name_ar || '')}</div>
-                ${line.material_code ? `<div class="text-xs text-gray-500 font-mono" dir="ltr">${escapeHtml(line.material_code)}</div>` : ''}
+                ${line.material_code ? `<div class="text-xs text-gray-500 font-mono store-num" dir="ltr">${escapeHtml(line.material_code)}</div>` : ''}
               </div></div></td>
               <td class="text-sm whitespace-nowrap">${unitPriceCell}</td>
               <td>
                 <div class="store-qty-stepper" data-cart-qty-control data-guid="${escapeHtml(guid)}">
                   <button type="button" data-bump="-1" aria-label="إنقاص">−</button>
-                  <input type="number" min="1" ${max ? `max="${Math.floor(max)}"` : ''} value="${qty}" data-qty-input>
+                  <input type="number" class="store-num" dir="ltr" min="0.01" step="0.01" ${max ? `max="${max}"` : ''} value="${formatQty(qty)}" data-qty-input>
                   <button type="button" data-bump="1" aria-label="زيادة">+</button>
                 </div>
                 <div class="text-xs text-gray-500 mt-1">${escapeHtml(packageUnit)}</div>
               </td>
-              <td class="font-bold text-sm">${lineTotalCell}</td>
+              <td class="font-bold text-sm store-num" dir="ltr">${lineTotalCell}</td>
               <td class="text-center">
                 <button type="button" class="p-2 rounded-full text-red-600 hover:bg-red-50" data-remove-item="${escapeHtml(guid)}" aria-label="حذف">
                   <span class="material-symbols-outlined">delete</span>

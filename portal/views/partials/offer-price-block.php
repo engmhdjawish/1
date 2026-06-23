@@ -42,7 +42,10 @@ $showUnitUsd = $showPriceUsd && ($effUnitUsd > 0 || $origUnitUsd > 0);
 ?>
 <div class="offer-price-block">
   <?php if ($badge !== ''): ?>
-    <span class="offer-price-block__badge"><?= h($badge) ?></span>
+    <span class="offer-price-block__badge">
+      <span class="material-symbols-outlined text-xs" aria-hidden="true">sell</span>
+      <?= h($badge) ?>
+    </span>
   <?php endif; ?>
 
   <?php if ($showPackSp): ?>
