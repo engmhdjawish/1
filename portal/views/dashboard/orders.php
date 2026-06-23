@@ -10,6 +10,7 @@ declare(strict_types=1);
 /** @var string $flashType */
 /** @var bool $canManageOrders */
 /** @var bool $itemEditSchemaReady */
+/** @var string $staffEditBlockReason */
 /** @var array<string, mixed>|null $orderDetails */
 
 $statusLabels = [
@@ -220,6 +221,7 @@ $truncate = static function (string $text, int $max = 48): string {
                         'limit' => $filters['limit'] ?? 50,
                         'details' => (string) ($row['id'] ?? ''),
                     ])) ?>"
+                    data-dashboard-no-nav
                     class="h-8 px-3 inline-flex items-center rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"
                   >تفاصيل</a>
                   <?php if ($canManageOrders): ?>
@@ -262,7 +264,7 @@ $truncate = static function (string $text, int $max = 48): string {
           <h2 id="order-details-title" class="text-lg font-extrabold text-slate-900 truncate"><?= h((string) ($orderDetails['order_number'] ?? '')) ?></h2>
           <p class="text-xs text-text-muted mt-0.5"><?= h((string) ($orderDetails['share_link_name'] ?? 'طلب مباشر')) ?> · <?= h((string) ($orderDetails['created_at'] ?? '')) ?></p>
         </div>
-        <a href="<?= h($buildOrdersUrl($filters)) ?>" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-border-subtle hover:bg-surface-low shrink-0" aria-label="إغلاق">
+        <a href="<?= h($buildOrdersUrl($filters)) ?>" data-dashboard-no-nav class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-border-subtle hover:bg-surface-low shrink-0" aria-label="إغلاق">
           <span class="material-symbols-outlined">close</span>
         </a>
       </div>
@@ -296,19 +298,13 @@ $truncate = static function (string $text, int $max = 48): string {
         <?php if ($detailItems === []): ?>
           <p class="text-sm text-text-muted text-center py-8">لا توجد أصناف في هذا الطلب.</p>
         <?php else: ?>
-          <?php if ($canManageOrders && !$itemEditSchemaReady): ?>
+          <?php if ($canManageOrders && $staffEditBlockReason !== ''): ?>
             <p class="text-[11px] text-red-800 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
-              تعذر تفعيل تعديل الأصناف تلقائياً. شغّل ملف الترحيل
-              <code dir="ltr">docs/portal-migration-order-item-edits.sql</code>
-              على قاعدة PostgreSQL.
+              <?= h($staffEditBlockReason) ?>
             </p>
           <?php elseif ($canManageOrders && !empty($orderDetails['can_staff_edit'])): ?>
             <p class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
-              يمكنك تعديل الأصناف قبل المزامنة — سيظهر السبب لصاحب الطلب.
-            </p>
-          <?php elseif ($canManageOrders && empty($orderDetails['can_staff_edit'])): ?>
-            <p class="text-[11px] text-text-muted bg-surface-low border border-border-subtle rounded-lg px-3 py-2 mb-3">
-              لا يمكن تعديل الأصناف (الطلب مكتمل أو تمت مزامنته).
+              يمكنك تعديل الأصناف قبل إتمام الطلب — سيظهر السبب لصاحب الطلب.
             </p>
           <?php endif; ?>
           <div class="store-order-lines">

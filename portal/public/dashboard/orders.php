@@ -81,6 +81,7 @@ $detailsId = trim((string) ($_GET['details'] ?? ''));
 
 $orders = OrderService::list($filters);
 $orderDetails = $detailsId !== '' ? OrderService::getOrderDetails($detailsId) : null;
+$staffEditBlockReason = is_array($orderDetails) ? OrderService::staffEditBlockReason($orderDetails) : '';
 $statusCounts = OrderService::statusCounts();
 $syncCounts = OrderService::syncCounts();
 $user = WebSession::user();
@@ -91,5 +92,4 @@ require dirname(__DIR__, 2) . '/views/dashboard/orders.php';
 $content = ob_get_clean();
 $title = 'إدارة الطلبات';
 $dashboardPageAssets = 'orders';
-$extraHead = '<link href="/css/store-ui.css" rel="stylesheet"><link href="/css/store-cart.css" rel="stylesheet"><link href="/css/customer-portal.css" rel="stylesheet">';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

@@ -20,13 +20,20 @@ final class OrderService
         }
 
         try {
-            $stmt = Database::pdo()->query(
+            $pdo = Database::pdo();
+            $changesTable = (bool) $pdo->query(
                 "SELECT 1
                  FROM information_schema.tables
                  WHERE table_schema = 'public' AND table_name = 'order_item_changes'
                  LIMIT 1"
-            );
-            self::$hasItemEditSchema = (bool) $stmt->fetchColumn();
+            )->fetchColumn();
+            $statusColumn = (bool) $pdo->query(
+                "SELECT 1
+                 FROM information_schema.columns
+                 WHERE table_schema = 'public' AND table_name = 'order_items' AND column_name = 'status'
+                 LIMIT 1"
+            )->fetchColumn();
+            self::$hasItemEditSchema = $changesTable && $statusColumn;
         } catch (\Throwable) {
             self::$hasItemEditSchema = false;
         }
@@ -746,13 +753,29 @@ final class OrderService
         }
 
         $status = (string) ($order['status'] ?? '');
-        if (in_array($status, ['completed', 'cancelled'], true)) {
-            return false;
+
+        return in_array($status, ['pending', 'confirmed'], true);
+    }
+
+    /** @param array<string, mixed> $order */
+    public static function staffEditBlockReason(array $order): string
+    {
+        if (!self::hasItemEditSchema()) {
+            return 'تعذر تفعيل تعديل الأصناف. شغّل ملف الترحيل docs/portal-migration-order-item-edits.sql على قاعدة PostgreSQL.';
         }
 
-        $sync = (string) ($order['amine_sync_status'] ?? 'none');
+        $status = (string) ($order['status'] ?? '');
+        if ($status === 'completed') {
+            return 'لا يمكن تعديل الأصناف لأن الطلب مكتمل.';
+        }
+        if ($status === 'cancelled') {
+            return 'لا يمكن تعديل الأصناف لأن الطلب ملغى.';
+        }
+        if (!in_array($status, ['pending', 'confirmed'], true)) {
+            return 'لا يمكن تعديل الأصناف في حالة الطلب الحالية.';
+        }
 
-        return $sync !== 'synced';
+        return '';
     }
 
     /**
@@ -782,7 +805,7 @@ final class OrderService
             return ['ok' => false, 'message' => 'الطلب غير موجود.'];
         }
         if (!self::canStaffEditOrder($order)) {
-            return ['ok' => false, 'message' => 'لا يمكن تعديل هذا الطلب (مكتمل أو تمت مزامنته).'];
+            return ['ok' => false, 'message' => self::staffEditBlockReason($order) ?: 'لا يمكن تعديل هذا الطلب.'];
         }
 
         $item = self::findOrderItem($order, $itemId);
@@ -874,7 +897,7 @@ final class OrderService
             return ['ok' => false, 'message' => 'الطلب غير موجود.'];
         }
         if (!self::canStaffEditOrder($order)) {
-            return ['ok' => false, 'message' => 'لا يمكن تعديل هذا الطلب.'];
+            return ['ok' => false, 'message' => self::staffEditBlockReason($order) ?: 'لا يمكن تعديل هذا الطلب.'];
         }
 
         $item = self::findOrderItem($order, $itemId);
@@ -946,7 +969,7 @@ final class OrderService
             return ['ok' => false, 'message' => 'الطلب غير موجود.'];
         }
         if (!self::canStaffEditOrder($order)) {
-            return ['ok' => false, 'message' => 'لا يمكن تعديل هذا الطلب.'];
+            return ['ok' => false, 'message' => self::staffEditBlockReason($order) ?: 'لا يمكن تعديل هذا الطلب.'];
         }
 
         $item = self::findOrderItem($order, $itemId);

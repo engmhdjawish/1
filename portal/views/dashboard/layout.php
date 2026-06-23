@@ -73,6 +73,9 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
   <link href="/assets/dashboard/dashboard.css" rel="stylesheet">
+  <link href="/css/store-ui.css" rel="stylesheet">
+  <link href="/css/store-cart.css" rel="stylesheet">
+  <link href="/css/customer-portal.css" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {

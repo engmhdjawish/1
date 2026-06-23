@@ -174,20 +174,36 @@
     },
   };
 
-  function ensureStylesheet(href) {
-    if (document.querySelector(`link[rel="stylesheet"][href="${href}"]`)) {
-      return;
+  function loadStylesheet(href) {
+    const existing = document.querySelector(`link[rel="stylesheet"][href="${href}"]`);
+    if (existing) {
+      if (existing.sheet) {
+        return Promise.resolve();
+      }
+      return new Promise((resolve, reject) => {
+        existing.addEventListener('load', () => resolve(), { once: true });
+        existing.addEventListener('error', () => reject(new Error(href)), { once: true });
+      });
     }
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = href;
-    document.head.appendChild(link);
+
+    return new Promise((resolve, reject) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      link.onload = () => resolve();
+      link.onerror = () => reject(new Error(href));
+      document.head.appendChild(link);
+    });
   }
 
-  function ensurePageAssets(key) {
+  function ensureStylesheet(href) {
+    loadStylesheet(href).catch(() => {});
+  }
+
+  async function ensurePageAssets(key) {
     const bundle = PAGE_ASSETS[key];
     if (!bundle) return;
-    (bundle.styles || []).forEach(ensureStylesheet);
+    await Promise.all((bundle.styles || []).map((href) => loadStylesheet(href)));
   }
 
   function bindOrderImageZoom(root) {
@@ -289,7 +305,7 @@
       }
       main.innerHTML = newMain.innerHTML;
       syncDashboardChrome(doc);
-      ensurePageAssets(newMain.getAttribute('data-dashboard-page-assets') || '');
+      await ensurePageAssets(newMain.getAttribute('data-dashboard-page-assets') || '');
       const route = newMain.getAttribute('data-current-route') || normalizeDashboardRoute(url);
       if (route) {
         main.setAttribute('data-current-route', route);
@@ -491,9 +507,9 @@
     bindOrderImageZoom(root);
   }
 
-  function init() {
+  async function init() {
     document.body.classList.add('dashboard-app');
-    ensurePageAssets(qs('[data-dashboard-main]')?.getAttribute('data-dashboard-page-assets') || '');
+    await ensurePageAssets(qs('[data-dashboard-main]')?.getAttribute('data-dashboard-page-assets') || '');
     if (window.matchMedia('(max-width: 1023px)').matches && qs('#dashboard-bottom-nav')) {
       document.body.classList.add('has-bottom-nav');
     }
