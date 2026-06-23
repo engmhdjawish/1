@@ -168,13 +168,6 @@ final class DashboardNavigation
                 'description' => 'متابعة طلبات الموقع الجديدة وتأكيدها ومزامنتها مع الأمين.',
             ],
             [
-                'route' => '/dashboard/visitor-analytics.php',
-                'label' => 'نشاط الزوار',
-                'icon' => 'travel_explore',
-                'permission' => 'orders.view',
-                'description' => 'متابعة زيارات الموقع ومواقع الزوار على الخريطة.',
-            ],
-            [
                 'route' => '/dashboard/material-images.php',
                 'label' => 'صور المواد',
                 'icon' => 'perm_media',
