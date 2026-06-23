@@ -150,7 +150,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
     <?= $extraHead ?>
   <?php endif; ?>
 </head>
-<body class="min-h-screen text-slate-900 dashboard-app<?= $hasAreaTabs ? ' has-area-tabs' : '' ?>">
+<body class="min-h-screen text-slate-900 dashboard-app<?= $hasAreaTabs ? ' has-area-tabs' : '' ?>" data-dashboard-has-area-tabs="<?= $hasAreaTabs ? '1' : '0' ?>">
   <header class="sticky top-0 z-50 h-16 bg-surface-white shadow-sm border-b border-border-subtle">
     <div class="h-full px-4 lg:px-10 flex items-center justify-between gap-3">
       <div class="flex items-center gap-2 min-w-0">
@@ -166,7 +166,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         </button>
         <a href="/dashboard/index.php" class="font-extrabold text-primary text-lg truncate">Jawish Trading</a>
         <?php if (!$hasAreaTabs && $headerQuickLinks !== []): ?>
-        <nav class="hidden lg:flex items-center gap-1 text-sm mr-2">
+        <nav class="hidden lg:flex items-center gap-1 text-sm mr-2" data-dashboard-header-quick-links>
           <?php foreach ($headerQuickLinks as $item): ?>
             <?php
               $itemRoute = (string) ($item['route'] ?? '');
