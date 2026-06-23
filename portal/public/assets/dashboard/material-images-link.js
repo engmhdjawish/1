@@ -61,9 +61,17 @@ const API_URL = '/dashboard/material-images-api.php';
   let totalCount = 0;
   const pageSize = 12;
   const sourceMaterialMap = new Map();
-  const MATERIAL_SEARCH_DEBOUNCE_MS = 420;
-  const SOURCE_FILTER_DEBOUNCE_MS = 500;
   const MIN_MATERIAL_SEARCH_LEN = 2;
+
+  function clearSourceMaterialSearch() {
+    if (sourceMaterialSearch) {
+      sourceMaterialSearch.value = '';
+    }
+  }
+
+  function applySourceMaterialSearch() {
+    loadSources(1);
+  }
 
   function currentLinkFilter() {
     const active = panel.querySelector('.link-filter-btn.border-primary.bg-primary');
@@ -391,7 +399,6 @@ const API_URL = '/dashboard/material-images-api.php';
     const previewBtn = card.querySelector('.preview-btn');
     if (!input || !sug || !chips || !assignBtn || !cardStatus) return;
 
-    let searchTimer = null;
     let searchRequestId = 0;
 
     const renderSuggestionRows = (rows) => {
@@ -426,38 +433,23 @@ const API_URL = '/dashboard/material-images-api.php';
       }
     };
 
-    const scheduleMaterialLookup = () => {
-      if (searchTimer) clearTimeout(searchTimer);
-      const q = input.value.trim();
-      if (q.length < MIN_MATERIAL_SEARCH_LEN) {
-        searchRequestId += 1;
-        closeSuggestions(card);
-        return;
-      }
-      searchTimer = setTimeout(() => {
-        searchTimer = null;
-        runMaterialLookup(q);
-      }, MATERIAL_SEARCH_DEBOUNCE_MS);
-    };
-
     previewBtn?.addEventListener('click', () => {
       openLightbox(item.preview_full_url || item.preview_url, item.linked_material_name || '');
     });
 
-    input.addEventListener('input', scheduleMaterialLookup);
-
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
         event.preventDefault();
-        if (searchTimer) clearTimeout(searchTimer);
         const q = input.value.trim();
         if (q.length >= MIN_MATERIAL_SEARCH_LEN) {
           runMaterialLookup(q);
+        } else {
+          searchRequestId += 1;
+          closeSuggestions(card);
         }
         return;
       }
       if (event.key === 'Escape') {
-        if (searchTimer) clearTimeout(searchTimer);
         searchRequestId += 1;
         closeSuggestions(card);
       }
@@ -565,7 +557,7 @@ const API_URL = '/dashboard/material-images-api.php';
             ${materialCode}
           </div>
           <div class="relative">
-            <input class="material-input h-9 w-full rounded-lg border border-border-subtle px-3 text-xs" placeholder="ابحث بالاسم أو الرمز (كلمات بأي ترتيب)...">
+            <input class="material-input h-9 w-full rounded-lg border border-border-subtle px-3 text-xs" placeholder="ابحث بالاسم أو الرمز — Enter للبحث">
             <div class="suggestions hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow max-h-48 overflow-auto"></div>
           </div>
           <div class="chips flex flex-wrap gap-1">${chipsHtml(key)}</div>
@@ -635,30 +627,21 @@ const API_URL = '/dashboard/material-images-api.php';
   sourcePrevBtn?.addEventListener('click', () => { if (page > 1) loadSources(page - 1); }, { signal });
   sourceNextBtn?.addEventListener('click', () => { if (hasMore) loadSources(page + 1); }, { signal });
   reloadSourcesBtn?.addEventListener('click', () => loadSources(page), { signal });
-  applySourceFiltersBtn?.addEventListener('click', () => loadSources(1), { signal });
+  applySourceFiltersBtn?.addEventListener('click', applySourceMaterialSearch, { signal });
   deleteAllUnlinkedBtn?.addEventListener('click', deleteAllUnlinked, { signal });
   linkFilterButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
       const filter = btn.getAttribute('data-filter') || 'all';
+      clearSourceMaterialSearch();
       setLinkFilter(filter);
       loadSources(1);
     }, { signal });
   });
-  let sourceSearchTimer = null;
-
-  sourceMaterialSearch?.addEventListener('input', () => {
-    if (sourceSearchTimer) clearTimeout(sourceSearchTimer);
-    sourceSearchTimer = setTimeout(() => {
-      sourceSearchTimer = null;
-      loadSources(1);
-    }, SOURCE_FILTER_DEBOUNCE_MS);
-  }, { signal });
 
   sourceMaterialSearch?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      if (sourceSearchTimer) clearTimeout(sourceSearchTimer);
-      loadSources(1);
+      applySourceMaterialSearch();
     }
   }, { signal });
   setLinkFilter('unlinked');
