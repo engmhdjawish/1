@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 param(
     [string]$EnvFile,
     [ValidateSet('fresh', 'migrate', 'skip')]
@@ -11,12 +11,12 @@ $envPath = if ($EnvFile) { $EnvFile } else { Join-Path $DeployRoot 'deploy.env' 
 $vars = Read-DeployEnv -Path $envPath
 
 $publishDir = $vars['PORTAL_PUBLISH_DIR']
-if (-not $publishDir) { throw 'PORTAL_PUBLISH_DIR غير معرّف في deploy.env' }
+if (-not $publishDir) { throw 'PORTAL_PUBLISH_DIR is not set in deploy.env' }
 
 $source = $vars['PORTAL_SOURCE_DIR']
 if (-not $source) { $source = Join-Path $RepoRoot 'portal' }
 
-Write-Step "تجهيز نشر الموقع في $publishDir"
+Write-Step "Publishing portal to $publishDir"
 Copy-PortalTree -Destination $publishDir -Source $source
 Write-PortalEnv -Destination $publishDir -Env $vars
 
@@ -25,12 +25,12 @@ try {
     composer install --no-dev --optimize-autoloader --no-interaction
 
     if ($DbSetup -eq 'fresh') {
-        Write-Step 'إنشاء قاعدة البيانات (مخطط + بذور)'
+        Write-Step 'Creating database (schema + seed)'
         php scripts/setup-database.php
-        Write-Step 'ترحيلات إضافية'
+        Write-Step 'Applying extra migrations'
         php scripts/run-migrations.php
     } elseif ($DbSetup -eq 'migrate') {
-        Write-Step 'ترحيل قاعدة البيانات'
+        Write-Step 'Running database migrations'
         php scripts/run-migrations.php
     }
 
@@ -38,7 +38,7 @@ try {
     $adminPass = $vars['PORTAL_ADMIN_PASSWORD']
     if ($adminUser -and $adminPass) {
         $display = $vars['PORTAL_ADMIN_DISPLAY_NAME']
-        if (-not $display) { $display = 'مدير النظام' }
+        if (-not $display) { $display = 'Admin' }
         php scripts/create-admin.php $adminUser $adminPass $display
     }
 
@@ -60,5 +60,5 @@ Copy-Item `
   (Join-Path $publishDir 'public\web.config') `
   -Force
 
-Write-Ok 'تم تجهيز الموقع'
-Write-Host "  IIS/Apache جذر الويب: $publishDir\public" -ForegroundColor Gray
+Write-Ok 'Portal publish finished'
+Write-Host "  IIS web root: $publishDir\public" -ForegroundColor Gray

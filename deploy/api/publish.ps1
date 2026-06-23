@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 param(
     [string]$EnvFile
 )
@@ -9,10 +9,10 @@ $envPath = if ($EnvFile) { $EnvFile } else { Join-Path $DeployRoot 'deploy.env' 
 $vars = Read-DeployEnv -Path $envPath
 
 $publishDir = $vars['API_PUBLISH_DIR']
-if (-not $publishDir) { throw 'API_PUBLISH_DIR غير معرّف في deploy.env' }
+if (-not $publishDir) { throw 'API_PUBLISH_DIR is not set in deploy.env' }
 
-Write-Step "نشر API إلى $publishDir"
-if (-not (Test-CommandExists dotnet)) { throw 'dotnet غير موجود' }
+Write-Step "Publishing API to $publishDir"
+if (-not (Test-CommandExists dotnet)) { throw 'dotnet not found' }
 if (-not (Test-Path $publishDir)) { New-Item -ItemType Directory -Path $publishDir -Force | Out-Null }
 
 $sln = Join-Path $RepoRoot 'ExistingDbWebApi.sln'
@@ -35,5 +35,5 @@ Expand-Template `
   -OutputPath (Join-Path $publishDir 'api.env') `
   -Variables $vars
 
-Write-Ok "تم نشر API — شغّل من: $publishDir"
-Write-Host "  `$env:ASPNETCORE_ENVIRONMENT='Production'; dotnet ExistingDb.Api.dll" -ForegroundColor Gray
+Write-Ok "API published to $publishDir"
+Write-Host "  Run: `$env:ASPNETCORE_ENVIRONMENT='Production'; dotnet ExistingDb.Api.dll" -ForegroundColor Gray

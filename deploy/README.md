@@ -29,8 +29,13 @@ cd C:\Users\HP\1
 git fetch origin
 git checkout cursor/deploy-wizard-f03f
 
-# المعالج التفاعلي
+# المعالج التفاعلي (Windows PowerShell 5.1+)
 .\deploy\wizard.ps1
+```
+
+> **ملاحظة:** سكريبتات `.ps1` تستخدم نصوصاً إنجليزية في الطرفية لتجنب مشاكل ترميز PowerShell 5.1 على Windows. الدليل الكامل بالعربية في هذا الملف.
+
+```powershell
 
 # أو مباشرة:
 .\deploy\wizard.ps1 -Action check      # فحص المتطلبات
