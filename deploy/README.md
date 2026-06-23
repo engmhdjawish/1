@@ -100,6 +100,23 @@ $env:ASPNETCORE_ENVIRONMENT = 'Production'
 dotnet ExistingDb.Api.dll
 ```
 
+**تشغيل تلقائي كخدمة Windows:**
+
+افتح PowerShell **كمسؤول**:
+
+```powershell
+cd C:\Users\HP\1
+git pull origin cursor/deploy-wizard-f03f
+.\deploy\api\install-windows-service.ps1 -ApiDir D:\AmeenApi\existingdb-api -Port 5000
+```
+
+أوامر مفيدة:
+
+```powershell
+Get-Service JawishExistingDbApi
+Restart-Service JawishExistingDbApi
+```
+
 **تشغيل API (Linux systemd):**
 
 ```bash
