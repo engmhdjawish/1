@@ -53,12 +53,8 @@ final class StoreCartRequest
         $notes = trim((string) ($input['notes_ar'] ?? ''));
         $loggedInCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
         if ($loggedInCustomer !== null) {
-            if ($guestName === '') {
-                $guestName = trim((string) ($loggedInCustomer['name_ar'] ?? ''));
-            }
-            if ($guestPhone === '') {
-                $guestPhone = trim((string) ($loggedInCustomer['phone'] ?? ''));
-            }
+            $guestName = trim((string) ($loggedInCustomer['name_ar'] ?? ''));
+            $guestPhone = trim((string) ($loggedInCustomer['phone'] ?? ''));
         }
 
         $cartItems = array_values(StoreCartService::items());

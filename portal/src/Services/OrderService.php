@@ -364,6 +364,7 @@ final class OrderService
                     o.updated_at,
                     o.quote_access_token,
                     o.notes_ar,
+                    o.web_customer_id::text AS web_customer_id,
                     wc.name_ar AS customer_name_ar,
                     wc.phone AS customer_phone,
                     o.guest_name_ar,
@@ -413,6 +414,19 @@ final class OrderService
         if ($toDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $toDate) === 1) {
             $sql .= ' AND o.created_at::date <= :to_date';
             $params['to_date'] = $toDate;
+        }
+
+        $webCustomerId = trim((string) ($filters['web_customer_id'] ?? ''));
+        if ($webCustomerId !== '') {
+            $sql .= ' AND o.web_customer_id::text = :web_customer_id';
+            $params['web_customer_id'] = $webCustomerId;
+        }
+
+        $origin = trim((string) ($filters['origin'] ?? ''));
+        if ($origin === 'guest') {
+            $sql .= ' AND o.web_customer_id IS NULL';
+        } elseif ($origin === 'registered') {
+            $sql .= ' AND o.web_customer_id IS NOT NULL';
         }
 
         $sql .= ' ORDER BY o.created_at DESC LIMIT :limit';
@@ -572,6 +586,46 @@ final class OrderService
             'cancelled' => 'ملغى',
             default => $status,
         };
+    }
+
+    /** @param array<string, mixed> $row */
+    public static function isRegisteredCustomerOrder(array $row): bool
+    {
+        return trim((string) ($row['web_customer_id'] ?? '')) !== '';
+    }
+
+    /** @param array<string, mixed> $row */
+    public static function orderOriginLabel(array $row): string
+    {
+        return self::isRegisteredCustomerOrder($row) ? 'عميل مسجّل' : 'زائر';
+    }
+
+    /** @param array{status?: string, limit?: int} $filters */
+    public static function listForWebCustomer(string $webCustomerId, array $filters = []): array
+    {
+        $webCustomerId = trim($webCustomerId);
+        if ($webCustomerId === '') {
+            return [];
+        }
+
+        $filters['web_customer_id'] = $webCustomerId;
+
+        return self::list($filters);
+    }
+
+    public static function countForWebCustomer(string $webCustomerId): int
+    {
+        $webCustomerId = trim($webCustomerId);
+        if ($webCustomerId === '') {
+            return 0;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT COUNT(*)::int FROM orders WHERE web_customer_id::text = :id'
+        );
+        $stmt->execute(['id' => $webCustomerId]);
+
+        return (int) $stmt->fetchColumn();
     }
 
     public static function syncCounts(): array

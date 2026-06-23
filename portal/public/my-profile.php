@@ -18,20 +18,7 @@ $flashType = 'success';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string) ($_POST['action'] ?? ''));
-    if ($action === 'update_profile') {
-        $result = WebCustomerService::updateOwnProfile(
-            $customerId,
-            trim((string) ($_POST['name_ar'] ?? '')),
-            trim((string) ($_POST['email'] ?? ''))
-        );
-        $flash = $result['message'];
-        $flashType = $result['ok'] ? 'success' : 'error';
-        if ($result['ok']) {
-            CustomerSession::refresh();
-            $customer = CustomerSession::customer() ?? $customer;
-            $profile = WebCustomerService::getById($customerId) ?? $profile;
-        }
-    } elseif ($action === 'change_password') {
+    if ($action === 'change_password') {
         $result = WebCustomerService::changeOwnPassword(
             $customerId,
             trim((string) ($_POST['current_password'] ?? '')),

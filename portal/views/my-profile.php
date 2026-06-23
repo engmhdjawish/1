@@ -19,26 +19,27 @@ $pageTitle = 'الملف الشخصي';
   <?php endif; ?>
 
   <div class="customer-profile-grid">
-    <form method="post" class="customer-form-card">
-      <input type="hidden" name="action" value="update_profile">
+    <article class="customer-form-card">
       <h2 class="customer-form-card__title">
         <span class="material-symbols-outlined" aria-hidden="true">badge</span>
         بيانات الحساب
       </h2>
-      <label>
-        الاسم
-        <input name="name_ar" value="<?= h((string) ($profile['name_ar'] ?? $customer['name_ar'] ?? '')) ?>" required>
-      </label>
-      <label>
-        رقم الهاتف
-        <input value="<?= h((string) ($customer['phone'] ?? '')) ?>" disabled dir="ltr">
-      </label>
-      <label>
-        البريد الإلكتروني
-        <input type="email" name="email" value="<?= h((string) ($profile['email'] ?? '')) ?>" dir="ltr">
-      </label>
-      <button type="submit" class="store-btn store-btn--primary">حفظ التغييرات</button>
-    </form>
+      <p class="text-sm text-gray-600 mb-4">بياناتك الأساسية ثابتة ولا يمكن تعديلها من هنا. للتحديث تواصل مع الإدارة.</p>
+      <dl class="customer-order-dl">
+        <div>
+          <dt>الاسم</dt>
+          <dd><?= h((string) ($profile['name_ar'] ?? $customer['name_ar'] ?? '')) ?></dd>
+        </div>
+        <div>
+          <dt>رقم الهاتف</dt>
+          <dd dir="ltr"><?= h((string) ($customer['phone'] ?? '')) ?></dd>
+        </div>
+        <div>
+          <dt>البريد الإلكتروني</dt>
+          <dd dir="ltr"><?= h((string) (($profile['email'] ?? '') !== '' ? $profile['email'] : '—')) ?></dd>
+        </div>
+      </dl>
+    </article>
 
     <form method="post" class="customer-form-card">
       <input type="hidden" name="action" value="change_password">

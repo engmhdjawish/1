@@ -585,6 +585,7 @@
     if (summaryEl) {
       const totals = data.totals || {};
       const allowOrder = !!data.allow_order;
+      const isLoggedIn = root.dataset.loggedIn === '1' || !!data.logged_in;
       const totalSp = Number(totals.total_sp) || 0;
       const totalUsd = Number(totals.total_usd) || 0;
       const totalLine = showPriceSyp
@@ -597,12 +598,18 @@
         ${items.length > 0 ? '<button type="button" class="store-btn store-btn--ghost" data-clear-cart>تفريغ السلة</button>' : ''}
         ${allowOrder && items.length > 0 ? `
           <form data-checkout-form class="space-y-3 border-t border-gray-100 pt-4">
-            <label class="block text-sm font-bold">الاسم الكامل *
-              <input name="guest_name_ar" required class="store-input mt-1" value="${escapeHtml(root.dataset.defaultName || '')}">
-            </label>
-            <label class="block text-sm font-bold">رقم الهاتف *
-              <input name="guest_phone" required dir="ltr" class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}">
-            </label>
+            ${isLoggedIn ? `
+              <p class="text-sm text-gray-600 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+                إرسال الطلب بحسابك المسجّل — بياناتك مأخوذة من ملفك ولا يمكن تغييرها هنا.
+              </p>
+            ` : `
+              <label class="block text-sm font-bold">الاسم الكامل *
+                <input name="guest_name_ar" required class="store-input mt-1" value="${escapeHtml(root.dataset.defaultName || '')}">
+              </label>
+              <label class="block text-sm font-bold">رقم الهاتف *
+                <input name="guest_phone" required dir="ltr" class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}">
+              </label>
+            `}
             <label class="block text-sm font-bold">ملاحظات
               <textarea name="notes_ar" rows="3" class="store-input mt-1 h-auto py-2 text-sm"></textarea>
             </label>
