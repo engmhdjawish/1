@@ -132,6 +132,15 @@
         throw new Error(data.message || 'تعذر تحميل المادة');
       }
       renderProduct(data.product);
+      if (window.SiteAnalytics && data.product) {
+        const p = data.product;
+        window.SiteAnalytics.track('product_quick_view', {
+          product_guid: guid,
+          product_code: p.code || p.materialCode || '',
+          product_name: p.name || '',
+          label_ar: `معاينة: ${p.name || 'صنف'}`,
+        });
+      }
     } catch (error) {
       body.innerHTML = `<div class="text-center text-red-600 py-12">${esc(error.message || 'تعذر التحميل')}</div>`;
     } finally {

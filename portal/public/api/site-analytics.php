@@ -22,13 +22,15 @@ if (!is_array($input)) {
 }
 
 $customer = CustomerSession::check() ? CustomerSession::customer() : null;
+$meta = is_array($input['meta'] ?? null) ? $input['meta'] : [];
 $result = VisitorLogService::recordEvent(
     (string) ($input['session_id'] ?? ''),
     (string) ($input['action'] ?? 'page_view'),
     (string) ($input['path'] ?? ''),
     (string) ($input['title'] ?? ''),
     (string) ($input['referer'] ?? ($_SERVER['HTTP_REFERER'] ?? '')),
-    $customer
+    $customer,
+    $meta
 );
 
 echo json_encode([

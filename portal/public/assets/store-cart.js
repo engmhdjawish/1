@@ -444,6 +444,15 @@
           updateBadge(data.cart_count);
           if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
           if (!data.ok) return;
+          if (window.SiteAnalytics) {
+            window.SiteAnalytics.track('add_to_cart', {
+              product_guid: String(payload.material_guid || form.dataset.materialGuid || ''),
+              product_code: String(payload.material_code || ''),
+              product_name: String(payload.material_name_ar || ''),
+              quantity: String(payload.quantity || '1'),
+              label_ar: `إضافة للسلة: ${String(payload.material_name_ar || 'صنف')}`,
+            });
+          }
           if (inputReset(form)) {
             const step = getQtyStep(form);
             form.querySelector('[name="quantity"]').value = String(step);

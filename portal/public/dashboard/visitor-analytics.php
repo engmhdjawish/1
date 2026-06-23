@@ -15,16 +15,31 @@ if (!in_array($days, [1, 7, 30, 90], true)) {
     $days = 7;
 }
 
+$sessionId = trim((string) ($_GET['session'] ?? ''));
 $schemaReady = VisitorLogService::hasSchema();
 $summary = $schemaReady ? VisitorLogService::summaryForDays($days) : [
+    'total_events' => 0,
     'page_views' => 0,
+    'product_views' => 0,
+    'cart_adds' => 0,
     'unique_sessions' => 0,
     'unique_ips' => 0,
     'registered_hits' => 0,
 ];
-$recent = $schemaReady ? VisitorLogService::recent(120, null, $days) : [];
+
+$recent = $schemaReady ? VisitorLogService::recent(150, null, $days) : [];
+$topProducts = $schemaReady ? VisitorLogService::topProducts($days, 15) : [];
+$topPages = $schemaReady ? VisitorLogService::topPages($days, 12) : [];
+$actionBreakdown = $schemaReady ? VisitorLogService::actionBreakdown($days) : [];
+$topReferrers = $schemaReady ? VisitorLogService::topReferrers($days, 8) : [];
+$sessions = $schemaReady ? VisitorLogService::sessionSummaries($days, 25) : [];
+$sessionEvents = ($schemaReady && $sessionId !== '')
+    ? VisitorLogService::sessionEvents($sessionId, 120)
+    : [];
 $mapPoints = $schemaReady ? VisitorLogService::mapPoints($days, 250) : [];
-$currentRoute = '/dashboard/visitor-analytics.php';
+$currentRoute = $sessionId !== ''
+    ? '/dashboard/visitor-analytics.php?days=' . $days . '&session=' . rawurlencode($sessionId)
+    : '/dashboard/visitor-analytics.php?days=' . $days;
 
 ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/visitor-analytics.php';
