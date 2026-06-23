@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Portal\Services;
 
+use Portal\Support\SimpleZipWriter;
 use Portal\Support\Utf8Text;
 
 final class MaterialImageZipService
@@ -67,12 +68,7 @@ final class MaterialImageZipService
         }
 
         $childPaths = [];
-        $zip = new \ZipArchive();
-        if ($zip->open($masterPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
-            @unlink($masterPath);
-            throw new \RuntimeException('تعذر إنشاء أرشيف التقسيم.');
-        }
-
+        $archiveEntries = [];
         $usedNames = [];
         $added = 0;
 
@@ -98,16 +94,15 @@ final class MaterialImageZipService
                 }
 
                 $entryName = self::uniqueEntryName(self::sanitizeFilename($value) . '.zip', $usedNames);
-                $zip->addFile($childPath, $entryName);
+                $archiveEntries[] = ['path' => $childPath, 'name' => $entryName];
                 $added++;
             }
-
-            $zip->close();
 
             if ($added === 0) {
                 throw new \RuntimeException('لا توجد صور مطابقة لخيارات التقسيم المحددة.');
             }
 
+            self::buildZipFromFileEntries($masterPath, $archiveEntries);
             self::streamLocalZipFile($masterPath, 'split-material-images');
         } finally {
             foreach ($childPaths as $childPath) {
@@ -289,15 +284,10 @@ final class MaterialImageZipService
             throw new \RuntimeException('تعذر إنشاء ملف مؤقت للضغط.');
         }
 
-        $zip = new \ZipArchive();
-        if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
-            @unlink($zipPath);
-            throw new \RuntimeException('تعذر فتح أرشيف ZIP.');
-        }
-
         $usedNames = [];
         $added = 0;
         $tempFiles = [];
+        $archiveEntries = [];
 
         try {
             foreach ($activeItems as $item) {
@@ -323,39 +313,21 @@ final class MaterialImageZipService
                     $extension = 'jpg';
                 }
                 $entryName = self::uniqueEntryName($baseName . '.' . $extension, $usedNames);
-                $zip->addFile($tempImage, $entryName);
+                $archiveEntries[] = ['path' => $tempImage, 'name' => $entryName];
                 $added++;
             }
 
-            $zip->close();
-
             if ($added === 0) {
-                @unlink($zipPath);
                 throw new \RuntimeException('لم يتم العثور على صور قابلة للتحميل لهذا الطلب.');
             }
+
+            self::buildZipFromFileEntries($zipPath, $archiveEntries);
 
             while (ob_get_level() > 0) {
                 ob_end_clean();
             }
 
-            header('Content-Type: application/zip');
-            header('Content-Disposition: attachment; filename="' . self::sanitizeFilename($archiveName) . '.zip"');
-            header('Content-Length: ' . (string) filesize($zipPath));
-            header('Cache-Control: no-store, no-cache, must-revalidate');
-            header('X-Accel-Buffering: no');
-
-            $handle = fopen($zipPath, 'rb');
-            if ($handle === false) {
-                throw new \RuntimeException('تعذر قراءة ملف ZIP.');
-            }
-            while (!feof($handle)) {
-                $chunk = fread($handle, 65536);
-                if ($chunk === false) {
-                    break;
-                }
-                echo $chunk;
-            }
-            fclose($handle);
+            self::streamLocalZipFile($zipPath, $archiveName);
         } finally {
             foreach ($tempFiles as $tempFile) {
                 if (is_file($tempFile)) {
@@ -625,5 +597,37 @@ final class MaterialImageZipService
         }
 
         return array_values(array_unique($values));
+    }
+
+    /**
+     * @param list<array{path: string, name: string}> $entries
+     */
+    private static function buildZipFromFileEntries(string $outputPath, array $entries): void
+    {
+        if ($entries === []) {
+            throw new \RuntimeException('لا توجد ملفات لإضافتها إلى ZIP.');
+        }
+
+        if (class_exists(\ZipArchive::class)) {
+            $zip = new \ZipArchive();
+            if ($zip->open($outputPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+                throw new \RuntimeException('تعذر إنشاء أرشيف ZIP.');
+            }
+            foreach ($entries as $entry) {
+                $zip->addFile($entry['path'], $entry['name']);
+            }
+            if ($zip->close() !== true) {
+                throw new \RuntimeException('تعذر إنهاء أرشيف ZIP.');
+            }
+
+            return;
+        }
+
+        $writer = new SimpleZipWriter();
+        $writer->open($outputPath);
+        foreach ($entries as $entry) {
+            $writer->addFileFromPath($entry['path'], $entry['name']);
+        }
+        $writer->close();
     }
 }
