@@ -44,6 +44,8 @@ final class StoreCartApi
             'update' => self::update($input),
             'bump' => self::bump($input),
             'remove' => self::remove($input),
+            'remove_unavailable' => self::removeUnavailable($input),
+            'clear_unavailable' => self::clearUnavailable(),
             'clear' => self::clear(),
             'submit_order' => self::submitOrder($input, $display),
             default => self::payload('إجراء غير معروف.', false),
@@ -78,6 +80,15 @@ final class StoreCartApi
             $message = $result['message'] !== '' ? $result['message'] : 'تمت إضافة الطرد إلى السلة.';
 
             return self::payload($message, true);
+        }
+
+        if (!empty($result['moved_unavailable'])) {
+            return self::payload(
+                $result['message'] !== '' ? $result['message'] : 'نُقل الصنف إلى قائمة غير المتوفرة.',
+                true,
+                [],
+                'warning'
+            );
         }
 
         return self::payload(
@@ -164,6 +175,24 @@ final class StoreCartApi
         return self::payload('تم تفريغ السلة.', true);
     }
 
+    /** @param array<string, mixed> $input */
+    private static function removeUnavailable(array $input): array
+    {
+        $materialGuid = trim((string) ($input['material_guid'] ?? ''));
+        if ($materialGuid === '' || !StoreCartService::removeUnavailable($materialGuid)) {
+            return self::payload('تعذر إزالة الصنف.', false);
+        }
+
+        return self::payload('تمت إزالة الصنف من قائمة غير المتوفرة.', true);
+    }
+
+    private static function clearUnavailable(): array
+    {
+        StoreCartService::clearUnavailable();
+
+        return self::payload('تمت إزالة الأصناف غير المتوفرة.', true);
+    }
+
     /** @param array<string, mixed> $display @param array<string, mixed> $input */
     private static function submitOrder(array $input, array $display): array
     {
@@ -236,11 +265,47 @@ final class StoreCartApi
     private static function clientQuantityCheck(string $materialGuid, float $addQty, float $currentQty): array
     {
         $max = StorePolicyService::maxPackagesPerMaterial();
+        $target = $currentQty + $addQty;
+
+        $product = StoreCatalogService::findMaterial($materialGuid);
+        if ($product !== null) {
+            $packaging = ShareCartService::packaging($product);
+            $warehouse = StockReservationService::warehousePrimaryUnits($product);
+            $available = StockReservationService::availablePackagesExact($materialGuid, $warehouse, $packaging);
+            $packageUnit = ShareCartService::packageUnitLabel($product);
+            $name = trim((string) ($product['name'] ?? $product['Name'] ?? 'المادة'));
+
+            if ($available <= 0) {
+                return [
+                    'ok' => false,
+                    'message' => 'نفدت كمية «' . $name . '» المتاحة للطلب حالياً.',
+                ];
+            }
+
+            if ($target > $available + 0.0001) {
+                $remaining = max(0.0, round($available - $currentQty, 4));
+                if ($currentQty > 0) {
+                    return [
+                        'ok' => false,
+                        'message' => $remaining > 0
+                            ? 'الكمية المتاحة لـ «' . $name . '» هي ' . StockReservationService::formatPackages($available) . ' ' . $packageUnit
+                                . '. لديك ' . StockReservationService::formatPackages($currentQty) . ' في السلة — يمكنك إضافة '
+                                . StockReservationService::formatPackages($remaining) . ' فقط.'
+                            : 'نفدت الكمية المتاحة لـ «' . $name . '».',
+                    ];
+                }
+
+                return [
+                    'ok' => false,
+                    'message' => 'الكمية المتاحة لـ «' . $name . '» هي ' . StockReservationService::formatPackages($available) . ' ' . $packageUnit . ' فقط.',
+                ];
+            }
+        }
+
         if ($max === null) {
             return ['ok' => true, 'message' => ''];
         }
 
-        $target = $currentQty + $addQty;
         if ($target <= $max + 0.0001) {
             return ['ok' => true, 'message' => ''];
         }

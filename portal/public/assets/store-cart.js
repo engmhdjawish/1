@@ -460,6 +460,62 @@
 
   const inputReset = (form) => form.querySelector('[name="quantity"]');
 
+  const renderUnavailableSection = (lines) => {
+    if (!lines.length) return '';
+    let html = `<section class="store-cart-unavailable" data-cart-unavailable>
+      <div class="store-cart-unavailable__head">
+        <div>
+          <h3 class="font-bold text-red-800">غير متوفرة للطلب</h3>
+          <p class="text-xs text-red-700 mt-0.5">هذه الأصناف لن تُرسل مع الطلب. قد يكون السبب حجز كميتها لطلبات أخرى قيد المعالجة.</p>
+        </div>
+        <button type="button" class="text-xs font-bold text-red-700 hover:underline" data-clear-unavailable>إزالة الكل</button>
+      </div>
+      <div class="store-cart-unavailable__list">`;
+    lines.forEach((line) => {
+      const guid = String(line.material_guid || '');
+      const packageUnit = String(line.package_unit || 'طرد');
+      const qty = Math.max(1, Math.round(Number(line.quantity) || 1));
+      const image = line.image_url
+        ? `<img src="${escapeHtml(line.image_url)}" alt="" class="w-14 h-14 rounded-lg object-cover bg-gray-100 shrink-0 opacity-70" loading="lazy">`
+        : '';
+      html += `<div class="store-cart-unavailable__item" data-unavailable-guid="${escapeHtml(guid)}">
+        <div class="flex items-center gap-3 min-w-0">
+          ${image}
+          <div class="min-w-0">
+            <div class="font-bold text-sm text-gray-800">${escapeHtml(line.material_name_ar || '')}</div>
+            <div class="text-xs text-red-700 mt-1">${escapeHtml(line.stock_message || 'نفدت الكمية المتاحة.')}</div>
+            <div class="text-xs text-gray-500 mt-1">الكمية المطلوبة: ${qty} ${escapeHtml(packageUnit)}</div>
+          </div>
+        </div>
+        <button type="button" class="text-xs font-bold text-gray-600 hover:text-red-600 shrink-0" data-remove-unavailable="${escapeHtml(guid)}">إزالة</button>
+      </div>`;
+    });
+    html += '</div></section>';
+    return html;
+  };
+
+  const bindUnavailableControls = (root) => {
+    root.querySelectorAll('[data-remove-unavailable]').forEach((btn) => {
+      if (btn.dataset.bound === '1') return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', async () => {
+        const guid = btn.getAttribute('data-remove-unavailable') || '';
+        if (!guid) return;
+        const data = await apiRequest({ action: 'remove_unavailable', material_guid: guid });
+        applyCartResponse(data);
+      });
+    });
+    root.querySelectorAll('[data-clear-unavailable]').forEach((btn) => {
+      if (btn.dataset.bound === '1') return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', async () => {
+        if (!window.confirm('إزالة جميع الأصناف غير المتوفرة؟')) return;
+        const data = await apiRequest({ action: 'clear_unavailable' });
+        applyCartResponse(data);
+      });
+    });
+  };
+
   const renderCartPage = (data) => {
     const root = document.querySelector('[data-store-cart-page]');
     if (!root) return;
@@ -516,15 +572,12 @@
           html += '</div>';
         }
         if (unavailable.length > 0) {
-          html += '<section class="rounded-2xl border border-amber-200 bg-amber-50 p-4"><h3 class="font-bold text-amber-900 mb-2">غير متوفرة حالياً</h3><ul class="text-sm text-amber-900 space-y-1">';
-          unavailable.forEach((line) => {
-            html += `<li>${escapeHtml(line.material_name_ar || '')}</li>`;
-          });
-          html += '</ul></section>';
+          html += renderUnavailableSection(unavailable);
         }
         html += '</div>';
         bodyEl.innerHTML = html;
         bindCartLineControls(bodyEl, max);
+        bindUnavailableControls(bodyEl);
         bindImageZoom(bodyEl);
       }
     }
@@ -686,6 +739,7 @@
     const page = document.querySelector('[data-store-cart-page]');
     if (page) {
       bindCartLineControls(page, null);
+      bindUnavailableControls(page);
       bindClearCart(page);
       bindCheckout(page);
       bindImageZoom(page);

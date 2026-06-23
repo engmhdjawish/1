@@ -187,6 +187,7 @@ final class StoreCatalogService
                     is_array($rawItems) ? $rawItems : [],
                     $contextOfferSlug
                 );
+                $products = self::applySellableStockFilter($products);
                 $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
                 $page = max(1, (int) ($data['page'] ?? $page));
                 $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
@@ -288,6 +289,7 @@ final class StoreCatalogService
             }
         }
 
+        $products = self::applySellableStockFilter($products);
         $totalCount = count($products);
         $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
         $page = min(max(1, $page), $totalPages);
@@ -369,6 +371,7 @@ final class StoreCatalogService
                     is_array($rawItems) ? $rawItems : [],
                     $contextOfferSlug
                 );
+                $products = self::applySellableStockFilter($products);
                 $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
                 $page = max(1, (int) ($data['page'] ?? $page));
                 $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
@@ -528,6 +531,17 @@ final class StoreCatalogService
         }
 
         return $result;
+    }
+
+    /** @param list<array<string, mixed>> $products @return list<array<string, mixed>> */
+    public static function applySellableStockFilter(array $products): array
+    {
+        $display = self::displayOptions();
+        if (!($display['allow_cart'] ?? false)) {
+            return $products;
+        }
+
+        return StockReservationService::filterSellableProducts($products);
     }
 
     /** @param array<string, mixed>|null $sectionContext */

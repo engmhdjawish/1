@@ -524,7 +524,7 @@ function store_cart_qty_bounds(array $item, float $cartQtyForItem, bool $showQua
     $policyRemaining = $maxPackages !== null
         ? max(0.0, round($maxPackages - $cartQtyForItem, 4))
         : null;
-    $stockAvailable = $showQuantity ? packages_available_display($item) : null;
+    $stockAvailable = packages_available_display($item);
     $effectiveMax = $policyRemaining;
     if ($stockAvailable !== null) {
         $stockRemaining = max(0.0, round($stockAvailable, 4));

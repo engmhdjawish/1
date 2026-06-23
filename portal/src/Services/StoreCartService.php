@@ -69,6 +69,17 @@ final class StoreCartService
         ShareCartService::clearUnavailable(self::TOKEN);
     }
 
+    public static function removeUnavailable(string $materialGuid): bool
+    {
+        return ShareCartService::removeUnavailable(self::TOKEN, $materialGuid);
+    }
+
+    /** @return array{moved: list<string>, notices: list<string>} */
+    public static function reconcileStock(): array
+    {
+        return ShareCartService::reconcileStock(self::TOKEN);
+    }
+
     /** @param list<string> $submittedGuids @param list<array<string, mixed>> $unavailableLines */
     public static function finalizeAfterSuccessfulOrder(array $submittedGuids, array $unavailableLines): void
     {

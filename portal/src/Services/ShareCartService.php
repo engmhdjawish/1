@@ -87,13 +87,22 @@ final class ShareCartService
             array_merge($line, ['quantity' => $targetQty])
         );
         if (!$stockCheck['ok']) {
-            if ($stockCheck['capped_packages'] > 0 && $existingQty <= 0) {
+            if ($stockCheck['capped_packages'] > 0) {
                 $targetQty = $stockCheck['capped_packages'];
+            } elseif ($existingQty > 0) {
+                self::moveToUnavailable($token, $materialGuid, $stockCheck['message']);
+
+                return [
+                    'ok' => false,
+                    'message' => $stockCheck['message'],
+                    'quantity' => 0.0,
+                    'moved_unavailable' => true,
+                ];
             } else {
                 return [
                     'ok' => false,
                     'message' => $stockCheck['message'],
-                    'quantity' => max(0.0, $stockCheck['capped_packages']),
+                    'quantity' => 0.0,
                 ];
             }
         }

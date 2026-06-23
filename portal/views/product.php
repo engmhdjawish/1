@@ -58,7 +58,8 @@ $offerMin = $offer !== null && is_numeric((string) ($offer['min_packages'] ?? ''
 $offerMax = $offer !== null && is_numeric((string) ($offer['max_packages'] ?? ''))
     ? (float) $offer['max_packages'] : null;
 $warehouseQty = (float) ($product['warehouseQuantity'] ?? 0);
-$packagesAvailable = $showQuantity ? packages_available_display($product) : 0.0;
+$packagesAvailable = ($allowCart || $showQuantity) ? packages_available_display($product) : 0.0;
+$outOfStock = $allowCart && $packagesAvailable <= 0;
 $materialCode = trim((string) ($product['materialCode'] ?? $product['code'] ?? ''));
 $productName = trim((string) ($product['name'] ?? 'مادة'));
 $manufacturer = trim((string) ($product['manufacturer'] ?? ''));
@@ -156,15 +157,24 @@ $specs = array_filter([
         <p class="text-sm text-gray-500">الأسعار غير متاحة لحسابك الحالي. سجّل دخولك كعميل مفعّل أو تواصل معنا.</p>
       <?php endif; ?>
 
-      <?php if ($showQuantity): ?>
-        <div class="store-buybox__stock <?= $packagesAvailable <= 2 ? 'store-buybox__stock--low' : '' ?>">
-          <span class="material-symbols-outlined text-base" aria-hidden="true">check_circle</span>
-          متاح: <?= number_format($packagesAvailable, 0, '.', ',') ?> <?= h($packageUnit) ?>
-          <span class="text-gray-400 font-normal">(<?= number_format($warehouseQty, 0, '.', ',') ?> <?= h($primaryUnit) ?>)</span>
-        </div>
+      <?php if ($showQuantity || $allowCart): ?>
+        <?php if ($outOfStock): ?>
+          <div class="store-buybox__stock store-buybox__stock--out">
+            <span class="material-symbols-outlined text-base" aria-hidden="true">inventory_2</span>
+            نفدت الكمية المتاحة للطلب حالياً
+          </div>
+        <?php else: ?>
+          <div class="store-buybox__stock <?= $packagesAvailable <= 2 ? 'store-buybox__stock--low' : '' ?>">
+            <span class="material-symbols-outlined text-base" aria-hidden="true">check_circle</span>
+            متاح: <?= number_format($packagesAvailable, 0, '.', ',') ?> <?= h($packageUnit) ?>
+            <?php if ($showQuantity): ?>
+              <span class="text-gray-400 font-normal">(<?= number_format($warehouseQty, 0, '.', ',') ?> <?= h($primaryUnit) ?>)</span>
+            <?php endif; ?>
+          </div>
+        <?php endif; ?>
       <?php endif; ?>
 
-      <?php if ($allowCart): ?>
+      <?php if ($allowCart && !$outOfStock): ?>
         <?php
           $item = $product;
           $cartItems = StoreCartService::items();

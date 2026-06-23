@@ -72,6 +72,17 @@ final class StoreCartRequest
             return ['ok' => false, 'message' => 'السلة فارغة.'];
         }
 
+        $reconcile = ShareCartService::reconcileStock(StoreCartService::TOKEN);
+        $cartItems = array_values(StoreCartService::items());
+        if ($cartItems === []) {
+            $notices = is_array($reconcile['notices'] ?? null) ? $reconcile['notices'] : [];
+            $message = $notices !== []
+                ? implode(' ', $notices)
+                : 'لا توجد أصناف متاحة للطلب. راجع قسم «غير المتوفرة» في السلة.';
+
+            return ['ok' => false, 'message' => $message];
+        }
+
         $result = OrderService::createGuestShareOrder(
             '',
             $guestName,

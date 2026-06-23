@@ -140,10 +140,21 @@ final class StockReservationService
         return max(0.0, round($primary / $packaging, 4));
     }
 
+  /** @param array<string, mixed> $material */
+    public static function materialGuid(array $material): string
+    {
+        return trim((string) (
+            $material['materialGuid']
+            ?? $material['MaterialGuid']
+            ?? $material['material_guid']
+            ?? ''
+        ));
+    }
+
     /** @param array<string, mixed> $material */
     public static function displayPackagesAvailable(array $material): float
     {
-        $guid = trim((string) ($material['materialGuid'] ?? $material['MaterialGuid'] ?? $material['material_guid'] ?? ''));
+        $guid = self::materialGuid($material);
         if ($guid === '') {
             return 0.0;
         }
@@ -152,6 +163,56 @@ final class StockReservationService
         $warehouse = self::warehousePrimaryUnits($material);
 
         return self::availablePackagesExact($guid, $warehouse, $packaging);
+    }
+
+    /** @param array<string, mixed> $material */
+    public static function isSellable(array $material): bool
+    {
+        return self::displayPackagesAvailable($material) > 0;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $products
+     * @return list<array<string, mixed>>
+     */
+    public static function filterSellableProducts(array $products): array
+    {
+        if ($products === []) {
+            return [];
+        }
+
+        $guids = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $guid = self::materialGuid($product);
+            if ($guid !== '') {
+                $guids[] = $guid;
+            }
+        }
+
+        $reservedMap = self::reservedPrimaryByMaterial(array_values(array_unique($guids)));
+        $sellable = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $guid = self::materialGuid($product);
+            if ($guid === '') {
+                continue;
+            }
+            $packaging = ShareCartService::packaging($product);
+            $warehouse = self::warehousePrimaryUnits($product);
+            $reserved = $reservedMap[$guid] ?? 0.0;
+            $availablePrimary = max(0.0, $warehouse - $reserved);
+            $availablePackages = max(0.0, round($availablePrimary / max(0.0001, $packaging), 4));
+            if ($availablePackages > 0) {
+                $sellable[] = $product;
+            }
+        }
+
+        return $sellable;
     }
 
     /**

@@ -466,6 +466,14 @@
   margin-top: 0.75rem;
 }
 
+.store-buybox__stock--low {
+  color: #d97706;
+}
+
+.store-buybox__stock--out {
+  color: #b91c1c;
+}
+
 .store-buybox .store-add-cart {
   margin-top: 1rem;
   border-top: 1px solid #e5e7eb;

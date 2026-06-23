@@ -631,7 +631,10 @@ final class HomeSectionService
             try {
                 $response = ApiClient::get('/api/materials/' . rawurlencode($guid));
                 if ($response['ok'] && is_array($response['data'])) {
-                    $items[] = $response['data'];
+                    $item = $response['data'];
+                    if (StockReservationService::isSellable($item)) {
+                        $items[] = $item;
+                    }
                 }
             } catch (\Throwable) {
                 continue;
@@ -657,6 +660,11 @@ final class HomeSectionService
 
             $items = $result['data']['items'] ?? [];
             if (!is_array($items) || $items === []) {
+                return [];
+            }
+
+            $items = StockReservationService::filterSellableProducts($items);
+            if ($items === []) {
                 return [];
             }
 

@@ -30,6 +30,15 @@ $defaultGuestName = (string) ($loggedInCustomer['name_ar'] ?? '');
 $defaultGuestPhone = (string) ($loggedInCustomer['phone'] ?? '');
 $maxPackagesPerMaterial = StorePolicyService::maxPackagesPerMaterial();
 
+$stockNotices = [];
+if ($allowCart) {
+    $reconcile = StoreCartService::reconcileStock();
+    $stockNotices = is_array($reconcile['notices'] ?? null) ? $reconcile['notices'] : [];
+    if ($stockNotices !== [] && $notice === null) {
+        $notice = implode(' ', array_values(array_unique(array_filter($stockNotices, static fn (string $n): bool => trim($n) !== ''))));
+    }
+}
+
 $cartItems = StoreCartService::enrichedItems();
 $unavailableItems = array_values(StoreCartService::unavailableItems());
 $totals = StoreCartService::totals();
