@@ -3,24 +3,23 @@
 declare(strict_types=1);
 
 /** @var array<string, mixed> $material */
-/** @var string $imageGuid */
+/** @var string|null $materialImageGuidOverride */
 /** @var string $variant card|detail|strip */
 /** @var bool $thumb */
 
-$material = is_array($material ?? null) ? $material : [];
-$imageGuid = trim((string) ($imageGuid ?? ''));
-if ($imageGuid === '') {
-    $imageGuid = material_image_guid($material);
-}
-$variant = in_array(($variant ?? 'card'), ['card', 'detail', 'strip'], true) ? (string) $variant : 'card';
-$thumb = (bool) ($thumb ?? ($variant !== 'detail'));
-$imageAlt = trim((string) ($material['name'] ?? ''));
-$imageSrc = $imageGuid !== '' ? material_image_api_url($imageGuid, $thumb) : '';
+$frameMaterial = is_array($material ?? null) ? $material : [];
+$frameVariant = in_array(($variant ?? 'card'), ['card', 'detail', 'strip'], true) ? (string) $variant : 'card';
+$frameThumb = (bool) ($thumb ?? ($frameVariant !== 'detail'));
+$frameImageGuid = isset($materialImageGuidOverride)
+    ? trim((string) $materialImageGuidOverride)
+    : material_image_guid($frameMaterial);
+$frameImageAlt = trim((string) ($frameMaterial['name'] ?? ''));
+$frameImageSrc = $frameImageGuid !== '' ? material_image_api_url($frameImageGuid, $frameThumb) : '';
 ?>
-<div class="material-image-frame material-image-frame--<?= h($variant) ?>">
+<div class="material-image-frame material-image-frame--<?= h($frameVariant) ?>">
   <div class="material-image-frame__photo">
-    <?php if ($imageSrc !== ''): ?>
-      <img src="<?= h($imageSrc) ?>" alt="<?= h($imageAlt) ?>" loading="lazy">
+    <?php if ($frameImageSrc !== ''): ?>
+      <img src="<?= h($frameImageSrc) ?>" alt="<?= h($frameImageAlt) ?>" loading="lazy">
     <?php else: ?>
       <span class="material-symbols-outlined material-image-frame__placeholder" aria-hidden="true">inventory_2</span>
     <?php endif; ?>
