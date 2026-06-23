@@ -32,6 +32,6 @@ require dirname(__DIR__) . '/views/home.php';
 $content = ob_get_clean();
 $title = 'الرئيسية';
 $extraHead = '<link href="' . h(portal_asset_url('/css/home-page.css')) . '" rel="stylesheet">';
-$extraFooter = count($ads) > 1 ? '<script src="' . h(portal_asset_url('/assets/home-page.js')) . '" defer></script>' : '';
+$extraFooter = '<script src="' . h(portal_asset_url('/assets/home-page.js')) . '" defer></script>';
 $enableQuickView = true;
 require dirname(__DIR__) . '/views/layout.php';

@@ -168,6 +168,13 @@ final class DashboardNavigation
                 'description' => 'متابعة طلبات الموقع الجديدة وتأكيدها ومزامنتها مع الأمين.',
             ],
             [
+                'route' => '/dashboard/visitor-analytics.php',
+                'label' => 'نشاط الزوار',
+                'icon' => 'travel_explore',
+                'permission' => 'orders.view',
+                'description' => 'متابعة زيارات الموقع ومواقع الزوار على الخريطة.',
+            ],
+            [
                 'route' => '/dashboard/material-images.php',
                 'label' => 'صور المواد',
                 'icon' => 'perm_media',
@@ -204,6 +211,7 @@ final class DashboardNavigation
         $groups += [
             'العملاء والمبيعات' => [
                 ['route' => '/dashboard/customers.php', 'label' => 'عملاء الموقع', 'icon' => 'group', 'permission' => 'web_customers.view'],
+                ['route' => '/dashboard/visitor-analytics.php', 'label' => 'نشاط الزوار', 'icon' => 'travel_explore', 'permission' => 'orders.view'],
                 ['route' => '/dashboard/share-links.php', 'label' => 'روابط المشاركة', 'icon' => 'share', 'permission' => 'share_links.manage'],
             ],
         ];

@@ -41,6 +41,26 @@ $isLightPage = in_array($pagePath, ['/login.php', '/register.php', '/about.php']
 $enableQuickView = (bool) ($enableQuickView ?? $isCatalogPage);
 $enableStoreCartJs = (bool) ($enableStoreCartJs ?? ($storeAllowCart && !$isLightPage));
 $enableOnboarding = (bool) ($enableOnboarding ?? !$isLightPage);
+$enableSiteAnalytics = (bool) ($enableSiteAnalytics ?? true);
+
+$metaDescription = portal_seo_description($pagePath, $siteName, $metaDescription ?? null);
+$canonicalUrl = portal_canonical_url($canonicalUrl ?? null);
+$ogTitle = trim((string) ($ogTitle ?? $title . ' — ' . $siteName));
+$ogImage = trim((string) ($ogImage ?? ''));
+if ($ogImage === '' && !empty($companyLogoUrl)) {
+    $ogImage = str_starts_with((string) $companyLogoUrl, 'http')
+        ? (string) $companyLogoUrl
+        : portal_absolute_url((string) $companyLogoUrl);
+}
+$jsonLdBlocks = [
+    portal_json_ld_organization($siteName, $companyLogoUrl ?? null),
+];
+if ($pagePath === '/index.php' || $pagePath === '/') {
+    $jsonLdBlocks[] = portal_json_ld_website($siteName);
+}
+$jsonLdPayload = count($jsonLdBlocks) === 1
+    ? $jsonLdBlocks[0]
+    : ['@context' => 'https://schema.org', '@graph' => $jsonLdBlocks];
 
 $navLinks = [
     ['href' => '/index.php', 'label' => 'الرئيسية'],
@@ -58,6 +78,25 @@ if ($customer) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= h($title) ?> — <?= h($siteName) ?></title>
+    <meta name="description" content="<?= h($metaDescription) ?>">
+    <meta name="robots" content="<?= h((string) ($metaRobots ?? 'index, follow')) ?>">
+    <link rel="canonical" href="<?= h($canonicalUrl) ?>">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="ar_SY">
+    <meta property="og:site_name" content="<?= h($siteName) ?>">
+    <meta property="og:title" content="<?= h($ogTitle) ?>">
+    <meta property="og:description" content="<?= h($metaDescription) ?>">
+    <meta property="og:url" content="<?= h($canonicalUrl) ?>">
+    <?php if ($ogImage !== ''): ?>
+      <meta property="og:image" content="<?= h($ogImage) ?>">
+    <?php endif; ?>
+    <meta name="twitter:card" content="<?= h($ogImage !== '' ? 'summary_large_image' : 'summary') ?>">
+    <meta name="twitter:title" content="<?= h($ogTitle) ?>">
+    <meta name="twitter:description" content="<?= h($metaDescription) ?>">
+    <?php if ($ogImage !== ''): ?>
+      <meta name="twitter:image" content="<?= h($ogImage) ?>">
+    <?php endif; ?>
+    <script type="application/ld+json"><?= json_encode($jsonLdPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
@@ -149,7 +188,7 @@ if ($customer) {
   <?php require __DIR__ . '/partials/product-quick-view.php'; ?>
   <script src="<?= h(portal_asset_url('/assets/product-quick-view.js')) ?>" defer></script>
 <?php endif; ?>
-<?php if ($storeShowPrice && !$isLightPage): ?>
+<?php if ($storeShowPrice): ?>
   <script src="<?= h(portal_asset_url('/assets/store-pref.js')) ?>" defer></script>
 <?php endif; ?>
 <?php if ($enableStoreCartJs): ?>
@@ -157,6 +196,9 @@ if ($customer) {
 <?php endif; ?>
 <?php if ($enableOnboarding): ?>
   <script src="<?= h(portal_asset_url('/assets/site-onboarding.js')) ?>" defer></script>
+<?php endif; ?>
+<?php if ($enableSiteAnalytics): ?>
+  <script src="<?= h(portal_asset_url('/assets/site-analytics.js')) ?>" defer></script>
 <?php endif; ?>
 <?php if (!empty($extraFooter ?? '')): ?>
   <?= $extraFooter ?>

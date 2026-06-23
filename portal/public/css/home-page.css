@@ -2,6 +2,7 @@
   --home-accent: #D81921;
   --home-ink: #0f172a;
   --home-muted: #64748b;
+  --home-scroll-offset: 9.5rem;
   display: flex;
   flex-direction: column;
   gap: 2rem;
@@ -324,6 +325,7 @@
   background: #fff;
   overflow: hidden;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+  scroll-margin-top: calc(var(--home-scroll-offset, 9.5rem));
 }
 
 .home-section--offer {

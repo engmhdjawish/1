@@ -47,6 +47,94 @@ function portal_is_catalog_page(string $path): bool
     return in_array($path, ['/index.php', '/store.php', '/product.php', '/share.php'], true);
 }
 
+function portal_absolute_url(string $path = ''): string
+{
+    $path = '/' . ltrim($path, '/');
+    if ($path === '//') {
+        $path = '/';
+    }
+
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    if ($host === '') {
+        return $path;
+    }
+
+    return $scheme . '://' . $host . $path;
+}
+
+function portal_canonical_url(?string $override = null): string
+{
+    $override = trim((string) $override);
+    if ($override !== '') {
+        if (str_starts_with($override, 'http://') || str_starts_with($override, 'https://')) {
+            return $override;
+        }
+
+        return portal_absolute_url($override);
+    }
+
+    $path = portal_request_path();
+    $query = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_QUERY) ?? '');
+    $canonicalPath = $path;
+    if ($query !== '' && in_array($path, ['/store.php', '/product.php', '/share.php'], true)) {
+        $canonicalPath .= '?' . $query;
+    }
+
+    return portal_absolute_url($canonicalPath);
+}
+
+function portal_seo_description(string $pagePath, string $siteName, ?string $override = null): string
+{
+    $override = trim((string) $override);
+    if ($override !== '') {
+        return $override;
+    }
+
+    $siteName = trim($siteName) !== '' ? trim($siteName) : 'جاويش للتجارة';
+
+    return match ($pagePath) {
+        '/index.php', '/' => 'تسوّق أحذية محلية ومستوردة من ' . $siteName . '. تصفّح التشكيلة، العروض الخاصة، واطلب بسهولة عبر الموقع.',
+        '/store.php' => 'متجر ' . $siteName . ' — تصفّح تشكيلة الأحذية، فلترة حسب النوع والماركة، واطّلع على الأسعار والعروض.',
+        '/store-cart.php', '/cart.php' => 'سلة التسوق في ' . $siteName . '. راجع أصنافك وأكمل طلبك بسهولة.',
+        '/about.php' => 'تعرّف على ' . $siteName . ': من نحن، أعمالنا، والتزامنا بجودة الأحذية وخدمة العملاء.',
+        '/login.php' => 'تسجيل الدخول إلى حسابك في ' . $siteName . ' لمتابعة الطلبات وإدارة ملفك الشخصي.',
+        '/register.php' => 'إنشاء حساب جديد في ' . $siteName . ' للتسوق ومتابعة الطلبات بسهولة.',
+        '/my-orders.php' => 'متابعة طلباتك في ' . $siteName . ' — حالة الطلب، التفاصيل، والتتبع.',
+        '/my-profile.php' => 'ملفك الشخصي في ' . $siteName . ' — بيانات الحساب وإعدادات الأمان.',
+        '/track-order.php' => 'تتبع طلبك من ' . $siteName . ' باستخدام رمز التتبع.',
+        default => $siteName . ' — بوابة تجارة الأحذية الإلكترونية.',
+    };
+}
+
+/** @return array<string, mixed> */
+function portal_json_ld_organization(string $siteName, ?string $logoUrl = null): array
+{
+    $data = [
+        '@context' => 'https://schema.org',
+        '@type' => 'Organization',
+        'name' => $siteName,
+        'url' => portal_absolute_url('/'),
+    ];
+    if ($logoUrl !== null && trim($logoUrl) !== '') {
+        $data['logo'] = str_starts_with($logoUrl, 'http') ? $logoUrl : portal_absolute_url($logoUrl);
+    }
+
+    return $data;
+}
+
+/** @return array<string, mixed> */
+function portal_json_ld_website(string $siteName): array
+{
+    return [
+        '@context' => 'https://schema.org',
+        '@type' => 'WebSite',
+        'name' => $siteName,
+        'url' => portal_absolute_url('/'),
+        'inLanguage' => 'ar',
+    ];
+}
+
 function web_can(string $permission): bool
 {
     return WebSession::hasPermission($permission);
