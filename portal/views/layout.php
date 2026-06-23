@@ -83,7 +83,7 @@ if ($customer) {
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="<?= h($siteName) ?>">
     <link rel="manifest" href="/manifest.php">
-    <link rel="apple-touch-icon" href="<?= h($companyLogoUrl !== '' ? $companyLogoUrl : '/icons/app-icon.svg') ?>">
+    <link rel="apple-touch-icon" href="<?= h($companyLogoUrl !== '' ? portal_absolute_url($companyLogoUrl) : portal_absolute_url('/icons/icon-png.php?size=192')) ?>">
     <title><?= h($title) ?> — <?= h($siteName) ?></title>
     <meta name="description" content="<?= h($metaDescription) ?>">
     <meta name="robots" content="<?= h((string) ($metaRobots ?? 'index, follow')) ?>">

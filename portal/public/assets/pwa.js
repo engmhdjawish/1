@@ -1,29 +1,64 @@
 /**
- * PWA install prompt + service worker registration.
+ * PWA install prompt + service worker + manual install hints (iOS / HTTP LAN).
  */
 (function () {
   'use strict';
 
-  if (!('serviceWorker' in navigator)) {
-    return;
-  }
+  const DISMISS_KEY = 'pwa-install-dismissed';
+  const isStandalone =
+    window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isAndroid = /android/i.test(navigator.userAgent);
+  const isMobile = window.matchMedia('(max-width: 900px)').matches || isIOS || isAndroid;
+  const isSecure = window.isSecureContext === true;
 
   let deferredPrompt = null;
 
-  window.addEventListener('beforeinstallprompt', (event) => {
-    event.preventDefault();
-    deferredPrompt = event;
-    showInstallBanner();
-  });
+  function isDismissed() {
+    try {
+      return sessionStorage.getItem(DISMISS_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
 
-  function showInstallBanner() {
-    if (document.getElementById('pwa-install-banner')) {
+  function dismissBanner() {
+    const banner = document.getElementById('pwa-install-banner');
+    if (banner) banner.remove();
+    try {
+      sessionStorage.setItem(DISMISS_KEY, '1');
+    } catch (_) {}
+  }
+
+  function bannerContent(mode) {
+    if (mode === 'ios') {
+      return {
+        title: 'أضف الموقع للشاشة الرئيسية',
+        hint: 'من Safari: زر المشاركة ↗ ثم «إضافة إلى الشاشة الرئيسية»',
+        button: null,
+      };
+    }
+    if (mode === 'http') {
+      return {
+        title: 'تثبيت التطبيق',
+        hint: 'للتثبيت التلقائي استخدم HTTPS. على الشبكة المحلية يمكن الإضافة يدوياً من قائمة المتصفح.',
+        button: null,
+      };
+    }
+    return {
+      title: 'ثبّت التطبيق على هاتفك',
+      hint: 'وصول أسرع للمتجر من الشاشة الرئيسية',
+      button: 'تثبيت',
+    };
+  }
+
+  function showInstallBanner(mode) {
+    if (document.getElementById('pwa-install-banner') || isStandalone || isDismissed()) {
       return;
     }
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      return;
-    }
 
+    const copy = bannerContent(mode);
     const banner = document.createElement('div');
     banner.id = 'pwa-install-banner';
     banner.className = 'pwa-install-banner';
@@ -31,10 +66,12 @@
       '<div class="pwa-install-banner__inner">' +
       '<span class="material-symbols-outlined" aria-hidden="true">install_mobile</span>' +
       '<div class="pwa-install-banner__text">' +
-      '<strong>ثبّت التطبيق على هاتفك</strong>' +
-      '<span>وصول أسرع للمتجر من الشاشة الرئيسية</span>' +
+      '<strong>' + copy.title + '</strong>' +
+      '<span>' + copy.hint + '</span>' +
       '</div>' +
-      '<button type="button" class="pwa-install-banner__btn" data-pwa-install>تثبيت</button>' +
+      (copy.button
+        ? '<button type="button" class="pwa-install-banner__btn" data-pwa-install>' + copy.button + '</button>'
+        : '') +
       '<button type="button" class="pwa-install-banner__close" data-pwa-dismiss aria-label="إغلاق">×</button>' +
       '</div>';
 
@@ -47,22 +84,42 @@
       deferredPrompt.prompt();
       await deferredPrompt.userChoice;
       deferredPrompt = null;
-      banner.remove();
+      dismissBanner();
     });
 
-    banner.querySelector('[data-pwa-dismiss]')?.addEventListener('click', () => {
-      banner.remove();
-      try {
-        sessionStorage.setItem('pwa-install-dismissed', '1');
-      } catch (_) {}
-    });
+    banner.querySelector('[data-pwa-dismiss]')?.addEventListener('click', dismissBanner);
   }
 
-  if (!sessionStorage.getItem('pwa-install-dismissed')) {
-    setTimeout(showInstallBanner, 2400);
-  }
-
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredPrompt = event;
+    showInstallBanner('native');
   });
+
+  if ('serviceWorker' in navigator && isSecure) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+    });
+  }
+
+  if (!isDismissed() && !isStandalone && isMobile) {
+    window.setTimeout(() => {
+      if (document.getElementById('pwa-install-banner')) {
+        return;
+      }
+      if (deferredPrompt) {
+        showInstallBanner('native');
+        return;
+      }
+      if (isIOS) {
+        showInstallBanner('ios');
+        return;
+      }
+      if (!isSecure) {
+        showInstallBanner('http');
+        return;
+      }
+      showInstallBanner('native');
+    }, 2200);
+  }
 })();

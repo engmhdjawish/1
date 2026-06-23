@@ -14,8 +14,8 @@ $siteName = trim((string) ($company['company_name'] ?? '')) !== ''
     : 'جاويش للتجارة';
 $shortName = mb_strlen($siteName) > 12 ? mb_substr($siteName, 0, 12) : $siteName;
 $logoUrl = PortalSettingsService::companyLogoUrl($company);
-$icon192 = $logoUrl !== '' ? portal_absolute_url($logoUrl) : portal_absolute_url('/icons/app-icon.svg');
-$icon512 = $icon192;
+$icon192 = portal_absolute_url('/icons/icon-png.php?size=192');
+$icon512 = portal_absolute_url('/icons/icon-png.php?size=512');
 
 header('Content-Type: application/manifest+json; charset=utf-8');
 header('Cache-Control: public, max-age=3600');
@@ -37,13 +37,13 @@ echo json_encode([
         [
             'src' => $icon192,
             'sizes' => '192x192',
-            'type' => str_ends_with(strtolower($icon192), '.svg') ? 'image/svg+xml' : 'image/png',
+            'type' => 'image/png',
             'purpose' => 'any',
         ],
         [
             'src' => $icon512,
             'sizes' => '512x512',
-            'type' => str_ends_with(strtolower($icon512), '.svg') ? 'image/svg+xml' : 'image/png',
+            'type' => 'image/png',
             'purpose' => 'any maskable',
         ],
     ],
