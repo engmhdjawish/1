@@ -8,6 +8,7 @@ use Portal\Auth\CustomerSession;
 use Portal\Services\OrderService;
 use Portal\Services\ShareCartService;
 use Portal\Services\SpecialOfferService;
+use Portal\Services\StockReservationService;
 use Portal\Services\StoreCartService;
 use Portal\Services\StoreCatalogService;
 use Portal\Services\StorePolicyService;
@@ -52,11 +53,14 @@ final class StoreCartApi
     /** @param array<string, mixed> $display @param array<string, mixed> $input */
     private static function add(array $input, array $display): array
     {
-        $quantity = max(1, (int) round((float) ($input['quantity'] ?? 1)));
+        $quantity = max(0.0, round((float) ($input['quantity'] ?? 1), 4));
+        if ($quantity <= 0) {
+            return self::payload('الكمية غير صالحة.', false);
+        }
         $materialGuid = trim((string) ($input['material_guid'] ?? ''));
         if ($materialGuid !== '') {
             $cartItems = StoreCartService::items();
-            $currentQty = (int) round((float) ($cartItems[$materialGuid]['quantity'] ?? 0));
+            $currentQty = (float) ($cartItems[$materialGuid]['quantity'] ?? 0);
             $clientCheck = self::clientQuantityCheck($materialGuid, $quantity, $currentQty);
             if (!$clientCheck['ok']) {
                 return self::payload($clientCheck['message'], false);
@@ -86,7 +90,7 @@ final class StoreCartApi
     private static function update(array $input): array
     {
         $materialGuid = trim((string) ($input['material_guid'] ?? ''));
-        $quantity = max(0, (int) round((float) ($input['quantity'] ?? 0)));
+        $quantity = max(0.0, round((float) ($input['quantity'] ?? 0), 4));
         if ($materialGuid === '') {
             return self::payload('تعذر تحديد المادة.', false);
         }
@@ -226,7 +230,7 @@ final class StoreCartApi
     }
 
     /** @return array{ok: bool, message: string} */
-    private static function clientQuantityCheck(string $materialGuid, int $addQty, int $currentQty): array
+    private static function clientQuantityCheck(string $materialGuid, float $addQty, float $currentQty): array
     {
         $max = StorePolicyService::maxPackagesPerMaterial();
         if ($max === null) {
@@ -234,19 +238,20 @@ final class StoreCartApi
         }
 
         $target = $currentQty + $addQty;
-        if ($target <= $max) {
+        if ($target <= $max + 0.0001) {
             return ['ok' => true, 'message' => ''];
         }
 
         $maxLabel = SpecialOfferService::formatQuantityLabel($max);
         if ($currentQty > 0) {
-            $remaining = max(0, (int) floor($max - $currentQty));
+            $remaining = max(0.0, round($max - $currentQty, 4));
+            $remainingLabel = StockReservationService::formatPackages($remaining);
 
             return [
                 'ok' => false,
                 'message' => 'الحد الأقصى ' . $maxLabel . ' طرد لهذه المادة. لديك '
-                    . $currentQty . ' في السلة'
-                    . ($remaining > 0 ? ' — يمكنك إضافة ' . $remaining . ' فقط.' : ' — لا يمكن إضافة المزيد.'),
+                    . StockReservationService::formatPackages($currentQty) . ' في السلة'
+                    . ($remaining > 0 ? ' — يمكنك إضافة ' . $remainingLabel . ' فقط.' : ' — لا يمكن إضافة المزيد.'),
             ];
         }
 

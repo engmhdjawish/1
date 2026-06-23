@@ -194,7 +194,7 @@ function material_image_zoom_url(string $imageUrl): string
 function product_preview_payload(
     array $item,
     array $displayOptions,
-    int $cartQtyForItem = 0,
+    float $cartQtyForItem = 0.0,
     ?string $returnUrl = null,
     ?string $offerSlug = null
 ): array {
@@ -220,12 +220,15 @@ function product_preview_payload(
 
     $guid = material_guid($item);
     $returnUrl = $returnUrl ?? ($_SERVER['REQUEST_URI'] ?? '/store.php');
+    $cartQtyForItem = max(0, (float) $cartQtyForItem);
+    $qtyBounds = store_cart_qty_bounds($item, $cartQtyForItem, $showQuantity);
     $maxPackages = \Portal\Services\StorePolicyService::maxPackagesPerMaterial();
     $maxLabel = $maxPackages !== null
         ? \Portal\Services\SpecialOfferService::formatQuantityLabel($maxPackages)
         : null;
-    $remaining = $maxPackages !== null ? max(0, (int) floor($maxPackages - $cartQtyForItem)) : null;
-    $atLimit = $maxPackages !== null && $remaining <= 0;
+    $remaining = $qtyBounds['effectiveMax'];
+    $atLimit = $qtyBounds['atLimit'];
+    $packagesAvailable = (float) ($qtyBounds['stockAvailable'] ?? 0.0);
 
     return [
         'guid' => $guid,
@@ -240,7 +243,8 @@ function product_preview_payload(
         'showPriceSyp' => $showPriceSyp,
         'showPriceUsd' => $showPriceUsd,
         'showQuantity' => $showQuantity,
-        'packagesAvailable' => $showQuantity ? packages_available_display($item) : 0.0,
+        'packagesAvailable' => $packagesAvailable,
+        'packagesAvailableLabel' => $showQuantity ? format_packages_display($packagesAvailable) : '',
         'packaging' => $packaging,
         'primaryUnit' => $primaryUnit,
         'packageUnit' => $packageUnit,
@@ -260,6 +264,11 @@ function product_preview_payload(
         'maxLabel' => $maxLabel,
         'remaining' => $remaining,
         'atLimit' => $atLimit,
+        'defaultQty' => $qtyBounds['defaultQty'],
+        'qtyStep' => $qtyBounds['qtyStep'],
+        'qtyMin' => $qtyBounds['qtyMin'],
+        'partialPackage' => $qtyBounds['partialPackage'],
+        'effectiveMax' => $qtyBounds['effectiveMax'],
         'returnUrl' => strtok((string) $returnUrl, '#'),
     ];
 }
@@ -375,6 +384,68 @@ function absolute_order_tracking_url(string $token): string
 function format_packaging(float $value): string
 {
     return rtrim(rtrim(number_format($value, 2, '.', ','), '0'), '.');
+}
+
+function format_packages_display(float $qty): string
+{
+    return \Portal\Services\StockReservationService::formatPackages($qty);
+}
+
+/**
+ * @return array{
+ *   policyRemaining: float|null,
+ *   stockAvailable: float|null,
+ *   effectiveMax: float|null,
+ *   defaultQty: float,
+ *   qtyStep: float,
+ *   qtyMin: float,
+ *   partialPackage: bool,
+ *   atLimit: bool
+ * }
+ */
+function store_cart_qty_bounds(array $item, float $cartQtyForItem, bool $showQuantity = false): array
+{
+    $maxPackages = \Portal\Services\StorePolicyService::maxPackagesPerMaterial();
+    $policyRemaining = $maxPackages !== null
+        ? max(0.0, round($maxPackages - $cartQtyForItem, 4))
+        : null;
+    $stockAvailable = $showQuantity ? packages_available_display($item) : null;
+    $effectiveMax = $policyRemaining;
+    if ($stockAvailable !== null) {
+        $stockRemaining = max(0.0, round($stockAvailable, 4));
+        $effectiveMax = $effectiveMax !== null
+            ? min($effectiveMax, $stockRemaining)
+            : $stockRemaining;
+    }
+
+    $partialPackage = $stockAvailable !== null && $stockAvailable > 0 && $stockAvailable < 1;
+    $defaultQty = 1.0;
+    $qtyStep = 1.0;
+    $qtyMin = 1.0;
+    if ($partialPackage) {
+        $defaultQty = $effectiveMax !== null && $effectiveMax > 0
+            ? min($stockAvailable, $effectiveMax)
+            : $stockAvailable;
+        $qtyStep = 0.01;
+        $qtyMin = 0.01;
+    } elseif ($effectiveMax !== null && $effectiveMax > 0 && $effectiveMax < 1) {
+        $defaultQty = $effectiveMax;
+        $qtyStep = 0.01;
+        $qtyMin = 0.01;
+    }
+
+    $atLimit = $effectiveMax !== null && $effectiveMax <= 0;
+
+    return [
+        'policyRemaining' => $policyRemaining,
+        'stockAvailable' => $stockAvailable,
+        'effectiveMax' => $effectiveMax,
+        'defaultQty' => max(0.0, round($defaultQty, 4)),
+        'qtyStep' => $qtyStep,
+        'qtyMin' => $qtyMin,
+        'partialPackage' => $partialPackage,
+        'atLimit' => $atLimit,
+    ];
 }
 
 /** @param array<string, mixed> $item */

@@ -429,7 +429,7 @@ final class SpecialOfferService
     /** @return array{ok: bool, message: string, quantity: float} */
     public static function validatePackageQuantity(string $materialGuid, float $quantity, ?array $offer = null): array
     {
-        $quantity = max(0.0, round($quantity));
+        $quantity = max(0.0, round($quantity, 4));
         if ($quantity <= 0) {
             return ['ok' => true, 'message' => '', 'quantity' => 0.0];
         }

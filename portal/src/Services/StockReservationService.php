@@ -106,10 +106,18 @@ final class StockReservationService
         float $warehousePrimary,
         float $packaging
     ): float {
-        $packaging = max(1.0, $packaging);
+        return self::availablePackagesExact($materialGuid, $warehousePrimary, $packaging);
+    }
+
+    public static function availablePackagesExact(
+        string $materialGuid,
+        float $warehousePrimary,
+        float $packaging
+    ): float {
+        $packaging = max(0.0001, $packaging);
         $primary = self::availablePrimaryUnits($materialGuid, $warehousePrimary, $packaging);
 
-        return $packaging > 0 ? floor($primary / $packaging) : $primary;
+        return max(0.0, round($primary / $packaging, 4));
     }
 
     /** @param array<string, mixed> $material */
@@ -123,7 +131,7 @@ final class StockReservationService
         $packaging = ShareCartService::packaging($material);
         $warehouse = self::warehousePrimaryUnits($material);
 
-        return self::availablePackages($guid, $warehouse, $packaging);
+        return self::availablePackagesExact($guid, $warehouse, $packaging);
     }
 
     /**

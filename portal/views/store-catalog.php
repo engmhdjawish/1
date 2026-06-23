@@ -720,7 +720,22 @@ require __DIR__ . '/partials/store-filter-group.php';
     $totalPages = (int) ($catalog['totalPages'] ?? 1);
     $buildUrl = static fn (int $targetPage): string => $buildStoreUrl($targetPage);
     require __DIR__ . '/partials/catalog-pagination.php';
+
+    $buildPreviewPageUrl = static function (int $targetPage, string $previewEdge) use ($buildStoreUrl): string {
+        $url = $buildStoreUrl($targetPage);
+        $separator = str_contains($url, '?') ? '&' : '?';
+
+        return $url . $separator . 'preview=' . rawurlencode($previewEdge);
+    };
     ?>
+    <script>
+      window.__storePreviewPaging = <?= json_encode([
+          'page' => $page,
+          'totalPages' => $totalPages,
+          'prevPageUrl' => $page > 1 ? $buildPreviewPageUrl($page - 1, 'last') : null,
+          'nextPageUrl' => $page < $totalPages ? $buildPreviewPageUrl($page + 1, 'first') : null,
+      ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    </script>
   </div>
 </div>
 

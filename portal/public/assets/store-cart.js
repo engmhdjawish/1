@@ -83,7 +83,7 @@
 
   const formatMoney = (amount) => {
     const n = Number(amount) || 0;
-    return n.toLocaleString('ar-SY', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   };
 
   const updateBadge = (count) => {
@@ -116,30 +116,46 @@
   };
 
   const getMaxQty = (form) => {
+    const effective = parseFloat(form.dataset.effectiveMax || '');
+    if (Number.isFinite(effective) && effective >= 0) return effective;
     const max = parseFloat(form.dataset.maxQty || '');
     return Number.isFinite(max) && max > 0 ? max : null;
   };
 
+  const getQtyStep = (form) => {
+    const step = parseFloat(form.dataset.qtyStep || '1');
+    return Number.isFinite(step) && step > 0 ? step : 1;
+  };
+
   const getCurrentInCart = (form) => {
-    return Math.max(0, parseInt(form.dataset.cartQty || '0', 10) || 0);
+    return Math.max(0, parseFloat(form.dataset.cartQty || '0') || 0);
   };
 
   const getRequestedQty = (form) => {
     const input = form.querySelector('[name="quantity"]');
-    return Math.max(1, parseInt(input?.value || '1', 10) || 1);
+    const step = getQtyStep(form);
+    const raw = Math.max(0, parseFloat(input?.value || String(step)) || step);
+    if (step < 1) return Math.round(raw * 100) / 100;
+    return Math.max(step, Math.round(raw));
   };
 
   const validateQty = (form, addQty, currentQty) => {
     const max = getMaxQty(form);
     if (max === null) return { ok: true, message: '' };
     const target = currentQty + addQty;
-    if (target <= max) return { ok: true, message: '' };
+    if (target <= max + 0.0001) return { ok: true, message: '' };
     const maxLabel = form.dataset.maxQtyLabel || String(max);
+    const fmt = (n) => {
+      const step = getQtyStep(form);
+      return step < 1
+        ? n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+        : String(Math.floor(n));
+    };
     if (currentQty > 0) {
-      const remaining = Math.max(0, Math.floor(max - currentQty));
+      const remaining = Math.max(0, max - currentQty);
       return {
         ok: false,
-        message: `الحد الأقصى ${maxLabel} طرد لهذه المادة. لديك ${currentQty} في السلة${remaining > 0 ? ` — يمكنك إضافة ${remaining} فقط.` : ' — لا يمكن إضافة المزيد.'}`,
+        message: `الحد الأقصى ${maxLabel} طرد لهذه المادة. لديك ${fmt(currentQty)} في السلة${remaining > 0 ? ` — يمكنك إضافة ${fmt(remaining)} فقط.` : ' — لا يمكن إضافة المزيد.'}`,
       };
     }
     return { ok: false, message: `الحد الأقصى للطلب هو ${maxLabel} طرد لهذه المادة.` };
@@ -155,25 +171,31 @@
     const hint = form.querySelector('[data-qty-hint]');
     const minus = form.querySelector('[data-qty-minus]');
     const plus = form.querySelector('[data-qty-plus]');
+    const step = getQtyStep(form);
     if (max !== null && input) {
       const remaining = Math.max(0, max - inCart);
-      input.max = String(Math.max(1, remaining));
-      if (parseInt(input.value, 10) > remaining && remaining > 0) {
-        input.value = String(remaining);
+      input.max = String(Math.max(step, remaining));
+      const currentVal = parseFloat(input.value || String(step)) || step;
+      if (currentVal > remaining && remaining > 0) {
+        input.value = step < 1 ? String(Math.round(remaining * 100) / 100) : String(Math.max(step, Math.floor(remaining)));
       }
-      if (hint) {
+      if (hint && !hint.textContent.includes('أقل من طرد')) {
         if (remaining <= 0) {
           hint.textContent = `وصلت للحد الأقصى (${form.dataset.maxQtyLabel || max} طرد)`;
           hint.classList.add('is-warning');
         } else {
-          hint.textContent = `الحد الأقصى ${form.dataset.maxQtyLabel || max} طرد — متبقي ${remaining}`;
+          const remainingLabel = step < 1
+            ? remaining.toLocaleString('en-US', { maximumFractionDigits: 2 })
+            : String(Math.floor(remaining));
+          hint.textContent = `الحد الأقصى ${form.dataset.maxQtyLabel || max} طرد — متبقي ${remainingLabel}`;
           hint.classList.remove('is-warning');
         }
       }
       if (plus) plus.disabled = remaining <= 0;
     }
     if (minus && input) {
-      minus.disabled = parseInt(input.value, 10) <= 1;
+      const val = parseFloat(input.value || String(step)) || step;
+      minus.disabled = val <= step;
     }
   };
 
@@ -187,23 +209,29 @@
       const refresh = () => {
         const max = getMaxQty(form);
         const current = getCurrentInCart(form);
-        const val = parseInt(input?.value || '1', 10) || 1;
-        if (minus) minus.disabled = val <= 1;
+        const step = getQtyStep(form);
+        const val = parseFloat(input?.value || String(step)) || step;
+        if (minus) minus.disabled = val <= step;
         if (plus && max !== null) {
           const remaining = Math.max(0, max - current);
-          plus.disabled = val >= remaining;
+          plus.disabled = val >= remaining - 0.0001;
         }
       };
       minus?.addEventListener('click', () => {
         if (!input) return;
-        input.value = String(Math.max(1, (parseInt(input.value, 10) || 1) - 1));
+        const step = getQtyStep(form);
+        const val = parseFloat(input.value || String(step)) || step;
+        const next = Math.max(step, step < 1 ? Math.round((val - step) * 100) / 100 : val - step);
+        input.value = String(next);
         refresh();
       });
       plus?.addEventListener('click', () => {
         if (!input) return;
-        const next = (parseInt(input.value, 10) || 1) + 1;
-        const check = validateQty(form, 1, getCurrentInCart(form));
-        if (!check.ok && next > (parseInt(input.value, 10) || 1)) {
+        const step = getQtyStep(form);
+        const val = parseFloat(input.value || String(step)) || step;
+        const next = step < 1 ? Math.round((val + step) * 100) / 100 : val + step;
+        const check = validateQty(form, step, getCurrentInCart(form));
+        if (!check.ok && next > val) {
           showToast(check.message, 'error');
           return;
         }
@@ -244,7 +272,10 @@
           updateBadge(data.cart_count);
           if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
           if (!data.ok) return;
-          if (inputReset(form)) form.querySelector('[name="quantity"]').value = '1';
+          if (inputReset(form)) {
+            const step = getQtyStep(form);
+            form.querySelector('[name="quantity"]').value = String(step);
+          }
         } catch {
           showToast('تعذر الاتصال بالخادم.', 'error');
         } finally {

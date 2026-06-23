@@ -61,7 +61,7 @@ $materialType = trim((string) ($item['materialType'] ?? ''));
 $manufacturer = trim((string) ($item['manufacturer'] ?? ''));
 $showAnyPrice = ($showPriceSyp || $showPriceUsd) && (bool) ($displayOptions['show_price'] ?? false);
 $cartItems = $allowCart ? StoreCartService::items() : [];
-$cartQtyForItem = $guid !== '' ? (int) round((float) ($cartItems[$guid]['quantity'] ?? 0)) : 0;
+$cartQtyForItem = $guid !== '' ? (float) ($cartItems[$guid]['quantity'] ?? 0) : 0.0;
 $previewPayload = $useImagePreview
     ? product_preview_payload($item, $displayOptions, $cartQtyForItem, $productReturnUrl, $productOfferSlug)
     : null;
@@ -127,17 +127,17 @@ $previewJson = $previewPayload !== null
         <div class="store-product-card__brand"><?= h($manufacturer) ?></div>
       <?php endif; ?>
       <div class="store-product-card__pack">
-        تعبئة <?= h(format_packaging($packaging)) ?> <?= h($primaryUnit) ?> / <?= h($packageUnit) ?>
+        تعبئة <span class="store-num" dir="ltr"><?= h(format_packaging($packaging)) ?></span> <?= h($primaryUnit) ?> / <?= h($packageUnit) ?>
       </div>
       <?php if ($showAnyPrice): ?>
         <div class="store-product-card__price">
           <?php require __DIR__ . '/offer-price-block.php'; ?>
         </div>
       <?php endif; ?>
-      <?php if ($showQuantity): ?>
+      <?php if ($showQuantity && $packagesAvailable > 0): ?>
         <div class="store-product-card__stock">
           <span class="material-symbols-outlined text-sm" aria-hidden="true">inventory</span>
-          <?= number_format($packagesAvailable, 0, '.', ',') ?> <?= h($packageUnit) ?>
+          <span class="store-num" dir="ltr"><?= h(format_packages_display($packagesAvailable)) ?></span> <?= h($packageUnit) ?>
         </div>
       <?php endif; ?>
     </div>

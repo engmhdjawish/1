@@ -72,7 +72,10 @@ final class ShareCartService
         if (isset($_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid])) {
             $existingQty = (float) ($_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]['quantity'] ?? 0);
         }
-        $quantity = max(1.0, round($quantity));
+        $quantity = max(0.0, round((float) $quantity, 4));
+        if ($quantity <= 0) {
+            return ['ok' => false, 'message' => 'الكمية غير صالحة.', 'quantity' => 0.0];
+        }
         $targetQty = $existingQty > 0 ? $existingQty + $quantity : $quantity;
         $validation = SpecialOfferService::validatePackageQuantity($materialGuid, $targetQty, null);
         if (!$validation['ok']) {
