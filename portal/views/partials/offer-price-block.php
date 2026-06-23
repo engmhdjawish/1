@@ -18,36 +18,78 @@ $primaryUnit = ShareCartService::primaryUnitLabel($item);
 if ($hasOffer) {
     $origPackSp = (float) ($item['original_package_sale_price_sp'] ?? 0);
     $origPackUsd = (float) ($item['original_package_sale_price_usd'] ?? 0);
+    $origUnitSp = (float) ($item['original_unit_sale_price_sp'] ?? 0);
+    $origUnitUsd = (float) ($item['original_unit_sale_price_usd'] ?? 0);
     $effPackSp = (float) ($item['effective_package_sale_price_sp'] ?? ShareCartService::packageSalePriceSp($item));
     $effPackUsd = (float) ($item['effective_package_sale_price_usd'] ?? ShareCartService::packageSalePriceUsd($item));
+    $effUnitSp = ShareCartService::unitSalePriceSp($item);
+    $effUnitUsd = ShareCartService::unitSalePriceUsd($item);
 } else {
     $origPackSp = 0.0;
     $origPackUsd = 0.0;
+    $origUnitSp = 0.0;
+    $origUnitUsd = 0.0;
     $effPackSp = ShareCartService::packageSalePriceSp($item);
     $effPackUsd = ShareCartService::packageSalePriceUsd($item);
+    $effUnitSp = ShareCartService::unitSalePriceSp($item);
+    $effUnitUsd = ShareCartService::unitSalePriceUsd($item);
 }
 $badge = trim((string) ($item['offer_badge'] ?? ''));
+$showPackSp = $showPriceSyp && ($effPackSp > 0 || $origPackSp > 0);
+$showPackUsd = $showPriceUsd && ($effPackUsd > 0 || $origPackUsd > 0);
+$showUnitSp = $showPriceSyp && ($effUnitSp > 0 || $origUnitSp > 0);
+$showUnitUsd = $showPriceUsd && ($effUnitUsd > 0 || $origUnitUsd > 0);
 ?>
-<?php if ($badge !== ''): ?>
-  <span class="inline-flex mb-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-extrabold"><?= h($badge) ?></span>
-<?php endif; ?>
-<?php if ($showPriceSyp && ($effPackSp > 0 || $origPackSp > 0)): ?>
-  <div class="mt-2">
-    <?php if ($hasOffer && $origPackSp > $effPackSp): ?>
-      <div class="text-xs text-gray-400 line-through"><?= format_money($origPackSp, true) ?> ل.س</div>
-    <?php endif; ?>
-    <div class="text-primary font-extrabold text-base"><?= format_money($effPackSp > 0 ? $effPackSp : $origPackSp, true) ?> ل.س
-      <span class="text-xs font-normal text-gray-500">/ <?= h($packageUnit) ?></span>
+<div class="offer-price-block">
+  <?php if ($badge !== ''): ?>
+    <span class="offer-price-block__badge"><?= h($badge) ?></span>
+  <?php endif; ?>
+
+  <?php if ($showPackSp): ?>
+    <div class="offer-price-block__row offer-price-block__row--main">
+      <span class="offer-price-block__label">سعر <?= h($packageUnit) ?></span>
+      <div class="offer-price-block__values">
+        <?php if ($hasOffer && $origPackSp > $effPackSp): ?>
+          <span class="offer-price-block__old"><?= format_money($origPackSp, true) ?> ل.س</span>
+        <?php endif; ?>
+        <span class="offer-price-block__amount offer-price-block__amount--syp"><?= format_money($effPackSp > 0 ? $effPackSp : $origPackSp, true) ?> <small>ل.س</small></span>
+      </div>
     </div>
-  </div>
-<?php endif; ?>
-<?php if ($showPriceUsd && ($effPackUsd > 0 || $origPackUsd > 0)): ?>
-  <div class="mt-1">
-    <?php if ($hasOffer && $origPackUsd > $effPackUsd): ?>
-      <div class="text-xs text-gray-400 line-through">$<?= number_format($origPackUsd, 2, '.', ',') ?></div>
-    <?php endif; ?>
-    <div class="text-emerald-700 font-bold text-sm">$<?= number_format($effPackUsd > 0 ? $effPackUsd : $origPackUsd, 2, '.', ',') ?>
-      <span class="text-xs font-normal text-gray-500">/ <?= h($packageUnit) ?></span>
+  <?php endif; ?>
+
+  <?php if ($showUnitSp): ?>
+    <div class="offer-price-block__row">
+      <span class="offer-price-block__label">سعر <?= h($primaryUnit) ?></span>
+      <div class="offer-price-block__values">
+        <?php if ($hasOffer && $origUnitSp > $effUnitSp): ?>
+          <span class="offer-price-block__old"><?= format_money($origUnitSp, true) ?> ل.س</span>
+        <?php endif; ?>
+        <span class="offer-price-block__amount offer-price-block__amount--unit"><?= format_money($effUnitSp > 0 ? $effUnitSp : $origUnitSp, true) ?> <small>ل.س</small></span>
+      </div>
     </div>
-  </div>
-<?php endif; ?>
+  <?php endif; ?>
+
+  <?php if ($showPackUsd): ?>
+    <div class="offer-price-block__row offer-price-block__row--main">
+      <span class="offer-price-block__label">سعر <?= h($packageUnit) ?></span>
+      <div class="offer-price-block__values">
+        <?php if ($hasOffer && $origPackUsd > $effPackUsd): ?>
+          <span class="offer-price-block__old">$<?= number_format($origPackUsd, 2, '.', ',') ?></span>
+        <?php endif; ?>
+        <span class="offer-price-block__amount offer-price-block__amount--usd">$<?= number_format($effPackUsd > 0 ? $effPackUsd : $origPackUsd, 2, '.', ',') ?></span>
+      </div>
+    </div>
+  <?php endif; ?>
+
+  <?php if ($showUnitUsd): ?>
+    <div class="offer-price-block__row">
+      <span class="offer-price-block__label">سعر <?= h($primaryUnit) ?></span>
+      <div class="offer-price-block__values">
+        <?php if ($hasOffer && $origUnitUsd > $effUnitUsd): ?>
+          <span class="offer-price-block__old">$<?= number_format($origUnitUsd, 2, '.', ',') ?></span>
+        <?php endif; ?>
+        <span class="offer-price-block__amount offer-price-block__amount--unit">$<?= number_format($effUnitUsd > 0 ? $effUnitUsd : $origUnitUsd, 2, '.', ',') ?></span>
+      </div>
+    </div>
+  <?php endif; ?>
+</div>

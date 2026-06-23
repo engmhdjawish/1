@@ -218,6 +218,7 @@ final class StoreCartApi
             'allow_cart' => (bool) ($display['allow_cart'] ?? false),
             'allow_order' => (bool) ($display['allow_order'] ?? false),
             'show_price' => (bool) ($display['show_price'] ?? false),
+            'price_mode' => (string) ($display['price_mode'] ?? 'syp'),
             'stock_notices' => $notices,
         ];
 

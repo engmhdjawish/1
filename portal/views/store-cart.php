@@ -8,6 +8,9 @@ declare(strict_types=1);
 /** @var bool $allowCart */
 /** @var bool $allowOrder */
 /** @var bool $showPrice */
+/** @var bool $showPriceSyp */
+/** @var bool $showPriceUsd */
+/** @var string $priceMode */
 /** @var string|null $error */
 /** @var string|null $notice */
 /** @var string $defaultGuestName */
@@ -26,6 +29,7 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
   data-store-cart-page="1"
   data-default-name="<?= h($defaultGuestName) ?>"
   data-default-phone="<?= h($defaultGuestPhone) ?>"
+  data-price-mode="<?= h($priceMode ?? 'syp') ?>"
 >
   <header class="store-cart-header flex flex-wrap items-center justify-between gap-3 mb-6">
     <div>
@@ -89,13 +93,19 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
                       $qty = max(1, (int) round((float) ($line['quantity'] ?? 1)));
                       $packageUnit = (string) ($line['package_unit'] ?? 'طرد');
                       $priceSp = (float) ($line['sale_price_sp'] ?? 0);
+                      $priceUsd = (float) ($line['sale_price_usd'] ?? 0);
                       $lineTotalSp = $qty * $priceSp;
+                      $lineTotalUsd = $qty * $priceUsd;
                     ?>
                     <tr data-cart-line="<?= h($materialGuid) ?>">
                       <td>
                         <div class="store-cart-product">
                           <?php if (!empty($line['image_url'])): ?>
-                            <img src="<?= h((string) $line['image_url']) ?>" alt="" loading="lazy">
+                            <?php $zoomUrl = material_image_zoom_url((string) $line['image_url']); ?>
+                            <button type="button" class="store-cart-product__thumb" data-cart-image-zoom="<?= h($zoomUrl) ?>" title="تكبير الصورة للتدقيق">
+                              <img src="<?= h((string) $line['image_url']) ?>" alt="">
+                              <span class="store-cart-product__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span>
+                            </button>
                           <?php else: ?>
                             <div class="store-cart-product__placeholder">
                               <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>
@@ -110,8 +120,10 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
                         </div>
                       </td>
                       <td class="text-sm whitespace-nowrap">
-                        <?php if ($showPrice && $priceSp > 0): ?>
+                        <?php if ($showPriceSyp && $priceSp > 0): ?>
                           <span class="font-bold text-primary"><?= format_money($priceSp, true) ?> ل.س</span>
+                        <?php elseif ($showPriceUsd && $priceUsd > 0): ?>
+                          <span class="font-bold text-emerald-700">$<?= number_format($priceUsd, 2, '.', ',') ?></span>
                         <?php else: ?>
                           —
                         <?php endif; ?>
@@ -131,7 +143,13 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
                         <div class="text-xs text-gray-500 mt-1"><?= h($packageUnit) ?></div>
                       </td>
                       <td class="font-bold text-sm whitespace-nowrap">
-                        <?= $showPrice ? format_money($lineTotalSp, true) . ' ل.س' : '—' ?>
+                        <?php if ($showPriceSyp): ?>
+                          <?= format_money($lineTotalSp, true) ?> ل.س
+                        <?php elseif ($showPriceUsd): ?>
+                          $<?= number_format($lineTotalUsd, 2, '.', ',') ?>
+                        <?php else: ?>
+                          —
+                        <?php endif; ?>
                       </td>
                       <td class="text-center">
                         <button type="button" class="p-2 rounded-full text-red-600 hover:bg-red-50" data-remove-item="<?= h($materialGuid) ?>" aria-label="حذف">
@@ -160,8 +178,10 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
 
       <aside class="lg:col-span-4" data-cart-summary>
         <div class="store-panel store-cart-summary space-y-4">
-          <?php if ($showPrice): ?>
+          <?php if ($showPriceSyp): ?>
             <div class="store-cart-summary__total">الإجمالي: <?= format_money((float) $totals['total_sp'], true) ?> ل.س</div>
+          <?php elseif ($showPriceUsd): ?>
+            <div class="store-cart-summary__total">الإجمالي: $<?= number_format((float) $totals['total_usd'], 2, '.', ',') ?></div>
           <?php endif; ?>
           <button type="button" class="store-btn store-btn--ghost" data-clear-cart>تفريغ السلة</button>
 
@@ -185,4 +205,15 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
       </aside>
     </div>
   <?php endif; ?>
+</div>
+
+<div id="storeImageLightbox" class="store-image-lightbox" hidden aria-hidden="true">
+  <button type="button" class="store-image-lightbox__close" data-lightbox-close aria-label="إغلاق">
+    <span class="material-symbols-outlined">close</span>
+  </button>
+  <div class="store-image-lightbox__backdrop" data-lightbox-close></div>
+  <figure class="store-image-lightbox__frame">
+    <img src="" alt="" id="storeImageLightboxImg">
+    <figcaption id="storeImageLightboxCaption" class="store-image-lightbox__caption"></figcaption>
+  </figure>
 </div>
