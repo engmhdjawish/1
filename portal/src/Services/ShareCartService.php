@@ -72,7 +72,10 @@ final class ShareCartService
         if (isset($_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid])) {
             $existingQty = (float) ($_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]['quantity'] ?? 0);
         }
-        $quantity = max(1.0, round($quantity));
+        $quantity = max(0.0, round((float) $quantity, 4));
+        if ($quantity <= 0) {
+            return ['ok' => false, 'message' => 'الكمية غير صالحة.', 'quantity' => 0.0];
+        }
         $targetQty = $existingQty > 0 ? $existingQty + $quantity : $quantity;
         $validation = SpecialOfferService::validatePackageQuantity($materialGuid, $targetQty, null);
         if (!$validation['ok']) {
@@ -500,6 +503,39 @@ final class ShareCartService
         $line['primary_unit'] = trim((string) ($line['primary_unit'] ?? '')) !== '' ? (string) $line['primary_unit'] : 'قطعة';
 
         return $line;
+    }
+
+    /** @param array<string, mixed> $line */
+    public static function enrichLineWithOffer(array $line): array
+    {
+        if (!empty($line['has_offer']) && trim((string) ($line['offer_badge'] ?? '')) !== '') {
+            return $line;
+        }
+
+        $guid = trim((string) ($line['material_guid'] ?? ''));
+        if ($guid === '') {
+            return $line;
+        }
+
+        $product = StoreCatalogService::findMaterial($guid);
+        if ($product === null) {
+            return $line;
+        }
+
+        $overlay = SpecialOfferService::pricingOverlay($product);
+        if (empty($overlay['has_offer']) || !is_array($overlay['offer'] ?? null)) {
+            return $line;
+        }
+
+        $baseLine = array_merge(self::lineFromApiItem($product, true), $line);
+        $baseLine['quantity'] = (float) ($line['quantity'] ?? 1);
+        $enriched = SpecialOfferService::applyToCartLine($baseLine, $overlay['offer']);
+        $enriched['quantity'] = (float) ($line['quantity'] ?? 1);
+        if (!empty($line['image_url'])) {
+            $enriched['image_url'] = (string) $line['image_url'];
+        }
+
+        return $enriched;
     }
 
     /** @param array<string, mixed> $apiItem */

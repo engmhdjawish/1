@@ -9,11 +9,13 @@ use Portal\Services\StorePolicyService;
 /** @var array<string, mixed> $item */
 /** @var bool $capturePrices */
 /** @var string|null $returnUrl */
-/** @var int $cartQtyForItem */
+/** @var float $cartQtyForItem */
+/** @var bool $showQuantity */
 
 $capturePrices = (bool) ($capturePrices ?? false);
 $returnUrl = isset($returnUrl) ? (string) $returnUrl : ($_SERVER['REQUEST_URI'] ?? '/store.php');
-$cartQtyForItem = max(0, (int) ($cartQtyForItem ?? 0));
+$cartQtyForItem = max(0.0, (float) ($cartQtyForItem ?? 0));
+$showQuantity = (bool) ($showQuantity ?? false);
 
 $materialGuid = material_guid($item);
 if ($materialGuid === '') {
@@ -22,8 +24,14 @@ if ($materialGuid === '') {
 
 $maxPackages = StorePolicyService::maxPackagesPerMaterial();
 $maxLabel = $maxPackages !== null ? SpecialOfferService::formatQuantityLabel($maxPackages) : null;
-$remaining = $maxPackages !== null ? max(0, (int) floor($maxPackages - $cartQtyForItem)) : null;
-$atLimit = $maxPackages !== null && $remaining <= 0;
+$qtyBounds = store_cart_qty_bounds($item, $cartQtyForItem, $showQuantity);
+$remaining = $qtyBounds['effectiveMax'];
+$atLimit = $qtyBounds['atLimit'];
+$defaultQty = $qtyBounds['defaultQty'];
+$qtyStep = $qtyBounds['qtyStep'];
+$qtyMin = $qtyBounds['qtyMin'];
+$partialPackage = $qtyBounds['partialPackage'];
+$stockAvailable = $qtyBounds['stockAvailable'];
 
 $packaging = ShareCartService::packaging($item);
 $primaryUnit = ShareCartService::primaryUnitLabel($item);
@@ -39,11 +47,15 @@ $imageUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) 
   action="<?= h(strtok($returnUrl, '#')) ?>"
   data-store-add-cart="1"
   data-material-guid="<?= h($materialGuid) ?>"
-  data-cart-qty="<?= (int) $cartQtyForItem ?>"
+  data-cart-qty="<?= h((string) $cartQtyForItem) ?>"
   <?php if ($maxPackages !== null): ?>
     data-max-qty="<?= h((string) $maxPackages) ?>"
     data-max-qty-label="<?= h((string) $maxLabel) ?>"
   <?php endif; ?>
+  <?php if ($remaining !== null): ?>
+    data-effective-max="<?= h((string) $remaining) ?>"
+  <?php endif; ?>
+  data-qty-step="<?= h((string) $qtyStep) ?>"
 >
   <input type="hidden" name="action" value="add_to_cart">
   <?php if ($returnUrl !== ''): ?>
@@ -61,12 +73,16 @@ $imageUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) 
     <input type="hidden" name="image_url" value="<?= h($imageUrl) ?>">
   <?php endif; ?>
 
-  <?php if ($maxLabel !== null): ?>
+  <?php if ($partialPackage && $stockAvailable !== null && $stockAvailable > 0): ?>
+    <p class="store-add-cart__limit" data-qty-hint>
+      متوفر أقل من طرد كامل: <span class="store-num" dir="ltr"><?= h(format_packages_display($stockAvailable)) ?></span> <?= h($packageUnit) ?> — يمكن طلب الكمية المتبقية.
+    </p>
+  <?php elseif ($maxLabel !== null): ?>
     <p class="store-add-cart__limit <?= $atLimit ? 'is-warning' : '' ?>" data-qty-hint>
       <?php if ($atLimit): ?>
         وصلت للحد الأقصى (<?= h($maxLabel) ?> <?= h($packageUnit) ?>)
       <?php elseif ($cartQtyForItem > 0): ?>
-        الحد الأقصى <?= h($maxLabel) ?> <?= h($packageUnit) ?> — متبقي <?= (int) $remaining ?>
+        الحد الأقصى <?= h($maxLabel) ?> <?= h($packageUnit) ?> — متبقي <span class="store-num" dir="ltr"><?= h(format_packages_display((float) $remaining)) ?></span>
       <?php else: ?>
         الحد الأقصى <?= h($maxLabel) ?> <?= h($packageUnit) ?> لكل مادة
       <?php endif; ?>
@@ -80,10 +96,12 @@ $imageUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) 
       <input
         type="number"
         name="quantity"
-        min="1"
-        <?php if ($remaining !== null && $remaining > 0): ?>max="<?= (int) $remaining ?>"<?php elseif ($atLimit): ?>max="1"<?php endif; ?>
-        step="1"
-        value="1"
+        class="store-num"
+        dir="ltr"
+        min="<?= h((string) $qtyMin) ?>"
+        <?php if ($remaining !== null && $remaining > 0): ?>max="<?= h((string) $remaining) ?>"<?php elseif ($atLimit): ?>max="<?= h((string) $qtyMin) ?>"<?php endif; ?>
+        step="<?= h((string) $qtyStep) ?>"
+        value="<?= h((string) $defaultQty) ?>"
         <?= $atLimit ? 'disabled' : '' ?>
       >
       <button type="button" data-qty-plus aria-label="زيادة" <?= ($atLimit || ($remaining !== null && $remaining <= 0)) ? 'disabled' : '' ?>>+</button>
@@ -95,6 +113,6 @@ $imageUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) 
     <?= $atLimit ? 'disabled' : '' ?>
   >
     <span class="material-symbols-outlined text-[20px]" aria-hidden="true">add_shopping_cart</span>
-    <?= $atLimit ? 'الحد الأقصى مكتمل' : 'إضافة للسلة' ?>
+    <?= $atLimit ? 'الحد الأقصى مكتمل' : ($partialPackage ? 'طلب الكمية المتاحة' : 'إضافة للسلة') ?>
   </button>
 </form>

@@ -12,11 +12,16 @@ use Portal\Services\StoreCartService;
 /** @var string|null $productReturnUrl */
 /** @var string|null $productOfferSlug */
 /** @var bool $useQuickView */
+/** @var bool $useImagePreview */
 /** @var list<string>|null $quickViewGuids */
 
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
 $linkToDetail = (bool) ($linkToDetail ?? true);
 $useQuickView = (bool) ($useQuickView ?? true);
+$useImagePreview = (bool) ($useImagePreview ?? false);
+if ($useImagePreview) {
+    $useQuickView = false;
+}
 $quickViewGuids = is_array($quickViewGuids ?? null)
     ? array_values(array_filter(array_map('strval', $quickViewGuids), static fn (string $g): bool => trim($g) !== ''))
     : [];
@@ -55,8 +60,47 @@ $materialCode = trim((string) ($item['materialCode'] ?? $item['code'] ?? ''));
 $materialType = trim((string) ($item['materialType'] ?? ''));
 $manufacturer = trim((string) ($item['manufacturer'] ?? ''));
 $showAnyPrice = ($showPriceSyp || $showPriceUsd) && (bool) ($displayOptions['show_price'] ?? false);
+$hasOffer = !empty($item['has_offer']);
+$offerBadge = trim((string) ($item['offer_badge'] ?? ''));
+$cartItems = $allowCart ? StoreCartService::items() : [];
+$cartQtyForItem = $guid !== '' ? (float) ($cartItems[$guid]['quantity'] ?? 0) : 0.0;
+$previewPayload = $useImagePreview
+    ? product_preview_payload($item, $displayOptions, $cartQtyForItem, $productReturnUrl, $productOfferSlug)
+    : null;
+$previewJson = $previewPayload !== null
+    ? json_encode($previewPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)
+    : '';
 ?>
-<article class="store-product-card">
+<article
+  class="store-product-card<?= $hasOffer ? ' store-product-card--offer' : '' ?>"
+  <?php if ($useImagePreview && $guid !== ''): ?>
+    data-store-preview-card
+    data-preview-guid="<?= h($guid) ?>"
+    data-preview="<?= h((string) $previewJson) ?>"
+  <?php endif; ?>
+>
+  <?php if ($useImagePreview && $showImages): ?>
+    <button type="button" class="store-product-card__media store-product-card__media--preview" data-store-product-preview title="معاينة الصورة والأسعار">
+      <?php if ($hasOffer): ?>
+        <span class="store-product-card__offer-ribbon">
+          <span class="material-symbols-outlined text-sm" aria-hidden="true">local_offer</span>
+          <?= h($offerBadge !== '' ? $offerBadge : 'عرض') ?>
+        </span>
+      <?php endif; ?>
+      <?php if ($materialType !== ''): ?>
+        <span class="store-product-card__chip"><?= h($materialType) ?></span>
+      <?php endif; ?>
+      <?php if ($materialCode !== ''): ?>
+        <span class="store-product-card__code-badge" dir="ltr"><?= h($materialCode) ?></span>
+      <?php endif; ?>
+      <span class="store-product-card__zoom-hint material-symbols-outlined" aria-hidden="true">zoom_in</span>
+      <?php
+        $material = $item;
+        $variant = 'card';
+        require __DIR__ . '/material-image-frame.php';
+      ?>
+    </button>
+  <?php endif; ?>
   <?php if ($linkToDetail && $detailUrl !== ''): ?>
     <a
       href="<?= h($detailUrl) ?>"
@@ -70,8 +114,14 @@ $showAnyPrice = ($showPriceSyp || $showPriceUsd) && (bool) ($displayOptions['sho
       <?php endif; ?>
     >
   <?php endif; ?>
-    <?php if ($showImages): ?>
+    <?php if ($showImages && !$useImagePreview): ?>
       <div class="store-product-card__media">
+        <?php if ($hasOffer): ?>
+          <span class="store-product-card__offer-ribbon">
+            <span class="material-symbols-outlined text-sm" aria-hidden="true">local_offer</span>
+            <?= h($offerBadge !== '' ? $offerBadge : 'عرض') ?>
+          </span>
+        <?php endif; ?>
         <?php if ($materialType !== ''): ?>
           <span class="store-product-card__chip"><?= h($materialType) ?></span>
         <?php endif; ?>
@@ -91,28 +141,24 @@ $showAnyPrice = ($showPriceSyp || $showPriceUsd) && (bool) ($displayOptions['sho
         <div class="store-product-card__brand"><?= h($manufacturer) ?></div>
       <?php endif; ?>
       <div class="store-product-card__pack">
-        تعبئة <?= h(format_packaging($packaging)) ?> <?= h($primaryUnit) ?> / <?= h($packageUnit) ?>
+        تعبئة <span class="store-num" dir="ltr"><?= h(format_packaging($packaging)) ?></span> <?= h($primaryUnit) ?> / <?= h($packageUnit) ?>
       </div>
       <?php if ($showAnyPrice): ?>
         <div class="store-product-card__price">
           <?php require __DIR__ . '/offer-price-block.php'; ?>
         </div>
       <?php endif; ?>
-      <?php if ($showQuantity): ?>
+      <?php if ($showQuantity && $packagesAvailable > 0): ?>
         <div class="store-product-card__stock">
           <span class="material-symbols-outlined text-sm" aria-hidden="true">inventory</span>
-          <?= number_format($packagesAvailable, 0, '.', ',') ?> <?= h($packageUnit) ?>
+          <span class="store-num" dir="ltr"><?= h(format_packages_display($packagesAvailable)) ?></span> <?= h($packageUnit) ?>
         </div>
       <?php endif; ?>
     </div>
   <?php if ($linkToDetail && $detailUrl !== ''): ?></a><?php endif; ?>
   <?php if ($allowCart): ?>
     <div class="store-product-card__footer">
-      <?php
-        $cartItems = StoreCartService::items();
-        $cartQtyForItem = $guid !== '' ? (int) round((float) ($cartItems[$guid]['quantity'] ?? 0)) : 0;
-        require __DIR__ . '/store-add-to-cart-form.php';
-      ?>
+      <?php require __DIR__ . '/store-add-to-cart-form.php'; ?>
     </div>
   <?php endif; ?>
 </article>

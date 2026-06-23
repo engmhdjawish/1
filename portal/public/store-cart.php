@@ -30,7 +30,7 @@ $defaultGuestName = (string) ($loggedInCustomer['name_ar'] ?? '');
 $defaultGuestPhone = (string) ($loggedInCustomer['phone'] ?? '');
 $maxPackagesPerMaterial = StorePolicyService::maxPackagesPerMaterial();
 
-$cartItems = array_values(StoreCartService::items());
+$cartItems = StoreCartService::enrichedItems();
 $unavailableItems = array_values(StoreCartService::unavailableItems());
 $totals = StoreCartService::totals();
 

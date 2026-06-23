@@ -702,25 +702,17 @@ require __DIR__ . '/partials/store-filter-group.php';
         لا توجد نتائج مطابقة لبحثك أو الفلاتر المحددة.
       </div>
     <?php else: ?>
-      <?php
-        $quickViewGuids = array_values(array_filter(array_map(
-            static fn ($row): string => is_array($row) ? material_guid($row) : '',
-            $products
-        ), static fn (string $g): bool => $g !== ''));
-      ?>
       <div class="store-product-grid">
         <?php foreach ($products as $item): ?>
           <?php if (!is_array($item)) continue; ?>
-          <?php require __DIR__ . '/partials/product-card.php'; ?>
+          <?php
+            $useImagePreview = true;
+            $useQuickView = false;
+            require __DIR__ . '/partials/product-card.php';
+          ?>
         <?php endforeach; ?>
       </div>
-      <script>
-        window.__productQuickView = <?= json_encode([
-            'guids' => $quickViewGuids,
-            'offer' => (string) ($productOfferSlug ?? ''),
-            'return' => (string) ($productReturnUrl ?? ''),
-        ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-      </script>
+      <?php require __DIR__ . '/partials/store-product-preview.php'; ?>
     <?php endif; ?>
 
     <?php
@@ -728,11 +720,27 @@ require __DIR__ . '/partials/store-filter-group.php';
     $totalPages = (int) ($catalog['totalPages'] ?? 1);
     $buildUrl = static fn (int $targetPage): string => $buildStoreUrl($targetPage);
     require __DIR__ . '/partials/catalog-pagination.php';
+
+    $buildPreviewPageUrl = static function (int $targetPage, string $previewEdge) use ($buildStoreUrl): string {
+        $url = $buildStoreUrl($targetPage);
+        $separator = str_contains($url, '?') ? '&' : '?';
+
+        return $url . $separator . 'preview=' . rawurlencode($previewEdge);
+    };
     ?>
+    <script>
+      window.__storePreviewPaging = <?= json_encode([
+          'page' => $page,
+          'totalPages' => $totalPages,
+          'prevPageUrl' => $page > 1 ? $buildPreviewPageUrl($page - 1, 'last') : null,
+          'nextPageUrl' => $page < $totalPages ? $buildPreviewPageUrl($page + 1, 'first') : null,
+      ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    </script>
   </div>
 </div>
 
 <script src="/assets/store-filters.js" defer></script>
+<script src="/assets/store-product-preview.js" defer></script>
 
 <style>
   .line-clamp-2 {

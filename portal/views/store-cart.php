@@ -75,91 +75,10 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
           </div>
         <?php else: ?>
           <?php if ($cartItems !== []): ?>
-            <div class="store-cart-table-wrap overflow-x-auto">
-              <table class="store-cart-table">
-                <thead>
-                  <tr>
-                    <th>المنتج</th>
-                    <th>سعر الطرد</th>
-                    <th>الكمية</th>
-                    <th>الإجمالي</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <?php foreach ($cartItems as $line): ?>
-                    <?php
-                      $materialGuid = (string) ($line['material_guid'] ?? '');
-                      $qty = max(1, (int) round((float) ($line['quantity'] ?? 1)));
-                      $packageUnit = (string) ($line['package_unit'] ?? 'طرد');
-                      $priceSp = (float) ($line['sale_price_sp'] ?? 0);
-                      $priceUsd = (float) ($line['sale_price_usd'] ?? 0);
-                      $lineTotalSp = $qty * $priceSp;
-                      $lineTotalUsd = $qty * $priceUsd;
-                    ?>
-                    <tr data-cart-line="<?= h($materialGuid) ?>">
-                      <td>
-                        <div class="store-cart-product">
-                          <?php if (!empty($line['image_url'])): ?>
-                            <?php $zoomUrl = material_image_zoom_url((string) $line['image_url']); ?>
-                            <button type="button" class="store-cart-product__thumb" data-cart-image-zoom="<?= h($zoomUrl) ?>" title="تكبير الصورة للتدقيق">
-                              <img src="<?= h((string) $line['image_url']) ?>" alt="">
-                              <span class="store-cart-product__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span>
-                            </button>
-                          <?php else: ?>
-                            <div class="store-cart-product__placeholder">
-                              <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>
-                            </div>
-                          <?php endif; ?>
-                          <div>
-                            <div class="font-bold text-sm"><?= h((string) ($line['material_name_ar'] ?? '')) ?></div>
-                            <?php if (!empty($line['material_code'])): ?>
-                              <div class="text-xs text-gray-500 font-mono" dir="ltr"><?= h((string) $line['material_code']) ?></div>
-                            <?php endif; ?>
-                          </div>
-                        </div>
-                      </td>
-                      <td class="text-sm whitespace-nowrap">
-                        <?php if ($showPriceSyp && $priceSp > 0): ?>
-                          <span class="font-bold text-primary"><?= format_money($priceSp, true) ?> ل.س</span>
-                        <?php elseif ($showPriceUsd && $priceUsd > 0): ?>
-                          <span class="font-bold text-emerald-700">$<?= number_format($priceUsd, 2, '.', ',') ?></span>
-                        <?php else: ?>
-                          —
-                        <?php endif; ?>
-                      </td>
-                      <td>
-                        <div class="store-qty-stepper" data-cart-qty-control data-guid="<?= h($materialGuid) ?>">
-                          <button type="button" data-bump="-1" aria-label="إنقاص">−</button>
-                          <input
-                            type="number"
-                            min="1"
-                            <?php if ($maxPackagesPerMaterial !== null): ?>max="<?= (int) $maxPackagesPerMaterial ?>"<?php endif; ?>
-                            value="<?= (int) $qty ?>"
-                            data-qty-input
-                          >
-                          <button type="button" data-bump="1" aria-label="زيادة">+</button>
-                        </div>
-                        <div class="text-xs text-gray-500 mt-1"><?= h($packageUnit) ?></div>
-                      </td>
-                      <td class="font-bold text-sm whitespace-nowrap">
-                        <?php if ($showPriceSyp): ?>
-                          <?= format_money($lineTotalSp, true) ?> ل.س
-                        <?php elseif ($showPriceUsd): ?>
-                          $<?= number_format($lineTotalUsd, 2, '.', ',') ?>
-                        <?php else: ?>
-                          —
-                        <?php endif; ?>
-                      </td>
-                      <td class="text-center">
-                        <button type="button" class="p-2 rounded-full text-red-600 hover:bg-red-50" data-remove-item="<?= h($materialGuid) ?>" aria-label="حذف">
-                          <span class="material-symbols-outlined" aria-hidden="true">delete</span>
-                        </button>
-                      </td>
-                    </tr>
-                  <?php endforeach; ?>
-                </tbody>
-              </table>
+            <div class="store-cart-lines">
+              <?php foreach ($cartItems as $item): ?>
+                <?php require __DIR__ . '/partials/store-cart-line-card.php'; ?>
+              <?php endforeach; ?>
             </div>
           <?php endif; ?>
 
@@ -207,13 +126,4 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
   <?php endif; ?>
 </div>
 
-<div id="storeImageLightbox" class="store-image-lightbox" hidden aria-hidden="true">
-  <button type="button" class="store-image-lightbox__close" data-lightbox-close aria-label="إغلاق">
-    <span class="material-symbols-outlined">close</span>
-  </button>
-  <div class="store-image-lightbox__backdrop" data-lightbox-close></div>
-  <figure class="store-image-lightbox__frame">
-    <img src="" alt="" id="storeImageLightboxImg">
-    <figcaption id="storeImageLightboxCaption" class="store-image-lightbox__caption"></figcaption>
-  </figure>
-</div>
+<?php require __DIR__ . '/partials/store-image-lightbox.php'; ?>

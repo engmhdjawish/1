@@ -184,6 +184,95 @@ function material_image_zoom_url(string $imageUrl): string
     return $imageUrl;
 }
 
+/**
+ * بيانات معاينة صورة المادة في المتجر (lightbox مع أسعار وسلة).
+ *
+ * @param array<string, mixed> $item
+ * @param array<string, mixed> $displayOptions
+ * @return array<string, mixed>
+ */
+function product_preview_payload(
+    array $item,
+    array $displayOptions,
+    float $cartQtyForItem = 0.0,
+    ?string $returnUrl = null,
+    ?string $offerSlug = null
+): array {
+    $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
+    $showPriceSyp = in_array($priceMode, ['both', 'syp'], true);
+    $showPriceUsd = in_array($priceMode, ['both', 'usd'], true);
+    $showPrice = (bool) ($displayOptions['show_price'] ?? false);
+    $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
+    $allowCart = (bool) ($displayOptions['allow_cart'] ?? false);
+    $hasOffer = !empty($item['has_offer']);
+
+    $packaging = \Portal\Services\ShareCartService::packaging($item);
+    $primaryUnit = \Portal\Services\ShareCartService::primaryUnitLabel($item);
+    $packageUnit = \Portal\Services\ShareCartService::packageUnitLabel($item);
+    $unitSaleSp = \Portal\Services\ShareCartService::unitSalePriceSp($item);
+    $unitSaleUsd = \Portal\Services\ShareCartService::unitSalePriceUsd($item);
+    $packageSaleSp = \Portal\Services\ShareCartService::packageSalePriceSp($item);
+    $packageSaleUsd = \Portal\Services\ShareCartService::packageSalePriceUsd($item);
+
+    $imageGuid = material_image_guid($item);
+    $thumbUrl = $imageGuid !== '' ? material_image_api_url($imageGuid, true) : '';
+    $zoomUrl = $thumbUrl !== '' ? material_image_zoom_url($thumbUrl) : '';
+
+    $guid = material_guid($item);
+    $returnUrl = $returnUrl ?? ($_SERVER['REQUEST_URI'] ?? '/store.php');
+    $cartQtyForItem = max(0, (float) $cartQtyForItem);
+    $qtyBounds = store_cart_qty_bounds($item, $cartQtyForItem, $showQuantity);
+    $maxPackages = \Portal\Services\StorePolicyService::maxPackagesPerMaterial();
+    $maxLabel = $maxPackages !== null
+        ? \Portal\Services\SpecialOfferService::formatQuantityLabel($maxPackages)
+        : null;
+    $remaining = $qtyBounds['effectiveMax'];
+    $atLimit = $qtyBounds['atLimit'];
+    $packagesAvailable = (float) ($qtyBounds['stockAvailable'] ?? 0.0);
+
+    return [
+        'guid' => $guid,
+        'name' => (string) ($item['name'] ?? ''),
+        'code' => (string) ($item['materialCode'] ?? $item['code'] ?? ''),
+        'manufacturer' => (string) ($item['manufacturer'] ?? ''),
+        'materialType' => (string) ($item['materialType'] ?? ''),
+        'thumbUrl' => $thumbUrl,
+        'zoomUrl' => $zoomUrl,
+        'detailUrl' => $guid !== '' ? product_url($guid, $returnUrl, $offerSlug) : '',
+        'showPrice' => $showPrice,
+        'showPriceSyp' => $showPriceSyp,
+        'showPriceUsd' => $showPriceUsd,
+        'showQuantity' => $showQuantity,
+        'packagesAvailable' => $packagesAvailable,
+        'packagesAvailableLabel' => $showQuantity ? format_packages_display($packagesAvailable) : '',
+        'packaging' => $packaging,
+        'primaryUnit' => $primaryUnit,
+        'packageUnit' => $packageUnit,
+        'hasOffer' => $hasOffer,
+        'offerBadge' => trim((string) ($item['offer_badge'] ?? '')),
+        'unitSaleSp' => $unitSaleSp,
+        'unitSaleUsd' => $unitSaleUsd,
+        'packageSaleSp' => $packageSaleSp,
+        'packageSaleUsd' => $packageSaleUsd,
+        'originalUnitSp' => $hasOffer ? (float) ($item['original_unit_sale_price_sp'] ?? 0) : 0.0,
+        'originalUnitUsd' => $hasOffer ? (float) ($item['original_unit_sale_price_usd'] ?? 0) : 0.0,
+        'originalPackSp' => $hasOffer ? (float) ($item['original_package_sale_price_sp'] ?? 0) : 0.0,
+        'originalPackUsd' => $hasOffer ? (float) ($item['original_package_sale_price_usd'] ?? 0) : 0.0,
+        'allowCart' => $allowCart,
+        'cartQty' => max(0, $cartQtyForItem),
+        'maxPackages' => $maxPackages,
+        'maxLabel' => $maxLabel,
+        'remaining' => $remaining,
+        'atLimit' => $atLimit,
+        'defaultQty' => $qtyBounds['defaultQty'],
+        'qtyStep' => $qtyBounds['qtyStep'],
+        'qtyMin' => $qtyBounds['qtyMin'],
+        'partialPackage' => $qtyBounds['partialPackage'],
+        'effectiveMax' => $qtyBounds['effectiveMax'],
+        'returnUrl' => strtok((string) $returnUrl, '#'),
+    ];
+}
+
 function product_url(string $guid, ?string $return = null, ?string $offer = null): string
 {
     $guid = trim($guid);
@@ -295,6 +384,176 @@ function absolute_order_tracking_url(string $token): string
 function format_packaging(float $value): string
 {
     return rtrim(rtrim(number_format($value, 2, '.', ','), '0'), '.');
+}
+
+function format_packages_display(float $qty): string
+{
+    return \Portal\Services\StockReservationService::formatPackages($qty);
+}
+
+/** @param array<string, mixed> $line */
+function store_line_has_offer(array $line): bool
+{
+    if (!empty($line['has_offer']) || !empty($line['special_offer_id'])) {
+        return true;
+    }
+
+    $origSp = (float) ($line['original_sale_price_sp'] ?? $line['original_package_sale_price_sp'] ?? 0);
+    $saleSp = (float) ($line['sale_price_sp'] ?? 0);
+    if ($origSp > 0 && $saleSp > 0 && $origSp > $saleSp + 0.009) {
+        return true;
+    }
+
+    $origUsd = (float) ($line['original_sale_price_usd'] ?? $line['original_package_sale_price_usd'] ?? 0);
+    $saleUsd = (float) ($line['sale_price_usd'] ?? 0);
+
+    return $origUsd > 0 && $saleUsd > 0 && $origUsd > $saleUsd + 0.009;
+}
+
+/** @param array<string, mixed> $line */
+function store_line_offer_badge(array $line): string
+{
+    $badge = trim((string) ($line['offer_badge'] ?? ''));
+    if ($badge !== '') {
+        return $badge;
+    }
+
+    $title = trim((string) ($line['offer_title_ar'] ?? ''));
+
+    return $title !== '' ? $title : 'عرض خاص';
+}
+
+/**
+ * @param array<string, mixed> $item
+ * @return array{
+ *   packaging: float,
+ *   primary_unit: string,
+ *   package_unit: string,
+ *   quantity: float,
+ *   unit_sp: float,
+ *   unit_usd: float,
+ *   pack_sp: float,
+ *   pack_usd: float,
+ *   orig_unit_sp: float,
+ *   orig_unit_usd: float,
+ *   orig_pack_sp: float,
+ *   orig_pack_usd: float,
+ *   line_total_sp: float,
+ *   line_total_usd: float
+ * }
+ */
+function store_order_line_prices(array $item): array
+{
+    $packaging = max(1.0, (float) ($item['packaging'] ?? $item['pcs_per_box'] ?? 1));
+    $primaryUnit = trim((string) ($item['primary_unit'] ?? '')) ?: 'زوج';
+    $packageUnit = trim((string) ($item['package_unit'] ?? '')) ?: 'طرد';
+    $quantity = max(0.0, (float) ($item['quantity'] ?? $item['packages_count'] ?? 0));
+
+    $packSp = (float) ($item['sale_price_sp'] ?? 0);
+    $packUsd = (float) ($item['sale_price_usd'] ?? 0);
+    $unitSp = (float) ($item['unit_sale_price_sp'] ?? 0);
+    $unitUsd = (float) ($item['unit_sale_price_usd'] ?? 0);
+
+    if ($unitSp <= 0 && $packSp > 0) {
+        $unitSp = $packSp / $packaging;
+    }
+    if ($unitUsd <= 0 && $packUsd > 0) {
+        $unitUsd = $packUsd / $packaging;
+    }
+    if ($packSp <= 0 && $unitSp > 0) {
+        $packSp = $unitSp * $packaging;
+    }
+    if ($packUsd <= 0 && $unitUsd > 0) {
+        $packUsd = $unitUsd * $packaging;
+    }
+
+    $origPackSp = (float) ($item['original_sale_price_sp'] ?? $item['original_package_sale_price_sp'] ?? 0);
+    $origPackUsd = (float) ($item['original_sale_price_usd'] ?? $item['original_package_sale_price_usd'] ?? 0);
+    $origUnitSp = (float) ($item['original_unit_sale_price_sp'] ?? 0);
+    $origUnitUsd = (float) ($item['original_unit_sale_price_usd'] ?? 0);
+    if ($origUnitSp <= 0 && $origPackSp > 0) {
+        $origUnitSp = $origPackSp / $packaging;
+    }
+    if ($origUnitUsd <= 0 && $origPackUsd > 0) {
+        $origUnitUsd = $origPackUsd / $packaging;
+    }
+
+    $lineTotalSp = (float) ($item['line_total_sp'] ?? ($quantity * $packSp));
+    $lineTotalUsd = (float) ($item['line_total_usd'] ?? ($quantity * $packUsd));
+
+    return [
+        'packaging' => $packaging,
+        'primary_unit' => $primaryUnit,
+        'package_unit' => $packageUnit,
+        'quantity' => $quantity,
+        'unit_sp' => $unitSp,
+        'unit_usd' => $unitUsd,
+        'pack_sp' => $packSp,
+        'pack_usd' => $packUsd,
+        'orig_unit_sp' => $origUnitSp,
+        'orig_unit_usd' => $origUnitUsd,
+        'orig_pack_sp' => $origPackSp,
+        'orig_pack_usd' => $origPackUsd,
+        'line_total_sp' => $lineTotalSp,
+        'line_total_usd' => $lineTotalUsd,
+    ];
+}
+
+/**
+ * @return array{
+ *   policyRemaining: float|null,
+ *   stockAvailable: float|null,
+ *   effectiveMax: float|null,
+ *   defaultQty: float,
+ *   qtyStep: float,
+ *   qtyMin: float,
+ *   partialPackage: bool,
+ *   atLimit: bool
+ * }
+ */
+function store_cart_qty_bounds(array $item, float $cartQtyForItem, bool $showQuantity = false): array
+{
+    $maxPackages = \Portal\Services\StorePolicyService::maxPackagesPerMaterial();
+    $policyRemaining = $maxPackages !== null
+        ? max(0.0, round($maxPackages - $cartQtyForItem, 4))
+        : null;
+    $stockAvailable = $showQuantity ? packages_available_display($item) : null;
+    $effectiveMax = $policyRemaining;
+    if ($stockAvailable !== null) {
+        $stockRemaining = max(0.0, round($stockAvailable, 4));
+        $effectiveMax = $effectiveMax !== null
+            ? min($effectiveMax, $stockRemaining)
+            : $stockRemaining;
+    }
+
+    $partialPackage = $stockAvailable !== null && $stockAvailable > 0 && $stockAvailable < 1;
+    $defaultQty = 1.0;
+    $qtyStep = 1.0;
+    $qtyMin = 1.0;
+    if ($partialPackage) {
+        $defaultQty = $effectiveMax !== null && $effectiveMax > 0
+            ? min($stockAvailable, $effectiveMax)
+            : $stockAvailable;
+        $qtyStep = 0.01;
+        $qtyMin = 0.01;
+    } elseif ($effectiveMax !== null && $effectiveMax > 0 && $effectiveMax < 1) {
+        $defaultQty = $effectiveMax;
+        $qtyStep = 0.01;
+        $qtyMin = 0.01;
+    }
+
+    $atLimit = $effectiveMax !== null && $effectiveMax <= 0;
+
+    return [
+        'policyRemaining' => $policyRemaining,
+        'stockAvailable' => $stockAvailable,
+        'effectiveMax' => $effectiveMax,
+        'defaultQty' => max(0.0, round($defaultQty, 4)),
+        'qtyStep' => $qtyStep,
+        'qtyMin' => $qtyMin,
+        'partialPackage' => $partialPackage,
+        'atLimit' => $atLimit,
+    ];
 }
 
 /** @param array<string, mixed> $item */

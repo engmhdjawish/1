@@ -429,7 +429,7 @@ final class SpecialOfferService
     /** @return array{ok: bool, message: string, quantity: float} */
     public static function validatePackageQuantity(string $materialGuid, float $quantity, ?array $offer = null): array
     {
-        $quantity = max(0.0, round($quantity));
+        $quantity = max(0.0, round($quantity, 4));
         if ($quantity <= 0) {
             return ['ok' => true, 'message' => '', 'quantity' => 0.0];
         }
@@ -531,6 +531,8 @@ final class SpecialOfferService
         $line['sale_price_usd'] = $pricing['effective_package_sale_price_usd'];
         $line['special_offer_id'] = (string) ($offer['id'] ?? '');
         $line['offer_badge'] = trim((string) ($offer['badge_text_ar'] ?? '')) ?: self::defaultBadge($offer);
+        $line['has_offer'] = true;
+        $line['offer_title_ar'] = trim((string) ($offer['title_ar'] ?? ''));
 
         return ShareCartService::normalizeLine($line);
     }

@@ -18,6 +18,12 @@ $statusClass = match ($status) {
 };
 $items = is_array($order['items'] ?? null) ? $order['items'] : [];
 $timeline = is_array($order['timeline'] ?? null) ? $order['timeline'] : [];
+$showPriceSyp = true;
+$showPriceUsd = (float) ($order['total_usd'] ?? 0) > 0 && (float) ($order['total_sp'] ?? 0) <= 0;
+if ((float) ($order['total_sp'] ?? 0) > 0) {
+    $showPriceSyp = true;
+    $showPriceUsd = false;
+}
 ?>
 <div class="store-cart-page max-w-3xl mx-auto">
   <?php if ($error): ?>
@@ -53,7 +59,7 @@ $timeline = is_array($order['timeline'] ?? null) ? $order['timeline'] : [];
         <?php if (!empty($order['total_sp'])): ?>
           <div>
             <dt class="text-gray-500">الإجمالي</dt>
-            <dd class="font-extrabold text-primary"><?= format_money((float) $order['total_sp'], true) ?> ل.س</dd>
+            <dd class="font-extrabold text-primary store-num" dir="ltr"><?= format_money((float) $order['total_sp'], true) ?> ل.س</dd>
           </div>
         <?php endif; ?>
         <?php if (!empty($order['notes_ar'])): ?>
@@ -68,31 +74,11 @@ $timeline = is_array($order['timeline'] ?? null) ? $order['timeline'] : [];
     <?php if ($items !== []): ?>
       <section class="store-panel mb-6">
         <h2 class="font-bold mb-4">الأصناف (<?= count($items) ?>)</h2>
-        <ul class="divide-y divide-gray-100">
+        <div class="store-order-lines">
           <?php foreach ($items as $item): ?>
-            <li class="py-3 flex gap-3 items-start">
-              <?php if (!empty($item['image_url'])): ?>
-                <img src="<?= h((string) $item['image_url']) ?>" alt="" class="w-14 h-14 rounded-lg object-cover bg-gray-100 shrink-0">
-              <?php else: ?>
-                <div class="w-14 h-14 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-400">
-                  <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>
-                </div>
-              <?php endif; ?>
-              <div class="flex-1 min-w-0">
-                <div class="font-bold text-sm"><?= h((string) ($item['material_name_ar'] ?? '')) ?></div>
-                <?php if (!empty($item['material_code'])): ?>
-                  <div class="text-xs text-gray-500 font-mono" dir="ltr"><?= h((string) $item['material_code']) ?></div>
-                <?php endif; ?>
-                <div class="text-xs text-gray-600 mt-1">
-                  <?= (int) round((float) ($item['quantity'] ?? 0)) ?> طرد
-                  <?php if (!empty($item['line_total_sp'])): ?>
-                    · <?= format_money((float) $item['line_total_sp'], true) ?> ل.س
-                  <?php endif; ?>
-                </div>
-              </div>
-            </li>
+            <?php require __DIR__ . '/partials/store-order-line-card.php'; ?>
           <?php endforeach; ?>
-        </ul>
+        </div>
       </section>
     <?php endif; ?>
 
@@ -141,6 +127,9 @@ $timeline = is_array($order['timeline'] ?? null) ? $order['timeline'] : [];
     </div>
   <?php endif; ?>
 </div>
+
+<?php require __DIR__ . '/partials/store-image-lightbox.php'; ?>
+
 <script>
   (() => {
     document.querySelectorAll('[data-copy-tracking-url]').forEach((btn) => {

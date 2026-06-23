@@ -59,6 +59,12 @@ if ($orderId !== '' && $orderDetails === null) {
 }
 
 $title = 'حسابي';
+$extraHead = $orderDetails !== null
+    ? '<link href="/css/store-ui.css" rel="stylesheet"><link href="/css/store-cart.css" rel="stylesheet">'
+    : '';
+$extraFooter = $orderDetails !== null
+    ? '<script src="/assets/store-image-zoom.js" defer></script>'
+    : '';
 ob_start();
 require dirname(__DIR__) . '/views/account.php';
 $content = ob_get_clean();

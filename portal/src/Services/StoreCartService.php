@@ -26,9 +26,20 @@ final class StoreCartService
         return ShareCartService::totals(self::TOKEN);
     }
 
+    /** @return list<array<string, mixed>> */
+    public static function enrichedItems(): array
+    {
+        return array_values(array_map(
+            static fn (array $line): array => ShareCartService::enrichLineWithOffer($line),
+            self::items()
+        ));
+    }
+
     /** @param array<string, mixed> $line */
     public static function add(array $line, float $quantity = 1.0): array
     {
+        $line = ShareCartService::enrichLineWithOffer($line);
+
         return ShareCartService::add(self::TOKEN, '', $line, $quantity);
     }
 

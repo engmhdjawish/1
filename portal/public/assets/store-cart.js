@@ -66,7 +66,8 @@
       btn.addEventListener('click', () => {
         const src = btn.getAttribute('data-cart-image-zoom') || '';
         if (!src) return;
-        const name = btn.closest('.store-cart-product')?.querySelector('.font-bold')?.textContent?.trim() || '';
+        const name = btn.closest('.store-order-line-card, .store-cart-product, .store-cart-line-card')
+          ?.querySelector('.store-order-line-card__title, .font-bold')?.textContent?.trim() || '';
         lightboxImg.src = src;
         if (lightboxCaption) lightboxCaption.textContent = name;
         lightbox.hidden = false;
@@ -83,7 +84,171 @@
 
   const formatMoney = (amount) => {
     const n = Number(amount) || 0;
-    return n.toLocaleString('ar-SY', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  };
+
+  const formatQty = (amount) => {
+    const n = Number(amount) || 0;
+    return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  };
+
+  const lineHasOffer = (line) => {
+    if (!line || typeof line !== 'object') return false;
+    if (line.has_offer || line.special_offer_id) return true;
+    const origSp = Number(line.original_sale_price_sp) || 0;
+    const saleSp = Number(line.sale_price_sp) || 0;
+    if (origSp > 0 && saleSp > 0 && origSp > saleSp + 0.009) return true;
+    const origUsd = Number(line.original_sale_price_usd) || 0;
+    const saleUsd = Number(line.sale_price_usd) || 0;
+    return origUsd > 0 && saleUsd > 0 && origUsd > saleUsd + 0.009;
+  };
+
+  const lineOfferBadge = (line) => {
+    const badge = String(line?.offer_badge || '').trim();
+    if (badge) return badge;
+    const title = String(line?.offer_title_ar || '').trim();
+    return title || 'عرض خاص';
+  };
+
+  const offerBadgeHtml = (line) => {
+    if (!lineHasOffer(line)) return '';
+    return `<span class="store-offer-badge store-offer-badge--sm"><span class="material-symbols-outlined" aria-hidden="true">sell</span>${escapeHtml(lineOfferBadge(line))}</span>`;
+  };
+
+  const computeLinePrices = (line) => {
+    const packaging = Math.max(1, Number(line.packaging ?? line.pcs_per_box ?? 1) || 1);
+    const primaryUnit = String(line.primary_unit || '').trim() || 'زوج';
+    const packageUnit = String(line.package_unit || '').trim() || 'طرد';
+    const quantity = Math.max(0, Number(line.quantity) || 0);
+
+    let packSp = Number(line.sale_price_sp) || 0;
+    let packUsd = Number(line.sale_price_usd) || 0;
+    let unitSp = Number(line.unit_sale_price_sp) || 0;
+    let unitUsd = Number(line.unit_sale_price_usd) || 0;
+
+    if (unitSp <= 0 && packSp > 0) unitSp = packSp / packaging;
+    if (unitUsd <= 0 && packUsd > 0) unitUsd = packUsd / packaging;
+    if (packSp <= 0 && unitSp > 0) packSp = unitSp * packaging;
+    if (packUsd <= 0 && unitUsd > 0) packUsd = unitUsd * packaging;
+
+    let origPackSp = Number(line.original_sale_price_sp ?? line.original_package_sale_price_sp) || 0;
+    let origPackUsd = Number(line.original_sale_price_usd ?? line.original_package_sale_price_usd) || 0;
+    let origUnitSp = Number(line.original_unit_sale_price_sp) || 0;
+    let origUnitUsd = Number(line.original_unit_sale_price_usd) || 0;
+    if (origUnitSp <= 0 && origPackSp > 0) origUnitSp = origPackSp / packaging;
+    if (origUnitUsd <= 0 && origPackUsd > 0) origUnitUsd = origPackUsd / packaging;
+
+    return {
+      packaging,
+      primaryUnit,
+      packageUnit,
+      quantity,
+      packSp,
+      packUsd,
+      unitSp,
+      unitUsd,
+      origPackSp,
+      origPackUsd,
+      origUnitSp,
+      origUnitUsd,
+      lineTotalSp: quantity * packSp,
+      lineTotalUsd: quantity * packUsd,
+    };
+  };
+
+  const linePricesHtml = (line, showPriceSyp, showPriceUsd) => {
+    const prices = computeLinePrices(line);
+    const hasOffer = lineHasOffer(line);
+    if (showPriceSyp && (prices.packSp > 0 || prices.origPackSp > 0)) {
+      let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
+      html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
+        <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
+        <div class="store-order-line-prices__values">
+          ${hasOffer && prices.origPackSp > prices.packSp ? `<span class="store-order-line-prices__old store-num" dir="ltr">${formatMoney(prices.origPackSp)}</span>` : ''}
+          <span class="store-order-line-prices__amount store-num" dir="ltr">${formatMoney(prices.packSp)} <small>ل.س</small></span>
+        </div>
+      </div>`;
+      if (prices.unitSp > 0) {
+        html += `<div class="store-order-line-prices__row">
+          <span class="store-order-line-prices__label">${escapeHtml(prices.primaryUnit)}</span>
+          <div class="store-order-line-prices__values">
+            ${hasOffer && prices.origUnitSp > prices.unitSp ? `<span class="store-order-line-prices__old store-num" dir="ltr">${formatMoney(prices.origUnitSp)}</span>` : ''}
+            <span class="store-order-line-prices__amount store-order-line-prices__amount--unit store-num" dir="ltr">${formatMoney(prices.unitSp)} <small>ل.س</small></span>
+          </div>
+        </div>`;
+      }
+      html += '</div>';
+      return html;
+    }
+    if (showPriceUsd && (prices.packUsd > 0 || prices.origPackUsd > 0)) {
+      let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
+      html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
+        <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
+        <div class="store-order-line-prices__values">
+          ${hasOffer && prices.origPackUsd > prices.packUsd ? `<span class="store-order-line-prices__old store-num" dir="ltr">$${formatUsd(prices.origPackUsd)}</span>` : ''}
+          <span class="store-order-line-prices__amount store-num" dir="ltr">$${formatUsd(prices.packUsd)}</span>
+        </div>
+      </div>`;
+      if (prices.unitUsd > 0) {
+        html += `<div class="store-order-line-prices__row">
+          <span class="store-order-line-prices__label">${escapeHtml(prices.primaryUnit)}</span>
+          <div class="store-order-line-prices__values">
+            ${hasOffer && prices.origUnitUsd > prices.unitUsd ? `<span class="store-order-line-prices__old store-num" dir="ltr">$${formatUsd(prices.origUnitUsd)}</span>` : ''}
+            <span class="store-order-line-prices__amount store-order-line-prices__amount--unit store-num" dir="ltr">$${formatUsd(prices.unitUsd)}</span>
+          </div>
+        </div>`;
+      }
+      html += '</div>';
+      return html;
+    }
+    return '';
+  };
+
+  const renderCartLineCard = (line, showPriceSyp, showPriceUsd, max) => {
+    const guid = line.material_guid || '';
+    const prices = computeLinePrices(line);
+    const hasOffer = lineHasOffer(line);
+    const img = line.image_url
+      ? (() => {
+          const thumb = escapeHtml(line.image_url);
+          const zoom = escapeHtml(imageZoomUrl(line.image_url));
+          return `<button type="button" class="store-order-line-card__thumb" data-cart-image-zoom="${zoom}" title="تكبير الصورة للتدقيق"><img src="${thumb}" alt="" loading="lazy"><span class="store-order-line-card__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span></button>`;
+        })()
+      : '<div class="store-order-line-card__placeholder"><span class="material-symbols-outlined" aria-hidden="true">inventory_2</span></div>';
+    const lineTotalCell = showPriceSyp
+      ? `${formatMoney(prices.lineTotalSp)} ل.س`
+      : showPriceUsd
+        ? `$${formatUsd(prices.lineTotalUsd)}`
+        : '';
+    return `<article class="store-order-line-card store-cart-line-card${hasOffer ? ' store-order-line-card--offer' : ''}" data-cart-line="${escapeHtml(guid)}">
+      <div class="store-order-line-card__media">${img}</div>
+      <div class="store-order-line-card__body">
+        <div class="store-cart-line-card__head">
+          <div class="store-order-line-card__head-main min-w-0">
+            ${offerBadgeHtml(line)}
+            <h3 class="store-order-line-card__title">${escapeHtml(line.material_name_ar || '')}</h3>
+            ${line.material_code ? `<span class="store-order-line-card__code store-num" dir="ltr">${escapeHtml(line.material_code)}</span>` : ''}
+          </div>
+          <button type="button" class="store-cart-line-card__remove" data-remove-item="${escapeHtml(guid)}" aria-label="حذف من السلة">
+            <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+          </button>
+        </div>
+        <div class="store-cart-line-card__foot">
+          ${showPriceSyp || showPriceUsd ? linePricesHtml(line, showPriceSyp, showPriceUsd) : ''}
+          <div class="store-cart-line-card__controls">
+            <div class="store-cart-line-card__qty-row">
+              <div class="store-qty-stepper store-qty-stepper--compact" data-cart-qty-control data-guid="${escapeHtml(guid)}">
+                <button type="button" data-bump="-1" aria-label="إنقاص">−</button>
+                <input type="number" class="store-num" dir="ltr" min="0.01" step="0.01" ${max ? `max="${max}"` : ''} value="${formatQty(prices.quantity)}" data-qty-input>
+                <button type="button" data-bump="1" aria-label="زيادة">+</button>
+              </div>
+              <span class="store-cart-line-card__unit">${escapeHtml(prices.packageUnit)}</span>
+            </div>
+            ${lineTotalCell ? `<div class="store-order-line-card__total store-cart-line-card__total"><span>الإجمالي</span><strong class="store-num" dir="ltr">${lineTotalCell}</strong></div>` : ''}
+          </div>
+        </div>
+      </div>
+    </article>`;
   };
 
   const updateBadge = (count) => {
@@ -116,30 +281,46 @@
   };
 
   const getMaxQty = (form) => {
+    const effective = parseFloat(form.dataset.effectiveMax || '');
+    if (Number.isFinite(effective) && effective >= 0) return effective;
     const max = parseFloat(form.dataset.maxQty || '');
     return Number.isFinite(max) && max > 0 ? max : null;
   };
 
+  const getQtyStep = (form) => {
+    const step = parseFloat(form.dataset.qtyStep || '1');
+    return Number.isFinite(step) && step > 0 ? step : 1;
+  };
+
   const getCurrentInCart = (form) => {
-    return Math.max(0, parseInt(form.dataset.cartQty || '0', 10) || 0);
+    return Math.max(0, parseFloat(form.dataset.cartQty || '0') || 0);
   };
 
   const getRequestedQty = (form) => {
     const input = form.querySelector('[name="quantity"]');
-    return Math.max(1, parseInt(input?.value || '1', 10) || 1);
+    const step = getQtyStep(form);
+    const raw = Math.max(0, parseFloat(input?.value || String(step)) || step);
+    if (step < 1) return Math.round(raw * 100) / 100;
+    return Math.max(step, Math.round(raw));
   };
 
   const validateQty = (form, addQty, currentQty) => {
     const max = getMaxQty(form);
     if (max === null) return { ok: true, message: '' };
     const target = currentQty + addQty;
-    if (target <= max) return { ok: true, message: '' };
+    if (target <= max + 0.0001) return { ok: true, message: '' };
     const maxLabel = form.dataset.maxQtyLabel || String(max);
+    const fmt = (n) => {
+      const step = getQtyStep(form);
+      return step < 1
+        ? n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+        : String(Math.floor(n));
+    };
     if (currentQty > 0) {
-      const remaining = Math.max(0, Math.floor(max - currentQty));
+      const remaining = Math.max(0, max - currentQty);
       return {
         ok: false,
-        message: `الحد الأقصى ${maxLabel} طرد لهذه المادة. لديك ${currentQty} في السلة${remaining > 0 ? ` — يمكنك إضافة ${remaining} فقط.` : ' — لا يمكن إضافة المزيد.'}`,
+        message: `الحد الأقصى ${maxLabel} طرد لهذه المادة. لديك ${fmt(currentQty)} في السلة${remaining > 0 ? ` — يمكنك إضافة ${fmt(remaining)} فقط.` : ' — لا يمكن إضافة المزيد.'}`,
       };
     }
     return { ok: false, message: `الحد الأقصى للطلب هو ${maxLabel} طرد لهذه المادة.` };
@@ -155,25 +336,31 @@
     const hint = form.querySelector('[data-qty-hint]');
     const minus = form.querySelector('[data-qty-minus]');
     const plus = form.querySelector('[data-qty-plus]');
+    const step = getQtyStep(form);
     if (max !== null && input) {
       const remaining = Math.max(0, max - inCart);
-      input.max = String(Math.max(1, remaining));
-      if (parseInt(input.value, 10) > remaining && remaining > 0) {
-        input.value = String(remaining);
+      input.max = String(Math.max(step, remaining));
+      const currentVal = parseFloat(input.value || String(step)) || step;
+      if (currentVal > remaining && remaining > 0) {
+        input.value = step < 1 ? String(Math.round(remaining * 100) / 100) : String(Math.max(step, Math.floor(remaining)));
       }
-      if (hint) {
+      if (hint && !hint.textContent.includes('أقل من طرد')) {
         if (remaining <= 0) {
           hint.textContent = `وصلت للحد الأقصى (${form.dataset.maxQtyLabel || max} طرد)`;
           hint.classList.add('is-warning');
         } else {
-          hint.textContent = `الحد الأقصى ${form.dataset.maxQtyLabel || max} طرد — متبقي ${remaining}`;
+          const remainingLabel = step < 1
+            ? remaining.toLocaleString('en-US', { maximumFractionDigits: 2 })
+            : String(Math.floor(remaining));
+          hint.textContent = `الحد الأقصى ${form.dataset.maxQtyLabel || max} طرد — متبقي ${remainingLabel}`;
           hint.classList.remove('is-warning');
         }
       }
       if (plus) plus.disabled = remaining <= 0;
     }
     if (minus && input) {
-      minus.disabled = parseInt(input.value, 10) <= 1;
+      const val = parseFloat(input.value || String(step)) || step;
+      minus.disabled = val <= step;
     }
   };
 
@@ -187,23 +374,29 @@
       const refresh = () => {
         const max = getMaxQty(form);
         const current = getCurrentInCart(form);
-        const val = parseInt(input?.value || '1', 10) || 1;
-        if (minus) minus.disabled = val <= 1;
+        const step = getQtyStep(form);
+        const val = parseFloat(input?.value || String(step)) || step;
+        if (minus) minus.disabled = val <= step;
         if (plus && max !== null) {
           const remaining = Math.max(0, max - current);
-          plus.disabled = val >= remaining;
+          plus.disabled = val >= remaining - 0.0001;
         }
       };
       minus?.addEventListener('click', () => {
         if (!input) return;
-        input.value = String(Math.max(1, (parseInt(input.value, 10) || 1) - 1));
+        const step = getQtyStep(form);
+        const val = parseFloat(input.value || String(step)) || step;
+        const next = Math.max(step, step < 1 ? Math.round((val - step) * 100) / 100 : val - step);
+        input.value = String(next);
         refresh();
       });
       plus?.addEventListener('click', () => {
         if (!input) return;
-        const next = (parseInt(input.value, 10) || 1) + 1;
-        const check = validateQty(form, 1, getCurrentInCart(form));
-        if (!check.ok && next > (parseInt(input.value, 10) || 1)) {
+        const step = getQtyStep(form);
+        const val = parseFloat(input.value || String(step)) || step;
+        const next = step < 1 ? Math.round((val + step) * 100) / 100 : val + step;
+        const check = validateQty(form, step, getCurrentInCart(form));
+        if (!check.ok && next > val) {
           showToast(check.message, 'error');
           return;
         }
@@ -244,7 +437,10 @@
           updateBadge(data.cart_count);
           if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
           if (!data.ok) return;
-          if (inputReset(form)) form.querySelector('[name="quantity"]').value = '1';
+          if (inputReset(form)) {
+            const step = getQtyStep(form);
+            form.querySelector('[name="quantity"]').value = String(step);
+          }
         } catch {
           showToast('تعذر الاتصال بالخادم.', 'error');
         } finally {
@@ -306,56 +502,11 @@
           html += `<p class="store-limit-banner">الحد الأقصى للطلب: <strong>${escapeHtml(String(maxLabel))}</strong> طرد لكل مادة.</p>`;
         }
         if (items.length > 0) {
-          html += '<div class="store-cart-table-wrap overflow-x-auto"><table class="store-cart-table"><thead><tr>';
-          html += '<th>المنتج</th><th>سعر الطرد</th><th>الكمية</th><th>الإجمالي</th><th></th></tr></thead><tbody>';
+          html += '<div class="store-cart-lines">';
           items.forEach((line) => {
-            const guid = line.material_guid || '';
-            const qty = Math.max(1, Math.round(Number(line.quantity) || 1));
-            const packageUnit = line.package_unit || 'طرد';
-            const priceSp = Number(line.sale_price_sp) || 0;
-            const priceUsd = Number(line.sale_price_usd) || 0;
-            const lineTotalSp = qty * priceSp;
-            const lineTotalUsd = qty * priceUsd;
-            const unitPriceCell = showPriceSyp && priceSp > 0
-              ? `<span class="font-bold text-primary">${formatMoney(priceSp)} ل.س</span>`
-              : showPriceUsd && priceUsd > 0
-                ? `<span class="font-bold text-emerald-700">$${formatUsd(priceUsd)}</span>`
-                : '—';
-            const lineTotalCell = showPriceSyp
-              ? `${formatMoney(lineTotalSp)} ل.س`
-              : showPriceUsd
-                ? `$${formatUsd(lineTotalUsd)}`
-                : '—';
-            const img = line.image_url
-              ? (() => {
-                  const thumb = escapeHtml(line.image_url);
-                  const zoom = escapeHtml(imageZoomUrl(line.image_url));
-                  return `<button type="button" class="store-cart-product__thumb" data-cart-image-zoom="${zoom}" title="تكبير الصورة للتدقيق"><img src="${thumb}" alt=""><span class="store-cart-product__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span></button>`;
-                })()
-              : '<div class="store-cart-product__placeholder"><span class="material-symbols-outlined">inventory_2</span></div>';
-            html += `<tr data-cart-line="${escapeHtml(guid)}">
-              <td><div class="store-cart-product">${img}<div>
-                <div class="font-bold text-sm">${escapeHtml(line.material_name_ar || '')}</div>
-                ${line.material_code ? `<div class="text-xs text-gray-500 font-mono" dir="ltr">${escapeHtml(line.material_code)}</div>` : ''}
-              </div></div></td>
-              <td class="text-sm whitespace-nowrap">${unitPriceCell}</td>
-              <td>
-                <div class="store-qty-stepper" data-cart-qty-control data-guid="${escapeHtml(guid)}">
-                  <button type="button" data-bump="-1" aria-label="إنقاص">−</button>
-                  <input type="number" min="1" ${max ? `max="${Math.floor(max)}"` : ''} value="${qty}" data-qty-input>
-                  <button type="button" data-bump="1" aria-label="زيادة">+</button>
-                </div>
-                <div class="text-xs text-gray-500 mt-1">${escapeHtml(packageUnit)}</div>
-              </td>
-              <td class="font-bold text-sm">${lineTotalCell}</td>
-              <td class="text-center">
-                <button type="button" class="p-2 rounded-full text-red-600 hover:bg-red-50" data-remove-item="${escapeHtml(guid)}" aria-label="حذف">
-                  <span class="material-symbols-outlined">delete</span>
-                </button>
-              </td>
-            </tr>`;
+            html += renderCartLineCard(line, showPriceSyp, showPriceUsd, max);
           });
-          html += '</tbody></table></div>';
+          html += '</div>';
         }
         if (unavailable.length > 0) {
           html += '<section class="rounded-2xl border border-amber-200 bg-amber-50 p-4"><h3 class="font-bold text-amber-900 mb-2">غير متوفرة حالياً</h3><ul class="text-sm text-amber-900 space-y-1">';
@@ -439,7 +590,7 @@
         timer = setTimeout(async () => {
           const wrap = input.closest('[data-cart-qty-control]');
           const guid = wrap?.dataset.guid || '';
-          const qty = Math.max(0, parseInt(input.value, 10) || 0);
+          const qty = Math.max(0.01, parseFloat(input.value) || 0.01);
           if (!guid) return;
           const data = await apiRequest({ action: 'update', material_guid: guid, quantity: qty });
           applyCartResponse(data);
@@ -527,5 +678,5 @@
     init();
   }
 
-  window.StoreCart = { showToast, updateBadge, applyCartResponse, apiRequest };
+  window.StoreCart = { showToast, updateBadge, applyCartResponse, apiRequest, bindAddForms, bindQtySteppers };
 })();
