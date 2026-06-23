@@ -59,7 +59,7 @@ foreach ($materialFilterOptions['groups'] ?? [] as $group) {
 ?>
 <div data-material-images-download-panel>
   <p class="mb-6 text-sm text-text-muted max-w-3xl leading-relaxed">
-    حمّل صور الأصناف كملف ZIP مضغوط — مناسب للمشاركة على واتساب. يُبنى الملف على السيرفر ثم يُرسل للمتصفح مع <strong>شريط تقدم</strong> (بفضل معرفة الحجم مسبقاً).
+    حمّل صور الأصناف من <strong>ملفات الموقع المحلية</strong> فقط (مجلد صور المواد على السيرفر) — لا يُسحب محتوى الصور من API الأمين. تُستخدم قائمة المواد من API للفلترة فقط.
   </p>
 
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">

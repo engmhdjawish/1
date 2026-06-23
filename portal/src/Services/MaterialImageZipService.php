@@ -11,6 +11,7 @@ final class MaterialImageZipService
 {
     public const MAX_ORDER_IMAGES = 200;
     public const MAX_SPLIT_PACKAGES = 40;
+    public const MAX_LOCAL_ZIP_IMAGES = 500;
 
     /**
      * @return array<string, list<string>>
@@ -60,7 +61,6 @@ final class MaterialImageZipService
         foreach ($dimensions[$splitBy] as $key) {
             unset($baseInput[$key]);
         }
-        $baseQuery = self::buildMaterialFilterQuery($baseInput);
 
         $masterPath = tempnam(sys_get_temp_dir(), 'splitzip_');
         if ($masterPath === false) {
@@ -74,8 +74,13 @@ final class MaterialImageZipService
 
         try {
             foreach ($splitValues as $value) {
-                $childQuery = $baseQuery;
-                $childQuery[$splitBy] = $value;
+                $childInput = $baseInput;
+                $childInput[$splitBy] = $value;
+
+                $childEntries = self::collectLocalMaterialImageEntries($childInput);
+                if ($childEntries === []) {
+                    continue;
+                }
 
                 $childPath = tempnam(sys_get_temp_dir(), 'childzip_');
                 if ($childPath === false) {
@@ -83,10 +88,7 @@ final class MaterialImageZipService
                 }
                 $childPaths[] = $childPath;
 
-                $result = ApiClient::downloadToFile('/api/material-images/download/materials', $childQuery, $childPath, 900);
-                if (!($result['ok'] ?? false)) {
-                    continue;
-                }
+                self::buildZipFromFileEntries($childPath, $childEntries);
 
                 $childSize = filesize($childPath);
                 if ($childSize === false || $childSize < 22) {
@@ -99,7 +101,7 @@ final class MaterialImageZipService
             }
 
             if ($added === 0) {
-                throw new \RuntimeException('لا توجد صور مطابقة لخيارات التقسيم المحددة.');
+                throw new \RuntimeException('لا توجد صور محلية على الموقع لخيارات التقسيم المحددة.');
             }
 
             self::buildZipFromFileEntries($masterPath, $archiveEntries);
@@ -212,7 +214,7 @@ final class MaterialImageZipService
             return 'لا توجد أصناف مواد في هذه الفاتورة.';
         }
         if (str_contains($normalized, 'no image files')) {
-            return 'لا توجد صور مرتبطة بأصناف هذه الفاتورة أو المادة.';
+            return 'لا توجد صور محلية على الموقع مرتبطة بهذه الفاتورة أو المادة.';
         }
 
         if ($status === 404) {
@@ -257,6 +259,315 @@ final class MaterialImageZipService
         }
 
         return null;
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     */
+    public static function streamLocalMaterialImagesZip(array $input, string $archiveName): void
+    {
+        self::prepareZipDownload();
+
+        $entries = self::collectLocalMaterialImageEntries($input);
+        if ($entries === []) {
+            throw new \RuntimeException('لا توجد صور محلية على الموقع للفلاتر المختارة.');
+        }
+
+        $zipPath = tempnam(sys_get_temp_dir(), 'loczip_');
+        if ($zipPath === false) {
+            throw new \RuntimeException('تعذر إنشاء ملف مؤقت للضغط.');
+        }
+
+        try {
+            self::buildZipFromFileEntries($zipPath, $entries);
+            self::streamLocalZipFile($zipPath, $archiveName);
+        } finally {
+            if (is_file($zipPath)) {
+                @unlink($zipPath);
+            }
+        }
+    }
+
+    public static function streamLocalInvoiceImagesZip(string $billGuid, string $archiveName): void
+    {
+        self::prepareZipDownload();
+
+        $billGuid = trim($billGuid);
+        if ($billGuid === '') {
+            throw new \RuntimeException('معرّف الفاتورة مطلوب.');
+        }
+
+        $invoice = AccountingApiService::getInvoice($billGuid);
+        $items = is_array($invoice['items'] ?? null) ? $invoice['items'] : [];
+
+        $entries = [];
+        $usedNames = [];
+        $seenImageGuids = [];
+
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $materialGuid = trim((string) ($item['materialGuid'] ?? $item['MaterialGuid'] ?? ''));
+            if ($materialGuid === '') {
+                continue;
+            }
+
+            $imageGuid = self::resolveMaterialImageGuid($materialGuid);
+            if ($imageGuid === '' || isset($seenImageGuids[$imageGuid])) {
+                continue;
+            }
+
+            $localPath = MaterialImageStorageService::resolvePathForGuid($imageGuid, false);
+            if ($localPath === null || !is_file($localPath)) {
+                continue;
+            }
+
+            $seenImageGuids[$imageGuid] = true;
+            $code = trim((string) ($item['materialCode'] ?? $item['MaterialCode'] ?? ''));
+            $name = trim((string) ($item['materialName'] ?? $item['MaterialName'] ?? ''));
+            $baseName = $code !== '' ? $code : 'item-' . (count($entries) + 1);
+            if ($name !== '') {
+                $baseName .= '-' . self::sanitizeFilename($name);
+            }
+            $extension = pathinfo($localPath, PATHINFO_EXTENSION);
+            if ($extension === '') {
+                $extension = 'jpg';
+            }
+            $entries[] = [
+                'path' => $localPath,
+                'name' => self::uniqueEntryName($baseName . '.' . $extension, $usedNames),
+            ];
+
+            if (count($entries) >= self::MAX_LOCAL_ZIP_IMAGES) {
+                break;
+            }
+        }
+
+        if ($entries === []) {
+            throw new \RuntimeException('لا توجد صور محلية على الموقع لأصناف هذه الفاتورة.');
+        }
+
+        $zipPath = tempnam(sys_get_temp_dir(), 'invzip_');
+        if ($zipPath === false) {
+            throw new \RuntimeException('تعذر إنشاء ملف مؤقت للضغط.');
+        }
+
+        try {
+            self::buildZipFromFileEntries($zipPath, $entries);
+            self::streamLocalZipFile($zipPath, $archiveName);
+        } finally {
+            if (is_file($zipPath)) {
+                @unlink($zipPath);
+            }
+        }
+    }
+
+    public static function streamLocalLinkedImagesZip(bool $linked, ?string $materialGuid = null): void
+    {
+        self::prepareZipDownload();
+
+        $linkFilter = $linked ? 'linked' : 'unlinked';
+        $materialSearch = $materialGuid !== null ? trim($materialGuid) : '';
+        $entries = [];
+        $usedNames = [];
+        $seenPaths = [];
+        $page = 1;
+
+        while ($page <= 50 && count($entries) < self::MAX_LOCAL_ZIP_IMAGES) {
+            $pageData = MaterialImageLinkService::listSourcesPage($page, 100, $linkFilter, $materialSearch);
+            $items = is_array($pageData['items'] ?? null) ? $pageData['items'] : [];
+            if ($items === []) {
+                break;
+            }
+
+            foreach ($items as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+
+                $localPath = trim((string) ($item['local_path'] ?? ''));
+                if ($localPath === '' || !is_file($localPath)) {
+                    $fileName = trim((string) ($item['file_name'] ?? ''));
+                    if ($fileName !== '') {
+                        $localPath = (string) (MaterialImageStorageService::resolveLocalPath($fileName, false) ?? '');
+                    }
+                }
+
+                if ($localPath === '' || !is_file($localPath)) {
+                    continue;
+                }
+
+                $pathKey = strtolower($localPath);
+                if (isset($seenPaths[$pathKey])) {
+                    continue;
+                }
+                $seenPaths[$pathKey] = true;
+
+                $code = trim((string) ($item['linked_material_code'] ?? ''));
+                $fileName = trim((string) ($item['file_name'] ?? ''));
+                $baseName = $code !== '' ? $code : ($fileName !== '' ? pathinfo($fileName, PATHINFO_FILENAME) : 'image');
+                $extension = pathinfo($localPath, PATHINFO_EXTENSION);
+                if ($extension === '') {
+                    $extension = 'jpg';
+                }
+
+                $entries[] = [
+                    'path' => $localPath,
+                    'name' => self::uniqueEntryName(self::sanitizeFilename($baseName) . '.' . $extension, $usedNames),
+                ];
+
+                if (count($entries) >= self::MAX_LOCAL_ZIP_IMAGES) {
+                    break 2;
+                }
+            }
+
+            if (!($pageData['has_more'] ?? false)) {
+                break;
+            }
+            $page++;
+        }
+
+        if ($entries === []) {
+            throw new \RuntimeException('لا توجد صور محلية على الموقع لهذا الاختيار.');
+        }
+
+        $archiveName = $linked ? 'material-images-linked' : 'material-images-unlinked';
+        $zipPath = tempnam(sys_get_temp_dir(), 'lnkzip_');
+        if ($zipPath === false) {
+            throw new \RuntimeException('تعذر إنشاء ملف مؤقت للضغط.');
+        }
+
+        try {
+            self::buildZipFromFileEntries($zipPath, $entries);
+            self::streamLocalZipFile($zipPath, $archiveName);
+        } finally {
+            if (is_file($zipPath)) {
+                @unlink($zipPath);
+            }
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @return list<array{path: string, name: string}>
+     */
+    public static function collectLocalMaterialImageEntries(array $input): array
+    {
+        MaterialImageStorageService::ensureSettings();
+
+        $query = self::buildMaterialFilterQuery($input);
+        $query['hasImage'] = 'true';
+
+        $entries = [];
+        $usedNames = [];
+        $seenImageGuids = [];
+        $page = 1;
+        $pageSize = 100;
+
+        while ($page <= 50 && count($entries) < self::MAX_LOCAL_ZIP_IMAGES) {
+            $query['page'] = $page;
+            $query['pageSize'] = $pageSize;
+
+            $response = ApiClient::get('/api/materials', $query);
+            if (!($response['ok'] ?? false)) {
+                if ($entries === []) {
+                    throw new \RuntimeException('تعذر جلب قائمة المواد من API (رمز ' . (int) ($response['status'] ?? 0) . ').');
+                }
+                break;
+            }
+
+            $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+            $rows = is_array($data['items'] ?? null) ? $data['items'] : [];
+            if ($rows === []) {
+                break;
+            }
+
+            foreach ($rows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+
+                $imageGuid = strtolower(trim((string) ($row['productImageGuid'] ?? $row['ProductImageGuid'] ?? '')));
+                if ($imageGuid === '' || isset($seenImageGuids[$imageGuid])) {
+                    continue;
+                }
+
+                $localPath = MaterialImageStorageService::resolvePathForGuid($imageGuid, false);
+                if ($localPath === null || !is_file($localPath)) {
+                    continue;
+                }
+
+                $seenImageGuids[$imageGuid] = true;
+                $code = trim((string) ($row['materialCode'] ?? $row['MaterialCode'] ?? ''));
+                $name = trim((string) ($row['name'] ?? $row['Name'] ?? ''));
+                $baseName = $code !== '' ? $code : 'img-' . (count($entries) + 1);
+                if ($name !== '') {
+                    $baseName .= '-' . self::sanitizeFilename($name);
+                }
+                $extension = pathinfo($localPath, PATHINFO_EXTENSION);
+                if ($extension === '') {
+                    $extension = 'jpg';
+                }
+
+                $entries[] = [
+                    'path' => $localPath,
+                    'name' => self::uniqueEntryName($baseName . '.' . $extension, $usedNames),
+                ];
+
+                if (count($entries) >= self::MAX_LOCAL_ZIP_IMAGES) {
+                    break 2;
+                }
+            }
+
+            $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+            if (($page * $pageSize) >= $totalCount) {
+                break;
+            }
+            $page++;
+        }
+
+        return $entries;
+    }
+
+    private static function prepareZipDownload(): void
+    {
+        if (headers_sent()) {
+            throw new \RuntimeException('لا يمكن بدء التحميل بعد إرسال المخرجات.');
+        }
+
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+    }
+
+    private static function resolveMaterialImageGuid(string $materialGuid): string
+    {
+        static $cache = [];
+
+        $materialGuid = strtolower(trim($materialGuid));
+        if ($materialGuid === '') {
+            return '';
+        }
+        if (isset($cache[$materialGuid])) {
+            return $cache[$materialGuid];
+        }
+
+        $imageGuid = '';
+        try {
+            $response = ApiClient::get('/api/materials/' . rawurlencode($materialGuid));
+            if ($response['ok'] ?? false) {
+                $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+                $imageGuid = strtolower(trim((string) ($data['productImageGuid'] ?? $data['ProductImageGuid'] ?? '')));
+            }
+        } catch (\Throwable) {
+            $imageGuid = '';
+        }
+
+        $cache[$materialGuid] = $imageGuid;
+
+        return $imageGuid;
     }
 
     /**
@@ -318,7 +629,7 @@ final class MaterialImageZipService
             }
 
             if ($added === 0) {
-                throw new \RuntimeException('لم يتم العثور على صور قابلة للتحميل لهذا الطلب.');
+                throw new \RuntimeException('لم يتم العثور على صور محلية قابلة للتحميل لهذا الطلب.');
             }
 
             self::buildZipFromFileEntries($zipPath, $archiveEntries);
@@ -372,78 +683,28 @@ final class MaterialImageZipService
 
     private static function downloadImageToTemp(string $imageGuid): ?string
     {
-        $localPath = self::resolveLocalImagePath($imageGuid);
-        if ($localPath !== null) {
-            $tempCopy = tempnam(sys_get_temp_dir(), 'ordimg_');
-            if ($tempCopy === false) {
-                return null;
-            }
-            $extension = pathinfo($localPath, PATHINFO_EXTENSION);
-            $target = $extension !== '' ? $tempCopy . '.' . $extension : $tempCopy . '.jpg';
-            if (@copy($localPath, $target)) {
-                @unlink($tempCopy);
+        MaterialImageStorageService::ensureSettings();
+        $localPath = MaterialImageStorageService::resolvePathForGuid($imageGuid, false);
+        if ($localPath === null || !is_file($localPath)) {
+            return null;
+        }
 
-                return $target;
-            }
+        $tempCopy = tempnam(sys_get_temp_dir(), 'ordimg_');
+        if ($tempCopy === false) {
+            return null;
+        }
+
+        $extension = pathinfo($localPath, PATHINFO_EXTENSION);
+        $target = $extension !== '' ? $tempCopy . '.' . $extension : $tempCopy . '.jpg';
+        if (@copy($localPath, $target)) {
             @unlink($tempCopy);
+
+            return $target;
         }
 
-        $download = ApiClient::getBinary('/api/material-images/' . rawurlencode($imageGuid) . '/file');
-        if (!($download['ok'] ?? false) || !is_string($download['body'] ?? null) || $download['body'] === '') {
-            return null;
-        }
+        @unlink($tempCopy);
 
-        $tempFile = tempnam(sys_get_temp_dir(), 'ordimg_');
-        if ($tempFile === false) {
-            return null;
-        }
-
-        $contentType = strtolower((string) ($download['contentType'] ?? ''));
-        $extension = 'jpg';
-        if (str_contains($contentType, 'png')) {
-            $extension = 'png';
-        } elseif (str_contains($contentType, 'webp')) {
-            $extension = 'webp';
-        } elseif (str_contains($contentType, 'gif')) {
-            $extension = 'gif';
-        }
-
-        $target = $tempFile . '.' . $extension;
-        if (file_put_contents($target, $download['body']) === false) {
-            @unlink($tempFile);
-
-            return null;
-        }
-        @unlink($tempFile);
-
-        return $target;
-    }
-
-    private static function resolveLocalImagePath(string $imageGuid): ?string
-    {
-        try {
-            MaterialImageStorageService::ensureSettings();
-            $settings = MaterialImageStorageService::settings();
-            $imagesDir = rtrim((string) ($settings['images_dir'] ?? ''), '/\\');
-            if ($imagesDir === '' || !is_dir($imagesDir)) {
-                return null;
-            }
-
-            $response = ApiClient::get('/api/material-images/' . rawurlencode($imageGuid));
-            if (!($response['ok'] ?? false)) {
-                return null;
-            }
-            $data = is_array($response['data']) ? $response['data'] : [];
-            $fileName = trim((string) ($data['fileName'] ?? $data['name'] ?? ''));
-            if ($fileName === '') {
-                return null;
-            }
-            $candidate = $imagesDir . DIRECTORY_SEPARATOR . basename($fileName);
-
-            return is_file($candidate) ? $candidate : null;
-        } catch (\Throwable) {
-            return null;
-        }
+        return null;
     }
 
   /**

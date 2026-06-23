@@ -30,11 +30,7 @@ try {
             throw new \RuntimeException('لم يتم العثور على فاتورة بهذا النوع والرقم.');
         }
 
-        MaterialImageZipService::streamApiZip(
-            '/api/material-images/download/bills/' . rawurlencode($billGuid),
-            [],
-            'invoice-' . $number . '-images'
-        );
+        MaterialImageZipService::streamLocalInvoiceImagesZip($billGuid, 'invoice-' . $number . '-images');
         exit;
     }
 
@@ -44,21 +40,17 @@ try {
             throw new \RuntimeException('معرّف الفاتورة مطلوب.');
         }
 
-        MaterialImageZipService::streamApiZip(
-            '/api/material-images/download/bills/' . rawurlencode($billGuid),
-            [],
-            'bill-images'
-        );
+        MaterialImageZipService::streamLocalInvoiceImagesZip($billGuid, 'bill-images');
         exit;
     }
 
     if ($mode === 'linked') {
-        $linked = trim((string) ($_GET['linked'] ?? 'true'));
-        $query = ['linked' => $linked === 'false' ? 'false' : 'true'];
-        if (trim((string) ($_GET['materialGuid'] ?? '')) !== '') {
-            $query['materialGuid'] = trim((string) $_GET['materialGuid']);
-        }
-        MaterialImageZipService::streamApiZip('/api/material-images/download', $query, 'material-images');
+        $linked = trim((string) ($_GET['linked'] ?? 'true')) !== 'false';
+        $materialGuid = trim((string) ($_GET['materialGuid'] ?? ''));
+        MaterialImageZipService::streamLocalLinkedImagesZip(
+            $linked,
+            $materialGuid !== '' ? $materialGuid : null
+        );
         exit;
     }
 
@@ -68,14 +60,9 @@ try {
         exit;
     }
 
-    $query = MaterialImageZipService::buildMaterialFilterQuery($_GET);
     $archiveName = trim((string) ($_GET['archiveName'] ?? ''));
-    if ($archiveName !== '') {
-        $query['archiveName'] = $archiveName;
-    }
-    MaterialImageZipService::streamApiZip(
-        '/api/material-images/download/materials',
-        $query,
+    MaterialImageZipService::streamLocalMaterialImagesZip(
+        $_GET,
         $archiveName !== '' ? $archiveName : 'filtered-material-images'
     );
 } catch (\Throwable $exception) {
