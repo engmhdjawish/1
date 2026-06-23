@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Portal\Services\ShareCartService;
 use Portal\Services\SpecialOfferService;
+use Portal\Services\StoreCartService;
 
 /** @var array<string, mixed> $item */
 /** @var array{show_images?: bool, show_price?: bool, show_quantity?: bool, price_mode?: string} $displayOptions */
@@ -118,7 +119,11 @@ $quickViewGuidsJson = $quickViewGuids !== [] ? json_encode($quickViewGuids, JSON
   <?php if ($linkToDetail && $detailUrl !== ''): ?></a><?php endif; ?>
   <?php if ($allowCart): ?>
     <div class="px-4 pb-4">
-      <?php require __DIR__ . '/store-add-to-cart-form.php'; ?>
+      <?php
+        $cartItems = StoreCartService::items();
+        $cartQtyForItem = $guid !== '' ? (int) round((float) ($cartItems[$guid]['quantity'] ?? 0)) : 0;
+        require __DIR__ . '/store-add-to-cart-form.php';
+      ?>
     </div>
   <?php endif; ?>
 </article>

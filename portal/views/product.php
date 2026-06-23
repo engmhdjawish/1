@@ -5,16 +5,24 @@ declare(strict_types=1);
 use Portal\Auth\CustomerSession;
 use Portal\Services\ShareCartService;
 use Portal\Services\SpecialOfferService;
+use Portal\Services\StoreCartService;
 
 /** @var array<string, mixed> $product */
 /** @var array<string, mixed> $displayOptions */
 /** @var string|null $returnUrl */
 /** @var string|null $offerSlug */
-/** @var string|null $cartNotice */
+/** @var array{ok?: bool, message?: string}|string|null $cartNotice */
 
 $product = is_array($product ?? null) ? $product : [];
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
-$cartNotice = isset($cartNotice) ? (string) $cartNotice : '';
+$cartNoticeMessage = '';
+$cartNoticeOk = true;
+if (is_array($cartNotice ?? null)) {
+    $cartNoticeMessage = (string) ($cartNotice['message'] ?? '');
+    $cartNoticeOk = (bool) ($cartNotice['ok'] ?? false);
+} elseif (isset($cartNotice) && is_string($cartNotice)) {
+    $cartNoticeMessage = $cartNotice;
+}
 $allowCart = (bool) ($displayOptions['allow_cart'] ?? false);
 $capturePrices = (bool) ($displayOptions['show_price'] ?? false);
 $offerSlug = trim((string) ($offerSlug ?? $_GET['offer'] ?? ''));
@@ -73,8 +81,8 @@ $imageGuid = material_image_guid($product);
   </a>
 </section>
 
-<?php if ($cartNotice !== ''): ?>
-  <p class="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm"><?= h($cartNotice) ?></p>
+<?php if ($cartNoticeMessage !== ''): ?>
+  <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $cartNoticeOk ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700' ?>"><?= h($cartNoticeMessage) ?></p>
 <?php endif; ?>
 
 <article class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -162,7 +170,12 @@ $imageGuid = material_image_guid($product);
       </div>
       <?php if ($allowCart): ?>
         <div class="pt-2 border-t border-gray-100">
-          <?php require __DIR__ . '/partials/store-add-to-cart-form.php'; ?>
+          <?php
+            $item = $product;
+            $cartItems = StoreCartService::items();
+            $cartQtyForItem = $guid !== '' ? (int) round((float) ($cartItems[$guid]['quantity'] ?? 0)) : 0;
+            require __DIR__ . '/partials/store-add-to-cart-form.php';
+          ?>
         </div>
       <?php endif; ?>
     </div>

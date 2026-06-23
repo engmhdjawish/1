@@ -12,48 +12,45 @@ use Portal\Services\StoreCatalogService;
 
 final class StoreCartRequest
 {
-    /** يعالج إضافة للسلة من نماذج المتجر. يُرجع رسالة للمستخدم أو null. */
-    public static function handleAddToCartPost(): ?string
+    /** @return array{ok: bool, message: string}|null */
+    public static function handleAddToCartPost(): ?array
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || ($_POST['action'] ?? '') !== 'add_to_cart') {
             return null;
         }
 
-        $display = StoreCatalogService::displayOptions();
-        if (!($display['allow_cart'] ?? false)) {
-            return 'سياسة المتجر لا تسمح باستخدام السلة.';
-        }
+        $result = StoreCartApi::dispatch('add', $_POST);
 
-        $quantity = max(1, (int) round((float) ($_POST['quantity'] ?? 1)));
-        $capturePrices = (bool) ($display['show_price'] ?? false);
-        $line = ShareCartService::lineFromForm($_POST, $capturePrices);
-        if ($line['material_guid'] === '') {
-            return 'تعذر تحديد المادة.';
-        }
-
-        $result = StoreCartService::add($line, (float) $quantity);
-        if ($result['ok']) {
-            return $result['message'] !== '' ? $result['message'] : 'تمت إضافة الطرد إلى السلة.';
-        }
-
-        return $result['message'] !== '' ? $result['message'] : 'تعذر الإضافة إلى السلة.';
+        return [
+            'ok' => (bool) ($result['ok'] ?? false),
+            'message' => (string) ($result['message'] ?? ''),
+        ];
     }
 
-    /** @return array{ok: bool, message: string, redirect?: string} */
+    /** @return array{ok: bool, message: string, redirect?: string, tracking_url?: string, order_number?: string} */
     public static function handleSubmitOrderPost(): array
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || ($_POST['action'] ?? '') !== 'submit_order') {
             return ['ok' => false, 'message' => ''];
         }
 
-        $display = StoreCatalogService::displayOptions();
+        return self::handleSubmitOrderPostFromInput($_POST, StoreCatalogService::displayOptions());
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @param array<string, mixed> $display
+     * @return array{ok: bool, message: string, redirect?: string, tracking_url?: string, order_number?: string}
+     */
+    public static function handleSubmitOrderPostFromInput(array $input, array $display): array
+    {
         if (!($display['allow_order'] ?? false)) {
             return ['ok' => false, 'message' => 'سياسة المتجر لا تسمح بإرسال الطلبات.'];
         }
 
-        $guestName = trim((string) ($_POST['guest_name_ar'] ?? ''));
-        $guestPhone = trim((string) ($_POST['guest_phone'] ?? ''));
-        $notes = trim((string) ($_POST['notes_ar'] ?? ''));
+        $guestName = trim((string) ($input['guest_name_ar'] ?? ''));
+        $guestPhone = trim((string) ($input['guest_phone'] ?? ''));
+        $notes = trim((string) ($input['notes_ar'] ?? ''));
         $loggedInCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
         if ($loggedInCustomer !== null) {
             if ($guestName === '') {
@@ -102,11 +99,16 @@ final class StoreCartRequest
             is_array($result['unavailable_items'] ?? null) ? $result['unavailable_items'] : []
         );
 
+        $quoteToken = (string) ($order['quote_access_token'] ?? '');
+        $orderNumber = (string) ($order['order_number'] ?? '');
+
         if (CustomerSession::check()) {
             return [
                 'ok' => true,
                 'message' => 'تم إرسال الطلب بنجاح.',
                 'redirect' => '/account.php?tab=orders&order=' . rawurlencode((string) ($order['id'] ?? '')),
+                'order_number' => $orderNumber,
+                'tracking_url' => $quoteToken !== '' ? order_tracking_url($quoteToken) : '',
             ];
         }
 
@@ -119,6 +121,8 @@ final class StoreCartRequest
             'ok' => true,
             'message' => 'تم إرسال الطلب بنجاح.',
             'redirect' => '/store-order-confirmation.php',
+            'order_number' => $orderNumber,
+            'tracking_url' => $quoteToken !== '' ? order_tracking_url($quoteToken) : '',
         ];
     }
 }

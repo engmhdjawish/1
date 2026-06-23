@@ -249,6 +249,32 @@ function store_url(array $params = []): string
     return '/store.php' . ($query !== '' ? '?' . $query : '');
 }
 
+function order_tracking_url(string $token): string
+{
+    $token = trim($token);
+    if ($token === '') {
+        return '';
+    }
+
+    return '/track-order.php?token=' . rawurlencode($token);
+}
+
+function absolute_order_tracking_url(string $token): string
+{
+    $path = order_tracking_url($token);
+    if ($path === '') {
+        return '';
+    }
+
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    if ($host === '') {
+        return $path;
+    }
+
+    return $scheme . '://' . $host . $path;
+}
+
 function format_packaging(float $value): string
 {
     return rtrim(rtrim(number_format($value, 2, '.', ','), '0'), '.');
