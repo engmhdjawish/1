@@ -321,9 +321,11 @@ public sealed class MaterialImagesController(
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var preferredFileName = BuildMaterialImageFileName(material, extension);
+                await PrepareMaterialImageSlotAsync(material, preferredFileName, cancellationToken);
                 var storedFile = await imageStorageService.CopyFromPathAsync(
                     sourcePath,
                     preferredFileName,
+                    replaceExisting: true,
                     cancellationToken);
 
                 savedFiles.Add(storedFile.ImagePath);
@@ -447,25 +449,36 @@ public sealed class MaterialImagesController(
             return BadRequest(new { message = "MaterialGuid cannot be empty." });
         }
 
+        var createdImages = new List<MaterialImageRecord>(files.Count);
+        var savedFiles = new List<string>(files.Count);
+        MaterialRecord? materialToLink = null;
         if (effectiveMaterialGuid is Guid linkedMaterialGuid)
         {
-            var materialExists = await mainDbContext.Materials
-                .AsNoTracking()
-                .AnyAsync(material => material.Guid == linkedMaterialGuid, cancellationToken);
-            if (!materialExists)
+            materialToLink = await mainDbContext.Materials
+                .SingleOrDefaultAsync(material => material.Guid == linkedMaterialGuid, cancellationToken);
+            if (materialToLink is null)
             {
                 return BadRequest(new { message = "Material GUID is invalid.", materialGuid = linkedMaterialGuid });
             }
         }
 
-        var createdImages = new List<MaterialImageRecord>(files.Count);
-        var savedFiles = new List<string>(files.Count);
         foreach (var file in files)
         {
             StoredImageFile storedFile;
             try
             {
-                storedFile = await imageStorageService.SaveAsync(file, cancellationToken);
+                if (materialToLink is not null)
+                {
+                    var preferredFileName = BuildMaterialImageFileName(
+                        materialToLink,
+                        Path.GetExtension(Path.GetFileName(file.FileName)));
+                    await PrepareMaterialImageSlotAsync(materialToLink, preferredFileName, cancellationToken);
+                }
+
+                storedFile = await imageStorageService.SaveAsync(
+                    file,
+                    replaceExisting: materialToLink is not null,
+                    cancellationToken);
             }
             catch (InvalidOperationException exception)
             {
@@ -502,7 +515,7 @@ public sealed class MaterialImagesController(
             throw;
         }
 
-        if (effectiveMaterialGuid is Guid materialGuidToLink)
+        if (effectiveMaterialGuid is Guid materialGuidToLink && materialToLink is not null)
         {
             var linked = await LinkImageToMaterialInternalAsync(createdImages[0].Guid, materialGuidToLink, cancellationToken);
             if (!linked)
@@ -655,6 +668,19 @@ public sealed class MaterialImagesController(
         MaterialImageRecord image,
         CancellationToken cancellationToken)
     {
+        var deleted = await DeleteImageRecordInternalAsync(image, cancellationToken);
+        if (!deleted)
+        {
+            return StatusCode(500, new { message = "Failed to delete image record from bm000." });
+        }
+
+        return NoContent();
+    }
+
+    private async Task<bool> DeleteImageRecordInternalAsync(
+        MaterialImageRecord image,
+        CancellationToken cancellationToken)
+    {
         var id = image.Guid;
         var imageName = image.Name;
 
@@ -684,14 +710,89 @@ public sealed class MaterialImagesController(
             .AnyAsync(item => item.Guid == id, cancellationToken);
         if (stillExists)
         {
-            return StatusCode(500, new { message = "Failed to delete image record from bm000." });
+            return false;
         }
 
         var settings = await imageSettingsService.GetAsync(cancellationToken);
         var imagePath = ResolveImagePath(imageName, settings.ImagesDirectory);
         imageStorageService.DeleteFile(imagePath);
 
-        return NoContent();
+        return true;
+    }
+
+    private async Task PrepareMaterialImageSlotAsync(
+        MaterialRecord material,
+        string preferredFileName,
+        CancellationToken cancellationToken)
+    {
+        var settings = await imageSettingsService.GetAsync(cancellationToken);
+        var preferredBase = Path.GetFileName(preferredFileName);
+        var codeBase = Path.GetFileNameWithoutExtension(preferredBase);
+        var extension = Path.GetExtension(preferredBase);
+
+        if (MaterialPictureGuid.HasImage(material.PictureGuid))
+        {
+            var linkedImage = await mainDbContext.MaterialImages
+                .SingleOrDefaultAsync(item => item.Guid == material.PictureGuid!.Value, cancellationToken);
+            if (linkedImage is not null)
+            {
+                await DeleteImageRecordInternalAsync(linkedImage, cancellationToken);
+            }
+        }
+
+        var linkedImageGuids = await mainDbContext.Materials
+            .AsNoTracking()
+            .Where(item => item.PictureGuid != null && item.PictureGuid != MaterialPictureGuid.Cleared)
+            .Select(item => item.PictureGuid!.Value)
+            .ToListAsync(cancellationToken);
+
+        var staleImages = await mainDbContext.MaterialImages
+            .Where(image => image.Name != null)
+            .ToListAsync(cancellationToken);
+        foreach (var staleImage in staleImages)
+        {
+            if (linkedImageGuids.Contains(staleImage.Guid))
+            {
+                continue;
+            }
+
+            var fileName = ExtractFileName(staleImage.Name);
+            if (fileName is null || !IsSameMaterialCodeFamily(fileName, codeBase, extension))
+            {
+                continue;
+            }
+
+            await DeleteImageRecordInternalAsync(staleImage, cancellationToken);
+        }
+
+        var targetPath = Path.GetFullPath(Path.Combine(settings.ImagesDirectory, preferredBase));
+        if (System.IO.File.Exists(targetPath))
+        {
+            imageStorageService.DeleteFile(targetPath);
+        }
+    }
+
+    private static bool IsSameMaterialCodeFamily(string fileName, string codeBase, string extension)
+    {
+        var name = Path.GetFileNameWithoutExtension(fileName);
+        var fileExtension = Path.GetExtension(fileName);
+        if (!fileExtension.Equals(extension, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (string.Equals(name, codeBase, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!name.StartsWith(codeBase + "_", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var suffix = name[(codeBase.Length + 1)..];
+        return suffix.Length > 0 && suffix.All(char.IsDigit);
     }
 
     private async Task TryDeleteStagingSourceAfterAssignAsync(

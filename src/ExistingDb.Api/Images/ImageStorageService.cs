@@ -11,7 +11,10 @@ public sealed class ImageStorageService(IImageSettingsService settingsService) :
         ".webp",
     };
 
-    public async Task<StoredImageFile> SaveAsync(IFormFile file, CancellationToken cancellationToken = default)
+    public async Task<StoredImageFile> SaveAsync(
+        IFormFile file,
+        bool replaceExisting = false,
+        CancellationToken cancellationToken = default)
     {
         if (file.Length == 0)
         {
@@ -28,8 +31,15 @@ public sealed class ImageStorageService(IImageSettingsService settingsService) :
         var settings = await settingsService.GetAsync(cancellationToken);
         Directory.CreateDirectory(settings.ImagesDirectory);
 
-        var storedFileName = GetAvailableFileName(settings.ImagesDirectory, SanitizeFileName(originalFileName));
+        var sanitizedFileName = SanitizeFileName(originalFileName);
+        var storedFileName = replaceExisting
+            ? sanitizedFileName
+            : GetAvailableFileName(settings.ImagesDirectory, sanitizedFileName);
         var imagePath = Path.GetFullPath(Path.Combine(settings.ImagesDirectory, storedFileName));
+        if (replaceExisting && File.Exists(imagePath))
+        {
+            TryDelete(imagePath);
+        }
 
         await using (var stream = File.Create(imagePath))
         {
@@ -46,6 +56,7 @@ public sealed class ImageStorageService(IImageSettingsService settingsService) :
     public async Task<StoredImageFile> CopyFromPathAsync(
         string sourcePath,
         string preferredFileName,
+        bool replaceExisting = false,
         CancellationToken cancellationToken = default)
     {
         if (!File.Exists(sourcePath))
@@ -67,8 +78,14 @@ public sealed class ImageStorageService(IImageSettingsService settingsService) :
         Directory.CreateDirectory(settings.ImagesDirectory);
 
         var baseName = SanitizeFileName(Path.GetFileNameWithoutExtension(preferredFileName) + extension);
-        var storedFileName = GetAvailableFileName(settings.ImagesDirectory, baseName);
+        var storedFileName = replaceExisting
+            ? baseName
+            : GetAvailableFileName(settings.ImagesDirectory, baseName);
         var imagePath = Path.GetFullPath(Path.Combine(settings.ImagesDirectory, storedFileName));
+        if (replaceExisting && File.Exists(imagePath))
+        {
+            TryDelete(imagePath);
+        }
 
         await using (var sourceStream = File.OpenRead(sourcePath))
         await using (var targetStream = File.Create(imagePath))

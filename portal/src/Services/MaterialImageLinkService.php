@@ -915,6 +915,18 @@ final class MaterialImageLinkService
 
             $data = is_array($response['data'] ?? null) ? $response['data'] : [];
             $imageGuid = trim((string) ($data['id'] ?? $data['Id'] ?? ''));
+            $storedFileName = trim((string) ($data['storedFileName'] ?? $data['StoredFileName'] ?? ''));
+            if ($storedFileName !== '' && strcasecmp($storedFileName, $fileName) !== 0) {
+                $resync = MaterialImageStorageService::copyLocalFromSource($localPath, $storedFileName);
+                if ($resync['ok'] ?? false) {
+                    MaterialImageStorageService::deleteLocalFile($fileName);
+                    $fileName = (string) ($resync['file_name'] ?? $storedFileName);
+                    $localPath = MaterialImageStorageService::settings()['images_dir'] . DIRECTORY_SEPARATOR . $fileName;
+                } else {
+                    $fileName = $storedFileName;
+                }
+            }
+
             if ($imageGuid !== '') {
                 MaterialImageSyncService::recordAssignedCopy(
                     $fileName,
