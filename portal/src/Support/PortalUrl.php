@@ -48,13 +48,31 @@ final class PortalUrl
         return $url;
     }
 
+    public static function isDashboardPath(string $path): bool
+    {
+        $path = (string) (parse_url($path, PHP_URL_PATH) ?: $path);
+        if ($path === '/dashboard' || $path === '/dashboard/') {
+            return true;
+        }
+
+        return str_starts_with($path, '/dashboard/');
+    }
+
     public static function loginRedirectTarget(string $type, ?string $rawRedirect = null): string
     {
         $safe = self::safeRedirectPath($rawRedirect);
+        if ($type === 'staff') {
+            if ($safe !== null && self::isDashboardPath($safe)) {
+                return $safe;
+            }
+
+            return '/dashboard/index.php';
+        }
+
         if ($safe !== null) {
             return $safe;
         }
 
-        return $type === 'customer' ? '/index.php' : '/dashboard/index.php';
+        return '/index.php';
     }
 }
