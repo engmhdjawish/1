@@ -63,10 +63,20 @@ try {
     }
 
     $query = MaterialImageZipService::buildMaterialFilterQuery($_GET);
-    MaterialImageZipService::streamApiZip('/api/material-images/download/materials', $query, 'filtered-material-images');
+    $archiveName = trim((string) ($_GET['archiveName'] ?? ''));
+    if ($archiveName !== '') {
+        $query['archiveName'] = $archiveName;
+    }
+    MaterialImageZipService::streamApiZip(
+        '/api/material-images/download/materials',
+        $query,
+        $archiveName !== '' ? $archiveName : 'filtered-material-images'
+    );
 } catch (\Throwable $exception) {
     if (!headers_sent()) {
-        http_response_code(400);
+        $message = $exception->getMessage();
+        $status = str_contains($message, 'لم يتم العثور') || str_contains($message, 'لا توجد') ? 404 : 400;
+        http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
     }
     echo json_encode([

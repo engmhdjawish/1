@@ -135,6 +135,75 @@ final class ApiClient
     }
 
     /**
+     * Download a binary API response to a local file (disk buffer, not PHP memory).
+     *
+     * @param array<string, scalar|null> $query
+     * @return array{ok: bool, status: int, contentType?: string, error?: string}
+     */
+    public static function downloadToFile(string $path, array $query, string $targetPath, int $timeoutSeconds = 600): array
+    {
+        $base = rtrim(Config::get('AMINE_API_BASE_URL', 'http://127.0.0.1:5000') ?? '', '/');
+        $url = $base . $path;
+        if ($query !== []) {
+            $url .= '?' . http_build_query($query);
+        }
+
+        $token = self::accessToken();
+        $headers = [
+            'Accept: */*',
+            'Authorization: Bearer ' . $token,
+        ];
+
+        $responseHeaders = [];
+        $handle = fopen($targetPath, 'wb');
+        if ($handle === false) {
+            return ['ok' => false, 'status' => 0, 'error' => 'تعذر إنشاء ملف التحميل المؤقت.'];
+        }
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_FILE => $handle,
+            CURLOPT_CUSTOMREQUEST => 'GET',
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_TIMEOUT => max(30, $timeoutSeconds),
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_HEADERFUNCTION => static function ($curl, string $headerLine) use (&$responseHeaders): int {
+                $length = strlen($headerLine);
+                $parts = explode(':', $headerLine, 2);
+                if (count($parts) === 2) {
+                    $name = strtolower(trim($parts[0]));
+                    $value = trim($parts[1]);
+                    if ($name !== '') {
+                        $responseHeaders[$name] = $value;
+                    }
+                }
+
+                return $length;
+            },
+        ]);
+
+        $ok = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+        fclose($handle);
+
+        if ($ok === false) {
+            return ['ok' => false, 'status' => 0, 'error' => $error ?: 'فشل الاتصال بالـ API'];
+        }
+        if ($status === 401) {
+            self::clearToken();
+        }
+
+        return [
+            'ok' => $status >= 200 && $status < 300,
+            'status' => $status,
+            'contentType' => (string) ($responseHeaders['content-type'] ?? 'application/octet-stream'),
+            'error' => $status >= 400 ? 'رمز الاستجابة ' . $status : '',
+        ];
+    }
+
+    /**
      * Stream a binary API response directly to the client without buffering in PHP memory.
      *
      * @param array<string, scalar|null> $query

@@ -996,9 +996,12 @@ public sealed class MaterialImagesController(
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        var images = imageGuids.Count == 0
-            ? []
-            : await mainDbContext.MaterialImages
+        if (imageGuids.Count == 0)
+        {
+            return NotFound(new { message = "No image files found for this bill.", billGuid });
+        }
+
+        var images = await mainDbContext.MaterialImages
                 .AsNoTracking()
                 .Where(image => imageGuids.Contains(image.Guid))
                 .OrderBy(image => image.Name)

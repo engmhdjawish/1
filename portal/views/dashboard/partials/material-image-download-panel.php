@@ -59,7 +59,7 @@ foreach ($materialFilterOptions['groups'] ?? [] as $group) {
 ?>
 <div data-material-images-download-panel>
   <p class="mb-6 text-sm text-text-muted max-w-3xl leading-relaxed">
-    حمّل صور الأصناف كملف ZIP مضغوط — مناسب للمشاركة على واتساب. التحميل يتم ببث مباشر دون تحميل كامل الملف في ذاكرة السيرفر.
+    حمّل صور الأصناف كملف ZIP مضغوط — مناسب للمشاركة على واتساب. يُبنى الملف على السيرفر ثم يُرسل للمتصفح مع <strong>شريط تقدم</strong> (بفضل معرفة الحجم مسبقاً).
   </p>
 
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -109,12 +109,31 @@ foreach ($materialFilterOptions['groups'] ?? [] as $group) {
           </label>
         </div>
 
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <label class="block text-sm md:col-span-2 max-w-md">
+            <span class="font-bold text-slate-700">تقسيم التحميل (اختياري)</span>
+            <select name="splitBy" data-zip-split-by class="mt-1 h-10 w-full rounded-lg border border-border-subtle px-3 text-sm">
+              <option value="">ملف ZIP واحد لكل النتائج</option>
+              <option value="materialTypes">ملف لكل نوع مادة (من التشيبس المختارة)</option>
+              <option value="ageCategories">ملف لكل فئة عمرية</option>
+              <option value="manufacturers">ملف لكل شركة مصنعة</option>
+              <option value="sizeRanges">ملف لكل قياس</option>
+              <option value="countryOfOrigins">ملف لكل بلد منشأ</option>
+              <option value="storeGuids">ملف لكل مخزن</option>
+              <option value="groupGuids">ملف لكل مجموعة</option>
+            </select>
+            <span class="text-xs text-text-muted mt-1 block">عند التقسيم: يُحمَّل ملف منفصل لكل تشيب في الفلتر المختار أعلاه.</span>
+          </label>
+        </div>
+
+        <div data-zip-download-status class="hidden text-sm rounded-lg border px-3 py-2"></div>
+
         <div class="flex flex-wrap items-center gap-3 pt-1">
           <button type="submit" class="h-11 px-5 rounded-xl bg-primary text-white text-sm font-bold inline-flex items-center gap-2">
             <span class="material-symbols-outlined text-lg">download</span>
             تحميل ZIP للنتائج
           </button>
-          <p class="text-xs text-text-muted">اختر فلاتر متعددة كتشيبس ثم اضغط التحميل — يُنشأ ملف ZIP في تبويب جديد.</p>
+          <p class="text-xs text-text-muted">ملف واحد: يفتح تبويب تحميل مع شريط تقدم. التقسيم: عدة ملفات متتالية (1.2 ثانية بين كل ملف).</p>
         </div>
       </form>
     </section>
@@ -174,3 +193,4 @@ foreach ($materialFilterOptions['groups'] ?? [] as $group) {
     </section>
   </div>
 </div>
+<script src="<?= h(portal_asset_url('/assets/dashboard/material-image-zip-download.js')) ?>" defer></script>

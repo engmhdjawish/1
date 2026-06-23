@@ -23,22 +23,87 @@ final class MaterialImageZipService
             ob_end_clean();
         }
 
-        header('Cache-Control: no-store, no-cache, must-revalidate');
-        header('X-Accel-Buffering: no');
-        header('Content-Type: application/zip');
-        header('Content-Disposition: attachment; filename="' . self::sanitizeFilename($fallbackFilename) . '.zip"');
+        $archiveName = trim((string) ($query['archiveName'] ?? ''));
+        unset($query['archiveName']);
+        $filename = self::sanitizeFilename($archiveName !== '' ? $archiveName : $fallbackFilename);
 
-        $result = ApiClient::streamGet($apiPath, $query, 900);
-        if (!($result['ok'] ?? false) && !str_contains((string) ($result['contentType'] ?? ''), 'application/zip')) {
-            if (!headers_sent()) {
-                http_response_code((int) ($result['status'] ?? 502));
-                header('Content-Type: application/json; charset=utf-8');
-                echo json_encode([
-                    'ok' => false,
-                    'message' => (string) ($result['error'] ?? 'تعذر تحميل الصور من API الأمين.'),
-                ], JSON_UNESCAPED_UNICODE);
+        $tempPath = tempnam(sys_get_temp_dir(), 'apizip_');
+        if ($tempPath === false) {
+            throw new \RuntimeException('تعذر إنشاء ملف مؤقت للتحميل.');
+        }
+
+        try {
+            $result = ApiClient::downloadToFile($apiPath, $query, $tempPath, 900);
+            if (!($result['ok'] ?? false)) {
+                throw new \RuntimeException(self::readApiZipErrorMessage($tempPath, (int) ($result['status'] ?? 502), (string) ($result['error'] ?? '')));
+            }
+
+            $contentType = strtolower((string) ($result['contentType'] ?? ''));
+            if (!str_contains($contentType, 'zip') && !str_contains($contentType, 'octet-stream')) {
+                throw new \RuntimeException(self::readApiZipErrorMessage($tempPath, (int) ($result['status'] ?? 502), 'استجابة غير صالحة من API الأمين.'));
+            }
+
+            $size = filesize($tempPath);
+            if ($size === false || $size < 22) {
+                throw new \RuntimeException('ملف ZIP فارغ أو لا توجد صور مطابقة.');
+            }
+
+            header('Cache-Control: no-store, no-cache, must-revalidate');
+            header('X-Accel-Buffering: no');
+            header('Content-Type: application/zip');
+            header('Content-Disposition: attachment; filename="' . $filename . '.zip"');
+            header('Content-Length: ' . (string) $size);
+
+            $handle = fopen($tempPath, 'rb');
+            if ($handle === false) {
+                throw new \RuntimeException('تعذر قراءة ملف ZIP.');
+            }
+            while (!feof($handle)) {
+                $chunk = fread($handle, 65536);
+                if ($chunk === false) {
+                    break;
+                }
+                echo $chunk;
+            }
+            fclose($handle);
+        } finally {
+            if (is_file($tempPath)) {
+                @unlink($tempPath);
             }
         }
+    }
+
+    private static function readApiZipErrorMessage(string $path, int $status, string $fallback): string
+    {
+        $body = is_file($path) ? (string) file_get_contents($path) : '';
+        if ($body !== '') {
+            $decoded = json_decode($body, true);
+            if (is_array($decoded)) {
+                $message = trim((string) ($decoded['message'] ?? $decoded['title'] ?? ''));
+                if ($message !== '') {
+                    return self::translateApiZipError($message, $status);
+                }
+            }
+        }
+
+        return self::translateApiZipError($fallback, $status);
+    }
+
+    private static function translateApiZipError(string $message, int $status): string
+    {
+        $normalized = strtolower($message);
+        if (str_contains($normalized, 'no material rows')) {
+            return 'لا توجد أصناف مواد في هذه الفاتورة.';
+        }
+        if (str_contains($normalized, 'no image files')) {
+            return 'لا توجد صور مرتبطة بأصناف هذه الفاتورة أو المادة.';
+        }
+
+        if ($status === 404) {
+            return 'لم يتم العثور على صور للتحميل.';
+        }
+
+        return trim($message) !== '' ? trim($message) : 'تعذر تحميل الصور من API الأمين.';
     }
 
     public static function findInvoiceGuid(?string $typeGuid, ?string $typeName, int $number): ?string
@@ -49,8 +114,8 @@ final class MaterialImageZipService
 
         $params = [
             'page' => 1,
-            'pageSize' => 30,
-            'keyword' => (string) $number,
+            'pageSize' => 5,
+            'number' => $number,
         ];
         if ($typeGuid !== null && trim($typeGuid) !== '') {
             $params['typeGuid'] = trim($typeGuid);
@@ -65,6 +130,13 @@ final class MaterialImageZipService
                 if ($guid !== '') {
                     return $guid;
                 }
+            }
+        }
+
+        if (count($result['items']) === 1) {
+            $guid = trim((string) ($result['items'][0]['guid'] ?? ''));
+            if ($guid !== '') {
+                return $guid;
             }
         }
 
