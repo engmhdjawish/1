@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Portal\Services\CatalogSectionResolver;
 use Portal\Services\SpecialOfferService;
 use Portal\Services\StorePolicyService;
+use Portal\Support\StorePricePreference;
 
 /** @var array<string, mixed> $catalog */
 /** @var array<string, mixed> $displayOptions */
@@ -392,11 +393,19 @@ require __DIR__ . '/partials/store-filter-group.php';
       <?php
         $storeMaxPackages = StorePolicyService::maxPackagesPerMaterial();
         $storeAllowCart = (bool) ($displayOptions['allow_cart'] ?? false);
+        $storeShowPrice = (bool) ($displayOptions['show_price'] ?? false);
       ?>
       <?php if ($storeAllowCart && $storeMaxPackages !== null): ?>
-        <p class="store-hero__meta">الحد الأقصى للطلب: <strong><?= h(SpecialOfferService::formatQuantityLabel($storeMaxPackages)) ?></strong> طرد لكل مادة — استخدم أيقونة السلة في الأعلى لمتابعة مشترياتك.</p>
-      <?php elseif ($storeAllowCart): ?>
-        <p class="store-hero__meta">استخدم أيقونة السلة في أعلى الصفحة لمتابعة مشترياتك.</p>
+        <p class="store-hero__meta">الحد الأقصى للطلب: <strong><?= h(SpecialOfferService::formatQuantityLabel($storeMaxPackages)) ?></strong> طرد لكل مادة.</p>
+      <?php endif; ?>
+      <?php if ($storeAllowCart && $storeShowPrice): ?>
+        <div class="store-hero__currency">
+          <p class="store-hero__currency-label">عملة عرض الأسعار (يمكنك أيضاً التبديل من أعلى الصفحة)</p>
+          <div class="store-currency-toggle">
+            <button type="button" class="store-currency-toggle__btn <?= StorePricePreference::current() === StorePricePreference::SYP ? 'is-active' : '' ?>" data-store-currency="<?= h(StorePricePreference::SYP) ?>">ليرة سورية (ل.س)</button>
+            <button type="button" class="store-currency-toggle__btn <?= StorePricePreference::current() === StorePricePreference::USD ? 'is-active' : '' ?>" data-store-currency="<?= h(StorePricePreference::USD) ?>">دولار ($)</button>
+          </div>
+        </div>
       <?php endif; ?>
     </div>
     <?php if ($isCustomer): ?>

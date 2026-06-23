@@ -7,6 +7,7 @@ use Portal\Auth\WebSession;
 use Portal\Services\PortalSettingsService;
 use Portal\Services\StoreCartService;
 use Portal\Services\StoreCatalogService;
+use Portal\Support\StorePricePreference;
 
 /** @var string $title */
 /** @var string $content */
@@ -24,6 +25,9 @@ $siteName = trim((string) ($companyContext['company_name'] ?? '')) !== ''
 $customer = CustomerSession::check() ? CustomerSession::customer() : null;
 $staffLoggedIn = WebSession::check();
 $storeDisplay = StoreCatalogService::displayOptions();
+StorePricePreference::applyFromRequest($_GET);
+$storeShowPrice = (bool) ($storeDisplay['show_price'] ?? false);
+$storePriceCurrency = StorePricePreference::current();
 $storeAllowCart = (bool) ($storeDisplay['allow_cart'] ?? false);
 $storeCartCount = $storeAllowCart ? StoreCartService::itemCount() : 0;
 
@@ -116,6 +120,22 @@ $navLinks = [
     </nav>
 
     <div class="flex items-center gap-2 shrink-0">
+      <?php if ($storeShowPrice): ?>
+        <div class="store-currency-toggle" role="group" aria-label="عملة عرض الأسعار">
+          <button
+            type="button"
+            class="store-currency-toggle__btn <?= $storePriceCurrency === StorePricePreference::SYP ? 'is-active' : '' ?>"
+            data-store-currency="<?= h(StorePricePreference::SYP) ?>"
+            title="عرض الأسعار بالليرة السورية"
+          >ل.س</button>
+          <button
+            type="button"
+            class="store-currency-toggle__btn <?= $storePriceCurrency === StorePricePreference::USD ? 'is-active' : '' ?>"
+            data-store-currency="<?= h(StorePricePreference::USD) ?>"
+            title="عرض الأسعار بالدولار"
+          >$</button>
+        </div>
+      <?php endif; ?>
       <?php if ($storeAllowCart): ?>
         <a href="/store-cart.php" class="relative inline-flex items-center justify-center w-10 h-10 rounded-xl border border-gray-200 hover:border-primary" title="السلة" aria-label="السلة">
           <span class="material-symbols-outlined">shopping_cart</span>
@@ -164,6 +184,15 @@ $navLinks = [
     <?php foreach ($navLinks as $link): ?>
       <a href="<?= h($link['href']) ?>" data-public-nav-link="1" class="block rounded-xl px-3 py-3 hover:bg-gray-50"><?= h($link['label']) ?></a>
     <?php endforeach; ?>
+    <?php if ($storeShowPrice): ?>
+      <div class="px-3 py-2">
+        <p class="text-xs text-gray-500 mb-2">عملة الأسعار</p>
+        <div class="store-currency-toggle store-currency-toggle--drawer">
+          <button type="button" class="store-currency-toggle__btn <?= $storePriceCurrency === StorePricePreference::SYP ? 'is-active' : '' ?>" data-store-currency="<?= h(StorePricePreference::SYP) ?>">ل.س</button>
+          <button type="button" class="store-currency-toggle__btn <?= $storePriceCurrency === StorePricePreference::USD ? 'is-active' : '' ?>" data-store-currency="<?= h(StorePricePreference::USD) ?>">$</button>
+        </div>
+      </div>
+    <?php endif; ?>
     <?php if ($customer): ?>
       <a href="/account.php" data-public-nav-link="1" class="block rounded-xl px-3 py-3 hover:bg-gray-50">حسابي</a>
       <div class="pt-3 mt-3 border-t border-gray-100 text-gray-600 px-3"><?= h((string) ($customer['name_ar'] ?? '')) ?></div>
@@ -207,6 +236,9 @@ $navLinks = [
   })();
 </script>
 <?php require __DIR__ . '/partials/product-quick-view.php'; ?>
+<?php if ($storeShowPrice): ?>
+  <script src="/assets/store-pref.js" defer></script>
+<?php endif; ?>
 <?php if ($storeAllowCart): ?>
   <script src="/assets/store-cart.js" defer></script>
 <?php endif; ?>

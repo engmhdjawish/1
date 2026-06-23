@@ -32,6 +32,11 @@
     return div.innerHTML;
   };
 
+  const formatUsd = (amount) => {
+    const n = Number(amount) || 0;
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
   const formatMoney = (amount) => {
     const n = Number(amount) || 0;
     return n.toLocaleString('ar-SY', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -213,6 +218,9 @@
     if (!root) return;
 
     const showPrice = !!data.show_price;
+    const priceMode = (data.price_mode || 'syp').toLowerCase();
+    const showPriceSyp = showPrice && (priceMode === 'syp' || priceMode === 'both');
+    const showPriceUsd = showPrice && (priceMode === 'usd' || priceMode === 'both');
     const max = data.max_packages_per_material;
     const maxLabel = data.max_packages_label || max;
 
@@ -261,7 +269,19 @@
             const qty = Math.max(1, Math.round(Number(line.quantity) || 1));
             const packageUnit = line.package_unit || 'طرد';
             const priceSp = Number(line.sale_price_sp) || 0;
-            const lineTotal = qty * priceSp;
+            const priceUsd = Number(line.sale_price_usd) || 0;
+            const lineTotalSp = qty * priceSp;
+            const lineTotalUsd = qty * priceUsd;
+            const unitPriceCell = showPriceSyp && priceSp > 0
+              ? `<span class="font-bold text-primary">${formatMoney(priceSp)} ل.س</span>`
+              : showPriceUsd && priceUsd > 0
+                ? `<span class="font-bold text-emerald-700">$${formatUsd(priceUsd)}</span>`
+                : '—';
+            const lineTotalCell = showPriceSyp
+              ? `${formatMoney(lineTotalSp)} ل.س`
+              : showPriceUsd
+                ? `$${formatUsd(lineTotalUsd)}`
+                : '—';
             const img = line.image_url
               ? `<img src="${escapeHtml(line.image_url)}" alt="" loading="lazy">`
               : '<div class="store-cart-product__placeholder"><span class="material-symbols-outlined">inventory_2</span></div>';
@@ -270,7 +290,7 @@
                 <div class="font-bold text-sm">${escapeHtml(line.material_name_ar || '')}</div>
                 ${line.material_code ? `<div class="text-xs text-gray-500 font-mono" dir="ltr">${escapeHtml(line.material_code)}</div>` : ''}
               </div></div></td>
-              <td class="text-sm whitespace-nowrap">${showPrice && priceSp > 0 ? `<span class="font-bold text-primary">${formatMoney(priceSp)} ل.س</span>` : '—'}</td>
+              <td class="text-sm whitespace-nowrap">${unitPriceCell}</td>
               <td>
                 <div class="store-qty-stepper" data-cart-qty-control data-guid="${escapeHtml(guid)}">
                   <button type="button" data-bump="-1" aria-label="إنقاص">−</button>
@@ -279,7 +299,7 @@
                 </div>
                 <div class="text-xs text-gray-500 mt-1">${escapeHtml(packageUnit)}</div>
               </td>
-              <td class="font-bold text-sm">${showPrice ? `${formatMoney(lineTotal)} ل.س` : '—'}</td>
+              <td class="font-bold text-sm">${lineTotalCell}</td>
               <td class="text-center">
                 <button type="button" class="p-2 rounded-full text-red-600 hover:bg-red-50" data-remove-item="${escapeHtml(guid)}" aria-label="حذف">
                   <span class="material-symbols-outlined">delete</span>
@@ -306,8 +326,14 @@
       const totals = data.totals || {};
       const allowOrder = !!data.allow_order;
       const totalSp = Number(totals.total_sp) || 0;
+      const totalUsd = Number(totals.total_usd) || 0;
+      const totalLine = showPriceSyp
+        ? `<div class="store-cart-summary__total">الإجمالي: ${formatMoney(totalSp)} ل.س</div>`
+        : showPriceUsd
+          ? `<div class="store-cart-summary__total">الإجمالي: $${formatUsd(totalUsd)}</div>`
+          : '';
       summaryEl.innerHTML = `<div class="store-panel store-cart-summary space-y-4">
-        ${showPrice ? `<div class="store-cart-summary__total">الإجمالي: ${formatMoney(totalSp)} ل.س</div>` : ''}
+        ${totalLine}
         ${items.length > 0 ? '<button type="button" class="store-btn store-btn--ghost" data-clear-cart>تفريغ السلة</button>' : ''}
         ${allowOrder && items.length > 0 ? `
           <form data-checkout-form class="space-y-3 border-t border-gray-100 pt-4">

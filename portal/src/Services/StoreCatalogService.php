@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Auth\CustomerSession;
+use Portal\Support\StorePricePreference;
 
 final class StoreCatalogService
 {
@@ -31,7 +32,7 @@ final class StoreCatalogService
             'allow_cart' => (bool) ($policy['allow_cart'] ?? false),
             'allow_order' => (bool) ($policy['allow_order'] ?? false),
             'show_images' => true,
-            'price_mode' => $showPrice ? 'both' : 'none',
+            'price_mode' => StorePricePreference::priceModeForDisplay($showPrice),
         ];
     }
 

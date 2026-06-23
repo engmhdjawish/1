@@ -15,6 +15,9 @@ $display = StoreCatalogService::displayOptions();
 $allowCart = (bool) ($display['allow_cart'] ?? false);
 $allowOrder = (bool) ($display['allow_order'] ?? false);
 $showPrice = (bool) ($display['show_price'] ?? false);
+$priceMode = (string) ($display['price_mode'] ?? 'syp');
+$showPriceSyp = $showPrice && in_array($priceMode, ['both', 'syp'], true);
+$showPriceUsd = $showPrice && in_array($priceMode, ['both', 'usd'], true);
 $error = null;
 $notice = null;
 
