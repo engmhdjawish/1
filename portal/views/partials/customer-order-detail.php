@@ -5,9 +5,17 @@ declare(strict_types=1);
 /** @var array<string, mixed> $order */
 /** @var string|null $trackingUrl */
 /** @var bool $showTrackingLink */
+/** @var bool $allowCustomerCancel */
+/** @var string|null $cancelQuoteToken */
 
 $trackingUrl ??= '';
 $showTrackingLink = (bool) ($showTrackingLink ?? false);
+$allowCustomerCancel = (bool) ($allowCustomerCancel ?? !empty($order['can_customer_cancel']));
+$cancelQuoteToken = isset($cancelQuoteToken) ? (string) $cancelQuoteToken : null;
+$customerCancelBlockReason = (string) ($order['customer_cancel_block_reason'] ?? '');
+$cancelOrderId = (string) ($order['id'] ?? '');
+$activeItemCount = (int) ($order['summary']['items_count'] ?? 0);
+$canCancelItems = $allowCustomerCancel && $activeItemCount > 1;
 $items = is_array($order['items'] ?? null) ? $order['items'] : [];
 $timeline = is_array($order['timeline'] ?? null) ? $order['timeline'] : [];
 $changes = is_array($order['item_changes'] ?? null) ? $order['item_changes'] : [];
@@ -26,6 +34,29 @@ $showPriceUsd = !$showPriceSyp && (float) ($order['total_usd'] ?? 0) > 0;
     </div>
     <?php require __DIR__ . '/order-status-badge.php'; ?>
   </header>
+
+  <?php if ($allowCustomerCancel): ?>
+    <div class="customer-order-cancel-bar">
+      <p class="customer-order-cancel-bar__hint">الطلب جديد ولم يراجعه فريقنا بعد — يمكنك إلغاؤه أو إزالة أصناف منه.</p>
+      <form
+        method="post"
+        class="customer-order-cancel-bar__form"
+        data-customer-cancel-confirm="هل تريد إلغاء الطلب بالكامل؟ لا يمكن التراجع عن هذا الإجراء."
+      >
+        <input type="hidden" name="action" value="cancel_order">
+        <input type="hidden" name="order_id" value="<?= h($cancelOrderId) ?>">
+        <?php if ($cancelQuoteToken !== null && $cancelQuoteToken !== ''): ?>
+          <input type="hidden" name="token" value="<?= h($cancelQuoteToken) ?>">
+        <?php endif; ?>
+        <button type="submit" class="store-btn store-btn--danger">
+          <span class="material-symbols-outlined text-base" aria-hidden="true">cancel</span>
+          إلغاء الطلب بالكامل
+        </button>
+      </form>
+    </div>
+  <?php elseif ($customerCancelBlockReason !== '' && $status === 'pending'): ?>
+    <p class="customer-order-cancel-note"><?= h($customerCancelBlockReason) ?></p>
+  <?php endif; ?>
 
   <div class="customer-order-detail__grid">
     <article class="customer-order-card">
@@ -76,7 +107,27 @@ $showPriceUsd = !$showPriceSyp && (float) ($order['total_usd'] ?? 0) > 0;
       <h3 class="customer-order-card__title">الأصناف (<?= (int) ($order['summary']['items_count'] ?? count($items)) ?>)</h3>
       <div class="store-order-lines">
         <?php foreach ($items as $item): ?>
-          <?php require __DIR__ . '/store-order-line-card.php'; ?>
+          <div class="customer-order-line-stack">
+            <?php require __DIR__ . '/store-order-line-card.php'; ?>
+            <?php if ($canCancelItems && empty($item['is_cancelled'])): ?>
+              <form
+                method="post"
+                class="customer-order-line-cancel"
+                data-customer-cancel-confirm="إلغاء «<?= h((string) ($item['material_name_ar'] ?? 'هذا الصنف')) ?>» من الطلب؟"
+              >
+                <input type="hidden" name="action" value="cancel_order_item">
+                <input type="hidden" name="order_id" value="<?= h($cancelOrderId) ?>">
+                <input type="hidden" name="item_id" value="<?= h((string) ($item['id'] ?? '')) ?>">
+                <?php if ($cancelQuoteToken !== null && $cancelQuoteToken !== ''): ?>
+                  <input type="hidden" name="token" value="<?= h($cancelQuoteToken) ?>">
+                <?php endif; ?>
+                <button type="submit" class="customer-order-line-cancel__btn">
+                  <span class="material-symbols-outlined text-sm" aria-hidden="true">remove_shopping_cart</span>
+                  إلغاء هذا الصنف
+                </button>
+              </form>
+            <?php endif; ?>
+          </div>
         <?php endforeach; ?>
       </div>
     </article>
@@ -104,3 +155,16 @@ $showPriceUsd = !$showPriceSyp && (float) ($order['total_usd'] ?? 0) > 0;
     </article>
   <?php endif; ?>
 </section>
+
+<script>
+  (() => {
+    document.querySelectorAll('[data-customer-cancel-confirm]').forEach((form) => {
+      form.addEventListener('submit', (event) => {
+        const message = form.getAttribute('data-customer-cancel-confirm') || 'تأكيد الإلغاء؟';
+        if (!window.confirm(message)) {
+          event.preventDefault();
+        }
+      });
+    });
+  })();
+</script>

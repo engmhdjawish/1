@@ -17,12 +17,15 @@ $phone = (string) ($customer['phone'] ?? '');
 $profile = WebCustomerService::getById($customerId) ?? [];
 
 $tab = ($_GET['tab'] ?? 'profile') === 'orders' ? 'orders' : 'profile';
-$orderId = trim((string) ($_GET['order'] ?? ''));
+$orderId = trim((string) ($_GET['order'] ?? $_POST['order_id'] ?? ''));
 $flash = null;
 $flashType = 'success';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string) ($_POST['action'] ?? ''));
+    if (in_array($action, ['cancel_order', 'cancel_order_item'], true)) {
+        $tab = 'orders';
+    }
     if ($action === 'update_profile') {
         $result = WebCustomerService::updateOwnProfile(
             $customerId,
@@ -44,6 +47,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         $flash = $result['message'];
         $flashType = $result['ok'] ? 'success' : 'error';
+    } elseif ($action === 'cancel_order') {
+        $targetOrderId = trim((string) ($_POST['order_id'] ?? ''));
+        $result = OrderService::cancelOrderByCustomer($targetOrderId, $customerId, $phone, null);
+        $flash = $result['message'];
+        $flashType = $result['ok'] ? 'success' : 'error';
+        if ($result['ok']) {
+            $orderId = $targetOrderId;
+        }
+    } elseif ($action === 'cancel_order_item') {
+        $targetOrderId = trim((string) ($_POST['order_id'] ?? ''));
+        $itemId = trim((string) ($_POST['item_id'] ?? ''));
+        $result = OrderService::cancelOrderItemByCustomer($targetOrderId, $itemId, $customerId, $phone, null);
+        $flash = $result['message'];
+        $flashType = $result['ok'] ? 'success' : 'error';
+        if ($result['ok']) {
+            $orderId = $targetOrderId;
+        }
     }
 }
 

@@ -8,7 +8,25 @@ use Portal\Services\OrderService;
 
 require dirname(__DIR__) . '/views/helpers.php';
 
-$token = trim((string) ($_GET['token'] ?? ''));
+$token = trim((string) ($_GET['token'] ?? $_POST['token'] ?? ''));
+$flash = null;
+$flashType = 'success';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $token !== '') {
+    $action = trim((string) ($_POST['action'] ?? ''));
+    $orderId = trim((string) ($_POST['order_id'] ?? ''));
+    if ($action === 'cancel_order') {
+        $result = OrderService::cancelOrderByCustomer($orderId, null, null, $token);
+        $flash = $result['message'];
+        $flashType = $result['ok'] ? 'success' : 'error';
+    } elseif ($action === 'cancel_order_item') {
+        $itemId = trim((string) ($_POST['item_id'] ?? ''));
+        $result = OrderService::cancelOrderItemByCustomer($orderId, $itemId, null, null, $token);
+        $flash = $result['message'];
+        $flashType = $result['ok'] ? 'success' : 'error';
+    }
+}
+
 $order = $token !== '' ? OrderService::getOrderByQuoteToken($token) : null;
 $error = null;
 
