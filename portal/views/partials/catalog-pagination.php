@@ -10,23 +10,41 @@ if ($totalPages <= 1) {
     return;
 }
 ?>
-<nav class="mt-8 flex flex-wrap items-center justify-center gap-2" aria-label="ترقيم الصفحات">
+<nav class="store-pagination" aria-label="ترقيم الصفحات">
   <?php if ($page > 1): ?>
-    <a href="<?= h($buildUrl($page - 1)) ?>" class="h-10 inline-flex items-center px-4 rounded-full border border-gray-300 text-sm font-bold hover:border-primary">السابق</a>
+    <a href="<?= h($buildUrl(1)) ?>" class="store-pagination__btn" title="الصفحة الأولى">
+      <span class="material-symbols-outlined text-base" aria-hidden="true">first_page</span>
+      <span>الأول</span>
+    </a>
+    <a href="<?= h($buildUrl($page - 1)) ?>" class="store-pagination__btn">
+      <span class="material-symbols-outlined text-base" aria-hidden="true">chevron_right</span>
+      <span>السابق</span>
+    </a>
   <?php endif; ?>
-  <?php
-    $windowStart = max(1, $page - 2);
-    $windowEnd = min($totalPages, $page + 2);
-    for ($pageNumber = $windowStart; $pageNumber <= $windowEnd; $pageNumber++):
-      $isCurrent = $pageNumber === $page;
-  ?>
-    <a
-      href="<?= h($buildUrl($pageNumber)) ?>"
-      class="h-10 min-w-10 inline-flex items-center justify-center px-3 rounded-full text-sm font-bold border <?= $isCurrent ? 'bg-primary text-white border-primary' : 'border-gray-300 hover:border-primary' ?>"
-      <?= $isCurrent ? 'aria-current="page"' : '' ?>
-    ><?= (int) $pageNumber ?></a>
-  <?php endfor; ?>
+
+  <div class="store-pagination__pages">
+    <?php
+      $windowStart = max(1, $page - 2);
+      $windowEnd = min($totalPages, $page + 2);
+      for ($pageNumber = $windowStart; $pageNumber <= $windowEnd; $pageNumber++):
+        $isCurrent = $pageNumber === $page;
+    ?>
+      <a
+        href="<?= h($buildUrl($pageNumber)) ?>"
+        class="store-pagination__page <?= $isCurrent ? 'is-current' : '' ?>"
+        <?= $isCurrent ? 'aria-current="page"' : '' ?>
+      ><?= (int) $pageNumber ?></a>
+    <?php endfor; ?>
+  </div>
+
   <?php if ($page < $totalPages): ?>
-    <a href="<?= h($buildUrl($page + 1)) ?>" class="h-10 inline-flex items-center px-4 rounded-full border border-gray-300 text-sm font-bold hover:border-primary">التالي</a>
+    <a href="<?= h($buildUrl($page + 1)) ?>" class="store-pagination__btn">
+      <span>التالي</span>
+      <span class="material-symbols-outlined text-base" aria-hidden="true">chevron_left</span>
+    </a>
+    <a href="<?= h($buildUrl($totalPages)) ?>" class="store-pagination__btn" title="الصفحة الأخيرة">
+      <span>الأخير</span>
+      <span class="material-symbols-outlined text-base" aria-hidden="true">last_page</span>
+    </a>
   <?php endif; ?>
 </nav>

@@ -32,6 +32,50 @@
     return div.innerHTML;
   };
 
+  const imageZoomUrl = (url) => {
+    const text = String(url || '');
+    if (!text) return '';
+    if (text.includes('thumb=1')) return text.replace('thumb=1', 'thumb=0');
+    return text.includes('?') ? `${text}&thumb=0` : `${text}?thumb=0`;
+  };
+
+  const bindImageZoom = (root = document) => {
+    const lightbox = document.getElementById('storeImageLightbox');
+    const lightboxImg = document.getElementById('storeImageLightboxImg');
+    const lightboxCaption = document.getElementById('storeImageLightboxCaption');
+    if (!lightbox || !lightboxImg) return;
+
+    const close = () => {
+      lightbox.hidden = true;
+      lightbox.setAttribute('aria-hidden', 'true');
+      lightboxImg.src = '';
+      document.body.style.overflow = '';
+    };
+
+    if (!lightbox.dataset.bound) {
+      lightbox.dataset.bound = '1';
+      lightbox.querySelectorAll('[data-lightbox-close]').forEach((el) => el.addEventListener('click', close));
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !lightbox.hidden) close();
+      });
+    }
+
+    root.querySelectorAll('[data-cart-image-zoom]').forEach((btn) => {
+      if (btn.dataset.zoomBound === '1') return;
+      btn.dataset.zoomBound = '1';
+      btn.addEventListener('click', () => {
+        const src = btn.getAttribute('data-cart-image-zoom') || '';
+        if (!src) return;
+        const name = btn.closest('.store-cart-product')?.querySelector('.font-bold')?.textContent?.trim() || '';
+        lightboxImg.src = src;
+        if (lightboxCaption) lightboxCaption.textContent = name;
+        lightbox.hidden = false;
+        lightbox.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+      });
+    });
+  };
+
   const formatUsd = (amount) => {
     const n = Number(amount) || 0;
     return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -283,7 +327,11 @@
                 ? `$${formatUsd(lineTotalUsd)}`
                 : '—';
             const img = line.image_url
-              ? `<img src="${escapeHtml(line.image_url)}" alt="" loading="lazy">`
+              ? (() => {
+                  const thumb = escapeHtml(line.image_url);
+                  const zoom = escapeHtml(imageZoomUrl(line.image_url));
+                  return `<button type="button" class="store-cart-product__thumb" data-cart-image-zoom="${zoom}" title="تكبير الصورة للتدقيق"><img src="${thumb}" alt=""><span class="store-cart-product__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span></button>`;
+                })()
               : '<div class="store-cart-product__placeholder"><span class="material-symbols-outlined">inventory_2</span></div>';
             html += `<tr data-cart-line="${escapeHtml(guid)}">
               <td><div class="store-cart-product">${img}<div>
@@ -319,6 +367,7 @@
         html += '</div>';
         bodyEl.innerHTML = html;
         bindCartLineControls(bodyEl, max);
+        bindImageZoom(bodyEl);
       }
     }
 
@@ -464,6 +513,7 @@
       bindCartLineControls(page, null);
       bindClearCart(page);
       bindCheckout(page);
+      bindImageZoom(page);
     }
     initCartPage();
     document.querySelectorAll('[data-store-add-cart]').forEach((form) => {

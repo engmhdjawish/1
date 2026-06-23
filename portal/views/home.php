@@ -218,11 +218,7 @@ if ($aboutSnippet !== '') {
                 <div class="p-3.5 flex flex-col flex-1">
                   <div class="font-bold text-sm line-clamp-2 min-h-[2.5rem] text-gray-900"><?= h((string) ($item['name'] ?? '-')) ?></div>
                   <?php if ($showAnyPrice): ?>
-                    <?php
-                      $showPriceSypBlock = $showPriceSyp;
-                      $showPriceUsdBlock = $showPriceUsd;
-                      require __DIR__ . '/partials/offer-price-block.php';
-                    ?>
+                    <?php require __DIR__ . '/partials/offer-price-block.php'; ?>
                   <?php endif; ?>
                 </div>
               </a>

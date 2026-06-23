@@ -101,7 +101,11 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
                       <td>
                         <div class="store-cart-product">
                           <?php if (!empty($line['image_url'])): ?>
-                            <img src="<?= h((string) $line['image_url']) ?>" alt="" loading="lazy">
+                            <?php $zoomUrl = material_image_zoom_url((string) $line['image_url']); ?>
+                            <button type="button" class="store-cart-product__thumb" data-cart-image-zoom="<?= h($zoomUrl) ?>" title="تكبير الصورة للتدقيق">
+                              <img src="<?= h((string) $line['image_url']) ?>" alt="">
+                              <span class="store-cart-product__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span>
+                            </button>
                           <?php else: ?>
                             <div class="store-cart-product__placeholder">
                               <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>
@@ -201,4 +205,15 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
       </aside>
     </div>
   <?php endif; ?>
+</div>
+
+<div id="storeImageLightbox" class="store-image-lightbox" hidden aria-hidden="true">
+  <button type="button" class="store-image-lightbox__close" data-lightbox-close aria-label="إغلاق">
+    <span class="material-symbols-outlined">close</span>
+  </button>
+  <div class="store-image-lightbox__backdrop" data-lightbox-close></div>
+  <figure class="store-image-lightbox__frame">
+    <img src="" alt="" id="storeImageLightboxImg">
+    <figcaption id="storeImageLightboxCaption" class="store-image-lightbox__caption"></figcaption>
+  </figure>
 </div>

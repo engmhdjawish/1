@@ -167,6 +167,23 @@ function material_image_api_url(string $imageGuid, bool $thumb = true): string
     return \Portal\Services\MaterialImageStorageService::imageGuidUrl($imageGuid, $thumb);
 }
 
+/** يحوّل رابط الصورة المصغّرة إلى نسخة كاملة للتكبير. */
+function material_image_zoom_url(string $imageUrl): string
+{
+    $imageUrl = trim($imageUrl);
+    if ($imageUrl === '') {
+        return '';
+    }
+    if (str_contains($imageUrl, 'thumb=1')) {
+        return str_replace('thumb=1', 'thumb=0', $imageUrl);
+    }
+    if (!str_contains($imageUrl, 'thumb=')) {
+        return str_contains($imageUrl, '?') ? $imageUrl . '&thumb=0' : $imageUrl . '?thumb=0';
+    }
+
+    return $imageUrl;
+}
+
 function product_url(string $guid, ?string $return = null, ?string $offer = null): string
 {
     $guid = trim($guid);

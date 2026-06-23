@@ -398,15 +398,6 @@ require __DIR__ . '/partials/store-filter-group.php';
       <?php if ($storeAllowCart && $storeMaxPackages !== null): ?>
         <p class="store-hero__meta">الحد الأقصى للطلب: <strong><?= h(SpecialOfferService::formatQuantityLabel($storeMaxPackages)) ?></strong> طرد لكل مادة.</p>
       <?php endif; ?>
-      <?php if ($storeAllowCart && $storeShowPrice): ?>
-        <div class="store-hero__currency">
-          <p class="store-hero__currency-label">عملة عرض الأسعار (يمكنك أيضاً التبديل من أعلى الصفحة)</p>
-          <div class="store-currency-toggle">
-            <button type="button" class="store-currency-toggle__btn <?= StorePricePreference::current() === StorePricePreference::SYP ? 'is-active' : '' ?>" data-store-currency="<?= h(StorePricePreference::SYP) ?>">ليرة سورية (ل.س)</button>
-            <button type="button" class="store-currency-toggle__btn <?= StorePricePreference::current() === StorePricePreference::USD ? 'is-active' : '' ?>" data-store-currency="<?= h(StorePricePreference::USD) ?>">دولار ($)</button>
-          </div>
-        </div>
-      <?php endif; ?>
     </div>
     <?php if ($isCustomer): ?>
       <span class="store-hero__badge">
