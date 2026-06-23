@@ -11,8 +11,8 @@ $canManageOrders = (bool) ($canManageOrders ?? false);
 $orderId = (string) ($orderId ?? ($orderDetails['id'] ?? ''));
 $editable = $canManageOrders && !empty($orderDetails['can_staff_edit']) && empty($item['is_cancelled']);
 $itemId = (string) ($item['id'] ?? '');
-$showPriceSyp = (float) ($orderDetails['total_sp'] ?? 0) > 0;
-$showPriceUsd = !$showPriceSyp && (float) ($orderDetails['total_usd'] ?? 0) > 0;
+$showPriceSyp = (float) ($orderDetails['total_sp'] ?? 0) > 0 || (float) ($item['sale_price_sp'] ?? 0) > 0;
+$showPriceUsd = (float) ($orderDetails['total_usd'] ?? 0) > 0 || (float) ($item['sale_price_usd'] ?? 0) > 0;
 ?>
 <div class="dashboard-order-line">
   <?php require __DIR__ . '/store-order-line-card.php'; ?>
@@ -24,7 +24,7 @@ $showPriceUsd = !$showPriceSyp && (float) ($orderDetails['total_usd'] ?? 0) > 0;
         تعديل الصنف
       </summary>
       <div class="dashboard-order-line__edit-body">
-        <form method="post" class="dashboard-order-line__form" data-dashboard-ajax>
+        <form method="post" class="dashboard-order-line__form" data-dashboard-ajax data-dashboard-reload>
           <input type="hidden" name="order_id" value="<?= h($orderId) ?>">
           <input type="hidden" name="item_id" value="<?= h($itemId) ?>">
           <input type="hidden" name="item_action" value="update_qty">
@@ -39,7 +39,7 @@ $showPriceUsd = !$showPriceSyp && (float) ($orderDetails['total_usd'] ?? 0) > 0;
           <button type="submit" class="dashboard-btn h-8 px-3 rounded-lg bg-primary text-white text-xs font-bold">حفظ الكمية</button>
         </form>
 
-        <form method="post" class="dashboard-order-line__form" data-dashboard-ajax>
+        <form method="post" class="dashboard-order-line__form" data-dashboard-ajax data-dashboard-reload>
           <input type="hidden" name="order_id" value="<?= h($orderId) ?>">
           <input type="hidden" name="item_id" value="<?= h($itemId) ?>">
           <input type="hidden" name="item_action" value="update_price">
@@ -62,7 +62,7 @@ $showPriceUsd = !$showPriceSyp && (float) ($orderDetails['total_usd'] ?? 0) > 0;
           <button type="submit" class="dashboard-btn h-8 px-3 rounded-lg border border-border-subtle text-xs font-bold">حفظ السعر</button>
         </form>
 
-        <form method="post" class="dashboard-order-line__form dashboard-order-line__form--danger" data-dashboard-ajax data-confirm="إلغاء هذا الصنف من الطلب؟ سيظهر التغيير للعميل.">
+        <form method="post" class="dashboard-order-line__form dashboard-order-line__form--danger" data-dashboard-ajax data-dashboard-reload data-dashboard-confirm="إلغاء هذا الصنف من الطلب؟ سيظهر التغيير للعميل.">
           <input type="hidden" name="order_id" value="<?= h($orderId) ?>">
           <input type="hidden" name="item_id" value="<?= h($itemId) ?>">
           <input type="hidden" name="item_action" value="cancel_item">

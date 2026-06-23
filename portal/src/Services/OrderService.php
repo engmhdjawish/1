@@ -34,6 +34,32 @@ final class OrderService
         return self::$hasItemEditSchema;
     }
 
+    public static function ensureItemEditSchema(): bool
+    {
+        if (self::hasItemEditSchema()) {
+            return true;
+        }
+
+        $migrationPath = dirname(__DIR__, 3) . '/docs/portal-migration-order-item-edits.sql';
+        if (!is_file($migrationPath)) {
+            return false;
+        }
+
+        try {
+            $sql = file_get_contents($migrationPath);
+            if (!is_string($sql) || trim($sql) === '') {
+                return false;
+            }
+
+            Database::pdo()->exec($sql);
+            self::$hasItemEditSchema = null;
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return self::hasItemEditSchema();
+    }
+
     /**
      * @param list<array{
      *   material_guid: string,

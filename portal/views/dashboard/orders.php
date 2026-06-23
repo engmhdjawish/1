@@ -9,6 +9,7 @@ declare(strict_types=1);
 /** @var string|null $flash */
 /** @var string $flashType */
 /** @var bool $canManageOrders */
+/** @var bool $itemEditSchemaReady */
 /** @var array<string, mixed>|null $orderDetails */
 
 $statusLabels = [
@@ -295,7 +296,13 @@ $truncate = static function (string $text, int $max = 48): string {
         <?php if ($detailItems === []): ?>
           <p class="text-sm text-text-muted text-center py-8">لا توجد أصناف في هذا الطلب.</p>
         <?php else: ?>
-          <?php if ($canManageOrders && !empty($orderDetails['can_staff_edit'])): ?>
+          <?php if ($canManageOrders && !$itemEditSchemaReady): ?>
+            <p class="text-[11px] text-red-800 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
+              تعذر تفعيل تعديل الأصناف تلقائياً. شغّل ملف الترحيل
+              <code dir="ltr">docs/portal-migration-order-item-edits.sql</code>
+              على قاعدة PostgreSQL.
+            </p>
+          <?php elseif ($canManageOrders && !empty($orderDetails['can_staff_edit'])): ?>
             <p class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
               يمكنك تعديل الأصناف قبل المزامنة — سيظهر السبب لصاحب الطلب.
             </p>
@@ -342,5 +349,4 @@ $truncate = static function (string $text, int $max = 48): string {
       <?php endif; ?>
     </footer>
   </aside>
-  <?php require dirname(__DIR__) . '/partials/store-image-lightbox.php'; ?>
 <?php endif; ?>
