@@ -54,4 +54,10 @@ ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/orders.php';
 $content = ob_get_clean();
 $title = 'إدارة الطلبات';
+$extraHead = $orderDetails !== null
+    ? '<link href="/css/store-ui.css" rel="stylesheet"><link href="/css/store-cart.css" rel="stylesheet">'
+    : '';
+$extraFooter = $orderDetails !== null
+    ? '<script src="/assets/store-image-zoom.js" defer></script>'
+    : '';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

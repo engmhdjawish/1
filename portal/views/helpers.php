@@ -424,6 +424,82 @@ function store_line_offer_badge(array $line): string
 }
 
 /**
+ * @param array<string, mixed> $item
+ * @return array{
+ *   packaging: float,
+ *   primary_unit: string,
+ *   package_unit: string,
+ *   quantity: float,
+ *   unit_sp: float,
+ *   unit_usd: float,
+ *   pack_sp: float,
+ *   pack_usd: float,
+ *   orig_unit_sp: float,
+ *   orig_unit_usd: float,
+ *   orig_pack_sp: float,
+ *   orig_pack_usd: float,
+ *   line_total_sp: float,
+ *   line_total_usd: float
+ * }
+ */
+function store_order_line_prices(array $item): array
+{
+    $packaging = max(1.0, (float) ($item['packaging'] ?? $item['pcs_per_box'] ?? 1));
+    $primaryUnit = trim((string) ($item['primary_unit'] ?? '')) ?: 'زوج';
+    $packageUnit = trim((string) ($item['package_unit'] ?? '')) ?: 'طرد';
+    $quantity = max(0.0, (float) ($item['quantity'] ?? $item['packages_count'] ?? 0));
+
+    $packSp = (float) ($item['sale_price_sp'] ?? 0);
+    $packUsd = (float) ($item['sale_price_usd'] ?? 0);
+    $unitSp = (float) ($item['unit_sale_price_sp'] ?? 0);
+    $unitUsd = (float) ($item['unit_sale_price_usd'] ?? 0);
+
+    if ($unitSp <= 0 && $packSp > 0) {
+        $unitSp = $packSp / $packaging;
+    }
+    if ($unitUsd <= 0 && $packUsd > 0) {
+        $unitUsd = $packUsd / $packaging;
+    }
+    if ($packSp <= 0 && $unitSp > 0) {
+        $packSp = $unitSp * $packaging;
+    }
+    if ($packUsd <= 0 && $unitUsd > 0) {
+        $packUsd = $unitUsd * $packaging;
+    }
+
+    $origPackSp = (float) ($item['original_sale_price_sp'] ?? $item['original_package_sale_price_sp'] ?? 0);
+    $origPackUsd = (float) ($item['original_sale_price_usd'] ?? $item['original_package_sale_price_usd'] ?? 0);
+    $origUnitSp = (float) ($item['original_unit_sale_price_sp'] ?? 0);
+    $origUnitUsd = (float) ($item['original_unit_sale_price_usd'] ?? 0);
+    if ($origUnitSp <= 0 && $origPackSp > 0) {
+        $origUnitSp = $origPackSp / $packaging;
+    }
+    if ($origUnitUsd <= 0 && $origPackUsd > 0) {
+        $origUnitUsd = $origPackUsd / $packaging;
+    }
+
+    $lineTotalSp = (float) ($item['line_total_sp'] ?? ($quantity * $packSp));
+    $lineTotalUsd = (float) ($item['line_total_usd'] ?? ($quantity * $packUsd));
+
+    return [
+        'packaging' => $packaging,
+        'primary_unit' => $primaryUnit,
+        'package_unit' => $packageUnit,
+        'quantity' => $quantity,
+        'unit_sp' => $unitSp,
+        'unit_usd' => $unitUsd,
+        'pack_sp' => $packSp,
+        'pack_usd' => $packUsd,
+        'orig_unit_sp' => $origUnitSp,
+        'orig_unit_usd' => $origUnitUsd,
+        'orig_pack_sp' => $origPackSp,
+        'orig_pack_usd' => $origPackUsd,
+        'line_total_sp' => $lineTotalSp,
+        'line_total_usd' => $lineTotalUsd,
+    ];
+}
+
+/**
  * @return array{
  *   policyRemaining: float|null,
  *   stockAvailable: float|null,

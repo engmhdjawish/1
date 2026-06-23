@@ -320,5 +320,8 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <?php if (!empty($extraScripts ?? '')): ?>
     <?= $extraScripts ?>
   <?php endif; ?>
+  <?php if (!empty($extraFooter ?? '')): ?>
+    <?= $extraFooter ?>
+  <?php endif; ?>
 </body>
 </html>

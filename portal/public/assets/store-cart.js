@@ -66,7 +66,8 @@
       btn.addEventListener('click', () => {
         const src = btn.getAttribute('data-cart-image-zoom') || '';
         if (!src) return;
-        const name = btn.closest('.store-cart-product')?.querySelector('.font-bold')?.textContent?.trim() || '';
+        const name = btn.closest('.store-order-line-card, .store-cart-product, .store-cart-line-card')
+          ?.querySelector('.store-order-line-card__title, .font-bold')?.textContent?.trim() || '';
         lightboxImg.src = src;
         if (lightboxCaption) lightboxCaption.textContent = name;
         lightbox.hidden = false;
@@ -112,6 +113,141 @@
   const offerBadgeHtml = (line) => {
     if (!lineHasOffer(line)) return '';
     return `<span class="store-offer-badge store-offer-badge--sm"><span class="material-symbols-outlined" aria-hidden="true">sell</span>${escapeHtml(lineOfferBadge(line))}</span>`;
+  };
+
+  const computeLinePrices = (line) => {
+    const packaging = Math.max(1, Number(line.packaging ?? line.pcs_per_box ?? 1) || 1);
+    const primaryUnit = String(line.primary_unit || '').trim() || 'زوج';
+    const packageUnit = String(line.package_unit || '').trim() || 'طرد';
+    const quantity = Math.max(0, Number(line.quantity) || 0);
+
+    let packSp = Number(line.sale_price_sp) || 0;
+    let packUsd = Number(line.sale_price_usd) || 0;
+    let unitSp = Number(line.unit_sale_price_sp) || 0;
+    let unitUsd = Number(line.unit_sale_price_usd) || 0;
+
+    if (unitSp <= 0 && packSp > 0) unitSp = packSp / packaging;
+    if (unitUsd <= 0 && packUsd > 0) unitUsd = packUsd / packaging;
+    if (packSp <= 0 && unitSp > 0) packSp = unitSp * packaging;
+    if (packUsd <= 0 && unitUsd > 0) packUsd = unitUsd * packaging;
+
+    let origPackSp = Number(line.original_sale_price_sp ?? line.original_package_sale_price_sp) || 0;
+    let origPackUsd = Number(line.original_sale_price_usd ?? line.original_package_sale_price_usd) || 0;
+    let origUnitSp = Number(line.original_unit_sale_price_sp) || 0;
+    let origUnitUsd = Number(line.original_unit_sale_price_usd) || 0;
+    if (origUnitSp <= 0 && origPackSp > 0) origUnitSp = origPackSp / packaging;
+    if (origUnitUsd <= 0 && origPackUsd > 0) origUnitUsd = origPackUsd / packaging;
+
+    return {
+      packaging,
+      primaryUnit,
+      packageUnit,
+      quantity,
+      packSp,
+      packUsd,
+      unitSp,
+      unitUsd,
+      origPackSp,
+      origPackUsd,
+      origUnitSp,
+      origUnitUsd,
+      lineTotalSp: quantity * packSp,
+      lineTotalUsd: quantity * packUsd,
+    };
+  };
+
+  const linePricesHtml = (line, showPriceSyp, showPriceUsd) => {
+    const prices = computeLinePrices(line);
+    const hasOffer = lineHasOffer(line);
+    if (showPriceSyp && (prices.packSp > 0 || prices.origPackSp > 0)) {
+      let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
+      html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
+        <span class="store-order-line-prices__label">سعر ${escapeHtml(prices.packageUnit)}</span>
+        <div class="store-order-line-prices__values">
+          ${hasOffer && prices.origPackSp > prices.packSp ? `<span class="store-order-line-prices__old store-num" dir="ltr">${formatMoney(prices.origPackSp)} ل.س</span>` : ''}
+          <span class="store-order-line-prices__amount store-num" dir="ltr">${formatMoney(prices.packSp)} <small>ل.س</small></span>
+        </div>
+      </div>`;
+      if (prices.unitSp > 0) {
+        html += `<div class="store-order-line-prices__row">
+          <span class="store-order-line-prices__label">سعر ${escapeHtml(prices.primaryUnit)}</span>
+          <div class="store-order-line-prices__values">
+            ${hasOffer && prices.origUnitSp > prices.unitSp ? `<span class="store-order-line-prices__old store-num" dir="ltr">${formatMoney(prices.origUnitSp)} ل.س</span>` : ''}
+            <span class="store-order-line-prices__amount store-order-line-prices__amount--unit store-num" dir="ltr">${formatMoney(prices.unitSp)} <small>ل.س</small></span>
+          </div>
+        </div>`;
+      }
+      html += '</div>';
+      return html;
+    }
+    if (showPriceUsd && (prices.packUsd > 0 || prices.origPackUsd > 0)) {
+      let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
+      html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
+        <span class="store-order-line-prices__label">سعر ${escapeHtml(prices.packageUnit)}</span>
+        <div class="store-order-line-prices__values">
+          ${hasOffer && prices.origPackUsd > prices.packUsd ? `<span class="store-order-line-prices__old store-num" dir="ltr">$${formatUsd(prices.origPackUsd)}</span>` : ''}
+          <span class="store-order-line-prices__amount store-num" dir="ltr">$${formatUsd(prices.packUsd)}</span>
+        </div>
+      </div>`;
+      if (prices.unitUsd > 0) {
+        html += `<div class="store-order-line-prices__row">
+          <span class="store-order-line-prices__label">سعر ${escapeHtml(prices.primaryUnit)}</span>
+          <div class="store-order-line-prices__values">
+            ${hasOffer && prices.origUnitUsd > prices.unitUsd ? `<span class="store-order-line-prices__old store-num" dir="ltr">$${formatUsd(prices.origUnitUsd)}</span>` : ''}
+            <span class="store-order-line-prices__amount store-order-line-prices__amount--unit store-num" dir="ltr">$${formatUsd(prices.unitUsd)}</span>
+          </div>
+        </div>`;
+      }
+      html += '</div>';
+      return html;
+    }
+    return '';
+  };
+
+  const renderCartLineCard = (line, showPriceSyp, showPriceUsd, max) => {
+    const guid = line.material_guid || '';
+    const prices = computeLinePrices(line);
+    const hasOffer = lineHasOffer(line);
+    const img = line.image_url
+      ? (() => {
+          const thumb = escapeHtml(line.image_url);
+          const zoom = escapeHtml(imageZoomUrl(line.image_url));
+          return `<button type="button" class="store-order-line-card__thumb" data-cart-image-zoom="${zoom}" title="تكبير الصورة للتدقيق"><img src="${thumb}" alt="" loading="lazy"><span class="store-order-line-card__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span></button>`;
+        })()
+      : '<div class="store-order-line-card__placeholder"><span class="material-symbols-outlined" aria-hidden="true">inventory_2</span></div>';
+    const lineTotalCell = showPriceSyp
+      ? `${formatMoney(prices.lineTotalSp)} ل.س`
+      : showPriceUsd
+        ? `$${formatUsd(prices.lineTotalUsd)}`
+        : '';
+    return `<article class="store-order-line-card store-cart-line-card${hasOffer ? ' store-order-line-card--offer' : ''}" data-cart-line="${escapeHtml(guid)}">
+      <div class="store-order-line-card__media">${img}</div>
+      <div class="store-order-line-card__body">
+        <div class="store-cart-line-card__head">
+          <div class="min-w-0">
+            ${offerBadgeHtml(line)}
+            <h3 class="store-order-line-card__title">${escapeHtml(line.material_name_ar || '')}</h3>
+            ${line.material_code ? `<div class="store-order-line-card__code store-num" dir="ltr">${escapeHtml(line.material_code)}</div>` : ''}
+          </div>
+          <button type="button" class="store-cart-line-card__remove" data-remove-item="${escapeHtml(guid)}" aria-label="حذف من السلة">
+            <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+          </button>
+        </div>
+        ${showPriceSyp || showPriceUsd ? linePricesHtml(line, showPriceSyp, showPriceUsd) : ''}
+        <div class="store-cart-line-card__actions">
+          <div class="store-cart-line-card__qty-wrap">
+            <span class="store-cart-line-card__qty-label">الكمية</span>
+            <div class="store-qty-stepper" data-cart-qty-control data-guid="${escapeHtml(guid)}">
+              <button type="button" data-bump="-1" aria-label="إنقاص">−</button>
+              <input type="number" class="store-num" dir="ltr" min="0.01" step="0.01" ${max ? `max="${max}"` : ''} value="${formatQty(prices.quantity)}" data-qty-input>
+              <button type="button" data-bump="1" aria-label="زيادة">+</button>
+            </div>
+            <span class="store-cart-line-card__unit">${escapeHtml(prices.packageUnit)}</span>
+          </div>
+          ${lineTotalCell ? `<div class="store-order-line-card__total store-cart-line-card__total"><span>إجمالي السطر</span><strong class="store-num" dir="ltr">${lineTotalCell}</strong></div>` : ''}
+        </div>
+      </div>
+    </article>`;
   };
 
   const updateBadge = (count) => {
@@ -365,61 +501,11 @@
           html += `<p class="store-limit-banner">الحد الأقصى للطلب: <strong>${escapeHtml(String(maxLabel))}</strong> طرد لكل مادة.</p>`;
         }
         if (items.length > 0) {
-          html += '<div class="store-cart-table-wrap overflow-x-auto"><table class="store-cart-table"><thead><tr>';
-          html += '<th>المنتج</th><th>سعر الطرد</th><th>الكمية</th><th>الإجمالي</th><th></th></tr></thead><tbody>';
+          html += '<div class="store-cart-lines">';
           items.forEach((line) => {
-            const guid = line.material_guid || '';
-            const qty = Math.max(0.01, Number(line.quantity) || 1);
-            const packageUnit = line.package_unit || 'طرد';
-            const priceSp = Number(line.sale_price_sp) || 0;
-            const priceUsd = Number(line.sale_price_usd) || 0;
-            const origSp = Number(line.original_sale_price_sp) || 0;
-            const origUsd = Number(line.original_sale_price_usd) || 0;
-            const hasOffer = lineHasOffer(line);
-            const lineTotalSp = qty * priceSp;
-            const lineTotalUsd = qty * priceUsd;
-            let unitPriceCell = '—';
-            if (showPriceSyp && priceSp > 0) {
-              unitPriceCell = `${hasOffer && origSp > priceSp ? `<div class="text-xs text-gray-400 line-through store-num" dir="ltr">${formatMoney(origSp)} ل.س</div>` : ''}<span class="font-bold text-primary store-num" dir="ltr">${formatMoney(priceSp)} ل.س</span>`;
-            } else if (showPriceUsd && priceUsd > 0) {
-              unitPriceCell = `${hasOffer && origUsd > priceUsd ? `<div class="text-xs text-gray-400 line-through store-num" dir="ltr">$${formatUsd(origUsd)}</div>` : ''}<span class="font-bold text-emerald-700 store-num" dir="ltr">$${formatUsd(priceUsd)}</span>`;
-            }
-            const lineTotalCell = showPriceSyp
-              ? `${formatMoney(lineTotalSp)} ل.س`
-              : showPriceUsd
-                ? `$${formatUsd(lineTotalUsd)}`
-                : '—';
-            const img = line.image_url
-              ? (() => {
-                  const thumb = escapeHtml(line.image_url);
-                  const zoom = escapeHtml(imageZoomUrl(line.image_url));
-                  return `<button type="button" class="store-cart-product__thumb${hasOffer ? ' store-cart-product__thumb--offer' : ''}" data-cart-image-zoom="${zoom}" title="تكبير الصورة للتدقيق"><img src="${thumb}" alt="">${hasOffer ? '<span class="store-cart-product__offer-dot" aria-hidden="true"></span>' : ''}<span class="store-cart-product__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span></button>`;
-                })()
-              : `<div class="store-cart-product__placeholder${hasOffer ? ' store-cart-product__placeholder--offer' : ''}"><span class="material-symbols-outlined">inventory_2</span></div>`;
-            html += `<tr data-cart-line="${escapeHtml(guid)}" class="${hasOffer ? 'store-cart-table__row--offer' : ''}">
-              <td><div class="store-cart-product">${img}<div>
-                ${offerBadgeHtml(line)}
-                <div class="font-bold text-sm">${escapeHtml(line.material_name_ar || '')}</div>
-                ${line.material_code ? `<div class="text-xs text-gray-500 font-mono store-num" dir="ltr">${escapeHtml(line.material_code)}</div>` : ''}
-              </div></div></td>
-              <td class="text-sm whitespace-nowrap">${unitPriceCell}</td>
-              <td>
-                <div class="store-qty-stepper" data-cart-qty-control data-guid="${escapeHtml(guid)}">
-                  <button type="button" data-bump="-1" aria-label="إنقاص">−</button>
-                  <input type="number" class="store-num" dir="ltr" min="0.01" step="0.01" ${max ? `max="${max}"` : ''} value="${formatQty(qty)}" data-qty-input>
-                  <button type="button" data-bump="1" aria-label="زيادة">+</button>
-                </div>
-                <div class="text-xs text-gray-500 mt-1">${escapeHtml(packageUnit)}</div>
-              </td>
-              <td class="font-bold text-sm store-num" dir="ltr">${lineTotalCell}</td>
-              <td class="text-center">
-                <button type="button" class="p-2 rounded-full text-red-600 hover:bg-red-50" data-remove-item="${escapeHtml(guid)}" aria-label="حذف">
-                  <span class="material-symbols-outlined">delete</span>
-                </button>
-              </td>
-            </tr>`;
+            html += renderCartLineCard(line, showPriceSyp, showPriceUsd, max);
           });
-          html += '</tbody></table></div>';
+          html += '</div>';
         }
         if (unavailable.length > 0) {
           html += '<section class="rounded-2xl border border-amber-200 bg-amber-50 p-4"><h3 class="font-bold text-amber-900 mb-2">غير متوفرة حالياً</h3><ul class="text-sm text-amber-900 space-y-1">';
@@ -503,7 +589,7 @@
         timer = setTimeout(async () => {
           const wrap = input.closest('[data-cart-qty-control]');
           const guid = wrap?.dataset.guid || '';
-          const qty = Math.max(0, parseInt(input.value, 10) || 0);
+          const qty = Math.max(0.01, parseFloat(input.value) || 0.01);
           if (!guid) return;
           const data = await apiRequest({ action: 'update', material_guid: guid, quantity: qty });
           applyCartResponse(data);

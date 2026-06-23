@@ -96,51 +96,23 @@ $statusOptions = [
         <?php if (!empty($orderDetails['notes_ar'])): ?>
           <p class="text-sm text-gray-600 rounded-lg bg-gray-50 px-3 py-2"><?= h((string) $orderDetails['notes_ar']) ?></p>
         <?php endif; ?>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm text-right min-w-[520px]">
-            <thead>
-              <tr class="border-b text-gray-500">
-                <th class="py-2 font-bold">المادة</th>
-                <th class="py-2 font-bold">الكمية</th>
-                <th class="py-2 font-bold">الإجمالي ل.س</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y">
-              <?php foreach ($items as $item): ?>
-                <?php $itemHasOffer = store_line_has_offer($item); ?>
-                <tr class="<?= $itemHasOffer ? 'store-order-item-row--offer' : '' ?>">
-                  <td class="py-2">
-                    <?php if ($itemHasOffer): ?>
-                      <?php $badge = store_line_offer_badge($item); $size = 'sm'; require __DIR__ . '/partials/offer-item-badge.php'; ?>
-                    <?php endif; ?>
-                    <div class="font-bold"><?= h((string) ($item['material_name_ar'] ?? '')) ?></div>
-                    <?php if (!empty($item['material_code'])): ?>
-                      <div class="text-xs text-gray-500 font-mono store-num" dir="ltr"><?= h((string) $item['material_code']) ?></div>
-                    <?php endif; ?>
-                  </td>
-                  <td class="py-2 store-num" dir="ltr"><?= h(format_packages_display((float) ($item['quantity'] ?? 0))) ?></td>
-                  <td class="py-2 font-bold">
-                    <?= format_money((float) ($item['line_total_sp'] ?? 0), true) ?> ل.س
-                    <?php
-                      $origSp = (float) ($item['original_sale_price_sp'] ?? 0);
-                      $saleSp = (float) ($item['sale_price_sp'] ?? 0);
-                    ?>
-                    <?php if ($itemHasOffer && $origSp > $saleSp): ?>
-                      <div class="text-xs text-gray-400 line-through font-normal store-num" dir="ltr"><?= format_money($origSp * (float) ($item['quantity'] ?? 0), true) ?> ل.س</div>
-                    <?php endif; ?>
-                  </td>
-                </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
+        <?php
+          $showPriceSyp = (float) ($orderDetails['total_sp'] ?? 0) > 0;
+          $showPriceUsd = !$showPriceSyp && (float) ($orderDetails['total_usd'] ?? 0) > 0;
+        ?>
+        <div class="store-order-lines">
+          <?php foreach ($items as $item): ?>
+            <?php require __DIR__ . '/partials/store-order-line-card.php'; ?>
+          <?php endforeach; ?>
         </div>
         <div class="flex flex-wrap gap-4 text-sm font-bold border-t pt-4">
-          <span>الإجمالي: <?= format_money((float) ($orderDetails['total_sp'] ?? 0), true) ?> ل.س</span>
+          <span>الإجمالي: <span class="store-num" dir="ltr"><?= format_money((float) ($orderDetails['total_sp'] ?? 0), true) ?> ل.س</span></span>
           <?php if ((float) ($orderDetails['total_usd'] ?? 0) > 0): ?>
-            <span class="text-emerald-700">$<?= number_format((float) $orderDetails['total_usd'], 2, '.', ',') ?></span>
+            <span class="text-emerald-700 store-num" dir="ltr">$<?= number_format((float) $orderDetails['total_usd'], 2, '.', ',') ?></span>
           <?php endif; ?>
         </div>
       </section>
+      <?php require __DIR__ . '/partials/store-image-lightbox.php'; ?>
     <?php else: ?>
       <form method="get" class="mb-4 flex flex-wrap items-end gap-2">
         <input type="hidden" name="tab" value="orders">

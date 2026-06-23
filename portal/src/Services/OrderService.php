@@ -620,6 +620,8 @@ final class OrderService
                     (float) ($item['original_sale_price_sp'] ?? 0) > 0
                     && (float) ($item['original_sale_price_sp'] ?? 0) > $packagePriceSp + 0.009
                 );
+            $item['primary_unit'] = 'زوج';
+            $item['package_unit'] = 'طرد';
 
             $totalPackages += $quantity;
             $totalPieces += $quantity * $packaging;

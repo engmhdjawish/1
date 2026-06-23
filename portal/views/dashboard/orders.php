@@ -295,54 +295,14 @@ $truncate = static function (string $text, int $max = 48): string {
         <?php if ($detailItems === []): ?>
           <p class="text-sm text-text-muted text-center py-8">لا توجد أصناف في هذا الطلب.</p>
         <?php else: ?>
-          <div class="rounded-xl border border-border-subtle overflow-hidden">
-            <div class="hidden sm:grid sm:grid-cols-[minmax(0,1fr)_72px_88px_96px] gap-2 px-3 py-2 bg-surface-low text-[11px] font-bold text-text-muted border-b border-border-subtle">
-              <span>المادة</span>
-              <span class="text-center">طرود</span>
-              <span class="text-left">سعر الزوج</span>
-              <span class="text-left">الإجمالي</span>
-            </div>
-            <ul class="divide-y divide-border-subtle">
-              <?php foreach ($detailItems as $item): ?>
-                <?php
-                  $imageUrl = trim((string) ($item['image_url'] ?? ''));
-                  $packages = (float) ($item['packages_count'] ?? $item['quantity'] ?? 0);
-                  $unitUsd = (float) ($item['unit_sale_price_usd'] ?? 0);
-                  $lineUsd = (float) ($item['line_total_usd'] ?? 0);
-                ?>
-                <li class="px-3 py-3 hover:bg-slate-50/60">
-                  <div class="sm:grid sm:grid-cols-[minmax(0,1fr)_72px_88px_96px] sm:items-center gap-2 sm:gap-3">
-                    <div class="flex items-center gap-3 min-w-0">
-                      <?php if ($imageUrl !== ''): ?>
-                        <img src="<?= h($imageUrl) ?>" alt="" class="w-14 h-14 rounded-lg object-cover bg-surface-low shrink-0 border border-border-subtle" loading="lazy">
-                      <?php else: ?>
-                        <div class="w-14 h-14 rounded-lg bg-surface-low shrink-0 border border-border-subtle flex items-center justify-center text-text-muted">
-                          <span class="material-symbols-outlined text-xl">inventory_2</span>
-                        </div>
-                      <?php endif; ?>
-                      <div class="min-w-0">
-                        <p class="font-bold text-sm leading-snug line-clamp-2"><?= h((string) ($item['material_name_ar'] ?? '—')) ?></p>
-                        <?php if (trim((string) ($item['material_code'] ?? '')) !== ''): ?>
-                          <p class="text-xs text-text-muted mt-0.5 font-mono"><?= h((string) $item['material_code']) ?></p>
-                        <?php endif; ?>
-                      </div>
-                    </div>
-                    <div class="mt-2 sm:mt-0 flex sm:block items-center justify-between sm:text-center">
-                      <span class="sm:hidden text-[11px] text-text-muted">طرود</span>
-                      <span class="font-extrabold text-sm"><?= h($formatPackages($packages)) ?></span>
-                    </div>
-                    <div class="flex sm:block items-center justify-between sm:text-left">
-                      <span class="sm:hidden text-[11px] text-text-muted">سعر الزوج</span>
-                      <span class="font-bold text-sm text-slate-700"><?= h($formatUsd($unitUsd)) ?></span>
-                    </div>
-                    <div class="flex sm:block items-center justify-between sm:text-left">
-                      <span class="sm:hidden text-[11px] text-text-muted">الإجمالي</span>
-                      <span class="font-extrabold text-sm text-emerald-700"><?= h($formatUsd($lineUsd)) ?></span>
-                    </div>
-                  </div>
-                </li>
-              <?php endforeach; ?>
-            </ul>
+          <div class="store-order-lines">
+            <?php foreach ($detailItems as $item): ?>
+              <?php
+                $showPriceUsd = (float) ($item['sale_price_usd'] ?? 0) > 0;
+                $showPriceSyp = !$showPriceUsd && (float) ($item['sale_price_sp'] ?? 0) > 0;
+                require dirname(__DIR__) . '/partials/store-order-line-card.php';
+              ?>
+            <?php endforeach; ?>
           </div>
         <?php endif; ?>
       </section>
@@ -372,4 +332,5 @@ $truncate = static function (string $text, int $max = 48): string {
       <?php endif; ?>
     </footer>
   </aside>
+  <?php require dirname(__DIR__) . '/partials/store-image-lightbox.php'; ?>
 <?php endif; ?>
