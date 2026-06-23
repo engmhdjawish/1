@@ -92,6 +92,15 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
           <?php endif; ?>
 
           <span class="site-header__divider" aria-hidden="true"></span>
+          <button
+            type="button"
+            class="site-header__icon-btn"
+            data-pwa-open
+            title="تثبيت التطبيق"
+            aria-label="تثبيت التطبيق"
+          >
+            <span class="material-symbols-outlined">install_mobile</span>
+          </button>
           <?php require __DIR__ . '/notification-bell.php'; ?>
 
           <?php if ($storeAllowCart): ?>
@@ -174,6 +183,13 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
         </div>
       </div>
     <?php endif; ?>
+
+    <div class="site-drawer__section">
+      <button type="button" class="site-drawer__link w-full text-right" data-pwa-open>
+        <span class="material-symbols-outlined align-middle text-base ml-1" aria-hidden="true">install_mobile</span>
+        تثبيت التطبيق
+      </button>
+    </div>
 
     <div class="site-drawer__section">
       <?php if ($customer): ?>
