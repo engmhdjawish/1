@@ -2,7 +2,8 @@
 param(
     [string]$EnvFile,
     [ValidateSet('fresh', 'migrate', 'skip')]
-    [string]$DbSetup = 'fresh'
+    [string]$DbSetup = 'fresh',
+    [switch]$UseUrlRewrite
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\lib\common.ps1"
@@ -55,9 +56,18 @@ Expand-Template `
   -OutputPath (Join-Path $out 'nginx-jawish-portal.conf') `
   -Variables $vars
 
+$webConfigTemplate = if ($UseUrlRewrite) {
+    'iis-web.config.template'
+} else {
+    'iis-web.config.minimal.template'
+}
+Copy-Item `
+  (Join-Path $DeployRoot "templates\portal\$webConfigTemplate") `
+  (Join-Path $publishDir 'public\web.config') `
+  -Force
 Copy-Item `
   (Join-Path $DeployRoot 'templates\portal\iis-web.config.template') `
-  (Join-Path $publishDir 'public\web.config') `
+  (Join-Path $publishDir 'public\web.config.with-rewrite') `
   -Force
 
 Write-Ok 'Portal publish finished'

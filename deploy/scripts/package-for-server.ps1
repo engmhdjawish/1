@@ -64,8 +64,12 @@ robocopy $docsSource $docsDest /E /XD .git /NFL /NDL /NJH /NJS /NC /NS | Out-Nul
 if ($LASTEXITCODE -ge 8) { throw "docs copy failed ($LASTEXITCODE)" }
 
 Copy-Item `
-  (Join-Path $DeployRoot 'templates\portal\iis-web.config.template') `
+  (Join-Path $DeployRoot 'templates\portal\iis-web.config.minimal.template') `
   (Join-Path $portalDest 'public\web.config') `
+  -Force
+Copy-Item `
+  (Join-Path $DeployRoot 'templates\portal\iis-web.config.template') `
+  (Join-Path $portalDest 'public\web.config.with-rewrite') `
   -Force
 
 $toolFiles = @(

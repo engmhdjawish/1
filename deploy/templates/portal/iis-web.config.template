@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- IIS site for Jawish Portal — place in portal/public/web.config -->
+<!-- Jawish Portal — requires IIS URL Rewrite module (rewrite_amd64.msi) -->
 <configuration>
   <system.webServer>
     <rewrite>

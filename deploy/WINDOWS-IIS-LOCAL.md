@@ -217,7 +217,7 @@ php scripts\check-environment.php
 | `could not connect to server` | PostgreSQL غير شغّال — `Start-Service PortalPostgreSQL` |
 | `pdo_pgsql` مفقود | فعّل الامتداد + `libpq.dll` + `iisreset` |
 | الموقع لا يتصل بالـ API | `AMINE_API_BASE_URL=http://127.0.0.1:5000` في `.env` |
-| 500 على IIS | فعّل عرض الأخطاء مؤقتاً في `php.ini`: `display_errors=On` |
+| 500.19 / 0x8007000d على IIS | ثبّت URL Rewrite **أو** استخدم `web.config` بدون rewrite (القالب الافتراضي الجديد) |
 | لا يمكن تحميل PostgreSQL | انسخ ZIP من جهاز آخر (القسم 1أ) |
 
 ---
