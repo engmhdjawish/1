@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Auth;
 
 use Portal\Database;
+use Portal\Support\StaffRoleProvisioner;
 use PDO;
 
 final class WebSession
@@ -130,6 +131,8 @@ final class WebSession
         }
 
         CustomerSession::logout();
+
+        StaffRoleProvisioner::ensureTaskRoles();
 
         $permissions = self::loadPermissions($user['id']);
         $roles = self::loadRoleLabels($user['id']);

@@ -487,7 +487,7 @@ final class DashboardNavigation
         return self::hasSiteContentAccess($user) || self::hasConfigurationAccess($user);
     }
 
-    public static function areaForRoute(string $route): string
+    public static function areaForRoute(string $route, ?array $user = null): string
     {
         $path = parse_url($route, PHP_URL_PATH) ?: $route;
         $query = [];
@@ -495,6 +495,10 @@ final class DashboardNavigation
 
         if ($path === '/dashboard/settings.php' && ($query['tab'] ?? '') === 'company') {
             return self::AREA_SITE_CONTENT;
+        }
+
+        if ($path === '/dashboard/accounting-sync.php' && !self::canAccessAccountingArea($user)) {
+            return self::AREA_OPERATIONS;
         }
 
         if (in_array($path, self::SITE_CONTENT_ROUTES, true)) {

@@ -7,15 +7,24 @@ declare(strict_types=1);
 /** @var array<string, mixed>|null $user */
 /** @var string|null $currentRoute */
 
+use Portal\Auth\WebSession;
 use Portal\Support\DashboardNavigation;
 
 require_once __DIR__ . '/../helpers.php';
 
-$user ??= null;
+if (WebSession::check()) {
+    if (empty($_SESSION['staff_roles_provisioned'])) {
+        \Portal\Support\StaffRoleProvisioner::ensureTaskRoles();
+        $_SESSION['staff_roles_provisioned'] = true;
+    }
+    WebSession::refreshPermissions();
+}
+
+$user = WebSession::check() ? WebSession::user() : ($user ?? null);
 $requestPath = parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: '/dashboard/index.php';
 $requestQuery = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_QUERY) ?? '');
 $currentRoute ??= $requestQuery !== '' ? $requestPath . '?' . $requestQuery : $requestPath;
-$navArea = $dashboardNavArea ?? DashboardNavigation::areaForRoute($currentRoute);
+$navArea = $dashboardNavArea ?? DashboardNavigation::areaForRoute($currentRoute, $user);
 $areaMeta = DashboardNavigation::areaMeta($navArea);
 $hasSiteContentAccess = DashboardNavigation::hasSiteContentAccess($user);
 $hasConfigurationAccess = DashboardNavigation::hasConfigurationAccess($user);
