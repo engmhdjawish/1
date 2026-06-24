@@ -109,8 +109,8 @@ try {
     $report['database']['error'] = $e->getMessage();
 }
 
-$storageRoot = MaterialImageStorageService::storageRoot();
-$paths = MaterialImageStorageService::directories();
+$paths = MaterialImageStorageService::settings();
+$storageRoot = Config::storagePath();
 foreach ([
     'storage_root' => $storageRoot,
     'material_images' => $paths['images_dir'],
@@ -135,11 +135,16 @@ try {
 }
 
 try {
-    ApiClient::get('/api/health');
-    $report['api']['login'] = ['ok' => true];
+    $materials = ApiClient::get('/api/materials', ['page' => 1, 'pageSize' => 1]);
+    $report['api']['login'] = [
+        'ok' => (bool) ($materials['ok'] ?? false),
+        'message' => ($materials['ok'] ?? false) ? 'Service login + materials.read OK' : ($materials['error'] ?? 'materials request failed'),
+    ];
 } catch (Throwable $e) {
     $report['api']['login'] = ['ok' => false, 'error' => $e->getMessage()];
-    $report['fixes'][] = 'Fix AMINE_API_USERNAME / AMINE_API_PASSWORD in .env and create portal-service user in ApiManagementDb';
+    $report['fixes'][] = 'Health alone is not enough. Fix AMINE_API_USERNAME/PASSWORD — use ApiManagementDb user (e.g. portal-service) with materials.read';
+    $report['fixes'][] = 'Test: php scripts/test-amine-api-login.php';
+    $report['fixes'][] = 'Amine API admin page also needs admin.permissions.read, admin.roles.manage, admin.users.manage on that API user';
 }
 
 if (!$report['docs']['schema']) {
