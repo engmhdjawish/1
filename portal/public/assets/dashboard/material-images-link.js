@@ -28,6 +28,7 @@ const API_URL = '/dashboard/material-images-api.php';
   async function fetchJson(url, options = {}) {
     const response = await fetch(url, {
       ...options,
+      signal: options.signal ?? signal,
       headers: { ...API_HEADERS, ...(options.headers || {}) },
     });
     const text = await response.text();
@@ -105,6 +106,18 @@ const API_URL = '/dashboard/material-images-api.php';
     if (!sourceCards.querySelector('article')) {
       sourceCards.innerHTML = '<div class="text-xs text-text-muted">لا توجد صور في هذه الصفحة.</div>';
     }
+  }
+
+  function showSourcesLoading() {
+    if (!sourceCards) return;
+    sourceCards.innerHTML = '<div class="col-span-full flex flex-col items-center justify-center gap-3 py-16 text-text-muted" aria-busy="true">'
+      + '<div class="dash-spinner" role="status" aria-label="جاري تحميل الصور"></div>'
+      + '<p class="text-sm font-medium">جاري تحميل الصور...</p>'
+      + '</div>';
+    if (sourcePageLabel) sourcePageLabel.textContent = 'جاري التحميل...';
+    if (sourcePrevBtn) sourcePrevBtn.disabled = true;
+    if (sourceNextBtn) sourceNextBtn.disabled = true;
+    if (linkStatus) linkStatus.textContent = '';
   }
 
   function removeCard(card, item) {
@@ -594,14 +607,30 @@ const API_URL = '/dashboard/material-images-api.php';
   }
 
   async function loadSources(targetPage = 1) {
+    showSourcesLoading();
     const linkFilter = currentLinkFilter();
     const materialQuery = sourceMaterialSearch?.value.trim() || '';
-    const payload = await fetchJson(`${API_URL}?action=link-sources-page&page=${targetPage}&page_size=${pageSize}&link_filter=${encodeURIComponent(linkFilter)}&material_query=${encodeURIComponent(materialQuery)}`);
-    if (!payload.ok) {
-      linkStatus.textContent = 'تعذر تحميل الصور.';
-      return;
+    try {
+      const payload = await fetchJson(`${API_URL}?action=link-sources-page&page=${targetPage}&page_size=${pageSize}&link_filter=${encodeURIComponent(linkFilter)}&material_query=${encodeURIComponent(materialQuery)}`);
+      if (signal.aborted) return;
+      if (!payload.ok) {
+        if (sourceCards) {
+          sourceCards.innerHTML = '<div class="text-xs text-red-600">تعذر تحميل الصور.</div>';
+        }
+        if (linkStatus) linkStatus.textContent = 'تعذر تحميل الصور.';
+        return;
+      }
+      if (linkStatus) linkStatus.textContent = '';
+      renderSources(payload);
+    } catch (error) {
+      if (signal.aborted || error?.name === 'AbortError') return;
+      if (sourceCards) {
+        sourceCards.innerHTML = '<div class="text-xs text-red-600">تعذر تحميل الصور.</div>';
+      }
+      if (linkStatus) {
+        linkStatus.textContent = error instanceof Error ? error.message : 'تعذر تحميل الصور.';
+      }
     }
-    renderSources(payload);
   }
 
   document.addEventListener('click', (event) => {

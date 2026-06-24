@@ -7,6 +7,9 @@
   const NAV_HEADER = 'X-Dashboard-Nav';
   const AJAX_HEADER = 'X-Dashboard-Ajax';
 
+  let navAbort = null;
+  let navGeneration = 0;
+
   const qs = (sel, root = document) => root.querySelector(sel);
   const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
@@ -22,6 +25,30 @@
   function showPageLoader(active) {
     const el = qs('#dashboard-page-loader');
     if (el) el.classList.toggle('is-active', active);
+  }
+
+  function mainLoadingMarkup() {
+    return '<div class="dashboard-main-loading" aria-live="polite" aria-busy="true">'
+      + '<div class="dash-spinner" role="status" aria-label="جاري التحميل"></div>'
+      + '<p class="dashboard-main-loading__text">جاري التحميل...</p>'
+      + '</div>';
+  }
+
+  function prepareMainForNavigation(main) {
+    if (!main) return;
+
+    if (window.__materialImagesLinkAbort) {
+      window.__materialImagesLinkAbort.abort();
+      window.__materialImagesLinkAbort = null;
+    }
+
+    if (typeof window.portalDeferredImages?.cancel === 'function') {
+      window.portalDeferredImages.cancel(main);
+    }
+
+    main.innerHTML = mainLoadingMarkup();
+    main.classList.add('is-nav-loading');
+    main.setAttribute('aria-busy', 'true');
   }
 
   function showToast(message, type = 'success', duration = 4200) {
@@ -288,22 +315,36 @@
       window.location.href = url;
       return;
     }
+
+    if (navAbort) {
+      navAbort.abort();
+    }
+    const generation = ++navGeneration;
+    navAbort = new AbortController();
+    const signal = navAbort.signal;
+
+    const main = qs('[data-dashboard-main]');
+    prepareMainForNavigation(main);
     showPageLoader(true);
     try {
       const res = await fetch(url, {
         credentials: 'same-origin',
         headers: { [NAV_HEADER]: '1', Accept: 'text/html' },
+        signal,
       });
+      if (generation !== navGeneration) return;
       if (!res.ok) throw new Error('تعذر تحميل الصفحة.');
       const html = await res.text();
+      if (generation !== navGeneration) return;
       const doc = new DOMParser().parseFromString(html, 'text/html');
       const newMain = doc.querySelector('[data-dashboard-main]');
-      const main = qs('[data-dashboard-main]');
       if (!newMain || !main) {
         window.location.href = url;
         return;
       }
       main.innerHTML = newMain.innerHTML;
+      main.classList.remove('is-nav-loading');
+      main.removeAttribute('aria-busy');
       syncDashboardChrome(doc);
       await ensurePageAssets(newMain.getAttribute('data-dashboard-page-assets') || '');
       const route = newMain.getAttribute('data-current-route') || normalizeDashboardRoute(url);
@@ -322,9 +363,12 @@
       bindPage(document);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
+      if (err?.name === 'AbortError') return;
       showToast(err.message || 'تعذر التنقل.', 'error');
     } finally {
-      showPageLoader(false);
+      if (generation === navGeneration) {
+        showPageLoader(false);
+      }
     }
   }
 

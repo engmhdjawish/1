@@ -422,7 +422,8 @@ require __DIR__ . '/partials/store-filter-group.php';
   <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $cartNoticeOk ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700' ?>"><?= h($cartNoticeMessage) ?></p>
 <?php endif; ?>
 
-<div class="store-layout <?= ($allowClientFilters || $isSectionBrowse) ? 'has-sidebar' : '' ?>" id="store-filters-root">
+<!-- store-catalog-fragment:start -->
+<div class="store-layout <?= ($allowClientFilters || $isSectionBrowse) ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root>
   <?php if ($allowClientFilters || $isSectionBrowse): ?>
     <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
       <aside class="store-filters-sidebar">
@@ -718,7 +719,6 @@ require __DIR__ . '/partials/store-filter-group.php';
           ?>
         <?php endforeach; ?>
       </div>
-      <?php require __DIR__ . '/partials/store-product-preview.php'; ?>
     <?php endif; ?>
 
     <?php
@@ -734,18 +734,23 @@ require __DIR__ . '/partials/store-filter-group.php';
         return $url . $separator . 'preview=' . rawurlencode($previewEdge);
     };
     ?>
-    <script>
-      window.__storePreviewPaging = <?= json_encode([
+    <script type="application/json" data-store-preview-paging><?= json_encode([
           'page' => $page,
           'totalPages' => $totalPages,
           'prevPageUrl' => $page > 1 ? $buildPreviewPageUrl($page - 1, 'last') : null,
           'nextPageUrl' => $page < $totalPages ? $buildPreviewPageUrl($page + 1, 'first') : null,
-      ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-    </script>
+      ], JSON_UNESCAPED_UNICODE) ?></script>
   </div>
 </div>
+<!-- store-catalog-fragment:end -->
+
+<?php if (empty($GLOBALS['storeCatalogPreviewRendered'])): ?>
+  <?php $GLOBALS['storeCatalogPreviewRendered'] = true; ?>
+  <?php require __DIR__ . '/partials/store-product-preview.php'; ?>
+<?php endif; ?>
 
 <script src="<?= h(portal_asset_url('/assets/store-filters.js')) ?>" defer></script>
+<script src="<?= h(portal_asset_url('/assets/store-catalog-nav.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/store-product-preview.js')) ?>" defer></script>
 
 <style>
