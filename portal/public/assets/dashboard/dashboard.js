@@ -7,6 +7,9 @@
   const NAV_HEADER = 'X-Dashboard-Nav';
   const AJAX_HEADER = 'X-Dashboard-Ajax';
 
+  let navAbort = null;
+  let navGeneration = 0;
+
   const qs = (sel, root = document) => root.querySelector(sel);
   const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
@@ -22,6 +25,30 @@
   function showPageLoader(active) {
     const el = qs('#dashboard-page-loader');
     if (el) el.classList.toggle('is-active', active);
+  }
+
+  function mainLoadingMarkup() {
+    return '<div class="dashboard-main-loading" aria-live="polite" aria-busy="true">'
+      + '<div class="dash-spinner" role="status" aria-label="جاري التحميل"></div>'
+      + '<p class="dashboard-main-loading__text">جاري التحميل...</p>'
+      + '</div>';
+  }
+
+  function prepareMainForNavigation(main) {
+    if (!main) return;
+
+    if (window.__materialImagesLinkAbort) {
+      window.__materialImagesLinkAbort.abort();
+      window.__materialImagesLinkAbort = null;
+    }
+
+    if (typeof window.portalDeferredImages?.cancel === 'function') {
+      window.portalDeferredImages.cancel(main);
+    }
+
+    main.innerHTML = mainLoadingMarkup();
+    main.classList.add('is-nav-loading');
+    main.setAttribute('aria-busy', 'true');
   }
 
   function showToast(message, type = 'success', duration = 4200) {
@@ -123,6 +150,57 @@
     if (srcSubtitle && targetSubtitle) targetSubtitle.textContent = srcSubtitle.textContent;
   }
 
+  function syncAreaTabs(doc) {
+    const srcAreaTabs = doc.querySelector('[data-dashboard-area-tabs]');
+    const wantsAreaTabs = doc.body?.dataset.dashboardHasAreaTabs === '1'
+      && srcAreaTabs !== null;
+    document.body.classList.toggle('has-area-tabs', wantsAreaTabs);
+    document.body.dataset.dashboardHasAreaTabs = wantsAreaTabs ? '1' : '0';
+
+    let areaTabs = qs('[data-dashboard-area-tabs]');
+
+    if (wantsAreaTabs && srcAreaTabs) {
+      if (!areaTabs) {
+        areaTabs = document.createElement('nav');
+        areaTabs.setAttribute('data-dashboard-area-tabs', '');
+        const header = qs('body.dashboard-app > header');
+        if (header) {
+          header.insertAdjacentElement('afterend', areaTabs);
+        }
+      }
+      areaTabs.className = srcAreaTabs.className;
+      areaTabs.setAttribute('aria-label', srcAreaTabs.getAttribute('aria-label') || 'أقسام لوحة التحكم');
+      areaTabs.innerHTML = srcAreaTabs.innerHTML;
+      areaTabs.hidden = false;
+      return;
+    }
+
+    if (areaTabs) {
+      areaTabs.remove();
+    }
+  }
+
+  function syncHeaderQuickLinks(doc) {
+    const srcQuickNav = doc.querySelector('[data-dashboard-header-quick-links]');
+    const quickNav = qs('[data-dashboard-header-quick-links]');
+    const brandWrap = qs('body.dashboard-app > header .flex.items-center.gap-2.min-w-0');
+
+    if (srcQuickNav && brandWrap) {
+      if (quickNav) {
+        quickNav.innerHTML = srcQuickNav.innerHTML;
+        quickNav.className = srcQuickNav.className;
+        quickNav.hidden = false;
+      } else {
+        brandWrap.appendChild(srcQuickNav.cloneNode(true));
+      }
+      return;
+    }
+
+    if (quickNav) {
+      quickNav.remove();
+    }
+  }
+
   function syncDashboardChrome(doc) {
     const srcMeta = doc.querySelector('[data-dashboard-sidebar-meta]');
     if (srcMeta) {
@@ -151,11 +229,8 @@
       headerArea.textContent = srcHeaderArea.textContent;
     }
 
-    const srcAreaTabs = doc.querySelector('[data-dashboard-area-tabs]');
-    const areaTabs = qs('[data-dashboard-area-tabs]');
-    if (srcAreaTabs && areaTabs) {
-      areaTabs.innerHTML = srcAreaTabs.innerHTML;
-    }
+    syncAreaTabs(doc);
+    syncHeaderQuickLinks(doc);
   }
 
   function currentDashboardRoute() {
@@ -305,22 +380,46 @@
       window.location.href = url;
       return;
     }
+
+    if (navAbort) {
+      navAbort.abort();
+    }
+    const generation = ++navGeneration;
+    navAbort = new AbortController();
+    const signal = navAbort.signal;
+
+    const main = qs('[data-dashboard-main]');
+
+    if (window.__materialImagesLinkAbort) {
+      window.__materialImagesLinkAbort.abort();
+      window.__materialImagesLinkAbort = null;
+    }
+
+    if (typeof window.portalDeferredImages?.cancel === 'function') {
+      window.portalDeferredImages.cancel(main);
+    }
+
+    prepareMainForNavigation(main);
     showPageLoader(true);
     try {
       const res = await fetch(url, {
         credentials: 'same-origin',
         headers: { [NAV_HEADER]: '1', Accept: 'text/html' },
+        signal,
       });
+      if (generation !== navGeneration) return;
       if (!res.ok) throw new Error('تعذر تحميل الصفحة.');
       const html = await res.text();
+      if (generation !== navGeneration) return;
       const doc = new DOMParser().parseFromString(html, 'text/html');
       const newMain = doc.querySelector('[data-dashboard-main]');
-      const main = qs('[data-dashboard-main]');
       if (!newMain || !main) {
         window.location.href = url;
         return;
       }
       main.innerHTML = newMain.innerHTML;
+      main.classList.remove('is-nav-loading');
+      main.removeAttribute('aria-busy');
       runInlineScripts(newMain);
       syncDashboardChrome(doc);
       await ensurePageAssets(newMain.getAttribute('data-dashboard-page-assets') || '');
@@ -340,9 +439,12 @@
       bindPage(document);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
+      if (err?.name === 'AbortError') return;
       showToast(err.message || 'تعذر التنقل.', 'error');
     } finally {
-      showPageLoader(false);
+      if (generation === navGeneration) {
+        showPageLoader(false);
+      }
     }
   }
 
@@ -386,8 +488,10 @@
   function bindNavigation(root) {
     qsa('a[href^="/dashboard/"]', root).forEach((link) => {
       if (link.hasAttribute('data-dashboard-no-nav')) return;
+      if (link.dataset.dashboardNavBound === '1') return;
       if (link.target === '_blank') return;
       if (link.hasAttribute('download')) return;
+      link.dataset.dashboardNavBound = '1';
       link.addEventListener('click', (event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         const href = link.getAttribute('href');
@@ -521,6 +625,9 @@
     }
     if (typeof window.portalMaterialImagesLinkInit === 'function') {
       window.portalMaterialImagesLinkInit(root);
+    }
+    if (typeof window.portalMaterialZipDownloadInit === 'function') {
+      window.portalMaterialZipDownloadInit(root);
     }
     bindOrderImageZoom(root);
   }

@@ -1,0 +1,2434 @@
+<!DOCTYPE html>
+<html class="light" lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>لوحة التحكم - إدارة الروابط</title>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#D81921",
+              "background-light": "#f6f6f8",
+              "background-dark": "#101622",
+            },
+            fontFamily: {
+              "display": ["Manrope", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Crypto JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    
+    <style type="text/tailwindcss">
+    body {
+        --stripe-color: rgba(0, 0, 0, 0.03);
+        background-color: #f6f6f8;
+        background-image:
+            linear-gradient(45deg, var(--stripe-color) 25%, transparent 25%),
+            linear-gradient(-45deg, var(--stripe-color) 25%, transparent 25%),
+            linear-gradient(45deg, transparent 75%, var(--stripe-color) 75%),
+            linear-gradient(-45deg, transparent 75%, var(--stripe-color) 75%);
+        background-size: 20px 20px;
+        font-family: "Manrope", sans-serif;
+    }
+    .dark body {
+        --stripe-color: rgba(255, 255, 255, 0.03);
+        background-color: #101622;
+    }
+    .material-symbols-outlined {
+        font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 24
+    }
+    </style>
+    <style>
+        /* General hidden class - base rule */
+        .hidden {
+            display: none !important;
+        }
+        /* Tab content visibility */
+        .tab-content:not(.active) {
+            display: none !important;
+        }
+        .tab-content.active {
+            display: block !important;
+        }
+        /* Sticky Navigation Tabs */
+        #navigationTabs {
+            position: sticky;
+            top: 73px;
+            z-index: 30;
+        }
+        @media (max-width: 640px) {
+            #navigationTabs {
+                top: 65px;
+            }
+        }
+        /* Notification Styles */
+        #notificationContainer {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 10000;
+            max-width: 400px;
+        }
+        .notification {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            border-right: 4px solid #007bff;
+            animation: slideIn 0.3s ease-out;
+        }
+        .notification.success {
+            border-right-color: #28a745;
+        }
+        .notification.warning {
+            border-right-color: #ffc107;
+        }
+        .notification.info {
+            border-right-color: #17a2b8;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        /* Image Popup */
+        #imagePopupOverlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background-color: rgba(0, 0, 0, 0.6);
+            z-index: 9998;
+            cursor: pointer;
+        }
+        #imagePopup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 9999;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 90vw;
+            max-height: 90vh;
+            text-align: center;
+        }
+        #imagePopup img {
+            max-width: 85vw;
+            max-height: 75vh;
+            object-fit: contain;
+            border-radius: 8px;
+        }
+        #imagePopupClose {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 36px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 10000;
+            line-height: 1;
+        }
+        #imagePopupClose:hover {
+            background-color: rgba(0, 0, 0, 0.8);
+            transform: scale(1.1);
+        }
+        /* Mobile responsive styles for order items */
+        @media (max-width: 575.98px) {
+            .order-item-image {
+                margin-left: 0 !important;
+                margin-bottom: 10px;
+                align-self: center;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-display">
+    <!-- Image Popup -->
+    <div id="imagePopupOverlay" onclick="hidePopupImage()"></div>
+    <div id="imagePopup">
+        <span id="imagePopupClose" onclick="hidePopupImage()">×</span>
+        <img src="" alt="صورة مكبرة">
+    </div>
+    
+    <!-- Notification Container -->
+    <div id="notificationContainer"></div>
+
+    <!-- Login Section -->
+    <div id="loginSection" class="min-h-screen flex items-center justify-center px-4">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 w-full max-w-md">
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white text-center mb-6">تسجيل الدخول</h2>
+            <form id="loginForm">
+                <div class="mb-4">
+                    <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اسم المستخدم</label>
+                    <input type="text" id="username" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-700 dark:text-white" required autocomplete="username">
+                </div>
+                <div class="mb-6">
+                    <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">كلمة المرور</label>
+                    <input type="password" id="password" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-700 dark:text-white" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="w-full bg-primary text-white py-2.5 px-4 rounded-lg font-semibold hover:bg-opacity-90 transition-colors">تسجيل الدخول</button>
+            </form>
+            <div id="loginError" class="mt-4 p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hidden"></div>
+        </div>
+    </div>
+
+    <!-- Dashboard Section -->
+    <div id="dashboardSection" class="hidden min-h-screen">
+        <!-- Header -->
+        <header class="bg-white dark:bg-gray-900 shadow-sm sticky top-0 z-40">
+            <div class="px-4 sm:px-6 lg:px-10 py-4">
+                <div class="flex items-center justify-between">
+                    <h1 class="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">لوحة التحكم</h1>
+                    <div class="flex items-center gap-3">
+                        <button onclick="toggleDarkMode()" class="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                            <span class="material-symbols-outlined text-gray-700 dark:text-gray-300">dark_mode</span>
+                        </button>
+                        <button onclick="logout()" class="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium">
+                            تسجيل الخروج
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-1 px-4 sm:px-6 lg:px-10 py-6">
+            <div class="max-w-7xl mx-auto">
+                <!-- Quick Stats Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">إجمالي الطلبات</p>
+                                <p class="text-2xl font-bold text-gray-900 dark:text-white" id="totalOrdersCount">-</p>
+                            </div>
+                            <div class="p-3 bg-primary bg-opacity-10 rounded-lg">
+                                <span class="material-symbols-outlined text-primary text-2xl">shopping_cart</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">إجمالي الروابط</p>
+                                <p class="text-2xl font-bold text-gray-900 dark:text-white" id="totalLinksCount">-</p>
+                            </div>
+                            <div class="p-3 bg-blue-500 bg-opacity-10 rounded-lg">
+                                <span class="material-symbols-outlined text-blue-500 text-2xl">link</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">الزوار الفريدون</p>
+                                <p class="text-2xl font-bold text-gray-900 dark:text-white" id="uniqueVisitorsCount">-</p>
+                            </div>
+                            <div class="p-3 bg-green-500 bg-opacity-10 rounded-lg">
+                                <span class="material-symbols-outlined text-green-500 text-2xl">people</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Navigation Tabs -->
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6 sticky top-[73px] z-30" id="navigationTabs">
+                    <div class="border-b border-gray-200 dark:border-gray-700">
+                        <nav class="flex flex-wrap -mb-px" id="mainTabs">
+                            <button onclick="switchTab('orders', this)" class="tab-button active px-6 py-3 text-sm font-medium border-b-2 border-primary text-primary">
+                                <span class="material-symbols-outlined align-middle mr-2">shopping_cart</span>
+                                الطلبات
+                            </button>
+                            <button onclick="switchTab('links', this)" class="tab-button px-6 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600">
+                                <span class="material-symbols-outlined align-middle mr-2">link</span>
+                                الروابط
+                            </button>
+                            <button onclick="switchTab('analytics', this)" class="tab-button px-6 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600">
+                                <span class="material-symbols-outlined align-middle mr-2">analytics</span>
+                                الإحصائيات
+                            </button>
+                            <button onclick="switchTab('account', this)" class="tab-button px-6 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600">
+                                <span class="material-symbols-outlined align-middle mr-2">settings</span>
+                                الإعدادات
+                            </button>
+                        </nav>
+                    </div>
+                </div>
+
+                <!-- Tab Content -->
+                <!-- Orders Tab -->
+                <div id="tab-orders" class="tab-content hidden">
+                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-xl font-bold text-gray-900 dark:text-white">إدارة الطلبات</h2>
+                            <div class="flex items-center gap-3">
+                                <select id="orderStatusFilter" onchange="loadOrders()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary">
+                                    <option value="">جميع الطلبات</option>
+                                    <option value="pending">قيد الانتظار</option>
+                                    <option value="confirmed">مؤكد</option>
+                                    <option value="completed">مكتمل</option>
+                                    <option value="cancelled">ملغي</option>
+                                </select>
+                                <button onclick="loadOrders()" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors font-medium">
+                                    <span class="material-symbols-outlined align-middle">refresh</span>
+                                    تحديث
+                                </button>
+                            </div>
+                        </div>
+                        <div id="ordersList" class="space-y-4"></div>
+                    </div>
+                </div>
+
+                <!-- Links Tab -->
+                <div id="tab-links" class="tab-content hidden">
+                    <div class="space-y-6">
+                        <!-- Create New Link -->
+                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
+                            <button onclick="toggleSection('createLink')" class="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                <h2 class="text-xl font-bold text-gray-900 dark:text-white">إنشاء رابط جديد</h2>
+                                <span class="material-symbols-outlined text-gray-600 dark:text-gray-400 transition-transform duration-300" id="createLinkIcon">expand_more</span>
+                            </button>
+                            <div id="createLinkContent" class="hidden border-t border-gray-200 dark:border-gray-700">
+                                <div class="p-6">
+                                    <form id="linkForm" class="space-y-4">
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اسم الرابط</label>
+                                                <input type="text" id="linkName" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary" required>
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الحد الأدنى للكمية</label>
+                                                <select id="filterMinQuantity" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary">
+                                                    <option value="0">الكل</option>
+                                                    <option value="0.001" selected>المتوفر فقط</option>
+                                                    <option value="1">1+</option>
+                                                    <option value="10">10+</option>
+                                                    <option value="50">50+</option>
+                                                    <option value="100">100+</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">كلمة البحث</label>
+                                            <input type="text" id="filterKeyword" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary" placeholder="ابحث عن منتج معين...">
+                                        </div>
+                                        <div class="flex items-center gap-4 flex-wrap">
+                                            <label class="flex items-center">
+                                                <input type="checkbox" id="showPrice" checked class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                                                <span class="mr-2 text-sm text-gray-700 dark:text-gray-300">إظهار الأسعار</span>
+                                            </label>
+                                            <label class="flex items-center">
+                                                <input type="checkbox" id="showQuantity" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                                                <span class="mr-2 text-sm text-gray-700 dark:text-gray-300">إظهار الكميات</span>
+                                            </label>
+                                            <label class="flex items-center">
+                                                <input type="checkbox" id="requirePassword" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" onchange="togglePasswordFields()">
+                                                <span class="mr-2 text-sm text-gray-700 dark:text-gray-300">يتطلب كلمة مرور</span>
+                                            </label>
+                                        </div>
+                                        <div id="passwordFields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اسم المستخدم</label>
+                                                <input type="text" id="linkUsername" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">كلمة المرور</label>
+                                                <input type="password" id="linkPassword" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary">
+                                            </div>
+                                        </div>
+                                        <div class="pt-4">
+                                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">الفلاتر المحددة مسبقاً</h3>
+                                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <div>
+                                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">نوع المادة</label>
+                                                    <div id="materialTypeContainer" class="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-gray-50 dark:bg-gray-700">
+                                                        <div class="text-sm text-gray-500 dark:text-gray-400 text-center py-2">جاري التحميل...</div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الفئة العمرية</label>
+                                                    <div id="targetCategoryContainer" class="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-gray-50 dark:bg-gray-700">
+                                                        <div class="text-sm text-gray-500 dark:text-gray-400 text-center py-2">جاري التحميل...</div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الشركة المصنعة</label>
+                                                    <div id="manufacturerContainer" class="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-gray-50 dark:bg-gray-700">
+                                                        <div class="text-sm text-gray-500 dark:text-gray-400 text-center py-2">جاري التحميل...</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button type="submit" class="w-full md:w-auto px-6 py-2.5 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors font-semibold">
+                                            إنشاء الرابط
+                                        </button>
+                                    </form>
+                                    <div id="linkMessage" class="mt-4 p-3 rounded-lg hidden"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Existing Links -->
+                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
+                            <button onclick="toggleSection('existingLinks')" class="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                <h2 class="text-xl font-bold text-gray-900 dark:text-white">الروابط الموجودة</h2>
+                                <span class="material-symbols-outlined text-gray-600 dark:text-gray-400 transition-transform duration-300" id="existingLinksIcon">expand_more</span>
+                            </button>
+                            <div id="existingLinksContent" class="hidden border-t border-gray-200 dark:border-gray-700">
+                                <div id="linksList" class="p-6 space-y-4"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analytics Tab -->
+                <div id="tab-analytics" class="tab-content hidden">
+                    <div class="space-y-4">
+                        <!-- Visitor Statistics -->
+                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
+                            <div class="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer" onclick="toggleSection('visitorStats')">
+                                <h2 class="text-xl font-bold text-gray-900 dark:text-white">إحصائيات الزوار</h2>
+                                <div class="flex items-center gap-3">
+                                    <button type="button" onclick="event.stopPropagation(); loadVisitorStatistics();" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors font-medium text-sm">
+                                        <span class="material-symbols-outlined align-middle text-lg">refresh</span>
+                                        تحديث
+                                    </button>
+                                    <span class="material-symbols-outlined text-gray-600 dark:text-gray-400 transition-transform duration-300" id="visitorStatsIcon">expand_more</span>
+                                </div>
+                            </div>
+                            <div id="visitorStatsContent" class="hidden border-t border-gray-200 dark:border-gray-700">
+                                <div id="visitorStatsList" class="p-6 space-y-4"></div>
+                            </div>
+                        </div>
+
+                        <!-- Visitor Map -->
+                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
+                            <div class="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer" onclick="toggleSection('visitorMap')">
+                                <h2 class="text-xl font-bold text-gray-900 dark:text-white">خريطة توزيع الزوار</h2>
+                                <div class="flex items-center gap-3">
+                                    <button type="button" onclick="event.stopPropagation(); loadVisitorMap();" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors font-medium text-sm">
+                                        <span class="material-symbols-outlined align-middle text-lg">refresh</span>
+                                        تحديث
+                                    </button>
+                                    <span class="material-symbols-outlined text-gray-600 dark:text-gray-400 transition-transform duration-300" id="visitorMapIcon">expand_more</span>
+                                </div>
+                            </div>
+                            <div id="visitorMapContent" class="hidden border-t border-gray-200 dark:border-gray-700">
+                                <div id="visitorMap" class="p-6" style="height: 500px; width: 100%; border-radius: 8px;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Visitor Logs -->
+                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
+                            <div class="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer" onclick="toggleSection('visitorLogs')">
+                                <h2 class="text-xl font-bold text-gray-900 dark:text-white">سجل الزوار</h2>
+                                <div class="flex items-center gap-3">
+                                    <select id="visitorLogLinkFilter" onchange="const content = document.getElementById('visitorLogsContent'); if(content && !content.classList.contains('hidden') && content.style.display !== 'none') loadVisitorLogs();" onclick="event.stopPropagation();" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm focus:ring-2 focus:ring-primary">
+                                        <option value="">جميع الروابط</option>
+                                    </select>
+                                    <button type="button" onclick="event.stopPropagation(); loadVisitorLogs();" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors font-medium text-sm">
+                                        <span class="material-symbols-outlined align-middle text-lg">refresh</span>
+                                        تحديث
+                                    </button>
+                                    <span class="material-symbols-outlined text-gray-600 dark:text-gray-400 transition-transform duration-300" id="visitorLogsIcon">expand_more</span>
+                                </div>
+                            </div>
+                            <div id="visitorLogsContent" class="hidden border-t border-gray-200 dark:border-gray-700">
+                                <div class="p-6">
+                                    <div class="mb-4 flex items-center gap-3 flex-wrap">
+                                        <button onclick="selectAllVisitorLogs()" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm">
+                                            تحديد الكل
+                                        </button>
+                                        <button onclick="deselectAllVisitorLogs()" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm">
+                                            إلغاء التحديد
+                                        </button>
+                                        <button onclick="deleteSelectedLogs()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm">
+                                            حذف المحدد
+                                        </button>
+                                        <button onclick="deleteAllLogs()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm">
+                                            حذف الكل
+                                        </button>
+                                    </div>
+                                    <div id="visitorLogsList" class="space-y-4"></div>
+                                    <div id="visitorLogsPagination" class="mt-6 flex items-center justify-center gap-2 hidden"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Account Tab -->
+                <div id="tab-account" class="tab-content hidden">
+                    <div class="space-y-4">
+                        <!-- Admin Account Settings -->
+                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
+                            <button onclick="toggleSection('adminAccount')" class="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                <h2 class="text-xl font-bold text-gray-900 dark:text-white">تغيير بيانات المدير</h2>
+                                <span class="material-symbols-outlined text-gray-600 dark:text-gray-400 transition-transform duration-300" id="adminAccountIcon">expand_more</span>
+                            </button>
+                            <div id="adminAccountContent" class="hidden border-t border-gray-200 dark:border-gray-700">
+                                <div class="p-6">
+                                    <form id="adminAccountForm" class="space-y-4">
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اسم المستخدم الجديد</label>
+                                                <input type="text" id="adminUsername" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary" required autocomplete="username">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">كلمة المرور الحالية</label>
+                                                <input type="password" id="adminCurrentPassword" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary" required autocomplete="current-password">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">كلمة المرور الجديدة</label>
+                                                <input type="password" id="adminNewPassword" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary" autocomplete="new-password">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">تأكيد كلمة المرور الجديدة</label>
+                                                <input type="password" id="adminConfirmPassword" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary" autocomplete="new-password">
+                                            </div>
+                                        </div>
+                                        <button type="submit" class="px-6 py-2.5 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors font-semibold">
+                                            حفظ التغييرات
+                                        </button>
+                                    </form>
+                                    <div id="adminAccountMessage" class="mt-4 p-3 rounded-lg hidden"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Company Information -->
+                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
+                            <button onclick="toggleSection('companyInfo')" class="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                <h2 class="text-xl font-bold text-gray-900 dark:text-white">معلومات الشركة</h2>
+                                <span class="material-symbols-outlined text-gray-600 dark:text-gray-400 transition-transform duration-300" id="companyInfoIcon">expand_more</span>
+                            </button>
+                            <div id="companyInfoContent" class="hidden border-t border-gray-200 dark:border-gray-700">
+                                <div class="p-6">
+                                    <form id="companyInfoForm" class="space-y-4">
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اسم الشركة</label>
+                                                <input type="text" id="companyName" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">اللوجو (مسار الملف)</label>
+                                                <input type="text" id="companyLogo" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">الموقع</label>
+                                                <input type="text" id="companyLocation" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">رقم الهاتف</label>
+                                                <input type="text" id="companyPhone" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">رقم الموبايل</label>
+                                                <input type="text" id="companyMobile" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">رقم الواتساب</label>
+                                                <input type="text" id="companyWhatsapp" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-primary">
+                                            </div>
+                                        </div>
+                                        <button type="submit" class="px-6 py-2.5 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors font-semibold">
+                                            حفظ المعلومات
+                                        </button>
+                                    </form>
+                                    <div id="companyInfoMessage" class="mt-4 p-3 rounded-lg hidden"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // ==================== INITIALIZATION ====================
+        window.onload = function() {
+            try {
+                checkAuth();
+                loadFilters();
+                loadCompanyInfo();
+                togglePasswordFields();
+                
+                // Setup login form event listener
+                const loginForm = document.getElementById('loginForm');
+                if (loginForm) {
+                    const newForm = loginForm.cloneNode(true);
+                    loginForm.parentNode.replaceChild(newForm, loginForm);
+                    
+                    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        const username = document.getElementById('username').value.trim();
+                        const password = document.getElementById('password').value;
+                        
+                        if (!username || !password) {
+                            const loginError = document.getElementById('loginError');
+                            if (loginError) {
+                                loginError.textContent = 'يرجى إدخال اسم المستخدم وكلمة المرور';
+                                loginError.classList.remove('hidden');
+                            }
+                            return;
+                        }
+
+                        try {
+                            const response = await fetch('auth.php', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: 'login_dashboard', username, password })
+                            });
+                            
+                            if (!response.ok) {
+                                throw new Error(`HTTP error! status: ${response.status}`);
+                            }
+                            
+                            const data = await response.json();
+                            
+                            if (data.success) {
+                                showDashboard();
+                                loadLinks();
+                            } else {
+                                const loginError = document.getElementById('loginError');
+                                if (loginError) {
+                                    loginError.textContent = data.message || 'اسم المستخدم أو كلمة المرور غير صحيحة';
+                                    loginError.classList.remove('hidden');
+                                }
+                            }
+                        } catch (error) {
+                            console.error('Login error:', error);
+                            const loginError = document.getElementById('loginError');
+                            if (loginError) {
+                                loginError.textContent = 'حدث خطأ في الاتصال: ' + error.message;
+                                loginError.classList.remove('hidden');
+                            }
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error initializing dashboard:', error);
+            }
+        };
+
+        // ==================== AUTHENTICATION ====================
+        async function checkAuth() {
+            try {
+                const response = await fetch('auth.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'check_auth', type: 'dashboard' })
+                });
+                const data = await response.json();
+                if (data.authenticated) {
+                    showDashboard();
+                    loadLinks();
+                } else {
+                    showLogin();
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showLogin();
+            }
+        }
+
+        function showLogin() {
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('dashboardSection').classList.add('hidden');
+        }
+
+        function showDashboard() {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('dashboardSection').classList.remove('hidden');
+            
+            // Show Orders tab by default
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+                tab.classList.add('hidden');
+            });
+            const ordersTab = document.getElementById('tab-orders');
+            if (ordersTab) {
+                ordersTab.classList.remove('hidden');
+                ordersTab.classList.add('active');
+            }
+            
+            // Set active tab button
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active', 'border-primary', 'text-primary');
+                btn.classList.add('border-transparent', 'text-gray-500', 'dark:text-gray-400');
+            });
+            const ordersBtn = document.querySelector('[onclick*="switchTab(\'orders\'"]');
+            if (ordersBtn) {
+                ordersBtn.classList.add('active', 'border-primary', 'text-primary');
+                ordersBtn.classList.remove('border-transparent', 'text-gray-500', 'dark:text-gray-400');
+            }
+            
+            const savedOrderIds = localStorage.getItem('previousOrderIds');
+            if (savedOrderIds) {
+                try {
+                    window.previousOrderIds = JSON.parse(savedOrderIds);
+                } catch (e) {
+                    window.previousOrderIds = [];
+                }
+            } else {
+                window.previousOrderIds = [];
+            }
+            
+            loadLinks();
+            loadOrders().then(() => {});
+            // Don't load analytics data automatically - let user open sections manually
+            // loadVisitorStatistics();
+            // loadVisitorLogs();
+            // loadVisitorMap();
+            loadAdminAccountInfo();
+            updateStats();
+            
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+            
+            startAutoRefresh();
+        }
+
+        async function logout() {
+            try {
+                await fetch('auth.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'logout' })
+                });
+                showLogin();
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        // ==================== TAB SWITCHING ====================
+        function switchTab(tabName, clickedButton) {
+            // Hide all tabs - remove active class
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+                tab.classList.add('hidden');
+            });
+            
+            // Remove active class from all buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active', 'border-primary', 'text-primary');
+                btn.classList.add('border-transparent', 'text-gray-500', 'dark:text-gray-400');
+            });
+            
+            // Show selected tab
+            const selectedTab = document.getElementById(`tab-${tabName}`);
+            if (selectedTab) {
+                selectedTab.classList.remove('hidden');
+                selectedTab.classList.add('active');
+            }
+            
+            // Add active class to clicked button
+            const button = clickedButton || document.querySelector(`[onclick*="switchTab('${tabName}')"]`);
+            if (button) {
+                button.classList.add('active', 'border-primary', 'text-primary');
+                button.classList.remove('border-transparent', 'text-gray-500', 'dark:text-gray-400');
+            }
+        }
+
+        // ==================== COLLAPSIBLE SUBSECTIONS ====================
+        function toggleSubSection(subSectionId) {
+            const content = document.getElementById(subSectionId);
+            const icon = document.getElementById(subSectionId + 'Icon');
+            
+            if (content && icon) {
+                const isHidden = content.classList.contains('hidden');
+                
+                if (isHidden) {
+                    content.classList.remove('hidden');
+                    icon.style.transform = 'rotate(180deg)';
+                } else {
+                    content.classList.add('hidden');
+                    icon.style.transform = 'rotate(0deg)';
+                }
+            }
+        }
+
+        // ==================== COLLAPSIBLE SECTIONS ====================
+        function toggleSection(sectionId) {
+            const content = document.getElementById(sectionId + 'Content');
+            const icon = document.getElementById(sectionId + 'Icon');
+            
+            if (content && icon) {
+                const isHidden = content.classList.contains('hidden');
+                
+                if (isHidden) {
+                    // Open section
+                    content.classList.remove('hidden');
+                    icon.style.transform = 'rotate(180deg)';
+                    
+                    // Load data if section is opened for the first time
+                    if (sectionId === 'visitorStats') {
+                        const statsList = content.querySelector('#visitorStatsList');
+                        if (statsList && statsList.innerHTML.trim() === '') {
+                            loadVisitorStatistics();
+                        }
+                    } else if (sectionId === 'visitorMap' && !visitorMap) {
+                        loadVisitorMap();
+                    } else if (sectionId === 'visitorLogs') {
+                        // Load links in filter dropdown first
+                        const filterSelect = document.getElementById('visitorLogLinkFilter');
+                        if (filterSelect && filterSelect.options.length === 1) {
+                            // Only "جميع الروابط" option exists, load links
+                            loadLinks().then(() => {
+                                // After links are loaded, load visitor logs
+                                const logsList = content.querySelector('#visitorLogsList');
+                                if (logsList && logsList.innerHTML.trim() === '') {
+                                    loadVisitorLogs();
+                                }
+                            });
+                        } else {
+                            // Links already loaded, just load visitor logs
+                            const logsList = content.querySelector('#visitorLogsList');
+                            if (logsList && logsList.innerHTML.trim() === '') {
+                                loadVisitorLogs();
+                            }
+                        }
+                    } else if (sectionId === 'existingLinks') {
+                        const linksList = content.querySelector('#linksList');
+                        if (linksList && linksList.innerHTML.trim() === '') {
+                            loadLinks();
+                        }
+                    } else if (sectionId === 'createLink' || sectionId === 'createNewLink') {
+                        const materialTypeContainer = content.querySelector('#materialTypeContainer');
+                        if (materialTypeContainer && (materialTypeContainer.innerHTML.trim() === '' || materialTypeContainer.innerHTML.trim() === '<div class="text-muted small text-center py-2">جاري التحميل...</div>')) {
+                            loadFilters();
+                        }
+                    } else if (sectionId === 'adminAccount') {
+                        const adminUsername = document.getElementById('adminUsername');
+                        if (adminUsername && adminUsername.value === '') {
+                            loadAdminAccountInfo();
+                        }
+                    } else if (sectionId === 'companyInfo') {
+                        const companyName = document.getElementById('companyName');
+                        if (companyName && companyName.value === '') {
+                            loadCompanyInfo();
+                        }
+                    }
+                } else {
+                    // Close section
+                    content.classList.add('hidden');
+                    icon.style.transform = 'rotate(0deg)';
+                }
+            }
+        }
+
+        // ==================== DARK MODE ====================
+        function toggleDarkMode() {
+            const html = document.documentElement;
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                localStorage.setItem('darkMode', 'false');
+            } else {
+                html.classList.add('dark');
+                localStorage.setItem('darkMode', 'true');
+            }
+        }
+
+        // Load dark mode preference
+        if (localStorage.getItem('darkMode') === 'true') {
+            document.documentElement.classList.add('dark');
+        }
+
+        // ==================== AUTO REFRESH ====================
+        let lastOrderCount = 0;
+        let autoRefreshInterval = null;
+        let refreshInterval = 30000; // 30 seconds
+
+        function startAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            autoRefreshInterval = setInterval(() => {
+                autoRefresh();
+            }, refreshInterval);
+        }
+
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
+
+        async function autoRefresh() {
+            try {
+                await loadOrders(true);
+            } catch (error) {
+                console.error('Error in auto-refresh:', error);
+            }
+        }
+
+        // ==================== STATS UPDATE ====================
+        async function updateStats() {
+            try {
+                // Update orders count
+                const ordersResponse = await fetch('order_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_orders' })
+                });
+                const ordersData = await ordersResponse.json();
+                document.getElementById('totalOrdersCount').textContent = ordersData.orders ? ordersData.orders.length : 0;
+                
+                // Update links count
+                const linksResponse = await fetch('link_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_links' })
+                });
+                const linksData = await linksResponse.json();
+                document.getElementById('totalLinksCount').textContent = linksData.links ? linksData.links.length : 0;
+                
+                // Update unique visitors count
+                const statsResponse = await fetch('visitor_log_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_link_statistics' })
+                });
+                const statsData = await statsResponse.json();
+                let uniqueVisitors = 0;
+                if (statsData.statistics) {
+                    statsData.statistics.forEach(stat => {
+                        uniqueVisitors += stat.uniqueVisitors || 0;
+                    });
+                }
+                document.getElementById('uniqueVisitorsCount').textContent = uniqueVisitors;
+            } catch (error) {
+                console.error('Error updating stats:', error);
+            }
+        }
+
+        // ==================== NOTIFICATIONS ====================
+        function showNotification(title, message, type = 'info') {
+            const container = document.getElementById('notificationContainer');
+            if (container) {
+                const notification = document.createElement('div');
+                notification.className = `notification ${type}`;
+                const notificationId = 'notification-' + Date.now();
+                notification.id = notificationId;
+                notification.innerHTML = `
+                    <div class="notification-header">
+                        <span class="notification-title">${title}</span>
+                        <button class="notification-close" onclick="closeNotification('${notificationId}')">×</button>
+                    </div>
+                    <div class="notification-body">${message}</div>
+                `;
+                container.appendChild(notification);
+                setTimeout(() => {
+                    closeNotification(notificationId);
+                }, 8000);
+            }
+            
+            if ('Notification' in window) {
+                if (Notification.permission === 'granted') {
+                    try {
+                        const browserNotification = new Notification(title, {
+                            body: message,
+                            icon: window.location.origin + '/JawishLogo.png',
+                            badge: window.location.origin + '/JawishLogo.png',
+                            tag: 'new-order-' + Date.now(),
+                            requireInteraction: false
+                        });
+                        setTimeout(() => {
+                            browserNotification.close();
+                        }, 10000);
+                        browserNotification.onclick = function() {
+                            window.focus();
+                            this.close();
+                        };
+                    } catch (e) {
+                        console.error('Error showing browser notification:', e);
+                    }
+                } else if (Notification.permission === 'default') {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === 'granted') {
+                            try {
+                                const browserNotification = new Notification(title, {
+                                    body: message,
+                                    icon: window.location.origin + '/JawishLogo.png',
+                                    badge: window.location.origin + '/JawishLogo.png',
+                                    tag: 'new-order-' + Date.now()
+                                });
+                                setTimeout(() => {
+                                    browserNotification.close();
+                                }, 10000);
+                                browserNotification.onclick = function() {
+                                    window.focus();
+                                    this.close();
+                                };
+                            } catch (e) {
+                                console.error('Error showing browser notification:', e);
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+        function closeNotification(notificationId) {
+            const notification = document.getElementById(notificationId);
+            if (notification) {
+                notification.style.animation = 'slideIn 0.3s ease-out reverse';
+                setTimeout(() => {
+                    notification.remove();
+                }, 300);
+            }
+        }
+
+        // ==================== IMAGE POPUP ====================
+        function showPopupImage(imageUrl) {
+            const popup = document.getElementById('imagePopup');
+            const overlay = document.getElementById('imagePopupOverlay');
+            const img = popup.querySelector('img');
+            img.src = imageUrl;
+            popup.style.display = 'block';
+            overlay.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function hidePopupImage() {
+            const popup = document.getElementById('imagePopup');
+            const overlay = document.getElementById('imagePopupOverlay');
+            popup.style.display = 'none';
+            overlay.style.display = 'none';
+            document.body.style.overflow = '';
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                hidePopupImage();
+            }
+        });
+
+        // ==================== HELPER FUNCTIONS ====================
+        function getActionLabel(action) {
+            const labels = {
+                'page_view': 'عرض الصفحة',
+                'materials_viewed': 'عرض المواد',
+                'add_to_cart': 'إضافة للسلة',
+                'order_placed': 'تأكيد طلب'
+            };
+            return labels[action] || action;
+        }
+
+        function getBrowserName(userAgent) {
+            if (!userAgent) return 'غير معروف';
+            if (userAgent.includes('Chrome')) return 'Chrome';
+            if (userAgent.includes('Firefox')) return 'Firefox';
+            if (userAgent.includes('Safari')) return 'Safari';
+            if (userAgent.includes('Edge')) return 'Edge';
+            if (userAgent.includes('Opera')) return 'Opera';
+            return 'متصفح آخر';
+        }
+
+        function generateQuoteTokenSecure(orderId, createdDate) {
+            if (typeof CryptoJS !== 'undefined' && CryptoJS.MD5) {
+                return CryptoJS.MD5(orderId + 'quote_secret_' + createdDate).toString();
+            }
+            return null;
+        }
+
+        // ==================== LINKS MANAGEMENT ====================
+        async function loadFilters() {
+            try {
+                const response = await fetch('api_proxy.php?action=mat_filter_options');
+                const data = await response.json();
+                
+                if (data.materialTypes) {
+                    fillSelect("materialType", data.materialTypes);
+                }
+                if (data.targetCategories) {
+                    fillSelect("targetCategory", data.targetCategories);
+                }
+                if (data.manufacturers) {
+                    fillSelect("manufacturer", data.manufacturers);
+                }
+            } catch (error) {
+                console.error('Error loading filters:', error);
+            }
+        }
+
+        function fillSelect(id, options) {
+            const containerId = id + "Container";
+            const container = document.getElementById(containerId);
+            if (container) {
+                if (!options || options.length === 0) {
+                    container.innerHTML = '<div class="text-sm text-gray-500 dark:text-gray-400 text-center py-2">لا توجد خيارات</div>';
+                    return;
+                }
+                container.innerHTML = "";
+                options.forEach(o => {
+                    const checkboxId = `${id}_${o.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '')}`;
+                    container.innerHTML += `
+                        <div class="flex items-center mb-2">
+                            <input type="checkbox" id="${checkboxId}" value="${o.replace(/"/g, '&quot;')}" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                            <label for="${checkboxId}" class="mr-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">${o}</label>
+                        </div>
+                    `;
+                });
+            }
+        }
+
+        function getSelectValue(id) {
+            const containerId = id + "Container";
+            const container = document.getElementById(containerId);
+            if (container) {
+                const checked = Array.from(container.querySelectorAll('input[type="checkbox"]:checked'))
+                    .map(cb => cb.value);
+                return checked;
+            }
+            return [];
+        }
+
+        function togglePasswordFields() {
+            const requirePassword = document.getElementById('requirePassword').checked;
+            const passwordFields = document.getElementById('passwordFields');
+            const usernameInput = document.getElementById('linkUsername');
+            const passwordInput = document.getElementById('linkPassword');
+            
+            if (requirePassword) {
+                passwordFields.classList.remove('hidden');
+                usernameInput.required = true;
+                passwordInput.required = true;
+            } else {
+                passwordFields.classList.add('hidden');
+                usernameInput.required = false;
+                passwordInput.required = false;
+            }
+        }
+
+        document.getElementById('linkForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const requirePassword = document.getElementById('requirePassword').checked;
+            const linkData = {
+                action: 'create_link',
+                name: document.getElementById('linkName').value,
+                showPrice: document.getElementById('showPrice').checked,
+                showQuantity: document.getElementById('showQuantity').checked,
+                requirePassword: requirePassword,
+                username: requirePassword ? document.getElementById('linkUsername').value : '',
+                password: requirePassword ? document.getElementById('linkPassword').value : '',
+                filters: {
+                    keyword: document.getElementById('filterKeyword').value,
+                    materialTypes: getSelectValue("materialType"),
+                    targetCategories: getSelectValue("targetCategory"),
+                    manufacturers: getSelectValue("manufacturer"),
+                    minQuantity: document.getElementById('filterMinQuantity').value
+                }
+            };
+
+            try {
+                const response = await fetch('link_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(linkData)
+                });
+                const data = await response.json();
+                
+                const messageDiv = document.getElementById('linkMessage');
+                if (data.success) {
+                    messageDiv.className = 'p-3 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-lg';
+                    messageDiv.textContent = 'تم إنشاء الرابط بنجاح: ' + data.linkUrl;
+                    messageDiv.classList.remove('hidden');
+                    document.getElementById('linkForm').reset();
+                    loadLinks();
+                    updateStats();
+                } else {
+                    messageDiv.className = 'p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg';
+                    messageDiv.textContent = data.error || 'حدث خطأ';
+                    messageDiv.classList.remove('hidden');
+                }
+            } catch (error) {
+                const messageDiv = document.getElementById('linkMessage');
+                messageDiv.className = 'p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg';
+                messageDiv.textContent = 'حدث خطأ في الاتصال';
+                messageDiv.classList.remove('hidden');
+            }
+        });
+
+        async function loadLinks() {
+            try {
+                const response = await fetch('link_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_links' })
+                });
+                const data = await response.json();
+                
+                const linksList = document.getElementById('linksList');
+                linksList.innerHTML = '';
+                
+                if (data.links.length === 0) {
+                    linksList.innerHTML = '<p class="text-gray-500 dark:text-gray-400">لا توجد روابط</p>';
+                    return;
+                }
+                
+                data.links.forEach(link => {
+                    const linkCard = document.createElement('div');
+                    linkCard.className = 'bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 mb-4';
+                    linkCard.innerHTML = `
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div class="flex-grow">
+                                <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">${link.name}</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400 mb-1"><strong>الرابط:</strong> <a href="${link.linkUrl}" target="_blank" class="text-primary hover:underline">${link.linkUrl}</a></p>
+                                <p class="text-sm text-gray-600 dark:text-gray-400 mb-1"><strong>إظهار السعر:</strong> ${link.showPrice ? 'نعم' : 'لا'}</p>
+                                <p class="text-sm text-gray-600 dark:text-gray-400 mb-1"><strong>إظهار الكمية:</strong> ${link.showQuantity ? 'نعم' : 'لا'}</p>
+                                <p class="text-sm text-gray-600 dark:text-gray-400"><strong>تاريخ الإنشاء:</strong> ${link.created}</p>
+                            </div>
+                            <div class="flex flex-col gap-2 w-full md:w-auto">
+                                <button onclick="viewVisitorLogs('${link.id}')" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">عرض سجل الزوار</button>
+                                <button onclick="deleteLink('${link.id}')" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">حذف</button>
+                            </div>
+                        </div>
+                    `;
+                    linksList.appendChild(linkCard);
+                });
+                
+                const filterSelect = document.getElementById('visitorLogLinkFilter');
+                if (filterSelect) {
+                    const currentValue = filterSelect.value;
+                    filterSelect.innerHTML = '<option value="">جميع الروابط</option>';
+                    data.links.forEach(link => {
+                        const option = document.createElement('option');
+                        option.value = link.id;
+                        option.textContent = link.name;
+                        filterSelect.appendChild(option);
+                    });
+                    if (currentValue) {
+                        filterSelect.value = currentValue;
+                    }
+                }
+                updateStats();
+            } catch (error) {
+                console.error('Error loading links:', error);
+            }
+        }
+
+        async function deleteLink(linkId) {
+            if (!confirm('هل أنت متأكد من حذف هذا الرابط؟')) return;
+            
+            try {
+                const response = await fetch('link_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete_link', linkId })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    loadLinks();
+                    updateStats();
+                } else {
+                    alert('حدث خطأ: ' + (data.error || 'غير معروف'));
+                }
+            } catch (error) {
+                alert('حدث خطأ في الاتصال');
+            }
+        }
+
+        function viewVisitorLogs(linkId) {
+            switchTab('analytics');
+            setTimeout(() => {
+                // Open visitor logs section
+                const content = document.getElementById('visitorLogsContent');
+                const icon = document.getElementById('visitorLogsIcon');
+                if (content && content.classList.contains('hidden')) {
+                    content.classList.remove('hidden');
+                    if (icon) icon.style.transform = 'rotate(180deg)';
+                }
+                
+                const filterSelect = document.getElementById('visitorLogLinkFilter');
+                if (filterSelect) {
+                    filterSelect.value = linkId;
+                }
+                loadVisitorLogs(linkId);
+                setTimeout(() => {
+                    const logsList = document.getElementById('visitorLogsList');
+                    if (logsList) {
+                        logsList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                }, 300);
+            }, 100);
+        }
+
+        // ==================== ORDERS MANAGEMENT ====================
+        async function loadOrders(silent = false) {
+            try {
+                const statusFilter = document.getElementById('orderStatusFilter')?.value || '';
+                const requestBody = { action: 'get_orders' };
+                if (statusFilter) {
+                    requestBody.status = statusFilter;
+                }
+                
+                const response = await fetch('order_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                const currentOrderIds = data.orders ? data.orders.map(o => o.id).sort() : [];
+                const previousOrderIds = window.previousOrderIds || [];
+                const newOrderIds = currentOrderIds.filter(id => !previousOrderIds.includes(id));
+                
+                if (previousOrderIds.length > 0 && newOrderIds.length > 0) {
+                    const newOrderCount = newOrderIds.length;
+                    const newOrders = data.orders.filter(order => newOrderIds.includes(order.id));
+                    const customerNames = newOrders.map(order => order.customerName || 'عميل').slice(0, 3);
+                    const customerText = customerNames.length > 0 ? `: ${customerNames.join('، ')}${newOrderCount > 3 ? '...' : ''}` : '';
+                    showNotification('طلب جديد!', `تم استلام ${newOrderCount} طلب جديد${customerText}`, 'success');
+                }
+                
+                window.previousOrderIds = currentOrderIds;
+                try {
+                    localStorage.setItem('previousOrderIds', JSON.stringify(currentOrderIds));
+                } catch (e) {
+                    console.error('Error saving order IDs to localStorage:', e);
+                }
+                
+                lastOrderCount = data.orders ? data.orders.length : 0;
+                const ordersList = document.getElementById('ordersList');
+                
+                let linksMap = {};
+                try {
+                    const linksResponse = await fetch('link_manager.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'get_links' })
+                    });
+                    const linksData = await linksResponse.json();
+                    if (linksData.links) {
+                        linksData.links.forEach(link => {
+                            linksMap[link.id] = link;
+                        });
+                    }
+                } catch (e) {
+                    console.error('Error loading links for order display:', e);
+                }
+                
+                function createOrderCard(order, linksMap) {
+                    const statusColors = {
+                        'pending': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
+                        'quoted': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+                        'confirmed': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+                        'completed': 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+                        'cancelled': 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
+                    };
+                    const statusText = {
+                        'pending': 'قيد الانتظار',
+                        'quoted': 'تم إرسال العرض',
+                        'confirmed': 'مؤكد',
+                        'completed': 'مكتمل',
+                        'cancelled': 'ملغي'
+                    };
+                    const statusColor = statusColors[order.status] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+                    const linkInfo = linksMap[order.linkId] || null;
+                    const linkName = linkInfo ? linkInfo.name : order.linkId;
+                    
+                    const baseUrl = window.location.origin;
+                    let itemsHTML = '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
+                    let totalBoxes = 0;
+                    order.items.forEach((item) => {
+                        totalBoxes += item.quantity || 0;
+                        const imageUrl = item.imageUrl || '';
+                        const thumbnailUrl = imageUrl ? baseUrl + imageUrl.replace('/images/', '/images/thumbnails/') : baseUrl + '/No_image_available.svg.png';
+                        const fullImageUrl = imageUrl ? baseUrl + imageUrl : baseUrl + '/No_image_available.svg.png';
+                        itemsHTML += `
+                            <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                                <div class="flex flex-col sm:flex-row gap-3">
+                                    <img src="${thumbnailUrl}" alt="${item.name}" class="w-20 h-20 object-contain cursor-pointer rounded" onclick="showPopupImage('${fullImageUrl}')">
+                                    <div class="flex-grow text-center sm:text-right">
+                                        <strong class="text-gray-900 dark:text-white">${item.name}</strong><br>
+                                        <small class="text-gray-600 dark:text-gray-400">الكود: ${item.code}</small><br>
+                                        <small class="text-gray-600 dark:text-gray-400">الكمية: ${item.quantity} علبة</small><br>
+                                        <small class="text-gray-600 dark:text-gray-400">التعبئة: ${item.pcsPerBox} قطعة</small><br>
+                                        <small class="text-gray-600 dark:text-gray-400">السعر: ${item.salePrice_SP.toLocaleString()} ل.س / $${item.salePrice_Usd.toFixed(2)}</small>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    itemsHTML += '</div>';
+                    const totalItems = order.items.length;
+                    
+                    const orderCardId = 'order-' + order.id.replace(/[^a-zA-Z0-9]/g, '-');
+                    
+                    return `
+                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-4" data-order-id="${order.id}">
+                            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+                                <div>
+                                    <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-1">
+                                        ${order.customerName}
+                                        ${order.customerPhone ? ` - <span class="text-gray-500 dark:text-gray-400">${order.customerPhone}</span>` : ''}
+                                        <span class="px-2 py-1 rounded-full text-xs font-semibold ${statusColor} mr-2">${statusText[order.status] || order.status}</span>
+                                    </h3>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">${order.created} | ${linkName}</p>
+                                </div>
+                            </div>
+                            <div class="mb-4">
+                                <div class="flex items-center justify-between cursor-pointer mb-2 pb-2 border-b border-gray-200 dark:border-gray-700" onclick="toggleSubSection('order-details-${order.id}')">
+                                    <h4 class="text-md font-semibold text-gray-900 dark:text-white">تفاصيل الطلب</h4>
+                                    <span class="material-symbols-outlined text-gray-600 dark:text-gray-400 transition-transform duration-300" id="order-details-${order.id}Icon">expand_more</span>
+                                </div>
+                                <div id="order-details-${order.id}" class="hidden mt-2">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                        <div>
+                                            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1"><strong>رقم الطلب:</strong> ${order.id}</p>
+                                            ${order.customerPhone ? `<p class="text-sm text-gray-600 dark:text-gray-400 mb-1"><strong>رقم الهاتف:</strong> <a href="tel:${order.customerPhone}" class="text-primary hover:underline">${order.customerPhone}</a></p>` : ''}
+                                            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1"><strong>التاريخ:</strong> ${order.created}</p>
+                                            <p class="text-sm text-gray-600 dark:text-gray-400"><strong>الرابط:</strong> ${linkName}</p>
+                                        </div>
+                                        <div class="text-left md:text-right">
+                                            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1"><strong>الإجمالي:</strong> ${order.totalSP.toLocaleString()} ل.س</p>
+                                            <p class="text-sm text-gray-600 dark:text-gray-400"><strong>الإجمالي:</strong> ${order.totalUSD.toFixed(2)} $</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-4">
+                                    <div class="flex items-center justify-between cursor-pointer mb-2" onclick="toggleSubSection('order-items-${order.id}')">
+                                        <strong class="text-gray-900 dark:text-white">المنتجات (${totalItems} منتج)</strong>
+                                        <span class="material-symbols-outlined text-gray-600 dark:text-gray-400 transition-transform duration-300" id="order-items-${order.id}Icon">expand_more</span>
+                                    </div>
+                                    <div id="order-items-${order.id}" class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 hidden">
+                                        ${itemsHTML}
+                                    </div>
+                                </div>
+                                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 mb-4">
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <p class="text-sm text-gray-600 dark:text-gray-400"><strong>عدد المنتجات:</strong> ${totalItems} منتج</p>
+                                        <p class="text-sm text-gray-600 dark:text-gray-400"><strong>عدد العلب:</strong> ${totalBoxes} علبة</p>
+                                    </div>
+                                </div>
+                                <div class="flex flex-wrap gap-2 justify-between items-center">
+                                    <div class="flex flex-wrap gap-2">
+                                        <button onclick="viewOrderQuote('${order.id}')" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm">عرض الأسعار</button>
+                                        <button onclick="editOrderPrices('${order.id}')" class="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors text-sm">تعديل الأسعار</button>
+                                        <button onclick="shareQuote('${order.id}')" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm">مشاركة العرض</button>
+                                    </div>
+                                    <div class="flex flex-wrap gap-2 items-center">
+                                        <select onchange="updateOrderStatus('${order.id}', this.value)" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm">
+                                            <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>قيد الانتظار</option>
+                                            <option value="quoted" ${order.status === 'quoted' ? 'selected' : ''}>تم إرسال العرض</option>
+                                            <option value="confirmed" ${order.status === 'confirmed' ? 'selected' : ''}>مؤكد</option>
+                                            <option value="completed" ${order.status === 'completed' ? 'selected' : ''}>مكتمل</option>
+                                            <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>ملغي</option>
+                                        </select>
+                                        <button onclick="deleteOrder('${order.id}')" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm">حذف</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                if (!data.orders || data.orders.length === 0) {
+                    ordersList.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-8">لا توجد طلبات</p>';
+                    lastOrderCount = 0;
+                    window.previousOrderIds = [];
+                    try {
+                        localStorage.setItem('previousOrderIds', JSON.stringify([]));
+                    } catch (e) {
+                        console.error('Error saving order IDs to localStorage:', e);
+                    }
+                    updateStats();
+                    return;
+                }
+                
+                ordersList.innerHTML = '';
+                data.orders.forEach(order => {
+                    const cardHTML = createOrderCard(order, linksMap);
+                    ordersList.insertAdjacentHTML('beforeend', cardHTML);
+                });
+                
+                updateStats();
+            } catch (error) {
+                console.error('Error loading orders:', error);
+                document.getElementById('ordersList').innerHTML = '<p class="text-red-500 text-center py-8">حدث خطأ في تحميل الطلبات</p>';
+            }
+        }
+
+        async function updateOrderStatus(orderId, status) {
+            try {
+                const response = await fetch('order_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'update_order_status', orderId, status })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    loadOrders();
+                } else {
+                    alert('حدث خطأ: ' + (data.error || 'غير معروف'));
+                }
+            } catch (error) {
+                alert('حدث خطأ في الاتصال');
+                console.error('Error:', error);
+            }
+        }
+
+        async function deleteOrder(orderId) {
+            if (!confirm('هل أنت متأكد من حذف هذا الطلب؟ لا يمكن التراجع عن هذا الإجراء.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('order_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete_order', orderId })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    loadOrders();
+                    updateStats();
+                } else {
+                    alert('حدث خطأ: ' + (data.error || 'غير معروف'));
+                }
+            } catch (error) {
+                alert('حدث خطأ في الاتصال');
+                console.error('Error:', error);
+            }
+        }
+
+        async function viewOrderQuote(orderId) {
+            try {
+                const response = await fetch('order_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_orders' })
+                });
+                const data = await response.json();
+                const order = data.orders.find(o => o.id === orderId);
+                
+                if (!order) {
+                    alert('الطلب غير موجود');
+                    return;
+                }
+                
+                let token = '';
+                try {
+                    const tokenResponse = await fetch('order_manager.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'generate_quote_token',
+                            orderId: orderId,
+                            created: order.created
+                        })
+                    });
+                    const tokenData = await tokenResponse.json();
+                    if (tokenData.success && tokenData.token) {
+                        token = tokenData.token;
+                    } else {
+                        token = generateQuoteTokenSecure(orderId, order.created);
+                        if (!token) {
+                            alert('حدث خطأ في إنشاء رابط العرض');
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error generating token:', error);
+                    token = generateQuoteTokenSecure(orderId, order.created);
+                    if (!token) {
+                        alert('حدث خطأ في فتح صفحة العرض');
+                        return;
+                    }
+                }
+                
+                if (!token) {
+                    alert('حدث خطأ في إنشاء رابط العرض');
+                    return;
+                }
+                
+                const quoteUrl = `quote.php?order=${orderId}&token=${token}`;
+                window.open(quoteUrl, '_blank');
+            } catch (error) {
+                console.error('Error viewing quote:', error);
+                alert('حدث خطأ في فتح صفحة العرض');
+            }
+        }
+
+        async function shareQuote(orderId) {
+            try {
+                const response = await fetch('order_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_orders' })
+                });
+                const data = await response.json();
+                const order = data.orders.find(o => o.id === orderId);
+                
+                if (!order) {
+                    alert('الطلب غير موجود');
+                    return;
+                }
+                
+                let token = '';
+                try {
+                    const tokenResponse = await fetch('order_manager.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'generate_quote_token',
+                            orderId: orderId,
+                            created: order.created
+                        })
+                    });
+                    const tokenData = await tokenResponse.json();
+                    if (tokenData.success && tokenData.token) {
+                        token = tokenData.token;
+                    } else {
+                        token = generateQuoteTokenSecure(orderId, order.created);
+                        if (!token) {
+                            alert('حدث خطأ في إنشاء رابط العرض');
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error generating token:', error);
+                    token = generateQuoteTokenSecure(orderId, order.created);
+                    if (!token) {
+                        alert('حدث خطأ في إنشاء رابط العرض');
+                        return;
+                    }
+                }
+                
+                if (!token) {
+                    alert('حدث خطأ في إنشاء رابط العرض');
+                    return;
+                }
+                
+                const quoteUrl = window.location.origin + window.location.pathname.replace('dashboard_v2.html', '') + `quote.php?order=${orderId}&token=${token}`;
+                
+                navigator.clipboard.writeText(quoteUrl).then(() => {
+                    alert('تم نسخ رابط العرض إلى الحافظة!\n\n' + quoteUrl);
+                }).catch(() => {
+                    const textArea = document.createElement('textarea');
+                    textArea.value = quoteUrl;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    alert('تم نسخ رابط العرض إلى الحافظة!\n\n' + quoteUrl);
+                });
+                
+                await updateOrderStatus(orderId, 'quoted');
+            } catch (error) {
+                console.error('Error sharing quote:', error);
+                alert('حدث خطأ في مشاركة العرض');
+            }
+        }
+
+        async function editOrderPrices(orderId) {
+            try {
+                const response = await fetch('order_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_orders' })
+                });
+                const data = await response.json();
+                const order = data.orders.find(o => o.id === orderId);
+                
+                if (!order) {
+                    alert('الطلب غير موجود');
+                    return;
+                }
+                
+                let priceEditHTML = '<div id="priceEditModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"><div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto"><div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center"><h3 class="text-xl font-bold text-gray-900 dark:text-white">تعديل الأسعار</h3><button onclick="closePriceModal()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">×</button></div><div class="p-6"><form id="priceEditForm">';
+                
+                order.items.forEach((item, idx) => {
+                    priceEditHTML += `
+                        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4">
+                            <h4 class="font-bold text-gray-900 dark:text-white mb-3">${item.name} (${item.code})</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">السعر بالليرة السورية</label>
+                                    <input type="number" name="items[${idx}][salePrice_SP]" value="${item.salePrice_SP}" step="0.01" required class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">السعر بالدولار</label>
+                                    <input type="number" name="items[${idx}][salePrice_Usd]" value="${item.salePrice_Usd}" step="0.01" required class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white">
+                                </div>
+                            </div>
+                            <input type="hidden" name="items[${idx}][guid]" value="${item.guid}">
+                        </div>
+                    `;
+                });
+                
+                priceEditHTML += '</form></div><div class="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3"><button onclick="closePriceModal()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600">إلغاء</button><button onclick="saveOrderPrices(\'' + orderId + '\')" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90">حفظ</button></div></div></div>';
+                
+                const existingModal = document.getElementById('priceEditModal');
+                if (existingModal) {
+                    existingModal.remove();
+                }
+                
+                document.body.insertAdjacentHTML('beforeend', priceEditHTML);
+            } catch (error) {
+                console.error('Error editing prices:', error);
+                alert('حدث خطأ في تحميل بيانات الطلب');
+            }
+        }
+
+        function closePriceModal() {
+            const modal = document.getElementById('priceEditModal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        async function saveOrderPrices(orderId) {
+            try {
+                const form = document.getElementById('priceEditForm');
+                const formData = new FormData(form);
+                const items = [];
+                
+                const itemCount = form.querySelectorAll('input[name*="[guid]"]').length;
+                for (let i = 0; i < itemCount; i++) {
+                    items.push({
+                        guid: formData.get(`items[${i}][guid]`),
+                        salePrice_SP: parseFloat(formData.get(`items[${i}][salePrice_SP]`)),
+                        salePrice_Usd: parseFloat(formData.get(`items[${i}][salePrice_Usd]`))
+                    });
+                }
+                
+                const response = await fetch('order_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'update_order_prices',
+                        orderId: orderId,
+                        items: items
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    alert('تم تحديث الأسعار بنجاح');
+                    closePriceModal();
+                    loadOrders();
+                } else {
+                    alert('حدث خطأ: ' + (data.error || 'غير معروف'));
+                }
+            } catch (error) {
+                console.error('Error saving prices:', error);
+                alert('حدث خطأ في حفظ الأسعار');
+            }
+        }
+
+        // ==================== ANALYTICS ====================
+        async function loadVisitorStatistics(silent = false) {
+            try {
+                const response = await fetch('visitor_log_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_link_statistics' })
+                });
+                const data = await response.json();
+                
+                const statsList = document.getElementById('visitorStatsList');
+                statsList.innerHTML = '';
+                
+                if (!data.statistics || data.statistics.length === 0) {
+                    statsList.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-8">لا توجد إحصائيات متاحة</p>';
+                    return;
+                }
+                
+                let linksMap = {};
+                try {
+                    const linksResponse = await fetch('link_manager.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'get_links' })
+                    });
+                    const linksData = await linksResponse.json();
+                    if (linksData.links) {
+                        linksData.links.forEach(link => {
+                            linksMap[link.id] = link;
+                        });
+                    }
+                } catch (e) {
+                    console.error('Error loading links for statistics:', e);
+                }
+                
+                data.statistics.forEach(stat => {
+                    const linkInfo = linksMap[stat.linkId] || null;
+                    const linkName = linkInfo ? linkInfo.name : stat.linkId;
+                    
+                    const statCard = document.createElement('div');
+                    statCard.className = 'bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-4';
+                    statCard.innerHTML = `
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4">${linkName}</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                            <div class="bg-blue-50 dark:bg-blue-900 rounded-lg p-4">
+                                <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">إجمالي الزيارات</p>
+                                <p class="text-2xl font-bold text-blue-600 dark:text-blue-300">${stat.totalVisits}</p>
+                            </div>
+                            <div class="bg-green-50 dark:bg-green-900 rounded-lg p-4">
+                                <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">زوار فريدون</p>
+                                <p class="text-2xl font-bold text-green-600 dark:text-green-300">${stat.uniqueVisitors}</p>
+                            </div>
+                            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                                <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">أول زيارة</p>
+                                <p class="text-sm font-semibold text-gray-900 dark:text-white">${stat.firstVisit || 'لا توجد'}</p>
+                            </div>
+                            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                                <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">آخر زيارة</p>
+                                <p class="text-sm font-semibold text-gray-900 dark:text-white">${stat.lastVisit || 'لا توجد'}</p>
+                            </div>
+                        </div>
+                        <div>
+                            <strong class="text-gray-900 dark:text-white mb-2 block">الإجراءات:</strong>
+                            <div class="flex flex-wrap gap-2">
+                                ${Object.entries(stat.actions).map(([action, count]) => 
+                                    `<span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-sm">${getActionLabel(action)}: ${count}</span>`
+                                ).join('')}
+                            </div>
+                        </div>
+                    `;
+                    statsList.appendChild(statCard);
+                });
+            } catch (error) {
+                console.error('Error loading visitor statistics:', error);
+            }
+        }
+
+        let visitorMap = null;
+        let mapMarkers = [];
+
+        async function loadVisitorMap() {
+            try {
+                const response = await fetch('visitor_log_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_visitor_logs' })
+                });
+                
+                const data = await response.json();
+                
+                if (!data.logs || data.logs.length === 0) {
+                    document.getElementById('visitorMap').innerHTML = '<div class="text-center p-8 text-gray-500 dark:text-gray-400">لا توجد مواقع GPS متاحة للعرض</div>';
+                    return;
+                }
+                
+                if (!visitorMap) {
+                    visitorMap = L.map('visitorMap').setView([33.5138, 36.2765], 6);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors',
+                        maxZoom: 19
+                    }).addTo(visitorMap);
+                }
+                
+                mapMarkers.forEach(marker => visitorMap.removeLayer(marker));
+                mapMarkers = [];
+                
+                const locations = [];
+                data.logs.forEach(visitor => {
+                    if (visitor.gpsLocations && visitor.gpsLocations.length > 0) {
+                        visitor.gpsLocations.forEach(loc => {
+                            locations.push({
+                                lat: parseFloat(loc.latitude),
+                                lng: parseFloat(loc.longitude),
+                                accuracy: loc.accuracy ? parseFloat(loc.accuracy) : null,
+                                timestamp: loc.timestamp || '',
+                                visitorIp: visitor.visitorIp,
+                                customerName: visitor.customerName || ''
+                            });
+                        });
+                    }
+                    if (visitor.actions) {
+                        visitor.actions.forEach(action => {
+                            if (action.gpsLocation && action.gpsLocation.latitude && action.gpsLocation.longitude) {
+                                locations.push({
+                                    lat: parseFloat(action.gpsLocation.latitude),
+                                    lng: parseFloat(action.gpsLocation.longitude),
+                                    accuracy: action.gpsLocation.accuracy ? parseFloat(action.gpsLocation.accuracy) : null,
+                                    timestamp: action.timestamp || '',
+                                    visitorIp: visitor.visitorIp,
+                                    customerName: action.customerName || visitor.customerName || ''
+                                });
+                            }
+                        });
+                    }
+                });
+                
+                if (locations.length === 0) {
+                    document.getElementById('visitorMap').innerHTML = '<div class="text-center p-8 text-gray-500 dark:text-gray-400">لا توجد مواقع GPS متاحة للعرض</div>';
+                    return;
+                }
+                
+                const bounds = [];
+                locations.forEach(loc => {
+                    if (isNaN(loc.lat) || isNaN(loc.lng)) return;
+                    
+                    const popupContent = `
+                        <div style="min-width: 200px;">
+                            <strong>موقع الزائر</strong><br>
+                            ${loc.customerName ? `<strong>الاسم:</strong> ${loc.customerName}<br>` : ''}
+                            <strong>IP:</strong> ${loc.visitorIp}<br>
+                            ${loc.timestamp ? `<strong>الوقت:</strong> ${loc.timestamp}<br>` : ''}
+                            ${loc.accuracy ? `<strong>الدقة:</strong> ±${Math.round(loc.accuracy)}م<br>` : ''}
+                            <strong>الإحداثيات:</strong> ${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}<br>
+                            <a href="https://www.google.com/maps?q=${loc.lat},${loc.lng}" target="_blank" class="mt-2 inline-block px-3 py-1 bg-primary text-white rounded hover:bg-opacity-90">فتح في Google Maps</a>
+                        </div>
+                    `;
+                    
+                    const marker = L.marker([loc.lat, loc.lng])
+                        .addTo(visitorMap)
+                        .bindPopup(popupContent);
+                    
+                    mapMarkers.push(marker);
+                    bounds.push([loc.lat, loc.lng]);
+                });
+                
+                if (bounds.length > 0) {
+                    visitorMap.fitBounds(bounds, { padding: [50, 50] });
+                }
+            } catch (error) {
+                console.error('Error loading visitor map:', error);
+                document.getElementById('visitorMap').innerHTML = '<div class="text-center p-8 text-red-500">حدث خطأ في تحميل الخريطة</div>';
+            }
+        }
+
+        // Pagination state for visitor logs
+        let visitorLogsData = [];
+        let visitorLogsCurrentPage = 1;
+        let visitorLogsPerPage = 10;
+        let visitorLogsLinksMap = {};
+
+        function renderVisitorLogsPage(page = 1) {
+            const logsList = document.getElementById('visitorLogsList');
+            const paginationDiv = document.getElementById('visitorLogsPagination');
+            
+            if (!logsList || !visitorLogsData || visitorLogsData.length === 0) {
+                logsList.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-8">لا توجد سجلات زوار</p>';
+                paginationDiv.classList.add('hidden');
+                return;
+            }
+
+            visitorLogsCurrentPage = page;
+            const startIndex = (page - 1) * visitorLogsPerPage;
+            const endIndex = startIndex + visitorLogsPerPage;
+            const pageData = visitorLogsData.slice(startIndex, endIndex);
+            const totalPages = Math.ceil(visitorLogsData.length / visitorLogsPerPage);
+
+            logsList.innerHTML = '';
+            
+            function getLinkDisplay(linkId) {
+                const linkInfo = visitorLogsLinksMap[linkId] || null;
+                return linkInfo ? linkInfo.name : linkId;
+            }
+
+            if (visitorLogsData[0] && visitorLogsData[0].actions) {
+                // Grouped data
+                pageData.forEach((visitor, index) => {
+                    const actualIndex = startIndex + index;
+                    const visitorCard = document.createElement('div');
+                    visitorCard.className = 'bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-4';
+                    const allLogIds = visitor.actions.map(a => a.id).filter(id => id);
+                    const visitorActionsId = `visitor-actions-${actualIndex}`;
+                    visitorCard.innerHTML = `
+                        <div class="mb-4">
+                            <div class="flex items-center gap-2 mb-2">
+                                <input type="checkbox" class="log-checkbox w-4 h-4" value="${allLogIds.join(',')}" onchange="updateDeleteButtonState()">
+                                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">تحديد جميع إجراءات هذا الزائر</label>
+                            </div>
+                            <div class="flex items-center justify-between cursor-pointer" onclick="toggleSubSection('${visitorActionsId}')">
+                                <div class="flex-1">
+                                    <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">
+                                        ${visitor.customerName ? `<span class="text-primary">${visitor.customerName}</span> | ` : ''}
+                                        ${visitor.visitorId ? `<span class="text-gray-500 dark:text-gray-400 text-sm">${visitor.visitorId.substring(0, 20)}...</span> | ` : ''}
+                                        <span class="text-gray-600 dark:text-gray-400">${visitor.visitorIp}</span>
+                                    </h3>
+                                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                        <strong>المتصفح:</strong> ${getBrowserName(visitor.userAgent)} | 
+                                        <strong>عدد الإجراءات:</strong> ${visitor.actions.length} | 
+                                        <strong>أول زيارة:</strong> ${visitor.firstVisit || 'غير معروف'} | 
+                                        <strong>آخر زيارة:</strong> ${visitor.lastVisit || 'غير معروف'}
+                                    </p>
+                                    ${visitor.gpsLocations && visitor.gpsLocations.length > 0 ? (() => {
+                                        const sortedLocations = [...visitor.gpsLocations].sort((a, b) => {
+                                            const timeA = new Date(a.timestamp || 0).getTime();
+                                            const timeB = new Date(b.timestamp || 0).getTime();
+                                            return timeB - timeA;
+                                        });
+                                        const lastLocation = sortedLocations[0];
+                                        return `
+                                            <p class="text-sm text-gray-600 dark:text-gray-400">
+                                                <strong>الموقع الأخير:</strong> 
+                                                <a href="https://www.google.com/maps?q=${lastLocation.latitude},${lastLocation.longitude}" target="_blank" class="text-primary hover:underline">
+                                                    ${lastLocation.latitude}, ${lastLocation.longitude}
+                                                </a>
+                                                ${lastLocation.accuracy ? ` (دقة: ±${Math.round(lastLocation.accuracy)}م)` : ''}
+                                                ${lastLocation.timestamp ? ` - ${lastLocation.timestamp}` : ''}
+                                            </p>
+                                        `;
+                                    })() : ''}
+                                </div>
+                                <span class="material-symbols-outlined text-gray-600 dark:text-gray-400 transition-transform duration-300" id="${visitorActionsId}Icon">expand_more</span>
+                            </div>
+                        </div>
+                        <div id="${visitorActionsId}" class="visitor-actions space-y-2 hidden border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                            ${visitor.actions.map(action => `
+                                <div class="border-r-4 border-blue-500 pr-3 mr-2">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <input type="checkbox" class="log-checkbox w-4 h-4" value="${action.id}" onchange="updateDeleteButtonState()">
+                                        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">تحديد هذا السجل</label>
+                                    </div>
+                                    <p class="text-sm text-gray-600 dark:text-gray-400">
+                                        <strong>الإجراء:</strong> <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-300 rounded text-xs">${getActionLabel(action.visitorAction)}</span> | 
+                                        <strong>الرابط:</strong> ${getLinkDisplay(action.linkId)} | 
+                                        <strong>الوقت:</strong> ${action.timestamp}
+                                        ${action.customerName ? ` | <strong>الاسم:</strong> <span class="text-primary">${action.customerName}</span>` : ''}
+                                    </p>
+                                    ${action.details ? `<p class="text-xs text-gray-500 dark:text-gray-500 mt-1">التفاصيل: ${action.details}</p>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                    logsList.appendChild(visitorCard);
+                });
+            } else {
+                // Flat data
+                pageData.forEach(log => {
+                    const logCard = document.createElement('div');
+                    logCard.className = 'bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 mb-2';
+                    logCard.innerHTML = `
+                        <p class="text-sm text-gray-600 dark:text-gray-400">
+                            <strong>الرابط:</strong> ${getLinkDisplay(log.linkId)} | 
+                            <strong>الإجراء:</strong> <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-300 rounded text-xs">${getActionLabel(log.visitorAction)}</span> | 
+                            <strong>الوقت:</strong> ${log.timestamp}
+                            ${log.customerName ? ` | <strong>الاسم:</strong> <span class="text-primary">${log.customerName}</span>` : ''}
+                        </p>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">
+                            <strong>عنوان IP:</strong> ${log.visitorIp} | 
+                            <strong>المتصفح:</strong> ${getBrowserName(log.userAgent)}
+                        </p>
+                        ${log.details ? `<p class="text-xs text-gray-500 dark:text-gray-500 mt-1">التفاصيل: ${log.details}</p>` : ''}
+                    `;
+                    logsList.appendChild(logCard);
+                });
+            }
+
+            // Render pagination
+            if (totalPages > 1) {
+                paginationDiv.classList.remove('hidden');
+                let paginationHTML = '';
+                
+                // Previous button
+                if (page > 1) {
+                    paginationHTML += `<button onclick="renderVisitorLogsPage(${page - 1})" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm">السابق</button>`;
+                } else {
+                    paginationHTML += `<button disabled class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed text-sm">السابق</button>`;
+                }
+                
+                // Page numbers
+                const maxPagesToShow = 5;
+                let startPage = Math.max(1, page - Math.floor(maxPagesToShow / 2));
+                let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+                
+                if (endPage - startPage < maxPagesToShow - 1) {
+                    startPage = Math.max(1, endPage - maxPagesToShow + 1);
+                }
+                
+                if (startPage > 1) {
+                    paginationHTML += `<button onclick="renderVisitorLogsPage(1)" class="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm">1</button>`;
+                    if (startPage > 2) {
+                        paginationHTML += `<span class="px-2 text-gray-500">...</span>`;
+                    }
+                }
+                
+                for (let i = startPage; i <= endPage; i++) {
+                    if (i === page) {
+                        paginationHTML += `<button class="px-3 py-2 bg-primary text-white rounded-lg text-sm font-semibold">${i}</button>`;
+                    } else {
+                        paginationHTML += `<button onclick="renderVisitorLogsPage(${i})" class="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm">${i}</button>`;
+                    }
+                }
+                
+                if (endPage < totalPages) {
+                    if (endPage < totalPages - 1) {
+                        paginationHTML += `<span class="px-2 text-gray-500">...</span>`;
+                    }
+                    paginationHTML += `<button onclick="renderVisitorLogsPage(${totalPages})" class="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm">${totalPages}</button>`;
+                }
+                
+                // Next button
+                if (page < totalPages) {
+                    paginationHTML += `<button onclick="renderVisitorLogsPage(${page + 1})" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm">التالي</button>`;
+                } else {
+                    paginationHTML += `<button disabled class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-600 rounded-lg cursor-not-allowed text-sm">التالي</button>`;
+                }
+                
+                paginationHTML += `<span class="px-4 text-sm text-gray-600 dark:text-gray-400">صفحة ${page} من ${totalPages} (${visitorLogsData.length} سجل)</span>`;
+                
+                paginationDiv.innerHTML = paginationHTML;
+            } else {
+                paginationDiv.classList.add('hidden');
+            }
+            
+            // Auto scroll to top of logs list when page changes
+            setTimeout(() => {
+                const logsContainer = document.getElementById('visitorLogsContent');
+                if (logsContainer && !logsContainer.classList.contains('hidden')) {
+                    logsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } else {
+                    logsList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 100);
+        }
+
+        async function loadVisitorLogs(linkId = null) {
+            try {
+                const logsList = document.getElementById('visitorLogsList');
+                if (!logsList) {
+                    console.error('visitorLogsList element not found');
+                    return;
+                }
+                
+                // Show loading state
+                logsList.innerHTML = '<div class="text-center py-8 text-gray-500 dark:text-gray-400">جاري التحميل...</div>';
+                
+                const filterLinkId = linkId || document.getElementById('visitorLogLinkFilter')?.value || '';
+                const response = await fetch('visitor_log_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        action: 'get_visitor_logs',
+                        linkId: filterLinkId || null
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (!data) {
+                    throw new Error('No data received');
+                }
+                
+                // Load links map
+                try {
+                    const linksResponse = await fetch('link_manager.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'get_links' })
+                    });
+                    const linksData = await linksResponse.json();
+                    if (linksData.links) {
+                        visitorLogsLinksMap = {};
+                        linksData.links.forEach(link => {
+                            visitorLogsLinksMap[link.id] = link;
+                        });
+                    }
+                } catch (e) {
+                    console.error('Error loading links for visitor logs:', e);
+                }
+                
+                if (!data.logs || data.logs.length === 0) {
+                    visitorLogsData = [];
+                    renderVisitorLogsPage(1);
+                    return;
+                }
+                
+                // Store all data
+                visitorLogsData = data.logs;
+                visitorLogsCurrentPage = 1;
+                
+                // Render first page
+                renderVisitorLogsPage(1);
+                
+            } catch (error) {
+                console.error('Error loading visitor logs:', error);
+                const logsList = document.getElementById('visitorLogsList');
+                if (logsList) {
+                    logsList.innerHTML = `<div class="text-center py-8 text-red-500">حدث خطأ في تحميل سجلات الزوار: ${error.message}</div>`;
+                }
+            }
+        }
+
+        function selectAllVisitorLogs() {
+            document.querySelectorAll('.log-checkbox').forEach(cb => {
+                cb.checked = true;
+            });
+            updateDeleteButtonState();
+        }
+
+        function deselectAllVisitorLogs() {
+            document.querySelectorAll('.log-checkbox').forEach(cb => {
+                cb.checked = false;
+            });
+            updateDeleteButtonState();
+        }
+
+        function updateDeleteButtonState() {
+            const checkedBoxes = document.querySelectorAll('.log-checkbox:checked');
+            const deleteSelectedBtn = document.querySelector('button[onclick="deleteSelectedLogs()"]');
+            if (deleteSelectedBtn) {
+                deleteSelectedBtn.disabled = checkedBoxes.length === 0;
+            }
+        }
+
+        async function deleteSelectedLogs() {
+            const checkedBoxes = document.querySelectorAll('.log-checkbox:checked');
+            if (checkedBoxes.length === 0) {
+                alert('يرجى تحديد سجلات للحذف');
+                return;
+            }
+
+            if (!confirm(`هل أنت متأكد من حذف ${checkedBoxes.length} سجل؟`)) {
+                return;
+            }
+
+            const logIds = [];
+            checkedBoxes.forEach(cb => {
+                const value = cb.value;
+                if (value.includes(',')) {
+                    logIds.push(...value.split(','));
+                } else {
+                    logIds.push(value);
+                }
+            });
+
+            try {
+                const response = await fetch('visitor_log_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'delete_logs',
+                        logIds: logIds
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    alert(data.message || 'تم الحذف بنجاح');
+                    loadVisitorLogs();
+                    loadVisitorStatistics();
+                } else {
+                    alert('حدث خطأ: ' + (data.error || 'غير معروف'));
+                }
+            } catch (error) {
+                console.error('Error deleting logs:', error);
+                alert('حدث خطأ في الاتصال');
+            }
+        }
+
+        async function deleteAllLogs() {
+            if (!confirm('هل أنت متأكد من حذف جميع السجلات؟ لا يمكن التراجع عن هذا الإجراء.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('visitor_log_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'delete_logs',
+                        logIds: []
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    alert(data.message || 'تم حذف جميع السجلات بنجاح');
+                    loadVisitorLogs();
+                    loadVisitorStatistics();
+                } else {
+                    alert('حدث خطأ: ' + (data.error || 'غير معروف'));
+                }
+            } catch (error) {
+                console.error('Error deleting logs:', error);
+                alert('حدث خطأ في الاتصال');
+            }
+        }
+
+        // ==================== ACCOUNT MANAGEMENT ====================
+        async function loadAdminAccountInfo() {
+            try {
+                const response = await fetch('auth.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_admin_info' })
+                });
+                const data = await response.json();
+                
+                if (data.success && data.username) {
+                    document.getElementById('adminUsername').value = data.username;
+                }
+            } catch (error) {
+                console.error('Error loading admin info:', error);
+            }
+        }
+
+        document.getElementById('adminAccountForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const messageDiv = document.getElementById('adminAccountMessage');
+            
+            const newPassword = document.getElementById('adminNewPassword').value;
+            const confirmPassword = document.getElementById('adminConfirmPassword').value;
+            
+            if (newPassword && newPassword !== confirmPassword) {
+                messageDiv.className = 'p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg';
+                messageDiv.textContent = 'كلمة المرور الجديدة وتأكيدها غير متطابقين';
+                messageDiv.classList.remove('hidden');
+                return;
+            }
+
+            const accountData = {
+                username: document.getElementById('adminUsername').value,
+                currentPassword: document.getElementById('adminCurrentPassword').value,
+                newPassword: newPassword,
+                confirmPassword: confirmPassword
+            };
+
+            try {
+                const response = await fetch('auth.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'update_admin_account', ...accountData })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    messageDiv.className = 'p-3 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-lg';
+                    messageDiv.textContent = data.message || 'تم تحديث بيانات الحساب بنجاح';
+                    messageDiv.classList.remove('hidden');
+                    document.getElementById('adminCurrentPassword').value = '';
+                    document.getElementById('adminNewPassword').value = '';
+                    document.getElementById('adminConfirmPassword').value = '';
+                    setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+                } else {
+                    messageDiv.className = 'p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg';
+                    messageDiv.textContent = data.message || 'فشل تحديث بيانات الحساب';
+                    messageDiv.classList.remove('hidden');
+                }
+            } catch (error) {
+                messageDiv.className = 'p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg';
+                messageDiv.textContent = 'حدث خطأ في الاتصال';
+                messageDiv.classList.remove('hidden');
+            }
+        });
+
+        // ==================== COMPANY INFO ====================
+        async function loadCompanyInfo() {
+            try {
+                const response = await fetch('company_info_manager.php?action=get');
+                const data = await response.json();
+                
+                if (data.success && data.info) {
+                    document.getElementById('companyName').value = data.info.name || '';
+                    document.getElementById('companyLogo').value = data.info.logo || '';
+                    document.getElementById('companyLocation').value = data.info.location || '';
+                    document.getElementById('companyPhone').value = data.info.phone || '';
+                    document.getElementById('companyMobile').value = data.info.mobile || '';
+                    document.getElementById('companyWhatsapp').value = data.info.whatsapp || '';
+                }
+            } catch (error) {
+                console.error('Error loading company info:', error);
+            }
+        }
+
+        document.getElementById('companyInfoForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const messageDiv = document.getElementById('companyInfoMessage');
+            
+            const companyInfo = {
+                name: document.getElementById('companyName').value,
+                logo: document.getElementById('companyLogo').value,
+                location: document.getElementById('companyLocation').value,
+                phone: document.getElementById('companyPhone').value,
+                mobile: document.getElementById('companyMobile').value,
+                whatsapp: document.getElementById('companyWhatsapp').value,
+                email: '',
+                website: ''
+            };
+
+            try {
+                const response = await fetch('company_info_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'save', ...companyInfo })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    messageDiv.className = 'p-3 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-lg';
+                    messageDiv.textContent = 'تم حفظ معلومات الشركة بنجاح';
+                    messageDiv.classList.remove('hidden');
+                    setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+                } else {
+                    messageDiv.className = 'p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg';
+                    messageDiv.textContent = data.message || 'فشل حفظ معلومات الشركة';
+                    messageDiv.classList.remove('hidden');
+                }
+            } catch (error) {
+                messageDiv.className = 'p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg';
+                messageDiv.textContent = 'حدث خطأ في الاتصال';
+                messageDiv.classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
+

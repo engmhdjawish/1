@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Auth;
 
 use Portal\Database;
+use Portal\Support\StaffRoleProvisioner;
 use PDO;
 
 final class WebSession
@@ -27,7 +28,8 @@ final class WebSession
             if (\Portal\Support\DashboardHttp::wantsJson()) {
                 \Portal\Support\DashboardHttp::json(false, 'انتهت جلسة الدخول. سجّل الدخول مجدداً.', ['login' => true]);
             }
-            header('Location: /login.php?type=staff');
+            $returnTo = rawurlencode(\Portal\Support\PortalUrl::currentPathWithQuery());
+            header('Location: /login.php?type=staff&redirect=' . $returnTo);
             exit;
         }
     }
@@ -130,6 +132,8 @@ final class WebSession
 
         CustomerSession::logout();
 
+        StaffRoleProvisioner::ensureTaskRoles();
+
         $permissions = self::loadPermissions($user['id']);
         $roles = self::loadRoleLabels($user['id']);
         $_SESSION[self::SESSION_KEY] = [
@@ -150,6 +154,23 @@ final class WebSession
     public static function logout(): void
     {
         unset($_SESSION[self::SESSION_KEY]);
+    }
+
+    public static function refreshPermissions(): void
+    {
+        if (!self::check()) {
+            return;
+        }
+
+        $userId = (string) (self::user()['id'] ?? '');
+        if ($userId === '') {
+            return;
+        }
+
+        $roles = self::loadRoleLabels($userId);
+        $_SESSION[self::SESSION_KEY]['permissions'] = self::loadPermissions($userId);
+        $_SESSION[self::SESSION_KEY]['roles'] = $roles;
+        $_SESSION[self::SESSION_KEY]['role_label'] = $roles[0] ?? 'موظف';
     }
 
     /** @return list<string> */

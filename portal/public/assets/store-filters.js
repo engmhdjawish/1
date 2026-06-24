@@ -1,12 +1,35 @@
-(() => {
-  const root = document.getElementById('store-filters-root');
-  if (!root) {
+window.portalStoreFiltersInit = (root = document) => {
+  const syncHeaderStickyOffset = () => {
+    const header = document.querySelector('.site-header');
+    if (!header) {
+      return;
+    }
+    const height = Math.ceil(header.getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--site-header-sticky-offset', `${height}px`);
+  };
+
+  syncHeaderStickyOffset();
+  if (!window.__storeFiltersHeaderSyncBound) {
+    window.__storeFiltersHeaderSyncBound = true;
+    window.addEventListener('resize', syncHeaderStickyOffset, { passive: true });
+    window.addEventListener('load', syncHeaderStickyOffset, { passive: true });
+
+    const header = document.querySelector('.site-header');
+    if (header && typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(syncHeaderStickyOffset).observe(header);
+    }
+  }
+
+  const catalogRoot = root.matches?.('[data-store-catalog-root]')
+    ? root
+    : root.querySelector('[data-store-catalog-root]');
+  if (!catalogRoot) {
     return;
   }
 
-  const openBtn = document.getElementById('store-filters-open');
-  const closeBtn = document.getElementById('store-filters-close');
-  const backdrop = document.getElementById('store-filters-backdrop');
+  const backdrop = catalogRoot.querySelector('#store-filters-backdrop');
+  const openBtn = catalogRoot.querySelector('#store-filters-open');
+  const closeBtn = catalogRoot.querySelector('#store-filters-close');
 
   const setDrawerOpen = (open) => {
     document.body.classList.toggle('store-filters-drawer-open', open);
@@ -16,13 +39,22 @@
     }
   };
 
-  openBtn?.addEventListener('click', () => setDrawerOpen(true));
-  closeBtn?.addEventListener('click', () => setDrawerOpen(false));
-  backdrop?.addEventListener('click', (event) => {
-    if (event.target === backdrop) {
-      setDrawerOpen(false);
-    }
-  });
+  if (openBtn && openBtn.dataset.filtersBound !== '1') {
+    openBtn.dataset.filtersBound = '1';
+    openBtn.addEventListener('click', () => setDrawerOpen(true));
+  }
+  if (closeBtn && closeBtn.dataset.filtersBound !== '1') {
+    closeBtn.dataset.filtersBound = '1';
+    closeBtn.addEventListener('click', () => setDrawerOpen(false));
+  }
+  if (backdrop && backdrop.dataset.filtersBound !== '1') {
+    backdrop.dataset.filtersBound = '1';
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop) {
+        setDrawerOpen(false);
+      }
+    });
+  }
 
   const setupFilterList = (list, input, toggleBtn) => {
     const initialVisible = Number.parseInt(list.getAttribute('data-initial-visible') || '6', 10);
@@ -61,23 +93,36 @@
       toggleBtn.classList.toggle('is-expanded', expanded);
     };
 
-    input?.addEventListener('input', applyVisibility);
+    if (input && input.dataset.filtersBound !== '1') {
+      input.dataset.filtersBound = '1';
+      input.addEventListener('input', applyVisibility);
+    }
 
-    toggleBtn?.addEventListener('click', () => {
-      expanded = !expanded;
-      applyVisibility();
-    });
+    if (toggleBtn && toggleBtn.dataset.filtersBound !== '1') {
+      toggleBtn.dataset.filtersBound = '1';
+      toggleBtn.addEventListener('click', () => {
+        expanded = !expanded;
+        applyVisibility();
+      });
+    }
 
     applyVisibility();
   };
 
-  root.querySelectorAll('[data-filter-list]').forEach((list) => {
+  catalogRoot.querySelectorAll('[data-filter-list]').forEach((list) => {
     const groupId = list.getAttribute('data-filter-list');
-    if (!groupId) {
+    if (!groupId || list.dataset.filtersBound === '1') {
       return;
     }
-    const input = root.querySelector(`[data-filter-search="${groupId}"]`);
-    const toggleBtn = root.querySelector(`[data-filter-toggle="${groupId}"]`);
+    list.dataset.filtersBound = '1';
+    const input = catalogRoot.querySelector(`[data-filter-search="${groupId}"]`);
+    const toggleBtn = catalogRoot.querySelector(`[data-filter-toggle="${groupId}"]`);
     setupFilterList(list, input, toggleBtn);
   });
-})();
+};
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => window.portalStoreFiltersInit());
+} else {
+  window.portalStoreFiltersInit();
+}

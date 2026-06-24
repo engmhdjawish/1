@@ -89,7 +89,14 @@ $specs = array_filter([
   <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $cartNoticeOk ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700' ?>"><?= h($cartNoticeMessage) ?></p>
 <?php endif; ?>
 
-<article class="store-product-detail">
+<article
+  class="store-product-detail"
+  data-analytics-product="1"
+  data-product-guid="<?= h($guid) ?>"
+  data-product-code="<?= h($materialCode) ?>"
+  data-product-name="<?= h($productName) ?>"
+  data-analytics-label="<?= h('عرض صنف: ' . $productName . ($materialCode !== '' ? ' (' . $materialCode . ')' : '')) ?>"
+>
   <div class="store-product-detail__layout">
   <?php if ($showImages): ?>
     <div class="store-product-detail__gallery">
@@ -194,7 +201,7 @@ $specs = array_filter([
       <?= h($backLabel) ?>
     </a>
     <?php if (!CustomerSession::check()): ?>
-      <p class="text-xs text-gray-500">لديك حساب؟ <a href="/login.php?type=customer" class="text-primary font-bold">سجّل دخولك</a> لمتابعة طلباتك.</p>
+      <p class="text-xs text-gray-500">لديك حساب؟ <a href="<?= h(portal_login_url('customer')) ?>" class="text-primary font-bold">سجّل دخولك</a> لمتابعة طلباتك.</p>
     <?php endif; ?>
   </div>
   </div>

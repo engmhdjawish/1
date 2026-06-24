@@ -6,8 +6,9 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
 use Portal\Services\OrderService;
+use Portal\Support\DashboardNavigation;
 
-WebSession::requireAnyPermission(['accounting.sync.view', 'orders.view']);
+WebSession::requirePermission('accounting.sync.view');
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 $filters = ['sync' => trim((string) ($_GET['sync'] ?? 'pending')), 'limit' => 100];
@@ -17,6 +18,9 @@ if ($filters['sync'] === '') {
 $orders = OrderService::list($filters);
 $user = WebSession::user();
 $currentRoute = '/dashboard/accounting-sync.php';
+if (!DashboardNavigation::canAccessAccountingArea($user)) {
+    $dashboardNavArea = DashboardNavigation::AREA_OPERATIONS;
+}
 
 $syncLabels = [
     'pending' => 'بانتظار المزامنة',

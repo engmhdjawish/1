@@ -15,6 +15,22 @@ $catalog = StoreCatalogService::catalogFromRequest($_GET);
 $displayOptions = StoreCatalogService::displayOptions();
 $isCustomer = CustomerSession::check();
 
+$isStoreAjaxNav = strtolower(trim((string) ($_SERVER['HTTP_X_STORE_NAV'] ?? ''))) === '1';
+if ($isStoreAjaxNav) {
+    header('Content-Type: text/html; charset=utf-8');
+    ob_start();
+    require dirname(__DIR__) . '/views/store-catalog.php';
+    $html = ob_get_clean();
+    if (preg_match('/<!-- store-catalog-fragment:start -->(.*)<!-- store-catalog-fragment:end -->/s', $html, $matches)) {
+        echo $matches[1];
+    }
+    exit;
+}
+
+$extraHead = '<link href="' . h(portal_asset_url('/css/store-filters.css')) . '" rel="stylesheet">';
+$enableQuickView = true;
+$enableStoreCartJs = true;
+
 ob_start();
 require dirname(__DIR__) . '/views/store-catalog.php';
 $content = ob_get_clean();
