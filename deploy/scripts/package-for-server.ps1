@@ -36,13 +36,14 @@ if (-not $OutputRoot) {
 $portalDest = Join-Path $OutputRoot 'JawishPortal'
 $docsDest = Join-Path $OutputRoot 'docs'
 $toolsDest = Join-Path $OutputRoot 'server-tools'
+$libDest = Join-Path $OutputRoot 'lib'
 
 Write-Step "Packaging for server -> $OutputRoot"
 
 if (Test-Path $OutputRoot) {
     Remove-Item $OutputRoot -Recurse -Force
 }
-New-Item -ItemType Directory -Path $portalDest, $docsDest, $toolsDest -Force | Out-Null
+New-Item -ItemType Directory -Path $portalDest, $docsDest, $toolsDest, $libDest -Force | Out-Null
 
 $portalSource = $vars['PORTAL_SOURCE_DIR']
 if (-not $portalSource) { $portalSource = Join-Path $RepoRoot 'portal' }
@@ -82,6 +83,7 @@ foreach ($name in $toolFiles) {
     Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $toolsDest $name) -Force
 }
 Copy-Item (Join-Path $DeployRoot 'lib\common.ps1') (Join-Path $toolsDest 'common.ps1') -Force
+Copy-Item (Join-Path $DeployRoot 'lib\common.ps1') (Join-Path $libDest 'common.ps1') -Force
 
 $apiUrl = [string]$vars['API_URL']
 $portalAppUrl = [string]$vars['PORTAL_APP_URL']

@@ -16,7 +16,15 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-. "$PSScriptRoot\..\lib\common.ps1"
+$commonPath = @(
+    (Join-Path $PSScriptRoot 'common.ps1'),
+    (Join-Path $PSScriptRoot '..\lib\common.ps1')
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $commonPath) {
+    Write-Host '[FAIL] common.ps1 not found beside server-tools or in ..\lib\' -ForegroundColor Red
+    exit 1
+}
+. $commonPath
 
 if (-not $DataDir) {
     $DataDir = Join-Path $PgRoot 'data'
