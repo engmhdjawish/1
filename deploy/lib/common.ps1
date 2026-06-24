@@ -44,7 +44,7 @@ function Get-ComposerInvocation {
 }
 
 function Install-ComposerPhar {
-  param([string]$TargetPath = (Join-Path $script:DeployRoot 'composer.phar'))
+    param([string]$TargetPath = (Join-Path $script:DeployRoot 'composer.phar'))
 
     if (Test-Path $TargetPath) {
         return $TargetPath
@@ -58,15 +58,17 @@ function Install-ComposerPhar {
         if (-not (Test-Path $installDir)) {
             New-Item -ItemType Directory -Path $installDir -Force | Out-Null
         }
-        & php $installer --install-dir=$installDir --filename=$(Split-Path -Leaf $TargetPath)
+        $filename = Split-Path -Leaf $TargetPath
+        & php $installer --install-dir=$installDir --filename=$filename 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path $TargetPath)) {
             throw 'Failed to download composer.phar'
         }
         Write-Ok "composer.phar ready at $TargetPath"
-        return $TargetPath
     } finally {
         Remove-Item $installer -Force -ErrorAction SilentlyContinue
     }
+
+    return $TargetPath
 }
 
 function Invoke-ComposerInstall {
@@ -74,15 +76,20 @@ function Invoke-ComposerInstall {
 
     $invocation = Get-ComposerInvocation
     if (-not $invocation) {
-        $phar = Install-ComposerPhar
-        $invocation = @{ Executable = 'php'; Args = @($phar) }
+        $pharPath = Install-ComposerPhar
+        $invocation = @{ Executable = 'php'; Args = @([string]$pharPath) }
     }
 
     Push-Location $WorkingDirectory
     try {
-        $args = @($invocation.Args + @('install', '--no-dev', '--optimize-autoloader', '--no-interaction'))
-        Write-Step "Running: $($invocation.Executable) $($args -join ' ')"
-        & $invocation.Executable @args
+        $composerArgs = @($invocation.Args + @('install', '--no-dev', '--optimize-autoloader', '--no-interaction'))
+        $pharForLog = ($invocation.Args | Select-Object -First 1)
+        if ($invocation.Executable -eq 'php' -and $pharForLog) {
+            Write-Step "Running: php `"$pharForLog`" install --no-dev ..."
+        } else {
+            Write-Step "Running: $($invocation.Executable) install --no-dev ..."
+        }
+        & $invocation.Executable @composerArgs
         if ($LASTEXITCODE -ne 0) {
             throw "composer install failed (exit $LASTEXITCODE)"
         }
