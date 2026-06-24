@@ -7,6 +7,8 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Auth\WebSession;
 use Portal\Services\WebUserService;
 use Portal\Support\DashboardHttp;
+use Portal\Support\StaffPermissions;
+use Portal\Support\StaffRoleProvisioner;
 
 WebSession::requirePermission('web_users.manage');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -106,6 +108,8 @@ $filters = [
     'active' => trim((string) ($_GET['active'] ?? '')),
 ];
 
+StaffRoleProvisioner::ensureTaskRoles();
+
 $roles = WebUserService::listRoles();
 $permissions = WebUserService::listPermissions();
 $users = WebUserService::listUsers($filters['q'], $filters['role'], $filters['active']);
@@ -121,6 +125,38 @@ $editRoleId = trim((string) ($_GET['edit_role'] ?? ''));
 $editRole = $editRoleId !== '' ? WebUserService::getRoleById($editRoleId) : null;
 if ($editRole === null) {
     $editRoleId = '';
+}
+
+$taskRoles = StaffPermissions::taskRoles();
+$permissionLabelsByCode = [];
+foreach (StaffPermissions::catalog() as $catalogItem) {
+    $permissionLabelsByCode[(string) ($catalogItem['code'] ?? '')] = (string) ($catalogItem['name_ar'] ?? '');
+}
+$roleIdsByCode = [];
+$rolesByCode = [];
+foreach ($roles as $role) {
+    $code = (string) ($role['code'] ?? '');
+    if ($code !== '') {
+        $roleIdsByCode[$code] = (string) ($role['id'] ?? '');
+        $rolesByCode[$code] = $role;
+    }
+}
+
+$taskRoleCodes = [];
+foreach ($taskRoles as $task) {
+    $code = (string) ($task['role_code'] ?? '');
+    if ($code !== '') {
+        $taskRoleCodes[$code] = true;
+    }
+}
+
+$extraRoles = [];
+foreach ($roles as $role) {
+    $code = (string) ($role['code'] ?? '');
+    if ($code === '' || isset($taskRoleCodes[$code])) {
+        continue;
+    }
+    $extraRoles[] = $role;
 }
 
 $permissionsByCategory = [];

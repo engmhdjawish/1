@@ -22,7 +22,7 @@ declare(strict_types=1);
     <button type="submit" class="w-full bg-primary text-white rounded-lg py-2.5 font-semibold">إرسال الطلب</button>
   </form>
   <p class="text-sm text-gray-600 mt-5 text-center">
-    لديك حساب مفعّل؟ <a href="/login.php?type=customer" class="text-primary font-bold hover:underline">تسجيل الدخول</a>
+    لديك حساب مفعّل؟ <a href="<?= h(portal_login_url('customer')) ?>" class="text-primary font-bold hover:underline">تسجيل الدخول</a>
   </p>
     </div>
   </section>

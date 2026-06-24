@@ -26,6 +26,7 @@ if (!$allowCart) {
 }
 
 $loggedInCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
+$isLoggedInCustomer = $loggedInCustomer !== null;
 $defaultGuestName = (string) ($loggedInCustomer['name_ar'] ?? '');
 $defaultGuestPhone = (string) ($loggedInCustomer['phone'] ?? '');
 $maxPackagesPerMaterial = StorePolicyService::maxPackagesPerMaterial();

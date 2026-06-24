@@ -1,0 +1,17 @@
+[Unit]
+Description=ExistingDb.Api (Jawish Amine API)
+After=network.target
+
+[Service]
+Type=notify
+WorkingDirectory={{API_PUBLISH_DIR}}
+ExecStart=/usr/bin/dotnet {{API_PUBLISH_DIR}}/ExistingDb.Api.dll
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+SyslogIdentifier=existingdb-api
+User=www-data
+EnvironmentFile={{API_PUBLISH_DIR}}/api.env
+
+[Install]
+WantedBy=multi-user.target

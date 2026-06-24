@@ -24,6 +24,8 @@ if (!isset($renderMediaPickerField)) {
           <span class="text-text-muted block mb-0.5"><?= h($label) ?></span>
           <?php if ($isLogoField): ?>
             <p class="text-[11px] text-text-muted mb-1.5">يفضّل PNG بخلفية شفافة. إن كان الشعار أبيض يُعرض على خلفية رمادية فاتحة ليكون أوضح.</p>
+          <?php elseif (in_array($defaultCategory, ['banner', 'ad'], true)): ?>
+            <p class="text-[11px] text-text-muted mb-1.5">يفضّل <strong>1920×820</strong> بكسل (نسبة 21:9). نفس المقاس يصلح للإعلانات وبانرات الأقسام.</p>
           <?php endif; ?>
           <input type="hidden" name="<?= h($inputName) ?>" id="<?= h($fieldId) ?>-input" value="<?= h($currentUrl) ?>">
           <div class="flex flex-wrap items-center gap-2">
