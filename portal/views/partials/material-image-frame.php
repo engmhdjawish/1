@@ -19,7 +19,7 @@ $frameImageSrc = $frameImageGuid !== '' ? material_image_api_url($frameImageGuid
 <div class="material-image-frame material-image-frame--<?= h($frameVariant) ?>">
   <div class="material-image-frame__photo">
     <?php if ($frameImageSrc !== ''): ?>
-      <img src="<?= h($frameImageSrc) ?>" alt="<?= h($frameImageAlt) ?>" loading="lazy">
+      <img src="<?= h($frameImageSrc) ?>" alt="<?= h($frameImageAlt) ?>" loading="lazy" decoding="async"<?= $frameVariant === 'card' || $frameVariant === 'strip' ? ' fetchpriority="low"' : '' ?>>
     <?php else: ?>
       <span class="material-symbols-outlined material-image-frame__placeholder" aria-hidden="true">inventory_2</span>
     <?php endif; ?>
