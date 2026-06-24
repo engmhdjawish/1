@@ -60,7 +60,7 @@ try {
 
 $appcmd = Join-Path $env:windir 'system32\inetsrv\appcmd.exe'
 if (-not (Test-Path $appcmd)) {
-    Write-Fail 'appcmd.exe not found — is IIS installed?'
+    Write-Fail 'appcmd.exe not found - is IIS installed?'
     exit 1
 }
 
@@ -88,7 +88,7 @@ if (-not $SiteName -and $SitePort -gt 0) {
 }
 if (-not $SiteName) {
     $SiteName = 'Default Web Site'
-    Write-Warn "Site name not specified — using: $SiteName"
+    Write-Warn "Site name not specified - using: $SiteName"
 }
 
 Write-Step "Adding PHP handler to site: $SiteName"
