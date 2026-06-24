@@ -66,7 +66,10 @@ php scripts/run-migrations.php
 
 ## النشر للإنتاج
 
-راجع **[deploy/README.md](../deploy/README.md)** — معالج تفاعلي:
+راجع **[deploy/README.md](../deploy/README.md)** — معالج تفاعلي.
+
+**نفس سيرفر الأمين + IIS (بدون PostgreSQL جاهز):**  
+راجع **[deploy/WINDOWS-IIS-LOCAL.md](../deploy/WINDOWS-IIS-LOCAL.md)** — نسخ PostgreSQL من جهاز آخر، IIS، وترتيب النشر.
 
 ```powershell
 .\deploy\wizard.ps1
