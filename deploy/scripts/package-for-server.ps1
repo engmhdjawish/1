@@ -90,57 +90,87 @@ $portalAppUrl = [string]$vars['PORTAL_APP_URL']
 
 $steps = @'
 ========================================
-  Jawish Portal — run ON THE SERVER
+  Jawish Portal — نشر من الصفر (السيرفر)
 ========================================
 
-Prerequisites on server (copy via USB if blocked):
-  - postgresql-16.*-windows-x64-binaries.zip  -> extract to D:\PostgreSQL
-  - PHP 8.2+ with FastCGI for IIS (if not installed)
-  - IIS URL Rewrite module (optional but recommended)
+الوضع المتوقع:
+  - API شغّال على المنفذ 5000 (لا تعيد نشره)
+  - PostgreSQL في C:\pgsql — المسؤول: admin
+  - PHP في C:\php — IIS على المنفذ 90
+  - الموقع في D:\JawishPortal
 
-1) Copy this entire folder to the server, e.g. C:\JawishDeploy\
+--- جهاز التطوير (مرة واحدة قبل النسخ) ---
+  cd C:\Users\HP\1
+  notepad deploy\deploy.env
+  .\deploy\scripts\package-for-server.ps1
+  انسخ deploy\output\server-package إلى السيرفر كـ C:\JawishDeploy\
 
-2) PostgreSQL (first time only):
-   cd C:\JawishDeploy\server-tools
-   .\setup-portable-postgres.ps1 -PgRoot C:\pgsql -DbPassword YOUR_DB_PASSWORD
-   (if superuser is not postgres: -SuperUser admin -SuperUserPassword YOUR_ADMIN_PASSWORD)
+--- السيرفر: الخطوة 0 — تنظيف (إعادة نشر فقط) ---
+  PowerShell كمسؤول:
+    iisreset /stop
+    Remove-Item D:\JawishPortal -Recurse -Force -ErrorAction SilentlyContinue
+  IIS Manager: احذف موقع JawishPortal إن وُجد
+  (اختياري) لإعادة قاعدة البوابة من الصفر:
+    C:\pgsql\bin\psql.exe -h 127.0.0.1 -U admin -d postgres -c "DROP DATABASE IF EXISTS portal_db;"
+    C:\pgsql\bin\psql.exe -h 127.0.0.1 -U admin -d postgres -c "DROP USER IF EXISTS portal;"
 
-3) Install site files:
-   xcopy /E /I /Y C:\JawishDeploy\JawishPortal D:\JawishPortal
-   xcopy /E /I /Y C:\JawishDeploy\docs D:\JawishPortal\docs
+--- السيرفر: الخطوة 1 — PHP ---
+  PowerShell كمسؤول:
+    dism /online /enable-feature /featurename IIS-CGI /all
+  تأكد: C:\php\php.exe و C:\php\php-cgi.exe و C:\php\php.ini
 
-4) Database + admin (on server, after PostgreSQL is running):
-   cd D:\JawishPortal
-   php scripts\setup-database.php
-   php scripts\run-migrations.php
-   php scripts\create-admin.php admin YOUR_PASSWORD مدير_النظام
-   php scripts\check-environment.php
+--- السيرفر: الخطوة 2 — نسخ الملفات ---
+  PowerShell عادي:
+    xcopy /E /I /Y C:\JawishDeploy\JawishPortal D:\JawishPortal
+    xcopy /E /I /Y C:\JawishDeploy\docs D:\JawishPortal\docs
+    New-Item C:\JawishDeploy\lib -Force -ErrorAction SilentlyContinue
+    Copy-Item C:\JawishDeploy\server-tools\common.ps1 C:\JawishDeploy\lib\common.ps1 -Force
 
-   Or run: C:\JawishDeploy\server-tools\server-setup-on-host.ps1
+--- السيرفر: الخطوة 3 — قاعدة البيانات (admin) ---
+  PowerShell عادي:
+    $env:PGPASSWORD = "ADMIN_PASSWORD"
+    C:\pgsql\bin\psql.exe -h 127.0.0.1 -U admin -d postgres -c "CREATE USER portal WITH PASSWORD 'PORTAL_DB_PASSWORD' CREATEDB;"
+    C:\pgsql\bin\psql.exe -h 127.0.0.1 -U admin -d postgres -c "CREATE DATABASE portal_db OWNER portal ENCODING 'UTF8';"
+    $env:PGPASSWORD = "PORTAL_DB_PASSWORD"
+    C:\pgsql\bin\psql.exe -h 127.0.0.1 -U portal -d portal_db -c "SELECT 1"
 
-5) IIS:
-   - Site physical path: D:\JawishPortal\public
-   - Binding: http port 8080 (or your IP)
-   - Run AS ADMINISTRATOR (fixes 404.3 on .php):
-     cd C:\JawishDeploy\server-tools
-     .\install-iis-php-handler.ps1 -SitePort 90
-     (or -PhpCgiPath C:\php\php-cgi.exe -SiteName YourSiteName)
-   - Enable pdo_pgsql for IIS (fixes "could not find driver"):
-     .\fix-windows-php.ps1 -ApplyFix -PgBinDir D:\PgSQL\bin
-     iisreset
-   - Write permission on D:\JawishPortal\storage for AppPool identity
+  أو بالسكربت (نسخة محدّثة):
+    cd C:\JawishDeploy\server-tools
+    .\setup-portable-postgres.ps1 -PgRoot C:\pgsql -SuperUser admin -SuperUserPassword "ADMIN_PASSWORD" -DbPassword "PORTAL_DB_PASSWORD"
 
-6) Test:
-   - API:  http://127.0.0.1:5000/api/health
-   - Site: http://YOUR_SERVER_IP:8080
-   - Admin: /dashboard/users.php
+--- السيرفر: الخطوة 4 — جداول + مدير ---
+  PowerShell عادي:
+    cd D:\JawishPortal
+    php scripts\setup-database.php
+    php scripts\run-migrations.php
+    php scripts\create-admin.php admin SITE_ADMIN_PASSWORD مدير_النظام
+    php scripts\check-environment.php
 
-Configured in .env (inside JawishPortal):
-  PORTAL_PUBLISH_DIR target on server: {0}
-  API_URL: {1}
-  PORTAL_APP_URL: {2}
+--- السيرفر: الخطوة 5 — PHP لـ IIS ---
+  PowerShell كمسؤول:
+    cd C:\JawishDeploy\server-tools
+    .\fix-windows-php.ps1 -ApplyFix -PgBinDir C:\pgsql\bin
+    .\install-iis-php-handler.ps1 -SitePort 90 -PhpCgiPath C:\php\php-cgi.exe -SiteName JawishPortal
+    icacls D:\JawishPortal\storage /grant "IIS AppPool\JawishPortal:(OI)(CI)M" /T
+    iisreset
 
-Full guide: deploy\WINDOWS-IIS-LOCAL.md (on dev PC repo)
+--- السيرفر: الخطوة 6 — IIS (إن لم يُنشأ الموقع) ---
+  IIS Manager (inetmgr):
+    Site name: JawishPortal
+    Physical path: D:\JawishPortal\public
+    Binding: http 192.168.1.106:90
+
+--- اختبار ---
+  API:  http://127.0.0.1:5000/api/health
+  Site: http://192.168.1.106:90
+  Login: /dashboard/  user: admin
+
+.env على السيرفر (D:\JawishPortal\.env):
+  PORTAL_PUBLISH_DIR: {0}
+  API: {1}
+  Site URL: {2}
+
+دليل كامل على جهاز التطوير: deploy\WINDOWS-IIS-LOCAL.md
 '@ -f $serverPublishDir, $apiUrl, $portalAppUrl
 
 $utf8Bom = New-Object System.Text.UTF8Encoding $true
