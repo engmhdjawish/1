@@ -27,7 +27,8 @@ final class WebSession
             if (\Portal\Support\DashboardHttp::wantsJson()) {
                 \Portal\Support\DashboardHttp::json(false, 'انتهت جلسة الدخول. سجّل الدخول مجدداً.', ['login' => true]);
             }
-            header('Location: /login.php?type=staff');
+            $returnTo = rawurlencode(\Portal\Support\PortalUrl::currentPathWithQuery());
+            header('Location: /login.php?type=staff&redirect=' . $returnTo);
             exit;
         }
     }

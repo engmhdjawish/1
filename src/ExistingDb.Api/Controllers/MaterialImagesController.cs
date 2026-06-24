@@ -996,9 +996,12 @@ public sealed class MaterialImagesController(
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        var images = imageGuids.Count == 0
-            ? []
-            : await mainDbContext.MaterialImages
+        if (imageGuids.Count == 0)
+        {
+            return NotFound(new { message = "No image files found for this bill.", billGuid });
+        }
+
+        var images = await mainDbContext.MaterialImages
                 .AsNoTracking()
                 .Where(image => imageGuids.Contains(image.Guid))
                 .OrderBy(image => image.Name)
@@ -1104,17 +1107,48 @@ public sealed class MaterialImagesController(
         Response.ContentType = "application/zip";
         Response.Headers.ContentDisposition = $"attachment; filename=\"{SanitizeFileName(archiveName)}.zip\"";
 
-        using var archive = new ZipArchive(Response.Body, ZipArchiveMode.Create, leaveOpen: true);
-        var usedEntryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in files)
+        var tempPath = Path.Combine(Path.GetTempPath(), $"matzip-{Guid.NewGuid():N}.zip");
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            await using (var zipFileStream = new FileStream(
+                tempPath,
+                FileMode.CreateNew,
+                FileAccess.ReadWrite,
+                FileShare.None,
+                bufferSize: 81920,
+                options: FileOptions.Asynchronous))
+            {
+                using (var archive = new ZipArchive(zipFileStream, ZipArchiveMode.Create, leaveOpen: true))
+                {
+                    var usedEntryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var path in files)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
 
-            var entryName = CreateUniqueEntryName(Path.GetFileName(path), usedEntryNames);
-            var entry = archive.CreateEntry(entryName, CompressionLevel.Fastest);
-            await using var archiveStream = entry.Open();
-            await using var fileStream = System.IO.File.OpenRead(path);
-            await fileStream.CopyToAsync(archiveStream, cancellationToken);
+                        var entryName = CreateUniqueEntryName(Path.GetFileName(path), usedEntryNames);
+                        var entry = archive.CreateEntry(entryName, CompressionLevel.Fastest);
+                        await using var archiveStream = entry.Open();
+                        await using var fileStream = new FileStream(
+                            path,
+                            FileMode.Open,
+                            FileAccess.Read,
+                            FileShare.Read,
+                            bufferSize: 81920,
+                            options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+                        await fileStream.CopyToAsync(archiveStream, cancellationToken);
+                    }
+                }
+
+                zipFileStream.Position = 0;
+                await zipFileStream.CopyToAsync(Response.Body, cancellationToken);
+            }
+        }
+        finally
+        {
+            if (System.IO.File.Exists(tempPath))
+            {
+                System.IO.File.Delete(tempPath);
+            }
         }
 
         return new EmptyResult();

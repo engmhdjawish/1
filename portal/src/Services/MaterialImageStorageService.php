@@ -1296,16 +1296,20 @@ final class MaterialImageStorageService
         return null;
     }
 
-    public static function resolvePathForGuid(string $imageGuid, bool $thumb = false): ?string
+    public static function resolvePathForGuid(string $imageGuid, bool $thumb = false, bool $localOnly = false): ?string
     {
         $imageGuid = trim($imageGuid);
         if ($imageGuid === '') {
             return null;
         }
 
-        $fromQueue = MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, $thumb);
+        $fromQueue = MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, $thumb, !$localOnly);
         if ($fromQueue !== null) {
             return $fromQueue;
+        }
+
+        if ($localOnly) {
+            return null;
         }
 
         foreach (self::fileNamesFromAmineApi($imageGuid) as $fileName) {

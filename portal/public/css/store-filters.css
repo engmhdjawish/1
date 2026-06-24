@@ -1,3 +1,7 @@
+:root {
+  --site-header-sticky-offset: 5.5rem;
+}
+
 .store-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -7,7 +11,7 @@
 @media (min-width: 1024px) {
   .store-layout.has-sidebar {
     grid-template-columns: 280px minmax(0, 1fr);
-    align-items: start;
+    align-items: stretch;
   }
 }
 
@@ -119,16 +123,25 @@
   .store-filters-backdrop {
     position: static;
     inset: auto;
+    width: 280px;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
     background: transparent;
     opacity: 1;
     pointer-events: auto;
+    z-index: auto;
   }
 
   .store-filters-sidebar {
     position: sticky;
-    top: 5.5rem;
-    max-height: calc(100vh - 6.5rem);
+    top: calc(var(--site-header-sticky-offset, 5.5rem) + 0.5rem);
+    z-index: 15;
+    width: 100%;
+    max-height: calc(100vh - var(--site-header-sticky-offset, 5.5rem) - 1rem);
     overflow: auto;
+    overscroll-behavior: contain;
+    flex-shrink: 0;
   }
 
   .store-filters-close-btn,

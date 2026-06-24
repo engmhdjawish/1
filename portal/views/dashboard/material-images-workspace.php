@@ -13,7 +13,7 @@ declare(strict_types=1);
 /** @var string|null $flash */
 /** @var string $flashType */
 
-$workspaceTab = in_array(($workspaceTab ?? 'link'), ['link', 'upload'], true) ? $workspaceTab : 'link';
+$workspaceTab = in_array(($workspaceTab ?? 'link'), ['link', 'upload', 'download'], true) ? $workspaceTab : 'link';
 $paths = is_array($paths ?? null) ? $paths : ['images_dir' => '', 'thumbnails_dir' => ''];
 $stats = is_array($stats ?? null) ? $stats : ['local_count' => 0, 'thumbnail_count' => 0];
 $syncStats = is_array($syncStats ?? null) ? $syncStats : ['pending' => 0, 'syncing' => 0, 'synced' => 0, 'failed' => 0, 'total' => 0];
@@ -62,6 +62,13 @@ $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'messag
       <span class="material-symbols-outlined text-lg">cloud_upload</span>
       رفع ومزامنة
     </a>
+    <a
+      href="/dashboard/material-images.php?tab=download"
+      class="h-10 px-4 inline-flex items-center gap-2 rounded-lg text-sm font-bold transition <?= $workspaceTab === 'download' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:bg-surface-low' ?>"
+    >
+      <span class="material-symbols-outlined text-lg">folder_zip</span>
+      تحميل ZIP
+    </a>
   </nav>
 </section>
 
@@ -74,8 +81,12 @@ $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'messag
   <div id="workspace-panel-link">
     <?php require __DIR__ . '/partials/material-image-link-panel.php'; ?>
   </div>
-<?php else: ?>
+<?php elseif ($workspaceTab === 'upload'): ?>
   <div id="workspace-panel-upload">
     <?php require __DIR__ . '/partials/material-image-upload-panel.php'; ?>
+  </div>
+<?php else: ?>
+  <div id="workspace-panel-download">
+    <?php require __DIR__ . '/partials/material-image-download-panel.php'; ?>
   </div>
 <?php endif; ?>
