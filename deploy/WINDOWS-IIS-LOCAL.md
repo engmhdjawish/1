@@ -12,6 +12,25 @@
 
 ---
 
+## المشروع على جهازك فقط (لا Git على السيرفر)
+
+| أين | ماذا |
+|-----|------|
+| **جهازك** | `package-for-server.ps1` → مجلد `deploy\output\server-package` → فلاشة |
+| **السيرفر** | PostgreSQL + نسخ المجلد + `server-setup-on-host.ps1` + IIS |
+
+```powershell
+# على جهازك:
+cd C:\Users\HP\1
+notepad deploy\deploy.env
+.\deploy\scripts\package-for-server.ps1
+# انسخ deploy\output\server-package إلى السيرفر
+```
+
+على السيرفر اتبع `SERVER-STEPS.txt` داخل المجلد المنقول.
+
+---
+
 ## 1) الحصول على PostgreSQL رغم الحجب (اختر طريقة واحدة)
 
 ### أ) نسخ من جهاز آخر (الأنسب لسوريا)

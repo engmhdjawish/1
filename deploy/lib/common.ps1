@@ -211,6 +211,10 @@ function Write-PortalEnv {
     )
     $envPath = Join-Path $Destination '.env'
     Write-Step "Creating $envPath"
+    $docsPath = $Env.PORTAL_REPO_DOCS_PATH
+    if (-not $docsPath) {
+        $docsPath = Join-Path $Destination 'docs'
+    }
     $content = @"
 PORTAL_DB_HOST=$($Env.PORTAL_DB_HOST)
 PORTAL_DB_PORT=$($Env.PORTAL_DB_PORT)
@@ -225,7 +229,7 @@ AMINE_API_PASSWORD=$($Env.AMINE_API_PASSWORD)
 PORTAL_APP_URL=$($Env.PORTAL_APP_URL)
 PORTAL_SESSION_NAME=$($Env.PORTAL_SESSION_NAME)
 PORTAL_STORAGE_PATH=$($Env.PORTAL_STORAGE_PATH)
-PORTAL_REPO_DOCS_PATH=$($Env.PORTAL_REPO_DOCS_PATH)
+PORTAL_REPO_DOCS_PATH=$docsPath
 PORTAL_DETAILS_FONT_PATH=$($Env.PORTAL_DETAILS_FONT_PATH)
 "@
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
