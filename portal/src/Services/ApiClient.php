@@ -70,8 +70,6 @@ final class ApiClient
         $response = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        curl_close($ch);
-
         if ($response === false) {
             return ['ok' => false, 'status' => 0, 'error' => $error ?: 'فشل الاتصال بالـ API'];
         }
@@ -117,8 +115,6 @@ final class ApiClient
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $contentType = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
         $error = curl_error($ch);
-        curl_close($ch);
-
         if ($body === false) {
             return ['ok' => false, 'status' => 0, 'error' => $error ?: 'فشل الاتصال بالـ API'];
         }
@@ -185,7 +181,6 @@ final class ApiClient
         $ok = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        curl_close($ch);
         fclose($handle);
 
         if ($ok === false) {
@@ -270,8 +265,6 @@ final class ApiClient
         $ok = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        curl_close($ch);
-
         if ($ok === false) {
             return ['ok' => false, 'status' => 0, 'error' => $error ?: 'فشل الاتصال بالـ API'];
         }
@@ -319,8 +312,6 @@ final class ApiClient
         $response = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        curl_close($ch);
-
         if ($response === false) {
             return ['ok' => false, 'status' => 0, 'error' => $error ?: 'فشل الاتصال بالـ API'];
         }
@@ -370,8 +361,6 @@ final class ApiClient
         ]);
         $response = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
         if ($status !== 200 || $response === false) {
             throw new \RuntimeException('فشل تسجيل دخول حساب خدمة API. تحقق من AMINE_API_* في .env');
         }
@@ -395,7 +384,6 @@ final class ApiClient
         ]);
         $response = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
         if ($status !== 200 || $response === false) {
             return null;
         }
