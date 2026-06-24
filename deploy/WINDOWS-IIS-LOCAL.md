@@ -223,6 +223,7 @@ php scripts\check-environment.php
 
 | المشكلة | الحل |
 |---------|------|
+| `password authentication failed for user "admin"` بعد `migrate` | المعالج كان يستبدل `.env` — حدّث السكريبت ثم أعد `PORTAL_DB_*` في `D:\JawishPortal\.env` (غالباً `PORTAL_DB_USER=portal`) وأعد `php scripts\run-migrations.php` |
 | `could not connect to server` | PostgreSQL غير شغّال — `Start-Service PortalPostgreSQL` |
 | `could not find driver` / `pdo_pgsql` | فعّل الامتداد في `php.ini` + انسخ `libpq.dll` من `D:\PostgreSQL\bin` بجانب `php.exe` — `.\fix-windows-php.ps1 -ApplyFix` ثم `iisreset` |
 | الموقع لا يتصل بالـ API | `AMINE_API_BASE_URL=http://127.0.0.1:5000` في `.env` |
