@@ -23,23 +23,95 @@
     return document.querySelector('[data-store-catalog-root]');
   }
 
-  function storeLoadingMarkup() {
-    return '<div class="store-results store-results--loading" aria-busy="true">'
-      + '<div class="store-catalog-loading">'
-      + '<div class="store-catalog-loading__spinner" role="status" aria-label="جاري التحميل"></div>'
-      + '<p class="store-catalog-loading__text">جاري تحميل المواد...</p>'
-      + '<div class="store-catalog-skeleton" aria-hidden="true">'
-      + Array.from({ length: 8 }, () => '<div class="store-catalog-skeleton__card"></div>').join('')
+  function skeletonCardHtml(includeFooter = false) {
+    const footer = includeFooter
+      ? '<div class="store-product-card__footer store-product-card__footer--skeleton">'
+        + '<div class="store-skeleton-block store-skeleton-block--footer"></div>'
+        + '</div>'
+      : '';
+
+    return '<article class="store-product-card store-product-card--skeleton" aria-hidden="true">'
+      + '<div class="store-product-card__media store-product-card__media--skeleton">'
+      + '<div class="store-skeleton-block store-skeleton-block--image"></div>'
       + '</div>'
+      + '<div class="store-product-card__body store-product-card__body--skeleton">'
+      + '<div class="store-skeleton-block store-skeleton-block--title"></div>'
+      + '<div class="store-skeleton-block store-skeleton-block--line"></div>'
+      + '<div class="store-skeleton-block store-skeleton-block--line store-skeleton-block--short"></div>'
+      + '<div class="store-skeleton-block store-skeleton-block--line store-skeleton-block--price"></div>'
       + '</div>'
-      + '</div>';
+      + footer
+      + '</article>';
+  }
+
+  function inferSkeletonCardCount(results) {
+    const grid = results.querySelector('.store-product-grid');
+    const currentCards = grid ? grid.querySelectorAll('.store-product-card:not(.store-product-card--skeleton)').length : 0;
+    if (currentCards > 0) {
+      return currentCards;
+    }
+
+    const meta = results.querySelector('.store-results-meta')?.textContent || '';
+    const rangeMatch = meta.match(/عرض\s+(\d+)\s*[–-]\s*(\d+)/u);
+    if (rangeMatch) {
+      const start = Number.parseInt(rangeMatch[1], 10);
+      const end = Number.parseInt(rangeMatch[2], 10);
+      if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+        return Math.max(1, end - start + 1);
+      }
+    }
+
+    const columns = window.matchMedia('(min-width: 1280px)').matches ? 4
+      : window.matchMedia('(min-width: 1024px)').matches ? 3
+        : window.matchMedia('(min-width: 640px)').matches ? 2
+          : 1;
+
+    return Math.max(columns * 3, 8);
   }
 
   function showCatalogLoading(root) {
     if (!root) return;
     root.setAttribute('aria-busy', 'true');
     root.classList.add('is-catalog-loading');
-    root.innerHTML = storeLoadingMarkup();
+
+    const results = root.querySelector('.store-results');
+    if (!results) return;
+
+    results.classList.add('is-loading');
+
+    const grid = results.querySelector('.store-product-grid');
+    const hadFooter = Boolean(grid?.querySelector('.store-product-card__footer'));
+    const cardCount = inferSkeletonCardCount(results);
+
+    results.querySelector('.store-empty-state')?.remove();
+
+    let targetGrid = grid;
+    if (!targetGrid) {
+      targetGrid = document.createElement('div');
+      targetGrid.className = 'store-product-grid';
+      const toolbar = results.querySelector('.store-results-toolbar');
+      if (toolbar?.nextElementSibling) {
+        results.insertBefore(targetGrid, toolbar.nextElementSibling);
+      } else {
+        results.appendChild(targetGrid);
+      }
+    }
+
+    targetGrid.classList.add('store-product-grid--loading');
+    targetGrid.setAttribute('aria-busy', 'true');
+    targetGrid.innerHTML = Array.from({ length: cardCount }, () => skeletonCardHtml(hadFooter)).join('');
+
+    const meta = results.querySelector('.store-results-meta');
+    if (meta) {
+      meta.textContent = 'جاري تحميل المواد...';
+      meta.classList.add('is-loading');
+    }
+
+    results.querySelectorAll('.store-pagination a, .store-pagination button').forEach((el) => {
+      el.setAttribute('aria-disabled', 'true');
+      el.classList.add('is-disabled');
+      el.tabIndex = -1;
+    });
   }
 
   function syncPreviewPaging(root) {
@@ -154,6 +226,8 @@
       currentRoot.replaceWith(newRoot);
       newRoot.classList.remove('is-catalog-loading');
       newRoot.removeAttribute('aria-busy');
+      newRoot.querySelector('.store-results')?.classList.remove('is-loading');
+      newRoot.querySelector('.store-results-meta')?.classList.remove('is-loading');
 
       if (doc.title) document.title = doc.title;
       if (push) history.pushState({ storeCatalogUrl: url }, '', url);
@@ -164,9 +238,18 @@
       if (currentRoot) {
         currentRoot.classList.remove('is-catalog-loading');
         currentRoot.removeAttribute('aria-busy');
-        currentRoot.innerHTML = '<div class="store-results"><div class="store-empty-state">'
-          + (error instanceof Error ? error.message : 'تعذر تحميل المتجر.')
-          + '</div></div>';
+        const results = currentRoot.querySelector('.store-results');
+        if (results) {
+          results.classList.remove('is-loading');
+          const grid = results.querySelector('.store-product-grid');
+          if (grid) {
+            grid.classList.remove('store-product-grid--loading');
+            grid.removeAttribute('aria-busy');
+            grid.innerHTML = '<div class="store-empty-state">'
+              + (error instanceof Error ? error.message : 'تعذر تحميل المتجر.')
+              + '</div>';
+          }
+        }
       }
     }
   }
