@@ -1283,6 +1283,88 @@ final class MaterialImageStorageService
             . ($thumb ? '&thumb=1' : '&thumb=0');
     }
 
+    /**
+     * Dashboard preview URLs from the site images folder only (/media/material.php).
+     *
+     * @return array{
+     *   preview_url: string,
+     *   preview_full_url: string,
+     *   stored_file_name: string,
+     *   has_local: bool,
+     *   local_path: string
+     * }
+     */
+    public static function resolveSitePreviewUrls(string $imageGuid, string $fileName): array
+    {
+        $empty = [
+            'preview_url' => '',
+            'preview_full_url' => '',
+            'stored_file_name' => '',
+            'has_local' => false,
+            'local_path' => '',
+        ];
+
+        $seen = [];
+        $candidates = [];
+        $addCandidate = static function (string $value) use (&$candidates, &$seen): void {
+            foreach (self::fileNameCandidates($value) as $candidate) {
+                if ($candidate === '' || isset($seen[$candidate])) {
+                    continue;
+                }
+                $seen[$candidate] = true;
+                $candidates[] = $candidate;
+            }
+        };
+
+        $addCandidate($fileName);
+
+        $imageGuid = strtolower(trim($imageGuid));
+        if ($imageGuid !== '') {
+            foreach (['.jpg', '.jpeg', '.png', '.webp'] as $extension) {
+                $addCandidate($imageGuid . $extension);
+            }
+
+            $queuePath = MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, false, false);
+            if ($queuePath !== null && is_file($queuePath)) {
+                $addCandidate(basename($queuePath));
+            }
+
+            $resolvedPath = self::resolvePathForGuid($imageGuid, false, true);
+            if ($resolvedPath === null) {
+                $resolvedPath = self::resolvePathForGuid($imageGuid, false, false);
+            }
+            if ($resolvedPath !== null && is_file($resolvedPath)) {
+                $addCandidate(basename($resolvedPath));
+            }
+
+            foreach (self::fileNamesFromAmineApi($imageGuid) as $candidate) {
+                $addCandidate($candidate);
+            }
+        }
+
+        foreach ($candidates as $candidate) {
+            $localPath = self::resolveLocalPath($candidate, false);
+            if ($localPath === null || !is_file($localPath)) {
+                continue;
+            }
+
+            $stored = self::lookupFileName($candidate);
+            if ($stored === '') {
+                $stored = basename($localPath);
+            }
+
+            return [
+                'preview_url' => self::publicUrl($stored, true),
+                'preview_full_url' => self::publicUrl($stored, false),
+                'stored_file_name' => $stored,
+                'has_local' => true,
+                'local_path' => $localPath,
+            ];
+        }
+
+        return $empty;
+    }
+
     public static function mimeForPath(string $path): string
     {
         return self::detectMime($path);
