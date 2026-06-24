@@ -133,11 +133,30 @@ foreach (StaffPermissions::catalog() as $catalogItem) {
     $permissionLabelsByCode[(string) ($catalogItem['code'] ?? '')] = (string) ($catalogItem['name_ar'] ?? '');
 }
 $roleIdsByCode = [];
+$rolesByCode = [];
 foreach ($roles as $role) {
     $code = (string) ($role['code'] ?? '');
     if ($code !== '') {
         $roleIdsByCode[$code] = (string) ($role['id'] ?? '');
+        $rolesByCode[$code] = $role;
     }
+}
+
+$taskRoleCodes = [];
+foreach ($taskRoles as $task) {
+    $code = (string) ($task['role_code'] ?? '');
+    if ($code !== '') {
+        $taskRoleCodes[$code] = true;
+    }
+}
+
+$extraRoles = [];
+foreach ($roles as $role) {
+    $code = (string) ($role['code'] ?? '');
+    if ($code === '' || isset($taskRoleCodes[$code])) {
+        continue;
+    }
+    $extraRoles[] = $role;
 }
 
 $permissionsByCategory = [];
