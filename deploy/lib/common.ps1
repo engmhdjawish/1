@@ -17,6 +17,95 @@ function Test-CommandExists([string]$Name) {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Get-PhpIniPath {
+    $ini = php --ini 2>$null | Select-String 'Loaded Configuration File' | ForEach-Object {
+        ($_ -split ':', 2)[1].Trim()
+    } | Select-Object -First 1
+    return $ini
+}
+
+function Get-ComposerInvocation {
+    if (Test-CommandExists 'composer') {
+        return @{ Executable = 'composer'; Args = @() }
+    }
+
+    $candidates = @(
+        (Join-Path $script:DeployRoot 'composer.phar'),
+        (Join-Path $script:RepoRoot 'composer.phar'),
+        (Join-Path $script:RepoRoot 'portal\composer.phar')
+    )
+    foreach ($path in $candidates) {
+        if (Test-Path $path) {
+            return @{ Executable = 'php'; Args = @($path) }
+        }
+    }
+
+    return $null
+}
+
+function Install-ComposerPhar {
+  param([string]$TargetPath = (Join-Path $script:DeployRoot 'composer.phar'))
+
+    if (Test-Path $TargetPath) {
+        return $TargetPath
+    }
+
+    Write-Step 'Downloading composer.phar'
+    $installer = Join-Path $env:TEMP ('composer-setup-' + [guid]::NewGuid().ToString() + '.php')
+    try {
+        Invoke-WebRequest -Uri 'https://getcomposer.org/installer' -OutFile $installer -UseBasicParsing
+        $installDir = Split-Path -Parent $TargetPath
+        if (-not (Test-Path $installDir)) {
+            New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+        }
+        & php $installer --install-dir=$installDir --filename=$(Split-Path -Leaf $TargetPath)
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $TargetPath)) {
+            throw 'Failed to download composer.phar'
+        }
+        Write-Ok "composer.phar ready at $TargetPath"
+        return $TargetPath
+    } finally {
+        Remove-Item $installer -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Invoke-ComposerInstall {
+    param([string]$WorkingDirectory)
+
+    $invocation = Get-ComposerInvocation
+    if (-not $invocation) {
+        $phar = Install-ComposerPhar
+        $invocation = @{ Executable = 'php'; Args = @($phar) }
+    }
+
+    Push-Location $WorkingDirectory
+    try {
+        $args = @($invocation.Args + @('install', '--no-dev', '--optimize-autoloader', '--no-interaction'))
+        Write-Step "Running: $($invocation.Executable) $($args -join ' ')"
+        & $invocation.Executable @args
+        if ($LASTEXITCODE -ne 0) {
+            throw "composer install failed (exit $LASTEXITCODE)"
+        }
+        Write-Ok 'Composer dependencies installed'
+    } finally {
+        Pop-Location
+    }
+}
+
+function Get-DefaultPortalPublishDir {
+    if ($env:OS -match 'Windows') {
+        return 'D:\JawishPortal'
+    }
+    return '/var/www/jawish-portal'
+}
+
+function Get-DefaultApiPublishDir {
+    if ($env:OS -match 'Windows') {
+        return 'D:\AmeenApi\existingdb-api'
+    }
+    return '/var/www/existingdb-api'
+}
+
 function Read-DeployEnv {
     param([string]$Path = (Join-Path $script:DeployRoot 'deploy.env'))
     if (-not (Test-Path $Path)) {

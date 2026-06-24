@@ -86,7 +86,7 @@ function Invoke-ConfigureWizard {
     }
 
     Write-Step 'API setup'
-    Save-DeployEnvValue 'API_PUBLISH_DIR' (Read-EnvValue 'API_PUBLISH_DIR' 'API publish folder' 'C:\publish\existingdb-api')
+    Save-DeployEnvValue 'API_PUBLISH_DIR' (Read-EnvValue 'API_PUBLISH_DIR' 'API publish folder' (Get-DefaultApiPublishDir))
     Save-DeployEnvValue 'API_PORT' (Read-EnvValue 'API_PORT' 'API port' '5000')
     Save-DeployEnvValue 'API_BIND_HOST' (Read-EnvValue 'API_BIND_HOST' 'API bind host' '0.0.0.0')
 
@@ -116,7 +116,7 @@ function Invoke-ConfigureWizard {
     }
 
     Write-Step 'Portal setup'
-    Save-DeployEnvValue 'PORTAL_PUBLISH_DIR' (Read-EnvValue 'PORTAL_PUBLISH_DIR' 'Portal publish folder' 'C:\publish\jawish-portal')
+    Save-DeployEnvValue 'PORTAL_PUBLISH_DIR' (Read-EnvValue 'PORTAL_PUBLISH_DIR' 'Portal publish folder' (Get-DefaultPortalPublishDir))
     Save-DeployEnvValue 'PORTAL_APP_URL' (Read-EnvValue 'PORTAL_APP_URL' 'Public site URL' 'http://127.0.0.1:8080')
     Save-DeployEnvValue 'PORTAL_DB_HOST' (Read-EnvValue 'PORTAL_DB_HOST' 'PostgreSQL host' '127.0.0.1')
     Save-DeployEnvValue 'PORTAL_DB_PORT' (Read-EnvValue 'PORTAL_DB_PORT' 'PostgreSQL port' '5432')
@@ -168,16 +168,25 @@ switch ($Action) {
             Invoke-ConfigureWizard
         }
         & "$PSScriptRoot\scripts\check-prerequisites.ps1"
+        if ($LASTEXITCODE -ne 0) { exit 1 }
         & "$PSScriptRoot\api\publish.ps1"
-        exit 0
+        exit $LASTEXITCODE
     }
     'portal' {
         if (-not (Test-Path (Join-Path $DeployRoot 'deploy.env'))) {
             Invoke-ConfigureWizard
         }
         & "$PSScriptRoot\scripts\check-prerequisites.ps1"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Fail 'Prerequisites missing - fix them before publishing the portal'
+            if ($env:OS -match 'Windows') {
+                Write-Host '  .\deploy\scripts\fix-windows-php.ps1' -ForegroundColor Yellow
+                Write-Host '  Edit deploy\deploy.env -> PORTAL_PUBLISH_DIR=D:\JawishPortal' -ForegroundColor Yellow
+            }
+            exit 1
+        }
         & "$PSScriptRoot\portal\publish.ps1" -DbSetup $DbSetup
-        exit 0
+        exit $LASTEXITCODE
     }
     'full' {
         Invoke-ConfigureWizard

@@ -218,6 +218,9 @@ SeedAdmin__Enabled=false
 
 | المشكلة | الحل |
 |---------|------|
+| `composer` not found | ثبّت [Composer-Setup.exe](https://getcomposer.org/Composer-Setup.exe) أو دع النشر يحمّل `composer.phar` تلقائياً |
+| Missing `mbstring` / `openssl` | `.\deploy\scripts\fix-windows-php.ps1` ثم فعّل الامتدادات في `php.ini` و`iisreset` |
+| نشر إلى `/var/www/...` على Windows | عدّل `deploy\deploy.env` → `PORTAL_PUBLISH_DIR=D:\JawishPortal` |
 | الموقع لا يتصل بالـ API | تحقق من `AMINE_API_BASE_URL` ووجود `portal-service` |
 | فشل ترحيل DB | تأكد من `psql` وصلاحيات المستخدم على PostgreSQL |
 | `openssl` / `gd` مفقود | فعّل الامتدادات في `php.ini` |

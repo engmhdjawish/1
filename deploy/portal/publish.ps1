@@ -22,7 +22,7 @@ Write-PortalEnv -Destination $publishDir -Env $vars
 
 Push-Location $publishDir
 try {
-    composer install --no-dev --optimize-autoloader --no-interaction
+    Invoke-ComposerInstall -WorkingDirectory $publishDir
 
     if ($DbSetup -eq 'fresh') {
         Write-Step 'Creating database (schema + seed)'

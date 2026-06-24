@@ -18,7 +18,22 @@ function Test-Tool {
 
 Test-Tool dotnet '.NET SDK' { dotnet --version }
 Test-Tool php 'PHP' { php -v | Select-Object -First 1 }
-Test-Tool composer 'Composer' { composer --version | Select-Object -First 1 }
+
+$composerInvocation = Get-ComposerInvocation
+if ($composerInvocation) {
+    if ($composerInvocation.Executable -eq 'composer') {
+        Write-Ok "Composer: $((composer --version) -split "`n" | Select-Object -First 1)"
+    } else {
+        Write-Ok "Composer: $($composerInvocation.Args[0])"
+    }
+} else {
+    Write-Warn 'Composer: not in PATH (deploy will download composer.phar automatically)'
+}
+
+$ini = Get-PhpIniPath
+if ($ini) {
+    Write-Host "  php.ini: $ini" -ForegroundColor DarkGray
+}
 
 if (Test-CommandExists psql) {
     Write-Ok "PostgreSQL client: $((psql --version) -split "`n" | Select-Object -First 1)"
@@ -34,6 +49,12 @@ if (Test-CommandExists psql) {
     } else {
         Write-Fail "Missing PHP extension: $ext"
         $missing = $true
+    }
+}
+
+if ($missing) {
+    if ($env:OS -match 'Windows') {
+        Write-Warn 'Run: .\deploy\scripts\fix-windows-php.ps1'
     }
 }
 
