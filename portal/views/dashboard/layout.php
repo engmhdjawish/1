@@ -313,6 +313,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   portal_render_media_picker_modal();
   require __DIR__ . '/../partials/store-image-lightbox.php';
   ?>
+  <script src="/assets/deferred-images.js" defer></script>
   <script src="/assets/store-image-zoom.js" defer></script>
   <script src="/assets/dashboard/dashboard.js" defer></script>
   <script src="/assets/dashboard/media-picker.js" defer></script>
