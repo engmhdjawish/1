@@ -316,6 +316,11 @@
     navAbort = new AbortController();
     const signal = navAbort.signal;
 
+    if (window.__materialImagesLinkAbort) {
+      window.__materialImagesLinkAbort.abort();
+      window.__materialImagesLinkAbort = null;
+    }
+
     if (typeof window.portalDeferredImages?.cancel === 'function') {
       window.portalDeferredImages.cancel(qs('[data-dashboard-main]'));
     }

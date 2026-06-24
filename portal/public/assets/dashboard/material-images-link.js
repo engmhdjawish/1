@@ -742,5 +742,11 @@ const API_URL = '/dashboard/material-images-api.php';
   }, { signal });
   setLinkFilter('unlinked');
   loadSources(1);
+
+  window.addEventListener('pageshow', (event) => {
+    if (!event.persisted || signal.aborted) return;
+    if (!panel.isConnected) return;
+    loadSources(page || 1);
+  }, { signal });
   };
 })();
