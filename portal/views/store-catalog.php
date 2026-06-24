@@ -368,7 +368,6 @@ if ($sectionContext !== null) {
 
 require __DIR__ . '/partials/store-filter-group.php';
 ?>
-<link href="/css/store-filters.css" rel="stylesheet">
 
 <?php if ($sectionContext !== null): ?>
   <section class="mb-4 rounded-2xl border border-primary/20 bg-red-50 px-4 py-3">
