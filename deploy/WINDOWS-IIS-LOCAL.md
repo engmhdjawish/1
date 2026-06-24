@@ -224,7 +224,7 @@ php scripts\check-environment.php
 | المشكلة | الحل |
 |---------|------|
 | `could not connect to server` | PostgreSQL غير شغّال — `Start-Service PortalPostgreSQL` |
-| `pdo_pgsql` مفقود | فعّل الامتداد + `libpq.dll` + `iisreset` |
+| `could not find driver` / `pdo_pgsql` | فعّل الامتداد في `php.ini` + انسخ `libpq.dll` من `D:\PostgreSQL\bin` بجانب `php.exe` — `.\fix-windows-php.ps1 -ApplyFix` ثم `iisreset` |
 | الموقع لا يتصل بالـ API | `AMINE_API_BASE_URL=http://127.0.0.1:5000` في `.env` |
 | 500.19 / 0x8007000d على IIS | ثبّت URL Rewrite **أو** استخدم `web.config` بدون rewrite (القالب الافتراضي الجديد) |
 | **404.3** على `index.php` (StaticFile / Handler StaticFile) | PHP غير مربوط بـ IIS — شغّل `install-iis-php-handler.ps1` كمسؤول ثم `iisreset`؛ تأكد من وجود `php-cgi.exe` |
