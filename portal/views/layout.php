@@ -13,6 +13,9 @@ use Portal\Support\StorePricePreference;
 /** @var string $content */
 /** @var array<string, string>|null $companyContext */
 /** @var string|null $companyLogoUrl */
+/** @var bool|null $enableQuickView */
+/** @var bool|null $enableStoreCartJs */
+/** @var bool|null $enableOnboarding */
 
 require_once __DIR__ . '/helpers.php';
 
@@ -31,11 +34,23 @@ $storePriceCurrency = StorePricePreference::current();
 $storeAllowCart = (bool) ($storeDisplay['allow_cart'] ?? false);
 $storeCartCount = $storeAllowCart ? StoreCartService::itemCount() : 0;
 
+$pagePath = portal_request_path();
+$isCatalogPage = portal_is_catalog_page($pagePath);
+$isLightPage = in_array($pagePath, ['/login.php', '/register.php', '/about.php'], true);
+
+$enableQuickView = (bool) ($enableQuickView ?? $isCatalogPage);
+$enableStoreCartJs = (bool) ($enableStoreCartJs ?? ($storeAllowCart && !$isLightPage));
+$enableOnboarding = (bool) ($enableOnboarding ?? !$isLightPage);
+
 $navLinks = [
     ['href' => '/index.php', 'label' => 'الرئيسية'],
     ['href' => '/store.php', 'label' => 'المتجر'],
     ['href' => '/about.php', 'label' => 'من نحن'],
 ];
+if ($customer) {
+    $navLinks[] = ['href' => '/my-orders.php', 'label' => 'طلباتي'];
+    $navLinks[] = ['href' => '/my-profile.php', 'label' => 'الملف الشخصي'];
+}
 ?>
 <!DOCTYPE html>
 <html class="light" lang="ar" dir="rtl">
@@ -43,15 +58,26 @@ $navLinks = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= h($title) ?> — <?= h($siteName) ?></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
+    <?php if ($pagePath === '/index.php'): ?>
+      <link rel="prefetch" href="/store.php" as="document">
+    <?php endif; ?>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&display=swap" rel="stylesheet">
-    <link href="/css/material-image-frame.css" rel="stylesheet">
-    <link href="/css/site-brand.css" rel="stylesheet">
-    <link href="/css/site-header.css" rel="stylesheet">
-    <link href="/css/site-footer.css" rel="stylesheet">
-    <link href="/css/store-ui.css" rel="stylesheet">
-    <?php if ($storeAllowCart): ?>
-      <link href="/css/store-cart.css" rel="stylesheet">
+    <link href="<?= h(portal_asset_url('/css/material-image-frame.css')) ?>" rel="stylesheet">
+    <link href="<?= h(portal_asset_url('/css/site-brand.css')) ?>" rel="stylesheet">
+    <link href="<?= h(portal_asset_url('/css/site-header.css')) ?>" rel="stylesheet">
+    <link href="<?= h(portal_asset_url('/css/site-footer.css')) ?>" rel="stylesheet">
+    <?php if (!$isLightPage): ?>
+      <link href="<?= h(portal_asset_url('/css/store-ui.css')) ?>" rel="stylesheet">
+    <?php endif; ?>
+    <?php if ($storeAllowCart && !$isLightPage): ?>
+      <link href="<?= h(portal_asset_url('/css/store-cart.css')) ?>" rel="stylesheet">
+    <?php endif; ?>
+    <?php if ($enableOnboarding): ?>
+      <link href="<?= h(portal_asset_url('/css/site-onboarding.css')) ?>" rel="stylesheet">
     <?php endif; ?>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -89,6 +115,13 @@ $navLinks = [
 
 <?php require __DIR__ . '/partials/site-footer.php'; ?>
 
+<?php if ($enableOnboarding): ?>
+  <?php
+    $siteOnboardingAutoStart = true;
+    require __DIR__ . '/partials/site-onboarding.php';
+  ?>
+<?php endif; ?>
+
 <script>
   (() => {
     const drawer = document.getElementById('publicNavDrawer');
@@ -104,6 +137,7 @@ $navLinks = [
       openBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
       document.body.style.overflow = open ? 'hidden' : '';
     };
+    window.PublicNav = { setOpen };
     openBtn.addEventListener('click', () => setOpen(true));
     closeBtn.addEventListener('click', () => setOpen(false));
     overlay.addEventListener('click', () => setOpen(false));
@@ -111,12 +145,18 @@ $navLinks = [
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape') setOpen(false); });
   })();
 </script>
-<?php require __DIR__ . '/partials/product-quick-view.php'; ?>
-<?php if ($storeShowPrice): ?>
-  <script src="/assets/store-pref.js" defer></script>
+<?php if ($enableQuickView): ?>
+  <?php require __DIR__ . '/partials/product-quick-view.php'; ?>
+  <script src="<?= h(portal_asset_url('/assets/product-quick-view.js')) ?>" defer></script>
 <?php endif; ?>
-<?php if ($storeAllowCart): ?>
-  <script src="/assets/store-cart.js" defer></script>
+<?php if ($storeShowPrice && !$isLightPage): ?>
+  <script src="<?= h(portal_asset_url('/assets/store-pref.js')) ?>" defer></script>
+<?php endif; ?>
+<?php if ($enableStoreCartJs): ?>
+  <script src="<?= h(portal_asset_url('/assets/store-cart.js')) ?>" defer></script>
+<?php endif; ?>
+<?php if ($enableOnboarding): ?>
+  <script src="<?= h(portal_asset_url('/assets/site-onboarding.js')) ?>" defer></script>
 <?php endif; ?>
 <?php if (!empty($extraFooter ?? '')): ?>
   <?= $extraFooter ?>

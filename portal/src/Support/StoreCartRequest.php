@@ -117,7 +117,7 @@ final class StoreCartRequest
             return [
                 'ok' => true,
                 'message' => 'تم إرسال الطلب بنجاح.',
-                'redirect' => '/account.php?tab=orders&order=' . rawurlencode((string) ($order['id'] ?? '')),
+                'redirect' => '/my-orders.php?order=' . rawurlencode((string) ($order['id'] ?? '')),
                 'order_number' => $orderNumber,
                 'tracking_url' => $quoteToken !== '' ? order_tracking_url($quoteToken) : '',
             ];

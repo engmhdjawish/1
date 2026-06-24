@@ -11,6 +11,42 @@ function h(?string $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+function portal_request_path(): string
+{
+    return \Portal\Support\PortalUrl::requestPath();
+}
+
+function portal_safe_redirect_path(?string $path): ?string
+{
+    return \Portal\Support\PortalUrl::safeRedirectPath($path);
+}
+
+function portal_login_url(string $type = 'customer', ?string $redirect = null): string
+{
+    return \Portal\Support\PortalUrl::loginUrl($type, $redirect);
+}
+
+function portal_login_redirect_target(string $type, ?string $rawRedirect = null): string
+{
+    return \Portal\Support\PortalUrl::loginRedirectTarget($type, $rawRedirect);
+}
+
+function portal_asset_url(string $webPath): string
+{
+    $webPath = '/' . ltrim($webPath, '/');
+    $file = dirname(__DIR__) . '/public' . $webPath;
+    if (is_file($file)) {
+        return $webPath . '?v=' . (string) filemtime($file);
+    }
+
+    return $webPath;
+}
+
+function portal_is_catalog_page(string $path): bool
+{
+    return in_array($path, ['/index.php', '/store.php', '/product.php', '/share.php'], true);
+}
+
 function web_can(string $permission): bool
 {
     return WebSession::hasPermission($permission);

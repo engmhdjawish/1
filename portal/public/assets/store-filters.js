@@ -1,12 +1,30 @@
 (() => {
+  const syncHeaderStickyOffset = () => {
+    const header = document.querySelector('.site-header');
+    if (!header) {
+      return;
+    }
+    const height = Math.ceil(header.getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--site-header-sticky-offset', `${height}px`);
+  };
+
+  syncHeaderStickyOffset();
+  window.addEventListener('resize', syncHeaderStickyOffset, { passive: true });
+  window.addEventListener('load', syncHeaderStickyOffset, { passive: true });
+
+  const header = document.querySelector('.site-header');
+  if (header && typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncHeaderStickyOffset).observe(header);
+  }
+
   const root = document.getElementById('store-filters-root');
   if (!root) {
     return;
   }
 
+  const backdrop = document.getElementById('store-filters-backdrop');
   const openBtn = document.getElementById('store-filters-open');
   const closeBtn = document.getElementById('store-filters-close');
-  const backdrop = document.getElementById('store-filters-backdrop');
 
   const setDrawerOpen = (open) => {
     document.body.classList.toggle('store-filters-drawer-open', open);

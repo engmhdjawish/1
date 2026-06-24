@@ -740,9 +740,244 @@ final class OrderService
 
         $order['item_changes'] = $changes;
         $order['can_staff_edit'] = self::canStaffEditOrder($order);
+        $order['can_customer_cancel'] = self::canCustomerCancelOrder($order);
+        $order['customer_cancel_block_reason'] = self::customerCancelBlockReason($order);
         $order['items'] = $items;
         $order['timeline'] = $timeline;
         return $order;
+    }
+
+    /** @param array<string, mixed> $order */
+    public static function canCustomerCancelOrder(array $order): bool
+    {
+        return self::customerCancelBlockReason($order) === '';
+    }
+
+    /** @param array<string, mixed> $order */
+    public static function customerCancelBlockReason(array $order): string
+    {
+        $status = (string) ($order['status'] ?? '');
+        if ($status === 'cancelled') {
+            return 'هذا الطلب ملغى مسبقاً.';
+        }
+        if ($status !== 'pending') {
+            return 'لا يمكن الإلغاء بعد أن راجع فريقنا الطلب أو غيّرت حالته.';
+        }
+
+        $syncStatus = (string) ($order['amine_sync_status'] ?? 'none');
+        if ($syncStatus !== 'none') {
+            return 'لا يمكن الإلغاء لأن الطلب قيد المزامنة مع النظام المحاسبي.';
+        }
+        if (trim((string) ($order['amine_synced_at'] ?? '')) !== '') {
+            return 'لا يمكن الإلغاء بعد مزامنة الطلب.';
+        }
+
+        if (self::hasStaffItemChanges((string) ($order['id'] ?? ''))) {
+            return 'لا يمكن الإلغاء بعد أن عدّل فريقنا الطلب.';
+        }
+
+        return '';
+    }
+
+    /**
+     * @return array{ok: bool, message: string}
+     */
+    public static function cancelOrderByCustomer(
+        string $orderId,
+        ?string $customerId = null,
+        ?string $phone = null,
+        ?string $quoteToken = null,
+        string $reasonAr = ''
+    ): array {
+        $order = self::resolveCustomerOrderAccess($orderId, $customerId, $phone, $quoteToken);
+        if ($order === null) {
+            return ['ok' => false, 'message' => 'الطلب غير موجود أو لا يخص حسابك.'];
+        }
+
+        $blockReason = self::customerCancelBlockReason($order);
+        if ($blockReason !== '') {
+            return ['ok' => false, 'message' => $blockReason];
+        }
+
+        $reasonAr = trim($reasonAr);
+        if ($reasonAr === '') {
+            $reasonAr = 'إلغاء من العميل';
+        }
+
+        $orderId = (string) ($order['id'] ?? '');
+        $pdo = Database::pdo();
+        try {
+            $pdo->beginTransaction();
+            if (self::hasItemEditSchema()) {
+                foreach ($order['items'] as $item) {
+                    if (!empty($item['is_cancelled'])) {
+                        continue;
+                    }
+                    $itemId = (string) ($item['id'] ?? '');
+                    if ($itemId === '') {
+                        continue;
+                    }
+                    $pdo->prepare(
+                        'UPDATE order_items SET status = \'cancelled\' WHERE id = :id AND order_id = :order_id'
+                    )->execute(['id' => $itemId, 'order_id' => $orderId]);
+                    self::logItemChange(
+                        $pdo,
+                        $orderId,
+                        $itemId,
+                        'cancel',
+                        (string) ($item['material_name_ar'] ?? ''),
+                        'cancelled',
+                        $reasonAr,
+                        null
+                    );
+                }
+                self::recalculateOrderTotals($pdo, $orderId);
+            }
+            $pdo->prepare(
+                'UPDATE orders SET status = \'cancelled\', updated_at = NOW() WHERE id = :id'
+            )->execute(['id' => $orderId]);
+            $pdo->commit();
+        } catch (\Throwable) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            return ['ok' => false, 'message' => 'تعذر إلغاء الطلب. حاول مجدداً أو تواصل معنا.'];
+        }
+
+        return ['ok' => true, 'message' => 'تم إلغاء الطلب بالكامل.'];
+    }
+
+    /**
+     * @return array{ok: bool, message: string}
+     */
+    public static function cancelOrderItemByCustomer(
+        string $orderId,
+        string $itemId,
+        ?string $customerId = null,
+        ?string $phone = null,
+        ?string $quoteToken = null,
+        string $reasonAr = ''
+    ): array {
+        if (!self::hasItemEditSchema()) {
+            return ['ok' => false, 'message' => 'إلغاء الأصناف غير متاح حالياً. يمكنك إلغاء الطلب بالكامل إن كان مسموحاً.'];
+        }
+
+        $order = self::resolveCustomerOrderAccess($orderId, $customerId, $phone, $quoteToken);
+        if ($order === null) {
+            return ['ok' => false, 'message' => 'الطلب غير موجود أو لا يخص حسابك.'];
+        }
+
+        $blockReason = self::customerCancelBlockReason($order);
+        if ($blockReason !== '') {
+            return ['ok' => false, 'message' => $blockReason];
+        }
+
+        $item = self::findOrderItem($order, $itemId);
+        if ($item === null) {
+            return ['ok' => false, 'message' => 'الصنف غير موجود.'];
+        }
+        if (!empty($item['is_cancelled'])) {
+            return ['ok' => false, 'message' => 'الصنف ملغى مسبقاً.'];
+        }
+
+        $activeCount = 0;
+        foreach ($order['items'] as $row) {
+            if (empty($row['is_cancelled'])) {
+                $activeCount++;
+            }
+        }
+        if ($activeCount <= 1) {
+            return ['ok' => false, 'message' => 'لا يمكن إلغاء آخر صنف. استخدم «إلغاء الطلب بالكامل» بدلاً من ذلك.'];
+        }
+
+        $reasonAr = trim($reasonAr);
+        if ($reasonAr === '') {
+            $reasonAr = 'إلغاء صنف من العميل';
+        }
+
+        $orderId = (string) ($order['id'] ?? '');
+        $pdo = Database::pdo();
+        try {
+            $pdo->beginTransaction();
+            $pdo->prepare(
+                'UPDATE order_items SET status = \'cancelled\' WHERE id = :id AND order_id = :order_id'
+            )->execute(['id' => $itemId, 'order_id' => $orderId]);
+            self::logItemChange(
+                $pdo,
+                $orderId,
+                $itemId,
+                'cancel',
+                (string) ($item['material_name_ar'] ?? ''),
+                'cancelled',
+                $reasonAr,
+                null
+            );
+            self::recalculateOrderTotals($pdo, $orderId);
+            $pdo->commit();
+        } catch (\Throwable) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            return ['ok' => false, 'message' => 'تعذر إلغاء الصنف.'];
+        }
+
+        return ['ok' => true, 'message' => 'تم إلغاء الصنف من الطلب.'];
+    }
+
+    /** @return array<string, mixed>|null */
+    private static function resolveCustomerOrderAccess(
+        string $orderId,
+        ?string $customerId,
+        ?string $phone,
+        ?string $quoteToken
+    ): ?array {
+        $orderId = trim($orderId);
+        if ($orderId === '') {
+            return null;
+        }
+
+        $customerId = trim((string) $customerId);
+        $phone = trim((string) $phone);
+        if ($customerId !== '' || $phone !== '') {
+            $order = self::getOrderForCustomer($orderId, $customerId, $phone);
+            if ($order !== null) {
+                return $order;
+            }
+        }
+
+        $quoteToken = trim((string) $quoteToken);
+        if ($quoteToken !== '') {
+            $order = self::getOrderByQuoteToken($quoteToken);
+            if ($order !== null && (string) ($order['id'] ?? '') === $orderId) {
+                return $order;
+            }
+        }
+
+        return null;
+    }
+
+    private static function hasStaffItemChanges(string $orderId): bool
+    {
+        $orderId = trim($orderId);
+        if ($orderId === '') {
+            return false;
+        }
+
+        try {
+            $stmt = Database::pdo()->prepare(
+                'SELECT 1
+                 FROM order_item_changes
+                 WHERE order_id = :order_id AND changed_by_web_user_id IS NOT NULL
+                 LIMIT 1'
+            );
+            $stmt->execute(['order_id' => $orderId]);
+
+            return (bool) $stmt->fetchColumn();
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     /** @param array<string, mixed> $order */

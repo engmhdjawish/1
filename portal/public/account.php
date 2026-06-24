@@ -4,64 +4,25 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
-use Portal\Auth\CustomerSession;
-use Portal\Services\OrderService;
-use Portal\Services\WebCustomerService;
+$tab = ($_GET['tab'] ?? '') === 'orders' ? 'orders' : 'profile';
+$target = $tab === 'orders' ? '/my-orders.php' : '/my-profile.php';
+$query = [];
 
-CustomerSession::requireLogin();
-require dirname(__DIR__) . '/views/helpers.php';
-
-$customer = CustomerSession::customer();
-$customerId = (string) ($customer['id'] ?? '');
-$phone = (string) ($customer['phone'] ?? '');
-$profile = WebCustomerService::getById($customerId) ?? [];
-
-$tab = ($_GET['tab'] ?? 'profile') === 'orders' ? 'orders' : 'profile';
-$orderId = trim((string) ($_GET['order'] ?? ''));
-$flash = null;
-$flashType = 'success';
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = trim((string) ($_POST['action'] ?? ''));
-    if ($action === 'update_profile') {
-        $result = WebCustomerService::updateOwnProfile(
-            $customerId,
-            trim((string) ($_POST['name_ar'] ?? '')),
-            trim((string) ($_POST['email'] ?? ''))
-        );
-        $flash = $result['message'];
-        $flashType = $result['ok'] ? 'success' : 'error';
-        if ($result['ok']) {
-            CustomerSession::refresh();
-            $customer = CustomerSession::customer() ?? $customer;
-            $profile = WebCustomerService::getById($customerId) ?? $profile;
-        }
-    } elseif ($action === 'change_password') {
-        $result = WebCustomerService::changeOwnPassword(
-            $customerId,
-            trim((string) ($_POST['current_password'] ?? '')),
-            trim((string) ($_POST['new_password'] ?? ''))
-        );
-        $flash = $result['message'];
-        $flashType = $result['ok'] ? 'success' : 'error';
+if ($tab === 'orders') {
+    $orderId = trim((string) ($_GET['order'] ?? ''));
+    $status = trim((string) ($_GET['status'] ?? ''));
+    if ($orderId !== '') {
+        $query['order'] = $orderId;
+    }
+    if ($status !== '') {
+        $query['status'] = $status;
     }
 }
 
-$statusFilter = trim((string) ($_GET['status'] ?? ''));
-$orders = OrderService::listForCustomer($customerId, $phone, [
-    'status' => $statusFilter,
-    'limit' => 50,
-]);
-$orderDetails = $orderId !== '' ? OrderService::getOrderForCustomer($orderId, $customerId, $phone) : null;
-if ($orderId !== '' && $orderDetails === null) {
-    $flash = $flash ?? 'الطلب غير موجود أو لا يخص حسابك.';
-    $flashType = $flashType === 'success' && $flash !== null ? 'error' : $flashType;
+$location = $target;
+if ($query !== []) {
+    $location .= '?' . http_build_query($query);
 }
 
-$title = 'حسابي';
-$extraHead = '<link href="/css/customer-portal.css" rel="stylesheet"><link href="/css/store-ui.css" rel="stylesheet"><link href="/css/store-cart.css" rel="stylesheet">';
-$extraFooter = '<script src="/assets/store-image-zoom.js" defer></script>';
-ob_start();
-require dirname(__DIR__) . '/views/account.php';
-$content = ob_get_clean();
-require dirname(__DIR__) . '/views/layout.php';
+header('Location: ' . $location, true, 302);
+exit;

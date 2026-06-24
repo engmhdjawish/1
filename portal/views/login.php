@@ -5,6 +5,11 @@ declare(strict_types=1);
 /** @var string $type */
 /** @var string|null $error */
 /** @var string|null $message */
+/** @var string|null $redirect */
+
+$redirectQuery = ($redirect ?? null) !== null && ($redirect ?? '') !== ''
+    ? '&redirect=' . rawurlencode((string) $redirect)
+    : '';
 ?>
 <div class="max-w-xl mx-auto">
   <section class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
@@ -23,13 +28,13 @@ declare(strict_types=1);
 
       <div class="grid grid-cols-2 gap-2 mb-5 text-sm">
         <a
-          href="?type=staff"
+          href="?type=staff<?= h($redirectQuery) ?>"
           class="inline-flex items-center justify-center rounded-lg px-3 py-2 font-semibold transition <?= $type === 'staff' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' ?>"
         >
           موظف
         </a>
         <a
-          href="?type=customer"
+          href="?type=customer<?= h($redirectQuery) ?>"
           class="inline-flex items-center justify-center rounded-lg px-3 py-2 font-semibold transition <?= $type === 'customer' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' ?>"
         >
           عميل
@@ -38,6 +43,9 @@ declare(strict_types=1);
 
       <form method="post" class="space-y-4">
         <input type="hidden" name="type" value="<?= h($type) ?>">
+        <?php if (!empty($redirect)): ?>
+          <input type="hidden" name="redirect" value="<?= h((string) $redirect) ?>">
+        <?php endif; ?>
         <?php if ($type === 'customer'): ?>
           <label class="block text-sm font-medium text-gray-700">
             رقم الهاتف
