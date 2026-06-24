@@ -498,9 +498,15 @@ final class MaterialImageSyncService
                 continue;
             }
 
-            if ($amine !== null && self::amineHasDbRecord($amine) && self::fingerprintsMatch($fingerprint, $amine)) {
-                self::upsertSyncedMatch($fileName, $localPath, null, $amine, $fingerprint, $uploadedByUserId);
-                $reconciled++;
+            if ($amine !== null && self::amineHasDbRecord($amine)) {
+                if (self::fingerprintsMatch($fingerprint, $amine)) {
+                    self::upsertSyncedMatch($fileName, $localPath, null, $amine, $fingerprint, $uploadedByUserId);
+                    $reconciled++;
+                } else {
+                    self::upsertLinkedByName($fileName, $localPath, null, $amine, $fingerprint, $uploadedByUserId);
+                    $contentChanged++;
+                    $reconciled++;
+                }
                 continue;
             }
 
@@ -822,8 +828,15 @@ final class MaterialImageSyncService
             'SELECT file_name, local_file_path, local_thumb_path
              FROM material_image_sync_queue
              WHERE amine_image_guid::text = :amine_image_guid
-               AND sync_status = \'synced\'::material_image_sync_status
-             ORDER BY synced_to_amine_at DESC NULLS LAST, updated_at DESC
+             ORDER BY
+                CASE sync_status
+                    WHEN \'synced\' THEN 0
+                    WHEN \'pending\' THEN 1
+                    WHEN \'syncing\' THEN 2
+                    ELSE 3
+                END,
+                synced_to_amine_at DESC NULLS LAST,
+                updated_at DESC
              LIMIT 1'
         );
         $stmt->execute(['amine_image_guid' => $amineImageGuid]);
@@ -842,6 +855,60 @@ final class MaterialImageSyncService
         $fileName = (string) ($row['file_name'] ?? '');
 
         return $fileName !== '' ? MaterialImageStorageService::resolveLocalPath($fileName, $thumb) : null;
+    }
+
+    /** @return array{updated: int, missing: int, message: string} */
+    public static function reindexLocalPaths(): array
+    {
+        self::ensureTable();
+        $stmt = Database::pdo()->query(
+            'SELECT id::text AS id, file_name, local_file_path, local_thumb_path
+             FROM material_image_sync_queue'
+        );
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $updated = 0;
+        $missing = 0;
+
+        $update = Database::pdo()->prepare(
+            'UPDATE material_image_sync_queue
+             SET local_file_path = :local_file_path,
+                 local_thumb_path = :local_thumb_path,
+                 updated_at = NOW()
+             WHERE id = :id'
+        );
+
+        foreach ($rows as $row) {
+            $fileName = (string) ($row['file_name'] ?? '');
+            if ($fileName === '') {
+                continue;
+            }
+
+            $localPath = MaterialImageStorageService::resolveLocalPath($fileName, false);
+            if ($localPath === null) {
+                $missing++;
+                continue;
+            }
+
+            $thumbPath = MaterialImageStorageService::resolveLocalPath($fileName, true);
+            $currentPath = (string) ($row['local_file_path'] ?? '');
+            $currentThumb = (string) ($row['local_thumb_path'] ?? '');
+            if ($currentPath === $localPath && $currentThumb === (string) ($thumbPath ?? '')) {
+                continue;
+            }
+
+            $update->execute([
+                'id' => (string) ($row['id'] ?? ''),
+                'local_file_path' => $localPath,
+                'local_thumb_path' => $thumbPath,
+            ]);
+            $updated++;
+        }
+
+        return [
+            'updated' => $updated,
+            'missing' => $missing,
+            'message' => 'تم تحديث ' . $updated . ' مساراً محلياً.' . ($missing > 0 ? (' (' . $missing . ' بدون ملف على الموقع)') : ''),
+        ];
     }
 
     public static function resetFailedToPending(): int
@@ -1130,12 +1197,12 @@ final class MaterialImageSyncService
             return null;
         }
 
-        if ($amine === null || !self::amineFileExistsOnDisk($amine)) {
+        if ($amine === null) {
             if ($id !== '') {
                 self::markPendingWithFingerprint(
                     $id,
                     $fingerprint,
-                    'الملف غير موجود على الأمين — ستُعاد المزامنة.'
+                    'الملف غير موجود في سجل الأمين — ستُعاد المزامنة.'
                 );
 
                 return 'missing_on_amine';
@@ -1144,21 +1211,21 @@ final class MaterialImageSyncService
             return null;
         }
 
-        if (self::fingerprintsMatch($fingerprint, $amine)) {
-            if (!self::amineHasDbRecord($amine)) {
-                if ($id !== '') {
-                    self::markPendingWithFingerprint(
-                        $id,
-                        $fingerprint,
-                        'الملف على الأمين بدون سجل bm000 — ستُعاد المزامنة.'
-                    );
+        if (!self::amineHasDbRecord($amine)) {
+            if ($id !== '') {
+                self::markPendingWithFingerprint(
+                    $id,
+                    $fingerprint,
+                    'الملف على الأمين بدون سجل bm000 — ستُعاد المزامنة.'
+                );
 
-                    return 'missing_on_amine';
-                }
-
-                return null;
+                return 'missing_on_amine';
             }
 
+            return null;
+        }
+
+        if (self::fingerprintsMatch($fingerprint, $amine) && self::amineFileExistsOnDisk($amine)) {
             if ($id !== '') {
                 self::markSyncedFromMatch($id, $amine, $fingerprint);
             } else {
@@ -1176,10 +1243,15 @@ final class MaterialImageSyncService
         }
 
         if ($id !== '') {
-            self::markPendingWithFingerprint(
-                $id,
+            self::markLinkedByName($id, $amine, $fingerprint);
+        } else {
+            self::upsertLinkedByName(
+                $fileName,
+                $localPath,
+                isset($row['local_thumb_path']) ? (string) $row['local_thumb_path'] : null,
+                $amine,
                 $fingerprint,
-                'المحتوى على الموقع يختلف عن نسخة الأمين — ستُعاد المزامنة.'
+                null
             );
         }
 
@@ -1254,6 +1326,72 @@ final class MaterialImageSyncService
         $amineSize = (int) ($amine['sizeBytes'] ?? $amine['SizeBytes'] ?? 0);
 
         return $localSize > 0 && $localSize === $amineSize;
+    }
+
+    /** @param array<string, mixed> $amine */
+    /** @param array{size_bytes: int, sha256: string} $fingerprint */
+    private static function upsertLinkedByName(
+        string $fileName,
+        string $localPath,
+        ?string $localThumbPath,
+        array $amine,
+        array $fingerprint,
+        ?string $uploadedByUserId
+    ): void {
+        $amineGuid = self::normalizeAmineGuid($amine['id'] ?? $amine['Id'] ?? null);
+
+        $stmt = Database::pdo()->prepare(
+            'INSERT INTO material_image_sync_queue (
+                file_name, local_file_path, local_thumb_path, local_size_bytes, local_sha256,
+                amine_image_guid, uploaded_by_web_user_id, sync_status
+             ) VALUES (
+                :file_name, :local_file_path, :local_thumb_path, :local_size_bytes, :local_sha256,
+                :amine_image_guid, :uploaded_by_web_user_id, \'pending\'::material_image_sync_status
+             )
+             ON CONFLICT (file_name) DO UPDATE SET
+                local_file_path = EXCLUDED.local_file_path,
+                local_thumb_path = EXCLUDED.local_thumb_path,
+                local_size_bytes = EXCLUDED.local_size_bytes,
+                local_sha256 = EXCLUDED.local_sha256,
+                amine_image_guid = EXCLUDED.amine_image_guid,
+                sync_status = \'pending\'::material_image_sync_status,
+                amine_sync_error_ar = \'نسخة الموقع أحدث — بانتظار رفعها للأمين.\',
+                synced_to_amine_at = NULL,
+                updated_at = NOW()'
+        );
+        $stmt->execute([
+            'file_name' => $fileName,
+            'local_file_path' => $localPath,
+            'local_thumb_path' => $localThumbPath,
+            'local_size_bytes' => $fingerprint['size_bytes'],
+            'local_sha256' => $fingerprint['sha256'],
+            'amine_image_guid' => $amineGuid,
+            'uploaded_by_web_user_id' => $uploadedByUserId !== null && $uploadedByUserId !== '' ? $uploadedByUserId : null,
+        ]);
+    }
+
+    /** @param array<string, mixed> $amine */
+    /** @param array{size_bytes: int, sha256: string} $fingerprint */
+    private static function markLinkedByName(string $id, array $amine, array $fingerprint): void
+    {
+        $amineGuid = self::normalizeAmineGuid($amine['id'] ?? $amine['Id'] ?? null);
+        $stmt = Database::pdo()->prepare(
+            "UPDATE material_image_sync_queue
+             SET amine_image_guid = :amine_image_guid,
+                 local_size_bytes = :local_size_bytes,
+                 local_sha256 = :local_sha256,
+                 sync_status = 'pending',
+                 amine_sync_error_ar = 'نسخة الموقع أحدث — بانتظار رفعها للأمين.',
+                 synced_to_amine_at = NULL,
+                 updated_at = NOW()
+             WHERE id = :id"
+        );
+        $stmt->execute([
+            'id' => $id,
+            'amine_image_guid' => $amineGuid,
+            'local_size_bytes' => $fingerprint['size_bytes'],
+            'local_sha256' => $fingerprint['sha256'],
+        ]);
     }
 
     /** @param array<string, mixed> $amine */

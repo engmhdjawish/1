@@ -54,7 +54,7 @@ $statusLabels = [
 
   <article class="rounded-xl border border-border-subtle bg-white p-4">
     <h2 class="font-bold mb-1">② مزامنة الأمين</h2>
-    <p class="text-xs text-text-muted mb-3">يرسل الطابور صورة واحدة في كل مرة. «فحص الملفات المحلية» يقارن كل صورة مع الأمين عبر SHA256 والحجم — إن تطابقت تُعلَّم متزامنة دون رفع. عند فصل الاتصال يتوقف — اضغط «استئناف» عند عودة الأمين.</p>
+    <p class="text-xs text-text-muted mb-3">مجلد الموقع هو الأصل. «فحص الملفات المحلية» يقرأ أسماء الملفات من مجلد الموقع ويبحث عنها في سجل الأمين (API) بالاسم — عند التطابق يُربط GUID للعرض. إن اختلف المحتوى تُعلَّم بانتظار الرفع للأمين. الطابور يرسل صورة واحدة في كل مرة.</p>
     <div class="flex flex-wrap gap-2 mb-3">
       <button type="button" id="startSyncBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold">بدء / استئناف المزامنة</button>
       <button type="button" id="pauseSyncBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">إيقاف مؤقت</button>
@@ -886,6 +886,10 @@ $statusLabels = [
           ? `اكتمل الفحص: ${parts.join('، ')}.`
           : 'اكتمل الفحص — لا تغييرات.';
       }
+      notify(
+        parts.length > 0 ? `اكتمل الفحص: ${parts.join('، ')}.` : 'اكتمل الفحص — لا تغييرات.',
+        parts.length > 0 ? 'success' : 'info'
+      );
       updateScanProgress(totalFiles, totalFiles, `فحص محلي: ${totalFiles} / ${totalFiles}`);
 
       const finishForm = new FormData();
@@ -894,7 +898,7 @@ $statusLabels = [
 
       await refreshOverview();
     } catch (error) {
-      if (syncStatus) syncStatus.textContent = 'تعذّر إكمال الفحص المحلي.';
+      notify('تعذّر إكمال الفحص المحلي.', 'error');
       const failForm = new FormData();
       failForm.append('action', 'scan-local-finish');
       await fetch(API_URL, { method: 'POST', body: failForm });

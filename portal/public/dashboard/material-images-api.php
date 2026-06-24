@@ -422,6 +422,17 @@ if ($method === 'POST') {
         exit;
     }
 
+    if ($action === 'reindex-local-paths') {
+        $reindex = MaterialImageSyncService::reindexLocalPaths();
+        echo json_encode([
+            'ok' => true,
+            'message' => (string) ($reindex['message'] ?? ''),
+            'reindex' => $reindex,
+            'sync' => MaterialImageSyncService::stats(),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     http_response_code(400);
     echo json_encode(['ok' => false, 'message' => 'إجراء غير معروف.'], JSON_UNESCAPED_UNICODE);
     exit;
