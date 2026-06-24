@@ -163,6 +163,30 @@ const API_URL = '/dashboard/material-images-api.php';
     return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[c]));
   }
 
+  function previewFallbackUrl(url) {
+    const value = String(url ?? '').trim();
+    if (value === '') return '';
+    if (value.includes('thumb=1')) {
+      return value.replace('thumb=1', 'thumb=0');
+    }
+    if (!value.includes('thumb=')) {
+      return value.includes('?') ? `${value}&thumb=0` : `${value}?thumb=0`;
+    }
+    return '';
+  }
+
+  function bindPreviewImages() {
+    sourceCards?.querySelectorAll('.preview-btn img').forEach((img) => {
+      if (!(img instanceof HTMLImageElement)) return;
+      img.addEventListener('error', () => {
+        const fallback = img.dataset.fullSrc || previewFallbackUrl(img.src);
+        if (fallback && img.src !== fallback) {
+          img.src = fallback;
+        }
+      }, { once: true });
+    });
+  }
+
   function cardKey(item) {
     return item.amine_image_guid || item.file_name || '';
   }
@@ -615,7 +639,7 @@ const API_URL = '/dashboard/material-images-api.php';
           : '<span class="link-badge text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">غير مرتبطة</span>';
         const preview = item.preview_url
           ? `<button type="button" class="preview-btn group relative w-full h-48 rounded-lg border border-border-subtle bg-surface-low overflow-hidden" title="تكبير الصورة">
-              <img data-deferred-src="${escapeHtml(item.preview_url)}" class="w-full h-full object-contain" alt="" decoding="async" fetchpriority="low">
+              <img src="${escapeHtml(item.preview_url)}" data-full-src="${escapeHtml(item.preview_full_url || item.preview_url)}" class="w-full h-full object-contain" alt="" loading="lazy" decoding="async" fetchpriority="low">
               <span class="absolute bottom-2 left-2 rounded-md bg-black/60 text-white text-[10px] px-2 py-1 opacity-90 group-hover:bg-black/80">🔍 تكبير</span>
             </button>`
           : '<div class="w-full h-48 rounded-lg border border-border-subtle bg-surface-low"></div>';
@@ -659,6 +683,7 @@ const API_URL = '/dashboard/material-images-api.php';
         const card = sourceCards.children[index];
         if (card) bindCard(card, item);
       });
+      bindPreviewImages();
     }
 
     page = Number(payload.page || 1);
@@ -668,7 +693,6 @@ const API_URL = '/dashboard/material-images-api.php';
     sourcePrevBtn.disabled = page <= 1;
     sourceNextBtn.disabled = !hasMore;
     syncBulkDeleteButton();
-    window.portalDeferredImages?.observe(sourceCards);
   }
 
   async function loadSources(targetPage = 1) {
@@ -678,13 +702,18 @@ const API_URL = '/dashboard/material-images-api.php';
       const payload = await fetchJson(`${API_URL}?action=link-sources-page&page=${targetPage}&page_size=${pageSize}&link_filter=${encodeURIComponent(linkFilter)}&material_query=${encodeURIComponent(materialQuery)}`);
       if (signal.aborted) return;
       if (!payload.ok) {
-        linkStatus.textContent = 'تعذر تحميل الصور.';
+        if (linkStatus) {
+          linkStatus.textContent = payload.message || 'تعذر تحميل الصور.';
+        }
         return;
       }
+      if (linkStatus) linkStatus.textContent = '';
       renderSources(payload);
     } catch (error) {
       if (signal.aborted || error?.name === 'AbortError') return;
-      linkStatus.textContent = 'تعذر تحميل الصور.';
+      if (linkStatus) {
+        linkStatus.textContent = error?.message || 'تعذر تحميل الصور.';
+      }
     }
   }
 

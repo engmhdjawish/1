@@ -857,6 +857,13 @@ final class MaterialImageSyncService
             return $path;
         }
 
+        if ($thumb) {
+            $fullPath = (string) ($row['local_file_path'] ?? '');
+            if ($fullPath !== '' && is_file($fullPath)) {
+                return $fullPath;
+            }
+        }
+
         $fileName = (string) ($row['file_name'] ?? '');
 
         return $fileName !== '' ? MaterialImageStorageService::resolveLocalPath($fileName, $thumb) : null;
