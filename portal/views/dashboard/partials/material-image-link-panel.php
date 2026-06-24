@@ -26,6 +26,17 @@
         <input type="search" id="sourceMaterialSearch" class="h-9 flex-1 rounded-lg border border-border-subtle px-3 text-sm" placeholder="بحث مادة بالاسم أو الرمز — Enter أو زر بحث">
         <button type="button" id="applySourceFiltersBtn" class="h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold">بحث</button>
         <button type="button" id="deleteAllUnlinkedBtn" class="h-9 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hidden">حذف كل غير المرتبطة</button>
+        <button type="button" id="pauseDeleteUnlinkedBtn" class="h-9 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold hidden">إيقاف الحذف</button>
+        <button type="button" id="resumeDeleteUnlinkedBtn" class="h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold hidden">استئناف الحذف</button>
+      </div>
+      <div id="deleteUnlinkedProgressWrap" class="hidden mb-3">
+        <div class="flex justify-between text-xs text-text-muted mb-1">
+          <span id="deleteUnlinkedProgressLabel">0 / 0</span>
+          <span id="deleteUnlinkedStatusLabel">جاري الحذف...</span>
+        </div>
+        <div class="h-2 rounded-full bg-surface-low overflow-hidden">
+          <div id="deleteUnlinkedProgressBar" class="h-full bg-red-500 transition-all" style="width:0%"></div>
+        </div>
       </div>
     </div>
     <div id="sourceCards" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>

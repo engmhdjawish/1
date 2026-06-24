@@ -967,6 +967,108 @@ final class MaterialImageSyncService
         ];
     }
 
+    public static function countDeletablePending(): int
+    {
+        self::ensureTable();
+        $stmt = Database::pdo()->query(
+            "SELECT COUNT(*)::int
+             FROM material_image_sync_queue
+             WHERE sync_status IN ('pending', 'failed')"
+        );
+
+        return (int) ($stmt->fetchColumn() ?: 0);
+    }
+
+    /**
+     * @param list<string> $ids
+     * @return array{ok: bool, message: string, deleted: int, failed: int, items: list<array<string, mixed>>}
+     */
+    public static function deletePendingQueueItems(array $ids): array
+    {
+        $deleted = 0;
+        $failed = 0;
+        $items = [];
+
+        foreach ($ids as $rawId) {
+            $id = trim((string) $rawId);
+            if ($id === '') {
+                continue;
+            }
+
+            $result = self::deletePendingQueueItem($id);
+            $items[] = array_merge($result, ['id' => $id]);
+            if ($result['ok'] ?? false) {
+                $deleted++;
+            } else {
+                $failed++;
+            }
+        }
+
+        if ($deleted === 0 && $failed === 0) {
+            return [
+                'ok' => false,
+                'message' => 'لم يُحدَّد أي عنصر للحذف.',
+                'deleted' => 0,
+                'failed' => 0,
+                'items' => [],
+            ];
+        }
+
+        return [
+            'ok' => $deleted > 0,
+            'message' => $deleted > 0
+                ? ('تم حذف ' . $deleted . ' صورة من الموقع والطابور.' . ($failed > 0 ? (' فشل ' . $failed . '.') : ''))
+                : 'لم يُحذف أي عنصر.',
+            'deleted' => $deleted,
+            'failed' => $failed,
+            'items' => $items,
+        ];
+    }
+
+    /**
+     * @return array{
+     *   ok: bool,
+     *   done: bool,
+     *   deleted: int,
+     *   remaining: int,
+     *   message: string,
+     *   file_name?: string
+     * }
+     */
+    public static function deleteNextPending(): array
+    {
+        self::ensureTable();
+        $stmt = Database::pdo()->query(
+            "SELECT id::text AS id
+             FROM material_image_sync_queue
+             WHERE sync_status IN ('pending', 'failed')
+             ORDER BY created_at ASC
+             LIMIT 1"
+        );
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row === false) {
+            return [
+                'ok' => true,
+                'done' => true,
+                'deleted' => 0,
+                'remaining' => 0,
+                'message' => 'لا توجد صور غير مزامنة للحذف.',
+            ];
+        }
+
+        $result = self::deletePendingQueueItem((string) ($row['id'] ?? ''));
+        $remaining = self::countDeletablePending();
+
+        return [
+            'ok' => (bool) ($result['ok'] ?? false),
+            'done' => $remaining === 0,
+            'deleted' => ($result['ok'] ?? false) ? 1 : 0,
+            'remaining' => $remaining,
+            'message' => (string) ($result['message'] ?? ''),
+            'file_name' => (string) ($result['file_name'] ?? ''),
+        ];
+    }
+
     /**
      * Remove queue rows whose local site file is missing (pending/failed only).
      *

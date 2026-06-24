@@ -342,6 +342,71 @@ final class MaterialImageLinkService
     }
 
     /**
+     * @return array{
+     *   ok: bool,
+     *   done: bool,
+     *   deleted: int,
+     *   remaining: int,
+     *   message: string,
+     *   file_name?: string,
+     *   image_guid?: string
+     * }
+     */
+    public static function deleteNextUnlinked(): array
+    {
+        if (!(PortalSettingsService::apiHealth()['ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'done' => true,
+                'deleted' => 0,
+                'remaining' => 0,
+                'message' => 'الأمين غير متصل.',
+            ];
+        }
+
+        $page = self::listSourcesPage(1, 1, 'unlinked', '');
+        $rows = is_array($page['items'] ?? null) ? $page['items'] : [];
+        $remainingBefore = max(0, (int) ($page['total_count'] ?? 0));
+
+        if ($rows === []) {
+            return [
+                'ok' => true,
+                'done' => true,
+                'deleted' => 0,
+                'remaining' => 0,
+                'message' => 'لا توجد صور غير مرتبطة للحذف.',
+            ];
+        }
+
+        $row = $rows[0];
+        $imageGuid = trim((string) ($row['amine_image_guid'] ?? ''));
+        $fileName = trim((string) ($row['file_name'] ?? ''));
+        if ($imageGuid === '') {
+            return [
+                'ok' => false,
+                'done' => $remainingBefore <= 1,
+                'deleted' => 0,
+                'remaining' => max(0, $remainingBefore - 1),
+                'message' => 'لا يوجد GUID للصورة «' . $fileName . '».',
+                'file_name' => $fileName,
+            ];
+        }
+
+        $result = self::deleteImage($imageGuid, $fileName);
+        $remaining = max(0, $remainingBefore - 1);
+
+        return [
+            'ok' => (bool) ($result['ok'] ?? false),
+            'done' => $remaining === 0,
+            'deleted' => ($result['ok'] ?? false) ? 1 : 0,
+            'remaining' => $remaining,
+            'message' => (string) ($result['message'] ?? ''),
+            'file_name' => $fileName,
+            'image_guid' => $imageGuid,
+        ];
+    }
+
+    /**
      * @return array{ok: bool, message: string, image_guid?: string}
      */
     private static function deleteOnAmine(string $imageGuid, string $fileName): array
