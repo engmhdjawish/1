@@ -7,7 +7,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Auth\WebSession;
 use Portal\Services\OrderService;
 
-WebSession::requireAnyPermission(['accounting.reports.view', 'orders.view']);
+WebSession::requirePermission('accounting.reports.view');
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 $summary = OrderService::financialSummary();

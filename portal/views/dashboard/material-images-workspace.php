@@ -12,8 +12,10 @@ declare(strict_types=1);
 /** @var array{ok: bool, message: string} $detailsBanner */
 /** @var string|null $flash */
 /** @var string $flashType */
+/** @var bool $canUploadImages */
 
 $workspaceTab = in_array(($workspaceTab ?? 'link'), ['link', 'upload', 'download'], true) ? $workspaceTab : 'link';
+$canUploadImages = (bool) ($canUploadImages ?? true);
 $paths = is_array($paths ?? null) ? $paths : ['images_dir' => '', 'thumbnails_dir' => ''];
 $stats = is_array($stats ?? null) ? $stats : ['local_count' => 0, 'thumbnail_count' => 0];
 $syncStats = is_array($syncStats ?? null) ? $syncStats : ['pending' => 0, 'syncing' => 0, 'synced' => 0, 'failed' => 0, 'total' => 0];
@@ -24,7 +26,11 @@ $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'messag
     <div>
       <h1 class="text-2xl font-extrabold">صور المواد</h1>
       <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
-        رفع الصور ومزامنتها مع الأمين، ثم ربطها بالمواد — كل ذلك من صفحة واحدة.
+        <?php if ($canUploadImages): ?>
+          رفع الصور ومزامنتها مع الأمين، ثم ربطها بالمواد — كل ذلك من صفحة واحدة.
+        <?php else: ?>
+          تصفّح صور المواد المحلية وتحميلها — صلاحية العرض فقط دون رفع أو تعديل.
+        <?php endif; ?>
       </p>
     </div>
     <div class="flex flex-wrap gap-2 text-xs" id="statsPills">
@@ -46,6 +52,7 @@ $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'messag
   </div>
 
   <nav class="mt-4 inline-flex flex-wrap gap-1 rounded-xl border border-border-subtle bg-white p-1 shadow-sm" aria-label="أقسام صور المواد">
+    <?php if ($canUploadImages): ?>
     <a
       href="/dashboard/material-images.php?tab=link"
       class="h-10 px-4 inline-flex items-center gap-2 rounded-lg text-sm font-bold transition <?= $workspaceTab === 'link' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:bg-surface-low' ?>"
@@ -60,6 +67,7 @@ $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'messag
       <span class="material-symbols-outlined text-lg">cloud_upload</span>
       رفع ومزامنة
     </a>
+    <?php endif; ?>
     <a
       href="/dashboard/material-images.php?tab=download"
       class="h-10 px-4 inline-flex items-center gap-2 rounded-lg text-sm font-bold transition <?= $workspaceTab === 'download' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:bg-surface-low' ?>"

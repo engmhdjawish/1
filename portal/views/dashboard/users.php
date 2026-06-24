@@ -12,6 +12,9 @@ declare(strict_types=1);
 /** @var array<string, mixed>|null $editRole */
 /** @var string|null $flash */
 /** @var string $flashType */
+/** @var list<array{code: string, role_code: string, name_ar: string, description_ar: string, permissions: list<string>}> $taskRoles */
+/** @var array<string, string> $roleIdsByCode */
+/** @var array<string, string> $permissionLabelsByCode */
 
 $editing = $editUser !== null;
 $editingRole = $editRole !== null;
@@ -78,8 +81,30 @@ $selectedPermissionIds = array_map('strval', $editRole['permission_ids'] ?? []);
       </label>
 
       <fieldset>
+        <legend class="text-sm text-text-muted mb-2">قوالب المهام (تعيين سريع)</legend>
+        <p class="text-xs text-text-muted mb-3">اختر مهمة جاهزة لتعيين الدور المناسب. يمكنك بعدها إضافة أدوار أخرى يدوياً.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-auto border border-border-subtle rounded-xl p-3 bg-surface-low" id="taskRoleTemplates">
+          <?php foreach ($taskRoles as $task): ?>
+            <?php
+              $taskCode = (string) ($task['role_code'] ?? '');
+              $roleId = (string) ($roleIdsByCode[$taskCode] ?? '');
+            ?>
+            <button
+              type="button"
+              class="task-role-template text-right rounded-xl border border-border-subtle bg-white px-3 py-2.5 hover:border-primary/40 hover:bg-primary/5 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              data-role-id="<?= h($roleId) ?>"
+              <?= $roleId === '' ? 'disabled title="الدور غير موجود — شغّل migration 007"' : '' ?>
+            >
+              <span class="block text-sm font-bold text-slate-900"><?= h((string) ($task['name_ar'] ?? '')) ?></span>
+              <span class="block text-[11px] text-text-muted mt-0.5 leading-relaxed"><?= h((string) ($task['description_ar'] ?? '')) ?></span>
+            </button>
+          <?php endforeach; ?>
+        </div>
+      </fieldset>
+
+      <fieldset>
         <legend class="text-sm text-text-muted mb-2">الأدوار</legend>
-        <div class="space-y-2 max-h-44 overflow-auto border border-border-subtle rounded-xl p-3 bg-surface-low">
+        <div class="space-y-2 max-h-44 overflow-auto border border-border-subtle rounded-xl p-3 bg-surface-low" id="userRoleCheckboxes">
           <?php foreach ($roles as $role): ?>
             <?php $roleId = (string) ($role['id'] ?? ''); ?>
             <label class="flex items-center justify-between gap-3 text-sm">
@@ -208,6 +233,44 @@ $selectedPermissionIds = array_map('strval', $editRole['permission_ids'] ?? []);
       </table>
     </div>
   </article>
+</section>
+
+<section class="mb-5 bg-white border border-border-subtle rounded-2xl overflow-hidden">
+  <div class="p-4 border-b border-border-subtle bg-surface-low">
+    <h2 class="text-base font-extrabold text-slate-900">قوالب المهام والصلاحيات</h2>
+    <p class="text-xs text-text-muted mt-1">مرجع سريع لتوزيع المهام بين الموظفين. الأدوار أدناه قابلة للتعديل من جدول «الأدوار والصلاحيات».</p>
+  </div>
+  <div class="overflow-auto">
+    <table class="w-full min-w-[920px] text-sm">
+      <thead class="bg-white border-b border-border-subtle text-text-muted">
+        <tr>
+          <th class="px-5 py-4 text-right font-bold">المهمة</th>
+          <th class="px-5 py-4 text-right font-bold">الدور</th>
+          <th class="px-5 py-4 text-right font-bold">الصلاحيات</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border-subtle">
+        <?php foreach ($taskRoles as $task): ?>
+          <tr class="hover:bg-slate-50 transition">
+            <td class="px-5 py-4">
+              <div class="font-bold text-slate-900"><?= h((string) ($task['name_ar'] ?? '')) ?></div>
+              <div class="text-xs text-text-muted mt-1"><?= h((string) ($task['description_ar'] ?? '')) ?></div>
+            </td>
+            <td class="px-5 py-4 font-mono text-xs text-text-muted" dir="ltr"><?= h((string) ($task['role_code'] ?? '')) ?></td>
+            <td class="px-5 py-4 text-xs text-text-muted leading-relaxed">
+              <?php
+                $labels = [];
+                foreach ($task['permissions'] ?? [] as $permissionCode) {
+                    $labels[] = $permissionLabelsByCode[$permissionCode] ?? $permissionCode;
+                }
+                echo h(implode(' · ', $labels));
+              ?>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
 </section>
 
 <section class="grid grid-cols-1 xl:grid-cols-3 gap-5">
@@ -350,3 +413,31 @@ $selectedPermissionIds = array_map('strval', $editRole['permission_ids'] ?? []);
     </div>
   </article>
 </section>
+
+<script>
+(() => {
+  const templateButtons = document.querySelectorAll('.task-role-template');
+  const roleCheckboxes = document.querySelectorAll('#userRoleCheckboxes input[name="role_ids[]"]');
+  if (templateButtons.length === 0 || roleCheckboxes.length === 0) {
+    return;
+  }
+
+  templateButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const roleId = button.getAttribute('data-role-id');
+      if (!roleId) {
+        return;
+      }
+
+      roleCheckboxes.forEach((checkbox) => {
+        checkbox.checked = checkbox.value === roleId;
+      });
+
+      templateButtons.forEach((item) => {
+        item.classList.remove('border-primary', 'bg-primary/10', 'ring-1', 'ring-primary/30');
+      });
+      button.classList.add('border-primary', 'bg-primary/10', 'ring-1', 'ring-primary/30');
+    });
+  });
+})();
+</script>

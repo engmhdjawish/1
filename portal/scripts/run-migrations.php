@@ -38,6 +38,7 @@ $ordered = [
     '004-ensure-accounting-permissions.sql',
     '005-visitor-logs.sql',
     '006-notifications.sql',
+    '007-staff-roles-reorganization.sql',
 ];
 
 $files = [];

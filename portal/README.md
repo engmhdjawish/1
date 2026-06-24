@@ -134,6 +134,24 @@ UPDATE home_sections SET is_active = TRUE WHERE slug IN ('offers','women','men',
 
 أضف فلاتر في `home_section_filters` حسب الحاجة.
 
+## صلاحيات الموظفين
+
+بعد `php scripts/run-migrations.php` (يشمل `007-staff-roles-reorganization.sql`) تتوفر أدوار مهام جاهزة من `/dashboard/users.php`:
+
+| الدور | المهمة |
+|--------|--------|
+| `order_desk` | طلبات + مزامنة الأمين |
+| `sales` | مبيعات، روابط مشاركة، نشاط الزوار |
+| `catalog_media` | رفع ومزامنة صور المواد |
+| `customers_admin` | موافقة وإدارة عملاء الموقع |
+| `content` | محتوى الرئيسية والعروض والوسائط |
+| `communications` | إشعارات الموقع |
+| `store_admin` | سياسات المتجر والوصول |
+| `accountant` | محاسبة أمين كاملة |
+| `super_admin` | كل الصلاحيات |
+
+**فصل مهم:** صلاحية `orders.view` لا تفتح لوحة المحاسبة. كل صفحة محاسبة تتطلب صلاحيتها (`accounting.*`). صلاحية `images.view` للتصفح والتحميل فقط؛ `images.upload` للرفع والربط والمزامنة.
+
 ## هيكل المجلدات
 
 ```text

@@ -7,7 +7,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Auth\WebSession;
 use Portal\Services\OrderService;
 
-WebSession::requireAnyPermission(['accounting.sync.view', 'orders.view']);
+WebSession::requirePermission('accounting.sync.view');
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 $filters = ['sync' => trim((string) ($_GET['sync'] ?? 'pending')), 'limit' => 100];

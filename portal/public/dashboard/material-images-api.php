@@ -38,7 +38,7 @@ function materialImagesApiJson(array $payload, int $status = 200): never
     exit;
 }
 
-WebSession::requirePermission('images.upload');
+WebSession::requireAnyPermission(['images.upload', 'images.view']);
 MaterialImageStorageService::ensureSettings();
 
 $user = WebSession::user();
@@ -143,6 +143,7 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
+    WebSession::requirePermission('images.upload');
     $action = trim((string) ($_POST['action'] ?? ($_GET['action'] ?? '')));
     $file = is_array($_FILES['file'] ?? null) ? $_FILES['file'] : [];
     $queuePage = max(1, (int) ($_POST['queue_page'] ?? $_GET['queue_page'] ?? 1));

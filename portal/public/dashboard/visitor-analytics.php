@@ -7,7 +7,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Auth\WebSession;
 use Portal\Services\VisitorLogService;
 
-WebSession::requirePermission('orders.view');
+WebSession::requireAnyPermission(['visitors.view', 'orders.view']);
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 $days = (int) ($_GET['days'] ?? 7);

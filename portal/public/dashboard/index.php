@@ -63,6 +63,7 @@ ob_start();
 <?php endif; ?>
 
 <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+  <?php if (WebSession::hasAnyPermission(['web_customers.view', 'web_customers.approve'])): ?>
   <a href="/dashboard/customers.php?status=pending" class="bg-red-50 border border-red-100 rounded-2xl p-5 hover:shadow-md transition block no-underline text-inherit">
     <div class="w-11 h-11 rounded-xl bg-red-100 text-red-700 flex items-center justify-center">
       <span class="material-symbols-outlined">person_add</span>
@@ -72,6 +73,8 @@ ob_start();
       <p class="text-sm text-text-muted mt-1">عملاء بانتظار الموافقة</p>
     </div>
   </a>
+  <?php endif; ?>
+  <?php if (WebSession::hasPermission('orders.view')): ?>
   <a href="/dashboard/orders.php" class="bg-amber-50 border border-amber-100 rounded-2xl p-5 hover:shadow-md transition block no-underline text-inherit">
     <div class="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
       <span class="material-symbols-outlined">shopping_basket</span>
@@ -81,6 +84,8 @@ ob_start();
       <p class="text-sm text-text-muted mt-1">طلبات جديدة / قيد التأكيد</p>
     </div>
   </a>
+  <?php endif; ?>
+  <?php if (WebSession::hasPermission('share_links.manage')): ?>
   <a href="/dashboard/share-links.php" class="bg-white border border-border-subtle rounded-2xl p-5 hover:shadow-md transition block no-underline text-inherit">
     <div class="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
       <span class="material-symbols-outlined">link</span>
@@ -90,6 +95,8 @@ ob_start();
       <p class="text-sm text-text-muted mt-1">روابط مشاركة نشطة</p>
     </div>
   </a>
+  <?php endif; ?>
+  <?php if (WebSession::hasPermission('accounting.sync.view')): ?>
   <a href="/dashboard/accounting-sync.php?sync=failed" class="bg-white border border-border-subtle rounded-2xl p-5 hover:shadow-md transition block no-underline text-inherit">
     <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
       <span class="material-symbols-outlined">sync_problem</span>
@@ -99,14 +106,23 @@ ob_start();
       <p class="text-sm text-text-muted mt-1">طابور مزامنة الأمين</p>
     </div>
   </a>
+  <?php endif; ?>
 </section>
 
+<?php if (WebSession::hasAnyPermission(['web_customers.approve', 'orders.view', 'accounting.sync.view'])): ?>
 <section class="mb-6">
   <div class="flex items-center justify-between mb-4">
     <h2 class="text-xl font-bold">يتطلب إجراء</h2>
-    <a href="/dashboard/orders.php" class="text-sm text-primary font-bold hover:underline">عرض الكل</a>
+    <?php if (WebSession::hasPermission('orders.view')): ?>
+      <a href="/dashboard/orders.php" class="text-sm text-primary font-bold hover:underline">عرض الطلبات</a>
+    <?php elseif (WebSession::hasAnyPermission(['web_customers.view', 'web_customers.approve'])): ?>
+      <a href="/dashboard/customers.php?status=pending" class="text-sm text-primary font-bold hover:underline">عرض التسجيلات</a>
+    <?php elseif (WebSession::hasPermission('accounting.sync.view')): ?>
+      <a href="/dashboard/accounting-sync.php?sync=failed" class="text-sm text-primary font-bold hover:underline">عرض المزامنة</a>
+    <?php endif; ?>
   </div>
   <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+    <?php if (WebSession::hasAnyPermission(['web_customers.view', 'web_customers.approve'])): ?>
     <article class="bg-white border border-border-subtle rounded-2xl overflow-hidden">
       <div class="px-4 py-3 bg-surface-low border-b border-border-subtle flex items-center justify-between">
         <h3 class="font-bold">تسجيلات جديدة</h3>
@@ -133,7 +149,9 @@ ob_start();
         <?php endforeach; ?>
       </div>
     </article>
+    <?php endif; ?>
 
+    <?php if (WebSession::hasPermission('orders.view')): ?>
     <article class="bg-white border border-border-subtle rounded-2xl overflow-hidden">
       <div class="px-4 py-3 bg-surface-low border-b border-border-subtle flex items-center justify-between">
         <h3 class="font-bold">طلبات قيد المراجعة</h3>
@@ -154,7 +172,9 @@ ob_start();
         <?php endforeach; ?>
       </div>
     </article>
+    <?php endif; ?>
 
+    <?php if (WebSession::hasPermission('accounting.sync.view')): ?>
     <article class="bg-white border border-border-subtle rounded-2xl overflow-hidden">
       <div class="px-4 py-3 bg-surface-low border-b border-border-subtle flex items-center justify-between">
         <h3 class="font-bold">أخطاء المزامنة</h3>
@@ -170,16 +190,19 @@ ob_start();
               <p class="font-bold text-sm"><?= h((string) ($row['order_number'] ?? '')) ?></p>
               <p class="text-xs text-text-muted"><?= h((string) ($row['updated_at'] ?? '')) ?></p>
             </div>
-            <?php if (WebSession::hasAnyPermission(['accounting.sync.view', 'orders.view'])): ?>
+            <?php if (WebSession::hasPermission('accounting.sync.view')): ?>
               <a href="/dashboard/accounting-sync.php?sync=failed" class="text-primary text-xs font-bold">متابعة</a>
             <?php endif; ?>
           </div>
         <?php endforeach; ?>
       </div>
     </article>
+    <?php endif; ?>
   </div>
 </section>
+<?php endif; ?>
 
+<?php if (WebSession::hasPermission('orders.view')): ?>
 <section class="bg-white border border-border-subtle rounded-2xl overflow-hidden">
   <div class="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
     <h2 class="font-bold">آخر الطلبات</h2>
@@ -214,6 +237,7 @@ ob_start();
     </div>
   <?php endif; ?>
 </section>
+<?php endif; ?>
 <?php
 $content = ob_get_clean();
 $title = 'لوحة العمل';

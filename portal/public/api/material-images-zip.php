@@ -7,7 +7,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Auth\WebSession;
 use Portal\Services\MaterialImageZipService;
 
-WebSession::requireAnyPermission(['images.upload', 'orders.view']);
+WebSession::requireAnyPermission(['images.upload', 'images.view', 'orders.view']);
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 $mode = trim((string) ($_GET['mode'] ?? 'materials'));

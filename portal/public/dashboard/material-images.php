@@ -11,7 +11,7 @@ use Portal\Services\MaterialImageStorageService;
 use Portal\Services\MaterialImageSyncService;
 use Portal\Services\PortalSettingsService;
 
-WebSession::requirePermission('images.upload');
+WebSession::requireAnyPermission(['images.upload', 'images.view']);
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 MaterialImageStorageService::ensureSettings();
@@ -24,6 +24,7 @@ $user = WebSession::user();
 $userId = isset($user['id']) ? (string) $user['id'] : null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    WebSession::requirePermission('images.upload');
     $action = trim((string) ($_POST['action'] ?? ''));
 
     if ($action === 'save_settings') {
@@ -40,9 +41,11 @@ if (isset($_GET['saved']) && $_GET['saved'] === '1' && $flash === null) {
     $flash = 'تم حفظ مسارات التخزين.';
 }
 
-$workspaceTab = trim((string) ($_GET['tab'] ?? 'link'));
-if (!in_array($workspaceTab, ['link', 'upload', 'download'], true)) {
-    $workspaceTab = 'link';
+$canUploadImages = WebSession::hasPermission('images.upload');
+$allowedTabs = $canUploadImages ? ['link', 'upload', 'download'] : ['download'];
+$workspaceTab = trim((string) ($_GET['tab'] ?? ($canUploadImages ? 'link' : 'download')));
+if (!in_array($workspaceTab, $allowedTabs, true)) {
+    $workspaceTab = $canUploadImages ? 'link' : 'download';
 }
 
 $company = PortalSettingsService::companySettings();

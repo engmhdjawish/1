@@ -7,6 +7,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Auth\WebSession;
 use Portal\Services\WebUserService;
 use Portal\Support\DashboardHttp;
+use Portal\Support\StaffPermissions;
 
 WebSession::requirePermission('web_users.manage');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -121,6 +122,19 @@ $editRoleId = trim((string) ($_GET['edit_role'] ?? ''));
 $editRole = $editRoleId !== '' ? WebUserService::getRoleById($editRoleId) : null;
 if ($editRole === null) {
     $editRoleId = '';
+}
+
+$taskRoles = StaffPermissions::taskRoles();
+$permissionLabelsByCode = [];
+foreach (StaffPermissions::catalog() as $catalogItem) {
+    $permissionLabelsByCode[(string) ($catalogItem['code'] ?? '')] = (string) ($catalogItem['name_ar'] ?? '');
+}
+$roleIdsByCode = [];
+foreach ($roles as $role) {
+    $code = (string) ($role['code'] ?? '');
+    if ($code !== '') {
+        $roleIdsByCode[$code] = (string) ($role['id'] ?? '');
+    }
 }
 
 $permissionsByCategory = [];

@@ -153,6 +153,23 @@ final class WebSession
         unset($_SESSION[self::SESSION_KEY]);
     }
 
+    public static function refreshPermissions(): void
+    {
+        if (!self::check()) {
+            return;
+        }
+
+        $userId = (string) (self::user()['id'] ?? '');
+        if ($userId === '') {
+            return;
+        }
+
+        $roles = self::loadRoleLabels($userId);
+        $_SESSION[self::SESSION_KEY]['permissions'] = self::loadPermissions($userId);
+        $_SESSION[self::SESSION_KEY]['roles'] = $roles;
+        $_SESSION[self::SESSION_KEY]['role_label'] = $roles[0] ?? 'موظف';
+    }
+
     /** @return list<string> */
     private static function loadPermissions(string $userId): array
     {
