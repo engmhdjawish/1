@@ -15,6 +15,7 @@ declare(strict_types=1);
 /** @var string|null $notice */
 /** @var string $defaultGuestName */
 /** @var string $defaultGuestPhone */
+/** @var bool $isLoggedInCustomer */
 /** @var float|null $maxPackagesPerMaterial */
 /** @var string|null $maxPackagesLabel */
 /** @var list<string> $stockNotices */
@@ -30,6 +31,7 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
   data-store-cart-page="1"
   data-default-name="<?= h($defaultGuestName) ?>"
   data-default-phone="<?= h($defaultGuestPhone) ?>"
+  data-logged-in="<?= $isLoggedInCustomer ? '1' : '0' ?>"
   data-price-mode="<?= h($priceMode ?? 'syp') ?>"
 >
   <header class="store-cart-header flex flex-wrap items-center justify-between gap-3 mb-6">
@@ -130,12 +132,18 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
 
           <?php if ($allowOrder && $cartItems !== []): ?>
             <form data-checkout-form class="space-y-3 border-t border-gray-100 pt-4">
-              <label class="block text-sm font-bold">الاسم الكامل *
-                <input name="guest_name_ar" required value="<?= h($defaultGuestName) ?>" class="store-input mt-1">
-              </label>
-              <label class="block text-sm font-bold">رقم الهاتف *
-                <input name="guest_phone" required dir="ltr" value="<?= h($defaultGuestPhone) ?>" class="store-input mt-1 text-left">
-              </label>
+              <?php if ($isLoggedInCustomer): ?>
+                <p class="text-sm text-gray-600 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+                  إرسال الطلب بحسابك المسجّل — بياناتك مأخوذة من ملفك ولا يمكن تغييرها هنا.
+                </p>
+              <?php else: ?>
+                <label class="block text-sm font-bold">الاسم الكامل *
+                  <input name="guest_name_ar" required value="<?= h($defaultGuestName) ?>" class="store-input mt-1">
+                </label>
+                <label class="block text-sm font-bold">رقم الهاتف *
+                  <input name="guest_phone" required dir="ltr" value="<?= h($defaultGuestPhone) ?>" class="store-input mt-1 text-left">
+                </label>
+              <?php endif; ?>
               <label class="block text-sm font-bold">ملاحظات
                 <textarea name="notes_ar" rows="3" class="store-input mt-1 h-auto py-2 text-sm"></textarea>
               </label>

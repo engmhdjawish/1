@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Auth\Password;
+use Portal\Auth\WebSession;
 use Portal\Database;
 use PDO;
 
@@ -399,6 +400,8 @@ final class WebUserService
             }
 
             $pdo->commit();
+            WebSession::refreshPermissions();
+
             return [
                 'ok' => true,
                 'message' => $id ? 'تم تحديث المستخدم.' : 'تم إنشاء المستخدم.',
@@ -536,6 +539,7 @@ final class WebUserService
             }
 
             $pdo->commit();
+            WebSession::refreshPermissions();
 
             return [
                 'ok' => true,

@@ -11,5 +11,7 @@ obj/
 
 appsettings.Local.json
 .env
+deploy/deploy.env
+deploy/output/
 uploads/
 amine-api-token.json

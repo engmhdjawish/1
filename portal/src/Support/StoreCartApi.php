@@ -256,6 +256,7 @@ final class StoreCartApi
             'show_price' => (bool) ($display['show_price'] ?? false),
             'price_mode' => (string) ($display['price_mode'] ?? 'syp'),
             'stock_notices' => $notices,
+            'logged_in' => CustomerSession::check(),
         ];
 
         return $payload;

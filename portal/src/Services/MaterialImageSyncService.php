@@ -810,7 +810,7 @@ final class MaterialImageSyncService
         ];
     }
 
-    public static function resolveLocalPathByAmineGuid(string $amineImageGuid, bool $thumb = false): ?string
+    public static function resolveLocalPathByAmineGuid(string $amineImageGuid, bool $thumb = false, bool $requireSynced = true): ?string
     {
         $amineImageGuid = trim($amineImageGuid);
         if ($amineImageGuid === '') {
@@ -818,13 +818,14 @@ final class MaterialImageSyncService
         }
 
         self::ensureTable();
+        $statusFilter = $requireSynced ? "AND sync_status = 'synced'::material_image_sync_status" : '';
         $stmt = Database::pdo()->prepare(
-            'SELECT file_name, local_file_path, local_thumb_path
+            "SELECT file_name, local_file_path, local_thumb_path
              FROM material_image_sync_queue
              WHERE amine_image_guid::text = :amine_image_guid
-               AND sync_status = \'synced\'::material_image_sync_status
+               {$statusFilter}
              ORDER BY synced_to_amine_at DESC NULLS LAST, updated_at DESC
-             LIMIT 1'
+             LIMIT 1"
         );
         $stmt->execute(['amine_image_guid' => $amineImageGuid]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);

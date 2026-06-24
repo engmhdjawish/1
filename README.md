@@ -23,6 +23,14 @@
 dotnet --version
 ```
 
+## النشر للإنتاج
+
+معالج نشر تفاعلي (API + الموقع): **[deploy/README.md](deploy/README.md)**
+
+```powershell
+.\deploy\wizard.ps1
+```
+
 ## تشغيل المشروع محلياً
 
 ```powershell

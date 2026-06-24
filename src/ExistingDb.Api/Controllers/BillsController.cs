@@ -75,6 +75,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         [FromQuery(Name = "search")] string? legacySearch = null,
         [FromQuery] Guid? typeGuid = null,
         [FromQuery] string? type = null,
+        [FromQuery] int? number = null,
         [FromQuery] DateTime? fromDate = null,
         [FromQuery] DateTime? toDate = null,
         [FromQuery] int page = 1,
@@ -107,6 +108,11 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             }
 
             query = query.Where(bill => bill.TypeGuid.HasValue && typeGuidsByText.Contains(bill.TypeGuid.Value));
+        }
+
+        if (number.HasValue)
+        {
+            query = query.Where(bill => bill.Number == number.Value);
         }
 
         if (fromDateOnly.HasValue)
