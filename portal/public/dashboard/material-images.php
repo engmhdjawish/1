@@ -51,6 +51,7 @@ $syncStats = MaterialImageSyncService::stats();
 $apiHealth = PortalSettingsService::apiHealth();
 $queuePage = MaterialImageSyncService::listQueuePage(1, 20);
 $queue = $queuePage['items'];
+$pendingDeletable = MaterialImageSyncService::countDeletablePending();
 $settingsForm = [
     'material_images_dir' => (string) ($company['material_images_dir'] ?? ''),
     'material_thumbnails_dir' => (string) ($company['material_thumbnails_dir'] ?? ''),

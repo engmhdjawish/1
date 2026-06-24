@@ -9,6 +9,9 @@
       window.__materialImagesLinkAbort.abort();
       window.__materialImagesLinkAbort = null;
     }
+    if (typeof window.portalDeferredImages?.cancel === 'function') {
+      window.portalDeferredImages.cancel(root.querySelector('[data-material-images-link-panel]'));
+    }
 
     const panel = root.querySelector('[data-material-images-link-panel]');
     if (!panel) return;
@@ -28,6 +31,7 @@ const API_URL = '/dashboard/material-images-api.php';
   async function fetchJson(url, options = {}) {
     const response = await fetch(url, {
       ...options,
+      signal: options.signal ?? signal,
       headers: { ...API_HEADERS, ...(options.headers || {}) },
     });
     const text = await response.text();
@@ -49,6 +53,12 @@ const API_URL = '/dashboard/material-images-api.php';
   const sourceMaterialSearch = panel.querySelector('#sourceMaterialSearch');
   const applySourceFiltersBtn = panel.querySelector('#applySourceFiltersBtn');
   const deleteAllUnlinkedBtn = panel.querySelector('#deleteAllUnlinkedBtn');
+  const pauseDeleteUnlinkedBtn = panel.querySelector('#pauseDeleteUnlinkedBtn');
+  const resumeDeleteUnlinkedBtn = panel.querySelector('#resumeDeleteUnlinkedBtn');
+  const deleteUnlinkedProgressWrap = panel.querySelector('#deleteUnlinkedProgressWrap');
+  const deleteUnlinkedProgressLabel = panel.querySelector('#deleteUnlinkedProgressLabel');
+  const deleteUnlinkedStatusLabel = panel.querySelector('#deleteUnlinkedStatusLabel');
+  const deleteUnlinkedProgressBar = panel.querySelector('#deleteUnlinkedProgressBar');
   const linkFilterButtons = panel.querySelectorAll('.link-filter-btn');
   const linkStatus = panel.querySelector('#linkStatus');
   
@@ -59,6 +69,11 @@ const API_URL = '/dashboard/material-images-api.php';
   let page = 1;
   let hasMore = false;
   let totalCount = 0;
+  let deleteUnlinkedRunning = false;
+  let deleteUnlinkedPaused = false;
+  let deleteUnlinkedInitialTotal = 0;
+  let deleteUnlinkedProcessed = 0;
+  let deleteUnlinkedFailed = 0;
   const pageSize = 12;
   const sourceMaterialMap = new Map();
   const MIN_MATERIAL_SEARCH_LEN = 2;
@@ -87,12 +102,7 @@ const API_URL = '/dashboard/material-images-api.php';
       btn.classList.toggle('border-border-subtle', !isActive);
       btn.classList.toggle('bg-white', !isActive);
     });
-    syncBulkDeleteButton();
-  }
-
-  function syncBulkDeleteButton() {
-    if (!deleteAllUnlinkedBtn) return;
-    deleteAllUnlinkedBtn.classList.toggle('hidden', currentLinkFilter() !== 'unlinked');
+    updateDeleteUnlinkedControls();
   }
 
   function updatePageLabel() {
@@ -368,22 +378,89 @@ const API_URL = '/dashboard/material-images-api.php';
     }
   }
 
-  async function deleteAllUnlinked() {
+  function updateDeleteUnlinkedControls() {
+    if (!deleteAllUnlinkedBtn) return;
+    const showBulk = currentLinkFilter() === 'unlinked';
+    deleteAllUnlinkedBtn.classList.toggle('hidden', !showBulk || deleteUnlinkedRunning);
+    pauseDeleteUnlinkedBtn?.classList.toggle('hidden', !showBulk || !deleteUnlinkedRunning || deleteUnlinkedPaused);
+    resumeDeleteUnlinkedBtn?.classList.toggle('hidden', !showBulk || !deleteUnlinkedRunning || !deleteUnlinkedPaused);
+    if (!deleteUnlinkedRunning) {
+      deleteUnlinkedProgressWrap?.classList.add('hidden');
+    }
+  }
+
+  function renderDeleteUnlinkedProgress() {
+    const total = Math.max(1, deleteUnlinkedInitialTotal || 1);
+    const done = deleteUnlinkedProcessed + deleteUnlinkedFailed;
+    const pct = Math.min(100, Math.round((done / total) * 100));
+    deleteUnlinkedProgressWrap?.classList.remove('hidden');
+    if (deleteUnlinkedProgressLabel) {
+      deleteUnlinkedProgressLabel.textContent = `${done} / ${deleteUnlinkedInitialTotal}`;
+    }
+    if (deleteUnlinkedProgressBar) {
+      deleteUnlinkedProgressBar.style.width = `${pct}%`;
+    }
+    if (deleteUnlinkedStatusLabel) {
+      deleteUnlinkedStatusLabel.textContent = deleteUnlinkedPaused
+        ? 'متوقف مؤقتاً'
+        : `تم ${deleteUnlinkedProcessed}${deleteUnlinkedFailed > 0 ? ` — فشل ${deleteUnlinkedFailed}` : ''}`;
+    }
+  }
+
+  async function runDeleteUnlinkedLoop() {
+    while (!deleteUnlinkedPaused) {
+      let payload;
+      try {
+        payload = await postAction('delete-unlinked-next', {});
+      } catch {
+        linkStatus.textContent = 'انقطع الاتصال — اضغط «استئناف الحذف».';
+        deleteUnlinkedPaused = true;
+        updateDeleteUnlinkedControls();
+        return;
+      }
+
+      if (payload.deleted) {
+        deleteUnlinkedProcessed += 1;
+      } else if (!payload.done) {
+        deleteUnlinkedFailed += 1;
+      }
+
+      if (typeof payload.remaining === 'number' && deleteUnlinkedInitialTotal === 0) {
+        deleteUnlinkedInitialTotal = deleteUnlinkedProcessed + deleteUnlinkedFailed + payload.remaining;
+      }
+
+      renderDeleteUnlinkedProgress();
+      linkStatus.textContent = payload.message || linkStatus.textContent;
+
+      if (payload.done) {
+        linkStatus.textContent = `اكتمل الحذف — نجح ${deleteUnlinkedProcessed}${deleteUnlinkedFailed > 0 ? `، فشل ${deleteUnlinkedFailed}` : ''}.`;
+        deleteUnlinkedRunning = false;
+        updateDeleteUnlinkedControls();
+        await loadSources(1);
+        return;
+      }
+    }
+    updateDeleteUnlinkedControls();
+  }
+
+  async function processDeleteAllUnlinked() {
+    if (deleteUnlinkedRunning) return;
     if (currentLinkFilter() !== 'unlinked') return;
     if (!confirm('حذف جميع الصور غير المرتبطة من bm000 والموقع؟ لا يمكن التراجع.')) return;
-    if (deleteAllUnlinkedBtn) deleteAllUnlinkedBtn.disabled = true;
+
+    deleteUnlinkedRunning = true;
+    deleteUnlinkedPaused = false;
+    deleteUnlinkedProcessed = 0;
+    deleteUnlinkedFailed = 0;
+    deleteUnlinkedInitialTotal = totalCount > 0 ? totalCount : 0;
+    updateDeleteUnlinkedControls();
+    renderDeleteUnlinkedProgress();
     linkStatus.textContent = 'جاري حذف الصور غير المرتبطة...';
-    try {
-      const payload = await postAction('delete-unlinked-batch', { max_images: 500 });
-      linkStatus.textContent = payload.message || '';
-      if (payload.ok || (payload.deleted || 0) > 0) {
-        await loadSources(1);
-      }
-    } catch {
-      linkStatus.textContent = 'تعذر حذف الصور غير المرتبطة.';
-    } finally {
-      if (deleteAllUnlinkedBtn) deleteAllUnlinkedBtn.disabled = false;
-    }
+    await runDeleteUnlinkedLoop();
+  }
+
+  async function deleteAllUnlinked() {
+    await processDeleteAllUnlinked();
   }
 
   function bindCard(card, item) {
@@ -538,7 +615,7 @@ const API_URL = '/dashboard/material-images-api.php';
           : '<span class="link-badge text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">غير مرتبطة</span>';
         const preview = item.preview_url
           ? `<button type="button" class="preview-btn group relative w-full h-48 rounded-lg border border-border-subtle bg-surface-low overflow-hidden" title="تكبير الصورة">
-              <img src="${escapeHtml(item.preview_url)}" class="w-full h-full object-contain" alt="">
+              <img data-deferred-src="${escapeHtml(item.preview_url)}" class="w-full h-full object-contain" alt="" decoding="async" fetchpriority="low">
               <span class="absolute bottom-2 left-2 rounded-md bg-black/60 text-white text-[10px] px-2 py-1 opacity-90 group-hover:bg-black/80">🔍 تكبير</span>
             </button>`
           : '<div class="w-full h-48 rounded-lg border border-border-subtle bg-surface-low"></div>';
@@ -591,17 +668,24 @@ const API_URL = '/dashboard/material-images-api.php';
     sourcePrevBtn.disabled = page <= 1;
     sourceNextBtn.disabled = !hasMore;
     syncBulkDeleteButton();
+    window.portalDeferredImages?.observe(sourceCards);
   }
 
   async function loadSources(targetPage = 1) {
     const linkFilter = currentLinkFilter();
     const materialQuery = sourceMaterialSearch?.value.trim() || '';
-    const payload = await fetchJson(`${API_URL}?action=link-sources-page&page=${targetPage}&page_size=${pageSize}&link_filter=${encodeURIComponent(linkFilter)}&material_query=${encodeURIComponent(materialQuery)}`);
-    if (!payload.ok) {
+    try {
+      const payload = await fetchJson(`${API_URL}?action=link-sources-page&page=${targetPage}&page_size=${pageSize}&link_filter=${encodeURIComponent(linkFilter)}&material_query=${encodeURIComponent(materialQuery)}`);
+      if (signal.aborted) return;
+      if (!payload.ok) {
+        linkStatus.textContent = 'تعذر تحميل الصور.';
+        return;
+      }
+      renderSources(payload);
+    } catch (error) {
+      if (signal.aborted || error?.name === 'AbortError') return;
       linkStatus.textContent = 'تعذر تحميل الصور.';
-      return;
     }
-    renderSources(payload);
   }
 
   document.addEventListener('click', (event) => {
@@ -629,6 +713,18 @@ const API_URL = '/dashboard/material-images-api.php';
   reloadSourcesBtn?.addEventListener('click', () => loadSources(page), { signal });
   applySourceFiltersBtn?.addEventListener('click', applySourceMaterialSearch, { signal });
   deleteAllUnlinkedBtn?.addEventListener('click', deleteAllUnlinked, { signal });
+  pauseDeleteUnlinkedBtn?.addEventListener('click', () => {
+    if (!deleteUnlinkedRunning) return;
+    deleteUnlinkedPaused = true;
+    updateDeleteUnlinkedControls();
+    if (linkStatus) linkStatus.textContent = 'متوقف مؤقتاً — اضغط «استئناف الحذف».';
+  }, { signal });
+  resumeDeleteUnlinkedBtn?.addEventListener('click', async () => {
+    if (!deleteUnlinkedRunning || !deleteUnlinkedPaused) return;
+    deleteUnlinkedPaused = false;
+    if (linkStatus) linkStatus.textContent = 'جاري حذف الصور غير المرتبطة...';
+    await runDeleteUnlinkedLoop();
+  }, { signal });
   linkFilterButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
       const filter = btn.getAttribute('data-filter') || 'all';
@@ -646,5 +742,11 @@ const API_URL = '/dashboard/material-images-api.php';
   }, { signal });
   setLinkFilter('unlinked');
   loadSources(1);
+
+  window.addEventListener('pageshow', (event) => {
+    if (!event.persisted || signal.aborted) return;
+    if (!panel.isConnected) return;
+    loadSources(page || 1);
+  }, { signal });
   };
 })();
