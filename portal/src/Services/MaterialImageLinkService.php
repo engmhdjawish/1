@@ -342,6 +342,71 @@ final class MaterialImageLinkService
     }
 
     /**
+     * @return array{
+     *   ok: bool,
+     *   done: bool,
+     *   deleted: int,
+     *   remaining: int,
+     *   message: string,
+     *   file_name?: string,
+     *   image_guid?: string
+     * }
+     */
+    public static function deleteNextUnlinked(): array
+    {
+        if (!(PortalSettingsService::apiHealth()['ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'done' => true,
+                'deleted' => 0,
+                'remaining' => 0,
+                'message' => 'الأمين غير متصل.',
+            ];
+        }
+
+        $page = self::listSourcesPage(1, 1, 'unlinked', '');
+        $rows = is_array($page['items'] ?? null) ? $page['items'] : [];
+        $remainingBefore = max(0, (int) ($page['total_count'] ?? 0));
+
+        if ($rows === []) {
+            return [
+                'ok' => true,
+                'done' => true,
+                'deleted' => 0,
+                'remaining' => 0,
+                'message' => 'لا توجد صور غير مرتبطة للحذف.',
+            ];
+        }
+
+        $row = $rows[0];
+        $imageGuid = trim((string) ($row['amine_image_guid'] ?? ''));
+        $fileName = trim((string) ($row['file_name'] ?? ''));
+        if ($imageGuid === '') {
+            return [
+                'ok' => false,
+                'done' => $remainingBefore <= 1,
+                'deleted' => 0,
+                'remaining' => max(0, $remainingBefore - 1),
+                'message' => 'لا يوجد GUID للصورة «' . $fileName . '».',
+                'file_name' => $fileName,
+            ];
+        }
+
+        $result = self::deleteImage($imageGuid, $fileName);
+        $remaining = max(0, $remainingBefore - 1);
+
+        return [
+            'ok' => (bool) ($result['ok'] ?? false),
+            'done' => $remaining === 0,
+            'deleted' => ($result['ok'] ?? false) ? 1 : 0,
+            'remaining' => $remaining,
+            'message' => (string) ($result['message'] ?? ''),
+            'file_name' => $fileName,
+            'image_guid' => $imageGuid,
+        ];
+    }
+
+    /**
      * @return array{ok: bool, message: string, image_guid?: string}
      */
     private static function deleteOnAmine(string $imageGuid, string $fileName): array
@@ -707,6 +772,8 @@ final class MaterialImageLinkService
         array $materialGuids,
         ?string $uploadedByUserId
     ): array {
+        $previousPictureGuids = self::snapshotMaterialPictureGuids($materialGuids);
+
         try {
             $response = ApiClient::postJson(
                 '/api/material-images/' . rawurlencode($amineSourceGuid) . '/assign-to-materials',
@@ -794,6 +861,11 @@ final class MaterialImageLinkService
                 );
             }
 
+            self::purgeReplacedMaterialImage(
+                (string) ($previousPictureGuids[$materialGuid] ?? ''),
+                $imageGuid
+            );
+
             $linked++;
             $results[] = [
                 'material_guid' => $materialGuid,
@@ -844,6 +916,8 @@ final class MaterialImageLinkService
                 ];
                 continue;
             }
+
+            $previousPictureGuid = self::materialPictureGuid($material);
 
             $targetFileName = self::buildTargetFileName($material, $extension !== '' ? '.' . $extension : '.jpg');
             $guidKey = strtolower($materialGuid);
@@ -927,15 +1001,27 @@ final class MaterialImageLinkService
                 }
             }
 
-            if ($imageGuid !== '') {
-                MaterialImageSyncService::recordAssignedCopy(
-                    $fileName,
-                    $localPath,
-                    $imageGuid,
-                    $uploadedByUserId,
-                    $sourceFileName
-                );
+            if ($imageGuid === '') {
+                $failed++;
+                $results[] = [
+                    'material_guid' => $materialGuid,
+                    'material_name' => (string) ($material['name'] ?? ''),
+                    'material_code' => (string) ($material['material_code'] ?? ''),
+                    'ok' => false,
+                    'message' => 'رفع الأمين نجح لكن لم يُرجع معرف الصورة (GUID).',
+                ];
+                continue;
             }
+
+            MaterialImageSyncService::recordAssignedCopy(
+                $fileName,
+                $localPath,
+                $imageGuid,
+                $uploadedByUserId,
+                $sourceFileName
+            );
+
+            self::purgeReplacedMaterialImage($previousPictureGuid, $imageGuid);
 
             $linked++;
             $results[] = [
@@ -958,6 +1044,61 @@ final class MaterialImageLinkService
             'failed' => $failed,
             'items' => $results,
         ];
+    }
+
+    /** @param array<string, mixed> $material */
+    private static function materialPictureGuid(array $material): string
+    {
+        $guid = trim((string) (
+            $material['pictureGuid']
+            ?? $material['PictureGuid']
+            ?? $material['imageGuid']
+            ?? $material['ImageGuid']
+            ?? ''
+        ));
+        if ($guid === '' || strcasecmp($guid, '00000000-0000-0000-0000-000000000000') === 0) {
+            return '';
+        }
+
+        return $guid;
+    }
+
+    private static function purgeReplacedMaterialImage(string $oldImageGuid, string $newImageGuid): void
+    {
+        $oldImageGuid = trim($oldImageGuid);
+        $newImageGuid = trim($newImageGuid);
+        if ($oldImageGuid === '' || $oldImageGuid === $newImageGuid) {
+            return;
+        }
+
+        MaterialImageSyncService::purgeImageRecords($oldImageGuid);
+    }
+
+    /**
+     * @param list<string> $materialGuids
+     * @return array<string, string> materialGuid => old pictureGuid
+     */
+    private static function snapshotMaterialPictureGuids(array $materialGuids): array
+    {
+        $snapshot = [];
+        foreach ($materialGuids as $materialGuid) {
+            $materialGuid = trim($materialGuid);
+            if ($materialGuid === '') {
+                continue;
+            }
+
+            $material = self::fetchMaterial($materialGuid);
+            if ($material === null) {
+                continue;
+            }
+
+            $pictureGuid = self::materialPictureGuid($material);
+            if ($pictureGuid !== '') {
+                $snapshot[$materialGuid] = $pictureGuid;
+            }
+        }
+
+        return $snapshot;
     }
 
     /** @return array<string, mixed>|null */

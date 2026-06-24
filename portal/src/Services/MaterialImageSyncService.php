@@ -498,20 +498,29 @@ final class MaterialImageSyncService
                 continue;
             }
 
-            if ($amine !== null && self::amineHasDbRecord($amine) && self::fingerprintsMatch($fingerprint, $amine)) {
-                self::upsertSyncedMatch($fileName, $localPath, null, $amine, $fingerprint, $uploadedByUserId);
-                $reconciled++;
+            if ($amine !== null && self::amineHasDbRecord($amine)) {
+                $thumbPath = self::localThumbPathFor($fileName);
+                if (self::fingerprintsMatch($fingerprint, $amine)) {
+                    self::upsertSyncedMatch($fileName, $localPath, $thumbPath, $amine, $fingerprint, $uploadedByUserId);
+                    $reconciled++;
+                } else {
+                    self::upsertLinkedByName($fileName, $localPath, $thumbPath, $amine, $fingerprint, $uploadedByUserId);
+                    $contentChanged++;
+                    $reconciled++;
+                }
                 continue;
             }
 
             if ($amine !== null) {
-                self::enqueue($fileName, $localPath, null, $uploadedByUserId);
+                $thumbPath = self::localThumbPathFor($fileName);
+                self::enqueue($fileName, $localPath, $thumbPath, $uploadedByUserId);
                 $contentChanged++;
                 $added++;
                 continue;
             }
 
-            self::enqueue($fileName, $localPath, null, $uploadedByUserId);
+            $thumbPath = self::localThumbPathFor($fileName);
+            self::enqueue($fileName, $localPath, $thumbPath, $uploadedByUserId);
             $added++;
         }
 
@@ -824,7 +833,15 @@ final class MaterialImageSyncService
              FROM material_image_sync_queue
              WHERE amine_image_guid::text = :amine_image_guid
                {$statusFilter}
-             ORDER BY synced_to_amine_at DESC NULLS LAST, updated_at DESC
+             ORDER BY
+                CASE sync_status
+                    WHEN 'synced' THEN 0
+                    WHEN 'pending' THEN 1
+                    WHEN 'syncing' THEN 2
+                    ELSE 3
+                END,
+                synced_to_amine_at DESC NULLS LAST,
+                updated_at DESC
              LIMIT 1"
         );
         $stmt->execute(['amine_image_guid' => $amineImageGuid]);
@@ -843,6 +860,277 @@ final class MaterialImageSyncService
         $fileName = (string) ($row['file_name'] ?? '');
 
         return $fileName !== '' ? MaterialImageStorageService::resolveLocalPath($fileName, $thumb) : null;
+    }
+
+    /** @return array{updated: int, missing: int, message: string} */
+    public static function reindexLocalPaths(): array
+    {
+        self::ensureTable();
+        $stmt = Database::pdo()->query(
+            'SELECT id::text AS id, file_name, local_file_path, local_thumb_path
+             FROM material_image_sync_queue'
+        );
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $updated = 0;
+        $missing = 0;
+
+        $update = Database::pdo()->prepare(
+            'UPDATE material_image_sync_queue
+             SET local_file_path = :local_file_path,
+                 local_thumb_path = :local_thumb_path,
+                 updated_at = NOW()
+             WHERE id = :id'
+        );
+
+        foreach ($rows as $row) {
+            $fileName = (string) ($row['file_name'] ?? '');
+            if ($fileName === '') {
+                continue;
+            }
+
+            $localPath = MaterialImageStorageService::resolveLocalPath($fileName, false);
+            if ($localPath === null) {
+                $missing++;
+                continue;
+            }
+
+            $thumbPath = MaterialImageStorageService::resolveLocalPath($fileName, true);
+            $currentPath = (string) ($row['local_file_path'] ?? '');
+            $currentThumb = (string) ($row['local_thumb_path'] ?? '');
+            if ($currentPath === $localPath && $currentThumb === (string) ($thumbPath ?? '')) {
+                continue;
+            }
+
+            $update->execute([
+                'id' => (string) ($row['id'] ?? ''),
+                'local_file_path' => $localPath,
+                'local_thumb_path' => $thumbPath,
+            ]);
+            $updated++;
+        }
+
+        return [
+            'updated' => $updated,
+            'missing' => $missing,
+            'message' => 'تم تحديث ' . $updated . ' مساراً محلياً.' . ($missing > 0 ? (' (' . $missing . ' بدون ملف على الموقع)') : ''),
+        ];
+    }
+
+    /**
+     * Remove a pending/failed queue item and its local site copy only (does not touch bm000).
+     *
+     * @return array{ok: bool, message: string, file_name?: string}
+     */
+    public static function deletePendingQueueItem(string $id): array
+    {
+        self::ensureTable();
+        $id = trim($id);
+        if ($id === '') {
+            return ['ok' => false, 'message' => 'معرف عنصر الطابور مطلوب.'];
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT
+                id::text AS id,
+                file_name,
+                sync_status::text AS sync_status
+             FROM material_image_sync_queue
+             WHERE id = :id
+             LIMIT 1'
+        );
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row === false) {
+            return ['ok' => false, 'message' => 'عنصر الطابور غير موجود.'];
+        }
+
+        $status = (string) ($row['sync_status'] ?? '');
+        if (in_array($status, ['synced', 'syncing'], true)) {
+            return [
+                'ok' => false,
+                'message' => 'الصورة متزامنة أو قيد المزامنة — استخدم «حذف الصورة» من تبويب الربط لحذفها من الموقع والأمين معاً.',
+            ];
+        }
+
+        $fileName = (string) ($row['file_name'] ?? '');
+        if ($fileName !== '') {
+            MaterialImageStorageService::deleteLocalFile($fileName);
+        }
+
+        $delete = Database::pdo()->prepare('DELETE FROM material_image_sync_queue WHERE id = :id');
+        $delete->execute(['id' => $id]);
+
+        return [
+            'ok' => true,
+            'message' => $fileName !== ''
+                ? ('تم حذف «' . $fileName . '» من مجلد الموقع وطابور المزامنة (لم يُمس سجل الأمين).')
+                : 'تم حذف عنصر الطابور.',
+            'file_name' => $fileName,
+        ];
+    }
+
+    public static function countDeletablePending(): int
+    {
+        self::ensureTable();
+        $stmt = Database::pdo()->query(
+            "SELECT COUNT(*)::int
+             FROM material_image_sync_queue
+             WHERE sync_status IN ('pending', 'failed')"
+        );
+
+        return (int) ($stmt->fetchColumn() ?: 0);
+    }
+
+    /**
+     * @param list<string> $ids
+     * @return array{ok: bool, message: string, deleted: int, failed: int, items: list<array<string, mixed>>}
+     */
+    public static function deletePendingQueueItems(array $ids): array
+    {
+        $deleted = 0;
+        $failed = 0;
+        $items = [];
+
+        foreach ($ids as $rawId) {
+            $id = trim((string) $rawId);
+            if ($id === '') {
+                continue;
+            }
+
+            $result = self::deletePendingQueueItem($id);
+            $items[] = array_merge($result, ['id' => $id]);
+            if ($result['ok'] ?? false) {
+                $deleted++;
+            } else {
+                $failed++;
+            }
+        }
+
+        if ($deleted === 0 && $failed === 0) {
+            return [
+                'ok' => false,
+                'message' => 'لم يُحدَّد أي عنصر للحذف.',
+                'deleted' => 0,
+                'failed' => 0,
+                'items' => [],
+            ];
+        }
+
+        return [
+            'ok' => $deleted > 0,
+            'message' => $deleted > 0
+                ? ('تم حذف ' . $deleted . ' صورة من الموقع والطابور.' . ($failed > 0 ? (' فشل ' . $failed . '.') : ''))
+                : 'لم يُحذف أي عنصر.',
+            'deleted' => $deleted,
+            'failed' => $failed,
+            'items' => $items,
+        ];
+    }
+
+    /**
+     * @return array{
+     *   ok: bool,
+     *   done: bool,
+     *   deleted: int,
+     *   remaining: int,
+     *   message: string,
+     *   file_name?: string
+     * }
+     */
+    public static function deleteNextPending(): array
+    {
+        self::ensureTable();
+        $stmt = Database::pdo()->query(
+            "SELECT id::text AS id
+             FROM material_image_sync_queue
+             WHERE sync_status IN ('pending', 'failed')
+             ORDER BY created_at ASC
+             LIMIT 1"
+        );
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row === false) {
+            return [
+                'ok' => true,
+                'done' => true,
+                'deleted' => 0,
+                'remaining' => 0,
+                'message' => 'لا توجد صور غير مزامنة للحذف.',
+            ];
+        }
+
+        $result = self::deletePendingQueueItem((string) ($row['id'] ?? ''));
+        $remaining = self::countDeletablePending();
+
+        return [
+            'ok' => (bool) ($result['ok'] ?? false),
+            'done' => $remaining === 0,
+            'deleted' => ($result['ok'] ?? false) ? 1 : 0,
+            'remaining' => $remaining,
+            'message' => (string) ($result['message'] ?? ''),
+            'file_name' => (string) ($result['file_name'] ?? ''),
+        ];
+    }
+
+    /**
+     * Remove queue rows whose local site file is missing (pending/failed only).
+     *
+     * @return array{ok: bool, message: string, purged: int, skipped_synced: int}
+     */
+    public static function purgeOrphanQueueRows(): array
+    {
+        self::ensureTable();
+        $stmt = Database::pdo()->query(
+            'SELECT
+                id::text AS id,
+                file_name,
+                local_file_path,
+                sync_status::text AS sync_status
+             FROM material_image_sync_queue'
+        );
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $purged = 0;
+        $skippedSynced = 0;
+
+        $delete = Database::pdo()->prepare('DELETE FROM material_image_sync_queue WHERE id = :id');
+
+        foreach ($rows as $row) {
+            $fileName = (string) ($row['file_name'] ?? '');
+            $localPath = (string) ($row['local_file_path'] ?? '');
+            $status = (string) ($row['sync_status'] ?? '');
+
+            $exists = ($localPath !== '' && is_file($localPath))
+                || ($fileName !== '' && MaterialImageStorageService::resolveLocalPath($fileName, false) !== null);
+            if ($exists) {
+                continue;
+            }
+
+            if ($status === 'synced') {
+                $skippedSynced++;
+                continue;
+            }
+
+            $delete->execute(['id' => (string) ($row['id'] ?? '')]);
+            $purged++;
+        }
+
+        $message = $purged > 0
+            ? ('تمت إزالة ' . $purged . ' سجلاً يتيمياً من الطابور (ملف الموقع مفقود).')
+            : 'لا توجد سجلات يتيمة قابلة للتنظيف.';
+        if ($skippedSynced > 0) {
+            $message .= ' (' . $skippedSynced . ' متزامنة بلا ملف محلي — استخدم تبويب الربط.)';
+        }
+
+        return [
+            'ok' => true,
+            'message' => $message,
+            'purged' => $purged,
+            'skipped_synced' => $skippedSynced,
+        ];
+    }
+
+    private static function localThumbPathFor(string $fileName): ?string
+    {
+        return MaterialImageStorageService::resolveLocalPath($fileName, true);
     }
 
     public static function resetFailedToPending(): int
@@ -1131,12 +1419,12 @@ final class MaterialImageSyncService
             return null;
         }
 
-        if ($amine === null || !self::amineFileExistsOnDisk($amine)) {
+        if ($amine === null) {
             if ($id !== '') {
                 self::markPendingWithFingerprint(
                     $id,
                     $fingerprint,
-                    'الملف غير موجود على الأمين — ستُعاد المزامنة.'
+                    'الملف غير موجود في سجل الأمين — ستُعاد المزامنة.'
                 );
 
                 return 'missing_on_amine';
@@ -1145,21 +1433,21 @@ final class MaterialImageSyncService
             return null;
         }
 
-        if (self::fingerprintsMatch($fingerprint, $amine)) {
-            if (!self::amineHasDbRecord($amine)) {
-                if ($id !== '') {
-                    self::markPendingWithFingerprint(
-                        $id,
-                        $fingerprint,
-                        'الملف على الأمين بدون سجل bm000 — ستُعاد المزامنة.'
-                    );
+        if (!self::amineHasDbRecord($amine)) {
+            if ($id !== '') {
+                self::markPendingWithFingerprint(
+                    $id,
+                    $fingerprint,
+                    'الملف على الأمين بدون سجل bm000 — ستُعاد المزامنة.'
+                );
 
-                    return 'missing_on_amine';
-                }
-
-                return null;
+                return 'missing_on_amine';
             }
 
+            return null;
+        }
+
+        if (self::fingerprintsMatch($fingerprint, $amine) && self::amineFileExistsOnDisk($amine)) {
             if ($id !== '') {
                 self::markSyncedFromMatch($id, $amine, $fingerprint);
             } else {
@@ -1177,10 +1465,15 @@ final class MaterialImageSyncService
         }
 
         if ($id !== '') {
-            self::markPendingWithFingerprint(
-                $id,
+            self::markLinkedByName($id, $amine, $fingerprint);
+        } else {
+            self::upsertLinkedByName(
+                $fileName,
+                $localPath,
+                isset($row['local_thumb_path']) ? (string) $row['local_thumb_path'] : null,
+                $amine,
                 $fingerprint,
-                'المحتوى على الموقع يختلف عن نسخة الأمين — ستُعاد المزامنة.'
+                null
             );
         }
 
@@ -1255,6 +1548,72 @@ final class MaterialImageSyncService
         $amineSize = (int) ($amine['sizeBytes'] ?? $amine['SizeBytes'] ?? 0);
 
         return $localSize > 0 && $localSize === $amineSize;
+    }
+
+    /** @param array<string, mixed> $amine */
+    /** @param array{size_bytes: int, sha256: string} $fingerprint */
+    private static function upsertLinkedByName(
+        string $fileName,
+        string $localPath,
+        ?string $localThumbPath,
+        array $amine,
+        array $fingerprint,
+        ?string $uploadedByUserId
+    ): void {
+        $amineGuid = self::normalizeAmineGuid($amine['id'] ?? $amine['Id'] ?? null);
+
+        $stmt = Database::pdo()->prepare(
+            'INSERT INTO material_image_sync_queue (
+                file_name, local_file_path, local_thumb_path, local_size_bytes, local_sha256,
+                amine_image_guid, uploaded_by_web_user_id, sync_status
+             ) VALUES (
+                :file_name, :local_file_path, :local_thumb_path, :local_size_bytes, :local_sha256,
+                :amine_image_guid, :uploaded_by_web_user_id, \'pending\'::material_image_sync_status
+             )
+             ON CONFLICT (file_name) DO UPDATE SET
+                local_file_path = EXCLUDED.local_file_path,
+                local_thumb_path = EXCLUDED.local_thumb_path,
+                local_size_bytes = EXCLUDED.local_size_bytes,
+                local_sha256 = EXCLUDED.local_sha256,
+                amine_image_guid = EXCLUDED.amine_image_guid,
+                sync_status = \'pending\'::material_image_sync_status,
+                amine_sync_error_ar = \'نسخة الموقع أحدث — بانتظار رفعها للأمين.\',
+                synced_to_amine_at = NULL,
+                updated_at = NOW()'
+        );
+        $stmt->execute([
+            'file_name' => $fileName,
+            'local_file_path' => $localPath,
+            'local_thumb_path' => $localThumbPath,
+            'local_size_bytes' => $fingerprint['size_bytes'],
+            'local_sha256' => $fingerprint['sha256'],
+            'amine_image_guid' => $amineGuid,
+            'uploaded_by_web_user_id' => $uploadedByUserId !== null && $uploadedByUserId !== '' ? $uploadedByUserId : null,
+        ]);
+    }
+
+    /** @param array<string, mixed> $amine */
+    /** @param array{size_bytes: int, sha256: string} $fingerprint */
+    private static function markLinkedByName(string $id, array $amine, array $fingerprint): void
+    {
+        $amineGuid = self::normalizeAmineGuid($amine['id'] ?? $amine['Id'] ?? null);
+        $stmt = Database::pdo()->prepare(
+            "UPDATE material_image_sync_queue
+             SET amine_image_guid = :amine_image_guid,
+                 local_size_bytes = :local_size_bytes,
+                 local_sha256 = :local_sha256,
+                 sync_status = 'pending',
+                 amine_sync_error_ar = 'نسخة الموقع أحدث — بانتظار رفعها للأمين.',
+                 synced_to_amine_at = NULL,
+                 updated_at = NOW()
+             WHERE id = :id"
+        );
+        $stmt->execute([
+            'id' => $id,
+            'amine_image_guid' => $amineGuid,
+            'local_size_bytes' => $fingerprint['size_bytes'],
+            'local_sha256' => $fingerprint['sha256'],
+        ]);
     }
 
     /** @param array<string, mixed> $amine */

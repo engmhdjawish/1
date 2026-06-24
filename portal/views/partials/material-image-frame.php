@@ -27,7 +27,7 @@ $frameDecoding = (string) ($decoding ?? 'async');
         alt="<?= h($frameImageAlt) ?>"
         loading="<?= h($frameLoading) ?>"
         decoding="<?= h($frameDecoding) ?>"
-        <?php if ($frameFetchPriority === 'high'): ?>fetchpriority="high"<?php endif; ?>
+        <?php if ($frameFetchPriority === 'high'): ?>fetchpriority="high"<?php elseif ($frameVariant === 'card' || $frameVariant === 'strip'): ?>fetchpriority="low"<?php endif; ?>
       >
     <?php else: ?>
       <span class="material-symbols-outlined material-image-frame__placeholder" aria-hidden="true">inventory_2</span>

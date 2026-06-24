@@ -7,6 +7,9 @@
   const NAV_HEADER = 'X-Dashboard-Nav';
   const AJAX_HEADER = 'X-Dashboard-Ajax';
 
+  let navAbort = null;
+  let navGeneration = 0;
+
   const qs = (sel, root = document) => root.querySelector(sel);
   const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
@@ -353,14 +356,34 @@
       window.location.href = url;
       return;
     }
+
+    if (navAbort) {
+      navAbort.abort();
+    }
+    const generation = ++navGeneration;
+    navAbort = new AbortController();
+    const signal = navAbort.signal;
+
+    if (window.__materialImagesLinkAbort) {
+      window.__materialImagesLinkAbort.abort();
+      window.__materialImagesLinkAbort = null;
+    }
+
+    if (typeof window.portalDeferredImages?.cancel === 'function') {
+      window.portalDeferredImages.cancel(qs('[data-dashboard-main]'));
+    }
+
     showPageLoader(true);
     try {
       const res = await fetch(url, {
         credentials: 'same-origin',
         headers: { [NAV_HEADER]: '1', Accept: 'text/html' },
+        signal,
       });
+      if (generation !== navGeneration) return;
       if (!res.ok) throw new Error('تعذر تحميل الصفحة.');
       const html = await res.text();
+      if (generation !== navGeneration) return;
       const doc = new DOMParser().parseFromString(html, 'text/html');
       const newMain = doc.querySelector('[data-dashboard-main]');
       const main = qs('[data-dashboard-main]');
@@ -388,9 +411,12 @@
       bindPage(document);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
+      if (err?.name === 'AbortError') return;
       showToast(err.message || 'تعذر التنقل.', 'error');
     } finally {
-      showPageLoader(false);
+      if (generation === navGeneration) {
+        showPageLoader(false);
+      }
     }
   }
 

@@ -125,7 +125,7 @@ php -S 127.0.0.1:8080
 | `/dashboard/accounting-documents.php` | الفواتير والسندات |
 | `/dashboard/material-images.php` | مخزون صور الموقع + رفع متسلسل مع استئناف (IndexedDB) |
 | `/dashboard/material-images-api.php` | API رفع صورة واحدة + قائمة الملفات المحلية |
-| `/api/image.php?id=...` | عرض صورة مادة من التخزين المحلي فقط (`portal/storage/material-images`) |
+| `/api/image.php?id=...` | عرض صورة مادة من مجلد الموقع فقط (GUID → ملف محلي، بدون بروكسي API) |
 | `/media/material.php?file=...` | عرض ملف صورة مادة محلي بالاسم |
 | `/api/proxy.php` | بروكسي JSON للـ API |
 

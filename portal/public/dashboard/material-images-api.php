@@ -71,6 +71,7 @@ if ($method === 'GET') {
             'sync' => MaterialImageSyncService::stats(),
             'api' => PortalSettingsService::apiHealth(),
             'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
+            'pending_deletable' => MaterialImageSyncService::countDeletablePending(),
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -282,6 +283,12 @@ if ($method === 'POST') {
         exit;
     }
 
+    if ($action === 'delete-unlinked-next') {
+        $result = MaterialImageLinkService::deleteNextUnlinked();
+        echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     if ($action === 'reassign-materials') {
         @set_time_limit(120);
         $sourceFileName = trim((string) ($_POST['source_file_name'] ?? ''));
@@ -420,6 +427,61 @@ if ($method === 'POST') {
             'sync' => MaterialImageSyncService::stats(),
             'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
         ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'reindex-local-paths') {
+        $reindex = MaterialImageSyncService::reindexLocalPaths();
+        echo json_encode([
+            'ok' => true,
+            'message' => (string) ($reindex['message'] ?? ''),
+            'reindex' => $reindex,
+            'sync' => MaterialImageSyncService::stats(),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'delete-pending-queue-item') {
+        $queueId = trim((string) ($_POST['queue_id'] ?? ''));
+        $result = MaterialImageSyncService::deletePendingQueueItem($queueId);
+        echo json_encode(array_merge($result, [
+            'sync' => MaterialImageSyncService::stats(),
+            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
+            'pending_deletable' => MaterialImageSyncService::countDeletablePending(),
+        ]), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'delete-pending-batch') {
+        $ids = $_POST['queue_ids'] ?? [];
+        if (!is_array($ids)) {
+            $ids = [$ids];
+        }
+        $result = MaterialImageSyncService::deletePendingQueueItems($ids);
+        echo json_encode(array_merge($result, [
+            'sync' => MaterialImageSyncService::stats(),
+            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
+            'pending_deletable' => MaterialImageSyncService::countDeletablePending(),
+        ]), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'delete-pending-next') {
+        $result = MaterialImageSyncService::deleteNextPending();
+        echo json_encode(array_merge($result, [
+            'sync' => MaterialImageSyncService::stats(),
+            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
+            'pending_deletable' => MaterialImageSyncService::countDeletablePending(),
+        ]), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'purge-orphan-queue') {
+        $result = MaterialImageSyncService::purgeOrphanQueueRows();
+        echo json_encode(array_merge($result, [
+            'sync' => MaterialImageSyncService::stats(),
+            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
+        ]), JSON_UNESCAPED_UNICODE);
         exit;
     }
 

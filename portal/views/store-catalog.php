@@ -662,7 +662,7 @@ require __DIR__ . '/partials/store-filter-group.php';
         </button>
       <?php endif; ?>
 
-      <?php if ((int) ($catalog['totalCount'] ?? 0) > 0): ?>
+      <?php if ((int) ($catalog['totalCount'] ?? 0) > 0 && $products !== []): ?>
         <p class="store-results-meta">
           عرض <?= (int) ($catalog['rangeStart'] ?? 0) ?>–<?= (int) ($catalog['rangeEnd'] ?? 0) ?> من <?= (int) ($catalog['totalCount'] ?? 0) ?> مادة
           <?php if ((int) ($catalog['totalPages'] ?? 1) > 1): ?>

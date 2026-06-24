@@ -153,48 +153,106 @@ final class StoreCatalogService
         $isAvailable = $mergedFilters['isAvailable'];
         $hasImage = $mergedFilters['hasImage'];
         $lockedClientFilters = self::lockedClientFilters($policyRules);
+        $sellableMode = self::shouldApplySellableStockFilter();
+        if ($sellableMode && $mergedFilters['minWarehouseQuantity'] === null) {
+            $mergedFilters['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
+        }
 
         try {
-            $materials = self::fetchMaterialsExtended(
-                $page,
-                $pageSize,
-                $search,
-                $sort,
-                $materialTypes,
-                $manufacturers,
-                $ageCategories,
-                $sizeRanges,
-                $countryOfOrigins,
-                $groupGuids,
-                $storeGuids,
-                $isAvailable,
-                $hasImage,
-                false,
-                true,
-                $mergedFilters['minWarehouseQuantity'],
-                $mergedFilters['maxWarehouseQuantity'],
-                $mergedFilters['minUnitSalePriceSyp'],
-                $mergedFilters['maxUnitSalePriceSyp'],
-                $mergedFilters['minUnitSalePriceUsd'],
-                $mergedFilters['maxUnitSalePriceUsd'],
-                $mergedFilters['minUnitPurchasePriceUsd'],
-                $mergedFilters['maxUnitPurchasePriceUsd']
-            );
-            if ($materials['ok']) {
-                $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
-                $rawItems = $data['items'] ?? $data['Items'] ?? [];
-                $products = self::withOfferPricing(
-                    is_array($rawItems) ? $rawItems : [],
+            if ($sellableMode) {
+                $paged = self::fetchMaterialsWithSellablePaging(
+                    $page,
+                    $pageSize,
+                    static function (int $apiPage, int $apiPageSize) use (
+                        $search,
+                        $sort,
+                        $materialTypes,
+                        $manufacturers,
+                        $ageCategories,
+                        $sizeRanges,
+                        $countryOfOrigins,
+                        $groupGuids,
+                        $storeGuids,
+                        $isAvailable,
+                        $hasImage,
+                        $mergedFilters
+                    ): array {
+                        return self::fetchMaterialsExtended(
+                            $apiPage,
+                            $apiPageSize,
+                            $search,
+                            $sort,
+                            $materialTypes,
+                            $manufacturers,
+                            $ageCategories,
+                            $sizeRanges,
+                            $countryOfOrigins,
+                            $groupGuids,
+                            $storeGuids,
+                            $isAvailable,
+                            $hasImage,
+                            false,
+                            $apiPage === 1,
+                            $mergedFilters['minWarehouseQuantity'],
+                            $mergedFilters['maxWarehouseQuantity'],
+                            $mergedFilters['minUnitSalePriceSyp'],
+                            $mergedFilters['maxUnitSalePriceSyp'],
+                            $mergedFilters['minUnitSalePriceUsd'],
+                            $mergedFilters['maxUnitSalePriceUsd'],
+                            $mergedFilters['minUnitPurchasePriceUsd'],
+                            $mergedFilters['maxUnitPurchasePriceUsd']
+                        );
+                    },
                     $contextOfferSlug
                 );
-                $products = self::applySellableStockFilter($products);
-                $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
-                $page = max(1, (int) ($data['page'] ?? $page));
-                $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
-                $resultFilters = is_array($data['resultFilters'] ?? null) ? $data['resultFilters'] : [];
-                $resultFilters = self::scopeResultFiltersForPolicy($resultFilters, $policyRules);
+                $products = $paged['products'];
+                $totalCount = $paged['totalCount'];
+                $resultFilters = $paged['resultFilters'];
+                $apiError = $paged['apiError'];
             } else {
-                $apiError = self::extractApiError($materials);
+                $materials = self::fetchMaterialsExtended(
+                    $page,
+                    $pageSize,
+                    $search,
+                    $sort,
+                    $materialTypes,
+                    $manufacturers,
+                    $ageCategories,
+                    $sizeRanges,
+                    $countryOfOrigins,
+                    $groupGuids,
+                    $storeGuids,
+                    $isAvailable,
+                    $hasImage,
+                    false,
+                    true,
+                    $mergedFilters['minWarehouseQuantity'],
+                    $mergedFilters['maxWarehouseQuantity'],
+                    $mergedFilters['minUnitSalePriceSyp'],
+                    $mergedFilters['maxUnitSalePriceSyp'],
+                    $mergedFilters['minUnitSalePriceUsd'],
+                    $mergedFilters['maxUnitSalePriceUsd'],
+                    $mergedFilters['minUnitPurchasePriceUsd'],
+                    $mergedFilters['maxUnitPurchasePriceUsd']
+                );
+                if ($materials['ok']) {
+                    $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
+                    $rawItems = $data['items'] ?? $data['Items'] ?? [];
+                    $products = self::withOfferPricing(
+                        is_array($rawItems) ? $rawItems : [],
+                        $contextOfferSlug
+                    );
+                    $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+                    $page = max(1, (int) ($data['page'] ?? $page));
+                    $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
+                    $resultFilters = is_array($data['resultFilters'] ?? null) ? $data['resultFilters'] : [];
+                    $resultFilters = self::scopeResultFiltersForPolicy($resultFilters, $policyRules);
+                } else {
+                    $apiError = self::extractApiError($materials);
+                }
+            }
+            if ($sellableMode && $apiError === null) {
+                $resultFilters = self::scopeResultFiltersForPolicy($resultFilters, $policyRules);
             }
         } catch (\Throwable $exception) {
             $apiError = $exception->getMessage();
@@ -361,23 +419,46 @@ final class StoreCatalogService
         $totalCount = 0;
         $resultFilters = [];
         $apiError = null;
+        $sellableMode = self::shouldApplySellableStockFilter();
 
         try {
-            $materials = self::requestMaterialsQuery($apiQuery);
-            if ($materials['ok']) {
-                $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
-                $rawItems = $data['items'] ?? $data['Items'] ?? [];
-                $products = self::withOfferPricing(
-                    is_array($rawItems) ? $rawItems : [],
+            if ($sellableMode) {
+                if (!isset($apiQuery['minWarehouseQuantity']) || $apiQuery['minWarehouseQuantity'] === null) {
+                    $apiQuery['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
+                }
+                $paged = self::fetchMaterialsWithSellablePaging(
+                    $page,
+                    $pageSize,
+                    static function (int $apiPage, int $apiPageSize) use ($apiQuery): array {
+                        $query = $apiQuery;
+                        $query['page'] = $apiPage;
+                        $query['pageSize'] = $apiPageSize;
+                        $query['includeResultFilters'] = $apiPage === 1 ? 'true' : 'false';
+
+                        return self::requestMaterialsQuery($query);
+                    },
                     $contextOfferSlug
                 );
-                $products = self::applySellableStockFilter($products);
-                $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
-                $page = max(1, (int) ($data['page'] ?? $page));
-                $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
-                $resultFilters = is_array($data['resultFilters'] ?? null) ? $data['resultFilters'] : [];
+                $products = $paged['products'];
+                $totalCount = $paged['totalCount'];
+                $resultFilters = $paged['resultFilters'];
+                $apiError = $paged['apiError'];
             } else {
-                $apiError = self::extractApiError($materials);
+                $materials = self::requestMaterialsQuery($apiQuery);
+                if ($materials['ok']) {
+                    $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
+                    $rawItems = $data['items'] ?? $data['Items'] ?? [];
+                    $products = self::withOfferPricing(
+                        is_array($rawItems) ? $rawItems : [],
+                        $contextOfferSlug
+                    );
+                    $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+                    $page = max(1, (int) ($data['page'] ?? $page));
+                    $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
+                    $resultFilters = is_array($data['resultFilters'] ?? null) ? $data['resultFilters'] : [];
+                } else {
+                    $apiError = self::extractApiError($materials);
+                }
             }
         } catch (\Throwable $exception) {
             $apiError = $exception->getMessage();
@@ -1303,5 +1384,92 @@ final class StoreCatalogService
         }
 
         return $locked;
+    }
+
+    private static function shouldApplySellableStockFilter(): bool
+    {
+        return (bool) (self::displayOptions()['allow_cart'] ?? false);
+    }
+
+    private static function sellableMinWarehouseQuantity(): float
+    {
+        return 0.0001;
+    }
+
+    /**
+     * Paginate sellable products after stock-reservation filtering.
+     * API page numbers do not match store page numbers once zero-stock items are removed.
+     *
+     * @param callable(int, int): array<string, mixed> $fetchPage
+     * @return array{
+     *   products: list<array<string, mixed>>,
+     *   totalCount: int,
+     *   resultFilters: array<string, mixed>,
+     *   apiError: string|null
+     * }
+     */
+    private static function fetchMaterialsWithSellablePaging(
+        int $page,
+        int $pageSize,
+        callable $fetchPage,
+        ?string $contextOfferSlug
+    ): array {
+        $page = max(1, $page);
+        $pageSize = max(1, $pageSize);
+        $targetStart = ($page - 1) * $pageSize;
+        $targetEnd = $targetStart + $pageSize;
+        $collected = [];
+        $sellableSeen = 0;
+        $apiPage = 1;
+        $apiPageSize = min(120, max($pageSize * 2, 48));
+        $apiTotalCount = 0;
+        $resultFilters = [];
+        $maxApiPages = 300;
+
+        while ($apiPage <= $maxApiPages) {
+            $materials = $fetchPage($apiPage, $apiPageSize);
+            if (!($materials['ok'] ?? false)) {
+                return [
+                    'products' => $collected,
+                    'totalCount' => $sellableSeen,
+                    'resultFilters' => $resultFilters,
+                    'apiError' => self::extractApiError($materials),
+                ];
+            }
+
+            $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
+            if ($apiPage === 1) {
+                $apiTotalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+                $resultFilters = is_array($data['resultFilters'] ?? null) ? $data['resultFilters'] : [];
+            }
+
+            $rawItems = $data['items'] ?? $data['Items'] ?? [];
+            $items = self::withOfferPricing(is_array($rawItems) ? $rawItems : [], $contextOfferSlug);
+            $items = StockReservationService::filterSellableProducts($items);
+
+            foreach ($items as $item) {
+                if ($sellableSeen >= $targetStart && $sellableSeen < $targetEnd) {
+                    $collected[] = $item;
+                }
+                $sellableSeen++;
+            }
+
+            if ($apiTotalCount > 0 && ($apiPage * $apiPageSize) >= $apiTotalCount) {
+                break;
+            }
+
+            if ($apiTotalCount === 0 && count($rawItems) < $apiPageSize) {
+                break;
+            }
+
+            $apiPage++;
+        }
+
+        return [
+            'products' => $collected,
+            'totalCount' => $sellableSeen,
+            'resultFilters' => $resultFilters,
+            'apiError' => null,
+        ];
     }
 }

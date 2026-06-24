@@ -25,21 +25,21 @@ if ($localPath === null && $thumb) {
     $localPath = MaterialImageStorageService::resolvePathForGuid($id, false, true);
 }
 
-if ($localPath === null || !is_readable($localPath)) {
-    http_response_code(404);
-    header('Content-Type: text/plain; charset=utf-8');
-    echo 'Image not found locally.';
+if ($localPath !== null && is_readable($localPath)) {
+    $mime = match (strtolower(pathinfo($localPath, PATHINFO_EXTENSION))) {
+        'jpg', 'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'gif' => 'image/gif',
+        'webp' => 'image/webp',
+        default => 'application/octet-stream',
+    };
+    header('Content-Type: ' . $mime);
+    header('Cache-Control: public, max-age=604800');
+    header('Content-Length: ' . (string) filesize($localPath));
+    readfile($localPath);
     exit;
 }
 
-$mime = match (strtolower(pathinfo($localPath, PATHINFO_EXTENSION))) {
-    'jpg', 'jpeg' => 'image/jpeg',
-    'png' => 'image/png',
-    'gif' => 'image/gif',
-    'webp' => 'image/webp',
-    default => 'application/octet-stream',
-};
-header('Content-Type: ' . $mime);
-header('Cache-Control: public, max-age=604800');
-header('Content-Length: ' . (string) filesize($localPath));
-readfile($localPath);
+http_response_code(404);
+header('Content-Type: text/plain; charset=utf-8');
+echo 'Image not found locally.';
