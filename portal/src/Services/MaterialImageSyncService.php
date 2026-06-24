@@ -499,11 +499,12 @@ final class MaterialImageSyncService
             }
 
             if ($amine !== null && self::amineHasDbRecord($amine)) {
+                $thumbPath = self::localThumbPathFor($fileName);
                 if (self::fingerprintsMatch($fingerprint, $amine)) {
-                    self::upsertSyncedMatch($fileName, $localPath, null, $amine, $fingerprint, $uploadedByUserId);
+                    self::upsertSyncedMatch($fileName, $localPath, $thumbPath, $amine, $fingerprint, $uploadedByUserId);
                     $reconciled++;
                 } else {
-                    self::upsertLinkedByName($fileName, $localPath, null, $amine, $fingerprint, $uploadedByUserId);
+                    self::upsertLinkedByName($fileName, $localPath, $thumbPath, $amine, $fingerprint, $uploadedByUserId);
                     $contentChanged++;
                     $reconciled++;
                 }
@@ -511,13 +512,15 @@ final class MaterialImageSyncService
             }
 
             if ($amine !== null) {
-                self::enqueue($fileName, $localPath, null, $uploadedByUserId);
+                $thumbPath = self::localThumbPathFor($fileName);
+                self::enqueue($fileName, $localPath, $thumbPath, $uploadedByUserId);
                 $contentChanged++;
                 $added++;
                 continue;
             }
 
-            self::enqueue($fileName, $localPath, null, $uploadedByUserId);
+            $thumbPath = self::localThumbPathFor($fileName);
+            self::enqueue($fileName, $localPath, $thumbPath, $uploadedByUserId);
             $added++;
         }
 
@@ -909,6 +912,121 @@ final class MaterialImageSyncService
             'missing' => $missing,
             'message' => 'تم تحديث ' . $updated . ' مساراً محلياً.' . ($missing > 0 ? (' (' . $missing . ' بدون ملف على الموقع)') : ''),
         ];
+    }
+
+    /**
+     * Remove a pending/failed queue item and its local site copy only (does not touch bm000).
+     *
+     * @return array{ok: bool, message: string, file_name?: string}
+     */
+    public static function deletePendingQueueItem(string $id): array
+    {
+        self::ensureTable();
+        $id = trim($id);
+        if ($id === '') {
+            return ['ok' => false, 'message' => 'معرف عنصر الطابور مطلوب.'];
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT
+                id::text AS id,
+                file_name,
+                sync_status::text AS sync_status
+             FROM material_image_sync_queue
+             WHERE id = :id
+             LIMIT 1'
+        );
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row === false) {
+            return ['ok' => false, 'message' => 'عنصر الطابور غير موجود.'];
+        }
+
+        $status = (string) ($row['sync_status'] ?? '');
+        if (in_array($status, ['synced', 'syncing'], true)) {
+            return [
+                'ok' => false,
+                'message' => 'الصورة متزامنة أو قيد المزامنة — استخدم «حذف الصورة» من تبويب الربط لحذفها من الموقع والأمين معاً.',
+            ];
+        }
+
+        $fileName = (string) ($row['file_name'] ?? '');
+        if ($fileName !== '') {
+            MaterialImageStorageService::deleteLocalFile($fileName);
+        }
+
+        $delete = Database::pdo()->prepare('DELETE FROM material_image_sync_queue WHERE id = :id');
+        $delete->execute(['id' => $id]);
+
+        return [
+            'ok' => true,
+            'message' => $fileName !== ''
+                ? ('تم حذف «' . $fileName . '» من مجلد الموقع وطابور المزامنة (لم يُمس سجل الأمين).')
+                : 'تم حذف عنصر الطابور.',
+            'file_name' => $fileName,
+        ];
+    }
+
+    /**
+     * Remove queue rows whose local site file is missing (pending/failed only).
+     *
+     * @return array{ok: bool, message: string, purged: int, skipped_synced: int}
+     */
+    public static function purgeOrphanQueueRows(): array
+    {
+        self::ensureTable();
+        $stmt = Database::pdo()->query(
+            'SELECT
+                id::text AS id,
+                file_name,
+                local_file_path,
+                sync_status::text AS sync_status
+             FROM material_image_sync_queue'
+        );
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $purged = 0;
+        $skippedSynced = 0;
+
+        $delete = Database::pdo()->prepare('DELETE FROM material_image_sync_queue WHERE id = :id');
+
+        foreach ($rows as $row) {
+            $fileName = (string) ($row['file_name'] ?? '');
+            $localPath = (string) ($row['local_file_path'] ?? '');
+            $status = (string) ($row['sync_status'] ?? '');
+
+            $exists = ($localPath !== '' && is_file($localPath))
+                || ($fileName !== '' && MaterialImageStorageService::resolveLocalPath($fileName, false) !== null);
+            if ($exists) {
+                continue;
+            }
+
+            if ($status === 'synced') {
+                $skippedSynced++;
+                continue;
+            }
+
+            $delete->execute(['id' => (string) ($row['id'] ?? '')]);
+            $purged++;
+        }
+
+        $message = $purged > 0
+            ? ('تمت إزالة ' . $purged . ' سجلاً يتيمياً من الطابور (ملف الموقع مفقود).')
+            : 'لا توجد سجلات يتيمة قابلة للتنظيف.';
+        if ($skippedSynced > 0) {
+            $message .= ' (' . $skippedSynced . ' متزامنة بلا ملف محلي — استخدم تبويب الربط.)';
+        }
+
+        return [
+            'ok' => true,
+            'message' => $message,
+            'purged' => $purged,
+            'skipped_synced' => $skippedSynced,
+        ];
+    }
+
+    private static function localThumbPathFor(string $fileName): ?string
+    {
+        return MaterialImageStorageService::resolveLocalPath($fileName, true);
     }
 
     public static function resetFailedToPending(): int

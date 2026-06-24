@@ -433,6 +433,25 @@ if ($method === 'POST') {
         exit;
     }
 
+    if ($action === 'delete-pending-queue-item') {
+        $queueId = trim((string) ($_POST['queue_id'] ?? ''));
+        $result = MaterialImageSyncService::deletePendingQueueItem($queueId);
+        echo json_encode(array_merge($result, [
+            'sync' => MaterialImageSyncService::stats(),
+            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
+        ]), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'purge-orphan-queue') {
+        $result = MaterialImageSyncService::purgeOrphanQueueRows();
+        echo json_encode(array_merge($result, [
+            'sync' => MaterialImageSyncService::stats(),
+            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
+        ]), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     http_response_code(400);
     echo json_encode(['ok' => false, 'message' => 'إجراء غير معروف.'], JSON_UNESCAPED_UNICODE);
     exit;

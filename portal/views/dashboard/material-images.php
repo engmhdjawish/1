@@ -108,6 +108,7 @@ $statusLabels = [
       <button type="button" id="pauseSyncBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">إيقاف مؤقت</button>
       <button type="button" id="retryFailedBtn" class="h-9 px-4 rounded-lg border border-amber-200 bg-amber-50 text-xs font-bold text-amber-900">إعادة المحاولة للفاشلة</button>
       <button type="button" id="scanLocalBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">فحص الملفات المحلية</button>
+      <button type="button" id="purgeOrphanQueueBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">تنظيف الطابور</button>
     </div>
     <div id="syncProgressWrap" class="hidden">
       <div class="flex justify-between text-xs text-text-muted mb-1">
@@ -142,19 +143,31 @@ $statusLabels = [
           <th class="text-right p-3">الحالة</th>
           <th class="text-right p-3">معرف الأمين</th>
           <th class="text-right p-3">ملاحظة</th>
+          <th class="text-right p-3">إجراء</th>
         </tr>
       </thead>
       <tbody id="syncQueueBody" class="divide-y divide-border-subtle">
         <?php if ($queue === []): ?>
-          <tr><td colspan="4" class="p-6 text-center text-text-muted">لا توجد عناصر في الطابور بعد. ارفع صوراً أو اضغط «فحص الملفات المحلية».</td></tr>
+          <tr><td colspan="5" class="p-6 text-center text-text-muted">لا توجد عناصر في الطابور بعد. ارفع صوراً أو اضغط «فحص الملفات المحلية».</td></tr>
         <?php endif; ?>
         <?php foreach ($queue as $row): ?>
-          <?php $status = (string) ($row['sync_status'] ?? 'pending'); $meta = $statusLabels[$status] ?? $statusLabels['pending']; ?>
+          <?php
+            $status = (string) ($row['sync_status'] ?? 'pending');
+            $meta = $statusLabels[$status] ?? $statusLabels['pending'];
+            $canDeletePending = in_array($status, ['pending', 'failed'], true);
+          ?>
           <tr>
             <td class="p-3 font-mono text-xs" dir="ltr"><?= h((string) ($row['file_name'] ?? '')) ?></td>
             <td class="p-3"><span class="text-xs px-2 py-0.5 rounded-full <?= h($meta['class']) ?>"><?= h($meta['label']) ?></span></td>
             <td class="p-3 font-mono text-xs" dir="ltr"><?= h((string) ($row['amine_image_guid'] ?? '—')) ?></td>
             <td class="p-3 text-xs text-text-muted"><?= h((string) ($row['amine_sync_error_ar'] ?? '')) ?></td>
+            <td class="p-3 text-xs">
+              <?php if ($canDeletePending): ?>
+                <button type="button" class="delete-pending-queue-btn h-7 px-2 rounded border border-red-200 bg-red-50 text-red-700 font-bold" data-queue-id="<?= h((string) ($row['id'] ?? '')) ?>" data-file-name="<?= h((string) ($row['file_name'] ?? '')) ?>">حذف محلي</button>
+              <?php else: ?>
+                <span class="text-text-muted">—</span>
+              <?php endif; ?>
+            </td>
           </tr>
         <?php endforeach; ?>
       </tbody>
@@ -214,6 +227,7 @@ $statusLabels = [
   const pauseSyncBtn = document.getElementById('pauseSyncBtn');
   const retryFailedBtn = document.getElementById('retryFailedBtn');
   const scanLocalBtn = document.getElementById('scanLocalBtn');
+  const purgeOrphanQueueBtn = document.getElementById('purgeOrphanQueueBtn');
   const syncProgressWrap = document.getElementById('syncProgressWrap');
   const syncProgressLabel = document.getElementById('syncProgressLabel');
   const syncProgressBar = document.getElementById('syncProgressBar');
@@ -680,19 +694,59 @@ $statusLabels = [
     updateSyncQueuePagination(meta);
     syncQueueSummary.textContent = `${syncQueueTotalCount} عنصر`;
     if (!items.length) {
-      syncQueueBody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-text-muted">الطابور فارغ.</td></tr>';
+      syncQueueBody.innerHTML = '<tr><td colspan="5" class="p-6 text-center text-text-muted">الطابور فارغ.</td></tr>';
       return;
     }
     syncQueueBody.innerHTML = items.map((row) => {
       const status = row.sync_status || 'pending';
       const meta = statusLabels[status] || statusLabels.pending;
+      const canDelete = status === 'pending' || status === 'failed';
+      const actionCell = canDelete
+        ? `<button type="button" class="delete-pending-queue-btn h-7 px-2 rounded border border-red-200 bg-red-50 text-red-700 font-bold" data-queue-id="${escapeHtml(row.id || '')}" data-file-name="${escapeHtml(row.file_name || '')}">حذف محلي</button>`
+        : '<span class="text-text-muted">—</span>';
       return `<tr>
         <td class="p-3 font-mono text-xs" dir="ltr">${escapeHtml(row.file_name || '')}</td>
         <td class="p-3"><span class="text-xs px-2 py-0.5 rounded-full ${meta.class}">${meta.label}</span></td>
         <td class="p-3 font-mono text-xs" dir="ltr">${escapeHtml(row.amine_image_guid || '—')}</td>
         <td class="p-3 text-xs text-text-muted">${escapeHtml(row.amine_sync_error_ar || '')}</td>
+        <td class="p-3 text-xs">${actionCell}</td>
       </tr>`;
     }).join('');
+  }
+
+  async function deletePendingQueueItem(queueId, fileName) {
+    const label = fileName || 'هذه الصورة';
+    if (!confirm(`حذف «${label}» من مجلد الموقع وطابور المزامنة؟\n(لن يُمس سجل الأمين bm000 إن وُجد — استخدم تبويب الربط للحذف الكامل.)`)) {
+      return;
+    }
+    const form = new FormData();
+    form.append('action', 'delete-pending-queue-item');
+    form.append('queue_id', queueId);
+    form.append('queue_page', String(syncQueuePage));
+    form.append('queue_page_size', String(syncQueuePageSize));
+    const res = await fetch(API_URL, { method: 'POST', body: form });
+    const payload = await res.json();
+    if (syncStatus) {
+      syncStatus.textContent = payload.message || (payload.ok ? 'تم الحذف.' : 'تعذر الحذف.');
+    }
+    if (payload.queue) {
+      renderSyncQueue(payload.queue, payload.sync || {});
+    }
+    if (payload.sync) {
+      renderSyncOverview({ sync: payload.sync, api: { ok: true }, queue: payload.queue });
+    }
+  }
+
+  async function purgeOrphanQueue() {
+    if (!confirm('إزالة سجلات الطابور التي فقدت ملفاتها على مجلد الموقع؟')) return;
+    const form = new FormData();
+    form.append('action', 'purge-orphan-queue');
+    form.append('queue_page', String(syncQueuePage));
+    form.append('queue_page_size', String(syncQueuePageSize));
+    const res = await fetch(API_URL, { method: 'POST', body: form });
+    const payload = await res.json();
+    if (syncStatus) syncStatus.textContent = payload.message || 'تم التنظيف.';
+    if (payload.queue) renderSyncQueue(payload.queue, payload.sync || {});
   }
 
   async function refreshOverview() {
@@ -952,6 +1006,14 @@ $statusLabels = [
   syncQueueNextBtn?.addEventListener('click', () => {
     if (syncQueueHasMore) loadSyncQueuePage(syncQueuePage + 1);
   });
+  syncQueueBody?.addEventListener('click', (event) => {
+    const btn = event.target instanceof HTMLElement ? event.target.closest('.delete-pending-queue-btn') : null;
+    if (!btn) return;
+    const queueId = btn.getAttribute('data-queue-id') || '';
+    const fileName = btn.getAttribute('data-file-name') || '';
+    if (queueId) deletePendingQueueItem(queueId, fileName);
+  });
+  purgeOrphanQueueBtn?.addEventListener('click', purgeOrphanQueue);
 
   updateSyncQueuePagination(normalizeQueuePayload({
     items: <?= json_encode($queue, JSON_UNESCAPED_UNICODE) ?>,

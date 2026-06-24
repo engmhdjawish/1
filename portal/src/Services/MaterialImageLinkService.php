@@ -927,15 +927,25 @@ final class MaterialImageLinkService
                 }
             }
 
-            if ($imageGuid !== '') {
-                MaterialImageSyncService::recordAssignedCopy(
-                    $fileName,
-                    $localPath,
-                    $imageGuid,
-                    $uploadedByUserId,
-                    $sourceFileName
-                );
+            if ($imageGuid === '') {
+                $failed++;
+                $results[] = [
+                    'material_guid' => $materialGuid,
+                    'material_name' => (string) ($material['name'] ?? ''),
+                    'material_code' => (string) ($material['material_code'] ?? ''),
+                    'ok' => false,
+                    'message' => 'رفع الأمين نجح لكن لم يُرجع معرف الصورة (GUID).',
+                ];
+                continue;
             }
+
+            MaterialImageSyncService::recordAssignedCopy(
+                $fileName,
+                $localPath,
+                $imageGuid,
+                $uploadedByUserId,
+                $sourceFileName
+            );
 
             $linked++;
             $results[] = [
