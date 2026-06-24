@@ -123,7 +123,7 @@ Prerequisites on server (copy via USB if blocked):
      .\install-iis-php-handler.ps1 -SitePort 90
      (or -PhpCgiPath C:\php\php-cgi.exe -SiteName YourSiteName)
    - Enable pdo_pgsql for IIS (fixes "could not find driver"):
-     .\fix-windows-php.ps1 -ApplyFix -PgBinDir D:\PostgreSQL\bin
+     .\fix-windows-php.ps1 -ApplyFix -PgBinDir D:\PgSQL\bin
      iisreset
    - Write permission on D:\JawishPortal\storage for AppPool identity
 

@@ -34,6 +34,7 @@ function Find-PostgresBinDir {
     }
 
     $candidates = @(
+        'D:\PgSQL\bin',
         'D:\PostgreSQL\bin',
         'C:\PostgreSQL\bin',
         'C:\Program Files\PostgreSQL\16\bin',
