@@ -136,12 +136,17 @@ final class MaterialImageLinkService
 
         $localPath = MaterialImageStorageService::resolveLocalPath($fileName, false);
         $hasLocal = $localPath !== null && is_file($localPath);
-        $previewUrl = $imageGuid !== ''
-            ? MaterialImageStorageService::imageGuidUrl($imageGuid, true)
-            : ($hasLocal ? MaterialImageStorageService::publicUrl($fileName, true) : '');
-        $previewFullUrl = $imageGuid !== ''
-            ? MaterialImageStorageService::imageGuidUrl($imageGuid, false)
-            : ($hasLocal ? MaterialImageStorageService::publicUrl($fileName, false) : '');
+        if ($hasLocal) {
+            $previewUrl = MaterialImageStorageService::publicUrl($fileName, false);
+            $previewFullUrl = MaterialImageStorageService::publicUrl($fileName, false);
+        } elseif ($imageGuid !== '') {
+            // Use full local image for card preview; CSS scales it down. Avoids missing thumb files.
+            $previewUrl = MaterialImageStorageService::imageGuidUrl($imageGuid, false);
+            $previewFullUrl = MaterialImageStorageService::imageGuidUrl($imageGuid, false);
+        } else {
+            $previewUrl = '';
+            $previewFullUrl = '';
+        }
 
         return [
             'file_name' => $fileName,

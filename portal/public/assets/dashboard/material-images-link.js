@@ -5,18 +5,23 @@
   'use strict';
 
   window.portalMaterialImagesLinkInit = function portalMaterialImagesLinkInit(root = document) {
-    if (window.__materialImagesLinkAbort) {
-      window.__materialImagesLinkAbort.abort();
-      window.__materialImagesLinkAbort = null;
-    }
-    if (typeof window.portalDeferredImages?.cancel === 'function') {
-      window.portalDeferredImages.cancel(root.querySelector('[data-material-images-link-panel]'));
-    }
-
     const panel = root.querySelector('[data-material-images-link-panel]');
     if (!panel) return;
 
+    if (window.__materialImagesLinkInstance) {
+      window.__materialImagesLinkInstance.dispose();
+    }
+
     const abort = new AbortController();
+    const instance = {
+      disposed: false,
+      loadId: 0,
+      dispose() {
+        this.disposed = true;
+        abort.abort();
+      },
+    };
+    window.__materialImagesLinkInstance = instance;
     window.__materialImagesLinkAbort = abort;
     const signal = abort.signal;
 
@@ -637,9 +642,10 @@ const API_URL = '/dashboard/material-images-api.php';
         const linkBadge = isLinked
           ? '<span class="link-badge text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">مرتبطة</span>'
           : '<span class="link-badge text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">غير مرتبطة</span>';
-        const preview = item.preview_url
+        const previewSrc = item.preview_full_url || item.preview_url;
+        const preview = previewSrc
           ? `<button type="button" class="preview-btn group relative w-full h-48 rounded-lg border border-border-subtle bg-surface-low overflow-hidden" title="تكبير الصورة">
-              <img src="${escapeHtml(item.preview_url)}" data-full-src="${escapeHtml(item.preview_full_url || item.preview_url)}" class="w-full h-full object-contain" alt="" loading="lazy" decoding="async" fetchpriority="low">
+              <img src="${escapeHtml(previewSrc)}" data-full-src="${escapeHtml(previewSrc)}" class="w-full h-full object-contain bg-surface-low" alt="" decoding="async">
               <span class="absolute bottom-2 left-2 rounded-md bg-black/60 text-white text-[10px] px-2 py-1 opacity-90 group-hover:bg-black/80">🔍 تكبير</span>
             </button>`
           : '<div class="w-full h-48 rounded-lg border border-border-subtle bg-surface-low"></div>';
@@ -692,15 +698,17 @@ const API_URL = '/dashboard/material-images-api.php';
     updatePageLabel();
     sourcePrevBtn.disabled = page <= 1;
     sourceNextBtn.disabled = !hasMore;
-    syncBulkDeleteButton();
+    updateDeleteUnlinkedControls();
   }
 
   async function loadSources(targetPage = 1) {
+    if (instance.disposed) return;
+    const requestId = ++instance.loadId;
     const linkFilter = currentLinkFilter();
     const materialQuery = sourceMaterialSearch?.value.trim() || '';
     try {
       const payload = await fetchJson(`${API_URL}?action=link-sources-page&page=${targetPage}&page_size=${pageSize}&link_filter=${encodeURIComponent(linkFilter)}&material_query=${encodeURIComponent(materialQuery)}`);
-      if (signal.aborted) return;
+      if (instance.disposed || signal.aborted || requestId !== instance.loadId) return;
       if (!payload.ok) {
         if (linkStatus) {
           linkStatus.textContent = payload.message || 'تعذر تحميل الصور.';
@@ -710,7 +718,7 @@ const API_URL = '/dashboard/material-images-api.php';
       if (linkStatus) linkStatus.textContent = '';
       renderSources(payload);
     } catch (error) {
-      if (signal.aborted || error?.name === 'AbortError') return;
+      if (instance.disposed || signal.aborted || error?.name === 'AbortError' || requestId !== instance.loadId) return;
       if (linkStatus) {
         linkStatus.textContent = error?.message || 'تعذر تحميل الصور.';
       }

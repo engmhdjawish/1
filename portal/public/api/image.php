@@ -20,9 +20,9 @@ if ($id === '' || preg_match('/^[0-9a-fA-F-]{36}$/', $id) !== 1) {
     exit;
 }
 
-$localPath = MaterialImageStorageService::resolvePathForGuid($id, $thumb, true);
+$localPath = MaterialImageStorageService::resolvePathForGuid($id, $thumb, false);
 if ($localPath === null && $thumb) {
-    $localPath = MaterialImageStorageService::resolvePathForGuid($id, false, true);
+    $localPath = MaterialImageStorageService::resolvePathForGuid($id, false, false);
 }
 
 if ($localPath !== null && is_readable($localPath)) {
