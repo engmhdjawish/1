@@ -23,7 +23,7 @@ $ErrorActionPreference = 'Stop'
 
 $envPath = if ($EnvFile) { $EnvFile } else { Join-Path $DeployRoot 'deploy.env' }
 if (-not (Test-Path $envPath)) {
-    Write-Fail "Missing $envPath — copy deploy.env.example to deploy.env and fill server values first"
+    Write-Fail "Missing $envPath - copy deploy.env.example to deploy.env and fill server values first"
     Write-Host '  notepad deploy\deploy.env' -ForegroundColor Yellow
     exit 1
 }
@@ -78,7 +78,10 @@ foreach ($name in $toolFiles) {
 }
 Copy-Item (Join-Path $DeployRoot 'lib\common.ps1') (Join-Path $toolsDest 'common.ps1') -Force
 
-$steps = @"
+$apiUrl = [string]$vars['API_URL']
+$portalAppUrl = [string]$vars['PORTAL_APP_URL']
+
+$steps = @'
 ========================================
   Jawish Portal — run ON THE SERVER
 ========================================
@@ -92,7 +95,7 @@ Prerequisites on server (copy via USB if blocked):
 
 2) PostgreSQL (first time only):
    cd C:\JawishDeploy\server-tools
-   .\setup-portable-postgres.ps1 -PgRoot D:\PostgreSQL -DbPassword "YOUR_DB_PASSWORD"
+   .\setup-portable-postgres.ps1 -PgRoot D:\PostgreSQL -DbPassword YOUR_DB_PASSWORD
 
 3) Install site files:
    xcopy /E /I /Y C:\JawishDeploy\JawishPortal D:\JawishPortal
@@ -102,14 +105,14 @@ Prerequisites on server (copy via USB if blocked):
    cd D:\JawishPortal
    php scripts\setup-database.php
    php scripts\run-migrations.php
-   php scripts\create-admin.php admin "YOUR_PASSWORD" "مدير النظام"
+   php scripts\create-admin.php admin YOUR_PASSWORD مدير_النظام
    php scripts\check-environment.php
 
    Or run: C:\JawishDeploy\server-tools\server-setup-on-host.ps1
 
 5) IIS:
    - Site physical path: D:\JawishPortal\public
-   - Binding: http :8080 (or your IP)
+   - Binding: http port 8080 (or your IP)
    - FastCGI handler for *.php
    - Write permission on D:\JawishPortal\storage for AppPool identity
 
@@ -119,12 +122,12 @@ Prerequisites on server (copy via USB if blocked):
    - Admin: /dashboard/users.php
 
 Configured in .env (inside JawishPortal):
-  PORTAL_PUBLISH_DIR target on server: $serverPublishDir
-  API_URL: $($vars['API_URL'])
-  PORTAL_APP_URL: $($vars['PORTAL_APP_URL'])
+  PORTAL_PUBLISH_DIR target on server: {0}
+  API_URL: {1}
+  PORTAL_APP_URL: {2}
 
 Full guide: deploy\WINDOWS-IIS-LOCAL.md (on dev PC repo)
-"@
+'@ -f $serverPublishDir, $apiUrl, $portalAppUrl
 
 $utf8Bom = New-Object System.Text.UTF8Encoding $true
 [System.IO.File]::WriteAllText((Join-Path $OutputRoot 'SERVER-STEPS.txt'), $steps, $utf8Bom)
