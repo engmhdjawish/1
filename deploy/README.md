@@ -132,6 +132,8 @@ sudo systemctl enable --now existingdb-api
 .\deploy\portal\publish.ps1 -DbSetup migrate # ترقية قاعدة موجودة
 ```
 
+في وضع **migrate** (أو **skip**) يُبقى ملف `.env` الموجود في مجلد النشر دون استبدال — حتى لا تُستبدل بيانات الاتصال الفعلية بقيم `deploy.env` القديمة.
+
 ينفّذ:
 
 - نسخ `portal/` إلى مجلد النشر (مع استثناء `.env` و `storage` الحساس)

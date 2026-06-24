@@ -8,7 +8,11 @@ PORTAL_PUBLISH_DIR="${PORTAL_PUBLISH_DIR:-/var/www/jawish-portal}"
 step "تجهيز نشر الموقع في $PORTAL_PUBLISH_DIR"
 
 copy_portal_tree "$PORTAL_PUBLISH_DIR"
-write_portal_env "$PORTAL_PUBLISH_DIR"
+env_preserve=""
+if [[ "${PORTAL_DB_SETUP:-}" != "fresh" && -f "$PORTAL_PUBLISH_DIR/.env" ]]; then
+  env_preserve="preserve"
+fi
+write_portal_env "$PORTAL_PUBLISH_DIR" "$env_preserve"
 
 pushd "$PORTAL_PUBLISH_DIR" >/dev/null
 composer install --no-dev --optimize-autoloader --no-interaction
@@ -25,7 +29,7 @@ else
   warn "تخطي إعداد DB — عيّن PORTAL_DB_SETUP=fresh أو migrate"
 fi
 
-if [[ -n "${PORTAL_ADMIN_USER:-}" && -n "${PORTAL_ADMIN_PASSWORD:-}" ]]; then
+if [[ "${PORTAL_DB_SETUP:-}" != "migrate" && -n "${PORTAL_ADMIN_USER:-}" && -n "${PORTAL_ADMIN_PASSWORD:-}" ]]; then
   php scripts/create-admin.php \
     "$PORTAL_ADMIN_USER" \
     "$PORTAL_ADMIN_PASSWORD" \

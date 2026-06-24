@@ -19,7 +19,8 @@ if (-not $source) { $source = Join-Path $RepoRoot 'portal' }
 
 Write-Step "Publishing portal to $publishDir"
 Copy-PortalTree -Destination $publishDir -Source $source
-Write-PortalEnv -Destination $publishDir -Env $vars
+$preserveEnv = ($DbSetup -ne 'fresh') -and (Test-Path (Join-Path $publishDir '.env'))
+Write-PortalEnv -Destination $publishDir -Env $vars -PreserveExisting:$preserveEnv
 
 Push-Location $publishDir
 try {
@@ -37,7 +38,7 @@ try {
 
     $adminUser = $vars['PORTAL_ADMIN_USER']
     $adminPass = $vars['PORTAL_ADMIN_PASSWORD']
-    if ($adminUser -and $adminPass) {
+    if ($DbSetup -ne 'migrate' -and $adminUser -and $adminPass) {
         $display = $vars['PORTAL_ADMIN_DISPLAY_NAME']
         if (-not $display) { $display = 'Admin' }
         php scripts/create-admin.php $adminUser $adminPass $display

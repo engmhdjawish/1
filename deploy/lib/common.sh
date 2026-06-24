@@ -115,7 +115,13 @@ copy_portal_tree() {
 
 write_portal_env() {
   local dest="$1"
+  local preserve="${2:-}"
   local env_file="$dest/.env"
+  if [[ "$preserve" == "preserve" && -f "$env_file" ]]; then
+    step "الإبقاء على $env_file الحالي"
+    ok "تم الإبقاء على .env الموجود"
+    return 0
+  fi
   step "إنشاء $env_file"
   cat > "$env_file" <<EOF
 PORTAL_DB_HOST=${PORTAL_DB_HOST}

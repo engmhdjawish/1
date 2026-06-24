@@ -214,9 +214,15 @@ function Copy-PortalTree {
 function Write-PortalEnv {
     param(
         [string]$Destination,
-        [hashtable]$Env
+        [hashtable]$Env,
+        [switch]$PreserveExisting
     )
     $envPath = Join-Path $Destination '.env'
+    if ($PreserveExisting -and (Test-Path $envPath)) {
+        Write-Step "Keeping existing $envPath"
+        Write-Ok 'Existing .env preserved'
+        return
+    }
     Write-Step "Creating $envPath"
     $docsPath = $Env.PORTAL_REPO_DOCS_PATH
     if (-not $docsPath) {
