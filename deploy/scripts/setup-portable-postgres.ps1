@@ -4,11 +4,16 @@
   Initialize portable PostgreSQL (ZIP binaries) for Jawish portal on Windows.
 
 .EXAMPLE
-  .\deploy\scripts\setup-portable-postgres.ps1 -PgRoot D:\PostgreSQL -DbPassword "MySecret"
+  .\deploy\scripts\setup-portable-postgres.ps1 -PgRoot C:\pgsql -DbPassword "MySecret"
+
+.EXAMPLE
+  .\deploy\scripts\setup-portable-postgres.ps1 -PgRoot C:\pgsql -SuperUser admin -SuperUserPassword "AdminPass" -DbPassword "PortalPass"
 #>
 param(
     [string]$PgRoot = 'D:\PostgreSQL',
     [string]$DataDir = '',
+    [string]$SuperUser = 'postgres',
+    [string]$SuperUserPassword = '',
     [string]$DbUser = 'portal',
     [string]$DbPassword = 'portal',
     [string]$DbName = 'portal_db',
@@ -52,7 +57,7 @@ if (-not (Test-Path $DataDir)) {
     Write-Step "Initializing data directory: $DataDir"
     New-Item -ItemType Directory -Path $DataDir -Force | Out-Null
     $env:PGDATA = $DataDir
-    & $initdb -D $DataDir -U postgres -E UTF8 --locale=C
+    & $initdb -D $DataDir -U $SuperUser -E UTF8 --locale=C
     if ($LASTEXITCODE -ne 0) {
         throw "initdb failed ($LASTEXITCODE)"
     }
@@ -78,22 +83,38 @@ if ($LASTEXITCODE -ne 0) {
 
 Start-Sleep -Seconds 2
 
-$env:PGPASSWORD = 'postgres'
-Write-Step "Creating role $DbUser and database $DbName"
+if (-not $SuperUserPassword) {
+  if ($SuperUser -eq 'postgres') {
+    $SuperUserPassword = 'postgres'
+    Write-Warn 'Using default superuser password "postgres" — pass -SuperUserPassword if yours is different'
+  } else {
+    Write-Fail "Superuser password required for -SuperUser $SuperUser"
+    Write-Host '  Example: -SuperUser admin -SuperUserPassword "YourAdminPassword"' -ForegroundColor Yellow
+    exit 1
+  }
+}
 
-$roleExists = & $psql -h 127.0.0.1 -p $Port -U postgres -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DbUser'" 2>$null
+$env:PGPASSWORD = $SuperUserPassword
+Write-Step "Creating role $DbUser and database $DbName (as $SuperUser)"
+
+$roleExists = & $psql -h 127.0.0.1 -p $Port -U $SuperUser -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DbUser'" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Fail "Could not connect as superuser '$SuperUser'. Check -SuperUser and -SuperUserPassword."
+    Write-Host "  Test: $psql -h 127.0.0.1 -p $Port -U $SuperUser -d postgres -c `"SELECT 1`"" -ForegroundColor Gray
+    exit 1
+}
 if ($roleExists -ne '1') {
-    & $psql -h 127.0.0.1 -p $Port -U postgres -d postgres -c "CREATE USER $DbUser WITH PASSWORD '$DbPassword' CREATEDB;"
+    & $psql -h 127.0.0.1 -p $Port -U $SuperUser -d postgres -c "CREATE USER $DbUser WITH PASSWORD '$DbPassword' CREATEDB;"
     if ($LASTEXITCODE -ne 0) { throw 'CREATE USER failed' }
     Write-Ok "User $DbUser created"
 } else {
     Write-Warn "User $DbUser already exists"
-    & $psql -h 127.0.0.1 -p $Port -U postgres -d postgres -c "ALTER USER $DbUser WITH PASSWORD '$DbPassword';" | Out-Null
+    & $psql -h 127.0.0.1 -p $Port -U $SuperUser -d postgres -c "ALTER USER $DbUser WITH PASSWORD '$DbPassword';" | Out-Null
 }
 
-$dbExists = & $psql -h 127.0.0.1 -p $Port -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$DbName'" 2>$null
+$dbExists = & $psql -h 127.0.0.1 -p $Port -U $SuperUser -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$DbName'" 2>$null
 if ($dbExists -ne '1') {
-    & $psql -h 127.0.0.1 -p $Port -U postgres -d postgres -c "CREATE DATABASE $DbName OWNER $DbUser ENCODING 'UTF8';"
+    & $psql -h 127.0.0.1 -p $Port -U $SuperUser -d postgres -c "CREATE DATABASE $DbName OWNER $DbUser ENCODING 'UTF8';"
     if ($LASTEXITCODE -ne 0) { throw 'CREATE DATABASE failed' }
     Write-Ok "Database $DbName created"
 } else {

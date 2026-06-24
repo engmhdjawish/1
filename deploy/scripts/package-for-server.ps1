@@ -102,7 +102,8 @@ Prerequisites on server (copy via USB if blocked):
 
 2) PostgreSQL (first time only):
    cd C:\JawishDeploy\server-tools
-   .\setup-portable-postgres.ps1 -PgRoot D:\PostgreSQL -DbPassword YOUR_DB_PASSWORD
+   .\setup-portable-postgres.ps1 -PgRoot C:\pgsql -DbPassword YOUR_DB_PASSWORD
+   (if superuser is not postgres: -SuperUser admin -SuperUserPassword YOUR_ADMIN_PASSWORD)
 
 3) Install site files:
    xcopy /E /I /Y C:\JawishDeploy\JawishPortal D:\JawishPortal
