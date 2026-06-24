@@ -28,6 +28,7 @@ $siteName = trim((string) ($companyContext['company_name'] ?? '')) !== ''
 $customer = CustomerSession::check() ? CustomerSession::customer() : null;
 $staffLoggedIn = WebSession::check();
 $storeDisplay = StoreCatalogService::displayOptions();
+StorePricePreference::bootstrap();
 StorePricePreference::applyFromRequest($_GET);
 $storeShowPrice = (bool) ($storeDisplay['show_price'] ?? false);
 $storePriceCurrency = StorePricePreference::current();
