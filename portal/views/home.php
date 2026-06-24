@@ -205,39 +205,74 @@ $storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
               } elseif (!$sectionShowPrice || !$storeShowPrice || $sectionPriceMode === 'none') {
                   $sectionPriceModeResolved = 'none';
               }
-              $cardDisplayOptions = [
+              $previewDisplayOptions = [
                   'show_images' => $showImages,
                   'show_price' => $sectionShowPrice && $storeShowPrice,
                   'show_quantity' => (bool) ($storeCatalogDisplay['show_quantity'] ?? false),
                   'allow_cart' => (bool) ($storeCatalogDisplay['allow_cart'] ?? false),
                   'price_mode' => $sectionPriceModeResolved,
               ];
+              $homeAllowCart = (bool) ($previewDisplayOptions['allow_cart'] ?? false);
             ?>
-            <div class="store-product-grid home-section__products">
+            <div class="home-strip">
               <?php foreach ($products as $item): ?>
                 <?php
                   if (!is_array($item)) {
                       continue;
                   }
+                  $guid = material_guid($item);
                   $contextOffer = $isOfferSection && $sectionSlug !== ''
                       ? SpecialOfferService::activeOfferBySlug($sectionSlug)
                       : null;
-                  $guid = material_guid($item);
                   if ($guid !== '') {
                       $overlay = SpecialOfferService::pricingOverlay($item, $contextOffer);
                       if (!empty($overlay['has_offer'])) {
                           $item = array_merge($item, $overlay);
                       }
                   }
-                  $displayOptions = $cardDisplayOptions;
-                  $linkToDetail = true;
-                  $useQuickView = false;
-                  $useImagePreview = $showImages;
-                  $quickViewGuids = $sectionGuids;
-                  $productReturnUrl = $sectionReturnUrl;
-                  $productOfferSlug = $sectionOfferSlug;
-                  require __DIR__ . '/partials/product-card.php';
+                  $cardUrl = $guid !== ''
+                      ? product_url($guid, $sectionReturnUrl, $sectionOfferSlug)
+                      : home_section_store_url($section);
+                  $cartQtyForItem = 0.0;
+                  if ($homeAllowCart && $guid !== '') {
+                      $cartItems = \Portal\Services\StoreCartService::items();
+                      $cartQtyForItem = (float) ($cartItems[$guid]['quantity'] ?? 0);
+                  }
+                  $previewPayload = $guid !== ''
+                      ? product_preview_payload($item, $previewDisplayOptions, $cartQtyForItem, $sectionReturnUrl, $sectionOfferSlug)
+                      : null;
+                  $previewJson = $previewPayload !== null
+                      ? json_encode($previewPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)
+                      : '';
                 ?>
+                <article
+                  class="home-product-card"
+                  <?php if ($guid !== '' && $previewJson !== ''): ?>
+                    data-store-preview-card
+                    data-preview-guid="<?= h($guid) ?>"
+                    data-preview="<?= h($previewJson) ?>"
+                  <?php endif; ?>
+                >
+                  <?php if ($showImages): ?>
+                    <button
+                      type="button"
+                      class="home-product-card__media home-product-card__media--preview"
+                      data-store-product-preview
+                      title="معاينة الصورة والأسعار"
+                    >
+                      <span class="home-product-card__zoom-hint material-symbols-outlined" aria-hidden="true">zoom_in</span>
+                      <?php $material = $item; $variant = 'strip'; require __DIR__ . '/partials/material-image-frame.php'; ?>
+                    </button>
+                  <?php endif; ?>
+                  <a href="<?= h($cardUrl) ?>" class="home-product-card__link">
+                    <div class="home-product-card__body">
+                      <div class="home-product-card__name"><?= h((string) ($item['name'] ?? '-')) ?></div>
+                      <?php if ($showAnyPrice): ?>
+                        <?php require __DIR__ . '/partials/offer-price-block.php'; ?>
+                      <?php endif; ?>
+                    </div>
+                  </a>
+                </article>
               <?php endforeach; ?>
             </div>
           <?php endif; ?>
