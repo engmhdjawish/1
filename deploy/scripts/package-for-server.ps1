@@ -75,7 +75,8 @@ Copy-Item `
 $toolFiles = @(
     'setup-portable-postgres.ps1',
     'fix-windows-php.ps1',
-    'server-setup-on-host.ps1'
+    'server-setup-on-host.ps1',
+    'install-iis-php-handler.ps1'
 )
 foreach ($name in $toolFiles) {
     Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $toolsDest $name) -Force
