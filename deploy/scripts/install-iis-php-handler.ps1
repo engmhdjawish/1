@@ -92,16 +92,34 @@ if (-not $SiteName) {
 }
 
 Write-Step "Adding PHP handler to site: $SiteName"
-& $appcmd set config "$SiteName/" /section:handlers /+`"[name='PHP_via_FastCGI',path='*.php',verb='*',modules='FastCGIModule',scriptProcessor='$PhpCgiPath',resourceType='Either',requireAccess='Script']`" 2>$null | Out-Null
-Write-Ok 'Handler *.php -> FastCGI added'
+$handlerXml = & $appcmd list config "$SiteName/" /section:handlers /xml 2>&1 | Out-String
+if ($handlerXml -match 'path=''?\*\.php') {
+    Write-Warn 'Handler for *.php already exists on this site — skipping add'
+} else {
+    $handlerResult = & $appcmd set config "$SiteName/" /section:handlers /+`"[name='PHP_via_FastCGI',path='*.php',verb='*',modules='FastCGIModule',scriptProcessor='$PhpCgiPath',resourceType='Either',requireAccess='Script']`" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "Could not add PHP handler: $handlerResult"
+        exit 1
+    }
+    Write-Ok 'Handler *.php -> FastCGI added'
+}
 
 Write-Step 'Setting default document index.php'
 & $appcmd set config "$SiteName/" /section:defaultDocument /+files.[value='index.php'] 2>$null | Out-Null
 
+Write-Step 'Restarting IIS'
+& $env:windir\system32\iisreset.exe /restart | Out-Null
+Write-Ok 'IIS restarted'
+
 Write-Host ''
 Write-Ok 'PHP handler configured'
 Write-Host "  Site: $SiteName" -ForegroundColor Gray
-Write-Host "  Test: http://localhost:$($SitePort)/index.php" -ForegroundColor Gray
+if ($SitePort -gt 0) {
+    Write-Host "  Test: http://localhost:$SitePort/index.php" -ForegroundColor Gray
+} else {
+    Write-Host '  Test: http://localhost:<your-port>/index.php' -ForegroundColor Gray
+}
 Write-Host ''
+Write-Host 'CLI test (optional): php -v' -ForegroundColor Gray
 Write-Host 'If errors persist, enable in php.ini: extension_dir, pdo_pgsql, mbstring, openssl' -ForegroundColor Yellow
 Write-Host "  php.ini folder: $phpDir" -ForegroundColor Gray

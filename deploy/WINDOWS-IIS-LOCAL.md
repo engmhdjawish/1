@@ -178,9 +178,18 @@ cd C:\Users\HP\1
 
 2. تأكد من وجود `D:\JawishPortal\public\web.config` (يُنسخ تلقائياً من النشر).
 
-3. **FastCGI** لـ PHP:
-   - Handler Mappings → `*.php` → `C:\path\to\php-cgi.exe`  
-   - أو استخدم [PHP Manager for IIS](https://phpmanager.gitlab.io/) إن وُجد لديك.
+3. **FastCGI** لـ PHP (مطلوب — بدونه يظهر **404.3** على `index.php`):
+
+   ```powershell
+   # PowerShell كمسؤول على السيرفر
+   cd C:\JawishDeploy\server-tools
+   .\install-iis-php-handler.ps1 -SitePort 90
+   # أو: -PhpCgiPath "C:\php\php-cgi.exe" -SiteName "JawishPortal"
+   iisreset
+   ```
+
+   يدوياً: IIS Manager → Handler Mappings → Add `*.php` → `php-cgi.exe`  
+   أو [PHP Manager for IIS](https://phpmanager.gitlab.io/) إن وُجد.
 
 4. صلاحيات الكتابة على:
    - `D:\JawishPortal\storage`
@@ -218,6 +227,7 @@ php scripts\check-environment.php
 | `pdo_pgsql` مفقود | فعّل الامتداد + `libpq.dll` + `iisreset` |
 | الموقع لا يتصل بالـ API | `AMINE_API_BASE_URL=http://127.0.0.1:5000` في `.env` |
 | 500.19 / 0x8007000d على IIS | ثبّت URL Rewrite **أو** استخدم `web.config` بدون rewrite (القالب الافتراضي الجديد) |
+| **404.3** على `index.php` (StaticFile / Handler StaticFile) | PHP غير مربوط بـ IIS — شغّل `install-iis-php-handler.ps1` كمسؤول ثم `iisreset`؛ تأكد من وجود `php-cgi.exe` |
 | لا يمكن تحميل PostgreSQL | انسخ ZIP من جهاز آخر (القسم 1أ) |
 
 ---

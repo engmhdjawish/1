@@ -118,7 +118,10 @@ Prerequisites on server (copy via USB if blocked):
 5) IIS:
    - Site physical path: D:\JawishPortal\public
    - Binding: http port 8080 (or your IP)
-   - FastCGI handler for *.php
+   - Run AS ADMINISTRATOR (fixes 404.3 on .php):
+     cd C:\JawishDeploy\server-tools
+     .\install-iis-php-handler.ps1 -SitePort 90
+     (or -PhpCgiPath C:\php\php-cgi.exe -SiteName YourSiteName)
    - Write permission on D:\JawishPortal\storage for AppPool identity
 
 6) Test:
