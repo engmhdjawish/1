@@ -134,19 +134,11 @@ final class MaterialImageLinkService
         $materialCode = trim((string) ($row['materialCode'] ?? $row['MaterialCode'] ?? ''));
         $isLinked = (bool) ($row['isLinkedToMaterial'] ?? $row['IsLinkedToMaterial'] ?? ($materialGuid !== ''));
 
-        $localPath = MaterialImageStorageService::resolveLocalPath($fileName, false);
-        $hasLocal = $localPath !== null && is_file($localPath);
-        if ($hasLocal) {
-            $previewUrl = MaterialImageStorageService::publicUrl($fileName, false);
-            $previewFullUrl = MaterialImageStorageService::publicUrl($fileName, false);
-        } elseif ($imageGuid !== '') {
-            // Use full local image for card preview; CSS scales it down. Avoids missing thumb files.
-            $previewUrl = MaterialImageStorageService::imageGuidUrl($imageGuid, false);
-            $previewFullUrl = MaterialImageStorageService::imageGuidUrl($imageGuid, false);
-        } else {
-            $previewUrl = '';
-            $previewFullUrl = '';
-        }
+        $sitePreview = MaterialImageStorageService::resolveSitePreviewUrls($imageGuid, $fileName);
+        $previewUrl = (string) ($sitePreview['preview_url'] ?? '');
+        $previewFullUrl = (string) ($sitePreview['preview_full_url'] ?? '');
+        $hasLocal = (bool) ($sitePreview['has_local'] ?? false);
+        $localPath = (string) ($sitePreview['local_path'] ?? '');
 
         return [
             'file_name' => $fileName,
