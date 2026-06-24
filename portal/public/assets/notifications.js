@@ -108,8 +108,17 @@
       event.preventDefault();
       event.stopPropagation();
       open = !open;
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
       panel.classList.toggle('is-open', open);
       if (open) load();
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && open) {
+        open = false;
+        btn.setAttribute('aria-expanded', 'false');
+        panel.classList.remove('is-open');
+      }
     });
 
     list.addEventListener('click', (event) => {

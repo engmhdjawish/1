@@ -47,6 +47,7 @@ use Portal\Services\NotificationService;
         <label class="block text-sm font-bold mb-1">الجمهور</label>
         <select name="audience" class="h-10 w-full rounded-lg border border-border-subtle px-3 text-sm">
           <option value="<?= h(NotificationService::AUDIENCE_ALL) ?>">الجميع (زوار + عملاء + موظفين)</option>
+          <option value="<?= h(NotificationService::AUDIENCE_GUESTS) ?>">الزوار فقط (غير المسجّلين)</option>
           <option value="<?= h(NotificationService::AUDIENCE_CUSTOMERS) ?>">العملاء المسجّلون فقط</option>
           <option value="<?= h(NotificationService::AUDIENCE_STAFF) ?>">الموظفون فقط</option>
         </select>
@@ -140,6 +141,7 @@ use Portal\Services\NotificationService;
                   · موظف: <?= h((string) $row['staff_name_ar']) ?>
                 <?php elseif (($row['scope'] ?? '') === 'public'): ?>
                   · <?= h(match ((string) ($row['audience'] ?? '')) {
+                      NotificationService::AUDIENCE_GUESTS => 'للزوار فقط',
                       NotificationService::AUDIENCE_CUSTOMERS => 'للعملاء',
                       NotificationService::AUDIENCE_STAFF => 'للموظفين',
                       default => 'للجميع',

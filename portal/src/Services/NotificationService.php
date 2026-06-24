@@ -15,6 +15,7 @@ final class NotificationService
     public const SCOPE_PRIVATE = 'private';
 
     public const AUDIENCE_ALL = 'all';
+    public const AUDIENCE_GUESTS = 'guests';
     public const AUDIENCE_CUSTOMERS = 'customers';
     public const AUDIENCE_STAFF = 'staff';
 
@@ -30,7 +31,7 @@ final class NotificationService
             "CREATE TABLE IF NOT EXISTS portal_notifications (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 scope VARCHAR(16) NOT NULL CHECK (scope IN ('public', 'private')),
-                audience VARCHAR(16) NOT NULL DEFAULT 'all' CHECK (audience IN ('all', 'customers', 'staff')),
+                audience VARCHAR(16) NOT NULL DEFAULT 'all' CHECK (audience IN ('all', 'guests', 'customers', 'staff')),
                 title_ar VARCHAR(200) NOT NULL,
                 body_ar TEXT NOT NULL,
                 link_url VARCHAR(500),
@@ -60,6 +61,29 @@ final class NotificationService
             'CREATE INDEX IF NOT EXISTS ix_portal_notification_reads_reader ON portal_notification_reads (reader_type, reader_id, read_at DESC)'
         );
         self::ensurePermission();
+        self::ensureAudienceGuestsSupport();
+    }
+
+    private static function ensureAudienceGuestsSupport(): void
+    {
+        try {
+            Database::pdo()->exec(
+                "ALTER TABLE portal_notifications DROP CONSTRAINT IF EXISTS portal_notifications_audience_check"
+            );
+            Database::pdo()->exec(
+                "ALTER TABLE portal_notifications
+                 ADD CONSTRAINT portal_notifications_audience_check
+                 CHECK (audience IN ('all', 'guests', 'customers', 'staff'))"
+            );
+        } catch (\Throwable) {
+            // Best-effort for installs that use ENUM types from SQL migrations.
+        }
+
+        try {
+            Database::pdo()->exec("ALTER TYPE notification_audience ADD VALUE IF NOT EXISTS 'guests'");
+        } catch (\Throwable) {
+            // ENUM may not exist when the table uses VARCHAR checks only.
+        }
     }
 
     private static function ensurePermission(): void
@@ -238,7 +262,7 @@ final class NotificationService
         string $source = 'manual'
     ): string {
         self::ensureTable();
-        if (!in_array($audience, [self::AUDIENCE_ALL, self::AUDIENCE_CUSTOMERS, self::AUDIENCE_STAFF], true)) {
+        if (!in_array($audience, [self::AUDIENCE_ALL, self::AUDIENCE_GUESTS, self::AUDIENCE_CUSTOMERS, self::AUDIENCE_STAFF], true)) {
             $audience = self::AUDIENCE_ALL;
         }
 
@@ -447,6 +471,12 @@ final class NotificationService
         $parts[] = '(n.scope = :scope_public AND n.audience = :audience_all)';
         $params[':scope_public'] = self::SCOPE_PUBLIC;
         $params[':audience_all'] = self::AUDIENCE_ALL;
+
+        if (!$reader['is_customer'] && !$reader['is_staff']) {
+            $parts[] = '(n.scope = :scope_public_guests AND n.audience = :audience_guests)';
+            $params[':scope_public_guests'] = self::SCOPE_PUBLIC;
+            $params[':audience_guests'] = self::AUDIENCE_GUESTS;
+        }
 
         if ($reader['is_customer']) {
             $parts[] = '(n.scope = :scope_public2 AND n.audience = :audience_customers)';

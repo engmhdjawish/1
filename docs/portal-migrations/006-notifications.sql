@@ -6,7 +6,7 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
-    CREATE TYPE notification_audience AS ENUM ('all', 'customers', 'staff');
+    CREATE TYPE notification_audience AS ENUM ('all', 'guests', 'customers', 'staff');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 

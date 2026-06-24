@@ -376,6 +376,42 @@ final class MaterialImageLinkService
         }
 
         $row = $rows[0];
+
+        return self::deleteUnlinkedRow($row, $remainingBefore);
+    }
+
+    /**
+     * @return array{
+     *   ok: bool,
+     *   done: bool,
+     *   deleted: int,
+     *   remaining: int,
+     *   message: string,
+     *   file_name?: string,
+     *   image_guid?: string
+     * }
+     */
+    public static function deleteUnlinkedItem(string $imageGuid, string $fileName): array
+    {
+        if (!(PortalSettingsService::apiHealth()['ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'done' => true,
+                'deleted' => 0,
+                'remaining' => 0,
+                'message' => 'الأمين غير متصل.',
+            ];
+        }
+
+        return self::deleteUnlinkedRow([
+            'amine_image_guid' => $imageGuid,
+            'file_name' => $fileName,
+        ], 1);
+    }
+
+    /** @param array<string, mixed> $row */
+    private static function deleteUnlinkedRow(array $row, int $remainingBefore): array
+    {
         $imageGuid = trim((string) ($row['amine_image_guid'] ?? ''));
         $fileName = trim((string) ($row['file_name'] ?? ''));
         if ($imageGuid === '') {

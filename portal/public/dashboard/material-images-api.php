@@ -284,7 +284,13 @@ if ($method === 'POST') {
     }
 
     if ($action === 'delete-unlinked-next') {
-        $result = MaterialImageLinkService::deleteNextUnlinked();
+        $imageGuid = trim((string) ($_POST['image_guid'] ?? ''));
+        $fileName = trim((string) ($_POST['file_name'] ?? ''));
+        if ($imageGuid !== '' || $fileName !== '') {
+            $result = MaterialImageLinkService::deleteUnlinkedItem($imageGuid, $fileName);
+        } else {
+            $result = MaterialImageLinkService::deleteNextUnlinked();
+        }
         echo json_encode($result, JSON_UNESCAPED_UNICODE);
         exit;
     }
