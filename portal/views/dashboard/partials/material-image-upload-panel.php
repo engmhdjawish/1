@@ -767,6 +767,15 @@ $statusLabels = [
       return;
     }
 
+    const notify = (message, type = 'info') => {
+      if (window.dashboardApp?.showToast) {
+        window.dashboardApp.showToast(message, type);
+      }
+      if (syncStatus) {
+        syncStatus.textContent = message;
+      }
+    };
+
     scanRunning = true;
     scanLocalBtn.disabled = true;
     startSyncBtn && (startSyncBtn.disabled = true);
@@ -793,7 +802,7 @@ $statusLabels = [
       const initRes = await fetch(API_URL, { method: 'POST', body: initForm });
       const initData = await initRes.json();
       if (!initData.ok) {
-        if (syncStatus) syncStatus.textContent = initData.message || 'تعذّر بدء الفحص.';
+        notify(initData.message || 'تعذّر بدء الفحص.', 'error');
         return;
       }
 
@@ -829,9 +838,7 @@ $statusLabels = [
       }
 
       if (totalFiles === 0) {
-        if (syncStatus) {
-          syncStatus.textContent = initData.message || 'لا توجد ملفات محلية للفحص.';
-        }
+        notify(initData.message || 'لا توجد ملفات محلية في المجلد المُعدّ — تحقق من المسارات ثم احفظها.', 'error');
         await refreshOverview();
         return;
       }

@@ -48,6 +48,7 @@ $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'messag
   <nav class="mt-4 inline-flex flex-wrap gap-1 rounded-xl border border-border-subtle bg-white p-1 shadow-sm" aria-label="أقسام صور المواد">
     <a
       href="/dashboard/material-images.php?tab=link"
+      data-dashboard-no-nav="1"
       class="h-10 px-4 inline-flex items-center gap-2 rounded-lg text-sm font-bold transition <?= $workspaceTab === 'link' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:bg-surface-low' ?>"
     >
       <span class="material-symbols-outlined text-lg">linked_services</span>
@@ -55,6 +56,7 @@ $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'messag
     </a>
     <a
       href="/dashboard/material-images.php?tab=upload"
+      data-dashboard-no-nav="1"
       class="h-10 px-4 inline-flex items-center gap-2 rounded-lg text-sm font-bold transition <?= $workspaceTab === 'upload' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:bg-surface-low' ?>"
     >
       <span class="material-symbols-outlined text-lg">cloud_upload</span>

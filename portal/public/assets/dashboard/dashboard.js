@@ -283,6 +283,23 @@
     return data;
   }
 
+  function runInlineScripts(fragment) {
+    if (!fragment) return;
+    const scripts = Array.from(fragment.querySelectorAll('script'));
+    scripts.forEach((oldScript) => {
+      const script = document.createElement('script');
+      Array.from(oldScript.attributes).forEach((attr) => {
+        script.setAttribute(attr.name, attr.value);
+      });
+      if (oldScript.src) {
+        script.src = oldScript.src;
+      } else {
+        script.textContent = oldScript.textContent || '';
+      }
+      document.body.appendChild(script);
+    });
+  }
+
   async function navigate(url, push = true) {
     if (!isDashboardUrl(url)) {
       window.location.href = url;
@@ -304,6 +321,7 @@
         return;
       }
       main.innerHTML = newMain.innerHTML;
+      runInlineScripts(newMain);
       syncDashboardChrome(doc);
       await ensurePageAssets(newMain.getAttribute('data-dashboard-page-assets') || '');
       const route = newMain.getAttribute('data-current-route') || normalizeDashboardRoute(url);
