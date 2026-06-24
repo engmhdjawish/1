@@ -41,7 +41,14 @@ $navLinks = [
 <html class="light" lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#D81921">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="<?= h($siteName) ?>">
+    <link rel="manifest" href="/manifest.php">
+    <link rel="apple-touch-icon" href="<?= h($companyLogoUrl !== '' ? $companyLogoUrl : '/icons/app-icon.svg') ?>">
     <title><?= h($title) ?> — <?= h($siteName) ?></title>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&display=swap" rel="stylesheet">
@@ -49,6 +56,7 @@ $navLinks = [
     <link href="/css/site-brand.css" rel="stylesheet">
     <link href="/css/site-header.css" rel="stylesheet">
     <link href="/css/site-footer.css" rel="stylesheet">
+    <link href="/css/pwa-install.css" rel="stylesheet">
     <link href="/css/store-ui.css" rel="stylesheet">
     <?php if ($storeAllowCart): ?>
       <link href="/css/store-cart.css" rel="stylesheet">
@@ -118,6 +126,7 @@ $navLinks = [
 <?php if ($storeAllowCart): ?>
   <script src="/assets/store-cart.js" defer></script>
 <?php endif; ?>
+<script src="/assets/pwa.js" defer></script>
 <?php if (!empty($extraFooter ?? '')): ?>
   <?= $extraFooter ?>
 <?php endif; ?>

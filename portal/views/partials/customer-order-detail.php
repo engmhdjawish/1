@@ -14,6 +14,11 @@ $changes = is_array($order['item_changes'] ?? null) ? $order['item_changes'] : [
 $status = (string) ($order['status'] ?? 'pending');
 $showPriceSyp = (float) ($order['total_sp'] ?? 0) > 0;
 $showPriceUsd = !$showPriceSyp && (float) ($order['total_usd'] ?? 0) > 0;
+$orderImagesDownloadUrl = '/api/order-images-zip.php?order_id=' . rawurlencode((string) ($order['id'] ?? ''));
+$quoteToken = trim((string) ($order['quote_access_token'] ?? ''));
+if ($quoteToken !== '') {
+    $orderImagesDownloadUrl .= '&token=' . rawurlencode($quoteToken);
+}
 ?>
 <section class="customer-order-detail">
   <header class="customer-order-detail__header">
@@ -24,7 +29,13 @@ $showPriceUsd = !$showPriceSyp && (float) ($order['total_usd'] ?? 0) > 0;
         <p class="customer-order-detail__date"><?= h(accounting_format_date($order['created_at'])) ?></p>
       <?php endif; ?>
     </div>
-    <?php require __DIR__ . '/order-status-badge.php'; ?>
+    <div class="flex flex-col items-end gap-2">
+      <?php require __DIR__ . '/order-status-badge.php'; ?>
+      <a href="<?= h($orderImagesDownloadUrl) ?>" class="store-btn store-btn--secondary text-sm inline-flex items-center gap-1" download>
+        <span class="material-symbols-outlined text-base" aria-hidden="true">folder_zip</span>
+        تحميل صور الطلب
+      </a>
+    </div>
   </header>
 
   <div class="customer-order-detail__grid">

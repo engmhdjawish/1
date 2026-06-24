@@ -5,6 +5,7 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
+use Portal\Services\AccountingApiService;
 use Portal\Services\ApiClient;
 use Portal\Services\MaterialImageStorageService;
 use Portal\Services\MaterialImageSyncService;
@@ -40,7 +41,7 @@ if (isset($_GET['saved']) && $_GET['saved'] === '1' && $flash === null) {
 }
 
 $workspaceTab = trim((string) ($_GET['tab'] ?? 'link'));
-if (!in_array($workspaceTab, ['link', 'upload'], true)) {
+if (!in_array($workspaceTab, ['link', 'upload', 'download'], true)) {
     $workspaceTab = 'link';
 }
 
@@ -88,6 +89,16 @@ try {
     }
 } catch (\Throwable $exception) {
     $materialFilterOptionsError = $exception->getMessage();
+}
+
+$invoiceTypes = [];
+$invoiceTypesError = null;
+if ($workspaceTab === 'download') {
+    try {
+        $invoiceTypes = AccountingApiService::invoiceTypes();
+    } catch (\Throwable $exception) {
+        $invoiceTypesError = $exception->getMessage();
+    }
 }
 
 $currentRoute = '/dashboard/material-images.php';
