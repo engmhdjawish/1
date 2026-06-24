@@ -123,7 +123,7 @@ final class MaterialImageStorageService
      * @param list<array<string, mixed>> $files from $_FILES['files']
      * @return array{ok: bool, message: string, uploaded: list<string>, replaced: list<string>, failed: list<string>}
      */
-    public static function uploadMany(array $files): array
+    public static function uploadMany(array $files, ?string $uploadedByUserId = null): array
     {
         $settings = self::settings();
         if (!self::ensureDirectory($settings['images_dir']) || !self::ensureDirectory($settings['thumbnails_dir'])) {
@@ -151,7 +151,18 @@ final class MaterialImageStorageService
                 continue;
             }
 
-            $uploaded[] = (string) ($result['file_name'] ?? '');
+            $fileName = (string) ($result['file_name'] ?? '');
+            $localPath = self::safeJoin($settings['images_dir'], $fileName) ?? '';
+            $thumbPath = self::safeJoin($settings['thumbnails_dir'], $fileName);
+
+            try {
+                MaterialImageSyncService::enqueue($fileName, $localPath, $thumbPath, $uploadedByUserId);
+            } catch (Throwable $exception) {
+                $failed[] = $fileName . ': تعذر إضافة الصورة لطابور المزامنة: ' . $exception->getMessage();
+                continue;
+            }
+
+            $uploaded[] = $fileName;
         }
 
         if ($uploaded === [] && $replaced === [] && $failed !== []) {
@@ -1296,16 +1307,20 @@ final class MaterialImageStorageService
         return null;
     }
 
-    public static function resolvePathForGuid(string $imageGuid, bool $thumb = false): ?string
+    public static function resolvePathForGuid(string $imageGuid, bool $thumb = false, bool $localOnly = false): ?string
     {
         $imageGuid = trim($imageGuid);
         if ($imageGuid === '') {
             return null;
         }
 
-        $fromQueue = MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, $thumb);
+        $fromQueue = MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, $thumb, !$localOnly);
         if ($fromQueue !== null) {
             return $fromQueue;
+        }
+
+        if ($localOnly) {
+            return null;
         }
 
         foreach (self::fileNamesFromAmineApi($imageGuid) as $fileName) {

@@ -318,6 +318,15 @@ $truncate = static function (string $text, int $max = 48): string {
         <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $statusClass($detailStatus) ?>"><?= h($statusLabels[$detailStatus] ?? $detailStatus) ?></span>
         <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $originClass($orderDetails) ?>"><?= h($detailOrigin) ?></span>
         <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $syncClass($detailSync) ?>"><?= h($syncLabels[$detailSync] ?? $detailSync) ?></span>
+        <a
+          href="/api/order-images-zip.php?order_id=<?= h(rawurlencode((string) ($orderDetails['id'] ?? ''))) ?>"
+          target="_blank"
+          class="inline-flex items-center gap-1 h-8 px-3 rounded-lg border border-border-subtle bg-white text-[11px] font-bold text-slate-700 hover:bg-surface-low"
+          download
+        >
+          <span class="material-symbols-outlined text-sm">folder_zip</span>
+          صور ZIP
+        </a>
         <div class="store-currency-toggle store-currency-toggle--drawer ms-auto" role="group" aria-label="عملة عرض الطلب">
           <button type="button" class="store-currency-toggle__btn <?= $orderPriceCurrency === 'syp' ? 'is-active' : '' ?>" data-dashboard-order-currency="syp" title="عرض بالليرة">ل.س</button>
           <button type="button" class="store-currency-toggle__btn <?= $orderPriceCurrency === 'usd' ? 'is-active' : '' ?>" data-dashboard-order-currency="usd" title="عرض بالدولار">$</button>

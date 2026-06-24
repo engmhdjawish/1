@@ -10,6 +10,9 @@ declare(strict_types=1);
 $redirectQuery = ($redirect ?? null) !== null && ($redirect ?? '') !== ''
     ? '&redirect=' . rawurlencode((string) $redirect)
     : '';
+$staffRedirectQuery = ($redirect ?? null) !== null && ($redirect ?? '') !== '' && \Portal\Support\PortalUrl::isDashboardPath((string) $redirect)
+    ? '&redirect=' . rawurlencode((string) $redirect)
+    : '';
 ?>
 <div class="max-w-xl mx-auto">
   <section class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
@@ -28,7 +31,7 @@ $redirectQuery = ($redirect ?? null) !== null && ($redirect ?? '') !== ''
 
       <div class="grid grid-cols-2 gap-2 mb-5 text-sm">
         <a
-          href="?type=staff<?= h($redirectQuery) ?>"
+          href="?type=staff<?= h($staffRedirectQuery) ?>"
           class="inline-flex items-center justify-center rounded-lg px-3 py-2 font-semibold transition <?= $type === 'staff' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' ?>"
         >
           موظف
@@ -43,7 +46,7 @@ $redirectQuery = ($redirect ?? null) !== null && ($redirect ?? '') !== ''
 
       <form method="post" class="space-y-4">
         <input type="hidden" name="type" value="<?= h($type) ?>">
-        <?php if (!empty($redirect)): ?>
+        <?php if (!empty($redirect) && ($type !== 'staff' || \Portal\Support\PortalUrl::isDashboardPath((string) $redirect))): ?>
           <input type="hidden" name="redirect" value="<?= h((string) $redirect) ?>">
         <?php endif; ?>
         <?php if ($type === 'customer'): ?>

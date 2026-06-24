@@ -308,6 +308,13 @@ final class WebCustomerService
             'id' => $customerId,
         ]);
 
+        if ($stmt->rowCount() > 0) {
+            try {
+                NotificationService::notifyCustomerApproved($customerId);
+            } catch (\Throwable) {
+            }
+        }
+
         return $stmt->rowCount() > 0;
     }
 
@@ -328,6 +335,13 @@ final class WebCustomerService
             'admin' => $adminUserId,
             'id' => $customerId,
         ]);
+
+        if ($stmt->rowCount() > 0) {
+            try {
+                NotificationService::notifyCustomerRejected($customerId, $reason);
+            } catch (\Throwable) {
+            }
+        }
 
         return $stmt->rowCount() > 0;
     }

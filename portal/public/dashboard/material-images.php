@@ -5,12 +5,13 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
+use Portal\Services\AccountingApiService;
 use Portal\Services\ApiClient;
 use Portal\Services\MaterialImageStorageService;
 use Portal\Services\MaterialImageSyncService;
 use Portal\Services\PortalSettingsService;
 
-WebSession::requirePermission('images.upload');
+WebSession::requireAnyPermission(['images.upload', 'images.view']);
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 MaterialImageStorageService::ensureSettings();
@@ -23,6 +24,7 @@ $user = WebSession::user();
 $userId = isset($user['id']) ? (string) $user['id'] : null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    WebSession::requirePermission('images.upload');
     $action = trim((string) ($_POST['action'] ?? ''));
 
     if ($action === 'save_settings') {
@@ -39,9 +41,11 @@ if (isset($_GET['saved']) && $_GET['saved'] === '1' && $flash === null) {
     $flash = 'تم حفظ مسارات التخزين.';
 }
 
-$workspaceTab = trim((string) ($_GET['tab'] ?? 'link'));
-if (!in_array($workspaceTab, ['link', 'upload'], true)) {
-    $workspaceTab = 'link';
+$canUploadImages = WebSession::hasPermission('images.upload');
+$allowedTabs = $canUploadImages ? ['link', 'upload', 'download'] : ['download'];
+$workspaceTab = trim((string) ($_GET['tab'] ?? ($canUploadImages ? 'link' : 'download')));
+if (!in_array($workspaceTab, $allowedTabs, true)) {
+    $workspaceTab = $canUploadImages ? 'link' : 'download';
 }
 
 $company = PortalSettingsService::companySettings();
@@ -51,6 +55,7 @@ $syncStats = MaterialImageSyncService::stats();
 $apiHealth = PortalSettingsService::apiHealth();
 $queuePage = MaterialImageSyncService::listQueuePage(1, 20);
 $queue = $queuePage['items'];
+$pendingDeletable = MaterialImageSyncService::countDeletablePending();
 $settingsForm = [
     'material_images_dir' => (string) ($company['material_images_dir'] ?? ''),
     'material_thumbnails_dir' => (string) ($company['material_thumbnails_dir'] ?? ''),
@@ -88,6 +93,16 @@ try {
     }
 } catch (\Throwable $exception) {
     $materialFilterOptionsError = $exception->getMessage();
+}
+
+$invoiceTypes = [];
+$invoiceTypesError = null;
+if ($workspaceTab === 'download') {
+    try {
+        $invoiceTypes = AccountingApiService::invoiceTypes();
+    } catch (\Throwable $exception) {
+        $invoiceTypesError = $exception->getMessage();
+    }
 }
 
 $currentRoute = '/dashboard/material-images.php';

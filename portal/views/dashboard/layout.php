@@ -7,19 +7,28 @@ declare(strict_types=1);
 /** @var array<string, mixed>|null $user */
 /** @var string|null $currentRoute */
 
+use Portal\Auth\WebSession;
 use Portal\Support\DashboardNavigation;
 
 require_once __DIR__ . '/../helpers.php';
 
-$user ??= null;
+if (WebSession::check()) {
+    if (empty($_SESSION['staff_roles_provisioned'])) {
+        \Portal\Support\StaffRoleProvisioner::ensureTaskRoles();
+        $_SESSION['staff_roles_provisioned'] = true;
+    }
+    WebSession::refreshPermissions();
+}
+
+$user = WebSession::check() ? WebSession::user() : ($user ?? null);
 $requestPath = parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: '/dashboard/index.php';
 $requestQuery = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_QUERY) ?? '');
 $currentRoute ??= $requestQuery !== '' ? $requestPath . '?' . $requestQuery : $requestPath;
-$navArea = $dashboardNavArea ?? DashboardNavigation::areaForRoute($currentRoute);
+$navArea = $dashboardNavArea ?? DashboardNavigation::areaForRoute($currentRoute, $user);
 $areaMeta = DashboardNavigation::areaMeta($navArea);
 $hasSiteContentAccess = DashboardNavigation::hasSiteContentAccess($user);
 $hasConfigurationAccess = DashboardNavigation::hasConfigurationAccess($user);
-$hasAccountingAccess = DashboardNavigation::canAccessAccounting($user);
+$hasAccountingAccess = DashboardNavigation::canAccessAccountingArea($user);
 $headerQuickLinks = DashboardNavigation::headerQuickLinks($user);
 $areaTabs = DashboardNavigation::areaTabs($user, $navArea);
 $bottomNavLinks = DashboardNavigation::bottomNavLinks($user);
@@ -69,10 +78,21 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <?php
+  use Portal\Services\PortalSettingsService;
+
+  $dashboardCompany = PortalSettingsService::companySettings();
+  $companyLogoUrl = PortalSettingsService::companyLogoUrl($dashboardCompany);
+  $siteName = trim((string) ($dashboardCompany['company_name'] ?? '')) !== ''
+      ? (string) $dashboardCompany['company_name']
+      : 'جاويش للتجارة';
+  require dirname(__DIR__) . '/partials/head-icons.php';
+  ?>
   <title><?= h($title) ?> — لوحة التحكم</title>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
   <link href="/assets/dashboard/dashboard.css" rel="stylesheet">
+  <link href="/css/notifications.css" rel="stylesheet">
   <link href="/css/store-ui.css" rel="stylesheet">
   <link href="/css/store-cart.css" rel="stylesheet">
   <link href="/css/customer-portal.css" rel="stylesheet">
@@ -150,7 +170,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
     <?= $extraHead ?>
   <?php endif; ?>
 </head>
-<body class="min-h-screen text-slate-900 dashboard-app<?= $hasAreaTabs ? ' has-area-tabs' : '' ?>">
+<body class="min-h-screen text-slate-900 dashboard-app<?= $hasAreaTabs ? ' has-area-tabs' : '' ?>" data-dashboard-has-area-tabs="<?= $hasAreaTabs ? '1' : '0' ?>">
   <header class="sticky top-0 z-50 h-16 bg-surface-white shadow-sm border-b border-border-subtle">
     <div class="h-full px-4 lg:px-10 flex items-center justify-between gap-3">
       <div class="flex items-center gap-2 min-w-0">
@@ -166,7 +186,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         </button>
         <a href="/dashboard/index.php" class="font-extrabold text-primary text-lg truncate">Jawish Trading</a>
         <?php if (!$hasAreaTabs && $headerQuickLinks !== []): ?>
-        <nav class="hidden lg:flex items-center gap-1 text-sm mr-2">
+        <nav class="hidden lg:flex items-center gap-1 text-sm mr-2" data-dashboard-header-quick-links>
           <?php foreach ($headerQuickLinks as $item): ?>
             <?php
               $itemRoute = (string) ($item['route'] ?? '');
@@ -184,6 +204,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         <?php endif; ?>
       </div>
       <div class="flex items-center gap-2 shrink-0">
+        <?php require __DIR__ . '/../partials/notification-bell.php'; ?>
         <div class="hidden md:flex flex-col items-end">
           <span class="text-sm font-bold"><?= h($user['display_name_ar'] ?? '') ?></span>
           <span class="text-xs text-text-muted" data-dashboard-header-area><?= h($sidebarTitle) ?></span>
@@ -313,7 +334,9 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   portal_render_media_picker_modal();
   require __DIR__ . '/../partials/store-image-lightbox.php';
   ?>
+  <script src="/assets/deferred-images.js" defer></script>
   <script src="/assets/store-image-zoom.js" defer></script>
+  <script src="/assets/dashboard/material-images-link.js" defer></script>
   <script src="/assets/dashboard/dashboard.js" defer></script>
   <script src="/assets/dashboard/media-picker.js" defer></script>
   <script src="/assets/dashboard/token-picker.js" defer></script>
@@ -321,7 +344,8 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <script src="/assets/dashboard/special-offers.js" defer></script>
   <script src="/assets/dashboard/about-editor.js" defer></script>
   <script src="/assets/dashboard/accounting-statement.js" defer></script>
-  <script src="/assets/dashboard/material-images-link.js" defer></script>
+  <script src="/assets/dashboard/material-image-zip-download.js" defer></script>
+  <script src="/assets/notifications.js" defer></script>
   <?php if (!empty($extraScripts ?? '')): ?>
     <?= $extraScripts ?>
   <?php endif; ?>

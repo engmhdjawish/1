@@ -12,6 +12,11 @@ declare(strict_types=1);
 /** @var array<string, mixed>|null $editRole */
 /** @var string|null $flash */
 /** @var string $flashType */
+/** @var list<array{code: string, role_code: string, name_ar: string, description_ar: string, permissions: list<string>}> $taskRoles */
+/** @var array<string, string> $roleIdsByCode */
+/** @var array<string, string> $permissionLabelsByCode */
+/** @var array<string, array<string, mixed>> $rolesByCode */
+/** @var list<array<string, mixed>> $extraRoles */
 
 $editing = $editUser !== null;
 $editingRole = $editRole !== null;
@@ -78,19 +83,62 @@ $selectedPermissionIds = array_map('strval', $editRole['permission_ids'] ?? []);
       </label>
 
       <fieldset>
-        <legend class="text-sm text-text-muted mb-2">الأدوار</legend>
-        <div class="space-y-2 max-h-44 overflow-auto border border-border-subtle rounded-xl p-3 bg-surface-low">
-          <?php foreach ($roles as $role): ?>
-            <?php $roleId = (string) ($role['id'] ?? ''); ?>
-            <label class="flex items-center justify-between gap-3 text-sm">
-              <span class="flex items-center gap-2">
-                <input type="checkbox" name="role_ids[]" value="<?= h($roleId) ?>" <?= in_array($roleId, $selectedRoleIds, true) ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
-                <span class="font-semibold"><?= h((string) ($role['name_ar'] ?? '')) ?></span>
-              </span>
-              <span class="text-xs text-text-muted"><?= (int) ($role['permissions_count'] ?? 0) ?> صلاحية</span>
+        <legend class="text-sm text-text-muted mb-2">مهام الموظف</legend>
+        <p class="text-xs text-text-muted mb-3">اختر مهمة واحدة أو أكثر. كل بطاقة = دور بصلاحياته.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-border-subtle rounded-xl p-3 bg-surface-low" id="userRoleCards">
+          <?php foreach ($taskRoles as $task): ?>
+            <?php
+              $taskCode = (string) ($task['role_code'] ?? '');
+              $role = $rolesByCode[$taskCode] ?? null;
+              $roleId = (string) ($role['id'] ?? '');
+              $isChecked = $roleId !== '' && in_array($roleId, $selectedRoleIds, true);
+            ?>
+            <label
+              class="user-role-card block text-right rounded-xl border px-3 py-2.5 cursor-pointer transition <?= $roleId === '' ? 'opacity-50 cursor-not-allowed' : 'border-border-subtle bg-white hover:border-primary/40 has-[:checked]:border-primary has-[:checked]:bg-primary/10 has-[:checked]:ring-1 has-[:checked]:ring-primary/30' ?>"
+            >
+              <input
+                type="checkbox"
+                name="role_ids[]"
+                value="<?= h($roleId) ?>"
+                class="sr-only"
+                <?= $isChecked ? 'checked' : '' ?>
+                <?= $roleId === '' ? 'disabled' : '' ?>
+              >
+              <span class="block text-sm font-bold text-slate-900"><?= h((string) ($task['name_ar'] ?? '')) ?></span>
+              <span class="block text-[11px] text-text-muted mt-0.5 leading-relaxed"><?= h((string) ($task['description_ar'] ?? '')) ?></span>
+              <?php if ($role !== null): ?>
+                <span class="block text-[10px] text-text-muted mt-1"><?= (int) ($role['permissions_count'] ?? 0) ?> صلاحية</span>
+              <?php endif; ?>
             </label>
           <?php endforeach; ?>
         </div>
+
+        <?php if ($extraRoles !== []): ?>
+          <details class="mt-3 rounded-xl border border-border-subtle bg-surface-low open:bg-white">
+            <summary class="cursor-pointer px-3 py-2.5 text-sm font-bold text-slate-800">أدوار إضافية (<?= count($extraRoles) ?>)</summary>
+            <div class="space-y-2 px-3 pb-3 border-t border-border-subtle pt-2">
+              <?php foreach ($extraRoles as $role): ?>
+                <?php $roleId = (string) ($role['id'] ?? ''); ?>
+                <label class="flex items-center justify-between gap-3 text-sm">
+                  <span class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="role_ids[]"
+                      value="<?= h($roleId) ?>"
+                      <?= in_array($roleId, $selectedRoleIds, true) ? 'checked' : '' ?>
+                      class="rounded border-border-subtle text-primary focus:ring-primary"
+                    >
+                    <span class="font-semibold"><?= h((string) ($role['name_ar'] ?? '')) ?></span>
+                  </span>
+                  <span class="text-xs text-text-muted"><?= (int) ($role['permissions_count'] ?? 0) ?> صلاحية</span>
+                </label>
+                <?php if ((string) ($role['code'] ?? '') === 'super_admin'): ?>
+                  <p class="text-[11px] text-amber-700 pr-6">صلاحيات كاملة — للمدير العام فقط.</p>
+                <?php endif; ?>
+              <?php endforeach; ?>
+            </div>
+          </details>
+        <?php endif; ?>
       </fieldset>
 
       <label class="inline-flex items-center gap-2 text-sm">
@@ -208,6 +256,44 @@ $selectedPermissionIds = array_map('strval', $editRole['permission_ids'] ?? []);
       </table>
     </div>
   </article>
+</section>
+
+<section class="mb-5 bg-white border border-border-subtle rounded-2xl overflow-hidden">
+  <div class="p-4 border-b border-border-subtle bg-surface-low">
+    <h2 class="text-base font-extrabold text-slate-900">مرجع المهام والصلاحيات</h2>
+    <p class="text-xs text-text-muted mt-1">شرح سريع لكل مهمة. التعيين الفعلي يتم من بطاقات «مهام الموظف» أعلاه.</p>
+  </div>
+  <div class="overflow-auto">
+    <table class="w-full min-w-[920px] text-sm">
+      <thead class="bg-white border-b border-border-subtle text-text-muted">
+        <tr>
+          <th class="px-5 py-4 text-right font-bold">المهمة</th>
+          <th class="px-5 py-4 text-right font-bold">الدور</th>
+          <th class="px-5 py-4 text-right font-bold">الصلاحيات</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border-subtle">
+        <?php foreach ($taskRoles as $task): ?>
+          <tr class="hover:bg-slate-50 transition">
+            <td class="px-5 py-4">
+              <div class="font-bold text-slate-900"><?= h((string) ($task['name_ar'] ?? '')) ?></div>
+              <div class="text-xs text-text-muted mt-1"><?= h((string) ($task['description_ar'] ?? '')) ?></div>
+            </td>
+            <td class="px-5 py-4 font-mono text-xs text-text-muted" dir="ltr"><?= h((string) ($task['role_code'] ?? '')) ?></td>
+            <td class="px-5 py-4 text-xs text-text-muted leading-relaxed">
+              <?php
+                $labels = [];
+                foreach ($task['permissions'] ?? [] as $permissionCode) {
+                    $labels[] = $permissionLabelsByCode[$permissionCode] ?? $permissionCode;
+                }
+                echo h(implode(' · ', $labels));
+              ?>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
 </section>
 
 <section class="grid grid-cols-1 xl:grid-cols-3 gap-5">

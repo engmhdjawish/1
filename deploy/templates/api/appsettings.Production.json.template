@@ -1,0 +1,27 @@
+{
+  "ConnectionStrings": {
+    "MainDb": "{{MAIN_DB_CONNECTION}}",
+    "ApiManagementDb": "{{API_MANAGEMENT_DB_CONNECTION}}"
+  },
+  "Jwt": {
+    "Issuer": "ExistingDb.Api",
+    "Audience": "ExistingDb.Api.Clients",
+    "SigningKey": "{{JWT_SIGNING_KEY}}",
+    "AccessTokenMinutes": 30,
+    "RefreshTokenDays": 14
+  },
+  "SeedAdmin": {
+    "Enabled": {{SEED_ADMIN_ENABLED}},
+    "UserName": "{{SEED_ADMIN_USERNAME}}",
+    "Email": "{{SEED_ADMIN_EMAIL}}",
+    "Password": "{{SEED_ADMIN_PASSWORD}}",
+    "DisplayName": "API Administrator"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*"
+}
