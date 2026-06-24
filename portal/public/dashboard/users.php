@@ -8,6 +8,7 @@ use Portal\Auth\WebSession;
 use Portal\Services\WebUserService;
 use Portal\Support\DashboardHttp;
 use Portal\Support\StaffPermissions;
+use Portal\Support\StaffRoleProvisioner;
 
 WebSession::requirePermission('web_users.manage');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -106,6 +107,8 @@ $filters = [
     'role' => trim((string) ($_GET['role'] ?? '')),
     'active' => trim((string) ($_GET['active'] ?? '')),
 ];
+
+StaffRoleProvisioner::ensureTaskRoles();
 
 $roles = WebUserService::listRoles();
 $permissions = WebUserService::listPermissions();

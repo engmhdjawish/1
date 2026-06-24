@@ -93,13 +93,15 @@ $selectedPermissionIds = array_map('strval', $editRole['permission_ids'] ?? []);
               type="button"
               class="task-role-template text-right rounded-xl border border-border-subtle bg-white px-3 py-2.5 hover:border-primary/40 hover:bg-primary/5 transition disabled:opacity-50 disabled:cursor-not-allowed"
               data-role-id="<?= h($roleId) ?>"
-              <?= $roleId === '' ? 'disabled title="الدور غير موجود — شغّل migration 007"' : '' ?>
+              data-role-code="<?= h($taskCode) ?>"
+              <?= $roleId === '' ? 'disabled title="تعذر تحميل الدور — أعد تحميل الصفحة"' : '' ?>
             >
               <span class="block text-sm font-bold text-slate-900"><?= h((string) ($task['name_ar'] ?? '')) ?></span>
               <span class="block text-[11px] text-text-muted mt-0.5 leading-relaxed"><?= h((string) ($task['description_ar'] ?? '')) ?></span>
             </button>
           <?php endforeach; ?>
         </div>
+        <p id="taskRoleTemplateHint" class="text-[11px] text-primary mt-2 hidden">تم تعيين الدور في قائمة «الأدوار» أدناه — يمكنك إضافة أدوار أخرى قبل الحفظ.</p>
       </fieldset>
 
       <fieldset>
@@ -413,31 +415,3 @@ $selectedPermissionIds = array_map('strval', $editRole['permission_ids'] ?? []);
     </div>
   </article>
 </section>
-
-<script>
-(() => {
-  const templateButtons = document.querySelectorAll('.task-role-template');
-  const roleCheckboxes = document.querySelectorAll('#userRoleCheckboxes input[name="role_ids[]"]');
-  if (templateButtons.length === 0 || roleCheckboxes.length === 0) {
-    return;
-  }
-
-  templateButtons.forEach((button) => {
-    button.addEventListener('click', () => {
-      const roleId = button.getAttribute('data-role-id');
-      if (!roleId) {
-        return;
-      }
-
-      roleCheckboxes.forEach((checkbox) => {
-        checkbox.checked = checkbox.value === roleId;
-      });
-
-      templateButtons.forEach((item) => {
-        item.classList.remove('border-primary', 'bg-primary/10', 'ring-1', 'ring-primary/30');
-      });
-      button.classList.add('border-primary', 'bg-primary/10', 'ring-1', 'ring-primary/30');
-    });
-  });
-})();
-</script>

@@ -528,6 +528,44 @@
     });
   }
 
+  function bindTaskRoleTemplates(root) {
+    const container = root.querySelector('#taskRoleTemplates');
+    if (!container || container.dataset.taskRolesBound === '1') {
+      return;
+    }
+    container.dataset.taskRolesBound = '1';
+
+    const hint = root.querySelector('#taskRoleTemplateHint');
+    const roleBox = root.querySelector('#userRoleCheckboxes');
+
+    container.addEventListener('click', (event) => {
+      const button = event.target.closest('.task-role-template');
+      if (!button || button.disabled) {
+        return;
+      }
+
+      const roleId = button.getAttribute('data-role-id');
+      if (!roleId) {
+        return;
+      }
+
+      const roleCheckboxes = root.querySelectorAll('#userRoleCheckboxes input[name="role_ids[]"]');
+      roleCheckboxes.forEach((checkbox) => {
+        checkbox.checked = checkbox.value === roleId;
+      });
+
+      container.querySelectorAll('.task-role-template').forEach((item) => {
+        item.classList.remove('border-primary', 'bg-primary/10', 'ring-1', 'ring-primary/30');
+        item.setAttribute('aria-pressed', 'false');
+      });
+      button.classList.add('border-primary', 'bg-primary/10', 'ring-1', 'ring-primary/30');
+      button.setAttribute('aria-pressed', 'true');
+
+      hint?.classList.remove('hidden');
+      roleBox?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  }
+
   function bindPage(root) {
     bindNavigation(root);
     bindAjaxForms(root);
@@ -559,6 +597,7 @@
       window.portalMaterialZipDownloadInit(root);
     }
     bindOrderImageZoom(root);
+    bindTaskRoleTemplates(root);
   }
 
   async function init() {
