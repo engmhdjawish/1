@@ -11,6 +11,27 @@ function h(?string $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+function portal_request_path(): string
+{
+    return (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: '');
+}
+
+function portal_asset_url(string $webPath): string
+{
+    $webPath = '/' . ltrim($webPath, '/');
+    $file = dirname(__DIR__) . '/public' . $webPath;
+    if (is_file($file)) {
+        return $webPath . '?v=' . (string) filemtime($file);
+    }
+
+    return $webPath;
+}
+
+function portal_is_catalog_page(string $path): bool
+{
+    return in_array($path, ['/index.php', '/store.php', '/product.php', '/share.php'], true);
+}
+
 function web_can(string $permission): bool
 {
     return WebSession::hasPermission($permission);

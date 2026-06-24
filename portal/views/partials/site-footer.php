@@ -58,6 +58,7 @@ $address = trim((string) ($companyContext['company_address'] ?? ''));
             <a href="/login.php?type=customer" class="block">دخول العملاء</a>
             <a href="/register.php" class="block">تسجيل عميل جديد</a>
           <?php endif; ?>
+          <button type="button" class="block text-right site-footer-guide-link" data-site-guide-replay>كيف أستخدم الموقع؟</button>
         </div>
       </div>
 
