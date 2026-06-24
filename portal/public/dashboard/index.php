@@ -29,7 +29,12 @@ ob_start();
 ?>
 <section class="mb-6">
   <h1 class="text-2xl font-extrabold text-slate-900">لوحة العمل</h1>
-      <p class="text-sm text-text-muted mt-1">متابعة الطلبات و<strong>صور المواد</strong> و<strong>عملاء الموقع</strong> — للمحاسبة انتقل إلى <a href="/dashboard/accounting.php" class="text-primary font-bold hover:underline">لوحة أمين</a>.</p>
+      <p class="text-sm text-text-muted mt-1">
+        متابعة الطلبات و<strong>صور المواد</strong> و<strong>عملاء الموقع</strong>
+        <?php if (DashboardNavigation::canAccessAccountingArea(WebSession::user())): ?>
+          — للمحاسبة انتقل إلى <a href="/dashboard/accounting.php" class="text-primary font-bold hover:underline">لوحة أمين</a>.
+        <?php endif; ?>
+      </p>
 </section>
 
 <?php if ($dailyTasks !== []): ?>

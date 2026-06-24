@@ -62,6 +62,8 @@ final class StaffRoleProvisioner
                     'permission_code' => $permissionCode,
                 ]);
             }
+
+            self::syncRolePermissions($pdo, (string) $roleId, $task['permissions'] ?? []);
         }
 
         $pdo->prepare(
@@ -72,6 +74,38 @@ final class StaffRoleProvisioner
              WHERE r.code = \'super_admin\'
              ON CONFLICT DO NOTHING'
         )->execute();
+    }
+
+    /** @param list<string> $allowedCodes */
+    private static function syncRolePermissions(PDO $pdo, string $roleId, array $allowedCodes): void
+    {
+        $allowedCodes = array_values(array_unique(array_filter(array_map(
+            static fn ($code): string => trim((string) $code),
+            $allowedCodes
+        ))));
+
+        if ($allowedCodes === []) {
+            $pdo->prepare('DELETE FROM web_role_permissions WHERE role_id = :role_id')
+                ->execute(['role_id' => $roleId]);
+
+            return;
+        }
+
+        $params = ['role_id' => $roleId];
+        $placeholders = [];
+        foreach ($allowedCodes as $index => $code) {
+            $key = 'code_' . $index;
+            $placeholders[] = ':' . $key;
+            $params[$key] = $code;
+        }
+
+        $pdo->prepare(
+            'DELETE FROM web_role_permissions rp
+             USING web_permissions p
+             WHERE rp.permission_id = p.id
+               AND rp.role_id = :role_id
+               AND p.code NOT IN (' . implode(', ', $placeholders) . ')'
+        )->execute($params);
     }
 
     private static function ensurePermissions(PDO $pdo): void

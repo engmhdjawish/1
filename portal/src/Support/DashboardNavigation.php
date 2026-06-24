@@ -93,6 +93,12 @@ final class DashboardNavigation
         return self::userCan($user, self::ACCOUNTING_ACCESS_PERMISSIONS);
     }
 
+    /** أمين tab / overview — not sync-only roles (e.g. order desk, sales). */
+    public static function canAccessAccountingArea(?array $user): bool
+    {
+        return self::userCan($user, 'accounting.view');
+    }
+
     /**
      * @param list<array<string, mixed>> $items
      * @return list<array<string, mixed>>
@@ -210,6 +216,17 @@ final class DashboardNavigation
                 ['route' => '/dashboard/share-links.php', 'label' => 'روابط المشاركة', 'icon' => 'share', 'permission' => 'share_links.manage'],
             ],
         ];
+
+        if (self::userCan($user, 'accounting.sync.view') && !self::userCan($user, 'accounting.view')) {
+            $groups['المزامنة'] = [
+                [
+                    'route' => '/dashboard/accounting-sync.php',
+                    'label' => 'مزامنة طلبات الأمين',
+                    'icon' => 'sync',
+                    'permission' => 'accounting.sync.view',
+                ],
+            ];
+        }
 
         $filtered = [];
         foreach ($groups as $title => $items) {
@@ -551,7 +568,7 @@ final class DashboardNavigation
             ['route' => '/dashboard/orders.php', 'label' => 'الطلبات', 'permission' => 'orders.view'],
             ['route' => '/dashboard/material-images.php', 'label' => 'صور المواد', 'permission' => ['images.upload', 'images.view']],
             ['route' => '/dashboard/customers.php', 'label' => 'عملاء الموقع', 'permission' => 'web_customers.view'],
-            ['route' => '/dashboard/accounting.php', 'label' => 'أمين', 'permission' => null, 'visible' => self::canAccessAccounting($user)],
+            ['route' => '/dashboard/accounting.php', 'label' => 'أمين', 'permission' => null, 'visible' => self::canAccessAccountingArea($user)],
         ];
 
         $links = self::filterItems($user, $candidates);
@@ -597,7 +614,7 @@ final class DashboardNavigation
             ];
         }
 
-        if (self::canAccessAccounting($user)) {
+        if (self::canAccessAccountingArea($user)) {
             $tabs[] = [
                 'route' => '/dashboard/accounting.php',
                 'label' => 'أمين',

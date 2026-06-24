@@ -124,13 +124,12 @@
   }
 
   function syncAreaTabs(doc) {
+    const srcAreaTabs = doc.querySelector('[data-dashboard-area-tabs]');
     const wantsAreaTabs = doc.body?.dataset.dashboardHasAreaTabs === '1'
-      || doc.body?.classList.contains('has-area-tabs')
-      || false;
+      && srcAreaTabs !== null;
     document.body.classList.toggle('has-area-tabs', wantsAreaTabs);
     document.body.dataset.dashboardHasAreaTabs = wantsAreaTabs ? '1' : '0';
 
-    const srcAreaTabs = doc.querySelector('[data-dashboard-area-tabs]');
     let areaTabs = qs('[data-dashboard-area-tabs]');
 
     if (wantsAreaTabs && srcAreaTabs) {
