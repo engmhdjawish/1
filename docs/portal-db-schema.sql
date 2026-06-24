@@ -1,6 +1,9 @@
 -- Portal website database (PostgreSQL)
 -- Separate from Amine SQL Server and ApiManagementDb
--- Run on the external web server
+--
+-- Fresh install only: run this entire file on an empty database.
+-- Existing database: use incremental scripts in docs/portal-migrations/
+--   (e.g. 005-visitor-logs.sql for visitor analytics).
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 

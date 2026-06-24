@@ -53,6 +53,7 @@ PORTAL_APP_URL=http://127.0.0.1:8080
 
 ```bash
 php scripts/setup-database.php
+php scripts/run-migrations.php
 ```
 
 أو يدوياً:
@@ -60,6 +61,19 @@ php scripts/setup-database.php
 ```bash
 psql -U portal -d portal_db -f ../docs/portal-db-schema.sql
 psql -U portal -d portal_db -f ../docs/portal-db-seed.sql
+php scripts/run-migrations.php
+```
+
+## النشر للإنتاج
+
+راجع **[deploy/README.md](../deploy/README.md)** — معالج تفاعلي:
+
+```powershell
+.\deploy\wizard.ps1
+```
+
+```bash
+./deploy/wizard.sh
 ```
 
 ## 4) أول مستخدم لوحة (موظّف)

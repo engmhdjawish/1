@@ -23,8 +23,14 @@ declare(strict_types=1);
       <a href="/store.php" class="store-btn store-btn--secondary mt-4">العودة للمتجر</a>
     </section>
   <?php else: ?>
+    <?php if (!empty($flash)): ?>
+      <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= ($flashType ?? 'success') === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700' ?>">
+        <?= h((string) $flash) ?>
+      </p>
+    <?php endif; ?>
     <?php
       $showTrackingLink = true;
+      $cancelQuoteToken = $token;
       require __DIR__ . '/partials/customer-order-detail.php';
     ?>
     <?php require __DIR__ . '/partials/store-image-lightbox.php'; ?>
