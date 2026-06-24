@@ -25,8 +25,15 @@ if (-not $commonPath) {
 
 function Test-PhpExtensionLoaded {
     param([string]$PhpExe, [string]$Extension)
+    # php-cgi.exe does not support -r; CLI and CGI share the same php.ini
+    if ($PhpExe -match '(?i)php-cgi\.exe$') {
+        $PhpExe = Join-Path (Split-Path $PhpExe -Parent) 'php.exe'
+        if (-not (Test-Path $PhpExe)) {
+            return $false
+        }
+    }
     $result = & $PhpExe -r "echo extension_loaded('$Extension') ? '1' : '0';" 2>$null
-    return $result -eq '1'
+    return "$result".Trim() -eq '1'
 }
 
 function Get-PhpDirectory {
@@ -160,12 +167,30 @@ if (Test-Path $libpqInPhp) {
 Write-Host ''
 
 $required = @('pdo_pgsql', 'curl', 'mbstring', 'openssl', 'gd')
+
+if ($ApplyFix) {
+    Write-Step 'Applying php.ini fixes'
+    if (Enable-PhpIniExtensions -IniPath $ini -Extensions $required) {
+        Write-Ok 'Updated php.ini'
+    } else {
+        Write-Warn 'php.ini extension lines already present — verifying load'
+    }
+
+    if (-not (Test-Path $libpqInPhp)) {
+        $pgBin = Find-PostgresBinDir -Preferred $PgBinDir
+        if ($pgBin) {
+            Copy-Item (Join-Path $pgBin 'libpq.dll') $libpqInPhp -Force
+            Write-Ok 'Copied libpq.dll into PHP folder'
+        }
+    }
+}
+
 $missingCli = @()
 $missingCgi = @()
 
 foreach ($ext in $required) {
     $cliOk = Test-PhpExtensionLoaded -PhpExe $phpCli -Extension $ext
-    $cgiOk = $false
+    $cgiOk = $cliOk
     if ($hasCgi) {
         $cgiOk = Test-PhpExtensionLoaded -PhpExe $phpCgi -Extension $ext
     }
@@ -181,46 +206,16 @@ foreach ($ext in $required) {
 
 if ($missingCli.Count -eq 0 -and $missingCgi.Count -eq 0) {
     Write-Ok 'All required PHP extensions are enabled for CLI and IIS'
+    if ($ApplyFix) {
+        Write-Host ''
+        Write-Warn 'Restart IIS so the site picks up changes:'
+        Write-Host '  iisreset' -ForegroundColor White
+    }
     exit 0
 }
 
 if ($ApplyFix) {
-    Write-Step 'Applying php.ini fixes'
-    $toEnable = @($missingCli + $missingCgi | Select-Object -Unique)
-    if (Enable-PhpIniExtensions -IniPath $ini -Extensions $toEnable) {
-        Write-Ok 'Updated php.ini'
-    } else {
-        Write-Warn 'php.ini already had extension lines — verify manually'
-    }
-
-    if (-not (Test-Path $libpqInPhp)) {
-        $pgBin = Find-PostgresBinDir -Preferred $PgBinDir
-        if ($pgBin) {
-            Copy-Item (Join-Path $pgBin 'libpq.dll') $libpqInPhp -Force
-            Write-Ok 'Copied libpq.dll into PHP folder'
-        }
-    }
-
-    Write-Step 'Re-checking extensions after fix'
-    $stillMissing = @()
-    foreach ($ext in $required) {
-        if (-not (Test-PhpExtensionLoaded -PhpExe $phpCli -Extension $ext)) {
-            $stillMissing += $ext
-        }
-        if ($hasCgi -and -not (Test-PhpExtensionLoaded -PhpExe $phpCgi -Extension $ext)) {
-            if ($stillMissing -notcontains $ext) { $stillMissing += $ext }
-        }
-    }
-
-    if ($stillMissing.Count -eq 0) {
-        Write-Ok 'Extensions loaded after fix'
-        Write-Host ''
-        Write-Warn 'Restart IIS so the site picks up changes:'
-        Write-Host '  iisreset' -ForegroundColor White
-        exit 0
-    }
-
-    Write-Fail "Still missing after -ApplyFix: $($stillMissing -join ', ')"
+    Write-Fail "Still missing after -ApplyFix: $(@($missingCli + $missingCgi | Select-Object -Unique) -join ', ')"
 }
 
 Write-Host ''
@@ -231,13 +226,13 @@ foreach ($ext in ($missingCli + $missingCgi | Select-Object -Unique)) {
 }
 Write-Host ''
 Write-Host 'Quick fix (run as Administrator):' -ForegroundColor Cyan
-Write-Host "  .\fix-windows-php.ps1 -ApplyFix -PgBinDir D:\PostgreSQL\bin" -ForegroundColor White
+Write-Host "  .\fix-windows-php.ps1 -ApplyFix -PgBinDir C:\pgsql\bin" -ForegroundColor White
 Write-Host ''
 Write-Host 'Manual steps:' -ForegroundColor Cyan
 Write-Host '  1) notepad "' + $ini + '"' -ForegroundColor Gray
 Write-Host '  2) Uncomment extension=pdo_pgsql, mbstring, openssl, curl, gd' -ForegroundColor Gray
 Write-Host '  3) Set: extension_dir = "ext"' -ForegroundColor Gray
-Write-Host '  4) Copy D:\PostgreSQL\bin\libpq.dll next to php.exe' -ForegroundColor Gray
+Write-Host '  4) Copy C:\pgsql\bin\libpq.dll next to php.exe' -ForegroundColor Gray
 Write-Host '  5) php -m | findstr pdo_pgsql' -ForegroundColor Gray
 Write-Host '  6) iisreset' -ForegroundColor Gray
 exit 1
