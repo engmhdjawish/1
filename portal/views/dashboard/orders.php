@@ -14,6 +14,9 @@ declare(strict_types=1);
 /** @var string $ordersListUrl */
 /** @var string $orderPriceCurrency */
 /** @var array<string, mixed>|null $orderDetails */
+/** @var array<string, mixed>|null $filteredCustomer */
+
+use Portal\Services\OrderService;
 
 $statusLabels = [
     'pending' => 'جديد',
@@ -45,6 +48,12 @@ $syncClass = static function (string $sync): string {
         'synced' => 'bg-emerald-100 text-emerald-800',
         default => 'bg-slate-100 text-slate-700',
     };
+};
+
+$originClass = static function (array $row): string {
+    return OrderService::isRegisteredCustomerOrder($row)
+        ? 'bg-indigo-100 text-indigo-800'
+        : 'bg-slate-100 text-slate-700';
 };
 
 $buildOrdersUrl = static function (array $params): string {
@@ -115,8 +124,25 @@ $truncate = static function (string $text, int $max = 48): string {
 
 <?php require __DIR__ . '/partials/flash.php'; ?>
 
+<?php if (!empty($filteredCustomer)): ?>
+  <section class="mb-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900 flex flex-wrap items-center justify-between gap-2">
+    <p>
+      عرض طلبات العميل:
+      <strong><?= h((string) ($filteredCustomer['name_ar'] ?? '')) ?></strong>
+      <span dir="ltr">(<?= h((string) ($filteredCustomer['phone'] ?? '')) ?>)</span>
+    </p>
+    <div class="flex gap-2">
+      <a href="/dashboard/customers.php?details=<?= h((string) ($filteredCustomer['id'] ?? '')) ?>" class="text-xs font-bold text-primary hover:underline">ملف العميل</a>
+      <a href="/dashboard/orders.php" class="text-xs font-bold text-slate-600 hover:underline">إلغاء التصفية</a>
+    </div>
+  </section>
+<?php endif; ?>
+
 <section class="bg-white border border-border-subtle rounded-xl p-3 mb-3">
-  <form method="get" data-dashboard-filter class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2 items-end">
+  <form method="get" data-dashboard-filter class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-2 items-end">
+    <?php if (!empty($filters['web_customer_id'])): ?>
+      <input type="hidden" name="web_customer_id" value="<?= h((string) $filters['web_customer_id']) ?>">
+    <?php endif; ?>
     <label class="text-xs lg:col-span-2">
       <span class="text-text-muted block mb-0.5">البحث</span>
       <input type="text" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm focus:border-primary focus:ring-primary" placeholder="رقم الطلب، اسم، هاتف...">
@@ -140,6 +166,14 @@ $truncate = static function (string $text, int $max = 48): string {
       </select>
     </label>
     <label class="text-xs">
+      <span class="text-text-muted block mb-0.5">مصدر الطلب</span>
+      <select name="origin" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
+        <option value="">الكل</option>
+        <option value="registered" <?= ($filters['origin'] ?? '') === 'registered' ? 'selected' : '' ?>>عميل مسجّل</option>
+        <option value="guest" <?= ($filters['origin'] ?? '') === 'guest' ? 'selected' : '' ?>>زائر</option>
+      </select>
+    </label>
+    <label class="text-xs">
       <span class="text-text-muted block mb-0.5">من</span>
       <input type="date" name="fromDate" value="<?= h((string) ($filters['fromDate'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
     </label>
@@ -147,7 +181,7 @@ $truncate = static function (string $text, int $max = 48): string {
       <span class="text-text-muted block mb-0.5">إلى</span>
       <input type="date" name="toDate" value="<?= h((string) ($filters['toDate'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
     </label>
-    <div class="lg:col-span-6 flex justify-end">
+    <div class="lg:col-span-7 flex justify-end">
       <button class="dashboard-btn h-9 bg-primary text-white rounded-lg px-5 text-xs font-bold hover:brightness-110 transition">تطبيق الفلاتر</button>
     </div>
   </form>
@@ -158,10 +192,11 @@ $truncate = static function (string $text, int $max = 48): string {
     <p class="p-5 text-sm text-text-muted text-center">لا توجد طلبات مطابقة للفلاتر الحالية.</p>
   <?php else: ?>
     <div class="overflow-auto">
-      <table class="w-full text-sm min-w-[1180px]">
+      <table class="w-full text-sm min-w-[1240px]">
         <thead class="bg-surface-low text-text-muted border-b border-border-subtle">
           <tr>
             <th class="text-right px-4 py-3 font-bold">رقم الطلب</th>
+            <th class="text-right px-4 py-3 font-bold">المصدر</th>
             <th class="text-right px-4 py-3 font-bold">العميل</th>
             <th class="text-right px-4 py-3 font-bold">الهاتف</th>
             <th class="text-right px-4 py-3 font-bold">ملاحظات</th>
@@ -187,6 +222,11 @@ $truncate = static function (string $text, int $max = 48): string {
               <td class="px-4 py-3">
                 <div class="font-extrabold text-primary"><?= h((string) ($row['order_number'] ?? '')) ?></div>
                 <div class="text-[11px] text-text-muted mt-0.5"><?= h((string) ($row['share_link_name'] ?? 'طلب مباشر')) ?></div>
+              </td>
+              <td class="px-4 py-3">
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $originClass($row) ?>">
+                  <?= h(OrderService::orderOriginLabel($row)) ?>
+                </span>
               </td>
               <td class="px-4 py-3 font-bold"><?= h($name) ?></td>
               <td class="px-4 py-3 whitespace-nowrap" dir="ltr"><?= h($phone) ?></td>
@@ -218,6 +258,8 @@ $truncate = static function (string $text, int $max = 48): string {
                         'q' => $filters['q'] ?? '',
                         'status' => $filters['status'] ?? '',
                         'sync' => $filters['sync'] ?? '',
+                        'origin' => $filters['origin'] ?? '',
+                        'web_customer_id' => $filters['web_customer_id'] ?? '',
                         'fromDate' => $filters['fromDate'] ?? '',
                         'toDate' => $filters['toDate'] ?? '',
                         'limit' => $filters['limit'] ?? 50,
@@ -256,6 +298,8 @@ $truncate = static function (string $text, int $max = 48): string {
     $detailPhone = (string) ($orderDetails['display_phone'] ?? '—');
     $detailStatus = (string) ($orderDetails['status'] ?? 'pending');
     $detailSync = (string) ($orderDetails['amine_sync_status'] ?? 'none');
+    $detailOrigin = OrderService::orderOriginLabel($orderDetails);
+    $detailIsRegistered = OrderService::isRegisteredCustomerOrder($orderDetails);
   ?>
   <div class="fixed inset-0 z-50 bg-slate-900/40" aria-hidden="true"></div>
   <aside class="fixed top-0 left-0 z-50 h-screen w-full max-w-2xl bg-white shadow-2xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby="order-details-title">
@@ -272,7 +316,17 @@ $truncate = static function (string $text, int $max = 48): string {
       </div>
       <div class="flex flex-wrap gap-1.5 mt-2 items-center">
         <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $statusClass($detailStatus) ?>"><?= h($statusLabels[$detailStatus] ?? $detailStatus) ?></span>
+        <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $originClass($orderDetails) ?>"><?= h($detailOrigin) ?></span>
         <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $syncClass($detailSync) ?>"><?= h($syncLabels[$detailSync] ?? $detailSync) ?></span>
+        <a
+          href="/api/order-images-zip.php?order_id=<?= h(rawurlencode((string) ($orderDetails['id'] ?? ''))) ?>"
+          target="_blank"
+          class="inline-flex items-center gap-1 h-8 px-3 rounded-lg border border-border-subtle bg-white text-[11px] font-bold text-slate-700 hover:bg-surface-low"
+          download
+        >
+          <span class="material-symbols-outlined text-sm">folder_zip</span>
+          صور ZIP
+        </a>
         <div class="store-currency-toggle store-currency-toggle--drawer ms-auto" role="group" aria-label="عملة عرض الطلب">
           <button type="button" class="store-currency-toggle__btn <?= $orderPriceCurrency === 'syp' ? 'is-active' : '' ?>" data-dashboard-order-currency="syp" title="عرض بالليرة">ل.س</button>
           <button type="button" class="store-currency-toggle__btn <?= $orderPriceCurrency === 'usd' ? 'is-active' : '' ?>" data-dashboard-order-currency="usd" title="عرض بالدولار">$</button>
@@ -291,6 +345,17 @@ $truncate = static function (string $text, int $max = 48): string {
             <p class="text-[11px] text-text-muted mb-0.5">الهاتف</p>
             <p class="font-bold" dir="ltr"><?= h($detailPhone) ?></p>
           </div>
+          <?php if ($detailIsRegistered && trim((string) ($orderDetails['web_customer_id'] ?? '')) !== ''): ?>
+            <div class="sm:col-span-2">
+              <a href="/dashboard/orders.php?web_customer_id=<?= h((string) $orderDetails['web_customer_id']) ?>" class="text-xs font-bold text-primary hover:underline">
+                عرض كل طلبات هذا العميل
+              </a>
+              ·
+              <a href="/dashboard/customers.php?details=<?= h((string) $orderDetails['web_customer_id']) ?>" class="text-xs font-bold text-primary hover:underline">
+                ملف العميل
+              </a>
+            </div>
+          <?php endif; ?>
         </div>
         <?php if ($detailNotes !== ''): ?>
           <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">

@@ -1,0 +1,225 @@
+.site-guide {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+}
+
+.site-guide[hidden] {
+  display: none !important;
+}
+
+.site-guide.is-active {
+  pointer-events: auto;
+}
+
+.site-guide__spotlight {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 0.85rem;
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.68);
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  transition: top 0.28s ease, left 0.28s ease, width 0.28s ease, height 0.28s ease, opacity 0.2s ease;
+}
+
+.site-guide.is-active .site-guide__spotlight {
+  opacity: 1;
+}
+
+.site-guide__spotlight.is-centered {
+  border-radius: 1.25rem;
+}
+
+.site-guide__pulse {
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 2px solid rgba(216, 25, 33, 0.85);
+  box-shadow: 0 0 0 0 rgba(216, 25, 33, 0.35);
+  animation: site-guide-pulse 1.8s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes site-guide-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(216, 25, 33, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(216, 25, 33, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(216, 25, 33, 0);
+  }
+}
+
+.site-guide__tooltip {
+  position: fixed;
+  z-index: 2;
+  width: min(calc(100vw - 2rem), 22rem);
+  background: #fff;
+  border-radius: 1.1rem;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.28);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: top 0.28s ease, left 0.28s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.site-guide.is-active .site-guide__tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.site-guide__tooltip.is-centered {
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%);
+  width: min(calc(100vw - 2rem), 26rem);
+}
+
+.site-guide.is-active .site-guide__tooltip.is-centered.is-visible {
+  transform: translate(-50%, -50%);
+}
+
+.site-guide__tooltip-head {
+  padding: 1rem 1.1rem 0.65rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.site-guide__eyebrow {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #D81921;
+  margin-bottom: 0.5rem;
+}
+
+.site-guide__dots {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.site-guide__dot {
+  flex: 1;
+  height: 0.28rem;
+  border-radius: 9999px;
+  background: #e2e8f0;
+  transition: background 0.2s ease;
+}
+
+.site-guide__dot.is-active {
+  background: #D81921;
+}
+
+.site-guide__tooltip-body {
+  padding: 1rem 1.1rem 0.35rem;
+}
+
+.site-guide__icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.9rem;
+  background: #fef2f2;
+  color: #D81921;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.75rem;
+}
+
+.site-guide__title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 0.45rem;
+  line-height: 1.35;
+}
+
+.site-guide__text {
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: #475569;
+}
+
+.site-guide__tooltip-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.85rem 1.1rem 1.1rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+.site-guide__skip {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.site-guide__skip:hover {
+  color: #334155;
+}
+
+.site-guide__actions {
+  display: flex;
+  gap: 0.45rem;
+  margin-inline-start: auto;
+}
+
+.site-guide__btn {
+  min-height: 2.35rem;
+  padding: 0 0.9rem;
+  border-radius: 0.7rem;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+}
+
+.site-guide__btn--ghost {
+  background: #fff;
+  border-color: #d1d5db;
+  color: #475569;
+}
+
+.site-guide__btn--primary {
+  background: #D81921;
+  color: #fff;
+}
+
+.site-guide__target-ring {
+  outline: 2px solid rgba(216, 25, 33, 0.9);
+  outline-offset: 3px;
+  border-radius: 0.5rem;
+}
+
+.site-footer-guide-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.site-footer-guide-link:hover {
+  color: #fff;
+}
+
+@media (max-width: 767px) {
+  .site-guide__tooltip:not(.is-centered) {
+    width: min(calc(100vw - 1.25rem), 22rem);
+  }
+}

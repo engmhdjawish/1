@@ -11,6 +11,245 @@ function h(?string $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+function portal_request_path(): string
+{
+    return \Portal\Support\PortalUrl::requestPath();
+}
+
+function portal_safe_redirect_path(?string $path): ?string
+{
+    return \Portal\Support\PortalUrl::safeRedirectPath($path);
+}
+
+function portal_login_url(string $type = 'customer', ?string $redirect = null): string
+{
+    return \Portal\Support\PortalUrl::loginUrl($type, $redirect);
+}
+
+function portal_login_redirect_target(string $type, ?string $rawRedirect = null): string
+{
+    return \Portal\Support\PortalUrl::loginRedirectTarget($type, $rawRedirect);
+}
+
+function portal_asset_url(string $webPath): string
+{
+    $webPath = '/' . ltrim($webPath, '/');
+    $file = dirname(__DIR__) . '/public' . $webPath;
+    if (is_file($file)) {
+        return $webPath . '?v=' . (string) filemtime($file);
+    }
+
+    return $webPath;
+}
+
+function portal_is_catalog_page(string $path): bool
+{
+    return in_array($path, ['/index.php', '/store.php', '/product.php', '/share.php'], true);
+}
+
+function portal_absolute_url(string $pathOrUrl = ''): string
+{
+    $value = trim($pathOrUrl);
+    if ($value === '') {
+        return '';
+    }
+    if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
+        return $value;
+    }
+
+    $path = '/' . ltrim($value, '/');
+    if ($path === '//') {
+        $path = '/';
+    }
+
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    if ($host === '') {
+        return $path;
+    }
+
+    return $scheme . '://' . $host . $path;
+}
+
+function portal_image_mime_from_url(string $url): string
+{
+    $path = (string) (parse_url($url, PHP_URL_PATH) ?: $url);
+    $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+    return match ($ext) {
+        'png' => 'image/png',
+        'jpg', 'jpeg' => 'image/jpeg',
+        'webp' => 'image/webp',
+        'svg' => 'image/svg+xml',
+        'gif' => 'image/gif',
+        'ico' => 'image/x-icon',
+        default => 'image/png',
+    };
+}
+
+/**
+ * @return array{
+ *   uses_company_logo: bool,
+ *   favicon_ico: string,
+ *   favicon_svg: string,
+ *   favicon_png_32: string,
+ *   apple_touch: string,
+ *   manifest_icons: list<array{src: string, sizes: string, type: string, purpose: string}>
+ * }
+ */
+function portal_site_icons(?string $companyLogoUrl = null): array
+{
+    $companyLogoUrl = trim((string) $companyLogoUrl);
+    $usesCompanyLogo = $companyLogoUrl !== '';
+    $logoAbs = $usesCompanyLogo
+        ? (str_starts_with($companyLogoUrl, 'http://') || str_starts_with($companyLogoUrl, 'https://')
+            ? $companyLogoUrl
+            : portal_absolute_url($companyLogoUrl))
+        : '';
+
+    $iconPng = static fn (int $size): string => portal_absolute_url('/icons/icon-png.php?size=' . $size);
+    $iconSvg = portal_absolute_url(portal_asset_url('/icons/app-icon.svg'));
+    $faviconIco = portal_absolute_url(portal_asset_url('/favicon.ico'));
+
+    if ($usesCompanyLogo) {
+        $logoMime = portal_image_mime_from_url($logoAbs);
+
+        return [
+            'uses_company_logo' => true,
+            'favicon_ico' => $faviconIco,
+            'favicon_svg' => $iconSvg,
+            'favicon_png_32' => $logoAbs,
+            'apple_touch' => $logoAbs,
+            'manifest_icons' => [
+                [
+                    'src' => $logoAbs,
+                    'sizes' => '192x192',
+                    'type' => $logoMime,
+                    'purpose' => 'any',
+                ],
+                [
+                    'src' => $logoAbs,
+                    'sizes' => '512x512',
+                    'type' => $logoMime,
+                    'purpose' => 'any',
+                ],
+                [
+                    'src' => $iconPng(192),
+                    'sizes' => '192x192',
+                    'type' => 'image/png',
+                    'purpose' => 'any',
+                ],
+                [
+                    'src' => $iconPng(512),
+                    'sizes' => '512x512',
+                    'type' => 'image/png',
+                    'purpose' => 'maskable',
+                ],
+            ],
+        ];
+    }
+
+    return [
+        'uses_company_logo' => false,
+        'favicon_ico' => $faviconIco,
+        'favicon_svg' => $iconSvg,
+        'favicon_png_32' => $iconPng(32),
+        'apple_touch' => $iconPng(180),
+        'manifest_icons' => [
+            [
+                'src' => $iconPng(192),
+                'sizes' => '192x192',
+                'type' => 'image/png',
+                'purpose' => 'any',
+            ],
+            [
+                'src' => $iconPng(512),
+                'sizes' => '512x512',
+                'type' => 'image/png',
+                'purpose' => 'any',
+            ],
+            [
+                'src' => $iconPng(512),
+                'sizes' => '512x512',
+                'type' => 'image/png',
+                'purpose' => 'maskable',
+            ],
+        ],
+    ];
+}
+
+function portal_canonical_url(?string $override = null): string
+{
+    $override = trim((string) $override);
+    if ($override !== '') {
+        if (str_starts_with($override, 'http://') || str_starts_with($override, 'https://')) {
+            return $override;
+        }
+
+        return portal_absolute_url($override);
+    }
+
+    $path = portal_request_path();
+    $query = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_QUERY) ?? '');
+    $canonicalPath = $path;
+    if ($query !== '' && in_array($path, ['/store.php', '/product.php', '/share.php'], true)) {
+        $canonicalPath .= '?' . $query;
+    }
+
+    return portal_absolute_url($canonicalPath);
+}
+
+function portal_seo_description(string $pagePath, string $siteName, ?string $override = null): string
+{
+    $override = trim((string) $override);
+    if ($override !== '') {
+        return $override;
+    }
+
+    $siteName = trim($siteName) !== '' ? trim($siteName) : 'جاويش للتجارة';
+
+    return match ($pagePath) {
+        '/index.php', '/' => 'تسوّق أحذية محلية ومستوردة من ' . $siteName . '. تصفّح التشكيلة، العروض الخاصة، واطلب بسهولة عبر الموقع.',
+        '/store.php' => 'متجر ' . $siteName . ' — تصفّح تشكيلة الأحذية، فلترة حسب النوع والماركة، واطّلع على الأسعار والعروض.',
+        '/store-cart.php', '/cart.php' => 'سلة التسوق في ' . $siteName . '. راجع أصنافك وأكمل طلبك بسهولة.',
+        '/about.php' => 'تعرّف على ' . $siteName . ': من نحن، أعمالنا، والتزامنا بجودة الأحذية وخدمة العملاء.',
+        '/login.php' => 'تسجيل الدخول إلى حسابك في ' . $siteName . ' لمتابعة الطلبات وإدارة ملفك الشخصي.',
+        '/register.php' => 'إنشاء حساب جديد في ' . $siteName . ' للتسوق ومتابعة الطلبات بسهولة.',
+        '/my-orders.php' => 'متابعة طلباتك في ' . $siteName . ' — حالة الطلب، التفاصيل، والتتبع.',
+        '/my-profile.php' => 'ملفك الشخصي في ' . $siteName . ' — بيانات الحساب وإعدادات الأمان.',
+        '/track-order.php' => 'تتبع طلبك من ' . $siteName . ' باستخدام رمز التتبع.',
+        default => $siteName . ' — بوابة تجارة الأحذية الإلكترونية.',
+    };
+}
+
+/** @return array<string, mixed> */
+function portal_json_ld_organization(string $siteName, ?string $logoUrl = null): array
+{
+    $data = [
+        '@context' => 'https://schema.org',
+        '@type' => 'Organization',
+        'name' => $siteName,
+        'url' => portal_absolute_url('/'),
+    ];
+    if ($logoUrl !== null && trim($logoUrl) !== '') {
+        $data['logo'] = str_starts_with($logoUrl, 'http') ? $logoUrl : portal_absolute_url($logoUrl);
+    }
+
+    return $data;
+}
+
+/** @return array<string, mixed> */
+function portal_json_ld_website(string $siteName): array
+{
+    return [
+        '@context' => 'https://schema.org',
+        '@type' => 'WebSite',
+        'name' => $siteName,
+        'url' => portal_absolute_url('/'),
+        'inLanguage' => 'ar',
+    ];
+}
+
 function web_can(string $permission): bool
 {
     return WebSession::hasPermission($permission);
@@ -379,13 +618,7 @@ function absolute_order_tracking_url(string $token): string
         return '';
     }
 
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
-    if ($host === '') {
-        return $path;
-    }
-
-    return $scheme . '://' . $host . $path;
+    return portal_absolute_url($path);
 }
 
 function format_packaging(float $value): string
