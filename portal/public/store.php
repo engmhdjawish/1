@@ -23,5 +23,4 @@ ob_start();
 require dirname(__DIR__) . '/views/store-catalog.php';
 $content = ob_get_clean();
 $title = 'المتجر';
-$extraHead = '<link href="/css/store-filters.css" rel="stylesheet">';
 require dirname(__DIR__) . '/views/layout.php';
