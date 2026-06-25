@@ -1,0 +1,42 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Test store catalog load (same path as store.php).
+ * Usage: php scripts/test-store-catalog.php
+ */
+
+error_reporting(E_ALL);
+ini_set('display_errors', '1');
+
+$base = dirname(__DIR__);
+require $base . '/bootstrap.php';
+require $base . '/views/helpers.php';
+
+use Portal\Services\StoreCatalogService;
+use Portal\Services\StorePolicyService;
+
+echo "=== Store catalog test ===\n";
+
+try {
+    $guest = StorePolicyService::guestPolicy();
+    if ($guest === null) {
+        echo "Guest policy: NOT SET or inactive\n";
+    } else {
+        echo 'Guest policy: ' . ($guest['name_ar'] ?? '') . ' (' . ($guest['code'] ?? '') . ")\n";
+        echo 'Policy id: ' . ($guest['id'] ?? '') . "\n";
+    }
+
+    $catalog = StoreCatalogService::catalogFromRequest([]);
+    echo 'Products: ' . count($catalog['products'] ?? []) . "\n";
+    echo 'Total: ' . (int) ($catalog['totalCount'] ?? 0) . "\n";
+    echo 'API error: ' . (string) ($catalog['apiError'] ?? '') . "\n";
+    echo 'Allow client filters: ' . ((bool) ($catalog['allow_client_filters'] ?? false) ? 'yes' : 'no') . "\n";
+    echo "OK\n";
+} catch (Throwable $e) {
+    echo "FAIL: " . $e->getMessage() . "\n";
+    echo $e->getFile() . ':' . $e->getLine() . "\n";
+    echo $e->getTraceAsString() . "\n";
+    exit(1);
+}
