@@ -47,7 +47,7 @@ $poolName = $SiteName
 $poolXml = & $appcmd list apppool /name:$poolName /xml 2>$null
 if (-not $poolXml) {
     $poolName = 'DefaultAppPool'
-    Write-Host "[!] App pool $SiteName not found — using $poolName" -ForegroundColor Yellow
+    Write-Host "[!] App pool $SiteName not found - using $poolName" -ForegroundColor Yellow
 }
 
 Write-Host "==> App pool: $poolName (queueLength=5000)" -ForegroundColor Cyan
