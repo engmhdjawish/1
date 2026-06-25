@@ -284,7 +284,7 @@
       if (existing) {
         return existing;
       }
-      return navigator.serviceWorker.register('/sw.js?v=5', { scope: '/', updateViaCache: 'none' });
+      return navigator.serviceWorker.register('/sw.js?v=6', { scope: '/', updateViaCache: 'none' });
     }).catch(() => null);
   }
 

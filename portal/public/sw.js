@@ -1,7 +1,7 @@
 /**
  * Jawish store PWA — cache static assets, network-first for pages.
  */
-const CACHE_VERSION = 'jawish-v5';
+const CACHE_VERSION = 'jawish-v6';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 
 const PRECACHE_URLS = [

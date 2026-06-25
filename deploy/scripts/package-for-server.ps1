@@ -50,6 +50,23 @@ if (-not $portalSource) { $portalSource = Join-Path $RepoRoot 'portal' }
 
 Copy-PortalTree -Destination $portalDest -Source $portalSource
 
+$pwaRequired = @(
+    'public\icons\icon-192.png',
+    'public\icons\icon-512.png',
+    'public\manifest.webmanifest',
+    'public\pwa-check.php'
+)
+foreach ($rel in $pwaRequired) {
+    $full = Join-Path $portalDest $rel
+    if (-not (Test-Path $full)) {
+        Write-Fail "PWA file missing in package: $rel — run git pull then package again"
+        exit 1
+    }
+}
+Write-Ok 'PWA icon + manifest files present in package'
+
+& (Join-Path $PSScriptRoot 'copy-pwa-bundle.ps1') | Out-Null
+
 $serverPublishDir = $vars['PORTAL_PUBLISH_DIR']
 if (-not $serverPublishDir) { $serverPublishDir = 'D:\JawishPortal' }
 
@@ -78,7 +95,8 @@ $toolFiles = @(
     'fix-windows-php.ps1',
     'fix-iis-php-concurrency.ps1',
     'server-setup-on-host.ps1',
-    'install-iis-php-handler.ps1'
+    'install-iis-php-handler.ps1',
+    'copy-pwa-bundle.ps1'
 )
 foreach ($name in $toolFiles) {
     Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $toolsDest $name) -Force

@@ -29,9 +29,52 @@ $checks[] = [
 ];
 
 $checks[] = [
-    'label' => 'مسار manifest',
-    'ok' => true,
-    'detail' => '/manifest.php',
+    'label' => 'ملف manifest.webmanifest',
+    'ok' => is_file(dirname(__DIR__) . '/public/manifest.webmanifest'),
+    'detail' => is_file(dirname(__DIR__) . '/public/manifest.webmanifest')
+        ? '/manifest.webmanifest موجود (ملف ثابت — الأفضل للتثبيت)'
+        : 'manifest.webmanifest مفقود — انسخه من آخر حزمة نشر',
+];
+
+$pwaHttpProbe = static function (string $path) use ($scheme, $host): array {
+    $canonicalHost = (string) preg_replace('/:\d+$/', '', $host);
+    $url = $scheme . '://' . $canonicalHost . $path;
+    $context = stream_context_create([
+        'http' => [
+            'timeout' => 10,
+            'ignore_errors' => true,
+        ],
+        'ssl' => [
+            'verify_peer' => false,
+            'verify_peer_name' => false,
+        ],
+    ]);
+    $body = @file_get_contents($url, false, $context);
+    $status = 0;
+    if (isset($http_response_header[0]) && preg_match('/\s(\d{3})\s/', (string) $http_response_header[0], $matches)) {
+        $status = (int) $matches[1];
+    }
+
+    return [
+        'url' => $url,
+        'status' => $status,
+        'ok' => $status === 200 && is_string($body) && strlen($body) > 50,
+    ];
+};
+
+$iconHttpChecks = [
+    $pwaHttpProbe('/icons/icon-192.png'),
+    $pwaHttpProbe('/icons/icon-512.png'),
+    $pwaHttpProbe('/manifest.webmanifest'),
+];
+$iconsHttpOk = count(array_filter($iconHttpChecks, static fn (array $row): bool => (bool) $row['ok'])) >= 3;
+
+$checks[] = [
+    'label' => 'تحميل الأيقونات عبر HTTPS (Chrome يحتاج 200)',
+    'ok' => $iconsHttpOk,
+    'detail' => $iconsHttpOk
+        ? 'icon-192.png و icon-512.png و manifest يُحمَّلون بنجاح.'
+        : 'فشل تحميل أيقونة أو manifest — هذا يمنع التثبيت. انسخ ملفات icons/*.png من الحزمة.',
 ];
 
 $iconChecks = [];
@@ -91,7 +134,7 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
     #sw-status, #manifest-status { margin-top: 0.5rem; font-size: 0.9rem; }
     a { color: #2563eb; }
   </style>
-  <link rel="manifest" href="/manifest.php">
+  <link rel="manifest" href="/manifest.webmanifest">
 </head>
 <body>
   <h1>تشخيص تثبيت التطبيق (PWA)</h1>
@@ -105,7 +148,20 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
   <?php endforeach; ?>
 
   <div class="card">
-    <strong>أيقونات manifest</strong>
+    <strong>فحص HTTP (مهم لـ Chrome)</strong>
+    <ul>
+      <?php foreach ($iconHttpChecks as $probe): ?>
+        <li>
+          <code><?= h($probe['url']) ?></code>
+          — HTTP <?= (int) $probe['status'] ?>
+          — <?= $probe['ok'] ? '✓' : '✗ فشل' ?>
+        </li>
+      <?php endforeach; ?>
+    </ul>
+  </div>
+
+  <div class="card">
+    <strong>أيقونات manifest (على القرص)</strong>
     <ul>
       <?php foreach ($iconChecks as $icon): ?>
         <li>
@@ -160,7 +216,7 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
         document.getElementById('sw-status').textContent = '✗ المتصفح لا يدعم Service Worker';
       }
 
-      fetch('/manifest.php', { cache: 'no-store' })
+      fetch('/manifest.webmanifest', { cache: 'no-store' })
         .then((r) => r.json())
         .then(async (m) => {
           const n = (m.icons || []).length;
@@ -195,7 +251,7 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
       }, 3000);
 
       if (window.isSecureContext) {
-        navigator.serviceWorker.register('/sw.js?v=5', { scope: '/', updateViaCache: 'none' }).catch(() => {});
+        navigator.serviceWorker.register('/sw.js?v=6', { scope: '/', updateViaCache: 'none' }).catch(() => {});
       }
     })();
   </script>
