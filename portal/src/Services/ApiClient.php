@@ -15,9 +15,9 @@ final class ApiClient
         return self::request('DELETE', $path);
     }
 
-    public static function get(string $path, array $query = []): array
+    public static function get(string $path, array $query = [], int $timeoutSeconds = 60): array
     {
-        return self::request('GET', $path, null, $query);
+        return self::request('GET', $path, null, $query, $timeoutSeconds);
     }
 
     public static function postJson(string $path, array $body = [], int $timeoutSeconds = 60): array

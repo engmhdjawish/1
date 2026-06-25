@@ -730,7 +730,7 @@ final class StoreCatalogService
             $minUnitPurchasePriceUsd,
             $maxUnitPurchasePriceUsd
         );
-        $materials = ApiClient::get('/api/materials', $primaryQuery);
+        $materials = ApiClient::get('/api/materials', $primaryQuery, 15);
         if ($materials['ok'] || (int) ($materials['status'] ?? 0) !== 400) {
             return $materials;
         }
@@ -760,7 +760,7 @@ final class StoreCatalogService
                 null,
                 null
             );
-            $retry = ApiClient::get('/api/materials', $fallbackQuery);
+            $retry = ApiClient::get('/api/materials', $fallbackQuery, 15);
             if ($retry['ok']) {
                 return $retry;
             }
@@ -789,7 +789,7 @@ final class StoreCatalogService
                 $minUnitPurchasePriceUsd,
                 $maxUnitPurchasePriceUsd
             );
-            $retry = ApiClient::get('/api/materials', $retryQuery);
+            $retry = ApiClient::get('/api/materials', $retryQuery, 15);
             if ($retry['ok']) {
                 return $retry;
             }
@@ -1446,9 +1446,14 @@ final class StoreCatalogService
         $apiPageSize = min(120, max($pageSize * 2, 48));
         $apiTotalCount = 0;
         $resultFilters = [];
-        $maxApiPages = 300;
+        $maxApiPages = 40;
+        $deadline = microtime(true) + 20.0;
 
         while ($apiPage <= $maxApiPages) {
+            if (microtime(true) >= $deadline) {
+                break;
+            }
+
             $materials = $fetchPage($apiPage, $apiPageSize);
             if (!($materials['ok'] ?? false)) {
                 return [
@@ -1474,6 +1479,10 @@ final class StoreCatalogService
                     $collected[] = $item;
                 }
                 $sellableSeen++;
+            }
+
+            if (count($collected) >= $pageSize) {
+                break;
             }
 
             if ($apiTotalCount > 0 && ($apiPage * $apiPageSize) >= $apiTotalCount) {
