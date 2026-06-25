@@ -128,8 +128,19 @@ function portal_image_mime_from_url(string $url): string
  */
 function portal_manifest_icon(int $size, string $purpose = 'any'): array
 {
+    if (\Portal\Services\CompanyBrandIconService::hasBrandIcons()) {
+        return [
+            'src' => \Portal\Services\CompanyBrandIconService::iconPublicUrl($size),
+            'sizes' => $size . 'x' . $size,
+            'type' => 'image/png',
+            'purpose' => $purpose,
+        ];
+    }
+
+    $file = 'icon-' . $size . '.png';
+
     return [
-        'src' => '/icons/icon-' . $size . '.png',
+        'src' => '/icons/icon-serve.php?f=' . rawurlencode($file),
         'sizes' => $size . 'x' . $size,
         'type' => 'image/png',
         'purpose' => $purpose,
@@ -150,6 +161,9 @@ function portal_site_icons(?string $companyLogoUrl = null): array
     $iconSvg = portal_asset_url('/icons/app-icon.svg');
     $faviconIco = portal_asset_url('/favicon.ico');
 
+    $brandIcon = static fn (int $size): string => \Portal\Services\CompanyBrandIconService::iconPublicUrl($size);
+    $hasBrandIcons = \Portal\Services\CompanyBrandIconService::hasBrandIcons();
+
     $manifestIcons = [
         portal_manifest_icon(192, 'any'),
         portal_manifest_icon(512, 'any'),
@@ -161,8 +175,8 @@ function portal_site_icons(?string $companyLogoUrl = null): array
             'uses_company_logo' => true,
             'favicon_ico' => $faviconIco,
             'favicon_svg' => $iconSvg,
-            'favicon_png_32' => $logoAbs,
-            'apple_touch' => $logoAbs,
+            'favicon_png_32' => $hasBrandIcons ? $brandIcon(32) : $logoAbs,
+            'apple_touch' => $hasBrandIcons ? $brandIcon(180) : $logoAbs,
             'manifest_icons' => $manifestIcons,
         ];
     }

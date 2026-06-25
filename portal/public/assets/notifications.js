@@ -5,6 +5,7 @@
   'use strict';
 
   const API = '/api/notifications.php';
+  const POLL_MS = 45_000;
 
   function formatTime(value) {
     if (!value) return '';
@@ -68,11 +69,45 @@
     if (!btn || !panel || !list || !badge) return;
 
     let open = false;
+    let lastUnread = -1;
 
     const setBadge = (count) => {
       const n = Math.max(0, Number(count) || 0);
       badge.textContent = n > 99 ? '99+' : String(n);
       badge.classList.toggle('hidden', n === 0);
+    };
+
+    const notifyNewItems = (count) => {
+      if (count <= lastUnread || lastUnread < 0) {
+        return;
+      }
+      document.querySelectorAll('[data-notif-bell]').forEach((root) => {
+        root.classList.add('notif-bell--pulse');
+        window.setTimeout(() => root.classList.remove('notif-bell--pulse'), 2400);
+      });
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        try {
+          new Notification('إشعار جديد', {
+            body: 'لديك إشعارات جديدة في جاويش للتجارة',
+            icon: '/icons/brand-icon.php?size=192',
+            tag: 'jawish-portal-notification',
+          });
+        } catch (_) {
+          /* ignore */
+        }
+      }
+    };
+
+    const pollUnread = async () => {
+      try {
+        const data = await fetchJson(API + '?action=count');
+        const count = Math.max(0, Number(data.count) || 0);
+        notifyNewItems(count);
+        lastUnread = count;
+        setBadge(count);
+      } catch {
+        /* ignore */
+      }
     };
 
     const load = async () => {
@@ -86,6 +121,7 @@
           items.forEach((item) => list.appendChild(renderItem(item)));
         }
         setBadge(data.unread ?? 0);
+        lastUnread = Math.max(0, Number(data.unread) || 0);
       } catch {
         list.innerHTML = '<p class="notif-bell__empty">تعذر تحميل الإشعارات.</p>';
       }
@@ -148,8 +184,19 @@
     });
 
     fetchJson(API + '?action=count')
-      .then((data) => setBadge(data.count ?? 0))
+      .then((data) => {
+        const count = Math.max(0, Number(data.count) || 0);
+        lastUnread = count;
+        setBadge(count);
+      })
       .catch(() => {});
+
+    window.setInterval(pollUnread, POLL_MS);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        pollUnread();
+      }
+    });
   }
 
   function init() {

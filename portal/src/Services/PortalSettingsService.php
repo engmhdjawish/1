@@ -78,6 +78,10 @@ final class PortalSettingsService
                 'updated_by_user_id' => $updatedByUserId ?: null,
             ]);
         }
+
+        if (array_key_exists('company_logo', $values)) {
+            CompanyBrandIconService::regenerateFromLogoUrl(trim((string) ($values['company_logo'] ?? '')));
+        }
     }
 
     /** @return list<array<string, mixed>> */

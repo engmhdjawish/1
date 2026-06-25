@@ -213,6 +213,7 @@ $tabUrl = static function (string $key) use ($tab): string {
       </label>
       <div class="md:col-span-3">
         <?php $renderMediaPickerField('شعار الشركة', 'company_logo', (string) ($company['company_logo'] ?? ''), 'settings-company-logo', 'logo'); ?>
+        <p class="text-xs text-text-muted mt-1">بعد الحفظ يُولَّد تلقائياً أيقونات PWA (192×512) من الشعار لتطبيق الموقع والمتصفح. يُفضَّل PNG أو JPG.</p>
       </div>
     </div>
   </article>
