@@ -8,10 +8,17 @@ require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Support\VapidKeyGenerator;
 
+$pemPath = isset($argv[1]) ? trim((string) $argv[1]) : '';
+
 try {
-    $keys = VapidKeyGenerator::create();
+    if ($pemPath !== '' && is_file($pemPath)) {
+        $keys = VapidKeyGenerator::createFromPem((string) file_get_contents($pemPath));
+    } else {
+        $keys = VapidKeyGenerator::create();
+    }
 } catch (\Throwable $exception) {
     fwrite(STDERR, $exception->getMessage() . PHP_EOL);
+    fwrite(STDERR, "Fallback: .\\deploy\\scripts\\generate-vapid-keys.ps1" . PHP_EOL);
     exit(1);
 }
 
