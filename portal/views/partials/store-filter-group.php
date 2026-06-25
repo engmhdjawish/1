@@ -19,7 +19,7 @@ $renderStoreFilterGroup = static function (
     array $options,
     array $selectedValues,
     string $groupId,
-    int $searchThreshold = 8,
+    int $searchThreshold = 5,
     int $initialVisible = 6
 ): void {
     $normalized = [];

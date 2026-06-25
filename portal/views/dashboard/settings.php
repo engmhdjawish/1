@@ -36,7 +36,7 @@ $materialFilterOptions = is_array($materialFilterOptions ?? null) ? $materialFil
 $materialFilterOptionsError = $materialFilterOptionsError ?? null;
 $policyFilterRules = is_array($editPolicy['filter_rules'] ?? null) ? $editPolicy['filter_rules'] : [];
 $policyStoreOptions = is_array($editPolicy['store_options'] ?? null) ? $editPolicy['store_options'] : AccessPolicyService::defaultStoreOptions();
-$visibleClientFilters = array_map('strval', $policyStoreOptions['visible_client_filters'] ?? []);
+$visibleClientFilters = AccessPolicyService::resolvedVisibleClientFilters($policyStoreOptions);
 $policyClientSortFields = array_map('strval', $policyStoreOptions['client_sort_fields'] ?? []);
 $policyAllowSorting = array_key_exists('allow_sorting', $policyStoreOptions) ? (bool) $policyStoreOptions['allow_sorting'] : true;
 $policyDefaultSort = (string) ($policyStoreOptions['default_sort'] ?? 'number:asc');
@@ -568,7 +568,11 @@ $tabUrl = static function (string $key) use ($tab): string {
               $usageTotal = (int) $usage['share_links'] + (int) $usage['customers'];
               $policyFilters = CatalogSectionResolver::filterSummaryLabels(is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : []);
               $policyFilterCount = count($policyFilters);
-              $visibleFilterCount = count(is_array($policy['store_options']['visible_client_filters'] ?? null) ? $policy['store_options']['visible_client_filters'] : []);
+              $visibleFilterCount = count(
+                  AccessPolicyService::resolvedVisibleClientFilters(
+                      is_array($policy['store_options'] ?? null) ? $policy['store_options'] : []
+                  )
+              );
             ?>
             <tr class="hover:bg-slate-50 <?= $isDefault ? 'bg-primary/5' : '' ?>">
               <td class="px-4 py-3">

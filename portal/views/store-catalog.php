@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Portal\Services\CatalogSectionResolver;
+use Portal\Services\AccessPolicyService;
 use Portal\Services\SpecialOfferService;
 use Portal\Services\StorePolicyService;
 use Portal\Support\StorePricePreference;
@@ -34,7 +35,7 @@ $isSectionBrowse = $sectionContext !== null;
 $products = is_array($catalog['products'] ?? null) ? $catalog['products'] : [];
 $resultFilters = is_array($catalog['resultFilters'] ?? null) ? $catalog['resultFilters'] : [];
 
-$visibleClientFilters = array_map('strval', $storeOptions['visible_client_filters'] ?? []);
+$visibleClientFilters = AccessPolicyService::resolvedVisibleClientFilters($storeOptions);
 $allowSorting = (bool) ($storeOptions['allow_sorting'] ?? true);
 $clientSortFields = array_map('strval', $storeOptions['client_sort_fields'] ?? ['number', 'materialType', 'manufacturer']);
 $isClientFilterVisible = static function (string $code) use ($visibleClientFilters, $lockedClientFilters): bool {
@@ -503,8 +504,8 @@ require __DIR__ . '/partials/store-filter-group.php';
                     $groupOptions,
                     (array) $facetConfig['selected'],
                     (string) $facetConfig['code'],
-                    (string) $facetConfig['code'] === 'manufacturers' ? 6 : 8,
-                    (string) $facetConfig['code'] === 'manufacturers' ? 8 : 6
+                    5,
+                    6
                 );
               ?>
             <?php endforeach; ?>

@@ -120,6 +120,16 @@ final class PortalSettingsService
 
     public static function setGuestPolicy(string $policyId, ?string $updatedByUserId): void
     {
+        $policyId = trim($policyId);
+        if ($policyId === '') {
+            throw new \InvalidArgumentException('معرّف السياسة مطلوب.');
+        }
+
+        $policy = AccessPolicyService::getById($policyId);
+        if ($policy === null || (int) ($policy['is_active'] ?? 0) !== 1) {
+            throw new \InvalidArgumentException('السياسة غير موجودة أو غير نشطة.');
+        }
+
         $stmt = Database::pdo()->prepare(
             'INSERT INTO store_guest_settings (id, access_policy_id, updated_by_user_id)
              VALUES (1, :access_policy_id, :updated_by_user_id)

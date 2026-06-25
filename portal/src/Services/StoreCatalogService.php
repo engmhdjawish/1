@@ -104,7 +104,7 @@ final class StoreCatalogService
         $storeOptions = is_array($policy['store_options'] ?? null)
             ? $policy['store_options']
             : AccessPolicyService::defaultStoreOptions();
-        $visibleClientFilters = array_map('strval', $storeOptions['visible_client_filters'] ?? []);
+        $visibleClientFilters = AccessPolicyService::resolvedVisibleClientFilters($storeOptions);
         $allowClientFilters = $visibleClientFilters !== [];
         $isClientFilterVisible = static fn (string $code): bool => in_array($code, $visibleClientFilters, true);
 
@@ -661,7 +661,8 @@ final class StoreCatalogService
             'section_context' => $sectionContext,
             'locked_client_filters' => $lockedClientFilters,
             'store_options' => $storeOptions ?? AccessPolicyService::defaultStoreOptions(),
-            'allow_client_filters' => $storeOptions !== null && ($storeOptions['visible_client_filters'] ?? []) !== [],
+            'allow_client_filters' => $storeOptions !== null
+                && AccessPolicyService::resolvedVisibleClientFilters($storeOptions) !== [],
             'filters' => [
                 'q' => (string) ($requestFilters['search'] ?? ''),
                 'sort' => (string) ($requestFilters['sort'] ?? 'number:asc'),
@@ -881,7 +882,11 @@ final class StoreCatalogService
     private static function normalizeSort(mixed $sort): string
     {
         $sort = trim(is_array($sort) ? '' : (string) $sort);
-        $allowed = [
+        if ($sort === '') {
+            return 'number:asc';
+        }
+
+        $allowedFixed = [
             'number:asc',
             'number:desc',
             'name:asc',
@@ -891,12 +896,29 @@ final class StoreCatalogService
             '-unitSalePriceUsd',
             'unitSalePriceUsd:desc',
         ];
-
-        if (in_array($sort, $allowed, true)) {
+        if (in_array($sort, $allowedFixed, true)) {
             return $sort;
         }
 
-        return 'number:asc';
+        $field = $sort;
+        $dir = 'asc';
+        if (str_starts_with($sort, '-')) {
+            $field = substr($sort, 1);
+            $dir = 'desc';
+        } elseif (str_contains($sort, ':')) {
+            [$field, $dirPart] = explode(':', $sort, 2);
+            $dir = strtolower(trim($dirPart)) === 'desc' ? 'desc' : 'asc';
+        }
+        $field = trim($field);
+        if ($field === '' || !in_array($field, AccessPolicyService::ALLOWED_CLIENT_SORT_FIELDS, true)) {
+            return 'number:asc';
+        }
+
+        if ($dir === 'desc' && in_array($field, ['unitSalePriceSyp', 'unitSalePriceUsd'], true)) {
+            return '-' . $field;
+        }
+
+        return $field . ':' . $dir;
     }
 
     /** @return array<string, list<array{value: string, count: int|null}>> */

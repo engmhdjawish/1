@@ -197,12 +197,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flash = 'يرجى اختيار سياسة وصول.';
                 $flashType = 'error';
             } else {
-                PortalSettingsService::setGuestPolicy($policyId, isset($user['id']) ? (string) $user['id'] : null);
-                $maxRaw = trim((string) ($_POST['max_packages_per_material'] ?? ''));
-                $maxPackages = $maxRaw !== '' && is_numeric($maxRaw) ? (float) $maxRaw : null;
-                StorePolicyService::setMaxPackagesPerMaterial($maxPackages, isset($user['id']) ? (string) $user['id'] : null);
-                header('Location: /dashboard/settings.php?tab=policies&saved=1');
-                exit;
+                try {
+                    PortalSettingsService::setGuestPolicy($policyId, isset($user['id']) ? (string) $user['id'] : null);
+                    $maxRaw = trim((string) ($_POST['max_packages_per_material'] ?? ''));
+                    $maxPackages = $maxRaw !== '' && is_numeric($maxRaw) ? (float) $maxRaw : null;
+                    StorePolicyService::setMaxPackagesPerMaterial($maxPackages, isset($user['id']) ? (string) $user['id'] : null);
+                    header('Location: /dashboard/settings.php?tab=policies&saved=1');
+                    exit;
+                } catch (\InvalidArgumentException $exception) {
+                    $flash = $exception->getMessage();
+                    $flashType = 'error';
+                }
             }
         }
         $tab = 'policies';

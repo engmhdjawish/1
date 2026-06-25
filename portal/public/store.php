@@ -11,7 +11,26 @@ use Portal\Support\StoreCartRequest;
 require dirname(__DIR__) . '/views/helpers.php';
 
 $cartNotice = StoreCartRequest::handleAddToCartPost();
-$catalog = StoreCatalogService::catalogFromRequest($_GET);
+try {
+    $catalog = StoreCatalogService::catalogFromRequest($_GET);
+} catch (\Throwable $exception) {
+    error_log('store.php catalog error: ' . $exception->getMessage());
+    $catalog = [
+        'products' => [],
+        'totalCount' => 0,
+        'page' => 1,
+        'pageSize' => 24,
+        'totalPages' => 1,
+        'rangeStart' => 0,
+        'rangeEnd' => 0,
+        'resultFilters' => [],
+        'filterOptions' => ['stores' => [], 'groups' => []],
+        'apiError' => 'تعذر تحميل المتجر. تحقق من سياسة الوصول أو اتصال API.',
+        'allow_client_filters' => false,
+        'filters' => ['q' => '', 'sort' => 'number:asc'],
+        'store_options' => [],
+    ];
+}
 $displayOptions = StoreCatalogService::displayOptions();
 $isCustomer = CustomerSession::check();
 
