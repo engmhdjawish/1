@@ -54,6 +54,7 @@ final class NotificationService
                 reader_type VARCHAR(16) NOT NULL CHECK (reader_type IN ('guest', 'customer', 'staff')),
                 reader_id VARCHAR(64) NOT NULL,
                 read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                dismissed_at TIMESTAMPTZ,
                 UNIQUE (notification_id, reader_type, reader_id)
             )"
         );
@@ -62,6 +63,18 @@ final class NotificationService
         );
         self::ensurePermission();
         self::ensureAudienceGuestsSupport();
+        self::ensureDismissedColumn();
+    }
+
+    private static function ensureDismissedColumn(): void
+    {
+        try {
+            Database::pdo()->exec(
+                'ALTER TABLE portal_notification_reads ADD COLUMN IF NOT EXISTS dismissed_at TIMESTAMPTZ'
+            );
+        } catch (\Throwable) {
+            // Older PostgreSQL without IF NOT EXISTS on ADD COLUMN.
+        }
     }
 
     private static function ensureAudienceGuestsSupport(): void
@@ -165,7 +178,7 @@ final class NotificationService
                        n.icon,
                        n.source,
                        n.created_at,
-                       (r.id IS NOT NULL) AS is_read
+                       (r.read_at IS NOT NULL) AS is_read
                 FROM portal_notifications n
                 LEFT JOIN portal_notification_reads r
                   ON r.notification_id = n.id
@@ -173,6 +186,7 @@ final class NotificationService
                  AND r.reader_id = :reader_id
                 WHERE (' . implode(' OR ', $conditions['parts']) . ')
                   AND (n.expires_at IS NULL OR n.expires_at > NOW())
+                  AND (r.dismissed_at IS NULL)
                 ORDER BY n.created_at DESC
                 LIMIT :limit';
 
@@ -201,7 +215,8 @@ final class NotificationService
                  AND r.reader_id = :reader_id
                 WHERE (' . implode(' OR ', $conditions['parts']) . ')
                   AND (n.expires_at IS NULL OR n.expires_at > NOW())
-                  AND r.id IS NULL';
+                  AND (r.dismissed_at IS NULL)
+                  AND r.read_at IS NULL';
 
         $stmt = Database::pdo()->prepare($sql);
         foreach ($conditions['params'] as $key => $value) {
@@ -235,6 +250,44 @@ final class NotificationService
         ]);
 
         return true;
+    }
+
+    public static function dismissForReader(string $notificationId): bool
+    {
+        self::ensureTable();
+        $notificationId = trim($notificationId);
+        if ($notificationId === '') {
+            return false;
+        }
+
+        $reader = self::currentReader();
+        $stmt = Database::pdo()->prepare(
+            'INSERT INTO portal_notification_reads (notification_id, reader_type, reader_id, read_at, dismissed_at)
+             VALUES (:notification_id, :reader_type, :reader_id, NOW(), NOW())
+             ON CONFLICT (notification_id, reader_type, reader_id)
+             DO UPDATE SET dismissed_at = NOW(), read_at = COALESCE(portal_notification_reads.read_at, NOW())'
+        );
+        $stmt->execute([
+            'notification_id' => $notificationId,
+            'reader_type' => $reader['reader_type'],
+            'reader_id' => $reader['reader_id'],
+        ]);
+
+        return true;
+    }
+
+    public static function deleteNotification(string $notificationId): bool
+    {
+        self::ensureTable();
+        $notificationId = trim($notificationId);
+        if ($notificationId === '') {
+            return false;
+        }
+
+        $stmt = Database::pdo()->prepare('DELETE FROM portal_notifications WHERE id = :id');
+        $stmt->execute(['id' => $notificationId]);
+
+        return $stmt->rowCount() > 0;
     }
 
     public static function markAllRead(): int

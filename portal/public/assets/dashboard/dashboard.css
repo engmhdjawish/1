@@ -354,3 +354,29 @@ button.is-loading::after,
 .dashboard-app .store-image-lightbox {
   z-index: 300;
 }
+
+/* Slide-over panels (order details, customer profile) above bottom nav */
+.dashboard-slide-panel-backdrop {
+  z-index: 80 !important;
+}
+
+.dashboard-slide-panel {
+  z-index: 81 !important;
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+.dashboard-modal-overlay {
+  z-index: 80 !important;
+}
+
+@media (max-width: 1023px) {
+  body.dashboard-app:has(.dashboard-slide-panel) #dashboard-bottom-nav,
+  body.dashboard-app:has(.dashboard-slide-panel) .dashboard-bottom-nav-spacer {
+    display: none !important;
+  }
+
+  .dashboard-slide-panel > footer {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  }
+}

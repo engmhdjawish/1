@@ -301,8 +301,8 @@ $truncate = static function (string $text, int $max = 48): string {
     $detailOrigin = OrderService::orderOriginLabel($orderDetails);
     $detailIsRegistered = OrderService::isRegisteredCustomerOrder($orderDetails);
   ?>
-  <div class="fixed inset-0 z-50 bg-slate-900/40" aria-hidden="true"></div>
-  <aside class="fixed top-0 left-0 z-50 h-screen w-full max-w-2xl bg-white shadow-2xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby="order-details-title">
+  <div class="dashboard-slide-panel-backdrop fixed inset-0 bg-slate-900/40" aria-hidden="true"></div>
+  <aside class="dashboard-slide-panel fixed top-0 left-0 w-full max-w-2xl bg-white shadow-2xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby="order-details-title">
     <header class="shrink-0 border-b border-border-subtle px-4 py-3">
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">

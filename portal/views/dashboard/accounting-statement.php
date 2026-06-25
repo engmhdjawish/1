@@ -347,7 +347,7 @@ $showAccountResults = !$hasSelection && ($query['accountSearch'] ?? '') !== '';
   <?php endif; ?>
 </section>
 
-<div id="documentModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true">
+<div id="documentModal" class="dashboard-modal-overlay hidden fixed inset-0 items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true">
   <div class="bg-white border border-border-subtle rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
     <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-border-subtle bg-surface-low/60">
       <div>

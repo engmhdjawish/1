@@ -286,8 +286,8 @@ $editing = $editCustomer !== null;
 </section>
 
 <?php if ($detailsCustomer): ?>
-  <div class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm"></div>
-  <aside class="fixed top-0 left-0 z-50 h-screen w-full max-w-xl bg-white shadow-2xl overflow-y-auto">
+  <div class="dashboard-slide-panel-backdrop fixed inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+  <aside class="dashboard-slide-panel fixed top-0 left-0 w-full max-w-xl bg-white shadow-2xl overflow-y-auto">
     <div class="sticky top-0 bg-white border-b border-border-subtle px-5 py-4 flex items-center justify-between">
       <div>
         <h2 class="text-lg font-extrabold text-slate-900">تفاصيل العميل</h2>
