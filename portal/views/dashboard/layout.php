@@ -91,7 +91,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <title><?= h($title) ?> — لوحة التحكم</title>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-  <link href="/assets/dashboard/dashboard.css" rel="stylesheet">
+  <link href="<?= h(portal_asset_url('/assets/dashboard/dashboard.css')) ?>" rel="stylesheet">
   <link href="/css/notifications.css" rel="stylesheet">
   <link href="/css/store-ui.css" rel="stylesheet">
   <link href="/css/store-cart.css" rel="stylesheet">
@@ -127,9 +127,37 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
     .material-symbols-outlined.fill {
       font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
     }
-    #dashboard-drawer { transition: transform 0.25s ease; }
-    #dashboard-drawer.is-open { transform: translateX(0); }
+    #dashboard-drawer {
+      transition: transform 0.25s ease, visibility 0.25s ease;
+      transform: translate3d(100%, 0, 0);
+      visibility: hidden;
+      pointer-events: none;
+    }
+    #dashboard-drawer.is-open {
+      transform: translate3d(0, 0, 0);
+      visibility: visible;
+      pointer-events: auto;
+    }
+    #dashboard-drawer-backdrop {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
     #dashboard-drawer-backdrop.is-open { opacity: 1; visibility: visible; pointer-events: auto; }
+    @media (min-width: 1024px) {
+      #dashboard-drawer,
+      #dashboard-drawer-backdrop {
+        display: none !important;
+      }
+      .dashboard-desktop-sidebar {
+        display: flex !important;
+      }
+    }
+    @media (max-width: 1023px) {
+      .dashboard-desktop-sidebar {
+        display: none !important;
+      }
+    }
     .dashboard-area-tabs {
       display: flex;
       gap: 0.35rem;
@@ -235,7 +263,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <?php endif; ?>
 
   <div id="dashboard-drawer-backdrop" aria-hidden="true"></div>
-  <nav id="dashboard-drawer" class="lg:hidden" aria-label="قائمة لوحة التحكم">
+  <nav id="dashboard-drawer" class="lg:hidden translate-x-full" aria-label="قائمة لوحة التحكم" aria-hidden="true">
     <div class="px-4 py-4 border-b border-border-subtle mb-3 flex items-center justify-between gap-3">
       <div data-dashboard-sidebar-meta>
         <h2 class="font-bold text-primary"><?= h($sidebarTitle) ?></h2>
@@ -337,7 +365,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <script src="/assets/deferred-images.js" defer></script>
   <script src="/assets/store-image-zoom.js" defer></script>
   <script src="<?= h(portal_asset_url('/assets/dashboard/material-images-link.js')) ?>" defer></script>
-  <script src="/assets/dashboard/dashboard.js" defer></script>
+  <script src="<?= h(portal_asset_url('/assets/dashboard/dashboard.js')) ?>" defer></script>
   <script src="/assets/dashboard/media-picker.js" defer></script>
   <script src="/assets/dashboard/token-picker.js" defer></script>
   <script src="/assets/dashboard/home-sections.js" defer></script>
