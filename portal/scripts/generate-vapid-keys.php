@@ -6,14 +6,17 @@ define('PORTAL_NO_SESSION', true);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
-if (!class_exists(\Minishlink\WebPush\VAPID::class)) {
-    fwrite(STDERR, "Run composer install in the portal folder first.\n");
+use Portal\Support\VapidKeyGenerator;
+
+try {
+    $keys = VapidKeyGenerator::create();
+} catch (\Throwable $exception) {
+    fwrite(STDERR, $exception->getMessage() . PHP_EOL);
     exit(1);
 }
 
-$keys = \Minishlink\WebPush\VAPID::createVapidKeys();
-
-echo "Add these lines to portal/.env:\n\n";
+echo "Add these lines to portal/.env (and D:\\JawishPortal\\.env on the server):\n\n";
 echo 'VAPID_PUBLIC_KEY=' . $keys['publicKey'] . "\n";
 echo 'VAPID_PRIVATE_KEY=' . $keys['privateKey'] . "\n";
-echo "VAPID_SUBJECT=mailto:admin@example.com\n";
+echo "VAPID_SUBJECT=mailto:admin@example.com\n\n";
+echo "Note: run deploy\\scripts\\portal-composer-install.ps1 once so Web Push can send from the server.\n";
