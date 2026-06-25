@@ -4,6 +4,13 @@
   <system.webServer>
     <rewrite>
       <rules>
+        <rule name="Force HTTPS" stopProcessing="true">
+          <match url="(.*)" />
+          <conditions>
+            <add input="{HTTPS}" pattern="off" ignoreCase="true" />
+          </conditions>
+          <action type="Redirect" url="https://{HTTP_HOST}/{R:1}" redirectType="Permanent" />
+        </rule>
         <rule name="Front Controller" stopProcessing="true">
           <match url="^(.*)$" ignoreCase="true" />
           <conditions logicalGrouping="MatchAll">

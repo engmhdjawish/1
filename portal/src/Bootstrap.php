@@ -32,6 +32,7 @@ final class Bootstrap
         }
 
         self::loadEnv($basePath);
+        \Portal\Support\HttpsGate::redirectIfNeeded();
         date_default_timezone_set('Asia/Damascus');
 
         if (session_status() !== PHP_SESSION_ACTIVE) {

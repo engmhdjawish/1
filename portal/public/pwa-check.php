@@ -122,6 +122,7 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
     <div id="sw-status">جاري فحص Service Worker…</div>
     <div id="manifest-status">جاري فحص manifest…</div>
     <div id="secure-status"></div>
+    <div id="browser-protocol"></div>
     <div id="prompt-status"></div>
   </div>
 
@@ -141,6 +142,11 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
       secureEl.textContent = window.isSecureContext
         ? '✓ المتصفح يرى السياق آمناً (isSecureContext)'
         : '✗ المتصفح لا يرى السياق آمناً — التثبيت التلقائي لن يعمل';
+
+      document.getElementById('browser-protocol').textContent =
+        window.location.protocol === 'https:'
+          ? '✓ أنت تتصفح عبر ' + window.location.protocol
+          : '✗ أنت على ' + window.location.protocol + ' — افتح https://' + window.location.hostname;
 
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistration('/').then((reg) => {

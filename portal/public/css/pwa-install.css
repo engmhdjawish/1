@@ -80,11 +80,35 @@
   cursor: pointer;
 }
 
+.pwa-install-banner--http .pwa-install-banner__inner {
+  background: #7f1d1d;
+}
+
+.pwa-install-banner--http .pwa-install-banner__btn {
+  background: #dc2626;
+}
+
+.pwa-install-banner--http .material-symbols-outlined {
+  color: #fca5a5;
+}
+
 /* زر التثبيت في الهيدر */
 .site-header__icon-btn[data-pwa-open] {
   color: #1d4ed8;
   border-color: rgba(37, 99, 235, 0.25);
   background: rgba(37, 99, 235, 0.08);
+}
+
+.site-header__icon-btn[data-pwa-open].is-pwa-http {
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.site-header__icon-btn[data-pwa-open].is-pwa-native {
+  color: #15803d;
+  border-color: rgba(22, 163, 74, 0.35);
+  background: rgba(22, 163, 74, 0.12);
 }
 
 .site-header__icon-btn[data-pwa-open]:hover {
@@ -182,6 +206,10 @@ body.pwa-modal-open {
   font-size: 0.92rem;
   font-weight: 700;
   cursor: pointer;
+}
+
+.pwa-install-modal__btn--warn {
+  background: #dc2626;
 }
 
 .pwa-install-modal__ghost {
