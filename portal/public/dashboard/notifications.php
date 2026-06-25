@@ -72,6 +72,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash = $exception->getMessage();
             $flashType = 'error';
         }
+    } elseif ($action === 'delete') {
+        try {
+            $id = trim((string) ($_POST['id'] ?? ''));
+            if ($id === '') {
+                throw new \RuntimeException('معرّف الإشعار مطلوب.');
+            }
+            if (!NotificationService::deleteNotification($id)) {
+                throw new \RuntimeException('تعذر حذف الإشعار.');
+            }
+            $_SESSION['notifications_flash'] = 'تم حذف الإشعار.';
+            $_SESSION['notifications_flash_type'] = 'success';
+            header('Location: /dashboard/notifications.php', true, 303);
+            exit;
+        } catch (\Throwable $exception) {
+            $flash = $exception->getMessage();
+            $flashType = 'error';
+        }
     }
 }
 

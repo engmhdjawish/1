@@ -149,6 +149,18 @@ use Portal\Services\NotificationService;
                 <?php endif; ?>
               </p>
             </div>
+            <form method="post" class="shrink-0" onsubmit="return confirm('حذف هذا الإشعار نهائياً من الجميع؟');">
+              <input type="hidden" name="action" value="delete">
+              <input type="hidden" name="id" value="<?= h((string) ($row['id'] ?? '')) ?>">
+              <button
+                type="submit"
+                class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+                title="حذف الإشعار"
+                aria-label="حذف الإشعار"
+              >
+                <span class="material-symbols-outlined text-lg">delete</span>
+              </button>
+            </form>
           </div>
         </article>
       <?php endforeach; ?>
