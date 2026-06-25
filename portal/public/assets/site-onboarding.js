@@ -371,6 +371,12 @@
 
   const autoStart = root.getAttribute('data-auto-start') === '1';
   if (autoStart) {
-    window.setTimeout(() => show(false), 1100);
+    const delayMs = 4500;
+    window.setTimeout(() => {
+      if (document.getElementById('pwa-install-modal') || document.getElementById('pwa-install-banner')) {
+        return;
+      }
+      show(false);
+    }, delayMs);
   }
 })();

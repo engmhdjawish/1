@@ -11,11 +11,11 @@
     window.matchMedia('(display-mode: standalone)').matches
     || window.navigator.standalone === true;
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const isAndroid = /android/i.test(navigator.userAgent);
   const isSecure = window.isSecureContext === true;
 
   let deferredPrompt = null;
   let modalEl = null;
+  let swRegistration = null;
 
   function detectMode() {
     if (isIOS) {
@@ -58,10 +58,10 @@
       return {
         title: 'تثبيت التطبيق',
         steps: [
-          'من Chrome (سطح المكتب): القائمة ⋮ أعلى اليمين → «تثبيت التطبيق» أو «Install Jawish».',
+          'من Chrome (سطح المكتب): القائمة ⋮ أعلى اليمين → «تثبيت التطبيق» أو «Install».',
           'من Edge: القائمة ⋯ → «التطبيقات» → «تثبيت هذا الموقع كتطبيق».',
           'على الجوال: القائمة → «إضافة إلى الشاشة الرئيسية».',
-          'إن لم يظهر الخيار: أغلق الموقع وافتحه من جديد عبر https:// ثم انتظر 10 ثوانٍ.',
+          'إن لم يظهر الخيار: افتح /pwa-check.php للتشخيص، ثم أعد تحميل الصفحة.',
         ],
         button: null,
       };
@@ -188,7 +188,6 @@
       '<button type="button" class="pwa-install-banner__close" data-pwa-banner-close aria-label="إغلاق">×</button>' +
       '</div>';
 
-    banner.querySelector('[data-pwa-banner-open]')?.addEventListener('click', () => openModal(mode));
     banner.querySelector('[data-pwa-banner-close]')?.addEventListener('click', () => {
       markAutoDismissed();
       banner.remove();
@@ -201,12 +200,20 @@
   }
 
   function bindTriggers() {
+    document.querySelectorAll('[data-pwa-open]').forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openModal();
+      });
+    });
+
     document.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) {
         return;
       }
-      if (target.closest('[data-pwa-open], [data-pwa-banner-open]')) {
+      if (target.closest('[data-pwa-banner-open]')) {
         event.preventDefault();
         openModal();
       }
@@ -217,7 +224,12 @@
     if (!('serviceWorker' in navigator) || !isSecure) {
       return;
     }
-    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+    const swUrl = '/sw.js?v=4';
+    navigator.serviceWorker.register(swUrl, { scope: '/' })
+      .then((registration) => {
+        swRegistration = registration;
+      })
+      .catch(() => {});
   }
 
   window.addEventListener('beforeinstallprompt', (event) => {
@@ -242,10 +254,10 @@
     bindTriggers();
 
     window.setTimeout(() => {
-      if (!document.getElementById('pwa-install-banner')) {
+      if (!document.getElementById('pwa-install-banner') && !autoDismissedRecently()) {
         showAutoBanner();
       }
-    }, 1200);
+    }, 1500);
   }
 
   window.PortalPwa = { open: openModal, close: closeModal };

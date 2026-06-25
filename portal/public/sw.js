@@ -1,7 +1,7 @@
 /**
  * Jawish store PWA — cache static assets, network-first for pages.
  */
-const CACHE_VERSION = 'jawish-v3';
+const CACHE_VERSION = 'jawish-v4';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 
 const PRECACHE_URLS = [
@@ -16,6 +16,10 @@ const PRECACHE_URLS = [
   '/css/home-page.css',
   '/assets/store-pref.js',
   '/assets/site-analytics.js',
+  '/css/pwa-install.css',
+  '/assets/pwa.js',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
 ];
 
 const NO_CACHE_PREFIXES = [

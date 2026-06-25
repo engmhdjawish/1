@@ -47,6 +47,36 @@ function portal_is_catalog_page(string $path): bool
     return in_array($path, ['/index.php', '/store.php', '/product.php', '/share.php'], true);
 }
 
+function portal_request_scheme(): string
+{
+    $https = $_SERVER['HTTPS'] ?? '';
+    if ($https !== '' && $https !== 'off' && $https !== '0') {
+        return 'https';
+    }
+
+    $forwardedProto = strtolower(trim((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')));
+    if ($forwardedProto === 'https') {
+        return 'https';
+    }
+
+    $forwardedSsl = strtolower(trim((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '')));
+    if (in_array($forwardedSsl, ['on', '1', 'true'], true)) {
+        return 'https';
+    }
+
+    $port = (int) ($_SERVER['SERVER_PORT'] ?? 0);
+    if ($port === 443) {
+        return 'https';
+    }
+
+    return 'http';
+}
+
+function portal_is_https_request(): bool
+{
+    return portal_request_scheme() === 'https';
+}
+
 function portal_absolute_url(string $pathOrUrl = ''): string
 {
     $value = trim($pathOrUrl);
@@ -62,13 +92,12 @@ function portal_absolute_url(string $pathOrUrl = ''): string
         $path = '/';
     }
 
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
     if ($host === '') {
         return $path;
     }
 
-    return $scheme . '://' . $host . $path;
+    return portal_request_scheme() . '://' . $host . $path;
 }
 
 function portal_image_mime_from_url(string $url): string
@@ -97,6 +126,16 @@ function portal_image_mime_from_url(string $url): string
  *   manifest_icons: list<array{src: string, sizes: string, type: string, purpose: string}>
  * }
  */
+function portal_manifest_icon(int $size, string $purpose = 'any'): array
+{
+    return [
+        'src' => portal_asset_url('/icons/icon-png.php?size=' . $size),
+        'sizes' => $size . 'x' . $size,
+        'type' => 'image/png',
+        'purpose' => $purpose,
+    ];
+}
+
 function portal_site_icons(?string $companyLogoUrl = null): array
 {
     $companyLogoUrl = trim((string) $companyLogoUrl);
@@ -107,45 +146,24 @@ function portal_site_icons(?string $companyLogoUrl = null): array
             : portal_absolute_url($companyLogoUrl))
         : '';
 
-    $iconPng = static fn (int $size): string => portal_absolute_url('/icons/icon-png.php?size=' . $size);
-    $iconSvg = portal_absolute_url(portal_asset_url('/icons/app-icon.svg'));
-    $faviconIco = portal_absolute_url(portal_asset_url('/favicon.ico'));
+    $iconPng = static fn (int $size): string => portal_asset_url('/icons/icon-png.php?size=' . $size);
+    $iconSvg = portal_asset_url('/icons/app-icon.svg');
+    $faviconIco = portal_asset_url('/favicon.ico');
+
+    $manifestIcons = [
+        portal_manifest_icon(192, 'any'),
+        portal_manifest_icon(512, 'any'),
+        portal_manifest_icon(512, 'maskable'),
+    ];
 
     if ($usesCompanyLogo) {
-        $logoMime = portal_image_mime_from_url($logoAbs);
-
         return [
             'uses_company_logo' => true,
             'favicon_ico' => $faviconIco,
             'favicon_svg' => $iconSvg,
             'favicon_png_32' => $logoAbs,
             'apple_touch' => $logoAbs,
-            'manifest_icons' => [
-                [
-                    'src' => $logoAbs,
-                    'sizes' => '192x192',
-                    'type' => $logoMime,
-                    'purpose' => 'any',
-                ],
-                [
-                    'src' => $logoAbs,
-                    'sizes' => '512x512',
-                    'type' => $logoMime,
-                    'purpose' => 'any',
-                ],
-                [
-                    'src' => $iconPng(192),
-                    'sizes' => '192x192',
-                    'type' => 'image/png',
-                    'purpose' => 'any',
-                ],
-                [
-                    'src' => $iconPng(512),
-                    'sizes' => '512x512',
-                    'type' => 'image/png',
-                    'purpose' => 'maskable',
-                ],
-            ],
+            'manifest_icons' => $manifestIcons,
         ];
     }
 
@@ -155,26 +173,7 @@ function portal_site_icons(?string $companyLogoUrl = null): array
         'favicon_svg' => $iconSvg,
         'favicon_png_32' => $iconPng(32),
         'apple_touch' => $iconPng(180),
-        'manifest_icons' => [
-            [
-                'src' => $iconPng(192),
-                'sizes' => '192x192',
-                'type' => 'image/png',
-                'purpose' => 'any',
-            ],
-            [
-                'src' => $iconPng(512),
-                'sizes' => '512x512',
-                'type' => 'image/png',
-                'purpose' => 'any',
-            ],
-            [
-                'src' => $iconPng(512),
-                'sizes' => '512x512',
-                'type' => 'image/png',
-                'purpose' => 'maskable',
-            ],
-        ],
+        'manifest_icons' => $manifestIcons,
     ];
 }
 

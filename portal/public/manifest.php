@@ -25,7 +25,7 @@ echo json_encode([
     'name' => $siteName,
     'short_name' => $shortName,
     'description' => 'متجر جاويش للتجارة — تصفح المنتجات واطلب بسهولة',
-    'start_url' => '/index.php',
+    'start_url' => '/index.php?source=pwa',
     'scope' => '/',
     'display' => 'standalone',
     'orientation' => 'portrait-primary',
@@ -34,5 +34,6 @@ echo json_encode([
     'theme_color' => '#D81921',
     'background_color' => '#f6f6f8',
     'categories' => ['shopping', 'business'],
+    'prefer_related_applications' => false,
     'icons' => $icons['manifest_icons'],
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);

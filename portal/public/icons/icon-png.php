@@ -6,7 +6,15 @@ $size = (int) ($_GET['size'] ?? 192);
 $allowedSizes = [16, 32, 48, 180, 192, 512];
 $size = in_array($size, $allowedSizes, true) ? $size : 192;
 
+$staticIcon = __DIR__ . '/icon-' . $size . '.png';
 if (!function_exists('imagecreatetruecolor')) {
+    if (is_file($staticIcon)) {
+        header('Content-Type: image/png');
+        header('Cache-Control: public, max-age=86400');
+        readfile($staticIcon);
+        exit;
+    }
+
     header('Content-Type: image/svg+xml; charset=utf-8');
     readfile(__DIR__ . '/app-icon.svg');
     exit;
@@ -14,6 +22,13 @@ if (!function_exists('imagecreatetruecolor')) {
 
 $image = imagecreatetruecolor($size, $size);
 if ($image === false) {
+    if (is_file($staticIcon)) {
+        header('Content-Type: image/png');
+        header('Cache-Control: public, max-age=86400');
+        readfile($staticIcon);
+        exit;
+    }
+
     http_response_code(500);
     exit;
 }
@@ -39,13 +54,7 @@ for ($y = 0; $y < $radius; $y++) {
     }
 }
 
-$fontSize = (int) round($size * 0.42);
 $font = 5;
-if ($size >= 512) {
-    $font = 5;
-} elseif ($size >= 192) {
-    $font = 5;
-}
 $text = 'J';
 $textWidth = imagefontwidth($font) * strlen($text);
 $textHeight = imagefontheight($font);
