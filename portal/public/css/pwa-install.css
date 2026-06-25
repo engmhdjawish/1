@@ -225,6 +225,13 @@ body.pwa-modal-open {
   cursor: pointer;
 }
 
+.site-header__icon-btn[data-pwa-open].hidden,
+.site-header__icon-btn[data-pwa-open][hidden],
+.site-drawer__link[data-pwa-open].hidden,
+.site-drawer__link[data-pwa-open][hidden] {
+  display: none !important;
+}
+
 .site-drawer__link[data-pwa-open] {
   color: #1d4ed8;
   font-weight: 800;

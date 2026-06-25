@@ -1,7 +1,7 @@
 /**
  * Jawish store PWA — cache static assets, network-first for pages.
  */
-const CACHE_VERSION = 'jawish-v7';
+const CACHE_VERSION = 'jawish-v8';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 
 const PRECACHE_URLS = [
@@ -100,20 +100,28 @@ self.addEventListener('push', (event) => {
   );
 });
 
+function resolveNotificationTargetUrl(rawUrl) {
+  const value = String(rawUrl || '').trim();
+  if (!value || value === 'null' || value === 'undefined') {
+    return new URL('/', self.location.origin).href;
+  }
+  return new URL(value, self.location.origin).href;
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = String(event.notification?.data?.url || '/');
-  const absoluteUrl = new URL(targetUrl, self.location.origin).href;
+  const absoluteUrl = resolveNotificationTargetUrl(event.notification?.data?.url);
 
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-      for (const client of clients) {
-        if (client.url.startsWith(self.location.origin) && 'focus' in client) {
-          if ('navigate' in client) {
-            return client.navigate(absoluteUrl).then((navigated) => navigated || client.focus());
-          }
-          return client.focus();
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (!client.url.startsWith(self.location.origin) || !('focus' in client)) {
+          continue;
         }
+        if ('navigate' in client) {
+          return client.navigate(absoluteUrl).then((navigated) => navigated || client.focus());
+        }
+        return client.focus();
       }
       if (self.clients.openWindow) {
         return self.clients.openWindow(absoluteUrl);

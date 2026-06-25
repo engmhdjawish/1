@@ -644,8 +644,10 @@
 
   function syncDashboardLayoutMetrics() {
     const tabs = qs('[data-dashboard-area-tabs]');
+    const bottomNav = qs('#dashboard-bottom-nav');
     const root = document.documentElement;
-    const apply = () => {
+
+    const applyTabs = () => {
       if (!tabs) {
         root.style.setProperty('--dash-area-tabs', '0px');
         return;
@@ -653,10 +655,37 @@
       const height = Math.ceil(tabs.getBoundingClientRect().height);
       root.style.setProperty('--dash-area-tabs', height > 0 ? height + 'px' : '0px');
     };
+
+    const applyBottomNav = () => {
+      const mobile = window.matchMedia('(max-width: 1023px)').matches;
+      if (!bottomNav || !mobile) {
+        root.style.setProperty('--dash-bottom-nav', '0px');
+        return;
+      }
+      const height = Math.ceil(bottomNav.getBoundingClientRect().height);
+      const px = height > 0 ? height + 'px' : '5rem';
+      root.style.setProperty('--dash-bottom-nav', px);
+      const spacer = qs('[data-dashboard-bottom-spacer]');
+      if (spacer) {
+        spacer.style.height = 'calc(' + px + ' + 0.75rem + env(safe-area-inset-bottom, 0px))';
+      }
+    };
+
+    const apply = () => {
+      applyTabs();
+      applyBottomNav();
+    };
+
     apply();
-    if (typeof ResizeObserver !== 'undefined' && tabs) {
-      const observer = new ResizeObserver(apply);
-      observer.observe(tabs);
+    if (typeof ResizeObserver !== 'undefined') {
+      if (tabs) {
+        const tabsObserver = new ResizeObserver(applyTabs);
+        tabsObserver.observe(tabs);
+      }
+      if (bottomNav) {
+        const navObserver = new ResizeObserver(applyBottomNav);
+        navObserver.observe(bottomNav);
+      }
     }
     window.addEventListener('resize', apply, { passive: true });
   }

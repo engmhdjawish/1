@@ -10,6 +10,18 @@
   const POLL_MS = 45_000;
   const ICON_URL = '/icons/brand-icon.php?size=192';
 
+  function defaultOpenUrl() {
+    if (document.body && document.body.classList.contains('dashboard-app')) {
+      return '/dashboard/index.php';
+    }
+    return '/';
+  }
+
+  function resolveNotificationUrl(item) {
+    const url = String(item?.link_url || '').trim();
+    return url || defaultOpenUrl();
+  }
+
   function formatTime(value) {
     if (!value) return '';
     const date = new Date(value);
@@ -83,7 +95,7 @@
 
     const title = String(item.title_ar || 'إشعار جديد');
     const body = String(item.body_ar || '');
-    const url = String(item.link_url || '/');
+    const url = resolveNotificationUrl(item);
     const tag = String(item.id || 'jawish-portal-notification');
     const options = {
       body,
@@ -100,7 +112,12 @@
     }
 
     try {
-      new Notification(title, options);
+      const notification = new Notification(title, options);
+      notification.onclick = () => {
+        window.focus();
+        window.location.href = url;
+        notification.close();
+      };
     } catch (_) {
       /* ignore */
     }
@@ -143,13 +160,9 @@
   }
 
   function renderItem(item) {
-    const link = (item.link_url || '').trim();
-    const tag = link ? 'a' : 'div';
-    const el = document.createElement(tag);
+    const el = document.createElement('a');
     el.className = 'notif-bell__item' + (item.is_read ? '' : ' is-unread');
-    if (link) {
-      el.href = link;
-    }
+    el.href = resolveNotificationUrl(item);
     el.dataset.notificationId = item.id || '';
     el.innerHTML =
       '<span class="notif-bell__icon"><span class="material-symbols-outlined" aria-hidden="true">' +
@@ -159,7 +172,10 @@
       '<div class="notif-bell__title">' + escapeHtml(item.title_ar || '') + '</div>' +
       '<div class="notif-bell__text">' + escapeHtml(item.body_ar || '') + '</div>' +
       '<div class="notif-bell__time">' + escapeHtml(formatTime(item.created_at)) + '</div>' +
-      '</div>';
+      '</div>' +
+      '<button type="button" class="notif-bell__dismiss" aria-label="حذف الإشعار" title="حذف">' +
+      '<span class="material-symbols-outlined" aria-hidden="true">close</span>' +
+      '</button>';
     return el;
   }
 
@@ -284,7 +300,33 @@
       }
     });
 
+    const dismissItem = async (id, element) => {
+      if (!id) return;
+      try {
+        const data = await fetchJson(API, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'dismiss', id }),
+        });
+        element?.remove();
+        setBadge(data.unread ?? 0);
+        if (list && !list.querySelector('[data-notification-id]')) {
+          list.innerHTML = '<p class="notif-bell__empty">لا توجد إشعارات حالياً.</p>';
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
     list.addEventListener('click', (event) => {
+      if (event.target.closest('.notif-bell__dismiss')) {
+        event.preventDefault();
+        event.stopPropagation();
+        const item = event.target.closest('[data-notification-id]');
+        if (item) {
+          dismissItem(item.dataset.notificationId || '', item);
+        }
+        return;
+      }
       const item = event.target.closest('[data-notification-id]');
       if (!item) return;
       markRead(item.dataset.notificationId || '');

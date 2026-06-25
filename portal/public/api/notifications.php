@@ -68,6 +68,27 @@ try {
         exit;
     }
 
+    if ($action === 'dismiss') {
+        $id = trim((string) ($payload['id'] ?? ''));
+        NotificationService::dismissForReader($id);
+        echo json_encode([
+            'ok' => true,
+            'unread' => NotificationService::unreadCount(),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'delete') {
+        WebSession::requirePermission('notifications.manage');
+        $id = trim((string) ($payload['id'] ?? ''));
+        $deleted = NotificationService::deleteNotification($id);
+        if (!$deleted) {
+            throw new \RuntimeException('تعذر حذف الإشعار.');
+        }
+        echo json_encode(['ok' => true, 'message' => 'تم حذف الإشعار.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     WebSession::requirePermission('notifications.manage');
     $scope = trim((string) ($payload['scope'] ?? 'public'));
     $title = trim((string) ($payload['title'] ?? ''));

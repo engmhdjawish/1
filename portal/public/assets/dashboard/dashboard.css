@@ -9,7 +9,7 @@
   --dash-sidebar: 16rem;
   --dash-header: 4rem;
   --dash-area-tabs: 0px;
-  --dash-bottom-nav: 4.25rem;
+  --dash-bottom-nav: 5rem;
 }
 
 body.dashboard-app.has-area-tabs {
@@ -28,9 +28,26 @@ body.dashboard-app.has-area-tabs {
 }
 
 .dashboard-main-content {
-  padding-bottom: calc(
-    var(--dash-bottom-nav) + 1rem + env(safe-area-inset-bottom, 0)
-  );
+  padding-bottom: 2rem;
+}
+
+@media (max-width: 1023px) {
+  body.dashboard-app.has-bottom-nav .dashboard-main-content {
+    padding-bottom: 0.75rem;
+  }
+
+  body.dashboard-app.has-bottom-nav {
+    scroll-padding-bottom: calc(
+      var(--dash-bottom-nav, 5rem) + env(safe-area-inset-bottom, 0px)
+    );
+  }
+
+  body.dashboard-app.has-bottom-nav .dashboard-bottom-nav-spacer {
+    display: block;
+    height: calc(
+      var(--dash-bottom-nav, 5rem) + 0.75rem + env(safe-area-inset-bottom, 0px)
+    );
+  }
 }
 
 @media (min-width: 1024px) {
@@ -205,20 +222,34 @@ body.dashboard-app {
     left: 0;
     right: 0;
     z-index: 55;
-    height: var(--dash-bottom-nav);
-    padding-bottom: env(safe-area-inset-bottom, 0);
+    min-height: var(--dash-bottom-nav);
+    height: auto;
+    box-sizing: border-box;
+    padding-top: 0.35rem;
+    padding-bottom: max(0.35rem, env(safe-area-inset-bottom, 0px));
     background: var(--dash-surface);
     border-top: 1px solid var(--dash-border);
     display: flex;
     align-items: stretch;
     justify-content: space-around;
   }
+
+  .dashboard-bottom-nav-spacer {
+    display: block;
+    width: 100%;
+    flex-shrink: 0;
+    height: calc(
+      var(--dash-bottom-nav, 5rem) + 0.75rem + env(safe-area-inset-bottom, 0px)
+    );
+    pointer-events: none;
+  }
 }
 
 @media (min-width: 1024px) {
   #dashboard-drawer,
   #dashboard-drawer-backdrop,
-  #dashboard-bottom-nav {
+  #dashboard-bottom-nav,
+  .dashboard-bottom-nav-spacer {
     display: none !important;
   }
 }
@@ -289,7 +320,20 @@ button.is-loading::after,
   font-size: 0.875rem;
 }
 
-/* Tables scroll hint on mobile */
+/* Tables and full-width sections — keep last rows clear of bottom nav on mobile */
+@media (max-width: 1023px) {
+  body.dashboard-app.has-bottom-nav .dashboard-table-wrap,
+  body.dashboard-app.has-bottom-nav .overflow-auto,
+  body.dashboard-app.has-bottom-nav .overflow-x-auto {
+    scroll-padding-bottom: calc(var(--dash-bottom-nav, 5rem) + 1rem);
+  }
+
+  body.dashboard-app.has-bottom-nav [data-dashboard-main] > section:last-child,
+  body.dashboard-app.has-bottom-nav [data-dashboard-main] > article:last-child,
+  body.dashboard-app.has-bottom-nav [data-dashboard-main] > div:last-child {
+    margin-bottom: 0.25rem;
+  }
+}
 .dashboard-table-wrap {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -309,4 +353,30 @@ button.is-loading::after,
 
 .dashboard-app .store-image-lightbox {
   z-index: 300;
+}
+
+/* Slide-over panels (order details, customer profile) above bottom nav */
+.dashboard-slide-panel-backdrop {
+  z-index: 80 !important;
+}
+
+.dashboard-slide-panel {
+  z-index: 81 !important;
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+.dashboard-modal-overlay {
+  z-index: 80 !important;
+}
+
+@media (max-width: 1023px) {
+  body.dashboard-app:has(.dashboard-slide-panel) #dashboard-bottom-nav,
+  body.dashboard-app:has(.dashboard-slide-panel) .dashboard-bottom-nav-spacer {
+    display: none !important;
+  }
+
+  .dashboard-slide-panel > footer {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  }
 }
