@@ -16,6 +16,8 @@
       </requestFiltering>
     </security>
     <staticContent>
+      <remove fileExtension=".webmanifest" />
+      <mimeMap fileExtension=".webmanifest" mimeType="application/manifest+json" />
       <clientCache cacheControlMode="UseMaxAge" cacheControlMaxAge="7.00:00:00" />
     </staticContent>
   </system.webServer>

@@ -129,7 +129,7 @@ function portal_image_mime_from_url(string $url): string
 function portal_manifest_icon(int $size, string $purpose = 'any'): array
 {
     return [
-        'src' => portal_asset_url('/icons/icon-png.php?size=' . $size),
+        'src' => '/icons/icon-' . $size . '.png',
         'sizes' => $size . 'x' . $size,
         'type' => 'image/png',
         'purpose' => $purpose,

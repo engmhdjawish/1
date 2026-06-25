@@ -38,11 +38,11 @@ $iconChecks = [];
 foreach ($icons['manifest_icons'] as $icon) {
     $src = (string) ($icon['src'] ?? '');
     $path = parse_url($src, PHP_URL_PATH) ?: $src;
-    $file = dirname(__DIR__) . '/public' . strtok($path, '?');
+    $file = dirname(__DIR__) . '/public' . $path;
     $iconChecks[] = [
         'src' => $src,
         'sizes' => (string) ($icon['sizes'] ?? ''),
-        'exists' => is_file($file) || str_contains($path, 'icon-png.php'),
+        'exists' => is_file($file),
     ];
 }
 $allIconsOk = count(array_filter($iconChecks, static fn (array $row): bool => (bool) $row['exists'])) >= 2;
@@ -162,10 +162,22 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
 
       fetch('/manifest.php', { cache: 'no-store' })
         .then((r) => r.json())
-        .then((m) => {
+        .then(async (m) => {
           const n = (m.icons || []).length;
+          let iconOk = true;
+          for (const icon of (m.icons || []).slice(0, 2)) {
+            try {
+              const res = await fetch(icon.src, { cache: 'no-store' });
+              if (!res.ok) {
+                iconOk = false;
+              }
+            } catch (_) {
+              iconOk = false;
+            }
+          }
           document.getElementById('manifest-status').textContent =
-            '✓ manifest صالح — ' + n + ' أيقونة، start_url=' + (m.start_url || '');
+            (iconOk ? '✓' : '⚠') + ' manifest — ' + n + ' أيقونة، start_url=' + (m.start_url || '')
+            + (iconOk ? '' : ' (تحقق من تحميل icon-192.png و icon-512.png)');
         })
         .catch((err) => {
           document.getElementById('manifest-status').textContent = '✗ فشل تحميل manifest: ' + err;
@@ -183,7 +195,7 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
       }, 3000);
 
       if (window.isSecureContext) {
-        navigator.serviceWorker.register('/sw.js?v=4', { scope: '/' }).catch(() => {});
+        navigator.serviceWorker.register('/sw.js?v=5', { scope: '/', updateViaCache: 'none' }).catch(() => {});
       }
     })();
   </script>

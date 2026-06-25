@@ -11,6 +11,11 @@ $siteName = trim((string) ($siteName ?? '')) !== '' ? (string) $siteName : 'جا
 $icons = portal_site_icons($companyLogoUrl ?? null);
 ?>
 <link rel="manifest" href="/manifest.php">
+<script>
+  if ('serviceWorker' in navigator && window.isSecureContext) {
+    navigator.serviceWorker.register('/sw.js?v=5', { scope: '/', updateViaCache: 'none' }).catch(function () {});
+  }
+</script>
 <link rel="icon" href="<?= h($icons['favicon_ico']) ?>" sizes="48x48">
 <link rel="icon" href="<?= h($icons['favicon_svg']) ?>" type="image/svg+xml">
 <link rel="icon" href="<?= h($icons['favicon_png_32']) ?>" type="image/png"<?= $icons['uses_company_logo'] ? '' : ' sizes="32x32"' ?>>

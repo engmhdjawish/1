@@ -6,6 +6,9 @@
 
   const AUTO_DISMISS_KEY = 'pwa-auto-dismissed-at';
   const AUTO_DISMISS_DAYS = 3;
+  const ENGAGE_MS = 28000;
+  const pageLoadedAt = Date.now();
+  let engagementReady = false;
 
   (function redirectHttpToHttps() {
     const host = window.location.hostname;
@@ -64,11 +67,11 @@
     }
     if (mode === 'manual') {
       return {
-        title: 'تثبيت التطبيق يدوياً',
+        title: 'تثبيت التطبيق من Chrome',
         steps: [
-          'من Chrome: القائمة ⋮ (أعلى اليمين) → «تثبيت التطبيق» أو «Install Jawish».',
-          'من Edge: القائمة ⋯ → «التطبيقات» → «تثبيت هذا الموقع كتطبيق».',
-          'الزر الأزرق في الموقع يعرض التعليمات فقط — التثبيت الفعلي من قائمة المتصفح.',
+          'ابحث عن أيقونة التثبيت ⊕ في شريط العنوان (قد تظهر بعد 30 ثانية من التصفح).',
+          'أو: القائمة ⋮ أعلى اليمين → «تثبيت التطبيق» أو «Install Jawish».',
+          'إن لم يظهر الخيار: امسح cache المتصفح (Ctrl+Shift+Delete) ثم أعد فتح https://' + window.location.hostname,
         ],
         button: null,
       };
@@ -275,9 +278,35 @@
 
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator) || !isSecure) {
+      return Promise.resolve(null);
+    }
+    return navigator.serviceWorker.getRegistration('/').then((existing) => {
+      if (existing) {
+        return existing;
+      }
+      return navigator.serviceWorker.register('/sw.js?v=5', { scope: '/', updateViaCache: 'none' });
+    }).catch(() => null);
+  }
+
+  function markEngagementReady() {
+    if (engagementReady) {
       return;
     }
-    navigator.serviceWorker.register('/sw.js?v=4', { scope: '/' }).catch(() => {});
+    engagementReady = true;
+    window.setTimeout(maybeShowEngagementBanner, 1500);
+  }
+
+  function maybeShowEngagementBanner() {
+    if (deferredPrompt || isStandalone || autoDismissedRecently()) {
+      return;
+    }
+    if (document.getElementById('pwa-install-banner')) {
+      return;
+    }
+    if (!engagementReady && (Date.now() - pageLoadedAt) < ENGAGE_MS) {
+      return;
+    }
+    showAutoBanner();
   }
 
   window.addEventListener('beforeinstallprompt', (event) => {
@@ -293,8 +322,6 @@
     });
   });
 
-  registerServiceWorker();
-
   function init() {
     if (isStandalone) {
       hideInstallTriggers();
@@ -303,12 +330,13 @@
 
     updateHeaderButtonMode(detectMode());
     bindTriggers();
+    registerServiceWorker();
 
-    window.setTimeout(() => {
-      if (!document.getElementById('pwa-install-banner') && !autoDismissedRecently()) {
-        showAutoBanner();
-      }
-    }, 1500);
+    ['click', 'scroll', 'keydown', 'touchstart'].forEach((evt) => {
+      document.addEventListener(evt, markEngagementReady, { once: true, passive: true });
+    });
+
+    window.setTimeout(markEngagementReady, ENGAGE_MS);
   }
 
   window.PortalPwa = { open: openModal, close: closeModal, install: triggerNativeInstall };

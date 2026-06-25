@@ -21,13 +21,14 @@ header('Content-Type: application/manifest+json; charset=utf-8');
 header('Cache-Control: public, max-age=3600');
 
 echo json_encode([
-    'id' => '/',
+    'id' => '/?source=pwa',
     'name' => $siteName,
     'short_name' => $shortName,
     'description' => 'متجر جاويش للتجارة — تصفح المنتجات واطلب بسهولة',
-    'start_url' => '/index.php?source=pwa',
+    'start_url' => '/?source=pwa',
     'scope' => '/',
     'display' => 'standalone',
+    'display_override' => ['standalone', 'browser'],
     'orientation' => 'portrait-primary',
     'dir' => 'rtl',
     'lang' => 'ar',
