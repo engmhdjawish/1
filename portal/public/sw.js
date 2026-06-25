@@ -1,7 +1,7 @@
 /**
  * Jawish store PWA — cache static assets, network-first for pages.
  */
-const CACHE_VERSION = 'jawish-v6';
+const CACHE_VERSION = 'jawish-v7';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 
 const PRECACHE_URLS = [
@@ -51,6 +51,75 @@ self.addEventListener('activate', (event) => {
           .map((key) => caches.delete(key))
       )
     ).then(() => self.clients.claim())
+  );
+});
+
+function parsePushPayload(event) {
+  const fallback = {
+    id: 'jawish-notification',
+    title: 'إشعار جديد',
+    body: '',
+    url: '/',
+    icon: '/icons/brand-icon.php?size=192',
+  };
+  if (!event || !event.data) {
+    return fallback;
+  }
+  try {
+    const parsed = event.data.json();
+    return {
+      id: String(parsed.id || fallback.id),
+      title: String(parsed.title || fallback.title),
+      body: String(parsed.body || ''),
+      url: String(parsed.url || fallback.url),
+      icon: String(parsed.icon || fallback.icon),
+    };
+  } catch (_) {
+    try {
+      const text = event.data.text();
+      return { ...fallback, body: String(text || '') };
+    } catch (_) {
+      return fallback;
+    }
+  }
+}
+
+self.addEventListener('push', (event) => {
+  const payload = parsePushPayload(event);
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: payload.icon,
+      badge: '/icons/brand-icon.php?size=96',
+      tag: payload.id,
+      data: {
+        url: payload.url,
+        id: payload.id,
+      },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = String(event.notification?.data?.url || '/');
+  const absoluteUrl = new URL(targetUrl, self.location.origin).href;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (client.url.startsWith(self.location.origin) && 'focus' in client) {
+          if ('navigate' in client) {
+            return client.navigate(absoluteUrl).then((navigated) => navigated || client.focus());
+          }
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(absoluteUrl);
+      }
+      return undefined;
+    })
   );
 });
 

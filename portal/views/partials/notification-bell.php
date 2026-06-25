@@ -12,6 +12,7 @@ declare(strict_types=1);
       <h2>الإشعارات</h2>
       <button type="button" class="notif-bell__mark-all" data-notif-bell-mark-all>تعليم الكل كمقروء</button>
     </div>
+    <button type="button" class="notif-bell__enable-push" data-notif-enable-push hidden>تفعيل إشعارات الجهاز</button>
     <div class="notif-bell__list" data-notif-bell-list>
       <p class="notif-bell__empty">جاري التحميل...</p>
     </div>

@@ -251,6 +251,18 @@ final class NotificationService
         return $marked;
     }
 
+    public static function latestUnread(): ?array
+    {
+        $items = self::listForReader(5);
+        foreach ($items as $item) {
+            if (empty($item['is_read'])) {
+                return $item;
+            }
+        }
+
+        return null;
+    }
+
     public static function createPublic(
         string $title,
         string $body,
@@ -286,7 +298,19 @@ final class NotificationService
             'expires_at' => $expiresAt,
         ]);
 
-        return (string) $stmt->fetchColumn();
+        $id = (string) $stmt->fetchColumn();
+        self::dispatchDevicePush($id);
+
+        return $id;
+    }
+
+    private static function dispatchDevicePush(string $notificationId): void
+    {
+        try {
+            WebPushService::sendForNotificationId($notificationId);
+        } catch (\Throwable) {
+            // Never block notification persistence.
+        }
     }
 
     public static function createPrivateForCustomer(
@@ -323,7 +347,10 @@ final class NotificationService
             'customer_id' => $customerId,
         ]);
 
-        return (string) $stmt->fetchColumn();
+        $id = (string) $stmt->fetchColumn();
+        self::dispatchDevicePush($id);
+
+        return $id;
     }
 
     public static function createPrivateForStaff(
@@ -360,7 +387,10 @@ final class NotificationService
             'user_id' => $userId,
         ]);
 
-        return (string) $stmt->fetchColumn();
+        $id = (string) $stmt->fetchColumn();
+        self::dispatchDevicePush($id);
+
+        return $id;
     }
 
     /** @return list<array<string, mixed>> */

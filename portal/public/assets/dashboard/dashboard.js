@@ -288,15 +288,23 @@
   }
 
   function closeDrawer() {
-    qs('#dashboard-drawer')?.classList.remove('is-open');
-    qs('#dashboard-drawer-backdrop')?.classList.remove('is-open');
+    const drawer = qs('#dashboard-drawer');
+    const backdrop = qs('#dashboard-drawer-backdrop');
+    drawer?.classList.remove('is-open');
+    backdrop?.classList.remove('is-open');
+    drawer?.setAttribute('aria-hidden', 'true');
+    backdrop?.setAttribute('aria-hidden', 'true');
     qs('#dashboard-menu-btn')?.setAttribute('aria-expanded', 'false');
     document.body.style.overflow = '';
   }
 
   function openDrawer() {
-    qs('#dashboard-drawer')?.classList.add('is-open');
-    qs('#dashboard-drawer-backdrop')?.classList.add('is-open');
+    const drawer = qs('#dashboard-drawer');
+    const backdrop = qs('#dashboard-drawer-backdrop');
+    drawer?.classList.add('is-open');
+    backdrop?.classList.add('is-open');
+    drawer?.setAttribute('aria-hidden', 'false');
+    backdrop?.setAttribute('aria-hidden', 'false');
     qs('#dashboard-menu-btn')?.setAttribute('aria-expanded', 'true');
     document.body.style.overflow = 'hidden';
   }
@@ -380,6 +388,8 @@
       window.location.href = url;
       return;
     }
+
+    closeDrawer();
 
     if (navAbort) {
       navAbort.abort();
@@ -632,6 +642,25 @@
     bindOrderImageZoom(root);
   }
 
+  function syncDashboardLayoutMetrics() {
+    const tabs = qs('[data-dashboard-area-tabs]');
+    const root = document.documentElement;
+    const apply = () => {
+      if (!tabs) {
+        root.style.setProperty('--dash-area-tabs', '0px');
+        return;
+      }
+      const height = Math.ceil(tabs.getBoundingClientRect().height);
+      root.style.setProperty('--dash-area-tabs', height > 0 ? height + 'px' : '0px');
+    };
+    apply();
+    if (typeof ResizeObserver !== 'undefined' && tabs) {
+      const observer = new ResizeObserver(apply);
+      observer.observe(tabs);
+    }
+    window.addEventListener('resize', apply, { passive: true });
+  }
+
   async function init() {
     document.body.classList.add('dashboard-app');
     await ensurePageAssets(qs('[data-dashboard-main]')?.getAttribute('data-dashboard-page-assets') || '');
@@ -639,6 +668,8 @@
       document.body.classList.add('has-bottom-nav');
     }
     bindMobileNav();
+    syncDashboardLayoutMetrics();
+    closeDrawer();
     bindHistory();
     bindPage(document);
     history.replaceState({ dashboardUrl: window.location.href }, '', window.location.href);
