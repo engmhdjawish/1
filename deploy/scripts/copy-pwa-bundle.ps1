@@ -24,6 +24,7 @@ $relativeFiles = @(
     'public\icons\icon-192.png',
     'public\icons\icon-512.png',
     'public\icons\brand-icon.php',
+    'public\icons\icon-serve.php',
     'src\Services\CompanyBrandIconService.php',
     'scripts\regenerate-brand-icons.php',
     'public\assets\pwa.js',
@@ -60,24 +61,18 @@ if ($missing.Count -gt 0) {
     exit 1
 }
 
-$readme = @"
-PWA bundle — copy to D:\JawishPortal
+$readme = @'
+PWA bundle - copy to D:\JawishPortal
 
-On the SERVER (PowerShell as Admin):
+On the SERVER:
 
   robocopy C:\JawishDeploy\output\pwa-bundle D:\JawishPortal /E /XF .env
 
-Then verify ON THE SERVER (no HTTPS needed):
+Then verify:
 
   cd C:\JawishDeploy\server-tools
   .\server-verify-pwa-files.ps1
-
-Or manually:
-  Test-Path D:\JawishPortal\public\icons\icon-192.png
-  Test-Path D:\JawishPortal\public\manifest.php
-
-Then in Chrome: https://jawish.ddns.net/pwa-check.php
-"@
+'@
 
 Set-Content -Path (Join-Path $bundleRoot 'README-PWA.txt') -Value $readme -Encoding UTF8
 
