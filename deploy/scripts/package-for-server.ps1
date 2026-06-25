@@ -96,7 +96,8 @@ $toolFiles = @(
     'fix-iis-php-concurrency.ps1',
     'server-setup-on-host.ps1',
     'install-iis-php-handler.ps1',
-    'copy-pwa-bundle.ps1'
+    'copy-pwa-bundle.ps1',
+    'server-verify-pwa-files.ps1'
 )
 foreach ($name in $toolFiles) {
     Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $toolsDest $name) -Force

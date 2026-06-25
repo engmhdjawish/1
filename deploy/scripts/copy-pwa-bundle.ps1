@@ -65,13 +65,18 @@ On the SERVER (PowerShell as Admin):
 
   robocopy C:\JawishDeploy\output\pwa-bundle D:\JawishPortal /E /XF .env
 
-Then verify:
+Then verify ON THE SERVER (no HTTPS needed):
 
-  Invoke-WebRequest -Uri https://jawish.ddns.net/icons/icon-192.png -UseBasicParsing | Select-Object StatusCode
-  Invoke-WebRequest -Uri https://jawish.ddns.net/manifest.webmanifest -UseBasicParsing | Select-Object StatusCode
+  cd C:\JawishDeploy\server-tools
+  .\server-verify-pwa-files.ps1
 
-Both must be 200. Then open https://jawish.ddns.net/pwa-check.php
+Or manually:
+  Test-Path D:\JawishPortal\public\icons\icon-192.png
+  Test-Path D:\JawishPortal\public\manifest.php
+
+Then in Chrome: https://jawish.ddns.net/pwa-check.php
 "@
+
 Set-Content -Path (Join-Path $bundleRoot 'README-PWA.txt') -Value $readme -Encoding UTF8
 
 Write-Ok "PWA bundle ready: $bundleRoot"

@@ -134,7 +134,7 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
     #sw-status, #manifest-status { margin-top: 0.5rem; font-size: 0.9rem; }
     a { color: #2563eb; }
   </style>
-  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="manifest" href="/manifest.php">
 </head>
 <body>
   <h1>تشخيص تثبيت التطبيق (PWA)</h1>

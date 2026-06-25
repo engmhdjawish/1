@@ -10,7 +10,7 @@ require_once __DIR__ . '/../helpers.php';
 $siteName = trim((string) ($siteName ?? '')) !== '' ? (string) $siteName : 'جاويش للتجارة';
 $icons = portal_site_icons($companyLogoUrl ?? null);
 ?>
-<link rel="manifest" href="/manifest.webmanifest">
+<link rel="manifest" href="/manifest.php">
 <script>
   if ('serviceWorker' in navigator && window.isSecureContext) {
     navigator.serviceWorker.register('/sw.js?v=6', { scope: '/', updateViaCache: 'none' }).catch(function () {});
