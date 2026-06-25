@@ -11,6 +11,9 @@ use Portal\Support\StoreCartRequest;
 require dirname(__DIR__) . '/views/helpers.php';
 
 $cartNotice = StoreCartRequest::handleAddToCartPost();
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 try {
     $catalog = StoreCatalogService::catalogFromRequest($_GET);
 } catch (\Throwable $exception) {

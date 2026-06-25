@@ -154,7 +154,8 @@ final class StoreCatalogService
         $hasImage = $mergedFilters['hasImage'];
         $lockedClientFilters = self::lockedClientFilters($policyRules);
         $sellableMode = self::shouldApplySellableStockFilter();
-        if ($sellableMode && $mergedFilters['minWarehouseQuantity'] === null) {
+        $sellableFilter = self::shouldFilterSellableStock();
+        if (($sellableMode || $sellableFilter) && $mergedFilters['minWarehouseQuantity'] === null) {
             $mergedFilters['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
         }
 
@@ -242,6 +243,9 @@ final class StoreCatalogService
                         is_array($rawItems) ? $rawItems : [],
                         $contextOfferSlug
                     );
+                    if ($sellableFilter) {
+                        $products = StockReservationService::filterSellableProducts($products);
+                    }
                     $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
                     $page = max(1, (int) ($data['page'] ?? $page));
                     $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
@@ -420,8 +424,12 @@ final class StoreCatalogService
         $resultFilters = [];
         $apiError = null;
         $sellableMode = self::shouldApplySellableStockFilter();
+        $sellableFilter = self::shouldFilterSellableStock();
 
         try {
+            if ($sellableFilter && !isset($apiQuery['minWarehouseQuantity'])) {
+                $apiQuery['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
+            }
             if ($sellableMode) {
                 if (!isset($apiQuery['minWarehouseQuantity']) || $apiQuery['minWarehouseQuantity'] === null) {
                     $apiQuery['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
@@ -452,6 +460,9 @@ final class StoreCatalogService
                         is_array($rawItems) ? $rawItems : [],
                         $contextOfferSlug
                     );
+                    if ($sellableFilter) {
+                        $products = StockReservationService::filterSellableProducts($products);
+                    }
                     $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
                     $page = max(1, (int) ($data['page'] ?? $page));
                     $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
@@ -1409,6 +1420,12 @@ final class StoreCatalogService
     }
 
     private static function shouldApplySellableStockFilter(): bool
+    {
+        return false;
+    }
+
+    /** Lightweight sellable filter on a single API page (no multi-page scan). */
+    private static function shouldFilterSellableStock(): bool
     {
         return (bool) (self::displayOptions()['allow_cart'] ?? false);
     }

@@ -76,6 +76,7 @@ Copy-Item `
 $toolFiles = @(
     'setup-portable-postgres.ps1',
     'fix-windows-php.ps1',
+    'fix-iis-php-concurrency.ps1',
     'server-setup-on-host.ps1',
     'install-iis-php-handler.ps1'
 )

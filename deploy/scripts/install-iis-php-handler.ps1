@@ -71,7 +71,10 @@ if ($fastCgiList -notmatch [regex]::Escape($PhpCgiPath)) {
 }
 & $appcmd set config /section:system.webServer/fastCGI /+`"[fullPath='$PhpCgiPath'].environmentVariables.[name='PHP_FCGI_MAX_REQUESTS',value='10000']`" /commit:apphost 2>$null | Out-Null
 & $appcmd set config /section:system.webServer/fastCGI /+`"[fullPath='$PhpCgiPath'].environmentVariables.[name='PHPRC',value='$phpDir']`" /commit:apphost 2>$null | Out-Null
-Write-Ok 'FastCGI application registered'
+& $appcmd set config -section:system.webServer/fastCGI "/[fullPath='$PhpCgiPath'].maxInstances:8" /commit:apphost 2>$null | Out-Null
+& $appcmd set config -section:system.webServer/fastCGI "/[fullPath='$PhpCgiPath'].instanceMaxRequests:10000" /commit:apphost 2>$null | Out-Null
+& $appcmd set config -section:system.webServer/fastCGI "/[fullPath='$PhpCgiPath'].requestTimeout:90" /commit:apphost 2>$null | Out-Null
+Write-Ok 'FastCGI application registered (maxInstances=8)'
 
 if (-not $SiteName -and $SitePort -gt 0) {
     $sitesXml = & $appcmd list sites /xml
