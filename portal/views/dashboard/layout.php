@@ -92,7 +92,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
   <link href="<?= h(portal_asset_url('/assets/dashboard/dashboard.css')) ?>" rel="stylesheet">
-  <link href="/css/notifications.css" rel="stylesheet">
+  <link href="<?= h(portal_asset_url('/css/notifications.css')) ?>" rel="stylesheet">
   <link href="/css/store-ui.css" rel="stylesheet">
   <link href="/css/store-cart.css" rel="stylesheet">
   <link href="/css/customer-portal.css" rel="stylesheet">
@@ -162,9 +162,14 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
       display: flex;
       gap: 0.35rem;
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
       padding: 0.5rem 1rem;
       background: #ffffff;
       border-bottom: 1px solid #E5E7EB;
+    }
+    .dashboard-area-tabs::-webkit-scrollbar {
+      display: none;
     }
     .dashboard-area-tab {
       display: inline-flex;
@@ -198,7 +203,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
     <?= $extraHead ?>
   <?php endif; ?>
 </head>
-<body class="min-h-screen text-slate-900 dashboard-app<?= $hasAreaTabs ? ' has-area-tabs' : '' ?>" data-dashboard-has-area-tabs="<?= $hasAreaTabs ? '1' : '0' ?>">
+<body class="min-h-screen text-slate-900 dashboard-app<?= $hasAreaTabs ? ' has-area-tabs' : '' ?><?= $bottomNavLinks !== [] ? ' has-bottom-nav' : '' ?>" data-dashboard-has-area-tabs="<?= $hasAreaTabs ? '1' : '0' ?>">
   <header class="sticky top-0 z-50 h-16 bg-surface-white shadow-sm border-b border-border-subtle">
     <div class="h-full px-4 lg:px-10 flex items-center justify-between gap-3">
       <div class="flex items-center gap-2 min-w-0">
@@ -263,7 +268,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <?php endif; ?>
 
   <div id="dashboard-drawer-backdrop" aria-hidden="true"></div>
-  <nav id="dashboard-drawer" class="lg:hidden translate-x-full" aria-label="قائمة لوحة التحكم" aria-hidden="true">
+  <nav id="dashboard-drawer" class="lg:hidden" aria-label="قائمة لوحة التحكم" aria-hidden="true">
     <div class="px-4 py-4 border-b border-border-subtle mb-3 flex items-center justify-between gap-3">
       <div data-dashboard-sidebar-meta>
         <h2 class="font-bold text-primary"><?= h($sidebarTitle) ?></h2>
@@ -373,7 +378,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <script src="/assets/dashboard/about-editor.js" defer></script>
   <script src="/assets/dashboard/accounting-statement.js" defer></script>
   <script src="/assets/dashboard/material-image-zip-download.js" defer></script>
-  <script src="/assets/notifications.js" defer></script>
+  <script src="<?= h(portal_asset_url('/assets/notifications.js')) ?>" defer></script>
   <?php if (!empty($extraScripts ?? '')): ?>
     <?= $extraScripts ?>
   <?php endif; ?>

@@ -18,16 +18,19 @@ body.dashboard-app.has-area-tabs {
 
 .dashboard-area-tabs {
   top: var(--dash-header);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
 
-.dashboard-desktop-sidebar {
-  top: calc(var(--dash-header) + var(--dash-area-tabs));
-  height: calc(100vh - var(--dash-header) - var(--dash-area-tabs));
-  height: calc(100dvh - var(--dash-header) - var(--dash-area-tabs));
+.dashboard-area-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .dashboard-main-content {
-  padding-bottom: calc(var(--dash-bottom-nav) + 1rem);
+  padding-bottom: calc(
+    var(--dash-bottom-nav) + 1rem + env(safe-area-inset-bottom, 0)
+  );
 }
 
 @media (min-width: 1024px) {
@@ -46,13 +49,19 @@ body.dashboard-app.has-area-tabs {
 }
 
 body.dashboard-app {
-  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-bottom: 0;
 }
 
 @media (max-width: 1023px) {
   body.dashboard-app.has-bottom-nav {
-    padding-bottom: calc(var(--dash-bottom-nav) + env(safe-area-inset-bottom, 0));
+    padding-bottom: 0;
   }
+}
+
+.dashboard-desktop-sidebar {
+  top: calc(var(--dash-header) + var(--dash-area-tabs));
+  height: calc(100vh - var(--dash-header) - var(--dash-area-tabs));
+  height: calc(100dvh - var(--dash-header) - var(--dash-area-tabs));
 }
 
 /* Page loader */
@@ -174,14 +183,16 @@ body.dashboard-app {
   #dashboard-drawer {
     position: fixed;
     top: 0;
-    inset-inline-end: 0;
+    right: 0;
+    left: auto;
     z-index: 70;
     width: min(88vw, 20rem);
     height: 100dvh;
     background: var(--dash-surface);
-    border-inline-start: 1px solid var(--dash-border);
+    border-left: 1px solid var(--dash-border);
     transition: transform 0.25s ease, visibility 0.25s ease;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 0;
     padding-top: calc(var(--dash-header) + var(--dash-area-tabs));
     display: flex;
@@ -292,7 +303,7 @@ button.is-loading::after,
 /* Sticky form toolbar spacing on mobile */
 @media (max-width: 767px) {
   .dashboard-sticky-toolbar {
-    top: calc(var(--dash-header) - 0.25rem) !important;
+    top: calc(var(--dash-header) + var(--dash-area-tabs, 0px) - 0.25rem) !important;
   }
 }
 

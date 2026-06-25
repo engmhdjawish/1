@@ -179,7 +179,30 @@
 }
 
 .dashboard-app .dashboard-area-tabs {
-  overflow: visible;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.notif-bell__enable-push {
+  display: none;
+  width: calc(100% - 2rem);
+  margin: 0.75rem 1rem 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(216, 25, 33, 0.25);
+  background: rgba(216, 25, 33, 0.06);
+  color: #b91c1c;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.notif-bell__enable-push.is-visible {
+  display: block;
+}
+
+.notif-bell__enable-push.is-enabled {
+  display: none;
 }
 
 @media (max-width: 1023px) {
@@ -193,7 +216,13 @@
   }
 
   .dashboard-app .notif-bell__panel.is-open {
-    top: calc(var(--dash-header, 4rem) + 0.5rem);
-    max-height: min(72dvh, calc(100dvh - var(--dash-header, 4rem) - 1.25rem));
+    top: calc(var(--dash-header, 4rem) + var(--dash-area-tabs, 0px) + 0.5rem);
+    max-height: min(
+      60dvh,
+      calc(
+        100dvh - var(--dash-header, 4rem) - var(--dash-area-tabs, 0px)
+        - var(--dash-bottom-nav, 4.25rem) - 1.5rem - env(safe-area-inset-bottom, 0)
+      )
+    );
   }
 }

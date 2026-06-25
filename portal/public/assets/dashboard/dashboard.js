@@ -642,6 +642,25 @@
     bindOrderImageZoom(root);
   }
 
+  function syncDashboardLayoutMetrics() {
+    const tabs = qs('[data-dashboard-area-tabs]');
+    const root = document.documentElement;
+    const apply = () => {
+      if (!tabs) {
+        root.style.setProperty('--dash-area-tabs', '0px');
+        return;
+      }
+      const height = Math.ceil(tabs.getBoundingClientRect().height);
+      root.style.setProperty('--dash-area-tabs', height > 0 ? height + 'px' : '0px');
+    };
+    apply();
+    if (typeof ResizeObserver !== 'undefined' && tabs) {
+      const observer = new ResizeObserver(apply);
+      observer.observe(tabs);
+    }
+    window.addEventListener('resize', apply, { passive: true });
+  }
+
   async function init() {
     document.body.classList.add('dashboard-app');
     await ensurePageAssets(qs('[data-dashboard-main]')?.getAttribute('data-dashboard-page-assets') || '');
@@ -649,6 +668,7 @@
       document.body.classList.add('has-bottom-nav');
     }
     bindMobileNav();
+    syncDashboardLayoutMetrics();
     closeDrawer();
     bindHistory();
     bindPage(document);

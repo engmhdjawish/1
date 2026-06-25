@@ -26,6 +26,15 @@ try {
             exit;
         }
 
+        if ($action === 'latest_unread') {
+            $item = NotificationService::latestUnread();
+            echo json_encode([
+                'ok' => true,
+                'item' => $item,
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
         echo json_encode([
             'ok' => true,
             'items' => NotificationService::listForReader(40),
