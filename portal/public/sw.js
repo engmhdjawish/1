@@ -1,7 +1,7 @@
 /**
  * Jawish store PWA — cache static assets, network-first for pages.
  */
-const CACHE_VERSION = 'jawish-v2';
+const CACHE_VERSION = 'jawish-v3';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 
 const PRECACHE_URLS = [
@@ -30,7 +30,11 @@ const NO_CACHE_PREFIXES = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) => cache.addAll(PRECACHE_URLS)).then(() => self.skipWaiting())
+    caches.open(STATIC_CACHE).then((cache) =>
+      Promise.all(
+        PRECACHE_URLS.map((url) => cache.add(url).catch(() => undefined))
+      )
+    ).then(() => self.skipWaiting())
   );
 });
 

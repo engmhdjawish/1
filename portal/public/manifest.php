@@ -21,6 +21,7 @@ header('Content-Type: application/manifest+json; charset=utf-8');
 header('Cache-Control: public, max-age=3600');
 
 echo json_encode([
+    'id' => '/',
     'name' => $siteName,
     'short_name' => $shortName,
     'description' => 'متجر جاويش للتجارة — تصفح المنتجات واطلب بسهولة',

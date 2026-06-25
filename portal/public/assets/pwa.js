@@ -58,9 +58,10 @@
       return {
         title: 'تثبيت التطبيق',
         steps: [
-          'من Chrome أو Edge: القائمة ⋮ (أعلى اليمين).',
-          'اختر «تثبيت التطبيق» أو «Install app».',
-          'إن لم تظهر الخيار: تأكد من https:// وشهادة SSL صالحة، ثم أعد تحميل الصفحة.',
+          'من Chrome (سطح المكتب): القائمة ⋮ أعلى اليمين → «تثبيت التطبيق» أو «Install Jawish».',
+          'من Edge: القائمة ⋯ → «التطبيقات» → «تثبيت هذا الموقع كتطبيق».',
+          'على الجوال: القائمة → «إضافة إلى الشاشة الرئيسية».',
+          'إن لم يظهر الخيار: أغلق الموقع وافتحه من جديد عبر https:// ثم انتظر 10 ثوانٍ.',
         ],
         button: null,
       };
@@ -104,8 +105,10 @@
   }
 
   function buildModal(mode) {
-    const copy = copyForMode(mode);
+    const effectiveMode = mode === 'native' && !deferredPrompt ? 'manual' : mode;
+    const copy = copyForMode(effectiveMode);
     const stepsHtml = copy.steps.map((line) => '<li>' + line + '</li>').join('');
+    const showNativeBtn = effectiveMode === 'native' && deferredPrompt && copy.button;
 
     const el = document.createElement('div');
     el.id = 'pwa-install-modal';
@@ -117,7 +120,7 @@
       '<div class="pwa-install-modal__icon" aria-hidden="true"><span class="material-symbols-outlined">install_mobile</span></div>' +
       '<h2 id="pwa-install-title" class="pwa-install-modal__title">' + copy.title + '</h2>' +
       '<ol class="pwa-install-modal__steps">' + stepsHtml + '</ol>' +
-      (copy.button
+      (showNativeBtn
         ? '<button type="button" class="pwa-install-modal__btn" data-pwa-native-install>' + copy.button + '</button>'
         : '') +
       '<button type="button" class="pwa-install-modal__ghost" data-pwa-close>لاحقاً</button>' +
@@ -129,10 +132,15 @@
 
     el.querySelector('[data-pwa-native-install]')?.addEventListener('click', async () => {
       if (!deferredPrompt) {
+        openModal('manual');
         return;
       }
-      deferredPrompt.prompt();
-      await deferredPrompt.userChoice;
+      try {
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+      } catch (_) {
+        openModal('manual');
+      }
       deferredPrompt = null;
       closeModal();
     });
@@ -193,12 +201,23 @@
   }
 
   function bindTriggers() {
-    document.querySelectorAll('[data-pwa-open]').forEach((btn) => {
-      btn.addEventListener('click', (event) => {
+    document.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      if (target.closest('[data-pwa-open], [data-pwa-banner-open]')) {
         event.preventDefault();
         openModal();
-      });
+      }
     });
+  }
+
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator) || !isSecure) {
+      return;
+    }
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
   }
 
   window.addEventListener('beforeinstallprompt', (event) => {
@@ -207,13 +226,12 @@
     if (!autoDismissedRecently() && !isStandalone) {
       showAutoBanner();
     }
+    document.querySelectorAll('[data-pwa-open]').forEach((btn) => {
+      btn.classList.remove('hidden');
+    });
   });
 
-  if ('serviceWorker' in navigator && isSecure) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
-    });
-  }
+  registerServiceWorker();
 
   function init() {
     if (isStandalone) {
