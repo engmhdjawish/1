@@ -198,6 +198,15 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
     .dashboard-area-tab .material-symbols-outlined {
       font-size: 1rem;
     }
+    @media (max-width: 1023px) {
+      body.dashboard-app.has-bottom-nav .dashboard-main-content {
+        padding-bottom: 0.75rem;
+      }
+      body.dashboard-app.has-bottom-nav .dashboard-bottom-nav-spacer {
+        display: block;
+        height: calc(5rem + 0.75rem + env(safe-area-inset-bottom, 0px));
+      }
+    }
   </style>
   <?php if (!empty($extraHead ?? '')): ?>
     <?= $extraHead ?>
@@ -345,6 +354,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   </div>
 
   <?php if ($bottomNavLinks !== []): ?>
+    <div class="dashboard-bottom-nav-spacer lg:hidden" aria-hidden="true" data-dashboard-bottom-spacer></div>
     <nav id="dashboard-bottom-nav" class="lg:hidden" aria-label="تنقل سريع">
       <?php foreach ($bottomNavLinks as $link): ?>
         <?php $isActive = DashboardNavigation::isNavItemActive($currentRoute, $link); ?>
