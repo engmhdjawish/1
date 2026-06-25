@@ -2,21 +2,40 @@
 
 declare(strict_types=1);
 
+define('PORTAL_NO_SESSION', true);
+
 require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Services\CompanyBrandIconService;
 use Portal\Services\PortalSettingsService;
+use Portal\Services\SiteMediaService;
 
 $logo = PortalSettingsService::companyLogoUrl();
 if ($logo === null || $logo === '') {
-    echo "No company_logo configured.\n";
+    fwrite(STDERR, "No company_logo configured in company_settings.\n");
     exit(1);
+}
+
+$diag = CompanyBrandIconService::diagnose($logo);
+echo "Logo URL: {$logo}\n";
+echo 'Source path: ' . ($diag['source_path'] ?? 'null') . "\n";
+echo 'Source exists: ' . (($diag['source_exists'] ?? false) ? 'yes' : 'no') . "\n";
+echo 'MIME: ' . ($diag['source_mime'] ?? 'n/a') . "\n";
+echo 'GD loaded: ' . (($diag['gd_loaded'] ?? false) ? 'yes' : 'no') . "\n";
+echo 'Branding writable: ' . (($diag['branding_writable'] ?? false) ? 'yes' : 'no') . "\n";
+
+if (preg_match('~^/media/site\.php\?id=([^&]+)~i', $logo, $matches) === 1) {
+    $asset = SiteMediaService::getById(rawurldecode((string) $matches[1]));
+    echo 'DB asset: ' . ($asset !== null ? 'found' : 'missing') . "\n";
+    if ($asset !== null) {
+        echo 'storage_path: ' . (string) ($asset['storage_path'] ?? '') . "\n";
+        echo 'mime_type: ' . (string) ($asset['mime_type'] ?? '') . "\n";
+    }
 }
 
 $ok = CompanyBrandIconService::regenerateFromLogoUrl($logo);
 if (!$ok) {
-    echo "Failed to generate brand icons from: {$logo}\n";
-    echo "Ensure GD is enabled and the logo is PNG/JPG/WebP (not SVG).\n";
+    fwrite(STDERR, 'Failed: ' . (CompanyBrandIconService::lastError() ?? 'unknown error') . "\n");
     exit(1);
 }
 

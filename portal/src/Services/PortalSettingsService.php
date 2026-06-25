@@ -80,7 +80,7 @@ final class PortalSettingsService
         }
 
         if (array_key_exists('company_logo', $values)) {
-            CompanyBrandIconService::regenerateFromLogoUrl(trim((string) ($values['company_logo'] ?? '')));
+            CompanyBrandIconService::regenerateFromLogoUrlSafe(trim((string) ($values['company_logo'] ?? '')));
         }
     }
 

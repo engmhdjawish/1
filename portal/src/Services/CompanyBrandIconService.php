@@ -11,6 +11,13 @@ final class CompanyBrandIconService
     /** @var list<int> */
     private const SIZES = [32, 180, 192, 512];
 
+    private static ?string $lastError = null;
+
+    public static function lastError(): ?string
+    {
+        return self::$lastError;
+    }
+
     public static function brandingDir(): string
     {
         $dir = rtrim(Config::storagePath(), '/\\') . DIRECTORY_SEPARATOR . 'branding';
@@ -40,6 +47,7 @@ final class CompanyBrandIconService
 
     public static function regenerateFromLogoUrl(?string $logoUrl): bool
     {
+        self::$lastError = null;
         $logoUrl = trim((string) $logoUrl);
         if ($logoUrl === '') {
             self::clearBrandIcons();
@@ -49,14 +57,41 @@ final class CompanyBrandIconService
 
         $sourcePath = self::resolveSourcePath($logoUrl);
         if ($sourcePath === null || !is_file($sourcePath)) {
+            self::$lastError = 'ملف الشعار غير موجود على القرص. أعد رفع الشعار من لوحة التحكم > مكتبة الوسائط.';
+
+            return false;
+        }
+
+        if (!is_readable($sourcePath)) {
+            self::$lastError = 'لا يمكن قراءة ملف الشعار. تحقق من صلاحيات مجلد storage.';
+
+            return false;
+        }
+
+        $mime = self::detectMime($sourcePath);
+        if ($mime === 'image/svg+xml' || str_ends_with(strtolower($sourcePath), '.svg')) {
+            self::$lastError = 'شعار SVG غير مدعوم لتوليد أيقونات التطبيق. ارفع الشعار بصيغة PNG أو JPG.';
+
             return false;
         }
 
         if (!function_exists('imagecreatetruecolor')) {
+            self::$lastError = 'امتداد PHP GD غير مفعّل. فعّل extension=gd في php.ini ثم أعد المحاولة.';
+
             return false;
         }
 
-        if (!is_dir(self::brandingDir()) && !mkdir(self::brandingDir(), 0775, true) && !is_dir(self::brandingDir())) {
+        $brandingDir = self::brandingDir();
+        if (!is_dir($brandingDir) && !mkdir($brandingDir, 0775, true) && !is_dir($brandingDir)) {
+            self::$lastError = 'تعذر إنشاء مجلد التخزين: ' . $brandingDir;
+
+            return false;
+        }
+
+        if (!is_writable($brandingDir)) {
+            self::$lastError = 'مجلد branding غير قابل للكتابة: ' . $brandingDir
+                . ' — نفّذ: icacls D:\\JawishPortal\\storage /grant "IIS AppPool\\JawishPortal:(OI)(CI)M" /T';
+
             return false;
         }
 
@@ -67,7 +102,43 @@ final class CompanyBrandIconService
             }
         }
 
+        if (!$ok) {
+            self::$lastError = 'تعذر تحويل الشعار إلى PNG (الصيغة: ' . $mime . '). استخدم PNG أو JPG.';
+        }
+
         return $ok;
+    }
+
+    public static function regenerateFromLogoUrlSafe(?string $logoUrl): bool
+    {
+        try {
+            return self::regenerateFromLogoUrl($logoUrl);
+        } catch (\Throwable $exception) {
+            self::$lastError = 'تعذر توليد أيقونات التطبيق: ' . $exception->getMessage();
+
+            return false;
+        }
+    }
+
+    /** @return array<string, mixed> */
+    public static function diagnose(?string $logoUrl = null): array
+    {
+        $logoUrl = trim((string) ($logoUrl ?? ''));
+        $sourcePath = $logoUrl !== '' ? self::resolveSourcePath($logoUrl) : null;
+
+        return [
+            'logo_url' => $logoUrl,
+            'source_path' => $sourcePath,
+            'source_exists' => $sourcePath !== null && is_file($sourcePath),
+            'source_readable' => $sourcePath !== null && is_readable($sourcePath),
+            'source_mime' => $sourcePath !== null && is_file($sourcePath) ? self::detectMime($sourcePath) : null,
+            'storage_path' => Config::storagePath(),
+            'branding_dir' => self::brandingDir(),
+            'branding_writable' => is_dir(self::brandingDir()) ? is_writable(self::brandingDir()) : is_writable(dirname(self::brandingDir())),
+            'gd_loaded' => extension_loaded('gd'),
+            'has_brand_icons' => self::hasBrandIcons(),
+            'last_error' => self::$lastError,
+        ];
     }
 
     public static function clearBrandIcons(): void
@@ -103,9 +174,10 @@ final class CompanyBrandIconService
         return null;
     }
 
-    private static function loadImage(string $sourcePath): \GdImage|false
+    /** @return \GdImage|false */
+    private static function loadImage(string $sourcePath)
     {
-        $mime = self::detectMime($sourcePath);
+        $mime = self::normalizeMime(self::detectMime($sourcePath));
 
         return match ($mime) {
             'image/jpeg' => @imagecreatefromjpeg($sourcePath),
@@ -113,6 +185,17 @@ final class CompanyBrandIconService
             'image/gif' => @imagecreatefromgif($sourcePath),
             'image/webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($sourcePath) : false,
             default => false,
+        };
+    }
+
+    private static function normalizeMime(string $mime): string
+    {
+        $mime = strtolower(trim($mime));
+
+        return match ($mime) {
+            'image/pjpeg', 'image/jpg' => 'image/jpeg',
+            'image/x-png' => 'image/png',
+            default => $mime,
         };
     }
 
@@ -136,6 +219,7 @@ final class CompanyBrandIconService
             'png' => 'image/png',
             'gif' => 'image/gif',
             'webp' => 'image/webp',
+            'svg' => 'image/svg+xml',
             default => 'application/octet-stream',
         };
     }

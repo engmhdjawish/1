@@ -228,8 +228,24 @@ final class SiteMediaService
         $base = rtrim(Config::storagePath(), '/\\');
         $full = $base . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $storagePath);
         $realBase = realpath($base);
+        if ($realBase === false) {
+            if (!is_dir($base)) {
+                return null;
+            }
+            $realBase = $base;
+        }
+
         $realFull = realpath($full);
-        if ($realBase === false || $realFull === false || !str_starts_with($realFull, $realBase)) {
+        if ($realFull === false) {
+            if (!is_file($full)) {
+                return null;
+            }
+            $realFull = $full;
+        }
+
+        $normalizedBase = strtolower(str_replace('\\', '/', $realBase));
+        $normalizedFull = strtolower(str_replace('\\', '/', $realFull));
+        if ($normalizedFull !== $normalizedBase && !str_starts_with($normalizedFull, $normalizedBase . '/')) {
             return null;
         }
 
