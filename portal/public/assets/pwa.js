@@ -5,6 +5,7 @@
   'use strict';
 
   const AUTO_DISMISS_KEY = 'pwa-auto-dismissed-at';
+  const INSTALLED_KEY = 'pwa-installed-v1';
   const AUTO_DISMISS_DAYS = 3;
   const ENGAGE_MS = 28000;
   const pageLoadedAt = Date.now();
@@ -21,6 +22,8 @@
 
   const isStandalone =
     window.matchMedia('(display-mode: standalone)').matches
+    || window.matchMedia('(display-mode: fullscreen)').matches
+    || window.matchMedia('(display-mode: minimal-ui)').matches
     || window.navigator.standalone === true;
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isSecure = window.isSecureContext === true;
@@ -111,7 +114,42 @@
   function hideInstallTriggers() {
     document.querySelectorAll('[data-pwa-open], [data-pwa-trigger]').forEach((el) => {
       el.classList.add('hidden');
+      el.setAttribute('hidden', '');
+      el.setAttribute('aria-hidden', 'true');
     });
+  }
+
+  function markInstalled() {
+    try {
+      localStorage.setItem(INSTALLED_KEY, '1');
+    } catch (_) {}
+    hideInstallTriggers();
+    document.getElementById('pwa-install-banner')?.remove();
+    deferredPrompt = null;
+  }
+
+  function isMarkedInstalled() {
+    try {
+      return localStorage.getItem(INSTALLED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  async function detectInstalledApp() {
+    if (isStandalone || isMarkedInstalled()) {
+      return true;
+    }
+    if (typeof navigator.getInstalledRelatedApps === 'function') {
+      try {
+        const relatedApps = await navigator.getInstalledRelatedApps();
+        if (Array.isArray(relatedApps) && relatedApps.length > 0) {
+          markInstalled();
+          return true;
+        }
+      } catch (_) {}
+    }
+    return false;
   }
 
   function updateHeaderButtonMode(mode) {
@@ -134,6 +172,7 @@
       deferredPrompt.prompt();
       await deferredPrompt.userChoice;
       deferredPrompt = null;
+      markInstalled();
       closeModal();
       document.getElementById('pwa-install-banner')?.remove();
       return true;
@@ -188,7 +227,7 @@
   }
 
   function openModal(forceMode) {
-    if (isStandalone) {
+    if (isStandalone || isMarkedInstalled()) {
       return;
     }
     closeModal();
@@ -207,7 +246,7 @@
   }
 
   function showAutoBanner() {
-    if (isStandalone || autoDismissedRecently() || document.getElementById('pwa-install-banner')) {
+    if (isStandalone || isMarkedInstalled() || autoDismissedRecently() || document.getElementById('pwa-install-banner')) {
       return;
     }
 
@@ -297,7 +336,7 @@
   }
 
   function maybeShowEngagementBanner() {
-    if (deferredPrompt || isStandalone || autoDismissedRecently()) {
+    if (deferredPrompt || isStandalone || isMarkedInstalled() || autoDismissedRecently()) {
       return;
     }
     if (document.getElementById('pwa-install-banner')) {
@@ -310,6 +349,9 @@
   }
 
   window.addEventListener('beforeinstallprompt', (event) => {
+    if (isStandalone || isMarkedInstalled()) {
+      return;
+    }
     event.preventDefault();
     deferredPrompt = event;
     updateHeaderButtonMode('native');
@@ -319,11 +361,18 @@
     }
     document.querySelectorAll('[data-pwa-open]').forEach((btn) => {
       btn.classList.remove('hidden');
+      btn.removeAttribute('hidden');
+      btn.setAttribute('aria-hidden', 'false');
     });
   });
 
-  function init() {
-    if (isStandalone) {
+  window.addEventListener('appinstalled', () => {
+    markInstalled();
+  });
+
+  async function init() {
+    const installed = await detectInstalledApp();
+    if (installed || isStandalone) {
       hideInstallTriggers();
       return;
     }

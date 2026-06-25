@@ -359,11 +359,18 @@ final class NotificationService
 
     private static function dispatchDevicePush(string $notificationId): void
     {
-        try {
-            WebPushService::sendForNotificationId($notificationId);
-        } catch (\Throwable) {
-            // Never block notification persistence.
+        $notificationId = trim($notificationId);
+        if ($notificationId === '') {
+            return;
         }
+
+        register_shutdown_function(static function () use ($notificationId): void {
+            try {
+                WebPushService::sendForNotificationId($notificationId);
+            } catch (\Throwable) {
+                // Never block notification persistence or the HTTP response.
+            }
+        });
     }
 
     public static function createPrivateForCustomer(

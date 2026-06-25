@@ -947,20 +947,27 @@
 }
 
 .store-image-lightbox__close {
-  position: absolute;
-  top: 1rem;
-  left: 1rem;
-  z-index: 2;
-  width: 2.75rem;
-  height: 2.75rem;
-  border: none;
+  position: fixed;
+  top: max(0.75rem, env(safe-area-inset-top, 0px));
+  inset-inline-start: max(0.75rem, env(safe-area-inset-left, 0px));
+  z-index: 220;
+  width: 3rem;
+  height: 3rem;
+  border: 2px solid rgba(255, 255, 255, 0.92);
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(15, 23, 42, 0.82);
   color: #fff;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+}
+
+.store-image-lightbox__close .material-symbols-outlined {
+  font-size: 1.5rem;
+  font-weight: 700;
 }
 
 .store-image-lightbox__frame {
@@ -1044,20 +1051,27 @@
 }
 
 .store-product-preview__close {
-  position: absolute;
-  top: 1rem;
-  left: 1rem;
-  z-index: 3;
-  width: 2.75rem;
-  height: 2.75rem;
-  border: none;
+  position: fixed;
+  top: max(0.75rem, env(safe-area-inset-top, 0px));
+  inset-inline-start: max(0.75rem, env(safe-area-inset-left, 0px));
+  z-index: 220;
+  width: 3rem;
+  height: 3rem;
+  border: 2px solid rgba(255, 255, 255, 0.92);
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(15, 23, 42, 0.82);
   color: #fff;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+}
+
+.store-product-preview__close .material-symbols-outlined {
+  font-size: 1.5rem;
+  font-weight: 700;
 }
 
 .store-product-preview__nav {

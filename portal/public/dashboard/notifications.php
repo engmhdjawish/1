@@ -8,6 +8,7 @@ use Portal\Auth\WebSession;
 use Portal\Services\NotificationService;
 use Portal\Services\WebCustomerService;
 use Portal\Database;
+use PDO;
 
 WebSession::requirePermission('notifications.manage');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -16,6 +17,12 @@ NotificationService::ensureTable();
 
 $flash = null;
 $flashType = 'success';
+
+if (!empty($_SESSION['notifications_flash'])) {
+    $flash = (string) $_SESSION['notifications_flash'];
+    $flashType = (string) ($_SESSION['notifications_flash_type'] ?? 'success');
+    unset($_SESSION['notifications_flash'], $_SESSION['notifications_flash_type']);
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string) ($_POST['action'] ?? ''));
@@ -57,7 +64,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
             }
 
-            header('Location: /dashboard/notifications.php?sent=1');
+            $_SESSION['notifications_flash'] = 'تم إرسال الإشعار بنجاح.';
+            $_SESSION['notifications_flash_type'] = 'success';
+            header('Location: /dashboard/notifications.php', true, 303);
             exit;
         } catch (\Throwable $exception) {
             $flash = $exception->getMessage();
@@ -66,19 +75,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-if (isset($_GET['sent']) && $_GET['sent'] === '1' && $flash === null) {
-    $flash = 'تم إرسال الإشعار بنجاح.';
+try {
+    $sentNotifications = NotificationService::listSent(40);
+} catch (\Throwable $exception) {
+    $sentNotifications = [];
+    if ($flash === null) {
+        $flash = 'تعذر تحميل قائمة الإشعارات: ' . $exception->getMessage();
+        $flashType = 'error';
+    }
 }
 
-$sentNotifications = NotificationService::listSent(40);
-$customers = WebCustomerService::listByStatus('active', '', '', 100);
-$staffUsers = Database::pdo()->query(
-    "SELECT id::text AS id, display_name_ar, user_name
-     FROM web_users
-     WHERE is_active = TRUE
-     ORDER BY display_name_ar ASC
-     LIMIT 100"
-)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+try {
+    $customers = WebCustomerService::listByStatus('active', '', '', 100);
+} catch (\Throwable) {
+    $customers = [];
+}
+
+try {
+    $staffUsers = Database::pdo()->query(
+        "SELECT id::text AS id, display_name_ar, user_name
+         FROM web_users
+         WHERE is_active = TRUE
+         ORDER BY display_name_ar ASC
+         LIMIT 100"
+    )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (\Throwable) {
+    $staffUsers = [];
+}
 
 $currentRoute = '/dashboard/notifications.php';
 
