@@ -54,6 +54,12 @@ if ($method === 'POST') {
         }
 
         $result = SiteMediaService::upload($file, $category, $titleAr, $userId);
+        if ($result['ok'] && is_array($result['asset'] ?? null)) {
+            $storagePath = SiteMediaService::absolutePathForId((string) ($result['asset']['id'] ?? ''));
+            if (is_string($storagePath) && $storagePath !== '') {
+                SiteMediaService::rasterizeSvgCompanionSafe($storagePath);
+            }
+        }
         http_response_code($result['ok'] ? 200 : 400);
         echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;

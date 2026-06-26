@@ -83,8 +83,26 @@
     bar.classList.toggle('is-active', busy);
     bar.setAttribute('aria-hidden', busy ? 'false' : 'true');
     const overlay = ensureOverlay();
-    overlay.classList.toggle('is-active', busy);
-    overlay.setAttribute('aria-hidden', busy ? 'false' : 'true');
+    if (busy) {
+      if (!overlay.dataset.delayTimer) {
+        overlay.dataset.delayTimer = String(window.setTimeout(() => {
+          if (activeNavigations > 0) {
+            document.body.classList.add('site-page-loading--overlay');
+            overlay.classList.add('is-active');
+            overlay.setAttribute('aria-hidden', 'false');
+          }
+          delete overlay.dataset.delayTimer;
+        }, 450));
+      }
+    } else {
+      document.body.classList.remove('site-page-loading--overlay');
+      if (overlay.dataset.delayTimer) {
+        window.clearTimeout(Number(overlay.dataset.delayTimer));
+        delete overlay.dataset.delayTimer;
+      }
+      overlay.classList.remove('is-active');
+      overlay.setAttribute('aria-hidden', 'true');
+    }
   }
 
   function markButtonBusy(button, busy) {
@@ -157,6 +175,7 @@
   window.addEventListener('pageshow', () => {
     activeNavigations = 0;
     document.body.classList.remove('site-page-loading');
+    document.body.classList.remove('site-page-loading--overlay');
     const bar = document.getElementById(BAR_ID);
     if (bar) {
       bar.classList.remove('is-active');
@@ -164,6 +183,10 @@
     }
     const overlay = document.getElementById(OVERLAY_ID);
     if (overlay) {
+      if (overlay.dataset.delayTimer) {
+        window.clearTimeout(Number(overlay.dataset.delayTimer));
+        delete overlay.dataset.delayTimer;
+      }
       overlay.classList.remove('is-active');
       overlay.setAttribute('aria-hidden', 'true');
     }

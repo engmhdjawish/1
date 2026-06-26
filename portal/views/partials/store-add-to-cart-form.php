@@ -97,7 +97,7 @@ $cartMode = $inCart
 
     <div class="store-card-cart-bar">
       <span class="store-card-cart-bar__status">
-        <span class="material-symbols-outlined text-base" aria-hidden="true">shopping_cart_checkout</span>
+        <span class="material-symbols-outlined text-base" aria-hidden="true">shopping_cart</span>
         <span>في السلة</span>
       </span>
 
@@ -131,7 +131,7 @@ $cartMode = $inCart
     <?php endif; ?>
 
     <div class="store-card-cart-bar store-card-cart-bar--add">
-      <div class="store-qty-stepper store-qty-stepper--inline<?= $partialPackage ? ' store-qty-stepper--locked' : '' ?>">
+      <div class="store-qty-stepper store-qty-stepper--inline store-qty-stepper--cart<?= $partialPackage ? ' store-qty-stepper--locked' : '' ?>">
         <button type="button" data-qty-minus aria-label="إنقاص"<?= $partialPackage ? ' disabled' : '' ?>>−</button>
         <input
           type="number"

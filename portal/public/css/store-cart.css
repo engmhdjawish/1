@@ -161,8 +161,8 @@
 
 .store-add-cart__submit {
   width: 100%;
-  margin-top: 0.5rem;
-  min-height: 2.75rem;
+  margin-top: 0;
+  min-height: 2.5rem;
   border-radius: 0.625rem;
   background: #D81921;
   color: #fff;
@@ -813,8 +813,8 @@ body.store-cart-drawer-open {
   width: 100%;
   padding: 0.5rem 0.6rem;
   border-radius: 0.75rem;
-  background: linear-gradient(180deg, #f0fdf4 0%, #ecfdf5 100%);
-  border: 1px solid #bbf7d0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
 }
 
 @media (min-width: 640px) {
@@ -838,8 +838,13 @@ body.store-cart-drawer-open {
   gap: 0.25rem;
   font-size: 0.6875rem;
   font-weight: 800;
-  color: #047857;
+  color: #D81921;
   white-space: nowrap;
+}
+
+.store-card-cart-bar__status .material-symbols-outlined {
+  font-size: 1rem;
+  line-height: 1;
 }
 
 @media (min-width: 640px) {
@@ -857,10 +862,19 @@ body.store-cart-drawer-open {
 }
 
 .store-card-cart-bar--add {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(6.25rem, 8.75rem) minmax(0, auto);
+  align-items: center;
+  gap: 0.45rem;
   background: #fff;
   border-color: #e5e7eb;
+}
+
+@media (min-width: 640px) {
+  .store-card-cart-bar--add {
+    grid-template-columns: minmax(7rem, 9.5rem) minmax(0, auto);
+    gap: 0.55rem;
+  }
 }
 
 .store-card-cart-bar__qty-locked {
@@ -878,37 +892,40 @@ body.store-cart-drawer-open {
   color: #111827;
 }
 
-.store-card-cart-bar .store-qty-stepper--inline {
+.store-card-cart-bar .store-qty-stepper--inline,
+.store-card-cart-bar--add .store-qty-stepper--inline {
   flex-shrink: 0;
-  border-color: #86efac;
+  border-color: #e5e7eb;
   background: #fff;
   width: 100%;
   max-width: 9.5rem;
 }
 
-.store-qty-stepper--cart button {
+.store-qty-stepper--cart button,
+.store-card-cart-bar--add .store-qty-stepper--inline button {
   width: 2.5rem;
   height: 2.35rem;
   font-size: 1.25rem;
-  color: #047857;
+  color: #D81921;
   background: #fff;
 }
 
-.store-qty-stepper--cart button:hover:not(:disabled) {
-  background: #ecfdf5;
+.store-qty-stepper--cart button:hover:not(:disabled),
+.store-card-cart-bar--add .store-qty-stepper--inline button:hover:not(:disabled) {
+  background: #fef2f2;
 }
 
-.store-qty-stepper--cart output {
+.store-qty-stepper--cart output,
+.store-card-cart-bar--add .store-qty-stepper--inline input {
   min-width: 2.75rem;
   font-size: 1rem;
   font-weight: 800;
   color: #111827;
-  padding: 0 0.35rem;
 }
 
 .store-card-cart-bar--add .store-add-cart__submit {
-  flex: 1 1 100%;
-  margin-top: 0.35rem;
+  grid-column: 1 / -1;
+  margin-top: 0.15rem;
 }
 
 .store-add-cart__note {

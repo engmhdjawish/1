@@ -179,22 +179,31 @@ final class SiteMediaService
 
         $asset = self::getById($id);
 
-        if ($mime === 'image/svg+xml') {
-            try {
-                $rasterPath = SvgRasterService::rasterCompanionPath($absolutePath);
-                if (!SvgRasterService::toPngFile($absolutePath, $rasterPath, 1024) && is_file($rasterPath)) {
-                    @unlink($rasterPath);
-                }
-            } catch (\Throwable) {
-                // Raster companion is optional; upload should still succeed.
-            }
-        }
-
         return [
             'ok' => true,
             'message' => 'تم رفع الصورة.',
             'asset' => $asset ?? ['id' => $id, 'url' => self::publicUrl($id)],
         ];
+    }
+
+    public static function rasterizeSvgCompanionSafe(string $absolutePath): void
+    {
+        if (!is_file($absolutePath) || !is_readable($absolutePath)) {
+            return;
+        }
+        $mime = self::detectMime($absolutePath, '');
+        if ($mime !== 'image/svg+xml' && !str_ends_with(strtolower($absolutePath), '.svg')) {
+            return;
+        }
+
+        try {
+            $rasterPath = SvgRasterService::rasterCompanionPath($absolutePath);
+            if (!SvgRasterService::toPngFile($absolutePath, $rasterPath, 1024) && is_file($rasterPath)) {
+                @unlink($rasterPath);
+            }
+        } catch (\Throwable) {
+            // Optional companion file — upload and listing must not fail.
+        }
     }
 
     /** @return array{ok: bool, message: string} */

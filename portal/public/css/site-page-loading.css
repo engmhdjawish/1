@@ -87,6 +87,10 @@ body.site-page-loading a:not([data-no-page-loading]) {
   pointer-events: none;
 }
 
+body.site-page-loading:not(.site-page-loading--overlay) a:not([data-no-page-loading]) {
+  pointer-events: auto;
+}
+
 button.is-loading,
 [type="submit"].is-loading,
 .store-add-cart__submit.is-loading {

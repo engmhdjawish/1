@@ -639,6 +639,9 @@
     if (typeof window.portalMaterialZipDownloadInit === 'function') {
       window.portalMaterialZipDownloadInit(root);
     }
+    if (typeof window.portalSiteMediaInit === 'function') {
+      window.portalSiteMediaInit(root);
+    }
     bindOrderImageZoom(root);
   }
 
