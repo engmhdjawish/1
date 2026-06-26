@@ -38,6 +38,16 @@ final class ShareCartService
         return count(self::items($token));
     }
 
+    public static function packageCount(string $token): float
+    {
+        $total = 0.0;
+        foreach (self::items($token) as $line) {
+            $total += max(0.0, (float) ($line['quantity'] ?? 0));
+        }
+
+        return round($total, 4);
+    }
+
     /** @return array{total_sp: float, total_usd: float} */
     public static function totals(string $token): array
     {

@@ -243,6 +243,7 @@ final class StoreCartApi
             'level' => $ok ? ($level === 'warning' ? 'warning' : 'success') : 'error',
             'message' => $message ?? '',
             'cart_count' => StoreCartService::itemCount(),
+            'cart_package_count' => StoreCartService::packageCount(),
             'items' => $items,
             'unavailable' => $unavailable,
             'totals' => $totals,

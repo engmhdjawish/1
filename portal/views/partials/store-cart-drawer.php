@@ -42,6 +42,18 @@ $isLoggedInCustomer = is_array($customer ?? null);
         <div data-cart-body></div>
       </div>
       <footer class="store-cart-drawer__footer" data-cart-summary></footer>
+      <div class="store-cart-checkout" data-cart-checkout-sheet hidden aria-hidden="true">
+        <div class="store-cart-checkout__backdrop" data-cart-checkout-close tabindex="-1" aria-hidden="true"></div>
+        <section class="store-cart-checkout__panel" role="dialog" aria-modal="true" aria-labelledby="store-cart-checkout-title">
+          <header class="store-cart-checkout__header">
+            <button type="button" class="store-cart-checkout__back" data-cart-checkout-close aria-label="رجوع للسلة">
+              <span class="material-symbols-outlined text-base" aria-hidden="true">arrow_forward</span>
+            </button>
+            <h3 id="store-cart-checkout-title" class="store-cart-checkout__title">إتمام الطلب</h3>
+          </header>
+          <div class="store-cart-checkout__body" data-cart-checkout-body></div>
+        </section>
+      </div>
     </div>
   </aside>
 </div>

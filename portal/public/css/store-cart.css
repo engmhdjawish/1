@@ -689,3 +689,114 @@ body.store-cart-drawer-open {
   padding: 0;
   background: transparent;
 }
+
+.store-cart-summary--drawer .store-cart-summary__totals {
+  margin-bottom: 0.25rem;
+}
+
+.store-cart-checkout {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.store-cart-checkout[hidden] {
+  display: none !important;
+}
+
+.store-cart-checkout__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.store-cart-checkout__panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  max-height: 88%;
+  background: #fff;
+  border-radius: 1.25rem 1.25rem 0 0;
+  box-shadow: 0 -16px 40px rgba(15, 23, 42, 0.18);
+  animation: store-cart-checkout-rise 0.28s ease;
+}
+
+@keyframes store-cart-checkout-rise {
+  from { transform: translateY(100%); opacity: 0.6; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.store-cart-checkout__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.store-cart-checkout__back {
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  background: #fff;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.store-cart-checkout__title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #111827;
+}
+
+.store-cart-checkout__body {
+  overflow: auto;
+  padding: 1rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+}
+
+.store-cart-checkout__lead {
+  margin: 0 0 0.85rem;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.store-cart-fly-dot {
+  position: fixed;
+  z-index: 120000;
+  width: 0.85rem;
+  height: 0.85rem;
+  margin: -0.425rem 0 0 -0.425rem;
+  border-radius: 999px;
+  background: #D81921;
+  box-shadow: 0 0 0 4px rgba(216, 25, 33, 0.22);
+  pointer-events: none;
+}
+
+.store-cart-fly-dot.is-flying {
+  animation: store-cart-fly 0.62s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes store-cart-fly {
+  to {
+    transform: translate(var(--fly-x, 0), var(--fly-y, 0)) scale(0.35);
+    opacity: 0.15;
+  }
+}
+
+.site-header__icon-btn.is-cart-bump {
+  animation: store-cart-icon-bump 0.55s ease;
+}
+
+@keyframes store-cart-icon-bump {
+  0%, 100% { transform: scale(1); }
+  35% { transform: scale(1.14); }
+  65% { transform: scale(0.96); }
+}

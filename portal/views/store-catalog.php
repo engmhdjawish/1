@@ -106,6 +106,40 @@ if ($isClientFilterVisible('availability') && $availabilityValue !== '') {
     $activeFilterCount++;
 }
 
+$parseUserFilterList = static function (mixed $raw): array {
+    if (is_array($raw)) {
+        return array_values(array_filter(array_map('strval', $raw), static fn (string $value): bool => trim($value) !== ''));
+    }
+    if (!is_string($raw) || trim($raw) === '') {
+        return [];
+    }
+
+    return array_values(array_filter(array_map('trim', explode(',', $raw)), static fn (string $value): bool => $value !== ''));
+};
+
+$userActiveFilterCount = 0;
+if ($isClientFilterVisible('search') && trim((string) ($_GET['q'] ?? '')) !== '') {
+    $userActiveFilterCount++;
+}
+$userFilterGroups = [
+    ['code' => 'materialTypes', 'param' => 'materialTypes'],
+    ['code' => 'manufacturers', 'param' => 'manufacturers'],
+    ['code' => 'ageCategories', 'param' => 'ageCategories'],
+    ['code' => 'sizeRanges', 'param' => 'sizeRanges'],
+    ['code' => 'countryOfOrigins', 'param' => 'countryOfOrigins'],
+    ['code' => 'stores', 'param' => 'storeGuids'],
+    ['code' => 'groups', 'param' => 'groupGuids'],
+];
+foreach ($userFilterGroups as $group) {
+    if (!$isClientFilterVisible((string) $group['code'])) {
+        continue;
+    }
+    $userActiveFilterCount += count($parseUserFilterList($_GET[(string) $group['param']] ?? null));
+}
+if ($isClientFilterVisible('availability') && trim((string) ($_GET['isAvailable'] ?? '')) !== '') {
+    $userActiveFilterCount++;
+}
+
 $buildFilterRemoveUrl = static function (
     array $removeScalarKeys = [],
     ?string $arrayParam = null,
@@ -660,8 +694,8 @@ require __DIR__ . '/partials/store-filter-group.php';
         <button type="button" id="store-filters-open" class="store-filters-open-btn lg:hidden">
           <span class="material-symbols-outlined text-base" aria-hidden="true">tune</span>
           فلاتر
-          <?php if ($activeFilterCount > 0): ?>
-            <span class="badge"><?= (int) $activeFilterCount ?></span>
+          <?php if ($userActiveFilterCount > 0): ?>
+            <span class="badge"><?= (int) $userActiveFilterCount ?></span>
           <?php endif; ?>
         </button>
       <?php endif; ?>

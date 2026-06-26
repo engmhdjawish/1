@@ -468,6 +468,9 @@
   };
 
   const close = () => {
+    if (document.activeElement instanceof HTMLElement && modal.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
     modal.hidden = true;
     modal.setAttribute('aria-hidden', 'true');
     imageRenderToken += 1;

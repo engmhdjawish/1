@@ -32,13 +32,6 @@ $storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
     <div class="home-hero__glow home-hero__glow--right" aria-hidden="true"></div>
     <div class="home-hero__inner">
       <div class="home-hero__content">
-        <?php if (!empty($companyLogoUrl)): ?>
-          <?php
-            $siteLogoVariant = 'hero-home';
-            $siteLogoAlt = $siteName;
-            require __DIR__ . '/partials/site-logo.php';
-          ?>
-        <?php endif; ?>
         <p class="home-hero__kicker">
           <span class="home-hero__kicker-dot" aria-hidden="true"></span>
           مرحباً بكم في <?= h($siteName) ?>

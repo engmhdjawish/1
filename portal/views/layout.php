@@ -34,6 +34,7 @@ $storeShowPrice = (bool) ($storeDisplay['show_price'] ?? false);
 $storePriceCurrency = StorePricePreference::current();
 $storeAllowCart = (bool) ($storeDisplay['allow_cart'] ?? false);
 $storeCartCount = $storeAllowCart ? StoreCartService::itemCount() : 0;
+$storeCartPackageCount = $storeAllowCart ? StoreCartService::packageCount() : 0.0;
 
 $pagePath = portal_request_path();
 $isCatalogPage = portal_is_catalog_page($pagePath);
@@ -169,6 +170,10 @@ if ($customer) {
 
 <?php require __DIR__ . '/partials/site-footer.php'; ?>
 
+<button type="button" id="siteScrollTopBtn" class="site-scroll-top" hidden aria-label="العودة لأعلى الصفحة">
+  <span class="material-symbols-outlined" aria-hidden="true">keyboard_arrow_up</span>
+</button>
+
 <?php if ($storeAllowCart && !in_array($pagePath, ['/store-cart.php', '/cart.php'], true)): ?>
   <?php require __DIR__ . '/partials/store-cart-drawer.php'; ?>
   <?php require __DIR__ . '/partials/store-image-lightbox.php'; ?>
@@ -189,6 +194,9 @@ if ($customer) {
     const closeBtn = document.getElementById('closePublicNavBtn');
     if (!drawer || !overlay || !openBtn || !closeBtn) return;
     const setOpen = (open) => {
+      if (!open && document.activeElement instanceof HTMLElement && drawer.contains(document.activeElement)) {
+        document.activeElement.blur();
+      }
       drawer.classList.toggle('is-open', open);
       overlay.classList.toggle('is-open', open);
       drawer.setAttribute('aria-hidden', open ? 'false' : 'true');

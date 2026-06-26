@@ -124,3 +124,45 @@ body[data-store-price-currency="syp"] .store-price-currency--usd,
 body:not([data-store-price-currency]) .store-price-currency--usd {
   display: none !important;
 }
+
+.site-scroll-top {
+  position: fixed;
+  inset-inline-end: max(1rem, env(safe-area-inset-right, 0px));
+  bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
+  z-index: 99980;
+  width: 3rem;
+  height: 3rem;
+  border: none;
+  border-radius: 999px;
+  background: #fff;
+  color: #D81921;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(0.75rem) scale(0.92);
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.22s ease, box-shadow 0.22s ease;
+}
+
+.site-scroll-top.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.site-scroll-top:hover {
+  box-shadow: 0 14px 34px rgba(216, 25, 33, 0.22);
+}
+
+.site-scroll-top .material-symbols-outlined {
+  font-size: 1.65rem;
+}
+
+body.store-cart-drawer-open .site-scroll-top,
+body.store-catalog-nav-busy .site-scroll-top {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

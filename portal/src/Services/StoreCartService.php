@@ -20,6 +20,11 @@ final class StoreCartService
         return ShareCartService::itemCount(self::TOKEN);
     }
 
+    public static function packageCount(): float
+    {
+        return ShareCartService::packageCount(self::TOKEN);
+    }
+
     /** @return array{total_sp: float, total_usd: float} */
     public static function totals(): array
     {

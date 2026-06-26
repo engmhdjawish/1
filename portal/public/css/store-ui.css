@@ -1110,8 +1110,8 @@
   z-index: 2;
   display: flex;
   flex-direction: column;
-  width: min(92vw, 28rem);
-  max-height: 92vh;
+  width: min(96vw, 36rem);
+  max-height: 94vh;
   background: #fff;
   border-radius: 1.25rem;
   overflow: hidden;
@@ -1126,7 +1126,7 @@
 
 .store-product-preview__image-stage {
   position: relative;
-  min-height: min(52vh, 22rem);
+  min-height: min(62vh, 30rem);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1134,7 +1134,7 @@
 
 .store-product-preview__image-wrap img {
   width: 100%;
-  max-height: min(52vh, 22rem);
+  max-height: min(62vh, 30rem);
   object-fit: contain;
   border-radius: 0.75rem;
   background: #fff;

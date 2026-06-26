@@ -263,14 +263,81 @@
     </article>`;
   };
 
-  const updateBadge = (count) => {
+  const formatPackageCount = (amount) => {
+    const n = Number(amount) || 0;
+    if (Math.abs(n - Math.round(n)) < 0.0001) {
+      return String(Math.round(n));
+    }
+    return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  };
+
+  const updateBadge = (data) => {
+    const itemCount = typeof data === 'object' && data !== null
+      ? Math.max(0, parseInt(data.cart_count, 10) || 0)
+      : Math.max(0, parseInt(data, 10) || 0);
+    const packageCount = typeof data === 'object' && data !== null
+      ? Math.max(0, Number(data.cart_package_count) || 0)
+      : 0;
+
     document.querySelectorAll('[data-store-cart-badge]').forEach((badge) => {
-      const n = Math.max(0, parseInt(count, 10) || 0);
-      badge.textContent = String(n);
-      badge.classList.toggle('hidden', n <= 0);
+      const itemsEl = badge.querySelector('[data-store-cart-badge-items]');
+      const packagesEl = badge.querySelector('[data-store-cart-badge-packages]');
+      const sepEl = badge.querySelector('.site-header__badge-sep');
+
+      if (itemsEl) {
+        itemsEl.textContent = String(itemCount);
+      } else {
+        badge.textContent = String(itemCount);
+      }
+
+      if (packagesEl) {
+        packagesEl.textContent = formatPackageCount(packageCount);
+      }
+      if (sepEl) {
+        sepEl.hidden = itemCount <= 0;
+      }
+
+      badge.classList.toggle('hidden', itemCount <= 0);
+      badge.title = itemCount > 0
+        ? `${itemCount} أصناف · ${formatPackageCount(packageCount)} طرد`
+        : '';
       badge.classList.add('is-updated');
       setTimeout(() => badge.classList.remove('is-updated'), 500);
     });
+
+    document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
+      btn.classList.toggle('is-cart-pulse', itemCount > 0);
+    });
+  };
+
+  const flyToCart = (fromEl) => {
+    const cartBtn = document.querySelector('[data-store-cart-open]');
+    if (!fromEl || !cartBtn) return;
+
+    const fromRect = fromEl.getBoundingClientRect();
+    const toRect = cartBtn.getBoundingClientRect();
+    if (fromRect.width <= 0 || toRect.width <= 0) return;
+
+    const dot = document.createElement('span');
+    dot.className = 'store-cart-fly-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    const startX = fromRect.left + fromRect.width / 2;
+    const startY = fromRect.top + fromRect.height / 2;
+    const endX = toRect.left + toRect.width / 2;
+    const endY = toRect.top + toRect.height / 2;
+    dot.style.setProperty('--fly-x', `${endX - startX}px`);
+    dot.style.setProperty('--fly-y', `${endY - startY}px`);
+    dot.style.left = `${startX}px`;
+    dot.style.top = `${startY}px`;
+    document.body.appendChild(dot);
+
+    requestAnimationFrame(() => {
+      dot.classList.add('is-flying');
+    });
+
+    dot.addEventListener('animationend', () => dot.remove(), { once: true });
+    cartBtn.classList.add('is-cart-bump');
+    setTimeout(() => cartBtn.classList.remove('is-cart-bump'), 650);
   };
 
   const apiRequest = async (payload) => {
@@ -449,9 +516,11 @@
       if (data.cart_qty_by_guid) {
         document.querySelectorAll('[data-store-add-cart]').forEach((f) => syncFormLimits(f, data.cart_qty_by_guid));
       }
-      updateBadge(data.cart_count);
+      updateBadge(data);
       if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
       if (!data.ok) return;
+      const flySource = btn || form.querySelector('.store-add-cart__submit') || form;
+      flyToCart(flySource);
       if (window.SiteAnalytics) {
         window.SiteAnalytics.track('add_to_cart', {
           product_guid: String(payload.material_guid || form.dataset.materialGuid || ''),
@@ -579,10 +648,13 @@
       stockEl.innerHTML = '';
     }
 
-    updateBadge(data.cart_count);
+    updateBadge(data);
 
     const items = Array.isArray(data.items) ? data.items : [];
     const unavailable = Array.isArray(data.unavailable) ? data.unavailable : [];
+    if (items.length === 0 && unavailable.length === 0 && isDrawer) {
+      closeCheckoutSheet(root);
+    }
 
     if (bodyEl) {
       if (items.length === 0 && unavailable.length === 0) {
@@ -629,32 +701,47 @@
             ${totalUsd > 0 ? `<div class="store-cart-summary__total store-price-currency store-price-currency--usd">الإجمالي: $${formatUsd(totalUsd)}</div>` : ''}
           </div>`
         : '';
-      summaryEl.innerHTML = `<div class="store-panel store-cart-summary space-y-4">
-        ${totalLine}
-        ${items.length > 0 ? '<button type="button" class="store-btn store-btn--ghost" data-clear-cart>تفريغ السلة</button>' : ''}
-        ${allowOrder && items.length > 0 ? `
-          <form data-checkout-form class="space-y-3 border-t border-gray-100 pt-4">
-            ${isLoggedIn ? `
-              <p class="text-sm text-gray-600 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
-                إرسال الطلب بحسابك المسجّل — بياناتك مأخوذة من ملفك ولا يمكن تغييرها هنا.
-              </p>
-            ` : `
-              <label class="block text-sm font-bold">الاسم الكامل *
-                <input name="guest_name_ar" required class="store-input mt-1" value="${escapeHtml(root.dataset.defaultName || '')}">
+
+      if (isDrawer) {
+        summaryEl.innerHTML = `<div class="store-panel store-cart-summary store-cart-summary--drawer space-y-3">
+          ${totalLine}
+          ${items.length > 0 ? `
+            ${allowOrder ? '<button type="button" class="store-btn store-btn--primary w-full" data-cart-checkout-open>متابعة الطلب</button>' : '<p class="text-sm text-amber-800">سياسة المتجر لا تسمح بإرسال الطلبات حالياً.</p>'}
+            <button type="button" class="store-btn store-btn--ghost w-full" data-clear-cart>تفريغ السلة</button>
+          ` : ''}
+        </div>`;
+      } else {
+        summaryEl.innerHTML = `<div class="store-panel store-cart-summary space-y-4">
+          ${totalLine}
+          ${items.length > 0 ? '<button type="button" class="store-btn store-btn--ghost" data-clear-cart>تفريغ السلة</button>' : ''}
+          ${allowOrder && items.length > 0 ? `
+            <form data-checkout-form class="space-y-3 border-t border-gray-100 pt-4">
+              ${isLoggedIn ? `
+                <p class="text-sm text-gray-600 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+                  إرسال الطلب بحسابك المسجّل — بياناتك مأخوذة من ملفك ولا يمكن تغييرها هنا.
+                </p>
+              ` : `
+                <label class="block text-sm font-bold">الاسم الكامل *
+                  <input name="guest_name_ar" required class="store-input mt-1" value="${escapeHtml(root.dataset.defaultName || '')}">
+                </label>
+                <label class="block text-sm font-bold">رقم الهاتف *
+                  <input name="guest_phone" required dir="ltr" class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}">
+                </label>
+              `}
+              <label class="block text-sm font-bold">ملاحظات
+                <textarea name="notes_ar" rows="3" class="store-input mt-1 h-auto py-2 text-sm"></textarea>
               </label>
-              <label class="block text-sm font-bold">رقم الهاتف *
-                <input name="guest_phone" required dir="ltr" class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}">
-              </label>
-            `}
-            <label class="block text-sm font-bold">ملاحظات
-              <textarea name="notes_ar" rows="3" class="store-input mt-1 h-auto py-2 text-sm"></textarea>
-            </label>
-            <button type="submit" class="store-btn store-btn--primary w-full">تأكيد وإرسال الطلب</button>
-          </form>
-        ` : !allowOrder && items.length > 0 ? '<p class="text-sm text-amber-800">سياسة المتجر لا تسمح بإرسال الطلبات حالياً.</p>' : ''}
-      </div>`;
+              <button type="submit" class="store-btn store-btn--primary w-full">تأكيد وإرسال الطلب</button>
+            </form>
+          ` : !allowOrder && items.length > 0 ? '<p class="text-sm text-amber-800">سياسة المتجر لا تسمح بإرسال الطلبات حالياً.</p>' : ''}
+        </div>`;
+        bindCheckout(summaryEl);
+      }
+
       bindClearCart(summaryEl);
-      bindCheckout(summaryEl);
+      if (isDrawer) {
+        bindCheckoutOpen(summaryEl, root, data);
+      }
     }
 
     if (Array.isArray(data.stock_notices) && data.stock_notices.length > 0 && stockEl) {
@@ -732,6 +819,72 @@
     });
   };
 
+  const buildCheckoutFormHtml = (root, data) => {
+    const isLoggedIn = root.dataset.loggedIn === '1' || !!data.logged_in;
+    return `
+      <p class="store-cart-checkout__lead">أدخل بيانات التواصل ثم أكّد إرسال الطلب.</p>
+      <form data-checkout-form class="store-cart-checkout__form space-y-3">
+        ${isLoggedIn ? `
+          <p class="text-sm text-gray-600 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+            إرسال الطلب بحسابك المسجّل — بياناتك مأخوذة من ملفك ولا يمكن تغييرها هنا.
+          </p>
+        ` : `
+          <label class="block text-sm font-bold">الاسم الكامل *
+            <input name="guest_name_ar" required class="store-input mt-1" value="${escapeHtml(root.dataset.defaultName || '')}">
+          </label>
+          <label class="block text-sm font-bold">رقم الهاتف *
+            <input name="guest_phone" required dir="ltr" class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}">
+          </label>
+        `}
+        <label class="block text-sm font-bold">ملاحظات
+          <textarea name="notes_ar" rows="3" class="store-input mt-1 h-auto py-2 text-sm" placeholder="اختياري"></textarea>
+        </label>
+        <button type="submit" class="store-btn store-btn--primary w-full">تأكيد وإرسال الطلب</button>
+      </form>
+    `;
+  };
+
+  const closeCheckoutSheet = (root) => {
+    const sheet = root?.querySelector('[data-cart-checkout-sheet]');
+    if (!sheet) return;
+    if (document.activeElement instanceof HTMLElement && sheet.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
+    sheet.hidden = true;
+    sheet.setAttribute('aria-hidden', 'true');
+    root.classList.remove('is-checkout-open');
+  };
+
+  const openCheckoutSheet = (root, data) => {
+    const sheet = root.querySelector('[data-cart-checkout-sheet]');
+    const body = root.querySelector('[data-cart-checkout-body]');
+    if (!sheet || !body) return;
+    body.innerHTML = buildCheckoutFormHtml(root, data);
+    bindCheckout(body);
+    sheet.hidden = false;
+    sheet.setAttribute('aria-hidden', 'false');
+    root.classList.add('is-checkout-open');
+    const firstField = body.querySelector('input, textarea, button');
+    if (firstField instanceof HTMLElement) {
+      firstField.focus();
+    }
+  };
+
+  const bindCheckoutOpen = (summaryEl, root, data) => {
+    summaryEl.querySelectorAll('[data-cart-checkout-open]').forEach((btn) => {
+      if (btn.dataset.bound === '1') return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', () => openCheckoutSheet(root, lastCartData || data));
+    });
+
+    const sheet = root.querySelector('[data-cart-checkout-sheet]');
+    if (!sheet || sheet.dataset.bound === '1') return;
+    sheet.dataset.bound = '1';
+    sheet.querySelectorAll('[data-cart-checkout-close]').forEach((btn) => {
+      btn.addEventListener('click', () => closeCheckoutSheet(root));
+    });
+  };
+
   const bindCheckout = (root) => {
     const form = root.querySelector('[data-checkout-form]');
     if (!form || form.dataset.bound === '1') return;
@@ -761,7 +914,7 @@
   const applyCartResponse = (data) => {
     if (!data || typeof data !== 'object') return;
     lastCartData = data;
-    updateBadge(data.cart_count);
+    updateBadge(data);
     if (data.cart_qty_by_guid) {
       document.querySelectorAll('[data-store-add-cart]').forEach((f) => syncFormLimits(f, data.cart_qty_by_guid));
     }
@@ -785,6 +938,13 @@
   const setCartDrawerOpen = (open) => {
     const drawer = cartDrawer();
     if (!drawer) return;
+    if (!open) {
+      const root = drawer.querySelector('[data-store-cart-drawer-root]');
+      if (root) closeCheckoutSheet(root);
+      if (document.activeElement instanceof HTMLElement && drawer.contains(document.activeElement)) {
+        document.activeElement.blur();
+      }
+    }
     drawer.hidden = !open;
     drawer.classList.toggle('is-open', open);
     drawer.setAttribute('aria-hidden', open ? 'false' : 'true');

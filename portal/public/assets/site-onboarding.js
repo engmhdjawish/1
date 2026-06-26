@@ -145,6 +145,9 @@
     const overlay = document.getElementById('publicNavOverlay');
     const openBtn = document.getElementById('openPublicNavBtn');
     if (!drawer || !overlay) return;
+    if (!shouldOpen && document.activeElement instanceof HTMLElement && drawer.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
     drawer.classList.toggle('is-open', shouldOpen);
     overlay.classList.toggle('is-open', shouldOpen);
     drawer.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
