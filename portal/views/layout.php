@@ -112,7 +112,7 @@ if ($customer) {
     <script type="application/ld+json"><?= json_encode($jsonLdPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
+    <link href="<?= h(portal_asset_url('/css/tailwind.css')) ?>" rel="stylesheet">
     <?php if ($pagePath === '/index.php'): ?>
       <link rel="prefetch" href="/store.php" as="document">
     <?php endif; ?>
@@ -134,22 +134,6 @@ if ($customer) {
     <?php if ($enableOnboarding): ?>
       <link href="<?= h(portal_asset_url('/css/site-onboarding.css')) ?>" rel="stylesheet">
     <?php endif; ?>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              primary: '#D81921',
-              'surface-bg': '#f6f6f8',
-              'surface-card': '#ffffff',
-              'text-main': '#111827',
-              'text-muted': '#4b5563'
-            }
-          }
-        }
-      };
-    </script>
     <style>
       body { font-family: Manrope, sans-serif; background: #f6f6f8; color: #111827; }
       .site-link { color: #374151; }

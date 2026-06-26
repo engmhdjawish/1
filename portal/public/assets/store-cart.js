@@ -272,41 +272,27 @@
   };
 
   const updateBadge = (data) => {
-    const itemCount = typeof data === 'object' && data !== null
-      ? Math.max(0, parseInt(data.cart_count, 10) || 0)
-      : Math.max(0, parseInt(data, 10) || 0);
     const packageCount = typeof data === 'object' && data !== null
       ? Math.max(0, Number(data.cart_package_count) || 0)
-      : 0;
+      : Math.max(0, Number(data) || 0);
 
     document.querySelectorAll('[data-store-cart-badge]').forEach((badge) => {
-      const itemsEl = badge.querySelector('[data-store-cart-badge-items]');
+      const label = formatPackageCount(packageCount);
       const packagesEl = badge.querySelector('[data-store-cart-badge-packages]');
-      const sepEl = badge.querySelector('.site-header__badge-sep');
-
-      if (itemsEl) {
-        itemsEl.textContent = String(itemCount);
-      } else {
-        badge.textContent = String(itemCount);
-      }
-
       if (packagesEl) {
-        packagesEl.textContent = formatPackageCount(packageCount);
-      }
-      if (sepEl) {
-        sepEl.hidden = itemCount <= 0;
+        packagesEl.textContent = label;
+      } else {
+        badge.textContent = label;
       }
 
-      badge.classList.toggle('hidden', itemCount <= 0);
-      badge.title = itemCount > 0
-        ? `${itemCount} أصناف · ${formatPackageCount(packageCount)} طرد`
-        : '';
+      badge.classList.toggle('hidden', packageCount <= 0);
+      badge.title = packageCount > 0 ? `${label} طرد` : '';
       badge.classList.add('is-updated');
       setTimeout(() => badge.classList.remove('is-updated'), 500);
     });
 
     document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
-      btn.classList.toggle('is-cart-pulse', itemCount > 0);
+      btn.classList.toggle('is-cart-pulse', packageCount > 0);
     });
   };
 
@@ -405,17 +391,71 @@
     return { ok: false, message: `الحد الأقصى للطلب هو ${maxLabel} طرد لهذه المادة.` };
   };
 
+  const isPartialAddForm = (form) => form.dataset.cartMode === 'partial-add' || form.dataset.lockQty === '1';
+
+  const setFormCartMode = (form, inCartQty) => {
+    if (!form) return;
+    const inCart = inCartQty > 0;
+    const max = getMaxQty(form);
+    const remaining = max !== null ? Math.max(0, max - inCartQty) : null;
+    const partialLocked = isPartialAddForm(form);
+    const atLimit = remaining !== null && remaining <= 0;
+    const lockedInCart = inCart && (partialLocked || atLimit);
+
+    form.dataset.cartQty = String(inCartQty);
+    form.dataset.cartMode = inCart
+      ? (lockedInCart ? 'in-cart-locked' : 'in-cart')
+      : (partialLocked ? 'partial-add' : 'add');
+
+    const inCartEl = form.querySelector('.store-add-cart__in-cart');
+    const addEl = form.querySelector('.store-add-cart__add');
+    if (inCartEl) inCartEl.hidden = !inCart;
+    if (addEl) addEl.hidden = inCart;
+    form.classList.toggle('store-add-cart--in-cart', inCart);
+    form.classList.toggle('store-add-cart--locked', lockedInCart);
+
+    form.querySelectorAll('[data-cart-qty-display]').forEach((el) => {
+      el.textContent = formatPackageCount(inCartQty);
+    });
+
+    const adjustRow = form.querySelector('[data-cart-qty-adjust]');
+    const lockedRow = form.querySelector('.store-add-cart__qty-locked');
+    if (adjustRow) adjustRow.hidden = lockedInCart;
+    if (lockedRow) lockedRow.hidden = !lockedInCart;
+
+    const plus = form.querySelector('[data-cart-bump="1"]');
+    const minus = form.querySelector('[data-cart-bump="-1"]');
+    const step = getQtyStep(form);
+    if (plus) plus.disabled = lockedInCart || (remaining !== null && remaining <= 0);
+    if (minus) minus.disabled = lockedInCart || inCartQty <= step;
+
+    const hint = form.querySelector('.store-add-cart__in-cart-remaining');
+    if (hint && remaining !== null) {
+      if (remaining <= 0) {
+        hint.textContent = 'وصلت للحد المتاح';
+        hint.classList.add('is-warning');
+      } else {
+        hint.innerHTML = `متبقي <span class="store-num" dir="ltr">${formatPackageCount(remaining)}</span> ${form.dataset.packageUnit || 'طرد'}`;
+        hint.classList.remove('is-warning');
+      }
+    }
+  };
+
   const syncFormLimits = (form, cartQtyByGuid) => {
     const guid = form.dataset.materialGuid || form.querySelector('[name="material_guid"]')?.value || '';
     if (!guid) return;
-    const inCart = cartQtyByGuid[guid] ?? 0;
-    form.dataset.cartQty = String(inCart);
+    const inCart = Math.max(0, Number(cartQtyByGuid[guid]) || 0);
+    setFormCartMode(form, inCart);
+
     const max = getMaxQty(form);
     const input = form.querySelector('[name="quantity"]');
-    const hint = form.querySelector('[data-qty-hint]');
+    const hint = form.querySelector('.store-add-cart__add [data-qty-hint]');
     const minus = form.querySelector('[data-qty-minus]');
     const plus = form.querySelector('[data-qty-plus]');
     const step = getQtyStep(form);
+    if (inCart > 0) {
+      return;
+    }
     if (max !== null && input) {
       const remaining = Math.max(0, max - inCart);
       input.max = String(Math.max(step, remaining));
@@ -423,23 +463,38 @@
       if (currentVal > remaining && remaining > 0) {
         input.value = step < 1 ? String(Math.round(remaining * 100) / 100) : String(Math.max(step, Math.floor(remaining)));
       }
-      if (hint && !hint.textContent.includes('أقل من طرد')) {
+      if (hint && !hint.textContent.includes('آخر كمية')) {
         if (remaining <= 0) {
           hint.textContent = `وصلت للحد الأقصى (${form.dataset.maxQtyLabel || max} طرد)`;
           hint.classList.add('is-warning');
         } else {
-          const remainingLabel = step < 1
-            ? remaining.toLocaleString('en-US', { maximumFractionDigits: 2 })
-            : String(Math.floor(remaining));
-          hint.textContent = `الحد الأقصى ${form.dataset.maxQtyLabel || max} طرد — متبقي ${remainingLabel}`;
+          hint.textContent = `الحد الأقصى ${form.dataset.maxQtyLabel || max} طرد لكل مادة`;
           hint.classList.remove('is-warning');
         }
       }
-      if (plus) plus.disabled = remaining <= 0;
+      if (plus) plus.disabled = remaining <= 0 || isPartialAddForm(form);
     }
     if (minus && input) {
       const val = parseFloat(input.value || String(step)) || step;
-      minus.disabled = val <= step;
+      minus.disabled = val <= step || isPartialAddForm(form);
+    }
+  };
+
+  const bumpCartQty = async (form, delta) => {
+    const guid = form.dataset.materialGuid || form.querySelector('[name="material_guid"]')?.value || '';
+    if (!guid || form.dataset.ajaxSubmitting === '1') return;
+    form.dataset.ajaxSubmitting = '1';
+    const buttons = form.querySelectorAll('[data-cart-bump]');
+    buttons.forEach((btn) => { btn.disabled = true; });
+    try {
+      const data = await apiRequest({ action: 'bump', material_guid: guid, delta });
+      applyCartResponse(data);
+      if (!data.ok && data.message) showToast(data.message, data.level || 'error');
+    } catch {
+      showToast('تعذر تحديث الكمية.', 'error');
+    } finally {
+      delete form.dataset.ajaxSubmitting;
+      buttons.forEach((btn) => { btn.disabled = false; });
     }
   };
 
@@ -451,18 +506,19 @@
       const minus = form.querySelector('[data-qty-minus]');
       const plus = form.querySelector('[data-qty-plus]');
       const refresh = () => {
+        if (form.dataset.cartMode?.startsWith('in-cart')) return;
         const max = getMaxQty(form);
         const current = getCurrentInCart(form);
         const step = getQtyStep(form);
         const val = parseFloat(input?.value || String(step)) || step;
-        if (minus) minus.disabled = val <= step;
+        if (minus) minus.disabled = val <= step || isPartialAddForm(form);
         if (plus && max !== null) {
           const remaining = Math.max(0, max - current);
-          plus.disabled = val >= remaining - 0.0001;
+          plus.disabled = val >= remaining - 0.0001 || isPartialAddForm(form);
         }
       };
       minus?.addEventListener('click', () => {
-        if (!input) return;
+        if (!input || isPartialAddForm(form)) return;
         const step = getQtyStep(form);
         const val = parseFloat(input.value || String(step)) || step;
         const next = Math.max(step, step < 1 ? Math.round((val - step) * 100) / 100 : val - step);
@@ -470,7 +526,7 @@
         refresh();
       });
       plus?.addEventListener('click', () => {
-        if (!input) return;
+        if (!input || isPartialAddForm(form)) return;
         const step = getQtyStep(form);
         const val = parseFloat(input.value || String(step)) || step;
         const next = step < 1 ? Math.round((val + step) * 100) / 100 : val + step;
@@ -484,6 +540,16 @@
       });
       input?.addEventListener('input', refresh);
       refresh();
+
+      form.querySelectorAll('[data-cart-bump]').forEach((btn) => {
+        if (btn.dataset.bound === '1') return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => {
+          const delta = parseInt(btn.getAttribute('data-cart-bump') || '0', 10);
+          if (!delta) return;
+          bumpCartQty(form, delta);
+        });
+      });
     });
   };
 

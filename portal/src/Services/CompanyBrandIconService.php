@@ -98,7 +98,8 @@ final class CompanyBrandIconService
         }
 
         if (!$ok) {
-            self::$lastError = 'تعذر تحويل الشعار إلى PNG (الصيغة: ' . $mime . '). استخدم PNG أو JPG.';
+            $detail = self::$lastError ?: ('تعذر تحويل الشعار إلى PNG (الصيغة: ' . $mime . ').');
+            self::$lastError = $detail;
         }
 
         return $ok;
@@ -131,6 +132,8 @@ final class CompanyBrandIconService
             'branding_dir' => self::brandingDir(),
             'branding_writable' => is_dir(self::brandingDir()) ? is_writable(self::brandingDir()) : is_writable(dirname(self::brandingDir())),
             'gd_loaded' => extension_loaded('gd'),
+            'imagick_loaded' => extension_loaded('imagick'),
+            'svg_raster_error' => SvgRasterService::lastError(),
             'has_brand_icons' => self::hasBrandIcons(),
             'last_error' => self::$lastError,
         ];
@@ -175,7 +178,12 @@ final class CompanyBrandIconService
         $mime = self::normalizeMime(self::detectMime($sourcePath));
 
         if ($mime === 'image/svg+xml') {
-            return self::loadSvgAsGd($sourcePath);
+            $gd = SvgRasterService::toGdImage($sourcePath, 1024);
+            if ($gd === false && SvgRasterService::lastError() !== null) {
+                self::$lastError = SvgRasterService::lastError();
+            }
+
+            return $gd;
         }
 
         return match ($mime) {
@@ -185,61 +193,6 @@ final class CompanyBrandIconService
             'image/webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($sourcePath) : false,
             default => false,
         };
-    }
-
-    /** @return \GdImage|false */
-    private static function loadSvgAsGd(string $sourcePath)
-    {
-        if (extension_loaded('imagick')) {
-            try {
-                $image = new \Imagick();
-                $image->setBackgroundColor(new \ImagickPixel('transparent'));
-                $image->setResolution(300, 300);
-                $image->readImage($sourcePath);
-                $image->setImageFormat('png');
-                $maxDim = max($image->getImageWidth(), $image->getImageHeight(), 1);
-                if ($maxDim > 1024) {
-                    $image->resizeImage(1024, 1024, \Imagick::FILTER_LANCZOS, 1, true);
-                }
-                $blob = $image->getImageBlob();
-                $image->clear();
-                $image->destroy();
-                $gd = @imagecreatefromstring($blob);
-
-                return $gd !== false ? $gd : false;
-            } catch (\Throwable) {
-                // fall through to CLI / error
-            }
-        }
-
-        $outputPath = tempnam(sys_get_temp_dir(), 'portal_svg_');
-        if ($outputPath === false) {
-            return false;
-        }
-        $pngPath = $outputPath . '.png';
-        @unlink($outputPath);
-
-        $commands = [
-            ['magick', 'convert', $sourcePath, '-background', 'none', '-density', '300', $pngPath],
-            ['convert', $sourcePath, '-background', 'none', '-density', '300', $pngPath],
-        ];
-        foreach ($commands as $command) {
-            $line = implode(' ', array_map('escapeshellarg', $command));
-            @exec($line . ' 2>&1', $output, $exitCode);
-            if ($exitCode === 0 && is_file($pngPath)) {
-                $gd = @imagecreatefrompng($pngPath);
-                @unlink($pngPath);
-
-                return $gd !== false ? $gd : false;
-            }
-        }
-        if (is_file($pngPath)) {
-            @unlink($pngPath);
-        }
-
-        self::$lastError = 'تعذر تحويل SVG إلى أيقونات. فعّل imagick أو ImageMagick، أو ارفع PNG/JPG.';
-
-        return false;
     }
 
     private static function normalizeMime(string $mime): string

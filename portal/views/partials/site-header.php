@@ -120,15 +120,9 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
               <span class="material-symbols-outlined">shopping_cart</span>
               <span
                 data-store-cart-badge
-                class="site-header__badge <?= $storeCartCount > 0 ? '' : 'hidden' ?>"
-                title="<?= $storeCartCount > 0 ? (int) $storeCartCount . ' أصناف · ' . format_packages_display($storeCartPackageCount) . ' طرد' : '' ?>"
-              >
-                <span data-store-cart-badge-items><?= (int) $storeCartCount ?></span>
-                <?php if ($storeCartCount > 0): ?>
-                  <span class="site-header__badge-sep" aria-hidden="true">·</span>
-                  <span data-store-cart-badge-packages><?= h(format_packages_display($storeCartPackageCount)) ?></span>
-                <?php endif; ?>
-              </span>
+                class="site-header__badge <?= $storeCartPackageCount > 0 ? '' : 'hidden' ?>"
+                title="<?= $storeCartPackageCount > 0 ? h(format_packages_display($storeCartPackageCount) . ' طرد') : '' ?>"
+              ><span data-store-cart-badge-packages><?= $storeCartPackageCount > 0 ? h(format_packages_display($storeCartPackageCount)) : '0' ?></span></span>
             </button>
           <?php endif; ?>
 

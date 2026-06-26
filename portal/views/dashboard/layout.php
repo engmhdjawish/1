@@ -96,27 +96,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <link href="/css/store-ui.css" rel="stylesheet">
   <link href="/css/store-cart.css" rel="stylesheet">
   <link href="/css/customer-portal.css" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          colors: {
-            primary: '#D81921',
-            'surface-white': '#ffffff',
-            'surface-low': '#f3f3f5',
-            'surface-bg': '#f6f6f8',
-            'border-subtle': '#E5E7EB',
-            'text-muted': '#5d3f3c',
-            'status-active': '#28A745',
-            'status-rejected': '#EF4444',
-            'status-pending': '#FFC107'
-          }
-        }
-      }
-    };
-  </script>
+  <link href="<?= h(portal_asset_url('/css/tailwind.css')) ?>" rel="stylesheet">
   <style>
     body { font-family: 'Manrope', sans-serif; background-color: #f6f6f8; }
     .material-symbols-outlined {
