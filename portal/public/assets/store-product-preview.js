@@ -158,39 +158,27 @@
     const badge = p.offerBadge
       ? `<span class="offer-price-block__badge">${esc(p.offerBadge)}</span>` : '';
 
-    if (p.showPriceSyp && (p.packageSaleSp > 0 || p.originalPackSp > 0)) {
-      const oldPack = p.hasOffer && p.originalPackSp > p.packageSaleSp
-        ? `<span class="offer-price-block__old"><span class="store-num" dir="ltr">${formatMoney(p.originalPackSp)}</span> ل.س</span>` : '';
-      rows.push(`
-        <div class="offer-price-block__row offer-price-block__row--main">
-          <span class="offer-price-block__label">سعر ${esc(p.packageUnit)}</span>
-          <div class="offer-price-block__values">
-            ${oldPack}
-            <span class="offer-price-block__amount offer-price-block__amount--syp"><span class="store-num" dir="ltr">${formatMoney(p.packageSaleSp > 0 ? p.packageSaleSp : p.originalPackSp)}</span> <small>ل.س</small></span>
-          </div>
-        </div>`);
-    }
     if (p.showPriceSyp && (p.unitSaleSp > 0 || p.originalUnitSp > 0)) {
       const oldUnit = p.hasOffer && p.originalUnitSp > p.unitSaleSp
         ? `<span class="offer-price-block__old"><span class="store-num" dir="ltr">${formatMoney(p.originalUnitSp)}</span> ل.س</span>` : '';
       rows.push(`
-        <div class="offer-price-block__row">
+        <div class="offer-price-block__row offer-price-block__row--main">
           <span class="offer-price-block__label">سعر ${esc(p.primaryUnit)}</span>
           <div class="offer-price-block__values">
             ${oldUnit}
-            <span class="offer-price-block__amount offer-price-block__amount--unit"><span class="store-num" dir="ltr">${formatMoney(p.unitSaleSp > 0 ? p.unitSaleSp : p.originalUnitSp)}</span> <small>ل.س</small></span>
+            <span class="offer-price-block__amount offer-price-block__amount--syp"><span class="store-num" dir="ltr">${formatMoney(p.unitSaleSp > 0 ? p.unitSaleSp : p.originalUnitSp)}</span> <small>ل.س</small></span>
           </div>
         </div>`);
     }
-    if (p.showPriceUsd && (p.packageSaleUsd > 0 || p.originalPackUsd > 0)) {
-      const oldPack = p.hasOffer && p.originalPackUsd > p.packageSaleUsd
-        ? `<span class="offer-price-block__old">$<span class="store-num" dir="ltr">${formatUsd(p.originalPackUsd)}</span></span>` : '';
+    if (p.showPriceSyp && (p.packageSaleSp > 0 || p.originalPackSp > 0)) {
+      const oldPack = p.hasOffer && p.originalPackSp > p.packageSaleSp
+        ? `<span class="offer-price-block__old"><span class="store-num" dir="ltr">${formatMoney(p.originalPackSp)}</span> ل.س</span>` : '';
       rows.push(`
-        <div class="offer-price-block__row offer-price-block__row--main">
+        <div class="offer-price-block__row">
           <span class="offer-price-block__label">سعر ${esc(p.packageUnit)}</span>
           <div class="offer-price-block__values">
             ${oldPack}
-            <span class="offer-price-block__amount offer-price-block__amount--usd">$<span class="store-num" dir="ltr">${formatUsd(p.packageSaleUsd > 0 ? p.packageSaleUsd : p.originalPackUsd)}</span></span>
+            <span class="offer-price-block__amount offer-price-block__amount--pack offer-price-block__amount--syp"><span class="store-num" dir="ltr">${formatMoney(p.packageSaleSp > 0 ? p.packageSaleSp : p.originalPackSp)}</span> <small>ل.س</small></span>
           </div>
         </div>`);
     }
@@ -198,11 +186,23 @@
       const oldUnit = p.hasOffer && p.originalUnitUsd > p.unitSaleUsd
         ? `<span class="offer-price-block__old">$<span class="store-num" dir="ltr">${formatUsd(p.originalUnitUsd)}</span></span>` : '';
       rows.push(`
-        <div class="offer-price-block__row">
+        <div class="offer-price-block__row offer-price-block__row--main">
           <span class="offer-price-block__label">سعر ${esc(p.primaryUnit)}</span>
           <div class="offer-price-block__values">
             ${oldUnit}
-            <span class="offer-price-block__amount offer-price-block__amount--unit">$<span class="store-num" dir="ltr">${formatUsd(p.unitSaleUsd > 0 ? p.unitSaleUsd : p.originalUnitUsd)}</span></span>
+            <span class="offer-price-block__amount offer-price-block__amount--usd">$<span class="store-num" dir="ltr">${formatUsd(p.unitSaleUsd > 0 ? p.unitSaleUsd : p.originalUnitUsd)}</span></span>
+          </div>
+        </div>`);
+    }
+    if (p.showPriceUsd && (p.packageSaleUsd > 0 || p.originalPackUsd > 0)) {
+      const oldPack = p.hasOffer && p.originalPackUsd > p.packageSaleUsd
+        ? `<span class="offer-price-block__old">$<span class="store-num" dir="ltr">${formatUsd(p.originalPackUsd)}</span></span>` : '';
+      rows.push(`
+        <div class="offer-price-block__row">
+          <span class="offer-price-block__label">سعر ${esc(p.packageUnit)}</span>
+          <div class="offer-price-block__values">
+            ${oldPack}
+            <span class="offer-price-block__amount offer-price-block__amount--pack offer-price-block__amount--usd">$<span class="store-num" dir="ltr">${formatUsd(p.packageSaleUsd > 0 ? p.packageSaleUsd : p.originalPackUsd)}</span></span>
           </div>
         </div>`);
     }

@@ -102,17 +102,21 @@ $cartMode = $inCart
       </div>
 
       <div class="store-cart-panel__controls">
-        <div class="store-cart-panel__qty-locked" data-cart-qty-locked<?= $canAdjustInCart ? ' hidden' : '' ?>>
-          <strong class="store-num" dir="ltr" data-cart-qty-display><?= h(format_packages_display($cartQtyForItem)) ?></strong>
-        </div>
+        <div class="store-cart-panel__stepper-group">
+          <div class="store-cart-panel__qty-slot">
+            <div class="store-cart-panel__qty-locked" data-cart-qty-locked<?= $canAdjustInCart ? ' hidden' : '' ?>>
+              <strong class="store-num" dir="ltr" data-cart-qty-display><?= h(format_packages_display($cartQtyForItem)) ?></strong>
+            </div>
 
-        <div class="store-qty-stepper store-qty-stepper--card" data-cart-qty-adjust<?= $canAdjustInCart ? '' : ' hidden' ?>>
-          <button type="button" data-cart-bump="-1" aria-label="إنقاص أو حذف من السلة">−</button>
-          <output class="store-num" dir="ltr" data-cart-qty-display><?= h(format_packages_display($cartQtyForItem)) ?></output>
-          <button type="button" data-cart-bump="1" aria-label="زيادة"<?= ($remaining !== null && $remaining <= 0) ? ' disabled' : '' ?>>+</button>
-        </div>
+            <div class="store-qty-stepper store-qty-stepper--card" data-cart-qty-adjust<?= $canAdjustInCart ? '' : ' hidden' ?>>
+              <button type="button" data-cart-bump="-1" aria-label="إنقاص أو حذف من السلة">−</button>
+              <output class="store-num" dir="ltr" data-cart-qty-display><?= h(format_packages_display($cartQtyForItem)) ?></output>
+              <button type="button" data-cart-bump="1" aria-label="زيادة"<?= ($remaining !== null && $remaining <= 0) ? ' disabled' : '' ?>>+</button>
+            </div>
+          </div>
 
-        <span class="store-cart-panel__unit"><?= h($packageUnit) ?></span>
+          <span class="store-cart-panel__unit"><?= h($packageUnit) ?></span>
+        </div>
       </div>
     </div>
   </div>
@@ -132,22 +136,24 @@ $cartMode = $inCart
 
     <div class="store-cart-panel store-cart-panel--add">
       <div class="store-cart-panel__controls">
-        <div class="store-qty-stepper store-qty-stepper--card<?= $partialPackage ? ' store-qty-stepper--locked' : '' ?>">
-          <button type="button" data-qty-minus aria-label="إنقاص"<?= $partialPackage ? ' disabled' : '' ?>>−</button>
-          <input
-            type="number"
-            name="quantity"
-            class="store-num"
-            dir="ltr"
-            min="<?= h((string) $qtyMin) ?>"
-            <?php if ($remaining !== null && $remaining > 0): ?>max="<?= h((string) $remaining) ?>"<?php elseif ($atLimit): ?>max="<?= h((string) $qtyMin) ?>"<?php endif; ?>
-            step="<?= h((string) $qtyStep) ?>"
-            value="<?= h((string) $defaultQty) ?>"
-            <?= $partialPackage ? 'readonly' : '' ?>
-          >
-          <button type="button" data-qty-plus aria-label="زيادة"<?= ($partialPackage || ($remaining !== null && $remaining <= 0)) ? ' disabled' : '' ?>>+</button>
+        <div class="store-cart-panel__stepper-group">
+          <div class="store-qty-stepper store-qty-stepper--card<?= $partialPackage ? ' store-qty-stepper--locked' : '' ?>">
+            <button type="button" data-qty-minus aria-label="إنقاص"<?= $partialPackage ? ' disabled' : '' ?>>−</button>
+            <input
+              type="number"
+              name="quantity"
+              class="store-num"
+              dir="ltr"
+              min="<?= h((string) $qtyMin) ?>"
+              <?php if ($remaining !== null && $remaining > 0): ?>max="<?= h((string) $remaining) ?>"<?php elseif ($atLimit): ?>max="<?= h((string) $qtyMin) ?>"<?php endif; ?>
+              step="<?= h((string) $qtyStep) ?>"
+              value="<?= h((string) $defaultQty) ?>"
+              <?= $partialPackage ? 'readonly' : '' ?>
+            >
+            <button type="button" data-qty-plus aria-label="زيادة"<?= ($partialPackage || ($remaining !== null && $remaining <= 0)) ? ' disabled' : '' ?>>+</button>
+          </div>
+          <span class="store-cart-panel__unit"><?= h($packageUnit) ?></span>
         </div>
-        <span class="store-cart-panel__unit"><?= h($packageUnit) ?></span>
       </div>
       <button type="submit" class="store-add-cart__submit" <?= $atLimit ? 'disabled' : '' ?>>
         <span class="material-symbols-outlined text-[20px]" aria-hidden="true">add_shopping_cart</span>
