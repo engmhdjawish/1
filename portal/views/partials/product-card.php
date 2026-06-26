@@ -31,9 +31,9 @@ if ($productOfferSlug === '') {
     $productOfferSlug = null;
 }
 $showImages = array_key_exists('show_images', $displayOptions) ? (bool) $displayOptions['show_images'] : true;
-$priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
-$showPriceSyp = in_array($priceMode, ['both', 'syp'], true);
-$showPriceUsd = in_array($priceMode, ['both', 'usd'], true);
+$showAnyPrice = (bool) ($displayOptions['show_price'] ?? false);
+$showPriceSyp = $showAnyPrice;
+$showPriceUsd = $showAnyPrice;
 $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
 $allowCart = (bool) ($displayOptions['allow_cart'] ?? false);
 

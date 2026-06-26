@@ -6,7 +6,10 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
 use Portal\Services\OrderService;
+use Portal\Services\WebCustomerService;
 use Portal\Support\DashboardHttp;
+
+use Portal\Support\DashboardOrderPricePreference;
 
 WebSession::requirePermission('orders.view');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -70,17 +73,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $filters = [
     'status' => array_key_exists('status', $_GET)
         ? trim((string) $_GET['status'])
-        : 'pending',
+        : (trim((string) ($_GET['web_customer_id'] ?? '')) !== '' ? '' : 'pending'),
     'sync' => trim((string) ($_GET['sync'] ?? '')),
     'q' => trim((string) ($_GET['q'] ?? '')),
     'fromDate' => trim((string) ($_GET['fromDate'] ?? '')),
     'toDate' => trim((string) ($_GET['toDate'] ?? '')),
+    'origin' => trim((string) ($_GET['origin'] ?? '')),
+    'web_customer_id' => trim((string) ($_GET['web_customer_id'] ?? '')),
     'limit' => (int) ($_GET['limit'] ?? 50),
 ];
 $detailsId = trim((string) ($_GET['details'] ?? ''));
+DashboardOrderPricePreference::applyFromRequest($_GET);
+$orderPriceCurrency = DashboardOrderPricePreference::current();
+
+$ordersListQuery = $_GET;
+unset($ordersListQuery['details']);
+$ordersListUrl = '/dashboard/orders.php' . ($ordersListQuery !== [] ? '?' . http_build_query($ordersListQuery) : '');
 
 $orders = OrderService::list($filters);
 $orderDetails = $detailsId !== '' ? OrderService::getOrderDetails($detailsId) : null;
+$filteredCustomer = null;
+if (($filters['web_customer_id'] ?? '') !== '') {
+    $filteredCustomer = WebCustomerService::getById((string) $filters['web_customer_id']);
+}
 $staffEditBlockReason = is_array($orderDetails) ? OrderService::staffEditBlockReason($orderDetails) : '';
 $statusCounts = OrderService::statusCounts();
 $syncCounts = OrderService::syncCounts();
@@ -92,4 +107,7 @@ require dirname(__DIR__, 2) . '/views/dashboard/orders.php';
 $content = ob_get_clean();
 $title = 'إدارة الطلبات';
 $dashboardPageAssets = 'orders';
+$extraFooter = $orderDetails !== null
+    ? '<script src="/assets/dashboard-order-price-pref.js" defer></script>'
+    : '';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

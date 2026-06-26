@@ -32,14 +32,26 @@ final class Bootstrap
         }
 
         self::loadEnv($basePath);
+        if (!self::shouldSkipWebRuntime()) {
+            \Portal\Support\HttpsGate::redirectIfNeeded();
+        }
         date_default_timezone_set('Asia/Damascus');
 
-        if (session_status() !== PHP_SESSION_ACTIVE) {
+        if (!self::shouldSkipWebRuntime() && session_status() !== PHP_SESSION_ACTIVE) {
             session_name(Config::get('PORTAL_SESSION_NAME', 'portal_session'));
             session_start();
         }
 
         self::$booted = true;
+    }
+
+    private static function shouldSkipWebRuntime(): bool
+    {
+        if (defined('PORTAL_NO_SESSION') && PORTAL_NO_SESSION) {
+            return true;
+        }
+
+        return PHP_SAPI === 'cli' || PHP_SAPI === 'phpdbg';
     }
 
     private static function loadEnv(string $basePath): void

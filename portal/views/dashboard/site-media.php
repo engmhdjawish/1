@@ -36,7 +36,7 @@ $labels = SiteMediaService::CATEGORY_LABELS;
 
 <article class="bg-white border border-border-subtle rounded-xl p-3 mb-4">
   <h2 class="font-bold text-sm mb-2">رفع صورة جديدة</h2>
-  <form method="post" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+  <form method="post" enctype="multipart/form-data" id="site-media-upload-form" class="grid grid-cols-1 md:grid-cols-4 gap-2 items-end" data-site-media-upload="1">
     <input type="hidden" name="action" value="upload">
     <label class="text-xs md:col-span-2">
       <span class="text-text-muted block mb-0.5">الملف</span>
@@ -54,7 +54,8 @@ $labels = SiteMediaService::CATEGORY_LABELS;
       <span class="text-text-muted block mb-0.5">عنوان (اختياري)</span>
       <input type="text" name="title_ar" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
     </label>
-    <button type="submit" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold md:col-span-4 md:justify-self-end">رفع</button>
+    <button type="submit" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold md:col-span-4 md:justify-self-end" data-site-media-submit>رفع</button>
+    <p id="site-media-upload-status" class="text-xs text-text-muted md:col-span-4 min-h-[1rem]"></p>
   </form>
 </article>
 

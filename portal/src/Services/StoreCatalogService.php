@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Auth\CustomerSession;
+use Portal\Support\ResponseCache;
 use Portal\Support\StorePricePreference;
 
 final class StoreCatalogService
@@ -104,11 +105,20 @@ final class StoreCatalogService
         $storeOptions = is_array($policy['store_options'] ?? null)
             ? $policy['store_options']
             : AccessPolicyService::defaultStoreOptions();
-        $visibleClientFilters = array_map('strval', $storeOptions['visible_client_filters'] ?? []);
+        $visibleClientFilters = AccessPolicyService::resolvedVisibleClientFilters($storeOptions);
         $allowClientFilters = $visibleClientFilters !== [];
         $isClientFilterVisible = static fn (string $code): bool => in_array($code, $visibleClientFilters, true);
-
         $requestFilters = self::parseRequestFilters($query, $storeOptions, $isClientFilterVisible);
+
+        $cachedCatalog = self::readCatalogCache($query, $policy);
+        if ($cachedCatalog !== null) {
+            $wantsInlineFilters = $allowClientFilters && self::shouldIncludeResultFilters($query, $requestFilters);
+            $cachedDeferred = (bool) ($cachedCatalog['filters_deferred'] ?? false);
+            if (!$wantsInlineFilters || !$cachedDeferred) {
+                return $cachedCatalog;
+            }
+        }
+
         $search = $requestFilters['search'];
         $sort = $requestFilters['sort'];
         $materialTypes = $requestFilters['materialTypes'];
@@ -153,53 +163,131 @@ final class StoreCatalogService
         $isAvailable = $mergedFilters['isAvailable'];
         $hasImage = $mergedFilters['hasImage'];
         $lockedClientFilters = self::lockedClientFilters($policyRules);
+        $sellableMode = self::shouldApplySellableStockFilter();
+        $sellableFilter = self::shouldFilterSellableStock();
+        if (($sellableMode || $sellableFilter) && $mergedFilters['minWarehouseQuantity'] === null) {
+            $mergedFilters['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
+        }
+
+        $deferClientFilters = $allowClientFilters
+            && !self::shouldIncludeResultFilters($query, $requestFilters);
+
+        $includeResultFilters = $allowClientFilters && !$deferClientFilters;
 
         try {
-            $materials = self::fetchMaterialsExtended(
-                $page,
-                $pageSize,
-                $search,
-                $sort,
-                $materialTypes,
-                $manufacturers,
-                $ageCategories,
-                $sizeRanges,
-                $countryOfOrigins,
-                $groupGuids,
-                $storeGuids,
-                $isAvailable,
-                $hasImage,
-                false,
-                true,
-                $mergedFilters['minWarehouseQuantity'],
-                $mergedFilters['maxWarehouseQuantity'],
-                $mergedFilters['minUnitSalePriceSyp'],
-                $mergedFilters['maxUnitSalePriceSyp'],
-                $mergedFilters['minUnitSalePriceUsd'],
-                $mergedFilters['maxUnitSalePriceUsd'],
-                $mergedFilters['minUnitPurchasePriceUsd'],
-                $mergedFilters['maxUnitPurchasePriceUsd']
-            );
-            if ($materials['ok']) {
-                $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
-                $rawItems = $data['items'] ?? $data['Items'] ?? [];
-                $products = self::withOfferPricing(
-                    is_array($rawItems) ? $rawItems : [],
+            if ($sellableMode) {
+                $paged = self::fetchMaterialsWithSellablePaging(
+                    $page,
+                    $pageSize,
+                    static function (int $apiPage, int $apiPageSize) use (
+                        $search,
+                        $sort,
+                        $materialTypes,
+                        $manufacturers,
+                        $ageCategories,
+                        $sizeRanges,
+                        $countryOfOrigins,
+                        $groupGuids,
+                        $storeGuids,
+                        $isAvailable,
+                        $hasImage,
+                        $mergedFilters,
+                        $includeResultFilters
+                    ): array {
+                        return self::fetchMaterialsExtended(
+                            $apiPage,
+                            $apiPageSize,
+                            $search,
+                            $sort,
+                            $materialTypes,
+                            $manufacturers,
+                            $ageCategories,
+                            $sizeRanges,
+                            $countryOfOrigins,
+                            $groupGuids,
+                            $storeGuids,
+                            $isAvailable,
+                            $hasImage,
+                            false,
+                            $includeResultFilters && $apiPage === 1,
+                            $mergedFilters['minWarehouseQuantity'],
+                            $mergedFilters['maxWarehouseQuantity'],
+                            $mergedFilters['minUnitSalePriceSyp'],
+                            $mergedFilters['maxUnitSalePriceSyp'],
+                            $mergedFilters['minUnitSalePriceUsd'],
+                            $mergedFilters['maxUnitSalePriceUsd'],
+                            $mergedFilters['minUnitPurchasePriceUsd'],
+                            $mergedFilters['maxUnitPurchasePriceUsd']
+                        );
+                    },
                     $contextOfferSlug
                 );
-                $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
-                $page = max(1, (int) ($data['page'] ?? $page));
-                $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
-                $resultFilters = is_array($data['resultFilters'] ?? null) ? $data['resultFilters'] : [];
-                $resultFilters = self::scopeResultFiltersForPolicy($resultFilters, $policyRules);
+                $products = $paged['products'];
+                $totalCount = $paged['totalCount'];
+                $resultFilters = $paged['resultFilters'];
+                $apiError = $paged['apiError'];
             } else {
-                $apiError = self::extractApiError($materials);
+                $materials = self::fetchMaterialsExtended(
+                    $page,
+                    $pageSize,
+                    $search,
+                    $sort,
+                    $materialTypes,
+                    $manufacturers,
+                    $ageCategories,
+                    $sizeRanges,
+                    $countryOfOrigins,
+                    $groupGuids,
+                    $storeGuids,
+                    $isAvailable,
+                    $hasImage,
+                    false,
+                    $includeResultFilters,
+                    $mergedFilters['minWarehouseQuantity'],
+                    $mergedFilters['maxWarehouseQuantity'],
+                    $mergedFilters['minUnitSalePriceSyp'],
+                    $mergedFilters['maxUnitSalePriceSyp'],
+                    $mergedFilters['minUnitSalePriceUsd'],
+                    $mergedFilters['maxUnitSalePriceUsd'],
+                    $mergedFilters['minUnitPurchasePriceUsd'],
+                    $mergedFilters['maxUnitPurchasePriceUsd']
+                );
+                if ($materials['ok']) {
+                    $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
+                    $rawItems = $data['items'] ?? $data['Items'] ?? [];
+                    $products = self::withOfferPricing(
+                        is_array($rawItems) ? $rawItems : [],
+                        $contextOfferSlug
+                    );
+                    if ($sellableFilter) {
+                        $products = StockReservationService::filterSellableProducts($products);
+                    }
+                    $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+                    $page = max(1, (int) ($data['page'] ?? $page));
+                    $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
+                    $resultFilters = self::extractResultFiltersFromApiData($data);
+                    $resultFilters = self::scopeResultFiltersForPolicy($resultFilters, $policyRules);
+                } else {
+                    $apiError = self::extractApiError($materials);
+                }
+            }
+            if ($sellableMode && $apiError === null) {
+                $resultFilters = self::scopeResultFiltersForPolicy($resultFilters, $policyRules);
             }
         } catch (\Throwable $exception) {
             $apiError = $exception->getMessage();
         }
 
-        $filterOptions = self::loadFilterOptions();
+        $filterOptions = ['stores' => [], 'groups' => []];
+        if ($allowClientFilters && !$deferClientFilters) {
+            $filterOptions = self::getCachedFilterOptions();
+            if (self::resultFiltersAreEmpty($resultFilters)) {
+                $resultFilters = self::scopeResultFiltersForPolicy(
+                    self::buildResultFiltersFromFilterOptions($filterOptions),
+                    $policyRules
+                );
+            }
+        }
         if ($storeGuids !== [] || self::parseList($policyRules['store_guids'] ?? []) !== []) {
             $forcedStoreGuids = self::parseList($policyRules['store_guids'] ?? []);
             if ($forcedStoreGuids !== []) {
@@ -232,7 +320,7 @@ final class StoreCatalogService
             $requestFilters
         );
 
-        return [
+        $catalogResult = [
             'products' => $products,
             'totalCount' => $totalCount,
             'page' => $page,
@@ -247,8 +335,15 @@ final class StoreCatalogService
             'locked_client_filters' => $lockedClientFilters,
             'store_options' => $storeOptions,
             'allow_client_filters' => $allowClientFilters,
+            'filters_deferred' => $deferClientFilters,
             'filters' => $displayFilters,
         ];
+
+        if (($apiError === null || $apiError === '') && !self::shouldRejectCachedCatalog($catalogResult)) {
+            self::writeCatalogCache($query, $policy, $catalogResult);
+        }
+
+        return $catalogResult;
     }
 
     /** @param array<string, mixed> $sectionContext */
@@ -288,6 +383,7 @@ final class StoreCatalogService
             }
         }
 
+        $products = self::applySellableStockFilter($products);
         $totalCount = count($products);
         $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
         $page = min(max(1, $page), $totalPages);
@@ -359,22 +455,53 @@ final class StoreCatalogService
         $totalCount = 0;
         $resultFilters = [];
         $apiError = null;
+        $sellableMode = self::shouldApplySellableStockFilter();
+        $sellableFilter = self::shouldFilterSellableStock();
 
         try {
-            $materials = self::requestMaterialsQuery($apiQuery);
-            if ($materials['ok']) {
-                $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
-                $rawItems = $data['items'] ?? $data['Items'] ?? [];
-                $products = self::withOfferPricing(
-                    is_array($rawItems) ? $rawItems : [],
+            if ($sellableFilter && !isset($apiQuery['minWarehouseQuantity'])) {
+                $apiQuery['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
+            }
+            if ($sellableMode) {
+                if (!isset($apiQuery['minWarehouseQuantity']) || $apiQuery['minWarehouseQuantity'] === null) {
+                    $apiQuery['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
+                }
+                $paged = self::fetchMaterialsWithSellablePaging(
+                    $page,
+                    $pageSize,
+                    static function (int $apiPage, int $apiPageSize) use ($apiQuery): array {
+                        $query = $apiQuery;
+                        $query['page'] = $apiPage;
+                        $query['pageSize'] = $apiPageSize;
+                        $query['includeResultFilters'] = $apiPage === 1 ? 'true' : 'false';
+
+                        return self::requestMaterialsQuery($query);
+                    },
                     $contextOfferSlug
                 );
-                $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
-                $page = max(1, (int) ($data['page'] ?? $page));
-                $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
-                $resultFilters = is_array($data['resultFilters'] ?? null) ? $data['resultFilters'] : [];
+                $products = $paged['products'];
+                $totalCount = $paged['totalCount'];
+                $resultFilters = $paged['resultFilters'];
+                $apiError = $paged['apiError'];
             } else {
-                $apiError = self::extractApiError($materials);
+                $materials = self::requestMaterialsQuery($apiQuery);
+                if ($materials['ok']) {
+                    $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
+                    $rawItems = $data['items'] ?? $data['Items'] ?? [];
+                    $products = self::withOfferPricing(
+                        is_array($rawItems) ? $rawItems : [],
+                        $contextOfferSlug
+                    );
+                    if ($sellableFilter) {
+                        $products = StockReservationService::filterSellableProducts($products);
+                    }
+                    $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+                    $page = max(1, (int) ($data['page'] ?? $page));
+                    $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
+                    $resultFilters = self::extractResultFiltersFromApiData($data);
+                } else {
+                    $apiError = self::extractApiError($materials);
+                }
             }
         } catch (\Throwable $exception) {
             $apiError = $exception->getMessage();
@@ -518,16 +645,18 @@ final class StoreCatalogService
             $contextOffer = SpecialOfferService::activeOfferBySlug($offerSlug);
         }
 
-        $result = [];
-        foreach ($products as $product) {
-            if (!is_array($product)) {
-                continue;
-            }
-            $overlay = SpecialOfferService::pricingOverlay($product, $contextOffer);
-            $result[] = !empty($overlay['has_offer']) ? array_merge($product, $overlay) : $product;
+        return SpecialOfferService::applyPricingOverlays($products, $contextOffer);
+    }
+
+    /** @param list<array<string, mixed>> $products @return list<array<string, mixed>> */
+    public static function applySellableStockFilter(array $products): array
+    {
+        $display = self::displayOptions();
+        if (!($display['allow_cart'] ?? false)) {
+            return $products;
         }
 
-        return $result;
+        return StockReservationService::filterSellableProducts($products);
     }
 
     /** @param array<string, mixed>|null $sectionContext */
@@ -566,7 +695,8 @@ final class StoreCatalogService
             'section_context' => $sectionContext,
             'locked_client_filters' => $lockedClientFilters,
             'store_options' => $storeOptions ?? AccessPolicyService::defaultStoreOptions(),
-            'allow_client_filters' => $storeOptions !== null && ($storeOptions['visible_client_filters'] ?? []) !== [],
+            'allow_client_filters' => $storeOptions !== null
+                && AccessPolicyService::resolvedVisibleClientFilters($storeOptions) !== [],
             'filters' => [
                 'q' => (string) ($requestFilters['search'] ?? ''),
                 'sort' => (string) ($requestFilters['sort'] ?? 'number:asc'),
@@ -634,7 +764,7 @@ final class StoreCatalogService
             $minUnitPurchasePriceUsd,
             $maxUnitPurchasePriceUsd
         );
-        $materials = ApiClient::get('/api/materials', $primaryQuery);
+        $materials = ApiClient::get('/api/materials', $primaryQuery, 15);
         if ($materials['ok'] || (int) ($materials['status'] ?? 0) !== 400) {
             return $materials;
         }
@@ -664,7 +794,7 @@ final class StoreCatalogService
                 null,
                 null
             );
-            $retry = ApiClient::get('/api/materials', $fallbackQuery);
+            $retry = ApiClient::get('/api/materials', $fallbackQuery, 15);
             if ($retry['ok']) {
                 return $retry;
             }
@@ -693,7 +823,7 @@ final class StoreCatalogService
                 $minUnitPurchasePriceUsd,
                 $maxUnitPurchasePriceUsd
             );
-            $retry = ApiClient::get('/api/materials', $retryQuery);
+            $retry = ApiClient::get('/api/materials', $retryQuery, 15);
             if ($retry['ok']) {
                 return $retry;
             }
@@ -786,7 +916,11 @@ final class StoreCatalogService
     private static function normalizeSort(mixed $sort): string
     {
         $sort = trim(is_array($sort) ? '' : (string) $sort);
-        $allowed = [
+        if ($sort === '') {
+            return 'number:asc';
+        }
+
+        $allowedFixed = [
             'number:asc',
             'number:desc',
             'name:asc',
@@ -796,44 +930,36 @@ final class StoreCatalogService
             '-unitSalePriceUsd',
             'unitSalePriceUsd:desc',
         ];
-
-        if (in_array($sort, $allowed, true)) {
+        if (in_array($sort, $allowedFixed, true)) {
             return $sort;
         }
 
-        return 'number:asc';
+        $field = $sort;
+        $dir = 'asc';
+        if (str_starts_with($sort, '-')) {
+            $field = substr($sort, 1);
+            $dir = 'desc';
+        } elseif (str_contains($sort, ':')) {
+            [$field, $dirPart] = explode(':', $sort, 2);
+            $dir = strtolower(trim($dirPart)) === 'desc' ? 'desc' : 'asc';
+        }
+        $field = trim($field);
+        if ($field === '' || !in_array($field, AccessPolicyService::ALLOWED_CLIENT_SORT_FIELDS, true)) {
+            return 'number:asc';
+        }
+
+        if ($dir === 'desc' && in_array($field, ['unitSalePriceSyp', 'unitSalePriceUsd'], true)) {
+            return '-' . $field;
+        }
+
+        return $field . ':' . $dir;
     }
 
     /** @return array<string, list<array{value: string, count: int|null}>> */
     private static function loadStaticResultFilters(): array
     {
         try {
-            $response = ApiClient::get('/api/materials/filter-options');
-            if (!$response['ok'] || !is_array($response['data'] ?? null)) {
-                return [];
-            }
-
-            $data = $response['data'];
-            $toFacetValues = static function (mixed $values): array {
-                if (!is_array($values)) {
-                    return [];
-                }
-                $items = [];
-                foreach ($values as $value) {
-                    $item = trim((string) $value);
-                    if ($item === '') {
-                        continue;
-                    }
-                    $items[] = ['value' => $item, 'count' => null];
-                }
-
-                return $items;
-            };
-
-            return [
-                'materialTypes' => $toFacetValues($data['materialTypes'] ?? $data['MaterialTypes'] ?? []),
-                'manufacturers' => $toFacetValues($data['manufacturers'] ?? $data['Manufacturers'] ?? []),
-            ];
+            return self::buildResultFiltersFromFilterOptions(self::getCachedFilterOptions());
         } catch (\Throwable) {
             return [];
         }
@@ -1073,7 +1199,7 @@ final class StoreCatalogService
             $withResults = array_values(array_filter($facets, static function (array $facet): bool {
                 $count = $facet['count'] ?? null;
 
-                return $count !== null && (int) $count > 0;
+                return $count === null || (int) $count > 0;
             }));
             if ($forced === []) {
                 return $withResults;
@@ -1093,7 +1219,7 @@ final class StoreCatalogService
             $withResults = array_values(array_filter($facets, static function (array $facet): bool {
                 $count = $facet['count'] ?? null;
 
-                return $count !== null && (int) $count > 0;
+                return $count === null || (int) $count > 0;
             }));
             if ($forcedGuids === []) {
                 return $withResults;
@@ -1135,7 +1261,7 @@ final class StoreCatalogService
         return $resultFilters;
     }
 
-    /** @return array{stores: list<array<string, mixed>>, groups: list<array<string, mixed>>} */
+    /** @return array{stores: list<array<string, mixed>>, groups: list<array<string, mixed>>, materialTypes?: list<string>, manufacturers?: list<string>, ageCategories?: list<string>, sizeRanges?: list<string>, countryOfOrigins?: list<string>} */
     private static function loadFilterOptions(): array
     {
         try {
@@ -1165,10 +1291,29 @@ final class StoreCatalogService
 
                 return $items;
             };
+            $normalizeStringList = static function (mixed $values): array {
+                if (!is_array($values)) {
+                    return [];
+                }
+                $items = [];
+                foreach ($values as $value) {
+                    $item = trim((string) $value);
+                    if ($item !== '') {
+                        $items[] = $item;
+                    }
+                }
+
+                return array_values(array_unique($items));
+            };
 
             return [
                 'stores' => $normalizeGuidRows($stores),
                 'groups' => $normalizeGuidRows($groups),
+                'materialTypes' => $normalizeStringList($data['materialTypes'] ?? $data['MaterialTypes'] ?? []),
+                'manufacturers' => $normalizeStringList($data['manufacturers'] ?? $data['Manufacturers'] ?? []),
+                'ageCategories' => $normalizeStringList($data['ageCategories'] ?? $data['AgeCategories'] ?? []),
+                'sizeRanges' => $normalizeStringList($data['sizeRanges'] ?? $data['SizeRanges'] ?? []),
+                'countryOfOrigins' => $normalizeStringList($data['countryOfOrigins'] ?? $data['CountryOfOrigins'] ?? []),
             ];
         } catch (\Throwable) {
             return ['stores' => [], 'groups' => []];
@@ -1289,5 +1434,430 @@ final class StoreCatalogService
         }
 
         return $locked;
+    }
+
+    private static function shouldApplySellableStockFilter(): bool
+    {
+        return false;
+    }
+
+    /** Lightweight sellable filter on a single API page (no multi-page scan). */
+    private static function shouldFilterSellableStock(): bool
+    {
+        return (bool) (self::displayOptions()['allow_cart'] ?? false);
+    }
+
+    private static function sellableMinWarehouseQuantity(): float
+    {
+        return 0.0001;
+    }
+
+    /**
+     * Paginate sellable products after stock-reservation filtering.
+     * API page numbers do not match store page numbers once zero-stock items are removed.
+     *
+     * @param callable(int, int): array<string, mixed> $fetchPage
+     * @return array{
+     *   products: list<array<string, mixed>>,
+     *   totalCount: int,
+     *   resultFilters: array<string, mixed>,
+     *   apiError: string|null
+     * }
+     */
+    private static function fetchMaterialsWithSellablePaging(
+        int $page,
+        int $pageSize,
+        callable $fetchPage,
+        ?string $contextOfferSlug
+    ): array {
+        $page = max(1, $page);
+        $pageSize = max(1, $pageSize);
+        $targetStart = ($page - 1) * $pageSize;
+        $targetEnd = $targetStart + $pageSize;
+        $collected = [];
+        $sellableSeen = 0;
+        $apiPage = 1;
+        $apiPageSize = min(120, max($pageSize * 2, 48));
+        $apiTotalCount = 0;
+        $resultFilters = [];
+        $maxApiPages = 40;
+        $deadline = microtime(true) + 20.0;
+
+        while ($apiPage <= $maxApiPages) {
+            if (microtime(true) >= $deadline) {
+                break;
+            }
+
+            $materials = $fetchPage($apiPage, $apiPageSize);
+            if (!($materials['ok'] ?? false)) {
+                return [
+                    'products' => $collected,
+                    'totalCount' => $sellableSeen,
+                    'resultFilters' => $resultFilters,
+                    'apiError' => self::extractApiError($materials),
+                ];
+            }
+
+            $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
+            if ($apiPage === 1) {
+                $apiTotalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+                $resultFilters = self::extractResultFiltersFromApiData($data);
+            }
+
+            $rawItems = $data['items'] ?? $data['Items'] ?? [];
+            $items = self::withOfferPricing(is_array($rawItems) ? $rawItems : [], $contextOfferSlug);
+            $items = StockReservationService::filterSellableProducts($items);
+
+            foreach ($items as $item) {
+                if ($sellableSeen >= $targetStart && $sellableSeen < $targetEnd) {
+                    $collected[] = $item;
+                }
+                $sellableSeen++;
+            }
+
+            if (count($collected) >= $pageSize) {
+                break;
+            }
+
+            if ($apiTotalCount > 0 && ($apiPage * $apiPageSize) >= $apiTotalCount) {
+                break;
+            }
+
+            if ($apiTotalCount === 0 && count($rawItems) < $apiPageSize) {
+                break;
+            }
+
+            $apiPage++;
+        }
+
+        return [
+            'products' => $collected,
+            'totalCount' => $sellableSeen,
+            'resultFilters' => $resultFilters,
+            'apiError' => null,
+        ];
+    }
+
+    /** @return array{stores: list<array<string, mixed>>, groups: list<array<string, mixed>>, materialTypes?: list<string>, manufacturers?: list<string>, ageCategories?: list<string>, sizeRanges?: list<string>, countryOfOrigins?: list<string>} */
+    public static function getCachedFilterOptions(): array
+    {
+        $cacheKey = 'store_filter_options_v2';
+        $cached = ResponseCache::get($cacheKey);
+        if (is_array($cached) && self::filterOptionsHaveData($cached)) {
+            return $cached;
+        }
+
+        $options = self::loadFilterOptions();
+        if (self::filterOptionsHaveData($options)) {
+            ResponseCache::set($cacheKey, $options, 600);
+        }
+
+        return $options;
+    }
+
+    /** @param array<string, mixed> $query @param array<string, mixed> $policy @return array<string, mixed>|null */
+    private static function readCatalogCache(array $query, array $policy): ?array
+    {
+        $key = self::catalogCacheKey($query, $policy);
+        if ($key === null) {
+            return null;
+        }
+
+        $cached = ResponseCache::get($key);
+        if (!is_array($cached)) {
+            return null;
+        }
+        if (self::shouldRejectCachedCatalog($cached)) {
+            ResponseCache::forget($key);
+
+            return null;
+        }
+
+        return $cached;
+    }
+
+    /** @param array<string, mixed> $query @param array<string, mixed> $policy @param array<string, mixed> $catalog */
+    private static function writeCatalogCache(array $query, array $policy, array $catalog): void
+    {
+        $key = self::catalogCacheKey($query, $policy);
+        if ($key === null) {
+            return;
+        }
+
+        ResponseCache::set($key, $catalog, 180);
+    }
+
+    /** @param array<string, mixed> $query @param array<string, mixed> $policy */
+    private static function catalogCacheKey(array $query, array $policy): ?string
+    {
+        if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'GET') {
+            return null;
+        }
+
+        $readerKey = CustomerSession::check()
+            ? 'customer:' . trim((string) (CustomerSession::customer()['id'] ?? ''))
+            : 'guest:' . trim((string) ($policy['id'] ?? 'none'));
+
+        $params = $query;
+        unset($params['facetFilters'], $params['loadFilterOptions']);
+        ksort($params);
+
+        return 'store_catalog_v4:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
+    }
+
+    /** @param array<string, mixed> $data */
+    private static function extractResultFiltersFromApiData(array $data): array
+    {
+        $raw = $data['resultFilters'] ?? $data['ResultFilters'] ?? null;
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $normalizeStringFacets = static function (mixed $facets): array {
+            if (!is_array($facets)) {
+                return [];
+            }
+            $items = [];
+            foreach ($facets as $facet) {
+                if (!is_array($facet)) {
+                    continue;
+                }
+                $value = trim((string) ($facet['value'] ?? $facet['Value'] ?? ''));
+                if ($value === '') {
+                    continue;
+                }
+                $count = $facet['count'] ?? $facet['Count'] ?? null;
+                $items[] = [
+                    'value' => $value,
+                    'count' => $count === null ? null : (int) $count,
+                ];
+            }
+
+            return $items;
+        };
+
+        $normalizeGroupFacets = static function (mixed $facets): array {
+            if (!is_array($facets)) {
+                return [];
+            }
+            $items = [];
+            foreach ($facets as $facet) {
+                if (!is_array($facet)) {
+                    continue;
+                }
+                $guid = trim((string) ($facet['guid'] ?? $facet['Guid'] ?? ''));
+                if ($guid === '') {
+                    continue;
+                }
+                $count = $facet['count'] ?? $facet['Count'] ?? null;
+                $items[] = [
+                    'guid' => $guid,
+                    'code' => trim((string) ($facet['code'] ?? $facet['Code'] ?? '')),
+                    'name' => trim((string) ($facet['name'] ?? $facet['Name'] ?? '')),
+                    'count' => $count === null ? null : (int) $count,
+                ];
+            }
+
+            return $items;
+        };
+
+        return [
+            'materialTypes' => $normalizeStringFacets($raw['materialTypes'] ?? $raw['MaterialTypes'] ?? []),
+            'ageCategories' => $normalizeStringFacets($raw['ageCategories'] ?? $raw['AgeCategories'] ?? []),
+            'manufacturers' => $normalizeStringFacets($raw['manufacturers'] ?? $raw['Manufacturers'] ?? []),
+            'sizeRanges' => $normalizeStringFacets($raw['sizeRanges'] ?? $raw['SizeRanges'] ?? []),
+            'countryOfOrigins' => $normalizeStringFacets($raw['countryOfOrigins'] ?? $raw['CountryOfOrigins'] ?? []),
+            'groups' => $normalizeGroupFacets($raw['groups'] ?? $raw['Groups'] ?? []),
+        ];
+    }
+
+    /** @param array<string, mixed> $resultFilters */
+    private static function resultFiltersAreEmpty(array $resultFilters): bool
+    {
+        foreach (['materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins', 'groups'] as $key) {
+            $items = $resultFilters[$key] ?? [];
+            if (is_array($items) && $items !== []) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** @param array<string, mixed> $filterOptions @return array<string, mixed> */
+    private static function buildResultFiltersFromFilterOptions(array $filterOptions): array
+    {
+        $toStringFacets = static function (mixed $values): array {
+            if (!is_array($values)) {
+                return [];
+            }
+            $items = [];
+            foreach ($values as $value) {
+                $item = trim((string) $value);
+                if ($item === '') {
+                    continue;
+                }
+                $items[] = ['value' => $item, 'count' => null];
+            }
+
+            return $items;
+        };
+
+        $groupFacets = [];
+        foreach (is_array($filterOptions['groups'] ?? null) ? $filterOptions['groups'] : [] as $group) {
+            if (!is_array($group)) {
+                continue;
+            }
+            $guid = trim((string) ($group['guid'] ?? ''));
+            if ($guid === '') {
+                continue;
+            }
+            $groupFacets[] = [
+                'guid' => $guid,
+                'code' => trim((string) ($group['code'] ?? '')),
+                'name' => trim((string) ($group['name'] ?? '')),
+                'count' => null,
+            ];
+        }
+
+        return [
+            'materialTypes' => $toStringFacets($filterOptions['materialTypes'] ?? []),
+            'ageCategories' => $toStringFacets($filterOptions['ageCategories'] ?? []),
+            'manufacturers' => $toStringFacets($filterOptions['manufacturers'] ?? []),
+            'sizeRanges' => $toStringFacets($filterOptions['sizeRanges'] ?? []),
+            'countryOfOrigins' => $toStringFacets($filterOptions['countryOfOrigins'] ?? []),
+            'groups' => $groupFacets,
+        ];
+    }
+
+    /** @param array<string, mixed> $filterOptions */
+    private static function filterOptionsHaveData(array $filterOptions): bool
+    {
+        if (($filterOptions['stores'] ?? []) !== [] || ($filterOptions['groups'] ?? []) !== []) {
+            return true;
+        }
+        foreach (['materialTypes', 'manufacturers', 'ageCategories', 'sizeRanges', 'countryOfOrigins'] as $key) {
+            if (($filterOptions[$key] ?? []) !== []) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @param array<string, mixed> $catalog */
+    private static function shouldRejectCachedCatalog(array $catalog): bool
+    {
+        if ((bool) ($catalog['filters_deferred'] ?? false)) {
+            return false;
+        }
+        if (!(bool) ($catalog['allow_client_filters'] ?? false)) {
+            return false;
+        }
+        if (trim((string) ($catalog['apiError'] ?? '')) !== '') {
+            return false;
+        }
+        if ((int) ($catalog['totalCount'] ?? 0) <= 0) {
+            return false;
+        }
+
+        return self::resultFiltersAreEmpty(is_array($catalog['resultFilters'] ?? null) ? $catalog['resultFilters'] : []);
+    }
+
+    /** @return array{filterOptions: array<string, mixed>, resultFilters: array<string, mixed>} */
+    public static function getClientFiltersPayload(): array
+    {
+        $policy = self::activePolicy();
+        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
+        $filterOptions = self::getCachedFilterOptions();
+        $forcedStoreGuids = self::parseList($policyRules['store_guids'] ?? []);
+        if ($forcedStoreGuids !== []) {
+            $forcedStoreMap = array_flip(array_map('strtolower', $forcedStoreGuids));
+            $filterOptions['stores'] = array_values(array_filter(
+                is_array($filterOptions['stores'] ?? null) ? $filterOptions['stores'] : [],
+                static fn (array $store): bool => isset($forcedStoreMap[strtolower((string) ($store['guid'] ?? ''))])
+            ));
+        }
+        $resultFilters = self::scopeResultFiltersForPolicy(
+            self::buildResultFiltersFromFilterOptions($filterOptions),
+            $policyRules
+        );
+
+        return [
+            'filterOptions' => $filterOptions,
+            'resultFilters' => $resultFilters,
+        ];
+    }
+
+    /** @param array<string, mixed> $query @param array<string, mixed> $requestFilters */
+    private static function shouldIncludeResultFilters(array $query, array $requestFilters): bool
+    {
+        if (trim((string) ($query['facetFilters'] ?? '')) === '1') {
+            return true;
+        }
+
+        return self::requestHasActiveFilters($requestFilters);
+    }
+
+    /** @param array<string, mixed> $requestFilters */
+    private static function requestHasActiveFilters(array $requestFilters): bool
+    {
+        if (trim((string) ($requestFilters['search'] ?? '')) !== '') {
+            return true;
+        }
+        foreach ([
+            'materialTypes',
+            'manufacturers',
+            'ageCategories',
+            'sizeRanges',
+            'countryOfOrigins',
+            'groupGuids',
+            'storeGuids',
+        ] as $key) {
+            if (($requestFilters[$key] ?? []) !== []) {
+                return true;
+            }
+        }
+        if (($requestFilters['isAvailable'] ?? null) !== null) {
+            return true;
+        }
+        foreach ([
+            'minWarehouseQuantity',
+            'maxWarehouseQuantity',
+            'minUnitSalePriceSyp',
+            'maxUnitSalePriceSyp',
+            'minUnitSalePriceUsd',
+            'maxUnitSalePriceUsd',
+            'minUnitPurchasePriceUsd',
+            'maxUnitPurchasePriceUsd',
+        ] as $key) {
+            if (($requestFilters[$key] ?? null) !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $query
+     * @param list<string> $visibleClientFilters
+     * @param array<string, mixed> $requestFilters
+     */
+    private static function shouldLoadFilterOptionsOnRequest(array $query, array $visibleClientFilters, array $requestFilters): bool
+    {
+        if (trim((string) ($query['loadFilterOptions'] ?? '')) === '1') {
+            return true;
+        }
+
+        if (in_array('stores', $visibleClientFilters, true) && ($requestFilters['storeGuids'] ?? []) !== []) {
+            return true;
+        }
+
+        if (in_array('groups', $visibleClientFilters, true) && ($requestFilters['groupGuids'] ?? []) !== []) {
+            return true;
+        }
+
+        return false;
     }
 }

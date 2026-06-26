@@ -11,8 +11,8 @@ $canManageOrders = (bool) ($canManageOrders ?? false);
 $orderId = (string) ($orderId ?? ($orderDetails['id'] ?? ''));
 $editable = $canManageOrders && !empty($orderDetails['can_staff_edit']) && empty($item['is_cancelled']);
 $itemId = (string) ($item['id'] ?? '');
-$showPriceSyp = (float) ($orderDetails['total_sp'] ?? 0) > 0 || (float) ($item['sale_price_sp'] ?? 0) > 0;
-$showPriceUsd = (float) ($orderDetails['total_usd'] ?? 0) > 0 || (float) ($item['sale_price_usd'] ?? 0) > 0;
+$showPriceSyp = (string) ($orderPriceCurrency ?? 'usd') === 'syp';
+$showPriceUsd = (string) ($orderPriceCurrency ?? 'usd') === 'usd';
 ?>
 <div class="dashboard-order-line">
   <?php require __DIR__ . '/store-order-line-card.php'; ?>

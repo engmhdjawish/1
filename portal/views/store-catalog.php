@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Portal\Services\CatalogSectionResolver;
+use Portal\Services\AccessPolicyService;
 use Portal\Services\SpecialOfferService;
 use Portal\Services\StorePolicyService;
 use Portal\Support\StorePricePreference;
@@ -30,11 +31,12 @@ $storeOptions = is_array($catalog['store_options'] ?? null) ? $catalog['store_op
 $filterOptions = is_array($catalog['filterOptions'] ?? null) ? $catalog['filterOptions'] : ['stores' => [], 'groups' => []];
 $lockedClientFilters = array_map('strval', is_array($catalog['locked_client_filters'] ?? null) ? $catalog['locked_client_filters'] : []);
 $allowClientFilters = (bool) ($catalog['allow_client_filters'] ?? false);
+$filtersDeferred = (bool) ($catalog['filters_deferred'] ?? false);
 $isSectionBrowse = $sectionContext !== null;
 $products = is_array($catalog['products'] ?? null) ? $catalog['products'] : [];
 $resultFilters = is_array($catalog['resultFilters'] ?? null) ? $catalog['resultFilters'] : [];
 
-$visibleClientFilters = array_map('strval', $storeOptions['visible_client_filters'] ?? []);
+$visibleClientFilters = AccessPolicyService::resolvedVisibleClientFilters($storeOptions);
 $allowSorting = (bool) ($storeOptions['allow_sorting'] ?? true);
 $clientSortFields = array_map('strval', $storeOptions['client_sort_fields'] ?? ['number', 'materialType', 'manufacturer']);
 $isClientFilterVisible = static function (string $code) use ($visibleClientFilters, $lockedClientFilters): bool {
@@ -102,6 +104,40 @@ foreach ([$selectedMaterialTypes, $selectedManufacturers, $selectedAgeCategories
 }
 if ($isClientFilterVisible('availability') && $availabilityValue !== '') {
     $activeFilterCount++;
+}
+
+$parseUserFilterList = static function (mixed $raw): array {
+    if (is_array($raw)) {
+        return array_values(array_filter(array_map('strval', $raw), static fn (string $value): bool => trim($value) !== ''));
+    }
+    if (!is_string($raw) || trim($raw) === '') {
+        return [];
+    }
+
+    return array_values(array_filter(array_map('trim', explode(',', $raw)), static fn (string $value): bool => $value !== ''));
+};
+
+$userActiveFilterCount = 0;
+if ($isClientFilterVisible('search') && trim((string) ($_GET['q'] ?? '')) !== '') {
+    $userActiveFilterCount++;
+}
+$userFilterGroups = [
+    ['code' => 'materialTypes', 'param' => 'materialTypes'],
+    ['code' => 'manufacturers', 'param' => 'manufacturers'],
+    ['code' => 'ageCategories', 'param' => 'ageCategories'],
+    ['code' => 'sizeRanges', 'param' => 'sizeRanges'],
+    ['code' => 'countryOfOrigins', 'param' => 'countryOfOrigins'],
+    ['code' => 'stores', 'param' => 'storeGuids'],
+    ['code' => 'groups', 'param' => 'groupGuids'],
+];
+foreach ($userFilterGroups as $group) {
+    if (!$isClientFilterVisible((string) $group['code'])) {
+        continue;
+    }
+    $userActiveFilterCount += count($parseUserFilterList($_GET[(string) $group['param']] ?? null));
+}
+if ($isClientFilterVisible('availability') && trim((string) ($_GET['isAvailable'] ?? '')) !== '') {
+    $userActiveFilterCount++;
 }
 
 $buildFilterRemoveUrl = static function (
@@ -354,10 +390,9 @@ $buildStoreUrl = static function (int $targetPage) use ($filters, $isSectionBrow
     return store_url($params);
 };
 
-$productReturnUrl = null;
+$productReturnUrl = catalog_current_return_url();
 $productOfferSlug = null;
 if ($sectionContext !== null) {
-    $productReturnUrl = store_url(CatalogSectionResolver::storeLinkParams($sectionContext));
     if (!empty($sectionContext['is_offer_section'])) {
         $productOfferSlug = trim((string) ($sectionContext['slug'] ?? ''));
         if ($productOfferSlug === '') {
@@ -368,7 +403,6 @@ if ($sectionContext !== null) {
 
 require __DIR__ . '/partials/store-filter-group.php';
 ?>
-<link href="/css/store-filters.css" rel="stylesheet">
 
 <?php if ($sectionContext !== null): ?>
   <section class="mb-4 rounded-2xl border border-primary/20 bg-red-50 px-4 py-3">
@@ -408,6 +442,13 @@ require __DIR__ . '/partials/store-filter-group.php';
   </div>
 </section>
 
+<?php if ($storeShowPrice && StorePricePreference::current() === StorePricePreference::SYP): ?>
+  <p class="store-syp-disclaimer" role="note">
+    <span class="material-symbols-outlined" aria-hidden="true">info</span>
+    الأسعار بالليرة السورية تقريبية وقد تتغيّر حسب سعر الصرف وقت إتمام الطلب.
+  </p>
+<?php endif; ?>
+
 <?php if (!empty($catalog['apiError'])): ?>
   <p class="mb-4 rounded-xl border bg-red-50 border-red-200 text-red-700 px-4 py-3 text-sm"><?= h((string) $catalog['apiError']) ?></p>
 <?php endif; ?>
@@ -416,7 +457,8 @@ require __DIR__ . '/partials/store-filter-group.php';
   <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $cartNoticeOk ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700' ?>"><?= h($cartNoticeMessage) ?></p>
 <?php endif; ?>
 
-<div class="store-layout <?= ($allowClientFilters || $isSectionBrowse) ? 'has-sidebar' : '' ?>" id="store-filters-root">
+<!-- store-catalog-fragment:start -->
+<div class="store-layout <?= ($allowClientFilters || $isSectionBrowse) ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?>>
   <?php if ($allowClientFilters || $isSectionBrowse): ?>
     <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
       <aside class="store-filters-sidebar">
@@ -496,8 +538,9 @@ require __DIR__ . '/partials/store-filter-group.php';
                     $groupOptions,
                     (array) $facetConfig['selected'],
                     (string) $facetConfig['code'],
-                    (string) $facetConfig['code'] === 'manufacturers' ? 6 : 8,
-                    (string) $facetConfig['code'] === 'manufacturers' ? 8 : 6
+                    5,
+                    6,
+                    $filtersDeferred || $groupOptions === []
                 );
               ?>
             <?php endforeach; ?>
@@ -516,7 +559,7 @@ require __DIR__ . '/partials/store-filter-group.php';
                     $label = trim((string) ($store['name'] ?? '')) ?: (trim((string) ($store['code'] ?? '')) ?: $guid);
                     $storeGroupOptions[] = ['value' => $guid, 'label' => $label];
                 }
-                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, $selectedStoreGuids, 'stores');
+                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, $selectedStoreGuids, 'stores', 5, 6, $filtersDeferred || $storeGroupOptions === []);
               ?>
             <?php endif; ?>
 
@@ -553,7 +596,7 @@ require __DIR__ . '/partials/store-filter-group.php';
                         $groupGroupOptions[] = ['value' => $guid, 'label' => $label];
                     }
                 }
-                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, $selectedGroupGuids, 'groups');
+                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, $selectedGroupGuids, 'groups', 5, 6, $filtersDeferred || $groupGroupOptions === []);
               ?>
             <?php endif; ?>
 
@@ -650,13 +693,13 @@ require __DIR__ . '/partials/store-filter-group.php';
         <button type="button" id="store-filters-open" class="store-filters-open-btn lg:hidden">
           <span class="material-symbols-outlined text-base" aria-hidden="true">tune</span>
           فلاتر
-          <?php if ($activeFilterCount > 0): ?>
-            <span class="badge"><?= (int) $activeFilterCount ?></span>
+          <?php if ($userActiveFilterCount > 0): ?>
+            <span class="badge"><?= (int) $userActiveFilterCount ?></span>
           <?php endif; ?>
         </button>
       <?php endif; ?>
 
-      <?php if ((int) ($catalog['totalCount'] ?? 0) > 0): ?>
+      <?php if ((int) ($catalog['totalCount'] ?? 0) > 0 && $products !== []): ?>
         <p class="store-results-meta">
           عرض <?= (int) ($catalog['rangeStart'] ?? 0) ?>–<?= (int) ($catalog['rangeEnd'] ?? 0) ?> من <?= (int) ($catalog['totalCount'] ?? 0) ?> مادة
           <?php if ((int) ($catalog['totalPages'] ?? 1) > 1): ?>
@@ -708,11 +751,11 @@ require __DIR__ . '/partials/store-filter-group.php';
           <?php
             $useImagePreview = true;
             $useQuickView = false;
+            $linkToDetail = false;
             require __DIR__ . '/partials/product-card.php';
           ?>
         <?php endforeach; ?>
       </div>
-      <?php require __DIR__ . '/partials/store-product-preview.php'; ?>
     <?php endif; ?>
 
     <?php
@@ -728,19 +771,24 @@ require __DIR__ . '/partials/store-filter-group.php';
         return $url . $separator . 'preview=' . rawurlencode($previewEdge);
     };
     ?>
-    <script>
-      window.__storePreviewPaging = <?= json_encode([
+    <script type="application/json" data-store-preview-paging><?= json_encode([
           'page' => $page,
           'totalPages' => $totalPages,
           'prevPageUrl' => $page > 1 ? $buildPreviewPageUrl($page - 1, 'last') : null,
           'nextPageUrl' => $page < $totalPages ? $buildPreviewPageUrl($page + 1, 'first') : null,
-      ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-    </script>
+      ], JSON_UNESCAPED_UNICODE) ?></script>
   </div>
 </div>
+<!-- store-catalog-fragment:end -->
 
-<script src="/assets/store-filters.js" defer></script>
-<script src="/assets/store-product-preview.js" defer></script>
+<?php if (empty($GLOBALS['storeCatalogPreviewRendered'])): ?>
+  <?php $GLOBALS['storeCatalogPreviewRendered'] = true; ?>
+  <?php require __DIR__ . '/partials/store-product-preview.php'; ?>
+<?php endif; ?>
+
+<script src="<?= h(portal_asset_url('/assets/store-filters.js')) ?>" defer></script>
+<script src="<?= h(portal_asset_url('/assets/store-catalog-nav.js')) ?>" defer></script>
+<script src="<?= h(portal_asset_url('/assets/store-product-preview.js')) ?>" defer></script>
 
 <style>
   .line-clamp-2 {

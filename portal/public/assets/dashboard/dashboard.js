@@ -7,6 +7,9 @@
   const NAV_HEADER = 'X-Dashboard-Nav';
   const AJAX_HEADER = 'X-Dashboard-Ajax';
 
+  let navAbort = null;
+  let navGeneration = 0;
+
   const qs = (sel, root = document) => root.querySelector(sel);
   const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
@@ -22,6 +25,30 @@
   function showPageLoader(active) {
     const el = qs('#dashboard-page-loader');
     if (el) el.classList.toggle('is-active', active);
+  }
+
+  function mainLoadingMarkup() {
+    return '<div class="dashboard-main-loading" aria-live="polite" aria-busy="true">'
+      + '<div class="dash-spinner" role="status" aria-label="جاري التحميل"></div>'
+      + '<p class="dashboard-main-loading__text">جاري التحميل...</p>'
+      + '</div>';
+  }
+
+  function prepareMainForNavigation(main) {
+    if (!main) return;
+
+    if (window.__materialImagesLinkAbort) {
+      window.__materialImagesLinkAbort.abort();
+      window.__materialImagesLinkAbort = null;
+    }
+
+    if (typeof window.portalDeferredImages?.cancel === 'function') {
+      window.portalDeferredImages.cancel(main);
+    }
+
+    main.innerHTML = mainLoadingMarkup();
+    main.classList.add('is-nav-loading');
+    main.setAttribute('aria-busy', 'true');
   }
 
   function showToast(message, type = 'success', duration = 4200) {
@@ -123,6 +150,57 @@
     if (srcSubtitle && targetSubtitle) targetSubtitle.textContent = srcSubtitle.textContent;
   }
 
+  function syncAreaTabs(doc) {
+    const srcAreaTabs = doc.querySelector('[data-dashboard-area-tabs]');
+    const wantsAreaTabs = doc.body?.dataset.dashboardHasAreaTabs === '1'
+      && srcAreaTabs !== null;
+    document.body.classList.toggle('has-area-tabs', wantsAreaTabs);
+    document.body.dataset.dashboardHasAreaTabs = wantsAreaTabs ? '1' : '0';
+
+    let areaTabs = qs('[data-dashboard-area-tabs]');
+
+    if (wantsAreaTabs && srcAreaTabs) {
+      if (!areaTabs) {
+        areaTabs = document.createElement('nav');
+        areaTabs.setAttribute('data-dashboard-area-tabs', '');
+        const header = qs('body.dashboard-app > header');
+        if (header) {
+          header.insertAdjacentElement('afterend', areaTabs);
+        }
+      }
+      areaTabs.className = srcAreaTabs.className;
+      areaTabs.setAttribute('aria-label', srcAreaTabs.getAttribute('aria-label') || 'أقسام لوحة التحكم');
+      areaTabs.innerHTML = srcAreaTabs.innerHTML;
+      areaTabs.hidden = false;
+      return;
+    }
+
+    if (areaTabs) {
+      areaTabs.remove();
+    }
+  }
+
+  function syncHeaderQuickLinks(doc) {
+    const srcQuickNav = doc.querySelector('[data-dashboard-header-quick-links]');
+    const quickNav = qs('[data-dashboard-header-quick-links]');
+    const brandWrap = qs('body.dashboard-app > header .flex.items-center.gap-2.min-w-0');
+
+    if (srcQuickNav && brandWrap) {
+      if (quickNav) {
+        quickNav.innerHTML = srcQuickNav.innerHTML;
+        quickNav.className = srcQuickNav.className;
+        quickNav.hidden = false;
+      } else {
+        brandWrap.appendChild(srcQuickNav.cloneNode(true));
+      }
+      return;
+    }
+
+    if (quickNav) {
+      quickNav.remove();
+    }
+  }
+
   function syncDashboardChrome(doc) {
     const srcMeta = doc.querySelector('[data-dashboard-sidebar-meta]');
     if (srcMeta) {
@@ -151,11 +229,8 @@
       headerArea.textContent = srcHeaderArea.textContent;
     }
 
-    const srcAreaTabs = doc.querySelector('[data-dashboard-area-tabs]');
-    const areaTabs = qs('[data-dashboard-area-tabs]');
-    if (srcAreaTabs && areaTabs) {
-      areaTabs.innerHTML = srcAreaTabs.innerHTML;
-    }
+    syncAreaTabs(doc);
+    syncHeaderQuickLinks(doc);
   }
 
   function currentDashboardRoute() {
@@ -213,15 +288,23 @@
   }
 
   function closeDrawer() {
-    qs('#dashboard-drawer')?.classList.remove('is-open');
-    qs('#dashboard-drawer-backdrop')?.classList.remove('is-open');
+    const drawer = qs('#dashboard-drawer');
+    const backdrop = qs('#dashboard-drawer-backdrop');
+    drawer?.classList.remove('is-open');
+    backdrop?.classList.remove('is-open');
+    drawer?.setAttribute('aria-hidden', 'true');
+    backdrop?.setAttribute('aria-hidden', 'true');
     qs('#dashboard-menu-btn')?.setAttribute('aria-expanded', 'false');
     document.body.style.overflow = '';
   }
 
   function openDrawer() {
-    qs('#dashboard-drawer')?.classList.add('is-open');
-    qs('#dashboard-drawer-backdrop')?.classList.add('is-open');
+    const drawer = qs('#dashboard-drawer');
+    const backdrop = qs('#dashboard-drawer-backdrop');
+    drawer?.classList.add('is-open');
+    backdrop?.classList.add('is-open');
+    drawer?.setAttribute('aria-hidden', 'false');
+    backdrop?.setAttribute('aria-hidden', 'false');
     qs('#dashboard-menu-btn')?.setAttribute('aria-expanded', 'true');
     document.body.style.overflow = 'hidden';
   }
@@ -283,27 +366,71 @@
     return data;
   }
 
+  function runInlineScripts(fragment) {
+    if (!fragment) return;
+    const scripts = Array.from(fragment.querySelectorAll('script'));
+    scripts.forEach((oldScript) => {
+      const script = document.createElement('script');
+      Array.from(oldScript.attributes).forEach((attr) => {
+        script.setAttribute(attr.name, attr.value);
+      });
+      if (oldScript.src) {
+        script.src = oldScript.src;
+      } else {
+        script.textContent = oldScript.textContent || '';
+      }
+      document.body.appendChild(script);
+    });
+  }
+
   async function navigate(url, push = true) {
     if (!isDashboardUrl(url)) {
       window.location.href = url;
       return;
     }
+
+    closeDrawer();
+
+    if (navAbort) {
+      navAbort.abort();
+    }
+    const generation = ++navGeneration;
+    navAbort = new AbortController();
+    const signal = navAbort.signal;
+
+    const main = qs('[data-dashboard-main]');
+
+    if (window.__materialImagesLinkAbort) {
+      window.__materialImagesLinkAbort.abort();
+      window.__materialImagesLinkAbort = null;
+    }
+
+    if (typeof window.portalDeferredImages?.cancel === 'function') {
+      window.portalDeferredImages.cancel(main);
+    }
+
+    prepareMainForNavigation(main);
     showPageLoader(true);
     try {
       const res = await fetch(url, {
         credentials: 'same-origin',
         headers: { [NAV_HEADER]: '1', Accept: 'text/html' },
+        signal,
       });
+      if (generation !== navGeneration) return;
       if (!res.ok) throw new Error('تعذر تحميل الصفحة.');
       const html = await res.text();
+      if (generation !== navGeneration) return;
       const doc = new DOMParser().parseFromString(html, 'text/html');
       const newMain = doc.querySelector('[data-dashboard-main]');
-      const main = qs('[data-dashboard-main]');
       if (!newMain || !main) {
         window.location.href = url;
         return;
       }
       main.innerHTML = newMain.innerHTML;
+      main.classList.remove('is-nav-loading');
+      main.removeAttribute('aria-busy');
+      runInlineScripts(newMain);
       syncDashboardChrome(doc);
       await ensurePageAssets(newMain.getAttribute('data-dashboard-page-assets') || '');
       const route = newMain.getAttribute('data-current-route') || normalizeDashboardRoute(url);
@@ -322,9 +449,12 @@
       bindPage(document);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
+      if (err?.name === 'AbortError') return;
       showToast(err.message || 'تعذر التنقل.', 'error');
     } finally {
-      showPageLoader(false);
+      if (generation === navGeneration) {
+        showPageLoader(false);
+      }
     }
   }
 
@@ -368,8 +498,10 @@
   function bindNavigation(root) {
     qsa('a[href^="/dashboard/"]', root).forEach((link) => {
       if (link.hasAttribute('data-dashboard-no-nav')) return;
+      if (link.dataset.dashboardNavBound === '1') return;
       if (link.target === '_blank') return;
       if (link.hasAttribute('download')) return;
+      link.dataset.dashboardNavBound = '1';
       link.addEventListener('click', (event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         const href = link.getAttribute('href');
@@ -504,7 +636,61 @@
     if (typeof window.portalMaterialImagesLinkInit === 'function') {
       window.portalMaterialImagesLinkInit(root);
     }
+    if (typeof window.portalMaterialZipDownloadInit === 'function') {
+      window.portalMaterialZipDownloadInit(root);
+    }
+    if (typeof window.portalSiteMediaInit === 'function') {
+      window.portalSiteMediaInit(root);
+    }
     bindOrderImageZoom(root);
+  }
+
+  function syncDashboardLayoutMetrics() {
+    const tabs = qs('[data-dashboard-area-tabs]');
+    const bottomNav = qs('#dashboard-bottom-nav');
+    const root = document.documentElement;
+
+    const applyTabs = () => {
+      if (!tabs) {
+        root.style.setProperty('--dash-area-tabs', '0px');
+        return;
+      }
+      const height = Math.ceil(tabs.getBoundingClientRect().height);
+      root.style.setProperty('--dash-area-tabs', height > 0 ? height + 'px' : '0px');
+    };
+
+    const applyBottomNav = () => {
+      const mobile = window.matchMedia('(max-width: 1023px)').matches;
+      if (!bottomNav || !mobile) {
+        root.style.setProperty('--dash-bottom-nav', '0px');
+        return;
+      }
+      const height = Math.ceil(bottomNav.getBoundingClientRect().height);
+      const px = height > 0 ? height + 'px' : '5rem';
+      root.style.setProperty('--dash-bottom-nav', px);
+      const spacer = qs('[data-dashboard-bottom-spacer]');
+      if (spacer) {
+        spacer.style.height = 'calc(' + px + ' + 0.75rem + env(safe-area-inset-bottom, 0px))';
+      }
+    };
+
+    const apply = () => {
+      applyTabs();
+      applyBottomNav();
+    };
+
+    apply();
+    if (typeof ResizeObserver !== 'undefined') {
+      if (tabs) {
+        const tabsObserver = new ResizeObserver(applyTabs);
+        tabsObserver.observe(tabs);
+      }
+      if (bottomNav) {
+        const navObserver = new ResizeObserver(applyBottomNav);
+        navObserver.observe(bottomNav);
+      }
+    }
+    window.addEventListener('resize', apply, { passive: true });
   }
 
   async function init() {
@@ -514,6 +700,8 @@
       document.body.classList.add('has-bottom-nav');
     }
     bindMobileNav();
+    syncDashboardLayoutMetrics();
+    closeDrawer();
     bindHistory();
     bindPage(document);
     history.replaceState({ dashboardUrl: window.location.href }, '', window.location.href);

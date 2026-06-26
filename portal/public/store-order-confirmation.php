@@ -43,7 +43,7 @@ ob_start();
 
     <div class="mt-6 flex flex-wrap justify-center gap-2">
       <a href="/store.php" class="store-btn store-btn--secondary">العودة للمتجر</a>
-      <a href="/login.php?type=customer" class="store-btn store-btn--ghost">دخول العملاء</a>
+      <a href="<?= h(portal_login_url('customer')) ?>" class="store-btn store-btn--ghost">دخول العملاء</a>
     </div>
   </div>
 </section>

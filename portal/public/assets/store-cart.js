@@ -1,5 +1,6 @@
 (() => {
   const API = '/api/store-cart.php';
+  let lastCartData = null;
 
   const toastHost = () => {
     let host = document.getElementById('storeCartToastHost');
@@ -12,8 +13,15 @@
     return host;
   };
 
+  let lastToastMessage = '';
+  let lastToastAt = 0;
+
   const showToast = (message, level = 'success') => {
     if (!message) return;
+    const now = Date.now();
+    if (message === lastToastMessage && now - lastToastAt < 2500) return;
+    lastToastMessage = message;
+    lastToastAt = now;
     const el = document.createElement('div');
     el.className = `store-cart-toast store-cart-toast--${level}`;
     const icon = level === 'error' ? 'error' : level === 'warning' ? 'warning' : 'check_circle';
@@ -156,11 +164,13 @@
     };
   };
 
-  const linePricesHtml = (line, showPriceSyp, showPriceUsd) => {
+  const linePricesHtml = (line) => {
     const prices = computeLinePrices(line);
     const hasOffer = lineHasOffer(line);
-    if (showPriceSyp && (prices.packSp > 0 || prices.origPackSp > 0)) {
-      let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
+    let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
+
+    if (prices.packSp > 0 || prices.origPackSp > 0) {
+      html += '<div class="store-price-currency store-price-currency--syp">';
       html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
         <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
         <div class="store-order-line-prices__values">
@@ -178,10 +188,10 @@
         </div>`;
       }
       html += '</div>';
-      return html;
     }
-    if (showPriceUsd && (prices.packUsd > 0 || prices.origPackUsd > 0)) {
-      let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
+
+    if (prices.packUsd > 0 || prices.origPackUsd > 0) {
+      html += '<div class="store-price-currency store-price-currency--usd">';
       html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
         <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
         <div class="store-order-line-prices__values">
@@ -199,12 +209,13 @@
         </div>`;
       }
       html += '</div>';
-      return html;
     }
-    return '';
+
+    html += '</div>';
+    return html;
   };
 
-  const renderCartLineCard = (line, showPriceSyp, showPriceUsd, max) => {
+  const renderCartLineCard = (line, max) => {
     const guid = line.material_guid || '';
     const prices = computeLinePrices(line);
     const hasOffer = lineHasOffer(line);
@@ -215,11 +226,12 @@
           return `<button type="button" class="store-order-line-card__thumb" data-cart-image-zoom="${zoom}" title="تكبير الصورة للتدقيق"><img src="${thumb}" alt="" loading="lazy"><span class="store-order-line-card__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span></button>`;
         })()
       : '<div class="store-order-line-card__placeholder"><span class="material-symbols-outlined" aria-hidden="true">inventory_2</span></div>';
-    const lineTotalCell = showPriceSyp
-      ? `${formatMoney(prices.lineTotalSp)} ل.س`
-      : showPriceUsd
-        ? `$${formatUsd(prices.lineTotalUsd)}`
-        : '';
+    const lineTotalCell = (prices.packSp > 0 || prices.origPackSp > 0 || prices.packUsd > 0 || prices.origPackUsd > 0)
+      ? `<div class="store-order-line-card__totals">
+          ${prices.packSp > 0 || prices.origPackSp > 0 ? `<span class="store-price-currency store-price-currency--syp store-num" dir="ltr">${formatMoney(prices.lineTotalSp)} ل.س</span>` : ''}
+          ${prices.packUsd > 0 || prices.origPackUsd > 0 ? `<span class="store-price-currency store-price-currency--usd store-num" dir="ltr">$${formatUsd(prices.lineTotalUsd)}</span>` : ''}
+        </div>`
+      : '';
     return `<article class="store-order-line-card store-cart-line-card${hasOffer ? ' store-order-line-card--offer' : ''}" data-cart-line="${escapeHtml(guid)}">
       <div class="store-order-line-card__media">${img}</div>
       <div class="store-order-line-card__body">
@@ -234,7 +246,7 @@
           </button>
         </div>
         <div class="store-cart-line-card__foot">
-          ${showPriceSyp || showPriceUsd ? linePricesHtml(line, showPriceSyp, showPriceUsd) : ''}
+          ${linePricesHtml(line)}
           <div class="store-cart-line-card__controls">
             <div class="store-cart-line-card__qty-row">
               <div class="store-qty-stepper store-qty-stepper--compact" data-cart-qty-control data-guid="${escapeHtml(guid)}">
@@ -251,14 +263,67 @@
     </article>`;
   };
 
-  const updateBadge = (count) => {
+  const formatPackageCount = (amount) => {
+    const n = Number(amount) || 0;
+    if (Math.abs(n - Math.round(n)) < 0.0001) {
+      return String(Math.round(n));
+    }
+    return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  };
+
+  const updateBadge = (data) => {
+    const packageCount = typeof data === 'object' && data !== null
+      ? Math.max(0, Number(data.cart_package_count) || 0)
+      : Math.max(0, Number(data) || 0);
+
     document.querySelectorAll('[data-store-cart-badge]').forEach((badge) => {
-      const n = Math.max(0, parseInt(count, 10) || 0);
-      badge.textContent = String(n);
-      badge.classList.toggle('hidden', n <= 0);
+      const label = formatPackageCount(packageCount);
+      const packagesEl = badge.querySelector('[data-store-cart-badge-packages]');
+      if (packagesEl) {
+        packagesEl.textContent = label;
+      } else {
+        badge.textContent = label;
+      }
+
+      badge.classList.toggle('hidden', packageCount <= 0);
+      badge.title = packageCount > 0 ? `${label} طرد` : '';
       badge.classList.add('is-updated');
       setTimeout(() => badge.classList.remove('is-updated'), 500);
     });
+
+    document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
+      btn.classList.toggle('is-cart-pulse', packageCount > 0);
+    });
+  };
+
+  const flyToCart = (fromEl) => {
+    const cartBtn = document.querySelector('[data-store-cart-open]');
+    if (!fromEl || !cartBtn) return;
+
+    const fromRect = fromEl.getBoundingClientRect();
+    const toRect = cartBtn.getBoundingClientRect();
+    if (fromRect.width <= 0 || toRect.width <= 0) return;
+
+    const dot = document.createElement('span');
+    dot.className = 'store-cart-fly-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    const startX = fromRect.left + fromRect.width / 2;
+    const startY = fromRect.top + fromRect.height / 2;
+    const endX = toRect.left + toRect.width / 2;
+    const endY = toRect.top + toRect.height / 2;
+    dot.style.setProperty('--fly-x', `${endX - startX}px`);
+    dot.style.setProperty('--fly-y', `${endY - startY}px`);
+    dot.style.left = `${startX}px`;
+    dot.style.top = `${startY}px`;
+    document.body.appendChild(dot);
+
+    requestAnimationFrame(() => {
+      dot.classList.add('is-flying');
+    });
+
+    dot.addEventListener('animationend', () => dot.remove(), { once: true });
+    cartBtn.classList.add('is-cart-bump');
+    setTimeout(() => cartBtn.classList.remove('is-cart-bump'), 650);
   };
 
   const apiRequest = async (payload) => {
@@ -326,41 +391,142 @@
     return { ok: false, message: `الحد الأقصى للطلب هو ${maxLabel} طرد لهذه المادة.` };
   };
 
+  const getRemainingAdd = (form, inCartQty) => {
+    const maxPackages = parseFloat(form.dataset.maxQty || '');
+    if (Number.isFinite(maxPackages) && maxPackages > 0) {
+      return Math.max(0, maxPackages - inCartQty);
+    }
+    const effective = parseFloat(form.dataset.effectiveMax || '');
+    if (Number.isFinite(effective) && effective >= 0) {
+      return effective;
+    }
+    return null;
+  };
+
+  const isPartialAddForm = (form) => form.dataset.partialPackage === '1';
+
+  const updatePreviewPayload = (guid, inCartQty) => {
+    const card = document.querySelector(`[data-preview-guid="${CSS.escape(guid)}"]`);
+    if (!card) return;
+    try {
+      const payload = JSON.parse(card.getAttribute('data-preview') || '{}');
+      payload.cartQty = inCartQty;
+      const maxPackages = Number(payload.maxPackages);
+      if (Number.isFinite(maxPackages) && maxPackages > 0) {
+        const remaining = Math.max(0, maxPackages - inCartQty);
+        payload.remaining = remaining;
+        payload.effectiveMax = remaining;
+        payload.atLimit = remaining <= 0;
+      }
+      card.setAttribute('data-preview', JSON.stringify(payload));
+    } catch {
+      // ignore invalid preview payload
+    }
+  };
+
+  const setFormCartMode = (form, inCartQty) => {
+    if (!form) return;
+    const inCart = inCartQty > 0;
+    const partialLocked = isPartialAddForm(form);
+    const remaining = getRemainingAdd(form, inCartQty);
+    const atLimit = remaining !== null && remaining <= 0;
+    const lockedInCart = inCart && (partialLocked || atLimit);
+    const canAdjust = inCart && !lockedInCart;
+    const qtyLabel = formatPackageCount(inCartQty);
+
+    form.dataset.cartQty = String(inCartQty);
+    form.dataset.cartMode = inCart
+      ? (lockedInCart ? 'in-cart-locked' : 'in-cart')
+      : (partialLocked ? 'partial-add' : 'add');
+    if (remaining !== null) {
+      form.dataset.effectiveMax = String(remaining);
+    }
+
+    const inCartEl = form.querySelector('.store-add-cart__in-cart');
+    const addEl = form.querySelector('.store-add-cart__add');
+    if (inCartEl) inCartEl.hidden = !inCart;
+    if (addEl) addEl.hidden = inCart;
+    form.classList.toggle('store-add-cart--in-cart', inCart);
+    form.classList.toggle('store-add-cart--locked', lockedInCart);
+
+    const qtyRoot = form.closest('.store-product-card') || form;
+    qtyRoot.querySelectorAll('[data-cart-qty-display]').forEach((el) => {
+      el.textContent = qtyLabel;
+    });
+
+    const lockedRow = form.querySelector('[data-cart-qty-locked]') || form.querySelector('.store-card-cart-bar__qty-locked');
+    const adjustRow = form.querySelector('[data-cart-qty-adjust]');
+    if (lockedRow) lockedRow.hidden = canAdjust;
+    if (adjustRow) adjustRow.hidden = !canAdjust;
+
+    const plus = adjustRow?.querySelector('[data-cart-bump="1"]') || form.querySelector('[data-cart-bump="1"]');
+    const minus = adjustRow?.querySelector('[data-cart-bump="-1"]') || form.querySelector('[data-cart-bump="-1"]');
+    const step = getQtyStep(form);
+    if (plus) plus.disabled = !canAdjust || (remaining !== null && remaining <= 0);
+    if (minus) minus.disabled = !canAdjust || inCartQty <= 0;
+
+    const guid = form.dataset.materialGuid || form.querySelector('[name="material_guid"]')?.value || '';
+    if (guid) updatePreviewPayload(guid, inCartQty);
+  };
+
+  const refreshCartForms = (data) => {
+    const qtyMap = data?.cart_qty_by_guid || {};
+    document.querySelectorAll('[data-store-add-cart]').forEach((form) => {
+      syncFormLimits(form, qtyMap);
+    });
+    document.dispatchEvent(new CustomEvent('store-cart-updated', { detail: data }));
+  };
+
   const syncFormLimits = (form, cartQtyByGuid) => {
     const guid = form.dataset.materialGuid || form.querySelector('[name="material_guid"]')?.value || '';
     if (!guid) return;
-    const inCart = cartQtyByGuid[guid] ?? 0;
-    form.dataset.cartQty = String(inCart);
+    const map = cartQtyByGuid && typeof cartQtyByGuid === 'object' ? cartQtyByGuid : {};
+    const inCartQty = Math.max(0, Number(map[guid] ?? map[guid.toLowerCase()] ?? map[guid.toUpperCase()]) || 0);
+    setFormCartMode(form, inCartQty);
+
+    if (inCartQty > 0) {
+      return;
+    }
+
     const max = getMaxQty(form);
     const input = form.querySelector('[name="quantity"]');
-    const hint = form.querySelector('[data-qty-hint]');
+    const hint = form.querySelector('.store-add-cart__add [data-qty-hint]');
     const minus = form.querySelector('[data-qty-minus]');
     const plus = form.querySelector('[data-qty-plus]');
     const step = getQtyStep(form);
     if (max !== null && input) {
-      const remaining = Math.max(0, max - inCart);
-      input.max = String(Math.max(step, remaining));
-      const currentVal = parseFloat(input.value || String(step)) || step;
-      if (currentVal > remaining && remaining > 0) {
-        input.value = step < 1 ? String(Math.round(remaining * 100) / 100) : String(Math.max(step, Math.floor(remaining)));
-      }
-      if (hint && !hint.textContent.includes('أقل من طرد')) {
-        if (remaining <= 0) {
-          hint.textContent = `وصلت للحد الأقصى (${form.dataset.maxQtyLabel || max} طرد)`;
-          hint.classList.add('is-warning');
-        } else {
-          const remainingLabel = step < 1
-            ? remaining.toLocaleString('en-US', { maximumFractionDigits: 2 })
-            : String(Math.floor(remaining));
-          hint.textContent = `الحد الأقصى ${form.dataset.maxQtyLabel || max} طرد — متبقي ${remainingLabel}`;
-          hint.classList.remove('is-warning');
-        }
-      }
-      if (plus) plus.disabled = remaining <= 0;
+      input.max = String(Math.max(step, max));
+      if (plus) plus.disabled = max <= 0 || isPartialAddForm(form);
     }
     if (minus && input) {
       const val = parseFloat(input.value || String(step)) || step;
-      minus.disabled = val <= step;
+      minus.disabled = val <= step || isPartialAddForm(form);
+    }
+    if (hint && !isPartialAddForm(form) && max !== null) {
+      hint.textContent = `الحد الأقصى ${form.dataset.maxQtyLabel || max} ${form.dataset.packageUnit || 'طرد'} لكل مادة`;
+      hint.classList.toggle('is-warning', max <= 0);
+    }
+  };
+
+  const bumpCartQty = async (form, delta) => {
+    const guid = form.dataset.materialGuid || form.querySelector('[name="material_guid"]')?.value || '';
+    if (!guid || form.dataset.ajaxSubmitting === '1') return;
+    form.dataset.ajaxSubmitting = '1';
+    const buttons = form.querySelectorAll('[data-cart-bump]');
+    buttons.forEach((btn) => { btn.disabled = true; });
+    try {
+      const data = await apiRequest({ action: 'bump', material_guid: guid, delta });
+      applyCartResponse(data);
+      if (!data.ok && data.message) showToast(data.message, data.level || 'error');
+    } catch {
+      showToast('تعذر تحديث الكمية.', 'error');
+    } finally {
+      delete form.dataset.ajaxSubmitting;
+      const refreshedQty = lastCartData?.cart_qty_by_guid?.[guid];
+      const inCartQty = refreshedQty !== undefined
+        ? Math.max(0, Number(refreshedQty) || 0)
+        : getCurrentInCart(form);
+      setFormCartMode(form, inCartQty);
     }
   };
 
@@ -372,18 +538,19 @@
       const minus = form.querySelector('[data-qty-minus]');
       const plus = form.querySelector('[data-qty-plus]');
       const refresh = () => {
+        if (form.dataset.cartMode?.startsWith('in-cart')) return;
         const max = getMaxQty(form);
         const current = getCurrentInCart(form);
         const step = getQtyStep(form);
         const val = parseFloat(input?.value || String(step)) || step;
-        if (minus) minus.disabled = val <= step;
+        if (minus) minus.disabled = val <= step || isPartialAddForm(form);
         if (plus && max !== null) {
           const remaining = Math.max(0, max - current);
-          plus.disabled = val >= remaining - 0.0001;
+          plus.disabled = val >= remaining - 0.0001 || isPartialAddForm(form);
         }
       };
       minus?.addEventListener('click', () => {
-        if (!input) return;
+        if (!input || isPartialAddForm(form)) return;
         const step = getQtyStep(form);
         const val = parseFloat(input.value || String(step)) || step;
         const next = Math.max(step, step < 1 ? Math.round((val - step) * 100) / 100 : val - step);
@@ -391,7 +558,7 @@
         refresh();
       });
       plus?.addEventListener('click', () => {
-        if (!input) return;
+        if (!input || isPartialAddForm(form)) return;
         const step = getQtyStep(form);
         const val = parseFloat(input.value || String(step)) || step;
         const next = step < 1 ? Math.round((val + step) * 100) / 100 : val + step;
@@ -405,64 +572,160 @@
       });
       input?.addEventListener('input', refresh);
       refresh();
+
+      form.querySelectorAll('[data-cart-bump]').forEach((btn) => {
+        if (btn.dataset.bound === '1') return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => {
+          const sign = parseInt(btn.getAttribute('data-cart-bump') || '0', 10);
+          if (!sign) return;
+          const step = getQtyStep(form);
+          const delta = sign > 0 ? step : -step;
+          bumpCartQty(form, delta);
+        });
+      });
     });
+  };
+
+  const submitAddCartForm = async (form) => {
+    if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-store-add-cart')) {
+      return;
+    }
+    if (form.dataset.ajaxSubmitting === '1') {
+      return;
+    }
+    form.dataset.ajaxSubmitting = '1';
+    const btn = form.querySelector('[type="submit"]');
+    const addQty = getRequestedQty(form);
+    const currentQty = getCurrentInCart(form);
+    const check = validateQty(form, addQty, currentQty);
+    if (!check.ok) {
+      showToast(check.message, 'error');
+      delete form.dataset.ajaxSubmitting;
+      return;
+    }
+    btn?.classList.add('is-loading');
+    const formData = new FormData(form);
+    const payload = { action: 'add' };
+    formData.forEach((value, key) => {
+      if (key === 'action') return;
+      payload[key] = value;
+    });
+    try {
+      const data = await apiRequest(payload);
+      refreshCartForms(data);
+      updateBadge(data);
+      if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
+      if (!data.ok) return;
+      const flySource = btn || form.querySelector('.store-add-cart__submit') || form;
+      flyToCart(flySource);
+      if (window.SiteAnalytics) {
+        window.SiteAnalytics.track('add_to_cart', {
+          product_guid: String(payload.material_guid || form.dataset.materialGuid || ''),
+          product_code: String(payload.material_code || ''),
+          product_name: String(payload.material_name_ar || ''),
+          quantity: String(payload.quantity || '1'),
+          label_ar: `إضافة للسلة: ${String(payload.material_name_ar || 'صنف')}`,
+        });
+      }
+      if (inputReset(form)) {
+        const step = getQtyStep(form);
+        form.querySelector('[name="quantity"]').value = String(step);
+      }
+    } catch {
+      showToast('تعذر الاتصال بالخادم.', 'error');
+    } finally {
+      btn?.classList.remove('is-loading');
+      delete form.dataset.ajaxSubmitting;
+    }
   };
 
   const bindAddForms = () => {
-    document.querySelectorAll('[data-store-add-cart]').forEach((form) => {
-      if (form.dataset.ajaxBound === '1') return;
-      form.dataset.ajaxBound = '1';
-      form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const btn = form.querySelector('[type="submit"]');
-        const addQty = getRequestedQty(form);
-        const currentQty = getCurrentInCart(form);
-        const check = validateQty(form, addQty, currentQty);
-        if (!check.ok) {
-          showToast(check.message, 'error');
-          return;
-        }
-        btn?.classList.add('is-loading');
-        const formData = new FormData(form);
-        const payload = { action: 'add' };
-        formData.forEach((value, key) => {
-          if (key === 'action') return;
-          payload[key] = value;
-        });
-        try {
-          const data = await apiRequest(payload);
-          if (data.cart_qty_by_guid) {
-            document.querySelectorAll('[data-store-add-cart]').forEach((f) => syncFormLimits(f, data.cart_qty_by_guid));
-          }
-          updateBadge(data.cart_count);
-          if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
-          if (!data.ok) return;
-          if (inputReset(form)) {
-            const step = getQtyStep(form);
-            form.querySelector('[name="quantity"]').value = String(step);
-          }
-        } catch {
-          showToast('تعذر الاتصال بالخادم.', 'error');
-        } finally {
-          btn?.classList.remove('is-loading');
-        }
-      });
-    });
     bindQtySteppers();
   };
 
+  if (!window.__storeCartSubmitCaptureBound) {
+    window.__storeCartSubmitCaptureBound = true;
+    document.addEventListener('submit', (event) => {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-store-add-cart')) {
+        return;
+      }
+      event.preventDefault();
+      submitAddCartForm(form);
+    }, true);
+  }
+
   const inputReset = (form) => form.querySelector('[name="quantity"]');
 
-  const renderCartPage = (data) => {
-    const root = document.querySelector('[data-store-cart-page]');
+  const renderUnavailableSection = (lines) => {
+    if (!lines.length) return '';
+    let html = `<section class="store-cart-unavailable" data-cart-unavailable>
+      <div class="store-cart-unavailable__head">
+        <div>
+          <h3 class="font-bold text-red-800">غير متوفرة للطلب</h3>
+          <p class="text-xs text-red-700 mt-0.5">هذه الأصناف لن تُرسل مع الطلب. قد يكون السبب حجز كميتها لطلبات أخرى قيد المعالجة.</p>
+        </div>
+        <button type="button" class="text-xs font-bold text-red-700 hover:underline" data-clear-unavailable>إزالة الكل</button>
+      </div>
+      <div class="store-cart-unavailable__list">`;
+    lines.forEach((line) => {
+      const guid = String(line.material_guid || '');
+      const packageUnit = String(line.package_unit || 'طرد');
+      const qty = Math.max(1, Math.round(Number(line.quantity) || 1));
+      const image = line.image_url
+        ? `<img src="${escapeHtml(line.image_url)}" alt="" class="w-14 h-14 rounded-lg object-cover bg-gray-100 shrink-0 opacity-70" loading="lazy">`
+        : '';
+      html += `<div class="store-cart-unavailable__item" data-unavailable-guid="${escapeHtml(guid)}">
+        <div class="flex items-center gap-3 min-w-0">
+          ${image}
+          <div class="min-w-0">
+            <div class="font-bold text-sm text-gray-800">${escapeHtml(line.material_name_ar || '')}</div>
+            <div class="text-xs text-red-700 mt-1">${escapeHtml(line.stock_message || 'نفدت الكمية المتاحة.')}</div>
+            <div class="text-xs text-gray-500 mt-1">الكمية المطلوبة: ${qty} ${escapeHtml(packageUnit)}</div>
+          </div>
+        </div>
+        <button type="button" class="text-xs font-bold text-gray-600 hover:text-red-600 shrink-0" data-remove-unavailable="${escapeHtml(guid)}">إزالة</button>
+      </div>`;
+    });
+    html += '</div></section>';
+    return html;
+  };
+
+  const bindUnavailableControls = (root) => {
+    root.querySelectorAll('[data-remove-unavailable]').forEach((btn) => {
+      if (btn.dataset.bound === '1') return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', async () => {
+        const guid = btn.getAttribute('data-remove-unavailable') || '';
+        if (!guid) return;
+        const data = await apiRequest({ action: 'remove_unavailable', material_guid: guid });
+        applyCartResponse(data);
+      });
+    });
+    root.querySelectorAll('[data-clear-unavailable]').forEach((btn) => {
+      if (btn.dataset.bound === '1') return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', async () => {
+        if (!window.confirm('إزالة جميع الأصناف غير المتوفرة؟')) return;
+        const data = await apiRequest({ action: 'clear_unavailable' });
+        applyCartResponse(data);
+      });
+    });
+  };
+
+  const renderCartRoot = (root, data) => {
     if (!root) return;
 
+    const isDrawer = root.dataset.storeCartPage === 'drawer';
     const showPrice = !!data.show_price;
-    const priceMode = (data.price_mode || 'syp').toLowerCase();
-    const showPriceSyp = showPrice && (priceMode === 'syp' || priceMode === 'both');
-    const showPriceUsd = showPrice && (priceMode === 'usd' || priceMode === 'both');
     const max = data.max_packages_per_material;
     const maxLabel = data.max_packages_label || max;
+    const loadingEl = root.querySelector('[data-cart-drawer-loading]');
+    if (loadingEl) {
+      loadingEl.hidden = true;
+    }
+    root.classList.remove('is-loading-cart');
 
     const noticeEl = root.querySelector('[data-cart-notice]');
     const errorEl = root.querySelector('[data-cart-error]');
@@ -483,41 +746,43 @@
       stockEl.innerHTML = '';
     }
 
-    updateBadge(data.cart_count);
+    updateBadge(data);
 
     const items = Array.isArray(data.items) ? data.items : [];
     const unavailable = Array.isArray(data.unavailable) ? data.unavailable : [];
+    if (items.length === 0 && unavailable.length === 0 && isDrawer) {
+      closeCheckoutSheet(root);
+    }
 
     if (bodyEl) {
       if (items.length === 0 && unavailable.length === 0) {
         bodyEl.innerHTML = `
-          <div class="store-cart-empty lg:col-span-8">
+          <div class="store-cart-empty${isDrawer ? '' : ' lg:col-span-8'}">
             <span class="material-symbols-outlined text-5xl text-gray-300" aria-hidden="true">shopping_cart</span>
             <p class="text-gray-500 mt-3">السلة فارغة.</p>
-            <a href="/store.php" class="store-btn store-btn--primary mt-4">تصفح المتجر</a>
+            ${isDrawer
+              ? '<button type="button" class="store-btn store-btn--primary mt-4" data-store-cart-drawer-close>تصفح المتجر</button>'
+              : '<a href="/store.php" class="store-btn store-btn--primary mt-4">تصفح المتجر</a>'}
           </div>`;
       } else {
-        let html = '<div class="lg:col-span-8 space-y-4">';
+        let html = isDrawer ? '<div class="space-y-4">' : '<div class="lg:col-span-8 space-y-4">';
         if (max) {
           html += `<p class="store-limit-banner">الحد الأقصى للطلب: <strong>${escapeHtml(String(maxLabel))}</strong> طرد لكل مادة.</p>`;
         }
         if (items.length > 0) {
           html += '<div class="store-cart-lines">';
           items.forEach((line) => {
-            html += renderCartLineCard(line, showPriceSyp, showPriceUsd, max);
+            html += renderCartLineCard(line, max);
           });
           html += '</div>';
         }
         if (unavailable.length > 0) {
-          html += '<section class="rounded-2xl border border-amber-200 bg-amber-50 p-4"><h3 class="font-bold text-amber-900 mb-2">غير متوفرة حالياً</h3><ul class="text-sm text-amber-900 space-y-1">';
-          unavailable.forEach((line) => {
-            html += `<li>${escapeHtml(line.material_name_ar || '')}</li>`;
-          });
-          html += '</ul></section>';
+          html += renderUnavailableSection(unavailable);
         }
         html += '</div>';
         bodyEl.innerHTML = html;
         bindCartLineControls(bodyEl, max);
+        bindUnavailableControls(bodyEl);
         bindImageZoom(bodyEl);
       }
     }
@@ -525,39 +790,70 @@
     if (summaryEl) {
       const totals = data.totals || {};
       const allowOrder = !!data.allow_order;
+      const isLoggedIn = root.dataset.loggedIn === '1' || !!data.logged_in;
       const totalSp = Number(totals.total_sp) || 0;
       const totalUsd = Number(totals.total_usd) || 0;
-      const totalLine = showPriceSyp
-        ? `<div class="store-cart-summary__total">الإجمالي: ${formatMoney(totalSp)} ل.س</div>`
-        : showPriceUsd
-          ? `<div class="store-cart-summary__total">الإجمالي: $${formatUsd(totalUsd)}</div>`
-          : '';
-      summaryEl.innerHTML = `<div class="store-panel store-cart-summary space-y-4">
-        ${totalLine}
-        ${items.length > 0 ? '<button type="button" class="store-btn store-btn--ghost" data-clear-cart>تفريغ السلة</button>' : ''}
-        ${allowOrder && items.length > 0 ? `
-          <form data-checkout-form class="space-y-3 border-t border-gray-100 pt-4">
-            <label class="block text-sm font-bold">الاسم الكامل *
-              <input name="guest_name_ar" required class="store-input mt-1" value="${escapeHtml(root.dataset.defaultName || '')}">
-            </label>
-            <label class="block text-sm font-bold">رقم الهاتف *
-              <input name="guest_phone" required dir="ltr" class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}">
-            </label>
-            <label class="block text-sm font-bold">ملاحظات
-              <textarea name="notes_ar" rows="3" class="store-input mt-1 h-auto py-2 text-sm"></textarea>
-            </label>
-            <button type="submit" class="store-btn store-btn--primary w-full">تأكيد وإرسال الطلب</button>
-          </form>
-        ` : !allowOrder && items.length > 0 ? '<p class="text-sm text-amber-800">سياسة المتجر لا تسمح بإرسال الطلبات حالياً.</p>' : ''}
-      </div>`;
+      const totalLine = showPrice
+        ? `<div class="store-cart-summary__totals">
+            ${totalSp > 0 ? `<div class="store-cart-summary__total store-price-currency store-price-currency--syp">الإجمالي: ${formatMoney(totalSp)} ل.س</div>` : ''}
+            ${totalUsd > 0 ? `<div class="store-cart-summary__total store-price-currency store-price-currency--usd">الإجمالي: $${formatUsd(totalUsd)}</div>` : ''}
+          </div>`
+        : '';
+
+      if (isDrawer) {
+        summaryEl.innerHTML = `<div class="store-panel store-cart-summary store-cart-summary--drawer space-y-3">
+          ${totalLine}
+          ${items.length > 0 ? `
+            ${allowOrder ? '<button type="button" class="store-btn store-btn--primary w-full" data-cart-checkout-open>متابعة الطلب</button>' : '<p class="text-sm text-amber-800">سياسة المتجر لا تسمح بإرسال الطلبات حالياً.</p>'}
+            <button type="button" class="store-btn store-btn--ghost w-full" data-clear-cart>تفريغ السلة</button>
+          ` : ''}
+        </div>`;
+      } else {
+        summaryEl.innerHTML = `<div class="store-panel store-cart-summary space-y-4">
+          ${totalLine}
+          ${items.length > 0 ? '<button type="button" class="store-btn store-btn--ghost" data-clear-cart>تفريغ السلة</button>' : ''}
+          ${allowOrder && items.length > 0 ? `
+            <form data-checkout-form class="space-y-3 border-t border-gray-100 pt-4">
+              ${isLoggedIn ? `
+                <p class="text-sm text-gray-600 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+                  إرسال الطلب بحسابك المسجّل — بياناتك مأخوذة من ملفك ولا يمكن تغييرها هنا.
+                </p>
+              ` : `
+                <label class="block text-sm font-bold">الاسم الكامل *
+                  <input name="guest_name_ar" required class="store-input mt-1" value="${escapeHtml(root.dataset.defaultName || '')}">
+                </label>
+                <label class="block text-sm font-bold">رقم الهاتف *
+                  <input name="guest_phone" required dir="ltr" class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}">
+                </label>
+              `}
+              <label class="block text-sm font-bold">ملاحظات
+                <textarea name="notes_ar" rows="3" class="store-input mt-1 h-auto py-2 text-sm"></textarea>
+              </label>
+              <button type="submit" class="store-btn store-btn--primary w-full">تأكيد وإرسال الطلب</button>
+            </form>
+          ` : !allowOrder && items.length > 0 ? '<p class="text-sm text-amber-800">سياسة المتجر لا تسمح بإرسال الطلبات حالياً.</p>' : ''}
+        </div>`;
+        bindCheckout(summaryEl);
+      }
+
       bindClearCart(summaryEl);
-      bindCheckout(summaryEl);
+      if (isDrawer) {
+        bindCheckoutOpen(summaryEl, root, data);
+      }
     }
 
     if (Array.isArray(data.stock_notices) && data.stock_notices.length > 0 && stockEl) {
-      stockEl.classList.remove('hidden');
-      stockEl.innerHTML = `<div class="rounded-xl border bg-amber-50 border-amber-200 text-amber-900 px-4 py-3 text-sm"><p class="font-bold mb-1">تنبيه المخزون</p>${data.stock_notices.map((n) => `<p>${escapeHtml(n)}</p>`).join('')}</div>`;
+      const uniqueNotices = [...new Set(data.stock_notices.map((n) => String(n || '').trim()).filter(Boolean))];
+      if (uniqueNotices.length > 0) {
+        stockEl.classList.remove('hidden');
+        stockEl.innerHTML = `<div class="rounded-xl border bg-amber-50 border-amber-200 text-amber-900 px-4 py-3 text-sm"><p class="font-bold mb-1">تنبيه المخزون</p>${uniqueNotices.map((n) => `<p>${escapeHtml(n)}</p>`).join('')}</div>`;
+      }
     }
+  };
+
+  const renderCartPage = (data) => {
+    const root = document.querySelector('[data-store-cart-page="1"]');
+    renderCartRoot(root, data);
   };
 
   const bindClearCart = (root) => {
@@ -572,18 +868,32 @@
     });
   };
 
-  const bindCartLineControls = (root, max) => {
+  const bindCartLineControls = (root, maxPackages) => {
     root.querySelectorAll('[data-bump]').forEach((btn) => {
+      if (btn.dataset.bumpBound === '1') return;
+      btn.dataset.bumpBound = '1';
       btn.addEventListener('click', async () => {
         const wrap = btn.closest('[data-cart-qty-control]');
         const guid = wrap?.dataset.guid || '';
         const delta = parseInt(btn.dataset.bump || '0', 10);
         if (!guid || !delta) return;
+        const input = wrap?.querySelector('[data-qty-input]');
+        const current = parseFloat(input?.value || '1') || 1;
+        if (delta > 0 && maxPackages !== null && maxPackages !== undefined) {
+          const max = parseFloat(String(maxPackages));
+          if (Number.isFinite(max) && current + delta > max + 0.0001) {
+            const maxLabel = String(maxPackages);
+            showToast(`الحد الأقصى للطلب هو ${maxLabel} طرد لهذه المادة.`, 'error');
+            return;
+          }
+        }
         const data = await apiRequest({ action: 'bump', material_guid: guid, delta });
         applyCartResponse(data);
       });
     });
     root.querySelectorAll('[data-qty-input]').forEach((input) => {
+      if (input.dataset.qtyBound === '1') return;
+      input.dataset.qtyBound = '1';
       let timer;
       input.addEventListener('change', () => {
         clearTimeout(timer);
@@ -604,6 +914,72 @@
         const data = await apiRequest({ action: 'remove', material_guid: guid });
         applyCartResponse(data);
       });
+    });
+  };
+
+  const buildCheckoutFormHtml = (root, data) => {
+    const isLoggedIn = root.dataset.loggedIn === '1' || !!data.logged_in;
+    return `
+      <p class="store-cart-checkout__lead">أدخل بيانات التواصل ثم أكّد إرسال الطلب.</p>
+      <form data-checkout-form class="store-cart-checkout__form space-y-3">
+        ${isLoggedIn ? `
+          <p class="text-sm text-gray-600 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+            إرسال الطلب بحسابك المسجّل — بياناتك مأخوذة من ملفك ولا يمكن تغييرها هنا.
+          </p>
+        ` : `
+          <label class="block text-sm font-bold">الاسم الكامل *
+            <input name="guest_name_ar" required class="store-input mt-1" value="${escapeHtml(root.dataset.defaultName || '')}">
+          </label>
+          <label class="block text-sm font-bold">رقم الهاتف *
+            <input name="guest_phone" required dir="ltr" class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}">
+          </label>
+        `}
+        <label class="block text-sm font-bold">ملاحظات
+          <textarea name="notes_ar" rows="3" class="store-input mt-1 h-auto py-2 text-sm" placeholder="اختياري"></textarea>
+        </label>
+        <button type="submit" class="store-btn store-btn--primary w-full">تأكيد وإرسال الطلب</button>
+      </form>
+    `;
+  };
+
+  const closeCheckoutSheet = (root) => {
+    const sheet = root?.querySelector('[data-cart-checkout-sheet]');
+    if (!sheet) return;
+    if (document.activeElement instanceof HTMLElement && sheet.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
+    sheet.hidden = true;
+    sheet.setAttribute('aria-hidden', 'true');
+    root.classList.remove('is-checkout-open');
+  };
+
+  const openCheckoutSheet = (root, data) => {
+    const sheet = root.querySelector('[data-cart-checkout-sheet]');
+    const body = root.querySelector('[data-cart-checkout-body]');
+    if (!sheet || !body) return;
+    body.innerHTML = buildCheckoutFormHtml(root, data);
+    bindCheckout(body);
+    sheet.hidden = false;
+    sheet.setAttribute('aria-hidden', 'false');
+    root.classList.add('is-checkout-open');
+    const firstField = body.querySelector('input, textarea, button');
+    if (firstField instanceof HTMLElement) {
+      firstField.focus();
+    }
+  };
+
+  const bindCheckoutOpen = (summaryEl, root, data) => {
+    summaryEl.querySelectorAll('[data-cart-checkout-open]').forEach((btn) => {
+      if (btn.dataset.bound === '1') return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', () => openCheckoutSheet(root, lastCartData || data));
+    });
+
+    const sheet = root.querySelector('[data-cart-checkout-sheet]');
+    if (!sheet || sheet.dataset.bound === '1') return;
+    sheet.dataset.bound = '1';
+    sheet.querySelectorAll('[data-cart-checkout-close]').forEach((btn) => {
+      btn.addEventListener('click', () => closeCheckoutSheet(root));
     });
   };
 
@@ -635,18 +1011,106 @@
 
   const applyCartResponse = (data) => {
     if (!data || typeof data !== 'object') return;
-    if (document.querySelector('[data-store-cart-page]')) {
-      renderCartPage(data);
-    }
-    updateBadge(data.cart_count);
+    lastCartData = data;
+    updateBadge(data);
     if (data.cart_qty_by_guid) {
-      document.querySelectorAll('[data-store-add-cart]').forEach((f) => syncFormLimits(f, data.cart_qty_by_guid));
+      refreshCartForms(data);
     }
+
+    const pageRoot = document.querySelector('[data-store-cart-page="1"]');
+    if (pageRoot) {
+      renderCartRoot(pageRoot, data);
+    }
+
+    const drawer = cartDrawer();
+    const drawerRoot = drawer?.querySelector('[data-store-cart-drawer-root]');
+    if (drawerRoot && drawer.classList.contains('is-open')) {
+      renderCartRoot(drawerRoot, data);
+    }
+
     if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
   };
 
+  const cartDrawer = () => document.getElementById('store-cart-drawer');
+
+  const setCartDrawerOpen = (open) => {
+    const drawer = cartDrawer();
+    if (!drawer) return;
+    if (!open) {
+      const root = drawer.querySelector('[data-store-cart-drawer-root]');
+      if (root) closeCheckoutSheet(root);
+      if (document.activeElement instanceof HTMLElement && drawer.contains(document.activeElement)) {
+        document.activeElement.blur();
+      }
+    }
+    drawer.hidden = !open;
+    drawer.classList.toggle('is-open', open);
+    drawer.setAttribute('aria-hidden', open ? 'false' : 'true');
+    document.body.classList.toggle('store-cart-drawer-open', open);
+    document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  };
+
+  const loadCartDrawer = async () => {
+    const drawer = cartDrawer();
+    const root = drawer?.querySelector('[data-store-cart-drawer-root]');
+    if (!root) return;
+
+    const loadingEl = root.querySelector('[data-cart-drawer-loading]');
+    const bodyEl = root.querySelector('[data-cart-body]');
+    const summaryEl = root.querySelector('[data-cart-summary]');
+    if (loadingEl) loadingEl.hidden = false;
+    root.classList.add('is-loading-cart');
+    if (bodyEl) bodyEl.innerHTML = '';
+    if (summaryEl) summaryEl.innerHTML = '';
+
+    try {
+      const res = await fetch(`${API}?reconcile=1`, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+      const data = await res.json();
+      lastCartData = data;
+      renderCartRoot(root, data);
+    } catch {
+      showToast('تعذر تحميل السلة.', 'error');
+      if (loadingEl) loadingEl.hidden = true;
+      root.classList.remove('is-loading-cart');
+    }
+  };
+
+  const bindCartDrawer = () => {
+    const drawer = cartDrawer();
+    if (!drawer || drawer.dataset.bound === '1') return;
+    drawer.dataset.bound = '1';
+
+    document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
+      if (btn.dataset.cartOpenBound === '1') return;
+      btn.dataset.cartOpenBound = '1';
+      btn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        setCartDrawerOpen(true);
+        await loadCartDrawer();
+      });
+    });
+
+    drawer.querySelectorAll('[data-store-cart-drawer-close]').forEach((btn) => {
+      btn.addEventListener('click', () => setCartDrawerOpen(false));
+    });
+
+    drawer.addEventListener('click', (event) => {
+      if (event.target instanceof Element && event.target.closest('[data-store-cart-drawer-close]')) {
+        setCartDrawerOpen(false);
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && drawer.classList.contains('is-open')) {
+        setCartDrawerOpen(false);
+      }
+    });
+  };
+
   const initCartPage = async () => {
-    const root = document.querySelector('[data-store-cart-page]');
+    const root = document.querySelector('[data-store-cart-page="1"]');
     if (!root) return;
     try {
       const res = await fetch(`${API}?reconcile=1`, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
@@ -657,19 +1121,30 @@
     }
   };
 
-  const init = () => {
+  const init = async () => {
     bindAddForms();
-    const page = document.querySelector('[data-store-cart-page]');
+    bindCartDrawer();
+    const page = document.querySelector('[data-store-cart-page="1"]');
     if (page) {
       bindCartLineControls(page, null);
+      bindUnavailableControls(page);
       bindClearCart(page);
       bindCheckout(page);
       bindImageZoom(page);
     }
     initCartPage();
-    document.querySelectorAll('[data-store-add-cart]').forEach((form) => {
-      if (form.dataset.maxQty) bindQtySteppers(form);
-    });
+    try {
+      const res = await fetch(API, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+      const data = await res.json();
+      if (data?.cart_qty_by_guid) {
+        refreshCartForms(data);
+        updateBadge(data);
+      }
+    } catch {
+      document.querySelectorAll('[data-store-add-cart]').forEach((form) => {
+        setFormCartMode(form, getCurrentInCart(form));
+      });
+    }
   };
 
   if (document.readyState === 'loading') {
@@ -678,5 +1153,15 @@
     init();
   }
 
-  window.StoreCart = { showToast, updateBadge, applyCartResponse, apiRequest, bindAddForms, bindQtySteppers };
+  window.StoreCart = {
+    showToast,
+    updateBadge,
+    applyCartResponse,
+    apiRequest,
+    bindAddForms,
+    bindQtySteppers,
+    refreshCartForms,
+    setFormCartMode,
+    openDrawer: () => { setCartDrawerOpen(true); return loadCartDrawer(); },
+  };
 })();

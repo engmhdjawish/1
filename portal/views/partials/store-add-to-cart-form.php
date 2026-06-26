@@ -32,20 +32,31 @@ $qtyStep = $qtyBounds['qtyStep'];
 $qtyMin = $qtyBounds['qtyMin'];
 $partialPackage = $qtyBounds['partialPackage'];
 $stockAvailable = $qtyBounds['stockAvailable'];
+$inCart = $cartQtyForItem > 0;
+$canAdjustInCart = $inCart && !$partialPackage && !$atLimit;
 
 $packaging = ShareCartService::packaging($item);
 $primaryUnit = ShareCartService::primaryUnitLabel($item);
 $packageUnit = ShareCartService::packageUnitLabel($item);
+$primaryUnitsAvailable = ($partialPackage && $stockAvailable !== null && $packaging > 0)
+    ? max(0.0, round($stockAvailable * $packaging, 4))
+    : null;
 $unitSaleSp = ShareCartService::unitSalePriceSp($item);
 $unitSaleUsd = ShareCartService::unitSalePriceUsd($item);
 $imageGuid = material_image_guid($item);
 $imageUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '';
+
+$cartMode = $inCart
+    ? ($partialPackage || $atLimit ? 'in-cart-locked' : 'in-cart')
+    : ($partialPackage ? 'partial-add' : 'add');
 ?>
 <form
   method="post"
-  class="store-add-cart"
-  action="<?= h(strtok($returnUrl, '#')) ?>"
+  class="store-add-cart<?= $inCart ? ' store-add-cart--in-cart' : '' ?><?= ($partialPackage || $atLimit) ? ' store-add-cart--locked' : '' ?>"
+  action="#"
   data-store-add-cart="1"
+  data-cart-mode="<?= h($cartMode) ?>"
+  data-partial-package="<?= $partialPackage ? '1' : '0' ?>"
   data-material-guid="<?= h($materialGuid) ?>"
   data-cart-qty="<?= h((string) $cartQtyForItem) ?>"
   <?php if ($maxPackages !== null): ?>
@@ -56,6 +67,8 @@ $imageUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) 
     data-effective-max="<?= h((string) $remaining) ?>"
   <?php endif; ?>
   data-qty-step="<?= h((string) $qtyStep) ?>"
+  data-package-unit="<?= h($packageUnit) ?>"
+  data-primary-unit="<?= h($primaryUnit) ?>"
 >
   <input type="hidden" name="action" value="add_to_cart">
   <?php if ($returnUrl !== ''): ?>
@@ -73,46 +86,73 @@ $imageUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) 
     <input type="hidden" name="image_url" value="<?= h($imageUrl) ?>">
   <?php endif; ?>
 
-  <?php if ($partialPackage && $stockAvailable !== null && $stockAvailable > 0): ?>
-    <p class="store-add-cart__limit" data-qty-hint>
-      متوفر أقل من طرد كامل: <span class="store-num" dir="ltr"><?= h(format_packages_display($stockAvailable)) ?></span> <?= h($packageUnit) ?> — يمكن طلب الكمية المتبقية.
-    </p>
-  <?php elseif ($maxLabel !== null): ?>
-    <p class="store-add-cart__limit <?= $atLimit ? 'is-warning' : '' ?>" data-qty-hint>
-      <?php if ($atLimit): ?>
-        وصلت للحد الأقصى (<?= h($maxLabel) ?> <?= h($packageUnit) ?>)
-      <?php elseif ($cartQtyForItem > 0): ?>
-        الحد الأقصى <?= h($maxLabel) ?> <?= h($packageUnit) ?> — متبقي <span class="store-num" dir="ltr"><?= h(format_packages_display((float) $remaining)) ?></span>
-      <?php else: ?>
-        الحد الأقصى <?= h($maxLabel) ?> <?= h($packageUnit) ?> لكل مادة
-      <?php endif; ?>
-    </p>
-  <?php endif; ?>
+  <div class="store-add-cart__in-cart"<?= $inCart ? '' : ' hidden' ?>>
+    <?php if ($partialPackage && $primaryUnitsAvailable !== null): ?>
+      <p class="store-add-cart__note" data-qty-hint-partial>
+        آخر كمية: <span class="store-num" dir="ltr"><?= h(format_packages_display((float) $stockAvailable)) ?></span> <?= h($packageUnit) ?>
+        <span class="store-add-cart__note-sep">·</span>
+        <span class="store-num" dir="ltr"><?= h(format_packages_display($primaryUnitsAvailable)) ?></span> <?= h($primaryUnit) ?>
+      </p>
+    <?php endif; ?>
 
-  <div class="store-add-cart__row">
-    <span class="text-xs font-bold text-gray-600 shrink-0"><?= h($packageUnit) ?></span>
-    <div class="store-qty-stepper">
-      <button type="button" data-qty-minus aria-label="إنقاص">−</button>
-      <input
-        type="number"
-        name="quantity"
-        class="store-num"
-        dir="ltr"
-        min="<?= h((string) $qtyMin) ?>"
-        <?php if ($remaining !== null && $remaining > 0): ?>max="<?= h((string) $remaining) ?>"<?php elseif ($atLimit): ?>max="<?= h((string) $qtyMin) ?>"<?php endif; ?>
-        step="<?= h((string) $qtyStep) ?>"
-        value="<?= h((string) $defaultQty) ?>"
-        <?= $atLimit ? 'disabled' : '' ?>
-      >
-      <button type="button" data-qty-plus aria-label="زيادة" <?= ($atLimit || ($remaining !== null && $remaining <= 0)) ? 'disabled' : '' ?>>+</button>
+    <div class="store-card-cart-bar">
+      <span class="store-card-cart-bar__status">
+        <span class="material-symbols-outlined text-base" aria-hidden="true">shopping_cart</span>
+        <span>في السلة</span>
+      </span>
+
+      <div class="store-card-cart-bar__qty">
+        <div class="store-card-cart-bar__qty-locked" data-cart-qty-locked<?= $canAdjustInCart ? ' hidden' : '' ?>>
+          <strong class="store-num" dir="ltr" data-cart-qty-display><?= h(format_packages_display($cartQtyForItem)) ?></strong>
+        </div>
+
+        <div class="store-qty-stepper store-qty-stepper--inline store-qty-stepper--cart" data-cart-qty-adjust<?= $canAdjustInCart ? '' : ' hidden' ?>>
+          <button type="button" data-cart-bump="-1" aria-label="إنقاص أو حذف من السلة">−</button>
+          <output class="store-num" dir="ltr" data-cart-qty-display><?= h(format_packages_display($cartQtyForItem)) ?></output>
+          <button type="button" data-cart-bump="1" aria-label="زيادة"<?= ($remaining !== null && $remaining <= 0) ? ' disabled' : '' ?>>+</button>
+        </div>
+      </div>
+
+      <span class="store-card-cart-bar__unit"><?= h($packageUnit) ?></span>
     </div>
   </div>
-  <button
-    type="submit"
-    class="store-add-cart__submit"
-    <?= $atLimit ? 'disabled' : '' ?>
-  >
-    <span class="material-symbols-outlined text-[20px]" aria-hidden="true">add_shopping_cart</span>
-    <?= $atLimit ? 'الحد الأقصى مكتمل' : ($partialPackage ? 'طلب الكمية المتاحة' : 'إضافة للسلة') ?>
-  </button>
+
+  <div class="store-add-cart__add"<?= $inCart ? ' hidden' : '' ?>>
+    <?php if ($partialPackage && $primaryUnitsAvailable !== null): ?>
+      <p class="store-add-cart__note" data-qty-hint>
+        آخر كمية: <span class="store-num" dir="ltr"><?= h(format_packages_display((float) $stockAvailable)) ?></span> <?= h($packageUnit) ?>
+        <span class="store-add-cart__note-sep">·</span>
+        <span class="store-num" dir="ltr"><?= h(format_packages_display($primaryUnitsAvailable)) ?></span> <?= h($primaryUnit) ?>
+      </p>
+    <?php elseif ($maxLabel !== null): ?>
+      <p class="store-add-cart__note<?= $atLimit ? ' is-warning' : '' ?>" data-qty-hint>
+        الحد الأقصى <?= h($maxLabel) ?> <?= h($packageUnit) ?> لكل مادة
+      </p>
+    <?php endif; ?>
+
+    <div class="store-card-cart-bar store-card-cart-bar--add">
+      <div class="store-card-cart-bar__row">
+        <div class="store-qty-stepper store-qty-stepper--inline store-qty-stepper--cart<?= $partialPackage ? ' store-qty-stepper--locked' : '' ?>">
+          <button type="button" data-qty-minus aria-label="إنقاص"<?= $partialPackage ? ' disabled' : '' ?>>−</button>
+          <input
+            type="number"
+            name="quantity"
+            class="store-num"
+            dir="ltr"
+            min="<?= h((string) $qtyMin) ?>"
+            <?php if ($remaining !== null && $remaining > 0): ?>max="<?= h((string) $remaining) ?>"<?php elseif ($atLimit): ?>max="<?= h((string) $qtyMin) ?>"<?php endif; ?>
+            step="<?= h((string) $qtyStep) ?>"
+            value="<?= h((string) $defaultQty) ?>"
+            <?= $partialPackage ? 'readonly' : '' ?>
+          >
+          <button type="button" data-qty-plus aria-label="زيادة"<?= ($partialPackage || ($remaining !== null && $remaining <= 0)) ? ' disabled' : '' ?>>+</button>
+        </div>
+        <span class="store-card-cart-bar__unit"><?= h($packageUnit) ?></span>
+      </div>
+      <button type="submit" class="store-add-cart__submit" <?= $atLimit ? 'disabled' : '' ?>>
+        <span class="material-symbols-outlined text-[20px]" aria-hidden="true">add_shopping_cart</span>
+        <?= $atLimit ? 'مكتمل' : ($partialPackage ? 'طلب الكمية' : 'إضافة') ?>
+      </button>
+    </div>
+  </div>
 </form>

@@ -1,0 +1,10 @@
+{
+  "name": "jawish-portal-assets",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i ./assets-src/tailwind.css -o ./public/css/tailwind.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}

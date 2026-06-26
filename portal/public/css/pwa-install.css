@@ -1,0 +1,238 @@
+/* شريط التثبيت السفلي */
+.pwa-install-banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9998;
+  padding: 0.75rem 0.85rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+  transform: translateY(110%);
+  opacity: 0;
+  transition: transform 0.35s ease, opacity 0.35s ease;
+}
+
+.pwa-install-banner.is-visible {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.pwa-install-banner__inner {
+  pointer-events: auto;
+  max-width: 42rem;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+  background: #0f172a;
+  color: #fff;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.28);
+}
+
+.pwa-install-banner__inner .material-symbols-outlined {
+  flex-shrink: 0;
+  font-size: 1.6rem;
+  color: #60a5fa;
+}
+
+.pwa-install-banner__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.pwa-install-banner__text strong {
+  font-size: 0.92rem;
+  line-height: 1.3;
+}
+
+.pwa-install-banner__text span {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.pwa-install-banner__btn {
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 0.75rem;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  padding: 0.55rem 0.85rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pwa-install-banner__close {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1.35rem;
+  line-height: 1;
+  padding: 0.15rem 0.35rem;
+  cursor: pointer;
+}
+
+.pwa-install-banner--http .pwa-install-banner__inner {
+  background: #7f1d1d;
+}
+
+.pwa-install-banner--http .pwa-install-banner__btn {
+  background: #dc2626;
+}
+
+.pwa-install-banner--http .material-symbols-outlined {
+  color: #fca5a5;
+}
+
+/* زر التثبيت في الهيدر */
+.site-header__icon-btn[data-pwa-open] {
+  color: #1d4ed8;
+  border-color: rgba(37, 99, 235, 0.25);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.site-header__icon-btn[data-pwa-open].is-pwa-http {
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.site-header__icon-btn[data-pwa-open].is-pwa-native {
+  color: #15803d;
+  border-color: rgba(22, 163, 74, 0.35);
+  background: rgba(22, 163, 74, 0.12);
+}
+
+.site-header__icon-btn[data-pwa-open]:hover {
+  color: #1e40af;
+  border-color: rgba(37, 99, 235, 0.45);
+  background: rgba(37, 99, 235, 0.14);
+}
+
+body.pwa-modal-open {
+  overflow: hidden;
+}
+
+/* نافذة التعليمات */
+.pwa-install-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.pwa-install-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.pwa-install-modal__card {
+  position: relative;
+  width: min(420px, 100%);
+  max-height: min(85vh, 560px);
+  overflow: auto;
+  background: #fff;
+  border-radius: 16px;
+  padding: 1.35rem 1.25rem 1.1rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+.pwa-install-modal__close {
+  position: absolute;
+  top: 0.65rem;
+  left: 0.65rem;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pwa-install-modal__icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+  color: #2563eb;
+}
+
+.pwa-install-modal__icon .material-symbols-outlined {
+  font-size: 2.4rem;
+}
+
+.pwa-install-modal__title {
+  margin: 0 0 0.85rem;
+  text-align: center;
+  font-size: 1.1rem;
+  color: #0f172a;
+}
+
+.pwa-install-modal__steps {
+  margin: 0 0 1rem;
+  padding-right: 1.25rem;
+  color: #334155;
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+
+.pwa-install-modal__steps li {
+  margin-bottom: 0.4rem;
+}
+
+.pwa-install-modal__btn {
+  display: block;
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  margin-bottom: 0.5rem;
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pwa-install-modal__btn--warn {
+  background: #dc2626;
+}
+
+.pwa-install-modal__ghost {
+  display: block;
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  padding: 0.65rem 1rem;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.site-header__icon-btn[data-pwa-open].hidden,
+.site-header__icon-btn[data-pwa-open][hidden],
+.site-drawer__link[data-pwa-open].hidden,
+.site-drawer__link[data-pwa-open][hidden] {
+  display: none !important;
+}
+
+.site-drawer__link[data-pwa-open] {
+  color: #1d4ed8;
+  font-weight: 800;
+}

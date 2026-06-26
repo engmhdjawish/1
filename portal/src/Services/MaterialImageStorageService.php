@@ -123,7 +123,7 @@ final class MaterialImageStorageService
      * @param list<array<string, mixed>> $files from $_FILES['files']
      * @return array{ok: bool, message: string, uploaded: list<string>, replaced: list<string>, failed: list<string>}
      */
-    public static function uploadMany(array $files): array
+    public static function uploadMany(array $files, ?string $uploadedByUserId = null): array
     {
         $settings = self::settings();
         if (!self::ensureDirectory($settings['images_dir']) || !self::ensureDirectory($settings['thumbnails_dir'])) {
@@ -151,7 +151,18 @@ final class MaterialImageStorageService
                 continue;
             }
 
-            $uploaded[] = (string) ($result['file_name'] ?? '');
+            $fileName = (string) ($result['file_name'] ?? '');
+            $localPath = self::safeJoin($settings['images_dir'], $fileName) ?? '';
+            $thumbPath = self::safeJoin($settings['thumbnails_dir'], $fileName);
+
+            try {
+                MaterialImageSyncService::enqueue($fileName, $localPath, $thumbPath, $uploadedByUserId);
+            } catch (Throwable $exception) {
+                $failed[] = $fileName . ': تعذر إضافة الصورة لطابور المزامنة: ' . $exception->getMessage();
+                continue;
+            }
+
+            $uploaded[] = $fileName;
         }
 
         if ($uploaded === [] && $replaced === [] && $failed !== []) {
@@ -1272,6 +1283,88 @@ final class MaterialImageStorageService
             . ($thumb ? '&thumb=1' : '&thumb=0');
     }
 
+    /**
+     * Dashboard preview URLs from the site images folder only (/media/material.php).
+     *
+     * @return array{
+     *   preview_url: string,
+     *   preview_full_url: string,
+     *   stored_file_name: string,
+     *   has_local: bool,
+     *   local_path: string
+     * }
+     */
+    public static function resolveSitePreviewUrls(string $imageGuid, string $fileName): array
+    {
+        $empty = [
+            'preview_url' => '',
+            'preview_full_url' => '',
+            'stored_file_name' => '',
+            'has_local' => false,
+            'local_path' => '',
+        ];
+
+        $seen = [];
+        $candidates = [];
+        $addCandidate = static function (string $value) use (&$candidates, &$seen): void {
+            foreach (self::fileNameCandidates($value) as $candidate) {
+                if ($candidate === '' || isset($seen[$candidate])) {
+                    continue;
+                }
+                $seen[$candidate] = true;
+                $candidates[] = $candidate;
+            }
+        };
+
+        $addCandidate($fileName);
+
+        $imageGuid = strtolower(trim($imageGuid));
+        if ($imageGuid !== '') {
+            foreach (['.jpg', '.jpeg', '.png', '.webp'] as $extension) {
+                $addCandidate($imageGuid . $extension);
+            }
+
+            $queuePath = MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, false, false);
+            if ($queuePath !== null && is_file($queuePath)) {
+                $addCandidate(basename($queuePath));
+            }
+
+            $resolvedPath = self::resolvePathForGuid($imageGuid, false, true);
+            if ($resolvedPath === null) {
+                $resolvedPath = self::resolvePathForGuid($imageGuid, false, false);
+            }
+            if ($resolvedPath !== null && is_file($resolvedPath)) {
+                $addCandidate(basename($resolvedPath));
+            }
+
+            foreach (self::fileNamesFromAmineApi($imageGuid) as $candidate) {
+                $addCandidate($candidate);
+            }
+        }
+
+        foreach ($candidates as $candidate) {
+            $localPath = self::resolveLocalPath($candidate, false);
+            if ($localPath === null || !is_file($localPath)) {
+                continue;
+            }
+
+            $stored = self::lookupFileName($candidate);
+            if ($stored === '') {
+                $stored = basename($localPath);
+            }
+
+            return [
+                'preview_url' => self::publicUrl($stored, true),
+                'preview_full_url' => self::publicUrl($stored, false),
+                'stored_file_name' => $stored,
+                'has_local' => true,
+                'local_path' => $localPath,
+            ];
+        }
+
+        return $empty;
+    }
+
     public static function mimeForPath(string $path): string
     {
         return self::detectMime($path);
@@ -1296,16 +1389,20 @@ final class MaterialImageStorageService
         return null;
     }
 
-    public static function resolvePathForGuid(string $imageGuid, bool $thumb = false): ?string
+    public static function resolvePathForGuid(string $imageGuid, bool $thumb = false, bool $localOnly = false): ?string
     {
         $imageGuid = trim($imageGuid);
         if ($imageGuid === '') {
             return null;
         }
 
-        $fromQueue = MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, $thumb);
+        $fromQueue = MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, $thumb, !$localOnly);
         if ($fromQueue !== null) {
             return $fromQueue;
+        }
+
+        if ($localOnly) {
+            return null;
         }
 
         foreach (self::fileNamesFromAmineApi($imageGuid) as $fileName) {

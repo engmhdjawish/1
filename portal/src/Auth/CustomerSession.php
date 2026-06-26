@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Auth;
 
 use Portal\Database;
+use Portal\Support\PortalUrl;
 use PDO;
 
 final class CustomerSession
@@ -25,7 +26,7 @@ final class CustomerSession
     public static function requireLogin(): void
     {
         if (!self::check()) {
-            header('Location: /login.php?type=customer');
+            header('Location: ' . PortalUrl::loginUrl('customer'));
             exit;
         }
     }

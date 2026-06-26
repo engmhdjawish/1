@@ -5,6 +5,7 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
+use Portal\Services\OrderService;
 use Portal\Services\WebCustomerService;
 use Portal\Support\DashboardNavigation;
 
@@ -83,6 +84,12 @@ if ($editCustomer === null) {
     $editId = '';
 }
 $detailsCustomer = $detailsId !== '' ? WebCustomerService::getById($detailsId) : null;
+$customerOrders = [];
+$customerOrderCount = 0;
+if ($detailsCustomer !== null) {
+    $customerOrderCount = OrderService::countForWebCustomer($detailsId);
+    $customerOrders = OrderService::listForWebCustomer($detailsId, ['limit' => 10]);
+}
 $currentRoute = '/dashboard/customers.php';
 
 ob_start();

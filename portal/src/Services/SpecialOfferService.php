@@ -426,6 +426,59 @@ final class SpecialOfferService
         return $result;
     }
 
+    /**
+     * @param list<array<string, mixed>> $products
+     * @param array<string, mixed>|null $contextOffer
+     * @return list<array<string, mixed>>
+     */
+    public static function applyPricingOverlays(array $products, ?array $contextOffer = null): array
+    {
+        if ($products === []) {
+            return [];
+        }
+
+        if ($contextOffer !== null) {
+            return self::attachOfferPricing($products, $contextOffer);
+        }
+
+        $offers = self::activeOffers();
+        if ($offers === []) {
+            return $products;
+        }
+
+        $result = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $guid = trim((string) ($product['materialGuid'] ?? $product['MaterialGuid'] ?? ''));
+            $best = null;
+            $bestScore = null;
+            foreach ($offers as $offer) {
+                if (!self::offerIncludesMaterial($offer, $guid, $product)) {
+                    continue;
+                }
+                $pricing = self::computePricing($product, $offer);
+                $score = self::offerSortScore($pricing, $offer);
+                if ($best === null || $score < $bestScore) {
+                    $best = $offer;
+                    $bestScore = $score;
+                }
+            }
+            if ($best === null) {
+                $result[] = $product;
+                continue;
+            }
+            $result[] = array_merge($product, [
+                'has_offer' => true,
+                'offer' => $best,
+                'offer_badge' => trim((string) ($best['badge_text_ar'] ?? '')) ?: self::defaultBadge($best),
+            ], self::computePricing($product, $best));
+        }
+
+        return $result;
+    }
+
     /** @return array{ok: bool, message: string, quantity: float} */
     public static function validatePackageQuantity(string $materialGuid, float $quantity, ?array $offer = null): array
     {

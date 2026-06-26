@@ -53,6 +53,7 @@ PORTAL_APP_URL=http://127.0.0.1:8080
 
 ```bash
 php scripts/setup-database.php
+php scripts/run-migrations.php
 ```
 
 أو يدوياً:
@@ -60,6 +61,22 @@ php scripts/setup-database.php
 ```bash
 psql -U portal -d portal_db -f ../docs/portal-db-schema.sql
 psql -U portal -d portal_db -f ../docs/portal-db-seed.sql
+php scripts/run-migrations.php
+```
+
+## النشر للإنتاج
+
+راجع **[deploy/README.md](../deploy/README.md)** — معالج تفاعلي.
+
+**نفس سيرفر الأمين + IIS (بدون PostgreSQL جاهز):**  
+راجع **[deploy/WINDOWS-IIS-LOCAL.md](../deploy/WINDOWS-IIS-LOCAL.md)** — نسخ PostgreSQL من جهاز آخر، IIS، وترتيب النشر.
+
+```powershell
+.\deploy\wizard.ps1
+```
+
+```bash
+./deploy/wizard.sh
 ```
 
 ## 4) أول مستخدم لوحة (موظّف)
@@ -108,7 +125,7 @@ php -S 127.0.0.1:8080
 | `/dashboard/accounting-documents.php` | الفواتير والسندات |
 | `/dashboard/material-images.php` | مخزون صور الموقع + رفع متسلسل مع استئناف (IndexedDB) |
 | `/dashboard/material-images-api.php` | API رفع صورة واحدة + قائمة الملفات المحلية |
-| `/api/image.php?id=...` | عرض صورة مادة (محلي أولاً ثم API كاحتياط) |
+| `/api/image.php?id=...` | عرض صورة مادة من مجلد الموقع فقط (GUID → ملف محلي، بدون بروكسي API) |
 | `/media/material.php?file=...` | عرض ملف صورة مادة محلي بالاسم |
 | `/api/proxy.php` | بروكسي JSON للـ API |
 
@@ -119,6 +136,24 @@ UPDATE home_sections SET is_active = TRUE WHERE slug IN ('offers','women','men',
 ```
 
 أضف فلاتر في `home_section_filters` حسب الحاجة.
+
+## صلاحيات الموظفين
+
+بعد `php scripts/run-migrations.php` (يشمل `007-staff-roles-reorganization.sql`) تتوفر أدوار مهام جاهزة من `/dashboard/users.php`:
+
+| الدور | المهمة |
+|--------|--------|
+| `order_desk` | طلبات + مزامنة الأمين |
+| `sales` | مبيعات، روابط مشاركة، نشاط الزوار |
+| `catalog_media` | رفع ومزامنة صور المواد |
+| `customers_admin` | موافقة وإدارة عملاء الموقع |
+| `content` | محتوى الرئيسية والعروض والوسائط |
+| `communications` | إشعارات الموقع |
+| `store_admin` | سياسات المتجر والوصول |
+| `accountant` | محاسبة أمين كاملة |
+| `super_admin` | كل الصلاحيات |
+
+**فصل مهم:** صلاحية `orders.view` لا تفتح لوحة المحاسبة. كل صفحة محاسبة تتطلب صلاحيتها (`accounting.*`). صلاحية `images.view` للتصفح والتحميل فقط؛ `images.upload` للرفع والربط والمزامنة.
 
 ## هيكل المجلدات
 

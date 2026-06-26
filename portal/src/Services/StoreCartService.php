@@ -20,6 +20,11 @@ final class StoreCartService
         return ShareCartService::itemCount(self::TOKEN);
     }
 
+    public static function packageCount(): float
+    {
+        return ShareCartService::packageCount(self::TOKEN);
+    }
+
     /** @return array{total_sp: float, total_usd: float} */
     public static function totals(): array
     {
@@ -67,6 +72,17 @@ final class StoreCartService
     public static function clearUnavailable(): void
     {
         ShareCartService::clearUnavailable(self::TOKEN);
+    }
+
+    public static function removeUnavailable(string $materialGuid): bool
+    {
+        return ShareCartService::removeUnavailable(self::TOKEN, $materialGuid);
+    }
+
+    /** @return array{moved: list<string>, notices: list<string>} */
+    public static function reconcileStock(): array
+    {
+        return ShareCartService::reconcileStock(self::TOKEN);
     }
 
     /** @param list<string> $submittedGuids @param list<array<string, mixed>> $unavailableLines */

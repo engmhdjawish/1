@@ -58,12 +58,13 @@ $offerMin = $offer !== null && is_numeric((string) ($offer['min_packages'] ?? ''
 $offerMax = $offer !== null && is_numeric((string) ($offer['max_packages'] ?? ''))
     ? (float) $offer['max_packages'] : null;
 $warehouseQty = (float) ($product['warehouseQuantity'] ?? 0);
-$packagesAvailable = $showQuantity ? packages_available_display($product) : 0.0;
+$packagesAvailable = ($allowCart || $showQuantity) ? packages_available_display($product) : 0.0;
+$outOfStock = $allowCart && $packagesAvailable <= 0;
 $materialCode = trim((string) ($product['materialCode'] ?? $product['code'] ?? ''));
 $productName = trim((string) ($product['name'] ?? 'مادة'));
 $manufacturer = trim((string) ($product['manufacturer'] ?? ''));
 
-$returnUrl = safe_return_url($returnUrl ?? ($_GET['return'] ?? '/store.php'));
+$returnUrl = resolve_product_return_url($returnUrl ?? ($_GET['return'] ?? '/store.php'));
 $backLabel = return_link_label($returnUrl);
 
 $specs = array_filter([
@@ -79,7 +80,7 @@ $specs = array_filter([
 <nav class="store-breadcrumb" aria-label="مسار التنقل">
   <a href="/index.php">الرئيسية</a>
   <span class="store-breadcrumb__sep" aria-hidden="true">›</span>
-  <a href="/store.php">المتجر</a>
+  <a href="<?= h(str_contains($returnUrl, 'store') ? $returnUrl : '/store.php') ?>">المتجر</a>
   <span class="store-breadcrumb__sep" aria-hidden="true">›</span>
   <span class="store-breadcrumb__current" title="<?= h($productName) ?>"><?= h($productName) ?></span>
 </nav>
@@ -88,7 +89,14 @@ $specs = array_filter([
   <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $cartNoticeOk ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700' ?>"><?= h($cartNoticeMessage) ?></p>
 <?php endif; ?>
 
-<article class="store-product-detail">
+<article
+  class="store-product-detail"
+  data-analytics-product="1"
+  data-product-guid="<?= h($guid) ?>"
+  data-product-code="<?= h($materialCode) ?>"
+  data-product-name="<?= h($productName) ?>"
+  data-analytics-label="<?= h('عرض صنف: ' . $productName . ($materialCode !== '' ? ' (' . $materialCode . ')' : '')) ?>"
+>
   <div class="store-product-detail__layout">
   <?php if ($showImages): ?>
     <div class="store-product-detail__gallery">
@@ -156,15 +164,24 @@ $specs = array_filter([
         <p class="text-sm text-gray-500">الأسعار غير متاحة لحسابك الحالي. سجّل دخولك كعميل مفعّل أو تواصل معنا.</p>
       <?php endif; ?>
 
-      <?php if ($showQuantity): ?>
-        <div class="store-buybox__stock <?= $packagesAvailable <= 2 ? 'store-buybox__stock--low' : '' ?>">
-          <span class="material-symbols-outlined text-base" aria-hidden="true">check_circle</span>
-          متاح: <?= number_format($packagesAvailable, 0, '.', ',') ?> <?= h($packageUnit) ?>
-          <span class="text-gray-400 font-normal">(<?= number_format($warehouseQty, 0, '.', ',') ?> <?= h($primaryUnit) ?>)</span>
-        </div>
+      <?php if ($showQuantity || $allowCart): ?>
+        <?php if ($outOfStock): ?>
+          <div class="store-buybox__stock store-buybox__stock--out">
+            <span class="material-symbols-outlined text-base" aria-hidden="true">inventory_2</span>
+            نفدت الكمية المتاحة للطلب حالياً
+          </div>
+        <?php else: ?>
+          <div class="store-buybox__stock <?= $packagesAvailable <= 2 ? 'store-buybox__stock--low' : '' ?>">
+            <span class="material-symbols-outlined text-base" aria-hidden="true">check_circle</span>
+            متاح: <?= number_format($packagesAvailable, 0, '.', ',') ?> <?= h($packageUnit) ?>
+            <?php if ($showQuantity): ?>
+              <span class="text-gray-400 font-normal">(<?= number_format($warehouseQty, 0, '.', ',') ?> <?= h($primaryUnit) ?>)</span>
+            <?php endif; ?>
+          </div>
+        <?php endif; ?>
       <?php endif; ?>
 
-      <?php if ($allowCart): ?>
+      <?php if ($allowCart && !$outOfStock): ?>
         <?php
           $item = $product;
           $cartItems = StoreCartService::items();
@@ -184,7 +201,7 @@ $specs = array_filter([
       <?= h($backLabel) ?>
     </a>
     <?php if (!CustomerSession::check()): ?>
-      <p class="text-xs text-gray-500">لديك حساب؟ <a href="/login.php?type=customer" class="text-primary font-bold">سجّل دخولك</a> لمتابعة طلباتك.</p>
+      <p class="text-xs text-gray-500">لديك حساب؟ <a href="<?= h(portal_login_url('customer')) ?>" class="text-primary font-bold">سجّل دخولك</a> لمتابعة طلباتك.</p>
     <?php endif; ?>
   </div>
   </div>

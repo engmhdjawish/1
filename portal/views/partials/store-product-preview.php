@@ -11,7 +11,13 @@
   </button>
   <div class="store-product-preview__panel" role="dialog" aria-modal="true" aria-labelledby="storeProductPreviewTitle">
     <div class="store-product-preview__image-wrap">
-      <img id="storeProductPreviewImg" src="" alt="">
+      <div class="store-product-preview__image-stage" id="storeProductPreviewImageStage" aria-live="polite">
+        <div class="store-product-preview__image-loader" id="storeProductPreviewImageLoader" hidden>
+          <span class="store-product-preview__image-spinner" aria-hidden="true"></span>
+          <span class="sr-only">جاري تحميل الصورة...</span>
+        </div>
+        <img id="storeProductPreviewImg" src="" alt="" decoding="async">
+      </div>
     </div>
     <div class="store-product-preview__meta">
       <div class="store-product-preview__counter" id="storeProductPreviewCounter"></div>

@@ -25,6 +25,7 @@ use Portal\Services\AccessPolicyService;
 /** @var string|null $materialFilterOptionsError */
 /** @var string|null $flash */
 /** @var string $flashType */
+/** @var string|null $pendingBrandIconUrl */
 
 require __DIR__ . '/partials/media-picker.php';
 require __DIR__ . '/partials/token-picker.php';
@@ -36,7 +37,7 @@ $materialFilterOptions = is_array($materialFilterOptions ?? null) ? $materialFil
 $materialFilterOptionsError = $materialFilterOptionsError ?? null;
 $policyFilterRules = is_array($editPolicy['filter_rules'] ?? null) ? $editPolicy['filter_rules'] : [];
 $policyStoreOptions = is_array($editPolicy['store_options'] ?? null) ? $editPolicy['store_options'] : AccessPolicyService::defaultStoreOptions();
-$visibleClientFilters = array_map('strval', $policyStoreOptions['visible_client_filters'] ?? []);
+$visibleClientFilters = AccessPolicyService::resolvedVisibleClientFilters($policyStoreOptions);
 $policyClientSortFields = array_map('strval', $policyStoreOptions['client_sort_fields'] ?? []);
 $policyAllowSorting = array_key_exists('allow_sorting', $policyStoreOptions) ? (bool) $policyStoreOptions['allow_sorting'] : true;
 $policyDefaultSort = (string) ($policyStoreOptions['default_sort'] ?? 'number:asc');
@@ -213,6 +214,7 @@ $tabUrl = static function (string $key) use ($tab): string {
       </label>
       <div class="md:col-span-3">
         <?php $renderMediaPickerField('شعار الشركة', 'company_logo', (string) ($company['company_logo'] ?? ''), 'settings-company-logo', 'logo'); ?>
+        <p class="text-xs text-text-muted mt-1">بعد الحفظ يُولَّد تلقائياً أيقونات PWA من الشعار. للشعار في الموقع استخدم <strong>PNG شفاف</strong>.</p>
       </div>
     </div>
   </article>
@@ -568,7 +570,11 @@ $tabUrl = static function (string $key) use ($tab): string {
               $usageTotal = (int) $usage['share_links'] + (int) $usage['customers'];
               $policyFilters = CatalogSectionResolver::filterSummaryLabels(is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : []);
               $policyFilterCount = count($policyFilters);
-              $visibleFilterCount = count(is_array($policy['store_options']['visible_client_filters'] ?? null) ? $policy['store_options']['visible_client_filters'] : []);
+              $visibleFilterCount = count(
+                  AccessPolicyService::resolvedVisibleClientFilters(
+                      is_array($policy['store_options'] ?? null) ? $policy['store_options'] : []
+                  )
+              );
             ?>
             <tr class="hover:bg-slate-50 <?= $isDefault ? 'bg-primary/5' : '' ?>">
               <td class="px-4 py-3">
@@ -619,4 +625,33 @@ $tabUrl = static function (string $key) use ($tab): string {
     </div>
   <?php endif; ?>
 </section>
+<?php endif; ?>
+
+<?php if (isset($pendingBrandIconUrl)): ?>
+<script>
+(function () {
+  const logoUrl = <?= json_encode((string) $pendingBrandIconUrl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+  const body = new FormData();
+  body.append('company_logo', logoUrl);
+  fetch('/dashboard/regenerate-brand-icons.php', {
+    method: 'POST',
+    body,
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+  })
+    .then((response) => response.json().catch(() => ({})))
+    .then((data) => {
+      if (!data || data.ok) return;
+      const message = data.message || 'تعذر توليد أيقونات التطبيق.';
+      if (window.dashboardApp?.showToast) {
+        window.dashboardApp.showToast(message, 'error');
+      }
+    })
+    .catch(() => {
+      if (window.dashboardApp?.showToast) {
+        window.dashboardApp.showToast('تعذر توليد أيقونات التطبيق تلقائياً.', 'error');
+      }
+    });
+})();
+</script>
 <?php endif; ?>

@@ -55,9 +55,10 @@ $address = trim((string) ($companyContext['company_address'] ?? ''));
           <a href="/store.php" class="block">المتجر</a>
           <a href="/about.php" class="block">من نحن</a>
           <?php if (!$customer): ?>
-            <a href="/login.php?type=customer" class="block">دخول العملاء</a>
+            <a href="<?= h(portal_login_url('customer')) ?>" class="block">دخول العملاء</a>
             <a href="/register.php" class="block">تسجيل عميل جديد</a>
           <?php endif; ?>
+          <button type="button" class="block text-right site-footer-guide-link" data-site-guide-replay>كيف أستخدم الموقع؟</button>
         </div>
       </div>
 
@@ -65,15 +66,31 @@ $address = trim((string) ($companyContext['company_address'] ?? ''));
         <h3 class="text-sm font-extrabold text-white mb-4">تواصل معنا</h3>
         <div class="text-sm">
           <?php if ($phone !== ''): ?>
+            <?php $phoneHref = contact_tel_href($phone); ?>
             <div class="site-footer-contact-item">
               <span class="site-footer-contact-icon"><span class="material-symbols-outlined text-base" aria-hidden="true">call</span></span>
-              <div><p class="text-xs text-gray-400 mb-0.5">الهاتف</p><p class="font-bold" dir="ltr"><?= h($phone) ?></p></div>
+              <div>
+                <p class="text-xs text-gray-400 mb-0.5">الهاتف</p>
+                <?php if ($phoneHref !== ''): ?>
+                  <a href="<?= h($phoneHref) ?>" class="font-bold site-footer-contact-link" dir="ltr"><?= h($phone) ?></a>
+                <?php else: ?>
+                  <p class="font-bold" dir="ltr"><?= h($phone) ?></p>
+                <?php endif; ?>
+              </div>
             </div>
           <?php endif; ?>
           <?php if ($mobile !== ''): ?>
+            <?php $mobileHref = contact_tel_href($mobile); ?>
             <div class="site-footer-contact-item">
               <span class="site-footer-contact-icon"><span class="material-symbols-outlined text-base" aria-hidden="true">smartphone</span></span>
-              <div><p class="text-xs text-gray-400 mb-0.5">الموبايل</p><p class="font-bold" dir="ltr"><?= h($mobile) ?></p></div>
+              <div>
+                <p class="text-xs text-gray-400 mb-0.5">الموبايل</p>
+                <?php if ($mobileHref !== ''): ?>
+                  <a href="<?= h($mobileHref) ?>" class="font-bold site-footer-contact-link" dir="ltr"><?= h($mobile) ?></a>
+                <?php else: ?>
+                  <p class="font-bold" dir="ltr"><?= h($mobile) ?></p>
+                <?php endif; ?>
+              </div>
             </div>
           <?php endif; ?>
           <?php if ($email !== ''): ?>
@@ -83,9 +100,17 @@ $address = trim((string) ($companyContext['company_address'] ?? ''));
             </div>
           <?php endif; ?>
           <?php if ($address !== ''): ?>
+            <?php $addressHref = contact_maps_href($address); ?>
             <div class="site-footer-contact-item">
               <span class="site-footer-contact-icon"><span class="material-symbols-outlined text-base" aria-hidden="true">location_on</span></span>
-              <div><p class="text-xs text-gray-400 mb-0.5">العنوان</p><p class="font-bold leading-6"><?= h($address) ?></p></div>
+              <div>
+                <p class="text-xs text-gray-400 mb-0.5">العنوان</p>
+                <?php if ($addressHref !== ''): ?>
+                  <a href="<?= h($addressHref) ?>" target="_blank" rel="noopener noreferrer" class="font-bold leading-6 site-footer-contact-link"><?= h($address) ?></a>
+                <?php else: ?>
+                  <p class="font-bold leading-6"><?= h($address) ?></p>
+                <?php endif; ?>
+              </div>
             </div>
           <?php endif; ?>
         </div>

@@ -15,9 +15,9 @@ final class ApiClient
         return self::request('DELETE', $path);
     }
 
-    public static function get(string $path, array $query = []): array
+    public static function get(string $path, array $query = [], int $timeoutSeconds = 60): array
     {
-        return self::request('GET', $path, null, $query);
+        return self::request('GET', $path, null, $query, $timeoutSeconds);
     }
 
     public static function postJson(string $path, array $body = [], int $timeoutSeconds = 60): array
@@ -70,8 +70,6 @@ final class ApiClient
         $response = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        curl_close($ch);
-
         if ($response === false) {
             return ['ok' => false, 'status' => 0, 'error' => $error ?: 'فشل الاتصال بالـ API'];
         }
@@ -117,8 +115,6 @@ final class ApiClient
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $contentType = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
         $error = curl_error($ch);
-        curl_close($ch);
-
         if ($body === false) {
             return ['ok' => false, 'status' => 0, 'error' => $error ?: 'فشل الاتصال بالـ API'];
         }
@@ -131,6 +127,156 @@ final class ApiClient
             'status' => $status,
             'body' => $body,
             'contentType' => $contentType !== '' ? $contentType : 'application/octet-stream',
+        ];
+    }
+
+    /**
+     * Download a binary API response to a local file (disk buffer, not PHP memory).
+     *
+     * @param array<string, scalar|null> $query
+     * @return array{ok: bool, status: int, contentType?: string, error?: string}
+     */
+    public static function downloadToFile(string $path, array $query, string $targetPath, int $timeoutSeconds = 600): array
+    {
+        $base = rtrim(Config::get('AMINE_API_BASE_URL', 'http://127.0.0.1:5000') ?? '', '/');
+        $url = $base . $path;
+        if ($query !== []) {
+            $url .= '?' . http_build_query($query);
+        }
+
+        $token = self::accessToken();
+        $headers = [
+            'Accept: */*',
+            'Authorization: Bearer ' . $token,
+        ];
+
+        $responseHeaders = [];
+        $handle = fopen($targetPath, 'wb');
+        if ($handle === false) {
+            return ['ok' => false, 'status' => 0, 'error' => 'تعذر إنشاء ملف التحميل المؤقت.'];
+        }
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_FILE => $handle,
+            CURLOPT_CUSTOMREQUEST => 'GET',
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_TIMEOUT => max(30, $timeoutSeconds),
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_HEADERFUNCTION => static function ($curl, string $headerLine) use (&$responseHeaders): int {
+                $length = strlen($headerLine);
+                $parts = explode(':', $headerLine, 2);
+                if (count($parts) === 2) {
+                    $name = strtolower(trim($parts[0]));
+                    $value = trim($parts[1]);
+                    if ($name !== '') {
+                        $responseHeaders[$name] = $value;
+                    }
+                }
+
+                return $length;
+            },
+        ]);
+
+        $ok = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        fclose($handle);
+
+        if ($ok === false) {
+            return ['ok' => false, 'status' => 0, 'error' => $error ?: 'فشل الاتصال بالـ API'];
+        }
+        if ($status === 401) {
+            self::clearToken();
+        }
+
+        return [
+            'ok' => $status >= 200 && $status < 300,
+            'status' => $status,
+            'contentType' => (string) ($responseHeaders['content-type'] ?? 'application/octet-stream'),
+            'error' => $status >= 400 ? 'رمز الاستجابة ' . $status : '',
+        ];
+    }
+
+    /**
+     * Stream a binary API response directly to the client without buffering in PHP memory.
+     *
+     * @param array<string, scalar|null> $query
+     * @return array{ok: bool, status: int, error?: string}
+     */
+    public static function streamGet(string $path, array $query = [], int $timeoutSeconds = 600): array
+    {
+        $base = rtrim(Config::get('AMINE_API_BASE_URL', 'http://127.0.0.1:5000') ?? '', '/');
+        $url = $base . $path;
+        if ($query !== []) {
+            $url .= '?' . http_build_query($query);
+        }
+
+        $token = self::accessToken();
+        $headers = [
+            'Accept: */*',
+            'Authorization: Bearer ' . $token,
+        ];
+
+        $responseHeaders = [];
+        $forwardedHeaders = false;
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => false,
+            CURLOPT_CUSTOMREQUEST => 'GET',
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_TIMEOUT => max(30, $timeoutSeconds),
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_HEADERFUNCTION => static function ($curl, string $headerLine) use (&$responseHeaders, &$forwardedHeaders): int {
+                $length = strlen($headerLine);
+                $parts = explode(':', $headerLine, 2);
+                if (count($parts) === 2) {
+                    $name = strtolower(trim($parts[0]));
+                    $value = trim($parts[1]);
+                    if ($name !== '') {
+                        $responseHeaders[$name] = $value;
+                    }
+                    if (!$forwardedHeaders && !headers_sent()) {
+                        if ($name === 'content-type' || $name === 'content-disposition' || $name === 'content-length') {
+                            header($name . ': ' . $value, false);
+                            if ($name === 'content-disposition') {
+                                $forwardedHeaders = true;
+                            }
+                        }
+                        if ($name === 'content-type' && str_starts_with(strtolower($value), 'application/zip')) {
+                            $forwardedHeaders = true;
+                        }
+                    }
+                } elseif (str_starts_with($headerLine, 'HTTP/')) {
+                    if (preg_match('/\s(\d{3})\s/', $headerLine, $matches) === 1 && !headers_sent()) {
+                        http_response_code((int) $matches[1]);
+                    }
+                }
+
+                return $length;
+            },
+            CURLOPT_WRITEFUNCTION => static function ($curl, string $chunk): int {
+                echo $chunk;
+
+                return strlen($chunk);
+            },
+        ]);
+
+        $ok = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        if ($ok === false) {
+            return ['ok' => false, 'status' => 0, 'error' => $error ?: 'فشل الاتصال بالـ API'];
+        }
+        if ($status === 401) {
+            self::clearToken();
+        }
+
+        return [
+            'ok' => $status >= 200 && $status < 300,
+            'status' => $status,
+            'contentType' => (string) ($responseHeaders['content-type'] ?? 'application/octet-stream'),
+            'contentDisposition' => (string) ($responseHeaders['content-disposition'] ?? ''),
         ];
     }
 
@@ -166,8 +312,6 @@ final class ApiClient
         $response = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        curl_close($ch);
-
         if ($response === false) {
             return ['ok' => false, 'status' => 0, 'error' => $error ?: 'فشل الاتصال بالـ API'];
         }
@@ -217,8 +361,6 @@ final class ApiClient
         ]);
         $response = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
         if ($status !== 200 || $response === false) {
             throw new \RuntimeException('فشل تسجيل دخول حساب خدمة API. تحقق من AMINE_API_* في .env');
         }
@@ -242,7 +384,6 @@ final class ApiClient
         ]);
         $response = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
         if ($status !== 200 || $response === false) {
             return null;
         }

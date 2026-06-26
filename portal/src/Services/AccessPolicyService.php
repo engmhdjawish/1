@@ -53,7 +53,7 @@ final class AccessPolicyService
     ];
 
     /** @var list<string> */
-    private const ALLOWED_CLIENT_SORT_FIELDS = [
+    public const ALLOWED_CLIENT_SORT_FIELDS = [
         'number',
         'materialType',
         'ageCategory',
@@ -171,6 +171,7 @@ final class AccessPolicyService
         $storeOptions = self::defaultStoreOptions();
         $hasStoreOptions = false;
         $hasVisibleClientFilters = false;
+        $visibleFilterWildcard = false;
 
         foreach ($rows as $row) {
             $type = trim((string) ($row['filter_type'] ?? ''));
@@ -190,7 +191,7 @@ final class AccessPolicyService
                 case self::OPTION_VISIBLE_CLIENT_FILTER:
                     $hasVisibleClientFilters = true;
                     if ($value === '*') {
-                        $storeOptions['visible_client_filters'] = [];
+                        $visibleFilterWildcard = true;
                     } else {
                         $storeOptions['visible_client_filters'][] = $value;
                     }
@@ -202,7 +203,11 @@ final class AccessPolicyService
         }
 
         if ($hasVisibleClientFilters) {
-            $storeOptions['visible_client_filters'] = self::normalizeVisibleClientFilters($storeOptions['visible_client_filters']);
+            if ($visibleFilterWildcard && $storeOptions['visible_client_filters'] === []) {
+                $storeOptions['visible_client_filters'] = self::ALLOWED_VISIBLE_CLIENT_FILTERS;
+            } else {
+                $storeOptions['visible_client_filters'] = self::normalizeVisibleClientFilters($storeOptions['visible_client_filters']);
+            }
         }
 
         $storeOptions['client_sort_fields'] = self::normalizeClientSortFields($storeOptions['client_sort_fields']);
@@ -622,6 +627,17 @@ final class AccessPolicyService
             'client_sort_fields' => ['number', 'materialType', 'manufacturer'],
             'default_sort' => 'number:asc',
         ];
+    }
+
+    /** @param array<string, mixed> $storeOptions @return list<string> */
+    public static function resolvedVisibleClientFilters(array $storeOptions): array
+    {
+        $filters = $storeOptions['visible_client_filters'] ?? [];
+        if (!is_array($filters)) {
+            $filters = [];
+        }
+
+        return self::normalizeVisibleClientFilters($filters);
     }
 
     /** @param array<int, mixed> $values @return list<string> */

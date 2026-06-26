@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="ar">
+
+<head>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <meta charset="UTF-8">
+    <title>عرض المواد</title>
+    <style>
+        body {
+            font-family: "Arial", sans-serif;
+            direction: rtl;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+            overscroll-behavior-y: contain;
+
+        }
+
+        h1 {
+            text-align: center;
+            color: #007bff;
+            margin-bottom: 20px;
+        }
+
+        #filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        #filters input,
+        #filters select,
+        #filters button {
+            padding: 8px;
+            font-size: 14px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        #filters button {
+            background-color: #28a745;
+            color: white;
+            cursor: pointer;
+        }
+
+        #filters button:hover {
+            background-color: #218838;
+        }
+
+        #productList {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .product-card {
+            width: 220px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: white;
+            padding: 10px;
+            box-shadow: 0 0 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+
+        .product-card img {
+            width: 100%;
+            height: 180px;
+            object-fit: contain;
+            border-radius: 5px;
+        }
+
+        .product-name {
+            font-weight: bold;
+            color: #343a40;
+            margin-top: 5px;
+        }
+
+        .product-info {
+            font-size: 100 px;
+            font-weight: bold;
+            margin-top: 25px;
+
+        }
+
+        #imagePopup button {
+            margin-top: 8px;
+            background-color: #007bff;
+            border: none;
+            padding: 6px 12px;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #imagePopup button:hover {
+            background-color: #0056b3;
+
+        }
+
+
+        .product-card button {
+            margin-top: 8px;
+            background-color: #007bff;
+            border: none;
+            padding: 6px 12px;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .product-card button:hover {
+            background-color: #0056b3;
+        }
+
+        #pagination {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        #pagination button {
+            margin: 0 5px;
+            padding: 6px 12px;
+            border: none;
+            background-color: #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #pagination button:hover {
+            background-color: #bbb;
+        }
+
+        #pagination .active-page {
+            background-color: #007bff;
+            color: white;
+        }
+
+        #shoppingCart {
+            margin-top: 40px;
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        #shoppingCart h2 {
+            color: #dc3545;
+            margin-bottom: 10px;
+        }
+
+        #cartItemsList {
+            list-style: none;
+            padding: 0;
+        }
+
+        .cart-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #eee;
+            padding: 10px 0;
+        }
+
+        .cart-item img {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+            border-radius: 5px;
+            cursor: zoom-in;
+        }
+
+        .cart-item .info {
+            flex-grow: 1;
+            margin-right: 10px;
+        }
+
+        .cart-item .price {
+            text-align: right;
+            min-width: 100px;
+        }
+
+        #shoppingCart button {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #shoppingCart button:hover {
+            background-color: #c82333;
+        }
+
+        #cartTotalSp,
+        #cartTotalUsd {
+            text-align: center;
+            margin-top: 10px;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        #imagePopupOverlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background-color: rgba(0, 0, 0, 0.6);
+            z-index: 9998;
+        }
+
+        #imagePopup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 10px;
+            border-radius: 12px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.4);
+            z-index: 9999;
+            overflow: hidden;
+            /* لتجنب أي مشاكل في العرض */
+        }
+
+        #imagePopup img {
+            max-width: 90vw;
+            max-height: 80vh;
+            object-fit: contain;
+            border-radius: 8px;
+        }
+
+        #imagePopupClose {
+            position: absolute;
+            top: 5px;
+            left: 10px;
+            font-size: 24px;
+            color: #333;
+            cursor: pointer;
+            font-weight: bold;
+            z-index: 10000;
+        }
+        .login-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body class="container py-4">
+    <!-- Login Form -->
+    <div id="loginSection" class="login-container">
+        <h2 class="text-center mb-4">تسجيل الدخول</h2>
+        <form id="loginForm">
+            <div class="mb-3">
+                <label for="username" class="form-label">اسم المستخدم</label>
+                <input type="text" class="form-control" id="username" required>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">كلمة المرور</label>
+                <input type="password" class="form-control" id="password" autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">تسجيل الدخول</button>
+        </form>
+        <div id="loginError" class="alert alert-danger mt-3 hidden"></div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent" class="hidden">
+    <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 rounded">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">نظام الصور</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="Mat2.html">معرض المواد</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" aria-current="page" href="img.html">إدارة الصور</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    <div id="toast" style="
+  visibility: hidden;
+  min-width: 250px;
+  max-width: 90%;
+  background-color: #333;
+  color: #fff;
+  text-align: center;
+  border-radius: 8px;
+  padding: 16px 24px;
+  position: fixed;
+  z-index: 99999; /* أعلى من كل شيء */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 17px;
+  transition: visibility 0s, opacity 0.5s ease;
+  opacity: 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+">
+        تم
+    </div>
+
+    <div id="imagePopupOverlay"></div>
+
+    <div id="imagePopup" ontouchstart="handleTouchStart(event)" ontouchmove="handleTouchMove(event)"
+        ontouchend="handleTouchEnd(event)">
+        <div id="popupProductInfo" style="margin-top: 10px; text-align: center;"></div>
+
+        <div style="position: absolute; top: 50%; transform: translateY(-50%); left: 10px; cursor: pointer; font-size: 60px; color: #007bff;"
+            onclick="navigatePopup(1)">&#10095;</div>
+        <div style="position: absolute; top: 50%; transform: translateY(-50%); right: 10px; cursor: pointer; font-size: 60px; color: #007bff;"
+            onclick="navigatePopup(-1)">&#10094;</div>
+
+        <span id="imagePopupClose" onclick="hidePopupImage()" style="
+        position: absolute;
+        top: 15px;
+        right: 20px;
+        font-size: 36px;
+        color: white;
+        background-color: red;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        line-height: 40px;
+        text-align: center;
+        cursor: pointer;
+        box-shadow: 0 0 8px rgba(0,0,0,0.3);
+        transition: transform 0.2s, background-color 0.3s;
+        z-index: 1000;
+      " onmouseover="this.style.transform='scale(1.2)'; this.style.backgroundColor='#cc0000';"
+            onmouseout="this.style.transform='scale(1)'; this.style.backgroundColor='red';">
+            ×
+        </span>
+
+        <img src="" alt="صورة مكبرة">
+    </div>
+
+    <h1>بحث المواد</h1>
+
+    <div id="filters">
+        <input type="text" id="keyword" placeholder="اسم أو كود المادة" onkeydown="handleKeyDown(event)">
+        <select id="materialType"></select>
+        <select id="targetCategory"></select>
+        <select id="manufacturer"></select>
+        <select id="minQuantity">
+            <option value="available">المتوفر</option>
+            <option value="All">الجميع</option>
+        </select>
+        <!-- أكبر او يساوي<input type="number" id="minQuantity" placeholder="كمية أكبر من..." value=1 step="0.5" min="0"> -->
+        <button onclick="filter()">تصفية</button>
+        <button onclick="resetFilters()" style="background-color: #dc3545;">إلغاء التصفية</button>
+        <button onclick="download()" style="background-color: #0a0a0aad;">تحميل الصور</button>
+
+    </div>
+
+    <div id="productList">جاري التحميل...</div>
+    <div id="pagination" current="" total=""></div>
+
+    <div id="shoppingCart">
+        <h2>سلة المشتريات</h2>
+
+
+        <ul id="cartItemsList">
+            <li>لا توجد منتجات في السلة.</li>
+        </ul>
+        <div id="cartTotalSp">الإجمالي: 0 ل.س</div>
+        <div id="cartTotalUsd">الإجمالي: 0 USD</div>
+        <div style="text-align: left;"><button onclick="clearCart()">تفريغ السلة</button></div>
+    </div>
+
+    </div>
+
+    <script>
+        // Authentication check
+        async function checkAuth() {
+            try {
+                const response = await fetch('auth.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'check_auth', type: 'dashboard' })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Response is not JSON');
+                }
+                
+                const data = await response.json();
+                if (data.authenticated) {
+                    showContent();
+                } else {
+                    showLogin();
+                }
+            } catch (error) {
+                console.error('Error checking authentication:', error);
+                showLogin();
+            }
+        }
+
+        function showLogin() {
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('mainContent').classList.add('hidden');
+        }
+
+        function showContent() {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('mainContent').classList.remove('hidden');
+            // Load content after showing
+            if (typeof loadFilters === 'function') {
+                loadFilters();
+            }
+            if (typeof filter === 'function') {
+                filter(1);
+            }
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('auth.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'login_dashboard', username, password })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Response is not JSON');
+                }
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showContent();
+                    // Load content after authentication
+                    if (typeof loadFilters === 'function') {
+                        loadFilters();
+                    }
+                    if (typeof filter === 'function') {
+                        filter(1);
+                    }
+                } else {
+                    document.getElementById('loginError').textContent = data.message || 'بيانات الدخول غير صحيحة';
+                    document.getElementById('loginError').classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                document.getElementById('loginError').textContent = 'حدث خطأ في الاتصال: ' + error.message;
+                document.getElementById('loginError').classList.remove('hidden');
+            }
+        });
+
+        // Check authentication on page load
+        checkAuth();
+
+        // Get API proxy URL - protects the API endpoints
+        // Use relative URL so it automatically uses the same protocol (HTTPS/HTTP) as the page
+        function getApiProxyUrl() {
+            // Relative URL ensures it uses the same protocol as the current page
+            return "./api_proxy.php";
+        }
+
+        function GetIp() {
+            let apiBaseUrl = "";
+            const currentHost = window.location.hostname;
+            if (currentHost.startsWith("192.168.") || currentHost === "localhost") {
+                apiBaseUrl = "http://192.168.1.9";
+            } else {
+                apiBaseUrl = "http://jawish.ddns.net";
+            }
+            return apiBaseUrl;
+        }       
+        let currentPopupIndex = -1;
+        let FromCart = false;
+
+        function showPopupImage(src, guid) {
+            const baseUrl = GetIp();
+            FromCart = false;
+            currentPopupIndex = -1;
+
+            let index = materialsData.findIndex(m => m.guid === guid);
+
+            if (index !== -1) {
+                FromCart = false;
+                currentPopupIndex = index;
+            } else {
+                index = cart.findIndex(m => m.guid === guid);
+                if (index !== -1) {
+                    FromCart = true;
+                    currentPopupIndex = index;
+                } else {
+                    document.querySelector('#imagePopup img').src = baseUrl + '/No_image_available.svg.png';
+                    document.getElementById("popupProductInfo").innerText = "لا توجد معلومات.";
+                    document.getElementById('imagePopup').style.display = 'block';
+                    document.getElementById('imagePopupOverlay').style.display = 'block';
+                    return;
+                }
+            }
+
+            updatePopupContent();
+            document.getElementById('imagePopup').style.display = 'block';
+            document.getElementById('imagePopupOverlay').style.display = 'block';
+        }
+
+        function updatePopupContent() {
+            const item = FromCart ? cart[currentPopupIndex] : materialsData[currentPopupIndex];
+            const baseUrl = GetIp();
+
+            if (!item) {
+                document.querySelector('#imagePopup img').src = baseUrl + '/No_image_available.svg.png';
+                document.getElementById("popupProductInfo").innerText = "لا توجد معلومات.";
+                return;
+            }
+
+            const fullImage = item.imageUrl ? baseUrl + item.imageUrl : baseUrl + '/No_image_available.svg.png';
+            document.querySelector('#imagePopup img').src = fullImage;
+
+            document.getElementById("popupProductInfo").innerHTML = `
+      <div><strong>${item.name ?? "?"}</strong> (${item.code ?? "?"})</div>
+      <div>السعر: ${formatNumber(item.salePrice_SP ?? 0)} ل.س - ${formatNumber((item.salePrice_Usd ?? 0).toFixed(2))} $</div>
+      <div>التعبـة: ${item.pcsPerBox ?? "?"}</div>
+      <div>الكمية المتاحة: ${(item.availableQunatity ?? 0) / (item.pcsPerBox || 1)}</div>
+      <div><button onclick="addToCart('${item.guid}')">إضافة إلى السلة</button></div>
+    `;
+        }
+
+        async function navigatePopup(direction) {
+            currentPage_ = document.getElementById("pagination").getAttribute("current");
+            totalpage_ = document.getElementById("pagination").getAttribute("total");
+            const list = FromCart ? cart : materialsData;
+            const newIndex = currentPopupIndex + direction;
+            if (newIndex >= 0 && newIndex < list.length) {
+                currentPopupIndex = newIndex;
+                updatePopupContent();
+                itemNum = document.getElementById("productList").querySelector(`div.product-card:nth-child(${newIndex})`);
+                itemNum.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+
+            }
+
+            else if (parseInt(parseInt(currentPage_) + parseInt(direction)) > 0 && parseInt(parseInt(currentPage_) + parseInt(direction)) <= parseInt(totalpage_)) {
+                await filter(parseInt(parseInt(currentPage_) + parseInt(direction)));
+                currentPopupIndex = parseInt(direction) > 0 ? 0 : materialsData.length-1 ;
+                updatePopupContent()
+                itemNum_ = document.getElementById("productList").querySelector(`div.product-card:nth-child(${currentPopupIndex+1})`);
+                itemNum_.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        function hidePopupImage() {
+            document.getElementById('imagePopup').style.display = 'none';
+            document.getElementById('imagePopupOverlay').style.display = 'none';
+        }
+        let currentPage = 1;
+        const pageSize = 12;
+        let cart = [];
+        let materialsData = [];
+
+        async function loadFilters() {
+            try {
+                const res = await fetch('api_proxy.php?action=mat_filter_options');
+                if (!res.ok) {
+                    throw new Error(`HTTP error! status: ${res.status}`);
+                }
+                const data = await res.json();
+
+                if (data.materialTypes) {
+                    fillSelect("materialType", data.materialTypes, "نوع المادة");
+                }
+                if (data.targetCategories) {
+                    fillSelect("targetCategory", data.targetCategories, "الفئة العمرية");
+                }
+                if (data.manufacturers) {
+                    fillSelect("manufacturer", data.manufacturers, "الشركة المصنعة");
+                }
+            } catch (error) {
+                console.error('Error loading filters:', error);
+            }
+        }
+
+        function fillSelect(id, options, placeholder) {
+            const select = document.getElementById(id);
+            select.innerHTML = `<option value="">-- ${placeholder} --</option>`;
+            options.forEach(o => {
+                select.innerHTML += `<option value="${o}">${o}</option>`;
+            });
+        }
+
+        function handleKeyDown(e) {
+            if (e.key === "Enter") {
+                filter();
+            }
+        }
+
+        function getSelectValue(id) {
+            const val = document.getElementById(id).value;
+            return val ? [val] : [];
+        }
+        async function download() {
+	    
+            const query = {
+                keyword: document.getElementById("keyword").value.trim(),
+                materialTypes: getSelectValue("materialType"),
+                targetCategories: getSelectValue("targetCategory"),
+                manufacturers: getSelectValue("manufacturer"),
+                minQuantity: (document.getElementById("minQuantity").value)=='available'? 0.001 : 0,
+                pageIndex: 1,
+                pageSize: pageSize
+            };
+
+            ShowToast('جاري التحميل...');
+
+            try {
+                const response = await fetch('api_proxy.php?action=mat_download', {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(query)
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.style.display = "none";
+                    a.href = url;
+                    a.download = "الصور.zip";
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                } else {
+                    const err = await response.text();
+                    console.error("خطأ:", err);
+                    alert("فشل التحميل: " + err);
+                }
+            } catch (error) {
+                console.error("حدث استثناء:", error);
+                alert("حدث خطأ أثناء الاتصال بالخادم.");
+            }
+        }
+
+        async function filter(page = 1) {
+            currentPage = page;
+            minQuantity = document.getElementById("minQuantity").value == "available" ? 0.01 : 0;
+            const query = {
+                keyword: document.getElementById("keyword").value.trim(),
+                materialTypes: getSelectValue("materialType"),
+                targetCategories: getSelectValue("targetCategory"),
+                manufacturers: getSelectValue("manufacturer"),
+                minQuantity: parseFloat(minQuantity) || 0,
+                pageIndex: page,
+                pageSize: pageSize
+            };
+
+            const res = await fetch(`${getApiProxyUrl()}?action=mat_filter`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(query)
+            });
+
+            const result = await res.json();
+            materialsData = result.data;
+            displayMaterials(result.data);
+            renderPagination(result.page, result.pageCount);
+            document.getElementById("pagination").setAttribute("current", result.page);
+            document.getElementById("pagination").setAttribute("total", result.pageCount);
+        }
+
+        function displayMaterials(items) {
+            const container = document.getElementById("productList");
+            container.innerHTML = "";
+
+            if (!items || items.length === 0) {
+                container.innerHTML = "<p>لا توجد مواد مطابقة.</p>";
+                return;
+            }
+            const BaseUrl = GetIp();
+            items.forEach(item => {
+                let ThumbnailImageUrl = item.imageUrl == '' ? BaseUrl.concat('/No_image_available.svg.png') : BaseUrl.concat(item.imageUrl.replace("/images/", "/images/thumbnails/"));
+
+                let ImageUrl = item.imageUrl == '' ? BaseUrl.concat('/No_image_available.svg.png') : BaseUrl.concat(item.imageUrl);
+                container.innerHTML += `
+                    <div class="product-card">
+                        <img src="${ThumbnailImageUrl}" 
+                             alt="صورة المادة"
+                             style="cursor: zoom-in;"
+                             onclick="showPopupImage('${ImageUrl}','${item.guid}')">
+                        <div class="product-name">${item.code} - ${item.name}</div>
+                        <div class="product-info">السعر (ل.س): ${formatNumber(item.salePrice_SP) ?? "غير محدد"}</div>
+                        <div class="product-info">السعر ($): ${formatNumber(item.salePrice_Usd.toFixed(2)) ?? "غير محدد"}</div>
+                        <div class="product-info">التعبـة: ${item.pcsPerBox ?? "?"}</div>
+                        <div class="product-info">المتاح: ${item.availableQunatity / item.pcsPerBox ?? "?"}</div>
+                        <button onclick="addToCart('${item.guid}')">إضافة إلى السلة</button>
+                    </div>
+                `;
+            });
+        }
+
+        function renderPagination(current, total) {
+            const container = document.getElementById("pagination");
+            container.innerHTML = "";
+
+            if (total <= 1) return;
+
+            if (current > 1) {
+                container.innerHTML += `<button onclick="filter(1);topFunction()">الأول</button>`;
+                //container.innerHTML += `<button onclick="filter(${current - 1});topFunction()">السابق</button>`;
+            }
+
+            const range = 2;
+            const start = Math.max(1, current - range);
+            const end = Math.min(total, current + range);
+
+            for (let i = start; i <= end; i++) {
+                container.innerHTML += `<button onclick="filter(${i});topFunction()" class="${i === current ? 'active-page' : ''}">${i}</button>`;
+            }
+
+            if (current < total) {
+                //container.innerHTML += `<button onclick="filter(${current + 1});topFunction()">التالي</button>`;
+                container.innerHTML += `<button onclick="filter(${total});topFunction()">الأخير (${total})</button>`;
+            }
+        }
+
+        function resetFilters() {
+            document.getElementById("keyword").value = "";
+            document.getElementById("materialType").selectedIndex = 0;
+            document.getElementById("targetCategory").selectedIndex = 0;
+            document.getElementById("manufacturer").selectedIndex = 0;
+            document.getElementById("minQuantity").selectedIndex = 0;
+            filter(1);
+        }
+
+        function addToCart(productGUID) {
+            const product = materialsData.find(item => item.guid === productGUID);
+            if (product) {
+                cart.push(product);
+                updateCartUI();
+
+                ShowToast("تم الاضافة");
+            }
+        }
+        function ShowToast(message) {
+            // Show the toast
+            const toast = document.getElementById("toast");
+            toast.innerText = message;
+            toast.style.visibility = "visible";
+            toast.style.opacity = "1";
+
+            // Hide it after 3 seconds
+            setTimeout(() => {
+                toast.style.opacity = "0";
+                toast.style.visibility = "hidden";
+            }, 3000);
+        }
+        function removeFromCart(index) {
+            cart.splice(index, 1);
+            updateCartUI();
+            ShowToast("تم الحذف");
+        }
+
+        function updateCartUI() {
+            const cartItemsList = document.getElementById("cartItemsList");
+            cartItemsList.innerHTML = "";
+            let totalSp = 0;
+            let totalUsd = 0;
+
+            if (cart.length === 0) {
+                cartItemsList.innerHTML = "<li>لا توجد منتجات في السلة.</li>";
+            } else {
+                const BaseUrl = GetIp()
+                cart.forEach((item, index) => {
+                    const itemTotalSYP = item.salePrice_SP * item.pcsPerBox;
+                    const itemTotalUSD = item.salePrice_Usd * item.pcsPerBox;
+                    totalSp += itemTotalSYP;
+                    totalUsd += itemTotalUSD;
+                    let ThumbnailImageUrl = item.imageUrl == '' ? BaseUrl.concat('/No_image_available.svg.png') : BaseUrl.concat(item.imageUrl.replace("/images/", "/images/thumbnails/"));
+                    let ImageUrl = item.imageUrl == '' ? BaseUrl.concat('/No_image_available.svg.png') : BaseUrl.concat(item.imageUrl);
+                    cartItemsList.innerHTML += `
+                        <li class="cart-item">
+                            <img src="${ThumbnailImageUrl}" 
+                                 alt="صورة المادة"
+                                 style="cursor: zoom-in;"
+                                 onclick="showPopupImage('${ImageUrl}','${item.guid}')">
+                            <div class="info">
+                                <div><strong>${item.name}</strong></div>
+                                <div>الكود: ${item.code}</div>
+                                <div>التعبـة: ${item.pcsPerBox}</div>
+                            </div>
+                            <div class="price">
+                                <div>${formatNumber(itemTotalSYP)} ل.س</div>
+                                <div>${formatNumber(itemTotalUSD.toFixed(2))} $</div>
+                            </div>
+                            <button onclick="removeFromCart(${index})">حذف</button>
+                        </li>
+                    `;
+                });
+            }
+
+            document.getElementById("cartTotalSp").innerText = `الإجمالي: ${formatNumber(totalSp)} ل.س`;
+            document.getElementById("cartTotalUsd").innerText = `الإجمالي: ${formatNumber(totalUsd.toFixed(2))} USD`;
+            localStorage.setItem("shoppingCart", JSON.stringify(cart));
+
+        }
+
+        window.onload = function () {
+            // Authentication is checked separately, content loading happens after auth
+            // This will be called after successful authentication
+            const savedCart = localStorage.getItem("shoppingCart");
+            if (savedCart) {
+                cart = JSON.parse(savedCart);
+                updateCartUI();
+            }
+        };
+        function formatNumber(number) {
+            return number.toLocaleString('En'); // تنسيق الأرقام باستخدام الفواصل العربية
+        }
+        function topFunction() {
+            document.body.scrollTop = 0; // For Safari
+            document.documentElement.scrollTop = 0;
+        }
+
+        function clearCart() {
+
+            if (confirm("هل أنت متأكد من تفريغ السلة؟")) {
+                cart = [];
+                localStorage.removeItem("shoppingCart");
+                updateCartUI();
+                ShowToast("تم تفريغ السلة");
+            }
+        }
+        let xStart = null;
+        let xEnd = null;
+
+        function handleTouchStart(evt) {
+            xStart = evt.touches[0].clientX;
+        }
+
+        function handleTouchMove(evt) {
+            xEnd = evt.touches[0].clientX;
+        }
+
+        function handleTouchEnd(evt) {
+            if (xStart === null || xEnd === null) return;
+
+            const diff = xStart - xEnd;
+
+            if (Math.abs(diff) > 30) { // فقط إذا السحب كان واضحًا بما فيه الكفاية
+                if (diff > 0) {
+                    // سحب نحو اليسار ⇒ صورة تالية
+                    navigatePopup(1);
+                } else {
+                    // سحب نحو اليمين ⇒ صورة سابقة
+                    navigatePopup(-1);
+                }
+            }
+
+            xStart = null;
+            xEnd = null;
+        }
+
+
+    </script>
+    </div>
+</body>
+
+</html>

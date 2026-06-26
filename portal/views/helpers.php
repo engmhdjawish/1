@@ -11,6 +11,258 @@ function h(?string $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+function portal_request_path(): string
+{
+    return \Portal\Support\PortalUrl::requestPath();
+}
+
+function portal_safe_redirect_path(?string $path): ?string
+{
+    return \Portal\Support\PortalUrl::safeRedirectPath($path);
+}
+
+function portal_login_url(string $type = 'customer', ?string $redirect = null): string
+{
+    return \Portal\Support\PortalUrl::loginUrl($type, $redirect);
+}
+
+function portal_login_redirect_target(string $type, ?string $rawRedirect = null): string
+{
+    return \Portal\Support\PortalUrl::loginRedirectTarget($type, $rawRedirect);
+}
+
+function portal_asset_url(string $webPath): string
+{
+    $webPath = '/' . ltrim($webPath, '/');
+    $file = dirname(__DIR__) . '/public' . $webPath;
+    if (is_file($file)) {
+        return $webPath . '?v=' . (string) filemtime($file);
+    }
+
+    return $webPath;
+}
+
+function portal_is_catalog_page(string $path): bool
+{
+    return in_array($path, ['/index.php', '/store.php', '/product.php', '/share.php'], true);
+}
+
+function portal_request_scheme(): string
+{
+    $https = $_SERVER['HTTPS'] ?? '';
+    if ($https !== '' && $https !== 'off' && $https !== '0') {
+        return 'https';
+    }
+
+    $forwardedProto = strtolower(trim((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')));
+    if ($forwardedProto === 'https') {
+        return 'https';
+    }
+
+    $forwardedSsl = strtolower(trim((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '')));
+    if (in_array($forwardedSsl, ['on', '1', 'true'], true)) {
+        return 'https';
+    }
+
+    $port = (int) ($_SERVER['SERVER_PORT'] ?? 0);
+    if ($port === 443) {
+        return 'https';
+    }
+
+    return 'http';
+}
+
+function portal_is_https_request(): bool
+{
+    return portal_request_scheme() === 'https';
+}
+
+function portal_absolute_url(string $pathOrUrl = ''): string
+{
+    $value = trim($pathOrUrl);
+    if ($value === '') {
+        return '';
+    }
+    if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
+        return $value;
+    }
+
+    $path = '/' . ltrim($value, '/');
+    if ($path === '//') {
+        $path = '/';
+    }
+
+    $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    if ($host === '') {
+        return $path;
+    }
+
+    return portal_request_scheme() . '://' . $host . $path;
+}
+
+function portal_image_mime_from_url(string $url): string
+{
+    $path = (string) (parse_url($url, PHP_URL_PATH) ?: $url);
+    $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+    return match ($ext) {
+        'png' => 'image/png',
+        'jpg', 'jpeg' => 'image/jpeg',
+        'webp' => 'image/webp',
+        'svg' => 'image/svg+xml',
+        'gif' => 'image/gif',
+        'ico' => 'image/x-icon',
+        default => 'image/png',
+    };
+}
+
+/**
+ * @return array{
+ *   uses_company_logo: bool,
+ *   favicon_ico: string,
+ *   favicon_svg: string,
+ *   favicon_png_32: string,
+ *   apple_touch: string,
+ *   manifest_icons: list<array{src: string, sizes: string, type: string, purpose: string}>
+ * }
+ */
+function portal_manifest_icon(int $size, string $purpose = 'any'): array
+{
+    if (\Portal\Services\CompanyBrandIconService::hasBrandIcons()) {
+        return [
+            'src' => \Portal\Services\CompanyBrandIconService::iconPublicUrl($size),
+            'sizes' => $size . 'x' . $size,
+            'type' => 'image/png',
+            'purpose' => $purpose,
+        ];
+    }
+
+    $file = 'icon-' . $size . '.png';
+
+    return [
+        'src' => '/icons/icon-serve.php?f=' . rawurlencode($file),
+        'sizes' => $size . 'x' . $size,
+        'type' => 'image/png',
+        'purpose' => $purpose,
+    ];
+}
+
+function portal_site_icons(?string $companyLogoUrl = null): array
+{
+    $companyLogoUrl = trim((string) $companyLogoUrl);
+    $usesCompanyLogo = $companyLogoUrl !== '';
+    $logoAbs = $usesCompanyLogo
+        ? (str_starts_with($companyLogoUrl, 'http://') || str_starts_with($companyLogoUrl, 'https://')
+            ? $companyLogoUrl
+            : portal_absolute_url($companyLogoUrl))
+        : '';
+
+    $iconPng = static fn (int $size): string => portal_asset_url('/icons/icon-png.php?size=' . $size);
+    $iconSvg = portal_asset_url('/icons/app-icon.svg');
+    $faviconIco = portal_asset_url('/favicon.ico');
+
+    $brandIcon = static fn (int $size): string => \Portal\Services\CompanyBrandIconService::iconPublicUrl($size);
+    $hasBrandIcons = \Portal\Services\CompanyBrandIconService::hasBrandIcons();
+
+    $manifestIcons = [
+        portal_manifest_icon(192, 'any'),
+        portal_manifest_icon(512, 'any'),
+        portal_manifest_icon(512, 'maskable'),
+    ];
+
+    if ($usesCompanyLogo) {
+        return [
+            'uses_company_logo' => true,
+            'favicon_ico' => $faviconIco,
+            'favicon_svg' => $iconSvg,
+            'favicon_png_32' => $hasBrandIcons ? $brandIcon(32) : $logoAbs,
+            'apple_touch' => $hasBrandIcons ? $brandIcon(180) : $logoAbs,
+            'manifest_icons' => $manifestIcons,
+        ];
+    }
+
+    return [
+        'uses_company_logo' => false,
+        'favicon_ico' => $faviconIco,
+        'favicon_svg' => $iconSvg,
+        'favicon_png_32' => $iconPng(32),
+        'apple_touch' => $iconPng(180),
+        'manifest_icons' => $manifestIcons,
+    ];
+}
+
+function portal_canonical_url(?string $override = null): string
+{
+    $override = trim((string) $override);
+    if ($override !== '') {
+        if (str_starts_with($override, 'http://') || str_starts_with($override, 'https://')) {
+            return $override;
+        }
+
+        return portal_absolute_url($override);
+    }
+
+    $path = portal_request_path();
+    $query = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_QUERY) ?? '');
+    $canonicalPath = $path;
+    if ($query !== '' && in_array($path, ['/store.php', '/product.php', '/share.php'], true)) {
+        $canonicalPath .= '?' . $query;
+    }
+
+    return portal_absolute_url($canonicalPath);
+}
+
+function portal_seo_description(string $pagePath, string $siteName, ?string $override = null): string
+{
+    $override = trim((string) $override);
+    if ($override !== '') {
+        return $override;
+    }
+
+    $siteName = trim($siteName) !== '' ? trim($siteName) : 'جاويش للتجارة';
+
+    return match ($pagePath) {
+        '/index.php', '/' => 'تسوّق أحذية محلية ومستوردة من ' . $siteName . '. تصفّح التشكيلة، العروض الخاصة، واطلب بسهولة عبر الموقع.',
+        '/store.php' => 'متجر ' . $siteName . ' — تصفّح تشكيلة الأحذية، فلترة حسب النوع والماركة، واطّلع على الأسعار والعروض.',
+        '/store-cart.php', '/cart.php' => 'سلة التسوق في ' . $siteName . '. راجع أصنافك وأكمل طلبك بسهولة.',
+        '/about.php' => 'تعرّف على ' . $siteName . ': من نحن، أعمالنا، والتزامنا بجودة الأحذية وخدمة العملاء.',
+        '/login.php' => 'تسجيل الدخول إلى حسابك في ' . $siteName . ' لمتابعة الطلبات وإدارة ملفك الشخصي.',
+        '/register.php' => 'إنشاء حساب جديد في ' . $siteName . ' للتسوق ومتابعة الطلبات بسهولة.',
+        '/my-orders.php' => 'متابعة طلباتك في ' . $siteName . ' — حالة الطلب، التفاصيل، والتتبع.',
+        '/my-profile.php' => 'ملفك الشخصي في ' . $siteName . ' — بيانات الحساب وإعدادات الأمان.',
+        '/track-order.php' => 'تتبع طلبك من ' . $siteName . ' باستخدام رمز التتبع.',
+        default => $siteName . ' — بوابة تجارة الأحذية الإلكترونية.',
+    };
+}
+
+/** @return array<string, mixed> */
+function portal_json_ld_organization(string $siteName, ?string $logoUrl = null): array
+{
+    $data = [
+        '@context' => 'https://schema.org',
+        '@type' => 'Organization',
+        'name' => $siteName,
+        'url' => portal_absolute_url('/'),
+    ];
+    if ($logoUrl !== null && trim($logoUrl) !== '') {
+        $data['logo'] = str_starts_with($logoUrl, 'http') ? $logoUrl : portal_absolute_url($logoUrl);
+    }
+
+    return $data;
+}
+
+/** @return array<string, mixed> */
+function portal_json_ld_website(string $siteName): array
+{
+    return [
+        '@context' => 'https://schema.org',
+        '@type' => 'WebSite',
+        'name' => $siteName,
+        'url' => portal_absolute_url('/'),
+        'inLanguage' => 'ar',
+    ];
+}
+
 function web_can(string $permission): bool
 {
     return WebSession::hasPermission($permission);
@@ -309,12 +561,76 @@ function safe_return_url(mixed $return): string
     return $return;
 }
 
+function contact_tel_href(string $phone): string
+{
+    $digits = preg_replace('/\D+/', '', $phone);
+    if ($digits === '') {
+        return '';
+    }
+
+    return 'tel:' . $digits;
+}
+
+function contact_maps_href(string $address): string
+{
+    $address = trim($address);
+    if ($address === '') {
+        return '';
+    }
+
+    return 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode($address);
+}
+
+function resolve_product_return_url(mixed $return): string
+{
+    $return = safe_return_url($return);
+    if (str_contains($return, '?')) {
+        return $return;
+    }
+
+    $referer = trim((string) ($_SERVER['HTTP_REFERER'] ?? ''));
+    if ($referer === '') {
+        return $return;
+    }
+
+    $refParts = parse_url($referer);
+    $refPath = rtrim((string) ($refParts['path'] ?? ''), '/') ?: '/';
+    if ($refPath !== '/store.php' && $refPath !== '/store') {
+        return $return;
+    }
+
+    $refQuery = trim((string) ($refParts['query'] ?? ''));
+    if ($refQuery === '') {
+        return $return;
+    }
+
+    return $refPath . '?' . $refQuery;
+}
+
+function catalog_current_return_url(): string
+{
+    $uri = (string) ($_SERVER['REQUEST_URI'] ?? '/store.php');
+    $parts = parse_url($uri);
+    $path = (string) ($parts['path'] ?? '/store.php');
+    $query = [];
+    if (!empty($parts['query'])) {
+        parse_str((string) $parts['query'], $query);
+        unset($query['preview']);
+    }
+
+    return $query === [] ? $path : $path . '?' . http_build_query($query);
+}
+
 function return_link_label(string $returnUrl): string
 {
     if ($returnUrl === '/' || str_starts_with($returnUrl, '/#') || str_contains($returnUrl, 'index.php')) {
         return 'العودة للرئيسية';
     }
-    if (str_contains($returnUrl, 'store.php')) {
+    if (str_contains($returnUrl, 'store.php') || str_contains($returnUrl, '/store')) {
+        if (str_contains($returnUrl, '?')) {
+            return 'العودة للنتائج';
+        }
+
         return 'العودة للمتجر';
     }
 
@@ -379,13 +695,7 @@ function absolute_order_tracking_url(string $token): string
         return '';
     }
 
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
-    if ($host === '') {
-        return $path;
-    }
-
-    return $scheme . '://' . $host . $path;
+    return portal_absolute_url($path);
 }
 
 function format_packaging(float $value): string
@@ -524,7 +834,7 @@ function store_cart_qty_bounds(array $item, float $cartQtyForItem, bool $showQua
     $policyRemaining = $maxPackages !== null
         ? max(0.0, round($maxPackages - $cartQtyForItem, 4))
         : null;
-    $stockAvailable = $showQuantity ? packages_available_display($item) : null;
+    $stockAvailable = packages_available_display($item);
     $effectiveMax = $policyRemaining;
     if ($stockAvailable !== null) {
         $stockRemaining = max(0.0, round($stockAvailable, 4));

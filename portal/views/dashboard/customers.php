@@ -15,6 +15,10 @@ declare(strict_types=1);
 /** @var bool $canViewAmineCustomers */
 /** @var array<string, mixed>|null $editCustomer */
 /** @var array<string, mixed>|null $detailsCustomer */
+/** @var list<array<string, mixed>> $customerOrders */
+/** @var int $customerOrderCount */
+
+use Portal\Services\OrderService;
 
 $statusTabs = [
     'pending' => ['label' => 'بانتظار الموافقة', 'badge' => 'bg-blue-100 text-blue-700'],
@@ -157,6 +161,12 @@ $editing = $editCustomer !== null;
                   >
                     التفاصيل
                   </a>
+                  <a
+                    href="/dashboard/orders.php?web_customer_id=<?= h((string) ($row['id'] ?? '')) ?>"
+                    class="h-9 px-3 inline-flex items-center rounded-lg border border-indigo-200 bg-indigo-50 text-xs font-bold text-indigo-800 hover:bg-indigo-100"
+                  >
+                    الطلبات
+                  </a>
 
                   <?php if ($canManageCustomers): ?>
                     <a
@@ -276,8 +286,8 @@ $editing = $editCustomer !== null;
 </section>
 
 <?php if ($detailsCustomer): ?>
-  <div class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm"></div>
-  <aside class="fixed top-0 left-0 z-50 h-screen w-full max-w-xl bg-white shadow-2xl overflow-y-auto">
+  <div class="dashboard-slide-panel-backdrop fixed inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+  <aside class="dashboard-slide-panel fixed top-0 left-0 w-full max-w-xl bg-white shadow-2xl overflow-y-auto">
     <div class="sticky top-0 bg-white border-b border-border-subtle px-5 py-4 flex items-center justify-between">
       <div>
         <h2 class="text-lg font-extrabold text-slate-900">تفاصيل العميل</h2>
@@ -324,6 +334,43 @@ $editing = $editCustomer !== null;
           <p class="font-bold"><?= h((string) ($detailsCustomer['notes_ar'] ?? '')) ?></p>
         </div>
       <?php endif; ?>
+
+      <div class="rounded-xl border border-border-subtle p-3">
+        <div class="flex items-center justify-between gap-2 mb-3">
+          <div>
+            <p class="text-text-muted text-xs mb-1">طلبات الموقع</p>
+            <p class="font-bold"><?= (int) $customerOrderCount ?> طلب</p>
+          </div>
+          <?php if ($customerOrderCount > 0): ?>
+            <a
+              href="/dashboard/orders.php?web_customer_id=<?= h((string) ($detailsCustomer['id'] ?? '')) ?>"
+              class="h-9 px-3 inline-flex items-center rounded-lg bg-primary text-white text-xs font-bold hover:brightness-110"
+            >
+              فتح كل الطلبات
+            </a>
+          <?php endif; ?>
+        </div>
+        <?php if ($customerOrders === []): ?>
+          <p class="text-xs text-text-muted">لا توجد طلبات مرتبطة بهذا الحساب بعد.</p>
+        <?php else: ?>
+          <div class="space-y-2">
+            <?php foreach ($customerOrders as $orderRow): ?>
+              <a
+                href="/dashboard/orders.php?web_customer_id=<?= h((string) ($detailsCustomer['id'] ?? '')) ?>&details=<?= h((string) ($orderRow['id'] ?? '')) ?>"
+                class="block rounded-lg border border-border-subtle px-3 py-2 hover:bg-surface-low"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-bold text-primary" dir="ltr"><?= h((string) ($orderRow['order_number'] ?? '')) ?></span>
+                  <span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold">
+                    <?= h(OrderService::statusLabel((string) ($orderRow['status'] ?? 'pending'))) ?>
+                  </span>
+                </div>
+                <p class="text-[11px] text-text-muted mt-1"><?= h((string) ($orderRow['created_at'] ?? '')) ?></p>
+              </a>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+      </div>
     </div>
   </aside>
 <?php endif; ?>

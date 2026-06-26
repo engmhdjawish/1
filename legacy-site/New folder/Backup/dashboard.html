@@ -1,0 +1,2484 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة التحكم - إدارة الروابط</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body {
+            background-color: #f5f5f5;
+            font-family: Arial, sans-serif;
+        }
+        .login-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        .link-card {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .hidden {
+            display: none;
+        }
+        .filter-container {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 10px;
+            background: #f8f9fa;
+        }
+        .filter-checkbox {
+            margin: 5px 0;
+        }
+        .filter-checkbox label {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            margin: 0;
+        }
+        .filter-checkbox input {
+            margin-left: 5px;
+        }
+        /* Image Popup Styles */
+        #imagePopupOverlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 9998;
+            cursor: pointer;
+        }
+        #imagePopup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 9999;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 90vw;
+            max-height: 90vh;
+            text-align: center;
+        }
+        #imagePopup img {
+            max-width: 85vw;
+            max-height: 75vh;
+            object-fit: contain;
+            border-radius: 8px;
+        }
+        #imagePopupClose {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 36px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 10000;
+            line-height: 1;
+        }
+        #imagePopupClose:hover {
+            background-color: rgba(0, 0, 0, 0.8);
+            transform: scale(1.1);
+        }
+        /* Notification Styles */
+        #notificationContainer {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 10000;
+            max-width: 400px;
+        }
+        .notification {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            border-right: 4px solid #007bff;
+            animation: slideIn 0.3s ease-out;
+        }
+        .notification.success {
+            border-right-color: #28a745;
+        }
+        .notification.warning {
+            border-right-color: #ffc107;
+        }
+        .notification.info {
+            border-right-color: #17a2b8;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        .notification-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .notification-title {
+            font-weight: bold;
+            color: #333;
+        }
+        .notification-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #999;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            line-height: 1;
+        }
+        .notification-close:hover {
+            color: #333;
+        }
+        .notification-body {
+            color: #666;
+            font-size: 14px;
+        }
+        .badge-new {
+            background-color: #dc3545;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 11px;
+            margin-right: 5px;
+        }
+        /* Mobile responsive styles for order items */
+        .order-item-image {
+            margin-left: 10px;
+            margin-bottom: 0;
+            align-self: flex-start;
+        }
+        @media (max-width: 575.98px) {
+            .order-item-image {
+                margin-left: 0;
+                margin-bottom: 10px;
+                align-self: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Image Popup -->
+    <div id="imagePopupOverlay" onclick="hidePopupImage()"></div>
+    <div id="imagePopup">
+        <span id="imagePopupClose" onclick="hidePopupImage()">×</span>
+        <img src="" alt="صورة مكبرة">
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notificationContainer"></div>
+    <!-- Login Form -->
+    <div id="loginSection" class="login-container">
+        <h2 class="text-center mb-4">تسجيل الدخول</h2>
+        <form id="loginForm">
+            <div class="mb-3">
+                <label for="username" class="form-label">اسم المستخدم</label>
+                <input type="text" class="form-control" id="username" autocomplete="username" required>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">كلمة المرور</label>
+                <input type="password" class="form-control" id="password" autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">تسجيل الدخول</button>
+        </form>
+        <div id="loginError" class="alert alert-danger mt-3 hidden"></div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboardSection" class="dashboard-container hidden">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>لوحة التحكم - إدارة الروابط</h2>
+            <button class="btn btn-secondary" onclick="logout()">تسجيل الخروج</button>
+        </div>
+
+        <!-- Accordion for organizing sections -->
+        <div class="accordion" id="dashboardAccordion">
+            <!-- Account Management Section -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingAccount">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAccount" aria-expanded="false" aria-controls="collapseAccount">
+                        <strong>⚙️ إدارة الحساب</strong>
+                    </button>
+                </h2>
+                <div id="collapseAccount" class="accordion-collapse collapse" aria-labelledby="headingAccount" data-bs-parent="#dashboardAccordion">
+                    <div class="accordion-body">
+                        <!-- Admin Account Settings -->
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5>تغيير بيانات المدير</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="adminAccountForm">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="adminUsername" class="form-label">اسم المستخدم الجديد</label>
+                                            <input type="text" class="form-control" id="adminUsername" autocomplete="username" required>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="adminCurrentPassword" class="form-label">كلمة المرور الحالية</label>
+                                            <input type="password" class="form-control" id="adminCurrentPassword" autocomplete="current-password" required>
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="adminNewPassword" class="form-label">كلمة المرور الجديدة (اتركها فارغة إذا لم ترد التغيير)</label>
+                                            <input type="password" class="form-control" id="adminNewPassword" autocomplete="new-password">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="adminConfirmPassword" class="form-label">تأكيد كلمة المرور الجديدة</label>
+                                            <input type="password" class="form-control" id="adminConfirmPassword" autocomplete="new-password">
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary">حفظ التغييرات</button>
+                                </form>
+                                <div id="adminAccountMessage" class="alert mt-3 hidden"></div>
+                            </div>
+                        </div>
+
+                        <!-- Company Information -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>معلومات الشركة</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="companyInfoForm">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="companyName" class="form-label">اسم الشركة</label>
+                                            <input type="text" class="form-control" id="companyName" required>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="companyLogo" class="form-label">اسم ملف الشعار (مثال: JawishLogo.png)</label>
+                                            <input type="text" class="form-control" id="companyLogo" required>
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="companyLocation" class="form-label">العنوان</label>
+                                            <input type="text" class="form-control" id="companyLocation">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="companyPhone" class="form-label">رقم الهاتف</label>
+                                            <input type="text" class="form-control" id="companyPhone" placeholder="00963-11-2213299">
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="companyMobile" class="form-label">رقم الموبايل (اختياري)</label>
+                                            <input type="text" class="form-control" id="companyMobile" placeholder="00963991234567">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="companyWhatsapp" class="form-label">رقم الواتساب (اختياري)</label>
+                                            <input type="text" class="form-control" id="companyWhatsapp" placeholder="00963991234567">
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="companyEmail" class="form-label">البريد الإلكتروني (اختياري)</label>
+                                            <input type="email" class="form-control" id="companyEmail">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="companyWebsite" class="form-label">الموقع الإلكتروني (اختياري)</label>
+                                            <input type="url" class="form-control" id="companyWebsite">
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary">حفظ معلومات الشركة</button>
+                                </form>
+                                <div id="companyInfoMessage" class="alert mt-3 hidden"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Links Management Section -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingLinks">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseLinks" aria-expanded="false" aria-controls="collapseLinks">
+                        <strong>🔗 إدارة الروابط</strong>
+                    </button>
+                </h2>
+                <div id="collapseLinks" class="accordion-collapse collapse" aria-labelledby="headingLinks" data-bs-parent="#dashboardAccordion">
+                    <div class="accordion-body">
+        <!-- Create New Link -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>إنشاء رابط جديد</h5>
+            </div>
+            <div class="card-body">
+                <form id="linkForm">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="linkName" class="form-label">اسم الرابط</label>
+                            <input type="text" class="form-control" id="linkName" required>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="showPrice" checked>
+                                <label class="form-check-label" for="showPrice">إظهار الأسعار</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="showQuantity">
+                                <label class="form-check-label" for="showQuantity">إظهار الكميات</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="requirePassword" onchange="togglePasswordFields()">
+                                <label class="form-check-label" for="requirePassword">يتطلب اسم مستخدم وكلمة مرور</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mb-3" id="passwordFields">
+                        <div class="col-md-6">
+                            <label for="linkUsername" class="form-label">اسم المستخدم للرابط</label>
+                            <input type="text" class="form-control" id="linkUsername" autocomplete="username">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="linkPassword" class="form-label">كلمة المرور للرابط</label>
+                            <input type="password" class="form-control" id="linkPassword" autocomplete="new-password">
+                        </div>
+                    </div>
+
+                    <h6 class="mt-4 mb-3">الفلاتر المحددة مسبقاً</h6>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="filterKeyword" class="form-label">كلمة البحث</label>
+                            <input type="text" class="form-control" id="filterKeyword">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="filterMinQuantity" class="form-label">الحد الأدنى للكمية</label>
+                            <select class="form-control" id="filterMinQuantity">
+                                <option value="0">الجميع</option>
+                                <option value="0.001" selected>المتوفر فقط</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">نوع المادة</label>
+                            <div id="materialTypeContainer" class="filter-container">
+                                <div class="text-muted small text-center py-2">جاري التحميل...</div>
+                        </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">الفئة العمرية</label>
+                            <div id="targetCategoryContainer" class="filter-container">
+                                <div class="text-muted small text-center py-2">جاري التحميل...</div>
+                    </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">الشركة المصنعة</label>
+                            <div id="manufacturerContainer" class="filter-container">
+                                <div class="text-muted small text-center py-2">جاري التحميل...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-success">إنشاء الرابط</button>
+                </form>
+                <div id="linkMessage" class="alert mt-3 hidden"></div>
+            </div>
+        </div>
+
+        <!-- Existing Links -->
+                        <div class="card">
+            <div class="card-header">
+                <h5>الروابط الموجودة</h5>
+            </div>
+            <div class="card-body">
+                <div id="linksList"></div>
+                            </div>
+                        </div>
+                    </div>
+            </div>
+        </div>
+
+            <!-- Analytics Section -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingAnalytics">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAnalytics" aria-expanded="false" aria-controls="collapseAnalytics">
+                        <strong>📊 الإحصائيات والتحليلات</strong>
+                    </button>
+                </h2>
+                <div id="collapseAnalytics" class="accordion-collapse collapse" aria-labelledby="headingAnalytics" data-bs-parent="#dashboardAccordion">
+                    <div class="accordion-body">
+                        <!-- Visitor Analytics -->
+                        <div class="card mb-4">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5>إحصائيات الزوار</h5>
+                                <button class="btn btn-sm btn-primary" onclick="loadVisitorStatistics()">تحديث</button>
+                            </div>
+                            <div class="card-body">
+                                <div id="visitorStatsList"></div>
+                            </div>
+                        </div>
+
+                        <!-- Visitor Map -->
+                        <div class="card mb-4">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5>خريطة توزيع الزوار</h5>
+                                <button class="btn btn-sm btn-primary" onclick="loadVisitorMap()">تحديث</button>
+                            </div>
+                            <div class="card-body">
+                                <div id="visitorMap" style="height: 500px; width: 100%; border-radius: 8px;"></div>
+                                <p class="text-muted small mt-2 mb-0">
+                                    <strong>ملاحظة:</strong> تظهر الخريطة مواقع GPS للزوار الذين قدموا إذن الوصول للموقع الجغرافي.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Visitor Logs -->
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5>سجل الزوار</h5>
+                                <div>
+                                    <select class="form-select form-select-sm d-inline-block" id="visitorLogLinkFilter" style="width: auto;" onchange="loadVisitorLogs()">
+                                        <option value="">جميع الروابط</option>
+                                    </select>
+                                    <button class="btn btn-sm btn-primary ms-2" onclick="loadVisitorLogs()">تحديث</button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3 d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <button class="btn btn-sm btn-outline-primary" onclick="selectAllVisitorLogs()">تحديد الكل</button>
+                                        <button class="btn btn-sm btn-outline-secondary ms-2" onclick="deselectAllVisitorLogs()">إلغاء التحديد</button>
+                                    </div>
+                                    <div>
+                                        <button class="btn btn-sm btn-danger" onclick="deleteSelectedLogs()">حذف المحدد</button>
+                                        <button class="btn btn-sm btn-danger ms-2" onclick="deleteAllLogs()">حذف الكل</button>
+                                    </div>
+                                </div>
+                                <div id="visitorLogsList"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Orders Management Section -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingOrders">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOrders" aria-expanded="false" aria-controls="collapseOrders">
+                        <strong>🛒 إدارة الطلبات</strong>
+                    </button>
+                </h2>
+                <div id="collapseOrders" class="accordion-collapse collapse" aria-labelledby="headingOrders" data-bs-parent="#dashboardAccordion">
+                    <div class="accordion-body">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>إدارة الطلبات</h5>
+                <button class="btn btn-sm btn-primary" onclick="loadOrders()">تحديث</button>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="orderStatusFilter" class="form-label">تصفية حسب الحالة:</label>
+                    <select class="form-select" id="orderStatusFilter" onchange="loadOrders()" style="max-width: 250px;">
+                        <option value="">جميع الطلبات</option>
+                        <option value="pending">قيد الانتظار</option>
+                        <option value="confirmed">مؤكد</option>
+                        <option value="completed">مكتمل</option>
+                        <option value="cancelled">ملغي</option>
+                    </select>
+                </div>
+                <div id="ordersList"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check authentication on load
+        window.onload = function() {
+            try {
+            checkAuth();
+            loadFilters();
+                loadCompanyInfo();
+                
+                // Initialize password fields visibility (hide by default)
+                togglePasswordFields();
+                
+                // Setup login form event listener
+                const loginForm = document.getElementById('loginForm');
+                if (loginForm) {
+                    // Remove any existing listeners by cloning the form
+                    const newForm = loginForm.cloneNode(true);
+                    loginForm.parentNode.replaceChild(newForm, loginForm);
+                    
+                    // Add event listener to the new form
+                    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        const username = document.getElementById('username').value.trim();
+                        const password = document.getElementById('password').value;
+                        
+                        if (!username || !password) {
+                            const loginError = document.getElementById('loginError');
+                            if (loginError) {
+                                loginError.textContent = 'يرجى إدخال اسم المستخدم وكلمة المرور';
+                                loginError.classList.remove('hidden');
+                            }
+                            return;
+                        }
+
+                        try {
+                            console.log('Attempting login for:', username);
+                            const response = await fetch('auth.php', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: 'login_dashboard', username, password })
+                            });
+                            
+                            if (!response.ok) {
+                                throw new Error(`HTTP error! status: ${response.status}`);
+                            }
+                            
+                            const data = await response.json();
+                            console.log('Login response:', data);
+                            
+                            if (data.success) {
+                                console.log('Login successful, showing dashboard');
+                                showDashboard();
+                                loadLinks();
+                            } else {
+                                const loginError = document.getElementById('loginError');
+                                if (loginError) {
+                                    loginError.textContent = data.message || 'اسم المستخدم أو كلمة المرور غير صحيحة';
+                                    loginError.classList.remove('hidden');
+                                }
+                                console.log('Login failed:', data.message);
+                            }
+                        } catch (error) {
+                            console.error('Login error:', error);
+                            const loginError = document.getElementById('loginError');
+                            if (loginError) {
+                                loginError.textContent = 'حدث خطأ في الاتصال: ' + error.message;
+                                loginError.classList.remove('hidden');
+                            }
+                        }
+                    });
+                } else {
+                    console.error('Login form not found');
+                }
+            } catch (error) {
+                console.error('Error initializing dashboard:', error);
+            }
+        };
+
+        async function checkAuth() {
+            try {
+                const response = await fetch('auth.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'check_auth', type: 'dashboard' })
+                });
+                const data = await response.json();
+                if (data.authenticated) {
+                    showDashboard();
+                    loadLinks();
+                } else {
+                    showLogin();
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showLogin();
+            }
+        }
+
+        function showLogin() {
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('dashboardSection').classList.add('hidden');
+        }
+
+        function showDashboard() {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('dashboardSection').classList.remove('hidden');
+            
+            // Load previous order IDs from localStorage to avoid re-notifying old orders
+            const savedOrderIds = localStorage.getItem('previousOrderIds');
+            if (savedOrderIds) {
+                try {
+                    window.previousOrderIds = JSON.parse(savedOrderIds);
+                } catch (e) {
+                    window.previousOrderIds = [];
+                }
+            } else {
+                window.previousOrderIds = [];
+            }
+            
+            loadLinks();
+            loadOrders().then(() => {
+                // Initialize previous order IDs after first load
+                // This will be set in loadOrders function
+            });
+            loadVisitorStatistics();
+            loadVisitorLogs();
+            loadVisitorMap();
+            loadAdminAccountInfo();
+            
+            // Request notification permission on dashboard load
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+            
+            // Start auto-refresh (will continue even when page is hidden)
+            startAutoRefresh();
+        }
+
+        // Auto-refresh and notification variables
+        let lastOrderCount = 0;
+        let autoRefreshInterval = null;
+        let refreshInterval = 30000; // 30 seconds
+
+        function startAutoRefresh() {
+            // Clear existing interval if any
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            
+            // Set up auto-refresh
+            autoRefreshInterval = setInterval(() => {
+                autoRefresh();
+            }, refreshInterval);
+        }
+
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
+
+        async function autoRefresh() {
+            try {
+                // Refresh orders and check for new ones (always check for notifications)
+                await loadOrders(true); // Pass true to indicate silent refresh but still check for new orders
+                
+                // Visitor statistics and logs are no longer auto-refreshed
+                // They can be manually refreshed using the update buttons
+            } catch (error) {
+                console.error('Error in auto-refresh:', error);
+            }
+        }
+
+        // Admin Account Management
+        async function loadAdminAccountInfo() {
+            try {
+                const response = await fetch('auth.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_admin_info' })
+                });
+                const data = await response.json();
+                
+                if (data.success && data.username) {
+                    document.getElementById('adminUsername').value = data.username;
+                }
+            } catch (error) {
+                console.error('Error loading admin info:', error);
+            }
+        }
+
+        document.getElementById('adminAccountForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const messageDiv = document.getElementById('adminAccountMessage');
+            
+            const newPassword = document.getElementById('adminNewPassword').value;
+            const confirmPassword = document.getElementById('adminConfirmPassword').value;
+            
+            if (newPassword && newPassword !== confirmPassword) {
+                messageDiv.className = 'alert alert-danger mt-3';
+                messageDiv.textContent = 'كلمة المرور الجديدة وتأكيدها غير متطابقين';
+                messageDiv.classList.remove('hidden');
+                return;
+            }
+
+            const accountData = {
+                username: document.getElementById('adminUsername').value,
+                currentPassword: document.getElementById('adminCurrentPassword').value,
+                newPassword: newPassword,
+                confirmPassword: confirmPassword
+            };
+
+            try {
+                const response = await fetch('auth.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'update_admin_account', ...accountData })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    messageDiv.className = 'alert alert-success mt-3';
+                    messageDiv.textContent = data.message || 'تم تحديث بيانات الحساب بنجاح';
+                    messageDiv.classList.remove('hidden');
+                    // Clear password fields
+                    document.getElementById('adminCurrentPassword').value = '';
+                    document.getElementById('adminNewPassword').value = '';
+                    document.getElementById('adminConfirmPassword').value = '';
+                    setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+                } else {
+                    messageDiv.className = 'alert alert-danger mt-3';
+                    messageDiv.textContent = data.message || 'فشل تحديث بيانات الحساب';
+                    messageDiv.classList.remove('hidden');
+                }
+            } catch (error) {
+                messageDiv.className = 'alert alert-danger mt-3';
+                messageDiv.textContent = 'حدث خطأ في الاتصال';
+                messageDiv.classList.remove('hidden');
+            }
+        });
+
+        // Login form event listener is now set up in window.onload
+
+        async function loadFilters() {
+            try {
+                const response = await fetch('api_proxy.php?action=mat_filter_options');
+                const data = await response.json();
+                
+                if (data.materialTypes) {
+                    fillSelect("materialType", data.materialTypes);
+                }
+                if (data.targetCategories) {
+                    fillSelect("targetCategory", data.targetCategories);
+                }
+                if (data.manufacturers) {
+                    fillSelect("manufacturer", data.manufacturers);
+                }
+            } catch (error) {
+                console.error('Error loading filters:', error);
+            }
+        }
+
+        function fillSelect(id, options) {
+            const containerId = id + "Container";
+            const container = document.getElementById(containerId);
+            if (container) {
+                if (!options || options.length === 0) {
+                    container.innerHTML = '<div class="text-muted small text-center py-2">لا توجد خيارات</div>';
+                    return;
+                }
+                container.innerHTML = "";
+                options.forEach(o => {
+                    const checkboxId = `${id}_${o.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '')}`;
+                    container.innerHTML += `
+                        <div class="filter-checkbox">
+                            <label>
+                                <input type="checkbox" id="${checkboxId}" value="${o.replace(/"/g, '&quot;')}">
+                                ${o}
+                            </label>
+                        </div>
+                    `;
+                });
+            }
+        }
+
+        function getSelectValue(id) {
+            const containerId = id + "Container";
+            const container = document.getElementById(containerId);
+            if (container) {
+                const checked = Array.from(container.querySelectorAll('input[type="checkbox"]:checked'))
+                    .map(cb => cb.value);
+                return checked;
+            }
+            return [];
+        }
+
+        function togglePasswordFields() {
+            const requirePassword = document.getElementById('requirePassword').checked;
+            const passwordFields = document.getElementById('passwordFields');
+            const usernameInput = document.getElementById('linkUsername');
+            const passwordInput = document.getElementById('linkPassword');
+            
+            if (requirePassword) {
+                passwordFields.style.display = 'block';
+                usernameInput.required = true;
+                passwordInput.required = true;
+            } else {
+                passwordFields.style.display = 'none';
+                usernameInput.required = false;
+                passwordInput.required = false;
+            }
+        }
+
+        document.getElementById('linkForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const requirePassword = document.getElementById('requirePassword').checked;
+            const linkData = {
+                action: 'create_link',
+                name: document.getElementById('linkName').value,
+                showPrice: document.getElementById('showPrice').checked,
+                showQuantity: document.getElementById('showQuantity').checked,
+                requirePassword: requirePassword,
+                username: requirePassword ? document.getElementById('linkUsername').value : '',
+                password: requirePassword ? document.getElementById('linkPassword').value : '',
+                filters: {
+                    keyword: document.getElementById('filterKeyword').value,
+                    materialTypes: getSelectValue("materialType"),
+                    targetCategories: getSelectValue("targetCategory"),
+                    manufacturers: getSelectValue("manufacturer"),
+                    minQuantity: document.getElementById('filterMinQuantity').value
+                }
+            };
+
+            try {
+                const response = await fetch('link_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(linkData)
+                });
+                const data = await response.json();
+                
+                const messageDiv = document.getElementById('linkMessage');
+                if (data.success) {
+                    messageDiv.className = 'alert alert-success mt-3';
+                    messageDiv.textContent = 'تم إنشاء الرابط بنجاح: ' + data.linkUrl;
+                    messageDiv.classList.remove('hidden');
+                    document.getElementById('linkForm').reset();
+                    loadLinks();
+                } else {
+                    messageDiv.className = 'alert alert-danger mt-3';
+                    messageDiv.textContent = data.error || 'حدث خطأ';
+                    messageDiv.classList.remove('hidden');
+                }
+            } catch (error) {
+                document.getElementById('linkMessage').className = 'alert alert-danger mt-3';
+                document.getElementById('linkMessage').textContent = 'حدث خطأ في الاتصال';
+                document.getElementById('linkMessage').classList.remove('hidden');
+            }
+        });
+
+        async function loadLinks() {
+            try {
+                const response = await fetch('link_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_links' })
+                });
+                const data = await response.json();
+                
+                const linksList = document.getElementById('linksList');
+                linksList.innerHTML = '';
+                
+                if (data.links.length === 0) {
+                    linksList.innerHTML = '<p>لا توجد روابط</p>';
+                    return;
+                }
+                
+                data.links.forEach(link => {
+                    const linkCard = document.createElement('div');
+                    linkCard.className = 'link-card';
+                    linkCard.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="flex-grow-1">
+                                <h6>${link.name}</h6>
+                                <p class="mb-1"><strong>الرابط:</strong> <a href="${link.linkUrl}" target="_blank">${link.linkUrl}</a></p>
+                                <p class="mb-1"><strong>إظهار السعر:</strong> ${link.showPrice ? 'نعم' : 'لا'}</p>
+                                <p class="mb-1"><strong>إظهار الكمية:</strong> ${link.showQuantity ? 'نعم' : 'لا'}</p>
+                                <p class="mb-0"><strong>تاريخ الإنشاء:</strong> ${link.created}</p>
+                            </div>
+                            <div class="ms-3">
+                                <button class="btn btn-info btn-sm mb-2" onclick="viewVisitorLogs('${link.id}')" style="display: block; width: 100%;">عرض سجل الزوار</button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteLink('${link.id}')" style="display: block; width: 100%;">حذف</button>
+                            </div>
+                        </div>
+                    `;
+                    linksList.appendChild(linkCard);
+                });
+                
+                // Update visitor log filter dropdown
+                const filterSelect = document.getElementById('visitorLogLinkFilter');
+                if (filterSelect) {
+                    const currentValue = filterSelect.value;
+                    filterSelect.innerHTML = '<option value="">جميع الروابط</option>';
+                    data.links.forEach(link => {
+                        const option = document.createElement('option');
+                        option.value = link.id;
+                        option.textContent = link.name;
+                        filterSelect.appendChild(option);
+                    });
+                    if (currentValue) {
+                        filterSelect.value = currentValue;
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading links:', error);
+            }
+        }
+
+        async function deleteLink(linkId) {
+            if (!confirm('هل أنت متأكد من حذف هذا الرابط؟')) return;
+            
+            try {
+                const response = await fetch('link_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete_link', linkId })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    loadLinks();
+                } else {
+                    alert('حدث خطأ: ' + (data.error || 'غير معروف'));
+                }
+            } catch (error) {
+                alert('حدث خطأ في الاتصال');
+            }
+        }
+
+        async function logout() {
+            try {
+                await fetch('auth.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'logout' })
+                });
+                showLogin();
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        async function loadVisitorStatistics(silent = false) {
+            try {
+                const response = await fetch('visitor_log_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_link_statistics' })
+                });
+                const data = await response.json();
+                
+                const statsList = document.getElementById('visitorStatsList');
+                
+                // Save main accordion state before updating
+                const analyticsAccordion = document.getElementById('collapseAnalytics');
+                const wasAnalyticsOpen = analyticsAccordion && analyticsAccordion.classList.contains('show');
+                
+                statsList.innerHTML = '';
+                
+                if (!data.statistics || data.statistics.length === 0) {
+                    statsList.innerHTML = '<p class="text-muted">لا توجد إحصائيات متاحة</p>';
+                    return;
+                }
+                
+                // Load links to get names and filters
+                let linksMap = {};
+                try {
+                    const linksResponse = await fetch('link_manager.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'get_links' })
+                    });
+                    const linksData = await linksResponse.json();
+                    if (linksData.links) {
+                        linksData.links.forEach(link => {
+                            linksMap[link.id] = link;
+                        });
+                    }
+                } catch (e) {
+                    console.error('Error loading links for statistics:', e);
+                }
+                
+                // Helper function to create statistics card
+                function createStatCard(stat, linksMap) {
+                    const statCard = document.createElement('div');
+                    statCard.className = 'link-card mb-3';
+                    statCard.setAttribute('data-stat-link-id', stat.linkId);
+                    
+                    const linkInfo = linksMap[stat.linkId] || null;
+                    const linkName = linkInfo ? linkInfo.name : stat.linkId;
+                    
+                    let filtersHTML = '';
+                    if (linkInfo && linkInfo.filters) {
+                        const filters = linkInfo.filters;
+                        const filterParts = [];
+                        if (filters.keyword) filterParts.push(`كلمة: ${filters.keyword}`);
+                        if (filters.materialTypes && filters.materialTypes.length > 0) filterParts.push(`نوع: ${filters.materialTypes.join(', ')}`);
+                        if (filters.targetCategories && filters.targetCategories.length > 0) filterParts.push(`فئة: ${filters.targetCategories.join(', ')}`);
+                        if (filters.manufacturers && filters.manufacturers.length > 0) filterParts.push(`شركة: ${filters.manufacturers.join(', ')}`);
+                        if (filters.minQuantity && filters.minQuantity !== '0') filterParts.push(`الحد الأدنى: ${filters.minQuantity}`);
+                        if (filterParts.length > 0) {
+                            filtersHTML = `<p class="mb-1 small text-muted"><strong>الفلاتر:</strong> ${filterParts.join(' | ')}</p>`;
+                        }
+                    }
+                    
+                    statCard.innerHTML = `
+                        <h6><strong>الرابط:</strong> ${linkName}</h6>
+                        ${filtersHTML}
+                        <div class="row">
+                            <div class="col-md-3">
+                                <p class="mb-1"><strong>إجمالي الزيارات:</strong> <span class="badge bg-primary">${stat.totalVisits}</span></p>
+                            </div>
+                            <div class="col-md-3">
+                                <p class="mb-1"><strong>زوار فريدون:</strong> <span class="badge bg-info">${stat.uniqueVisitors}</span></p>
+                            </div>
+                            <div class="col-md-3">
+                                <p class="mb-1"><strong>أول زيارة:</strong> ${stat.firstVisit || 'لا توجد'}</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p class="mb-1"><strong>آخر زيارة:</strong> ${stat.lastVisit || 'لا توجد'}</p>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <strong>الإجراءات:</strong>
+                            <div class="mt-1">
+                                ${Object.entries(stat.actions).map(([action, count]) => 
+                                    `<span class="badge bg-secondary me-1">${getActionLabel(action)}: ${count}</span>`
+                                ).join('')}
+                            </div>
+                        </div>
+                    `;
+                    return statCard;
+                }
+                
+                // Get existing statistics
+                const existingStatIds = new Set();
+                const existingStatCards = new Map();
+                statsList.querySelectorAll('[data-stat-link-id]').forEach(card => {
+                    const linkId = card.getAttribute('data-stat-link-id');
+                    existingStatIds.add(linkId);
+                    existingStatCards.set(linkId, card);
+                });
+                
+                // Get new statistics IDs
+                const newStatIds = new Set(data.statistics.map(s => s.linkId));
+                
+                // Remove statistics that no longer exist
+                existingStatIds.forEach(linkId => {
+                    if (!newStatIds.has(linkId)) {
+                        const card = existingStatCards.get(linkId);
+                        if (card) {
+                            card.style.transition = 'opacity 0.3s, transform 0.3s';
+                            card.style.opacity = '0';
+                            card.style.transform = 'translateX(-20px)';
+                            setTimeout(() => card.remove(), 300);
+                        }
+                    }
+                });
+                
+                // Add or update statistics
+                data.statistics.forEach((stat, index) => {
+                    const existingCard = existingStatCards.get(stat.linkId);
+                    
+                    if (existingCard) {
+                        // Update existing - smooth fade
+                        existingCard.style.transition = 'opacity 0.2s';
+                        existingCard.style.opacity = '0.6';
+                        const newCard = createStatCard(stat, linksMap);
+                        setTimeout(() => {
+                            existingCard.replaceWith(newCard);
+                            newCard.style.opacity = '0';
+                            newCard.style.transition = 'opacity 0.3s';
+                            requestAnimationFrame(() => {
+                                newCard.style.opacity = '1';
+                            });
+                        }, 200);
+                    } else {
+                        // New statistic - add with animation
+                        const newCard = createStatCard(stat, linksMap);
+                        newCard.style.opacity = '0';
+                        newCard.style.transform = 'translateY(-10px)';
+                        newCard.style.transition = 'opacity 0.3s, transform 0.3s';
+                        setTimeout(() => {
+                            statsList.appendChild(newCard);
+                            requestAnimationFrame(() => {
+                                newCard.style.opacity = '1';
+                                newCard.style.transform = 'translateY(0)';
+                            });
+                        }, index * 50);
+                    }
+                });
+                
+                // Remove "no statistics" message if exists
+                const noStatsMsg = statsList.querySelector('p.text-muted');
+                if (noStatsMsg && noStatsMsg.textContent.includes('لا توجد إحصائيات')) {
+                    noStatsMsg.style.transition = 'opacity 0.3s';
+                    noStatsMsg.style.opacity = '0';
+                    setTimeout(() => noStatsMsg.remove(), 300);
+                }
+            } catch (error) {
+                console.error('Error loading visitor statistics:', error);
+            }
+        }
+
+        async function loadVisitorLogs(linkId = null) {
+            try {
+                const filterLinkId = linkId || document.getElementById('visitorLogLinkFilter')?.value || '';
+                const response = await fetch('visitor_log_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        action: 'get_visitor_logs',
+                        linkId: filterLinkId || null
+                    })
+                });
+                const data = await response.json();
+                
+                // Load links to get names and filters
+                let linksMap = {};
+                try {
+                    const linksResponse = await fetch('link_manager.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'get_links' })
+                    });
+                    const linksData = await linksResponse.json();
+                    if (linksData.links) {
+                        linksData.links.forEach(link => {
+                            linksMap[link.id] = link;
+                        });
+                    }
+                } catch (e) {
+                    console.error('Error loading links for visitor logs:', e);
+                }
+                
+                const logsList = document.getElementById('visitorLogsList');
+                
+                // Save main accordion state before updating
+                const analyticsAccordion = document.getElementById('collapseAnalytics');
+                const wasAnalyticsOpen = analyticsAccordion && analyticsAccordion.classList.contains('show');
+                
+                logsList.innerHTML = '';
+                
+                if (!data.logs || data.logs.length === 0) {
+                    logsList.innerHTML = '<p class="text-muted">لا توجد سجلات زوار</p>';
+                    
+                    // Restore main accordion state if it was open
+                    if (wasAnalyticsOpen && analyticsAccordion) {
+                        setTimeout(() => {
+                            const bsCollapse = bootstrap.Collapse.getInstance(analyticsAccordion);
+                            if (!bsCollapse || !analyticsAccordion.classList.contains('show')) {
+                                new bootstrap.Collapse(analyticsAccordion, { toggle: false }).show();
+                            }
+                        }, 50);
+                    }
+                    return;
+                }
+                
+                // Helper function to get link name and filters
+                function getLinkDisplay(linkId) {
+                    const linkInfo = linksMap[linkId] || null;
+                    if (!linkInfo) return linkId;
+                    
+                    let filtersHTML = '';
+                    if (linkInfo.filters) {
+                        const filters = linkInfo.filters;
+                        const filterParts = [];
+                        if (filters.keyword) filterParts.push(`كلمة: ${filters.keyword}`);
+                        if (filters.materialTypes && filters.materialTypes.length > 0) filterParts.push(`نوع: ${filters.materialTypes.join(', ')}`);
+                        if (filters.targetCategories && filters.targetCategories.length > 0) filterParts.push(`فئة: ${filters.targetCategories.join(', ')}`);
+                        if (filters.manufacturers && filters.manufacturers.length > 0) filterParts.push(`شركة: ${filters.manufacturers.join(', ')}`);
+                        if (filters.minQuantity && filters.minQuantity !== '0') filterParts.push(`الحد الأدنى: ${filters.minQuantity}`);
+                        if (filterParts.length > 0) {
+                            filtersHTML = `<br><small class="text-muted">الفلاتر: ${filterParts.join(' | ')}</small>`;
+                        }
+                    }
+                    
+                    return `${linkInfo.name}${filtersHTML}`;
+                }
+                
+                // Check if logs are grouped by visitor
+                if (data.grouped) {
+                    // Display grouped by visitor
+                    data.logs.forEach(visitor => {
+                        const visitorCard = document.createElement('div');
+                        visitorCard.className = 'link-card mb-3';
+                        const allLogIds = visitor.actions.map(a => a.id).filter(id => id);
+                        visitorCard.innerHTML = `
+                            <div class="visitor-header mb-2 p-2 bg-light rounded">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="flex-grow-1">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input log-checkbox" type="checkbox" value="${allLogIds.join(',')}" id="visitor-${visitor.visitorIp.replace(/\./g, '-')}" onchange="updateDeleteButtonState()">
+                                            <label class="form-check-label" for="visitor-${visitor.visitorIp.replace(/\./g, '-')}">
+                                                <strong>تحديد جميع إجراءات هذا الزائر</strong>
+                                            </label>
+                                        </div>
+                                        <h6 class="mb-1">
+                                            ${visitor.customerName ? `<strong>الاسم:</strong> <span class="text-primary">${visitor.customerName}</span> | ` : ''}
+                                            ${visitor.visitorId ? `<strong>معرف الزائر:</strong> <span class="text-muted small">${visitor.visitorId.substring(0, 20)}...</span> | ` : ''}
+                                            <strong>عنوان IP:</strong> ${visitor.visitorIp} | 
+                                            <strong>المتصفح:</strong> ${getBrowserName(visitor.userAgent)}
+                                        </h6>
+                                        <p class="mb-0 small text-muted">
+                                            <strong>عدد الإجراءات:</strong> ${visitor.actions.length} | 
+                                            <strong>الروابط المزورة:</strong> ${visitor.linkIds.map(id => linksMap[id] ? linksMap[id].name : id).join(', ') || 'لا يوجد'} | 
+                                            <strong>أول زيارة:</strong> ${visitor.firstVisit || 'غير معروف'} | 
+                                            <strong>آخر زيارة:</strong> ${visitor.lastVisit || 'غير معروف'}
+                                        </p>
+                                        ${visitor.gpsLocations && visitor.gpsLocations.length > 0 ? (() => {
+                                            // Get the last GPS location (most recent by timestamp)
+                                            const sortedLocations = [...visitor.gpsLocations].sort((a, b) => {
+                                                const timeA = new Date(a.timestamp || 0).getTime();
+                                                const timeB = new Date(b.timestamp || 0).getTime();
+                                                return timeB - timeA; // Sort descending (newest first)
+                                            });
+                                            const lastLocation = sortedLocations[0];
+                                            return `
+                                                <p class="mb-0 small mt-1">
+                                                    <strong>الموقع الأخير:</strong> 
+                                                    <a href="https://www.google.com/maps?q=${lastLocation.latitude},${lastLocation.longitude}" target="_blank" class="text-primary">
+                                                        ${lastLocation.latitude}, ${lastLocation.longitude}
+                                                    </a>
+                                                    ${lastLocation.accuracy ? ` (دقة: ±${Math.round(lastLocation.accuracy)}م)` : ''}
+                                                    ${lastLocation.timestamp ? ` - ${lastLocation.timestamp}` : ''}
+                                                </p>
+                                            `;
+                                        })() : ''}
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="toggleVisitorActions(this)">
+                                        <span class="toggle-text">إظهار</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="visitor-actions" style="display: none;">
+                                ${visitor.actions.map(action => `
+                                    <div class="border-start border-3 border-info ps-3 mb-2 ms-2">
+                                        <div class="form-check mb-1">
+                                            <input class="form-check-input log-checkbox" type="checkbox" value="${action.id}" id="log-${action.id}" onchange="updateDeleteButtonState()">
+                                            <label class="form-check-label" for="log-${action.id}">
+                                                <strong>تحديد هذا السجل</strong>
+                                            </label>
+                                        </div>
+                                        <p class="mb-1">
+                                            <strong>الإجراء:</strong> <span class="badge bg-info">${getActionLabel(action.visitorAction)}</span> | 
+                                            <strong>الرابط:</strong> ${getLinkDisplay(action.linkId)} | 
+                                            <strong>الوقت:</strong> ${action.timestamp}
+                                            ${action.customerName ? ` | <strong>الاسم:</strong> <span class="text-primary">${action.customerName}</span>` : ''}
+                                        </p>
+                                        ${action.gpsLocation && action.gpsLocation.latitude && action.gpsLocation.longitude ? `
+                                            <p class="mb-1">
+                                                <strong>الموقع:</strong> 
+                                                <a href="https://www.google.com/maps?q=${action.gpsLocation.latitude},${action.gpsLocation.longitude}" target="_blank" class="text-primary">
+                                                    ${action.gpsLocation.latitude}, ${action.gpsLocation.longitude}
+                                                </a>
+                                                ${action.gpsLocation.accuracy ? ` (دقة: ±${Math.round(action.gpsLocation.accuracy)}م)` : ''}
+                                            </p>
+                                        ` : ''}
+                                        ${action.details ? `<p class="mb-0 text-muted small">التفاصيل: ${action.details}</p>` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
+                        logsList.appendChild(visitorCard);
+                    });
+                } else {
+                    // Display flat list (backward compatibility)
+                    data.logs.forEach(log => {
+                        const logCard = document.createElement('div');
+                        logCard.className = 'link-card mb-2';
+                        logCard.style.fontSize = '0.9em';
+                        logCard.innerHTML = `
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <p class="mb-1">
+                                        <strong>الرابط:</strong> ${getLinkDisplay(log.linkId)} | 
+                                        <strong>الإجراء:</strong> <span class="badge bg-info">${getActionLabel(log.visitorAction)}</span> | 
+                                        <strong>الوقت:</strong> ${log.timestamp}
+                                        ${log.customerName ? ` | <strong>الاسم:</strong> <span class="text-primary">${log.customerName}</span>` : ''}
+                                    </p>
+                                    <p class="mb-1">
+                                        <strong>عنوان IP:</strong> ${log.visitorIp} | 
+                                        <strong>المتصفح:</strong> ${getBrowserName(log.userAgent)}
+                                    </p>
+                                    ${log.details ? `<p class="mb-0 text-muted"><small>التفاصيل: ${log.details}</small></p>` : ''}
+                                </div>
+                            </div>
+                        `;
+                        logsList.appendChild(logCard);
+                    });
+                }
+                
+                // Restore main accordion state if it was open
+                if (wasAnalyticsOpen && analyticsAccordion) {
+                    setTimeout(() => {
+                        const bsCollapse = bootstrap.Collapse.getInstance(analyticsAccordion);
+                        if (!bsCollapse || !analyticsAccordion.classList.contains('show')) {
+                            new bootstrap.Collapse(analyticsAccordion, { toggle: false }).show();
+                        }
+                    }, 50);
+                }
+            } catch (error) {
+                console.error('Error loading visitor logs:', error);
+            }
+        }
+
+        function viewVisitorLogs(linkId) {
+            document.getElementById('visitorLogLinkFilter').value = linkId;
+            loadVisitorLogs(linkId);
+            // Scroll to visitor logs section
+            setTimeout(() => {
+                document.getElementById('visitorLogsList').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+        }
+
+        let visitorMap = null;
+        let mapMarkers = [];
+
+        async function loadVisitorMap() {
+            try {
+                const response = await fetch('visitor_log_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_visitor_logs' })
+                });
+                
+                const data = await response.json();
+                
+                if (!data.logs || data.logs.length === 0) {
+                    document.getElementById('visitorMap').innerHTML = '<div class="alert alert-info text-center p-4">لا توجد مواقع GPS متاحة للعرض</div>';
+                    return;
+                }
+                
+                // Initialize map if not already initialized
+                if (!visitorMap) {
+                    visitorMap = L.map('visitorMap').setView([33.5138, 36.2765], 6); // Default to Syria center
+                    
+                    // Add OpenStreetMap tiles
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors',
+                        maxZoom: 19
+                    }).addTo(visitorMap);
+                }
+                
+                // Clear existing markers
+                mapMarkers.forEach(marker => visitorMap.removeLayer(marker));
+                mapMarkers = [];
+                
+                // Collect all GPS locations
+                const locations = [];
+                data.logs.forEach(visitor => {
+                    if (visitor.gpsLocations && visitor.gpsLocations.length > 0) {
+                        visitor.gpsLocations.forEach(loc => {
+                            locations.push({
+                                lat: parseFloat(loc.latitude),
+                                lng: parseFloat(loc.longitude),
+                                accuracy: loc.accuracy ? parseFloat(loc.accuracy) : null,
+                                timestamp: loc.timestamp || '',
+                                visitorIp: visitor.visitorIp,
+                                customerName: visitor.customerName || '',
+                                action: 'GPS Location'
+                            });
+                        });
+                    }
+                    
+                    // Also check individual actions for GPS locations
+                    if (visitor.actions) {
+                        visitor.actions.forEach(action => {
+                            if (action.gpsLocation && action.gpsLocation.latitude && action.gpsLocation.longitude) {
+                                locations.push({
+                                    lat: parseFloat(action.gpsLocation.latitude),
+                                    lng: parseFloat(action.gpsLocation.longitude),
+                                    accuracy: action.gpsLocation.accuracy ? parseFloat(action.gpsLocation.accuracy) : null,
+                                    timestamp: action.timestamp || '',
+                                    visitorIp: visitor.visitorIp,
+                                    customerName: action.customerName || visitor.customerName || '',
+                                    action: getActionLabel(action.visitorAction) || action.visitorAction
+                                });
+                            }
+                        });
+                    }
+                });
+                
+                if (locations.length === 0) {
+                    document.getElementById('visitorMap').innerHTML = '<div class="alert alert-info text-center p-4">لا توجد مواقع GPS متاحة للعرض</div>';
+                    return;
+                }
+                
+                // Add markers for each location
+                const bounds = [];
+                locations.forEach(loc => {
+                    if (isNaN(loc.lat) || isNaN(loc.lng)) return;
+                    
+                    const popupContent = `
+                        <div style="min-width: 200px;">
+                            <strong>موقع الزائر</strong><br>
+                            ${loc.customerName ? `<strong>الاسم:</strong> ${loc.customerName}<br>` : ''}
+                            <strong>IP:</strong> ${loc.visitorIp}<br>
+                            ${loc.timestamp ? `<strong>الوقت:</strong> ${loc.timestamp}<br>` : ''}
+                            ${loc.accuracy ? `<strong>الدقة:</strong> ±${Math.round(loc.accuracy)}م<br>` : ''}
+                            <strong>الإحداثيات:</strong> ${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}<br>
+                            <a href="https://www.google.com/maps?q=${loc.lat},${loc.lng}" target="_blank" class="btn btn-sm btn-primary mt-2">فتح في Google Maps</a>
+                        </div>
+                    `;
+                    
+                    const marker = L.marker([loc.lat, loc.lng])
+                        .addTo(visitorMap)
+                        .bindPopup(popupContent);
+                    
+                    mapMarkers.push(marker);
+                    bounds.push([loc.lat, loc.lng]);
+                });
+                
+                // Fit map to show all markers
+                if (bounds.length > 0) {
+                    visitorMap.fitBounds(bounds, { padding: [50, 50] });
+                }
+                
+            } catch (error) {
+                console.error('Error loading visitor map:', error);
+                document.getElementById('visitorMap').innerHTML = '<div class="alert alert-danger text-center p-4">حدث خطأ في تحميل الخريطة</div>';
+            }
+        }
+
+        function getActionLabel(action) {
+            const labels = {
+                'page_view': 'عرض الصفحة',
+                'materials_viewed': 'عرض المواد',
+                'add_to_cart': 'إضافة للسلة',
+                'order_placed': 'تأكيد طلب'
+            };
+            return labels[action] || action;
+        }
+
+        function getBrowserName(userAgent) {
+            if (!userAgent) return 'غير معروف';
+            if (userAgent.includes('Chrome')) return 'Chrome';
+            if (userAgent.includes('Firefox')) return 'Firefox';
+            if (userAgent.includes('Safari')) return 'Safari';
+            if (userAgent.includes('Edge')) return 'Edge';
+            if (userAgent.includes('Opera')) return 'Opera';
+            return 'متصفح آخر';
+        }
+
+        function toggleVisitorActions(button) {
+            const visitorCard = button.closest('.link-card');
+            const actionsDiv = visitorCard.querySelector('.visitor-actions');
+            const toggleText = button.querySelector('.toggle-text');
+            
+            if (actionsDiv.style.display === 'none') {
+                actionsDiv.style.display = 'block';
+                toggleText.textContent = 'إخفاء';
+            } else {
+                actionsDiv.style.display = 'none';
+                toggleText.textContent = 'إظهار';
+            }
+        }
+
+        function selectAllVisitorLogs() {
+            document.querySelectorAll('.log-checkbox').forEach(cb => {
+                cb.checked = true;
+            });
+            updateDeleteButtonState();
+        }
+
+        function deselectAllVisitorLogs() {
+            document.querySelectorAll('.log-checkbox').forEach(cb => {
+                cb.checked = false;
+            });
+            updateDeleteButtonState();
+        }
+
+        function updateDeleteButtonState() {
+            const checkedBoxes = document.querySelectorAll('.log-checkbox:checked');
+            const deleteSelectedBtn = document.querySelector('button[onclick="deleteSelectedLogs()"]');
+            if (deleteSelectedBtn) {
+                deleteSelectedBtn.disabled = checkedBoxes.length === 0;
+            }
+        }
+
+        async function deleteSelectedLogs() {
+            const checkedBoxes = document.querySelectorAll('.log-checkbox:checked');
+            if (checkedBoxes.length === 0) {
+                alert('يرجى تحديد سجلات للحذف');
+                return;
+            }
+
+            if (!confirm(`هل أنت متأكد من حذف ${checkedBoxes.length} سجل؟`)) {
+                return;
+            }
+
+            const logIds = [];
+            checkedBoxes.forEach(cb => {
+                const value = cb.value;
+                if (value.includes(',')) {
+                    // Multiple IDs (visitor checkbox)
+                    logIds.push(...value.split(','));
+                } else {
+                    // Single ID
+                    logIds.push(value);
+                }
+            });
+
+            try {
+                const response = await fetch('visitor_log_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'delete_logs',
+                        logIds: logIds
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    alert(data.message || 'تم الحذف بنجاح');
+                    loadVisitorLogs();
+                    loadVisitorStatistics();
+                } else {
+                    alert('حدث خطأ: ' + (data.error || 'غير معروف'));
+                }
+            } catch (error) {
+                console.error('Error deleting logs:', error);
+                alert('حدث خطأ في الاتصال');
+            }
+        }
+
+        async function deleteAllLogs() {
+            if (!confirm('هل أنت متأكد من حذف جميع السجلات؟ لا يمكن التراجع عن هذا الإجراء.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('visitor_log_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'delete_logs',
+                        logIds: [] // Empty array means delete all
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    alert(data.message || 'تم حذف جميع السجلات بنجاح');
+                    loadVisitorLogs();
+                    loadVisitorStatistics();
+                } else {
+                    alert('حدث خطأ: ' + (data.error || 'غير معروف'));
+                }
+            } catch (error) {
+                console.error('Error deleting logs:', error);
+                alert('حدث خطأ في الاتصال');
+            }
+        }
+
+        async function viewOrderQuote(orderId) {
+            // عرض الأسعار: يفتح صفحة العرض مباشرة (للمعاينة السريعة)
+            try {
+                // Get order to generate proper token
+                const response = await fetch('order_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'get_orders'
+                    })
+                });
+                const data = await response.json();
+                const order = data.orders.find(o => o.id === orderId);
+                
+                if (!order) {
+                    alert('الطلب غير موجود');
+                    return;
+                }
+                
+                // Always get token from server to ensure consistency
+                let token = '';
+                try {
+                    const tokenResponse = await fetch('order_manager.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'generate_quote_token',
+                            orderId: orderId,
+                            created: order.created
+                        })
+                    });
+                    const tokenData = await tokenResponse.json();
+                    if (tokenData.success && tokenData.token) {
+                        token = tokenData.token;
+                    } else {
+                        // Fallback: try client-side if server fails
+                        token = generateQuoteTokenSecure(orderId, order.created);
+                        if (!token) {
+                            alert('حدث خطأ في إنشاء رابط العرض');
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error generating token:', error);
+                    // Fallback: try client-side
+                    token = generateQuoteTokenSecure(orderId, order.created);
+                    if (!token) {
+                        alert('حدث خطأ في فتح صفحة العرض');
+                        return;
+                    }
+                }
+                
+                if (!token) {
+                    alert('حدث خطأ في إنشاء رابط العرض');
+                    return;
+                }
+                
+                const quoteUrl = `quote.php?order=${orderId}&token=${token}`;
+                window.open(quoteUrl, '_blank');
+            } catch (error) {
+                console.error('Error viewing quote:', error);
+                alert('حدث خطأ في فتح صفحة العرض');
+            }
+        }
+
+        async function shareQuote(orderId) {
+            try {
+                // Get order to generate proper token
+                const response = await fetch('order_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'get_orders'
+                    })
+                });
+                const data = await response.json();
+                const order = data.orders.find(o => o.id === orderId);
+                
+                if (!order) {
+                    alert('الطلب غير موجود');
+                    return;
+                }
+                
+                // Always get token from server to ensure consistency
+                let token = '';
+                try {
+                    const tokenResponse = await fetch('order_manager.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'generate_quote_token',
+                            orderId: orderId,
+                            created: order.created
+                        })
+                    });
+                    const tokenData = await tokenResponse.json();
+                    if (tokenData.success && tokenData.token) {
+                        token = tokenData.token;
+                    } else {
+                        // Fallback: try client-side if server fails
+                        token = generateQuoteTokenSecure(orderId, order.created);
+                        if (!token) {
+                            alert('حدث خطأ في إنشاء رابط العرض');
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error generating token:', error);
+                    // Fallback: try client-side
+                    token = generateQuoteTokenSecure(orderId, order.created);
+                    if (!token) {
+                        alert('حدث خطأ في إنشاء رابط العرض');
+                        return;
+                    }
+                }
+                
+                if (!token) {
+                    alert('حدث خطأ في إنشاء رابط العرض');
+                    return;
+                }
+                
+                const quoteUrl = window.location.origin + window.location.pathname.replace('dashboard.html', '') + `quote.php?order=${orderId}&token=${token}`;
+                
+                // Copy to clipboard
+                navigator.clipboard.writeText(quoteUrl).then(() => {
+                    alert('تم نسخ رابط العرض إلى الحافظة!\n\n' + quoteUrl);
+                }).catch(() => {
+                    // Fallback
+                    const textArea = document.createElement('textarea');
+                    textArea.value = quoteUrl;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    alert('تم نسخ رابط العرض إلى الحافظة!\n\n' + quoteUrl);
+                });
+                
+                // Update status to quoted
+                await updateOrderStatus(orderId, 'quoted');
+            } catch (error) {
+                console.error('Error sharing quote:', error);
+                alert('حدث خطأ في مشاركة العرض');
+            }
+        }
+
+        // Generate MD5 token using crypto-js library
+        function generateQuoteTokenSecure(orderId, createdDate) {
+            if (typeof CryptoJS !== 'undefined' && CryptoJS.MD5) {
+                return CryptoJS.MD5(orderId + 'quote_secret_' + createdDate).toString();
+            } else {
+                // Fallback: use server-side generation
+                return null;
+            }
+        }
+
+        async function editOrderPrices(orderId) {
+            try {
+                // Get order details
+                const response = await fetch('order_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_orders' })
+                });
+                const data = await response.json();
+                const order = data.orders.find(o => o.id === orderId);
+                
+                if (!order) {
+                    alert('الطلب غير موجود');
+                    return;
+                }
+                
+                // Create modal for price editing
+                let priceEditHTML = '<div class="modal fade" id="priceEditModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">تعديل الأسعار</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="priceEditForm">';
+                
+                order.items.forEach((item, idx) => {
+                    priceEditHTML += `
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h6>${item.name} (${item.code})</h6>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label class="form-label">السعر بالليرة السورية</label>
+                                        <input type="number" class="form-control" name="items[${idx}][salePrice_SP]" value="${item.salePrice_SP}" step="0.01" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">السعر بالدولار</label>
+                                        <input type="number" class="form-control" name="items[${idx}][salePrice_Usd]" value="${item.salePrice_Usd}" step="0.01" required>
+                                    </div>
+                                </div>
+                                <input type="hidden" name="items[${idx}][guid]" value="${item.guid}">
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                priceEditHTML += '</form></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button><button type="button" class="btn btn-primary" onclick="saveOrderPrices(\'' + orderId + '\')">حفظ</button></div></div></div></div>';
+                
+                // Remove existing modal if any
+                const existingModal = document.getElementById('priceEditModal');
+                if (existingModal) {
+                    existingModal.remove();
+                }
+                
+                document.body.insertAdjacentHTML('beforeend', priceEditHTML);
+                const modal = new bootstrap.Modal(document.getElementById('priceEditModal'));
+                modal.show();
+                
+            } catch (error) {
+                console.error('Error editing prices:', error);
+                alert('حدث خطأ في تحميل بيانات الطلب');
+            }
+        }
+
+        async function saveOrderPrices(orderId) {
+            try {
+                const form = document.getElementById('priceEditForm');
+                const formData = new FormData(form);
+                const items = [];
+                
+                // Collect form data
+                const itemCount = form.querySelectorAll('input[name*="[guid]"]').length;
+                for (let i = 0; i < itemCount; i++) {
+                    items.push({
+                        guid: formData.get(`items[${i}][guid]`),
+                        salePrice_SP: parseFloat(formData.get(`items[${i}][salePrice_SP]`)),
+                        salePrice_Usd: parseFloat(formData.get(`items[${i}][salePrice_Usd]`))
+                    });
+                }
+                
+                const response = await fetch('order_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'update_order_prices',
+                        orderId: orderId,
+                        items: items
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    alert('تم تحديث الأسعار بنجاح');
+                    bootstrap.Modal.getInstance(document.getElementById('priceEditModal')).hide();
+                    loadOrders();
+                } else {
+                    alert('حدث خطأ: ' + (data.error || 'غير معروف'));
+                }
+            } catch (error) {
+                console.error('Error saving prices:', error);
+                alert('حدث خطأ في حفظ الأسعار');
+            }
+        }
+
+        async function loadOrders(silent = false) {
+            try {
+                const statusFilter = document.getElementById('orderStatusFilter')?.value || '';
+                const requestBody = { action: 'get_orders' };
+                if (statusFilter) {
+                    requestBody.status = statusFilter;
+                }
+                
+                const response = await fetch('order_manager.php', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Check for new orders (always check, even if silent)
+                // Compare by order IDs to detect new orders accurately
+                const currentOrderIds = data.orders ? data.orders.map(o => o.id).sort() : [];
+                const previousOrderIds = window.previousOrderIds || [];
+                
+                // Find new orders (orders that exist in current but not in previous)
+                const newOrderIds = currentOrderIds.filter(id => !previousOrderIds.includes(id));
+                
+                console.log('Order check - Current:', currentOrderIds.length, 'Previous:', previousOrderIds.length, 'New:', newOrderIds.length);
+                console.log('Current IDs:', currentOrderIds);
+                console.log('Previous IDs:', previousOrderIds);
+                console.log('New IDs:', newOrderIds);
+                
+                // Only notify if there are actually new orders AND we have previous orders (not first load)
+                if (previousOrderIds.length > 0 && newOrderIds.length > 0) {
+                    const newOrderCount = newOrderIds.length;
+                    const newOrders = data.orders.filter(order => newOrderIds.includes(order.id));
+                    const customerNames = newOrders.map(order => order.customerName || 'عميل').slice(0, 3);
+                    const customerText = customerNames.length > 0 ? `: ${customerNames.join('، ')}${newOrderCount > 3 ? '...' : ''}` : '';
+                    
+                    console.log('New orders detected:', newOrderIds, 'Previous:', previousOrderIds); // Debug
+                    console.log('Calling showNotification with:', 'طلب جديد!', `تم استلام ${newOrderCount} طلب جديد${customerText}`);
+                    showNotification('طلب جديد!', `تم استلام ${newOrderCount} طلب جديد${customerText}`, 'success');
+                } else if (previousOrderIds.length === 0 && currentOrderIds.length > 0) {
+                    // First load: just save the current orders without notifying
+                    console.log('First load, saving order IDs:', currentOrderIds); // Debug
+                } else {
+                    console.log('No new orders or first load');
+                }
+                
+                // Update previous order IDs and save to localStorage
+                window.previousOrderIds = currentOrderIds;
+                try {
+                    localStorage.setItem('previousOrderIds', JSON.stringify(currentOrderIds));
+                } catch (e) {
+                    console.error('Error saving order IDs to localStorage:', e);
+                }
+                
+                // Update last order count (for backward compatibility)
+                lastOrderCount = data.orders ? data.orders.length : 0;
+                
+                // Get ordersList element
+                const ordersList = document.getElementById('ordersList');
+                
+                // Save main accordion state before updating
+                const ordersAccordion = document.getElementById('collapseOrders');
+                const wasOrdersOpen = ordersAccordion && ordersAccordion.classList.contains('show');
+                
+                // Save accordion state before updating (which orders are expanded)
+                const expandedOrders = new Set();
+                if (ordersList) {
+                    ordersList.querySelectorAll('.accordion-collapse.show').forEach(collapse => {
+                        const collapseId = collapse.id;
+                        // Extract order ID from collapse ID (format: collapseorder-{orderId})
+                        const match = collapseId.match(/collapseorder-(.+)/);
+                        if (match) {
+                            const orderId = match[1].replace(/-/g, '_');
+                            expandedOrders.add(orderId);
+                        }
+                    });
+                }
+                
+                // Store links map for lookup
+                let linksMap = {};
+                try {
+                    const linksResponse = await fetch('link_manager.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'get_links' })
+                    });
+                    const linksData = await linksResponse.json();
+                    if (linksData.links) {
+                        linksData.links.forEach(link => {
+                            linksMap[link.id] = link;
+                        });
+                    }
+                } catch (e) {
+                    console.error('Error loading links for order display:', e);
+                }
+                
+                // Helper function to create order card element
+                function createOrderCard(order, linksMap) {
+                    const statusColors = {
+                        'pending': 'warning',
+                        'quoted': 'primary',
+                        'confirmed': 'info',
+                        'completed': 'success',
+                        'cancelled': 'danger'
+                    };
+                    const statusText = {
+                        'pending': 'قيد الانتظار',
+                        'quoted': 'تم إرسال العرض',
+                        'confirmed': 'مؤكد',
+                        'completed': 'مكتمل',
+                        'cancelled': 'ملغي'
+                    };
+                    const statusColor = statusColors[order.status] || 'secondary';
+                    
+                    const linkInfo = linksMap[order.linkId] || null;
+                    const linkName = linkInfo ? linkInfo.name : order.linkId;
+                    
+                    const baseUrl = window.location.origin;
+                    let itemsHTML = '<div class="row">';
+                    let totalBoxes = 0;
+                    order.items.forEach((item, idx) => {
+                        totalBoxes += item.quantity || 0;
+                        const imageUrl = item.imageUrl || '';
+                        const thumbnailUrl = imageUrl ? baseUrl + imageUrl.replace('/images/', '/images/thumbnails/') : baseUrl + '/No_image_available.svg.png';
+                        const fullImageUrl = imageUrl ? baseUrl + imageUrl : baseUrl + '/No_image_available.svg.png';
+                        itemsHTML += `
+                            <div class="col-12 col-md-6 mb-3">
+                                <div class="border rounded p-2">
+                                    <div class="d-flex flex-column flex-sm-row">
+                                        <img src="${thumbnailUrl}" alt="${item.name}" class="order-item-image" style="width: 80px; height: 80px; object-fit: contain; cursor: pointer;" onclick="showPopupImage('${fullImageUrl}')">
+                                        <div class="flex-grow-1 text-center text-sm-start">
+                                            <strong>${item.name}</strong><br>
+                                            <small>الكود: ${item.code}</small><br>
+                                            <small>الكمية: ${item.quantity} علبة</small><br>
+                                            <small>التعبئة: ${item.pcsPerBox} قطعة</small><br>
+                                            <small>السعر: ${item.salePrice_SP.toLocaleString()} ل.س / $${item.salePrice_Usd.toFixed(2)}</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    itemsHTML += '</div>';
+                    const totalItems = order.items.length;
+                    
+                    const orderCardId = 'order-' + order.id.replace(/[^a-zA-Z0-9]/g, '-');
+                    
+                    const card = document.createElement('div');
+                    card.className = 'link-card mb-3';
+                    card.setAttribute('data-order-id', order.id);
+                    card.innerHTML = `
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="heading${orderCardId}">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse${orderCardId}" aria-expanded="false" aria-controls="collapse${orderCardId}">
+                                    <div class="d-flex justify-content-between align-items-center w-100 me-3">
+                        <div>
+                                            <strong>${order.customerName}</strong>
+                                            ${order.customerPhone ? ` - <span class="text-muted">${order.customerPhone}</span>` : ''}
+                                            <span class="badge bg-${statusColor} ms-2">${statusText[order.status] || order.status}</span>
+                                        </div>
+                                        <div class="text-muted small">
+                                            ${order.created} | ${linkName}
+                                        </div>
+                                    </div>
+                                </button>
+                            </h2>
+                            <div id="collapse${orderCardId}" class="accordion-collapse collapse" aria-labelledby="heading${orderCardId}">
+                                <div class="accordion-body">
+                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start mb-2">
+                                <div class="mb-2 mb-md-0">
+                                            <p class="mb-1"><strong>رقم الطلب:</strong> ${order.id}</p>
+                                            ${order.customerPhone ? `<p class="mb-1"><strong>رقم الهاتف:</strong> <a href="tel:${order.customerPhone}" class="text-primary">${order.customerPhone}</a></p>` : ''}
+                                    <p class="mb-1"><strong>التاريخ:</strong> ${order.created}</p>
+                                            <p class="mb-1"><strong>الرابط:</strong> ${linkName}</p>
+                                </div>
+                                <div class="text-end text-md-end w-100 w-md-auto">
+                                    <p class="mb-1"><strong>الإجمالي:</strong> ${order.totalSP.toLocaleString()} ل.س</p>
+                                    <p class="mb-1"><strong>الإجمالي:</strong> ${order.totalUSD.toFixed(2)} $</p>
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <strong>المنتجات:</strong>
+                                ${itemsHTML}
+                            </div>
+                            <div class="mt-3 p-2 bg-light rounded">
+                                <div class="row">
+                                    <div class="col-6">
+                                        <p class="mb-0"><strong>عدد المنتجات:</strong> ${totalItems} منتج</p>
+                                    </div>
+                                    <div class="col-6">
+                                        <p class="mb-0"><strong>عدد العلب:</strong> ${totalBoxes} علبة</p>
+                                    </div>
+                                </div>
+                            </div>
+                                    <div class="mt-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                        <div>
+                                            <button class="btn btn-info btn-sm" onclick="viewOrderQuote('${order.id}')">عرض الأسعار</button>
+                                            <button class="btn btn-warning btn-sm ms-2" onclick="editOrderPrices('${order.id}')">تعديل الأسعار</button>
+                                            <button class="btn btn-success btn-sm ms-2" onclick="shareQuote('${order.id}')">مشاركة العرض</button>
+                                        </div>
+                                        <div>
+                                <select class="form-select form-select-sm d-inline-block" style="width: auto;" onchange="updateOrderStatus('${order.id}', this.value)">
+                                    <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>قيد الانتظار</option>
+                                                <option value="quoted" ${order.status === 'quoted' ? 'selected' : ''}>تم إرسال العرض</option>
+                                    <option value="confirmed" ${order.status === 'confirmed' ? 'selected' : ''}>مؤكد</option>
+                                    <option value="completed" ${order.status === 'completed' ? 'selected' : ''}>مكتمل</option>
+                                    <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>ملغي</option>
+                                </select>
+                                            <button class="btn btn-danger btn-sm ms-2" onclick="deleteOrder('${order.id}')">حذف</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    return card;
+                }
+                
+                if (!data.orders || data.orders.length === 0) {
+                    // Remove all orders smoothly
+                    const existingOrders = ordersList.querySelectorAll('[data-order-id]');
+                    existingOrders.forEach(card => {
+                        card.style.transition = 'opacity 0.3s, transform 0.3s';
+                        card.style.opacity = '0';
+                        card.style.transform = 'translateX(-20px)';
+                        setTimeout(() => card.remove(), 300);
+                    });
+                    
+                    if (ordersList.children.length === 0 || (ordersList.children.length === 1 && ordersList.children[0].tagName === 'P')) {
+                        ordersList.innerHTML = '<p>لا توجد طلبات</p>';
+                    }
+                    lastOrderCount = 0;
+                    window.previousOrderIds = [];
+                    try {
+                        localStorage.setItem('previousOrderIds', JSON.stringify([]));
+                    } catch (e) {
+                        console.error('Error saving order IDs to localStorage:', e);
+                    }
+                    return;
+                }
+                
+                // Get existing order IDs
+                const existingOrderIds = new Set();
+                const existingOrderCards = new Map();
+                ordersList.querySelectorAll('[data-order-id]').forEach(card => {
+                    const orderId = card.getAttribute('data-order-id');
+                    existingOrderIds.add(orderId);
+                    existingOrderCards.set(orderId, card);
+                });
+                
+                // Get new order IDs as Set
+                const newOrderIdsSet = new Set(data.orders.map(o => o.id));
+                
+                // Remove orders that no longer exist (with smooth animation)
+                existingOrderIds.forEach(orderId => {
+                    if (!newOrderIdsSet.has(orderId)) {
+                        const card = existingOrderCards.get(orderId);
+                        if (card) {
+                            card.style.transition = 'opacity 0.3s, transform 0.3s, max-height 0.3s';
+                            card.style.opacity = '0';
+                            card.style.transform = 'translateX(-20px)';
+                            card.style.maxHeight = card.offsetHeight + 'px';
+                            setTimeout(() => {
+                                card.style.maxHeight = '0';
+                                setTimeout(() => card.remove(), 300);
+                            }, 50);
+                        }
+                    }
+                });
+                
+                // Add or update orders
+                const fragment = document.createDocumentFragment();
+                const orderIdsToAdd = [];
+                
+                data.orders.forEach(order => {
+                    const existingCard = existingOrderCards.get(order.id);
+                    
+                    if (existingCard) {
+                        // Update existing order (preserve accordion state)
+                        const collapseElement = existingCard.querySelector('.accordion-collapse');
+                        const wasExpanded = collapseElement && collapseElement.classList.contains('show');
+                        
+                        const newCard = createOrderCard(order, linksMap);
+                        const newCollapse = newCard.querySelector('.accordion-collapse');
+                        
+                        // Preserve accordion state
+                        if (wasExpanded && newCollapse) {
+                            newCollapse.classList.add('show');
+                            const button = newCard.querySelector('.accordion-button');
+                            if (button) {
+                                button.classList.remove('collapsed');
+                                button.setAttribute('aria-expanded', 'true');
+                            }
+                        }
+                        
+                        // Smooth replacement
+                        existingCard.style.transition = 'opacity 0.2s';
+                        existingCard.style.opacity = '0.5';
+                        setTimeout(() => {
+                            existingCard.replaceWith(newCard);
+                            // Reinitialize Bootstrap collapse if needed
+                            if (wasExpanded && newCollapse) {
+                                setTimeout(() => {
+                                    const bsCollapse = bootstrap.Collapse.getInstance(newCollapse) || new bootstrap.Collapse(newCollapse, { toggle: false });
+                                    bsCollapse.show();
+                                }, 50);
+                            }
+                        }, 200);
+                    } else {
+                        // New order - add with animation
+                        const newCard = createOrderCard(order, linksMap);
+                        newCard.style.opacity = '0';
+                        newCard.style.transform = 'translateY(-10px)';
+                        newCard.style.transition = 'opacity 0.3s, transform 0.3s';
+                        orderIdsToAdd.push({ order, card: newCard });
+                    }
+                });
+                
+                // Add new orders with animation
+                orderIdsToAdd.forEach(({ order, card }, index) => {
+                    setTimeout(() => {
+                        ordersList.appendChild(card);
+                        // Trigger animation
+                        requestAnimationFrame(() => {
+                            card.style.opacity = '1';
+                            card.style.transform = 'translateY(0)';
+                        });
+                    }, index * 50); // Stagger animations
+                });
+                
+                // Remove "no orders" message if exists
+                const noOrdersMsg = ordersList.querySelector('p');
+                if (noOrdersMsg && noOrdersMsg.textContent.includes('لا توجد طلبات')) {
+                    noOrdersMsg.style.transition = 'opacity 0.3s';
+                    noOrdersMsg.style.opacity = '0';
+                    setTimeout(() => noOrdersMsg.remove(), 300);
+                }
+                
+                // Restore main accordion state if it was open
+                if (wasOrdersOpen && ordersAccordion) {
+                    setTimeout(() => {
+                        const bsCollapse = bootstrap.Collapse.getInstance(ordersAccordion);
+                        if (!bsCollapse || !ordersAccordion.classList.contains('show')) {
+                            new bootstrap.Collapse(ordersAccordion, { toggle: false }).show();
+                        }
+                    }, 50);
+                }
+                
+                // Restore individual order accordion states after a short delay to allow Bootstrap to initialize
+                if (expandedOrders.size > 0) {
+                    setTimeout(() => {
+                        expandedOrders.forEach(orderId => {
+                            const orderIdClean = orderId.replace(/_/g, '-');
+                            const collapseElement = document.getElementById(`collapseorder-${orderIdClean}`);
+                            if (collapseElement) {
+                                const bsCollapse = new bootstrap.Collapse(collapseElement, {
+                                    toggle: false
+                                });
+                                bsCollapse.show();
+                            }
+                        });
+                    }, 150);
+                }
+            } catch (error) {
+                console.error('Error loading orders:', error);
+                document.getElementById('ordersList').innerHTML = '<p class="text-danger">حدث خطأ في تحميل الطلبات</p>';
+            }
+        }
+
+        async function updateOrderStatus(orderId, status) {
+            try {
+                const response = await fetch('order_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'update_order_status', orderId, status })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    loadOrders();
+                } else {
+                    alert('حدث خطأ: ' + (data.error || 'غير معروف'));
+                }
+            } catch (error) {
+                alert('حدث خطأ في الاتصال');
+                console.error('Error:', error);
+            }
+        }
+
+        async function deleteOrder(orderId) {
+            if (!confirm('هل أنت متأكد من حذف هذا الطلب؟ لا يمكن التراجع عن هذا الإجراء.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('order_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete_order', orderId })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    loadOrders();
+                } else {
+                    alert('حدث خطأ: ' + (data.error || 'غير معروف'));
+                }
+            } catch (error) {
+                alert('حدث خطأ في الاتصال');
+                console.error('Error:', error);
+            }
+        }
+
+        // Company Information Management
+        async function loadCompanyInfo() {
+            try {
+                const response = await fetch('company_info_manager.php?action=get');
+                const data = await response.json();
+                
+                if (data.success && data.info) {
+                    document.getElementById('companyName').value = data.info.name || '';
+                    document.getElementById('companyLogo').value = data.info.logo || '';
+                    document.getElementById('companyLocation').value = data.info.location || '';
+                    document.getElementById('companyPhone').value = data.info.phone || '';
+                    document.getElementById('companyMobile').value = data.info.mobile || '';
+                    document.getElementById('companyWhatsapp').value = data.info.whatsapp || '';
+                    document.getElementById('companyEmail').value = data.info.email || '';
+                    document.getElementById('companyWebsite').value = data.info.website || '';
+                }
+            } catch (error) {
+                console.error('Error loading company info:', error);
+            }
+        }
+
+        document.getElementById('companyInfoForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const messageDiv = document.getElementById('companyInfoMessage');
+            
+            const companyInfo = {
+                name: document.getElementById('companyName').value,
+                logo: document.getElementById('companyLogo').value,
+                location: document.getElementById('companyLocation').value,
+                phone: document.getElementById('companyPhone').value,
+                mobile: document.getElementById('companyMobile').value,
+                whatsapp: document.getElementById('companyWhatsapp').value,
+                email: document.getElementById('companyEmail').value,
+                website: document.getElementById('companyWebsite').value
+            };
+
+            try {
+                const response = await fetch('company_info_manager.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'save', ...companyInfo })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    messageDiv.className = 'alert alert-success mt-3';
+                    messageDiv.textContent = 'تم حفظ معلومات الشركة بنجاح';
+                    messageDiv.classList.remove('hidden');
+                    setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+                } else {
+                    messageDiv.className = 'alert alert-danger mt-3';
+                    messageDiv.textContent = data.message || 'فشل حفظ معلومات الشركة';
+                    messageDiv.classList.remove('hidden');
+                }
+            } catch (error) {
+                messageDiv.className = 'alert alert-danger mt-3';
+                messageDiv.textContent = 'حدث خطأ في الاتصال';
+                messageDiv.classList.remove('hidden');
+            }
+        });
+
+        // Image Popup Functions
+        function showPopupImage(imageUrl) {
+            const popup = document.getElementById('imagePopup');
+            const overlay = document.getElementById('imagePopupOverlay');
+            const img = popup.querySelector('img');
+            
+            img.src = imageUrl;
+            popup.style.display = 'block';
+            overlay.style.display = 'block';
+            document.body.style.overflow = 'hidden'; // Prevent scrolling
+        }
+
+        function hidePopupImage() {
+            const popup = document.getElementById('imagePopup');
+            const overlay = document.getElementById('imagePopupOverlay');
+            
+            popup.style.display = 'none';
+            overlay.style.display = 'none';
+            document.body.style.overflow = ''; // Restore scrolling
+        }
+
+        // Close popup on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                hidePopupImage();
+            }
+        });
+
+        // Notification System
+        function showNotification(title, message, type = 'info') {
+            console.log('Showing notification:', title, message, 'Type:', type); // Debug
+            
+            // Show in-page notification (always show, even if page is hidden - user might come back)
+            const container = document.getElementById('notificationContainer');
+            if (container) {
+                const notification = document.createElement('div');
+                notification.className = `notification ${type}`;
+                
+                const notificationId = 'notification-' + Date.now();
+                notification.id = notificationId;
+                
+                notification.innerHTML = `
+                    <div class="notification-header">
+                        <span class="notification-title">${title}</span>
+                        <button class="notification-close" onclick="closeNotification('${notificationId}')">×</button>
+                    </div>
+                    <div class="notification-body">${message}</div>
+                `;
+                
+                container.appendChild(notification);
+                
+                // Auto-remove after 8 seconds
+                setTimeout(() => {
+                    closeNotification(notificationId);
+                }, 8000);
+            }
+            
+            // Show browser notification (works even when page is hidden/minimized)
+            if ('Notification' in window) {
+                if (Notification.permission === 'granted') {
+                    try {
+                        const browserNotification = new Notification(title, {
+                            body: message,
+                            icon: window.location.origin + '/JawishLogo.png',
+                            badge: window.location.origin + '/JawishLogo.png',
+                            tag: 'new-order-' + Date.now(), // Unique tag to show multiple notifications
+                            requireInteraction: false
+                        });
+                        
+                        console.log('Browser notification created:', browserNotification); // Debug
+                        
+                        // Auto-close browser notification after 10 seconds
+                        setTimeout(() => {
+                            browserNotification.close();
+                        }, 10000);
+                        
+                        // Focus window when notification is clicked
+                        browserNotification.onclick = function() {
+                            window.focus();
+                            this.close();
+                        };
+                    } catch (e) {
+                        console.error('Error showing browser notification:', e);
+                    }
+                } else if (Notification.permission === 'default') {
+                    // Request permission
+                    console.log('Requesting notification permission...'); // Debug
+                    Notification.requestPermission().then(permission => {
+                        console.log('Notification permission:', permission); // Debug
+                        if (permission === 'granted') {
+                            try {
+                                const browserNotification = new Notification(title, {
+                                    body: message,
+                                    icon: window.location.origin + '/JawishLogo.png',
+                                    badge: window.location.origin + '/JawishLogo.png',
+                                    tag: 'new-order-' + Date.now()
+                                });
+                                
+                                setTimeout(() => {
+                                    browserNotification.close();
+                                }, 10000);
+                                
+                                browserNotification.onclick = function() {
+                                    window.focus();
+                                    this.close();
+                                };
+                            } catch (e) {
+                                console.error('Error showing browser notification:', e);
+                            }
+                        } else {
+                            console.warn('Notification permission denied or not granted');
+                        }
+                    });
+                } else {
+                    console.warn('Notification permission is denied');
+                }
+            } else {
+                console.warn('Browser does not support notifications');
+            }
+        }
+
+        function closeNotification(notificationId) {
+            const notification = document.getElementById(notificationId);
+            if (notification) {
+                notification.style.animation = 'slideIn 0.3s ease-out reverse';
+                setTimeout(() => {
+                    notification.remove();
+                }, 300);
+            }
+        }
+
+        // Keep auto-refresh running even when page is hidden
+        // This ensures notifications work even when tab is minimized
+
+    </script>
+</body>
+</html>
+

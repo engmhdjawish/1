@@ -1,0 +1,52 @@
+========================================
+  Jawish Portal - server deploy steps
+========================================
+
+Expected setup:
+  - API on port 5000 (do not redeploy if already running)
+  - PostgreSQL in C:\pgsql - superuser: admin
+  - PHP in C:\php - IIS on port 90
+  - Portal files in D:\JawishPortal
+
+--- Dev PC (once before copy) ---
+  cd C:\Users\HP\1
+  notepad deploy\deploy.env
+  .\deploy\scripts\package-for-server.ps1
+  Copy deploy\output\server-package to server as C:\JawishDeploy\
+
+--- Server step 0 - clean (redeploy only) ---
+  PowerShell as Admin:
+    iisreset /stop
+    Remove-Item D:\JawishPortal -Recurse -Force -ErrorAction SilentlyContinue
+  IIS Manager: delete JawishPortal site if exists
+
+--- Server step 1 - PHP ---
+  PowerShell as Admin:
+    dism /online /enable-feature /featurename IIS-CGI /all
+  Check: C:\php\php.exe C:\php\php-cgi.exe C:\php\php.ini
+
+--- Server step 2 - copy files ---
+  robocopy C:\JawishDeploy\JawishPortal D:\JawishPortal /E /XF .env
+  robocopy C:\JawishDeploy\docs D:\JawishPortal\docs /E
+  Copy-Item C:\JawishDeploy\server-tools\common.ps1 C:\JawishDeploy\lib\common.ps1 -Force
+
+--- Server step 3 - database ---
+  cd D:\JawishPortal
+  C:\php\php-cgi.exe scripts\setup-database.php
+  C:\php\php-cgi.exe scripts\run-migrations.php
+
+--- Server step 4 - IIS PHP handler ---
+  cd C:\JawishDeploy\server-tools
+  .\install-iis-php-handler.ps1 -SitePort 90 -PhpCgiPath C:\php\php-cgi.exe -SiteName JawishPortal
+  iisreset
+
+--- Test ---
+  API:  http://127.0.0.1:5000/api/health
+  Site: https://jawish.ddns.net
+
+.env on server (D:\JawishPortal\.env):
+  PORTAL_PUBLISH_DIR: {0}
+  API: {1}
+  Site URL: {2}
+
+Full guide: deploy\WINDOWS-IIS-LOCAL.md

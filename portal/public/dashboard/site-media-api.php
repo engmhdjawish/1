@@ -34,28 +34,43 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
-    $action = trim((string) ($_POST['action'] ?? $_GET['action'] ?? 'upload'));
-    if ($action === 'delete') {
-        $id = trim((string) ($_POST['id'] ?? ''));
-        $result = SiteMediaService::delete($id);
+    try {
+        $action = trim((string) ($_POST['action'] ?? $_GET['action'] ?? 'upload'));
+        if ($action === 'delete') {
+            $id = trim((string) ($_POST['id'] ?? ''));
+            $result = SiteMediaService::delete($id);
+            http_response_code($result['ok'] ? 200 : 400);
+            echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
+
+        $category = trim((string) ($_POST['category'] ?? 'banner'));
+        $titleAr = trim((string) ($_POST['title_ar'] ?? ''));
+        $file = $_FILES['file'] ?? null;
+        if (!is_array($file)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'message' => 'لم يتم إرسال ملف.'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $result = SiteMediaService::upload($file, $category, $titleAr, $userId);
+        if ($result['ok'] && is_array($result['asset'] ?? null)) {
+            $storagePath = SiteMediaService::absolutePathForId((string) ($result['asset']['id'] ?? ''));
+            if (is_string($storagePath) && $storagePath !== '') {
+                SiteMediaService::rasterizeSvgCompanionSafe($storagePath);
+            }
+        }
         http_response_code($result['ok'] ? 200 : 400);
         echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
-    }
-
-    $category = trim((string) ($_POST['category'] ?? 'banner'));
-    $titleAr = trim((string) ($_POST['title_ar'] ?? ''));
-    $file = $_FILES['file'] ?? null;
-    if (!is_array($file)) {
-        http_response_code(400);
-        echo json_encode(['ok' => false, 'message' => 'لم يتم إرسال ملف.'], JSON_UNESCAPED_UNICODE);
+    } catch (\Throwable $exception) {
+        http_response_code(500);
+        echo json_encode([
+            'ok' => false,
+            'message' => 'تعذر معالجة الطلب: ' . $exception->getMessage(),
+        ], JSON_UNESCAPED_UNICODE);
         exit;
     }
-
-    $result = SiteMediaService::upload($file, $category, $titleAr, $userId);
-    http_response_code($result['ok'] ? 200 : 400);
-    echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    exit;
 }
 
 http_response_code(405);

@@ -93,11 +93,24 @@ final class PortalSettingsService
         if ($logo === '') {
             return null;
         }
-        if (str_starts_with($logo, '/media/') || str_starts_with($logo, 'http://') || str_starts_with($logo, 'https://')) {
-            return $logo;
+        if (!str_starts_with($logo, '/media/') && !str_starts_with($logo, 'http://') && !str_starts_with($logo, 'https://')) {
+            return null;
         }
 
-        return null;
+        if (preg_match('~^/media/site\.php\?id=([^&]+)~i', $logo, $matches) === 1) {
+            $id = rawurldecode((string) ($matches[1] ?? ''));
+            $sourcePath = SiteMediaService::absolutePathForId($id);
+            if ($sourcePath !== null && is_file($sourcePath) && str_ends_with(strtolower($sourcePath), '.svg')) {
+                $rasterPath = SvgRasterService::rasterCompanionPath($sourcePath);
+                if (is_file($rasterPath) && is_readable($rasterPath) && filesize($rasterPath) > 128) {
+                    $separator = str_contains($logo, '?') ? '&' : '?';
+
+                    return $logo . $separator . 'format=png';
+                }
+            }
+        }
+
+        return $logo;
     }
 
     /** @return array{ok: bool, message: string} */
@@ -120,6 +133,16 @@ final class PortalSettingsService
 
     public static function setGuestPolicy(string $policyId, ?string $updatedByUserId): void
     {
+        $policyId = trim($policyId);
+        if ($policyId === '') {
+            throw new \InvalidArgumentException('معرّف السياسة مطلوب.');
+        }
+
+        $policy = AccessPolicyService::getById($policyId);
+        if ($policy === null || (int) ($policy['is_active'] ?? 0) !== 1) {
+            throw new \InvalidArgumentException('السياسة غير موجودة أو غير نشطة.');
+        }
+
         $stmt = Database::pdo()->prepare(
             'INSERT INTO store_guest_settings (id, access_policy_id, updated_by_user_id)
              VALUES (1, :access_policy_id, :updated_by_user_id)
@@ -150,8 +173,6 @@ final class PortalSettingsService
         $response = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        curl_close($ch);
-
         if ($response === false) {
             return [
                 'base_url' => $base,

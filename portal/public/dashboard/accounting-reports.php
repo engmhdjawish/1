@@ -7,7 +7,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Auth\WebSession;
 use Portal\Services\OrderService;
 
-WebSession::requireAnyPermission(['accounting.reports.view', 'orders.view']);
+WebSession::requirePermission('accounting.reports.view');
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
 $summary = OrderService::financialSummary();
@@ -48,6 +48,17 @@ ob_start();
       </table>
     </div>
   <?php endif; ?>
+</section>
+
+<section class="mt-4 bg-white border rounded-xl p-4">
+  <h2 class="text-sm font-bold mb-2">تفاصيل إضافية</h2>
+  <p class="text-sm text-gray-600 mb-3">لمراجعة الطلبات حسب نوع العميل (زائر / مسجّل) أو حسب عميل معيّن، استخدم صفحات الطلبات والعملاء.</p>
+  <div class="flex flex-wrap gap-2">
+    <a href="/dashboard/orders.php" class="inline-flex h-9 items-center px-4 rounded-lg bg-primary text-white text-xs font-bold">كل الطلبات</a>
+    <a href="/dashboard/orders.php?origin=guest" class="inline-flex h-9 items-center px-4 rounded-lg border text-xs font-bold">طلبات الزوار</a>
+    <a href="/dashboard/orders.php?origin=registered" class="inline-flex h-9 items-center px-4 rounded-lg border text-xs font-bold">طلبات العملاء المسجّلين</a>
+    <a href="/dashboard/customers.php" class="inline-flex h-9 items-center px-4 rounded-lg border text-xs font-bold">عملاء الموقع</a>
+  </div>
 </section>
 <?php
 $content = ob_get_clean();

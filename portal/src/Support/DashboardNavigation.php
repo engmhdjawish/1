@@ -19,7 +19,6 @@ final class DashboardNavigation
         'accounting.statement.view',
         'accounting.sync.view',
         'accounting.reports.view',
-        'orders.view',
     ];
 
     /** @var list<string> */
@@ -92,6 +91,12 @@ final class DashboardNavigation
     public static function canAccessAccounting(?array $user): bool
     {
         return self::userCan($user, self::ACCOUNTING_ACCESS_PERMISSIONS);
+    }
+
+    /** أمين tab / overview — not sync-only roles (e.g. order desk, sales). */
+    public static function canAccessAccountingArea(?array $user): bool
+    {
+        return self::userCan($user, 'accounting.view');
     }
 
     /**
@@ -171,8 +176,10 @@ final class DashboardNavigation
                 'route' => '/dashboard/material-images.php',
                 'label' => 'صور المواد',
                 'icon' => 'perm_media',
-                'permission' => 'images.upload',
-                'description' => 'رفع الصور، مزامنة الأمين، وربطها بالمواد من صفحة واحدة.',
+                'permission' => ['images.upload', 'images.view'],
+                'description' => self::userCan($user, 'images.upload')
+                    ? 'رفع الصور، مزامنة الأمين، وربطها بالمواد من صفحة واحدة.'
+                    : 'تصفّح الصور المحلية وتحميلها.',
             ],
         ]);
     }
@@ -204,9 +211,22 @@ final class DashboardNavigation
         $groups += [
             'العملاء والمبيعات' => [
                 ['route' => '/dashboard/customers.php', 'label' => 'عملاء الموقع', 'icon' => 'group', 'permission' => 'web_customers.view'],
+                ['route' => '/dashboard/visitor-analytics.php', 'label' => 'نشاط الزوار', 'icon' => 'travel_explore', 'permission' => ['visitors.view', 'orders.view']],
+                ['route' => '/dashboard/notifications.php', 'label' => 'الإشعارات', 'icon' => 'notifications', 'permission' => 'notifications.manage'],
                 ['route' => '/dashboard/share-links.php', 'label' => 'روابط المشاركة', 'icon' => 'share', 'permission' => 'share_links.manage'],
             ],
         ];
+
+        if (self::userCan($user, 'accounting.sync.view') && !self::userCan($user, 'accounting.view')) {
+            $groups['المزامنة'] = [
+                [
+                    'route' => '/dashboard/accounting-sync.php',
+                    'label' => 'مزامنة طلبات الأمين',
+                    'icon' => 'sync',
+                    'permission' => 'accounting.sync.view',
+                ],
+            ];
+        }
 
         $filtered = [];
         foreach ($groups as $title => $items) {
@@ -232,7 +252,7 @@ final class DashboardNavigation
                     'route' => '/dashboard/accounting-customers.php',
                     'label' => 'عملاء الأمين',
                     'icon' => 'groups',
-                    'permission' => ['accounting.customers.view', 'orders.view'],
+                    'permission' => 'accounting.customers.view',
                     'description' => 'دليل عملاء نظام الأمين مع ملخص الحساب — مختلف عن عملاء تسجيل الموقع.',
                 ],
                 [
@@ -248,21 +268,21 @@ final class DashboardNavigation
                     'route' => '/dashboard/accounting-documents.php',
                     'label' => 'الفواتير والسندات',
                     'icon' => 'receipt_long',
-                    'permission' => ['accounting.documents.view', 'orders.view'],
+                    'permission' => 'accounting.documents.view',
                     'description' => 'تصفّح فواتير وقبض ودفع الأمين مع التفاصيل والفلترة.',
                 ],
                 [
                     'route' => '/dashboard/accounting-sync.php',
                     'label' => 'مزامنة طلبات الموقع',
                     'icon' => 'sync',
-                    'permission' => ['accounting.sync.view', 'orders.view'],
+                    'permission' => 'accounting.sync.view',
                     'description' => 'متابعة إرسال طلبات البوابة إلى نظام الأمين.',
                 ],
                 [
                     'route' => '/dashboard/accounting-reports.php',
                     'label' => 'ملخص طلبات الموقع',
                     'icon' => 'analytics',
-                    'permission' => ['accounting.reports.view', 'orders.view'],
+                    'permission' => 'accounting.reports.view',
                     'description' => 'تجميع مالي لطلبات البوابة حسب الحالة.',
                 ],
             ],
@@ -284,7 +304,7 @@ final class DashboardNavigation
                         'route' => '/dashboard/accounting.php',
                         'label' => 'نظرة عامة',
                         'icon' => 'account_balance',
-                        'permission' => ['accounting.view', 'orders.view'],
+                        'permission' => 'accounting.view',
                     ],
                 ],
             ],
@@ -467,7 +487,7 @@ final class DashboardNavigation
         return self::hasSiteContentAccess($user) || self::hasConfigurationAccess($user);
     }
 
-    public static function areaForRoute(string $route): string
+    public static function areaForRoute(string $route, ?array $user = null): string
     {
         $path = parse_url($route, PHP_URL_PATH) ?: $route;
         $query = [];
@@ -475,6 +495,10 @@ final class DashboardNavigation
 
         if ($path === '/dashboard/settings.php' && ($query['tab'] ?? '') === 'company') {
             return self::AREA_SITE_CONTENT;
+        }
+
+        if ($path === '/dashboard/accounting-sync.php' && !self::canAccessAccountingArea($user)) {
+            return self::AREA_OPERATIONS;
         }
 
         if (in_array($path, self::SITE_CONTENT_ROUTES, true)) {
@@ -534,7 +558,7 @@ final class DashboardNavigation
         $candidates = [
             ['route' => '/dashboard/index.php', 'label' => 'الرئيسية', 'icon' => 'dashboard', 'permission' => null],
             ['route' => '/dashboard/orders.php', 'label' => 'الطلبات', 'icon' => 'shopping_cart', 'permission' => 'orders.view'],
-            ['route' => '/dashboard/material-images.php', 'label' => 'الصور', 'icon' => 'perm_media', 'permission' => 'images.upload'],
+            ['route' => '/dashboard/material-images.php', 'label' => 'الصور', 'icon' => 'perm_media', 'permission' => ['images.upload', 'images.view']],
             ['route' => '/dashboard/customers.php', 'label' => 'العملاء', 'icon' => 'group', 'permission' => 'web_customers.view'],
         ];
 
@@ -546,9 +570,9 @@ final class DashboardNavigation
     {
         $candidates = [
             ['route' => '/dashboard/orders.php', 'label' => 'الطلبات', 'permission' => 'orders.view'],
-            ['route' => '/dashboard/material-images.php', 'label' => 'صور المواد', 'permission' => 'images.upload'],
+            ['route' => '/dashboard/material-images.php', 'label' => 'صور المواد', 'permission' => ['images.upload', 'images.view']],
             ['route' => '/dashboard/customers.php', 'label' => 'عملاء الموقع', 'permission' => 'web_customers.view'],
-            ['route' => '/dashboard/accounting.php', 'label' => 'أمين', 'permission' => null, 'visible' => self::canAccessAccounting($user)],
+            ['route' => '/dashboard/accounting.php', 'label' => 'أمين', 'permission' => null, 'visible' => self::canAccessAccountingArea($user)],
         ];
 
         $links = self::filterItems($user, $candidates);
@@ -594,7 +618,7 @@ final class DashboardNavigation
             ];
         }
 
-        if (self::canAccessAccounting($user)) {
+        if (self::canAccessAccountingArea($user)) {
             $tabs[] = [
                 'route' => '/dashboard/accounting.php',
                 'label' => 'أمين',

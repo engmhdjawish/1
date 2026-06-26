@@ -19,8 +19,9 @@ $renderStoreFilterGroup = static function (
     array $options,
     array $selectedValues,
     string $groupId,
-    int $searchThreshold = 8,
-    int $initialVisible = 6
+    int $searchThreshold = 5,
+    int $initialVisible = 6,
+    bool $renderWhenEmpty = false
 ): void {
     $normalized = [];
     foreach ($options as $option) {
@@ -42,7 +43,7 @@ $renderStoreFilterGroup = static function (
             'count' => $option['count'] ?? null,
         ];
     }
-    if ($normalized === []) {
+    if ($normalized === [] && !$renderWhenEmpty) {
         return;
     }
 

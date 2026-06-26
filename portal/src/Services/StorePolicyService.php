@@ -24,7 +24,7 @@ final class StorePolicyService
                 CASE WHEN ap.is_active THEN 1 ELSE 0 END AS is_active,
                 s.max_packages_per_material
              FROM store_guest_settings s
-             INNER JOIN access_policies ap ON ap.id = s.access_policy_id
+             INNER JOIN access_policies ap ON ap.id = s.access_policy_id AND ap.is_active = TRUE
              WHERE s.id = 1
              LIMIT 1'
         )->fetch();

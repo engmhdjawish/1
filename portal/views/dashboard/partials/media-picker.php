@@ -23,7 +23,9 @@ if (!isset($renderMediaPickerField)) {
         <div class="text-xs" id="<?= h($fieldId) ?>-wrap" data-media-field="<?= h($fieldId) ?>" data-default-category="<?= h($defaultCategory) ?>" data-media-preview-logo="<?= $isLogoField ? '1' : '0' ?>">
           <span class="text-text-muted block mb-0.5"><?= h($label) ?></span>
           <?php if ($isLogoField): ?>
-            <p class="text-[11px] text-text-muted mb-1.5">يفضّل PNG بخلفية شفافة. إن كان الشعار أبيض يُعرض على خلفية رمادية فاتحة ليكون أوضح.</p>
+            <p class="text-[11px] text-text-muted mb-1.5">يفضّل <strong>PNG بخلفية شفافة</strong>. تجنّب JPG أو SVG إن أردت شفافية في الهيدر.</p>
+          <?php elseif (in_array($defaultCategory, ['banner', 'ad'], true)): ?>
+            <p class="text-[11px] text-text-muted mb-1.5">يفضّل <strong>1920×820</strong> بكسل (نسبة 21:9). نفس المقاس يصلح للإعلانات وبانرات الأقسام.</p>
           <?php endif; ?>
           <input type="hidden" name="<?= h($inputName) ?>" id="<?= h($fieldId) ?>-input" value="<?= h($currentUrl) ?>">
           <div class="flex flex-wrap items-center gap-2">

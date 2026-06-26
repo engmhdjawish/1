@@ -186,6 +186,26 @@ final class SiteMediaService
         ];
     }
 
+    public static function rasterizeSvgCompanionSafe(string $absolutePath): void
+    {
+        if (!is_file($absolutePath) || !is_readable($absolutePath)) {
+            return;
+        }
+        $mime = self::detectMime($absolutePath, '');
+        if ($mime !== 'image/svg+xml' && !str_ends_with(strtolower($absolutePath), '.svg')) {
+            return;
+        }
+
+        try {
+            $rasterPath = SvgRasterService::rasterCompanionPath($absolutePath);
+            if (!SvgRasterService::toPngFile($absolutePath, $rasterPath, 1024) && is_file($rasterPath)) {
+                @unlink($rasterPath);
+            }
+        } catch (\Throwable) {
+            // Optional companion file — upload and listing must not fail.
+        }
+    }
+
     /** @return array{ok: bool, message: string} */
     public static function delete(string $id): array
     {
@@ -228,8 +248,24 @@ final class SiteMediaService
         $base = rtrim(Config::storagePath(), '/\\');
         $full = $base . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $storagePath);
         $realBase = realpath($base);
+        if ($realBase === false) {
+            if (!is_dir($base)) {
+                return null;
+            }
+            $realBase = $base;
+        }
+
         $realFull = realpath($full);
-        if ($realBase === false || $realFull === false || !str_starts_with($realFull, $realBase)) {
+        if ($realFull === false) {
+            if (!is_file($full)) {
+                return null;
+            }
+            $realFull = $full;
+        }
+
+        $normalizedBase = strtolower(str_replace('\\', '/', $realBase));
+        $normalizedFull = strtolower(str_replace('\\', '/', $realFull));
+        if ($normalizedFull !== $normalizedBase && !str_starts_with($normalizedFull, $normalizedBase . '/')) {
             return null;
         }
 

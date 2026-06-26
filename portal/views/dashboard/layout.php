@@ -7,19 +7,28 @@ declare(strict_types=1);
 /** @var array<string, mixed>|null $user */
 /** @var string|null $currentRoute */
 
+use Portal\Auth\WebSession;
 use Portal\Support\DashboardNavigation;
 
 require_once __DIR__ . '/../helpers.php';
 
-$user ??= null;
+if (WebSession::check()) {
+    if (empty($_SESSION['staff_roles_provisioned'])) {
+        \Portal\Support\StaffRoleProvisioner::ensureTaskRoles();
+        $_SESSION['staff_roles_provisioned'] = true;
+    }
+    WebSession::refreshPermissions();
+}
+
+$user = WebSession::check() ? WebSession::user() : ($user ?? null);
 $requestPath = parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: '/dashboard/index.php';
 $requestQuery = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_QUERY) ?? '');
 $currentRoute ??= $requestQuery !== '' ? $requestPath . '?' . $requestQuery : $requestPath;
-$navArea = $dashboardNavArea ?? DashboardNavigation::areaForRoute($currentRoute);
+$navArea = $dashboardNavArea ?? DashboardNavigation::areaForRoute($currentRoute, $user);
 $areaMeta = DashboardNavigation::areaMeta($navArea);
 $hasSiteContentAccess = DashboardNavigation::hasSiteContentAccess($user);
 $hasConfigurationAccess = DashboardNavigation::hasConfigurationAccess($user);
-$hasAccountingAccess = DashboardNavigation::canAccessAccounting($user);
+$hasAccountingAccess = DashboardNavigation::canAccessAccountingArea($user);
 $headerQuickLinks = DashboardNavigation::headerQuickLinks($user);
 $areaTabs = DashboardNavigation::areaTabs($user, $navArea);
 $bottomNavLinks = DashboardNavigation::bottomNavLinks($user);
@@ -69,34 +78,25 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <?php
+  use Portal\Services\PortalSettingsService;
+
+  $dashboardCompany = PortalSettingsService::companySettings();
+  $companyLogoUrl = PortalSettingsService::companyLogoUrl($dashboardCompany);
+  $siteName = trim((string) ($dashboardCompany['company_name'] ?? '')) !== ''
+      ? (string) $dashboardCompany['company_name']
+      : 'جاويش للتجارة';
+  require dirname(__DIR__) . '/partials/head-icons.php';
+  ?>
   <title><?= h($title) ?> — لوحة التحكم</title>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-  <link href="/assets/dashboard/dashboard.css" rel="stylesheet">
+  <link href="<?= h(portal_asset_url('/assets/dashboard/dashboard.css')) ?>" rel="stylesheet">
+  <link href="<?= h(portal_asset_url('/css/notifications.css')) ?>" rel="stylesheet">
   <link href="/css/store-ui.css" rel="stylesheet">
   <link href="/css/store-cart.css" rel="stylesheet">
   <link href="/css/customer-portal.css" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          colors: {
-            primary: '#D81921',
-            'surface-white': '#ffffff',
-            'surface-low': '#f3f3f5',
-            'surface-bg': '#f6f6f8',
-            'border-subtle': '#E5E7EB',
-            'text-muted': '#5d3f3c',
-            'status-active': '#28A745',
-            'status-rejected': '#EF4444',
-            'status-pending': '#FFC107'
-          }
-        }
-      }
-    };
-  </script>
+  <link href="<?= h(portal_asset_url('/css/tailwind.css')) ?>" rel="stylesheet">
   <style>
     body { font-family: 'Manrope', sans-serif; background-color: #f6f6f8; }
     .material-symbols-outlined {
@@ -107,16 +107,49 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
     .material-symbols-outlined.fill {
       font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
     }
-    #dashboard-drawer { transition: transform 0.25s ease; }
-    #dashboard-drawer.is-open { transform: translateX(0); }
+    #dashboard-drawer {
+      transition: transform 0.25s ease, visibility 0.25s ease;
+      transform: translate3d(100%, 0, 0);
+      visibility: hidden;
+      pointer-events: none;
+    }
+    #dashboard-drawer.is-open {
+      transform: translate3d(0, 0, 0);
+      visibility: visible;
+      pointer-events: auto;
+    }
+    #dashboard-drawer-backdrop {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
     #dashboard-drawer-backdrop.is-open { opacity: 1; visibility: visible; pointer-events: auto; }
+    @media (min-width: 1024px) {
+      #dashboard-drawer,
+      #dashboard-drawer-backdrop {
+        display: none !important;
+      }
+      .dashboard-desktop-sidebar {
+        display: flex !important;
+      }
+    }
+    @media (max-width: 1023px) {
+      .dashboard-desktop-sidebar {
+        display: none !important;
+      }
+    }
     .dashboard-area-tabs {
       display: flex;
       gap: 0.35rem;
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
       padding: 0.5rem 1rem;
       background: #ffffff;
       border-bottom: 1px solid #E5E7EB;
+    }
+    .dashboard-area-tabs::-webkit-scrollbar {
+      display: none;
     }
     .dashboard-area-tab {
       display: inline-flex;
@@ -145,12 +178,21 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
     .dashboard-area-tab .material-symbols-outlined {
       font-size: 1rem;
     }
+    @media (max-width: 1023px) {
+      body.dashboard-app.has-bottom-nav .dashboard-main-content {
+        padding-bottom: 0.75rem;
+      }
+      body.dashboard-app.has-bottom-nav .dashboard-bottom-nav-spacer {
+        display: block;
+        height: calc(5rem + 0.75rem + env(safe-area-inset-bottom, 0px));
+      }
+    }
   </style>
   <?php if (!empty($extraHead ?? '')): ?>
     <?= $extraHead ?>
   <?php endif; ?>
 </head>
-<body class="min-h-screen text-slate-900 dashboard-app<?= $hasAreaTabs ? ' has-area-tabs' : '' ?>">
+<body class="min-h-screen text-slate-900 dashboard-app<?= $hasAreaTabs ? ' has-area-tabs' : '' ?><?= $bottomNavLinks !== [] ? ' has-bottom-nav' : '' ?>" data-dashboard-has-area-tabs="<?= $hasAreaTabs ? '1' : '0' ?>">
   <header class="sticky top-0 z-50 h-16 bg-surface-white shadow-sm border-b border-border-subtle">
     <div class="h-full px-4 lg:px-10 flex items-center justify-between gap-3">
       <div class="flex items-center gap-2 min-w-0">
@@ -166,7 +208,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         </button>
         <a href="/dashboard/index.php" class="font-extrabold text-primary text-lg truncate">Jawish Trading</a>
         <?php if (!$hasAreaTabs && $headerQuickLinks !== []): ?>
-        <nav class="hidden lg:flex items-center gap-1 text-sm mr-2">
+        <nav class="hidden lg:flex items-center gap-1 text-sm mr-2" data-dashboard-header-quick-links>
           <?php foreach ($headerQuickLinks as $item): ?>
             <?php
               $itemRoute = (string) ($item['route'] ?? '');
@@ -184,6 +226,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         <?php endif; ?>
       </div>
       <div class="flex items-center gap-2 shrink-0">
+        <?php require __DIR__ . '/../partials/notification-bell.php'; ?>
         <div class="hidden md:flex flex-col items-end">
           <span class="text-sm font-bold"><?= h($user['display_name_ar'] ?? '') ?></span>
           <span class="text-xs text-text-muted" data-dashboard-header-area><?= h($sidebarTitle) ?></span>
@@ -214,7 +257,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <?php endif; ?>
 
   <div id="dashboard-drawer-backdrop" aria-hidden="true"></div>
-  <nav id="dashboard-drawer" class="lg:hidden" aria-label="قائمة لوحة التحكم">
+  <nav id="dashboard-drawer" class="lg:hidden" aria-label="قائمة لوحة التحكم" aria-hidden="true">
     <div class="px-4 py-4 border-b border-border-subtle mb-3 flex items-center justify-between gap-3">
       <div data-dashboard-sidebar-meta>
         <h2 class="font-bold text-primary"><?= h($sidebarTitle) ?></h2>
@@ -291,6 +334,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   </div>
 
   <?php if ($bottomNavLinks !== []): ?>
+    <div class="dashboard-bottom-nav-spacer lg:hidden" aria-hidden="true" data-dashboard-bottom-spacer></div>
     <nav id="dashboard-bottom-nav" class="lg:hidden" aria-label="تنقل سريع">
       <?php foreach ($bottomNavLinks as $link): ?>
         <?php $isActive = DashboardNavigation::isNavItemActive($currentRoute, $link); ?>
@@ -313,15 +357,19 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   portal_render_media_picker_modal();
   require __DIR__ . '/../partials/store-image-lightbox.php';
   ?>
+  <script src="/assets/deferred-images.js" defer></script>
   <script src="/assets/store-image-zoom.js" defer></script>
-  <script src="/assets/dashboard/dashboard.js" defer></script>
+  <script src="<?= h(portal_asset_url('/assets/dashboard/material-images-link.js')) ?>" defer></script>
+  <script src="<?= h(portal_asset_url('/assets/dashboard/dashboard.js')) ?>" defer></script>
   <script src="/assets/dashboard/media-picker.js" defer></script>
+  <script src="/assets/dashboard/site-media-upload.js" defer></script>
   <script src="/assets/dashboard/token-picker.js" defer></script>
   <script src="/assets/dashboard/home-sections.js" defer></script>
   <script src="/assets/dashboard/special-offers.js" defer></script>
   <script src="/assets/dashboard/about-editor.js" defer></script>
   <script src="/assets/dashboard/accounting-statement.js" defer></script>
-  <script src="/assets/dashboard/material-images-link.js" defer></script>
+  <script src="/assets/dashboard/material-image-zip-download.js" defer></script>
+  <script src="<?= h(portal_asset_url('/assets/notifications.js')) ?>" defer></script>
   <?php if (!empty($extraScripts ?? '')): ?>
     <?= $extraScripts ?>
   <?php endif; ?>
