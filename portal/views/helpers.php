@@ -561,6 +561,26 @@ function safe_return_url(mixed $return): string
     return $return;
 }
 
+function contact_tel_href(string $phone): string
+{
+    $digits = preg_replace('/\D+/', '', $phone);
+    if ($digits === '') {
+        return '';
+    }
+
+    return 'tel:' . $digits;
+}
+
+function contact_maps_href(string $address): string
+{
+    $address = trim($address);
+    if ($address === '') {
+        return '';
+    }
+
+    return 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode($address);
+}
+
 function resolve_product_return_url(mixed $return): string
 {
     $return = safe_return_url($return);

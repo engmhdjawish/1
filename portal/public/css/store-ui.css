@@ -688,30 +688,6 @@
   font-size: 0.875rem;
 }
 
-.store-product-card__cart-badge {
-  position: absolute;
-  right: 0.55rem;
-  bottom: 0.55rem;
-  z-index: 5;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  max-width: calc(100% - 1rem);
-  padding: 0.28rem 0.55rem;
-  border-radius: 9999px;
-  background: rgba(236, 253, 245, 0.96);
-  border: 1px solid #86efac;
-  color: #047857;
-  font-size: 0.625rem;
-  font-weight: 800;
-  box-shadow: 0 4px 14px rgba(4, 120, 87, 0.18);
-  backdrop-filter: blur(4px);
-}
-
-.store-product-card__cart-badge .material-symbols-outlined {
-  font-size: 0.875rem;
-}
-
 .store-product-preview__cart-banner {
   position: absolute;
   left: 50%;
@@ -1158,10 +1134,10 @@
 .store-product-preview__panel {
   position: relative;
   z-index: 2;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, auto) minmax(0, 1fr);
   width: min(96vw, 36rem);
-  max-height: 94vh;
+  max-height: min(94dvh, 94vh);
   background: #fff;
   border-radius: 1.25rem;
   overflow: hidden;
@@ -1177,7 +1153,8 @@
 
 .store-product-preview__image-stage {
   position: relative;
-  min-height: min(62vh, 30rem);
+  min-height: 0;
+  max-height: min(42dvh, 42vh, 22rem);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1185,7 +1162,7 @@
 
 .store-product-preview__image-wrap img {
   width: 100%;
-  max-height: min(62vh, 30rem);
+  max-height: min(40dvh, 40vh, 20rem);
   object-fit: contain;
   border-radius: 0.75rem;
   background: #fff;
@@ -1241,8 +1218,21 @@
 }
 
 .store-product-preview__meta {
-  padding: 1rem 1.25rem 1.25rem;
-  overflow-y: auto;
+  padding: 0.85rem 1rem 1rem;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: 0;
+}
+
+.store-product-preview__prices {
+  margin-top: 0.35rem;
+}
+
+.store-product-preview__cart {
+  margin-top: 0.5rem;
+  flex-shrink: 0;
 }
 
 .store-product-preview__counter {
@@ -1267,7 +1257,7 @@
 }
 
 .store-product-preview__prices {
-  margin-top: 0.85rem;
+  margin-top: 0.35rem;
 }
 
 .store-product-preview__prices .offer-price-block {

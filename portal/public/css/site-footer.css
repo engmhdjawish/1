@@ -31,6 +31,21 @@
   padding: 0.65rem 0;
 }
 
+.site-footer-contact-link {
+  display: inline-block;
+  color: #f9fafb;
+  transition: color 0.2s ease, transform 0.15s ease;
+}
+
+.site-footer-contact-link:hover {
+  color: #ffffff;
+  transform: translateX(-2px);
+}
+
+.site-footer-contact-link:active {
+  opacity: 0.85;
+}
+
 .site-footer-contact-icon {
   display: inline-flex;
   height: 2.25rem;

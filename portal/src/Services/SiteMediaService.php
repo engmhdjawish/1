@@ -180,8 +180,14 @@ final class SiteMediaService
         $asset = self::getById($id);
 
         if ($mime === 'image/svg+xml') {
-            $rasterPath = SvgRasterService::rasterCompanionPath($absolutePath);
-            SvgRasterService::toPngFile($absolutePath, $rasterPath, 1024);
+            try {
+                $rasterPath = SvgRasterService::rasterCompanionPath($absolutePath);
+                if (!SvgRasterService::toPngFile($absolutePath, $rasterPath, 1024) && is_file($rasterPath)) {
+                    @unlink($rasterPath);
+                }
+            } catch (\Throwable) {
+                // Raster companion is optional; upload should still succeed.
+            }
         }
 
         return [

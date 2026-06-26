@@ -855,6 +855,29 @@ body.store-cart-drawer-open {
 
 .store-card-cart-bar .store-qty-stepper--inline {
   margin-inline-start: auto;
+  flex-shrink: 0;
+  border-color: #86efac;
+  background: #fff;
+}
+
+.store-qty-stepper--cart button {
+  width: 2.5rem;
+  height: 2.35rem;
+  font-size: 1.25rem;
+  color: #047857;
+  background: #fff;
+}
+
+.store-qty-stepper--cart button:hover:not(:disabled) {
+  background: #ecfdf5;
+}
+
+.store-qty-stepper--cart output {
+  min-width: 2.75rem;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #111827;
+  padding: 0 0.35rem;
 }
 
 .store-card-cart-bar--add .store-add-cart__submit {

@@ -466,7 +466,6 @@
 
     if (pricesEl) pricesEl.innerHTML = renderPrices(item);
     mountCartForm(item, cartEl);
-    updateInCartBanner(item);
     if (detailEl) {
       const detailHref = detailUrlForItem(item);
       detailEl.href = detailHref || '/store.php';

@@ -454,18 +454,13 @@
       el.textContent = qtyLabel;
     });
 
-    const cardBadge = form.closest('.store-product-card')?.querySelector('[data-card-cart-badge]');
-    if (cardBadge) {
-      cardBadge.hidden = !inCart;
-    }
-
-    const lockedRow = form.querySelector('.store-card-cart-bar__qty-locked');
+    const lockedRow = form.querySelector('[data-cart-qty-locked]') || form.querySelector('.store-card-cart-bar__qty-locked');
     const adjustRow = form.querySelector('[data-cart-qty-adjust]');
     if (lockedRow) lockedRow.hidden = canAdjust;
     if (adjustRow) adjustRow.hidden = !canAdjust;
 
-    const plus = form.querySelector('[data-cart-bump="1"]');
-    const minus = form.querySelector('[data-cart-bump="-1"]');
+    const plus = adjustRow?.querySelector('[data-cart-bump="1"]') || form.querySelector('[data-cart-bump="1"]');
+    const minus = adjustRow?.querySelector('[data-cart-bump="-1"]') || form.querySelector('[data-cart-bump="-1"]');
     const step = getQtyStep(form);
     if (plus) plus.disabled = !canAdjust || (remaining !== null && remaining <= 0);
     if (minus) minus.disabled = !canAdjust || inCartQty <= step;
@@ -485,7 +480,8 @@
   const syncFormLimits = (form, cartQtyByGuid) => {
     const guid = form.dataset.materialGuid || form.querySelector('[name="material_guid"]')?.value || '';
     if (!guid) return;
-    const inCartQty = Math.max(0, Number(cartQtyByGuid[guid]) || 0);
+    const map = cartQtyByGuid && typeof cartQtyByGuid === 'object' ? cartQtyByGuid : {};
+    const inCartQty = Math.max(0, Number(map[guid] ?? map[guid.toLowerCase()] ?? map[guid.toUpperCase()]) || 0);
     setFormCartMode(form, inCartQty);
 
     if (inCartQty > 0) {
@@ -1123,7 +1119,7 @@
     }
   };
 
-  const init = () => {
+  const init = async () => {
     bindAddForms();
     bindCartDrawer();
     const page = document.querySelector('[data-store-cart-page="1"]');
@@ -1135,10 +1131,18 @@
       bindImageZoom(page);
     }
     initCartPage();
-    document.querySelectorAll('[data-store-add-cart]').forEach((form) => {
-      setFormCartMode(form, getCurrentInCart(form));
-      if (form.dataset.maxQty) bindQtySteppers(form);
-    });
+    try {
+      const res = await fetch(API, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+      const data = await res.json();
+      if (data?.cart_qty_by_guid) {
+        refreshCartForms(data);
+        updateBadge(data);
+      }
+    } catch {
+      document.querySelectorAll('[data-store-add-cart]').forEach((form) => {
+        setFormCartMode(form, getCurrentInCart(form));
+      });
+    }
   };
 
   if (document.readyState === 'loading') {

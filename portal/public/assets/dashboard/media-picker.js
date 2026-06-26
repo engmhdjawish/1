@@ -140,8 +140,17 @@
           method: 'POST',
           body: formData,
           credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
         });
-        const data = await response.json();
+        const raw = await response.text();
+        let data = {};
+        try {
+          data = raw ? JSON.parse(raw) : {};
+        } catch (_) {
+          if (uploadStatus) uploadStatus.textContent = 'تم الرفع لكن الاستجابة غير متوقعة. أعد تحميل المكتبة.';
+          await loadGrid(activeCategory);
+          return;
+        }
         if (!data.ok) {
           if (uploadStatus) uploadStatus.textContent = data.message || 'تعذر الرفع.';
           return;

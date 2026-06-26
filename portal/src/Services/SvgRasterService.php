@@ -72,7 +72,15 @@ final class SvgRasterService
         $saved = imagepng($gd, $targetPath);
         imagedestroy($gd);
 
-        return (bool) $saved;
+        if (!$saved || !is_file($targetPath) || filesize($targetPath) <= 128) {
+            if (is_file($targetPath)) {
+                @unlink($targetPath);
+            }
+
+            return false;
+        }
+
+        return true;
     }
 
     public static function rasterCompanionPath(string $svgPath): string

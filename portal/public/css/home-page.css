@@ -478,12 +478,11 @@
   box-shadow: 0 14px 28px rgba(15, 23, 42, 0.1);
 }
 
-.home-product-card__link {
+.home-product-card__body {
   display: flex;
   flex: 1;
   flex-direction: column;
-  text-decoration: none;
-  color: inherit;
+  padding: 0.75rem 0.85rem 0.9rem;
 }
 
 .home-product-card__media--preview {

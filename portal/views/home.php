@@ -231,9 +231,6 @@ $storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
                           $item = array_merge($item, $overlay);
                       }
                   }
-                  $cardUrl = $guid !== ''
-                      ? product_url($guid, $sectionReturnUrl, $sectionOfferSlug)
-                      : home_section_store_url($section);
                   $cartQtyForItem = 0.0;
                   if ($homeAllowCart && $guid !== '') {
                       $cartItems = \Portal\Services\StoreCartService::items();
@@ -265,14 +262,12 @@ $storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
                       <?php $material = $item; $variant = 'strip'; require __DIR__ . '/partials/material-image-frame.php'; ?>
                     </button>
                   <?php endif; ?>
-                  <a href="<?= h($cardUrl) ?>" class="home-product-card__link">
-                    <div class="home-product-card__body">
-                      <div class="home-product-card__name"><?= h((string) ($item['name'] ?? '-')) ?></div>
-                      <?php if ($showAnyPrice): ?>
-                        <?php require __DIR__ . '/partials/offer-price-block.php'; ?>
-                      <?php endif; ?>
-                    </div>
-                  </a>
+                  <div class="home-product-card__body">
+                    <div class="home-product-card__name"><?= h((string) ($item['name'] ?? '-')) ?></div>
+                    <?php if ($showAnyPrice): ?>
+                      <?php require __DIR__ . '/partials/offer-price-block.php'; ?>
+                    <?php endif; ?>
+                  </div>
                 </article>
               <?php endforeach; ?>
             </div>

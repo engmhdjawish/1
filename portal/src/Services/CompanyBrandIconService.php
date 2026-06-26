@@ -182,12 +182,16 @@ final class CompanyBrandIconService
         }
 
         $raster = SvgRasterService::rasterCompanionPath($sourcePath);
-        if (is_file($raster) && is_readable($raster)) {
+        if (is_file($raster) && is_readable($raster) && filesize($raster) > 128) {
             return $raster;
         }
 
-        if (SvgRasterService::toPngFile($sourcePath, $raster, 1024) && is_file($raster)) {
+        if (SvgRasterService::toPngFile($sourcePath, $raster, 1024) && is_file($raster) && filesize($raster) > 128) {
             return $raster;
+        }
+
+        if (is_file($raster)) {
+            @unlink($raster);
         }
 
         return $sourcePath;

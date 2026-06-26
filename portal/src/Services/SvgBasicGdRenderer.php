@@ -50,12 +50,42 @@ final class SvgBasicGdRenderer
             'offsetX' => $offsetX,
             'offsetY' => $offsetY,
             'viewBox' => $viewBox,
-            'defaultFill' => '#111827',
+            'defaultFill' => '',
+            'defaultStroke' => '',
         ];
 
         self::drawNode($svg, $ctx);
 
+        if (!self::hasVisibleInk($canvas)) {
+            imagedestroy($canvas);
+
+            return false;
+        }
+
         return $canvas;
+    }
+
+    /** @param \GdImage $canvas */
+    private static function hasVisibleInk($canvas): bool
+    {
+        $width = imagesx($canvas);
+        $height = imagesy($canvas);
+        if ($width <= 0 || $height <= 0) {
+            return false;
+        }
+
+        $stepX = max(1, (int) floor($width / 24));
+        $stepY = max(1, (int) floor($height / 24));
+        for ($y = 0; $y < $height; $y += $stepY) {
+            for ($x = 0; $x < $width; $x += $stepX) {
+                $alpha = (imagecolorat($canvas, $x, $y) >> 24) & 0x7F;
+                if ($alpha < 120) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /** @return array{x: float, y: float, width: float, height: float} */
@@ -84,36 +114,70 @@ final class SvgBasicGdRenderer
     {
         $name = strtolower($node->getName());
         if ($name === 'g' || $name === 'svg') {
+            $attrs = $node->attributes();
+            $nextCtx = $ctx;
+            $fillAttr = trim((string) ($attrs->fill ?? ''));
+            if ($fillAttr !== '' && strtolower($fillAttr) !== 'inherit') {
+                $nextCtx['defaultFill'] = $fillAttr;
+            }
+            $strokeAttr = trim((string) ($attrs->stroke ?? ''));
+            if ($strokeAttr !== '' && strtolower($strokeAttr) !== 'inherit') {
+                $nextCtx['defaultStroke'] = $strokeAttr;
+            }
             foreach ($node->children() as $child) {
-                self::drawNode($child, $ctx);
+                self::drawNode($child, $nextCtx);
             }
 
             return;
         }
 
         $attrs = $node->attributes();
-        $fill = self::parseColor((string) ($attrs->fill ?? ''), (string) $ctx['defaultFill']);
-        if ($fill === null) {
+        $fillRaw = trim((string) ($attrs->fill ?? ''));
+        if ($fillRaw === '' || strtolower($fillRaw) === 'inherit') {
+            $fillRaw = (string) ($ctx['defaultFill'] ?? '');
+        }
+        $strokeRaw = trim((string) ($attrs->stroke ?? ''));
+        if ($strokeRaw === '' || strtolower($strokeRaw) === 'inherit') {
+            $strokeRaw = (string) ($ctx['defaultStroke'] ?? '');
+        }
+
+        $fill = self::parseColor($fillRaw);
+        $stroke = self::parseColor($strokeRaw);
+        if ($fill === null && $stroke === null) {
             return;
         }
 
         /** @var \GdImage $canvas */
         $canvas = $ctx['canvas'];
-        $color = imagecolorallocatealpha($canvas, $fill[0], $fill[1], $fill[2], $fill[3]);
+        $fillColor = $fill !== null
+            ? imagecolorallocatealpha($canvas, $fill[0], $fill[1], $fill[2], $fill[3])
+            : null;
+        $strokeColor = $stroke !== null
+            ? imagecolorallocatealpha($canvas, $stroke[0], $stroke[1], $stroke[2], $stroke[3])
+            : null;
 
         if ($name === 'rect') {
             $x = (float) ($attrs->x ?? 0);
             $y = (float) ($attrs->y ?? 0);
             $w = (float) ($attrs->width ?? 0);
             $h = (float) ($attrs->height ?? 0);
-            if ($w > 0 && $h > 0) {
+            if ($w > 0 && $h > 0 && $fillColor !== null) {
                 imagefilledrectangle(
                     $canvas,
                     (int) self::tx($ctx, $x),
                     (int) self::ty($ctx, $y),
                     (int) self::tx($ctx, $x + $w),
                     (int) self::ty($ctx, $y + $h),
-                    $color
+                    $fillColor
+                );
+            } elseif ($w > 0 && $h > 0 && $strokeColor !== null) {
+                imagerectangle(
+                    $canvas,
+                    (int) self::tx($ctx, $x),
+                    (int) self::ty($ctx, $y),
+                    (int) self::tx($ctx, $x + $w),
+                    (int) self::ty($ctx, $y + $h),
+                    $strokeColor
                 );
             }
 
@@ -124,14 +188,14 @@ final class SvgBasicGdRenderer
             $cx = (float) ($attrs->cx ?? 0);
             $cy = (float) ($attrs->cy ?? 0);
             $r = (float) ($attrs->r ?? 0);
-            if ($r > 0) {
+            if ($r > 0 && $fillColor !== null) {
                 imagefilledellipse(
                     $canvas,
                     (int) self::tx($ctx, $cx),
                     (int) self::ty($ctx, $cy),
                     (int) max(1, round($r * 2 * $ctx['scale'])),
                     (int) max(1, round($r * 2 * $ctx['scale'])),
-                    $color
+                    $fillColor
                 );
             }
 
@@ -143,14 +207,14 @@ final class SvgBasicGdRenderer
             $cy = (float) ($attrs->cy ?? 0);
             $rx = (float) ($attrs->rx ?? 0);
             $ry = (float) ($attrs->ry ?? 0);
-            if ($rx > 0 && $ry > 0) {
+            if ($rx > 0 && $ry > 0 && $fillColor !== null) {
                 imagefilledellipse(
                     $canvas,
                     (int) self::tx($ctx, $cx),
                     (int) self::ty($ctx, $cy),
                     (int) max(1, round($rx * 2 * $ctx['scale'])),
                     (int) max(1, round($ry * 2 * $ctx['scale'])),
-                    $color
+                    $fillColor
                 );
             }
 
@@ -165,12 +229,15 @@ final class SvgBasicGdRenderer
                 $points[] = (int) self::ty($ctx, (float) ($raw[$i + 1] ?? 0));
             }
             if (count($points) >= 6) {
-                if ($name === 'polygon') {
-                    imagefilledpolygon($canvas, $points, $color);
-                } else {
+                if ($name === 'polygon' && $fillColor !== null) {
+                    imagefilledpolygon($canvas, $points, $fillColor);
+                } elseif ($strokeColor !== null) {
                     imagesetthickness($canvas, max(1, (int) round($ctx['scale'])));
                     for ($i = 0; $i < count($points) - 2; $i += 2) {
-                        imageline($canvas, $points[$i], $points[$i + 1], $points[$i + 2], $points[$i + 3], $color);
+                        imageline($canvas, $points[$i], $points[$i + 1], $points[$i + 2], $points[$i + 3], $strokeColor);
+                    }
+                    if ($name === 'polygon') {
+                        imageline($canvas, $points[count($points) - 2], $points[count($points) - 1], $points[0], $points[1], $strokeColor);
                     }
                 }
             }
@@ -181,7 +248,14 @@ final class SvgBasicGdRenderer
         if ($name === 'path') {
             $polygon = self::pathToPolygon((string) ($attrs->d ?? ''), $ctx);
             if (count($polygon) >= 6) {
-                imagefilledpolygon($canvas, $polygon, $color);
+                if ($fillColor !== null) {
+                    imagefilledpolygon($canvas, $polygon, $fillColor);
+                } elseif ($strokeColor !== null) {
+                    imagesetthickness($canvas, max(1, (int) round($ctx['scale'])));
+                    for ($i = 0; $i < count($polygon) - 2; $i += 2) {
+                        imageline($canvas, $polygon[$i], $polygon[$i + 1], $polygon[$i + 2], $polygon[$i + 3], $strokeColor);
+                    }
+                }
             }
         }
     }
@@ -312,11 +386,11 @@ final class SvgBasicGdRenderer
     }
 
     /** @return array{0: int, 1: int, 2: int, 3: int}|null */
-    private static function parseColor(string $value, string $fallback): ?array
+    private static function parseColor(string $value): ?array
     {
         $value = trim($value);
-        if ($value === '' || $value === 'none') {
-            $value = $fallback;
+        if ($value === '' || $value === 'none' || $value === 'transparent') {
+            return null;
         }
 
         if (preg_match('/^#([0-9a-f]{3})$/i', $value, $m) === 1) {
@@ -336,7 +410,17 @@ final class SvgBasicGdRenderer
             return [hexdec(substr($hex, 0, 2)), hexdec(substr($hex, 2, 2)), hexdec(substr($hex, 4, 2)), 0];
         }
 
-        return [17, 24, 39, 0];
+        $named = [
+            'black' => [0, 0, 0, 0],
+            'white' => [255, 255, 255, 0],
+            'red' => [220, 38, 38, 0],
+            'green' => [22, 163, 74, 0],
+            'blue' => [37, 99, 235, 0],
+            'currentcolor' => [17, 24, 39, 0],
+        ];
+        $lower = strtolower($value);
+
+        return $named[$lower] ?? null;
     }
 
     /** @param array<string, mixed> $ctx */
