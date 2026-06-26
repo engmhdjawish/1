@@ -196,6 +196,7 @@
     if (window.StoreCart?.bindQtySteppers) {
       window.StoreCart.bindQtySteppers(root);
     }
+    window.StoreImageZoom?.seedLoadedImages?.(root);
   }
 
   async function navigateStore(url, push = true) {

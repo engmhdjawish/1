@@ -67,9 +67,18 @@
     return text;
   };
 
+  const findCardImageForItem = (item) => {
+    if (!item?.guid) return null;
+    const card = document.querySelector(`[data-preview-guid="${CSS.escape(item.guid)}"]`);
+    return card?.querySelector('.material-image-frame__photo img') || null;
+  };
+
   const preloadImage = (url) => {
     const src = String(url || '').trim();
     if (!src) return Promise.resolve(null);
+    if (window.StoreImageZoom?.preload) {
+      return window.StoreImageZoom.preload(src).catch(() => null);
+    }
 
     const cached = imageCache.get(src);
     if (cached?.status === 'ready') return Promise.resolve(cached.img);
@@ -112,10 +121,11 @@
     if (loading) setImageLoading(true);
   };
 
-  const applyPreviewImage = async (itemOrUrl) => {
+  const applyPreviewImage = async (itemOrUrl, options = {}) => {
     const isItem = itemOrUrl && typeof itemOrUrl === 'object';
     const src = isItem ? imageUrlFor(itemOrUrl) : String(itemOrUrl || '').trim();
     const thumbSrc = isItem ? thumbUrlFor(itemOrUrl) : thumbFromZoomUrl(src);
+    const preferElement = options.preferElement || (isItem ? findCardImageForItem(itemOrUrl) : null);
     const token = ++imageRenderToken;
 
     if (!imgEl) return;
@@ -130,12 +140,23 @@
       return;
     }
 
-    const cached = imageCache.get(src);
-    const alreadyVisible = imgEl.src === src && imgEl.complete && imgEl.naturalWidth > 0;
+    const zoom = window.StoreImageZoom;
+    const hasThumb = !!(thumbSrc && thumbSrc !== src);
+    const thumbReady = hasThumb && (
+      zoom?.isImageLoaded?.(thumbSrc)
+      || zoom?.isElementReady?.(preferElement)
+    );
+    const previewAlreadyFull = imgEl.complete && imgEl.naturalWidth > 0
+      && (!zoom?.normalizeImageUrl || zoom.normalizeImageUrl(imgEl.currentSrc || imgEl.src) === zoom.normalizeImageUrl(src));
+    const fullReady = zoom?.isImageLoaded?.(src) || previewAlreadyFull;
 
-    if (cached?.status === 'ready' || alreadyVisible) {
+    if (fullReady) {
       setImageLoading(false);
-      imgEl.src = src;
+      if (zoom?.applySrc) {
+        zoom.applySrc(imgEl, src, { preferElement });
+      } else {
+        imgEl.src = src;
+      }
       imgEl.classList.remove('is-placeholder', 'is-loading', 'is-preview-thumb');
       delete imgEl.dataset.pendingFull;
       return;
@@ -144,7 +165,55 @@
     imgEl.classList.remove('is-placeholder');
     delete imgEl.dataset.pendingFull;
 
-    if (thumbSrc && thumbSrc !== src) {
+    if (zoom?.loadProgressive) {
+      if (hasThumb && thumbReady) {
+        zoom.applySrc(imgEl, thumbSrc, { preferElement });
+        imgEl.classList.add('is-preview-thumb');
+        setImageLoading(true);
+      } else if (hasThumb) {
+        imgEl.classList.add('is-preview-thumb');
+        setImageLoading(true);
+      } else {
+        imgEl.classList.remove('is-preview-thumb');
+        setImageLoading(true);
+      }
+
+      try {
+        await zoom.loadProgressive(imgEl, src, thumbSrc, { preferElement });
+        if (token !== imageRenderToken) return;
+        imgEl.classList.remove('is-loading', 'is-preview-thumb');
+        setImageLoading(false);
+      } catch (_) {
+        if (token !== imageRenderToken) return;
+        if (!thumbReady) {
+          imgEl.removeAttribute('src');
+          imgEl.classList.add('is-placeholder');
+        }
+        imgEl.classList.remove('is-loading', 'is-preview-thumb');
+        setImageLoading(false);
+      }
+      return;
+    }
+
+    const cached = imageCache.get(src);
+    const alreadyVisible = imgEl.src === src && imgEl.complete && imgEl.naturalWidth > 0;
+
+    if (cached?.status === 'ready' || alreadyVisible) {
+      setImageLoading(false);
+      imgEl.src = src;
+      imgEl.classList.remove('is-placeholder', 'is-loading', 'is-preview-thumb');
+      return;
+    }
+
+    if (hasThumb && thumbReady) {
+      if (zoom?.applySrc) {
+        zoom.applySrc(imgEl, thumbSrc, { preferElement });
+      } else {
+        imgEl.src = thumbSrc;
+      }
+      imgEl.classList.add('is-preview-thumb');
+      imgEl.classList.remove('is-loading');
+    } else if (hasThumb) {
       imgEl.src = thumbSrc;
       imgEl.classList.add('is-preview-thumb');
       imgEl.classList.remove('is-loading');
@@ -160,16 +229,14 @@
       if (token !== imageRenderToken) return;
       imgEl.src = src;
       imgEl.classList.remove('is-loading', 'is-preview-thumb');
-      delete imgEl.dataset.pendingFull;
       setImageLoading(false);
     } catch (_) {
       if (token !== imageRenderToken) return;
-      if (!thumbSrc) {
+      if (!thumbReady) {
         imgEl.removeAttribute('src');
         imgEl.classList.add('is-placeholder');
       }
       imgEl.classList.remove('is-loading', 'is-preview-thumb');
-      delete imgEl.dataset.pendingFull;
       setImageLoading(false);
     }
   };
@@ -549,7 +616,7 @@
     if (btnNext) btnNext.disabled = state.navigating || (atLast && !hasNextPage);
   };
 
-  const render = (p) => {
+  const render = (p, imageOptions = {}) => {
     const item = syncCartQtyFromDom(p);
     const panel = modal.querySelector('.store-product-preview__panel');
     if (panel) panel.classList.toggle('store-product-preview__panel--offer', !!item.hasOffer);
@@ -557,7 +624,7 @@
     if (imgEl) {
       imgEl.alt = item.name || '';
     }
-    applyPreviewImage(item);
+    applyPreviewImage(item, imageOptions);
     preloadAdjacent(state.index);
 
     const imageWrap = modal.querySelector('.store-product-preview__image-wrap');
@@ -601,10 +668,12 @@
     updateNav();
   };
 
-  const showAt = (index) => {
+  const showAt = (index, imageOptions = {}) => {
     if (state.items.length === 0) return;
     state.index = Math.max(0, Math.min(index, state.items.length - 1));
-    render(state.items[state.index]);
+    const item = state.items[state.index];
+    const preferElement = imageOptions.preferElement || findCardImageForItem(item);
+    render(item, preferElement ? { preferElement } : {});
   };
 
   const cleanPreviewUrl = (url) => {
@@ -674,13 +743,17 @@
     document.body.style.overflow = 'hidden';
   };
 
-  const open = (guid) => {
+  const open = (guid, preferElement = null) => {
     state.items = collectItems();
     if (state.items.length === 0) return;
     const idx = state.items.findIndex((item) => item.guid === guid);
     state.index = idx >= 0 ? idx : 0;
     openModal();
-    showAt(state.index);
+    const item = state.items[state.index];
+    const sourceImg = preferElement instanceof HTMLImageElement
+      ? preferElement
+      : findCardImageForItem(item);
+    showAt(state.index, sourceImg ? { preferElement: sourceImg } : {});
   };
 
   const close = () => {
@@ -725,7 +798,9 @@
     const card = trigger.closest('[data-store-preview-card]');
     const guid = card?.getAttribute('data-preview-guid') || '';
     if (!guid) return;
-    open(guid);
+    const sourceImg = trigger.querySelector('.material-image-frame__photo img')
+      || card?.querySelector('.material-image-frame__photo img');
+    open(guid, sourceImg);
   });
 
   modal.querySelectorAll('[data-preview-close]').forEach((el) => {

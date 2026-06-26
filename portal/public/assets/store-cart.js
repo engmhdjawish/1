@@ -131,12 +131,23 @@
     return text.includes('?') ? `${text}&thumb=0` : `${text}?thumb=0`;
   };
 
-  const loadLightboxImage = (imgEl, fullUrl, thumbUrl) => {
+  const loadLightboxImage = (imgEl, fullUrl, thumbUrl, preferElement) => {
     if (window.StoreImageZoom?.loadProgressive) {
-      window.StoreImageZoom.loadProgressive(imgEl, fullUrl, thumbUrl);
+      window.StoreImageZoom.loadProgressive(imgEl, fullUrl, thumbUrl, { preferElement });
       return;
     }
     imgEl.src = fullUrl;
+  };
+
+  const hydrateCartLineImages = (root) => {
+    const zoom = window.StoreImageZoom;
+    if (!zoom?.applySrc || !root) return;
+    root.querySelectorAll('[data-cart-image-zoom] img').forEach((img) => {
+      const src = img.getAttribute('src') || '';
+      if (!src) return;
+      zoom.applySrc(img, src);
+    });
+    zoom.seedLoadedImages?.(root);
   };
 
   const bindImageZoom = (root = document) => {
@@ -167,12 +178,13 @@
       btn.dataset.zoomBound = '1';
       btn.addEventListener('click', () => {
         const raw = btn.getAttribute('data-cart-image-zoom') || '';
-        const thumbSrc = btn.querySelector('img')?.getAttribute('src') || '';
+        const thumbImg = btn.querySelector('img');
+        const thumbSrc = thumbImg?.currentSrc || thumbImg?.getAttribute('src') || '';
         const src = raw || imageZoomUrl(thumbSrc);
         if (!src) return;
         const name = btn.closest('.store-order-line-card, .store-cart-product, .store-cart-line-card')
           ?.querySelector('.store-order-line-card__title, .font-bold')?.textContent?.trim() || '';
-        loadLightboxImage(lightboxImg, src, thumbSrc);
+        loadLightboxImage(lightboxImg, src, thumbSrc, thumbImg);
         if (lightboxCaption) lightboxCaption.textContent = name;
         lightbox.hidden = false;
         lightbox.setAttribute('aria-hidden', 'false');
@@ -879,6 +891,7 @@
         }
         html += '</div>';
         bodyEl.innerHTML = html;
+        hydrateCartLineImages(bodyEl);
         bindCartLineControls(bodyEl, max);
         bindUnavailableControls(bodyEl);
         bindImageZoom(bodyEl);
