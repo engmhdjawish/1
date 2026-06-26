@@ -169,42 +169,46 @@
     const hasOffer = lineHasOffer(line);
     let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
 
-    if (prices.packSp > 0 || prices.origPackSp > 0) {
+    if (prices.packSp > 0 || prices.origPackSp > 0 || prices.unitSp > 0) {
       html += '<div class="store-price-currency store-price-currency--syp">';
-      html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
-        <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
-        <div class="store-order-line-prices__values">
-          ${hasOffer && prices.origPackSp > prices.packSp ? `<span class="store-order-line-prices__old store-num" dir="ltr">${formatMoney(prices.origPackSp)}</span>` : ''}
-          <span class="store-order-line-prices__amount store-num" dir="ltr">${formatMoney(prices.packSp)} <small>ل.س</small></span>
-        </div>
-      </div>`;
       if (prices.unitSp > 0) {
-        html += `<div class="store-order-line-prices__row">
+        html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
           <span class="store-order-line-prices__label">${escapeHtml(prices.primaryUnit)}</span>
           <div class="store-order-line-prices__values">
             ${hasOffer && prices.origUnitSp > prices.unitSp ? `<span class="store-order-line-prices__old store-num" dir="ltr">${formatMoney(prices.origUnitSp)}</span>` : ''}
-            <span class="store-order-line-prices__amount store-order-line-prices__amount--unit store-num" dir="ltr">${formatMoney(prices.unitSp)} <small>ل.س</small></span>
+            <span class="store-order-line-prices__amount store-num" dir="ltr">${formatMoney(prices.unitSp)} <small>ل.س</small></span>
+          </div>
+        </div>`;
+      }
+      if (prices.packSp > 0 || prices.origPackSp > 0) {
+        html += `<div class="store-order-line-prices__row">
+          <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
+          <div class="store-order-line-prices__values">
+            ${hasOffer && prices.origPackSp > prices.packSp ? `<span class="store-order-line-prices__old store-num" dir="ltr">${formatMoney(prices.origPackSp)}</span>` : ''}
+            <span class="store-order-line-prices__amount store-order-line-prices__amount--pack store-num" dir="ltr">${formatMoney(prices.packSp)} <small>ل.س</small></span>
           </div>
         </div>`;
       }
       html += '</div>';
     }
 
-    if (prices.packUsd > 0 || prices.origPackUsd > 0) {
+    if (prices.packUsd > 0 || prices.origPackUsd > 0 || prices.unitUsd > 0) {
       html += '<div class="store-price-currency store-price-currency--usd">';
-      html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
-        <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
-        <div class="store-order-line-prices__values">
-          ${hasOffer && prices.origPackUsd > prices.packUsd ? `<span class="store-order-line-prices__old store-num" dir="ltr">$${formatUsd(prices.origPackUsd)}</span>` : ''}
-          <span class="store-order-line-prices__amount store-num" dir="ltr">$${formatUsd(prices.packUsd)}</span>
-        </div>
-      </div>`;
       if (prices.unitUsd > 0) {
-        html += `<div class="store-order-line-prices__row">
+        html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
           <span class="store-order-line-prices__label">${escapeHtml(prices.primaryUnit)}</span>
           <div class="store-order-line-prices__values">
             ${hasOffer && prices.origUnitUsd > prices.unitUsd ? `<span class="store-order-line-prices__old store-num" dir="ltr">$${formatUsd(prices.origUnitUsd)}</span>` : ''}
-            <span class="store-order-line-prices__amount store-order-line-prices__amount--unit store-num" dir="ltr">$${formatUsd(prices.unitUsd)}</span>
+            <span class="store-order-line-prices__amount store-num" dir="ltr">$${formatUsd(prices.unitUsd)}</span>
+          </div>
+        </div>`;
+      }
+      if (prices.packUsd > 0 || prices.origPackUsd > 0) {
+        html += `<div class="store-order-line-prices__row">
+          <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
+          <div class="store-order-line-prices__values">
+            ${hasOffer && prices.origPackUsd > prices.packUsd ? `<span class="store-order-line-prices__old store-num" dir="ltr">$${formatUsd(prices.origPackUsd)}</span>` : ''}
+            <span class="store-order-line-prices__amount store-order-line-prices__amount--pack store-num" dir="ltr">$${formatUsd(prices.packUsd)}</span>
           </div>
         </div>`;
       }
@@ -454,7 +458,7 @@
       el.textContent = qtyLabel;
     });
 
-    const lockedRow = form.querySelector('[data-cart-qty-locked]') || form.querySelector('.store-card-cart-bar__qty-locked');
+    const lockedRow = form.querySelector('[data-cart-qty-locked]') || form.querySelector('.store-cart-panel__qty-locked');
     const adjustRow = form.querySelector('[data-cart-qty-adjust]');
     if (lockedRow) lockedRow.hidden = canAdjust;
     if (adjustRow) adjustRow.hidden = !canAdjust;
