@@ -714,6 +714,18 @@
   padding-top: 0.75rem;
 }
 
+.store-product-preview__cart .store-cart-panel {
+  max-width: 100%;
+}
+
+.store-product-preview__cart .store-cart-panel__stepper-group {
+  max-width: 100%;
+}
+
+.store-product-preview__cart .store-qty-stepper--card {
+  max-width: 12rem;
+}
+
 .store-offer-badge {
   display: inline-flex;
   align-items: center;
@@ -1071,7 +1083,7 @@
 .store-product-preview {
   position: fixed;
   inset: 0;
-  z-index: 210;
+  z-index: 100100;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1092,7 +1104,7 @@
   position: fixed;
   top: max(0.75rem, env(safe-area-inset-top, 0px));
   inset-inline-start: max(0.75rem, env(safe-area-inset-left, 0px));
-  z-index: 220;
+  z-index: 100120;
   width: 3rem;
   height: 3rem;
   border: 2px solid rgba(255, 255, 255, 0.92);

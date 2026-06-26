@@ -434,8 +434,8 @@
     const partialLocked = isPartialAddForm(form);
     const remaining = getRemainingAdd(form, inCartQty);
     const atLimit = remaining !== null && remaining <= 0;
-    const lockedInCart = inCart && (partialLocked || atLimit);
-    const canAdjust = inCart && !lockedInCart;
+    const lockedInCart = inCart && partialLocked;
+    const canAdjust = inCart && !partialLocked;
     const qtyLabel = formatPackageCount(inCartQty);
 
     form.dataset.cartQty = String(inCartQty);

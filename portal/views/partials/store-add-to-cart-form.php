@@ -33,7 +33,7 @@ $qtyMin = $qtyBounds['qtyMin'];
 $partialPackage = $qtyBounds['partialPackage'];
 $stockAvailable = $qtyBounds['stockAvailable'];
 $inCart = $cartQtyForItem > 0;
-$canAdjustInCart = $inCart && !$partialPackage && !$atLimit;
+$canAdjustInCart = $inCart && !$partialPackage;
 
 $packaging = ShareCartService::packaging($item);
 $primaryUnit = ShareCartService::primaryUnitLabel($item);

@@ -259,13 +259,17 @@
     const sourceForm = card?.querySelector('[data-store-add-cart]');
     if (!sourceForm) {
       container.innerHTML = renderCartFormFallback(item);
+      const form = container.querySelector('[data-store-add-cart]');
+      if (form && window.StoreCart?.setFormCartMode) {
+        window.StoreCart.setFormCartMode(form, Math.max(0, Number(item.cartQty) || 0));
+      }
       if (window.StoreCart?.bindAddForms) {
         window.StoreCart.bindAddForms();
       }
       if (window.StoreCart?.bindQtySteppers) {
         window.StoreCart.bindQtySteppers(container);
       }
-      return container.querySelector('[data-store-add-cart]');
+      return form;
     }
 
     const clone = sourceForm.cloneNode(true);
@@ -293,45 +297,102 @@
     const maxAttr = p.maxPackages != null ? `data-max-qty="${esc(p.maxPackages)}" data-max-qty-label="${esc(p.maxLabel || p.maxPackages)}"` : '';
     const effectiveMax = p.effectiveMax != null ? Number(p.effectiveMax) : (p.remaining != null ? Number(p.remaining) : null);
     const remaining = effectiveMax != null ? Math.max(0, effectiveMax) : null;
-    const atLimit = !!p.atLimit;
+    const atLimit = remaining !== null && remaining <= 0;
+    const inCartQty = Math.max(0, Number(p.cartQty) || 0);
+    const inCart = inCartQty > 0;
+    const partial = !!p.partialPackage;
+    const canAdjust = inCart && !partial;
     const qtyStep = Number(p.qtyStep) > 0 ? Number(p.qtyStep) : 1;
     const qtyMin = Number(p.qtyMin) > 0 ? Number(p.qtyMin) : 1;
     const defaultQty = Number(p.defaultQty) > 0 ? Number(p.defaultQty) : qtyMin;
-    const partial = !!p.partialPackage;
     const maxInput = remaining !== null && remaining > 0 ? `max="${remaining}"` : (atLimit ? `max="${qtyMin}"` : '');
-    const disabled = atLimit ? 'disabled' : '';
-    const plusDisabled = (atLimit || (remaining !== null && remaining <= 0)) ? 'disabled' : '';
+    const submitDisabled = atLimit && !inCart ? 'disabled' : '';
+    const plusDisabled = partial || (remaining !== null && remaining <= 0) ? 'disabled' : '';
+    const minusDisabled = partial || defaultQty <= qtyStep ? 'disabled' : '';
+    const plusInCartDisabled = !canAdjust || (remaining !== null && remaining <= 0) ? 'disabled' : '';
+    const minusInCartDisabled = !canAdjust || inCartQty <= 0 ? 'disabled' : '';
     const effectiveMaxAttr = remaining !== null ? `data-effective-max="${remaining}"` : '';
+    const qtyLabel = formatPackageCount(inCartQty);
+    const cartMode = inCart
+      ? (partial ? 'in-cart-locked' : 'in-cart')
+      : (partial ? 'partial-add' : 'add');
 
     let hint = '';
     if (partial && p.packagesAvailable > 0) {
-      hint = `<p class="store-add-cart__limit" data-qty-hint>متوفر أقل من طرد كامل: <span class="store-num" dir="ltr">${formatQty(p.packagesAvailable)}</span> ${esc(p.packageUnit)} — يمكن طلب الكمية المتبقية.</p>`;
+      hint = `<p class="store-add-cart__note" data-qty-hint>آخر كمية: <span class="store-num" dir="ltr">${formatQty(p.packagesAvailable)}</span> ${esc(p.packageUnit)}</p>`;
     } else if (p.maxLabel != null) {
-      if (atLimit) {
-        hint = `<p class="store-add-cart__limit is-warning" data-qty-hint>وصلت للحد الأقصى (${esc(p.maxLabel)} ${esc(p.packageUnit)})</p>`;
-      } else if (p.cartQty > 0) {
-        hint = `<p class="store-add-cart__limit" data-qty-hint>الحد الأقصى ${esc(p.maxLabel)} ${esc(p.packageUnit)} — متبقي <span class="store-num" dir="ltr">${formatQty(remaining)}</span></p>`;
-      } else {
-        hint = `<p class="store-add-cart__limit" data-qty-hint>الحد الأقصى ${esc(p.maxLabel)} ${esc(p.packageUnit)} لكل مادة</p>`;
-      }
+      hint = `<p class="store-add-cart__note${atLimit && !inCart ? ' is-warning' : ''}" data-qty-hint>${
+        atLimit && !inCart
+          ? `الحد الأقصى ${esc(p.maxLabel)} ${esc(p.packageUnit)} لكل مادة`
+          : `الحد الأقصى ${esc(p.maxLabel)} ${esc(p.packageUnit)} لكل مادة`
+      }</p>`;
     }
 
     const imageField = p.thumbUrl
       ? `<input type="hidden" name="image_url" value="${esc(p.thumbUrl)}">` : '';
 
+    const inCartBlock = `
+      <div class="store-add-cart__in-cart"${inCart ? '' : ' hidden'}>
+        <div class="store-cart-panel store-cart-panel--in-cart">
+          <div class="store-cart-panel__badge">
+            <span class="material-symbols-outlined" aria-hidden="true">shopping_cart</span>
+            <span>في السلة</span>
+          </div>
+          <div class="store-cart-panel__controls">
+            <div class="store-cart-panel__stepper-group">
+              <div class="store-cart-panel__qty-slot">
+                <div class="store-cart-panel__qty-locked" data-cart-qty-locked${canAdjust ? ' hidden' : ''}>
+                  <strong class="store-num" dir="ltr" data-cart-qty-display>${esc(qtyLabel)}</strong>
+                </div>
+                <div class="store-qty-stepper store-qty-stepper--card" data-cart-qty-adjust${canAdjust ? '' : ' hidden'}>
+                  <button type="button" data-cart-bump="-1" aria-label="إنقاص أو حذف من السلة" ${minusInCartDisabled}>−</button>
+                  <output class="store-num" dir="ltr" data-cart-qty-display>${esc(qtyLabel)}</output>
+                  <button type="button" data-cart-bump="1" aria-label="زيادة" ${plusInCartDisabled}>+</button>
+                </div>
+              </div>
+              <span class="store-cart-panel__unit">${esc(p.packageUnit || 'طرد')}</span>
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    const addBlock = `
+      <div class="store-add-cart__add"${inCart ? ' hidden' : ''}>
+        ${hint}
+        <div class="store-cart-panel store-cart-panel--add">
+          <div class="store-cart-panel__controls">
+            <div class="store-cart-panel__stepper-group">
+              <div class="store-qty-stepper store-qty-stepper--card${partial ? ' store-qty-stepper--locked' : ''}">
+                <button type="button" data-qty-minus aria-label="إنقاص" ${minusDisabled}>−</button>
+                <input type="number" class="store-num" dir="ltr" name="quantity" min="${qtyMin}" ${maxInput} step="${qtyStep}" value="${defaultQty}" ${partial ? 'readonly' : ''}>
+                <button type="button" data-qty-plus aria-label="زيادة" ${plusDisabled}>+</button>
+              </div>
+              <span class="store-cart-panel__unit">${esc(p.packageUnit || 'طرد')}</span>
+            </div>
+          </div>
+          <button type="submit" class="store-add-cart__submit" ${submitDisabled}>
+            <span class="material-symbols-outlined text-[20px]" aria-hidden="true">add_shopping_cart</span>
+            ${atLimit ? 'مكتمل' : (partial ? 'طلب الكمية' : 'إضافة')}
+          </button>
+        </div>
+      </div>`;
+
     return `
       <form
         method="post"
-        class="store-add-cart store-add-cart--preview"
+        class="store-add-cart store-add-cart--preview${inCart ? ' store-add-cart--in-cart' : ''}${partial ? ' store-add-cart--locked' : ''}"
         action="${esc(p.returnUrl || '/store.php')}"
         data-store-add-cart="1"
+        data-cart-mode="${esc(cartMode)}"
         data-partial-package="${partial ? '1' : '0'}"
         data-material-guid="${esc(p.guid)}"
-        data-cart-qty="${esc(p.cartQty)}"
+        data-cart-qty="${esc(inCartQty)}"
         data-qty-step="${qtyStep}"
+        data-package-unit="${esc(p.packageUnit || 'طرد')}"
         ${maxAttr}
         ${effectiveMaxAttr}
       >
+        <input type="hidden" name="action" value="add_to_cart">
         <input type="hidden" name="material_guid" value="${esc(p.guid)}">
         <input type="hidden" name="material_code" value="${esc(p.code)}">
         <input type="hidden" name="material_name_ar" value="${esc(p.name)}">
@@ -341,19 +402,8 @@
         <input type="hidden" name="unit_sale_price_sp" value="${esc(p.unitSaleSp)}">
         <input type="hidden" name="unit_sale_price_usd" value="${esc(p.unitSaleUsd)}">
         ${imageField}
-        ${hint}
-        <div class="store-add-cart__row">
-          <span class="text-xs font-bold text-gray-600 shrink-0">${esc(p.packageUnit)}</span>
-          <div class="store-qty-stepper">
-            <button type="button" data-qty-minus aria-label="إنقاص">−</button>
-            <input type="number" class="store-num" dir="ltr" name="quantity" min="${qtyMin}" ${maxInput} step="${qtyStep}" value="${defaultQty}" ${disabled}>
-            <button type="button" data-qty-plus aria-label="زيادة" ${plusDisabled}>+</button>
-          </div>
-        </div>
-        <button type="submit" class="store-add-cart__submit" ${disabled}>
-          <span class="material-symbols-outlined text-[20px]" aria-hidden="true">add_shopping_cart</span>
-          ${atLimit ? 'الحد الأقصى مكتمل' : (partial ? 'طلب الكمية المتاحة' : 'إضافة للسلة')}
-        </button>
+        ${inCartBlock}
+        ${addBlock}
       </form>`;
   };
 
