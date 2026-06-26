@@ -22,17 +22,25 @@
 
 .site-header__row {
   display: grid;
-  grid-template-columns: minmax(0, auto) 1fr minmax(0, auto);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.5rem;
   min-height: 3.25rem;
 }
 
-@media (min-width: 640px) {
-  .site-header__row {
-    gap: 0.75rem;
-    min-height: 3.75rem;
-  }
+.site-header__brand {
+  grid-column: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.site-header__nav {
+  display: none;
+  justify-content: center;
+}
+
+.site-header__actions {
+  grid-column: 2;
 }
 
 @media (min-width: 768px) {
@@ -40,6 +48,20 @@
     grid-template-columns: auto 1fr auto;
     gap: 1.25rem;
     min-height: 4.75rem;
+  }
+
+  .site-header__brand {
+    grid-column: auto;
+    overflow: visible;
+  }
+
+  .site-header__nav {
+    display: flex;
+    grid-column: 2;
+  }
+
+  .site-header__actions {
+    grid-column: 3;
   }
 }
 
@@ -52,31 +74,21 @@
 .site-header__brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   min-width: 0;
-  max-width: min(46vw, 8.5rem);
+  max-width: 100%;
   flex-shrink: 1;
 }
 
 .site-header__brand .site-brand-link {
   min-width: 0;
   max-width: 100%;
-}
-
-@media (min-width: 480px) {
-  .site-header__brand {
-    max-width: min(50vw, 10rem);
-  }
-}
-
-@media (min-width: 640px) {
-  .site-header__brand {
-    max-width: min(55vw, 12rem);
-  }
+  overflow: hidden;
 }
 
 @media (min-width: 768px) {
   .site-header__brand {
+    gap: 0.4rem;
     max-width: none;
     flex-shrink: 0;
   }
@@ -104,17 +116,6 @@
 @media (min-width: 768px) {
   .site-header__menu-btn {
     display: none;
-  }
-}
-
-.site-header__nav {
-  display: none;
-  justify-content: center;
-}
-
-@media (min-width: 768px) {
-  .site-header__nav {
-    display: flex;
   }
 }
 
@@ -196,6 +197,34 @@
 @media (min-width: 480px) {
   .site-header__currency {
     display: inline-flex;
+  }
+}
+
+@media (max-width: 639px) {
+  .site-header__currency-label {
+    display: none;
+  }
+
+  .site-header__icon-btn[data-pwa-open] {
+    display: none;
+  }
+
+  .site-header__divider:has(+ .site-header__icon-btn[data-pwa-open]),
+  .site-header__icon-btn[data-pwa-open] + .site-header__divider {
+    display: none;
+  }
+
+  .site-header__btn--primary {
+    min-height: 2.35rem;
+    padding: 0 0.65rem;
+    font-size: 0.75rem;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 767px) {
+  .site-header {
+    --site-header-logo-height: 2rem;
+    --site-header-logo-max-width: 3.75rem;
   }
 }
 

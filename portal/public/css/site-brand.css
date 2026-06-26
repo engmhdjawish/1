@@ -23,12 +23,43 @@
 /* الهيدر: شعار بارز — بدون نص بجانبه عند وجود صورة */
 .site-logo-wrap--header {
   height: var(--site-header-logo-height);
-  min-width: 3rem;
+  min-width: 0;
   max-width: var(--site-header-logo-max-width);
   padding: 0;
   background: transparent;
   border: none;
   box-shadow: none;
+}
+
+/* على الجوال والشاشات الضيقة: إخفاء الشعار من الهيدر (يبقى في القائمة الجانبية) */
+@media (max-width: 767px) {
+  .site-header {
+    --site-header-logo-height: 0;
+    --site-header-logo-max-width: 0;
+  }
+
+  .site-logo-wrap--header {
+    display: none;
+  }
+
+  .site-header__brand .site-brand-link {
+    font-size: 0.8125rem;
+    font-weight: 800;
+    max-width: min(34vw, 7.5rem);
+  }
+
+  .site-header__brand .site-brand-link .sr-only {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+    clip: auto;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    display: block;
+  }
 }
 
 .site-logo-wrap--drawer {
