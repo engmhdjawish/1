@@ -5,6 +5,7 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
+use Portal\Services\PortalPresenceService;
 use Portal\Services\PortalSessionService;
 
 WebSession::requirePermission('sessions.manage');
@@ -43,7 +44,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $schemaReady) {
 
 $onlineStaff = $schemaReady ? PortalSessionService::onlineStaff() : [];
 $onlineCustomers = $schemaReady ? PortalSessionService::onlineCustomers() : [];
-$onlineCounts = $schemaReady ? PortalSessionService::onlineCounts() : ['staff' => 0, 'customers' => 0, 'total' => 0];
+$onlineGuests = PortalPresenceService::isEnabled() ? PortalPresenceService::onlineGuests() : [];
+$onlineCounts = $schemaReady || PortalPresenceService::isEnabled()
+    ? PortalSessionService::onlineCounts()
+    : ['staff' => 0, 'customers' => 0, 'guests' => 0, 'total' => 0];
 $currentRoute = '/dashboard/sessions.php';
 
 ob_start();

@@ -42,6 +42,7 @@ $ordered = [
     '008-push-subscriptions.sql',
     '009-web-sessions-tracking.sql',
     '010-sessions-permission.sql',
+    '011-portal-presence.sql',
     '007-staff-roles-reorganization.sql',
 ];
 

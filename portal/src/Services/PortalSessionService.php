@@ -54,14 +54,20 @@ final class PortalSessionService
         }
 
         if (WebSession::check()) {
-            self::ensureStaffSession((string) (WebSession::user()['id'] ?? ''));
+            if (!self::validateCurrentMeta('staff')) {
+                self::ensureStaffSession((string) (WebSession::user()['id'] ?? ''));
+            }
             self::touchCurrent();
+
             return;
         }
 
         if (CustomerSession::check()) {
-            self::ensureCustomerSession((string) (CustomerSession::customer()['id'] ?? ''));
+            if (!self::validateCurrentMeta('customer')) {
+                self::ensureCustomerSession((string) (CustomerSession::customer()['id'] ?? ''));
+            }
             self::touchCurrent();
+
             return;
         }
 
@@ -75,7 +81,12 @@ final class PortalSessionService
             return;
         }
 
-        self::revokeCurrent();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
+
+        self::revokeAllForStaffUser($userId);
+        unset($_SESSION[self::META_KEY]);
         self::insertSession('staff', $userId);
     }
 
@@ -86,7 +97,12 @@ final class PortalSessionService
             return;
         }
 
-        self::revokeCurrent();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
+
+        self::revokeAllForCustomer($customerId);
+        unset($_SESSION[self::META_KEY]);
         self::insertSession('customer', $customerId);
     }
 
@@ -152,6 +168,16 @@ final class PortalSessionService
         );
         $stmt->execute(['id' => $sessionId]);
 
+        $meta = self::meta();
+        if (
+            $stmt->rowCount() > 0
+            && $meta !== null
+            && ($meta['kind'] ?? '') === $kind
+            && ($meta['id'] ?? '') === $sessionId
+        ) {
+            self::forceLogoutForKind($kind);
+        }
+
         return $stmt->rowCount() > 0;
     }
 
@@ -198,17 +224,45 @@ final class PortalSessionService
 
     public static function onlineCounts(int $minutes = self::ONLINE_MINUTES): array
     {
+        $staff = self::onlineStaff($minutes);
+        $customers = self::onlineCustomers($minutes);
+        $guests = PortalPresenceService::isEnabled() ? PortalPresenceService::onlineGuestCount($minutes) : 0;
+
         return [
-            'staff' => count(self::onlineStaff($minutes)),
-            'customers' => count(self::onlineCustomers($minutes)),
-            'total' => count(self::onlineStaff($minutes)) + count(self::onlineCustomers($minutes)),
+            'staff' => count($staff),
+            'customers' => count($customers),
+            'guests' => $guests,
+            'total' => count($staff) + count($customers) + $guests,
         ];
+    }
+
+    private static function validateCurrentMeta(string $expectedKind): bool
+    {
+        $meta = self::meta();
+        if ($meta === null || ($meta['kind'] ?? '') !== $expectedKind) {
+            return false;
+        }
+
+        if (!self::isEnabled()) {
+            return false;
+        }
+
+        $table = $expectedKind === 'customer' ? 'web_customer_sessions' : 'web_sessions';
+        $stmt = Database::pdo()->prepare(
+            "SELECT 1 FROM {$table}
+             WHERE id = :id
+               AND revoked_at IS NULL
+               AND expires_at > NOW()
+             LIMIT 1"
+        );
+        $stmt->execute(['id' => $meta['id']]);
+
+        return (bool) $stmt->fetchColumn();
     }
 
     private static function ensureStaffSession(string $userId): void
     {
-        $meta = self::meta();
-        if ($meta !== null && ($meta['kind'] ?? '') === 'staff') {
+        if (self::validateCurrentMeta('staff')) {
             return;
         }
 
@@ -217,8 +271,7 @@ final class PortalSessionService
 
     private static function ensureCustomerSession(string $customerId): void
     {
-        $meta = self::meta();
-        if ($meta !== null && ($meta['kind'] ?? '') === 'customer') {
+        if (self::validateCurrentMeta('customer')) {
             return;
         }
 
@@ -238,25 +291,36 @@ final class PortalSessionService
         $pdo = Database::pdo();
 
         if ($kind === 'customer') {
-            $stmt = $pdo->prepare(
-                "INSERT INTO web_customer_sessions (
-                    customer_id, token_hash, expires_at, created_ip, user_agent, last_seen_at
-                 ) VALUES (
-                    :subject_id, :hash, NOW() + (:days || ' days')::interval, :ip, :ua, NOW()
-                 )
-                 RETURNING id::text"
-            );
+            $sql = "INSERT INTO web_customer_sessions (
+                        customer_id, token_hash, expires_at, created_ip, user_agent, last_seen_at
+                    ) VALUES (
+                        :subject_id, :hash, NOW() + (:days || ' days')::interval, :ip, :ua, NOW()
+                    )
+                    ON CONFLICT (token_hash) DO UPDATE SET
+                        customer_id = EXCLUDED.customer_id,
+                        expires_at = EXCLUDED.expires_at,
+                        created_ip = EXCLUDED.created_ip,
+                        user_agent = EXCLUDED.user_agent,
+                        last_seen_at = NOW(),
+                        revoked_at = NULL
+                    RETURNING id::text";
         } else {
-            $stmt = $pdo->prepare(
-                "INSERT INTO web_sessions (
-                    user_id, token_hash, expires_at, created_ip, user_agent, last_seen_at
-                 ) VALUES (
-                    :subject_id, :hash, NOW() + (:days || ' days')::interval, :ip, :ua, NOW()
-                 )
-                 RETURNING id::text"
-            );
+            $sql = "INSERT INTO web_sessions (
+                        user_id, token_hash, expires_at, created_ip, user_agent, last_seen_at
+                    ) VALUES (
+                        :subject_id, :hash, NOW() + (:days || ' days')::interval, :ip, :ua, NOW()
+                    )
+                    ON CONFLICT (token_hash) DO UPDATE SET
+                        user_id = EXCLUDED.user_id,
+                        expires_at = EXCLUDED.expires_at,
+                        created_ip = EXCLUDED.created_ip,
+                        user_agent = EXCLUDED.user_agent,
+                        last_seen_at = NOW(),
+                        revoked_at = NULL
+                    RETURNING id::text";
         }
 
+        $stmt = $pdo->prepare($sql);
         $stmt->execute([
             'subject_id' => $subjectId,
             'hash' => $hash,

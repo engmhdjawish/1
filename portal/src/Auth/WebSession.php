@@ -133,6 +133,10 @@ final class WebSession
 
         CustomerSession::logout();
 
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
+
         StaffRoleProvisioner::ensureTaskRoles();
 
         $permissions = self::loadPermissions($user['id']);

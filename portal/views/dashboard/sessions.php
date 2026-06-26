@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 /** @var list<array<string, mixed>> $onlineStaff */
 /** @var list<array<string, mixed>> $onlineCustomers */
-/** @var array{staff: int, customers: int, total: int} $onlineCounts */
+/** @var list<array<string, mixed>> $onlineGuests */
+/** @var array{staff: int, customers: int, guests: int, total: int} $onlineCounts */
 /** @var bool $schemaReady */
 /** @var string|null $flash */
 /** @var string $flashType */
@@ -23,8 +24,9 @@ $formatSeen = static function (?string $value): string {
     <div>
       <h1 class="text-2xl font-extrabold text-slate-900">المتصلون الآن</h1>
       <p class="text-sm text-text-muted mt-1">
-        من يستخدم الموقع أو لوحة التحكم حالياً (آخر 5 دقائق). يمكنك إنهاء جلسة واحدة أو كل جلسات حساب.
+        من يستخدم الموقع أو لوحة التحكم حالياً (آخر 5 دقائق). تسجيل دخول جديد يُنهي الجلسات الأخرى لنفس الحساب.
       </p>
+      <p class="text-xs text-amber-700 mt-2">تنبيه: إنهاء جلستك الحالية من هذه الصفحة يُخرجك فوراً من لوحة التحكم.</p>
     </div>
     <?php if ($schemaReady): ?>
       <div class="flex flex-wrap gap-2">
@@ -55,7 +57,7 @@ $formatSeen = static function (?string $value): string {
     <code class="font-mono text-xs">docs/portal-migrations/009-web-sessions-tracking.sql</code>
   </div>
 <?php else: ?>
-  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
     <div class="rounded-2xl border border-border-subtle bg-white p-4 shadow-sm">
       <p class="text-xs font-bold text-text-muted">الإجمالي الآن</p>
       <p class="text-3xl font-extrabold text-slate-900 mt-1"><?= (int) ($onlineCounts['total'] ?? 0) ?></p>
@@ -67,6 +69,10 @@ $formatSeen = static function (?string $value): string {
     <div class="rounded-2xl border border-border-subtle bg-white p-4 shadow-sm">
       <p class="text-xs font-bold text-text-muted">عملاء</p>
       <p class="text-3xl font-extrabold text-emerald-700 mt-1"><?= (int) ($onlineCounts['customers'] ?? 0) ?></p>
+    </div>
+    <div class="rounded-2xl border border-border-subtle bg-white p-4 shadow-sm">
+      <p class="text-xs font-bold text-text-muted">زوار (غير مسجّلين)</p>
+      <p class="text-3xl font-extrabold text-sky-700 mt-1"><?= (int) ($onlineCounts['guests'] ?? 0) ?></p>
     </div>
   </div>
 
@@ -129,6 +135,40 @@ $formatSeen = static function (?string $value): string {
       </article>
     <?php endforeach; ?>
   </div>
+
+  <?php if (($onlineGuests ?? []) !== []): ?>
+    <article class="mt-6 rounded-2xl border border-border-subtle bg-white shadow-sm overflow-hidden">
+      <div class="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-extrabold text-slate-900">زوار غير مسجّلين</h2>
+          <p class="text-xs text-text-muted mt-0.5">تقدير من نشاط الصفحة خلال آخر 5 دقائق</p>
+        </div>
+        <span class="text-xs font-bold text-text-muted"><?= count($onlineGuests) ?> زائر</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-surface-low text-text-muted">
+            <tr>
+              <th class="px-4 py-3 text-right font-bold">الموقع التقريبي</th>
+              <th class="px-4 py-3 text-right font-bold">آخر نشاط</th>
+              <th class="px-4 py-3 text-right font-bold">IP</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border-subtle">
+            <?php foreach ($onlineGuests as $row): ?>
+              <tr class="hover:bg-slate-50">
+                <td class="px-4 py-3">
+                  <div class="font-bold text-slate-900"><?= h(trim((string) (($row['city_ar'] ?? '') !== '' ? $row['city_ar'] : 'مدينة غير معروفة') . ' · ' . ($row['country_ar'] ?? 'بلد غير معروف'))) ?></div>
+                </td>
+                <td class="px-4 py-3 text-xs text-text-muted"><?= h($formatSeen((string) ($row['last_seen_at'] ?? ''))) ?></td>
+                <td class="px-4 py-3 text-xs text-text-muted" dir="ltr"><?= h((string) ($row['visitor_ip'] ?? '—')) ?></td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    </article>
+  <?php endif; ?>
 <?php endif; ?>
 
 <script>

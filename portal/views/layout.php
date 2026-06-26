@@ -219,7 +219,25 @@ if ($customer) {
 <?php if ($staffLoggedIn || $customer !== null): ?>
 <script>
 (function () {
-  const beat = () => fetch('/api/session-heartbeat.php', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+  const visitorId = (() => {
+    try {
+      const key = 'jawish_vid';
+      let id = localStorage.getItem(key);
+      if (!id) {
+        id = window.crypto?.randomUUID?.() || `v-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        localStorage.setItem(key, id);
+      }
+      return id;
+    } catch {
+      return '';
+    }
+  })();
+  const beat = () => fetch('/api/session-heartbeat.php', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ visitor_id: visitorId }),
+  }).catch(() => {});
   beat();
   window.setInterval(beat, 60000);
 })();
