@@ -122,6 +122,7 @@ if ($customer) {
     <link href="<?= h(portal_asset_url('/css/site-header.css')) ?>" rel="stylesheet">
     <link href="<?= h(portal_asset_url('/css/site-footer.css')) ?>" rel="stylesheet">
     <link href="<?= h(portal_asset_url('/css/pwa-install.css')) ?>" rel="stylesheet">
+    <link href="<?= h(portal_asset_url('/css/site-page-loading.css')) ?>" rel="stylesheet">
     <link href="<?= h(portal_asset_url('/css/notifications.css')) ?>" rel="stylesheet">
     <?php if (!$isLightPage): ?>
       <link href="<?= h(portal_asset_url('/css/store-ui.css')) ?>" rel="stylesheet">
@@ -215,6 +216,7 @@ if ($customer) {
   <script src="<?= h(portal_asset_url('/assets/site-analytics.js')) ?>" data-endpoint="/api/site-analytics.php" defer></script>
 <?php endif; ?>
 <script src="<?= h(portal_asset_url('/assets/pwa.js')) ?>" defer></script>
+<script src="<?= h(portal_asset_url('/assets/site-page-loading.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/notifications.js')) ?>" defer></script>
 <?php if (!empty($extraFooter ?? '')): ?>
   <?= $extraFooter ?>

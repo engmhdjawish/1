@@ -7,6 +7,7 @@
   const NAV_HEADER = 'X-Store-Nav';
   let navAbort = null;
   let navGeneration = 0;
+  let navBusy = false;
 
   function isStoreCatalogUrl(url) {
     try {
@@ -139,7 +140,12 @@
       if (form.method && form.method.toLowerCase() !== 'get') return;
       form.dataset.storeNavBound = '1';
       form.addEventListener('submit', (event) => {
+        if (form.dataset.storeSubmitting === '1') {
+          event.preventDefault();
+          return;
+        }
         event.preventDefault();
+        form.dataset.storeSubmitting = '1';
         const submitter = event.submitter;
         const formData = new FormData(form);
         if (submitter instanceof HTMLElement && submitter.name) {
@@ -192,12 +198,18 @@
       return;
     }
 
+    if (navBusy) {
+      return;
+    }
+
     if (navAbort) {
       navAbort.abort();
     }
     const generation = ++navGeneration;
     navAbort = new AbortController();
     const signal = navAbort.signal;
+    navBusy = true;
+    document.body.classList.add('store-catalog-nav-busy');
 
     const root = catalogRoot();
     showCatalogLoading(root);
@@ -250,6 +262,14 @@
               + '</div>';
           }
         }
+      }
+    } finally {
+      if (generation === navGeneration) {
+        navBusy = false;
+        document.body.classList.remove('store-catalog-nav-busy');
+        catalogRoot()?.querySelectorAll('form[data-store-submitting]').forEach((form) => {
+          delete form.dataset.storeSubmitting;
+        });
       }
     }
   }

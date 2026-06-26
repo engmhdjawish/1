@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Auth\CustomerSession;
+use Portal\Support\ResponseCache;
 use Portal\Support\StorePricePreference;
 
 final class StoreCatalogService
@@ -101,6 +102,11 @@ final class StoreCatalogService
             return self::emptyCatalogResult($page, $pageSize, 'لم تُضبط سياسة عرض المتجر بعد.');
         }
 
+        $cachedCatalog = self::readCatalogCache($query, $policy);
+        if ($cachedCatalog !== null) {
+            return $cachedCatalog;
+        }
+
         $storeOptions = is_array($policy['store_options'] ?? null)
             ? $policy['store_options']
             : AccessPolicyService::defaultStoreOptions();
@@ -158,6 +164,8 @@ final class StoreCatalogService
         if (($sellableMode || $sellableFilter) && $mergedFilters['minWarehouseQuantity'] === null) {
             $mergedFilters['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
         }
+
+        $includeResultFilters = self::shouldIncludeResultFilters($query, $requestFilters);
 
         try {
             if ($sellableMode) {
@@ -226,7 +234,7 @@ final class StoreCatalogService
                     $isAvailable,
                     $hasImage,
                     false,
-                    true,
+                    $includeResultFilters,
                     $mergedFilters['minWarehouseQuantity'],
                     $mergedFilters['maxWarehouseQuantity'],
                     $mergedFilters['minUnitSalePriceSyp'],
@@ -262,7 +270,9 @@ final class StoreCatalogService
             $apiError = $exception->getMessage();
         }
 
-        $filterOptions = self::loadFilterOptions();
+        $filterOptions = self::shouldLoadFilterOptionsOnRequest($query, $visibleClientFilters, $requestFilters)
+            ? self::getCachedFilterOptions()
+            : ['stores' => [], 'groups' => [], 'deferred' => true];
         if ($storeGuids !== [] || self::parseList($policyRules['store_guids'] ?? []) !== []) {
             $forcedStoreGuids = self::parseList($policyRules['store_guids'] ?? []);
             if ($forcedStoreGuids !== []) {
@@ -295,7 +305,7 @@ final class StoreCatalogService
             $requestFilters
         );
 
-        return [
+        $catalogResult = [
             'products' => $products,
             'totalCount' => $totalCount,
             'page' => $page,
@@ -312,6 +322,12 @@ final class StoreCatalogService
             'allow_client_filters' => $allowClientFilters,
             'filters' => $displayFilters,
         ];
+
+        if ($apiError === null || $apiError === '') {
+            self::writeCatalogCache($query, $policy, $catalogResult);
+        }
+
+        return $catalogResult;
     }
 
     /** @param array<string, mixed> $sectionContext */
@@ -613,16 +629,7 @@ final class StoreCatalogService
             $contextOffer = SpecialOfferService::activeOfferBySlug($offerSlug);
         }
 
-        $result = [];
-        foreach ($products as $product) {
-            if (!is_array($product)) {
-                continue;
-            }
-            $overlay = SpecialOfferService::pricingOverlay($product, $contextOffer);
-            $result[] = !empty($overlay['has_offer']) ? array_merge($product, $overlay) : $product;
-        }
-
-        return $result;
+        return SpecialOfferService::applyPricingOverlays($products, $contextOffer);
     }
 
     /** @param list<array<string, mixed>> $products @return list<array<string, mixed>> */
@@ -1519,5 +1526,125 @@ final class StoreCatalogService
             'resultFilters' => $resultFilters,
             'apiError' => null,
         ];
+    }
+
+    /** @return array{stores: list<array<string, mixed>>, groups: list<array<string, mixed>>} */
+    public static function getCachedFilterOptions(): array
+    {
+        return ResponseCache::remember('store_filter_options_v1', 600, static fn (): array => self::loadFilterOptions());
+    }
+
+    /** @param array<string, mixed> $query @param array<string, mixed> $policy @return array<string, mixed>|null */
+    private static function readCatalogCache(array $query, array $policy): ?array
+    {
+        $key = self::catalogCacheKey($query, $policy);
+        if ($key === null) {
+            return null;
+        }
+
+        $cached = ResponseCache::get($key);
+
+        return is_array($cached) ? $cached : null;
+    }
+
+    /** @param array<string, mixed> $query @param array<string, mixed> $policy @param array<string, mixed> $catalog */
+    private static function writeCatalogCache(array $query, array $policy, array $catalog): void
+    {
+        $key = self::catalogCacheKey($query, $policy);
+        if ($key === null) {
+            return;
+        }
+
+        ResponseCache::set($key, $catalog, 180);
+    }
+
+    /** @param array<string, mixed> $query @param array<string, mixed> $policy */
+    private static function catalogCacheKey(array $query, array $policy): ?string
+    {
+        if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'GET') {
+            return null;
+        }
+
+        $readerKey = CustomerSession::check()
+            ? 'customer:' . trim((string) (CustomerSession::customer()['id'] ?? ''))
+            : 'guest:' . trim((string) ($policy['id'] ?? 'none'));
+
+        $params = $query;
+        unset($params['facetFilters'], $params['loadFilterOptions']);
+        ksort($params);
+
+        return 'store_catalog_v1:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
+    }
+
+    /** @param array<string, mixed> $query @param array<string, mixed> $requestFilters */
+    private static function shouldIncludeResultFilters(array $query, array $requestFilters): bool
+    {
+        if (trim((string) ($query['facetFilters'] ?? '')) === '1') {
+            return true;
+        }
+
+        return self::requestHasActiveFilters($requestFilters);
+    }
+
+    /** @param array<string, mixed> $requestFilters */
+    private static function requestHasActiveFilters(array $requestFilters): bool
+    {
+        if (trim((string) ($requestFilters['search'] ?? '')) !== '') {
+            return true;
+        }
+        foreach ([
+            'materialTypes',
+            'manufacturers',
+            'ageCategories',
+            'sizeRanges',
+            'countryOfOrigins',
+            'groupGuids',
+            'storeGuids',
+        ] as $key) {
+            if (($requestFilters[$key] ?? []) !== []) {
+                return true;
+            }
+        }
+        if (($requestFilters['isAvailable'] ?? null) !== null) {
+            return true;
+        }
+        foreach ([
+            'minWarehouseQuantity',
+            'maxWarehouseQuantity',
+            'minUnitSalePriceSyp',
+            'maxUnitSalePriceSyp',
+            'minUnitSalePriceUsd',
+            'maxUnitSalePriceUsd',
+            'minUnitPurchasePriceUsd',
+            'maxUnitPurchasePriceUsd',
+        ] as $key) {
+            if (($requestFilters[$key] ?? null) !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $query
+     * @param list<string> $visibleClientFilters
+     * @param array<string, mixed> $requestFilters
+     */
+    private static function shouldLoadFilterOptionsOnRequest(array $query, array $visibleClientFilters, array $requestFilters): bool
+    {
+        if (trim((string) ($query['loadFilterOptions'] ?? '')) === '1') {
+            return true;
+        }
+
+        if (in_array('stores', $visibleClientFilters, true) && ($requestFilters['storeGuids'] ?? []) !== []) {
+            return true;
+        }
+
+        if (in_array('groups', $visibleClientFilters, true) && ($requestFilters['groupGuids'] ?? []) !== []) {
+            return true;
+        }
+
+        return false;
     }
 }
