@@ -31,6 +31,7 @@ $storeOptions = is_array($catalog['store_options'] ?? null) ? $catalog['store_op
 $filterOptions = is_array($catalog['filterOptions'] ?? null) ? $catalog['filterOptions'] : ['stores' => [], 'groups' => []];
 $lockedClientFilters = array_map('strval', is_array($catalog['locked_client_filters'] ?? null) ? $catalog['locked_client_filters'] : []);
 $allowClientFilters = (bool) ($catalog['allow_client_filters'] ?? false);
+$filtersDeferred = (bool) ($catalog['filters_deferred'] ?? false);
 $isSectionBrowse = $sectionContext !== null;
 $products = is_array($catalog['products'] ?? null) ? $catalog['products'] : [];
 $resultFilters = is_array($catalog['resultFilters'] ?? null) ? $catalog['resultFilters'] : [];
@@ -424,7 +425,7 @@ require __DIR__ . '/partials/store-filter-group.php';
 <?php endif; ?>
 
 <!-- store-catalog-fragment:start -->
-<div class="store-layout <?= ($allowClientFilters || $isSectionBrowse) ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root>
+<div class="store-layout <?= ($allowClientFilters || $isSectionBrowse) ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?>>
   <?php if ($allowClientFilters || $isSectionBrowse): ?>
     <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
       <aside class="store-filters-sidebar">
@@ -505,7 +506,8 @@ require __DIR__ . '/partials/store-filter-group.php';
                     (array) $facetConfig['selected'],
                     (string) $facetConfig['code'],
                     5,
-                    6
+                    6,
+                    $filtersDeferred || $groupOptions === []
                 );
               ?>
             <?php endforeach; ?>
@@ -524,7 +526,7 @@ require __DIR__ . '/partials/store-filter-group.php';
                     $label = trim((string) ($store['name'] ?? '')) ?: (trim((string) ($store['code'] ?? '')) ?: $guid);
                     $storeGroupOptions[] = ['value' => $guid, 'label' => $label];
                 }
-                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, $selectedStoreGuids, 'stores', 5, 6, true);
+                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, $selectedStoreGuids, 'stores', 5, 6, $filtersDeferred || $storeGroupOptions === []);
               ?>
             <?php endif; ?>
 
@@ -561,7 +563,7 @@ require __DIR__ . '/partials/store-filter-group.php';
                         $groupGroupOptions[] = ['value' => $guid, 'label' => $label];
                     }
                 }
-                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, $selectedGroupGuids, 'groups', 5, 6, true);
+                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, $selectedGroupGuids, 'groups', 5, 6, $filtersDeferred || $groupGroupOptions === []);
               ?>
             <?php endif; ?>
 

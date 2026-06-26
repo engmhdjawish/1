@@ -40,20 +40,38 @@ try {
         echo 'Total: ' . (int) ($catalog['totalCount'] ?? 0) . "\n";
         echo 'API error: ' . (string) ($catalog['apiError'] ?? '') . "\n";
         echo 'Allow client filters: ' . ((bool) ($catalog['allow_client_filters'] ?? false) ? 'yes' : 'no') . "\n";
+        echo 'Filters deferred: ' . ((bool) ($catalog['filters_deferred'] ?? false) ? 'yes' : 'no') . "\n";
         $resultFilters = is_array($catalog['resultFilters'] ?? null) ? $catalog['resultFilters'] : [];
         $filterOptions = is_array($catalog['filterOptions'] ?? null) ? $catalog['filterOptions'] : [];
         foreach ([
             'materialTypes' => 'result materialTypes',
             'manufacturers' => 'result manufacturers',
             'groups' => 'result groups',
-        ] as $key => $label) {
+        ] as $key => $facetLabel) {
             $items = is_array($resultFilters[$key] ?? null) ? $resultFilters[$key] : [];
-            echo $label . ': ' . count($items) . "\n";
+            echo $facetLabel . ': ' . count($items) . "\n";
         }
         echo 'filter stores: ' . count(is_array($filterOptions['stores'] ?? null) ? $filterOptions['stores'] : []) . "\n";
         echo 'filter groups: ' . count(is_array($filterOptions['groups'] ?? null) ? $filterOptions['groups'] : []) . "\n";
         echo 'Elapsed ms: ' . $elapsedMs . "\n";
     }
+
+    $started = microtime(true);
+    $fullFiltersCatalog = StoreCatalogService::catalogFromRequest(['facetFilters' => '1']);
+    $fullFiltersMs = (int) round((microtime(true) - $started) * 1000);
+    echo "\n--- with facetFilters=1 (inline filters) ---\n";
+    echo 'Filters deferred: ' . ((bool) ($fullFiltersCatalog['filters_deferred'] ?? false) ? 'yes' : 'no') . "\n";
+    $inlineResultFilters = is_array($fullFiltersCatalog['resultFilters'] ?? null) ? $fullFiltersCatalog['resultFilters'] : [];
+    echo 'result materialTypes: ' . count(is_array($inlineResultFilters['materialTypes'] ?? null) ? $inlineResultFilters['materialTypes'] : []) . "\n";
+    echo 'Elapsed ms: ' . $fullFiltersMs . "\n";
+
+    $started = microtime(true);
+    $payload = StoreCatalogService::getClientFiltersPayload();
+    $deferredPayloadMs = (int) round((microtime(true) - $started) * 1000);
+    echo "\n--- deferred API payload ---\n";
+    $payloadResultFilters = is_array($payload['resultFilters'] ?? null) ? $payload['resultFilters'] : [];
+    echo 'result materialTypes: ' . count(is_array($payloadResultFilters['materialTypes'] ?? null) ? $payloadResultFilters['materialTypes'] : []) . "\n";
+    echo 'Elapsed ms: ' . $deferredPayloadMs . "\n";
 
     echo "\nOK\n";
 } catch (Throwable $e) {

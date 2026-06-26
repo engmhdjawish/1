@@ -10,9 +10,11 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: private, max-age=300');
 
 try {
+    $payload = StoreCatalogService::getClientFiltersPayload();
     echo json_encode([
         'ok' => true,
-        'filterOptions' => StoreCatalogService::getCachedFilterOptions(),
+        'filterOptions' => $payload['filterOptions'],
+        'resultFilters' => $payload['resultFilters'],
     ], JSON_UNESCAPED_UNICODE);
 } catch (Throwable $exception) {
     http_response_code(500);
@@ -20,5 +22,6 @@ try {
         'ok' => false,
         'message' => $exception->getMessage(),
         'filterOptions' => ['stores' => [], 'groups' => []],
+        'resultFilters' => [],
     ], JSON_UNESCAPED_UNICODE);
 }

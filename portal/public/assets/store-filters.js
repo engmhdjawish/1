@@ -30,33 +30,14 @@ window.portalStoreFiltersInit = (root = document) => {
   const backdrop = catalogRoot.querySelector('#store-filters-backdrop');
   const openBtn = catalogRoot.querySelector('#store-filters-open');
   const closeBtn = catalogRoot.querySelector('#store-filters-close');
-
-  const setDrawerOpen = (open) => {
-    document.body.classList.toggle('store-filters-drawer-open', open);
-    if (backdrop) {
-      backdrop.classList.toggle('is-open', open);
-      backdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
-    }
-  };
-
-  if (openBtn && openBtn.dataset.filtersBound !== '1') {
-    openBtn.dataset.filtersBound = '1';
-    openBtn.addEventListener('click', () => setDrawerOpen(true));
-  }
-  if (closeBtn && closeBtn.dataset.filtersBound !== '1') {
-    closeBtn.dataset.filtersBound = '1';
-    closeBtn.addEventListener('click', () => setDrawerOpen(false));
-  }
-  if (backdrop && backdrop.dataset.filtersBound !== '1') {
-    backdrop.dataset.filtersBound = '1';
-    backdrop.addEventListener('click', (event) => {
-      if (event.target === backdrop) {
-        setDrawerOpen(false);
-      }
-    });
-  }
+  const sidebar = catalogRoot.querySelector('.store-filters-sidebar');
 
   const setupFilterList = (list, input, toggleBtn) => {
+    if (!list || list.dataset.filtersBound === '1') {
+      return;
+    }
+    list.dataset.filtersBound = '1';
+
     const initialVisible = Number.parseInt(list.getAttribute('data-initial-visible') || '6', 10);
     let expanded = false;
 
@@ -109,67 +90,203 @@ window.portalStoreFiltersInit = (root = document) => {
     applyVisibility();
   };
 
-  catalogRoot.querySelectorAll('[data-filter-list]').forEach((list) => {
-    const groupId = list.getAttribute('data-filter-list');
-    if (!groupId || list.dataset.filtersBound === '1') {
+  const bindFilterLists = () => {
+    catalogRoot.querySelectorAll('[data-filter-list]').forEach((list) => {
+      const groupId = list.getAttribute('data-filter-list');
+      if (!groupId) {
+        return;
+      }
+      const input = catalogRoot.querySelector(`[data-filter-search="${groupId}"]`);
+      const toggleBtn = catalogRoot.querySelector(`[data-filter-toggle="${groupId}"]`);
+      if (list.dataset.filtersBound !== '1') {
+        setupFilterList(list, input, toggleBtn);
+      }
+    });
+  };
+
+  bindFilterLists();
+
+  const filterListIsEmpty = (groupId) => {
+    const list = catalogRoot.querySelector(`[data-filter-list="${groupId}"]`);
+    return Boolean(list && list.querySelectorAll('.store-filter-option').length === 0);
+  };
+
+  const needsDeferredFilters = () => {
+    if (catalogRoot.dataset.storeFiltersLoaded === '1') {
+      return false;
+    }
+    if (catalogRoot.hasAttribute('data-store-filters-deferred')) {
+      return true;
+    }
+    return ['materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins', 'stores', 'groups']
+      .some((groupId) => filterListIsEmpty(groupId));
+  };
+
+  let deferredFiltersPromise = null;
+
+  const renderStringFacetOptions = (groupId, paramName, facets) => {
+    const list = catalogRoot.querySelector(`[data-filter-list="${groupId}"]`);
+    if (!list || list.querySelectorAll('.store-filter-option').length > 0) {
       return;
     }
-    list.dataset.filtersBound = '1';
+
+    const selected = new Set(
+      Array.from(catalogRoot.querySelectorAll(`input[name="${paramName}[]"]:checked`)).map((el) => el.value)
+    );
+    const rows = (facets || []).map((facet) => {
+      const value = String(facet?.value || '').trim();
+      if (!value) {
+        return '';
+      }
+      const checked = selected.has(value) ? ' checked' : '';
+      const count = facet?.count != null
+        ? `<span class="store-filter-option-count">${Number.parseInt(String(facet.count), 10) || 0}</span>`
+        : '';
+      return `<label class="store-filter-option" data-filter-label="${value.replace(/"/g, '&quot;')}">`
+        + `<input type="checkbox" name="${paramName}[]" value="${value.replace(/"/g, '&quot;')}"${checked}>`
+        + `<span class="store-filter-option-text">${value}</span>${count}`
+        + '</label>';
+    }).join('');
+    if (!rows) {
+      return;
+    }
+    list.innerHTML = rows;
+    list.dataset.filtersBound = '0';
     const input = catalogRoot.querySelector(`[data-filter-search="${groupId}"]`);
     const toggleBtn = catalogRoot.querySelector(`[data-filter-toggle="${groupId}"]`);
     setupFilterList(list, input, toggleBtn);
-  });
-
-  const needsGuidOptions = (groupId) => {
-    const list = catalogRoot.querySelector(`[data-filter-list="${groupId}"]`);
-    return list && list.querySelectorAll('.store-filter-option').length === 0;
   };
 
-  if (needsGuidOptions('stores') || needsGuidOptions('groups')) {
-    fetch('/api/store-filter-options.php', {
+  const renderGuidFacetOptions = (groupId, paramName, items) => {
+    const list = catalogRoot.querySelector(`[data-filter-list="${groupId}"]`);
+    if (!list || list.querySelectorAll('.store-filter-option').length > 0) {
+      return;
+    }
+
+    const selected = new Set(
+      Array.from(catalogRoot.querySelectorAll(`input[name="${paramName}[]"]:checked`)).map((el) => el.value.toLowerCase())
+    );
+    const rows = (items || []).map((item) => {
+      const value = String(item?.guid || item?.Guid || '').trim();
+      if (!value) {
+        return '';
+      }
+      const label = String(item?.name || item?.Name || item?.code || item?.Code || value);
+      const checked = selected.has(value.toLowerCase()) ? ' checked' : '';
+      const count = item?.count != null
+        ? `<span class="store-filter-option-count">${Number.parseInt(String(item.count), 10) || 0}</span>`
+        : '';
+      return `<label class="store-filter-option" data-filter-label="${label.replace(/"/g, '&quot;')}">`
+        + `<input type="checkbox" name="${paramName}[]" value="${value.replace(/"/g, '&quot;')}"${checked}>`
+        + `<span class="store-filter-option-text">${label}</span>${count}`
+        + '</label>';
+    }).join('');
+    if (!rows) {
+      return;
+    }
+    list.innerHTML = rows;
+    list.dataset.filtersBound = '0';
+    const input = catalogRoot.querySelector(`[data-filter-search="${groupId}"]`);
+    const toggleBtn = catalogRoot.querySelector(`[data-filter-toggle="${groupId}"]`);
+    setupFilterList(list, input, toggleBtn);
+  };
+
+  const applyDeferredFilters = (data) => {
+    if (!data?.ok) {
+      throw new Error(data?.message || 'تعذر تحميل خيارات الفلاتر.');
+    }
+
+    const resultFilters = data.resultFilters || {};
+    const filterOptions = data.filterOptions || {};
+    const facetMap = [
+      ['materialTypes', 'materialTypes'],
+      ['ageCategories', 'ageCategories'],
+      ['manufacturers', 'manufacturers'],
+      ['sizeRanges', 'sizeRanges'],
+      ['countryOfOrigins', 'countryOfOrigins'],
+    ];
+
+    facetMap.forEach(([groupId, paramName]) => {
+      renderStringFacetOptions(groupId, paramName, resultFilters[groupId] || []);
+    });
+
+    const groupFacets = Array.isArray(resultFilters.groups) && resultFilters.groups.length > 0
+      ? resultFilters.groups
+      : (filterOptions.groups || []);
+    renderGuidFacetOptions('groups', 'groupGuids', groupFacets);
+    renderGuidFacetOptions('stores', 'storeGuids', filterOptions.stores || []);
+
+    catalogRoot.dataset.storeFiltersLoaded = '1';
+    catalogRoot.removeAttribute('data-store-filters-deferred');
+  };
+
+  const loadDeferredFilters = () => {
+    if (!needsDeferredFilters()) {
+      return Promise.resolve();
+    }
+    if (deferredFiltersPromise) {
+      return deferredFiltersPromise;
+    }
+
+    sidebar?.classList.add('is-loading-options');
+    deferredFiltersPromise = fetch('/api/store-filter-options.php', {
       credentials: 'same-origin',
       headers: { Accept: 'application/json' },
     })
       .then((response) => response.json())
       .then((data) => {
-        if (!data?.ok) {
-          return;
-        }
-        const options = data.filterOptions || {};
-        const renderGuidOptions = (groupId, paramName, items) => {
-          const list = catalogRoot.querySelector(`[data-filter-list="${groupId}"]`);
-          if (!list || list.querySelectorAll('.store-filter-option').length > 0) {
-            return;
-          }
-          const selected = new Set(
-            Array.from(catalogRoot.querySelectorAll(`input[name="${paramName}[]"]:checked`)).map((el) => el.value.toLowerCase())
-          );
-          const rows = (items || []).map((item) => {
-            const value = String(item.guid || item.Guid || '');
-            if (!value) {
-              return '';
-            }
-            const label = String(item.name || item.Name || item.code || item.Code || value);
-            const checked = selected.has(value.toLowerCase()) ? ' checked' : '';
-            return '<label class="store-filter-option" data-filter-label="' + label.replace(/"/g, '&quot;') + '">'
-              + '<input type="checkbox" name="' + paramName + '[]" value="' + value.replace(/"/g, '&quot;') + '"' + checked + '>'
-              + '<span class="store-filter-option-text">' + label + '</span>'
-              + '</label>';
-          }).join('');
-          if (!rows) {
-            return;
-          }
-          list.innerHTML = rows;
-          list.dataset.filtersBound = '0';
-          const input = catalogRoot.querySelector(`[data-filter-search="${groupId}"]`);
-          const toggleBtn = catalogRoot.querySelector(`[data-filter-toggle="${groupId}"]`);
-          setupFilterList(list, input, toggleBtn);
-        };
-        renderGuidOptions('stores', 'storeGuids', options.stores || []);
-        renderGuidOptions('groups', 'groupGuids', options.groups || []);
+        applyDeferredFilters(data);
       })
-      .catch(() => {});
+      .finally(() => {
+        sidebar?.classList.remove('is-loading-options');
+      });
+
+    return deferredFiltersPromise;
+  };
+
+  const scheduleDeferredFilters = () => {
+    if (!needsDeferredFilters()) {
+      return;
+    }
+    const run = () => {
+      loadDeferredFilters().catch(() => {});
+    };
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(run, { timeout: 2000 });
+    } else {
+      window.setTimeout(run, 600);
+    }
+  };
+
+  const setDrawerOpen = (open) => {
+    document.body.classList.toggle('store-filters-drawer-open', open);
+    if (backdrop) {
+      backdrop.classList.toggle('is-open', open);
+      backdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
+    }
+    if (open) {
+      loadDeferredFilters().catch(() => {});
+    }
+  };
+
+  if (openBtn && openBtn.dataset.filtersBound !== '1') {
+    openBtn.dataset.filtersBound = '1';
+    openBtn.addEventListener('click', () => setDrawerOpen(true));
   }
+  if (closeBtn && closeBtn.dataset.filtersBound !== '1') {
+    closeBtn.dataset.filtersBound = '1';
+    closeBtn.addEventListener('click', () => setDrawerOpen(false));
+  }
+  if (backdrop && backdrop.dataset.filtersBound !== '1') {
+    backdrop.dataset.filtersBound = '1';
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop) {
+        setDrawerOpen(false);
+      }
+    });
+  }
+
+  scheduleDeferredFilters();
 };
 
 if (document.readyState === 'loading') {

@@ -165,7 +165,10 @@ final class StoreCatalogService
             $mergedFilters['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
         }
 
-        $includeResultFilters = $allowClientFilters;
+        $deferClientFilters = $allowClientFilters
+            && !self::shouldIncludeResultFilters($query, $requestFilters);
+
+        $includeResultFilters = $allowClientFilters && !$deferClientFilters;
 
         try {
             if ($sellableMode) {
@@ -271,14 +274,15 @@ final class StoreCatalogService
             $apiError = $exception->getMessage();
         }
 
-        $filterOptions = $allowClientFilters
-            ? self::getCachedFilterOptions()
-            : ['stores' => [], 'groups' => []];
-        if ($allowClientFilters && self::resultFiltersAreEmpty($resultFilters)) {
-            $resultFilters = self::scopeResultFiltersForPolicy(
-                self::buildResultFiltersFromFilterOptions($filterOptions),
-                $policyRules
-            );
+        $filterOptions = ['stores' => [], 'groups' => []];
+        if ($allowClientFilters && !$deferClientFilters) {
+            $filterOptions = self::getCachedFilterOptions();
+            if (self::resultFiltersAreEmpty($resultFilters)) {
+                $resultFilters = self::scopeResultFiltersForPolicy(
+                    self::buildResultFiltersFromFilterOptions($filterOptions),
+                    $policyRules
+                );
+            }
         }
         if ($storeGuids !== [] || self::parseList($policyRules['store_guids'] ?? []) !== []) {
             $forcedStoreGuids = self::parseList($policyRules['store_guids'] ?? []);
@@ -327,6 +331,7 @@ final class StoreCatalogService
             'locked_client_filters' => $lockedClientFilters,
             'store_options' => $storeOptions,
             'allow_client_filters' => $allowClientFilters,
+            'filters_deferred' => $deferClientFilters,
             'filters' => $displayFilters,
         ];
 
@@ -1739,6 +1744,9 @@ final class StoreCatalogService
     /** @param array<string, mixed> $catalog */
     private static function shouldRejectCachedCatalog(array $catalog): bool
     {
+        if ((bool) ($catalog['filters_deferred'] ?? false)) {
+            return false;
+        }
         if (!(bool) ($catalog['allow_client_filters'] ?? false)) {
             return false;
         }
@@ -1750,6 +1758,31 @@ final class StoreCatalogService
         }
 
         return self::resultFiltersAreEmpty(is_array($catalog['resultFilters'] ?? null) ? $catalog['resultFilters'] : []);
+    }
+
+    /** @return array{filterOptions: array<string, mixed>, resultFilters: array<string, mixed>} */
+    public static function getClientFiltersPayload(): array
+    {
+        $policy = self::activePolicy();
+        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
+        $filterOptions = self::getCachedFilterOptions();
+        $forcedStoreGuids = self::parseList($policyRules['store_guids'] ?? []);
+        if ($forcedStoreGuids !== []) {
+            $forcedStoreMap = array_flip(array_map('strtolower', $forcedStoreGuids));
+            $filterOptions['stores'] = array_values(array_filter(
+                is_array($filterOptions['stores'] ?? null) ? $filterOptions['stores'] : [],
+                static fn (array $store): bool => isset($forcedStoreMap[strtolower((string) ($store['guid'] ?? ''))])
+            ));
+        }
+        $resultFilters = self::scopeResultFiltersForPolicy(
+            self::buildResultFiltersFromFilterOptions($filterOptions),
+            $policyRules
+        );
+
+        return [
+            'filterOptions' => $filterOptions,
+            'resultFilters' => $resultFilters,
+        ];
     }
 
     /** @param array<string, mixed> $query @param array<string, mixed> $requestFilters */
