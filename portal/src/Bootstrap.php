@@ -40,6 +40,7 @@ final class Bootstrap
         if (!self::shouldSkipWebRuntime() && session_status() !== PHP_SESSION_ACTIVE) {
             session_name(Config::get('PORTAL_SESSION_NAME', 'portal_session'));
             session_start();
+            \Portal\Services\PortalSessionService::bootstrap();
         }
 
         self::$booted = true;

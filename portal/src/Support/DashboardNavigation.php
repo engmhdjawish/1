@@ -212,6 +212,7 @@ final class DashboardNavigation
             'العملاء والمبيعات' => [
                 ['route' => '/dashboard/customers.php', 'label' => 'عملاء الموقع', 'icon' => 'group', 'permission' => 'web_customers.view'],
                 ['route' => '/dashboard/visitor-analytics.php', 'label' => 'نشاط الزوار', 'icon' => 'travel_explore', 'permission' => ['visitors.view', 'orders.view']],
+                ['route' => '/dashboard/sessions.php', 'label' => 'المتصلون الآن', 'icon' => 'sensors', 'permission' => 'sessions.manage'],
                 ['route' => '/dashboard/notifications.php', 'label' => 'الإشعارات', 'icon' => 'notifications', 'permission' => 'notifications.manage'],
                 ['route' => '/dashboard/share-links.php', 'label' => 'روابط المشاركة', 'icon' => 'share', 'permission' => 'share_links.manage'],
             ],

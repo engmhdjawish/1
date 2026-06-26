@@ -216,6 +216,15 @@ if ($customer) {
 <script src="<?= h(portal_asset_url('/assets/pwa.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/site-page-loading.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/notifications.js')) ?>" defer></script>
+<?php if ($staffLoggedIn || $customer !== null): ?>
+<script>
+(function () {
+  const beat = () => fetch('/api/session-heartbeat.php', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+  beat();
+  window.setInterval(beat, 60000);
+})();
+</script>
+<?php endif; ?>
 <?php if (!empty($extraFooter ?? '')): ?>
   <?= $extraFooter ?>
 <?php endif; ?>

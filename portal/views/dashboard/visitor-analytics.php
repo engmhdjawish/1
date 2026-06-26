@@ -11,6 +11,7 @@ declare(strict_types=1);
 /** @var list<array<string, mixed>> $sessions */
 /** @var list<array<string, mixed>> $sessionEvents */
 /** @var list<array<string, mixed>> $mapPoints */
+/** @var list<array<string, mixed>> $locationStats */
 /** @var int $days */
 /** @var bool $schemaReady */
 /** @var string $sessionId */
@@ -26,6 +27,7 @@ $topReferrers = is_array($topReferrers ?? null) ? $topReferrers : [];
 $sessions = is_array($sessions ?? null) ? $sessions : [];
 $sessionEvents = is_array($sessionEvents ?? null) ? $sessionEvents : [];
 $mapPoints = is_array($mapPoints ?? null) ? $mapPoints : [];
+$locationStats = is_array($locationStats ?? null) ? $locationStats : [];
 $days = (int) ($days ?? 7);
 $schemaReady = (bool) ($schemaReady ?? false);
 $sessionId = trim((string) ($sessionId ?? ''));
@@ -40,9 +42,9 @@ $buildUrl = static function (array $params = []) use ($days, $sessionId): string
 <section class="mb-6">
   <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-extrabold text-slate-900">نشاط الزوار والعملاء</h1>
+      <h1 class="text-2xl font-extrabold text-slate-900">نشاط الزوار</h1>
       <p class="text-sm text-text-muted mt-1">
-        رؤية تفصيلية لزيارات الموقع، اهتمام الزوار بالأصناف، وسلوك الجلسات خلال آخر <?= h((string) $days) ?> يوماً.
+        ملخص مبسّط لسلوك الزوار خلال آخر <?= h((string) $days) ?> يوماً — ماذا شاهدوا وأين كانوا تقريباً.
       </p>
     </div>
     <form method="get" class="flex items-end gap-3">
@@ -69,35 +71,82 @@ $buildUrl = static function (array $params = []) use ($days, $sessionId): string
   </div>
 <?php endif; ?>
 
-<div class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 mb-6">
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
   <?php
   $statCards = [
-      ['label' => 'إجمالي الأحداث', 'value' => $summary['total_events'] ?? 0],
-      ['label' => 'زيارات الصفحات', 'value' => $summary['page_views'] ?? 0],
-      ['label' => 'مشاهدات الأصناف', 'value' => $summary['product_views'] ?? 0],
-      ['label' => 'إضافات للسلة', 'value' => $summary['cart_adds'] ?? 0],
-      ['label' => 'جلسات فريدة', 'value' => $summary['unique_sessions'] ?? 0],
-      ['label' => 'عناوين IP', 'value' => $summary['unique_ips'] ?? 0],
-      ['label' => 'زيارات مسجّلين', 'value' => $summary['registered_hits'] ?? 0],
+      ['label' => 'زيارات الصفحات', 'value' => $summary['page_views'] ?? 0, 'hint' => 'عدد مرات فتح صفحات الموقع'],
+      ['label' => 'شاهدوا منتجات', 'value' => $summary['product_views'] ?? 0, 'hint' => 'معاينة أو صفحة منتج'],
+      ['label' => 'أضافوا للسلة', 'value' => $summary['cart_adds'] ?? 0, 'hint' => 'محاولات شراء فعلية'],
+      ['label' => 'زوار مسجّلون', 'value' => $summary['registered_hits'] ?? 0, 'hint' => 'أحداث من حسابات عملاء'],
   ];
   foreach ($statCards as $card): ?>
-    <div class="rounded-2xl border border-border-subtle bg-white p-4 shadow-sm">
+    <div class="rounded-2xl border border-border-subtle bg-white p-4 shadow-sm" title="<?= h($card['hint']) ?>">
       <p class="text-xs font-bold text-text-muted"><?= h($card['label']) ?></p>
       <p class="text-2xl font-extrabold text-slate-900 mt-1"><?= number_format((int) $card['value']) ?></p>
     </div>
   <?php endforeach; ?>
 </div>
 
-<?php if ($actionBreakdown !== []): ?>
-  <div class="mb-6 flex flex-wrap gap-2">
-    <?php foreach ($actionBreakdown as $item): ?>
-      <span class="inline-flex items-center gap-2 rounded-full border border-border-subtle bg-white px-3 py-1.5 text-xs font-bold text-slate-700">
-        <?= h((string) ($item['label_ar'] ?? $item['action'] ?? '')) ?>
-        <span class="rounded-full bg-slate-100 px-2 py-0.5 text-slate-900"><?= number_format((int) ($item['hits'] ?? 0)) ?></span>
-      </span>
-    <?php endforeach; ?>
+<?php if ($locationStats !== []): ?>
+  <div class="mb-6 rounded-2xl border border-border-subtle bg-white shadow-sm overflow-hidden">
+    <div class="px-4 py-3 border-b border-border-subtle">
+      <h2 class="text-lg font-extrabold text-slate-900">من أين يزورون؟</h2>
+      <p class="text-sm text-text-muted mt-0.5">تقدير من عنوان الشبكة (IP). قد يختلف مع VPN أو الشبكات الخلوية.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-surface-low text-text-muted">
+          <tr>
+            <th class="px-4 py-3 text-right font-bold">البلد</th>
+            <th class="px-4 py-3 text-right font-bold">المدينة</th>
+            <th class="px-4 py-3 text-right font-bold">زيارات</th>
+            <th class="px-4 py-3 text-right font-bold">جلسات</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border-subtle">
+          <?php foreach ($locationStats as $row): ?>
+            <tr>
+              <td class="px-4 py-3 font-bold text-slate-900"><?= h((string) ($row['country'] ?? '—')) ?></td>
+              <td class="px-4 py-3 text-text-muted"><?= h((string) ($row['city'] ?? '—')) ?></td>
+              <td class="px-4 py-3"><?= number_format((int) ($row['hits'] ?? 0)) ?></td>
+              <td class="px-4 py-3"><?= number_format((int) ($row['sessions'] ?? 0)) ?></td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
   </div>
 <?php endif; ?>
+
+<details class="mb-6 rounded-2xl border border-border-subtle bg-white shadow-sm">
+  <summary class="cursor-pointer px-4 py-3 text-sm font-bold text-slate-800">تفاصيل تقنية إضافية</summary>
+  <div class="px-4 pb-4 pt-2 border-t border-border-subtle">
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+      <?php
+      $techCards = [
+          ['label' => 'إجمالي الأحداث', 'value' => $summary['total_events'] ?? 0],
+          ['label' => 'جلسات فريدة', 'value' => $summary['unique_sessions'] ?? 0],
+          ['label' => 'عناوين IP', 'value' => $summary['unique_ips'] ?? 0],
+      ];
+      foreach ($techCards as $card): ?>
+        <div class="rounded-xl border border-border-subtle bg-surface-low p-3">
+          <p class="text-xs font-bold text-text-muted"><?= h($card['label']) ?></p>
+          <p class="text-xl font-extrabold text-slate-900 mt-1"><?= number_format((int) $card['value']) ?></p>
+        </div>
+      <?php endforeach; ?>
+    </div>
+    <?php if ($actionBreakdown !== []): ?>
+      <div class="flex flex-wrap gap-2">
+        <?php foreach ($actionBreakdown as $item): ?>
+          <span class="inline-flex items-center gap-2 rounded-full border border-border-subtle bg-white px-3 py-1.5 text-xs font-bold text-slate-700">
+            <?= h((string) ($item['label_ar'] ?? $item['action'] ?? '')) ?>
+            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-slate-900"><?= number_format((int) ($item['hits'] ?? 0)) ?></span>
+          </span>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+  </div>
+</details>
 
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
   <div class="rounded-2xl border border-border-subtle bg-white shadow-sm overflow-hidden">

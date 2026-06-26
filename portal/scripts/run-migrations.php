@@ -39,6 +39,8 @@ $ordered = [
     '005-visitor-logs.sql',
     '006-notifications.sql',
     '008-push-subscriptions.sql',
+    '009-web-sessions-tracking.sql',
+    '010-sessions-permission.sql',
     '007-staff-roles-reorganization.sql',
 ];
 
