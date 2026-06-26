@@ -470,13 +470,9 @@
     banner.innerHTML = `<span class="material-symbols-outlined text-base" aria-hidden="true">shopping_cart_checkout</span><span>في السلة</span><span class="store-num" dir="ltr">${esc(qtyLabel)}</span><span>${esc(item.packageUnit || 'طرد')}</span>`;
   };
 
-  const syncCartQtyFromDom = (p) => {
-    const card = document.querySelector(`[data-preview-guid="${CSS.escape(p.guid)}"]`);
-    const form = card?.querySelector('[data-store-add-cart]');
-    if (!form) return p;
-    const inCart = Math.max(0, parseFloat(form.dataset.cartQty || '0') || 0);
+  const applyCartQtyToPayload = (p, inCart) => {
     const next = { ...p, cartQty: inCart };
-    if (next.effectiveMax != null) {
+    if (next.effectiveMax != null || next.maxPackages != null) {
       const policyRemaining = next.maxPackages != null
         ? Math.max(0, Number(next.maxPackages) - inCart)
         : null;
@@ -487,11 +483,50 @@
       if (stockRemaining !== null) {
         effective = effective !== null ? Math.min(effective, stockRemaining) : stockRemaining;
       }
-      next.effectiveMax = effective;
-      next.remaining = effective;
-      next.atLimit = effective !== null && effective <= 0;
+      if (effective !== null) {
+        next.effectiveMax = effective;
+        next.remaining = effective;
+        next.atLimit = effective <= 0;
+      }
     }
     return next;
+  };
+
+  const resolveCartQtyForGuid = (guid) => {
+    if (!guid) return null;
+
+    const previewForm = modal.querySelector(
+      `[data-store-add-cart][data-material-guid="${CSS.escape(guid)}"]`,
+    );
+    if (previewForm) {
+      return Math.max(0, parseFloat(previewForm.dataset.cartQty || '0') || 0);
+    }
+
+    const card = document.querySelector(`[data-preview-guid="${CSS.escape(guid)}"]`);
+    const cardForm = card?.querySelector('[data-store-add-cart]');
+    if (cardForm) {
+      return Math.max(0, parseFloat(cardForm.dataset.cartQty || '0') || 0);
+    }
+
+    if (card) {
+      try {
+        const payload = JSON.parse(card.getAttribute('data-preview') || '{}');
+        if (payload?.guid === guid) {
+          return Math.max(0, Number(payload.cartQty) || 0);
+        }
+      } catch {
+        // ignore invalid preview payload
+      }
+    }
+
+    return null;
+  };
+
+  const syncCartQtyFromDom = (p) => {
+    if (!p?.guid) return p;
+    const resolved = resolveCartQtyForGuid(p.guid);
+    if (resolved === null) return p;
+    return applyCartQtyToPayload(p, resolved);
   };
 
   const updateNav = () => {
@@ -729,10 +764,27 @@
     initFromUrl();
   }
 
-  document.addEventListener('store-cart-updated', () => {
+  document.addEventListener('store-cart-updated', (event) => {
     if (modal.hidden || state.items.length === 0) return;
     const current = state.items[state.index];
     if (!current?.guid) return;
-    render(syncCartQtyFromDom(current));
+
+    const qtyMap = event.detail?.cart_qty_by_guid;
+    if (qtyMap && typeof qtyMap === 'object') {
+      state.items = state.items.map((item) => {
+        if (!item?.guid) return item;
+        const raw = qtyMap[item.guid]
+          ?? qtyMap[item.guid.toLowerCase()]
+          ?? qtyMap[item.guid.toUpperCase()];
+        if (raw !== undefined) {
+          return applyCartQtyToPayload(item, Math.max(0, Number(raw) || 0));
+        }
+        return syncCartQtyFromDom(item);
+      });
+    } else {
+      state.items[state.index] = syncCartQtyFromDom(current);
+    }
+
+    render(state.items[state.index]);
   });
 })();
