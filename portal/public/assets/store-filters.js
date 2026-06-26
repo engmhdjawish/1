@@ -45,7 +45,8 @@ window.portalStoreFiltersInit = (root = document) => {
       const query = (input?.value || '').trim().toLowerCase();
       const searching = query !== '';
 
-      list.querySelectorAll('.store-filter-option').forEach((row, index) => {
+      let visibleIndex = 0;
+      list.querySelectorAll('.store-filter-option').forEach((row) => {
         const label = (row.getAttribute('data-filter-label') || '').toLowerCase();
         const matchesSearch = !searching || label.includes(query);
         row.classList.toggle('is-search-hidden', !matchesSearch);
@@ -55,8 +56,9 @@ window.portalStoreFiltersInit = (root = document) => {
         }
 
         const checked = Boolean(row.querySelector('input')?.checked);
-        const shouldCollapse = !searching && !expanded && !checked && index >= initialVisible;
+        const shouldCollapse = !searching && !expanded && !checked && visibleIndex >= initialVisible;
         row.classList.toggle('is-collapsed', shouldCollapse);
+        visibleIndex += 1;
       });
 
       if (!toggleBtn) {
@@ -124,6 +126,50 @@ window.portalStoreFiltersInit = (root = document) => {
 
   let deferredFiltersPromise = null;
 
+  const ensureFilterGroupControls = (groupId, optionCount) => {
+    const accordion = catalogRoot.querySelector(`[data-filter-group="${groupId}"]`);
+    const body = accordion?.querySelector('.store-filter-accordion-body');
+    const list = body?.querySelector(`[data-filter-list="${groupId}"]`);
+    if (!body || !list) {
+      return;
+    }
+
+    const initialVisible = Number.parseInt(list.getAttribute('data-initial-visible') || '6', 10);
+    const searchThreshold = 5;
+    const title = accordion?.querySelector('.store-filter-accordion-summary span')?.textContent?.trim() || '';
+
+    if (optionCount >= searchThreshold && !body.querySelector(`[data-filter-search="${groupId}"]`)) {
+      const input = document.createElement('input');
+      input.type = 'search';
+      input.className = 'store-filter-search';
+      input.placeholder = title ? `ابحث في ${title}...` : 'بحث...';
+      input.dataset.filterSearch = groupId;
+      input.autocomplete = 'off';
+      body.insertBefore(input, list);
+    }
+
+    let toggleBtn = body.querySelector(`[data-filter-toggle="${groupId}"]`);
+    if (optionCount > initialVisible) {
+      if (!toggleBtn) {
+        toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.className = 'store-filter-toggle-more';
+        toggleBtn.dataset.filterToggle = groupId;
+        body.appendChild(toggleBtn);
+      }
+      toggleBtn.hidden = false;
+    } else if (toggleBtn) {
+      toggleBtn.hidden = true;
+    }
+
+    list.dataset.filtersBound = '0';
+    setupFilterList(
+      list,
+      body.querySelector(`[data-filter-search="${groupId}"]`),
+      body.querySelector(`[data-filter-toggle="${groupId}"]`)
+    );
+  };
+
   const renderStringFacetOptions = (groupId, paramName, facets) => {
     const list = catalogRoot.querySelector(`[data-filter-list="${groupId}"]`);
     if (!list || list.querySelectorAll('.store-filter-option').length > 0) {
@@ -151,10 +197,7 @@ window.portalStoreFiltersInit = (root = document) => {
       return;
     }
     list.innerHTML = rows;
-    list.dataset.filtersBound = '0';
-    const input = catalogRoot.querySelector(`[data-filter-search="${groupId}"]`);
-    const toggleBtn = catalogRoot.querySelector(`[data-filter-toggle="${groupId}"]`);
-    setupFilterList(list, input, toggleBtn);
+    ensureFilterGroupControls(groupId, (facets || []).filter((facet) => String(facet?.value || '').trim() !== '').length);
   };
 
   const renderGuidFacetOptions = (groupId, paramName, items) => {
@@ -185,10 +228,7 @@ window.portalStoreFiltersInit = (root = document) => {
       return;
     }
     list.innerHTML = rows;
-    list.dataset.filtersBound = '0';
-    const input = catalogRoot.querySelector(`[data-filter-search="${groupId}"]`);
-    const toggleBtn = catalogRoot.querySelector(`[data-filter-toggle="${groupId}"]`);
-    setupFilterList(list, input, toggleBtn);
+    ensureFilterGroupControls(groupId, (items || []).filter((item) => String(item?.guid || item?.Guid || '').trim() !== '').length);
   };
 
   const applyDeferredFilters = (data) => {

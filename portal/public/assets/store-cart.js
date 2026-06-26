@@ -1,5 +1,6 @@
 (() => {
   const API = '/api/store-cart.php';
+  let lastCartData = null;
 
   const toastHost = () => {
     let host = document.getElementById('storeCartToastHost');
@@ -419,57 +420,74 @@
     });
   };
 
-  const bindAddForms = () => {
-    document.querySelectorAll('[data-store-add-cart]').forEach((form) => {
-      if (form.dataset.ajaxBound === '1') return;
-      form.dataset.ajaxBound = '1';
-      form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const btn = form.querySelector('[type="submit"]');
-        const addQty = getRequestedQty(form);
-        const currentQty = getCurrentInCart(form);
-        const check = validateQty(form, addQty, currentQty);
-        if (!check.ok) {
-          showToast(check.message, 'error');
-          return;
-        }
-        btn?.classList.add('is-loading');
-        const formData = new FormData(form);
-        const payload = { action: 'add' };
-        formData.forEach((value, key) => {
-          if (key === 'action') return;
-          payload[key] = value;
-        });
-        try {
-          const data = await apiRequest(payload);
-          if (data.cart_qty_by_guid) {
-            document.querySelectorAll('[data-store-add-cart]').forEach((f) => syncFormLimits(f, data.cart_qty_by_guid));
-          }
-          updateBadge(data.cart_count);
-          if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
-          if (!data.ok) return;
-          if (window.SiteAnalytics) {
-            window.SiteAnalytics.track('add_to_cart', {
-              product_guid: String(payload.material_guid || form.dataset.materialGuid || ''),
-              product_code: String(payload.material_code || ''),
-              product_name: String(payload.material_name_ar || ''),
-              quantity: String(payload.quantity || '1'),
-              label_ar: `إضافة للسلة: ${String(payload.material_name_ar || 'صنف')}`,
-            });
-          }
-          if (inputReset(form)) {
-            const step = getQtyStep(form);
-            form.querySelector('[name="quantity"]').value = String(step);
-          }
-        } catch {
-          showToast('تعذر الاتصال بالخادم.', 'error');
-        } finally {
-          btn?.classList.remove('is-loading');
-        }
-      });
+  const submitAddCartForm = async (form) => {
+    if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-store-add-cart')) {
+      return;
+    }
+    if (form.dataset.ajaxSubmitting === '1') {
+      return;
+    }
+    form.dataset.ajaxSubmitting = '1';
+    const btn = form.querySelector('[type="submit"]');
+    const addQty = getRequestedQty(form);
+    const currentQty = getCurrentInCart(form);
+    const check = validateQty(form, addQty, currentQty);
+    if (!check.ok) {
+      showToast(check.message, 'error');
+      delete form.dataset.ajaxSubmitting;
+      return;
+    }
+    btn?.classList.add('is-loading');
+    const formData = new FormData(form);
+    const payload = { action: 'add' };
+    formData.forEach((value, key) => {
+      if (key === 'action') return;
+      payload[key] = value;
     });
+    try {
+      const data = await apiRequest(payload);
+      if (data.cart_qty_by_guid) {
+        document.querySelectorAll('[data-store-add-cart]').forEach((f) => syncFormLimits(f, data.cart_qty_by_guid));
+      }
+      updateBadge(data.cart_count);
+      if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
+      if (!data.ok) return;
+      if (window.SiteAnalytics) {
+        window.SiteAnalytics.track('add_to_cart', {
+          product_guid: String(payload.material_guid || form.dataset.materialGuid || ''),
+          product_code: String(payload.material_code || ''),
+          product_name: String(payload.material_name_ar || ''),
+          quantity: String(payload.quantity || '1'),
+          label_ar: `إضافة للسلة: ${String(payload.material_name_ar || 'صنف')}`,
+        });
+      }
+      if (inputReset(form)) {
+        const step = getQtyStep(form);
+        form.querySelector('[name="quantity"]').value = String(step);
+      }
+    } catch {
+      showToast('تعذر الاتصال بالخادم.', 'error');
+    } finally {
+      btn?.classList.remove('is-loading');
+      delete form.dataset.ajaxSubmitting;
+    }
+  };
+
+  const bindAddForms = () => {
     bindQtySteppers();
   };
+
+  if (!window.__storeCartSubmitCaptureBound) {
+    window.__storeCartSubmitCaptureBound = true;
+    document.addEventListener('submit', (event) => {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-store-add-cart')) {
+        return;
+      }
+      event.preventDefault();
+      submitAddCartForm(form);
+    }, true);
+  }
 
   const inputReset = (form) => form.querySelector('[name="quantity"]');
 
@@ -540,6 +558,7 @@
     if (loadingEl) {
       loadingEl.hidden = true;
     }
+    root.classList.remove('is-loading-cart');
 
     const noticeEl = root.querySelector('[data-cart-notice]');
     const errorEl = root.querySelector('[data-cart-error]');
@@ -741,13 +760,23 @@
 
   const applyCartResponse = (data) => {
     if (!data || typeof data !== 'object') return;
-    document.querySelectorAll('[data-store-cart-page]').forEach((root) => {
-      renderCartRoot(root, data);
-    });
+    lastCartData = data;
     updateBadge(data.cart_count);
     if (data.cart_qty_by_guid) {
       document.querySelectorAll('[data-store-add-cart]').forEach((f) => syncFormLimits(f, data.cart_qty_by_guid));
     }
+
+    const pageRoot = document.querySelector('[data-store-cart-page="1"]');
+    if (pageRoot) {
+      renderCartRoot(pageRoot, data);
+    }
+
+    const drawer = cartDrawer();
+    const drawerRoot = drawer?.querySelector('[data-store-cart-drawer-root]');
+    if (drawerRoot && drawer.classList.contains('is-open')) {
+      renderCartRoot(drawerRoot, data);
+    }
+
     if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
   };
 
@@ -769,19 +798,24 @@
     const drawer = cartDrawer();
     const root = drawer?.querySelector('[data-store-cart-drawer-root]');
     if (!root) return;
+
     const loadingEl = root.querySelector('[data-cart-drawer-loading]');
-    if (loadingEl) {
-      loadingEl.hidden = false;
-    }
+    const bodyEl = root.querySelector('[data-cart-body]');
+    const summaryEl = root.querySelector('[data-cart-summary]');
+    if (loadingEl) loadingEl.hidden = false;
+    root.classList.add('is-loading-cart');
+    if (bodyEl) bodyEl.innerHTML = '';
+    if (summaryEl) summaryEl.innerHTML = '';
+
     try {
       const res = await fetch(`${API}?reconcile=1`, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
       const data = await res.json();
+      lastCartData = data;
       renderCartRoot(root, data);
     } catch {
       showToast('تعذر تحميل السلة.', 'error');
-      if (loadingEl) {
-        loadingEl.hidden = true;
-      }
+      if (loadingEl) loadingEl.hidden = true;
+      root.classList.remove('is-loading-cart');
     }
   };
 

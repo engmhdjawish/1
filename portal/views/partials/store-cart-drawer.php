@@ -24,19 +24,24 @@ $isLoggedInCustomer = is_array($customer ?? null);
       </button>
     </header>
     <div
-      class="store-cart-drawer__body"
+      class="store-cart-drawer__shell"
       data-store-cart-drawer-root
       data-store-cart-page="drawer"
       data-default-name="<?= h($defaultGuestName) ?>"
       data-default-phone="<?= h($defaultGuestPhone) ?>"
       data-logged-in="<?= $isLoggedInCustomer ? '1' : '0' ?>"
     >
-      <p class="store-cart-drawer__loading" data-cart-drawer-loading>جاري تحميل السلة...</p>
-      <p class="mb-4 hidden rounded-xl border border-red-200 bg-red-50 text-red-700 px-4 py-3 text-sm" data-cart-error></p>
-      <p class="mb-4 hidden rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm" data-cart-notice></p>
-      <div class="hidden mb-4" data-cart-stock-notices></div>
-      <div data-cart-body></div>
-      <aside data-cart-summary></aside>
+      <div class="store-cart-drawer__loading-overlay" data-cart-drawer-loading hidden>
+        <span class="store-cart-drawer__spinner" aria-hidden="true"></span>
+        <span>جاري تحميل السلة...</span>
+      </div>
+      <div class="store-cart-drawer__scroll">
+        <p class="mb-4 hidden rounded-xl border border-red-200 bg-red-50 text-red-700 px-4 py-3 text-sm" data-cart-error></p>
+        <p class="mb-4 hidden rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm" data-cart-notice></p>
+        <div class="hidden mb-4" data-cart-stock-notices></div>
+        <div data-cart-body></div>
+      </div>
+      <footer class="store-cart-drawer__footer" data-cart-summary></footer>
     </div>
   </aside>
 </div>

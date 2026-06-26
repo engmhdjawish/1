@@ -190,6 +190,12 @@
     if (typeof window.portalStoreFiltersInit === 'function') {
       window.portalStoreFiltersInit(root);
     }
+    if (window.StoreCart?.bindAddForms) {
+      window.StoreCart.bindAddForms();
+    }
+    if (window.StoreCart?.bindQtySteppers) {
+      window.StoreCart.bindQtySteppers(root);
+    }
   }
 
   async function navigateStore(url, push = true) {

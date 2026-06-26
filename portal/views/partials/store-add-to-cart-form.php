@@ -44,7 +44,7 @@ $imageUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) 
 <form
   method="post"
   class="store-add-cart"
-  action="<?= h(strtok($returnUrl, '#')) ?>"
+  action="#"
   data-store-add-cart="1"
   data-material-guid="<?= h($materialGuid) ?>"
   data-cart-qty="<?= h((string) $cartQtyForItem) ?>"

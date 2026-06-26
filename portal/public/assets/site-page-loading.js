@@ -5,6 +5,7 @@
   'use strict';
 
   const BAR_ID = 'site-page-loading-bar';
+  const OVERLAY_ID = 'site-page-loading-overlay';
   let activeNavigations = 0;
 
   function isDashboardUrl(url) {
@@ -54,9 +55,24 @@
     bar.className = 'site-page-loading-bar';
     bar.setAttribute('role', 'progressbar');
     bar.setAttribute('aria-hidden', 'true');
-    bar.innerHTML = '<span class="site-page-loading-bar__track"></span>';
+    bar.innerHTML = '<span class="site-page-loading-bar__fill"></span>';
     document.body.appendChild(bar);
     return bar;
+  }
+
+  function ensureOverlay() {
+    let overlay = document.getElementById(OVERLAY_ID);
+    if (overlay) return overlay;
+    overlay = document.createElement('div');
+    overlay.id = OVERLAY_ID;
+    overlay.className = 'site-page-loading-overlay';
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.innerHTML = '<div class="site-page-loading-card" role="status" aria-live="polite">'
+      + '<span class="site-page-loading-spinner" aria-hidden="true"></span>'
+      + '<span class="site-page-loading-label">جاري تحميل الصفحة...</span>'
+      + '</div>';
+    document.body.appendChild(overlay);
+    return overlay;
   }
 
   function setLoading(active) {
@@ -66,6 +82,9 @@
     const bar = ensureBar();
     bar.classList.toggle('is-active', busy);
     bar.setAttribute('aria-hidden', busy ? 'false' : 'true');
+    const overlay = ensureOverlay();
+    overlay.classList.toggle('is-active', busy);
+    overlay.setAttribute('aria-hidden', busy ? 'false' : 'true');
   }
 
   function markButtonBusy(button, busy) {
@@ -102,6 +121,7 @@
   document.addEventListener('submit', (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement)) return;
+    if (form.hasAttribute('data-store-add-cart')) return;
     if (form.method && form.method.toLowerCase() !== 'get') {
       const submitter = event.submitter;
       if (submitter instanceof HTMLElement) {
@@ -141,6 +161,11 @@
     if (bar) {
       bar.classList.remove('is-active');
       bar.setAttribute('aria-hidden', 'true');
+    }
+    const overlay = document.getElementById(OVERLAY_ID);
+    if (overlay) {
+      overlay.classList.remove('is-active');
+      overlay.setAttribute('aria-hidden', 'true');
     }
     document.querySelectorAll('form[data-site-submitting]').forEach((form) => {
       delete form.dataset.siteSubmitting;
