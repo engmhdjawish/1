@@ -718,12 +718,8 @@
   max-width: 100%;
 }
 
-.store-product-preview__cart .store-cart-panel__stepper-group {
-  max-width: 100%;
-}
-
 .store-product-preview__cart .store-qty-stepper--card {
-  max-width: 12rem;
+  max-width: 100%;
 }
 
 .store-offer-badge {

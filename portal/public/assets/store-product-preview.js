@@ -379,18 +379,19 @@
             <span>في السلة</span>
           </div>
           <div class="store-cart-panel__controls">
-            <div class="store-cart-panel__stepper-group">
-              <div class="store-cart-panel__qty-slot">
-                <div class="store-cart-panel__qty-locked" data-cart-qty-locked${canAdjust ? ' hidden' : ''}>
-                  <strong class="store-num" dir="ltr" data-cart-qty-display>${esc(qtyLabel)}</strong>
-                </div>
-                <div class="store-qty-stepper store-qty-stepper--card" data-cart-qty-adjust${canAdjust ? '' : ' hidden'}>
-                  <button type="button" data-cart-bump="-1" aria-label="إنقاص أو حذف من السلة" ${minusInCartDisabled}>−</button>
-                  <output class="store-num" dir="ltr" data-cart-qty-display>${esc(qtyLabel)}</output>
-                  <button type="button" data-cart-bump="1" aria-label="زيادة" ${plusInCartDisabled}>+</button>
-                </div>
+            <div class="store-cart-panel__qty-slot">
+              <div class="store-cart-panel__qty-locked" data-cart-qty-locked${canAdjust ? ' hidden' : ''} dir="ltr">
+                <strong class="store-num" data-cart-qty-display>${esc(qtyLabel)}</strong>
+                <span class="store-qty-stepper__unit">${esc(p.packageUnit || 'طرد')}</span>
               </div>
-              <span class="store-cart-panel__unit">${esc(p.packageUnit || 'طرد')}</span>
+              <div class="store-qty-stepper store-qty-stepper--card" data-cart-qty-adjust${canAdjust ? '' : ' hidden'}>
+                <button type="button" data-cart-bump="-1" aria-label="إنقاص أو حذف من السلة" ${minusInCartDisabled}>−</button>
+                <div class="store-qty-stepper__value" dir="ltr">
+                  <output class="store-num" data-cart-qty-display>${esc(qtyLabel)}</output>
+                  <span class="store-qty-stepper__unit">${esc(p.packageUnit || 'طرد')}</span>
+                </div>
+                <button type="button" data-cart-bump="1" aria-label="زيادة" ${plusInCartDisabled}>+</button>
+              </div>
             </div>
           </div>
         </div>
@@ -401,13 +402,13 @@
         ${hint}
         <div class="store-cart-panel store-cart-panel--add">
           <div class="store-cart-panel__controls">
-            <div class="store-cart-panel__stepper-group">
-              <div class="store-qty-stepper store-qty-stepper--card${partial ? ' store-qty-stepper--locked' : ''}">
-                <button type="button" data-qty-minus aria-label="إنقاص" ${minusDisabled}>−</button>
-                <input type="number" class="store-num" dir="ltr" name="quantity" min="${qtyMin}" ${maxInput} step="${qtyStep}" value="${defaultQty}" ${partial ? 'readonly' : ''}>
-                <button type="button" data-qty-plus aria-label="زيادة" ${plusDisabled}>+</button>
+            <div class="store-qty-stepper store-qty-stepper--card${partial ? ' store-qty-stepper--locked' : ''}">
+              <button type="button" data-qty-minus aria-label="إنقاص" ${minusDisabled}>−</button>
+              <div class="store-qty-stepper__value" dir="ltr">
+                <input type="number" class="store-num" name="quantity" min="${qtyMin}" ${maxInput} step="${qtyStep}" value="${defaultQty}" ${partial ? 'readonly' : ''}>
+                <span class="store-qty-stepper__unit">${esc(p.packageUnit || 'طرد')}</span>
               </div>
-              <span class="store-cart-panel__unit">${esc(p.packageUnit || 'طرد')}</span>
+              <button type="button" data-qty-plus aria-label="زيادة" ${plusDisabled}>+</button>
             </div>
           </div>
           <button type="submit" class="store-add-cart__submit" ${submitDisabled}>
