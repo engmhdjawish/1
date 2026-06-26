@@ -122,6 +122,7 @@ if ($customer) {
     <link href="<?= h(portal_asset_url('/css/site-header.css')) ?>" rel="stylesheet">
     <link href="<?= h(portal_asset_url('/css/site-footer.css')) ?>" rel="stylesheet">
     <link href="<?= h(portal_asset_url('/css/pwa-install.css')) ?>" rel="stylesheet">
+    <link href="<?= h(portal_asset_url('/css/site-page-loading.css')) ?>" rel="stylesheet">
     <link href="<?= h(portal_asset_url('/css/notifications.css')) ?>" rel="stylesheet">
     <?php if (!$isLightPage): ?>
       <link href="<?= h(portal_asset_url('/css/store-ui.css')) ?>" rel="stylesheet">
@@ -159,7 +160,7 @@ if ($customer) {
       <?= $extraHead ?>
     <?php endif; ?>
 </head>
-<body class="min-h-screen text-text-main bg-surface-bg flex flex-col">
+<body class="min-h-screen text-text-main bg-surface-bg flex flex-col" data-store-price-currency="<?= h($storePriceCurrency) ?>">
 <?php require __DIR__ . '/partials/site-header.php'; ?>
 
 <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-6 md:py-8">
@@ -167,6 +168,11 @@ if ($customer) {
 </main>
 
 <?php require __DIR__ . '/partials/site-footer.php'; ?>
+
+<?php if ($storeAllowCart && !in_array($pagePath, ['/store-cart.php', '/cart.php'], true)): ?>
+  <?php require __DIR__ . '/partials/store-cart-drawer.php'; ?>
+  <?php require __DIR__ . '/partials/store-image-lightbox.php'; ?>
+<?php endif; ?>
 
 <?php if ($enableOnboarding): ?>
   <?php
@@ -215,6 +221,7 @@ if ($customer) {
   <script src="<?= h(portal_asset_url('/assets/site-analytics.js')) ?>" data-endpoint="/api/site-analytics.php" defer></script>
 <?php endif; ?>
 <script src="<?= h(portal_asset_url('/assets/pwa.js')) ?>" defer></script>
+<script src="<?= h(portal_asset_url('/assets/site-page-loading.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/notifications.js')) ?>" defer></script>
 <?php if (!empty($extraFooter ?? '')): ?>
   <?= $extraFooter ?>

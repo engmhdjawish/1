@@ -107,13 +107,22 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
             <?php if ($storeShowPrice): ?>
               <span class="site-header__divider" aria-hidden="true"></span>
             <?php endif; ?>
-            <a href="/store-cart.php" class="site-header__icon-btn" data-guide="cart" title="السلة" aria-label="السلة">
+            <button
+              type="button"
+              class="site-header__icon-btn"
+              data-guide="cart"
+              data-store-cart-open
+              title="السلة"
+              aria-label="السلة"
+              aria-controls="store-cart-drawer"
+              aria-expanded="false"
+            >
               <span class="material-symbols-outlined">shopping_cart</span>
               <span
                 data-store-cart-badge
                 class="site-header__badge <?= $storeCartCount > 0 ? '' : 'hidden' ?>"
               ><?= (int) $storeCartCount ?></span>
-            </a>
+            </button>
           <?php endif; ?>
 
           <span class="site-header__divider" aria-hidden="true"></span>

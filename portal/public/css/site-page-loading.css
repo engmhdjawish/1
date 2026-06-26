@@ -1,0 +1,126 @@
+.site-page-loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100000;
+  height: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  background: rgba(216, 25, 33, 0.12);
+  overflow: hidden;
+}
+
+.site-page-loading-bar.is-active {
+  opacity: 1;
+}
+
+.site-page-loading-bar__fill {
+  display: block;
+  width: 42%;
+  height: 100%;
+  background: linear-gradient(90deg, #ff6b6b, #d81921, #ff6b6b);
+  border-radius: 0 2px 2px 0;
+  animation: site-page-loading-slide 1s ease-in-out infinite;
+}
+
+@keyframes site-page-loading-slide {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+
+.site-page-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99990;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+.site-page-loading-overlay.is-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.site-page-loading-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: min(92vw, 18rem);
+  padding: 0.9rem 1.1rem;
+  border-radius: 1rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+  color: #111827;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.site-page-loading-spinner {
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 3px solid #e5e7eb;
+  border-top-color: #d81921;
+  border-radius: 999px;
+  animation: site-page-loading-spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes site-page-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+body.site-page-loading {
+  cursor: progress;
+}
+
+body.site-page-loading a:not([data-no-page-loading]) {
+  pointer-events: none;
+}
+
+button.is-loading,
+[type="submit"].is-loading,
+.store-add-cart__submit.is-loading {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+body.store-catalog-nav-busy {
+  cursor: progress;
+}
+
+body.store-catalog-nav-busy .store-pagination a,
+body.store-catalog-nav-busy .store-pagination button,
+body.store-catalog-nav-busy #store-filters-open,
+body.store-catalog-nav-busy [data-store-nav-bound] {
+  pointer-events: none;
+  opacity: 0.65;
+}
+
+.store-filters-sidebar.is-loading-options::after {
+  content: 'جاري تحميل خيارات الفلاتر...';
+  display: block;
+  margin: 0.75rem 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+  text-align: center;
+}
+
+body[data-store-price-currency="usd"] .store-price-currency--syp {
+  display: none !important;
+}
+
+body[data-store-price-currency="syp"] .store-price-currency--usd,
+body:not([data-store-price-currency]) .store-price-currency--usd {
+  display: none !important;
+}

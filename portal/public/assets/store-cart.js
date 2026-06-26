@@ -1,5 +1,6 @@
 (() => {
   const API = '/api/store-cart.php';
+  let lastCartData = null;
 
   const toastHost = () => {
     let host = document.getElementById('storeCartToastHost');
@@ -163,11 +164,13 @@
     };
   };
 
-  const linePricesHtml = (line, showPriceSyp, showPriceUsd) => {
+  const linePricesHtml = (line) => {
     const prices = computeLinePrices(line);
     const hasOffer = lineHasOffer(line);
-    if (showPriceSyp && (prices.packSp > 0 || prices.origPackSp > 0)) {
-      let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
+    let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
+
+    if (prices.packSp > 0 || prices.origPackSp > 0) {
+      html += '<div class="store-price-currency store-price-currency--syp">';
       html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
         <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
         <div class="store-order-line-prices__values">
@@ -185,10 +188,10 @@
         </div>`;
       }
       html += '</div>';
-      return html;
     }
-    if (showPriceUsd && (prices.packUsd > 0 || prices.origPackUsd > 0)) {
-      let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
+
+    if (prices.packUsd > 0 || prices.origPackUsd > 0) {
+      html += '<div class="store-price-currency store-price-currency--usd">';
       html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
         <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
         <div class="store-order-line-prices__values">
@@ -206,12 +209,13 @@
         </div>`;
       }
       html += '</div>';
-      return html;
     }
-    return '';
+
+    html += '</div>';
+    return html;
   };
 
-  const renderCartLineCard = (line, showPriceSyp, showPriceUsd, max) => {
+  const renderCartLineCard = (line, max) => {
     const guid = line.material_guid || '';
     const prices = computeLinePrices(line);
     const hasOffer = lineHasOffer(line);
@@ -222,11 +226,12 @@
           return `<button type="button" class="store-order-line-card__thumb" data-cart-image-zoom="${zoom}" title="تكبير الصورة للتدقيق"><img src="${thumb}" alt="" loading="lazy"><span class="store-order-line-card__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span></button>`;
         })()
       : '<div class="store-order-line-card__placeholder"><span class="material-symbols-outlined" aria-hidden="true">inventory_2</span></div>';
-    const lineTotalCell = showPriceSyp
-      ? `${formatMoney(prices.lineTotalSp)} ل.س`
-      : showPriceUsd
-        ? `$${formatUsd(prices.lineTotalUsd)}`
-        : '';
+    const lineTotalCell = (prices.packSp > 0 || prices.origPackSp > 0 || prices.packUsd > 0 || prices.origPackUsd > 0)
+      ? `<div class="store-order-line-card__totals">
+          ${prices.packSp > 0 || prices.origPackSp > 0 ? `<span class="store-price-currency store-price-currency--syp store-num" dir="ltr">${formatMoney(prices.lineTotalSp)} ل.س</span>` : ''}
+          ${prices.packUsd > 0 || prices.origPackUsd > 0 ? `<span class="store-price-currency store-price-currency--usd store-num" dir="ltr">$${formatUsd(prices.lineTotalUsd)}</span>` : ''}
+        </div>`
+      : '';
     return `<article class="store-order-line-card store-cart-line-card${hasOffer ? ' store-order-line-card--offer' : ''}" data-cart-line="${escapeHtml(guid)}">
       <div class="store-order-line-card__media">${img}</div>
       <div class="store-order-line-card__body">
@@ -241,7 +246,7 @@
           </button>
         </div>
         <div class="store-cart-line-card__foot">
-          ${showPriceSyp || showPriceUsd ? linePricesHtml(line, showPriceSyp, showPriceUsd) : ''}
+          ${linePricesHtml(line)}
           <div class="store-cart-line-card__controls">
             <div class="store-cart-line-card__qty-row">
               <div class="store-qty-stepper store-qty-stepper--compact" data-cart-qty-control data-guid="${escapeHtml(guid)}">
@@ -415,57 +420,74 @@
     });
   };
 
-  const bindAddForms = () => {
-    document.querySelectorAll('[data-store-add-cart]').forEach((form) => {
-      if (form.dataset.ajaxBound === '1') return;
-      form.dataset.ajaxBound = '1';
-      form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const btn = form.querySelector('[type="submit"]');
-        const addQty = getRequestedQty(form);
-        const currentQty = getCurrentInCart(form);
-        const check = validateQty(form, addQty, currentQty);
-        if (!check.ok) {
-          showToast(check.message, 'error');
-          return;
-        }
-        btn?.classList.add('is-loading');
-        const formData = new FormData(form);
-        const payload = { action: 'add' };
-        formData.forEach((value, key) => {
-          if (key === 'action') return;
-          payload[key] = value;
-        });
-        try {
-          const data = await apiRequest(payload);
-          if (data.cart_qty_by_guid) {
-            document.querySelectorAll('[data-store-add-cart]').forEach((f) => syncFormLimits(f, data.cart_qty_by_guid));
-          }
-          updateBadge(data.cart_count);
-          if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
-          if (!data.ok) return;
-          if (window.SiteAnalytics) {
-            window.SiteAnalytics.track('add_to_cart', {
-              product_guid: String(payload.material_guid || form.dataset.materialGuid || ''),
-              product_code: String(payload.material_code || ''),
-              product_name: String(payload.material_name_ar || ''),
-              quantity: String(payload.quantity || '1'),
-              label_ar: `إضافة للسلة: ${String(payload.material_name_ar || 'صنف')}`,
-            });
-          }
-          if (inputReset(form)) {
-            const step = getQtyStep(form);
-            form.querySelector('[name="quantity"]').value = String(step);
-          }
-        } catch {
-          showToast('تعذر الاتصال بالخادم.', 'error');
-        } finally {
-          btn?.classList.remove('is-loading');
-        }
-      });
+  const submitAddCartForm = async (form) => {
+    if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-store-add-cart')) {
+      return;
+    }
+    if (form.dataset.ajaxSubmitting === '1') {
+      return;
+    }
+    form.dataset.ajaxSubmitting = '1';
+    const btn = form.querySelector('[type="submit"]');
+    const addQty = getRequestedQty(form);
+    const currentQty = getCurrentInCart(form);
+    const check = validateQty(form, addQty, currentQty);
+    if (!check.ok) {
+      showToast(check.message, 'error');
+      delete form.dataset.ajaxSubmitting;
+      return;
+    }
+    btn?.classList.add('is-loading');
+    const formData = new FormData(form);
+    const payload = { action: 'add' };
+    formData.forEach((value, key) => {
+      if (key === 'action') return;
+      payload[key] = value;
     });
+    try {
+      const data = await apiRequest(payload);
+      if (data.cart_qty_by_guid) {
+        document.querySelectorAll('[data-store-add-cart]').forEach((f) => syncFormLimits(f, data.cart_qty_by_guid));
+      }
+      updateBadge(data.cart_count);
+      if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
+      if (!data.ok) return;
+      if (window.SiteAnalytics) {
+        window.SiteAnalytics.track('add_to_cart', {
+          product_guid: String(payload.material_guid || form.dataset.materialGuid || ''),
+          product_code: String(payload.material_code || ''),
+          product_name: String(payload.material_name_ar || ''),
+          quantity: String(payload.quantity || '1'),
+          label_ar: `إضافة للسلة: ${String(payload.material_name_ar || 'صنف')}`,
+        });
+      }
+      if (inputReset(form)) {
+        const step = getQtyStep(form);
+        form.querySelector('[name="quantity"]').value = String(step);
+      }
+    } catch {
+      showToast('تعذر الاتصال بالخادم.', 'error');
+    } finally {
+      btn?.classList.remove('is-loading');
+      delete form.dataset.ajaxSubmitting;
+    }
+  };
+
+  const bindAddForms = () => {
     bindQtySteppers();
   };
+
+  if (!window.__storeCartSubmitCaptureBound) {
+    window.__storeCartSubmitCaptureBound = true;
+    document.addEventListener('submit', (event) => {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-store-add-cart')) {
+        return;
+      }
+      event.preventDefault();
+      submitAddCartForm(form);
+    }, true);
+  }
 
   const inputReset = (form) => form.querySelector('[name="quantity"]');
 
@@ -525,16 +547,18 @@
     });
   };
 
-  const renderCartPage = (data) => {
-    const root = document.querySelector('[data-store-cart-page]');
+  const renderCartRoot = (root, data) => {
     if (!root) return;
 
+    const isDrawer = root.dataset.storeCartPage === 'drawer';
     const showPrice = !!data.show_price;
-    const priceMode = (data.price_mode || 'syp').toLowerCase();
-    const showPriceSyp = showPrice && (priceMode === 'syp' || priceMode === 'both');
-    const showPriceUsd = showPrice && (priceMode === 'usd' || priceMode === 'both');
     const max = data.max_packages_per_material;
     const maxLabel = data.max_packages_label || max;
+    const loadingEl = root.querySelector('[data-cart-drawer-loading]');
+    if (loadingEl) {
+      loadingEl.hidden = true;
+    }
+    root.classList.remove('is-loading-cart');
 
     const noticeEl = root.querySelector('[data-cart-notice]');
     const errorEl = root.querySelector('[data-cart-error]');
@@ -563,20 +587,22 @@
     if (bodyEl) {
       if (items.length === 0 && unavailable.length === 0) {
         bodyEl.innerHTML = `
-          <div class="store-cart-empty lg:col-span-8">
+          <div class="store-cart-empty${isDrawer ? '' : ' lg:col-span-8'}">
             <span class="material-symbols-outlined text-5xl text-gray-300" aria-hidden="true">shopping_cart</span>
             <p class="text-gray-500 mt-3">السلة فارغة.</p>
-            <a href="/store.php" class="store-btn store-btn--primary mt-4">تصفح المتجر</a>
+            ${isDrawer
+              ? '<button type="button" class="store-btn store-btn--primary mt-4" data-store-cart-drawer-close>تصفح المتجر</button>'
+              : '<a href="/store.php" class="store-btn store-btn--primary mt-4">تصفح المتجر</a>'}
           </div>`;
       } else {
-        let html = '<div class="lg:col-span-8 space-y-4">';
+        let html = isDrawer ? '<div class="space-y-4">' : '<div class="lg:col-span-8 space-y-4">';
         if (max) {
           html += `<p class="store-limit-banner">الحد الأقصى للطلب: <strong>${escapeHtml(String(maxLabel))}</strong> طرد لكل مادة.</p>`;
         }
         if (items.length > 0) {
           html += '<div class="store-cart-lines">';
           items.forEach((line) => {
-            html += renderCartLineCard(line, showPriceSyp, showPriceUsd, max);
+            html += renderCartLineCard(line, max);
           });
           html += '</div>';
         }
@@ -597,11 +623,12 @@
       const isLoggedIn = root.dataset.loggedIn === '1' || !!data.logged_in;
       const totalSp = Number(totals.total_sp) || 0;
       const totalUsd = Number(totals.total_usd) || 0;
-      const totalLine = showPriceSyp
-        ? `<div class="store-cart-summary__total">الإجمالي: ${formatMoney(totalSp)} ل.س</div>`
-        : showPriceUsd
-          ? `<div class="store-cart-summary__total">الإجمالي: $${formatUsd(totalUsd)}</div>`
-          : '';
+      const totalLine = showPrice
+        ? `<div class="store-cart-summary__totals">
+            ${totalSp > 0 ? `<div class="store-cart-summary__total store-price-currency store-price-currency--syp">الإجمالي: ${formatMoney(totalSp)} ل.س</div>` : ''}
+            ${totalUsd > 0 ? `<div class="store-cart-summary__total store-price-currency store-price-currency--usd">الإجمالي: $${formatUsd(totalUsd)}</div>` : ''}
+          </div>`
+        : '';
       summaryEl.innerHTML = `<div class="store-panel store-cart-summary space-y-4">
         ${totalLine}
         ${items.length > 0 ? '<button type="button" class="store-btn store-btn--ghost" data-clear-cart>تفريغ السلة</button>' : ''}
@@ -637,6 +664,11 @@
         stockEl.innerHTML = `<div class="rounded-xl border bg-amber-50 border-amber-200 text-amber-900 px-4 py-3 text-sm"><p class="font-bold mb-1">تنبيه المخزون</p>${uniqueNotices.map((n) => `<p>${escapeHtml(n)}</p>`).join('')}</div>`;
       }
     }
+  };
+
+  const renderCartPage = (data) => {
+    const root = document.querySelector('[data-store-cart-page="1"]');
+    renderCartRoot(root, data);
   };
 
   const bindClearCart = (root) => {
@@ -728,18 +760,99 @@
 
   const applyCartResponse = (data) => {
     if (!data || typeof data !== 'object') return;
-    if (document.querySelector('[data-store-cart-page]')) {
-      renderCartPage(data);
-    }
+    lastCartData = data;
     updateBadge(data.cart_count);
     if (data.cart_qty_by_guid) {
       document.querySelectorAll('[data-store-add-cart]').forEach((f) => syncFormLimits(f, data.cart_qty_by_guid));
     }
+
+    const pageRoot = document.querySelector('[data-store-cart-page="1"]');
+    if (pageRoot) {
+      renderCartRoot(pageRoot, data);
+    }
+
+    const drawer = cartDrawer();
+    const drawerRoot = drawer?.querySelector('[data-store-cart-drawer-root]');
+    if (drawerRoot && drawer.classList.contains('is-open')) {
+      renderCartRoot(drawerRoot, data);
+    }
+
     if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
   };
 
+  const cartDrawer = () => document.getElementById('store-cart-drawer');
+
+  const setCartDrawerOpen = (open) => {
+    const drawer = cartDrawer();
+    if (!drawer) return;
+    drawer.hidden = !open;
+    drawer.classList.toggle('is-open', open);
+    drawer.setAttribute('aria-hidden', open ? 'false' : 'true');
+    document.body.classList.toggle('store-cart-drawer-open', open);
+    document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  };
+
+  const loadCartDrawer = async () => {
+    const drawer = cartDrawer();
+    const root = drawer?.querySelector('[data-store-cart-drawer-root]');
+    if (!root) return;
+
+    const loadingEl = root.querySelector('[data-cart-drawer-loading]');
+    const bodyEl = root.querySelector('[data-cart-body]');
+    const summaryEl = root.querySelector('[data-cart-summary]');
+    if (loadingEl) loadingEl.hidden = false;
+    root.classList.add('is-loading-cart');
+    if (bodyEl) bodyEl.innerHTML = '';
+    if (summaryEl) summaryEl.innerHTML = '';
+
+    try {
+      const res = await fetch(`${API}?reconcile=1`, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+      const data = await res.json();
+      lastCartData = data;
+      renderCartRoot(root, data);
+    } catch {
+      showToast('تعذر تحميل السلة.', 'error');
+      if (loadingEl) loadingEl.hidden = true;
+      root.classList.remove('is-loading-cart');
+    }
+  };
+
+  const bindCartDrawer = () => {
+    const drawer = cartDrawer();
+    if (!drawer || drawer.dataset.bound === '1') return;
+    drawer.dataset.bound = '1';
+
+    document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
+      if (btn.dataset.cartOpenBound === '1') return;
+      btn.dataset.cartOpenBound = '1';
+      btn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        setCartDrawerOpen(true);
+        await loadCartDrawer();
+      });
+    });
+
+    drawer.querySelectorAll('[data-store-cart-drawer-close]').forEach((btn) => {
+      btn.addEventListener('click', () => setCartDrawerOpen(false));
+    });
+
+    drawer.addEventListener('click', (event) => {
+      if (event.target instanceof Element && event.target.closest('[data-store-cart-drawer-close]')) {
+        setCartDrawerOpen(false);
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && drawer.classList.contains('is-open')) {
+        setCartDrawerOpen(false);
+      }
+    });
+  };
+
   const initCartPage = async () => {
-    const root = document.querySelector('[data-store-cart-page]');
+    const root = document.querySelector('[data-store-cart-page="1"]');
     if (!root) return;
     try {
       const res = await fetch(`${API}?reconcile=1`, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
@@ -752,7 +865,8 @@
 
   const init = () => {
     bindAddForms();
-    const page = document.querySelector('[data-store-cart-page]');
+    bindCartDrawer();
+    const page = document.querySelector('[data-store-cart-page="1"]');
     if (page) {
       bindCartLineControls(page, null);
       bindUnavailableControls(page);
@@ -772,5 +886,5 @@
     init();
   }
 
-  window.StoreCart = { showToast, updateBadge, applyCartResponse, apiRequest, bindAddForms, bindQtySteppers };
+  window.StoreCart = { showToast, updateBadge, applyCartResponse, apiRequest, bindAddForms, bindQtySteppers, openDrawer: () => { setCartDrawerOpen(true); return loadCartDrawer(); } };
 })();
