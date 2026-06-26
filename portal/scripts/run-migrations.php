@@ -11,6 +11,7 @@ declare(strict_types=1);
  */
 
 $base = dirname(__DIR__);
+define('PORTAL_NO_SESSION', true);
 require $base . '/bootstrap.php';
 
 use Portal\Config;
