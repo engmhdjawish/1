@@ -51,6 +51,7 @@ $packageSaleUsd = ShareCartService::packageSalePriceUsd($product);
 $origPackSp = $hasOffer ? (float) ($product['original_package_sale_price_sp'] ?? 0) : 0.0;
 $origPackUsd = $hasOffer ? (float) ($product['original_package_sale_price_usd'] ?? 0) : 0.0;
 $origUnitSp = $hasOffer ? (float) ($product['original_unit_sale_price_sp'] ?? 0) : 0.0;
+$origUnitUsd = $hasOffer ? (float) ($product['original_unit_sale_price_usd'] ?? 0) : 0.0;
 $offerBadge = trim((string) ($product['offer_badge'] ?? ''));
 $offer = is_array($product['offer'] ?? null) ? $product['offer'] : null;
 $offerMin = $offer !== null && is_numeric((string) ($offer['min_packages'] ?? ''))
@@ -129,27 +130,36 @@ $specs = array_filter([
         <?php endif; ?>
 
         <?php if ($showPriceSyp && ($packageSaleSp > 0 || $unitSaleSp > 0)): ?>
-          <?php if ($hasOffer && $origPackSp > $packageSaleSp): ?>
-            <div class="store-buybox__price-old"><?= format_money($origPackSp, true) ?> ل.س</div>
+          <?php if ($hasOffer && $origUnitSp > $unitSaleSp): ?>
+            <div class="store-buybox__price-old"><?= format_money($origUnitSp, true) ?> ل.س</div>
           <?php endif; ?>
           <div class="store-buybox__price-main">
-            <?= format_money($packageSaleSp, true) ?>
-            <span class="currency">ل.س / <?= h($packageUnit) ?></span>
+            <?= format_money($unitSaleSp, true) ?>
+            <span class="currency">ل.س / <?= h($primaryUnit) ?></span>
           </div>
           <div class="text-xs text-gray-500 mt-1">
-            سعر <?= h($primaryUnit) ?>:
-            <?php if ($hasOffer && $origUnitSp > $unitSaleSp): ?>
-              <span class="line-through text-gray-400"><?= format_money($origUnitSp, true) ?></span>
+            سعر <?= h($packageUnit) ?>:
+            <?php if ($hasOffer && $origPackSp > $packageSaleSp): ?>
+              <span class="line-through text-gray-400"><?= format_money($origPackSp, true) ?></span>
             <?php endif; ?>
-            <?= format_money($unitSaleSp, true) ?> ل.س
+            <?= format_money($packageSaleSp, true) ?> ل.س
           </div>
         <?php endif; ?>
 
-        <?php if ($showPriceUsd && $packageSaleUsd > 0): ?>
-          <?php if ($hasOffer && $origPackUsd > $packageSaleUsd): ?>
-            <div class="store-buybox__price-old">$<?= number_format($origPackUsd, 2, '.', ',') ?></div>
+        <?php if ($showPriceUsd && ($packageSaleUsd > 0 || $unitSaleUsd > 0)): ?>
+          <?php if ($hasOffer && $origUnitUsd > $unitSaleUsd): ?>
+            <div class="store-buybox__price-old">$<?= number_format($origUnitUsd, 2, '.', ',') ?></div>
           <?php endif; ?>
-          <div class="store-buybox__price-usd">$<?= number_format($packageSaleUsd, 2, '.', ',') ?> / <?= h($packageUnit) ?></div>
+          <div class="store-buybox__price-usd">$<?= number_format($unitSaleUsd, 2, '.', ',') ?> / <?= h($primaryUnit) ?></div>
+          <?php if ($packageSaleUsd > 0): ?>
+            <div class="text-xs text-gray-500 mt-1">
+              سعر <?= h($packageUnit) ?>:
+              <?php if ($hasOffer && $origPackUsd > $packageSaleUsd): ?>
+                <span class="line-through text-gray-400">$<?= number_format($origPackUsd, 2, '.', ',') ?></span>
+              <?php endif; ?>
+              $<?= number_format($packageSaleUsd, 2, '.', ',') ?>
+            </div>
+          <?php endif; ?>
         <?php endif; ?>
 
         <?php if ($hasOffer && ($offerMin !== null || $offerMax !== null)): ?>
@@ -164,21 +174,24 @@ $specs = array_filter([
         <p class="text-sm text-gray-500">الأسعار غير متاحة لحسابك الحالي. سجّل دخولك كعميل مفعّل أو تواصل معنا.</p>
       <?php endif; ?>
 
-      <?php if ($showQuantity || $allowCart): ?>
-        <?php if ($outOfStock): ?>
+      <?php if ($showQuantity): ?>
+        <?php if ($packagesAvailable <= 0 && $allowCart): ?>
           <div class="store-buybox__stock store-buybox__stock--out">
             <span class="material-symbols-outlined text-base" aria-hidden="true">inventory_2</span>
             نفدت الكمية المتاحة للطلب حالياً
           </div>
-        <?php else: ?>
+        <?php elseif ($packagesAvailable > 0): ?>
           <div class="store-buybox__stock <?= $packagesAvailable <= 2 ? 'store-buybox__stock--low' : '' ?>">
             <span class="material-symbols-outlined text-base" aria-hidden="true">check_circle</span>
             متاح: <?= number_format($packagesAvailable, 0, '.', ',') ?> <?= h($packageUnit) ?>
-            <?php if ($showQuantity): ?>
-              <span class="text-gray-400 font-normal">(<?= number_format($warehouseQty, 0, '.', ',') ?> <?= h($primaryUnit) ?>)</span>
-            <?php endif; ?>
+            <span class="text-gray-400 font-normal">(<?= number_format($warehouseQty, 0, '.', ',') ?> <?= h($primaryUnit) ?>)</span>
           </div>
         <?php endif; ?>
+      <?php elseif ($allowCart && $outOfStock): ?>
+        <div class="store-buybox__stock store-buybox__stock--out">
+          <span class="material-symbols-outlined text-base" aria-hidden="true">inventory_2</span>
+          نفدت الكمية المتاحة للطلب حالياً
+        </div>
       <?php endif; ?>
 
       <?php if ($allowCart && !$outOfStock): ?>

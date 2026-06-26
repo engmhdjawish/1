@@ -70,6 +70,15 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
       </nav>
 
       <div class="site-header__actions">
+        <?php if (!empty($companyLogoUrl)): ?>
+          <a href="/index.php" class="site-header__mobile-logo" aria-label="<?= h($siteName) ?>">
+            <?php
+              $siteLogoVariant = 'mobile-toolbar';
+              $siteLogoAlt = $siteName;
+              require __DIR__ . '/site-logo.php';
+            ?>
+          </a>
+        <?php endif; ?>
         <div class="site-header__toolbar">
           <?php if ($storeShowPrice): ?>
             <div class="site-header__currency" data-guide="currency" role="group" aria-label="عملة عرض الأسعار">
