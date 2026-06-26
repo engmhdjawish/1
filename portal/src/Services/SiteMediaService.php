@@ -179,6 +179,11 @@ final class SiteMediaService
 
         $asset = self::getById($id);
 
+        if ($mime === 'image/svg+xml') {
+            $rasterPath = SvgRasterService::rasterCompanionPath($absolutePath);
+            SvgRasterService::toPngFile($absolutePath, $rasterPath, 1024);
+        }
+
         return [
             'ok' => true,
             'message' => 'تم رفع الصورة.',

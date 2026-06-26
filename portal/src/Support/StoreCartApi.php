@@ -135,14 +135,14 @@ final class StoreCartApi
     private static function bump(array $input): array
     {
         $materialGuid = trim((string) ($input['material_guid'] ?? ''));
-        $delta = (int) ($input['delta'] ?? 0);
-        if ($materialGuid === '' || $delta === 0) {
+        $delta = (float) ($input['delta'] ?? 0);
+        if ($materialGuid === '' || abs($delta) < 0.0001) {
             return self::payload('تعذر تحديث الكمية.', false);
         }
 
         $items = StoreCartService::items();
-        $current = (int) round((float) ($items[$materialGuid]['quantity'] ?? 1));
-        $next = max(0, $current + $delta);
+        $current = max(0.0, round((float) ($items[$materialGuid]['quantity'] ?? 0), 4));
+        $next = max(0.0, round($current + $delta, 4));
 
         if ($delta > 0) {
             $clientCheck = self::clientQuantityCheck($materialGuid, $delta, $current);
@@ -235,7 +235,7 @@ final class StoreCartApi
         $totals = StoreCartService::totals();
         $cartQtyByGuid = [];
         foreach (StoreCartService::items() as $guid => $line) {
-            $cartQtyByGuid[$guid] = (int) round((float) ($line['quantity'] ?? 0));
+            $cartQtyByGuid[$guid] = max(0.0, round((float) ($line['quantity'] ?? 0), 4));
         }
 
         $payload = [

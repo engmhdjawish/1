@@ -62,13 +62,15 @@ final class CompanyBrandIconService
             return false;
         }
 
+        $iconSourcePath = self::iconSourcePath($sourcePath);
+
         if (!is_readable($sourcePath)) {
             self::$lastError = 'لا يمكن قراءة ملف الشعار. تحقق من صلاحيات مجلد storage.';
 
             return false;
         }
 
-        $mime = self::detectMime($sourcePath);
+        $mime = self::detectMime($iconSourcePath);
 
         if (!function_exists('imagecreatetruecolor')) {
             self::$lastError = 'امتداد PHP GD غير مفعّل. فعّل extension=gd في php.ini ثم أعد المحاولة.';
@@ -92,7 +94,7 @@ final class CompanyBrandIconService
 
         $ok = true;
         foreach (self::SIZES as $size) {
-            if (!self::generateSquarePng($sourcePath, self::iconAbsolutePath($size), $size)) {
+            if (!self::generateSquarePng($iconSourcePath, self::iconAbsolutePath($size), $size)) {
                 $ok = false;
             }
         }
@@ -170,6 +172,25 @@ final class CompanyBrandIconService
         }
 
         return null;
+    }
+
+    private static function iconSourcePath(string $sourcePath): string
+    {
+        $mime = self::detectMime($sourcePath);
+        if ($mime !== 'image/svg+xml' && !str_ends_with(strtolower($sourcePath), '.svg')) {
+            return $sourcePath;
+        }
+
+        $raster = SvgRasterService::rasterCompanionPath($sourcePath);
+        if (is_file($raster) && is_readable($raster)) {
+            return $raster;
+        }
+
+        if (SvgRasterService::toPngFile($sourcePath, $raster, 1024) && is_file($raster)) {
+            return $raster;
+        }
+
+        return $sourcePath;
     }
 
     /** @return \GdImage|false */

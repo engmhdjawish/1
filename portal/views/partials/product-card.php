@@ -93,6 +93,13 @@ $previewJson = $previewPayload !== null
       <?php if ($materialCode !== ''): ?>
         <span class="store-product-card__code-badge" dir="ltr"><?= h($materialCode) ?></span>
       <?php endif; ?>
+      <?php if ($allowCart): ?>
+        <span class="store-product-card__cart-badge" data-card-cart-badge<?= $cartQtyForItem <= 0 ? ' hidden' : '' ?>>
+          <span class="material-symbols-outlined text-sm" aria-hidden="true">shopping_cart_checkout</span>
+          <span>في السلة</span>
+          <span class="store-num" dir="ltr" data-cart-qty-display><?= h(format_packages_display($cartQtyForItem)) ?></span>
+        </span>
+      <?php endif; ?>
       <span class="store-product-card__zoom-hint material-symbols-outlined" aria-hidden="true">zoom_in</span>
       <?php
         $material = $item;

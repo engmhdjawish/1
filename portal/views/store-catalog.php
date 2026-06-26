@@ -390,10 +390,9 @@ $buildStoreUrl = static function (int $targetPage) use ($filters, $isSectionBrow
     return store_url($params);
 };
 
-$productReturnUrl = null;
+$productReturnUrl = catalog_current_return_url();
 $productOfferSlug = null;
 if ($sectionContext !== null) {
-    $productReturnUrl = store_url(CatalogSectionResolver::storeLinkParams($sectionContext));
     if (!empty($sectionContext['is_offer_section'])) {
         $productOfferSlug = trim((string) ($sectionContext['slug'] ?? ''));
         if ($productOfferSlug === '') {
@@ -752,6 +751,7 @@ require __DIR__ . '/partials/store-filter-group.php';
           <?php
             $useImagePreview = true;
             $useQuickView = false;
+            $linkToDetail = false;
             require __DIR__ . '/partials/product-card.php';
           ?>
         <?php endforeach; ?>

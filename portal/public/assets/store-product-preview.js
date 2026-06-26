@@ -214,9 +214,82 @@
     return `<div class="offer-price-block">${badge}${rows.join('')}</div>`;
   };
 
-  const renderCartForm = (p) => {
-    if (!p.allowCart) return '';
+  const formatPackageCount = (amount) => {
+    const n = Number(amount) || 0;
+    if (Math.abs(n - Math.round(n)) < 0.0001) {
+      return String(Math.round(n));
+    }
+    return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  };
 
+  const currentCatalogReturnUrl = () => {
+    const path = window.location.pathname;
+    if (path !== '/store.php' && path !== '/store') {
+      return null;
+    }
+    const params = new URLSearchParams(window.location.search);
+    params.delete('preview');
+    const query = params.toString();
+    return query ? `${path}?${query}` : path;
+  };
+
+  const detailUrlForItem = (item) => {
+    const base = String(item.detailUrl || '').trim();
+    if (!base) return '';
+    try {
+      const url = new URL(base, window.location.origin);
+      const currentReturn = currentCatalogReturnUrl();
+      if (currentReturn) {
+        url.searchParams.set('return', currentReturn);
+      }
+      return `${url.pathname}?${url.searchParams.toString()}`;
+    } catch {
+      return base;
+    }
+  };
+
+  const mountCartForm = (item, container) => {
+    if (!container) return null;
+    if (!item.allowCart) {
+      container.innerHTML = '';
+      return null;
+    }
+
+    const card = document.querySelector(`[data-preview-guid="${CSS.escape(item.guid)}"]`);
+    const sourceForm = card?.querySelector('[data-store-add-cart]');
+    if (!sourceForm) {
+      container.innerHTML = renderCartFormFallback(item);
+      if (window.StoreCart?.bindAddForms) {
+        window.StoreCart.bindAddForms();
+      }
+      if (window.StoreCart?.bindQtySteppers) {
+        window.StoreCart.bindQtySteppers(container);
+      }
+      return container.querySelector('[data-store-add-cart]');
+    }
+
+    const clone = sourceForm.cloneNode(true);
+    clone.classList.add('store-add-cart--preview');
+    delete clone.dataset.stepperBound;
+    clone.querySelectorAll('[data-bound]').forEach((el) => {
+      delete el.dataset.bound;
+    });
+
+    container.innerHTML = '';
+    container.appendChild(clone);
+
+    const inCartQty = Math.max(0, parseFloat(sourceForm.dataset.cartQty || '0') || 0);
+    if (window.StoreCart?.setFormCartMode) {
+      window.StoreCart.setFormCartMode(clone, inCartQty);
+    }
+    if (window.StoreCart?.bindQtySteppers) {
+      window.StoreCart.bindQtySteppers(container);
+    }
+
+    return clone;
+  };
+
+  const renderCartFormFallback = (p) => {
     const maxAttr = p.maxPackages != null ? `data-max-qty="${esc(p.maxPackages)}" data-max-qty-label="${esc(p.maxLabel || p.maxPackages)}"` : '';
     const effectiveMax = p.effectiveMax != null ? Number(p.effectiveMax) : (p.remaining != null ? Number(p.remaining) : null);
     const remaining = effectiveMax != null ? Math.max(0, effectiveMax) : null;
@@ -252,6 +325,7 @@
         class="store-add-cart store-add-cart--preview"
         action="${esc(p.returnUrl || '/store.php')}"
         data-store-add-cart="1"
+        data-partial-package="${partial ? '1' : '0'}"
         data-material-guid="${esc(p.guid)}"
         data-cart-qty="${esc(p.cartQty)}"
         data-qty-step="${qtyStep}"
@@ -281,6 +355,28 @@
           ${atLimit ? 'الحد الأقصى مكتمل' : (partial ? 'طلب الكمية المتاحة' : 'إضافة للسلة')}
         </button>
       </form>`;
+  };
+
+  const updateInCartBanner = (item) => {
+    const imageWrap = modal.querySelector('.store-product-preview__image-wrap');
+    if (!imageWrap) return;
+
+    let banner = imageWrap.querySelector('[data-preview-cart-banner]');
+    const inCart = Math.max(0, Number(item.cartQty) || 0);
+    if (inCart <= 0) {
+      banner?.remove();
+      return;
+    }
+
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.className = 'store-product-preview__cart-banner';
+      banner.setAttribute('data-preview-cart-banner', '');
+      imageWrap.appendChild(banner);
+    }
+
+    const qtyLabel = formatPackageCount(inCart);
+    banner.innerHTML = `<span class="material-symbols-outlined text-base" aria-hidden="true">shopping_cart_checkout</span><span>في السلة</span><span class="store-num" dir="ltr">${esc(qtyLabel)}</span><span>${esc(item.packageUnit || 'طرد')}</span>`;
   };
 
   const syncCartQtyFromDom = (p) => {
@@ -369,20 +465,15 @@
     }
 
     if (pricesEl) pricesEl.innerHTML = renderPrices(item);
-    if (cartEl) cartEl.innerHTML = renderCartForm(item);
+    mountCartForm(item, cartEl);
+    updateInCartBanner(item);
     if (detailEl) {
-      detailEl.href = item.detailUrl || '/store.php';
-      detailEl.classList.toggle('hidden', !item.detailUrl);
+      const detailHref = detailUrlForItem(item);
+      detailEl.href = detailHref || '/store.php';
+      detailEl.classList.toggle('hidden', !detailHref);
     }
 
     updateNav();
-
-    if (window.StoreCart?.bindAddForms) {
-      window.StoreCart.bindAddForms();
-    }
-    if (window.StoreCart?.bindQtySteppers) {
-      window.StoreCart.bindQtySteppers(cartEl || modal);
-    }
   };
 
   const showAt = (index) => {
@@ -547,4 +638,11 @@
   } else {
     initFromUrl();
   }
+
+  document.addEventListener('store-cart-updated', () => {
+    if (modal.hidden || state.items.length === 0) return;
+    const current = state.items[state.index];
+    if (!current?.guid) return;
+    render(syncCartQtyFromDom(current));
+  });
 })();

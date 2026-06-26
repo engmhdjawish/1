@@ -64,7 +64,7 @@ $materialCode = trim((string) ($product['materialCode'] ?? $product['code'] ?? '
 $productName = trim((string) ($product['name'] ?? 'مادة'));
 $manufacturer = trim((string) ($product['manufacturer'] ?? ''));
 
-$returnUrl = safe_return_url($returnUrl ?? ($_GET['return'] ?? '/store.php'));
+$returnUrl = resolve_product_return_url($returnUrl ?? ($_GET['return'] ?? '/store.php'));
 $backLabel = return_link_label($returnUrl);
 
 $specs = array_filter([
@@ -80,7 +80,7 @@ $specs = array_filter([
 <nav class="store-breadcrumb" aria-label="مسار التنقل">
   <a href="/index.php">الرئيسية</a>
   <span class="store-breadcrumb__sep" aria-hidden="true">›</span>
-  <a href="/store.php">المتجر</a>
+  <a href="<?= h(str_contains($returnUrl, 'store') ? $returnUrl : '/store.php') ?>">المتجر</a>
   <span class="store-breadcrumb__sep" aria-hidden="true">›</span>
   <span class="store-breadcrumb__current" title="<?= h($productName) ?>"><?= h($productName) ?></span>
 </nav>

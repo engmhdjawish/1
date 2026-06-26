@@ -52,9 +52,34 @@ final class SvgRasterService
             }
         }
 
+        $gd = SvgBasicGdRenderer::render($sourcePath, $targetSize);
+        if ($gd !== false) {
+            return $gd;
+        }
+
         self::$lastError ??= 'تعذر تحويل SVG. ثبّت ImageMagick أو Inkscape، أو ارفع الشعار بصيغة PNG/JPG.';
 
         return false;
+    }
+
+    public static function toPngFile(string $sourcePath, string $targetPath, int $targetSize = 512): bool
+    {
+        $gd = self::toGdImage($sourcePath, $targetSize);
+        if ($gd === false) {
+            return false;
+        }
+
+        $saved = imagepng($gd, $targetPath);
+        imagedestroy($gd);
+
+        return (bool) $saved;
+    }
+
+    public static function rasterCompanionPath(string $svgPath): string
+    {
+        $replaced = preg_replace('/\.svg$/i', '_raster.png', $svgPath);
+
+        return is_string($replaced) ? $replaced : ($svgPath . '_raster.png');
     }
 
     /** @return \GdImage|false */

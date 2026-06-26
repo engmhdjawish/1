@@ -561,12 +561,56 @@ function safe_return_url(mixed $return): string
     return $return;
 }
 
+function resolve_product_return_url(mixed $return): string
+{
+    $return = safe_return_url($return);
+    if (str_contains($return, '?')) {
+        return $return;
+    }
+
+    $referer = trim((string) ($_SERVER['HTTP_REFERER'] ?? ''));
+    if ($referer === '') {
+        return $return;
+    }
+
+    $refParts = parse_url($referer);
+    $refPath = rtrim((string) ($refParts['path'] ?? ''), '/') ?: '/';
+    if ($refPath !== '/store.php' && $refPath !== '/store') {
+        return $return;
+    }
+
+    $refQuery = trim((string) ($refParts['query'] ?? ''));
+    if ($refQuery === '') {
+        return $return;
+    }
+
+    return $refPath . '?' . $refQuery;
+}
+
+function catalog_current_return_url(): string
+{
+    $uri = (string) ($_SERVER['REQUEST_URI'] ?? '/store.php');
+    $parts = parse_url($uri);
+    $path = (string) ($parts['path'] ?? '/store.php');
+    $query = [];
+    if (!empty($parts['query'])) {
+        parse_str((string) $parts['query'], $query);
+        unset($query['preview']);
+    }
+
+    return $query === [] ? $path : $path . '?' . http_build_query($query);
+}
+
 function return_link_label(string $returnUrl): string
 {
     if ($returnUrl === '/' || str_starts_with($returnUrl, '/#') || str_contains($returnUrl, 'index.php')) {
         return 'العودة للرئيسية';
     }
-    if (str_contains($returnUrl, 'store.php')) {
+    if (str_contains($returnUrl, 'store.php') || str_contains($returnUrl, '/store')) {
+        if (str_contains($returnUrl, '?')) {
+            return 'العودة للنتائج';
+        }
+
         return 'العودة للمتجر';
     }
 
