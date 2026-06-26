@@ -174,21 +174,24 @@ $specs = array_filter([
         <p class="text-sm text-gray-500">الأسعار غير متاحة لحسابك الحالي. سجّل دخولك كعميل مفعّل أو تواصل معنا.</p>
       <?php endif; ?>
 
-      <?php if ($showQuantity || $allowCart): ?>
-        <?php if ($outOfStock): ?>
+      <?php if ($showQuantity): ?>
+        <?php if ($packagesAvailable <= 0 && $allowCart): ?>
           <div class="store-buybox__stock store-buybox__stock--out">
             <span class="material-symbols-outlined text-base" aria-hidden="true">inventory_2</span>
             نفدت الكمية المتاحة للطلب حالياً
           </div>
-        <?php else: ?>
+        <?php elseif ($packagesAvailable > 0): ?>
           <div class="store-buybox__stock <?= $packagesAvailable <= 2 ? 'store-buybox__stock--low' : '' ?>">
             <span class="material-symbols-outlined text-base" aria-hidden="true">check_circle</span>
             متاح: <?= number_format($packagesAvailable, 0, '.', ',') ?> <?= h($packageUnit) ?>
-            <?php if ($showQuantity): ?>
-              <span class="text-gray-400 font-normal">(<?= number_format($warehouseQty, 0, '.', ',') ?> <?= h($primaryUnit) ?>)</span>
-            <?php endif; ?>
+            <span class="text-gray-400 font-normal">(<?= number_format($warehouseQty, 0, '.', ',') ?> <?= h($primaryUnit) ?>)</span>
           </div>
         <?php endif; ?>
+      <?php elseif ($allowCart && $outOfStock): ?>
+        <div class="store-buybox__stock store-buybox__stock--out">
+          <span class="material-symbols-outlined text-base" aria-hidden="true">inventory_2</span>
+          نفدت الكمية المتاحة للطلب حالياً
+        </div>
       <?php endif; ?>
 
       <?php if ($allowCart && !$outOfStock): ?>

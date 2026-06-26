@@ -41,10 +41,21 @@
   };
 
   const imageZoomUrl = (url) => {
+    if (window.StoreImageZoom?.imageZoomUrl) {
+      return window.StoreImageZoom.imageZoomUrl(url);
+    }
     const text = String(url || '');
     if (!text) return '';
     if (text.includes('thumb=1')) return text.replace('thumb=1', 'thumb=0');
     return text.includes('?') ? `${text}&thumb=0` : `${text}?thumb=0`;
+  };
+
+  const loadLightboxImage = (imgEl, fullUrl, thumbUrl) => {
+    if (window.StoreImageZoom?.loadProgressive) {
+      window.StoreImageZoom.loadProgressive(imgEl, fullUrl, thumbUrl);
+      return;
+    }
+    imgEl.src = fullUrl;
   };
 
   const bindImageZoom = (root = document) => {
@@ -56,7 +67,9 @@
     const close = () => {
       lightbox.hidden = true;
       lightbox.setAttribute('aria-hidden', 'true');
-      lightboxImg.src = '';
+      lightboxImg.removeAttribute('src');
+      lightboxImg.classList.remove('is-upgrading');
+      delete lightboxImg.dataset.pendingFull;
       document.body.style.overflow = '';
     };
 
@@ -72,11 +85,13 @@
       if (btn.dataset.zoomBound === '1') return;
       btn.dataset.zoomBound = '1';
       btn.addEventListener('click', () => {
-        const src = btn.getAttribute('data-cart-image-zoom') || '';
+        const raw = btn.getAttribute('data-cart-image-zoom') || '';
+        const thumbSrc = btn.querySelector('img')?.getAttribute('src') || '';
+        const src = raw || imageZoomUrl(thumbSrc);
         if (!src) return;
         const name = btn.closest('.store-order-line-card, .store-cart-product, .store-cart-line-card')
           ?.querySelector('.store-order-line-card__title, .font-bold')?.textContent?.trim() || '';
-        lightboxImg.src = src;
+        loadLightboxImage(lightboxImg, src, thumbSrc);
         if (lightboxCaption) lightboxCaption.textContent = name;
         lightbox.hidden = false;
         lightbox.setAttribute('aria-hidden', 'false');

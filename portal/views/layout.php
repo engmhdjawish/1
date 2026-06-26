@@ -204,6 +204,7 @@ if ($customer) {
   <script src="<?= h(portal_asset_url('/assets/store-pref.js')) ?>" defer></script>
 <?php endif; ?>
 <?php if ($enableStoreCartJs): ?>
+  <script src="<?= h(portal_asset_url('/assets/store-image-zoom.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/store-cart.js')) ?>" defer></script>
 <?php endif; ?>
 <?php if ($enableOnboarding): ?>

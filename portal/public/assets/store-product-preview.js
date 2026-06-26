@@ -45,6 +45,28 @@
 
   const imageUrlFor = (item) => item?.zoomUrl || item?.thumbUrl || '';
 
+  const thumbUrlFor = (item) => {
+    if (!item || typeof item !== 'object') return '';
+    const thumb = String(item.thumbUrl || '').trim();
+    if (thumb) return thumb;
+    const zoom = String(item.zoomUrl || '').trim();
+    if (zoom.includes('thumb=0')) return zoom.replace('thumb=0', 'thumb=1');
+    if (zoom && !zoom.includes('thumb=')) {
+      return zoom.includes('?') ? `${zoom}&thumb=1` : `${zoom}?thumb=1`;
+    }
+    return '';
+  };
+
+  const thumbFromZoomUrl = (url) => {
+    const text = String(url || '').trim();
+    if (!text) return '';
+    if (text.includes('thumb=0')) return text.replace('thumb=0', 'thumb=1');
+    if (!text.includes('thumb=')) {
+      return text.includes('?') ? `${text}&thumb=1` : `${text}?thumb=1`;
+    }
+    return text;
+  };
+
   const preloadImage = (url) => {
     const src = String(url || '').trim();
     if (!src) return Promise.resolve(null);
@@ -90,8 +112,10 @@
     if (loading) setImageLoading(true);
   };
 
-  const applyPreviewImage = async (url) => {
-    const src = String(url || '').trim();
+  const applyPreviewImage = async (itemOrUrl) => {
+    const isItem = itemOrUrl && typeof itemOrUrl === 'object';
+    const src = isItem ? imageUrlFor(itemOrUrl) : String(itemOrUrl || '').trim();
+    const thumbSrc = isItem ? thumbUrlFor(itemOrUrl) : thumbFromZoomUrl(src);
     const token = ++imageRenderToken;
 
     if (!imgEl) return;
@@ -101,7 +125,8 @@
       imgEl.removeAttribute('src');
       imgEl.alt = '';
       imgEl.classList.add('is-placeholder');
-      imgEl.classList.remove('is-loading');
+      imgEl.classList.remove('is-loading', 'is-preview-thumb');
+      delete imgEl.dataset.pendingFull;
       return;
     }
 
@@ -111,25 +136,40 @@
     if (cached?.status === 'ready' || alreadyVisible) {
       setImageLoading(false);
       imgEl.src = src;
-      imgEl.classList.remove('is-placeholder', 'is-loading');
+      imgEl.classList.remove('is-placeholder', 'is-loading', 'is-preview-thumb');
+      delete imgEl.dataset.pendingFull;
       return;
     }
 
-    setImageLoading(true);
     imgEl.classList.remove('is-placeholder');
-    imgEl.classList.add('is-loading');
+    delete imgEl.dataset.pendingFull;
+
+    if (thumbSrc && thumbSrc !== src) {
+      imgEl.src = thumbSrc;
+      imgEl.classList.add('is-preview-thumb');
+      imgEl.classList.remove('is-loading');
+    } else {
+      imgEl.classList.remove('is-preview-thumb');
+      imgEl.classList.add('is-loading');
+    }
+
+    setImageLoading(true);
 
     try {
       await preloadImage(src);
       if (token !== imageRenderToken) return;
       imgEl.src = src;
-      imgEl.classList.remove('is-loading');
+      imgEl.classList.remove('is-loading', 'is-preview-thumb');
+      delete imgEl.dataset.pendingFull;
       setImageLoading(false);
     } catch (_) {
       if (token !== imageRenderToken) return;
-      imgEl.removeAttribute('src');
-      imgEl.classList.add('is-placeholder');
-      imgEl.classList.remove('is-loading');
+      if (!thumbSrc) {
+        imgEl.removeAttribute('src');
+        imgEl.classList.add('is-placeholder');
+      }
+      imgEl.classList.remove('is-loading', 'is-preview-thumb');
+      delete imgEl.dataset.pendingFull;
       setImageLoading(false);
     }
   };
@@ -481,7 +521,7 @@
     if (imgEl) {
       imgEl.alt = item.name || '';
     }
-    applyPreviewImage(imageUrlFor(item));
+    applyPreviewImage(item);
     preloadAdjacent(state.index);
 
     const imageWrap = modal.querySelector('.store-product-preview__image-wrap');
