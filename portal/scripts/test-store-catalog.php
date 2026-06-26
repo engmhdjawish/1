@@ -60,10 +60,13 @@ try {
     $fullFiltersCatalog = StoreCatalogService::catalogFromRequest(['facetFilters' => '1']);
     $fullFiltersMs = (int) round((microtime(true) - $started) * 1000);
     echo "\n--- with facetFilters=1 (inline filters) ---\n";
-    echo 'Filters deferred: ' . ((bool) ($fullFiltersCatalog['filters_deferred'] ?? false) ? 'yes' : 'no') . "\n";
-    $inlineResultFilters = is_array($fullFiltersCatalog['resultFilters'] ?? null) ? $fullFiltersCatalog['resultFilters'] : [];
-    echo 'result materialTypes: ' . count(is_array($inlineResultFilters['materialTypes'] ?? null) ? $inlineResultFilters['materialTypes'] : []) . "\n";
-    echo 'Elapsed ms: ' . $fullFiltersMs . "\n";
+        echo 'Filters deferred: ' . ((bool) ($fullFiltersCatalog['filters_deferred'] ?? false) ? 'yes' : 'no') . "\n";
+        $inlineResultFilters = is_array($fullFiltersCatalog['resultFilters'] ?? null) ? $fullFiltersCatalog['resultFilters'] : [];
+        echo 'result materialTypes: ' . count(is_array($inlineResultFilters['materialTypes'] ?? null) ? $inlineResultFilters['materialTypes'] : []) . "\n";
+        echo 'Elapsed ms: ' . $fullFiltersMs . "\n";
+        if (count(is_array($inlineResultFilters['materialTypes'] ?? null) ? $inlineResultFilters['materialTypes'] : []) === 0) {
+            echo "Note: clear storage/cache if facetFilters still hits a deferred cache entry.\n";
+        }
 
     $started = microtime(true);
     $payload = StoreCatalogService::getClientFiltersPayload();

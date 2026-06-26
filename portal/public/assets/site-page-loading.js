@@ -30,12 +30,15 @@
   function shouldHandleLink(link) {
     if (!link || link.target === '_blank' || link.hasAttribute('download')) return false;
     const href = link.getAttribute('href');
-    if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return false;
-    if (link.dataset.noPageLoading === '1') return false;
+    if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) return false;
+    if (link.dataset.noPageLoading === '1' || link.hasAttribute('data-store-cart-open')) return false;
     try {
       const parsed = new URL(href, window.location.origin);
       if (parsed.origin !== window.location.origin) return false;
-      if (isDashboardUrl(parsed.href) || isStoreCatalogUrl(parsed.href)) return false;
+      if (isDashboardUrl(parsed.href)) return false;
+      if (isStoreCatalogUrl(parsed.href) && isStoreCatalogUrl(window.location.href) && typeof window.portalStoreCatalogNavigate === 'function') {
+        return false;
+      }
       if (parsed.pathname.includes('/api/')) return false;
     } catch {
       return false;
@@ -80,11 +83,16 @@
     delete button.dataset.siteWasDisabled;
   }
 
+  function isBusy() {
+    return document.body.classList.contains('site-page-loading')
+      || document.body.classList.contains('store-catalog-nav-busy');
+  }
+
   document.addEventListener('click', (event) => {
     const link = event.target.closest('a[href]');
     if (!link || !shouldHandleLink(link)) return;
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    if (document.body.classList.contains('site-page-loading')) {
+    if (isBusy()) {
       event.preventDefault();
       return;
     }
@@ -106,10 +114,17 @@
         }
         form.dataset.siteSubmitting = '1';
       }
-    }
-    if (isDashboardUrl(formActionUrl(form)) || isStoreCatalogUrl(formActionUrl(form))) {
       return;
     }
+    if (isDashboardUrl(formActionUrl(form))) return;
+    if (isStoreCatalogUrl(formActionUrl(form)) && typeof window.portalStoreCatalogNavigate === 'function') {
+      return;
+    }
+    if (form.dataset.siteSubmitting === '1') {
+      event.preventDefault();
+      return;
+    }
+    form.dataset.siteSubmitting = '1';
     setLoading(true);
   }, true);
 

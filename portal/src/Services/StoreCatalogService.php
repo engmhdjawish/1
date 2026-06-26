@@ -102,19 +102,23 @@ final class StoreCatalogService
             return self::emptyCatalogResult($page, $pageSize, 'لم تُضبط سياسة عرض المتجر بعد.');
         }
 
-        $cachedCatalog = self::readCatalogCache($query, $policy);
-        if ($cachedCatalog !== null) {
-            return $cachedCatalog;
-        }
-
         $storeOptions = is_array($policy['store_options'] ?? null)
             ? $policy['store_options']
             : AccessPolicyService::defaultStoreOptions();
         $visibleClientFilters = AccessPolicyService::resolvedVisibleClientFilters($storeOptions);
         $allowClientFilters = $visibleClientFilters !== [];
         $isClientFilterVisible = static fn (string $code): bool => in_array($code, $visibleClientFilters, true);
-
         $requestFilters = self::parseRequestFilters($query, $storeOptions, $isClientFilterVisible);
+
+        $cachedCatalog = self::readCatalogCache($query, $policy);
+        if ($cachedCatalog !== null) {
+            $wantsInlineFilters = $allowClientFilters && self::shouldIncludeResultFilters($query, $requestFilters);
+            $cachedDeferred = (bool) ($cachedCatalog['filters_deferred'] ?? false);
+            if (!$wantsInlineFilters || !$cachedDeferred) {
+                return $cachedCatalog;
+            }
+        }
+
         $search = $requestFilters['search'];
         $sort = $requestFilters['sort'];
         $materialTypes = $requestFilters['materialTypes'];
@@ -1598,7 +1602,7 @@ final class StoreCatalogService
         unset($params['facetFilters'], $params['loadFilterOptions']);
         ksort($params);
 
-        return 'store_catalog_v3:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
+        return 'store_catalog_v4:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
     }
 
     /** @param array<string, mixed> $data */

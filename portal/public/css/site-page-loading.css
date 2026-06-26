@@ -63,3 +63,12 @@ body.store-catalog-nav-busy [data-store-nav-bound] {
   color: #64748b;
   text-align: center;
 }
+
+body[data-store-price-currency="usd"] .store-price-currency--syp {
+  display: none !important;
+}
+
+body[data-store-price-currency="syp"] .store-price-currency--usd,
+body:not([data-store-price-currency]) .store-price-currency--usd {
+  display: none !important;
+}

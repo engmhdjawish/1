@@ -160,7 +160,7 @@ if ($customer) {
       <?= $extraHead ?>
     <?php endif; ?>
 </head>
-<body class="min-h-screen text-text-main bg-surface-bg flex flex-col">
+<body class="min-h-screen text-text-main bg-surface-bg flex flex-col" data-store-price-currency="<?= h($storePriceCurrency) ?>">
 <?php require __DIR__ . '/partials/site-header.php'; ?>
 
 <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-6 md:py-8">
@@ -168,6 +168,11 @@ if ($customer) {
 </main>
 
 <?php require __DIR__ . '/partials/site-footer.php'; ?>
+
+<?php if ($storeAllowCart && !in_array($pagePath, ['/store-cart.php', '/cart.php'], true)): ?>
+  <?php require __DIR__ . '/partials/store-cart-drawer.php'; ?>
+  <?php require __DIR__ . '/partials/store-image-lightbox.php'; ?>
+<?php endif; ?>
 
 <?php if ($enableOnboarding): ?>
   <?php
