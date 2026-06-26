@@ -101,15 +101,18 @@ $cartMode = $inCart
         <span>في السلة</span>
       </span>
 
-      <div class="store-card-cart-bar__qty-locked" data-cart-qty-locked<?= $canAdjustInCart ? ' hidden' : '' ?>>
-        <strong class="store-num" dir="ltr" data-cart-qty-display><?= h(format_packages_display($cartQtyForItem)) ?></strong>
+      <div class="store-card-cart-bar__qty">
+        <div class="store-card-cart-bar__qty-locked" data-cart-qty-locked<?= $canAdjustInCart ? ' hidden' : '' ?>>
+          <strong class="store-num" dir="ltr" data-cart-qty-display><?= h(format_packages_display($cartQtyForItem)) ?></strong>
+        </div>
+
+        <div class="store-qty-stepper store-qty-stepper--inline store-qty-stepper--cart" data-cart-qty-adjust<?= $canAdjustInCart ? '' : ' hidden' ?>>
+          <button type="button" data-cart-bump="-1" aria-label="إنقاص أو حذف من السلة">−</button>
+          <output class="store-num" dir="ltr" data-cart-qty-display><?= h(format_packages_display($cartQtyForItem)) ?></output>
+          <button type="button" data-cart-bump="1" aria-label="زيادة"<?= ($remaining !== null && $remaining <= 0) ? ' disabled' : '' ?>>+</button>
+        </div>
       </div>
 
-      <div class="store-qty-stepper store-qty-stepper--inline store-qty-stepper--cart" data-cart-qty-adjust<?= $canAdjustInCart ? '' : ' hidden' ?>>
-        <button type="button" data-cart-bump="-1" aria-label="إنقاص">−</button>
-        <output class="store-num" dir="ltr" data-cart-qty-display><?= h(format_packages_display($cartQtyForItem)) ?></output>
-        <button type="button" data-cart-bump="1" aria-label="زيادة"<?= ($remaining !== null && $remaining <= 0) ? ' disabled' : '' ?>>+</button>
-      </div>
       <span class="store-card-cart-bar__unit"><?= h($packageUnit) ?></span>
     </div>
   </div>

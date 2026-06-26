@@ -118,12 +118,18 @@ $buildPolicyStoreOptions = static function () use ($parseValues): array {
 
 $flash = null;
 $flashType = 'success';
+$pendingBrandIconUrl = null;
 
-if (isset($_GET['saved']) && $_GET['saved'] === '1') {
+if (isset($_SESSION['portal_pending_brand_icon_url'])) {
+    $pendingBrandIconUrl = (string) $_SESSION['portal_pending_brand_icon_url'];
+    unset($_SESSION['portal_pending_brand_icon_url']);
+}
+
+if ($flash === null && isset($_GET['saved']) && $_GET['saved'] === '1') {
     $flash = 'تم حفظ الإعدادات.';
     $flashType = 'success';
 }
-if (isset($_GET['icon_warning']) && trim((string) $_GET['icon_warning']) !== '') {
+if ($flash === null && isset($_GET['icon_warning']) && trim((string) $_GET['icon_warning']) !== '') {
     $flash = 'تم حفظ الإعدادات، لكن تعذر توليد أيقونات التطبيق: ' . trim((string) $_GET['icon_warning']);
     $flashType = 'error';
 }
@@ -159,12 +165,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'material_images_dir' => (string) ($currentCompany['material_images_dir'] ?? ''),
                     'material_thumbnails_dir' => (string) ($currentCompany['material_thumbnails_dir'] ?? ''),
                 ], isset($user['id']) ? (string) $user['id'] : null);
-                $redirectQuery = 'tab=company&saved=1';
-                $iconError = \Portal\Services\CompanyBrandIconService::lastError();
-                if (is_string($iconError) && trim($iconError) !== '') {
-                    $redirectQuery .= '&icon_warning=' . rawurlencode(trim($iconError));
-                }
-                header('Location: /dashboard/settings.php?' . $redirectQuery);
+                $_SESSION['portal_pending_brand_icon_url'] = trim((string) ($_POST['company_logo'] ?? ''));
+                header('Location: /dashboard/settings.php?tab=company&saved=1');
                 exit;
             } catch (\Throwable $exception) {
                 $flash = 'تعذر حفظ إعدادات الشركة: ' . $exception->getMessage();

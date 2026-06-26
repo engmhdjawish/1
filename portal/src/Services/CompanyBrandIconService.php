@@ -213,11 +213,25 @@ final class CompanyBrandIconService
 
         return match ($mime) {
             'image/jpeg' => @imagecreatefromjpeg($sourcePath),
-            'image/png' => @imagecreatefrompng($sourcePath),
+            'image/png' => self::loadPngImage($sourcePath),
             'image/gif' => @imagecreatefromgif($sourcePath),
             'image/webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($sourcePath) : false,
             default => false,
         };
+    }
+
+    /** @return \GdImage|false */
+    private static function loadPngImage(string $sourcePath)
+    {
+        $image = @imagecreatefrompng($sourcePath);
+        if ($image === false) {
+            return false;
+        }
+
+        imagealphablending($image, true);
+        imagesavealpha($image, true);
+
+        return $image;
     }
 
     private static function normalizeMime(string $mime): string
@@ -278,8 +292,11 @@ final class CompanyBrandIconService
             return false;
         }
 
-        $bg = imagecolorallocate($canvas, 246, 246, 248);
-        imagefilledrectangle($canvas, 0, 0, $size, $size, $bg);
+        imagealphablending($canvas, false);
+        imagesavealpha($canvas, true);
+        $transparent = imagecolorallocatealpha($canvas, 0, 0, 0, 127);
+        imagefilledrectangle($canvas, 0, 0, $size, $size, $transparent);
+        imagealphablending($canvas, true);
 
         $padding = (int) round($size * 0.1);
         $maxBox = $size - ($padding * 2);
@@ -289,10 +306,12 @@ final class CompanyBrandIconService
         $dstX = (int) round(($size - $dstW) / 2);
         $dstY = (int) round(($size - $dstH) / 2);
 
-        imagealphablending($canvas, true);
+        imagealphablending($source, true);
+        imagesavealpha($source, true);
         imagecopyresampled($canvas, $source, $dstX, $dstY, 0, 0, $dstW, $dstH, $srcW, $srcH);
         imagedestroy($source);
 
+        imagesavealpha($canvas, true);
         $saved = imagepng($canvas, $targetPath);
         imagedestroy($canvas);
 

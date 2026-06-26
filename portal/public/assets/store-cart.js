@@ -463,7 +463,7 @@
     const minus = adjustRow?.querySelector('[data-cart-bump="-1"]') || form.querySelector('[data-cart-bump="-1"]');
     const step = getQtyStep(form);
     if (plus) plus.disabled = !canAdjust || (remaining !== null && remaining <= 0);
-    if (minus) minus.disabled = !canAdjust || inCartQty <= step;
+    if (minus) minus.disabled = !canAdjust || inCartQty <= 0;
 
     const guid = form.dataset.materialGuid || form.querySelector('[name="material_guid"]')?.value || '';
     if (guid) updatePreviewPayload(guid, inCartQty);
@@ -577,8 +577,10 @@
         if (btn.dataset.bound === '1') return;
         btn.dataset.bound = '1';
         btn.addEventListener('click', () => {
-          const delta = parseInt(btn.getAttribute('data-cart-bump') || '0', 10);
-          if (!delta) return;
+          const sign = parseInt(btn.getAttribute('data-cart-bump') || '0', 10);
+          if (!sign) return;
+          const step = getQtyStep(form);
+          const delta = sign > 0 ? step : -step;
           bumpCartQty(form, delta);
         });
       });
