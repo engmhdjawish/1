@@ -424,7 +424,7 @@ require __DIR__ . '/partials/store-filter-group.php';
 <?php endif; ?>
 
 <!-- store-catalog-fragment:start -->
-<div class="store-layout <?= ($allowClientFilters || $isSectionBrowse) ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= !empty($filterOptions['deferred']) ? ' data-store-filter-options-deferred="1"' : '' ?>>
+<div class="store-layout <?= ($allowClientFilters || $isSectionBrowse) ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root>
   <?php if ($allowClientFilters || $isSectionBrowse): ?>
     <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
       <aside class="store-filters-sidebar">
@@ -524,18 +524,7 @@ require __DIR__ . '/partials/store-filter-group.php';
                     $label = trim((string) ($store['name'] ?? '')) ?: (trim((string) ($store['code'] ?? '')) ?: $guid);
                     $storeGroupOptions[] = ['value' => $guid, 'label' => $label];
                 }
-                if (!empty($filterOptions['deferred']) && $storeGroupOptions === []) {
-                    ?>
-                    <details class="store-filter-accordion" data-filter-group="stores">
-                      <summary class="store-filter-accordion-summary"><span>المخازن</span></summary>
-                      <div class="store-filter-accordion-body">
-                        <div class="store-filter-options" data-filter-list="stores" data-initial-visible="6"></div>
-                      </div>
-                    </details>
-                    <?php
-                } else {
-                    $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, $selectedStoreGuids, 'stores');
-                }
+                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, $selectedStoreGuids, 'stores');
               ?>
             <?php endif; ?>
 
@@ -572,18 +561,7 @@ require __DIR__ . '/partials/store-filter-group.php';
                         $groupGroupOptions[] = ['value' => $guid, 'label' => $label];
                     }
                 }
-                if (!empty($filterOptions['deferred']) && $groupGroupOptions === []) {
-                    ?>
-                    <details class="store-filter-accordion" data-filter-group="groups">
-                      <summary class="store-filter-accordion-summary"><span>المجموعات</span></summary>
-                      <div class="store-filter-accordion-body">
-                        <div class="store-filter-options" data-filter-list="groups" data-initial-visible="6"></div>
-                      </div>
-                    </details>
-                    <?php
-                } else {
-                    $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, $selectedGroupGuids, 'groups');
-                }
+                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, $selectedGroupGuids, 'groups');
               ?>
             <?php endif; ?>
 

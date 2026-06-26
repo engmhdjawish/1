@@ -165,7 +165,7 @@ final class StoreCatalogService
             $mergedFilters['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
         }
 
-        $includeResultFilters = self::shouldIncludeResultFilters($query, $requestFilters);
+        $includeResultFilters = $allowClientFilters;
 
         try {
             if ($sellableMode) {
@@ -270,9 +270,9 @@ final class StoreCatalogService
             $apiError = $exception->getMessage();
         }
 
-        $filterOptions = self::shouldLoadFilterOptionsOnRequest($query, $visibleClientFilters, $requestFilters)
+        $filterOptions = $allowClientFilters
             ? self::getCachedFilterOptions()
-            : ['stores' => [], 'groups' => [], 'deferred' => true];
+            : ['stores' => [], 'groups' => []];
         if ($storeGuids !== [] || self::parseList($policyRules['store_guids'] ?? []) !== []) {
             $forcedStoreGuids = self::parseList($policyRules['store_guids'] ?? []);
             if ($forcedStoreGuids !== []) {
@@ -1573,7 +1573,7 @@ final class StoreCatalogService
         unset($params['facetFilters'], $params['loadFilterOptions']);
         ksort($params);
 
-        return 'store_catalog_v1:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
+        return 'store_catalog_v2:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
     }
 
     /** @param array<string, mixed> $query @param array<string, mixed> $requestFilters */

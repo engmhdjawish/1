@@ -30,96 +30,12 @@ window.portalStoreFiltersInit = (root = document) => {
   const backdrop = catalogRoot.querySelector('#store-filters-backdrop');
   const openBtn = catalogRoot.querySelector('#store-filters-open');
   const closeBtn = catalogRoot.querySelector('#store-filters-close');
-  const sidebar = catalogRoot.querySelector('.store-filters-sidebar');
-
-  let filterOptionsPromise = null;
-
-  const renderGuidFilterOptions = (list, paramName, items, selectedValues) => {
-    if (!list) return;
-    const selected = new Set((selectedValues || []).map((value) => String(value).toLowerCase()));
-    const rows = (items || []).map((item) => {
-      const value = String(item.guid || item.Guid || '');
-      if (!value) return '';
-      const label = String(item.name || item.Name || item.code || item.Code || value);
-      const checked = selected.has(value.toLowerCase()) ? ' checked' : '';
-      return '<label class="store-filter-option" data-filter-label="' + label.replace(/"/g, '&quot;') + '">'
-        + '<input type="checkbox" name="' + paramName + '[]" value="' + value.replace(/"/g, '&quot;') + '"' + checked + '>'
-        + '<span class="store-filter-option-text">' + label + '</span>'
-        + '</label>';
-    }).join('');
-    list.innerHTML = rows || '<p class="text-xs text-text-muted px-2 py-1">لا توجد خيارات.</p>';
-    list.dataset.filtersBound = '0';
-    const groupId = list.getAttribute('data-filter-list');
-    const input = catalogRoot.querySelector('[data-filter-search="' + groupId + '"]');
-    const toggleBtn = catalogRoot.querySelector('[data-filter-toggle="' + groupId + '"]');
-    if (groupId) {
-      setupFilterList(list, input, toggleBtn);
-    }
-  };
-
-  const loadDeferredFilterOptions = async () => {
-    if (catalogRoot.dataset.filterOptionsLoaded === '1') {
-      return;
-    }
-    if (filterOptionsPromise) {
-      await filterOptionsPromise;
-      return;
-    }
-    sidebar?.classList.add('is-loading-options');
-    filterOptionsPromise = fetch('/api/store-filter-options.php', {
-      credentials: 'same-origin',
-      headers: { Accept: 'application/json' },
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        if (!data?.ok) {
-          throw new Error(data?.message || 'تعذر تحميل خيارات الفلاتر.');
-        }
-        const options = data.filterOptions || {};
-        renderGuidFilterOptions(
-          catalogRoot.querySelector('[data-filter-list="stores"]'),
-          'storeGuids',
-          options.stores || [],
-          Array.from(catalogRoot.querySelectorAll('input[name="storeGuids[]"]:checked')).map((el) => el.value)
-        );
-        renderGuidFilterOptions(
-          catalogRoot.querySelector('[data-filter-list="groups"]'),
-          'groupGuids',
-          options.groups || [],
-          Array.from(catalogRoot.querySelectorAll('input[name="groupGuids[]"]:checked')).map((el) => el.value)
-        );
-        catalogRoot.dataset.filterOptionsLoaded = '1';
-        delete catalogRoot.dataset.storeFilterOptionsDeferred;
-      })
-      .catch(() => {})
-      .finally(() => {
-        sidebar?.classList.remove('is-loading-options');
-      });
-    await filterOptionsPromise;
-  };
-
-  const scheduleDeferredFilterOptions = () => {
-    if (!catalogRoot.hasAttribute('data-store-filter-options-deferred')) {
-      return;
-    }
-    const run = () => {
-      loadDeferredFilterOptions().catch(() => {});
-    };
-    if ('requestIdleCallback' in window) {
-      window.requestIdleCallback(run, { timeout: 2500 });
-    } else {
-      window.setTimeout(run, 900);
-    }
-  };
 
   const setDrawerOpen = (open) => {
     document.body.classList.toggle('store-filters-drawer-open', open);
     if (backdrop) {
       backdrop.classList.toggle('is-open', open);
       backdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
-    }
-    if (open) {
-      loadDeferredFilterOptions().catch(() => {});
     }
   };
 
@@ -141,10 +57,6 @@ window.portalStoreFiltersInit = (root = document) => {
   }
 
   const setupFilterList = (list, input, toggleBtn) => {
-    if (list.dataset.filtersBound === '1') {
-      return;
-    }
-    list.dataset.filtersBound = '1';
     const initialVisible = Number.parseInt(list.getAttribute('data-initial-visible') || '6', 10);
     let expanded = false;
 
@@ -199,15 +111,14 @@ window.portalStoreFiltersInit = (root = document) => {
 
   catalogRoot.querySelectorAll('[data-filter-list]').forEach((list) => {
     const groupId = list.getAttribute('data-filter-list');
-    if (!groupId) {
+    if (!groupId || list.dataset.filtersBound === '1') {
       return;
     }
+    list.dataset.filtersBound = '1';
     const input = catalogRoot.querySelector(`[data-filter-search="${groupId}"]`);
     const toggleBtn = catalogRoot.querySelector(`[data-filter-toggle="${groupId}"]`);
     setupFilterList(list, input, toggleBtn);
   });
-
-  scheduleDeferredFilterOptions();
 };
 
 if (document.readyState === 'loading') {

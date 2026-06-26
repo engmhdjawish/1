@@ -40,7 +40,6 @@ try {
         echo 'Total: ' . (int) ($catalog['totalCount'] ?? 0) . "\n";
         echo 'API error: ' . (string) ($catalog['apiError'] ?? '') . "\n";
         echo 'Allow client filters: ' . ((bool) ($catalog['allow_client_filters'] ?? false) ? 'yes' : 'no') . "\n";
-        echo 'Filter options deferred: ' . (!empty($catalog['filterOptions']['deferred']) ? 'yes' : 'no') . "\n";
         echo 'Elapsed ms: ' . $elapsedMs . "\n";
     }
 
