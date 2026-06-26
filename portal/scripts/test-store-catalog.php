@@ -16,8 +16,11 @@ require $base . '/views/helpers.php';
 
 use Portal\Services\StoreCatalogService;
 use Portal\Services\StorePolicyService;
+use Portal\Config;
 
 echo "=== Store catalog test ===\n";
+echo 'Storage: ' . Config::storagePath() . "\n";
+echo 'Cache dir writable: ' . (is_writable(Config::storagePath()) || (is_dir(Config::storagePath() . '/cache') && is_writable(Config::storagePath() . '/cache')) ? 'yes' : 'no') . "\n\n";
 
 try {
     $guest = StorePolicyService::guestPolicy();
@@ -28,16 +31,20 @@ try {
         echo 'Policy id: ' . ($guest['id'] ?? '') . "\n";
     }
 
-    $started = microtime(true);
-    $catalog = StoreCatalogService::catalogFromRequest([]);
-    $elapsedMs = (int) round((microtime(true) - $started) * 1000);
-    echo 'Products: ' . count($catalog['products'] ?? []) . "\n";
-    echo 'Total: ' . (int) ($catalog['totalCount'] ?? 0) . "\n";
-    echo 'API error: ' . (string) ($catalog['apiError'] ?? '') . "\n";
-    echo 'Allow client filters: ' . ((bool) ($catalog['allow_client_filters'] ?? false) ? 'yes' : 'no') . "\n";
-    echo 'Filter options deferred: ' . (!empty($catalog['filterOptions']['deferred']) ? 'yes' : 'no') . "\n";
-    echo 'Elapsed ms: ' . $elapsedMs . "\n";
-    echo "OK\n";
+    foreach (['first run (cold)', 'second run (cache)'] as $label) {
+        $started = microtime(true);
+        $catalog = StoreCatalogService::catalogFromRequest([]);
+        $elapsedMs = (int) round((microtime(true) - $started) * 1000);
+        echo "\n--- {$label} ---\n";
+        echo 'Products: ' . count($catalog['products'] ?? []) . "\n";
+        echo 'Total: ' . (int) ($catalog['totalCount'] ?? 0) . "\n";
+        echo 'API error: ' . (string) ($catalog['apiError'] ?? '') . "\n";
+        echo 'Allow client filters: ' . ((bool) ($catalog['allow_client_filters'] ?? false) ? 'yes' : 'no') . "\n";
+        echo 'Filter options deferred: ' . (!empty($catalog['filterOptions']['deferred']) ? 'yes' : 'no') . "\n";
+        echo 'Elapsed ms: ' . $elapsedMs . "\n";
+    }
+
+    echo "\nOK\n";
 } catch (Throwable $e) {
     echo "FAIL: " . $e->getMessage() . "\n";
     echo $e->getFile() . ':' . $e->getLine() . "\n";
