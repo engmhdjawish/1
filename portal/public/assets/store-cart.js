@@ -2,6 +2,87 @@
   const API = '/api/store-cart.php';
   let lastCartData = null;
 
+  const CART_SYNC_KEY = 'jawish-store-cart-sync';
+  const CART_SYNC_CHANNEL = 'jawish-store-cart';
+  const tabId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  let lastRemoteSyncAt = 0;
+  let tabHiddenAt = 0;
+  let refreshInFlight = null;
+  let cartSyncChannel = null;
+
+  const handleCartSyncMessage = (message) => {
+    if (!message || typeof message !== 'object' || message.tabId === tabId) return;
+    const ts = Number(message.ts) || 0;
+    if (ts <= lastRemoteSyncAt) return;
+    if (!message.data || typeof message.data !== 'object') return;
+    lastRemoteSyncAt = ts;
+    applyCartResponse(message.data, { remote: true, silent: true });
+  };
+
+  const publishCartSync = (data) => {
+    if (!data || typeof data !== 'object' || !data.cart_qty_by_guid) return;
+    const message = { tabId, ts: Date.now(), data };
+    try {
+      cartSyncChannel?.postMessage(message);
+    } catch {
+      // ignore channel errors
+    }
+    try {
+      localStorage.setItem(CART_SYNC_KEY, JSON.stringify(message));
+    } catch {
+      // ignore private mode / quota errors
+    }
+  };
+
+  const refreshCartFromServer = async (options = {}) => {
+    if (refreshInFlight) return refreshInFlight;
+    refreshInFlight = (async () => {
+      try {
+        const res = await fetch(`${API}?reconcile=1`, {
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+        });
+        const data = await res.json();
+        applyCartResponse(data, { remote: true, silent: options.silent !== false });
+      } catch {
+        // ignore background refresh errors
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+    return refreshInFlight;
+  };
+
+  const initCartCrossTabSync = () => {
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        cartSyncChannel = new BroadcastChannel(CART_SYNC_CHANNEL);
+        cartSyncChannel.onmessage = (event) => handleCartSyncMessage(event.data);
+      } catch {
+        cartSyncChannel = null;
+      }
+    }
+
+    window.addEventListener('storage', (event) => {
+      if (event.key !== CART_SYNC_KEY || !event.newValue) return;
+      try {
+        handleCartSyncMessage(JSON.parse(event.newValue));
+      } catch {
+        // ignore invalid sync payload
+      }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        tabHiddenAt = Date.now();
+        return;
+      }
+      if (tabHiddenAt > 0 && Date.now() - tabHiddenAt > 800) {
+        refreshCartFromServer({ silent: true });
+      }
+    });
+  };
+
   const toastHost = () => {
     let host = document.getElementById('storeCartToastHost');
     if (!host) {
@@ -632,9 +713,7 @@
     });
     try {
       const data = await apiRequest(payload);
-      refreshCartForms(data);
-      updateBadge(data);
-      if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
+      applyCartResponse(data);
       if (!data.ok) return;
       const flySource = btn || form.querySelector('.store-add-cart__submit') || form;
       flyToCart(flySource);
@@ -1028,7 +1107,9 @@
     });
   };
 
-  const applyCartResponse = (data) => {
+  const applyCartResponse = (data, options = {}) => {
+    const remote = options.remote === true;
+    const silent = options.silent === true;
     if (!data || typeof data !== 'object') return;
     lastCartData = data;
     updateBadge(data);
@@ -1047,7 +1128,10 @@
       renderCartRoot(drawerRoot, data);
     }
 
-    if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
+    if (!silent && data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
+    if (!remote && data.cart_qty_by_guid) {
+      publishCartSync(data);
+    }
   };
 
   const cartDrawer = () => document.getElementById('store-cart-drawer');
@@ -1141,6 +1225,7 @@
   };
 
   const init = async () => {
+    initCartCrossTabSync();
     bindAddForms();
     bindCartDrawer();
     const page = document.querySelector('[data-store-cart-page="1"]');
