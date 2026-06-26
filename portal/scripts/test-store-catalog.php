@@ -40,6 +40,18 @@ try {
         echo 'Total: ' . (int) ($catalog['totalCount'] ?? 0) . "\n";
         echo 'API error: ' . (string) ($catalog['apiError'] ?? '') . "\n";
         echo 'Allow client filters: ' . ((bool) ($catalog['allow_client_filters'] ?? false) ? 'yes' : 'no') . "\n";
+        $resultFilters = is_array($catalog['resultFilters'] ?? null) ? $catalog['resultFilters'] : [];
+        $filterOptions = is_array($catalog['filterOptions'] ?? null) ? $catalog['filterOptions'] : [];
+        foreach ([
+            'materialTypes' => 'result materialTypes',
+            'manufacturers' => 'result manufacturers',
+            'groups' => 'result groups',
+        ] as $key => $label) {
+            $items = is_array($resultFilters[$key] ?? null) ? $resultFilters[$key] : [];
+            echo $label . ': ' . count($items) . "\n";
+        }
+        echo 'filter stores: ' . count(is_array($filterOptions['stores'] ?? null) ? $filterOptions['stores'] : []) . "\n";
+        echo 'filter groups: ' . count(is_array($filterOptions['groups'] ?? null) ? $filterOptions['groups'] : []) . "\n";
         echo 'Elapsed ms: ' . $elapsedMs . "\n";
     }
 

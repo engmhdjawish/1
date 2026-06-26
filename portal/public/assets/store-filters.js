@@ -119,6 +119,57 @@ window.portalStoreFiltersInit = (root = document) => {
     const toggleBtn = catalogRoot.querySelector(`[data-filter-toggle="${groupId}"]`);
     setupFilterList(list, input, toggleBtn);
   });
+
+  const needsGuidOptions = (groupId) => {
+    const list = catalogRoot.querySelector(`[data-filter-list="${groupId}"]`);
+    return list && list.querySelectorAll('.store-filter-option').length === 0;
+  };
+
+  if (needsGuidOptions('stores') || needsGuidOptions('groups')) {
+    fetch('/api/store-filter-options.php', {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (!data?.ok) {
+          return;
+        }
+        const options = data.filterOptions || {};
+        const renderGuidOptions = (groupId, paramName, items) => {
+          const list = catalogRoot.querySelector(`[data-filter-list="${groupId}"]`);
+          if (!list || list.querySelectorAll('.store-filter-option').length > 0) {
+            return;
+          }
+          const selected = new Set(
+            Array.from(catalogRoot.querySelectorAll(`input[name="${paramName}[]"]:checked`)).map((el) => el.value.toLowerCase())
+          );
+          const rows = (items || []).map((item) => {
+            const value = String(item.guid || item.Guid || '');
+            if (!value) {
+              return '';
+            }
+            const label = String(item.name || item.Name || item.code || item.Code || value);
+            const checked = selected.has(value.toLowerCase()) ? ' checked' : '';
+            return '<label class="store-filter-option" data-filter-label="' + label.replace(/"/g, '&quot;') + '">'
+              + '<input type="checkbox" name="' + paramName + '[]" value="' + value.replace(/"/g, '&quot;') + '"' + checked + '>'
+              + '<span class="store-filter-option-text">' + label + '</span>'
+              + '</label>';
+          }).join('');
+          if (!rows) {
+            return;
+          }
+          list.innerHTML = rows;
+          list.dataset.filtersBound = '0';
+          const input = catalogRoot.querySelector(`[data-filter-search="${groupId}"]`);
+          const toggleBtn = catalogRoot.querySelector(`[data-filter-toggle="${groupId}"]`);
+          setupFilterList(list, input, toggleBtn);
+        };
+        renderGuidOptions('stores', 'storeGuids', options.stores || []);
+        renderGuidOptions('groups', 'groupGuids', options.groups || []);
+      })
+      .catch(() => {});
+  }
 };
 
 if (document.readyState === 'loading') {

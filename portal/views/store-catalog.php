@@ -524,7 +524,7 @@ require __DIR__ . '/partials/store-filter-group.php';
                     $label = trim((string) ($store['name'] ?? '')) ?: (trim((string) ($store['code'] ?? '')) ?: $guid);
                     $storeGroupOptions[] = ['value' => $guid, 'label' => $label];
                 }
-                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, $selectedStoreGuids, 'stores');
+                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, $selectedStoreGuids, 'stores', 5, 6, true);
               ?>
             <?php endif; ?>
 
@@ -561,7 +561,7 @@ require __DIR__ . '/partials/store-filter-group.php';
                         $groupGroupOptions[] = ['value' => $guid, 'label' => $label];
                     }
                 }
-                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, $selectedGroupGuids, 'groups');
+                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, $selectedGroupGuids, 'groups', 5, 6, true);
               ?>
             <?php endif; ?>
 

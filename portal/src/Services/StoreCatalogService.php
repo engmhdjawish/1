@@ -184,7 +184,8 @@ final class StoreCatalogService
                         $storeGuids,
                         $isAvailable,
                         $hasImage,
-                        $mergedFilters
+                        $mergedFilters,
+                        $includeResultFilters
                     ): array {
                         return self::fetchMaterialsExtended(
                             $apiPage,
@@ -201,7 +202,7 @@ final class StoreCatalogService
                             $isAvailable,
                             $hasImage,
                             false,
-                            $apiPage === 1,
+                            $includeResultFilters && $apiPage === 1,
                             $mergedFilters['minWarehouseQuantity'],
                             $mergedFilters['maxWarehouseQuantity'],
                             $mergedFilters['minUnitSalePriceSyp'],
@@ -257,7 +258,7 @@ final class StoreCatalogService
                     $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
                     $page = max(1, (int) ($data['page'] ?? $page));
                     $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
-                    $resultFilters = is_array($data['resultFilters'] ?? null) ? $data['resultFilters'] : [];
+                    $resultFilters = self::extractResultFiltersFromApiData($data);
                     $resultFilters = self::scopeResultFiltersForPolicy($resultFilters, $policyRules);
                 } else {
                     $apiError = self::extractApiError($materials);
@@ -273,6 +274,12 @@ final class StoreCatalogService
         $filterOptions = $allowClientFilters
             ? self::getCachedFilterOptions()
             : ['stores' => [], 'groups' => []];
+        if ($allowClientFilters && self::resultFiltersAreEmpty($resultFilters)) {
+            $resultFilters = self::scopeResultFiltersForPolicy(
+                self::buildResultFiltersFromFilterOptions($filterOptions),
+                $policyRules
+            );
+        }
         if ($storeGuids !== [] || self::parseList($policyRules['store_guids'] ?? []) !== []) {
             $forcedStoreGuids = self::parseList($policyRules['store_guids'] ?? []);
             if ($forcedStoreGuids !== []) {
@@ -323,7 +330,7 @@ final class StoreCatalogService
             'filters' => $displayFilters,
         ];
 
-        if ($apiError === null || $apiError === '') {
+        if (($apiError === null || $apiError === '') && !self::shouldRejectCachedCatalog($catalogResult)) {
             self::writeCatalogCache($query, $policy, $catalogResult);
         }
 
@@ -482,7 +489,7 @@ final class StoreCatalogService
                     $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
                     $page = max(1, (int) ($data['page'] ?? $page));
                     $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
-                    $resultFilters = is_array($data['resultFilters'] ?? null) ? $data['resultFilters'] : [];
+                    $resultFilters = self::extractResultFiltersFromApiData($data);
                 } else {
                     $apiError = self::extractApiError($materials);
                 }
@@ -943,32 +950,7 @@ final class StoreCatalogService
     private static function loadStaticResultFilters(): array
     {
         try {
-            $response = ApiClient::get('/api/materials/filter-options');
-            if (!$response['ok'] || !is_array($response['data'] ?? null)) {
-                return [];
-            }
-
-            $data = $response['data'];
-            $toFacetValues = static function (mixed $values): array {
-                if (!is_array($values)) {
-                    return [];
-                }
-                $items = [];
-                foreach ($values as $value) {
-                    $item = trim((string) $value);
-                    if ($item === '') {
-                        continue;
-                    }
-                    $items[] = ['value' => $item, 'count' => null];
-                }
-
-                return $items;
-            };
-
-            return [
-                'materialTypes' => $toFacetValues($data['materialTypes'] ?? $data['MaterialTypes'] ?? []),
-                'manufacturers' => $toFacetValues($data['manufacturers'] ?? $data['Manufacturers'] ?? []),
-            ];
+            return self::buildResultFiltersFromFilterOptions(self::getCachedFilterOptions());
         } catch (\Throwable) {
             return [];
         }
@@ -1208,7 +1190,7 @@ final class StoreCatalogService
             $withResults = array_values(array_filter($facets, static function (array $facet): bool {
                 $count = $facet['count'] ?? null;
 
-                return $count !== null && (int) $count > 0;
+                return $count === null || (int) $count > 0;
             }));
             if ($forced === []) {
                 return $withResults;
@@ -1228,7 +1210,7 @@ final class StoreCatalogService
             $withResults = array_values(array_filter($facets, static function (array $facet): bool {
                 $count = $facet['count'] ?? null;
 
-                return $count !== null && (int) $count > 0;
+                return $count === null || (int) $count > 0;
             }));
             if ($forcedGuids === []) {
                 return $withResults;
@@ -1270,7 +1252,7 @@ final class StoreCatalogService
         return $resultFilters;
     }
 
-    /** @return array{stores: list<array<string, mixed>>, groups: list<array<string, mixed>>} */
+    /** @return array{stores: list<array<string, mixed>>, groups: list<array<string, mixed>>, materialTypes?: list<string>, manufacturers?: list<string>, ageCategories?: list<string>, sizeRanges?: list<string>, countryOfOrigins?: list<string>} */
     private static function loadFilterOptions(): array
     {
         try {
@@ -1300,10 +1282,29 @@ final class StoreCatalogService
 
                 return $items;
             };
+            $normalizeStringList = static function (mixed $values): array {
+                if (!is_array($values)) {
+                    return [];
+                }
+                $items = [];
+                foreach ($values as $value) {
+                    $item = trim((string) $value);
+                    if ($item !== '') {
+                        $items[] = $item;
+                    }
+                }
+
+                return array_values(array_unique($items));
+            };
 
             return [
                 'stores' => $normalizeGuidRows($stores),
                 'groups' => $normalizeGuidRows($groups),
+                'materialTypes' => $normalizeStringList($data['materialTypes'] ?? $data['MaterialTypes'] ?? []),
+                'manufacturers' => $normalizeStringList($data['manufacturers'] ?? $data['Manufacturers'] ?? []),
+                'ageCategories' => $normalizeStringList($data['ageCategories'] ?? $data['AgeCategories'] ?? []),
+                'sizeRanges' => $normalizeStringList($data['sizeRanges'] ?? $data['SizeRanges'] ?? []),
+                'countryOfOrigins' => $normalizeStringList($data['countryOfOrigins'] ?? $data['CountryOfOrigins'] ?? []),
             ];
         } catch (\Throwable) {
             return ['stores' => [], 'groups' => []];
@@ -1491,7 +1492,7 @@ final class StoreCatalogService
             $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
             if ($apiPage === 1) {
                 $apiTotalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
-                $resultFilters = is_array($data['resultFilters'] ?? null) ? $data['resultFilters'] : [];
+                $resultFilters = self::extractResultFiltersFromApiData($data);
             }
 
             $rawItems = $data['items'] ?? $data['Items'] ?? [];
@@ -1528,10 +1529,21 @@ final class StoreCatalogService
         ];
     }
 
-    /** @return array{stores: list<array<string, mixed>>, groups: list<array<string, mixed>>} */
+    /** @return array{stores: list<array<string, mixed>>, groups: list<array<string, mixed>>, materialTypes?: list<string>, manufacturers?: list<string>, ageCategories?: list<string>, sizeRanges?: list<string>, countryOfOrigins?: list<string>} */
     public static function getCachedFilterOptions(): array
     {
-        return ResponseCache::remember('store_filter_options_v1', 600, static fn (): array => self::loadFilterOptions());
+        $cacheKey = 'store_filter_options_v2';
+        $cached = ResponseCache::get($cacheKey);
+        if (is_array($cached) && self::filterOptionsHaveData($cached)) {
+            return $cached;
+        }
+
+        $options = self::loadFilterOptions();
+        if (self::filterOptionsHaveData($options)) {
+            ResponseCache::set($cacheKey, $options, 600);
+        }
+
+        return $options;
     }
 
     /** @param array<string, mixed> $query @param array<string, mixed> $policy @return array<string, mixed>|null */
@@ -1543,8 +1555,16 @@ final class StoreCatalogService
         }
 
         $cached = ResponseCache::get($key);
+        if (!is_array($cached)) {
+            return null;
+        }
+        if (self::shouldRejectCachedCatalog($cached)) {
+            ResponseCache::forget($key);
 
-        return is_array($cached) ? $cached : null;
+            return null;
+        }
+
+        return $cached;
     }
 
     /** @param array<string, mixed> $query @param array<string, mixed> $policy @param array<string, mixed> $catalog */
@@ -1573,7 +1593,163 @@ final class StoreCatalogService
         unset($params['facetFilters'], $params['loadFilterOptions']);
         ksort($params);
 
-        return 'store_catalog_v2:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
+        return 'store_catalog_v3:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
+    }
+
+    /** @param array<string, mixed> $data */
+    private static function extractResultFiltersFromApiData(array $data): array
+    {
+        $raw = $data['resultFilters'] ?? $data['ResultFilters'] ?? null;
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $normalizeStringFacets = static function (mixed $facets): array {
+            if (!is_array($facets)) {
+                return [];
+            }
+            $items = [];
+            foreach ($facets as $facet) {
+                if (!is_array($facet)) {
+                    continue;
+                }
+                $value = trim((string) ($facet['value'] ?? $facet['Value'] ?? ''));
+                if ($value === '') {
+                    continue;
+                }
+                $count = $facet['count'] ?? $facet['Count'] ?? null;
+                $items[] = [
+                    'value' => $value,
+                    'count' => $count === null ? null : (int) $count,
+                ];
+            }
+
+            return $items;
+        };
+
+        $normalizeGroupFacets = static function (mixed $facets): array {
+            if (!is_array($facets)) {
+                return [];
+            }
+            $items = [];
+            foreach ($facets as $facet) {
+                if (!is_array($facet)) {
+                    continue;
+                }
+                $guid = trim((string) ($facet['guid'] ?? $facet['Guid'] ?? ''));
+                if ($guid === '') {
+                    continue;
+                }
+                $count = $facet['count'] ?? $facet['Count'] ?? null;
+                $items[] = [
+                    'guid' => $guid,
+                    'code' => trim((string) ($facet['code'] ?? $facet['Code'] ?? '')),
+                    'name' => trim((string) ($facet['name'] ?? $facet['Name'] ?? '')),
+                    'count' => $count === null ? null : (int) $count,
+                ];
+            }
+
+            return $items;
+        };
+
+        return [
+            'materialTypes' => $normalizeStringFacets($raw['materialTypes'] ?? $raw['MaterialTypes'] ?? []),
+            'ageCategories' => $normalizeStringFacets($raw['ageCategories'] ?? $raw['AgeCategories'] ?? []),
+            'manufacturers' => $normalizeStringFacets($raw['manufacturers'] ?? $raw['Manufacturers'] ?? []),
+            'sizeRanges' => $normalizeStringFacets($raw['sizeRanges'] ?? $raw['SizeRanges'] ?? []),
+            'countryOfOrigins' => $normalizeStringFacets($raw['countryOfOrigins'] ?? $raw['CountryOfOrigins'] ?? []),
+            'groups' => $normalizeGroupFacets($raw['groups'] ?? $raw['Groups'] ?? []),
+        ];
+    }
+
+    /** @param array<string, mixed> $resultFilters */
+    private static function resultFiltersAreEmpty(array $resultFilters): bool
+    {
+        foreach (['materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins', 'groups'] as $key) {
+            $items = $resultFilters[$key] ?? [];
+            if (is_array($items) && $items !== []) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** @param array<string, mixed> $filterOptions @return array<string, mixed> */
+    private static function buildResultFiltersFromFilterOptions(array $filterOptions): array
+    {
+        $toStringFacets = static function (mixed $values): array {
+            if (!is_array($values)) {
+                return [];
+            }
+            $items = [];
+            foreach ($values as $value) {
+                $item = trim((string) $value);
+                if ($item === '') {
+                    continue;
+                }
+                $items[] = ['value' => $item, 'count' => null];
+            }
+
+            return $items;
+        };
+
+        $groupFacets = [];
+        foreach (is_array($filterOptions['groups'] ?? null) ? $filterOptions['groups'] : [] as $group) {
+            if (!is_array($group)) {
+                continue;
+            }
+            $guid = trim((string) ($group['guid'] ?? ''));
+            if ($guid === '') {
+                continue;
+            }
+            $groupFacets[] = [
+                'guid' => $guid,
+                'code' => trim((string) ($group['code'] ?? '')),
+                'name' => trim((string) ($group['name'] ?? '')),
+                'count' => null,
+            ];
+        }
+
+        return [
+            'materialTypes' => $toStringFacets($filterOptions['materialTypes'] ?? []),
+            'ageCategories' => $toStringFacets($filterOptions['ageCategories'] ?? []),
+            'manufacturers' => $toStringFacets($filterOptions['manufacturers'] ?? []),
+            'sizeRanges' => $toStringFacets($filterOptions['sizeRanges'] ?? []),
+            'countryOfOrigins' => $toStringFacets($filterOptions['countryOfOrigins'] ?? []),
+            'groups' => $groupFacets,
+        ];
+    }
+
+    /** @param array<string, mixed> $filterOptions */
+    private static function filterOptionsHaveData(array $filterOptions): bool
+    {
+        if (($filterOptions['stores'] ?? []) !== [] || ($filterOptions['groups'] ?? []) !== []) {
+            return true;
+        }
+        foreach (['materialTypes', 'manufacturers', 'ageCategories', 'sizeRanges', 'countryOfOrigins'] as $key) {
+            if (($filterOptions[$key] ?? []) !== []) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @param array<string, mixed> $catalog */
+    private static function shouldRejectCachedCatalog(array $catalog): bool
+    {
+        if (!(bool) ($catalog['allow_client_filters'] ?? false)) {
+            return false;
+        }
+        if (trim((string) ($catalog['apiError'] ?? '')) !== '') {
+            return false;
+        }
+        if ((int) ($catalog['totalCount'] ?? 0) <= 0) {
+            return false;
+        }
+
+        return self::resultFiltersAreEmpty(is_array($catalog['resultFilters'] ?? null) ? $catalog['resultFilters'] : []);
     }
 
     /** @param array<string, mixed> $query @param array<string, mixed> $requestFilters */
