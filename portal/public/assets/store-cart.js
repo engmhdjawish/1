@@ -454,7 +454,7 @@
       el.textContent = qtyLabel;
     });
 
-    const lockedRow = form.querySelector('[data-cart-qty-locked]') || form.querySelector('.store-card-cart-bar__qty-locked');
+    const lockedRow = form.querySelector('[data-cart-qty-locked]') || form.querySelector('.store-cart-panel__qty-locked');
     const adjustRow = form.querySelector('[data-cart-qty-adjust]');
     if (lockedRow) lockedRow.hidden = canAdjust;
     if (adjustRow) adjustRow.hidden = !canAdjust;

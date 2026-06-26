@@ -95,25 +95,25 @@ $cartMode = $inCart
       </p>
     <?php endif; ?>
 
-    <div class="store-card-cart-bar">
-      <span class="store-card-cart-bar__status">
-        <span class="material-symbols-outlined text-base" aria-hidden="true">shopping_cart</span>
+    <div class="store-cart-panel store-cart-panel--in-cart">
+      <div class="store-cart-panel__badge">
+        <span class="material-symbols-outlined" aria-hidden="true">shopping_cart</span>
         <span>في السلة</span>
-      </span>
+      </div>
 
-      <div class="store-card-cart-bar__qty">
-        <div class="store-card-cart-bar__qty-locked" data-cart-qty-locked<?= $canAdjustInCart ? ' hidden' : '' ?>>
+      <div class="store-cart-panel__controls">
+        <div class="store-cart-panel__qty-locked" data-cart-qty-locked<?= $canAdjustInCart ? ' hidden' : '' ?>>
           <strong class="store-num" dir="ltr" data-cart-qty-display><?= h(format_packages_display($cartQtyForItem)) ?></strong>
         </div>
 
-        <div class="store-qty-stepper store-qty-stepper--inline store-qty-stepper--cart" data-cart-qty-adjust<?= $canAdjustInCart ? '' : ' hidden' ?>>
+        <div class="store-qty-stepper store-qty-stepper--card" data-cart-qty-adjust<?= $canAdjustInCart ? '' : ' hidden' ?>>
           <button type="button" data-cart-bump="-1" aria-label="إنقاص أو حذف من السلة">−</button>
           <output class="store-num" dir="ltr" data-cart-qty-display><?= h(format_packages_display($cartQtyForItem)) ?></output>
           <button type="button" data-cart-bump="1" aria-label="زيادة"<?= ($remaining !== null && $remaining <= 0) ? ' disabled' : '' ?>>+</button>
         </div>
-      </div>
 
-      <span class="store-card-cart-bar__unit"><?= h($packageUnit) ?></span>
+        <span class="store-cart-panel__unit"><?= h($packageUnit) ?></span>
+      </div>
     </div>
   </div>
 
@@ -130,9 +130,9 @@ $cartMode = $inCart
       </p>
     <?php endif; ?>
 
-    <div class="store-card-cart-bar store-card-cart-bar--add">
-      <div class="store-card-cart-bar__row">
-        <div class="store-qty-stepper store-qty-stepper--inline store-qty-stepper--cart<?= $partialPackage ? ' store-qty-stepper--locked' : '' ?>">
+    <div class="store-cart-panel store-cart-panel--add">
+      <div class="store-cart-panel__controls">
+        <div class="store-qty-stepper store-qty-stepper--card<?= $partialPackage ? ' store-qty-stepper--locked' : '' ?>">
           <button type="button" data-qty-minus aria-label="إنقاص"<?= $partialPackage ? ' disabled' : '' ?>>−</button>
           <input
             type="number"
@@ -147,7 +147,7 @@ $cartMode = $inCart
           >
           <button type="button" data-qty-plus aria-label="زيادة"<?= ($partialPackage || ($remaining !== null && $remaining <= 0)) ? ' disabled' : '' ?>>+</button>
         </div>
-        <span class="store-card-cart-bar__unit"><?= h($packageUnit) ?></span>
+        <span class="store-cart-panel__unit"><?= h($packageUnit) ?></span>
       </div>
       <button type="submit" class="store-add-cart__submit" <?= $atLimit ? 'disabled' : '' ?>>
         <span class="material-symbols-outlined text-[20px]" aria-hidden="true">add_shopping_cart</span>
