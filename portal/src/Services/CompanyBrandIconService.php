@@ -71,7 +71,7 @@ final class CompanyBrandIconService
         }
 
         if (self::isSvgPath($iconSourcePath)) {
-            self::$lastError ??= 'تعذر تحويل SVG إلى PNG. ثبّت ImageMagick على الخادم، أو ارفع الشعار بصيغة PNG/JPG.';
+            self::$lastError ??= 'تعذر تحويل SVG إلى PNG. إن كان الشعار معقداً ارفعه PNG/JPG، أو ثبّت ImageMagick على الخادم.';
 
             return false;
         }
@@ -205,7 +205,7 @@ final class CompanyBrandIconService
         $detail = SvgRasterService::lastError();
         self::$lastError = is_string($detail) && trim($detail) !== ''
             ? $detail
-            : 'تعذر تحويل SVG. ثبّت ImageMagick على الخادم، أو ارفع الشعار بصيغة PNG/JPG.';
+            : 'تعذر تحويل SVG. إن كان الشعار معقداً ارفعه PNG/JPG، أو ثبّت ImageMagick على الخادم.';
 
         return $sourcePath;
     }
