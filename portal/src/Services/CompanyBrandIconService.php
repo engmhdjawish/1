@@ -57,7 +57,8 @@ final class CompanyBrandIconService
 
         $sourcePath = self::resolveSourcePath($logoUrl);
         if ($sourcePath === null || !is_file($sourcePath)) {
-            self::$lastError = 'ملف الشعار غير موجود على القرص. أعد رفع الشعار من لوحة التحكم > مكتبة الوسائط.';
+            self::clearBrandIcons();
+            self::$lastError = 'ملف الشعار غير موجود في مكتبة الوسائط. اختر شعاراً جديداً من الإعدادات > مكتبة الوسائط.';
 
             return false;
         }

@@ -23,7 +23,6 @@ if ($aboutSnippet !== '') {
 $sectionCount = count($sections);
 $offerCount = count(array_filter($sections, static fn (array $s): bool => !empty($s['is_offer_section'])));
 $storeCatalogDisplay = StoreCatalogService::displayOptions();
-$storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
 ?>
 <div class="home-page">
   <section class="home-hero home-hero--premium" aria-label="ترحيب">
