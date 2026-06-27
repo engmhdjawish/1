@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 /**
- * Minimal SVG → GD rasterizer for simple logos (no external binaries).
+ * SVG → GD rasterizer for logos (no ImageMagick/Inkscape required).
  */
 final class SvgBasicGdRenderer
 {
@@ -17,18 +17,22 @@ final class SvgBasicGdRenderer
             return false;
         }
 
-        $svg = @simplexml_load_string($xml);
-        if ($svg === false) {
-            $xml = preg_replace('/<!DOCTYPE[^>]*>/i', '', $xml) ?? $xml;
-            $svg = @simplexml_load_string($xml);
-        }
+        $xml = self::sanitizeSvgXml($xml);
+        libxml_use_internal_errors(true);
+        $svg = @simplexml_load_string($xml, 'SimpleXMLElement', LIBXML_NONET | LIBXML_COMPACT);
         if ($svg === false) {
             return false;
         }
 
         $svg->registerXPathNamespace('svg', 'http://www.w3.org/2000/svg');
+        $svg->registerXPathNamespace('xlink', 'http://www.w3.org/1999/xlink');
+
         $attrs = $svg->attributes();
-        $viewBox = self::parseViewBox((string) ($attrs->viewBox ?? ''), (float) ($attrs->width ?? 0), (float) ($attrs->height ?? 0));
+        $viewBox = self::parseViewBox(
+            (string) ($attrs->viewBox ?? ''),
+            self::parseLength((string) ($attrs->width ?? '0')),
+            self::parseLength((string) ($attrs->height ?? '0'))
+        );
         if ($viewBox['width'] <= 0 || $viewBox['height'] <= 0) {
             return false;
         }
@@ -50,12 +54,14 @@ final class SvgBasicGdRenderer
 
         $ctx = [
             'canvas' => $canvas,
+            'root' => $svg,
             'scale' => $scale,
             'offsetX' => $offsetX,
             'offsetY' => $offsetY,
             'viewBox' => $viewBox,
             'defaultFill' => '',
             'defaultStroke' => '',
+            'defaultStrokeWidth' => 1.0,
         ];
 
         self::drawNode($svg, $ctx);
@@ -67,6 +73,29 @@ final class SvgBasicGdRenderer
         }
 
         return $canvas;
+    }
+
+    private static function sanitizeSvgXml(string $xml): string
+    {
+        $xml = preg_replace('/^\xEF\xBB\xBF/', '', $xml) ?? $xml;
+        $xml = preg_replace('/<\?xml[^?]*\?>/i', '', $xml) ?? $xml;
+        $xml = preg_replace('/<!DOCTYPE[^>]*>/i', '', $xml) ?? $xml;
+
+        return trim($xml);
+    }
+
+    private static function parseLength(string $value): float
+    {
+        $value = trim(str_replace(',', '.', $value));
+        if ($value === '') {
+            return 0.0;
+        }
+
+        if (preg_match('/^[-+]?(?:\d*\.\d+|\d+)(?:e[-+]?\d+)?/i', $value, $matches) === 1) {
+            return (float) $matches[0];
+        }
+
+        return 0.0;
     }
 
     /** @param \GdImage $canvas */
@@ -114,63 +143,57 @@ final class SvgBasicGdRenderer
     }
 
     /** @param array<string, mixed> $ctx */
-    private static function drawNode(\SimpleXMLElement $node, array $ctx): void
+    private static function drawNode(\SimpleXMLElement $node, array $ctx, int $depth = 0): void
     {
+        if ($depth > 32) {
+            return;
+        }
+
         $name = strtolower($node->getName());
+        if (in_array($name, ['defs', 'clippath', 'mask', 'metadata', 'title', 'desc'], true)) {
+            return;
+        }
+
         if ($name === 'g' || $name === 'svg') {
             $attrs = $node->attributes();
-            $nextCtx = $ctx;
-            $fillAttr = self::styleValue($attrs, 'fill');
-            if ($fillAttr === '' && isset($attrs->fill)) {
-                $fillAttr = trim((string) $attrs->fill);
-            }
-            if ($fillAttr !== '' && strtolower($fillAttr) !== 'inherit') {
-                $nextCtx['defaultFill'] = $fillAttr;
-            }
-            $strokeAttr = self::styleValue($attrs, 'stroke');
-            if ($strokeAttr === '' && isset($attrs->stroke)) {
-                $strokeAttr = trim((string) $attrs->stroke);
-            }
-            if ($strokeAttr !== '' && strtolower($strokeAttr) !== 'inherit') {
-                $nextCtx['defaultStroke'] = $strokeAttr;
-            }
+            $nextCtx = self::applyInheritedContext($ctx, $attrs);
             foreach (self::childElements($node) as $child) {
-                self::drawNode($child, $nextCtx);
+                self::drawNode($child, $nextCtx, $depth + 1);
             }
+
+            return;
+        }
+
+        if ($name === 'use') {
+            self::drawUseNode($node, $ctx, $depth);
+
+            return;
+        }
+
+        if ($name === 'image') {
+            self::drawImageNode($node, $ctx);
+
+            return;
+        }
+
+        if ($name === 'text') {
+            self::drawTextNode($node, $ctx);
 
             return;
         }
 
         $attrs = $node->attributes();
-        $fillRaw = self::styleValue($attrs, 'fill');
-        if ($fillRaw === '' && isset($attrs->fill)) {
-            $fillRaw = trim((string) $attrs->fill);
-        }
-        if ($fillRaw === '' || strtolower($fillRaw) === 'inherit') {
-            $fillRaw = (string) ($ctx['defaultFill'] ?? '');
-        }
-        if ($fillRaw === '' && $name === 'path') {
-            $fillRaw = '#000000';
-        }
-        $strokeRaw = self::styleValue($attrs, 'stroke');
-        if ($strokeRaw === '' && isset($attrs->stroke)) {
-            $strokeRaw = trim((string) $attrs->stroke);
-        }
-        if ($strokeRaw === '' || strtolower($strokeRaw) === 'inherit') {
-            $strokeRaw = (string) ($ctx['defaultStroke'] ?? '');
-        }
+        $fillRaw = self::rawPaint($attrs, 'fill', $ctx, true);
+        $strokeRaw = self::rawPaint($attrs, 'stroke', $ctx, false);
+        $fill = self::resolvePaint($fillRaw, $ctx);
+        $stroke = self::resolvePaint($strokeRaw, $ctx);
 
-        if (strtolower($fillRaw) === 'none') {
-            $fillRaw = '';
-        }
-        if (strtolower($strokeRaw) === 'none') {
-            $strokeRaw = '';
-        }
-
-        $fill = self::parseColor($fillRaw);
-        $stroke = self::parseColor($strokeRaw);
         if ($fill === null && $stroke === null) {
-            return;
+            if (in_array($name, ['path', 'rect', 'circle', 'ellipse', 'polygon'], true) && $fillRaw === '') {
+                $fill = [0, 0, 0, 0];
+            } else {
+                return;
+            }
         }
 
         /** @var \GdImage $canvas */
@@ -183,10 +206,10 @@ final class SvgBasicGdRenderer
             : null;
 
         if ($name === 'rect') {
-            $x = (float) ($attrs->x ?? 0);
-            $y = (float) ($attrs->y ?? 0);
-            $w = (float) ($attrs->width ?? 0);
-            $h = (float) ($attrs->height ?? 0);
+            $x = self::parseLength((string) ($attrs->x ?? '0'));
+            $y = self::parseLength((string) ($attrs->y ?? '0'));
+            $w = self::parseLength((string) ($attrs->width ?? '0'));
+            $h = self::parseLength((string) ($attrs->height ?? '0'));
             if ($w > 0 && $h > 0 && $fillColor !== null) {
                 imagefilledrectangle(
                     $canvas,
@@ -211,9 +234,9 @@ final class SvgBasicGdRenderer
         }
 
         if ($name === 'circle') {
-            $cx = (float) ($attrs->cx ?? 0);
-            $cy = (float) ($attrs->cy ?? 0);
-            $r = (float) ($attrs->r ?? 0);
+            $cx = self::parseLength((string) ($attrs->cx ?? '0'));
+            $cy = self::parseLength((string) ($attrs->cy ?? '0'));
+            $r = self::parseLength((string) ($attrs->r ?? '0'));
             if ($r > 0 && $fillColor !== null) {
                 imagefilledellipse(
                     $canvas,
@@ -229,10 +252,10 @@ final class SvgBasicGdRenderer
         }
 
         if ($name === 'ellipse') {
-            $cx = (float) ($attrs->cx ?? 0);
-            $cy = (float) ($attrs->cy ?? 0);
-            $rx = (float) ($attrs->rx ?? 0);
-            $ry = (float) ($attrs->ry ?? 0);
+            $cx = self::parseLength((string) ($attrs->cx ?? '0'));
+            $cy = self::parseLength((string) ($attrs->cy ?? '0'));
+            $rx = self::parseLength((string) ($attrs->rx ?? '0'));
+            $ry = self::parseLength((string) ($attrs->ry ?? '0'));
             if ($rx > 0 && $ry > 0 && $fillColor !== null) {
                 imagefilledellipse(
                     $canvas,
@@ -251,20 +274,14 @@ final class SvgBasicGdRenderer
             $raw = preg_split('/[\s,]+/', trim((string) ($attrs->points ?? ''))) ?: [];
             $points = [];
             for ($i = 0; $i < count($raw) - 1; $i += 2) {
-                $points[] = (int) self::tx($ctx, (float) $raw[$i]);
-                $points[] = (int) self::ty($ctx, (float) ($raw[$i + 1] ?? 0));
+                $points[] = (int) self::tx($ctx, self::parseLength((string) $raw[$i]));
+                $points[] = (int) self::ty($ctx, self::parseLength((string) ($raw[$i + 1] ?? '0')));
             }
             if (count($points) >= 6) {
                 if ($name === 'polygon' && $fillColor !== null) {
                     imagefilledpolygon($canvas, $points, $fillColor);
                 } elseif ($strokeColor !== null) {
-                    imagesetthickness($canvas, max(1, (int) round($ctx['scale'])));
-                    for ($i = 0; $i < count($points) - 2; $i += 2) {
-                        imageline($canvas, $points[$i], $points[$i + 1], $points[$i + 2], $points[$i + 3], $strokeColor);
-                    }
-                    if ($name === 'polygon') {
-                        imageline($canvas, $points[count($points) - 2], $points[count($points) - 1], $points[0], $points[1], $strokeColor);
-                    }
+                    self::drawPolyline($canvas, $points, $strokeColor, $ctx, $name === 'polygon');
                 }
             }
 
@@ -277,12 +294,235 @@ final class SvgBasicGdRenderer
                 if ($fillColor !== null) {
                     imagefilledpolygon($canvas, $polygon, $fillColor);
                 } elseif ($strokeColor !== null) {
-                    imagesetthickness($canvas, max(1, (int) round($ctx['scale'])));
-                    for ($i = 0; $i < count($polygon) - 2; $i += 2) {
-                        imageline($canvas, $polygon[$i], $polygon[$i + 1], $polygon[$i + 2], $polygon[$i + 3], $strokeColor);
-                    }
+                    self::drawPolyline($canvas, $polygon, $strokeColor, $ctx, false);
                 }
             }
+        }
+    }
+
+    /** @param array<string, mixed> $ctx */
+    private static function drawUseNode(\SimpleXMLElement $node, array $ctx, int $depth): void
+    {
+        $attrs = $node->attributes();
+        $href = trim((string) ($attrs->href ?? $attrs->{'xlink:href'} ?? ''));
+        if ($href === '' || !str_starts_with($href, '#')) {
+            return;
+        }
+
+        $id = substr($href, 1);
+        /** @var \SimpleXMLElement $root */
+        $root = $ctx['root'];
+        $matches = $root->xpath("//*[@id=" . self::xpathLiteral($id) . "]");
+        if (!is_array($matches) || $matches === []) {
+            return;
+        }
+
+        $nextCtx = self::applyInheritedContext($ctx, $attrs);
+        $dx = self::parseLength((string) ($attrs->x ?? '0'));
+        $dy = self::parseLength((string) ($attrs->y ?? '0'));
+        if ($dx !== 0.0 || $dy !== 0.0) {
+            $nextCtx['offsetX'] = (float) $nextCtx['offsetX'] + ($dx * (float) $nextCtx['scale']);
+            $nextCtx['offsetY'] = (float) $nextCtx['offsetY'] + ($dy * (float) $nextCtx['scale']);
+        }
+
+        foreach ($matches as $target) {
+            if (!($target instanceof \SimpleXMLElement)) {
+                continue;
+            }
+            self::drawNode($target, $nextCtx, $depth + 1);
+        }
+    }
+
+    /** @param array<string, mixed> $ctx */
+    private static function drawImageNode(\SimpleXMLElement $node, array $ctx): void
+    {
+        $attrs = $node->attributes();
+        $href = trim((string) ($attrs->href ?? $attrs->{'xlink:href'} ?? ''));
+        if ($href === '' || !str_starts_with($href, 'data:image/')) {
+            return;
+        }
+
+        if (!preg_match('/^data:image\/(png|jpe?g|webp);base64,(.+)$/i', $href, $matches)) {
+            return;
+        }
+
+        $binary = base64_decode((string) ($matches[2] ?? ''), true);
+        if ($binary === false || $binary === '') {
+            return;
+        }
+
+        $embedded = @imagecreatefromstring($binary);
+        if ($embedded === false) {
+            return;
+        }
+
+        $x = self::parseLength((string) ($attrs->x ?? '0'));
+        $y = self::parseLength((string) ($attrs->y ?? '0'));
+        $w = self::parseLength((string) ($attrs->width ?? (string) imagesx($embedded)));
+        $h = self::parseLength((string) ($attrs->height ?? (string) imagesy($embedded)));
+        if ($w <= 0) {
+            $w = (float) imagesx($embedded);
+        }
+        if ($h <= 0) {
+            $h = (float) imagesy($embedded);
+        }
+
+        /** @var \GdImage $canvas */
+        $canvas = $ctx['canvas'];
+        $dstX = (int) self::tx($ctx, $x);
+        $dstY = (int) self::ty($ctx, $y);
+        $dstW = max(1, (int) round($w * (float) $ctx['scale']));
+        $dstH = max(1, (int) round($h * (float) $ctx['scale']));
+        imagecopyresampled($canvas, $embedded, $dstX, $dstY, 0, 0, $dstW, $dstH, imagesx($embedded), imagesy($embedded));
+        imagedestroy($embedded);
+    }
+
+    /** @param array<string, mixed> $ctx */
+    private static function drawTextNode(\SimpleXMLElement $node, array $ctx): void
+    {
+        $attrs = $node->attributes();
+        $text = trim((string) $node);
+        if ($text === '') {
+            return;
+        }
+
+        $fillRaw = self::rawPaint($attrs, 'fill', $ctx, true);
+        $fill = self::resolvePaint($fillRaw !== '' ? $fillRaw : '#000000', $ctx);
+        if ($fill === null) {
+            $fill = [0, 0, 0, 0];
+        }
+
+        $x = self::parseLength((string) ($attrs->x ?? '0'));
+        $y = self::parseLength((string) ($attrs->y ?? '0'));
+        $fontSize = max(8.0, self::parseLength((string) ($attrs->{'font-size'} ?? '16')));
+        $fontSizePx = max(8, (int) round($fontSize * (float) $ctx['scale']));
+
+        /** @var \GdImage $canvas */
+        $canvas = $ctx['canvas'];
+        $color = imagecolorallocatealpha($canvas, $fill[0], $fill[1], $fill[2], $fill[3]);
+        $fontPath = self::systemFontPath();
+        $drawX = (int) self::tx($ctx, $x);
+        $drawY = (int) self::ty($ctx, $y);
+
+        if ($fontPath !== null && function_exists('imagettftext')) {
+            imagettftext($canvas, $fontSizePx, 0, $drawX, $drawY, $color, $fontPath, $text);
+
+            return;
+        }
+
+        imagestring($canvas, 5, $drawX, max(0, $drawY - 12), substr($text, 0, 80), $color);
+    }
+
+    /** @param \SimpleXMLElement|null $attrs @param array<string, mixed> $ctx */
+    private static function rawPaint($attrs, string $key, array $ctx, bool $isFill): string
+    {
+        $raw = self::styleValue($attrs, $key);
+        if ($raw === '' && $attrs !== null && isset($attrs->{$key})) {
+            $raw = trim((string) $attrs->{$key});
+        }
+        if ($raw === '' || strtolower($raw) === 'inherit') {
+            $raw = (string) ($ctx[$isFill ? 'defaultFill' : 'defaultStroke'] ?? '');
+        }
+
+        return strtolower($raw) === 'none' ? '' : $raw;
+    }
+
+    /** @param array<string, mixed> $ctx @return array<string, mixed> */
+    private static function applyInheritedContext(array $ctx, ?\SimpleXMLElement $attrs): array
+    {
+        $nextCtx = $ctx;
+        if ($attrs === null) {
+            return $nextCtx;
+        }
+
+        $fillAttr = self::styleValue($attrs, 'fill');
+        if ($fillAttr === '' && isset($attrs->fill)) {
+            $fillAttr = trim((string) $attrs->fill);
+        }
+        if ($fillAttr !== '' && strtolower($fillAttr) !== 'inherit') {
+            $nextCtx['defaultFill'] = $fillAttr;
+        }
+
+        $strokeAttr = self::styleValue($attrs, 'stroke');
+        if ($strokeAttr === '' && isset($attrs->stroke)) {
+            $strokeAttr = trim((string) $attrs->stroke);
+        }
+        if ($strokeAttr !== '' && strtolower($strokeAttr) !== 'inherit') {
+            $nextCtx['defaultStroke'] = $strokeAttr;
+        }
+
+        return $nextCtx;
+    }
+
+    /** @param array<string, mixed> $ctx @return array{0: int, 1: int, 2: int, 3: int}|null */
+    private static function resolvePaint(string $raw, array $ctx): ?array
+    {
+        $raw = trim($raw);
+        if ($raw === '' || strtolower($raw) === 'none' || strtolower($raw) === 'transparent') {
+            return null;
+        }
+
+        if (preg_match('/^url\(#([^)]+)\)$/i', $raw, $matches) === 1) {
+            return self::gradientFirstColor((string) ($matches[1] ?? ''), $ctx);
+        }
+
+        return self::parseColor($raw);
+    }
+
+    /** @param array<string, mixed> $ctx @return array{0: int, 1: int, 2: int, 3: int}|null */
+    private static function gradientFirstColor(string $id, array $ctx): ?array
+    {
+        /** @var \SimpleXMLElement $root */
+        $root = $ctx['root'];
+        $matches = $root->xpath("//*[@id=" . self::xpathLiteral($id) . "]");
+        if (!is_array($matches) || $matches === []) {
+            return null;
+        }
+
+        $gradient = $matches[0];
+        if (!($gradient instanceof \SimpleXMLElement)) {
+            return null;
+        }
+
+        $stops = $gradient->xpath('.//*[local-name()="stop"]');
+        if (!is_array($stops)) {
+            return null;
+        }
+
+        foreach ($stops as $stop) {
+            if (!($stop instanceof \SimpleXMLElement)) {
+                continue;
+            }
+            $stopAttrs = $stop->attributes();
+            $color = trim((string) ($stopAttrs->{'stop-color'} ?? ''));
+            if ($color === '') {
+                $color = self::styleValue($stopAttrs, 'stop-color');
+            }
+            $parsed = self::parseColor($color);
+            if ($parsed !== null) {
+                return $parsed;
+            }
+        }
+
+        return null;
+    }
+
+    /** @param \GdImage $canvas @param list<int> $points */
+    private static function drawPolyline($canvas, array $points, int $strokeColor, array $ctx, bool $close): void
+    {
+        imagesetthickness($canvas, max(1, (int) round((float) ($ctx['defaultStrokeWidth'] ?? 1) * (float) $ctx['scale'])));
+        for ($i = 0; $i < count($points) - 2; $i += 2) {
+            imageline($canvas, $points[$i], $points[$i + 1], $points[$i + 2], $points[$i + 3], $strokeColor);
+        }
+        if ($close && count($points) >= 4) {
+            imageline(
+                $canvas,
+                $points[count($points) - 2],
+                $points[count($points) - 1],
+                $points[0],
+                $points[1],
+                $strokeColor
+            );
         }
     }
 
@@ -398,19 +638,6 @@ final class SvgBasicGdRenderer
         return $points;
     }
 
-    /** @return list<int> */
-    private static function parsePoints(string $points): array
-    {
-        $nums = preg_split('/[\s,]+/', trim($points)) ?: [];
-        $out = [];
-        for ($i = 0; $i < count($nums) - 1; $i += 2) {
-            $out[] = (int) round((float) $nums[$i]);
-            $out[] = (int) round((float) $nums[$i + 1]);
-        }
-
-        return $out;
-    }
-
     /** @return array{0: int, 1: int, 2: int, 3: int}|null */
     private static function parseColor(string $value): ?array
     {
@@ -434,6 +661,27 @@ final class SvgBasicGdRenderer
             $hex = $m[1];
 
             return [hexdec(substr($hex, 0, 2)), hexdec(substr($hex, 2, 2)), hexdec(substr($hex, 4, 2)), 0];
+        }
+
+        if (preg_match('/^#([0-9a-f]{8})$/i', $value, $m) === 1) {
+            $hex = $m[1];
+            $alpha = hexdec(substr($hex, 6, 2));
+            $gdAlpha = (int) round(127 - ($alpha / 255) * 127);
+
+            return [hexdec(substr($hex, 0, 2)), hexdec(substr($hex, 2, 2)), hexdec(substr($hex, 4, 2)), max(0, min(127, $gdAlpha))];
+        }
+
+        if (preg_match('/^rgba?\(([^)]+)\)$/i', $value, $m) === 1) {
+            $parts = array_map('trim', explode(',', (string) ($m[1] ?? '')));
+            if (count($parts) >= 3) {
+                $r = (int) round((float) $parts[0]);
+                $g = (int) round((float) $parts[1]);
+                $b = (int) round((float) $parts[2]);
+                $alpha = count($parts) >= 4 ? (float) $parts[3] : 1.0;
+                $gdAlpha = (int) round(127 - max(0.0, min(1.0, $alpha)) * 127);
+
+                return [max(0, min(255, $r)), max(0, min(255, $g)), max(0, min(255, $b)), max(0, min(127, $gdAlpha))];
+            }
         }
 
         $named = [
@@ -495,5 +743,48 @@ final class SvgBasicGdRenderer
         }
 
         return '';
+    }
+
+    private static function xpathLiteral(string $value): string
+    {
+        if (!str_contains($value, "'")) {
+            return "'{$value}'";
+        }
+        if (!str_contains($value, '"')) {
+            return '"' . $value . '"';
+        }
+
+        $parts = explode("'", $value);
+
+        return 'concat(' . implode(", \"'\", ", array_map(static fn (string $part): string => "'{$part}'", $parts)) . ')';
+    }
+
+    private static function systemFontPath(): ?string
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached !== '' ? $cached : null;
+        }
+
+        $candidates = [
+            'C:\\Windows\\Fonts\\arial.ttf',
+            'C:\\Windows\\Fonts\\segoeui.ttf',
+            'C:\\Windows\\Fonts\\tahoma.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/usr/share/fonts/TTF/DejaVuSans.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_file($candidate) && is_readable($candidate)) {
+                $cached = $candidate;
+
+                return $candidate;
+            }
+        }
+
+        $cached = '';
+
+        return null;
     }
 }

@@ -92,6 +92,7 @@ final class HomeSectionService
             'subtitle_ar' => (string) ($row['subtitle_ar'] ?? ''),
             'selection_mode' => (string) ($row['display_mode'] ?? 'filter'),
             'filter_rules' => $parsed['rules'],
+            'display_options' => $parsed['display_options'],
             'material_guids' => self::manualProducts($id),
             'is_offer_section' => false,
         ];

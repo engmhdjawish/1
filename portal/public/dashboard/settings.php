@@ -12,6 +12,7 @@ use Portal\Services\ApiClient;
 use Portal\Services\CompanyBrandIconService;
 use Portal\Services\EnvConfigService;
 use Portal\Services\PortalSettingsService;
+use Portal\Services\SiteMediaService;
 use Portal\Services\StorePolicyService;
 use Portal\Support\DashboardHttp;
 
@@ -124,6 +125,11 @@ if ($flash === null && isset($_GET['saved']) && $_GET['saved'] === '1') {
     $flash = 'تم حفظ الإعدادات.';
     $flashType = 'success';
 }
+if ($flash === null && isset($_SESSION['portal_settings_icon_warning'])) {
+    $flash = 'تم حفظ الإعدادات، لكن تعذر توليد أيقونات التطبيق: ' . trim((string) $_SESSION['portal_settings_icon_warning']);
+    $flashType = 'error';
+    unset($_SESSION['portal_settings_icon_warning']);
+}
 if ($flash === null && isset($_GET['icon_warning']) && trim((string) $_GET['icon_warning']) !== '') {
     $flash = 'تم حفظ الإعدادات، لكن تعذر توليد أيقونات التطبيق: ' . trim((string) $_GET['icon_warning']);
     $flashType = 'error';
@@ -148,6 +154,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $currentCompany = PortalSettingsService::companySettings();
                 $savedLogoUrl = trim((string) ($_POST['company_logo'] ?? ''));
+                $iconWarning = null;
+
+                if ($savedLogoUrl !== '' && !SiteMediaService::logoUrlIsUsable($savedLogoUrl)) {
+                    $iconWarning = 'ملف الشعار غير موجود في مكتبة الوسائط. اختر شعاراً جديداً.';
+                    $savedLogoUrl = '';
+                    CompanyBrandIconService::clearBrandIcons();
+                }
+
                 PortalSettingsService::saveCompanySettings([
                     'company_name' => trim((string) ($_POST['company_name'] ?? '')),
                     'company_phone' => trim((string) ($_POST['company_phone'] ?? '')),
@@ -162,15 +176,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'material_thumbnails_dir' => (string) ($currentCompany['material_thumbnails_dir'] ?? ''),
                 ], isset($user['id']) ? (string) $user['id'] : null);
 
-                $iconQuery = 'tab=company&saved=1';
-                if ($savedLogoUrl !== '' && !CompanyBrandIconService::regenerateFromLogoUrlSafe($savedLogoUrl)) {
-                    $iconError = trim((string) (CompanyBrandIconService::lastError() ?? ''));
-                    if ($iconError !== '') {
-                        $iconQuery .= '&icon_warning=' . rawurlencode($iconError);
+                if ($iconWarning === null && $savedLogoUrl !== '') {
+                    ob_start();
+                    try {
+                        @set_time_limit(60);
+                        if (!CompanyBrandIconService::regenerateFromLogoUrlSafe($savedLogoUrl)) {
+                            $iconWarning = trim((string) (CompanyBrandIconService::lastError() ?? ''));
+                        }
+                    } catch (\Throwable $exception) {
+                        $iconWarning = trim($exception->getMessage());
                     }
+                    ob_end_clean();
                 }
 
-                header('Location: /dashboard/settings.php?' . $iconQuery);
+                if ($iconWarning !== null && $iconWarning !== '') {
+                    $_SESSION['portal_settings_icon_warning'] = $iconWarning;
+                }
+
+                header('Location: /dashboard/settings.php?tab=company&saved=1');
                 exit;
             } catch (\Throwable $exception) {
                 $flash = 'تعذر حفظ إعدادات الشركة: ' . $exception->getMessage();
@@ -253,7 +276,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash = $result['message'];
             $flashType = $result['ok'] ? 'success' : 'error';
             if ($result['ok']) {
-                header('Location: /dashboard/settings.php?tab=policies&policy_saved=1');
+                $savedPolicyId = trim((string) ($result['id'] ?? $_POST['id'] ?? ''));
+                $redirect = '/dashboard/settings.php?tab=policies&policy_saved=1';
+                if ($savedPolicyId !== '') {
+                    $redirect .= '&policy_edit=' . rawurlencode($savedPolicyId);
+                }
+                header('Location: ' . $redirect);
                 exit;
             }
             $tab = 'policies';

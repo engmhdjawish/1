@@ -57,7 +57,8 @@ final class CompanyBrandIconService
 
         $sourcePath = self::resolveSourcePath($logoUrl);
         if ($sourcePath === null || !is_file($sourcePath)) {
-            self::$lastError = 'ملف الشعار غير موجود على القرص. أعد رفع الشعار من لوحة التحكم > مكتبة الوسائط.';
+            self::clearBrandIcons();
+            self::$lastError = 'ملف الشعار غير موجود في مكتبة الوسائط. اختر شعاراً جديداً من الإعدادات > مكتبة الوسائط.';
 
             return false;
         }
@@ -71,7 +72,7 @@ final class CompanyBrandIconService
         }
 
         if (self::isSvgPath($iconSourcePath)) {
-            self::$lastError ??= 'تعذر تحويل SVG إلى PNG. ثبّت ImageMagick على الخادم، أو ارفع الشعار بصيغة PNG/JPG.';
+            self::$lastError ??= 'تعذر تحويل SVG إلى PNG. إن كان الشعار معقداً ارفعه PNG/JPG، أو ثبّت ImageMagick على الخادم.';
 
             return false;
         }
@@ -108,6 +109,7 @@ final class CompanyBrandIconService
         if (!$ok) {
             $detail = self::$lastError ?: ('تعذر تحويل الشعار إلى PNG (الصيغة: ' . $mime . ').');
             self::$lastError = $detail;
+            self::clearBrandIcons();
         }
 
         return $ok;
@@ -204,7 +206,7 @@ final class CompanyBrandIconService
         $detail = SvgRasterService::lastError();
         self::$lastError = is_string($detail) && trim($detail) !== ''
             ? $detail
-            : 'تعذر تحويل SVG. ثبّت ImageMagick على الخادم، أو ارفع الشعار بصيغة PNG/JPG.';
+            : 'تعذر تحويل SVG. إن كان الشعار معقداً ارفعه PNG/JPG، أو ثبّت ImageMagick على الخادم.';
 
         return $sourcePath;
     }

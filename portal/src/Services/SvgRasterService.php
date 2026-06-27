@@ -57,7 +57,7 @@ final class SvgRasterService
             return $gd;
         }
 
-        self::$lastError ??= 'تعذر تحويل SVG. ثبّت ImageMagick أو Inkscape، أو ارفع الشعار بصيغة PNG/JPG.';
+        self::$lastError ??= 'تعذر تحويل SVG. إن كان الشعار معقداً ارفعه PNG/JPG، أو ثبّت ImageMagick على الخادم.';
 
         return false;
     }

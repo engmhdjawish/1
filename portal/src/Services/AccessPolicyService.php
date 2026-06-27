@@ -32,6 +32,7 @@ final class AccessPolicyService
     private const OPTION_DEFAULT_SORT = 'option_default_sort';
     private const OPTION_VISIBLE_CLIENT_FILTER = 'option_visible_client_filter';
     private const OPTION_CLIENT_SORT_FIELD = 'option_client_sort_field';
+    private const VISIBLE_CLIENT_FILTERS_NONE = '__none__';
 
     /** @var list<string> */
     public const ALLOWED_VISIBLE_CLIENT_FILTERS = [
@@ -168,9 +169,13 @@ final class AccessPolicyService
     private static function parseAllFilterRows(array $rows): array
     {
         $parsed = self::parseFilterRows($rows);
-        $storeOptions = self::defaultStoreOptions();
+        $defaults = self::defaultStoreOptions();
+        $storeOptions = $defaults;
+        $storeOptions['visible_client_filters'] = [];
+        $storeOptions['client_sort_fields'] = [];
         $hasStoreOptions = false;
         $hasVisibleClientFilters = false;
+        $hasClientSortFields = false;
         $visibleFilterWildcard = false;
 
         foreach ($rows as $row) {
@@ -192,11 +197,12 @@ final class AccessPolicyService
                     $hasVisibleClientFilters = true;
                     if ($value === '*') {
                         $visibleFilterWildcard = true;
-                    } else {
+                    } elseif ($value !== self::VISIBLE_CLIENT_FILTERS_NONE) {
                         $storeOptions['visible_client_filters'][] = $value;
                     }
                     break;
                 case self::OPTION_CLIENT_SORT_FIELD:
+                    $hasClientSortFields = true;
                     $storeOptions['client_sort_fields'][] = $value;
                     break;
             }
@@ -208,13 +214,20 @@ final class AccessPolicyService
             } else {
                 $storeOptions['visible_client_filters'] = self::normalizeVisibleClientFilters($storeOptions['visible_client_filters']);
             }
+        } else {
+            $storeOptions['visible_client_filters'] = $defaults['visible_client_filters'];
         }
 
-        $storeOptions['client_sort_fields'] = self::normalizeClientSortFields($storeOptions['client_sort_fields']);
+        if ($hasClientSortFields) {
+            $storeOptions['client_sort_fields'] = self::normalizeClientSortFields($storeOptions['client_sort_fields']);
+        } else {
+            $storeOptions['client_sort_fields'] = $defaults['client_sort_fields'];
+        }
+
+        $storeOptions['default_sort'] = self::normalizeDefaultSort((string) $storeOptions['default_sort']);
         if ($storeOptions['client_sort_fields'] === []) {
             $storeOptions['client_sort_fields'] = self::clientSortFieldsFromDefaultSort((string) $storeOptions['default_sort']);
         }
-        $storeOptions['default_sort'] = self::normalizeDefaultSort((string) $storeOptions['default_sort']);
 
         return [
             'rules' => $parsed['rules'],
@@ -426,7 +439,7 @@ final class AccessPolicyService
             $insert->execute([
                 'policy_id' => $policyId,
                 'filter_type' => self::OPTION_VISIBLE_CLIENT_FILTER,
-                'value_ar' => '*',
+                'value_ar' => self::VISIBLE_CLIENT_FILTERS_NONE,
             ]);
         } else {
             $insertValues(self::OPTION_VISIBLE_CLIENT_FILTER, $visibleClientFilters);

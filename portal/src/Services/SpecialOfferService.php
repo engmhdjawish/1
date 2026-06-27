@@ -319,6 +319,7 @@ final class SpecialOfferService
             'subtitle_ar' => (string) ($row['subtitle_ar'] ?? ''),
             'selection_mode' => (string) ($row['selection_mode'] ?? 'filter'),
             'filter_rules' => $parsed['rules'],
+            'display_options' => $parsed['display_options'],
             'material_guids' => self::manualProducts($id),
             'is_offer_section' => true,
         ];

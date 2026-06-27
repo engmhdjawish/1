@@ -25,8 +25,6 @@ use Portal\Services\AccessPolicyService;
 /** @var string|null $materialFilterOptionsError */
 /** @var string|null $flash */
 /** @var string $flashType */
-/** @var string|null $pendingBrandIconUrl */
-
 require __DIR__ . '/partials/media-picker.php';
 require __DIR__ . '/partials/token-picker.php';
 
