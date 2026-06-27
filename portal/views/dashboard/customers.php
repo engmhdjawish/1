@@ -193,6 +193,21 @@ $editing = $editCustomer !== null;
                       <button name="action" value="approve" class="h-9 px-3 rounded-lg bg-green-600 text-white text-xs font-bold">موافقة</button>
                       <button name="action" value="reject" class="h-9 px-3 rounded-lg bg-red-600 text-white text-xs font-bold">رفض</button>
                     </form>
+                  <?php elseif ($canManageCustomers && $status === 'active'): ?>
+                    <form method="post" onsubmit="return confirm('تعليق هذا الحساب وإنهاء جلساته؟');">
+                      <input type="hidden" name="customer_id" value="<?= h((string) ($row['id'] ?? '')) ?>">
+                      <button name="action" value="suspend" class="h-9 px-3 rounded-lg bg-amber-600 text-white text-xs font-bold">تعليق</button>
+                    </form>
+                  <?php elseif ($canApproveCustomers && in_array($status, ['suspended', 'rejected'], true)): ?>
+                    <form method="post" class="flex items-center gap-2">
+                      <input type="hidden" name="customer_id" value="<?= h((string) ($row['id'] ?? '')) ?>">
+                      <select name="access_policy_id" class="h-9 rounded-lg border border-border-subtle px-2 text-xs" required>
+                        <?php foreach ($policies as $policy): ?>
+                          <option value="<?= h((string) $policy['id']) ?>"><?= h((string) $policy['name_ar']) ?></option>
+                        <?php endforeach; ?>
+                      </select>
+                      <button name="action" value="reactivate" class="h-9 px-3 rounded-lg bg-green-600 text-white text-xs font-bold">تفعيل</button>
+                    </form>
                   <?php endif; ?>
                 </div>
               </td>
@@ -255,6 +270,7 @@ $editing = $editCustomer !== null;
               <option value="<?= h($key) ?>" <?= ((string) ($editCustomer['status'] ?? 'pending')) === $key ? 'selected' : '' ?>><?= h($label) ?></option>
             <?php endforeach; ?>
           </select>
+          <p class="text-xs text-text-muted mt-1">«نشط» يسمح بتسجيل الدخول. «معلق» أو «مرفوض» يوقف الدخول وينهي الجلسات الحالية.</p>
         </label>
 
         <label class="block text-sm">
@@ -270,11 +286,6 @@ $editing = $editCustomer !== null;
         <label class="block text-sm">
           <span class="text-text-muted block mb-1">ملاحظات</span>
           <textarea name="notes_ar" rows="3" class="w-full rounded-xl border border-border-subtle px-4 py-2 focus:border-primary focus:ring-primary"><?= h((string) ($editCustomer['notes_ar'] ?? '')) ?></textarea>
-        </label>
-
-        <label class="inline-flex items-center gap-2 text-sm">
-          <input type="checkbox" name="is_active" value="1" <?= ((int) ($editCustomer['is_active'] ?? 0) === 1 || !$editing) ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
-          <span>الحساب نشط</span>
         </label>
 
         <button class="w-full h-11 rounded-xl bg-primary text-white font-bold hover:brightness-110 transition">

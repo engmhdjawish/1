@@ -9,6 +9,7 @@ use Portal\Config;
 use Portal\Database;
 use Portal\Services\AccessPolicyService;
 use Portal\Services\ApiClient;
+use Portal\Services\CompanyBrandIconService;
 use Portal\Services\EnvConfigService;
 use Portal\Services\PortalSettingsService;
 use Portal\Services\StorePolicyService;
@@ -118,12 +119,6 @@ $buildPolicyStoreOptions = static function () use ($parseValues): array {
 
 $flash = null;
 $flashType = 'success';
-$pendingBrandIconUrl = null;
-
-if (isset($_SESSION['portal_pending_brand_icon_url'])) {
-    $pendingBrandIconUrl = (string) $_SESSION['portal_pending_brand_icon_url'];
-    unset($_SESSION['portal_pending_brand_icon_url']);
-}
 
 if ($flash === null && isset($_GET['saved']) && $_GET['saved'] === '1') {
     $flash = 'تم حفظ الإعدادات.';
@@ -152,6 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 $currentCompany = PortalSettingsService::companySettings();
+                $savedLogoUrl = trim((string) ($_POST['company_logo'] ?? ''));
                 PortalSettingsService::saveCompanySettings([
                     'company_name' => trim((string) ($_POST['company_name'] ?? '')),
                     'company_phone' => trim((string) ($_POST['company_phone'] ?? '')),
@@ -159,14 +155,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'company_whatsapp' => trim((string) ($_POST['company_whatsapp'] ?? '')),
                     'company_email' => trim((string) ($_POST['company_email'] ?? '')),
                     'company_address' => trim((string) ($_POST['company_address'] ?? '')),
-                    'company_logo' => trim((string) ($_POST['company_logo'] ?? '')),
+                    'company_logo' => $savedLogoUrl,
                     'about_us_title_ar' => trim((string) ($_POST['about_us_title_ar'] ?? '')),
                     'about_us_ar' => trim((string) ($_POST['about_us_ar'] ?? '')),
                     'material_images_dir' => (string) ($currentCompany['material_images_dir'] ?? ''),
                     'material_thumbnails_dir' => (string) ($currentCompany['material_thumbnails_dir'] ?? ''),
                 ], isset($user['id']) ? (string) $user['id'] : null);
-                $_SESSION['portal_pending_brand_icon_url'] = trim((string) ($_POST['company_logo'] ?? ''));
-                header('Location: /dashboard/settings.php?tab=company&saved=1');
+
+                $iconQuery = 'tab=company&saved=1';
+                if ($savedLogoUrl !== '' && !CompanyBrandIconService::regenerateFromLogoUrlSafe($savedLogoUrl)) {
+                    $iconError = trim((string) (CompanyBrandIconService::lastError() ?? ''));
+                    if ($iconError !== '') {
+                        $iconQuery .= '&icon_warning=' . rawurlencode($iconError);
+                    }
+                }
+
+                header('Location: /dashboard/settings.php?' . $iconQuery);
                 exit;
             } catch (\Throwable $exception) {
                 $flash = 'تعذر حفظ إعدادات الشركة: ' . $exception->getMessage();

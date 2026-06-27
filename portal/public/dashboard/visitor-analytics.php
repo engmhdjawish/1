@@ -37,6 +37,7 @@ $sessionEvents = ($schemaReady && $sessionId !== '')
     ? VisitorLogService::sessionEvents($sessionId, 120)
     : [];
 $mapPoints = $schemaReady ? VisitorLogService::mapPoints($days, 250) : [];
+$locationStats = $schemaReady ? VisitorLogService::locationStats($days, 12) : [];
 $currentRoute = $sessionId !== ''
     ? '/dashboard/visitor-analytics.php?days=' . $days . '&session=' . rawurlencode($sessionId)
     : '/dashboard/visitor-analytics.php?days=' . $days;

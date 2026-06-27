@@ -381,6 +381,11 @@
     bindTriggers();
     registerServiceWorker();
 
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('install') === '1' || window.location.pathname.endsWith('/install.php')) {
+      window.setTimeout(() => openModal(), 600);
+    }
+
     ['click', 'scroll', 'keydown', 'touchstart'].forEach((evt) => {
       document.addEventListener(evt, markEngagementReady, { once: true, passive: true });
     });

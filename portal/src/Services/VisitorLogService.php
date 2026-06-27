@@ -498,6 +498,37 @@ final class VisitorLogService
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
+    /** @return list<array<string, mixed>> */
+    public static function locationStats(int $days = 7, int $limit = 15): array
+    {
+        if (!self::hasSchema()) {
+            return [];
+        }
+
+        $days = max(1, min(365, $days));
+        $limit = max(1, min(50, $limit));
+        $stmt = Database::pdo()->prepare(
+            "SELECT
+                COALESCE(NULLIF(TRIM(country_ar), ''), 'غير معروف') AS country,
+                COALESCE(NULLIF(TRIM(city_ar), ''), '—') AS city,
+                COUNT(DISTINCT session_id)::int AS sessions,
+                COUNT(DISTINCT visitor_ip) FILTER (
+                    WHERE visitor_ip IS NOT NULL AND visitor_ip <> ''
+                )::int AS ips,
+                COUNT(*)::int AS hits
+             FROM visitor_logs
+             WHERE created_at >= NOW() - (:days || ' days')::interval
+             GROUP BY 1, 2
+             ORDER BY sessions DESC, hits DESC
+             LIMIT :limit"
+        );
+        $stmt->bindValue(':days', (string) $days);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
     /** @return array{today: int, week: int, sessions: int} */
     public static function summary(): array
     {

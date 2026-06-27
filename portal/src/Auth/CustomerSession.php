@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Auth;
 
 use Portal\Database;
+use Portal\Services\PortalSessionService;
 use Portal\Support\PortalUrl;
 use PDO;
 
@@ -42,7 +43,12 @@ final class CustomerSession
         );
         $stmt->execute(['phone' => $phone]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$row || $row['status'] !== 'active' || empty($row['password_hash'])) {
+        if (
+            !$row
+            || ($row['status'] ?? '') !== 'active'
+            || !(bool) ($row['is_active'] ?? false)
+            || empty($row['password_hash'])
+        ) {
             return false;
         }
         if (!Password::verify($password, $row['password_hash'])) {
@@ -55,11 +61,14 @@ final class CustomerSession
         $pdo->prepare('UPDATE web_customers SET last_login_at = NOW() WHERE id = :id')
             ->execute(['id' => $row['id']]);
 
+        PortalSessionService::registerCustomer((string) $row['id']);
+
         return true;
     }
 
     public static function logout(): void
     {
+        PortalSessionService::revokeCurrent();
         unset($_SESSION[self::SESSION_KEY]);
     }
 
@@ -97,7 +106,7 @@ final class CustomerSession
         );
         $stmt->execute(['id' => $customer['id']]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$row || ($row['status'] ?? '') !== 'active') {
+        if (!$row || ($row['status'] ?? '') !== 'active' || !(bool) ($row['is_active'] ?? false)) {
             self::logout();
 
             return;

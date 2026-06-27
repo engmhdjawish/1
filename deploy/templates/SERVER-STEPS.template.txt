@@ -32,8 +32,9 @@ Expected setup:
 
 --- Server step 3 - database ---
   cd D:\JawishPortal
-  C:\php\php-cgi.exe scripts\setup-database.php
-  C:\php\php-cgi.exe scripts\run-migrations.php
+  C:\php\php.exe scripts\setup-database.php
+  C:\php\php.exe scripts\run-migrations.php
+  C:\php\php.exe scripts\run-migrations.php --list
 
 --- Server step 4 - IIS PHP handler ---
   cd C:\JawishDeploy\server-tools

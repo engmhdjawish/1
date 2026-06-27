@@ -31,6 +31,7 @@ final class StaffPermissions
             ['code' => 'store_policy.manage', 'name_ar' => 'سياسة المتجر', 'category_ar' => 'إعدادات', 'description_ar' => 'إعدادات الزائر والمتجر العام'],
             ['code' => 'access_policies.manage', 'name_ar' => 'سياسات الوصول', 'category_ar' => 'إعدادات', 'description_ar' => 'قواعد عرض الأسعار والسلة للعملاء'],
             ['code' => 'web_users.manage', 'name_ar' => 'موظفو الموقع', 'category_ar' => 'إدارة', 'description_ar' => 'إدارة المستخدمين والأدوار'],
+            ['code' => 'sessions.manage', 'name_ar' => 'الجلسات النشطة', 'category_ar' => 'إدارة', 'description_ar' => 'متابعة المتصلين وإنهاء الجلسات'],
             ['code' => 'accounting.view', 'name_ar' => 'لوحة المحاسبة', 'category_ar' => 'محاسبة', 'description_ar' => 'نظرة عامة على أمين'],
             ['code' => 'accounting.customers.view', 'name_ar' => 'عملاء الأمين', 'category_ar' => 'محاسبة', 'description_ar' => 'دليل عملاء نظام الأمين'],
             ['code' => 'accounting.documents.view', 'name_ar' => 'الفواتير والسندات', 'category_ar' => 'محاسبة', 'description_ar' => 'مستندات الأمين المحاسبية'],
