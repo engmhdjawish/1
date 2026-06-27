@@ -237,7 +237,20 @@ if ($customer) {
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ visitor_id: visitorId }),
-  }).catch(() => {});
+  })
+    .then((response) => response.json().catch(() => null))
+    .then((data) => {
+      if (!data || !data.login_required) return;
+      const path = window.location.pathname + window.location.search;
+      if (path.startsWith('/dashboard')) {
+        window.location.href = '/login.php?type=staff&redirect=' + encodeURIComponent(path);
+        return;
+      }
+      if (path.startsWith('/my-') || path.startsWith('/cart.php') || path.startsWith('/store-cart.php')) {
+        window.location.href = '/login.php?type=customer&redirect=' + encodeURIComponent(path);
+      }
+    })
+    .catch(() => {});
   beat();
   window.setInterval(beat, 60000);
 })();

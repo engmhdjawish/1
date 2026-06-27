@@ -19,6 +19,10 @@ final class SvgBasicGdRenderer
 
         $svg = @simplexml_load_string($xml);
         if ($svg === false) {
+            $xml = preg_replace('/<!DOCTYPE[^>]*>/i', '', $xml) ?? $xml;
+            $svg = @simplexml_load_string($xml);
+        }
+        if ($svg === false) {
             return false;
         }
 
@@ -116,15 +120,21 @@ final class SvgBasicGdRenderer
         if ($name === 'g' || $name === 'svg') {
             $attrs = $node->attributes();
             $nextCtx = $ctx;
-            $fillAttr = trim((string) ($attrs->fill ?? ''));
+            $fillAttr = self::styleValue($attrs, 'fill');
+            if ($fillAttr === '' && isset($attrs->fill)) {
+                $fillAttr = trim((string) $attrs->fill);
+            }
             if ($fillAttr !== '' && strtolower($fillAttr) !== 'inherit') {
                 $nextCtx['defaultFill'] = $fillAttr;
             }
-            $strokeAttr = trim((string) ($attrs->stroke ?? ''));
+            $strokeAttr = self::styleValue($attrs, 'stroke');
+            if ($strokeAttr === '' && isset($attrs->stroke)) {
+                $strokeAttr = trim((string) $attrs->stroke);
+            }
             if ($strokeAttr !== '' && strtolower($strokeAttr) !== 'inherit') {
                 $nextCtx['defaultStroke'] = $strokeAttr;
             }
-            foreach ($node->children() as $child) {
+            foreach (self::childElements($node) as $child) {
                 self::drawNode($child, $nextCtx);
             }
 
@@ -132,13 +142,29 @@ final class SvgBasicGdRenderer
         }
 
         $attrs = $node->attributes();
-        $fillRaw = trim((string) ($attrs->fill ?? ''));
+        $fillRaw = self::styleValue($attrs, 'fill');
+        if ($fillRaw === '' && isset($attrs->fill)) {
+            $fillRaw = trim((string) $attrs->fill);
+        }
         if ($fillRaw === '' || strtolower($fillRaw) === 'inherit') {
             $fillRaw = (string) ($ctx['defaultFill'] ?? '');
         }
-        $strokeRaw = trim((string) ($attrs->stroke ?? ''));
+        if ($fillRaw === '' && $name === 'path') {
+            $fillRaw = '#000000';
+        }
+        $strokeRaw = self::styleValue($attrs, 'stroke');
+        if ($strokeRaw === '' && isset($attrs->stroke)) {
+            $strokeRaw = trim((string) $attrs->stroke);
+        }
         if ($strokeRaw === '' || strtolower($strokeRaw) === 'inherit') {
             $strokeRaw = (string) ($ctx['defaultStroke'] ?? '');
+        }
+
+        if (strtolower($fillRaw) === 'none') {
+            $fillRaw = '';
+        }
+        if (strtolower($strokeRaw) === 'none') {
+            $strokeRaw = '';
         }
 
         $fill = self::parseColor($fillRaw);
@@ -433,5 +459,41 @@ final class SvgBasicGdRenderer
     private static function ty(array $ctx, float $y): float
     {
         return $ctx['offsetY'] + (($y - $ctx['viewBox']['y']) * $ctx['scale']);
+    }
+
+    /** @return iterable<int, \SimpleXMLElement> */
+    private static function childElements(\SimpleXMLElement $node): iterable
+    {
+        $namespaced = $node->children('http://www.w3.org/2000/svg');
+        if (count($namespaced) > 0) {
+            return $namespaced;
+        }
+
+        return $node->children();
+    }
+
+    /** @param \SimpleXMLElement|null $attrs */
+    private static function styleValue($attrs, string $key): string
+    {
+        if ($attrs === null) {
+            return '';
+        }
+
+        $style = trim((string) ($attrs->style ?? ''));
+        if ($style === '') {
+            return '';
+        }
+
+        foreach (explode(';', $style) as $rule) {
+            $parts = explode(':', $rule, 2);
+            if (count($parts) !== 2) {
+                continue;
+            }
+            if (trim($parts[0]) === $key) {
+                return trim($parts[1]);
+            }
+        }
+
+        return '';
     }
 }

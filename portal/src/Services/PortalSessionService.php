@@ -54,8 +54,11 @@ final class PortalSessionService
         }
 
         if (WebSession::check()) {
-            if (!self::validateCurrentMeta('staff')) {
-                self::ensureStaffSession((string) (WebSession::user()['id'] ?? ''));
+            $userId = (string) (WebSession::user()['id'] ?? '');
+            if ($userId === '' || !self::assertCurrentSession('staff', $userId)) {
+                self::forceLogoutForKind('staff');
+
+                return;
             }
             self::touchCurrent();
 
@@ -63,8 +66,11 @@ final class PortalSessionService
         }
 
         if (CustomerSession::check()) {
-            if (!self::validateCurrentMeta('customer')) {
-                self::ensureCustomerSession((string) (CustomerSession::customer()['id'] ?? ''));
+            $customerId = (string) (CustomerSession::customer()['id'] ?? '');
+            if ($customerId === '' || !self::assertCurrentSession('customer', $customerId)) {
+                self::forceLogoutForKind('customer');
+
+                return;
             }
             self::touchCurrent();
 
@@ -85,9 +91,18 @@ final class PortalSessionService
             session_regenerate_id(true);
         }
 
-        self::revokeAllForStaffUser($userId);
-        unset($_SESSION[self::META_KEY]);
-        self::insertSession('staff', $userId);
+        $pdo = Database::pdo();
+        $pdo->beginTransaction();
+        try {
+            self::revokeAllForStaffUser($userId);
+            unset($_SESSION[self::META_KEY]);
+            self::insertSession('staff', $userId);
+            $pdo->commit();
+        } catch (\Throwable) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+        }
     }
 
     public static function registerCustomer(string $customerId): void
@@ -101,9 +116,18 @@ final class PortalSessionService
             session_regenerate_id(true);
         }
 
-        self::revokeAllForCustomer($customerId);
-        unset($_SESSION[self::META_KEY]);
-        self::insertSession('customer', $customerId);
+        $pdo = Database::pdo();
+        $pdo->beginTransaction();
+        try {
+            self::revokeAllForCustomer($customerId);
+            unset($_SESSION[self::META_KEY]);
+            self::insertSession('customer', $customerId);
+            $pdo->commit();
+        } catch (\Throwable) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+        }
     }
 
     public static function touchCurrent(): void
@@ -236,6 +260,50 @@ final class PortalSessionService
         ];
     }
 
+    private static function assertCurrentSession(string $kind, string $subjectId): bool
+    {
+        $sessionId = session_id();
+        if ($sessionId === '') {
+            return false;
+        }
+
+        $hash = hash('sha256', $sessionId);
+        $table = $kind === 'customer' ? 'web_customer_sessions' : 'web_sessions';
+        $subjectCol = $kind === 'customer' ? 'customer_id' : 'user_id';
+
+        $stmt = Database::pdo()->prepare(
+            "SELECT s.id::text
+             FROM {$table} s
+             WHERE s.{$subjectCol} = :subject_id
+               AND s.token_hash = :hash
+               AND s.revoked_at IS NULL
+               AND s.expires_at > NOW()
+               AND s.id = (
+                   SELECT s2.id
+                   FROM {$table} s2
+                   WHERE s2.{$subjectCol} = :subject_id2
+                     AND s2.revoked_at IS NULL
+                     AND s2.expires_at > NOW()
+                   ORDER BY s2.last_seen_at DESC NULLS LAST, s2.created_at DESC
+                   LIMIT 1
+               )
+             LIMIT 1"
+        );
+        $stmt->execute([
+            'subject_id' => $subjectId,
+            'subject_id2' => $subjectId,
+            'hash' => $hash,
+        ]);
+        $id = $stmt->fetchColumn();
+        if ($id === false || $id === '') {
+            return false;
+        }
+
+        $_SESSION[self::META_KEY] = ['id' => (string) $id, 'kind' => $kind];
+
+        return true;
+    }
+
     private static function validateCurrentMeta(string $expectedKind): bool
     {
         $meta = self::meta();
@@ -258,24 +326,6 @@ final class PortalSessionService
         $stmt->execute(['id' => $meta['id']]);
 
         return (bool) $stmt->fetchColumn();
-    }
-
-    private static function ensureStaffSession(string $userId): void
-    {
-        if (self::validateCurrentMeta('staff')) {
-            return;
-        }
-
-        self::registerStaff($userId);
-    }
-
-    private static function ensureCustomerSession(string $customerId): void
-    {
-        if (self::validateCurrentMeta('customer')) {
-            return;
-        }
-
-        self::registerCustomer($customerId);
     }
 
     private static function insertSession(string $kind, string $subjectId): void
@@ -434,9 +484,9 @@ final class PortalSessionService
     {
         unset($_SESSION[self::META_KEY]);
         if ($kind === 'customer') {
-            CustomerSession::logout();
+            unset($_SESSION['web_customer']);
         } else {
-            WebSession::logout();
+            unset($_SESSION['web_user']);
         }
     }
 

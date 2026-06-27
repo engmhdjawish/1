@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
+ob_start();
+
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
+use Portal\Auth\CustomerSession;
+use Portal\Auth\WebSession;
 use Portal\Services\PortalPresenceService;
 use Portal\Services\PortalSessionService;
-
-header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-store');
+use Portal\Support\DashboardHttp;
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['ok' => false], JSON_UNESCAPED_UNICODE);
-    exit;
+    DashboardHttp::emitJson(['ok' => false, 'message' => 'Method not allowed.'], 405);
 }
 
 $visitorId = '';
@@ -35,8 +35,16 @@ try {
     if (random_int(1, 50) === 1) {
         PortalPresenceService::pruneStale();
     }
-    echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+
+    $staffLoggedIn = WebSession::check();
+    $customerLoggedIn = CustomerSession::check();
+    $loginRequired = !($staffLoggedIn || $customerLoggedIn);
+
+    DashboardHttp::emitJson([
+        'ok' => true,
+        'login_required' => $loginRequired,
+        'auth' => $staffLoggedIn ? 'staff' : ($customerLoggedIn ? 'customer' : 'guest'),
+    ]);
 } catch (\Throwable) {
-    http_response_code(500);
-    echo json_encode(['ok' => false], JSON_UNESCAPED_UNICODE);
+    DashboardHttp::emitJson(['ok' => false, 'message' => 'تعذر تحديث الجلسة.'], 500);
 }
