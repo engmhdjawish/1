@@ -99,8 +99,8 @@ final class StoreCatalogService
             $sectionRules = is_array($sectionContext['filter_rules'] ?? null) ? $sectionContext['filter_rules'] : [];
             $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
             $lockedClientFilters = array_values(array_unique(array_merge(
-                self::lockedClientFilters($policyRules),
-                self::lockedClientFilters($sectionRules)
+                self::lockedPolicyClientFilters($policyRules),
+                self::lockedSectionClientFilters($sectionRules)
             )));
             $isClientFilterVisible = static function (string $code) use ($visibleClientFilters, $lockedClientFilters): bool {
                 if (in_array($code, $lockedClientFilters, true)) {
@@ -419,6 +419,15 @@ final class StoreCatalogService
         $offset = ($page - 1) * $pageSize;
         $products = array_slice($products, $offset, $pageSize);
         $contextOfferSlug = self::contextOfferSlug($sectionContext);
+        $sectionRules = is_array($sectionContext['filter_rules'] ?? null) ? $sectionContext['filter_rules'] : [];
+        $policy = self::activePolicy();
+        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
+        $baseRules = self::mergeFilterRuleSets($policyRules, $sectionRules);
+        $filterOptions = self::getCachedFilterOptions();
+        $resultFilters = self::scopeResultFiltersForPolicy(
+            self::buildResultFiltersFromFilterOptions($filterOptions),
+            $baseRules
+        );
 
         return [
             'products' => self::withOfferPricing($products, $contextOfferSlug),
@@ -428,8 +437,8 @@ final class StoreCatalogService
             'totalPages' => $totalPages,
             'rangeStart' => $totalCount === 0 ? 0 : ($offset + 1),
             'rangeEnd' => min($totalCount, $page * $pageSize),
-            'resultFilters' => self::loadStaticResultFilters(),
-            'filterOptions' => ['stores' => [], 'groups' => []],
+            'resultFilters' => $resultFilters,
+            'filterOptions' => $filterOptions,
             'apiError' => null,
             'section_context' => $sectionContext,
             'section_filter_summary' => [['label' => 'العرض', 'value' => 'منتجات محددة يدوياً']],
@@ -540,11 +549,11 @@ final class StoreCatalogService
         }
 
         if ($apiError === null) {
-            $resultFilters = self::scopeResultFiltersForPolicy($resultFilters, $rules);
+            $resultFilters = self::scopeResultFiltersForPolicy($resultFilters, $baseRules);
         }
 
         $filterOptions = self::getCachedFilterOptions();
-        $forcedStoreGuids = self::parseList($rules['store_guids'] ?? []);
+        $forcedStoreGuids = self::parseList($baseRules['store_guids'] ?? []);
         if ($forcedStoreGuids !== []) {
             $forcedStoreMap = array_flip(array_map('strtolower', $forcedStoreGuids));
             $filterOptions['stores'] = array_values(array_filter(
@@ -552,11 +561,22 @@ final class StoreCatalogService
                 static fn (array $store): bool => isset($forcedStoreMap[strtolower((string) ($store['guid'] ?? ''))])
             ));
         }
+        $fallbackResultFilters = self::scopeResultFiltersForPolicy(
+            self::buildResultFiltersFromFilterOptions($filterOptions),
+            $baseRules
+        );
         if (self::resultFiltersAreEmpty($resultFilters)) {
-            $resultFilters = self::scopeResultFiltersForPolicy(
-                self::buildResultFiltersFromFilterOptions($filterOptions),
-                $rules
-            );
+            $resultFilters = $fallbackResultFilters;
+        } else {
+            foreach (['materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins', 'groups'] as $facetKey) {
+                $current = is_array($resultFilters[$facetKey] ?? null) ? $resultFilters[$facetKey] : [];
+                if ($current !== []) {
+                    continue;
+                }
+                $resultFilters[$facetKey] = is_array($fallbackResultFilters[$facetKey] ?? null)
+                    ? $fallbackResultFilters[$facetKey]
+                    : [];
+            }
         }
 
         $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
@@ -1566,29 +1586,49 @@ final class StoreCatalogService
     /** @param array<string, mixed> $policyRules @return list<string> */
     private static function lockedClientFilters(array $policyRules): array
     {
+        return self::lockedPolicyClientFilters($policyRules);
+    }
+
+    /** @param array<string, mixed> $policyRules @return list<string> */
+    private static function lockedPolicyClientFilters(array $policyRules): array
+    {
         $locked = [];
         if (array_key_exists('is_available', $policyRules) && $policyRules['is_available'] !== null) {
             $locked[] = 'availability';
         }
-        if (self::parseList($policyRules['material_types'] ?? []) !== []) {
+
+        return $locked;
+    }
+
+    /** @param array<string, mixed> $sectionRules @return list<string> */
+    private static function lockedSectionClientFilters(array $sectionRules): array
+    {
+        $locked = [];
+        if (trim((string) ($sectionRules['keyword'] ?? '')) !== '') {
+            $locked[] = 'search';
+        }
+        if (array_key_exists('is_available', $sectionRules) && $sectionRules['is_available'] !== null) {
+            $locked[] = 'availability';
+        }
+        if (self::parseList($sectionRules['material_types'] ?? []) !== []) {
             $locked[] = 'materialTypes';
         }
-        if (self::parseList($policyRules['age_categories'] ?? []) !== []) {
+        if (self::parseList($sectionRules['age_categories'] ?? []) !== []) {
             $locked[] = 'ageCategories';
         }
-        if (self::parseList($policyRules['manufacturers'] ?? []) !== []) {
+        if (self::parseList($sectionRules['manufacturers'] ?? []) !== []) {
             $locked[] = 'manufacturers';
         }
-        if (self::parseList($policyRules['size_ranges'] ?? []) !== []) {
+        if (self::parseList($sectionRules['size_ranges'] ?? []) !== []) {
             $locked[] = 'sizeRanges';
         }
-        if (self::parseList($policyRules['country_origins'] ?? []) !== []) {
+        if (self::parseList($sectionRules['country_origins'] ?? []) !== []) {
             $locked[] = 'countryOfOrigins';
         }
-        if (self::parseList($policyRules['store_guids'] ?? []) !== []) {
+        if (self::parseList($sectionRules['store_guids'] ?? []) !== []) {
             $locked[] = 'stores';
         }
-        if (self::parseList($policyRules['group_guids'] ?? []) !== []) {
+        if (self::parseList($sectionRules['group_guids'] ?? []) !== []) {
             $locked[] = 'groups';
         }
         foreach ([
@@ -1601,7 +1641,7 @@ final class StoreCatalogService
             'min_unit_purchase_price_usd' => 'pricePurchaseUsd',
             'max_unit_purchase_price_usd' => 'pricePurchaseUsd',
         ] as $ruleKey => $filterCode) {
-            $value = $policyRules[$ruleKey] ?? null;
+            $value = $sectionRules[$ruleKey] ?? null;
             if ($value !== null && $value !== '') {
                 $locked[] = $filterCode;
             }
