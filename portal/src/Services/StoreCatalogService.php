@@ -87,14 +87,34 @@ final class StoreCatalogService
         );
 
         if ($sectionContext !== null) {
+            $policy = self::activePolicy();
+            $storeOptions = is_array($policy['store_options'] ?? null)
+                ? $policy['store_options']
+                : AccessPolicyService::defaultStoreOptions();
+            $visibleClientFilters = AccessPolicyService::resolvedVisibleClientFilters($storeOptions);
+            $allowSorting = (bool) ($storeOptions['allow_sorting'] ?? true);
+            $defaultSort = self::normalizeSort((string) ($storeOptions['default_sort'] ?? 'number:asc'));
+            $sortAllowed = $allowSorting && in_array('sort', $visibleClientFilters, true);
             $search = trim((string) ($query['q'] ?? $query['search'] ?? ''));
-            $sort = self::normalizeSort($query['sort'] ?? 'number:asc');
+            $sort = $sortAllowed
+                ? self::normalizeSort($query['sort'] ?? $defaultSort)
+                : $defaultSort;
+            if (!in_array('search', $visibleClientFilters, true)) {
+                $search = '';
+            }
             $isAvailable = self::parseNullableBool($query['isAvailable'] ?? null);
+            if (!in_array('availability', $visibleClientFilters, true)) {
+                $isAvailable = null;
+            }
             if ((string) ($sectionContext['selection_mode'] ?? '') === 'manual') {
-                return self::catalogFromManualSection($sectionContext, $page, $pageSize, $sort, $search);
+                $catalog = self::catalogFromManualSection($sectionContext, $page, $pageSize, $sort, $search);
+
+                return self::attachPolicyCatalogMeta($catalog, $storeOptions, $visibleClientFilters);
             }
 
-            return self::catalogFromFilterSection($sectionContext, $page, $pageSize, $sort, $search, $isAvailable);
+            $catalog = self::catalogFromFilterSection($sectionContext, $page, $pageSize, $sort, $search, $isAvailable);
+
+            return self::attachPolicyCatalogMeta($catalog, $storeOptions, $visibleClientFilters);
         }
 
         $policy = self::activePolicy();
@@ -669,6 +689,15 @@ final class StoreCatalogService
         $slug = trim((string) ($sectionContext['slug'] ?? ''));
 
         return $slug !== '' ? $slug : null;
+    }
+
+    /** @param array<string, mixed> $catalog @param array<string, mixed> $storeOptions @param list<string> $visibleClientFilters @return array<string, mixed> */
+    private static function attachPolicyCatalogMeta(array $catalog, array $storeOptions, array $visibleClientFilters): array
+    {
+        $catalog['store_options'] = $storeOptions;
+        $catalog['allow_client_filters'] = $visibleClientFilters !== [];
+
+        return $catalog;
     }
 
     /** @return array{products: list<array<string, mixed>>, totalCount: int, page: int, pageSize: int, totalPages: int, rangeStart: int, rangeEnd: int, resultFilters: array<string, mixed>, apiError: string|null, filters: array<string, mixed>, store_options?: array<string, mixed>, allow_client_filters?: bool} */

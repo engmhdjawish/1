@@ -149,9 +149,6 @@ final class SvgBasicGdRenderer
         if ($fillRaw === '' || strtolower($fillRaw) === 'inherit') {
             $fillRaw = (string) ($ctx['defaultFill'] ?? '');
         }
-        if ($fillRaw === '' && $name === 'path') {
-            $fillRaw = '#000000';
-        }
         $strokeRaw = self::styleValue($attrs, 'stroke');
         if ($strokeRaw === '' && isset($attrs->stroke)) {
             $strokeRaw = trim((string) $attrs->stroke);

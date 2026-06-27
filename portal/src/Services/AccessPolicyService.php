@@ -32,6 +32,7 @@ final class AccessPolicyService
     private const OPTION_DEFAULT_SORT = 'option_default_sort';
     private const OPTION_VISIBLE_CLIENT_FILTER = 'option_visible_client_filter';
     private const OPTION_CLIENT_SORT_FIELD = 'option_client_sort_field';
+    private const VISIBLE_CLIENT_FILTERS_NONE = '__none__';
 
     /** @var list<string> */
     public const ALLOWED_VISIBLE_CLIENT_FILTERS = [
@@ -192,6 +193,8 @@ final class AccessPolicyService
                     $hasVisibleClientFilters = true;
                     if ($value === '*') {
                         $visibleFilterWildcard = true;
+                    } elseif ($value === self::VISIBLE_CLIENT_FILTERS_NONE) {
+                        $storeOptions['visible_client_filters'] = [];
                     } else {
                         $storeOptions['visible_client_filters'][] = $value;
                     }
@@ -426,7 +429,7 @@ final class AccessPolicyService
             $insert->execute([
                 'policy_id' => $policyId,
                 'filter_type' => self::OPTION_VISIBLE_CLIENT_FILTER,
-                'value_ar' => '*',
+                'value_ar' => self::VISIBLE_CLIENT_FILTERS_NONE,
             ]);
         } else {
             $insertValues(self::OPTION_VISIBLE_CLIENT_FILTER, $visibleClientFilters);

@@ -458,8 +458,8 @@ require __DIR__ . '/partials/store-filter-group.php';
 <?php endif; ?>
 
 <!-- store-catalog-fragment:start -->
-<div class="store-layout <?= ($allowClientFilters || $isSectionBrowse) ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?>>
-  <?php if ($allowClientFilters || $isSectionBrowse): ?>
+<div class="store-layout <?= $allowClientFilters ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?>>
+  <?php if ($allowClientFilters): ?>
     <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
       <aside class="store-filters-sidebar">
         <form method="get" class="store-filters-sidebar-inner">
@@ -485,7 +485,7 @@ require __DIR__ . '/partials/store-filter-group.php';
             </div>
           <?php endif; ?>
 
-          <?php if ($isSectionBrowse): ?>
+          <?php if ($isSectionBrowse && $allowSorting && $isClientFilterVisible('sort')): ?>
             <div class="store-inline-field">
               <label for="store-section-sort">الترتيب</label>
               <select id="store-section-sort" name="sort">
@@ -689,7 +689,7 @@ require __DIR__ . '/partials/store-filter-group.php';
     <?php require __DIR__ . '/partials/store-active-filter-chips.php'; ?>
 
     <div class="store-results-toolbar">
-      <?php if ($allowClientFilters || $isSectionBrowse): ?>
+      <?php if ($allowClientFilters): ?>
         <button type="button" id="store-filters-open" class="store-filters-open-btn lg:hidden">
           <span class="material-symbols-outlined text-base" aria-hidden="true">tune</span>
           فلاتر

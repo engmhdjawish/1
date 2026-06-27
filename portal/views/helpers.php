@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Portal\Auth\WebSession;
 use Portal\Services\CatalogSectionResolver;
 use Portal\Services\ShareCartService;
+use Portal\Support\StorePricePreference;
 
 function h(?string $value): string
 {
@@ -649,6 +650,72 @@ function home_section_return_url(array $section): string
     $slug = trim((string) ($section['slug'] ?? ''));
 
     return $slug !== '' ? '/#' . $slug : '/';
+}
+
+/**
+ * @param array<string, mixed> $displayOptions
+ * @param array<string, mixed>|null $storeCatalogDisplay
+ * @return array{
+ *   show_any_price: bool,
+ *   show_price_syp: bool,
+ *   show_price_usd: bool,
+ *   price_mode_resolved: string,
+ *   preview_display_options: array<string, mixed>
+ * }
+ */
+function section_price_display_state(array $displayOptions, ?array $storeCatalogDisplay = null): array
+{
+    $storeCatalogDisplay ??= [];
+    $sectionPriceMode = (string) ($displayOptions['price_mode'] ?? 'both');
+    $showImages = array_key_exists('show_images', $displayOptions) ? (bool) $displayOptions['show_images'] : true;
+
+    if ($sectionPriceMode === 'none') {
+        return [
+            'show_any_price' => false,
+            'show_price_syp' => false,
+            'show_price_usd' => false,
+            'price_mode_resolved' => 'none',
+            'preview_display_options' => [
+                'show_images' => $showImages,
+                'show_price' => false,
+                'show_quantity' => (bool) ($storeCatalogDisplay['show_quantity'] ?? false),
+                'allow_cart' => (bool) ($storeCatalogDisplay['allow_cart'] ?? false),
+                'price_mode' => 'none',
+            ],
+        ];
+    }
+
+    if ($sectionPriceMode === 'both') {
+        $resolved = StorePricePreference::current();
+        $showPriceSyp = $resolved === StorePricePreference::SYP;
+        $showPriceUsd = $resolved === StorePricePreference::USD;
+    } else {
+        $resolved = $sectionPriceMode;
+        $showPriceSyp = $sectionPriceMode === 'syp';
+        $showPriceUsd = $sectionPriceMode === 'usd';
+    }
+
+    return [
+        'show_any_price' => true,
+        'show_price_syp' => $showPriceSyp,
+        'show_price_usd' => $showPriceUsd,
+        'price_mode_resolved' => $resolved,
+        'preview_display_options' => [
+            'show_images' => $showImages,
+            'show_price' => true,
+            'show_quantity' => (bool) ($storeCatalogDisplay['show_quantity'] ?? false),
+            'allow_cart' => (bool) ($storeCatalogDisplay['allow_cart'] ?? false),
+            'price_mode' => $resolved,
+        ],
+    ];
+}
+
+/** @param array<string, mixed> $sectionDisplayOptions @param array<string, mixed> $baseDisplayOptions @return array<string, mixed> */
+function section_catalog_display_options(array $sectionDisplayOptions, array $baseDisplayOptions): array
+{
+    $priceState = section_price_display_state($sectionDisplayOptions, $baseDisplayOptions);
+
+    return array_merge($baseDisplayOptions, $priceState['preview_display_options']);
 }
 
 /** @param array<string, mixed> $params */

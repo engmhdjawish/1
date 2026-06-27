@@ -108,6 +108,7 @@ final class CompanyBrandIconService
         if (!$ok) {
             $detail = self::$lastError ?: ('تعذر تحويل الشعار إلى PNG (الصيغة: ' . $mime . ').');
             self::$lastError = $detail;
+            self::clearBrandIcons();
         }
 
         return $ok;
