@@ -254,8 +254,9 @@ final class StoreCartApi
     ): array {
         $display = $displayOverride ?? StoreCatalogService::displayOptionsForCartContext();
         $reprice = StoreCartPricingService::repriceCart(StoreCartService::TOKEN);
+        $pendingChanges = StoreCartPricingService::pendingPriceChanges(StoreCartService::TOKEN);
         $changesByGuid = [];
-        foreach ($reprice['changes'] as $change) {
+        foreach ($pendingChanges as $change) {
             $guid = trim((string) ($change['material_guid'] ?? ''));
             if ($guid !== '') {
                 $changesByGuid[$guid] = $change;
@@ -269,6 +270,8 @@ final class StoreCartApi
                 $guid = trim((string) ($enriched['material_guid'] ?? ''));
                 if ($guid !== '' && isset($changesByGuid[$guid])) {
                     $enriched['price_change'] = $changesByGuid[$guid];
+                } elseif (is_array($line['price_change'] ?? null)) {
+                    $enriched['price_change'] = $line['price_change'];
                 }
 
                 return $enriched;
@@ -302,7 +305,7 @@ final class StoreCartApi
             'show_price' => $showPrice,
             'price_mode' => (string) ($display['price_mode'] ?? 'syp'),
             'stock_notices' => $notices,
-            'price_changes' => $reprice['changes'],
+            'price_changes' => $pendingChanges,
             'logged_in' => CustomerSession::check(),
         ];
 

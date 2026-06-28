@@ -327,22 +327,67 @@
     return html;
   };
 
-  const priceChangeHtml = (line) => {
-    const change = line?.price_change;
-    if (!change || typeof change !== 'object') return '';
+  const priceChangeDirection = (change) => {
+    if (!change || typeof change !== 'object') return null;
     const up = change.direction_sp === 'up' || change.direction_usd === 'up';
     const down = change.direction_sp === 'down' || change.direction_usd === 'down';
-    if (!up && !down) return '';
-    let label = 'تغيّر السعر';
-    let cls = 'changed';
-    if (up && !down) {
-      label = 'ارتفع السعر';
-      cls = 'up';
-    } else if (down && !up) {
-      label = 'انخفض السعر';
-      cls = 'down';
+    if (up && !down) return 'up';
+    if (down && !up) return 'down';
+    if (up || down) return 'changed';
+    return null;
+  };
+
+  const priceChangeHtml = (line) => {
+    const change = line?.price_change;
+    const direction = priceChangeDirection(change);
+    if (!direction) return '';
+    const icon = direction === 'up' ? 'arrow_upward' : (direction === 'down' ? 'arrow_downward' : 'swap_vert');
+    const label = direction === 'up' ? 'ارتفع السعر' : (direction === 'down' ? 'انخفض السعر' : 'تغيّر السعر');
+    return `<span class="store-price-change store-price-change--${direction}">
+      <span class="material-symbols-outlined store-price-change__icon" aria-hidden="true">${icon}</span>
+      <span>${escapeHtml(label)}</span>
+    </span>`;
+  };
+
+  const linePriceChangeDetailHtml = (line, prices, showPrice = true) => {
+    const change = line?.price_change;
+    const direction = priceChangeDirection(change);
+    if (!direction) return '';
+    const icon = direction === 'up' ? 'trending_up' : (direction === 'down' ? 'trending_down' : 'swap_vert');
+    const rows = [];
+
+    const oldSp = Number(change.old_sale_price_sp) || 0;
+    const newSp = Number(prices.packSp) || Number(change.new_sale_price_sp) || 0;
+    if (change.direction_sp && oldSp > 0 && newSp > 0 && Math.abs(oldSp - newSp) > 0.009) {
+      rows.push(`<div class="store-price-change-detail__row store-price-change-detail__row--${change.direction_sp}">
+        <span class="material-symbols-outlined" aria-hidden="true">${icon}</span>
+        <span class="store-price-change-detail__label">ل.س / ${escapeHtml(prices.packageUnit)}</span>
+        ${showPrice ? `<span class="store-price-change-detail__old store-num" dir="ltr">${formatMoney(oldSp)}</span>
+        <span class="store-price-change-detail__sep" aria-hidden="true">→</span>
+        <span class="store-price-change-detail__new store-num" dir="ltr">${formatMoney(newSp)}</span>` : ''}
+      </div>`);
     }
-    return `<span class="store-price-change store-price-change--${cls}">${escapeHtml(label)}</span>`;
+
+    const oldUsd = Number(change.old_sale_price_usd) || 0;
+    const newUsd = Number(prices.packUsd) || Number(change.new_sale_price_usd) || 0;
+    if (change.direction_usd && oldUsd > 0 && newUsd > 0 && Math.abs(oldUsd - newUsd) > 0.009) {
+      rows.push(`<div class="store-price-change-detail__row store-price-change-detail__row--${change.direction_usd}">
+        <span class="material-symbols-outlined" aria-hidden="true">${icon}</span>
+        <span class="store-price-change-detail__label">$ / ${escapeHtml(prices.packageUnit)}</span>
+        ${showPrice ? `<span class="store-price-change-detail__old store-num" dir="ltr">$${formatUsd(oldUsd)}</span>
+        <span class="store-price-change-detail__sep" aria-hidden="true">→</span>
+        <span class="store-price-change-detail__new store-num" dir="ltr">$${formatUsd(newUsd)}</span>` : ''}
+      </div>`);
+    }
+
+    if (rows.length === 0) {
+      return `<div class="store-price-change-detail store-price-change-detail--${direction}">
+        <span class="material-symbols-outlined" aria-hidden="true">${icon}</span>
+        <span>${direction === 'up' ? 'ارتفع سعر هذا الصنف منذ إضافته للسلة' : (direction === 'down' ? 'انخفض سعر هذا الصنف منذ إضافته للسلة' : 'تغيّر سعر هذا الصنف')}</span>
+      </div>`;
+    }
+
+    return `<div class="store-price-change-detail store-price-change-detail--${direction}">${rows.join('')}</div>`;
   };
 
   const buildPriceChangeConfirmMessage = (changes) => {
@@ -363,6 +408,8 @@
     const guid = line.material_guid || '';
     const prices = computeLinePrices(line);
     const hasOffer = lineHasOffer(line);
+    const priceDirection = priceChangeDirection(line?.price_change);
+    const priceCardClass = priceDirection ? ` store-cart-line-card--price-${priceDirection}` : '';
     const img = line.image_url
       ? (() => {
           const thumb = escapeHtml(line.image_url);
@@ -376,13 +423,12 @@
           ${prices.packUsd > 0 || prices.origPackUsd > 0 ? `<span class="store-price-currency store-price-currency--usd store-num" dir="ltr">$${formatUsd(prices.lineTotalUsd)}</span>` : ''}
         </div>`
       : '';
-    return `<article class="store-order-line-card store-cart-line-card${hasOffer ? ' store-order-line-card--offer' : ''}" data-cart-line="${escapeHtml(guid)}">
+    return `<article class="store-order-line-card store-cart-line-card${hasOffer ? ' store-order-line-card--offer' : ''}${priceCardClass}" data-cart-line="${escapeHtml(guid)}">
       <div class="store-order-line-card__media">${img}</div>
       <div class="store-order-line-card__body">
         <div class="store-cart-line-card__head">
           <div class="store-order-line-card__head-main min-w-0">
             ${offerBadgeHtml(line)}
-            ${priceChangeHtml(line)}
             <h3 class="store-order-line-card__title">${escapeHtml(line.material_name_ar || '')}</h3>
             ${line.material_code ? `<span class="store-order-line-card__code store-num" dir="ltr">${escapeHtml(line.material_code)}</span>` : ''}
           </div>
@@ -391,6 +437,8 @@
           </button>
         </div>
         <div class="store-cart-line-card__foot">
+          ${priceChangeHtml(line)}
+          ${linePriceChangeDetailHtml(line, prices, showPrice)}
           ${showPrice ? linePricesHtml(line) : ''}
           <div class="store-cart-line-card__controls">
             <div class="store-cart-line-card__qty-row">
@@ -914,7 +962,13 @@
         }
         const priceChanges = Array.isArray(data.price_changes) ? data.price_changes : [];
         if (priceChanges.length > 0) {
-          html += `<p class="store-price-change-banner">تنبيه: تغيّرت أسعار ${priceChanges.length} صنف — راجع قبل إرسال الطلب.</p>`;
+          html += `<div class="store-price-change-banner" role="status">
+            <span class="material-symbols-outlined store-price-change-banner__icon" aria-hidden="true">price_change</span>
+            <div>
+              <strong>تغيّرت أسعار ${priceChanges.length} صنف</strong>
+              <span>راجع الأسعار المحدّثة قبل إرسال الطلب.</span>
+            </div>
+          </div>`;
         }
         if (items.length > 0) {
           html += '<div class="store-cart-lines">';

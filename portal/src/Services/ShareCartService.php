@@ -146,6 +146,10 @@ final class ShareCartService
 
         $line['material_guid'] = $materialGuid;
         $line['quantity'] = $quantity;
+        if (!isset($line['price_snapshot_sp']) && !isset($line['price_snapshot_usd'])) {
+            $line['price_snapshot_sp'] = (float) ($line['sale_price_sp'] ?? 0);
+            $line['price_snapshot_usd'] = (float) ($line['sale_price_usd'] ?? 0);
+        }
         $items[$materialGuid] = $line;
 
         return ['ok' => true, 'message' => '', 'quantity' => $quantity];

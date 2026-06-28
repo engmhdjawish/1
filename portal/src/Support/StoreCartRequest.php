@@ -107,6 +107,7 @@ final class StoreCartRequest
             is_array($result['submitted_material_guids'] ?? null) ? $result['submitted_material_guids'] : [],
             is_array($result['unavailable_items'] ?? null) ? $result['unavailable_items'] : []
         );
+        StoreCartPricingService::clearPriceChangeNotices(StoreCartService::TOKEN);
         unset($_SESSION['store_cart_context']);
 
         $quoteToken = (string) ($order['quote_access_token'] ?? '');

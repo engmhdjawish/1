@@ -413,39 +413,140 @@
 }
 
 .store-price-change-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
   font-size: 0.8125rem;
   color: #92400e;
-  background: #fffbeb;
-  border: 1px solid #fcd34d;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border: 1px solid #f59e0b;
   border-radius: 0.75rem;
-  padding: 0.625rem 1rem;
+  padding: 0.75rem 1rem;
   margin-bottom: 0.75rem;
+  box-shadow: 0 1px 0 rgba(245, 158, 11, 0.15);
+}
+
+.store-price-change-banner__icon {
+  font-size: 1.35rem;
+  color: #d97706;
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+}
+
+.store-price-change-banner strong {
+  display: block;
+  color: #92400e;
+  margin-bottom: 0.15rem;
+}
+
+.store-price-change-banner span {
+  color: #b45309;
 }
 
 .store-price-change {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  font-size: 0.6875rem;
-  font-weight: 700;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 800;
   border-radius: 9999px;
-  padding: 0.15rem 0.5rem;
-  margin-bottom: 0.25rem;
+  padding: 0.25rem 0.65rem;
+  margin-bottom: 0.45rem;
+}
+
+.store-price-change__icon {
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .store-price-change--up {
   color: #b45309;
   background: #fef3c7;
+  border: 1px solid #fcd34d;
 }
 
 .store-price-change--down {
   color: #047857;
   background: #d1fae5;
+  border: 1px solid #6ee7b7;
 }
 
 .store-price-change--changed {
   color: #1d4ed8;
   background: #dbeafe;
+  border: 1px solid #93c5fd;
+}
+
+.store-price-change-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-radius: 0.65rem;
+  padding: 0.55rem 0.7rem;
+  margin-bottom: 0.55rem;
+  font-size: 0.78rem;
+}
+
+.store-price-change-detail--up {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+
+.store-price-change-detail--down {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
+.store-price-change-detail--changed {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+}
+
+.store-price-change-detail__row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+}
+
+.store-price-change-detail__row .material-symbols-outlined {
+  font-size: 1.05rem;
+}
+
+.store-price-change-detail__label {
+  font-weight: 700;
+}
+
+.store-price-change-detail__old {
+  text-decoration: line-through;
+  opacity: 0.72;
+}
+
+.store-price-change-detail__sep {
+  opacity: 0.55;
+  font-weight: 700;
+}
+
+.store-price-change-detail__new {
+  font-weight: 800;
+}
+
+.store-cart-line-card--price-up {
+  border-color: #fcd34d;
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.store-cart-line-card--price-down {
+  border-color: #6ee7b7;
+  box-shadow: inset 3px 0 0 #10b981;
+}
+
+.store-cart-line-card--price-changed {
+  border-color: #93c5fd;
+  box-shadow: inset 3px 0 0 #3b82f6;
 }
 
 .store-cart-lines {

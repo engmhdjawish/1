@@ -90,9 +90,6 @@ final class StoreCartPricingService
             }
 
             $change = self::detectPriceChange($line, $current);
-            if ($change !== null) {
-                $changes[] = $change;
-            }
 
             $merged = ShareCartService::normalizeLine(array_merge($line, [
                 'unit_sale_price_sp' => $current['unit_sale_price_sp'] ?? 0,
@@ -109,6 +106,19 @@ final class StoreCartPricingService
                 'special_offer_id' => $current['special_offer_id'] ?? null,
             ]));
 
+            if ($change !== null) {
+                $changes[] = $change;
+                $merged['price_change'] = $change;
+            } elseif (is_array($line['price_change'] ?? null)) {
+                $recheck = self::detectPriceChange($line, $current);
+                if ($recheck !== null) {
+                    $merged['price_change'] = $recheck;
+                }
+            }
+
+            $merged['price_snapshot_sp'] = (float) ($line['price_snapshot_sp'] ?? $merged['sale_price_sp'] ?? 0);
+            $merged['price_snapshot_usd'] = (float) ($line['price_snapshot_usd'] ?? $merged['sale_price_usd'] ?? 0);
+
             ShareCartService::replaceLine($token, (string) $guid, $merged);
             $items[(string) $guid] = $merged;
         }
@@ -119,6 +129,36 @@ final class StoreCartPricingService
         ];
     }
 
+    /** @return list<array<string, mixed>> */
+    public static function pendingPriceChanges(string $token): array
+    {
+        $changes = [];
+        foreach (ShareCartService::items($token) as $line) {
+            if (!is_array($line['price_change'] ?? null)) {
+                continue;
+            }
+            $changes[] = $line['price_change'];
+        }
+
+        return $changes;
+    }
+
+    public static function clearPriceChangeNotices(string $token): void
+    {
+        $token = trim($token);
+        if ($token === '') {
+            return;
+        }
+
+        foreach (ShareCartService::items($token) as $guid => $line) {
+            if (!isset($line['price_change'])) {
+                continue;
+            }
+            unset($line['price_change']);
+            ShareCartService::replaceLine($token, (string) $guid, $line);
+        }
+    }
+
     /** @param array<string, mixed> $stored @param array<string, mixed> $current @return array<string, mixed>|null */
     public static function detectPriceChange(array $stored, array $current): ?array
     {
@@ -127,10 +167,14 @@ final class StoreCartPricingService
             return null;
         }
 
-        $oldSp = (float) ($stored['sale_price_sp'] ?? 0);
-        $newSp = (float) ($current['sale_price_sp'] ?? 0);
-        $oldUsd = (float) ($stored['sale_price_usd'] ?? 0);
-        $newUsd = (float) ($current['sale_price_usd'] ?? 0);
+        $storedNorm = ShareCartService::normalizeLine($stored);
+        $currentNorm = ShareCartService::normalizeLine($current);
+        $snapshotSp = (float) ($stored['price_snapshot_sp'] ?? 0);
+        $snapshotUsd = (float) ($stored['price_snapshot_usd'] ?? 0);
+        $oldSp = $snapshotSp > 0 ? $snapshotSp : (float) ($storedNorm['sale_price_sp'] ?? 0);
+        $oldUsd = $snapshotUsd > 0 ? $snapshotUsd : (float) ($storedNorm['sale_price_usd'] ?? 0);
+        $newSp = (float) ($currentNorm['sale_price_sp'] ?? 0);
+        $newUsd = (float) ($currentNorm['sale_price_usd'] ?? 0);
 
         if ($oldSp <= 0 && $newSp <= 0 && $oldUsd <= 0 && $newUsd <= 0) {
             return null;
