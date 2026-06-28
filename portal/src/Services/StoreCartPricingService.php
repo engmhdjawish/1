@@ -178,11 +178,8 @@ final class StoreCartPricingService
             if ($change !== null) {
                 $changes[] = $change;
                 $merged['price_change'] = $change;
-            } elseif (is_array($line['price_change'] ?? null)) {
-                $recheck = self::detectPriceChange($line, $current);
-                if ($recheck !== null) {
-                    $merged['price_change'] = $recheck;
-                }
+            } else {
+                unset($merged['price_change']);
             }
 
             $merged['price_snapshot_sp'] = (float) ($line['price_snapshot_sp'] ?? $merged['sale_price_sp'] ?? 0);

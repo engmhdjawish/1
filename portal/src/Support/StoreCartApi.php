@@ -271,8 +271,8 @@ final class StoreCartApi
                 $guid = trim((string) ($enriched['material_guid'] ?? ''));
                 if ($guid !== '' && isset($changesByGuid[$guid])) {
                     $enriched['price_change'] = $changesByGuid[$guid];
-                } elseif (is_array($line['price_change'] ?? null)) {
-                    $enriched['price_change'] = $line['price_change'];
+                } else {
+                    unset($enriched['price_change']);
                 }
                 $enriched['display_has_price'] = StoreCartPricingService::lineHasDisplayPrice($enriched, $showPrice);
 

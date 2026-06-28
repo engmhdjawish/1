@@ -350,8 +350,41 @@
     return html;
   };
 
-  const priceChangeDirection = (change) => {
+  const PRICE_CHANGE_EPSILON = 0.009;
+
+  const priceChangeDiffers = (change, line, prices) => {
+    if (!change || typeof change !== 'object') return false;
+    const oldSp = Number(line?.price_snapshot_sp) || Number(change.old_sale_price_sp) || 0;
+    const oldUsd = Number(line?.price_snapshot_usd) || Number(change.old_sale_price_usd) || 0;
+    const newSp = Number(prices?.packSp) || Number(change.new_sale_price_sp) || 0;
+    const newUsd = Number(prices?.packUsd) || Number(change.new_sale_price_usd) || 0;
+    const spDiffers = (oldSp > 0 || newSp > 0) && Math.abs(oldSp - newSp) > PRICE_CHANGE_EPSILON;
+    const usdDiffers = (oldUsd > 0 || newUsd > 0) && Math.abs(oldUsd - newUsd) > PRICE_CHANGE_EPSILON;
+    return spDiffers || usdDiffers;
+  };
+
+  const priceChangeDirection = (change, line = null, prices = null) => {
     if (!change || typeof change !== 'object') return null;
+    if (line && prices && !priceChangeDiffers(change, line, prices)) return null;
+
+    const oldSp = Number(line?.price_snapshot_sp) || Number(change.old_sale_price_sp) || 0;
+    const oldUsd = Number(line?.price_snapshot_usd) || Number(change.old_sale_price_usd) || 0;
+    const newSp = Number(prices?.packSp) || Number(change.new_sale_price_sp) || 0;
+    const newUsd = Number(prices?.packUsd) || Number(change.new_sale_price_usd) || 0;
+
+    if (line && prices) {
+      const upSp = oldSp > 0 && newSp > 0 && newSp > oldSp + PRICE_CHANGE_EPSILON;
+      const downSp = oldSp > 0 && newSp > 0 && newSp < oldSp - PRICE_CHANGE_EPSILON;
+      const upUsd = oldUsd > 0 && newUsd > 0 && newUsd > oldUsd + PRICE_CHANGE_EPSILON;
+      const downUsd = oldUsd > 0 && newUsd > 0 && newUsd < oldUsd - PRICE_CHANGE_EPSILON;
+      const up = upSp || upUsd || (oldSp <= 0 && newSp > 0) || (oldUsd <= 0 && newUsd > 0);
+      const down = downSp || downUsd || (newSp <= 0 && oldSp > 0) || (newUsd <= 0 && oldUsd > 0);
+      if (up && !down) return 'up';
+      if (down && !up) return 'down';
+      if (up || down) return 'changed';
+      return null;
+    }
+
     const up = change.direction_sp === 'up' || change.direction_usd === 'up';
     const down = change.direction_sp === 'down' || change.direction_usd === 'down';
     if (up && !down) return 'up';
@@ -360,9 +393,10 @@
     return null;
   };
 
-  const priceChangeHtml = (line) => {
+  const priceChangeHtml = (line, prices = null) => {
     const change = line?.price_change;
-    const direction = priceChangeDirection(change);
+    const resolvedPrices = prices || computeLinePrices(line);
+    const direction = priceChangeDirection(change, line, resolvedPrices);
     if (!direction) return '';
     const icon = direction === 'up' ? 'arrow_upward' : (direction === 'down' ? 'arrow_downward' : 'swap_vert');
     const label = direction === 'up' ? 'ارتفع السعر' : (direction === 'down' ? 'انخفض السعر' : 'تغيّر السعر');
@@ -374,15 +408,16 @@
 
   const linePriceChangeDetailHtml = (line, prices, showPrice = true) => {
     const change = line?.price_change;
-    const direction = priceChangeDirection(change);
+    const direction = priceChangeDirection(change, line, prices);
     if (!direction) return '';
     const icon = direction === 'up' ? 'trending_up' : (direction === 'down' ? 'trending_down' : 'swap_vert');
     const rows = [];
 
-    const oldSp = Number(change.old_sale_price_sp) || 0;
+    const oldSp = Number(line?.price_snapshot_sp) || Number(change.old_sale_price_sp) || 0;
     const newSp = Number(prices.packSp) || Number(change.new_sale_price_sp) || 0;
-    if (change.direction_sp && oldSp > 0 && newSp > 0 && Math.abs(oldSp - newSp) > 0.009) {
-      rows.push(`<div class="store-price-change-detail__row store-price-change-detail__row--${change.direction_sp}">
+    if (oldSp > 0 && newSp > 0 && Math.abs(oldSp - newSp) > PRICE_CHANGE_EPSILON) {
+      const rowDir = newSp > oldSp ? 'up' : 'down';
+      rows.push(`<div class="store-price-change-detail__row store-price-change-detail__row--${rowDir}">
         <span class="material-symbols-outlined" aria-hidden="true">${icon}</span>
         <span class="store-price-change-detail__label">ل.س / ${escapeHtml(prices.packageUnit)}</span>
         ${showPrice ? `<span class="store-price-change-detail__old store-num" dir="ltr">${formatMoney(oldSp)}</span>
@@ -391,10 +426,11 @@
       </div>`);
     }
 
-    const oldUsd = Number(change.old_sale_price_usd) || 0;
+    const oldUsd = Number(line?.price_snapshot_usd) || Number(change.old_sale_price_usd) || 0;
     const newUsd = Number(prices.packUsd) || Number(change.new_sale_price_usd) || 0;
-    if (change.direction_usd && oldUsd > 0 && newUsd > 0 && Math.abs(oldUsd - newUsd) > 0.009) {
-      rows.push(`<div class="store-price-change-detail__row store-price-change-detail__row--${change.direction_usd}">
+    if (oldUsd > 0 && newUsd > 0 && Math.abs(oldUsd - newUsd) > PRICE_CHANGE_EPSILON) {
+      const rowDir = newUsd > oldUsd ? 'up' : 'down';
+      rows.push(`<div class="store-price-change-detail__row store-price-change-detail__row--${rowDir}">
         <span class="material-symbols-outlined" aria-hidden="true">${icon}</span>
         <span class="store-price-change-detail__label">$ / ${escapeHtml(prices.packageUnit)}</span>
         ${showPrice ? `<span class="store-price-change-detail__old store-num" dir="ltr">$${formatUsd(oldUsd)}</span>
@@ -403,12 +439,7 @@
       </div>`);
     }
 
-    if (rows.length === 0) {
-      return `<div class="store-price-change-detail store-price-change-detail--${direction}">
-        <span class="material-symbols-outlined" aria-hidden="true">${icon}</span>
-        <span>${direction === 'up' ? 'ارتفع سعر هذا الصنف منذ إضافته للسلة' : (direction === 'down' ? 'انخفض سعر هذا الصنف منذ إضافته للسلة' : 'تغيّر سعر هذا الصنف')}</span>
-      </div>`;
-    }
+    if (rows.length === 0) return '';
 
     return `<div class="store-price-change-detail store-price-change-detail--${direction}">${rows.join('')}</div>`;
   };
@@ -432,7 +463,7 @@
     const prices = computeLinePrices(line);
     const hasOffer = lineHasOffer(line);
     const lineShowPrice = lineHasDisplayPrice(line, showPrice);
-    const priceDirection = priceChangeDirection(line?.price_change);
+    const priceDirection = priceChangeDirection(line?.price_change, line, prices);
     const priceCardClass = priceDirection ? ` store-cart-line-card--price-${priceDirection}` : '';
     const noPriceClass = showPrice && !lineShowPrice ? ' store-cart-line-card--no-price' : '';
     const img = line.image_url
@@ -468,7 +499,7 @@
           </button>
         </div>
         <div class="store-cart-line-card__foot">
-          ${priceChangeHtml(line)}
+          ${priceChangeHtml(line, prices)}
           ${linePriceChangeDetailHtml(line, prices, lineShowPrice)}
           ${lineShowPrice ? linePricesHtml(line, showPrice) : noPriceHtml}
           <div class="store-cart-line-card__controls">
