@@ -44,6 +44,9 @@ $totals = StoreCartService::totals();
 $customerShowsPrices = StoreCartPricingService::cartShowsAnyLinePrices($cartItems, $display)
     || $globalShowsPrices;
 $showPrice = $customerShowsPrices;
+$priceMode = (string) ($display['price_mode'] ?? 'syp');
+$showPriceSyp = $showPrice && in_array($priceMode, ['both', 'syp'], true);
+$showPriceUsd = $showPrice && in_array($priceMode, ['both', 'usd'], true);
 $displayTotals = StoreCartPricingService::displayTotals(StoreCartService::TOKEN, $globalShowsPrices);
 $cartPartition = StoreCartPricingService::partitionItems($cartItems, $globalShowsPrices);
 $hasMixedPricing = $cartPartition['has_mixed'];

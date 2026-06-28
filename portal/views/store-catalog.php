@@ -46,7 +46,7 @@ if ($sectionContext !== null) {
         ? $sectionContext['display_options']
         : [];
     if (!function_exists('section_catalog_display_options')) {
-        require __DIR__ . '/helpers.php';
+        require_once __DIR__ . '/helpers.php';
     }
     $displayOptions = section_catalog_display_options($sectionDisplay, $displayOptions);
 }
