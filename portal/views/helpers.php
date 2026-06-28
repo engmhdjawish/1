@@ -764,9 +764,9 @@ function customer_order_shows_prices(string $status): bool
 }
 
 /** @param array<string, mixed> $line */
-function store_line_has_display_price(array $line, bool $customerShowsPrices): bool
+function store_line_has_display_price(array $line): bool
 {
-    return \Portal\Services\StoreCartPricingService::lineHasDisplayPrice($line, $customerShowsPrices);
+    return \Portal\Services\StoreCartPricingService::lineHasDisplayPrice($line);
 }
 
 /** @param array<string, mixed> $line */

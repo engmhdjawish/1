@@ -38,15 +38,36 @@ final class StoreCartPricingService
         return is_array($ctx) && !empty($ctx['show_price']);
     }
 
-    /** @param list<array<string, mixed>> $items */
-    public static function cartShowsAnyLinePrices(array $items, array $display): bool
+    /** @param array<string, mixed> $line */
+    public static function resolveLineCustomerShowPrice(array $line): bool
     {
-        $fallback = self::customerShowsPrices($display);
+        if (array_key_exists('customer_show_price', $line)) {
+            return (bool) $line['customer_show_price'];
+        }
+
+        $section = trim((string) ($line['added_store_section'] ?? ''));
+        $offer = trim((string) ($line['added_store_offer'] ?? ''));
+        if ($section !== '' || $offer !== '') {
+            $display = StoreCatalogService::displayOptionsForCartContext([
+                'store_section' => $section,
+                'store_offer' => $offer,
+            ]);
+
+            return self::contextShowsPrices($display);
+        }
+
+        return (bool) (StoreCatalogService::displayOptions()['show_price'] ?? false);
+    }
+
+    /** @param list<array<string, mixed>> $items */
+    public static function cartShowsAnyLinePrices(array $items, array $display = []): bool
+    {
+        unset($display);
         foreach ($items as $line) {
             if (!is_array($line)) {
                 continue;
             }
-            if (self::lineHasDisplayPrice($line, $fallback)) {
+            if (self::lineHasDisplayPrice($line)) {
                 return true;
             }
         }
@@ -61,12 +82,9 @@ final class StoreCartPricingService
     }
 
     /** @param array<string, mixed> $line */
-    public static function lineHasDisplayPrice(array $line, bool $customerShowsPrices): bool
+    public static function lineHasDisplayPrice(array $line): bool
     {
-        $lineAllows = array_key_exists('customer_show_price', $line)
-            ? (bool) $line['customer_show_price']
-            : $customerShowsPrices;
-        if (!$lineAllows) {
+        if (!self::resolveLineCustomerShowPrice($line)) {
             return false;
         }
 
@@ -85,12 +103,12 @@ final class StoreCartPricingService
     }
 
     /** @return array{total_sp: float, total_usd: float} */
-    public static function displayTotals(string $token, bool $customerShowsPrices): array
+    public static function displayTotals(string $token): array
     {
         $totalSp = 0.0;
         $totalUsd = 0.0;
         foreach (ShareCartService::items($token) as $line) {
-            if (!self::lineHasDisplayPrice($line, $customerShowsPrices)) {
+            if (!self::lineHasDisplayPrice($line)) {
                 continue;
             }
             $norm = ShareCartService::normalizeLine($line);
@@ -110,7 +128,7 @@ final class StoreCartPricingService
      *   has_mixed: bool
      * }
      */
-    public static function partitionItems(array $items, bool $customerShowsPrices): array
+    public static function partitionItems(array $items): array
     {
         $priced = [];
         $unpriced = [];
@@ -118,7 +136,7 @@ final class StoreCartPricingService
             if (!is_array($line)) {
                 continue;
             }
-            if (self::lineHasDisplayPrice($line, $customerShowsPrices)) {
+            if (self::lineHasDisplayPrice($line)) {
                 $priced[] = $line;
             } else {
                 $unpriced[] = $line;
@@ -212,6 +230,7 @@ final class StoreCartPricingService
 
             $merged['price_snapshot_sp'] = (float) ($line['price_snapshot_sp'] ?? $merged['sale_price_sp'] ?? 0);
             $merged['price_snapshot_usd'] = (float) ($line['price_snapshot_usd'] ?? $merged['sale_price_usd'] ?? 0);
+            $merged['customer_show_price'] = self::resolveLineCustomerShowPrice($merged);
 
             ShareCartService::replaceLine($token, (string) $guid, $merged);
             $items[(string) $guid] = $merged;

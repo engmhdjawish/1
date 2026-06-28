@@ -272,19 +272,25 @@
     };
   };
 
-  const lineHasDisplayPrice = (line, globalShowPrice) => {
-    if (!globalShowPrice) return false;
-    if (line?.display_has_price === true) return true;
+  const lineHasDisplayPrice = (line) => {
+    if (line?.display_has_price === true) {
+      const prices = computeLinePrices(line);
+      return prices.packSp > 0 || prices.packUsd > 0;
+    }
     if (line?.display_has_price === false) return false;
-    const prices = computeLinePrices(line);
-    return prices.packSp > 0 || prices.packUsd > 0;
+    if (line?.customer_show_price === false) return false;
+    if (line?.customer_show_price === true) {
+      const prices = computeLinePrices(line);
+      return prices.packSp > 0 || prices.packUsd > 0;
+    }
+    return false;
   };
 
-  const partitionCartItems = (items, showPrice) => {
+  const partitionCartItems = (items) => {
     const priced = [];
     const unpriced = [];
     (Array.isArray(items) ? items : []).forEach((line) => {
-      if (lineHasDisplayPrice(line, showPrice)) priced.push(line);
+      if (lineHasDisplayPrice(line)) priced.push(line);
       else unpriced.push(line);
     });
     return {
@@ -294,8 +300,8 @@
     };
   };
 
-  const linePricesHtml = (line, showPrice = true) => {
-    if (!lineHasDisplayPrice(line, showPrice)) return '';
+  const linePricesHtml = (line) => {
+    if (!lineHasDisplayPrice(line)) return '';
     const prices = computeLinePrices(line);
     const hasOffer = lineHasOffer(line);
     let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
@@ -458,11 +464,11 @@
     return `تغيّرت أسعار الأصناف التالية:\n${lines.join('\n')}\n\nهل تريد المتابعة بالأسعار الحالية من النظام؟`;
   };
 
-  const renderCartLineCard = (line, max, showPrice = true) => {
+  const renderCartLineCard = (line, max) => {
     const guid = line.material_guid || '';
     const prices = computeLinePrices(line);
     const hasOffer = lineHasOffer(line);
-    const lineShowPrice = lineHasDisplayPrice(line, showPrice);
+    const lineShowPrice = lineHasDisplayPrice(line);
     const priceDirection = priceChangeDirection(line?.price_change, line, prices);
     const priceCardClass = priceDirection ? ` store-cart-line-card--price-${priceDirection}` : '';
     const noPriceClass = !lineShowPrice ? ' store-cart-line-card--no-price' : '';
@@ -501,7 +507,7 @@
         <div class="store-cart-line-card__foot">
           ${priceChangeHtml(line, prices)}
           ${linePriceChangeDetailHtml(line, prices, lineShowPrice)}
-          ${lineShowPrice ? linePricesHtml(line, showPrice) : noPriceHtml}
+          ${lineShowPrice ? linePricesHtml(line) : noPriceHtml}
           <div class="store-cart-line-card__controls">
             <div class="store-cart-line-card__qty-row">
               <div class="store-qty-stepper store-qty-stepper--compact" data-cart-qty-control data-guid="${escapeHtml(guid)}">
@@ -518,7 +524,7 @@
     </article>`;
   };
 
-  const renderCartSection = (lines, sectionClass, icon, title, subtitle, max, showPrice, showSectionHeader) => {
+  const renderCartSection = (lines, sectionClass, icon, title, subtitle, max, showSectionHeader) => {
     if (!lines.length) return '';
     let html = `<section class="store-cart-section ${sectionClass}">`;
     if (showSectionHeader) {
@@ -535,7 +541,7 @@
     }
     html += '<div class="store-cart-lines">';
     lines.forEach((line) => {
-      html += renderCartLineCard(line, max, showPrice);
+      html += renderCartLineCard(line, max);
     });
     html += '</div></section>';
     return html;
@@ -1056,7 +1062,7 @@
           </div>`;
         }
         if (items.length > 0) {
-          const partition = partitionCartItems(items, showPrice);
+          const partition = partitionCartItems(items);
           const hasMixed = data.has_mixed_pricing === true || partition.hasMixed;
           if (partition.priced.length > 0) {
             html += renderCartSection(
@@ -1066,7 +1072,6 @@
               'أصناف بسعر محدد',
               'الأسعار المعروضة قابلة للتحديث حتى إرسال الطلب.',
               max,
-              showPrice,
               hasMixed
             );
           }
@@ -1078,7 +1083,6 @@
               'يُسعّر عند التأكيد',
               'سيُحدد سعر هذه الأصناف عند مراجعة الطلب.',
               max,
-              showPrice,
               hasMixed || partition.unpriced.length > 0
             );
           }
@@ -1101,7 +1105,7 @@
       const isLoggedIn = root.dataset.loggedIn === '1' || !!data.logged_in;
       const totalSp = Number(totals.total_sp) || 0;
       const totalUsd = Number(totals.total_usd) || 0;
-      const unpricedCount = Number(data.unpriced_items_count) || partitionCartItems(items, showPrice).unpriced.length;
+      const unpricedCount = Number(data.unpriced_items_count) || partitionCartItems(items).unpriced.length;
       const totalLine = showPrice && (totalSp > 0 || totalUsd > 0)
         ? `<div class="store-cart-summary__totals">
             ${totalSp > 0 ? `<div class="store-cart-summary__total store-price-currency store-price-currency--syp">الإجمالي: ${formatMoney(totalSp)} ل.س</div>` : ''}

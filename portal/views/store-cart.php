@@ -91,7 +91,7 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
                 string $title,
                 string $subtitle,
                 bool $showSectionHeader
-            ) use ($maxPackagesPerMaterial, $showPriceSyp, $showPriceUsd, $globalShowsPrices): void {
+            ) use ($maxPackagesPerMaterial, $showPriceSyp, $showPriceUsd): void {
                 if ($sectionItems === []) {
                     return;
                 }
@@ -112,7 +112,7 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
               <div class="store-cart-lines">
                 <?php foreach ($sectionItems as $item): ?>
                   <?php
-                    $lineShowsPrice = store_line_has_display_price($item, $globalShowsPrices);
+                    $lineShowsPrice = store_line_has_display_price($item);
                     require __DIR__ . '/partials/store-cart-line-card.php';
                   ?>
                 <?php endforeach; ?>
@@ -192,7 +192,7 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
           <?php elseif ($showPriceUsd && $summaryUsd > 0): ?>
             <div class="store-cart-summary__total store-price-currency store-price-currency--usd">الإجمالي: $<?= number_format($summaryUsd, 2, '.', ',') ?></div>
           <?php endif; ?>
-          <?php if ($customerShowsPrices && $unpricedCount > 0): ?>
+          <?php if ($unpricedCount > 0): ?>
             <p class="store-cart-summary__unpriced-note">
               <?= $unpricedCount ?> <?= $unpricedCount === 1 ? 'صنف' : 'أصناف' ?> بدون سعر محدد — يُسعّر عند التأكيد
             </p>

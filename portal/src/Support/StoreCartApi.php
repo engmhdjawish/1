@@ -273,9 +273,8 @@ final class StoreCartApi
         }
 
         $maxPackages = StorePolicyService::maxPackagesPerMaterial();
-        $priceFallback = StoreCartPricingService::customerShowsPrices($display);
         $items = array_values(array_map(
-            static function (array $line) use ($changesByGuid, $priceFallback): array {
+            static function (array $line) use ($changesByGuid): array {
                 $enriched = ShareCartService::enrichLineWithOffer($line);
                 $guid = trim((string) ($enriched['material_guid'] ?? ''));
                 if ($guid !== '' && isset($changesByGuid[$guid])) {
@@ -283,17 +282,36 @@ final class StoreCartApi
                 } else {
                     unset($enriched['price_change']);
                 }
-                $enriched['display_has_price'] = StoreCartPricingService::lineHasDisplayPrice($enriched, $priceFallback);
+                $enriched['customer_show_price'] = StoreCartPricingService::resolveLineCustomerShowPrice($enriched);
+                $enriched['display_has_price'] = StoreCartPricingService::lineHasDisplayPrice($enriched);
 
                 return $enriched;
             },
             StoreCartService::items()
         ));
-        $showPrice = StoreCartPricingService::cartShowsAnyLinePrices($items, $display);
-        $partition = StoreCartPricingService::partitionItems($items, $priceFallback);
+        $showPrice = StoreCartPricingService::cartShowsAnyLinePrices($items);
+        $partition = StoreCartPricingService::partitionItems($items);
         $unavailable = array_values(StoreCartService::unavailableItems());
         $totals = StoreCartService::totals();
-        $displayTotals = StoreCartPricingService::displayTotals(StoreCartService::TOKEN, $priceFallback);
+        $displayTotals = StoreCartPricingService::displayTotals(StoreCartService::TOKEN);
+        $pendingChanges = array_values(array_filter(
+            $pendingChanges,
+            static function (array $change) use ($items): bool {
+                $guid = trim((string) ($change['material_guid'] ?? ''));
+                if ($guid === '') {
+                    return false;
+                }
+                foreach ($items as $line) {
+                    if (trim((string) ($line['material_guid'] ?? '')) !== $guid) {
+                        continue;
+                    }
+
+                    return StoreCartPricingService::lineHasDisplayPrice($line);
+                }
+
+                return false;
+            }
+        ));
         $cartQtyByGuid = [];
         foreach (StoreCartService::items() as $guid => $line) {
             $cartQtyByGuid[$guid] = max(0.0, round((float) ($line['quantity'] ?? 0), 4));

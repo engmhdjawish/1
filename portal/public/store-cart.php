@@ -15,7 +15,6 @@ require dirname(__DIR__) . '/views/helpers.php';
 $display = StoreCatalogService::displayOptionsForCartContext();
 $allowCart = (bool) ($display['allow_cart'] ?? false);
 $allowOrder = (bool) ($display['allow_order'] ?? false);
-$globalShowsPrices = StoreCartPricingService::customerShowsPrices(StoreCatalogService::displayOptions());
 $error = null;
 $notice = null;
 
@@ -41,14 +40,13 @@ if ($allowCart) {
 $cartItems = StoreCartService::enrichedItems();
 $unavailableItems = array_values(StoreCartService::unavailableItems());
 $totals = StoreCartService::totals();
-$customerShowsPrices = StoreCartPricingService::cartShowsAnyLinePrices($cartItems, $display)
-    || $globalShowsPrices;
+$customerShowsPrices = StoreCartPricingService::cartShowsAnyLinePrices($cartItems);
 $showPrice = $customerShowsPrices;
 $priceMode = (string) ($display['price_mode'] ?? 'syp');
 $showPriceSyp = $showPrice && in_array($priceMode, ['both', 'syp'], true);
 $showPriceUsd = $showPrice && in_array($priceMode, ['both', 'usd'], true);
-$displayTotals = StoreCartPricingService::displayTotals(StoreCartService::TOKEN, $globalShowsPrices);
-$cartPartition = StoreCartPricingService::partitionItems($cartItems, $globalShowsPrices);
+$displayTotals = StoreCartPricingService::displayTotals(StoreCartService::TOKEN);
+$cartPartition = StoreCartPricingService::partitionItems($cartItems);
 $hasMixedPricing = $cartPartition['has_mixed'];
 $pricedCartItems = $cartPartition['priced'];
 $unpricedCartItems = $cartPartition['unpriced'];
