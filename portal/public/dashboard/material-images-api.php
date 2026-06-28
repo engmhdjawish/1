@@ -149,11 +149,17 @@ if ($method === 'GET') {
             $linkFilter = 'all';
         }
         $materialQuery = trim((string) ($_GET['material_query'] ?? ''));
-        echo json_encode(array_merge(
-            ['ok' => true],
-            MaterialImageLinkService::listSourcesPage($page, $pageSize, $linkFilter, $materialQuery)
-        ), JSON_UNESCAPED_UNICODE);
-        exit;
+        try {
+            materialImagesApiJson(array_merge(
+                ['ok' => true],
+                MaterialImageLinkService::listSourcesPage($page, $pageSize, $linkFilter, $materialQuery)
+            ));
+        } catch (Throwable $exception) {
+            materialImagesApiJson([
+                'ok' => false,
+                'message' => 'تعذر تحميل الصور: ' . $exception->getMessage(),
+            ], 500);
+        }
     }
 
     if ($action === 'material-search') {
@@ -185,9 +191,7 @@ if ($method === 'GET') {
         exit;
     }
 
-    http_response_code(400);
-    echo json_encode(['ok' => false, 'message' => 'إجراء غير معروف.'], JSON_UNESCAPED_UNICODE);
-    exit;
+    materialImagesApiJson(['ok' => false, 'message' => 'إجراء غير معروف.'], 400);
 }
 
 if ($method === 'POST') {
@@ -196,17 +200,33 @@ if ($method === 'POST') {
     $file = is_array($_FILES['file'] ?? null) ? $_FILES['file'] : [];
     $queuePage = max(1, (int) ($_POST['queue_page'] ?? $_GET['queue_page'] ?? 1));
     $queuePageSize = max(5, min(50, (int) ($_POST['queue_page_size'] ?? $_GET['queue_page_size'] ?? 20)));
+    $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+    $contentType = strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? ''));
+    $isMultipart = str_contains($contentType, 'multipart/form-data');
 
-    if ($action === '' && $file !== []) {
+    if ($action === '' && ($file !== [] || $isMultipart)) {
         $action = 'upload';
     }
 
-    $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
-    if ($action === 'upload' && $file === [] && $contentLength > 0 && empty($_POST)) {
+    if ($action === 'upload' && ($file === [] || trim((string) ($file['tmp_name'] ?? '')) === '')) {
+        $uploadError = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
+        $message = match ($uploadError) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'حجم الملف أكبر من المسموح في PHP (upload_max_filesize / post_max_size).',
+            UPLOAD_ERR_PARTIAL => 'وصل جزء من الملف فقط — أعد المحاولة.',
+            UPLOAD_ERR_NO_TMP_DIR => 'مجلد الملفات المؤقتة لـ PHP غير موجود (upload_tmp_dir).',
+            UPLOAD_ERR_CANT_WRITE => 'تعذر كتابة الملف المؤقت على القرص.',
+            UPLOAD_ERR_EXTENSION => 'امتداد الملف مرفوض من إعدادات PHP.',
+            UPLOAD_ERR_NO_FILE => $contentLength > 0
+                ? 'لم يصل الملف إلى PHP رغم إرسال الطلب. تحقق من upload_tmp_dir وصلاحيات IIS على مجلد الرفع.'
+                : 'لم يُرسل ملف.',
+            default => 'تعذر استلام الملف على الخادم.',
+        };
         materialImagesApiJson([
             'ok' => false,
-            'message' => 'تعذر استلام الملف. تحقق من upload_max_filesize و post_max_size في PHP.',
-        ], 413);
+            'message' => $message,
+            'upload_error_code' => $uploadError,
+            'content_length' => $contentLength,
+        ], 400);
     }
 
     if ($action === 'upload') {
@@ -553,9 +573,7 @@ if ($method === 'POST') {
         exit;
     }
 
-    http_response_code(400);
-    echo json_encode(['ok' => false, 'message' => 'إجراء غير معروف.'], JSON_UNESCAPED_UNICODE);
-    exit;
+    materialImagesApiJson(['ok' => false, 'message' => 'إجراء غير معروف.'], 400);
 }
 
 http_response_code(405);

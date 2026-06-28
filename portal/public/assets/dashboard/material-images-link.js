@@ -34,8 +34,10 @@ const API_URL = '/dashboard/material-images-api.php';
     'X-Requested-With': 'XMLHttpRequest',
   };
 
-  async function fetchJson(url, options = {}) {
+  async function fetchJson(url, options = {}, attempt = 0) {
     const response = await fetch(url, {
+      credentials: 'same-origin',
+      cache: 'no-store',
       ...options,
       signal: options.signal ?? signal,
       headers: { ...API_HEADERS, ...(options.headers || {}) },
@@ -45,8 +47,17 @@ const API_URL = '/dashboard/material-images-api.php';
       throw new Error('استجابة فارغة من الخادم. تحقق من GD والخط (Tahoma) أو سجل أخطاء PHP.');
     }
     try {
-      return JSON.parse(text);
+      const payload = JSON.parse(text);
+      if (payload?.login && attempt < 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+        return fetchJson(url, options, attempt + 1);
+      }
+      return payload;
     } catch {
+      if (attempt < 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 350));
+        return fetchJson(url, options, attempt + 1);
+      }
       throw new Error(`استجابة غير صالحة من الخادم: ${text.slice(0, 180)}`);
     }
   }
@@ -943,7 +954,11 @@ const API_URL = '/dashboard/material-images-api.php';
     }
   }, { signal });
   setLinkFilter('unlinked');
-  loadSources(1);
+  queueMicrotask(() => {
+    if (!signal.aborted && panel.isConnected) {
+      loadSources(1);
+    }
+  });
 
   window.addEventListener('pageshow', (event) => {
     if (!event.persisted || signal.aborted) return;
