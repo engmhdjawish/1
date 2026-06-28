@@ -55,8 +55,8 @@ foreach ($rel in $files) {
 }
 
 $contentScan = @(
-    Join-Path $PortalDir 'views\helpers.php',
-    Join-Path $PortalDir 'views\home.php'
+    (Join-Path $PortalDir 'views\helpers.php'),
+    (Join-Path $PortalDir 'views\home.php')
 )
 foreach ($path in $contentScan) {
     if (-not (Test-Path $path)) { continue }
