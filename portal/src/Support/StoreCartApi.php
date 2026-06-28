@@ -35,7 +35,7 @@ final class StoreCartApi
      */
     public static function dispatch(string $action, array $input): array
     {
-        $display = StoreCatalogService::displayOptionsForCartContext($input);
+        $display = StoreCatalogService::displayOptionsForCartContext($input, false);
         if (!($display['allow_cart'] ?? false) && $action !== 'submit_order') {
             return self::payload('سياسة المتجر لا تسمح باستخدام السلة.', false, [], 'info', $display);
         }
@@ -75,14 +75,20 @@ final class StoreCartApi
         if ($line['material_guid'] === '') {
             return self::payload('تعذر تحديد المادة.', false);
         }
-        $line['customer_show_price'] = StoreCartPricingService::contextShowsPrices($display);
         $section = trim((string) ($input['store_section'] ?? ''));
         $offer = trim((string) ($input['store_offer'] ?? ''));
+        $line['customer_show_price'] = ($section !== '' || $offer !== '')
+            ? StoreCartPricingService::contextShowsPrices($display)
+            : (bool) (StoreCatalogService::displayOptions()['show_price'] ?? false);
         if ($section !== '') {
             $line['added_store_section'] = $section;
+        } else {
+            unset($line['added_store_section']);
         }
         if ($offer !== '') {
             $line['added_store_offer'] = $offer;
+        } else {
+            unset($line['added_store_offer']);
         }
 
         $result = StoreCartService::add($line, (float) $quantity);

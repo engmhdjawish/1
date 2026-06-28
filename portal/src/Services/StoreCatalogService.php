@@ -80,7 +80,7 @@ final class StoreCatalogService
      * @param array<string, mixed> $input
      * @return array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string}
      */
-    public static function displayOptionsForCartContext(array $input = []): array
+    public static function displayOptionsForCartContext(array $input = [], bool $useSessionFallback = true): array
     {
         $display = self::displayOptions();
         if (!function_exists('section_catalog_display_options')) {
@@ -89,7 +89,7 @@ final class StoreCatalogService
 
         $section = trim((string) ($input['store_section'] ?? ''));
         $offer = trim((string) ($input['store_offer'] ?? ''));
-        if ($section === '' && $offer === '') {
+        if ($useSessionFallback && $section === '' && $offer === '') {
             $ctx = $_SESSION['store_cart_context'] ?? null;
             if (is_array($ctx)) {
                 $section = trim((string) ($ctx['section'] ?? ''));
