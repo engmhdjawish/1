@@ -12,6 +12,7 @@ declare(strict_types=1);
 /** @var bool $allowOrder */
 /** @var bool $showPrice */
 /** @var bool $customerShowsPrices */
+/** @var bool $globalShowsPrices */
 /** @var bool $hasMixedPricing */
 /** @var bool $showPriceSyp */
 /** @var bool $showPriceUsd */
@@ -90,7 +91,7 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
                 string $title,
                 string $subtitle,
                 bool $showSectionHeader
-            ) use ($maxPackagesPerMaterial, $showPriceSyp, $showPriceUsd, $customerShowsPrices): void {
+            ) use ($maxPackagesPerMaterial, $showPriceSyp, $showPriceUsd, $globalShowsPrices): void {
                 if ($sectionItems === []) {
                     return;
                 }
@@ -111,7 +112,7 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
               <div class="store-cart-lines">
                 <?php foreach ($sectionItems as $item): ?>
                   <?php
-                    $lineShowsPrice = store_line_has_display_price($item, $customerShowsPrices);
+                    $lineShowsPrice = store_line_has_display_price($item, $globalShowsPrices);
                     require __DIR__ . '/partials/store-cart-line-card.php';
                   ?>
                 <?php endforeach; ?>
@@ -139,7 +140,7 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
                 'receipt_long',
                 'يُسعّر عند التأكيد',
                 'سيُحدد سعر هذه الأصناف عند مراجعة الطلب.',
-                $hasMixedPricing || ($customerShowsPrices && $pricedCartItems === [])
+                $hasMixedPricing || $unpricedCartItems !== []
             ); ?>
           <?php endif; ?>
 

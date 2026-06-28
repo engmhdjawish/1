@@ -42,6 +42,13 @@ if ($sectionContext !== null) {
     } else {
         $storeSectionSlug = $sectionSlug;
     }
+    $sectionDisplay = is_array($sectionContext['display_options'] ?? null)
+        ? $sectionContext['display_options']
+        : [];
+    if (!function_exists('section_catalog_display_options')) {
+        require __DIR__ . '/helpers.php';
+    }
+    $displayOptions = section_catalog_display_options($sectionDisplay, $displayOptions);
 }
 $products = is_array($catalog['products'] ?? null) ? $catalog['products'] : [];
 $resultFilters = is_array($catalog['resultFilters'] ?? null) ? $catalog['resultFilters'] : [];

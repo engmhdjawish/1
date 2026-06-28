@@ -579,6 +579,12 @@ final class ShareCartService
             $enriched['material_name_ar'] = (string) $line['material_name_ar'];
         }
 
+        foreach (['customer_show_price', 'added_store_section', 'added_store_offer', 'price_snapshot_sp', 'price_snapshot_usd', 'price_change'] as $policyKey) {
+            if (array_key_exists($policyKey, $line)) {
+                $enriched[$policyKey] = $line[$policyKey];
+            }
+        }
+
         return $enriched;
     }
 

@@ -146,8 +146,9 @@ $storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
         $sectionPriceMode = (string) ($displayOptions['price_mode'] ?? 'both');
         $sectionShowPrice = array_key_exists('show_price', $displayOptions)
             ? (bool) $displayOptions['show_price']
-            : $storeShowPrice;
-        if (!$sectionShowPrice || $sectionPriceMode === 'none') {
+            : ($sectionPriceMode !== 'none');
+        $effectiveSectionShowPrice = $sectionShowPrice && ($storeShowPrice || $sectionPriceMode !== 'none');
+        if (!$effectiveSectionShowPrice || $sectionPriceMode === 'none') {
             $showAnyPrice = false;
             $showPriceSyp = false;
             $showPriceUsd = false;
@@ -201,14 +202,14 @@ $storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
               $sectionReturnUrl = home_section_return_url($section);
               $sectionOfferSlug = $isOfferSection && $sectionSlug !== '' ? $sectionSlug : null;
               $sectionPriceModeResolved = $sectionPriceMode;
-              if ($sectionShowPrice && $storeShowPrice && $sectionPriceMode === 'both') {
+              if ($effectiveSectionShowPrice && $storeShowPrice && $sectionPriceMode === 'both') {
                   $sectionPriceModeResolved = StorePricePreference::current();
-              } elseif (!$sectionShowPrice || !$storeShowPrice || $sectionPriceMode === 'none') {
+              } elseif (!$effectiveSectionShowPrice || $sectionPriceMode === 'none') {
                   $sectionPriceModeResolved = 'none';
               }
               $previewDisplayOptions = [
                   'show_images' => $showImages,
-                  'show_price' => $sectionShowPrice && $storeShowPrice,
+                  'show_price' => $effectiveSectionShowPrice,
                   'show_quantity' => (bool) ($storeCatalogDisplay['show_quantity'] ?? false),
                   'allow_cart' => (bool) ($storeCatalogDisplay['allow_cart'] ?? false),
                   'price_mode' => $sectionPriceModeResolved,

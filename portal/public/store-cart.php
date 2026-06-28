@@ -12,14 +12,10 @@ use Portal\Services\StorePolicyService;
 
 require dirname(__DIR__) . '/views/helpers.php';
 
-$display = StoreCatalogService::displayOptions();
+$display = StoreCatalogService::displayOptionsForCartContext();
 $allowCart = (bool) ($display['allow_cart'] ?? false);
 $allowOrder = (bool) ($display['allow_order'] ?? false);
-$customerShowsPrices = StoreCartPricingService::customerShowsPrices($display);
-$showPrice = $customerShowsPrices;
-$priceMode = (string) ($display['price_mode'] ?? 'syp');
-$showPriceSyp = $showPrice && in_array($priceMode, ['both', 'syp'], true);
-$showPriceUsd = $showPrice && in_array($priceMode, ['both', 'usd'], true);
+$globalShowsPrices = StoreCartPricingService::customerShowsPrices(StoreCatalogService::displayOptions());
 $error = null;
 $notice = null;
 
@@ -45,8 +41,11 @@ if ($allowCart) {
 $cartItems = StoreCartService::enrichedItems();
 $unavailableItems = array_values(StoreCartService::unavailableItems());
 $totals = StoreCartService::totals();
-$displayTotals = StoreCartPricingService::displayTotals(StoreCartService::TOKEN, $customerShowsPrices);
-$cartPartition = StoreCartPricingService::partitionItems($cartItems, $customerShowsPrices);
+$customerShowsPrices = StoreCartPricingService::cartShowsAnyLinePrices($cartItems, $display)
+    || $globalShowsPrices;
+$showPrice = $customerShowsPrices;
+$displayTotals = StoreCartPricingService::displayTotals(StoreCartService::TOKEN, $globalShowsPrices);
+$cartPartition = StoreCartPricingService::partitionItems($cartItems, $globalShowsPrices);
 $hasMixedPricing = $cartPartition['has_mixed'];
 $pricedCartItems = $cartPartition['priced'];
 $unpricedCartItems = $cartPartition['unpriced'];

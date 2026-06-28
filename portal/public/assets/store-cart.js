@@ -465,7 +465,7 @@
     const lineShowPrice = lineHasDisplayPrice(line, showPrice);
     const priceDirection = priceChangeDirection(line?.price_change, line, prices);
     const priceCardClass = priceDirection ? ` store-cart-line-card--price-${priceDirection}` : '';
-    const noPriceClass = showPrice && !lineShowPrice ? ' store-cart-line-card--no-price' : '';
+    const noPriceClass = !lineShowPrice ? ' store-cart-line-card--no-price' : '';
     const img = line.image_url
       ? (() => {
           const thumb = escapeHtml(line.image_url);
@@ -479,7 +479,7 @@
           ${prices.packUsd > 0 ? `<span class="store-price-currency store-price-currency--usd store-num" dir="ltr">$${formatUsd(prices.lineTotalUsd)}</span>` : ''}
         </div>`
       : '';
-    const noPriceHtml = showPrice && !lineShowPrice
+    const noPriceHtml = !lineShowPrice
       ? `<div class="store-cart-line-card__no-price">
           <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
           <span>السعر عند التأكيد</span>
@@ -1079,7 +1079,7 @@
               'سيُحدد سعر هذه الأصناف عند مراجعة الطلب.',
               max,
               showPrice,
-              hasMixed || (showPrice && partition.priced.length === 0)
+              hasMixed || partition.unpriced.length > 0
             );
           }
         }

@@ -38,10 +38,35 @@ final class StoreCartPricingService
         return is_array($ctx) && !empty($ctx['show_price']);
     }
 
+    /** @param list<array<string, mixed>> $items */
+    public static function cartShowsAnyLinePrices(array $items, array $display): bool
+    {
+        $fallback = self::customerShowsPrices($display);
+        foreach ($items as $line) {
+            if (!is_array($line)) {
+                continue;
+            }
+            if (self::lineHasDisplayPrice($line, $fallback)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @param array<string, mixed> $display */
+    public static function contextShowsPrices(array $display): bool
+    {
+        return (bool) ($display['show_price'] ?? false);
+    }
+
     /** @param array<string, mixed> $line */
     public static function lineHasDisplayPrice(array $line, bool $customerShowsPrices): bool
     {
-        if (!$customerShowsPrices) {
+        $lineAllows = array_key_exists('customer_show_price', $line)
+            ? (bool) $line['customer_show_price']
+            : $customerShowsPrices;
+        if (!$lineAllows) {
             return false;
         }
 

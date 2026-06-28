@@ -56,7 +56,7 @@ $packageUnit = (string) ($prices['package_unit'] ?? 'طرد');
     <div class="store-cart-line-card__foot">
       <?php if ($lineShowsPrice && ($showPriceSyp || $showPriceUsd)): ?>
         <?php $size = 'compact'; require __DIR__ . '/store-order-line-prices.php'; ?>
-      <?php elseif ($customerShowsPrices): ?>
+      <?php elseif (!$lineShowsPrice): ?>
         <div class="store-cart-line-card__no-price">
           <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
           <span>السعر عند التأكيد</span>

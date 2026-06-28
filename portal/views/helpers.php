@@ -711,6 +711,58 @@ function format_packages_display(float $qty): string
     return \Portal\Services\StockReservationService::formatPackages($qty);
 }
 
+/** @param array{show_images?: bool, price_mode?: string, show_price?: bool} $sectionDisplay
+ * @param array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string} $globalDisplay
+ * @return array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string}
+ */
+function section_catalog_display_options(array $sectionDisplay, array $globalDisplay): array
+{
+    $merged = $globalDisplay;
+    $storeShowPrice = (bool) ($globalDisplay['show_price'] ?? false);
+
+    if (array_key_exists('show_images', $sectionDisplay)) {
+        $merged['show_images'] = (bool) $sectionDisplay['show_images'];
+    }
+
+    $sectionPriceMode = trim((string) ($sectionDisplay['price_mode'] ?? 'both'));
+    if (!in_array($sectionPriceMode, ['both', 'syp', 'usd', 'none'], true)) {
+        $sectionPriceMode = 'both';
+    }
+
+    if ($sectionPriceMode === 'none') {
+        $merged['show_price'] = false;
+        $merged['price_mode'] = 'none';
+
+        return $merged;
+    }
+
+    $sectionShowPrice = array_key_exists('show_price', $sectionDisplay)
+        ? (bool) $sectionDisplay['show_price']
+        : true;
+
+    $merged['show_price'] = $sectionShowPrice && ($storeShowPrice || $sectionPriceMode !== 'none');
+    if (!$merged['show_price']) {
+        $merged['price_mode'] = 'none';
+
+        return $merged;
+    }
+
+    if ($sectionPriceMode === 'both') {
+        $merged['price_mode'] = $storeShowPrice
+            ? \Portal\Support\StorePricePreference::priceModeForDisplay(true)
+            : \Portal\Support\StorePricePreference::current();
+    } else {
+        $merged['price_mode'] = $sectionPriceMode;
+    }
+
+    return $merged;
+}
+
+function customer_order_shows_prices(string $status): bool
+{
+    return in_array($status, ['confirmed', 'completed'], true);
+}
+
 /** @param array<string, mixed> $line */
 function store_line_has_display_price(array $line, bool $customerShowsPrices): bool
 {

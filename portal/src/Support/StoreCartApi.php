@@ -75,6 +75,15 @@ final class StoreCartApi
         if ($line['material_guid'] === '') {
             return self::payload('تعذر تحديد المادة.', false);
         }
+        $line['customer_show_price'] = StoreCartPricingService::contextShowsPrices($display);
+        $section = trim((string) ($input['store_section'] ?? ''));
+        $offer = trim((string) ($input['store_offer'] ?? ''));
+        if ($section !== '') {
+            $line['added_store_section'] = $section;
+        }
+        if ($offer !== '') {
+            $line['added_store_offer'] = $offer;
+        }
 
         $result = StoreCartService::add($line, (float) $quantity);
         if ($result['ok']) {
@@ -264,7 +273,7 @@ final class StoreCartApi
         }
 
         $maxPackages = StorePolicyService::maxPackagesPerMaterial();
-        $showPrice = StoreCartPricingService::customerShowsPrices($display);
+        $showPrice = StoreCartPricingService::cartShowsAnyLinePrices($items, $display);
         $items = array_values(array_map(
             static function (array $line) use ($changesByGuid, $showPrice): array {
                 $enriched = ShareCartService::enrichLineWithOffer($line);
