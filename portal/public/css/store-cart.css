@@ -555,6 +555,118 @@
   gap: 0.45rem;
 }
 
+.store-cart-section {
+  border: 1px solid #e5e7eb;
+  border-radius: 1rem;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.store-cart-section + .store-cart-section {
+  margin-top: 0.75rem;
+}
+
+.store-cart-section__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.store-cart-section--priced .store-cart-section__head {
+  background: linear-gradient(135deg, #f0fdf4 0%, #fff 100%);
+  border-bottom-color: #bbf7d0;
+}
+
+.store-cart-section--unpriced .store-cart-section__head {
+  background: linear-gradient(135deg, #fffbeb 0%, #fff 100%);
+  border-bottom-color: #fde68a;
+}
+
+.store-cart-section__title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.store-cart-section__icon {
+  font-size: 1.35rem;
+  flex-shrink: 0;
+}
+
+.store-cart-section--priced .store-cart-section__icon {
+  color: #059669;
+}
+
+.store-cart-section--unpriced .store-cart-section__icon {
+  color: #d97706;
+}
+
+.store-cart-section__title {
+  font-size: 0.9375rem;
+  font-weight: 800;
+  color: #111827;
+  line-height: 1.3;
+}
+
+.store-cart-section__subtitle {
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.store-cart-section__count {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 9999px;
+  padding: 0.2rem 0.55rem;
+}
+
+.store-cart-section .store-cart-lines {
+  padding: 0.5rem;
+}
+
+.store-cart-line-card--no-price {
+  background: linear-gradient(135deg, #fff 0%, #fffbeb 100%);
+}
+
+.store-cart-line-card__no-price {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 0.5rem;
+  padding: 0.3rem 0.55rem;
+}
+
+.store-cart-line-card__no-price .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.store-cart-summary__unpriced-note {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  line-height: 1.45;
+}
+
 .store-cart-line-card__head {
   display: flex;
   align-items: flex-start;

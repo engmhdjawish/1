@@ -38,6 +38,75 @@ final class StoreCartPricingService
         return is_array($ctx) && !empty($ctx['show_price']);
     }
 
+    /** @param array<string, mixed> $line */
+    public static function lineHasDisplayPrice(array $line, bool $customerShowsPrices): bool
+    {
+        if (!$customerShowsPrices) {
+            return false;
+        }
+
+        $norm = ShareCartService::normalizeLine($line);
+        $packSp = (float) ($norm['sale_price_sp'] ?? 0);
+        $packUsd = (float) ($norm['sale_price_usd'] ?? 0);
+        if ($packSp > self::PRICE_EPSILON || $packUsd > self::PRICE_EPSILON) {
+            return true;
+        }
+
+        $packaging = max(1.0, (float) ($norm['packaging'] ?? $norm['pcs_per_box'] ?? 1));
+        $unitSp = (float) ($norm['unit_sale_price_sp'] ?? 0);
+        $unitUsd = (float) ($norm['unit_sale_price_usd'] ?? 0);
+
+        return $unitSp > self::PRICE_EPSILON || $unitUsd > self::PRICE_EPSILON;
+    }
+
+    /** @return array{total_sp: float, total_usd: float} */
+    public static function displayTotals(string $token, bool $customerShowsPrices): array
+    {
+        $totalSp = 0.0;
+        $totalUsd = 0.0;
+        foreach (ShareCartService::items($token) as $line) {
+            if (!self::lineHasDisplayPrice($line, $customerShowsPrices)) {
+                continue;
+            }
+            $norm = ShareCartService::normalizeLine($line);
+            $qty = max(0.0, (float) ($norm['quantity'] ?? 0));
+            $totalSp += $qty * (float) ($norm['sale_price_sp'] ?? 0);
+            $totalUsd += $qty * (float) ($norm['sale_price_usd'] ?? 0);
+        }
+
+        return ['total_sp' => $totalSp, 'total_usd' => $totalUsd];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $items
+     * @return array{
+     *   priced: list<array<string, mixed>>,
+     *   unpriced: list<array<string, mixed>>,
+     *   has_mixed: bool
+     * }
+     */
+    public static function partitionItems(array $items, bool $customerShowsPrices): array
+    {
+        $priced = [];
+        $unpriced = [];
+        foreach ($items as $line) {
+            if (!is_array($line)) {
+                continue;
+            }
+            if (self::lineHasDisplayPrice($line, $customerShowsPrices)) {
+                $priced[] = $line;
+            } else {
+                $unpriced[] = $line;
+            }
+        }
+
+        return [
+            'priced' => $priced,
+            'unpriced' => $unpriced,
+            'has_mixed' => $priced !== [] && $unpriced !== [],
+        ];
+    }
+
     /** @param array<string, mixed> $input @return array<string, mixed> */
     public static function lineFromRequest(array $input): array
     {

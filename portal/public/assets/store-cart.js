@@ -272,12 +272,35 @@
     };
   };
 
-  const linePricesHtml = (line) => {
+  const lineHasDisplayPrice = (line, globalShowPrice) => {
+    if (!globalShowPrice) return false;
+    if (line?.display_has_price === true) return true;
+    if (line?.display_has_price === false) return false;
+    const prices = computeLinePrices(line);
+    return prices.packSp > 0 || prices.packUsd > 0;
+  };
+
+  const partitionCartItems = (items, showPrice) => {
+    const priced = [];
+    const unpriced = [];
+    (Array.isArray(items) ? items : []).forEach((line) => {
+      if (lineHasDisplayPrice(line, showPrice)) priced.push(line);
+      else unpriced.push(line);
+    });
+    return {
+      priced,
+      unpriced,
+      hasMixed: priced.length > 0 && unpriced.length > 0,
+    };
+  };
+
+  const linePricesHtml = (line, showPrice = true) => {
+    if (!lineHasDisplayPrice(line, showPrice)) return '';
     const prices = computeLinePrices(line);
     const hasOffer = lineHasOffer(line);
     let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
 
-    if (prices.packSp > 0 || prices.origPackSp > 0 || prices.unitSp > 0) {
+    if (prices.packSp > 0 || prices.unitSp > 0) {
       html += '<div class="store-price-currency store-price-currency--syp">';
       if (prices.unitSp > 0) {
         html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
@@ -288,7 +311,7 @@
           </div>
         </div>`;
       }
-      if (prices.packSp > 0 || prices.origPackSp > 0) {
+      if (prices.packSp > 0) {
         html += `<div class="store-order-line-prices__row">
           <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
           <div class="store-order-line-prices__values">
@@ -300,7 +323,7 @@
       html += '</div>';
     }
 
-    if (prices.packUsd > 0 || prices.origPackUsd > 0 || prices.unitUsd > 0) {
+    if (prices.packUsd > 0 || prices.unitUsd > 0) {
       html += '<div class="store-price-currency store-price-currency--usd">';
       if (prices.unitUsd > 0) {
         html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
@@ -311,7 +334,7 @@
           </div>
         </div>`;
       }
-      if (prices.packUsd > 0 || prices.origPackUsd > 0) {
+      if (prices.packUsd > 0) {
         html += `<div class="store-order-line-prices__row">
           <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
           <div class="store-order-line-prices__values">
@@ -408,8 +431,10 @@
     const guid = line.material_guid || '';
     const prices = computeLinePrices(line);
     const hasOffer = lineHasOffer(line);
+    const lineShowPrice = lineHasDisplayPrice(line, showPrice);
     const priceDirection = priceChangeDirection(line?.price_change);
     const priceCardClass = priceDirection ? ` store-cart-line-card--price-${priceDirection}` : '';
+    const noPriceClass = showPrice && !lineShowPrice ? ' store-cart-line-card--no-price' : '';
     const img = line.image_url
       ? (() => {
           const thumb = escapeHtml(line.image_url);
@@ -417,13 +442,19 @@
           return `<button type="button" class="store-order-line-card__thumb" data-cart-image-zoom="${zoom}" title="تكبير الصورة للتدقيق"><img src="${thumb}" alt="" loading="lazy"><span class="store-order-line-card__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span></button>`;
         })()
       : '<div class="store-order-line-card__placeholder"><span class="material-symbols-outlined" aria-hidden="true">inventory_2</span></div>';
-    const lineTotalCell = showPrice && (prices.packSp > 0 || prices.origPackSp > 0 || prices.packUsd > 0 || prices.origPackUsd > 0)
+    const lineTotalCell = lineShowPrice && (prices.packSp > 0 || prices.packUsd > 0)
       ? `<div class="store-order-line-card__totals">
-          ${prices.packSp > 0 || prices.origPackSp > 0 ? `<span class="store-price-currency store-price-currency--syp store-num" dir="ltr">${formatMoney(prices.lineTotalSp)} ل.س</span>` : ''}
-          ${prices.packUsd > 0 || prices.origPackUsd > 0 ? `<span class="store-price-currency store-price-currency--usd store-num" dir="ltr">$${formatUsd(prices.lineTotalUsd)}</span>` : ''}
+          ${prices.packSp > 0 ? `<span class="store-price-currency store-price-currency--syp store-num" dir="ltr">${formatMoney(prices.lineTotalSp)} ل.س</span>` : ''}
+          ${prices.packUsd > 0 ? `<span class="store-price-currency store-price-currency--usd store-num" dir="ltr">$${formatUsd(prices.lineTotalUsd)}</span>` : ''}
         </div>`
       : '';
-    return `<article class="store-order-line-card store-cart-line-card${hasOffer ? ' store-order-line-card--offer' : ''}${priceCardClass}" data-cart-line="${escapeHtml(guid)}">
+    const noPriceHtml = showPrice && !lineShowPrice
+      ? `<div class="store-cart-line-card__no-price">
+          <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
+          <span>السعر عند التأكيد</span>
+        </div>`
+      : '';
+    return `<article class="store-order-line-card store-cart-line-card${hasOffer ? ' store-order-line-card--offer' : ''}${priceCardClass}${noPriceClass}" data-cart-line="${escapeHtml(guid)}">
       <div class="store-order-line-card__media">${img}</div>
       <div class="store-order-line-card__body">
         <div class="store-cart-line-card__head">
@@ -438,8 +469,8 @@
         </div>
         <div class="store-cart-line-card__foot">
           ${priceChangeHtml(line)}
-          ${linePriceChangeDetailHtml(line, prices, showPrice)}
-          ${showPrice ? linePricesHtml(line) : ''}
+          ${linePriceChangeDetailHtml(line, prices, lineShowPrice)}
+          ${lineShowPrice ? linePricesHtml(line, showPrice) : noPriceHtml}
           <div class="store-cart-line-card__controls">
             <div class="store-cart-line-card__qty-row">
               <div class="store-qty-stepper store-qty-stepper--compact" data-cart-qty-control data-guid="${escapeHtml(guid)}">
@@ -454,6 +485,29 @@
         </div>
       </div>
     </article>`;
+  };
+
+  const renderCartSection = (lines, sectionClass, icon, title, subtitle, max, showPrice, showSectionHeader) => {
+    if (!lines.length) return '';
+    let html = `<section class="store-cart-section ${sectionClass}">`;
+    if (showSectionHeader) {
+      html += `<header class="store-cart-section__head">
+        <div class="store-cart-section__title-row">
+          <span class="material-symbols-outlined store-cart-section__icon" aria-hidden="true">${icon}</span>
+          <div>
+            <h3 class="store-cart-section__title">${escapeHtml(title)}</h3>
+            <p class="store-cart-section__subtitle">${escapeHtml(subtitle)}</p>
+          </div>
+        </div>
+        <span class="store-cart-section__count">${lines.length} صنف</span>
+      </header>`;
+    }
+    html += '<div class="store-cart-lines">';
+    lines.forEach((line) => {
+      html += renderCartLineCard(line, max, showPrice);
+    });
+    html += '</div></section>';
+    return html;
   };
 
   const formatPackageCount = (amount) => {
@@ -971,11 +1025,32 @@
           </div>`;
         }
         if (items.length > 0) {
-          html += '<div class="store-cart-lines">';
-          items.forEach((line) => {
-            html += renderCartLineCard(line, max, showPrice);
-          });
-          html += '</div>';
+          const partition = partitionCartItems(items, showPrice);
+          const hasMixed = data.has_mixed_pricing === true || partition.hasMixed;
+          if (partition.priced.length > 0) {
+            html += renderCartSection(
+              partition.priced,
+              'store-cart-section--priced',
+              'sell',
+              'أصناف بسعر محدد',
+              'الأسعار المعروضة قابلة للتحديث حتى إرسال الطلب.',
+              max,
+              showPrice,
+              hasMixed
+            );
+          }
+          if (partition.unpriced.length > 0) {
+            html += renderCartSection(
+              partition.unpriced,
+              'store-cart-section--unpriced',
+              'receipt_long',
+              'يُسعّر عند التأكيد',
+              'سيُحدد سعر هذه الأصناف عند مراجعة الطلب.',
+              max,
+              showPrice,
+              hasMixed || (showPrice && partition.priced.length === 0)
+            );
+          }
         }
         if (unavailable.length > 0) {
           html += renderUnavailableSection(unavailable);
@@ -990,21 +1065,26 @@
     }
 
     if (summaryEl) {
-      const totals = data.totals || {};
+      const totals = data.display_totals || data.totals || {};
       const allowOrder = !!data.allow_order;
       const isLoggedIn = root.dataset.loggedIn === '1' || !!data.logged_in;
       const totalSp = Number(totals.total_sp) || 0;
       const totalUsd = Number(totals.total_usd) || 0;
-      const totalLine = showPrice
+      const unpricedCount = Number(data.unpriced_items_count) || partitionCartItems(items, showPrice).unpriced.length;
+      const totalLine = showPrice && (totalSp > 0 || totalUsd > 0)
         ? `<div class="store-cart-summary__totals">
             ${totalSp > 0 ? `<div class="store-cart-summary__total store-price-currency store-price-currency--syp">الإجمالي: ${formatMoney(totalSp)} ل.س</div>` : ''}
             ${totalUsd > 0 ? `<div class="store-cart-summary__total store-price-currency store-price-currency--usd">الإجمالي: $${formatUsd(totalUsd)}</div>` : ''}
           </div>`
         : '';
+      const unpricedNote = showPrice && unpricedCount > 0
+        ? `<p class="store-cart-summary__unpriced-note">${unpricedCount} ${unpricedCount === 1 ? 'صنف' : 'أصناف'} بدون سعر محدد — يُسعّر عند التأكيد</p>`
+        : '';
 
       if (isDrawer) {
         summaryEl.innerHTML = `<div class="store-panel store-cart-summary store-cart-summary--drawer space-y-3">
           ${totalLine}
+          ${unpricedNote}
           ${items.length > 0 ? `
             ${allowOrder ? '<button type="button" class="store-btn store-btn--primary w-full" data-cart-checkout-open>متابعة الطلب</button>' : '<p class="text-sm text-amber-800">سياسة المتجر لا تسمح بإرسال الطلبات حالياً.</p>'}
             <button type="button" class="store-btn store-btn--ghost w-full" data-clear-cart>تفريغ السلة</button>
@@ -1013,6 +1093,7 @@
       } else {
         summaryEl.innerHTML = `<div class="store-panel store-cart-summary space-y-4">
           ${totalLine}
+          ${unpricedNote}
           ${items.length > 0 ? '<button type="button" class="store-btn store-btn--ghost" data-clear-cart>تفريغ السلة</button>' : ''}
           ${allowOrder && items.length > 0 ? `
             <form data-checkout-form class="space-y-3 border-t border-gray-100 pt-4">

@@ -5,6 +5,7 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Auth\CustomerSession;
+use Portal\Services\StoreCartPricingService;
 use Portal\Services\StoreCartService;
 use Portal\Services\StoreCatalogService;
 use Portal\Services\StorePolicyService;
@@ -14,7 +15,8 @@ require dirname(__DIR__) . '/views/helpers.php';
 $display = StoreCatalogService::displayOptions();
 $allowCart = (bool) ($display['allow_cart'] ?? false);
 $allowOrder = (bool) ($display['allow_order'] ?? false);
-$showPrice = (bool) ($display['show_price'] ?? false);
+$customerShowsPrices = StoreCartPricingService::customerShowsPrices($display);
+$showPrice = $customerShowsPrices;
 $priceMode = (string) ($display['price_mode'] ?? 'syp');
 $showPriceSyp = $showPrice && in_array($priceMode, ['both', 'syp'], true);
 $showPriceUsd = $showPrice && in_array($priceMode, ['both', 'usd'], true);
@@ -43,6 +45,11 @@ if ($allowCart) {
 $cartItems = StoreCartService::enrichedItems();
 $unavailableItems = array_values(StoreCartService::unavailableItems());
 $totals = StoreCartService::totals();
+$displayTotals = StoreCartPricingService::displayTotals(StoreCartService::TOKEN, $customerShowsPrices);
+$cartPartition = StoreCartPricingService::partitionItems($cartItems, $customerShowsPrices);
+$hasMixedPricing = $cartPartition['has_mixed'];
+$pricedCartItems = $cartPartition['priced'];
+$unpricedCartItems = $cartPartition['unpriced'];
 
 ob_start();
 require dirname(__DIR__) . '/views/store-cart.php';

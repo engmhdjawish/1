@@ -712,6 +712,12 @@ function format_packages_display(float $qty): string
 }
 
 /** @param array<string, mixed> $line */
+function store_line_has_display_price(array $line, bool $customerShowsPrices): bool
+{
+    return \Portal\Services\StoreCartPricingService::lineHasDisplayPrice($line, $customerShowsPrices);
+}
+
+/** @param array<string, mixed> $line */
 function store_line_has_offer(array $line): bool
 {
     if (!empty($line['has_offer']) || !empty($line['special_offer_id'])) {

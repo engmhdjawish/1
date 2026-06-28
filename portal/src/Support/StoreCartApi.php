@@ -264,8 +264,9 @@ final class StoreCartApi
         }
 
         $maxPackages = StorePolicyService::maxPackagesPerMaterial();
+        $showPrice = StoreCartPricingService::customerShowsPrices($display);
         $items = array_values(array_map(
-            static function (array $line) use ($changesByGuid): array {
+            static function (array $line) use ($changesByGuid, $showPrice): array {
                 $enriched = ShareCartService::enrichLineWithOffer($line);
                 $guid = trim((string) ($enriched['material_guid'] ?? ''));
                 if ($guid !== '' && isset($changesByGuid[$guid])) {
@@ -273,19 +274,21 @@ final class StoreCartApi
                 } elseif (is_array($line['price_change'] ?? null)) {
                     $enriched['price_change'] = $line['price_change'];
                 }
+                $enriched['display_has_price'] = StoreCartPricingService::lineHasDisplayPrice($enriched, $showPrice);
 
                 return $enriched;
             },
             StoreCartService::items()
         ));
+        $partition = StoreCartPricingService::partitionItems($items, $showPrice);
         $unavailable = array_values(StoreCartService::unavailableItems());
         $totals = StoreCartService::totals();
+        $displayTotals = StoreCartPricingService::displayTotals(StoreCartService::TOKEN, $showPrice);
         $cartQtyByGuid = [];
         foreach (StoreCartService::items() as $guid => $line) {
             $cartQtyByGuid[$guid] = max(0.0, round((float) ($line['quantity'] ?? 0), 4));
         }
 
-        $showPrice = StoreCartPricingService::customerShowsPrices($display);
         $payload = [
             'ok' => $ok,
             'level' => $ok ? ($level === 'warning' ? 'warning' : 'success') : 'error',
@@ -295,6 +298,10 @@ final class StoreCartApi
             'items' => $items,
             'unavailable' => $unavailable,
             'totals' => $totals,
+            'display_totals' => $displayTotals,
+            'has_mixed_pricing' => $partition['has_mixed'],
+            'priced_items_count' => count($partition['priced']),
+            'unpriced_items_count' => count($partition['unpriced']),
             'cart_qty_by_guid' => $cartQtyByGuid,
             'max_packages_per_material' => $maxPackages,
             'max_packages_label' => $maxPackages !== null
