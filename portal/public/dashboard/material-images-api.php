@@ -20,10 +20,45 @@ function materialImagesApiJson(array $payload, int $status = 200): never
     DashboardHttp::emitJson($payload, $status);
 }
 
+/** @return array{pending: int, syncing: int, synced: int, failed: int, total: int} */
+function materialImagesSyncStatsSafe(): array
+{
+    try {
+        return MaterialImageSyncService::stats();
+    } catch (Throwable) {
+        return [
+            'pending' => 0,
+            'syncing' => 0,
+            'synced' => 0,
+            'failed' => 0,
+            'total' => 0,
+        ];
+    }
+}
+
 set_exception_handler(static function (Throwable $exception): void {
     materialImagesApiJson([
         'ok' => false,
         'message' => 'تعذر معالجة الطلب: ' . $exception->getMessage(),
+    ], 500);
+});
+
+register_shutdown_function(static function (): void {
+    $error = error_get_last();
+    if ($error === null) {
+        return;
+    }
+    if (!in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) {
+        return;
+    }
+    if (headers_sent()) {
+        return;
+    }
+    materialImagesApiJson([
+        'ok' => false,
+        'message' => 'خطأ PHP: ' . (string) ($error['message'] ?? 'unknown'),
+        'file' => basename((string) ($error['file'] ?? '')),
+        'line' => (int) ($error['line'] ?? 0),
     ], 500);
 });
 
@@ -35,16 +70,37 @@ try {
     $userId = isset($user['id']) ? (string) $user['id'] : null;
 
     MaterialImageSyncService::ensureTable();
-    MaterialImageSyncService::recoverStaleSyncing();
-    MaterialImageSyncService::recoverSyncedWithoutGuid();
-
     $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    if ($method === 'GET') {
+        MaterialImageSyncService::recoverStaleSyncing();
+        MaterialImageSyncService::recoverSyncedWithoutGuid();
+    }
     if (ob_get_length() > 0) {
         ob_clean();
     }
 
 if ($method === 'GET') {
     $action = trim((string) ($_GET['action'] ?? 'stats'));
+
+    if ($action === 'upload-check') {
+        $settings = MaterialImageStorageService::settings();
+        $imagesDir = (string) ($settings['images_dir'] ?? '');
+        $thumbsDir = (string) ($settings['thumbnails_dir'] ?? '');
+        materialImagesApiJson([
+            'ok' => true,
+            'images_dir' => $imagesDir,
+            'thumbnails_dir' => $thumbsDir,
+            'images_dir_exists' => $imagesDir !== '' && is_dir($imagesDir),
+            'thumbnails_dir_exists' => $thumbsDir !== '' && is_dir($thumbsDir),
+            'images_dir_writable' => $imagesDir !== '' && is_dir($imagesDir) && is_writable($imagesDir),
+            'thumbnails_dir_writable' => $thumbsDir !== '' && is_dir($thumbsDir) && is_writable($thumbsDir),
+            'gd_loaded' => function_exists('imagecreatetruecolor'),
+            'upload_max_filesize' => (string) ini_get('upload_max_filesize'),
+            'post_max_size' => (string) ini_get('post_max_size'),
+            'file_uploads' => (string) ini_get('file_uploads'),
+            'sync' => materialImagesSyncStatsSafe(),
+        ]);
+    }
 
     if ($action === 'stats') {
         materialImagesApiJson([
@@ -161,13 +217,13 @@ if ($method === 'POST') {
                 'message' => (string) ($result['message'] ?? ''),
                 'file_name' => (string) ($result['file_name'] ?? ''),
                 'replaced' => (bool) ($result['replaced'] ?? false),
-                'sync' => MaterialImageSyncService::stats(),
+                'sync' => materialImagesSyncStatsSafe(),
             ], ($result['ok'] ?? false) ? 200 : 400);
         } catch (Throwable $exception) {
             materialImagesApiJson([
                 'ok' => false,
                 'message' => 'تعذر رفع الصورة: ' . $exception->getMessage(),
-                'sync' => MaterialImageSyncService::stats(),
+                'sync' => materialImagesSyncStatsSafe(),
             ], 500);
         }
     }
