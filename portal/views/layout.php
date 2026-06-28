@@ -216,6 +216,46 @@ if ($customer) {
 <script src="<?= h(portal_asset_url('/assets/pwa.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/site-page-loading.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/notifications.js')) ?>" defer></script>
+<?php if ($staffLoggedIn || $customer !== null): ?>
+<script>
+(function () {
+  const visitorId = (() => {
+    try {
+      const key = 'jawish_vid';
+      let id = localStorage.getItem(key);
+      if (!id) {
+        id = window.crypto?.randomUUID?.() || `v-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        localStorage.setItem(key, id);
+      }
+      return id;
+    } catch {
+      return '';
+    }
+  })();
+  const beat = () => fetch('/api/session-heartbeat.php', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ visitor_id: visitorId }),
+  })
+    .then((response) => response.json().catch(() => null))
+    .then((data) => {
+      if (!data || !data.login_required) return;
+      const path = window.location.pathname + window.location.search;
+      if (path.startsWith('/dashboard')) {
+        window.location.href = '/login.php?type=staff&redirect=' + encodeURIComponent(path);
+        return;
+      }
+      if (path.startsWith('/my-') || path.startsWith('/cart.php') || path.startsWith('/store-cart.php')) {
+        window.location.href = '/login.php?type=customer&redirect=' + encodeURIComponent(path);
+      }
+    })
+    .catch(() => {});
+  beat();
+  window.setInterval(beat, 60000);
+})();
+</script>
+<?php endif; ?>
 <?php if (!empty($extraFooter ?? '')): ?>
   <?= $extraFooter ?>
 <?php endif; ?>

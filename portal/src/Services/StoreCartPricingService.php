@@ -26,18 +26,6 @@ final class StoreCartPricingService
         $_SESSION['store_cart_context']['show_price'] = (bool) ($display['show_price'] ?? false);
     }
 
-    /** @param array<string, mixed> $display */
-    public static function customerShowsPrices(array $display): bool
-    {
-        if ((bool) ($display['show_price'] ?? false)) {
-            return true;
-        }
-
-        $ctx = $_SESSION['store_cart_context'] ?? null;
-
-        return is_array($ctx) && !empty($ctx['show_price']);
-    }
-
     /** @param array<string, mixed> $line */
     public static function resolveLineCustomerShowPrice(array $line): bool
     {

@@ -253,20 +253,14 @@ $pushChipGroup = static function (
     ];
 };
 
-if (!$isSectionBrowse && $isClientFilterVisible('search') && trim((string) ($filters['q'] ?? '')) !== '') {
-    $pushChipGroup('search', 'بحث', 'search', [[
-        'text' => (string) $filters['q'],
-        'url' => $buildFilterRemoveUrl(['q']),
-    ]]);
-} elseif ($isSectionBrowse && trim((string) ($filters['q'] ?? '')) !== '') {
+if ($isClientFilterVisible('search') && trim((string) ($filters['q'] ?? '')) !== '') {
     $pushChipGroup('search', 'بحث', 'search', [[
         'text' => (string) $filters['q'],
         'url' => $buildFilterRemoveUrl(['q']),
     ]]);
 }
 
-if (!$isSectionBrowse) {
-    $facetChipMap = [
+$facetChipMap = [
         'materialTypes' => ['param' => 'materialTypes', 'label' => 'نوع المادة', 'tone' => 'material', 'selected' => $selectedMaterialTypes],
         'ageCategories' => ['param' => 'ageCategories', 'label' => 'الفئة العمرية', 'tone' => 'age', 'selected' => $selectedAgeCategories],
         'manufacturers' => ['param' => 'manufacturers', 'label' => 'الشركة', 'tone' => 'manufacturer', 'selected' => $selectedManufacturers],
@@ -383,9 +377,8 @@ if (!$isSectionBrowse) {
         ];
         $pushChipGroup('groupBy', 'التجميع', 'group-by', [[
             'text' => $groupByLabels[$selectedGroupBy] ?? $selectedGroupBy,
-            'url' => $buildFilterRemoveUrl(['groupBy']),
-        ]]);
-    }
+        'url' => $buildFilterRemoveUrl(['groupBy']),
+    ]]);
 }
 
 $clearAllFiltersUrl = store_url(array_filter([
@@ -475,8 +468,8 @@ require __DIR__ . '/partials/store-filter-group.php';
 <?php endif; ?>
 
 <!-- store-catalog-fragment:start -->
-<div class="store-layout <?= ($allowClientFilters || $isSectionBrowse) ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?>>
-  <?php if ($allowClientFilters || $isSectionBrowse): ?>
+<div class="store-layout <?= $allowClientFilters ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?>>
+  <?php if ($allowClientFilters): ?>
     <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
       <aside class="store-filters-sidebar">
         <form method="get" class="store-filters-sidebar-inner">
@@ -495,32 +488,15 @@ require __DIR__ . '/partials/store-filter-group.php';
             <p class="text-xs text-text-muted mb-3">تصفح ضمن قسم محدد — بعض الفلاتر مقيّدة بهذا القسم.</p>
           <?php endif; ?>
 
-          <?php if (!$isSectionBrowse && $isClientFilterVisible('search')): ?>
+          <?php if ($isClientFilterVisible('search')): ?>
             <div class="store-inline-field">
               <label for="store-search-q">بحث</label>
               <input id="store-search-q" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" placeholder="اسم المادة أو الكود">
             </div>
           <?php endif; ?>
 
-          <?php if ($isSectionBrowse): ?>
-            <div class="store-inline-field">
-              <label for="store-section-sort">الترتيب</label>
-              <select id="store-section-sort" name="sort">
-                <?php foreach ([
-                    'number:asc' => 'الرقم تصاعدي',
-                    'number:desc' => 'الرقم تنازلي',
-                    'name:asc' => 'الاسم',
-                    '-unitSalePriceSyp' => 'السعر',
-                ] as $value => $label): ?>
-                  <option value="<?= h($value) ?>" <?= ((string) ($filters['sort'] ?? '') === $value) ? 'selected' : '' ?>><?= h($label) ?></option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-          <?php endif; ?>
-
-          <?php if (!$isSectionBrowse): ?>
-            <?php
-              $facetMap = [
+          <?php
+            $facetMap = [
                   'materialTypes' => ['param' => 'materialTypes', 'code' => 'materialTypes', 'label' => 'نوع المادة', 'selected' => $selectedMaterialTypes],
                   'ageCategories' => ['param' => 'ageCategories', 'code' => 'ageCategories', 'label' => 'الفئة العمرية', 'selected' => $selectedAgeCategories],
                   'manufacturers' => ['param' => 'manufacturers', 'code' => 'manufacturers', 'label' => 'الشركة', 'selected' => $selectedManufacturers],
@@ -688,7 +664,6 @@ require __DIR__ . '/partials/store-filter-group.php';
                 </select>
               </div>
             <?php endif; ?>
-          <?php endif; ?>
 
           <div class="store-filter-actions">
             <button type="submit" class="store-btn-primary">تطبيق</button>
@@ -706,7 +681,7 @@ require __DIR__ . '/partials/store-filter-group.php';
     <?php require __DIR__ . '/partials/store-active-filter-chips.php'; ?>
 
     <div class="store-results-toolbar">
-      <?php if ($allowClientFilters || $isSectionBrowse): ?>
+      <?php if ($allowClientFilters): ?>
         <button type="button" id="store-filters-open" class="store-filters-open-btn lg:hidden">
           <span class="material-symbols-outlined text-base" aria-hidden="true">tune</span>
           فلاتر
@@ -727,7 +702,7 @@ require __DIR__ . '/partials/store-filter-group.php';
         <p class="store-results-meta">لا توجد نتائج مطابقة</p>
       <?php endif; ?>
 
-      <?php if (!$isSectionBrowse && $allowSorting && $isClientFilterVisible('sort') && $clientSortFields !== []): ?>
+      <?php if ($allowSorting && $isClientFilterVisible('sort') && $clientSortFields !== []): ?>
         <form method="get" class="store-sort-bar">
           <?php foreach ($_GET as $key => $value): ?>
             <?php if ($key === 'sort' || $key === 'page') continue; ?>

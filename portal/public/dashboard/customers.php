@@ -43,6 +43,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash = $ok ? 'تم رفض الطلب.' : 'تعذر رفض الطلب.';
             $flashType = $ok ? 'success' : 'error';
         }
+    } elseif ($action === 'suspend' && $canManageCustomers) {
+        $ok = WebCustomerService::suspend($customerId, $adminId, trim((string) ($_POST['suspend_reason'] ?? '')));
+        $flash = $ok ? 'تم تعليق الحساب وإنهاء جلساته.' : 'تعذر تعليق الحساب.';
+        $flashType = $ok ? 'success' : 'error';
+    } elseif ($action === 'reactivate' && $canApproveCustomers) {
+        $policyId = trim((string) ($_POST['access_policy_id'] ?? ''));
+        $ok = WebCustomerService::reactivate($customerId, $policyId, $adminId);
+        $flash = $ok ? 'تم إعادة تفعيل الحساب.' : 'تعذر إعادة التفعيل. تأكد من اختيار سياسة الوصول.';
+        $flashType = $ok ? 'success' : 'error';
     } elseif ($action === 'save_customer') {
         if (!$canManageCustomers) {
             $flash = 'لا تملك صلاحية إضافة/تعديل العملاء.';
@@ -55,7 +64,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 trim((string) ($_POST['email'] ?? '')),
                 trim((string) ($_POST['access_policy_id'] ?? '')),
                 trim((string) ($_POST['status'] ?? 'pending')),
-                isset($_POST['is_active']),
                 trim((string) ($_POST['plain_password'] ?? '')),
                 trim((string) ($_POST['notes_ar'] ?? '')),
                 trim((string) ($_POST['rejection_reason_ar'] ?? '')),

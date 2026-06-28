@@ -12,7 +12,7 @@ use Portal\Services\StorePolicyService;
 
 require dirname(__DIR__) . '/views/helpers.php';
 
-$display = StoreCatalogService::displayOptionsForCartContext();
+$display = StoreCatalogService::displayOptionsForCartContext([], false);
 $allowCart = (bool) ($display['allow_cart'] ?? false);
 $allowOrder = (bool) ($display['allow_order'] ?? false);
 $error = null;

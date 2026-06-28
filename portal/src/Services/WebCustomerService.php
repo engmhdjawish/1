@@ -117,7 +117,6 @@ final class WebCustomerService
         ?string $email,
         string $accessPolicyId,
         string $status,
-        bool $isActive,
         ?string $plainPassword,
         ?string $notes,
         ?string $rejectionReason,
@@ -141,6 +140,9 @@ final class WebCustomerService
             $status = 'pending';
         }
 
+        $isActive = $status === 'active';
+        $approvedAt = $status === 'active' ? date('c') : null;
+
         $pdo = Database::pdo();
         $duplicate = $pdo->prepare(
             "SELECT 1
@@ -158,10 +160,6 @@ final class WebCustomerService
             return ['ok' => false, 'message' => 'رقم الهاتف مسجّل مسبقاً لعميل آخر.'];
         }
 
-        if ($status !== 'active') {
-            $isActive = false;
-        }
-        $approvedAt = $status === 'active' ? date('c') : null;
         $approvedBy = $status === 'active' ? $adminUserId : null;
         $safePolicyId = $accessPolicyId !== '' ? $accessPolicyId : null;
         $safeEmail = $email !== '' ? $email : null;
@@ -286,6 +284,10 @@ final class WebCustomerService
             return ['ok' => false, 'message' => 'لم يتم العثور على العميل المطلوب تحديثه.'];
         }
 
+        if (in_array($status, ['suspended', 'rejected', 'pending'], true)) {
+            PortalSessionService::revokeAllForCustomer($customerId);
+        }
+
         return ['ok' => true, 'message' => 'تم تحديث بيانات العميل بنجاح.', 'id' => $customerId];
     }
 
@@ -337,6 +339,7 @@ final class WebCustomerService
         ]);
 
         if ($stmt->rowCount() > 0) {
+            PortalSessionService::revokeAllForCustomer($customerId);
             try {
                 NotificationService::notifyCustomerRejected($customerId, $reason);
             } catch (\Throwable) {
@@ -367,6 +370,10 @@ final class WebCustomerService
             'id' => $customerId,
             'notes' => $reason !== null && trim($reason) !== '' ? trim($reason) : null,
         ]);
+
+        if ($stmt->rowCount() > 0) {
+            PortalSessionService::revokeAllForCustomer($customerId);
+        }
 
         return $stmt->rowCount() > 0;
     }

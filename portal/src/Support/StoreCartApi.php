@@ -26,7 +26,7 @@ final class StoreCartApi
             $notices = [];
         }
 
-        return self::payload(null, true, $notices, 'info', StoreCatalogService::displayOptionsForCartContext());
+        return self::payload(null, true, $notices, 'info', StoreCatalogService::displayOptionsForCartContext([], false));
     }
 
     /**
@@ -79,7 +79,7 @@ final class StoreCartApi
         $offer = trim((string) ($input['store_offer'] ?? ''));
         $line['customer_show_price'] = ($section !== '' || $offer !== '')
             ? StoreCartPricingService::contextShowsPrices($display)
-            : (bool) (StoreCatalogService::displayOptions()['show_price'] ?? false);
+            : (bool) ($display['show_price'] ?? false);
         if ($section !== '') {
             $line['added_store_section'] = $section;
         } else {
@@ -267,7 +267,7 @@ final class StoreCartApi
         string $level = 'info',
         ?array $displayOverride = null
     ): array {
-        $display = $displayOverride ?? StoreCatalogService::displayOptionsForCartContext();
+        $display = $displayOverride ?? StoreCatalogService::displayOptionsForCartContext([], false);
         $reprice = StoreCartPricingService::repriceCart(StoreCartService::TOKEN);
         $pendingChanges = StoreCartPricingService::pendingPriceChanges(StoreCartService::TOKEN);
         $changesByGuid = [];

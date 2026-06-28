@@ -57,15 +57,22 @@ final class CompanyBrandIconService
 
         $sourcePath = self::resolveSourcePath($logoUrl);
         if ($sourcePath === null || !is_file($sourcePath)) {
-            self::$lastError = 'ملف الشعار غير موجود على القرص. أعد رفع الشعار من لوحة التحكم > مكتبة الوسائط.';
+            self::clearBrandIcons();
+            self::$lastError = 'ملف الشعار غير موجود في مكتبة الوسائط. اختر شعاراً جديداً من الإعدادات > مكتبة الوسائط.';
 
             return false;
         }
 
         $iconSourcePath = self::iconSourcePath($sourcePath);
 
-        if (!is_readable($sourcePath)) {
+        if (!is_readable($iconSourcePath)) {
             self::$lastError = 'لا يمكن قراءة ملف الشعار. تحقق من صلاحيات مجلد storage.';
+
+            return false;
+        }
+
+        if (self::isSvgPath($iconSourcePath)) {
+            self::$lastError ??= 'تعذر تحويل SVG إلى PNG. إن كان الشعار معقداً ارفعه PNG/JPG، أو ثبّت ImageMagick على الخادم.';
 
             return false;
         }
@@ -102,6 +109,7 @@ final class CompanyBrandIconService
         if (!$ok) {
             $detail = self::$lastError ?: ('تعذر تحويل الشعار إلى PNG (الصيغة: ' . $mime . ').');
             self::$lastError = $detail;
+            self::clearBrandIcons();
         }
 
         return $ok;
@@ -176,10 +184,11 @@ final class CompanyBrandIconService
 
     private static function iconSourcePath(string $sourcePath): string
     {
-        $mime = self::detectMime($sourcePath);
-        if ($mime !== 'image/svg+xml' && !str_ends_with(strtolower($sourcePath), '.svg')) {
+        if (!self::isSvgPath($sourcePath)) {
             return $sourcePath;
         }
+
+        SiteMediaService::rasterizeSvgCompanionSafe($sourcePath);
 
         $raster = SvgRasterService::rasterCompanionPath($sourcePath);
         if (is_file($raster) && is_readable($raster) && filesize($raster) > 128) {
@@ -194,7 +203,23 @@ final class CompanyBrandIconService
             @unlink($raster);
         }
 
+        $detail = SvgRasterService::lastError();
+        self::$lastError = is_string($detail) && trim($detail) !== ''
+            ? $detail
+            : 'تعذر تحويل SVG. إن كان الشعار معقداً ارفعه PNG/JPG، أو ثبّت ImageMagick على الخادم.';
+
         return $sourcePath;
+    }
+
+    private static function isSvgPath(string $sourcePath): bool
+    {
+        if (str_ends_with(strtolower($sourcePath), '.svg')) {
+            return true;
+        }
+
+        $mime = self::normalizeMime(self::detectMime($sourcePath));
+
+        return in_array($mime, ['image/svg+xml', 'text/xml', 'application/xml'], true);
     }
 
     /** @return \GdImage|false */
@@ -266,6 +291,7 @@ final class CompanyBrandIconService
             'gif' => 'image/gif',
             'webp' => 'image/webp',
             'svg' => 'image/svg+xml',
+            'xml' => 'image/svg+xml',
             default => 'application/octet-stream',
         };
     }

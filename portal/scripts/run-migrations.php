@@ -11,6 +11,7 @@ declare(strict_types=1);
  */
 
 $base = dirname(__DIR__);
+define('PORTAL_NO_SESSION', true);
 require $base . '/bootstrap.php';
 
 use Portal\Config;
@@ -39,6 +40,9 @@ $ordered = [
     '005-visitor-logs.sql',
     '006-notifications.sql',
     '008-push-subscriptions.sql',
+    '009-web-sessions-tracking.sql',
+    '010-sessions-permission.sql',
+    '011-portal-presence.sql',
     '007-staff-roles-reorganization.sql',
 ];
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Portal\Auth\WebSession;
 use Portal\Services\CatalogSectionResolver;
 use Portal\Services\ShareCartService;
+use Portal\Support\StorePricePreference;
 
 function h(?string $value): string
 {
@@ -654,6 +655,82 @@ function home_section_return_url(array $section): string
     return $slug !== '' ? '/#' . $slug : '/';
 }
 
+/**
+ * @param array<string, mixed> $displayOptions
+ * @param array<string, mixed>|null $storeCatalogDisplay
+ * @return array{
+ *   show_any_price: bool,
+ *   show_price_syp: bool,
+ *   show_price_usd: bool,
+ *   price_mode_resolved: string,
+ *   preview_display_options: array<string, mixed>
+ * }
+ */
+function section_price_display_state(array $displayOptions, ?array $storeCatalogDisplay = null): array
+{
+    $storeCatalogDisplay ??= [];
+    $storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
+    $sectionPriceMode = trim((string) ($displayOptions['price_mode'] ?? 'both'));
+    if (!in_array($sectionPriceMode, ['both', 'syp', 'usd', 'none'], true)) {
+        $sectionPriceMode = 'both';
+    }
+    $showImages = array_key_exists('show_images', $displayOptions) ? (bool) $displayOptions['show_images'] : true;
+    $sectionShowPrice = array_key_exists('show_price', $displayOptions)
+        ? (bool) $displayOptions['show_price']
+        : ($sectionPriceMode !== 'none');
+    $effectiveSectionShowPrice = $sectionShowPrice && ($storeShowPrice || $sectionPriceMode !== 'none');
+
+    if (!$effectiveSectionShowPrice || $sectionPriceMode === 'none') {
+        return [
+            'show_any_price' => false,
+            'show_price_syp' => false,
+            'show_price_usd' => false,
+            'price_mode_resolved' => 'none',
+            'preview_display_options' => [
+                'show_images' => $showImages,
+                'show_price' => false,
+                'show_quantity' => (bool) ($storeCatalogDisplay['show_quantity'] ?? false),
+                'allow_cart' => (bool) ($storeCatalogDisplay['allow_cart'] ?? false),
+                'price_mode' => 'none',
+            ],
+        ];
+    }
+
+    if ($sectionPriceMode === 'both') {
+        $resolved = $storeShowPrice
+            ? StorePricePreference::priceModeForDisplay(true)
+            : StorePricePreference::current();
+        $showPriceSyp = $resolved === StorePricePreference::SYP;
+        $showPriceUsd = $resolved === StorePricePreference::USD;
+    } else {
+        $resolved = $sectionPriceMode;
+        $showPriceSyp = $sectionPriceMode === 'syp';
+        $showPriceUsd = $sectionPriceMode === 'usd';
+    }
+
+    return [
+        'show_any_price' => true,
+        'show_price_syp' => $showPriceSyp,
+        'show_price_usd' => $showPriceUsd,
+        'price_mode_resolved' => $resolved,
+        'preview_display_options' => [
+            'show_images' => $showImages,
+            'show_price' => true,
+            'show_quantity' => (bool) ($storeCatalogDisplay['show_quantity'] ?? false),
+            'allow_cart' => (bool) ($storeCatalogDisplay['allow_cart'] ?? false),
+            'price_mode' => $resolved,
+        ],
+    ];
+}
+
+/** @param array<string, mixed> $sectionDisplayOptions @param array<string, mixed> $baseDisplayOptions @return array<string, mixed> */
+function section_catalog_display_options(array $sectionDisplayOptions, array $baseDisplayOptions): array
+{
+    $priceState = section_price_display_state($sectionDisplayOptions, $baseDisplayOptions);
+
+    return array_merge($baseDisplayOptions, $priceState['preview_display_options']);
+}
+
 /** @param array<string, mixed> $params */
 function store_url(array $params = []): string
 {
@@ -709,53 +786,6 @@ function format_packaging(float $value): string
 function format_packages_display(float $qty): string
 {
     return \Portal\Services\StockReservationService::formatPackages($qty);
-}
-
-/** @param array{show_images?: bool, price_mode?: string, show_price?: bool} $sectionDisplay
- * @param array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string} $globalDisplay
- * @return array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string}
- */
-function section_catalog_display_options(array $sectionDisplay, array $globalDisplay): array
-{
-    $merged = $globalDisplay;
-    $storeShowPrice = (bool) ($globalDisplay['show_price'] ?? false);
-
-    if (array_key_exists('show_images', $sectionDisplay)) {
-        $merged['show_images'] = (bool) $sectionDisplay['show_images'];
-    }
-
-    $sectionPriceMode = trim((string) ($sectionDisplay['price_mode'] ?? 'both'));
-    if (!in_array($sectionPriceMode, ['both', 'syp', 'usd', 'none'], true)) {
-        $sectionPriceMode = 'both';
-    }
-
-    if ($sectionPriceMode === 'none') {
-        $merged['show_price'] = false;
-        $merged['price_mode'] = 'none';
-
-        return $merged;
-    }
-
-    $sectionShowPrice = array_key_exists('show_price', $sectionDisplay)
-        ? (bool) $sectionDisplay['show_price']
-        : true;
-
-    $merged['show_price'] = $sectionShowPrice && ($storeShowPrice || $sectionPriceMode !== 'none');
-    if (!$merged['show_price']) {
-        $merged['price_mode'] = 'none';
-
-        return $merged;
-    }
-
-    if ($sectionPriceMode === 'both') {
-        $merged['price_mode'] = $storeShowPrice
-            ? \Portal\Support\StorePricePreference::priceModeForDisplay(true)
-            : \Portal\Support\StorePricePreference::current();
-    } else {
-        $merged['price_mode'] = $sectionPriceMode;
-    }
-
-    return $merged;
 }
 
 function customer_order_shows_prices(string $status): bool

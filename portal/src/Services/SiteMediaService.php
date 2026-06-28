@@ -38,6 +38,38 @@ final class SiteMediaService
         return '/media/site.php?id=' . rawurlencode(trim($id));
     }
 
+    public static function logoUrlIsUsable(?string $logoUrl): bool
+    {
+        $logoUrl = trim((string) $logoUrl);
+        if ($logoUrl === '') {
+            return true;
+        }
+
+        if (preg_match('~^/media/site\.php\?id=([^&]+)~i', $logoUrl, $matches) === 1) {
+            $id = rawurldecode((string) ($matches[1] ?? ''));
+            $asset = self::getById($id);
+            if ($asset === null) {
+                return false;
+            }
+            $path = self::absolutePathForId($id);
+
+            return $path !== null && is_file($path) && is_readable($path);
+        }
+
+        if (str_starts_with($logoUrl, 'http://') || str_starts_with($logoUrl, 'https://')) {
+            return true;
+        }
+
+        if (str_starts_with($logoUrl, '/')) {
+            $publicRoot = dirname(__DIR__, 2) . '/public';
+            $candidate = $publicRoot . $logoUrl;
+
+            return is_file($candidate) && is_readable($candidate);
+        }
+
+        return false;
+    }
+
     /** @return list<array<string, mixed>> */
     public static function listAssets(?string $category = null): array
     {

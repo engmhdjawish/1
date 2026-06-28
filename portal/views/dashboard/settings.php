@@ -25,8 +25,6 @@ use Portal\Services\AccessPolicyService;
 /** @var string|null $materialFilterOptionsError */
 /** @var string|null $flash */
 /** @var string $flashType */
-/** @var string|null $pendingBrandIconUrl */
-
 require __DIR__ . '/partials/media-picker.php';
 require __DIR__ . '/partials/token-picker.php';
 
@@ -625,33 +623,4 @@ $tabUrl = static function (string $key) use ($tab): string {
     </div>
   <?php endif; ?>
 </section>
-<?php endif; ?>
-
-<?php if (isset($pendingBrandIconUrl)): ?>
-<script>
-(function () {
-  const logoUrl = <?= json_encode((string) $pendingBrandIconUrl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-  const body = new FormData();
-  body.append('company_logo', logoUrl);
-  fetch('/dashboard/regenerate-brand-icons.php', {
-    method: 'POST',
-    body,
-    credentials: 'same-origin',
-    headers: { Accept: 'application/json' },
-  })
-    .then((response) => response.json().catch(() => ({})))
-    .then((data) => {
-      if (!data || data.ok) return;
-      const message = data.message || 'تعذر توليد أيقونات التطبيق.';
-      if (window.dashboardApp?.showToast) {
-        window.dashboardApp.showToast(message, 'error');
-      }
-    })
-    .catch(() => {
-      if (window.dashboardApp?.showToast) {
-        window.dashboardApp.showToast('تعذر توليد أيقونات التطبيق تلقائياً.', 'error');
-      }
-    });
-})();
-</script>
 <?php endif; ?>
