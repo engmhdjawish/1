@@ -71,6 +71,12 @@ $cartMode = $inCart
   data-primary-unit="<?= h($primaryUnit) ?>"
 >
   <input type="hidden" name="action" value="add_to_cart">
+  <?php if (!empty($storeSectionSlug ?? '')): ?>
+    <input type="hidden" name="store_section" value="<?= h((string) $storeSectionSlug) ?>">
+  <?php endif; ?>
+  <?php if (!empty($storeOfferSlug ?? '')): ?>
+    <input type="hidden" name="store_offer" value="<?= h((string) $storeOfferSlug) ?>">
+  <?php endif; ?>
   <?php if ($returnUrl !== ''): ?>
     <input type="hidden" name="return" value="<?= h($returnUrl) ?>">
   <?php endif; ?>

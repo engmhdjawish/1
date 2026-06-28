@@ -7,6 +7,7 @@ namespace Portal\Support;
 use Portal\Auth\CustomerSession;
 use Portal\Services\OrderService;
 use Portal\Services\ShareCartService;
+use Portal\Services\StoreCartPricingService;
 use Portal\Services\StoreCartService;
 use Portal\Services\StoreCatalogService;
 
@@ -34,7 +35,7 @@ final class StoreCartRequest
             return ['ok' => false, 'message' => ''];
         }
 
-        return self::handleSubmitOrderPostFromInput($_POST, StoreCatalogService::displayOptions());
+        return self::handleSubmitOrderPostFromInput($_POST, StoreCatalogService::displayOptionsForCartContext($_POST));
     }
 
     /**
@@ -69,6 +70,7 @@ final class StoreCartRequest
         }
 
         $reconcile = ShareCartService::reconcileStock(StoreCartService::TOKEN);
+        StoreCartPricingService::repriceCart(StoreCartService::TOKEN);
         $cartItems = array_values(StoreCartService::items());
         if ($cartItems === []) {
             $notices = is_array($reconcile['notices'] ?? null) ? $reconcile['notices'] : [];
@@ -105,6 +107,7 @@ final class StoreCartRequest
             is_array($result['submitted_material_guids'] ?? null) ? $result['submitted_material_guids'] : [],
             is_array($result['unavailable_items'] ?? null) ? $result['unavailable_items'] : []
         );
+        unset($_SESSION['store_cart_context']);
 
         $quoteToken = (string) ($order['quote_access_token'] ?? '');
         $orderNumber = (string) ($order['order_number'] ?? '');

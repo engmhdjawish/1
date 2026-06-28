@@ -76,6 +76,39 @@ final class StoreCatalogService
         return $guestPolicy;
     }
 
+    /**
+     * @param array<string, mixed> $input
+     * @return array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string}
+     */
+    public static function displayOptionsForCartContext(array $input = []): array
+    {
+        $display = self::displayOptions();
+        if (!function_exists('section_catalog_display_options')) {
+            require dirname(__DIR__, 2) . '/views/helpers.php';
+        }
+
+        $section = trim((string) ($input['store_section'] ?? ''));
+        $offer = trim((string) ($input['store_offer'] ?? ''));
+        if ($section === '' && $offer === '') {
+            $ctx = $_SESSION['store_cart_context'] ?? null;
+            if (is_array($ctx)) {
+                $section = trim((string) ($ctx['section'] ?? ''));
+                $offer = trim((string) ($ctx['offer'] ?? ''));
+            }
+        }
+
+        $sectionContext = CatalogSectionResolver::resolve($section, $offer);
+        if ($sectionContext === null) {
+            return $display;
+        }
+
+        $sectionDisplay = is_array($sectionContext['display_options'] ?? null)
+            ? $sectionContext['display_options']
+            : [];
+
+        return section_catalog_display_options($sectionDisplay, $display);
+    }
+
     /** @param array<string, mixed> $query */
     public static function catalogFromRequest(array $query): array
     {

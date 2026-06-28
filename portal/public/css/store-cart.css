@@ -412,6 +412,42 @@
   color: #D81921;
 }
 
+.store-price-change-banner {
+  font-size: 0.8125rem;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 0.75rem;
+  padding: 0.625rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.store-price-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  border-radius: 9999px;
+  padding: 0.15rem 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.store-price-change--up {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.store-price-change--down {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.store-price-change--changed {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
 .store-cart-lines {
   display: flex;
   flex-direction: column;

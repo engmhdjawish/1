@@ -9,6 +9,7 @@ use Portal\Services\OrderService;
 use Portal\Services\ShareCartService;
 use Portal\Services\SpecialOfferService;
 use Portal\Services\StockReservationService;
+use Portal\Services\StoreCartPricingService;
 use Portal\Services\StoreCartService;
 use Portal\Services\StoreCatalogService;
 use Portal\Services\StorePolicyService;
@@ -25,7 +26,7 @@ final class StoreCartApi
             $notices = [];
         }
 
-        return self::payload(null, true, $notices);
+        return self::payload(null, true, $notices, 'info', StoreCatalogService::displayOptionsForCartContext());
     }
 
     /**
@@ -34,9 +35,9 @@ final class StoreCartApi
      */
     public static function dispatch(string $action, array $input): array
     {
-        $display = StoreCatalogService::displayOptions();
+        $display = StoreCatalogService::displayOptionsForCartContext($input);
         if (!($display['allow_cart'] ?? false) && $action !== 'submit_order') {
-            return self::payload('سياسة المتجر لا تسمح باستخدام السلة.', false);
+            return self::payload('سياسة المتجر لا تسمح باستخدام السلة.', false, [], 'info', $display);
         }
 
         return match ($action) {
@@ -48,7 +49,7 @@ final class StoreCartApi
             'clear_unavailable' => self::clearUnavailable(),
             'clear' => self::clear(),
             'submit_order' => self::submitOrder($input, $display),
-            default => self::payload('إجراء غير معروف.', false),
+            default => self::payload('إجراء غير معروف.', false, [], 'info', $display),
         };
     }
 
@@ -69,8 +70,8 @@ final class StoreCartApi
             }
         }
 
-        $capturePrices = (bool) ($display['show_price'] ?? false);
-        $line = ShareCartService::lineFromForm($input, $capturePrices);
+        StoreCartPricingService::rememberCartDisplayContext($display, $input);
+        $line = StoreCartPricingService::lineFromRequest($input);
         if ($line['material_guid'] === '') {
             return self::payload('تعذر تحديد المادة.', false);
         }
@@ -196,12 +197,36 @@ final class StoreCartApi
     /** @param array<string, mixed> $display @param array<string, mixed> $input */
     private static function submitOrder(array $input, array $display): array
     {
-        $result = StoreCartRequest::handleSubmitOrderPostFromInput($input, $display);
-        if (!($result['ok'] ?? false)) {
-            return self::payload((string) ($result['message'] ?? 'تعذر حفظ الطلب.'), false);
+        $reprice = StoreCartPricingService::repriceCart(StoreCartService::TOKEN);
+        $confirm = (string) ($input['confirm_price_changes'] ?? '') === '1';
+        if ($reprice['changes'] !== [] && !$confirm) {
+            $payload = self::payload(
+                'تغيّرت أسعار بعض الأصناف — راجع السلة ثم أكّد الإرسال.',
+                false,
+                [],
+                'warning',
+                $display
+            );
+            $payload['requires_price_confirmation'] = true;
+            $payload['price_changes'] = $reprice['changes'];
+
+            return $payload;
         }
 
-        $payload = self::payload((string) ($result['message'] ?? 'تم إرسال الطلب بنجاح.'), true);
+        $result = StoreCartRequest::handleSubmitOrderPostFromInput($input, $display);
+        if (!($result['ok'] ?? false)) {
+            if (!empty($result['requires_price_confirmation'])) {
+                $payload = self::payload((string) ($result['message'] ?? 'تغيّرت الأسعار.'), false, [], 'warning', $display);
+                $payload['requires_price_confirmation'] = true;
+                $payload['price_changes'] = is_array($result['price_changes'] ?? null) ? $result['price_changes'] : [];
+
+                return $payload;
+            }
+
+            return self::payload((string) ($result['message'] ?? 'تعذر حفظ الطلب.'), false, [], 'error', $display);
+        }
+
+        $payload = self::payload((string) ($result['message'] ?? 'تم إرسال الطلب بنجاح.'), true, [], 'success', $display);
         if (!empty($result['redirect'])) {
             $payload['redirect'] = (string) $result['redirect'];
         }
@@ -217,18 +242,37 @@ final class StoreCartApi
 
     /**
      * @param list<string> $notices
+     * @param array<string, mixed>|null $displayOverride
      * @return array<string, mixed>
      */
     private static function payload(
         ?string $message,
         bool $ok,
         array $notices = [],
-        string $level = 'info'
+        string $level = 'info',
+        ?array $displayOverride = null
     ): array {
-        $display = StoreCatalogService::displayOptions();
+        $display = $displayOverride ?? StoreCatalogService::displayOptionsForCartContext();
+        $reprice = StoreCartPricingService::repriceCart(StoreCartService::TOKEN);
+        $changesByGuid = [];
+        foreach ($reprice['changes'] as $change) {
+            $guid = trim((string) ($change['material_guid'] ?? ''));
+            if ($guid !== '') {
+                $changesByGuid[$guid] = $change;
+            }
+        }
+
         $maxPackages = StorePolicyService::maxPackagesPerMaterial();
         $items = array_values(array_map(
-            static fn (array $line): array => ShareCartService::enrichLineWithOffer($line),
+            static function (array $line) use ($changesByGuid): array {
+                $enriched = ShareCartService::enrichLineWithOffer($line);
+                $guid = trim((string) ($enriched['material_guid'] ?? ''));
+                if ($guid !== '' && isset($changesByGuid[$guid])) {
+                    $enriched['price_change'] = $changesByGuid[$guid];
+                }
+
+                return $enriched;
+            },
             StoreCartService::items()
         ));
         $unavailable = array_values(StoreCartService::unavailableItems());
@@ -238,6 +282,7 @@ final class StoreCartApi
             $cartQtyByGuid[$guid] = max(0.0, round((float) ($line['quantity'] ?? 0), 4));
         }
 
+        $showPrice = StoreCartPricingService::customerShowsPrices($display);
         $payload = [
             'ok' => $ok,
             'level' => $ok ? ($level === 'warning' ? 'warning' : 'success') : 'error',
@@ -254,9 +299,10 @@ final class StoreCartApi
                 : null,
             'allow_cart' => (bool) ($display['allow_cart'] ?? false),
             'allow_order' => (bool) ($display['allow_order'] ?? false),
-            'show_price' => (bool) ($display['show_price'] ?? false),
+            'show_price' => $showPrice,
             'price_mode' => (string) ($display['price_mode'] ?? 'syp'),
             'stock_notices' => $notices,
+            'price_changes' => $reprice['changes'],
             'logged_in' => CustomerSession::check(),
         ];
 

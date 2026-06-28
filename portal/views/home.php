@@ -237,7 +237,14 @@ $storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
                       $cartQtyForItem = (float) ($cartItems[$guid]['quantity'] ?? 0);
                   }
                   $previewPayload = $guid !== ''
-                      ? product_preview_payload($item, $previewDisplayOptions, $cartQtyForItem, $sectionReturnUrl, $sectionOfferSlug)
+                      ? product_preview_payload(
+                          $item,
+                          $previewDisplayOptions,
+                          $cartQtyForItem,
+                          $sectionReturnUrl,
+                          $sectionOfferSlug,
+                          $isOfferSection ? null : ($sectionSlug !== '' ? $sectionSlug : null)
+                      )
                       : null;
                   $previewJson = $previewPayload !== null
                       ? json_encode($previewPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)

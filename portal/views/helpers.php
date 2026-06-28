@@ -455,7 +455,8 @@ function product_preview_payload(
     array $displayOptions,
     float $cartQtyForItem = 0.0,
     ?string $returnUrl = null,
-    ?string $offerSlug = null
+    ?string $offerSlug = null,
+    ?string $sectionSlug = null
 ): array {
     $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
     $showPriceSyp = in_array($priceMode, ['both', 'syp'], true);
@@ -529,6 +530,8 @@ function product_preview_payload(
         'partialPackage' => $qtyBounds['partialPackage'],
         'effectiveMax' => $qtyBounds['effectiveMax'],
         'returnUrl' => strtok((string) $returnUrl, '#'),
+        'storeOffer' => trim((string) $offerSlug),
+        'storeSection' => trim((string) $sectionSlug),
     ];
 }
 

@@ -151,6 +151,25 @@ final class ShareCartService
         return ['ok' => true, 'message' => '', 'quantity' => $quantity];
     }
 
+    /** @param array<string, mixed> $line */
+    public static function replaceLine(string $token, string $materialGuid, array $line): void
+    {
+        $token = trim($token);
+        $materialGuid = trim($materialGuid);
+        if ($token === '' || $materialGuid === '') {
+            return;
+        }
+
+        if (!isset($_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid])) {
+            return;
+        }
+
+        $line = self::normalizeLine($line);
+        $line['material_guid'] = $materialGuid;
+        $line['quantity'] = (float) ($_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]['quantity'] ?? $line['quantity'] ?? 0);
+        $_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid] = $line;
+    }
+
     /** @return array{ok: bool, message: string, quantity: float} */
     public static function updateQuantity(string $token, string $materialGuid, float $quantity): array
     {
@@ -546,12 +565,14 @@ final class ShareCartService
             return $line;
         }
 
-        $baseLine = array_merge(self::lineFromApiItem($product, true), $line);
-        $baseLine['quantity'] = (float) ($line['quantity'] ?? 1);
-        $enriched = SpecialOfferService::applyToCartLine($baseLine, $overlay['offer']);
+        $apiLine = self::lineFromApiItem($product, true);
+        $enriched = SpecialOfferService::applyToCartLine($apiLine, $overlay['offer']);
         $enriched['quantity'] = (float) ($line['quantity'] ?? 1);
         if (!empty($line['image_url'])) {
             $enriched['image_url'] = (string) $line['image_url'];
+        }
+        if (trim((string) ($line['material_name_ar'] ?? '')) !== '') {
+            $enriched['material_name_ar'] = (string) $line['material_name_ar'];
         }
 
         return $enriched;

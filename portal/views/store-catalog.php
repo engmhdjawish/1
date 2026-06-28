@@ -33,6 +33,16 @@ $lockedClientFilters = array_map('strval', is_array($catalog['locked_client_filt
 $allowClientFilters = (bool) ($catalog['allow_client_filters'] ?? false);
 $filtersDeferred = (bool) ($catalog['filters_deferred'] ?? false);
 $isSectionBrowse = $sectionContext !== null;
+$storeSectionSlug = '';
+$storeOfferSlug = '';
+if ($sectionContext !== null) {
+    $sectionSlug = trim((string) ($sectionContext['slug'] ?? ''));
+    if (!empty($sectionContext['is_offer_section'])) {
+        $storeOfferSlug = $sectionSlug;
+    } else {
+        $storeSectionSlug = $sectionSlug;
+    }
+}
 $products = is_array($catalog['products'] ?? null) ? $catalog['products'] : [];
 $resultFilters = is_array($catalog['resultFilters'] ?? null) ? $catalog['resultFilters'] : [];
 

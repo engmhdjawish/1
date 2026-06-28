@@ -501,6 +501,8 @@
         ${effectiveMaxAttr}
       >
         <input type="hidden" name="action" value="add_to_cart">
+        ${p.storeSection ? `<input type="hidden" name="store_section" value="${esc(p.storeSection)}">` : ''}
+        ${p.storeOffer ? `<input type="hidden" name="store_offer" value="${esc(p.storeOffer)}">` : ''}
         <input type="hidden" name="material_guid" value="${esc(p.guid)}">
         <input type="hidden" name="material_code" value="${esc(p.code)}">
         <input type="hidden" name="material_name_ar" value="${esc(p.name)}">

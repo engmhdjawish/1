@@ -327,7 +327,39 @@
     return html;
   };
 
-  const renderCartLineCard = (line, max) => {
+  const priceChangeHtml = (line) => {
+    const change = line?.price_change;
+    if (!change || typeof change !== 'object') return '';
+    const up = change.direction_sp === 'up' || change.direction_usd === 'up';
+    const down = change.direction_sp === 'down' || change.direction_usd === 'down';
+    if (!up && !down) return '';
+    let label = 'تغيّر السعر';
+    let cls = 'changed';
+    if (up && !down) {
+      label = 'ارتفع السعر';
+      cls = 'up';
+    } else if (down && !up) {
+      label = 'انخفض السعر';
+      cls = 'down';
+    }
+    return `<span class="store-price-change store-price-change--${cls}">${escapeHtml(label)}</span>`;
+  };
+
+  const buildPriceChangeConfirmMessage = (changes) => {
+    const rows = Array.isArray(changes) ? changes : [];
+    if (rows.length === 0) return 'تغيّرت أسعار بعض الأصناف.';
+    const lines = rows.slice(0, 6).map((row) => {
+      const name = String(row.material_name_ar || 'صنف');
+      const up = row.direction_sp === 'up' || row.direction_usd === 'up';
+      const down = row.direction_sp === 'down' || row.direction_usd === 'down';
+      const dir = up && !down ? 'ارتفع' : (down && !up ? 'انخفض' : 'تغيّر');
+      return `• ${name}: ${dir}`;
+    });
+    if (rows.length > 6) lines.push(`• و${rows.length - 6} أصناف أخرى`);
+    return `تغيّرت أسعار الأصناف التالية:\n${lines.join('\n')}\n\nهل تريد المتابعة بالأسعار الحالية من النظام؟`;
+  };
+
+  const renderCartLineCard = (line, max, showPrice = true) => {
     const guid = line.material_guid || '';
     const prices = computeLinePrices(line);
     const hasOffer = lineHasOffer(line);
@@ -338,7 +370,7 @@
           return `<button type="button" class="store-order-line-card__thumb" data-cart-image-zoom="${zoom}" title="تكبير الصورة للتدقيق"><img src="${thumb}" alt="" loading="lazy"><span class="store-order-line-card__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span></button>`;
         })()
       : '<div class="store-order-line-card__placeholder"><span class="material-symbols-outlined" aria-hidden="true">inventory_2</span></div>';
-    const lineTotalCell = (prices.packSp > 0 || prices.origPackSp > 0 || prices.packUsd > 0 || prices.origPackUsd > 0)
+    const lineTotalCell = showPrice && (prices.packSp > 0 || prices.origPackSp > 0 || prices.packUsd > 0 || prices.origPackUsd > 0)
       ? `<div class="store-order-line-card__totals">
           ${prices.packSp > 0 || prices.origPackSp > 0 ? `<span class="store-price-currency store-price-currency--syp store-num" dir="ltr">${formatMoney(prices.lineTotalSp)} ل.س</span>` : ''}
           ${prices.packUsd > 0 || prices.origPackUsd > 0 ? `<span class="store-price-currency store-price-currency--usd store-num" dir="ltr">$${formatUsd(prices.lineTotalUsd)}</span>` : ''}
@@ -350,6 +382,7 @@
         <div class="store-cart-line-card__head">
           <div class="store-order-line-card__head-main min-w-0">
             ${offerBadgeHtml(line)}
+            ${priceChangeHtml(line)}
             <h3 class="store-order-line-card__title">${escapeHtml(line.material_name_ar || '')}</h3>
             ${line.material_code ? `<span class="store-order-line-card__code store-num" dir="ltr">${escapeHtml(line.material_code)}</span>` : ''}
           </div>
@@ -358,7 +391,7 @@
           </button>
         </div>
         <div class="store-cart-line-card__foot">
-          ${linePricesHtml(line)}
+          ${showPrice ? linePricesHtml(line) : ''}
           <div class="store-cart-line-card__controls">
             <div class="store-cart-line-card__qty-row">
               <div class="store-qty-stepper store-qty-stepper--compact" data-cart-qty-control data-guid="${escapeHtml(guid)}">
@@ -879,10 +912,14 @@
         if (max) {
           html += `<p class="store-limit-banner">الحد الأقصى للطلب: <strong>${escapeHtml(String(maxLabel))}</strong> طرد لكل مادة.</p>`;
         }
+        const priceChanges = Array.isArray(data.price_changes) ? data.price_changes : [];
+        if (priceChanges.length > 0) {
+          html += `<p class="store-price-change-banner">تنبيه: تغيّرت أسعار ${priceChanges.length} صنف — راجع قبل إرسال الطلب.</p>`;
+        }
         if (items.length > 0) {
           html += '<div class="store-cart-lines">';
           items.forEach((line) => {
-            html += renderCartLineCard(line, max);
+            html += renderCartLineCard(line, max, showPrice);
           });
           html += '</div>';
         }
@@ -1104,8 +1141,21 @@
       btn?.classList.add('is-loading');
       const payload = { action: 'submit_order' };
       new FormData(form).forEach((v, k) => { payload[k] = v; });
+      const submitOnce = async (confirmPriceChanges = false) => {
+        if (confirmPriceChanges) payload.confirm_price_changes = '1';
+        else delete payload.confirm_price_changes;
+        return apiRequest(payload);
+      };
       try {
-        const data = await apiRequest(payload);
+        let data = await submitOnce(false);
+        if (data.requires_price_confirmation) {
+          const confirmed = window.confirm(buildPriceChangeConfirmMessage(data.price_changes));
+          if (!confirmed) {
+            applyCartResponse(data);
+            return;
+          }
+          data = await submitOnce(true);
+        }
         if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
         if (data.ok && data.redirect) {
           window.location.href = data.redirect;
