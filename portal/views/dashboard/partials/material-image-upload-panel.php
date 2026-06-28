@@ -283,6 +283,7 @@ $statusLabels = [
   let paused = false;
   let uploading = false;
   let uploadSessionStarted = false;
+  let preferBase64Upload = false;
   let dbPromise = null;
 
   function hasPendingUploadItems() {
@@ -489,9 +490,20 @@ $statusLabels = [
   function shouldRetryUploadWithBase64(payload, status) {
     if (payload?.ok) return false;
     const message = String(payload?.message || '');
+    if (/<!DOCTYPE|xmlns=|<html/i.test(message)) return true;
     if (payload?.upload_error_code === 4) return true;
     return /لم يصل|لم يُرسل|ملف غير صالح|upload_tmp|تعذر استلام/i.test(message)
-      || (status === 400 && /multipart|ملف/i.test(message));
+      || (status === 400 && /multipart|ملف/i.test(message))
+      || status === 500;
+  }
+
+  async function loadUploadEnvironment() {
+    try {
+      const { payload } = await apiJson(`${API_URL}?action=upload-check`);
+      preferBase64Upload = !payload.upload_tmp_dir_writable;
+    } catch {
+      preferBase64Upload = false;
+    }
   }
 
   function dedupeQueueItems(items) {
@@ -640,11 +652,15 @@ $statusLabels = [
     const file = blobToUploadFile(blob, item.name);
     let result;
     try {
-      result = await uploadViaMultipart(file, item);
-      if (shouldRetryUploadWithBase64(result.payload, result.status)) {
-        item.progress = Math.max(item.progress, 1);
-        renderQueue();
+      if (preferBase64Upload) {
         result = await uploadViaBase64(blob, item);
+      } else {
+        result = await uploadViaMultipart(file, item);
+        if (shouldRetryUploadWithBase64(result.payload, result.status)) {
+          item.progress = Math.max(item.progress, 1);
+          renderQueue();
+          result = await uploadViaBase64(blob, item);
+        }
       }
     } catch (error) {
       try {
@@ -1353,6 +1369,7 @@ $statusLabels = [
   }));
 
   restoreQueueFromStorage();
+  loadUploadEnvironment();
   refreshOverview();
 })();
 </script>

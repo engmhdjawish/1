@@ -65,6 +65,7 @@ register_shutdown_function(static function (): void {
 try {
     WebSession::requireAnyPermission(['images.upload', 'images.view']);
     MaterialImageStorageService::ensureSettings();
+    MaterialImageStorageService::ensurePhpUploadTempDir();
 
     $user = WebSession::user();
     $userId = isset($user['id']) ? (string) $user['id'] : null;
@@ -86,10 +87,7 @@ if ($method === 'GET') {
         $settings = MaterialImageStorageService::settings();
         $imagesDir = (string) ($settings['images_dir'] ?? '');
         $thumbsDir = (string) ($settings['thumbnails_dir'] ?? '');
-        $uploadTmpDir = trim((string) ini_get('upload_tmp_dir'));
-        if ($uploadTmpDir === '') {
-            $uploadTmpDir = sys_get_temp_dir();
-        }
+        $tmpStatus = MaterialImageStorageService::ensurePhpUploadTempDir();
         materialImagesApiJson([
             'ok' => true,
             'images_dir' => $imagesDir,
@@ -98,9 +96,11 @@ if ($method === 'GET') {
             'thumbnails_dir_exists' => $thumbsDir !== '' && is_dir($thumbsDir),
             'images_dir_writable' => $imagesDir !== '' && is_dir($imagesDir) && is_writable($imagesDir),
             'thumbnails_dir_writable' => $thumbsDir !== '' && is_dir($thumbsDir) && is_writable($thumbsDir),
-            'upload_tmp_dir' => $uploadTmpDir,
-            'upload_tmp_dir_exists' => is_dir($uploadTmpDir),
-            'upload_tmp_dir_writable' => is_dir($uploadTmpDir) && is_writable($uploadTmpDir),
+            'upload_tmp_dir' => $tmpStatus['configured'],
+            'upload_tmp_dir_active' => $tmpStatus['active'],
+            'upload_tmp_dir_exists' => $tmpStatus['exists'],
+            'upload_tmp_dir_writable' => $tmpStatus['writable'],
+            'upload_tmp_dir_created' => $tmpStatus['created'],
             'gd_loaded' => function_exists('imagecreatetruecolor'),
             'upload_max_filesize' => (string) ini_get('upload_max_filesize'),
             'post_max_size' => (string) ini_get('post_max_size'),
