@@ -103,6 +103,34 @@ final class MaterialImageSyncService
         ]);
     }
 
+    public static function findQueuedFileNameByHash(string $sha256): ?string
+    {
+        self::ensureTable();
+        $sha256 = strtolower(trim($sha256));
+        if ($sha256 === '') {
+            return null;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            "SELECT file_name
+             FROM material_image_sync_queue
+             WHERE local_sha256 = :sha256
+               AND sync_status IN ('pending', 'syncing', 'synced')
+             ORDER BY
+                CASE sync_status
+                    WHEN 'pending' THEN 0
+                    WHEN 'syncing' THEN 1
+                    ELSE 2
+                END,
+                updated_at DESC
+             LIMIT 1"
+        );
+        $stmt->execute(['sha256' => $sha256]);
+        $fileName = $stmt->fetchColumn();
+
+        return is_string($fileName) && $fileName !== '' ? $fileName : null;
+    }
+
     /** @return array{pending: int, syncing: int, synced: int, failed: int, total: int} */
     public static function stats(): array
     {

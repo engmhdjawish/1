@@ -515,6 +515,7 @@ $statusLabels = [
     renderQueue();
 
     const formData = new FormData();
+    formData.append('action', 'upload');
     formData.append('file', blob, item.name);
 
     return new Promise((resolve) => {
