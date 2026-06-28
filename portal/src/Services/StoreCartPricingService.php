@@ -198,6 +198,9 @@ final class StoreCartPricingService
                 'offer_badge' => $current['offer_badge'] ?? null,
                 'offer_title_ar' => $current['offer_title_ar'] ?? null,
                 'special_offer_id' => $current['special_offer_id'] ?? null,
+                'customer_show_price' => $line['customer_show_price'] ?? null,
+                'added_store_section' => $line['added_store_section'] ?? null,
+                'added_store_offer' => $line['added_store_offer'] ?? null,
             ]));
 
             if ($change !== null) {

@@ -32,7 +32,8 @@ $files = @(
     'public\login.php',
     'public\index.php',
     'src\Services\StoreCartPricingService.php',
-    'src\Support\StoreCartApi.php'
+    'src\Support\StoreCartApi.php',
+    'public\api\store-cart.php'
 )
 
 Write-Step "PHP syntax check -> $PortalDir"
