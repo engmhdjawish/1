@@ -175,6 +175,48 @@ $statusLabels = [
 <script>
 (() => {
   const API_URL = '/dashboard/material-images-api.php';
+  const API_HEADERS = {
+    Accept: 'application/json',
+    'X-Dashboard-Ajax': '1',
+    'X-Requested-With': 'XMLHttpRequest',
+  };
+
+  async function apiJson(url, options = {}) {
+    const response = await fetch(url, {
+      credentials: 'same-origin',
+      headers: { ...API_HEADERS, ...(options.headers || {}) },
+      ...options,
+    });
+    const raw = await response.text();
+    let payload = {};
+    if (raw.trim() !== '') {
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        const preview = raw.replace(/\s+/g, ' ').trim().slice(0, 120);
+        throw new Error(preview ? `استجابة غير صالحة من الخادم [HTTP ${response.status}]: ${preview}` : `استجابة غير صالحة من الخادم [HTTP ${response.status}]`);
+      }
+    }
+    if (payload.login) {
+      throw new Error(payload.message || 'انتهت جلسة الدخول. أعد تحميل الصفحة وسجّل الدخول.');
+    }
+    return { response, payload };
+  }
+
+  function parseUploadResponse(xhr) {
+    const raw = xhr.responseText || '';
+    try {
+      return raw.trim() === '' ? {} : JSON.parse(raw);
+    } catch {
+      const preview = raw.replace(/\s+/g, ' ').trim().slice(0, 120);
+      return {
+        ok: false,
+        message: preview
+          ? `استجابة غير صالحة من الخادم [HTTP ${xhr.status}]: ${preview}`
+          : `استجابة غير صالحة من الخادم [HTTP ${xhr.status}]`,
+      };
+    }
+  }
   const QUEUE_STORAGE_KEY = 'materialImages.uploadQueue';
   const DB_NAME = 'materialImagesUploadDb';
   const DB_STORE = 'files';
@@ -472,6 +514,9 @@ $statusLabels = [
     return new Promise((resolve) => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', API_URL);
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.setRequestHeader('X-Dashboard-Ajax', '1');
+      xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
       xhr.upload.onprogress = (event) => {
         if (!event.lengthComputable) return;
         item.progress = Math.max(1, Math.round((event.loaded / event.total) * 100));
@@ -479,12 +524,7 @@ $statusLabels = [
       };
       xhr.onreadystatechange = () => {
         if (xhr.readyState !== 4) return;
-        let payload = null;
-        try {
-          payload = JSON.parse(xhr.responseText || '{}');
-        } catch {
-          payload = { ok: false, message: 'استجابة غير صالحة من الخادم' };
-        }
+        const payload = parseUploadResponse(xhr);
 
         if (xhr.status >= 200 && xhr.status < 300 && payload.ok) {
           item.status = 'done';
@@ -616,8 +656,7 @@ $statusLabels = [
 
   async function refreshStats() {
     try {
-      const response = await fetch(`${API_URL}?action=overview`);
-      const payload = await response.json();
+      const { payload } = await apiJson(`${API_URL}?action=overview`);
       if (!payload.ok) return;
 
       const statLocal = document.getElementById('statLocalCount');
@@ -882,8 +921,7 @@ $statusLabels = [
 
   async function refreshOverview() {
     try {
-      const response = await fetch(`${API_URL}?action=overview&queue_page=${syncQueuePage}&queue_page_size=${syncQueuePageSize}`);
-      const payload = await response.json();
+      const { payload } = await apiJson(`${API_URL}?action=overview&queue_page=${syncQueuePage}&queue_page_size=${syncQueuePageSize}`);
       if (payload.ok) {
         if (typeof payload.pending_deletable === 'number') {
           pendingDeletableTotal = payload.pending_deletable;
@@ -899,8 +937,7 @@ $statusLabels = [
   async function loadSyncQueuePage(page) {
     syncQueuePage = Math.max(1, page);
     try {
-      const response = await fetch(`${API_URL}?action=queue&page=${syncQueuePage}&page_size=${syncQueuePageSize}`);
-      const payload = await response.json();
+      const { payload } = await apiJson(`${API_URL}?action=queue&page=${syncQueuePage}&page_size=${syncQueuePageSize}`);
       if (payload.ok) {
         renderSyncQueue(payload, payload.sync || {});
       }
@@ -915,8 +952,8 @@ $statusLabels = [
     form.append('action', 'sync-next');
     form.append('queue_page', String(syncQueuePage));
     form.append('queue_page_size', String(syncQueuePageSize));
-    const res = await fetch(API_URL, { method: 'POST', body: form });
-    return res.json();
+    const { payload } = await apiJson(API_URL, { method: 'POST', body: form });
+    return payload;
   }
 
   async function processSyncQueue() {

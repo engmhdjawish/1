@@ -8,6 +8,11 @@ final class DashboardHttp
 {
     public static function wantsJson(): bool
     {
+        $script = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+        if ($script !== '' && str_ends_with($script, '-api.php')) {
+            return true;
+        }
+
         $accept = strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? ''));
         if (str_contains($accept, 'application/json')) {
             return true;

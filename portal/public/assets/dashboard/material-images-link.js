@@ -30,6 +30,7 @@
 const API_URL = '/dashboard/material-images-api.php';
   const API_HEADERS = {
     Accept: 'application/json',
+    'X-Dashboard-Ajax': '1',
     'X-Requested-With': 'XMLHttpRequest',
   };
 

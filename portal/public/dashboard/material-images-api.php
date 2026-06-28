@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+ob_start();
+
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
@@ -9,71 +11,60 @@ use Portal\Services\MaterialImageLinkService;
 use Portal\Services\MaterialImageStorageService;
 use Portal\Services\MaterialImageSyncService;
 use Portal\Services\PortalSettingsService;
+use Portal\Support\DashboardHttp;
 use Throwable;
-
-header('Content-Type: application/json; charset=utf-8');
 
 /** @param array<string, mixed> $payload */
 function materialImagesApiJson(array $payload, int $status = 200): never
 {
-    if (!headers_sent()) {
-        http_response_code($status);
-        header('Content-Type: application/json; charset=utf-8');
-    }
-
-    $flags = JSON_UNESCAPED_UNICODE;
-    if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) {
-        $flags |= JSON_INVALID_UTF8_SUBSTITUTE;
-    }
-
-    $encoded = json_encode($payload, $flags);
-    if ($encoded === false) {
-        $encoded = json_encode([
-            'ok' => false,
-            'message' => 'تعذر ترميز استجابة الخادم.',
-        ], JSON_UNESCAPED_UNICODE) ?: '{"ok":false,"message":"json encode failed"}';
-    }
-
-    echo $encoded;
-    exit;
+    DashboardHttp::emitJson($payload, $status);
 }
 
-WebSession::requireAnyPermission(['images.upload', 'images.view']);
-MaterialImageStorageService::ensureSettings();
+set_exception_handler(static function (Throwable $exception): void {
+    materialImagesApiJson([
+        'ok' => false,
+        'message' => 'تعذر معالجة الطلب: ' . $exception->getMessage(),
+    ], 500);
+});
 
-$user = WebSession::user();
-$userId = isset($user['id']) ? (string) $user['id'] : null;
+try {
+    WebSession::requireAnyPermission(['images.upload', 'images.view']);
+    MaterialImageStorageService::ensureSettings();
 
-MaterialImageSyncService::ensureTable();
-MaterialImageSyncService::recoverStaleSyncing();
-MaterialImageSyncService::recoverSyncedWithoutGuid();
+    $user = WebSession::user();
+    $userId = isset($user['id']) ? (string) $user['id'] : null;
 
-$method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    MaterialImageSyncService::ensureTable();
+    MaterialImageSyncService::recoverStaleSyncing();
+    MaterialImageSyncService::recoverSyncedWithoutGuid();
+
+    $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    if (ob_get_length() > 0) {
+        ob_clean();
+    }
 
 if ($method === 'GET') {
     $action = trim((string) ($_GET['action'] ?? 'stats'));
 
     if ($action === 'stats') {
-        echo json_encode([
+        materialImagesApiJson([
             'ok' => true,
             'stats' => MaterialImageStorageService::stats(),
             'banner' => MaterialImageStorageService::detailsBannerRequirements(),
-        ], JSON_UNESCAPED_UNICODE);
-        exit;
+        ]);
     }
 
     if ($action === 'overview') {
         $queuePage = max(1, (int) ($_GET['queue_page'] ?? 1));
         $queuePageSize = max(5, min(50, (int) ($_GET['queue_page_size'] ?? 20)));
-        echo json_encode([
+        materialImagesApiJson([
             'ok' => true,
             'local' => MaterialImageStorageService::stats(),
             'sync' => MaterialImageSyncService::stats(),
             'api' => PortalSettingsService::apiHealth(),
             'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
             'pending_deletable' => MaterialImageSyncService::countDeletablePending(),
-        ], JSON_UNESCAPED_UNICODE);
-        exit;
+        ]);
     }
 
     if ($action === 'queue') {
@@ -154,16 +145,31 @@ if ($method === 'POST') {
         $action = 'upload';
     }
 
+    $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+    if ($action === 'upload' && $file === [] && $contentLength > 0 && empty($_POST)) {
+        materialImagesApiJson([
+            'ok' => false,
+            'message' => 'تعذر استلام الملف. تحقق من upload_max_filesize و post_max_size في PHP.',
+        ], 413);
+    }
+
     if ($action === 'upload') {
-        $result = MaterialImageStorageService::uploadSingle($file, $userId);
-        echo json_encode([
-            'ok' => (bool) ($result['ok'] ?? false),
-            'message' => (string) ($result['message'] ?? ''),
-            'file_name' => (string) ($result['file_name'] ?? ''),
-            'replaced' => (bool) ($result['replaced'] ?? false),
-            'sync' => MaterialImageSyncService::stats(),
-        ], JSON_UNESCAPED_UNICODE);
-        exit;
+        try {
+            $result = MaterialImageStorageService::uploadSingle($file, $userId);
+            materialImagesApiJson([
+                'ok' => (bool) ($result['ok'] ?? false),
+                'message' => (string) ($result['message'] ?? ''),
+                'file_name' => (string) ($result['file_name'] ?? ''),
+                'replaced' => (bool) ($result['replaced'] ?? false),
+                'sync' => MaterialImageSyncService::stats(),
+            ], ($result['ok'] ?? false) ? 200 : 400);
+        } catch (Throwable $exception) {
+            materialImagesApiJson([
+                'ok' => false,
+                'message' => 'تعذر رفع الصورة: ' . $exception->getMessage(),
+                'sync' => MaterialImageSyncService::stats(),
+            ], 500);
+        }
     }
 
     if ($action === 'sync-next') {
@@ -497,4 +503,10 @@ if ($method === 'POST') {
 }
 
 http_response_code(405);
-echo json_encode(['ok' => false, 'message' => 'الطريقة غير مدعومة.'], JSON_UNESCAPED_UNICODE);
+materialImagesApiJson(['ok' => false, 'message' => 'الطريقة غير مدعومة.'], 405);
+} catch (Throwable $exception) {
+    materialImagesApiJson([
+        'ok' => false,
+        'message' => 'تعذر معالجة الطلب: ' . $exception->getMessage(),
+    ], 500);
+}
