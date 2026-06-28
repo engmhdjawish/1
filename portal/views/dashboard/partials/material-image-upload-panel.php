@@ -458,6 +458,77 @@ $statusLabels = [
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
+  function guessMimeFromName(name) {
+    const ext = String(name || '').split('.').pop()?.toLowerCase() || '';
+    return ({
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
+    })[ext] || 'application/octet-stream';
+  }
+
+  function blobToUploadFile(blob, name) {
+    const type = blob.type || guessMimeFromName(name);
+    if (typeof File !== 'undefined') {
+      return new File([blob], name, { type });
+    }
+    return blob;
+  }
+
+  function uint8ToBase64(bytes) {
+    const chunkSize = 0x8000;
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+  }
+
+  function shouldRetryUploadWithBase64(payload, status) {
+    if (payload?.ok) return false;
+    const message = String(payload?.message || '');
+    if (payload?.upload_error_code === 4) return true;
+    return /لم يصل|لم يُرسل|ملف غير صالح|upload_tmp|تعذر استلام/i.test(message)
+      || (status === 400 && /multipart|ملف/i.test(message));
+  }
+
+  function dedupeQueueItems(items) {
+    const byName = new Map();
+    for (const item of items) {
+      const key = String(item.name || '').toLowerCase();
+      if (!key) continue;
+      const existing = byName.get(key);
+      if (!existing) {
+        byName.set(key, item);
+        continue;
+      }
+      if (existing.status === 'done' && item.status !== 'done') {
+        byName.set(key, item);
+      } else if (existing.status !== 'done' && item.status === 'done') {
+        continue;
+      } else if (item.status === 'error' && existing.status !== 'error') {
+        byName.set(key, item);
+      }
+    }
+    return Array.from(byName.values());
+  }
+
+  function prepareQueueForResume() {
+    if (!queue) return;
+    queue.items = dedupeQueueItems(queue.items);
+    for (const item of queue.items) {
+      if (item.status === 'error' || item.status === 'uploading') {
+        item.status = 'pending';
+        item.progress = 0;
+        item.error = '';
+      }
+    }
+    saveQueue();
+    renderQueue();
+  }
+
   async function buildQueueFromFiles(fileList) {
     const files = Array.from(fileList || []);
     if (files.length === 0) return;
@@ -467,10 +538,28 @@ $statusLabels = [
       return;
     }
 
+    if (queue && hasPendingUploadItems()) {
+      if (!confirm('يوجد طابور رفع سابق. استبداله بالملفات الجديدة؟')) {
+        if (picker) picker.value = '';
+        return;
+      }
+      await idbClearQueue(queue.id);
+    }
+
+    const seen = new Set();
+    const uniqueFiles = [];
+    for (const file of files) {
+      const key = String(file.name || '').toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      uniqueFiles.push(file);
+    }
+    if (uniqueFiles.length === 0) return;
+
     queue = {
       id: uid(),
       createdAt: new Date().toISOString(),
-      items: files.map((file) => ({
+      items: uniqueFiles.map((file) => ({
         id: uid(),
         name: file.name,
         size: file.size,
@@ -481,14 +570,54 @@ $statusLabels = [
       })),
     };
 
-    for (let i = 0; i < files.length; i++) {
-      await idbPut(`${queue.id}:${queue.items[i].id}`, files[i]);
+    for (let i = 0; i < uniqueFiles.length; i++) {
+      await idbPut(`${queue.id}:${queue.items[i].id}`, uniqueFiles[i]);
     }
 
     saveQueue();
     uploadSessionStarted = false;
     paused = false;
+    if (picker) picker.value = '';
     renderQueue();
+  }
+
+  function uploadViaMultipart(file, item) {
+    const formData = new FormData();
+    formData.append('action', 'upload');
+    formData.append('file', file, item.name);
+
+    return new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', API_URL);
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        item.progress = Math.max(1, Math.round((event.loaded / event.total) * 100));
+        renderQueue();
+      };
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState !== 4) return;
+        const payload = parseUploadResponse(xhr);
+        resolve({ payload, status: xhr.status });
+      };
+      xhr.onerror = () => {
+        resolve({
+          payload: { ok: false, message: 'انقطع الاتصال أثناء الرفع' },
+          status: 0,
+        });
+      };
+      xhr.send(formData);
+    });
+  }
+
+  async function uploadViaBase64(blob, item) {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const form = new FormData();
+    form.append('action', 'upload-data');
+    form.append('file_name', item.name);
+    form.append('file_data', uint8ToBase64(bytes));
+    const { response, payload } = await apiJson(API_URL, { method: 'POST', body: form });
+    return { payload, status: response.status };
   }
 
   async function uploadItem(item) {
@@ -508,54 +637,50 @@ $statusLabels = [
     saveQueue();
     renderQueue();
 
-    const formData = new FormData();
-    formData.append('action', 'upload');
-    formData.append('file', blob, item.name);
-
-    return new Promise((resolve) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', API_URL);
-      xhr.setRequestHeader('Accept', 'application/json');
-      xhr.setRequestHeader('X-Dashboard-Ajax', '1');
-      xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-      xhr.upload.onprogress = (event) => {
-        if (!event.lengthComputable) return;
-        item.progress = Math.max(1, Math.round((event.loaded / event.total) * 100));
+    const file = blobToUploadFile(blob, item.name);
+    let result;
+    try {
+      result = await uploadViaMultipart(file, item);
+      if (shouldRetryUploadWithBase64(result.payload, result.status)) {
+        item.progress = Math.max(item.progress, 1);
         renderQueue();
-      };
-      xhr.onreadystatechange = () => {
-        if (xhr.readyState !== 4) return;
-        const payload = parseUploadResponse(xhr);
-
-        if (xhr.status >= 200 && xhr.status < 300 && payload.ok) {
-          item.status = 'done';
-          item.progress = 100;
-          item.replaced = !!payload.replaced;
-          idbDelete(`${queue.id}:${item.id}`);
-          resolve(true);
-        } else {
-          item.status = 'error';
-          item.error = payload.message || `فشل الرفع (رمز ${xhr.status})`;
-          item.progress = 0;
-          resolve(false);
-        }
-        saveQueue();
-        renderQueue();
-      };
-      xhr.onerror = () => {
+        result = await uploadViaBase64(blob, item);
+      }
+    } catch (error) {
+      try {
+        result = await uploadViaBase64(blob, item);
+      } catch (fallbackError) {
         item.status = 'error';
-        item.error = 'انقطع الاتصال أثناء الرفع';
+        item.error = fallbackError instanceof Error ? fallbackError.message : 'فشل الرفع';
         item.progress = 0;
         saveQueue();
         renderQueue();
-        resolve(false);
-      };
-      xhr.send(formData);
-    });
+        return false;
+      }
+    }
+
+    const payload = result.payload || {};
+    if (result.status >= 200 && result.status < 300 && payload.ok) {
+      item.status = 'done';
+      item.progress = 100;
+      item.replaced = !!payload.replaced;
+      idbDelete(`${queue.id}:${item.id}`);
+      saveQueue();
+      renderQueue();
+      return true;
+    }
+
+    item.status = 'error';
+    item.error = payload.message || `فشل الرفع (رمز ${result.status || '—'})`;
+    item.progress = 0;
+    saveQueue();
+    renderQueue();
+    return false;
   }
 
   async function processQueue() {
     if (!queue || uploading) return;
+    prepareQueueForResume();
     uploading = true;
     paused = false;
     uploadSessionStarted = true;
@@ -618,6 +743,7 @@ $statusLabels = [
         replaced: !!item.replaced,
       })),
     };
+    queue.items = dedupeQueueItems(queue.items);
 
     for (const item of queue.items) {
       if (item.status === 'pending' || item.status === 'error') {
@@ -1004,6 +1130,7 @@ $statusLabels = [
   }
 
   picker?.addEventListener('change', async () => {
+    if (!picker?.files?.length) return;
     await buildQueueFromFiles(picker.files);
   });
 

@@ -86,6 +86,10 @@ if ($method === 'GET') {
         $settings = MaterialImageStorageService::settings();
         $imagesDir = (string) ($settings['images_dir'] ?? '');
         $thumbsDir = (string) ($settings['thumbnails_dir'] ?? '');
+        $uploadTmpDir = trim((string) ini_get('upload_tmp_dir'));
+        if ($uploadTmpDir === '') {
+            $uploadTmpDir = sys_get_temp_dir();
+        }
         materialImagesApiJson([
             'ok' => true,
             'images_dir' => $imagesDir,
@@ -94,6 +98,9 @@ if ($method === 'GET') {
             'thumbnails_dir_exists' => $thumbsDir !== '' && is_dir($thumbsDir),
             'images_dir_writable' => $imagesDir !== '' && is_dir($imagesDir) && is_writable($imagesDir),
             'thumbnails_dir_writable' => $thumbsDir !== '' && is_dir($thumbsDir) && is_writable($thumbsDir),
+            'upload_tmp_dir' => $uploadTmpDir,
+            'upload_tmp_dir_exists' => is_dir($uploadTmpDir),
+            'upload_tmp_dir_writable' => is_dir($uploadTmpDir) && is_writable($uploadTmpDir),
             'gd_loaded' => function_exists('imagecreatetruecolor'),
             'upload_max_filesize' => (string) ini_get('upload_max_filesize'),
             'post_max_size' => (string) ini_get('post_max_size'),
@@ -232,6 +239,36 @@ if ($method === 'POST') {
     if ($action === 'upload') {
         try {
             $result = MaterialImageStorageService::uploadSingle($file, $userId);
+            materialImagesApiJson([
+                'ok' => (bool) ($result['ok'] ?? false),
+                'message' => (string) ($result['message'] ?? ''),
+                'file_name' => (string) ($result['file_name'] ?? ''),
+                'replaced' => (bool) ($result['replaced'] ?? false),
+                'sync' => materialImagesSyncStatsSafe(),
+            ], ($result['ok'] ?? false) ? 200 : 400);
+        } catch (Throwable $exception) {
+            materialImagesApiJson([
+                'ok' => false,
+                'message' => 'تعذر رفع الصورة: ' . $exception->getMessage(),
+                'sync' => materialImagesSyncStatsSafe(),
+            ], 500);
+        }
+    }
+
+    if ($action === 'upload-data') {
+        $fileName = trim((string) ($_POST['file_name'] ?? ''));
+        $encoded = (string) ($_POST['file_data'] ?? '');
+        if ($encoded === '') {
+            materialImagesApiJson(['ok' => false, 'message' => 'لم يُرسل محتوى الملف.'], 400);
+        }
+
+        $binary = base64_decode($encoded, true);
+        if ($binary === false || $binary === '') {
+            materialImagesApiJson(['ok' => false, 'message' => 'محتوى الملف غير صالح (base64).'], 400);
+        }
+
+        try {
+            $result = MaterialImageStorageService::uploadSingleFromBinary($binary, $fileName, $userId);
             materialImagesApiJson([
                 'ok' => (bool) ($result['ok'] ?? false),
                 'message' => (string) ($result['message'] ?? ''),
