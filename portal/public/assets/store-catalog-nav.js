@@ -227,6 +227,127 @@
     return groups.reduce((total, group) => total + (group.chips?.length || 0), 0);
   }
 
+  function getUrlParamValues(url, param) {
+    const values = [];
+    url.searchParams.forEach((value, key) => {
+      if (key === param || key === `${param}[]` || key.startsWith(`${param}[`)) {
+        values.push(value);
+      }
+    });
+    return values;
+  }
+
+  function syncFilterFormFromUrl(urlString) {
+    const form = catalogRoot()?.querySelector('.store-filters-sidebar-inner');
+    if (!form) return;
+
+    const url = new URL(urlString, window.location.origin);
+    const searchInput = form.querySelector('#store-search-q');
+    if (searchInput) {
+      searchInput.value = url.searchParams.get('q') || '';
+    }
+
+    form.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+      const param = input.name.replace(/\[\]$/, '');
+      const selected = new Set(getUrlParamValues(url, param));
+      input.checked = selected.has(input.value);
+    });
+
+    const availability = url.searchParams.get('isAvailable');
+    form.querySelectorAll('input[name="isAvailable"]').forEach((input) => {
+      if (availability === null || availability === '') {
+        input.checked = input.value === '';
+        return;
+      }
+      input.checked = input.value === availability;
+    });
+
+    [
+      'minWarehouseQuantity',
+      'maxWarehouseQuantity',
+      'minUnitSalePriceSyp',
+      'maxUnitSalePriceSyp',
+      'minUnitSalePriceUsd',
+      'maxUnitSalePriceUsd',
+      'minUnitPurchasePriceUsd',
+      'maxUnitPurchasePriceUsd',
+    ].forEach((name) => {
+      const input = form.querySelector(`input[name="${name}"]`);
+      if (input) {
+        input.value = url.searchParams.get(name) || '';
+      }
+    });
+
+    const groupBy = form.querySelector('#store-group-by');
+    if (groupBy) {
+      groupBy.value = url.searchParams.get('groupBy') || 'none';
+    }
+  }
+
+  function removeFilterChipOptimistically(chipLink) {
+    const section = chipLink.closest('.store-active-filters');
+    if (!section) return;
+
+    const group = chipLink.closest('.store-active-filter-group');
+    chipLink.remove();
+    if (group && group.querySelectorAll('.store-active-chip').length === 0) {
+      group.remove();
+    }
+
+    const remaining = section.querySelectorAll('.store-active-chip').length;
+    updateMobileFilterBadge(remaining);
+    if (remaining === 0) {
+      section.remove();
+    }
+  }
+
+  function clearFilterChipsOptimistically() {
+    catalogRoot()?.querySelector('.store-active-filters')?.remove();
+    updateMobileFilterBadge(0);
+  }
+
+  function renderOptimisticFilterChipSection(groups, targetUrl) {
+    const root = catalogRoot();
+    const results = root?.querySelector('.store-results');
+    if (!results) return;
+
+    updateMobileFilterBadge(countOptimisticFilterChips(groups));
+
+    let section = results.querySelector('.store-active-filters');
+    if (groups.length === 0) {
+      section?.remove();
+      return;
+    }
+
+    const clearUrl = buildClearAllFiltersUrl(targetUrl);
+    const groupsHtml = groups.map((group) => {
+      const chipsHtml = group.chips.map((chip) => (
+        `<a href="${escapeHtml(chip.url)}" class="store-active-chip" title="إزالة ${escapeHtml(chip.text)}">`
+        + `<span>${escapeHtml(chip.text)}</span>`
+        + '<span class="store-active-chip-remove material-symbols-outlined" aria-hidden="true">close</span>'
+        + '</a>'
+      )).join('');
+      return `<div class="store-active-filter-group store-active-filter-group--${escapeHtml(group.tone)}">`
+        + `<span class="store-active-filter-group-label">${escapeHtml(group.label)}</span>`
+        + `<div class="store-active-filter-chips">${chipsHtml}</div>`
+        + '</div>';
+    }).join('');
+
+    const html = '<div class="store-active-filters-head">'
+      + '<span class="store-active-filters-title">الفلاتر المختارة</span>'
+      + `<a href="${escapeHtml(clearUrl)}" class="store-active-filters-clear">مسح الكل</a>`
+      + '</div>'
+      + groupsHtml;
+
+    if (!section) {
+      section = document.createElement('section');
+      section.className = 'store-active-filters';
+      section.setAttribute('aria-label', 'الفلاتر المطبّقة');
+      results.insertBefore(section, results.firstChild);
+    }
+    section.innerHTML = html;
+  }
+
   function showOptimisticFilterChips(form, targetUrl) {
     const root = catalogRoot();
     const results = root?.querySelector('.store-results');
@@ -317,41 +438,16 @@
       }]);
     }
 
-    updateMobileFilterBadge(countOptimisticFilterChips(groups));
+    renderOptimisticFilterChipSection(groups, targetUrl);
+  }
 
-    let section = results.querySelector('.store-active-filters');
-    if (groups.length === 0) {
-      section?.remove();
-      return;
+  function applyOptimisticFilterChipNavigation(link, targetUrl) {
+    if (link.classList.contains('store-active-chip')) {
+      removeFilterChipOptimistically(link);
+    } else if (link.classList.contains('store-active-filters-clear')) {
+      clearFilterChipsOptimistically();
     }
-
-    const clearUrl = buildClearAllFiltersUrl(targetUrl);
-    const groupsHtml = groups.map((group) => {
-      const chipsHtml = group.chips.map((chip) => (
-        `<a href="${escapeHtml(chip.url)}" class="store-active-chip" title="إزالة ${escapeHtml(chip.text)}">`
-        + `<span>${escapeHtml(chip.text)}</span>`
-        + '<span class="store-active-chip-remove material-symbols-outlined" aria-hidden="true">close</span>'
-        + '</a>'
-      )).join('');
-      return `<div class="store-active-filter-group store-active-filter-group--${escapeHtml(group.tone)}">`
-        + `<span class="store-active-filter-group-label">${escapeHtml(group.label)}</span>`
-        + `<div class="store-active-filter-chips">${chipsHtml}</div>`
-        + '</div>';
-    }).join('');
-
-    const html = '<div class="store-active-filters-head">'
-      + '<span class="store-active-filters-title">الفلاتر المختارة</span>'
-      + `<a href="${escapeHtml(clearUrl)}" class="store-active-filters-clear">مسح الكل</a>`
-      + '</div>'
-      + groupsHtml;
-
-    if (!section) {
-      section = document.createElement('section');
-      section.className = 'store-active-filters';
-      section.setAttribute('aria-label', 'الفلاتر المطبّقة');
-      results.insertBefore(section, results.firstChild);
-    }
-    section.innerHTML = html;
+    syncFilterFormFromUrl(targetUrl);
   }
 
   function closeFilterDrawer() {
@@ -414,6 +510,9 @@
       link.addEventListener('click', (event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
+        if (link.classList.contains('store-active-chip') || link.classList.contains('store-active-filters-clear')) {
+          applyOptimisticFilterChipNavigation(link, href);
+        }
         closeFilterDrawer();
         navigateStore(href);
       });
