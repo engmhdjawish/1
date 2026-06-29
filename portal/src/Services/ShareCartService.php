@@ -290,18 +290,34 @@ final class ShareCartService
 
     /**
      * Re-check cart lines against warehouse minus open orders.
+     * Items in the unavailable list are moved back to the cart when stock returns.
      *
-     * @return array{moved: list<string>, notices: list<string>}
+     * @return array{moved: list<string>, restored: list<string>, notices: list<string>}
      */
     public static function reconcileStock(string $token): array
     {
         $token = trim($token);
         if ($token === '') {
-            return ['moved' => [], 'notices' => []];
+            return ['moved' => [], 'restored' => [], 'notices' => []];
         }
 
         $moved = [];
+        $restored = [];
         $notices = [];
+
+        foreach (array_keys(self::unavailableItems($token)) as $guid) {
+            $unavailable = $_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY][$guid] ?? null;
+            if (!is_array($unavailable)) {
+                continue;
+            }
+            $notice = self::tryRestoreUnavailableLine($token, (string) $guid, $unavailable);
+            if ($notice === null) {
+                continue;
+            }
+            $restored[] = (string) $guid;
+            $notices[] = $notice;
+        }
+
         foreach (self::items($token) as $guid => $line) {
             $check = StockReservationService::validateCartLine($line);
             if ($check['available_packages'] <= 0) {
@@ -323,8 +339,88 @@ final class ShareCartService
 
         return [
             'moved' => $moved,
+            'restored' => $restored,
             'notices' => array_values(array_unique(array_filter($notices, static fn (string $n): bool => trim($n) !== ''))),
         ];
+    }
+
+    /** @return string|null User-facing notice when quantity was restored to the cart */
+    private static function tryRestoreUnavailableLine(string $token, string $materialGuid, array $line): ?string
+    {
+        $token = trim($token);
+        $materialGuid = trim($materialGuid);
+        if ($token === '' || $materialGuid === '') {
+            return null;
+        }
+
+        if (!isset($_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY][$materialGuid])) {
+            return null;
+        }
+
+        $line = self::normalizeLine($line);
+        $requested = max(0.0, (float) ($line['quantity'] ?? 0));
+        if ($requested <= 0) {
+            unset($_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY][$materialGuid]);
+
+            return null;
+        }
+
+        $check = StockReservationService::validateCartLine($line);
+        if ($check['available_packages'] <= 0 || $check['capped_packages'] <= 0) {
+            return null;
+        }
+
+        $name = trim((string) ($line['material_name_ar'] ?? 'المادة'));
+        $packageUnit = trim((string) ($line['package_unit'] ?? '')) ?: 'طرد';
+        $restoreQty = (float) $check['capped_packages'];
+
+        if (!isset($_SESSION[self::SESSION_KEY][$token]['items']) || !is_array($_SESSION[self::SESSION_KEY][$token]['items'])) {
+            $_SESSION[self::SESSION_KEY][$token]['items'] = [];
+        }
+
+        $items = &$_SESSION[self::SESSION_KEY][$token]['items'];
+        $existingQty = isset($items[$materialGuid]) && is_array($items[$materialGuid])
+            ? max(0.0, (float) ($items[$materialGuid]['quantity'] ?? 0))
+            : 0.0;
+
+        $cartLine = isset($items[$materialGuid]) && is_array($items[$materialGuid])
+            ? array_merge($line, $items[$materialGuid])
+            : $line;
+        $cartLine['quantity'] = $existingQty + $restoreQty;
+        unset($cartLine['stock_message'], $cartLine['stock_unavailable_at']);
+
+        $finalCheck = StockReservationService::validateCartLine($cartLine);
+        if ($finalCheck['capped_packages'] <= 0) {
+            return null;
+        }
+
+        $actualInCart = (float) $finalCheck['capped_packages'];
+        $actuallyRestored = max(0.0, round($actualInCart - $existingQty, 4));
+        if ($actuallyRestored <= 0) {
+            return null;
+        }
+
+        $cartLine['quantity'] = $actualInCart;
+        $items[$materialGuid] = self::normalizeLine($cartLine);
+
+        $remaining = max(0.0, round($requested - $actuallyRestored, 4));
+        if ($remaining > 0.0001) {
+            $waiting = $line;
+            $waiting['quantity'] = $remaining;
+            $waiting['stock_message'] = 'بانتظار توفر باقي الكمية ('
+                . StockReservationService::formatPackages($remaining) . ' ' . $packageUnit . ').';
+            $waiting['stock_unavailable_at'] = (string) ($line['stock_unavailable_at'] ?? date('c'));
+            $_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY][$materialGuid] = self::normalizeLine($waiting);
+        } else {
+            unset($_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY][$materialGuid]);
+        }
+
+        if ($remaining > 0.0001) {
+            return 'عاد «' . $name . '» جزئياً إلى السلة ('
+                . StockReservationService::formatPackages($actuallyRestored) . ' ' . $packageUnit . ').';
+        }
+
+        return 'عاد «' . $name . '» إلى السلة بعد توفر الكمية.';
     }
 
     /** @param list<string> $submittedGuids @param list<array<string, mixed>> $unavailableLines */
