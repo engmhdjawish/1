@@ -112,6 +112,14 @@ $buildNextSortValue = static function (string $field) use ($activeSort, $parseSo
 };
 $activeSortParsed = $parseSortClause($activeSort);
 
+$storeCanonicalMissingParams = [];
+if ($isClientFilterVisible('sort') && $allowSorting && !array_key_exists('sort', $_GET)) {
+    $storeCanonicalMissingParams['sort'] = $activeSort;
+}
+if ($isClientFilterVisible('groupBy') && !array_key_exists('groupBy', $_GET) && $selectedGroupBy !== 'none') {
+    $storeCanonicalMissingParams['groupBy'] = $selectedGroupBy;
+}
+
 $activeFilterCount = 0;
 if (trim((string) ($filters['q'] ?? '')) !== '') {
     $activeFilterCount++;
@@ -763,6 +771,9 @@ require __DIR__ . '/partials/store-filter-group.php';
         return $url . $separator . 'preview=' . rawurlencode($previewEdge);
     };
     ?>
+    <?php if ($storeCanonicalMissingParams !== []): ?>
+      <script type="application/json" data-store-canonical-query><?= json_encode($storeCanonicalMissingParams, JSON_UNESCAPED_UNICODE) ?></script>
+    <?php endif; ?>
     <script type="application/json" data-store-preview-paging><?= json_encode([
           'page' => $page,
           'totalPages' => $totalPages,

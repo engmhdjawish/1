@@ -5,6 +5,7 @@
   'use strict';
 
   const NAV_HEADER = 'X-Store-Nav';
+  const FILTER_DEBOUNCE_MS = 450;
   let navAbort = null;
   let navGeneration = 0;
   let navBusy = false;
@@ -125,6 +126,39 @@
     }
   }
 
+  function syncCanonicalFilterUrl(root) {
+    const script = root?.querySelector('[data-store-canonical-query]');
+    if (!script) return;
+
+    let missingParams = {};
+    try {
+      missingParams = JSON.parse(script.textContent || '{}');
+    } catch {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    let changed = false;
+    Object.entries(missingParams).forEach(([key, value]) => {
+      if (url.searchParams.has(key)) {
+        return;
+      }
+      const normalized = String(value ?? '').trim();
+      if (normalized === '') {
+        return;
+      }
+      url.searchParams.set(key, normalized);
+      changed = true;
+    });
+
+    if (!changed) {
+      return;
+    }
+
+    const nextUrl = url.toString();
+    history.replaceState({ storeCatalogUrl: nextUrl }, '', nextUrl);
+  }
+
   function closeFilterDrawer() {
     document.body.classList.remove('store-filters-drawer-open');
     const backdrop = document.getElementById('store-filters-backdrop');
@@ -132,6 +166,79 @@
       backdrop.classList.remove('is-open');
       backdrop.setAttribute('aria-hidden', 'true');
     }
+  }
+
+  function buildUrlFromGetForm(form, submitter) {
+    const formData = new FormData(form);
+    if (submitter instanceof HTMLElement && submitter.name) {
+      formData.set(submitter.name, submitter.value);
+    }
+    const action = form.getAttribute('action') || window.location.pathname;
+    const url = new URL(action, window.location.origin);
+    url.search = '';
+    formData.forEach((value, key) => {
+      if (key.endsWith('[]')) {
+        url.searchParams.append(key, value);
+      } else {
+        url.searchParams.set(key, value);
+      }
+    });
+    return url.toString();
+  }
+
+  function submitFilterForm(form, submitter) {
+    if (!form || form.dataset.storeSubmitting === '1') {
+      return;
+    }
+    form.dataset.storeSubmitting = '1';
+    closeFilterDrawer();
+    navigateStore(buildUrlFromGetForm(form, submitter));
+  }
+
+  function bindFilterAutoApply(root) {
+    const filterForm = root.querySelector('.store-filters-sidebar-inner');
+    if (!filterForm || filterForm.dataset.storeAutoApplyBound === '1') {
+      return;
+    }
+    filterForm.dataset.storeAutoApplyBound = '1';
+
+    let debounceTimer = null;
+    const scheduleDebouncedSubmit = () => {
+      window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        submitFilterForm(filterForm);
+      }, FILTER_DEBOUNCE_MS);
+    };
+
+    filterForm.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) {
+        return;
+      }
+      if (target.matches('[data-filter-search]')) {
+        return;
+      }
+      if (target.id === 'store-search-q') {
+        return;
+      }
+      if (target.type === 'number') {
+        return;
+      }
+      submitFilterForm(filterForm);
+    });
+
+    filterForm.addEventListener('input', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) {
+        return;
+      }
+      if (target.matches('[data-filter-search]')) {
+        return;
+      }
+      if (target.id === 'store-search-q' || target.type === 'number') {
+        scheduleDebouncedSubmit();
+      }
+    });
   }
 
   function bindCatalogForms(root) {
@@ -147,21 +254,8 @@
         event.preventDefault();
         form.dataset.storeSubmitting = '1';
         const submitter = event.submitter;
-        const formData = new FormData(form);
-        if (submitter instanceof HTMLElement && submitter.name) {
-          formData.set(submitter.name, submitter.value);
-        }
-        const action = form.getAttribute('action') || window.location.pathname;
-        const url = new URL(action, window.location.origin);
-        formData.forEach((value, key) => {
-          if (key.endsWith('[]')) {
-            url.searchParams.append(key, value);
-          } else {
-            url.searchParams.set(key, value);
-          }
-        });
         closeFilterDrawer();
-        navigateStore(url.toString());
+        navigateStore(buildUrlFromGetForm(form, submitter));
       });
     });
   }
@@ -185,8 +279,10 @@
   function bindCatalog(root = catalogRoot()) {
     if (!root) return;
     bindCatalogForms(root);
+    bindFilterAutoApply(root);
     bindCatalogLinks(root);
     syncPreviewPaging(root);
+    syncCanonicalFilterUrl(root);
     if (typeof window.portalStoreFiltersInit === 'function') {
       window.portalStoreFiltersInit(root);
     }
@@ -202,10 +298,6 @@
   async function navigateStore(url, push = true) {
     if (!isStoreCatalogUrl(url)) {
       window.location.href = url;
-      return;
-    }
-
-    if (navBusy) {
       return;
     }
 

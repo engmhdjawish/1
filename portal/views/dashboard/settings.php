@@ -39,6 +39,7 @@ $visibleClientFilters = AccessPolicyService::resolvedVisibleClientFilters($polic
 $policyClientSortFields = array_map('strval', $policyStoreOptions['client_sort_fields'] ?? []);
 $policyAllowSorting = array_key_exists('allow_sorting', $policyStoreOptions) ? (bool) $policyStoreOptions['allow_sorting'] : true;
 $policyDefaultSort = (string) ($policyStoreOptions['default_sort'] ?? 'number:asc');
+$policyDefaultGroupBy = (string) ($policyStoreOptions['default_group_by'] ?? 'none');
 
 $visibleFilterOptions = [
     ['value' => 'search', 'label' => 'بحث نصي'],
@@ -504,6 +505,18 @@ $tabUrl = static function (string $key) use ($tab): string {
                 <option value="name:asc" <?= $policyDefaultSort === 'name:asc' ? 'selected' : '' ?>>الاسم</option>
                 <option value="-unitSalePriceSyp" <?= $policyDefaultSort === '-unitSalePriceSyp' ? 'selected' : '' ?>>السعر ل.س</option>
                 <option value="-unitSalePriceUsd" <?= $policyDefaultSort === '-unitSalePriceUsd' ? 'selected' : '' ?>>السعر $</option>
+              </select>
+            </label>
+            <label class="text-xs">
+              <span class="text-text-muted block mb-0.5">التجميع الافتراضي</span>
+              <select name="option_default_group_by" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+                <option value="none" <?= $policyDefaultGroupBy === 'none' ? 'selected' : '' ?>>بدون</option>
+                <option value="ageCategory" <?= $policyDefaultGroupBy === 'ageCategory' ? 'selected' : '' ?>>الفئة العمرية</option>
+                <option value="sizeRange" <?= $policyDefaultGroupBy === 'sizeRange' ? 'selected' : '' ?>>القياس</option>
+                <option value="materialType" <?= $policyDefaultGroupBy === 'materialType' ? 'selected' : '' ?>>النوع</option>
+                <option value="manufacturer" <?= $policyDefaultGroupBy === 'manufacturer' ? 'selected' : '' ?>>الشركة</option>
+                <option value="countryOfOrigin" <?= $policyDefaultGroupBy === 'countryOfOrigin' ? 'selected' : '' ?>>بلد المنشأ</option>
+                <option value="group" <?= $policyDefaultGroupBy === 'group' ? 'selected' : '' ?>>المجموعة</option>
               </select>
             </label>
             <div class="text-xs md:col-span-2">

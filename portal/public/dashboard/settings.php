@@ -115,6 +115,7 @@ $buildPolicyStoreOptions = static function () use ($parseValues): array {
         'allow_sorting' => isset($_POST['option_allow_sorting']),
         'client_sort_fields' => $parseValues($_POST['option_client_sort_fields'] ?? []),
         'default_sort' => trim((string) ($_POST['option_default_sort'] ?? 'number:asc')),
+        'default_group_by' => trim((string) ($_POST['option_default_group_by'] ?? 'none')),
     ];
 };
 

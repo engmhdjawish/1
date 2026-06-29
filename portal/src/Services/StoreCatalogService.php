@@ -1272,6 +1272,7 @@ final class StoreCatalogService
     private static function parseRequestFilters(array $query, array $storeOptions, callable $isClientFilterVisible): array
     {
         $defaultSort = (string) ($storeOptions['default_sort'] ?? 'number:asc');
+        $defaultGroupBy = (string) ($storeOptions['default_group_by'] ?? 'none');
         $allowSorting = (bool) ($storeOptions['allow_sorting'] ?? true);
 
         return [
@@ -1297,9 +1298,18 @@ final class StoreCatalogService
             'minUnitPurchasePriceUsd' => $isClientFilterVisible('pricePurchaseUsd') ? self::parseNullableFloat($query['minUnitPurchasePriceUsd'] ?? null) : null,
             'maxUnitPurchasePriceUsd' => $isClientFilterVisible('pricePurchaseUsd') ? self::parseNullableFloat($query['maxUnitPurchasePriceUsd'] ?? null) : null,
             'groupBy' => $isClientFilterVisible('groupBy')
-                ? trim((string) ($query['groupBy'] ?? 'none'))
+                ? self::normalizeGroupBy($query['groupBy'] ?? $defaultGroupBy)
                 : 'none',
         ];
+    }
+
+    private static function normalizeGroupBy(mixed $value): string
+    {
+        $value = trim((string) $value);
+
+        return in_array($value, ['none', 'ageCategory', 'sizeRange', 'materialType', 'manufacturer', 'countryOfOrigin', 'group'], true)
+            ? $value
+            : 'none';
     }
 
     /** @param array<string, mixed> $resultFilters @param array<string, mixed> $policyRules @return array<string, mixed> */
