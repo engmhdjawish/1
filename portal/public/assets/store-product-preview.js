@@ -489,8 +489,9 @@
       <form
         method="post"
         class="store-add-cart store-add-cart--preview${inCart ? ' store-add-cart--in-cart' : ''}${partial ? ' store-add-cart--locked' : ''}"
-        action="${esc(p.returnUrl || '/store.php')}"
+        action="#"
         data-store-add-cart="1"
+        data-no-page-loading="1"
         data-cart-mode="${esc(cartMode)}"
         data-partial-package="${partial ? '1' : '0'}"
         data-material-guid="${esc(p.guid)}"

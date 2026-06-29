@@ -139,7 +139,7 @@
   document.addEventListener('submit', (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement)) return;
-    if (form.hasAttribute('data-store-add-cart')) return;
+    if (form.hasAttribute('data-store-add-cart') || form.dataset.noPageLoading === '1') return;
     if (form.method && form.method.toLowerCase() !== 'get') {
       const submitter = event.submitter;
       if (submitter instanceof HTMLElement) {

@@ -204,6 +204,17 @@ if ($customer) {
   <script src="<?= h(portal_asset_url('/assets/store-pref.js')) ?>" defer></script>
 <?php endif; ?>
 <?php if ($enableStoreCartJs): ?>
+  <script>
+    (() => {
+      if (window.__storeCartSubmitGuard) return;
+      window.__storeCartSubmitGuard = true;
+      document.addEventListener('submit', (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-store-add-cart')) return;
+        event.preventDefault();
+      }, true);
+    })();
+  </script>
   <script src="<?= h(portal_asset_url('/assets/store-image-zoom.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/store-cart.js')) ?>" defer></script>
 <?php endif; ?>

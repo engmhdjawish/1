@@ -55,6 +55,7 @@ $cartMode = $inCart
   class="store-add-cart<?= $inCart ? ' store-add-cart--in-cart' : '' ?><?= ($partialPackage || $atLimit) ? ' store-add-cart--locked' : '' ?>"
   action="#"
   data-store-add-cart="1"
+  data-no-page-loading="1"
   data-cart-mode="<?= h($cartMode) ?>"
   data-partial-package="<?= $partialPackage ? '1' : '0' ?>"
   data-material-guid="<?= h($materialGuid) ?>"

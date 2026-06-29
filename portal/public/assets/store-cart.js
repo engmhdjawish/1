@@ -4,11 +4,14 @@
 
   const CART_SYNC_KEY = 'jawish-store-cart-sync';
   const CART_SYNC_CHANNEL = 'jawish-store-cart';
+  const DRAWER_CLOSE_MS = 260;
   const tabId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   let lastRemoteSyncAt = 0;
   let tabHiddenAt = 0;
   let refreshInFlight = null;
   let cartSyncChannel = null;
+  let drawerCloseGuardUntil = 0;
+  let drawerCloseTimer = null;
 
   const handleCartSyncMessage = (message) => {
     if (!message || typeof message !== 'object' || message.tabId === tabId) return;
@@ -1359,6 +1362,9 @@
     const drawerRoot = drawer?.querySelector('[data-store-cart-drawer-root]');
     if (drawerRoot && drawer.classList.contains('is-open')) {
       renderCartRoot(drawerRoot, data);
+    } else if (drawerRoot && lastCartData) {
+      // Keep drawer content warm for the next open without flashing a reload.
+      renderCartRoot(drawerRoot, data);
     }
 
     if (!silent && data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
@@ -1369,26 +1375,68 @@
 
   const cartDrawer = () => document.getElementById('store-cart-drawer');
 
+  const guardDrawerGhostClick = (event) => {
+    if (Date.now() >= drawerCloseGuardUntil) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === 'function') {
+      event.stopImmediatePropagation();
+    }
+  };
+
+  const closeCartDrawer = (event) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    setCartDrawerOpen(false);
+  };
+
   const setCartDrawerOpen = (open) => {
     const drawer = cartDrawer();
     if (!drawer) return;
-    if (!open) {
-      const root = drawer.querySelector('[data-store-cart-drawer-root]');
-      if (root) closeCheckoutSheet(root);
-      if (document.activeElement instanceof HTMLElement && drawer.contains(document.activeElement)) {
-        document.activeElement.blur();
-      }
+
+    if (drawerCloseTimer) {
+      window.clearTimeout(drawerCloseTimer);
+      drawerCloseTimer = null;
     }
-    drawer.hidden = !open;
-    drawer.classList.toggle('is-open', open);
-    drawer.setAttribute('aria-hidden', open ? 'false' : 'true');
-    document.body.classList.toggle('store-cart-drawer-open', open);
+
+    if (open) {
+      drawer.hidden = false;
+      drawerCloseGuardUntil = 0;
+      requestAnimationFrame(() => {
+        drawer.classList.add('is-open');
+        drawer.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('store-cart-drawer-open');
+        document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
+          btn.setAttribute('aria-expanded', 'true');
+        });
+      });
+      return;
+    }
+
+    const root = drawer.querySelector('[data-store-cart-drawer-root]');
+    if (root) closeCheckoutSheet(root);
+    if (document.activeElement instanceof HTMLElement && drawer.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
+
+    drawer.classList.remove('is-open');
+    drawer.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('store-cart-drawer-open');
     document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      btn.setAttribute('aria-expanded', 'false');
     });
+    drawerCloseGuardUntil = Date.now() + DRAWER_CLOSE_MS + 80;
+    drawerCloseTimer = window.setTimeout(() => {
+      drawerCloseTimer = null;
+      if (!drawer.classList.contains('is-open')) {
+        drawer.hidden = true;
+      }
+    }, DRAWER_CLOSE_MS);
   };
 
-  const loadCartDrawer = async () => {
+  const loadCartDrawer = async ({ force = false } = {}) => {
     const drawer = cartDrawer();
     const root = drawer?.querySelector('[data-store-cart-drawer-root]');
     if (!root) return;
@@ -1396,6 +1444,19 @@
     const loadingEl = root.querySelector('[data-cart-drawer-loading]');
     const bodyEl = root.querySelector('[data-cart-body]');
     const summaryEl = root.querySelector('[data-cart-summary]');
+    const hasCached = !force
+      && lastCartData
+      && typeof lastCartData === 'object'
+      && Array.isArray(lastCartData.items);
+
+    if (hasCached) {
+      if (loadingEl) loadingEl.hidden = true;
+      root.classList.remove('is-loading-cart');
+      renderCartRoot(root, lastCartData);
+      refreshCartFromServer({ silent: true });
+      return;
+    }
+
     if (loadingEl) loadingEl.hidden = false;
     root.classList.add('is-loading-cart');
     if (bodyEl) bodyEl.innerHTML = '';
@@ -1418,6 +1479,12 @@
     if (!drawer || drawer.dataset.bound === '1') return;
     drawer.dataset.bound = '1';
 
+    if (!window.__storeCartDrawerGhostGuard) {
+      window.__storeCartDrawerGhostGuard = true;
+      document.addEventListener('click', guardDrawerGhostClick, true);
+      document.addEventListener('touchend', guardDrawerGhostClick, true);
+    }
+
     document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
       if (btn.dataset.cartOpenBound === '1') return;
       btn.dataset.cartOpenBound = '1';
@@ -1428,19 +1495,15 @@
       });
     });
 
-    drawer.querySelectorAll('[data-store-cart-drawer-close]').forEach((btn) => {
-      btn.addEventListener('click', () => setCartDrawerOpen(false));
-    });
-
     drawer.addEventListener('click', (event) => {
-      if (event.target instanceof Element && event.target.closest('[data-store-cart-drawer-close]')) {
-        setCartDrawerOpen(false);
-      }
+      if (!(event.target instanceof Element)) return;
+      if (!event.target.closest('[data-store-cart-drawer-close]')) return;
+      closeCartDrawer(event);
     });
 
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && drawer.classList.contains('is-open')) {
-        setCartDrawerOpen(false);
+        closeCartDrawer(event);
       }
     });
   };
@@ -1500,5 +1563,6 @@
     refreshCartForms,
     setFormCartMode,
     openDrawer: () => { setCartDrawerOpen(true); return loadCartDrawer(); },
+    closeDrawer: closeCartDrawer,
   };
 })();
