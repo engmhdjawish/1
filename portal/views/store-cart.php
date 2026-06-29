@@ -210,7 +210,7 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
                   <input name="guest_name_ar" required value="<?= h($defaultGuestName) ?>" class="store-input mt-1">
                 </label>
                 <label class="block text-sm font-bold">رقم الهاتف *
-                  <input name="guest_phone" required dir="ltr" value="<?= h($defaultGuestPhone) ?>" class="store-input mt-1 text-left">
+                  <input name="guest_phone" required <?= portal_phone_input_attributes() ?> value="<?= h($defaultGuestPhone) ?>" class="store-input mt-1 text-left" placeholder="09xxxxxxxx">
                 </label>
               <?php endif; ?>
               <label class="block text-sm font-bold">ملاحظات

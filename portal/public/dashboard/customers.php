@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $result = WebCustomerService::saveByAdmin(
                 $customerId !== '' ? $customerId : null,
                 trim((string) ($_POST['name_ar'] ?? '')),
-                trim((string) ($_POST['phone'] ?? '')),
+                portal_normalize_phone(trim((string) ($_POST['phone'] ?? ''))),
                 trim((string) ($_POST['email'] ?? '')),
                 trim((string) ($_POST['access_policy_id'] ?? '')),
                 trim((string) ($_POST['status'] ?? 'pending')),

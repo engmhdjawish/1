@@ -224,6 +224,7 @@ if ($customer) {
 <?php if ($enableSiteAnalytics): ?>
   <script src="<?= h(portal_asset_url('/assets/site-analytics.js')) ?>" data-endpoint="/api/site-analytics.php" defer></script>
 <?php endif; ?>
+<script src="<?= h(portal_asset_url('/assets/phone-input.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/pwa.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/site-page-loading.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/notifications.js')) ?>" defer></script>

@@ -242,7 +242,7 @@ $editing = $editCustomer !== null;
 
         <label class="block text-sm">
           <span class="text-text-muted block mb-1">الهاتف</span>
-          <input name="phone" required value="<?= h((string) ($editCustomer['phone'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary">
+          <input name="phone" required <?= portal_phone_input_attributes() ?> value="<?= h((string) ($editCustomer['phone'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary text-left" placeholder="09xxxxxxxx">
         </label>
 
         <label class="block text-sm">

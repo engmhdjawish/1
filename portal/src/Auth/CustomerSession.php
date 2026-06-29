@@ -6,6 +6,7 @@ namespace Portal\Auth;
 
 use Portal\Database;
 use Portal\Services\PortalSessionService;
+use Portal\Support\DigitNormalizer;
 use Portal\Support\PortalUrl;
 use PDO;
 
@@ -34,6 +35,7 @@ final class CustomerSession
 
     public static function login(string $phone, string $password): bool
     {
+        $phone = DigitNormalizer::normalizePhone($phone);
         $pdo = Database::pdo();
         $stmt = $pdo->prepare(
             'SELECT c.*, ap.show_price, ap.show_quantity, ap.allow_cart, ap.allow_order

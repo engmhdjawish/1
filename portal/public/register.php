@@ -14,7 +14,7 @@ $message = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $result = WebCustomerService::registerSelf(
         trim($_POST['name'] ?? ''),
-        trim($_POST['phone'] ?? ''),
+        portal_normalize_phone(trim($_POST['phone'] ?? '')),
         $_POST['password'] ?? '',
         trim($_POST['email'] ?? '') ?: null
     );

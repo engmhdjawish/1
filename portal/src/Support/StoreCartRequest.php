@@ -50,7 +50,7 @@ final class StoreCartRequest
         }
 
         $guestName = trim((string) ($input['guest_name_ar'] ?? ''));
-        $guestPhone = trim((string) ($input['guest_phone'] ?? ''));
+        $guestPhone = DigitNormalizer::normalizePhone(trim((string) ($input['guest_phone'] ?? '')));
         $notes = trim((string) ($input['notes_ar'] ?? ''));
         $loggedInCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
         if ($loggedInCustomer !== null) {
