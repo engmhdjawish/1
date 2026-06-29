@@ -5,7 +5,6 @@
   'use strict';
 
   const NAV_HEADER = 'X-Store-Nav';
-  const FILTER_DEBOUNCE_MS = 450;
   let navAbort = null;
   let navGeneration = 0;
   let navBusy = false;
@@ -159,6 +158,202 @@
     history.replaceState({ storeCatalogUrl: nextUrl }, '', nextUrl);
   }
 
+  function escapeHtml(text) {
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function filterToneForGroup(groupId) {
+    const tones = {
+      materialTypes: 'material',
+      ageCategories: 'age',
+      manufacturers: 'manufacturer',
+      sizeRanges: 'size',
+      countryOfOrigins: 'country',
+      stores: 'stores',
+      groups: 'groups',
+    };
+    return tones[groupId] || 'default';
+  }
+
+  function urlWithoutScalarParam(urlString, key) {
+    const url = new URL(urlString, window.location.origin);
+    url.searchParams.delete(key);
+    url.searchParams.set('page', '1');
+    return url.pathname + url.search;
+  }
+
+  function urlWithoutArrayValue(urlString, param, value) {
+    const url = new URL(urlString, window.location.origin);
+    [param, `${param}[]`].forEach((key) => {
+      const remaining = url.searchParams.getAll(key).filter((item) => item !== value);
+      url.searchParams.delete(key);
+      remaining.forEach((item) => url.searchParams.append(key, item));
+    });
+    url.searchParams.set('page', '1');
+    return url.pathname + url.search;
+  }
+
+  function buildClearAllFiltersUrl(targetUrl) {
+    const source = new URL(targetUrl, window.location.origin);
+    const clear = new URL('/store.php', window.location.origin);
+    const section = source.searchParams.get('section');
+    const offer = source.searchParams.get('offer');
+    if (section) clear.searchParams.set('section', section);
+    if (offer) clear.searchParams.set('offer', offer);
+    return clear.pathname + clear.search;
+  }
+
+  function updateMobileFilterBadge(chipCount) {
+    const openBtn = document.getElementById('store-filters-open');
+    if (!openBtn) return;
+    let badge = openBtn.querySelector('.badge');
+    if (chipCount <= 0) {
+      badge?.remove();
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'badge';
+      openBtn.appendChild(badge);
+    }
+    badge.textContent = String(chipCount);
+  }
+
+  function countOptimisticFilterChips(groups) {
+    return groups.reduce((total, group) => total + (group.chips?.length || 0), 0);
+  }
+
+  function showOptimisticFilterChips(form, targetUrl) {
+    const root = catalogRoot();
+    const results = root?.querySelector('.store-results');
+    if (!results || !form) return;
+
+    const groups = [];
+    const pushGroup = (label, tone, chips) => {
+      const normalized = (chips || []).filter((chip) => chip?.text && chip?.url);
+      if (normalized.length > 0) {
+        groups.push({ label, tone, chips: normalized });
+      }
+    };
+
+    const searchValue = form.querySelector('#store-search-q')?.value?.trim();
+    if (searchValue) {
+      pushGroup('بحث', 'search', [{
+        text: searchValue,
+        url: urlWithoutScalarParam(targetUrl, 'q'),
+      }]);
+    }
+
+    form.querySelectorAll('[data-filter-group]').forEach((accordion) => {
+      const title = accordion.querySelector('.store-filter-accordion-summary span')?.textContent?.trim() || '';
+      const groupId = accordion.getAttribute('data-filter-group') || 'default';
+      const chips = [];
+      accordion.querySelectorAll('input[type="checkbox"]:checked').forEach((input) => {
+        const text = input.closest('.store-filter-option')
+          ?.querySelector('.store-filter-option-text')
+          ?.textContent?.trim() || input.value;
+        const param = input.name.replace(/\[\]$/, '');
+        chips.push({
+          text,
+          url: urlWithoutArrayValue(targetUrl, param, input.value),
+        });
+      });
+      if (title) {
+        pushGroup(title, filterToneForGroup(groupId), chips);
+      }
+    });
+
+    const availability = form.querySelector('input[name="isAvailable"]:checked');
+    if (availability && availability.value !== '') {
+      const text = availability.closest('.store-filter-option')
+        ?.querySelector('.store-filter-option-text')
+        ?.textContent?.trim() || availability.value;
+      pushGroup('التوفر', 'availability', [{
+        text,
+        url: urlWithoutScalarParam(targetUrl, 'isAvailable'),
+      }]);
+    }
+
+    const minWarehouse = form.querySelector('input[name="minWarehouseQuantity"]')?.value?.trim() || '';
+    const maxWarehouse = form.querySelector('input[name="maxWarehouseQuantity"]')?.value?.trim() || '';
+    if (minWarehouse !== '' || maxWarehouse !== '') {
+      const text = `من ${minWarehouse || '…'} إلى ${maxWarehouse || '…'}`;
+      const url = new URL(targetUrl, window.location.origin);
+      url.searchParams.delete('minWarehouseQuantity');
+      url.searchParams.delete('maxWarehouseQuantity');
+      url.searchParams.set('page', '1');
+      pushGroup('مدى الكمية', 'warehouse', [{ text, url: url.pathname + url.search }]);
+    }
+
+    const priceRanges = [
+      ['minUnitSalePriceSyp', 'maxUnitSalePriceSyp', 'سعر البيع ل.س', 'price-syp'],
+      ['minUnitSalePriceUsd', 'maxUnitSalePriceUsd', 'سعر البيع $', 'price-usd'],
+      ['minUnitPurchasePriceUsd', 'maxUnitPurchasePriceUsd', 'سعر الشراء $', 'price-purchase'],
+    ];
+    priceRanges.forEach(([minKey, maxKey, label, tone]) => {
+      const min = form.querySelector(`input[name="${minKey}"]`)?.value?.trim() || '';
+      const max = form.querySelector(`input[name="${maxKey}"]`)?.value?.trim() || '';
+      if (min === '' && max === '') {
+        return;
+      }
+      const text = `من ${min || '…'} إلى ${max || '…'}`;
+      const url = new URL(targetUrl, window.location.origin);
+      url.searchParams.delete(minKey);
+      url.searchParams.delete(maxKey);
+      url.searchParams.set('page', '1');
+      pushGroup(label, tone, [{ text, url: url.pathname + url.search }]);
+    });
+
+    const groupBy = form.querySelector('#store-group-by');
+    if (groupBy && groupBy.value && groupBy.value !== 'none') {
+      const text = groupBy.options[groupBy.selectedIndex]?.textContent?.trim() || groupBy.value;
+      pushGroup('التجميع', 'group-by', [{
+        text,
+        url: urlWithoutScalarParam(targetUrl, 'groupBy'),
+      }]);
+    }
+
+    updateMobileFilterBadge(countOptimisticFilterChips(groups));
+
+    let section = results.querySelector('.store-active-filters');
+    if (groups.length === 0) {
+      section?.remove();
+      return;
+    }
+
+    const clearUrl = buildClearAllFiltersUrl(targetUrl);
+    const groupsHtml = groups.map((group) => {
+      const chipsHtml = group.chips.map((chip) => (
+        `<a href="${escapeHtml(chip.url)}" class="store-active-chip" title="إزالة ${escapeHtml(chip.text)}">`
+        + `<span>${escapeHtml(chip.text)}</span>`
+        + '<span class="store-active-chip-remove material-symbols-outlined" aria-hidden="true">close</span>'
+        + '</a>'
+      )).join('');
+      return `<div class="store-active-filter-group store-active-filter-group--${escapeHtml(group.tone)}">`
+        + `<span class="store-active-filter-group-label">${escapeHtml(group.label)}</span>`
+        + `<div class="store-active-filter-chips">${chipsHtml}</div>`
+        + '</div>';
+    }).join('');
+
+    const html = '<div class="store-active-filters-head">'
+      + '<span class="store-active-filters-title">الفلاتر المختارة</span>'
+      + `<a href="${escapeHtml(clearUrl)}" class="store-active-filters-clear">مسح الكل</a>`
+      + '</div>'
+      + groupsHtml;
+
+    if (!section) {
+      section = document.createElement('section');
+      section.className = 'store-active-filters';
+      section.setAttribute('aria-label', 'الفلاتر المطبّقة');
+      results.insertBefore(section, results.firstChild);
+    }
+    section.innerHTML = html;
+  }
+
   function closeFilterDrawer() {
     document.body.classList.remove('store-filters-drawer-open');
     const backdrop = document.getElementById('store-filters-backdrop');
@@ -186,61 +381,6 @@
     return url.toString();
   }
 
-  function submitFilterForm(form, submitter) {
-    if (!form || form.dataset.storeSubmitting === '1') {
-      return;
-    }
-    form.dataset.storeSubmitting = '1';
-    closeFilterDrawer();
-    navigateStore(buildUrlFromGetForm(form, submitter));
-  }
-
-  function bindFilterAutoApply(root) {
-    const filterForm = root.querySelector('.store-filters-sidebar-inner');
-    if (!filterForm || filterForm.dataset.storeAutoApplyBound === '1') {
-      return;
-    }
-    filterForm.dataset.storeAutoApplyBound = '1';
-
-    let debounceTimer = null;
-    const scheduleDebouncedSubmit = () => {
-      window.clearTimeout(debounceTimer);
-      debounceTimer = window.setTimeout(() => {
-        submitFilterForm(filterForm);
-      }, FILTER_DEBOUNCE_MS);
-    };
-
-    filterForm.addEventListener('change', (event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) {
-        return;
-      }
-      if (target.matches('[data-filter-search]')) {
-        return;
-      }
-      if (target.id === 'store-search-q') {
-        return;
-      }
-      if (target.type === 'number') {
-        return;
-      }
-      submitFilterForm(filterForm);
-    });
-
-    filterForm.addEventListener('input', (event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLInputElement)) {
-        return;
-      }
-      if (target.matches('[data-filter-search]')) {
-        return;
-      }
-      if (target.id === 'store-search-q' || target.type === 'number') {
-        scheduleDebouncedSubmit();
-      }
-    });
-  }
-
   function bindCatalogForms(root) {
     root.querySelectorAll('form').forEach((form) => {
       if (form.dataset.storeNavBound === '1') return;
@@ -254,8 +394,12 @@
         event.preventDefault();
         form.dataset.storeSubmitting = '1';
         const submitter = event.submitter;
+        const targetUrl = buildUrlFromGetForm(form, submitter);
+        if (form.classList.contains('store-filters-sidebar-inner')) {
+          showOptimisticFilterChips(form, targetUrl);
+        }
         closeFilterDrawer();
-        navigateStore(buildUrlFromGetForm(form, submitter));
+        navigateStore(targetUrl);
       });
     });
   }
@@ -279,7 +423,6 @@
   function bindCatalog(root = catalogRoot()) {
     if (!root) return;
     bindCatalogForms(root);
-    bindFilterAutoApply(root);
     bindCatalogLinks(root);
     syncPreviewPaging(root);
     syncCanonicalFilterUrl(root);

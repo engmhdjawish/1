@@ -59,7 +59,7 @@ $renderStoreFilterGroup = static function (
     $searchable = $total >= $searchThreshold;
     $collapsible = $total > $initialVisible;
     ?>
-    <details class="store-filter-accordion" <?= $hasSelection ? 'open' : '' ?> data-filter-group="<?= h($groupId) ?>">
+    <details class="store-filter-accordion" open data-filter-group="<?= h($groupId) ?>">
       <summary class="store-filter-accordion-summary">
         <span><?= h($title) ?></span>
         <?php if ($hasSelection): ?>
@@ -93,9 +93,6 @@ $renderStoreFilterGroup = static function (
                 <?= $isChecked ? 'checked' : '' ?>
               >
               <span class="store-filter-option-text"><?= h($item['label']) ?></span>
-              <?php if ($item['count'] !== null): ?>
-                <span class="store-filter-option-count"><?= (int) $item['count'] ?></span>
-              <?php endif; ?>
             </label>
           <?php endforeach; ?>
         </div>

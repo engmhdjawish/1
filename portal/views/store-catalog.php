@@ -602,7 +602,7 @@ require __DIR__ . '/partials/store-filter-group.php';
             <?php endif; ?>
 
             <?php if ($isClientFilterVisible('availability')): ?>
-              <details class="store-filter-accordion" <?= $availabilityValue !== '' ? 'open' : '' ?>>
+              <details class="store-filter-accordion" open>
                 <summary class="store-filter-accordion-summary"><span>التوفر</span></summary>
                 <div class="store-filter-accordion-body store-filter-options">
                   <?php foreach (['' => 'الكل', '1' => 'متوفر', '0' => 'غير متوفر'] as $value => $label): ?>
@@ -617,7 +617,7 @@ require __DIR__ . '/partials/store-filter-group.php';
             <?php endif; ?>
 
             <?php if ($isClientFilterVisible('warehouseRange')): ?>
-              <details class="store-filter-accordion">
+              <details class="store-filter-accordion" open>
                 <summary class="store-filter-accordion-summary"><span>مدى الكمية</span></summary>
                 <div class="store-filter-accordion-body grid grid-cols-2 gap-2">
                   <div class="store-inline-field mb-0">
@@ -633,7 +633,7 @@ require __DIR__ . '/partials/store-filter-group.php';
             <?php endif; ?>
 
             <?php if ($isClientFilterVisible('priceSaleSyp') || $isClientFilterVisible('priceSaleUsd') || $isClientFilterVisible('pricePurchaseUsd')): ?>
-              <details class="store-filter-accordion">
+              <details class="store-filter-accordion" open>
                 <summary class="store-filter-accordion-summary"><span>المدى السعري</span></summary>
                 <div class="store-filter-accordion-body space-y-2">
                   <?php if ($isClientFilterVisible('priceSaleSyp')): ?>

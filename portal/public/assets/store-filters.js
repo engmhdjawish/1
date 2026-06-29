@@ -185,12 +185,9 @@ window.portalStoreFiltersInit = (root = document) => {
         return '';
       }
       const checked = selected.has(value) ? ' checked' : '';
-      const count = facet?.count != null
-        ? `<span class="store-filter-option-count">${Number.parseInt(String(facet.count), 10) || 0}</span>`
-        : '';
       return `<label class="store-filter-option" data-filter-label="${value.replace(/"/g, '&quot;')}">`
         + `<input type="checkbox" name="${paramName}[]" value="${value.replace(/"/g, '&quot;')}"${checked}>`
-        + `<span class="store-filter-option-text">${value}</span>${count}`
+        + `<span class="store-filter-option-text">${value}</span>`
         + '</label>';
     }).join('');
     if (!rows) {
@@ -216,12 +213,9 @@ window.portalStoreFiltersInit = (root = document) => {
       }
       const label = String(item?.name || item?.Name || item?.code || item?.Code || value);
       const checked = selected.has(value.toLowerCase()) ? ' checked' : '';
-      const count = item?.count != null
-        ? `<span class="store-filter-option-count">${Number.parseInt(String(item.count), 10) || 0}</span>`
-        : '';
       return `<label class="store-filter-option" data-filter-label="${label.replace(/"/g, '&quot;')}">`
         + `<input type="checkbox" name="${paramName}[]" value="${value.replace(/"/g, '&quot;')}"${checked}>`
-        + `<span class="store-filter-option-text">${label}</span>${count}`
+        + `<span class="store-filter-option-text">${label}</span>`
         + '</label>';
     }).join('');
     if (!rows) {
