@@ -507,6 +507,7 @@ function product_preview_payload(
         'packagesAvailable' => $packagesAvailable,
         'packagesAvailableLabel' => $showQuantity ? format_packages_display($packagesAvailable) : '',
         'packaging' => $packaging,
+        'packagingLabel' => format_packaging($packaging) . ' ' . $primaryUnit . ' / ' . $packageUnit,
         'primaryUnit' => $primaryUnit,
         'packageUnit' => $packageUnit,
         'hasOffer' => $hasOffer,

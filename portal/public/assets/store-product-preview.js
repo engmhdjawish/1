@@ -7,6 +7,7 @@
   const imageLoader = document.getElementById('storeProductPreviewImageLoader');
   const titleEl = document.getElementById('storeProductPreviewTitle');
   const subtitleEl = document.getElementById('storeProductPreviewSubtitle');
+  const packagingEl = document.getElementById('storeProductPreviewPackaging');
   const pricesEl = document.getElementById('storeProductPreviewPrices');
   const cartEl = document.getElementById('storeProductPreviewCart');
   const counterEl = document.getElementById('storeProductPreviewCounter');
@@ -254,6 +255,29 @@
       }
     });
     return items;
+  };
+
+  const formatPackagingLabel = (item) => {
+    const label = String(item?.packagingLabel || '').trim();
+    if (label) return label;
+    const packaging = Number(item?.packaging) || 0;
+    if (packaging <= 0) return '';
+    const primaryUnit = String(item?.primaryUnit || 'قطعة').trim() || 'قطعة';
+    const packageUnit = String(item?.packageUnit || 'طرد').trim() || 'طرد';
+    const qty = formatQty(packaging).replace(/\.00$/, '');
+    return `${qty} ${primaryUnit} / ${packageUnit}`;
+  };
+
+  const renderPackaging = (item) => {
+    if (!packagingEl) return;
+    const label = formatPackagingLabel(item);
+    if (!label) {
+      packagingEl.innerHTML = '';
+      packagingEl.hidden = true;
+      return;
+    }
+    packagingEl.innerHTML = `<span class="store-product-preview__packaging-label">التعبئة</span><span class="store-product-preview__packaging-value" dir="ltr">${esc(label)}</span>`;
+    packagingEl.hidden = false;
   };
 
   const renderPrices = (p) => {
@@ -659,6 +683,8 @@
       subtitleEl.textContent = parts.join(' · ');
       subtitleEl.hidden = parts.length === 0;
     }
+
+    renderPackaging(item);
 
     if (pricesEl) pricesEl.innerHTML = renderPrices(item);
     mountCartForm(item, cartEl);
