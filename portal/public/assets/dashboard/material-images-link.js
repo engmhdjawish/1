@@ -401,6 +401,40 @@ const API_URL = '/dashboard/material-images-api.php';
     return fetchJson(API_URL, { method: 'POST', body: form });
   }
 
+  function itemStillInUnlinkedList(items, item) {
+    const key = cardKey(item);
+    const guid = String(item?.amine_image_guid || '').trim();
+    const fileName = String(item?.file_name || '').trim();
+    return (items || []).some((row) => {
+      if (key && cardKey(row) === key) return true;
+      if (guid && String(row?.amine_image_guid || '').trim() === guid) return true;
+      return fileName !== '' && String(row?.file_name || '').trim() === fileName;
+    });
+  }
+
+  async function recoverCardIfAssignSucceededOnServer(item, card) {
+    if (currentLinkFilter() !== 'unlinked') return false;
+    try {
+      const payload = await fetchJson(`${API_URL}?action=link-sources-page&page=1&page_size=${Math.max(pageSize, 24)}&link_filter=unlinked`);
+      if (!payload.ok || itemStillInUnlinkedList(payload.items, item)) return false;
+      const successMessage = 'تم الربط (تأكيد من قائمة الأمين).';
+      linkStatus.textContent = successMessage;
+      const cardStatus = card?.querySelector('.card-status');
+      if (cardStatus) cardStatus.textContent = '';
+      if (window.dashboardApp?.showToast) {
+        window.dashboardApp.showToast(successMessage, 'success');
+      }
+      rememberLinkedItem(item);
+      removeCardByItem(item, card);
+      syncSelectAllUnlinked();
+      updateDeleteUnlinkedControls();
+      ensureCardsPlaceholder();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function handleCardAfterAssign(card, item, payload) {
     sourceMaterialMap.delete(cardKey(item));
     if (currentLinkFilter() !== 'unlinked' && item.is_linked_to_material) {
@@ -448,6 +482,7 @@ const API_URL = '/dashboard/material-images-api.php';
           if (statusEl) statusEl.textContent = detail;
         }
       }
+      if (await recoverCardIfAssignSucceededOnServer(item, card)) return;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر تنفيذ الربط.';
       linkStatus.textContent = message;

@@ -686,9 +686,14 @@ final class MaterialImageLinkService
         $tempSourcePath = null;
         [$sourcePath, $tempSourcePath] = self::resolveAssignSourcePaths($sourceFileName, $amineSourceGuid);
         $hasLocal = $sourcePath !== null && is_file($sourcePath);
-        $amineReady = $amineSourceGuid !== '' && self::imageGuidExistsOnAmine($amineSourceGuid);
+        $amineGuidVerified = $amineSourceGuid !== '' && self::imageGuidExistsOnAmine($amineSourceGuid);
 
         if (!$hasLocal && $amineSourceGuid === '') {
+            $reconciled = self::reconcileAssignSuccessFromAmine($materialGuids, $previousPictureGuids, $sourceFileName);
+            if ($reconciled !== null) {
+                return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
+            }
+
             return self::assignError('الصورة غير موجودة على الأمين أو الموقع.');
         }
 
@@ -713,7 +718,7 @@ final class MaterialImageLinkService
 
             $effectiveSourcePath = $hasLocal ? (string) $sourcePath : '';
 
-            if (!$amineReady && $hasLocal && $sourcePath !== null) {
+            if ($hasLocal && $sourcePath !== null && !$amineGuidVerified) {
                 $uploadResult = self::assignViaUpload((string) $sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId);
                 if (($uploadResult['linked'] ?? 0) > 0) {
                     return self::finalizeAssignResult($uploadResult, $sourceFileName, $amineSourceGuid);
@@ -725,7 +730,7 @@ final class MaterialImageLinkService
                 }
             }
 
-            if ($amineReady) {
+            if ($amineSourceGuid !== '') {
                 $amineResult = self::assignViaAmine(
                     $effectiveSourcePath,
                     $sourceFileName,
@@ -790,7 +795,13 @@ final class MaterialImageLinkService
                         return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
                     }
 
-                    return self::combineAssignFailures($amineResult, $uploadResult);
+                    return self::assignFailureOrReconcile(
+                        self::combineAssignFailures($amineResult, $uploadResult),
+                        $materialGuids,
+                        $previousPictureGuids,
+                        $sourceFileName,
+                        $amineSourceGuid
+                    );
                 }
 
                 $reconciled = self::reconcileAssignSuccessFromAmine($materialGuids, $previousPictureGuids, $sourceFileName);
@@ -798,7 +809,7 @@ final class MaterialImageLinkService
                     return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
                 }
 
-                return $amineResult;
+                return self::assignFailureOrReconcile($amineResult, $materialGuids, $previousPictureGuids, $sourceFileName, $amineSourceGuid);
             }
 
             if ($hasLocal && $sourcePath !== null) {
@@ -812,10 +823,15 @@ final class MaterialImageLinkService
                     return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
                 }
 
-                return $uploadResult;
+                return self::assignFailureOrReconcile($uploadResult, $materialGuids, $previousPictureGuids, $sourceFileName, $amineSourceGuid);
             }
 
-            return self::assignError('الصورة غير موجودة على الموقع ولا يمكن رفعها للأمين.');
+            $reconciled = self::reconcileAssignSuccessFromAmine($materialGuids, $previousPictureGuids, $sourceFileName);
+            if ($reconciled !== null) {
+                return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
+            }
+
+            return self::assignError('تعذر تأكيد الربط. حدّث القائمة وتحقق من المادة على الأمين.');
         } finally {
             if ($tempSourcePath !== null && self::isTempProcessingSource($tempSourcePath)) {
                 MaterialImageStorageService::deleteTempProcessedFile($tempSourcePath);
@@ -1691,9 +1707,9 @@ final class MaterialImageLinkService
         array $previousPictureGuids,
         string $sourceFileName
     ): ?array {
-        for ($attempt = 0; $attempt < 2; $attempt++) {
+        for ($attempt = 0; $attempt < 5; $attempt++) {
             if ($attempt > 0) {
-                usleep(250000);
+                usleep(350000);
             }
 
             $items = [];
@@ -1739,6 +1755,27 @@ final class MaterialImageLinkService
         }
 
         return null;
+    }
+
+    /**
+     * @param array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>} $failure
+     * @param list<string> $materialGuids
+     * @param array<string, string> $previousPictureGuids
+     * @return array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>}
+     */
+    private static function assignFailureOrReconcile(
+        array $failure,
+        array $materialGuids,
+        array $previousPictureGuids,
+        string $sourceFileName,
+        string $amineSourceGuid
+    ): array {
+        $reconciled = self::reconcileAssignSuccessFromAmine($materialGuids, $previousPictureGuids, $sourceFileName);
+        if ($reconciled !== null) {
+            return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
+        }
+
+        return $failure;
     }
 
     /** @param array<string, mixed> $response */
