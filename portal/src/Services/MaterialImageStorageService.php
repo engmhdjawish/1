@@ -1483,6 +1483,14 @@ final class MaterialImageStorageService
         return $empty;
     }
 
+    public static function resolveLocalSourcePath(string $imageGuid, string $fileName): ?string
+    {
+        $preview = self::resolveSitePreviewUrls($imageGuid, $fileName);
+        $path = trim((string) ($preview['local_path'] ?? ''));
+
+        return ($path !== '' && is_file($path)) ? $path : null;
+    }
+
     public static function mimeForPath(string $path): string
     {
         return self::detectMime($path);
