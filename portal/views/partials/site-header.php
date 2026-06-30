@@ -162,8 +162,8 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
   </div>
 </header>
 
-<div id="publicNavOverlay" class="lg:hidden fixed inset-0 z-40 bg-black/40 opacity-0 pointer-events-none transition" aria-hidden="true"></div>
-<aside id="publicNavDrawer" class="lg:hidden fixed top-0 right-0 z-50 h-full w-[min(88vw,300px)] bg-white border-l border-gray-200 shadow-2xl flex flex-col translate-x-full" aria-hidden="true">
+<div id="publicNavOverlay" class="fixed inset-0 z-40 bg-black/40 opacity-0 pointer-events-none transition" aria-hidden="true"></div>
+<aside id="publicNavDrawer" class="fixed top-0 right-0 z-50 h-full w-[min(88vw,300px)] bg-white border-l border-gray-200 shadow-2xl flex flex-col translate-x-full" aria-hidden="true">
   <div class="site-drawer__head">
     <div class="site-drawer__brand">
       <?php if (!empty($companyLogoUrl)): ?>
