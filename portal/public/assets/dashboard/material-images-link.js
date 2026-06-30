@@ -100,7 +100,11 @@ const API_URL = '/dashboard/material-images-api.php';
   let deleteUnlinkedQueue = null;
   const pageSize = 12;
   const sourceMaterialMap = new Map();
+  const recentlyLinkedKeys = new Set();
   const MIN_MATERIAL_SEARCH_LEN = 2;
+  const SOURCE_FILTER_DEBOUNCE_MS = 500;
+  const MATERIAL_SEARCH_DEBOUNCE_MS = 400;
+  let sourceSearchTimer = null;
 
   function clearSourceMaterialSearch() {
     if (sourceMaterialSearch) {
@@ -215,6 +219,8 @@ const API_URL = '/dashboard/material-images-api.php';
     sourceCards?.querySelectorAll('.preview-btn img').forEach((img) => {
       if (!(img instanceof HTMLImageElement)) return;
       img.addEventListener('error', () => {
+        const card = img.closest('article');
+        if (card?.dataset.assigning === '1') return;
         const fallback = img.dataset.fullSrc || previewFallbackUrl(img.src);
         if (fallback && img.src !== fallback) {
           img.src = fallback;
@@ -225,6 +231,68 @@ const API_URL = '/dashboard/material-images-api.php';
 
   function cardKey(item) {
     return item.amine_image_guid || item.file_name || '';
+  }
+
+  function cssAttrEscape(value) {
+    return String(value ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  }
+
+  function findCardForItem(item, card = null) {
+    if (card?.isConnected) return card;
+    if (!sourceCards) return null;
+    const guid = itemImageGuid(item);
+    const fileName = String(item?.file_name || '').trim();
+    if (guid) {
+      const byGuid = sourceCards.querySelector(`article[data-image-guid="${cssAttrEscape(guid)}"]`);
+      if (byGuid) return byGuid;
+    }
+    if (fileName) {
+      const byFile = sourceCards.querySelector(`article[data-file-name="${cssAttrEscape(fileName)}"]`);
+      if (byFile) return byFile;
+    }
+    const key = cardKey(item);
+    if (key) {
+      return sourceCards.querySelector(`article[data-key="${cssAttrEscape(key)}"]`);
+    }
+    return null;
+  }
+
+  function rememberLinkedItem(item) {
+    const key = cardKey(item);
+    if (key) recentlyLinkedKeys.add(key);
+    const guid = itemImageGuid(item);
+    if (guid) recentlyLinkedKeys.add(guid);
+    const fileName = String(item?.file_name || '').trim();
+    if (fileName) recentlyLinkedKeys.add(fileName);
+  }
+
+  function isRecentlyLinkedItem(item) {
+    const key = cardKey(item);
+    if (key && recentlyLinkedKeys.has(key)) return true;
+    const guid = String(item?.amine_image_guid || '').trim();
+    if (guid && recentlyLinkedKeys.has(guid)) return true;
+    const fileName = String(item?.file_name || '').trim();
+    return fileName !== '' && recentlyLinkedKeys.has(fileName);
+  }
+
+  function removeCardByItem(item, card = null) {
+    const target = findCardForItem(item, card);
+    if (target) removeCard(target, item);
+  }
+
+  function setCardAssigning(card, assigning) {
+    if (!card) return;
+    card.dataset.assigning = assigning ? '1' : '0';
+    const previewBtn = card.querySelector('.preview-btn');
+    if (previewBtn instanceof HTMLElement) {
+      previewBtn.style.visibility = assigning ? 'hidden' : '';
+    }
+  }
+
+  function assignSucceeded(payload) {
+    if (!payload || typeof payload !== 'object') return false;
+    if (payload.ok) return true;
+    return Number(payload.linked || 0) > 0;
   }
 
   function itemImageGuid(item, card = null) {
@@ -331,13 +399,18 @@ const API_URL = '/dashboard/material-images-api.php';
     return fetchJson(API_URL, { method: 'POST', body: form });
   }
 
-  function handleCardAfterAssign(card, item) {
-    sourceMaterialMap.set(cardKey(item), []);
-    if (currentLinkFilter() === 'unlinked' || !item.is_linked_to_material) {
-      removeCard(card, item);
+  function handleCardAfterAssign(card, item, payload) {
+    sourceMaterialMap.delete(cardKey(item));
+    if (currentLinkFilter() !== 'unlinked' && item.is_linked_to_material) {
+      loadSources(page);
       return;
     }
-    loadSources(page);
+    if (!assignSucceeded(payload)) return;
+    rememberLinkedItem(item);
+    removeCardByItem(item, card);
+    syncSelectAllUnlinked();
+    updateDeleteUnlinkedControls();
+    ensureCardsPlaceholder();
   }
 
   async function assign(item, items, card, button, statusEl = null) {
@@ -348,13 +421,17 @@ const API_URL = '/dashboard/material-images-api.php';
       return;
     }
     button.disabled = true;
+    setCardAssigning(card, true);
     linkStatus.textContent = 'جاري الربط...';
     if (statusEl) statusEl.textContent = 'جاري الربط...';
     try {
       const payload = await postAssignForm('assign-materials', item, items, card);
+      if (assignSucceeded(payload)) {
+        handleCardAfterAssign(card, item, payload);
+      }
       linkStatus.textContent = payload.message || '';
       if (statusEl) statusEl.textContent = payload.message || '';
-      if (payload.items && payload.items.length && !payload.ok) {
+      if (payload.items && payload.items.length && !assignSucceeded(payload)) {
         const firstFail = payload.items.find((row) => row && row.ok === false);
         if (firstFail?.message) {
           const extra = `${firstFail.material_code || ''} ${firstFail.material_name || ''}`.trim();
@@ -363,12 +440,12 @@ const API_URL = '/dashboard/material-images-api.php';
           if (statusEl) statusEl.textContent = detail;
         }
       }
-      if (payload.ok) handleCardAfterAssign(card, item);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر تنفيذ الربط.';
       linkStatus.textContent = message;
       if (statusEl) statusEl.textContent = message;
     } finally {
+      setCardAssigning(card, false);
       button.disabled = false;
     }
   }
@@ -381,16 +458,20 @@ const API_URL = '/dashboard/material-images-api.php';
     }
     if (!confirm('سيتم فك الربط الحالي ثم ربط الصورة بالمواد المختارة. متابعة؟')) return;
     button.disabled = true;
+    setCardAssigning(card, true);
     if (statusEl) statusEl.textContent = 'جاري الاستبدال...';
     try {
       const payload = await postAssignForm('reassign-materials', item, items, card);
+      if (assignSucceeded(payload)) {
+        handleCardAfterAssign(card, item, payload);
+      }
       if (statusEl) statusEl.textContent = payload.message || '';
       linkStatus.textContent = payload.message || '';
-      if (payload.ok) handleCardAfterAssign(card, item);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر تنفيذ الاستبدال.';
       if (statusEl) statusEl.textContent = message;
     } finally {
+      setCardAssigning(card, false);
       button.disabled = false;
     }
   }
@@ -646,6 +727,7 @@ const API_URL = '/dashboard/material-images-api.php';
     const previewBtn = card.querySelector('.preview-btn');
     if (!input || !sug || !chips || !assignBtn || !cardStatus) return;
 
+    let searchTimer = null;
     let searchRequestId = 0;
 
     const renderSuggestionRows = (rows) => {
@@ -680,13 +762,30 @@ const API_URL = '/dashboard/material-images-api.php';
       }
     };
 
+    const scheduleMaterialLookup = () => {
+      if (searchTimer) clearTimeout(searchTimer);
+      const q = input.value.trim();
+      if (q.length < MIN_MATERIAL_SEARCH_LEN) {
+        searchRequestId += 1;
+        closeSuggestions(card);
+        return;
+      }
+      searchTimer = setTimeout(() => {
+        searchTimer = null;
+        runMaterialLookup(q);
+      }, MATERIAL_SEARCH_DEBOUNCE_MS);
+    };
+
     previewBtn?.addEventListener('click', () => {
       openLightbox(item.preview_full_url || item.preview_url, item.linked_material_name || '');
     });
 
+    input.addEventListener('input', scheduleMaterialLookup);
+
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
         event.preventDefault();
+        if (searchTimer) clearTimeout(searchTimer);
         const q = input.value.trim();
         if (q.length >= MIN_MATERIAL_SEARCH_LEN) {
           runMaterialLookup(q);
@@ -697,6 +796,7 @@ const API_URL = '/dashboard/material-images-api.php';
         return;
       }
       if (event.key === 'Escape') {
+        if (searchTimer) clearTimeout(searchTimer);
         searchRequestId += 1;
         closeSuggestions(card);
       }
@@ -767,7 +867,7 @@ const API_URL = '/dashboard/material-images-api.php';
   }
 
   function renderSources(payload) {
-    const items = payload.items || [];
+    const items = (payload.items || []).filter((item) => !isRecentlyLinkedItem(item));
     if (!items.length) {
       sourceCards.innerHTML = '<div class="text-xs text-text-muted">لا توجد صور في هذه الصفحة.</div>';
     } else {
@@ -815,7 +915,7 @@ const API_URL = '/dashboard/material-images-api.php';
             ${materialCode}
           </div>
           <div class="relative">
-            <input class="material-input h-9 w-full rounded-lg border border-border-subtle px-3 text-xs" placeholder="ابحث بالاسم أو الرمز — Enter للبحث">
+            <input class="material-input h-9 w-full rounded-lg border border-border-subtle px-3 text-xs" placeholder="ابحث بالاسم أو الرمز (كلمات بأي ترتيب)">
             <div class="suggestions hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow max-h-48 overflow-auto"></div>
           </div>
           <div class="chips flex flex-wrap gap-1">${chipsHtml(key)}</div>
@@ -941,15 +1041,26 @@ const API_URL = '/dashboard/material-images-api.php';
   linkFilterButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
       const filter = btn.getAttribute('data-filter') || 'all';
+      recentlyLinkedKeys.clear();
       clearSourceMaterialSearch();
       setLinkFilter(filter);
       loadSources(1);
     }, { signal });
   });
 
+  sourceMaterialSearch?.addEventListener('input', () => {
+    if (sourceSearchTimer) clearTimeout(sourceSearchTimer);
+    sourceSearchTimer = setTimeout(() => {
+      sourceSearchTimer = null;
+      applySourceMaterialSearch();
+    }, SOURCE_FILTER_DEBOUNCE_MS);
+  }, { signal });
+
   sourceMaterialSearch?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
+      if (sourceSearchTimer) clearTimeout(sourceSearchTimer);
+      sourceSearchTimer = null;
       applySourceMaterialSearch();
     }
   }, { signal });
