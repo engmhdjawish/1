@@ -32,7 +32,7 @@
 }
 
 /* على الجوال والشاشات الضيقة: إخفاء الشعار من الهيدر (يبقى في القائمة الجانبية) */
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .site-header {
     --site-header-logo-height: 0;
     --site-header-logo-max-width: 0;
@@ -73,13 +73,13 @@
   text-decoration: none;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .site-header__mobile-logo {
     display: inline-flex;
   }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .site-header__mobile-logo {
     display: none !important;
   }
@@ -218,13 +218,6 @@
   filter:
     drop-shadow(0 2px 6px rgba(0, 0, 0, 0.42))
     drop-shadow(0 0 1px rgba(0, 0, 0, 0.55));
-}
-
-@media (min-width: 768px) {
-  .site-header {
-    --site-header-logo-height: 4.25rem;
-    --site-header-logo-max-width: 14rem;
-  }
 }
 
 @media (min-width: 1024px) {

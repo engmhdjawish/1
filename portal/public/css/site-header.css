@@ -43,11 +43,11 @@
   grid-column: 2;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .site-header__row {
     grid-template-columns: auto 1fr auto;
     gap: 1.25rem;
-    min-height: 4.75rem;
+    min-height: 5.25rem;
   }
 
   .site-header__brand {
@@ -58,16 +58,11 @@
   .site-header__nav {
     display: flex;
     grid-column: 2;
+    min-width: 0;
   }
 
   .site-header__actions {
     grid-column: 3;
-  }
-}
-
-@media (min-width: 1024px) {
-  .site-header__row {
-    min-height: 5.25rem;
   }
 }
 
@@ -86,7 +81,7 @@
   overflow: hidden;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .site-header__brand {
     gap: 0.4rem;
     max-width: none;
@@ -113,7 +108,7 @@
   color: #D81921;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .site-header__menu-btn {
     display: none;
   }
@@ -123,6 +118,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
+  max-width: 100%;
   padding: 0.3rem;
   border-radius: 9999px;
   background: #f8fafc;
@@ -221,7 +217,7 @@
   }
 }
 
-@media (min-width: 640px) and (max-width: 767px) {
+@media (min-width: 640px) and (max-width: 1023px) {
   .site-header {
     --site-header-logo-height: 2rem;
     --site-header-logo-max-width: 3.75rem;
