@@ -431,6 +431,9 @@ const API_URL = '/dashboard/material-images-api.php';
       if (assignSucceeded(payload)) {
         linkStatus.textContent = payload.message || 'تم الربط.';
         if (statusEl) statusEl.textContent = '';
+        if (window.dashboardApp?.showToast) {
+          window.dashboardApp.showToast(payload.message || 'تم الربط.', 'success');
+        }
         handleCardAfterAssign(card, item, payload);
         return;
       }

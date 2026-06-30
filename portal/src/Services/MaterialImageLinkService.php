@@ -553,6 +553,35 @@ final class MaterialImageLinkService
         return self::normalizeImageGuid((string) ($data['id'] ?? $data['Id'] ?? ''));
     }
 
+    private static function resolveAuthoritativeAmineSourceGuid(string $sourceFileName, ?string $knownGuid): string
+    {
+        $fromLookup = self::lookupAmineImageGuidByFileName($sourceFileName);
+        if ($fromLookup !== '') {
+            return $fromLookup;
+        }
+
+        $knownGuid = self::normalizeImageGuid((string) $knownGuid);
+        if ($knownGuid !== '' && self::imageGuidExistsOnAmine($knownGuid)) {
+            return $knownGuid;
+        }
+
+        $local = MaterialImageStorageService::resolveLocalSourcePath($knownGuid, $sourceFileName)
+            ?? MaterialImageStorageService::resolveLocalPath($sourceFileName, false);
+        if ($local !== null && is_file($local)) {
+            $resolved = self::resolveAmineSourceGuid($sourceFileName, $local);
+            if ($resolved !== '' && self::imageGuidExistsOnAmine($resolved)) {
+                return $resolved;
+            }
+        }
+
+        $withoutLocal = self::resolveAmineSourceGuidWithoutLocal($sourceFileName);
+        if ($withoutLocal !== '' && self::imageGuidExistsOnAmine($withoutLocal)) {
+            return $withoutLocal;
+        }
+
+        return $knownGuid !== '' ? $knownGuid : $withoutLocal;
+    }
+
     private static function normalizeImageGuid(string $imageGuid): string
     {
         $imageGuid = strtolower(trim($imageGuid));
@@ -652,19 +681,12 @@ final class MaterialImageLinkService
 
         $previousPictureGuids = self::snapshotMaterialPictureGuids($materialGuids);
 
-        $amineSourceGuid = trim((string) $knownAmineSourceGuid);
-        if ($amineSourceGuid === '') {
-            $quickLocal = MaterialImageStorageService::resolveLocalPath($sourceFileName, false);
-            if ($quickLocal !== null && is_file($quickLocal)) {
-                $amineSourceGuid = self::resolveAmineSourceGuid($sourceFileName, $quickLocal);
-            } else {
-                $amineSourceGuid = self::resolveAmineSourceGuidWithoutLocal($sourceFileName);
-            }
-        }
+        $amineSourceGuid = self::resolveAuthoritativeAmineSourceGuid($sourceFileName, $knownAmineSourceGuid);
 
         $tempSourcePath = null;
         [$sourcePath, $tempSourcePath] = self::resolveAssignSourcePaths($sourceFileName, $amineSourceGuid);
         $hasLocal = $sourcePath !== null && is_file($sourcePath);
+        $amineReady = $amineSourceGuid !== '' && self::imageGuidExistsOnAmine($amineSourceGuid);
 
         if (!$hasLocal && $amineSourceGuid === '') {
             return self::assignError('الصورة غير موجودة على الأمين أو الموقع.');
@@ -691,7 +713,19 @@ final class MaterialImageLinkService
 
             $effectiveSourcePath = $hasLocal ? (string) $sourcePath : '';
 
-            if ($amineSourceGuid !== '') {
+            if (!$amineReady && $hasLocal && $sourcePath !== null) {
+                $uploadResult = self::assignViaUpload((string) $sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId);
+                if (($uploadResult['linked'] ?? 0) > 0) {
+                    return self::finalizeAssignResult($uploadResult, $sourceFileName, $amineSourceGuid);
+                }
+
+                $reconciled = self::reconcileAssignSuccessFromAmine($materialGuids, $previousPictureGuids, $sourceFileName);
+                if ($reconciled !== null) {
+                    return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
+                }
+            }
+
+            if ($amineReady) {
                 $amineResult = self::assignViaAmine(
                     $effectiveSourcePath,
                     $sourceFileName,
@@ -704,9 +738,12 @@ final class MaterialImageLinkService
                 }
 
                 if (self::isSourceNotFoundAssignError($amineResult)) {
-                    $resolvedGuid = $hasLocal
-                        ? self::resolveAmineSourceGuid($sourceFileName, (string) $sourcePath)
-                        : self::resolveAmineSourceGuidWithoutLocal($sourceFileName);
+                    $resolvedGuid = self::lookupAmineImageGuidByFileName($sourceFileName);
+                    if ($resolvedGuid === '') {
+                        $resolvedGuid = $hasLocal
+                            ? self::resolveAmineSourceGuid($sourceFileName, (string) $sourcePath)
+                            : self::resolveAmineSourceGuidWithoutLocal($sourceFileName);
+                    }
                     if ($resolvedGuid !== '' && strcasecmp($resolvedGuid, $amineSourceGuid) !== 0) {
                         $amineSourceGuid = $resolvedGuid;
                         if ($sourcePath === null || !is_file((string) $sourcePath)) {
@@ -1144,7 +1181,9 @@ final class MaterialImageLinkService
     private static function materialPictureGuid(array $material): string
     {
         $guid = trim((string) (
-            $material['pictureGuid']
+            $material['productImageGuid']
+            ?? $material['ProductImageGuid']
+            ?? $material['pictureGuid']
             ?? $material['PictureGuid']
             ?? $material['imageGuid']
             ?? $material['ImageGuid']
@@ -1242,6 +1281,10 @@ final class MaterialImageLinkService
                 'Unit2' => trim((string) ($data['packageUnit'] ?? $data['PackageUnit'] ?? $data['unit2'] ?? $data['Unit2'] ?? '')),
                 'unit2Fact' => $data['packageConversionFactor'] ?? $data['PackageConversionFactor'] ?? $data['unit2Fact'] ?? $data['Unit2Fact'] ?? null,
                 'Unit2Fact' => $data['packageConversionFactor'] ?? $data['PackageConversionFactor'] ?? $data['unit2Fact'] ?? $data['Unit2Fact'] ?? null,
+                'productImageGuid' => $data['productImageGuid'] ?? $data['ProductImageGuid'] ?? null,
+                'ProductImageGuid' => $data['productImageGuid'] ?? $data['ProductImageGuid'] ?? null,
+                'pictureGuid' => $data['productImageGuid'] ?? $data['ProductImageGuid'] ?? $data['pictureGuid'] ?? $data['PictureGuid'] ?? null,
+                'PictureGuid' => $data['productImageGuid'] ?? $data['ProductImageGuid'] ?? $data['pictureGuid'] ?? $data['PictureGuid'] ?? null,
             ]);
         } catch (Throwable) {
             return null;
@@ -1568,6 +1611,19 @@ final class MaterialImageLinkService
         }
 
         $items = array_merge($uploadResult['items'] ?? [], $amineResult['items'] ?? []);
+        if (self::isSourceNotFoundAssignError($amineResult) && $items !== []) {
+            $uploadMessage = self::formatAssignFailureMessage($uploadResult['items'] ?? [], '');
+            if ($uploadMessage !== 'لم يُربط أي مادة من «». تحقق من صلاحيات حساب API (materials.update) واتصال الأمين.') {
+                return [
+                    'ok' => false,
+                    'message' => $uploadMessage,
+                    'linked' => 0,
+                    'failed' => max((int) ($amineResult['failed'] ?? 0), (int) ($uploadResult['failed'] ?? 0)),
+                    'items' => $items,
+                ];
+            }
+        }
+
         $message = self::formatAssignFailureMessage($items, '');
         if ($message === 'لم يُربط أي مادة من «». تحقق من صلاحيات حساب API (materials.update) واتصال الأمين.') {
             $message = trim((string) ($uploadResult['message'] ?? ''));
@@ -1635,48 +1691,54 @@ final class MaterialImageLinkService
         array $previousPictureGuids,
         string $sourceFileName
     ): ?array {
-        $items = [];
-        $linked = 0;
-
-        foreach ($materialGuids as $materialGuid) {
-            $materialGuid = trim($materialGuid);
-            if ($materialGuid === '') {
-                continue;
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            if ($attempt > 0) {
+                usleep(250000);
             }
 
-            $material = self::fetchMaterial($materialGuid);
-            if ($material === null) {
-                continue;
+            $items = [];
+            $linked = 0;
+
+            foreach ($materialGuids as $materialGuid) {
+                $materialGuid = trim($materialGuid);
+                if ($materialGuid === '') {
+                    continue;
+                }
+
+                $material = self::fetchMaterial($materialGuid);
+                if ($material === null) {
+                    continue;
+                }
+
+                $currentPictureGuid = self::materialPictureGuid($material);
+                $previousPictureGuid = (string) ($previousPictureGuids[$materialGuid] ?? '');
+                if ($currentPictureGuid === '' || strcasecmp($currentPictureGuid, $previousPictureGuid) === 0) {
+                    continue;
+                }
+
+                $linked++;
+                $items[] = [
+                    'material_guid' => $materialGuid,
+                    'material_name' => (string) ($material['name'] ?? ''),
+                    'material_code' => (string) ($material['material_code'] ?? ''),
+                    'image_guid' => $currentPictureGuid,
+                    'ok' => true,
+                    'message' => 'تم التأكد من الربط على الأمين.',
+                ];
             }
 
-            $currentPictureGuid = self::materialPictureGuid($material);
-            $previousPictureGuid = (string) ($previousPictureGuids[$materialGuid] ?? '');
-            if ($currentPictureGuid === '' || strcasecmp($currentPictureGuid, $previousPictureGuid) === 0) {
-                continue;
+            if ($linked > 0) {
+                return [
+                    'ok' => true,
+                    'message' => 'تم ربط ' . $linked . ' مادة من الصورة «' . $sourceFileName . '».',
+                    'linked' => $linked,
+                    'failed' => max(0, count($materialGuids) - $linked),
+                    'items' => $items,
+                ];
             }
-
-            $linked++;
-            $items[] = [
-                'material_guid' => $materialGuid,
-                'material_name' => (string) ($material['name'] ?? ''),
-                'material_code' => (string) ($material['material_code'] ?? ''),
-                'image_guid' => $currentPictureGuid,
-                'ok' => true,
-                'message' => 'تم التأكد من الربط على الأمين.',
-            ];
         }
 
-        if ($linked === 0) {
-            return null;
-        }
-
-        return [
-            'ok' => true,
-            'message' => 'تم ربط ' . $linked . ' مادة من الصورة «' . $sourceFileName . '».',
-            'linked' => $linked,
-            'failed' => max(0, count($materialGuids) - $linked),
-            'items' => $items,
-        ];
+        return null;
     }
 
     /** @param array<string, mixed> $response */
