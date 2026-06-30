@@ -292,7 +292,9 @@ const API_URL = '/dashboard/material-images-api.php';
   function assignSucceeded(payload) {
     if (!payload || typeof payload !== 'object') return false;
     if (payload.ok) return true;
-    return Number(payload.linked || 0) > 0;
+    if (Number(payload.linked || 0) > 0) return true;
+    if (Array.isArray(payload.items) && payload.items.some((row) => row && row.ok === true)) return true;
+    return false;
   }
 
   function itemImageGuid(item, card = null) {
@@ -427,11 +429,14 @@ const API_URL = '/dashboard/material-images-api.php';
     try {
       const payload = await postAssignForm('assign-materials', item, items, card);
       if (assignSucceeded(payload)) {
+        linkStatus.textContent = payload.message || 'تم الربط.';
+        if (statusEl) statusEl.textContent = '';
         handleCardAfterAssign(card, item, payload);
+        return;
       }
       linkStatus.textContent = payload.message || '';
       if (statusEl) statusEl.textContent = payload.message || '';
-      if (payload.items && payload.items.length && !assignSucceeded(payload)) {
+      if (payload.items && payload.items.length) {
         const firstFail = payload.items.find((row) => row && row.ok === false);
         if (firstFail?.message) {
           const extra = `${firstFail.material_code || ''} ${firstFail.material_name || ''}`.trim();
@@ -463,7 +468,10 @@ const API_URL = '/dashboard/material-images-api.php';
     try {
       const payload = await postAssignForm('reassign-materials', item, items, card);
       if (assignSucceeded(payload)) {
+        linkStatus.textContent = payload.message || 'تم الاستبدال.';
+        if (statusEl) statusEl.textContent = '';
         handleCardAfterAssign(card, item, payload);
+        return;
       }
       if (statusEl) statusEl.textContent = payload.message || '';
       linkStatus.textContent = payload.message || '';

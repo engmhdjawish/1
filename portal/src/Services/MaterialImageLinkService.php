@@ -653,6 +653,9 @@ final class MaterialImageLinkService
         $sourcePath = MaterialImageStorageService::resolveLocalPath($sourceFileName, false);
         $hasLocal = $sourcePath !== null && is_file($sourcePath);
         $amineSourceGuid = trim((string) $knownAmineSourceGuid);
+        if ($amineSourceGuid !== '' && !self::imageGuidExistsOnAmine($amineSourceGuid)) {
+            $amineSourceGuid = '';
+        }
         if ($amineSourceGuid === '' && $hasLocal) {
             $amineSourceGuid = self::resolveAmineSourceGuid($sourceFileName, $sourcePath);
         } elseif ($amineSourceGuid === '') {
@@ -681,7 +684,32 @@ final class MaterialImageLinkService
             return self::assignError('تعذر تجهيز الصورة مع تفاصيل المادة.');
         }
 
-        $effectiveSourcePath = $hasLocal ? $sourcePath : '';
+        $effectiveSourcePath = $hasLocal ? (string) $sourcePath : '';
+
+        if ($hasLocal) {
+            $uploadResult = self::assignViaUpload($sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId);
+            if (($uploadResult['linked'] ?? 0) > 0) {
+                return self::finalizeAssignResult($uploadResult, $sourceFileName, $amineSourceGuid);
+            }
+
+            if ($amineSourceGuid !== '') {
+                $amineResult = self::assignViaAmine(
+                    $effectiveSourcePath,
+                    $sourceFileName,
+                    $amineSourceGuid,
+                    $materialGuids,
+                    $uploadedByUserId
+                );
+                if (($amineResult['linked'] ?? 0) > 0) {
+                    return self::finalizeAssignResult($amineResult, $sourceFileName, $amineSourceGuid);
+                }
+
+                return self::combineAssignFailures($amineResult, $uploadResult);
+            }
+
+            return $uploadResult;
+        }
+
         if ($amineSourceGuid !== '') {
             $amineResult = self::assignViaAmine(
                 $effectiveSourcePath,
@@ -694,27 +722,10 @@ final class MaterialImageLinkService
                 return self::finalizeAssignResult($amineResult, $sourceFileName, $amineSourceGuid);
             }
 
-            if ($hasLocal) {
-                $uploadResult = self::assignViaUpload($sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId);
-                if (($uploadResult['linked'] ?? 0) > 0) {
-                    return self::finalizeAssignResult($uploadResult, $sourceFileName, $amineSourceGuid);
-                }
-
-                return self::combineAssignFailures($amineResult, $uploadResult);
-            }
-
             return $amineResult;
         }
 
-        if (!$hasLocal) {
-            return self::assignError('الصورة غير موجودة على الموقع ولا يمكن رفعها للأمين.');
-        }
-
-        return self::finalizeAssignResult(
-            self::assignViaUpload($sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId),
-            $sourceFileName,
-            $amineSourceGuid
-        );
+        return self::assignError('الصورة غير موجودة على الموقع ولا يمكن رفعها للأمين.');
     }
 
     /**
@@ -723,7 +734,7 @@ final class MaterialImageLinkService
      */
     private static function finalizeAssignResult(array $result, string $sourceFileName, string $amineSourceGuid): array
     {
-        if (($result['linked'] ?? 0) > 0 && ($result['failed'] ?? 0) === 0) {
+        if (($result['linked'] ?? 0) > 0) {
             self::cleanupStagingSourceAfterAssign($sourceFileName, $amineSourceGuid);
         }
 
@@ -818,7 +829,9 @@ final class MaterialImageLinkService
         }
 
         if (!($response['ok'] ?? false)) {
-            $message = (string) ($response['data']['message'] ?? $response['error'] ?? 'فشل توليد نسخ الصور على الأمين.');
+            $message = self::localizeAmineAssignMessage(
+                (string) ($response['data']['message'] ?? $response['error'] ?? 'فشل توليد نسخ الصور على الأمين.')
+            );
 
             return self::assignError($message);
         }
@@ -1497,12 +1510,21 @@ final class MaterialImageLinkService
     /** @return array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>} */
     private static function combineAssignFailures(array $amineResult, array $uploadResult): array
     {
+        $uploadLinked = (int) ($uploadResult['linked'] ?? 0);
+        $amineLinked = (int) ($amineResult['linked'] ?? 0);
+        if ($uploadLinked > 0) {
+            return $uploadResult;
+        }
+        if ($amineLinked > 0) {
+            return $amineResult;
+        }
+
         $items = array_merge($uploadResult['items'] ?? [], $amineResult['items'] ?? []);
         $message = self::formatAssignFailureMessage($items, '');
         if ($message === 'لم يُربط أي مادة من «». تحقق من صلاحيات حساب API (materials.update) واتصال الأمين.') {
             $message = trim((string) ($uploadResult['message'] ?? ''));
             if ($message === '' || str_starts_with($message, 'تم ')) {
-                $message = (string) ($amineResult['message'] ?? 'لم يُربط أي مادة.');
+                $message = self::localizeAmineAssignMessage((string) ($amineResult['message'] ?? 'لم يُربط أي مادة.'));
             }
         }
 
@@ -1513,6 +1535,18 @@ final class MaterialImageLinkService
             'failed' => max((int) ($amineResult['failed'] ?? 0), (int) ($uploadResult['failed'] ?? 0)),
             'items' => $items,
         ];
+    }
+
+    private static function localizeAmineAssignMessage(string $message): string
+    {
+        $normalized = strtolower(trim($message));
+
+        return match (true) {
+            str_contains($normalized, 'source image was not found') => 'صورة المصدر غير موجودة على الأمين. جرّب إعادة تحميل القائمة.',
+            str_contains($normalized, 'source image file was not found on disk') => 'ملف الصورة غير موجود على قرص الأمين.',
+            str_contains($normalized, 'no valid materials were found') => 'لم تُعثر على مواد صالحة للربط.',
+            default => $message,
+        };
     }
 
     /** @return array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>} */
