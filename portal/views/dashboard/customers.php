@@ -17,6 +17,7 @@ declare(strict_types=1);
 /** @var array<string, mixed>|null $detailsCustomer */
 /** @var list<array<string, mixed>> $customerOrders */
 /** @var int $customerOrderCount */
+/** @var string $orderPriceCurrency */
 
 use Portal\Services\OrderService;
 
@@ -44,6 +45,18 @@ $buildCustomerUrl = static function (array $params): string {
         $params,
         static fn ($value) => $value !== null && $value !== ''
     ));
+};
+
+$formatUsd = static function (float $amount): string {
+    return '$' . number_format($amount, 2, '.', ',');
+};
+
+$formatOrderTotal = static function (array $order) use ($orderPriceCurrency, $formatUsd): string {
+    if ($orderPriceCurrency === 'syp') {
+        return number_format((float) ($order['total_sp'] ?? 0), 0, '.', ',') . ' ل.س';
+    }
+
+    return $formatUsd((float) ($order['total_usd'] ?? 0));
 };
 
 $editing = $editCustomer !== null;
@@ -103,7 +116,7 @@ $editing = $editCustomer !== null;
 <section class="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-5">
   <article class="xl:col-span-2 bg-surface-white rounded-2xl border border-border-subtle shadow-sm overflow-hidden">
     <div class="overflow-x-auto">
-      <table class="w-full min-w-[980px] text-sm">
+      <table class="w-full min-w-[920px] text-sm">
         <thead class="bg-surface-low border-b border-border-subtle text-text-muted">
           <tr>
             <th class="px-5 py-4 text-right font-bold">الاسم</th>
@@ -149,7 +162,7 @@ $editing = $editCustomer !== null;
                 <?= h((string) ($row['access_policy_name_ar'] ?? 'غير محددة')) ?>
               </td>
               <td class="px-5 py-4">
-                <div class="flex items-center justify-end gap-2">
+                <div class="flex flex-wrap items-center justify-end gap-1.5 max-w-[15rem] ms-auto">
                   <a
                     href="<?= h($buildCustomerUrl([
                         'status' => $statusFilter,
@@ -183,15 +196,32 @@ $editing = $editCustomer !== null;
                   <?php endif; ?>
 
                   <?php if ($canApproveCustomers && $status === 'pending'): ?>
-                    <form method="post" class="flex items-center gap-2">
+                    <form method="post" class="flex flex-col items-stretch gap-1.5 w-full min-w-[9.5rem]">
                       <input type="hidden" name="customer_id" value="<?= h((string) ($row['id'] ?? '')) ?>">
-                      <select name="access_policy_id" class="h-9 rounded-lg border border-border-subtle px-2 text-xs" required>
+                      <select name="access_policy_id" class="h-8 rounded-lg border border-border-subtle px-2 text-xs w-full" required>
                         <?php foreach ($policies as $policy): ?>
                           <option value="<?= h((string) $policy['id']) ?>"><?= h((string) $policy['name_ar']) ?></option>
                         <?php endforeach; ?>
                       </select>
-                      <button name="action" value="approve" class="h-9 px-3 rounded-lg bg-green-600 text-white text-xs font-bold">موافقة</button>
-                      <button name="action" value="reject" class="h-9 px-3 rounded-lg bg-red-600 text-white text-xs font-bold">رفض</button>
+                      <div class="flex gap-1">
+                        <button name="action" value="approve" class="h-8 flex-1 px-2 rounded-lg bg-green-600 text-white text-[11px] font-bold">موافقة</button>
+                        <button name="action" value="reject" class="h-8 flex-1 px-2 rounded-lg bg-red-600 text-white text-[11px] font-bold">رفض</button>
+                      </div>
+                    </form>
+                  <?php elseif ($canManageCustomers && $status === 'active'): ?>
+                    <form method="post" onsubmit="return confirm('تعليق هذا الحساب وإنهاء جلساته؟');">
+                      <input type="hidden" name="customer_id" value="<?= h((string) ($row['id'] ?? '')) ?>">
+                      <button name="action" value="suspend" class="h-9 px-3 rounded-lg bg-amber-600 text-white text-xs font-bold">تعليق</button>
+                    </form>
+                  <?php elseif ($canApproveCustomers && in_array($status, ['suspended', 'rejected'], true)): ?>
+                    <form method="post" class="flex flex-col items-stretch gap-1.5 w-full min-w-[9.5rem]">
+                      <input type="hidden" name="customer_id" value="<?= h((string) ($row['id'] ?? '')) ?>">
+                      <select name="access_policy_id" class="h-8 rounded-lg border border-border-subtle px-2 text-xs w-full" required>
+                        <?php foreach ($policies as $policy): ?>
+                          <option value="<?= h((string) $policy['id']) ?>"><?= h((string) $policy['name_ar']) ?></option>
+                        <?php endforeach; ?>
+                      </select>
+                      <button name="action" value="reactivate" class="h-8 px-2 rounded-lg bg-green-600 text-white text-[11px] font-bold w-full">تفعيل</button>
                     </form>
                   <?php endif; ?>
                 </div>
@@ -227,7 +257,7 @@ $editing = $editCustomer !== null;
 
         <label class="block text-sm">
           <span class="text-text-muted block mb-1">الهاتف</span>
-          <input name="phone" required value="<?= h((string) ($editCustomer['phone'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary">
+          <input name="phone" required <?= portal_phone_input_attributes() ?> value="<?= h((string) ($editCustomer['phone'] ?? '')) ?>" class="h-11 w-full rounded-xl border border-border-subtle px-4 focus:border-primary focus:ring-primary text-left" placeholder="09xxxxxxxx">
         </label>
 
         <label class="block text-sm">
@@ -255,6 +285,7 @@ $editing = $editCustomer !== null;
               <option value="<?= h($key) ?>" <?= ((string) ($editCustomer['status'] ?? 'pending')) === $key ? 'selected' : '' ?>><?= h($label) ?></option>
             <?php endforeach; ?>
           </select>
+          <p class="text-xs text-text-muted mt-1">«نشط» يسمح بتسجيل الدخول. «معلق» أو «مرفوض» يوقف الدخول وينهي الجلسات الحالية.</p>
         </label>
 
         <label class="block text-sm">
@@ -272,11 +303,6 @@ $editing = $editCustomer !== null;
           <textarea name="notes_ar" rows="3" class="w-full rounded-xl border border-border-subtle px-4 py-2 focus:border-primary focus:ring-primary"><?= h((string) ($editCustomer['notes_ar'] ?? '')) ?></textarea>
         </label>
 
-        <label class="inline-flex items-center gap-2 text-sm">
-          <input type="checkbox" name="is_active" value="1" <?= ((int) ($editCustomer['is_active'] ?? 0) === 1 || !$editing) ? 'checked' : '' ?> class="rounded border-border-subtle text-primary focus:ring-primary">
-          <span>الحساب نشط</span>
-        </label>
-
         <button class="w-full h-11 rounded-xl bg-primary text-white font-bold hover:brightness-110 transition">
           <?= $editing ? 'حفظ التعديلات' : 'إضافة العميل' ?>
         </button>
@@ -286,42 +312,65 @@ $editing = $editCustomer !== null;
 </section>
 
 <?php if ($detailsCustomer): ?>
-  <div class="dashboard-slide-panel-backdrop fixed inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
-  <aside class="dashboard-slide-panel fixed top-0 left-0 w-full max-w-xl bg-white shadow-2xl overflow-y-auto">
-    <div class="sticky top-0 bg-white border-b border-border-subtle px-5 py-4 flex items-center justify-between">
-      <div>
-        <h2 class="text-lg font-extrabold text-slate-900">تفاصيل العميل</h2>
-        <p class="text-xs text-text-muted mt-1"><?= h((string) ($detailsCustomer['name_ar'] ?? '')) ?></p>
+  <?php
+    $detailStatus = (string) ($detailsCustomer['status'] ?? 'pending');
+    $detailStatusClass = match ($detailStatus) {
+        'active' => 'bg-green-100 text-green-700',
+        'rejected' => 'bg-red-100 text-red-700',
+        'suspended' => 'bg-amber-100 text-amber-700',
+        default => 'bg-blue-100 text-blue-700',
+    };
+    $detailSource = (string) ($detailsCustomer['registration_source'] ?? '');
+  ?>
+  <div class="dashboard-slide-panel-backdrop fixed inset-0 bg-slate-900/40" aria-hidden="true"></div>
+  <aside class="dashboard-slide-panel fixed top-0 left-0 w-full max-w-2xl bg-white shadow-2xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby="customer-details-title">
+    <header class="shrink-0 border-b border-border-subtle px-4 py-3">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-[11px] text-text-muted">تفاصيل العميل</p>
+          <h2 id="customer-details-title" class="text-lg font-extrabold text-slate-900 truncate"><?= h((string) ($detailsCustomer['name_ar'] ?? '')) ?></h2>
+          <p class="text-xs text-text-muted mt-0.5" dir="ltr"><?= h((string) ($detailsCustomer['phone'] ?? '')) ?></p>
+        </div>
+        <a href="<?= h($buildCustomerUrl(['status' => $statusFilter, 'q' => $searchFilter, 'source' => $sourceFilter])) ?>" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-border-subtle hover:bg-surface-low shrink-0" aria-label="إغلاق">
+          <span class="material-symbols-outlined">close</span>
+        </a>
       </div>
-      <a href="<?= h($buildCustomerUrl(['status' => $statusFilter, 'q' => $searchFilter, 'source' => $sourceFilter])) ?>" class="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-surface-low">
-        <span class="material-symbols-outlined">close</span>
-      </a>
-    </div>
-    <div class="p-5 space-y-3 text-sm">
-      <div class="rounded-xl border border-border-subtle p-3">
-        <p class="text-text-muted text-xs mb-1">الهاتف</p>
-        <p class="font-bold"><?= h((string) ($detailsCustomer['phone'] ?? '')) ?></p>
+      <div class="flex flex-wrap gap-1.5 mt-2 items-center">
+        <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $detailStatusClass ?>"><?= h($statusLabels[$detailStatus] ?? $detailStatus) ?></span>
+        <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700"><?= h($sourceLabels[$detailSource] ?? $detailSource) ?></span>
+        <?php if ($canManageCustomers): ?>
+          <a
+            href="<?= h($buildCustomerUrl([
+                'status' => $statusFilter,
+                'q' => $searchFilter,
+                'source' => $sourceFilter,
+                'edit' => (string) ($detailsCustomer['id'] ?? ''),
+            ])) ?>"
+            class="inline-flex items-center gap-1 h-8 px-3 rounded-lg border border-border-subtle bg-white text-[11px] font-bold text-slate-700 hover:bg-surface-low"
+          >
+            <span class="material-symbols-outlined text-sm">edit</span>
+            تعديل
+          </a>
+        <?php endif; ?>
       </div>
-      <div class="rounded-xl border border-border-subtle p-3">
-        <p class="text-text-muted text-xs mb-1">البريد</p>
-        <p class="font-bold"><?= h((string) (($detailsCustomer['email'] ?? '') !== '' ? $detailsCustomer['email'] : 'غير متوفر')) ?></p>
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-4 space-y-3 text-sm">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="rounded-xl border border-border-subtle p-3">
+          <p class="text-text-muted text-xs mb-1">البريد</p>
+          <p class="font-bold break-all"><?= h((string) (($detailsCustomer['email'] ?? '') !== '' ? $detailsCustomer['email'] : 'غير متوفر')) ?></p>
+        </div>
+        <div class="rounded-xl border border-border-subtle p-3">
+          <p class="text-text-muted text-xs mb-1">سياسة الوصول</p>
+          <p class="font-bold"><?= h((string) (($detailsCustomer['access_policy_name_ar'] ?? '') !== '' ? $detailsCustomer['access_policy_name_ar'] : 'غير محددة')) ?></p>
+        </div>
+        <div class="rounded-xl border border-border-subtle p-3 sm:col-span-2">
+          <p class="text-text-muted text-xs mb-1">تاريخ الإنشاء</p>
+          <p class="font-bold"><?= h((string) ($detailsCustomer['created_at'] ?? '')) ?></p>
+        </div>
       </div>
-      <div class="rounded-xl border border-border-subtle p-3">
-        <p class="text-text-muted text-xs mb-1">الحالة</p>
-        <p class="font-bold"><?= h($statusLabels[(string) ($detailsCustomer['status'] ?? 'pending')] ?? (string) ($detailsCustomer['status'] ?? '')) ?></p>
-      </div>
-      <div class="rounded-xl border border-border-subtle p-3">
-        <p class="text-text-muted text-xs mb-1">سياسة الوصول</p>
-        <p class="font-bold"><?= h((string) (($detailsCustomer['access_policy_name_ar'] ?? '') !== '' ? $detailsCustomer['access_policy_name_ar'] : 'غير محددة')) ?></p>
-      </div>
-      <div class="rounded-xl border border-border-subtle p-3">
-        <p class="text-text-muted text-xs mb-1">مصدر التسجيل</p>
-        <p class="font-bold"><?= h($sourceLabels[(string) ($detailsCustomer['registration_source'] ?? '')] ?? (string) ($detailsCustomer['registration_source'] ?? '')) ?></p>
-      </div>
-      <div class="rounded-xl border border-border-subtle p-3">
-        <p class="text-text-muted text-xs mb-1">تاريخ الإنشاء</p>
-        <p class="font-bold"><?= h((string) ($detailsCustomer['created_at'] ?? '')) ?></p>
-      </div>
+
       <?php if ((string) ($detailsCustomer['rejection_reason_ar'] ?? '') !== ''): ?>
         <div class="rounded-xl border border-red-200 bg-red-50 p-3">
           <p class="text-red-700 text-xs mb-1">سبب الرفض</p>
@@ -331,11 +380,11 @@ $editing = $editCustomer !== null;
       <?php if ((string) ($detailsCustomer['notes_ar'] ?? '') !== ''): ?>
         <div class="rounded-xl border border-border-subtle p-3">
           <p class="text-text-muted text-xs mb-1">ملاحظات</p>
-          <p class="font-bold"><?= h((string) ($detailsCustomer['notes_ar'] ?? '')) ?></p>
+          <p class="font-bold whitespace-pre-wrap"><?= h((string) ($detailsCustomer['notes_ar'] ?? '')) ?></p>
         </div>
       <?php endif; ?>
 
-      <div class="rounded-xl border border-border-subtle p-3">
+      <section class="rounded-xl border border-border-subtle p-3">
         <div class="flex items-center justify-between gap-2 mb-3">
           <div>
             <p class="text-text-muted text-xs mb-1">طلبات الموقع</p>
@@ -357,7 +406,7 @@ $editing = $editCustomer !== null;
             <?php foreach ($customerOrders as $orderRow): ?>
               <a
                 href="/dashboard/orders.php?web_customer_id=<?= h((string) ($detailsCustomer['id'] ?? '')) ?>&details=<?= h((string) ($orderRow['id'] ?? '')) ?>"
-                class="block rounded-lg border border-border-subtle px-3 py-2 hover:bg-surface-low"
+                class="block rounded-lg border border-border-subtle px-3 py-2.5 hover:bg-surface-low"
               >
                 <div class="flex items-center justify-between gap-2">
                   <span class="font-bold text-primary" dir="ltr"><?= h((string) ($orderRow['order_number'] ?? '')) ?></span>
@@ -365,12 +414,59 @@ $editing = $editCustomer !== null;
                     <?= h(OrderService::statusLabel((string) ($orderRow['status'] ?? 'pending'))) ?>
                   </span>
                 </div>
-                <p class="text-[11px] text-text-muted mt-1"><?= h((string) ($orderRow['created_at'] ?? '')) ?></p>
+                <div class="flex items-center justify-between gap-2 mt-1.5">
+                  <p class="text-[11px] text-text-muted"><?= h((string) ($orderRow['created_at'] ?? '')) ?></p>
+                  <p class="text-sm font-extrabold text-emerald-700 tabular-nums" dir="ltr"><?= h($formatOrderTotal($orderRow)) ?></p>
+                </div>
               </a>
             <?php endforeach; ?>
           </div>
         <?php endif; ?>
-      </div>
+      </section>
+
+      <?php if ($canApproveCustomers && $detailStatus === 'pending'): ?>
+        <section class="rounded-xl border border-border-subtle p-3">
+          <p class="text-xs font-bold text-slate-700 mb-2">موافقة أو رفض الطلب</p>
+          <form method="post" class="space-y-2">
+            <input type="hidden" name="customer_id" value="<?= h((string) ($detailsCustomer['id'] ?? '')) ?>">
+            <label class="block text-xs">
+              <span class="text-text-muted block mb-1">سياسة الوصول</span>
+              <select name="access_policy_id" class="h-10 w-full rounded-lg border border-border-subtle px-3 text-sm" required>
+                <?php foreach ($policies as $policy): ?>
+                  <option value="<?= h((string) $policy['id']) ?>"><?= h((string) $policy['name_ar']) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </label>
+            <div class="flex gap-2">
+              <button name="action" value="approve" class="h-10 flex-1 rounded-lg bg-green-600 text-white text-sm font-bold">موافقة</button>
+              <button name="action" value="reject" class="h-10 flex-1 rounded-lg bg-red-600 text-white text-sm font-bold">رفض</button>
+            </div>
+          </form>
+        </section>
+      <?php elseif ($canApproveCustomers && in_array($detailStatus, ['suspended', 'rejected'], true)): ?>
+        <section class="rounded-xl border border-border-subtle p-3">
+          <p class="text-xs font-bold text-slate-700 mb-2">إعادة تفعيل الحساب</p>
+          <form method="post" class="space-y-2">
+            <input type="hidden" name="customer_id" value="<?= h((string) ($detailsCustomer['id'] ?? '')) ?>">
+            <label class="block text-xs">
+              <span class="text-text-muted block mb-1">سياسة الوصول</span>
+              <select name="access_policy_id" class="h-10 w-full rounded-lg border border-border-subtle px-3 text-sm" required>
+                <?php foreach ($policies as $policy): ?>
+                  <option value="<?= h((string) $policy['id']) ?>"><?= h((string) $policy['name_ar']) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </label>
+            <button name="action" value="reactivate" class="h-10 w-full rounded-lg bg-green-600 text-white text-sm font-bold">تفعيل</button>
+          </form>
+        </section>
+      <?php elseif ($canManageCustomers && $detailStatus === 'active'): ?>
+        <section class="rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <form method="post" onsubmit="return confirm('تعليق هذا الحساب وإنهاء جلساته؟');">
+            <input type="hidden" name="customer_id" value="<?= h((string) ($detailsCustomer['id'] ?? '')) ?>">
+            <button name="action" value="suspend" class="h-10 w-full rounded-lg bg-amber-600 text-white text-sm font-bold">تعليق الحساب</button>
+          </form>
+        </section>
+      <?php endif; ?>
     </div>
   </aside>
 <?php endif; ?>

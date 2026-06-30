@@ -3,11 +3,17 @@
 declare(strict_types=1);
 
 /** @var list<array<string, mixed>> $cartItems */
+/** @var list<array<string, mixed>> $pricedCartItems */
+/** @var list<array<string, mixed>> $unpricedCartItems */
 /** @var list<array<string, mixed>> $unavailableItems */
 /** @var array{total_sp: float, total_usd: float} $totals */
+/** @var array{total_sp: float, total_usd: float} $displayTotals */
 /** @var bool $allowCart */
 /** @var bool $allowOrder */
 /** @var bool $showPrice */
+/** @var bool $customerShowsPrices */
+/** @var bool $globalShowsPrices */
+/** @var bool $hasMixedPricing */
 /** @var bool $showPriceSyp */
 /** @var bool $showPriceUsd */
 /** @var string $priceMode */
@@ -77,12 +83,65 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
             <a href="/store.php" class="store-btn store-btn--primary mt-4">تصفح المتجر</a>
           </div>
         <?php else: ?>
-          <?php if ($cartItems !== []): ?>
-            <div class="store-cart-lines">
-              <?php foreach ($cartItems as $item): ?>
-                <?php require __DIR__ . '/partials/store-cart-line-card.php'; ?>
-              <?php endforeach; ?>
-            </div>
+          <?php
+            $renderCartSection = static function (
+                array $sectionItems,
+                string $sectionClass,
+                string $icon,
+                string $title,
+                string $subtitle,
+                bool $showSectionHeader
+            ) use ($maxPackagesPerMaterial, $showPriceSyp, $showPriceUsd): void {
+                if ($sectionItems === []) {
+                    return;
+                }
+                ?>
+            <section class="store-cart-section <?= h($sectionClass) ?>">
+              <?php if ($showSectionHeader): ?>
+                <header class="store-cart-section__head">
+                  <div class="store-cart-section__title-row">
+                    <span class="material-symbols-outlined store-cart-section__icon" aria-hidden="true"><?= h($icon) ?></span>
+                    <div>
+                      <h3 class="store-cart-section__title"><?= h($title) ?></h3>
+                      <p class="store-cart-section__subtitle"><?= h($subtitle) ?></p>
+                    </div>
+                  </div>
+                  <span class="store-cart-section__count"><?= count($sectionItems) ?> صنف</span>
+                </header>
+              <?php endif; ?>
+              <div class="store-cart-lines">
+                <?php foreach ($sectionItems as $item): ?>
+                  <?php
+                    $lineShowsPrice = store_line_has_display_price($item);
+                    require __DIR__ . '/partials/store-cart-line-card.php';
+                  ?>
+                <?php endforeach; ?>
+              </div>
+            </section>
+                <?php
+            };
+          ?>
+
+          <?php if ($pricedCartItems !== []): ?>
+            <?php $renderCartSection(
+                $pricedCartItems,
+                'store-cart-section--priced',
+                'sell',
+                'أصناف بسعر محدد',
+                'الأسعار المعروضة قابلة للتحديث حتى إرسال الطلب.',
+                $hasMixedPricing
+            ); ?>
+          <?php endif; ?>
+
+          <?php if ($unpricedCartItems !== []): ?>
+            <?php $renderCartSection(
+                $unpricedCartItems,
+                'store-cart-section--unpriced',
+                'receipt_long',
+                'يُسعّر عند التأكيد',
+                'سيُحدد سعر هذه الأصناف عند مراجعة الطلب.',
+                $hasMixedPricing || $unpricedCartItems !== []
+            ); ?>
           <?php endif; ?>
 
           <?php if ($unavailableItems !== []): ?>
@@ -123,10 +182,20 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
 
       <aside class="lg:col-span-4" data-cart-summary>
         <div class="store-panel store-cart-summary space-y-4">
-          <?php if ($showPriceSyp): ?>
-            <div class="store-cart-summary__total">الإجمالي: <?= format_money((float) $totals['total_sp'], true) ?> ل.س</div>
-          <?php elseif ($showPriceUsd): ?>
-            <div class="store-cart-summary__total">الإجمالي: $<?= number_format((float) $totals['total_usd'], 2, '.', ',') ?></div>
+          <?php
+            $summarySp = (float) ($displayTotals['total_sp'] ?? 0);
+            $summaryUsd = (float) ($displayTotals['total_usd'] ?? 0);
+            $unpricedCount = count($unpricedCartItems);
+          ?>
+          <?php if ($showPriceSyp && $summarySp > 0): ?>
+            <div class="store-cart-summary__total store-price-currency store-price-currency--syp">الإجمالي: <?= format_money($summarySp, true) ?> ل.س</div>
+          <?php elseif ($showPriceUsd && $summaryUsd > 0): ?>
+            <div class="store-cart-summary__total store-price-currency store-price-currency--usd">الإجمالي: $<?= number_format($summaryUsd, 2, '.', ',') ?></div>
+          <?php endif; ?>
+          <?php if ($unpricedCount > 0): ?>
+            <p class="store-cart-summary__unpriced-note">
+              <?= $unpricedCount ?> <?= $unpricedCount === 1 ? 'صنف' : 'أصناف' ?> بدون سعر محدد — يُسعّر عند التأكيد
+            </p>
           <?php endif; ?>
           <button type="button" class="store-btn store-btn--ghost" data-clear-cart>تفريغ السلة</button>
 
@@ -141,7 +210,7 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
                   <input name="guest_name_ar" required value="<?= h($defaultGuestName) ?>" class="store-input mt-1">
                 </label>
                 <label class="block text-sm font-bold">رقم الهاتف *
-                  <input name="guest_phone" required dir="ltr" value="<?= h($defaultGuestPhone) ?>" class="store-input mt-1 text-left">
+                  <input name="guest_phone" required <?= portal_phone_input_attributes() ?> value="<?= h($defaultGuestPhone) ?>" class="store-input mt-1 text-left" placeholder="09xxxxxxxx">
                 </label>
               <?php endif; ?>
               <label class="block text-sm font-bold">ملاحظات

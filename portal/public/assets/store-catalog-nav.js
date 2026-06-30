@@ -125,6 +125,331 @@
     }
   }
 
+  function syncCanonicalFilterUrl(root) {
+    const script = root?.querySelector('[data-store-canonical-query]');
+    if (!script) return;
+
+    let missingParams = {};
+    try {
+      missingParams = JSON.parse(script.textContent || '{}');
+    } catch {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    let changed = false;
+    Object.entries(missingParams).forEach(([key, value]) => {
+      if (url.searchParams.has(key)) {
+        return;
+      }
+      const normalized = String(value ?? '').trim();
+      if (normalized === '') {
+        return;
+      }
+      url.searchParams.set(key, normalized);
+      changed = true;
+    });
+
+    if (!changed) {
+      return;
+    }
+
+    const nextUrl = url.toString();
+    history.replaceState({ storeCatalogUrl: nextUrl }, '', nextUrl);
+  }
+
+  function escapeHtml(text) {
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function filterToneForGroup(groupId) {
+    const tones = {
+      materialTypes: 'material',
+      ageCategories: 'age',
+      manufacturers: 'manufacturer',
+      sizeRanges: 'size',
+      countryOfOrigins: 'country',
+      stores: 'stores',
+      groups: 'groups',
+    };
+    return tones[groupId] || 'default';
+  }
+
+  function urlWithoutScalarParam(urlString, key) {
+    const url = new URL(urlString, window.location.origin);
+    url.searchParams.delete(key);
+    url.searchParams.set('page', '1');
+    return url.pathname + url.search;
+  }
+
+  function urlWithoutArrayValue(urlString, param, value) {
+    const url = new URL(urlString, window.location.origin);
+    [param, `${param}[]`].forEach((key) => {
+      const remaining = url.searchParams.getAll(key).filter((item) => item !== value);
+      url.searchParams.delete(key);
+      remaining.forEach((item) => url.searchParams.append(key, item));
+    });
+    url.searchParams.set('page', '1');
+    return url.pathname + url.search;
+  }
+
+  function buildClearAllFiltersUrl(targetUrl) {
+    const source = new URL(targetUrl, window.location.origin);
+    const clear = new URL('/store.php', window.location.origin);
+    const section = source.searchParams.get('section');
+    const offer = source.searchParams.get('offer');
+    if (section) clear.searchParams.set('section', section);
+    if (offer) clear.searchParams.set('offer', offer);
+    return clear.pathname + clear.search;
+  }
+
+  function updateMobileFilterBadge(chipCount) {
+    const openBtn = document.getElementById('store-filters-open');
+    if (!openBtn) return;
+    let badge = openBtn.querySelector('.badge');
+    if (chipCount <= 0) {
+      badge?.remove();
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'badge';
+      openBtn.appendChild(badge);
+    }
+    badge.textContent = String(chipCount);
+  }
+
+  function countOptimisticFilterChips(groups) {
+    return groups.reduce((total, group) => total + (group.chips?.length || 0), 0);
+  }
+
+  function getUrlParamValues(url, param) {
+    const values = [];
+    url.searchParams.forEach((value, key) => {
+      if (key === param || key === `${param}[]` || key.startsWith(`${param}[`)) {
+        values.push(value);
+      }
+    });
+    return values;
+  }
+
+  function syncFilterFormFromUrl(urlString) {
+    const form = catalogRoot()?.querySelector('.store-filters-sidebar-inner');
+    if (!form) return;
+
+    const url = new URL(urlString, window.location.origin);
+    const searchInput = form.querySelector('#store-search-q');
+    if (searchInput) {
+      searchInput.value = url.searchParams.get('q') || '';
+    }
+
+    form.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+      const param = input.name.replace(/\[\]$/, '');
+      const selected = new Set(getUrlParamValues(url, param));
+      input.checked = selected.has(input.value);
+    });
+
+    const availability = url.searchParams.get('isAvailable');
+    form.querySelectorAll('input[name="isAvailable"]').forEach((input) => {
+      if (availability === null || availability === '') {
+        input.checked = input.value === '';
+        return;
+      }
+      input.checked = input.value === availability;
+    });
+
+    [
+      'minWarehouseQuantity',
+      'maxWarehouseQuantity',
+      'minUnitSalePriceSyp',
+      'maxUnitSalePriceSyp',
+      'minUnitSalePriceUsd',
+      'maxUnitSalePriceUsd',
+      'minUnitPurchasePriceUsd',
+      'maxUnitPurchasePriceUsd',
+    ].forEach((name) => {
+      const input = form.querySelector(`input[name="${name}"]`);
+      if (input) {
+        input.value = url.searchParams.get(name) || '';
+      }
+    });
+
+    const groupBy = form.querySelector('#store-group-by');
+    if (groupBy) {
+      groupBy.value = url.searchParams.get('groupBy') || 'none';
+    }
+  }
+
+  function removeFilterChipOptimistically(chipLink) {
+    const section = chipLink.closest('.store-active-filters');
+    if (!section) return;
+
+    const group = chipLink.closest('.store-active-filter-group');
+    chipLink.remove();
+    if (group && group.querySelectorAll('.store-active-chip').length === 0) {
+      group.remove();
+    }
+
+    const remaining = section.querySelectorAll('.store-active-chip').length;
+    updateMobileFilterBadge(remaining);
+    if (remaining === 0) {
+      section.remove();
+    }
+  }
+
+  function clearFilterChipsOptimistically() {
+    catalogRoot()?.querySelector('.store-active-filters')?.remove();
+    updateMobileFilterBadge(0);
+  }
+
+  function renderOptimisticFilterChipSection(groups, targetUrl) {
+    const root = catalogRoot();
+    const results = root?.querySelector('.store-results');
+    if (!results) return;
+
+    updateMobileFilterBadge(countOptimisticFilterChips(groups));
+
+    let section = results.querySelector('.store-active-filters');
+    if (groups.length === 0) {
+      section?.remove();
+      return;
+    }
+
+    const clearUrl = buildClearAllFiltersUrl(targetUrl);
+    const groupsHtml = groups.map((group) => {
+      const chipsHtml = group.chips.map((chip) => (
+        `<a href="${escapeHtml(chip.url)}" class="store-active-chip" title="إزالة ${escapeHtml(chip.text)}">`
+        + `<span>${escapeHtml(chip.text)}</span>`
+        + '<span class="store-active-chip-remove material-symbols-outlined" aria-hidden="true">close</span>'
+        + '</a>'
+      )).join('');
+      return `<div class="store-active-filter-group store-active-filter-group--${escapeHtml(group.tone)}">`
+        + `<span class="store-active-filter-group-label">${escapeHtml(group.label)}</span>`
+        + `<div class="store-active-filter-chips">${chipsHtml}</div>`
+        + '</div>';
+    }).join('');
+
+    const html = '<div class="store-active-filters-head">'
+      + '<span class="store-active-filters-title">الفلاتر المختارة</span>'
+      + `<a href="${escapeHtml(clearUrl)}" class="store-active-filters-clear">مسح الكل</a>`
+      + '</div>'
+      + groupsHtml;
+
+    if (!section) {
+      section = document.createElement('section');
+      section.className = 'store-active-filters';
+      section.setAttribute('aria-label', 'الفلاتر المطبّقة');
+      results.insertBefore(section, results.firstChild);
+    }
+    section.innerHTML = html;
+  }
+
+  function showOptimisticFilterChips(form, targetUrl) {
+    const root = catalogRoot();
+    const results = root?.querySelector('.store-results');
+    if (!results || !form) return;
+
+    const groups = [];
+    const pushGroup = (label, tone, chips) => {
+      const normalized = (chips || []).filter((chip) => chip?.text && chip?.url);
+      if (normalized.length > 0) {
+        groups.push({ label, tone, chips: normalized });
+      }
+    };
+
+    const searchValue = form.querySelector('#store-search-q')?.value?.trim();
+    if (searchValue) {
+      pushGroup('بحث', 'search', [{
+        text: searchValue,
+        url: urlWithoutScalarParam(targetUrl, 'q'),
+      }]);
+    }
+
+    form.querySelectorAll('[data-filter-group]').forEach((accordion) => {
+      const title = accordion.querySelector('.store-filter-accordion-summary span')?.textContent?.trim() || '';
+      const groupId = accordion.getAttribute('data-filter-group') || 'default';
+      const chips = [];
+      accordion.querySelectorAll('input[type="checkbox"]:checked').forEach((input) => {
+        const text = input.closest('.store-filter-option')
+          ?.querySelector('.store-filter-option-text')
+          ?.textContent?.trim() || input.value;
+        const param = input.name.replace(/\[\]$/, '');
+        chips.push({
+          text,
+          url: urlWithoutArrayValue(targetUrl, param, input.value),
+        });
+      });
+      if (title) {
+        pushGroup(title, filterToneForGroup(groupId), chips);
+      }
+    });
+
+    const availability = form.querySelector('input[name="isAvailable"]:checked');
+    if (availability && availability.value !== '') {
+      const text = availability.closest('.store-filter-option')
+        ?.querySelector('.store-filter-option-text')
+        ?.textContent?.trim() || availability.value;
+      pushGroup('التوفر', 'availability', [{
+        text,
+        url: urlWithoutScalarParam(targetUrl, 'isAvailable'),
+      }]);
+    }
+
+    const minWarehouse = form.querySelector('input[name="minWarehouseQuantity"]')?.value?.trim() || '';
+    const maxWarehouse = form.querySelector('input[name="maxWarehouseQuantity"]')?.value?.trim() || '';
+    if (minWarehouse !== '' || maxWarehouse !== '') {
+      const text = `من ${minWarehouse || '…'} إلى ${maxWarehouse || '…'}`;
+      const url = new URL(targetUrl, window.location.origin);
+      url.searchParams.delete('minWarehouseQuantity');
+      url.searchParams.delete('maxWarehouseQuantity');
+      url.searchParams.set('page', '1');
+      pushGroup('مدى الكمية', 'warehouse', [{ text, url: url.pathname + url.search }]);
+    }
+
+    const priceRanges = [
+      ['minUnitSalePriceSyp', 'maxUnitSalePriceSyp', 'سعر البيع ل.س', 'price-syp'],
+      ['minUnitSalePriceUsd', 'maxUnitSalePriceUsd', 'سعر البيع $', 'price-usd'],
+      ['minUnitPurchasePriceUsd', 'maxUnitPurchasePriceUsd', 'سعر الشراء $', 'price-purchase'],
+    ];
+    priceRanges.forEach(([minKey, maxKey, label, tone]) => {
+      const min = form.querySelector(`input[name="${minKey}"]`)?.value?.trim() || '';
+      const max = form.querySelector(`input[name="${maxKey}"]`)?.value?.trim() || '';
+      if (min === '' && max === '') {
+        return;
+      }
+      const text = `من ${min || '…'} إلى ${max || '…'}`;
+      const url = new URL(targetUrl, window.location.origin);
+      url.searchParams.delete(minKey);
+      url.searchParams.delete(maxKey);
+      url.searchParams.set('page', '1');
+      pushGroup(label, tone, [{ text, url: url.pathname + url.search }]);
+    });
+
+    const groupBy = form.querySelector('#store-group-by');
+    if (groupBy && groupBy.value && groupBy.value !== 'none') {
+      const text = groupBy.options[groupBy.selectedIndex]?.textContent?.trim() || groupBy.value;
+      pushGroup('التجميع', 'group-by', [{
+        text,
+        url: urlWithoutScalarParam(targetUrl, 'groupBy'),
+      }]);
+    }
+
+    renderOptimisticFilterChipSection(groups, targetUrl);
+  }
+
+  function applyOptimisticFilterChipNavigation(link, targetUrl) {
+    if (link.classList.contains('store-active-chip')) {
+      removeFilterChipOptimistically(link);
+    } else if (link.classList.contains('store-active-filters-clear')) {
+      clearFilterChipsOptimistically();
+    }
+    syncFilterFormFromUrl(targetUrl);
+  }
+
   function closeFilterDrawer() {
     document.body.classList.remove('store-filters-drawer-open');
     const backdrop = document.getElementById('store-filters-backdrop');
@@ -132,6 +457,24 @@
       backdrop.classList.remove('is-open');
       backdrop.setAttribute('aria-hidden', 'true');
     }
+  }
+
+  function buildUrlFromGetForm(form, submitter) {
+    const formData = new FormData(form);
+    if (submitter instanceof HTMLElement && submitter.name) {
+      formData.set(submitter.name, submitter.value);
+    }
+    const action = form.getAttribute('action') || window.location.pathname;
+    const url = new URL(action, window.location.origin);
+    url.search = '';
+    formData.forEach((value, key) => {
+      if (key.endsWith('[]')) {
+        url.searchParams.append(key, value);
+      } else {
+        url.searchParams.set(key, value);
+      }
+    });
+    return url.toString();
   }
 
   function bindCatalogForms(root) {
@@ -147,21 +490,12 @@
         event.preventDefault();
         form.dataset.storeSubmitting = '1';
         const submitter = event.submitter;
-        const formData = new FormData(form);
-        if (submitter instanceof HTMLElement && submitter.name) {
-          formData.set(submitter.name, submitter.value);
+        const targetUrl = buildUrlFromGetForm(form, submitter);
+        if (form.classList.contains('store-filters-sidebar-inner')) {
+          showOptimisticFilterChips(form, targetUrl);
         }
-        const action = form.getAttribute('action') || window.location.pathname;
-        const url = new URL(action, window.location.origin);
-        formData.forEach((value, key) => {
-          if (key.endsWith('[]')) {
-            url.searchParams.append(key, value);
-          } else {
-            url.searchParams.set(key, value);
-          }
-        });
         closeFilterDrawer();
-        navigateStore(url.toString());
+        navigateStore(targetUrl);
       });
     });
   }
@@ -176,6 +510,9 @@
       link.addEventListener('click', (event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
+        if (link.classList.contains('store-active-chip') || link.classList.contains('store-active-filters-clear')) {
+          applyOptimisticFilterChipNavigation(link, href);
+        }
         closeFilterDrawer();
         navigateStore(href);
       });
@@ -187,6 +524,7 @@
     bindCatalogForms(root);
     bindCatalogLinks(root);
     syncPreviewPaging(root);
+    syncCanonicalFilterUrl(root);
     if (typeof window.portalStoreFiltersInit === 'function') {
       window.portalStoreFiltersInit(root);
     }
@@ -202,10 +540,6 @@
   async function navigateStore(url, push = true) {
     if (!isStoreCatalogUrl(url)) {
       window.location.href = url;
-      return;
-    }
-
-    if (navBusy) {
       return;
     }
 

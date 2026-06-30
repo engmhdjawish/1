@@ -25,8 +25,6 @@ use Portal\Services\AccessPolicyService;
 /** @var string|null $materialFilterOptionsError */
 /** @var string|null $flash */
 /** @var string $flashType */
-/** @var string|null $pendingBrandIconUrl */
-
 require __DIR__ . '/partials/media-picker.php';
 require __DIR__ . '/partials/token-picker.php';
 
@@ -41,6 +39,7 @@ $visibleClientFilters = AccessPolicyService::resolvedVisibleClientFilters($polic
 $policyClientSortFields = array_map('strval', $policyStoreOptions['client_sort_fields'] ?? []);
 $policyAllowSorting = array_key_exists('allow_sorting', $policyStoreOptions) ? (bool) $policyStoreOptions['allow_sorting'] : true;
 $policyDefaultSort = (string) ($policyStoreOptions['default_sort'] ?? 'number:asc');
+$policyDefaultGroupBy = (string) ($policyStoreOptions['default_group_by'] ?? 'none');
 
 $visibleFilterOptions = [
     ['value' => 'search', 'label' => 'بحث نصي'],
@@ -194,11 +193,11 @@ $tabUrl = static function (string $key) use ($tab): string {
       </label>
       <label class="text-xs">
         <span class="text-text-muted block mb-0.5">الهاتف الثابت</span>
-        <input name="company_phone" value="<?= h($company['company_phone'] ?? '') ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
+        <input name="company_phone" <?= portal_phone_input_attributes() ?> value="<?= h($company['company_phone'] ?? '') ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm text-left">
       </label>
       <label class="text-xs">
         <span class="text-text-muted block mb-0.5">الموبايل</span>
-        <input name="company_mobile" value="<?= h($company['company_mobile'] ?? '') ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
+        <input name="company_mobile" <?= portal_phone_input_attributes() ?> value="<?= h($company['company_mobile'] ?? '') ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm text-left">
       </label>
       <label class="text-xs">
         <span class="text-text-muted block mb-0.5">واتساب</span>
@@ -508,6 +507,18 @@ $tabUrl = static function (string $key) use ($tab): string {
                 <option value="-unitSalePriceUsd" <?= $policyDefaultSort === '-unitSalePriceUsd' ? 'selected' : '' ?>>السعر $</option>
               </select>
             </label>
+            <label class="text-xs">
+              <span class="text-text-muted block mb-0.5">التجميع الافتراضي</span>
+              <select name="option_default_group_by" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+                <option value="none" <?= $policyDefaultGroupBy === 'none' ? 'selected' : '' ?>>بدون</option>
+                <option value="ageCategory" <?= $policyDefaultGroupBy === 'ageCategory' ? 'selected' : '' ?>>الفئة العمرية</option>
+                <option value="sizeRange" <?= $policyDefaultGroupBy === 'sizeRange' ? 'selected' : '' ?>>القياس</option>
+                <option value="materialType" <?= $policyDefaultGroupBy === 'materialType' ? 'selected' : '' ?>>النوع</option>
+                <option value="manufacturer" <?= $policyDefaultGroupBy === 'manufacturer' ? 'selected' : '' ?>>الشركة</option>
+                <option value="countryOfOrigin" <?= $policyDefaultGroupBy === 'countryOfOrigin' ? 'selected' : '' ?>>بلد المنشأ</option>
+                <option value="group" <?= $policyDefaultGroupBy === 'group' ? 'selected' : '' ?>>المجموعة</option>
+              </select>
+            </label>
             <div class="text-xs md:col-span-2">
               <?php $renderTokenPicker('حقول الترتيب المتاحة', 'option_client_sort_fields[]', $sortFieldOptions, $policyClientSortFields, 'policy-client-sort-fields', false, false, false, 4); ?>
             </div>
@@ -625,33 +636,4 @@ $tabUrl = static function (string $key) use ($tab): string {
     </div>
   <?php endif; ?>
 </section>
-<?php endif; ?>
-
-<?php if (isset($pendingBrandIconUrl)): ?>
-<script>
-(function () {
-  const logoUrl = <?= json_encode((string) $pendingBrandIconUrl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-  const body = new FormData();
-  body.append('company_logo', logoUrl);
-  fetch('/dashboard/regenerate-brand-icons.php', {
-    method: 'POST',
-    body,
-    credentials: 'same-origin',
-    headers: { Accept: 'application/json' },
-  })
-    .then((response) => response.json().catch(() => ({})))
-    .then((data) => {
-      if (!data || data.ok) return;
-      const message = data.message || 'تعذر توليد أيقونات التطبيق.';
-      if (window.dashboardApp?.showToast) {
-        window.dashboardApp.showToast(message, 'error');
-      }
-    })
-    .catch(() => {
-      if (window.dashboardApp?.showToast) {
-        window.dashboardApp.showToast('تعذر توليد أيقونات التطبيق تلقائياً.', 'error');
-      }
-    });
-})();
-</script>
 <?php endif; ?>

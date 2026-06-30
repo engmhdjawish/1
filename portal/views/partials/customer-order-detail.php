@@ -20,8 +20,9 @@ $items = is_array($order['items'] ?? null) ? $order['items'] : [];
 $timeline = is_array($order['timeline'] ?? null) ? $order['timeline'] : [];
 $changes = is_array($order['item_changes'] ?? null) ? $order['item_changes'] : [];
 $status = (string) ($order['status'] ?? 'pending');
-$showPriceSyp = (float) ($order['total_sp'] ?? 0) > 0;
-$showPriceUsd = !$showPriceSyp && (float) ($order['total_usd'] ?? 0) > 0;
+$customerSeesPrices = customer_order_shows_prices($status);
+$showPriceSyp = $customerSeesPrices && (float) ($order['total_sp'] ?? 0) > 0;
+$showPriceUsd = $customerSeesPrices && !$showPriceSyp && (float) ($order['total_usd'] ?? 0) > 0;
 $orderImagesDownloadUrl = '/api/order-images-zip.php?order_id=' . rawurlencode((string) ($order['id'] ?? ''));
 $quoteToken = trim((string) ($order['quote_access_token'] ?? ''));
 if ($quoteToken !== '') {
@@ -90,6 +91,11 @@ if ($quoteToken !== '') {
           <div>
             <dt>الإجمالي</dt>
             <dd class="customer-order-dl__total store-num" dir="ltr">$<?= number_format((float) ($order['total_usd'] ?? 0), 2, '.', ',') ?></dd>
+          </div>
+        <?php elseif (!$customerSeesPrices && $status === 'pending'): ?>
+          <div>
+            <dt>الإجمالي</dt>
+            <dd class="text-sm text-amber-800">يُحدد عند تأكيد الطلب</dd>
           </div>
         <?php endif; ?>
       </dl>

@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = trim((string) ($_POST['password'] ?? ''));
     $redirect = PortalUrl::safeRedirectPath($_POST['redirect'] ?? $redirect);
     if ($type === 'customer') {
-        $ok = CustomerSession::login(trim($_POST['phone'] ?? ''), $password);
+        $ok = CustomerSession::login(portal_normalize_phone(trim($_POST['phone'] ?? '')), $password);
         if ($ok) {
             header('Location: ' . PortalUrl::loginRedirectTarget('customer', $redirect));
             exit;

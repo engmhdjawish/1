@@ -6,11 +6,9 @@ require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Auth\CustomerSession;
 use Portal\Services\StoreCatalogService;
-use Portal\Support\StoreCartRequest;
 
 require dirname(__DIR__) . '/views/helpers.php';
 
-$cartNotice = StoreCartRequest::handleAddToCartPost();
 if (session_status() === PHP_SESSION_ACTIVE) {
     session_write_close();
 }
@@ -35,6 +33,13 @@ try {
     ];
 }
 $displayOptions = StoreCatalogService::displayOptions();
+$sectionContext = is_array($catalog['section_context'] ?? null) ? $catalog['section_context'] : null;
+if ($sectionContext !== null && is_array($sectionContext['display_options'] ?? null)) {
+    $displayOptions = section_catalog_display_options(
+        $sectionContext['display_options'],
+        $displayOptions
+    );
+}
 $isCustomer = CustomerSession::check();
 
 $isStoreAjaxNav = strtolower(trim((string) ($_SERVER['HTTP_X_STORE_NAV'] ?? ''))) === '1';

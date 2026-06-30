@@ -4,11 +4,14 @@
 
   const CART_SYNC_KEY = 'jawish-store-cart-sync';
   const CART_SYNC_CHANNEL = 'jawish-store-cart';
+  const DRAWER_CLOSE_MS = 260;
   const tabId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   let lastRemoteSyncAt = 0;
   let tabHiddenAt = 0;
   let refreshInFlight = null;
   let cartSyncChannel = null;
+  let drawerCloseGuardUntil = 0;
+  let drawerCloseTimer = null;
 
   const handleCartSyncMessage = (message) => {
     if (!message || typeof message !== 'object' || message.tabId === tabId) return;
@@ -272,12 +275,41 @@
     };
   };
 
+  const lineHasDisplayPrice = (line) => {
+    if (line?.display_has_price === true) {
+      const prices = computeLinePrices(line);
+      return prices.packSp > 0 || prices.packUsd > 0;
+    }
+    if (line?.display_has_price === false) return false;
+    if (line?.customer_show_price === false) return false;
+    if (line?.customer_show_price === true) {
+      const prices = computeLinePrices(line);
+      return prices.packSp > 0 || prices.packUsd > 0;
+    }
+    return false;
+  };
+
+  const partitionCartItems = (items) => {
+    const priced = [];
+    const unpriced = [];
+    (Array.isArray(items) ? items : []).forEach((line) => {
+      if (lineHasDisplayPrice(line)) priced.push(line);
+      else unpriced.push(line);
+    });
+    return {
+      priced,
+      unpriced,
+      hasMixed: priced.length > 0 && unpriced.length > 0,
+    };
+  };
+
   const linePricesHtml = (line) => {
+    if (!lineHasDisplayPrice(line)) return '';
     const prices = computeLinePrices(line);
     const hasOffer = lineHasOffer(line);
     let html = '<div class="store-order-line-prices store-order-line-prices--compact">';
 
-    if (prices.packSp > 0 || prices.origPackSp > 0 || prices.unitSp > 0) {
+    if (prices.packSp > 0 || prices.unitSp > 0) {
       html += '<div class="store-price-currency store-price-currency--syp">';
       if (prices.unitSp > 0) {
         html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
@@ -288,7 +320,7 @@
           </div>
         </div>`;
       }
-      if (prices.packSp > 0 || prices.origPackSp > 0) {
+      if (prices.packSp > 0) {
         html += `<div class="store-order-line-prices__row">
           <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
           <div class="store-order-line-prices__values">
@@ -300,7 +332,7 @@
       html += '</div>';
     }
 
-    if (prices.packUsd > 0 || prices.origPackUsd > 0 || prices.unitUsd > 0) {
+    if (prices.packUsd > 0 || prices.unitUsd > 0) {
       html += '<div class="store-price-currency store-price-currency--usd">';
       if (prices.unitUsd > 0) {
         html += `<div class="store-order-line-prices__row store-order-line-prices__row--main">
@@ -311,7 +343,7 @@
           </div>
         </div>`;
       }
-      if (prices.packUsd > 0 || prices.origPackUsd > 0) {
+      if (prices.packUsd > 0) {
         html += `<div class="store-order-line-prices__row">
           <span class="store-order-line-prices__label">${escapeHtml(prices.packageUnit)}</span>
           <div class="store-order-line-prices__values">
@@ -327,10 +359,122 @@
     return html;
   };
 
+  const PRICE_CHANGE_EPSILON = 0.009;
+
+  const priceChangeDiffers = (change, line, prices) => {
+    if (!change || typeof change !== 'object') return false;
+    const oldSp = Number(line?.price_snapshot_sp) || Number(change.old_sale_price_sp) || 0;
+    const oldUsd = Number(line?.price_snapshot_usd) || Number(change.old_sale_price_usd) || 0;
+    const newSp = Number(prices?.packSp) || Number(change.new_sale_price_sp) || 0;
+    const newUsd = Number(prices?.packUsd) || Number(change.new_sale_price_usd) || 0;
+    const spDiffers = (oldSp > 0 || newSp > 0) && Math.abs(oldSp - newSp) > PRICE_CHANGE_EPSILON;
+    const usdDiffers = (oldUsd > 0 || newUsd > 0) && Math.abs(oldUsd - newUsd) > PRICE_CHANGE_EPSILON;
+    return spDiffers || usdDiffers;
+  };
+
+  const priceChangeDirection = (change, line = null, prices = null) => {
+    if (!change || typeof change !== 'object') return null;
+    if (line && prices && !priceChangeDiffers(change, line, prices)) return null;
+
+    const oldSp = Number(line?.price_snapshot_sp) || Number(change.old_sale_price_sp) || 0;
+    const oldUsd = Number(line?.price_snapshot_usd) || Number(change.old_sale_price_usd) || 0;
+    const newSp = Number(prices?.packSp) || Number(change.new_sale_price_sp) || 0;
+    const newUsd = Number(prices?.packUsd) || Number(change.new_sale_price_usd) || 0;
+
+    if (line && prices) {
+      const upSp = oldSp > 0 && newSp > 0 && newSp > oldSp + PRICE_CHANGE_EPSILON;
+      const downSp = oldSp > 0 && newSp > 0 && newSp < oldSp - PRICE_CHANGE_EPSILON;
+      const upUsd = oldUsd > 0 && newUsd > 0 && newUsd > oldUsd + PRICE_CHANGE_EPSILON;
+      const downUsd = oldUsd > 0 && newUsd > 0 && newUsd < oldUsd - PRICE_CHANGE_EPSILON;
+      const up = upSp || upUsd || (oldSp <= 0 && newSp > 0) || (oldUsd <= 0 && newUsd > 0);
+      const down = downSp || downUsd || (newSp <= 0 && oldSp > 0) || (newUsd <= 0 && oldUsd > 0);
+      if (up && !down) return 'up';
+      if (down && !up) return 'down';
+      if (up || down) return 'changed';
+      return null;
+    }
+
+    const up = change.direction_sp === 'up' || change.direction_usd === 'up';
+    const down = change.direction_sp === 'down' || change.direction_usd === 'down';
+    if (up && !down) return 'up';
+    if (down && !up) return 'down';
+    if (up || down) return 'changed';
+    return null;
+  };
+
+  const priceChangeHtml = (line, prices = null) => {
+    const change = line?.price_change;
+    const resolvedPrices = prices || computeLinePrices(line);
+    const direction = priceChangeDirection(change, line, resolvedPrices);
+    if (!direction) return '';
+    const icon = direction === 'up' ? 'arrow_upward' : (direction === 'down' ? 'arrow_downward' : 'swap_vert');
+    const label = direction === 'up' ? 'ارتفع السعر' : (direction === 'down' ? 'انخفض السعر' : 'تغيّر السعر');
+    return `<span class="store-price-change store-price-change--${direction}">
+      <span class="material-symbols-outlined store-price-change__icon" aria-hidden="true">${icon}</span>
+      <span>${escapeHtml(label)}</span>
+    </span>`;
+  };
+
+  const linePriceChangeDetailHtml = (line, prices, showPrice = true) => {
+    const change = line?.price_change;
+    const direction = priceChangeDirection(change, line, prices);
+    if (!direction) return '';
+    const icon = direction === 'up' ? 'trending_up' : (direction === 'down' ? 'trending_down' : 'swap_vert');
+    const rows = [];
+
+    const oldSp = Number(line?.price_snapshot_sp) || Number(change.old_sale_price_sp) || 0;
+    const newSp = Number(prices.packSp) || Number(change.new_sale_price_sp) || 0;
+    if (oldSp > 0 && newSp > 0 && Math.abs(oldSp - newSp) > PRICE_CHANGE_EPSILON) {
+      const rowDir = newSp > oldSp ? 'up' : 'down';
+      rows.push(`<div class="store-price-change-detail__row store-price-change-detail__row--${rowDir}">
+        <span class="material-symbols-outlined" aria-hidden="true">${icon}</span>
+        <span class="store-price-change-detail__label">ل.س / ${escapeHtml(prices.packageUnit)}</span>
+        ${showPrice ? `<span class="store-price-change-detail__old store-num" dir="ltr">${formatMoney(oldSp)}</span>
+        <span class="store-price-change-detail__sep" aria-hidden="true">→</span>
+        <span class="store-price-change-detail__new store-num" dir="ltr">${formatMoney(newSp)}</span>` : ''}
+      </div>`);
+    }
+
+    const oldUsd = Number(line?.price_snapshot_usd) || Number(change.old_sale_price_usd) || 0;
+    const newUsd = Number(prices.packUsd) || Number(change.new_sale_price_usd) || 0;
+    if (oldUsd > 0 && newUsd > 0 && Math.abs(oldUsd - newUsd) > PRICE_CHANGE_EPSILON) {
+      const rowDir = newUsd > oldUsd ? 'up' : 'down';
+      rows.push(`<div class="store-price-change-detail__row store-price-change-detail__row--${rowDir}">
+        <span class="material-symbols-outlined" aria-hidden="true">${icon}</span>
+        <span class="store-price-change-detail__label">$ / ${escapeHtml(prices.packageUnit)}</span>
+        ${showPrice ? `<span class="store-price-change-detail__old store-num" dir="ltr">$${formatUsd(oldUsd)}</span>
+        <span class="store-price-change-detail__sep" aria-hidden="true">→</span>
+        <span class="store-price-change-detail__new store-num" dir="ltr">$${formatUsd(newUsd)}</span>` : ''}
+      </div>`);
+    }
+
+    if (rows.length === 0) return '';
+
+    return `<div class="store-price-change-detail store-price-change-detail--${direction}">${rows.join('')}</div>`;
+  };
+
+  const buildPriceChangeConfirmMessage = (changes) => {
+    const rows = Array.isArray(changes) ? changes : [];
+    if (rows.length === 0) return 'تغيّرت أسعار بعض الأصناف.';
+    const lines = rows.slice(0, 6).map((row) => {
+      const name = String(row.material_name_ar || 'صنف');
+      const up = row.direction_sp === 'up' || row.direction_usd === 'up';
+      const down = row.direction_sp === 'down' || row.direction_usd === 'down';
+      const dir = up && !down ? 'ارتفع' : (down && !up ? 'انخفض' : 'تغيّر');
+      return `• ${name}: ${dir}`;
+    });
+    if (rows.length > 6) lines.push(`• و${rows.length - 6} أصناف أخرى`);
+    return `تغيّرت أسعار الأصناف التالية:\n${lines.join('\n')}\n\nهل تريد المتابعة بالأسعار الحالية من النظام؟`;
+  };
+
   const renderCartLineCard = (line, max) => {
     const guid = line.material_guid || '';
     const prices = computeLinePrices(line);
     const hasOffer = lineHasOffer(line);
+    const lineShowPrice = lineHasDisplayPrice(line);
+    const priceDirection = priceChangeDirection(line?.price_change, line, prices);
+    const priceCardClass = priceDirection ? ` store-cart-line-card--price-${priceDirection}` : '';
+    const noPriceClass = !lineShowPrice ? ' store-cart-line-card--no-price' : '';
     const img = line.image_url
       ? (() => {
           const thumb = escapeHtml(line.image_url);
@@ -338,13 +482,19 @@
           return `<button type="button" class="store-order-line-card__thumb" data-cart-image-zoom="${zoom}" title="تكبير الصورة للتدقيق"><img src="${thumb}" alt="" loading="lazy"><span class="store-order-line-card__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span></button>`;
         })()
       : '<div class="store-order-line-card__placeholder"><span class="material-symbols-outlined" aria-hidden="true">inventory_2</span></div>';
-    const lineTotalCell = (prices.packSp > 0 || prices.origPackSp > 0 || prices.packUsd > 0 || prices.origPackUsd > 0)
+    const lineTotalCell = lineShowPrice && (prices.packSp > 0 || prices.packUsd > 0)
       ? `<div class="store-order-line-card__totals">
-          ${prices.packSp > 0 || prices.origPackSp > 0 ? `<span class="store-price-currency store-price-currency--syp store-num" dir="ltr">${formatMoney(prices.lineTotalSp)} ل.س</span>` : ''}
-          ${prices.packUsd > 0 || prices.origPackUsd > 0 ? `<span class="store-price-currency store-price-currency--usd store-num" dir="ltr">$${formatUsd(prices.lineTotalUsd)}</span>` : ''}
+          ${prices.packSp > 0 ? `<span class="store-price-currency store-price-currency--syp store-num" dir="ltr">${formatMoney(prices.lineTotalSp)} ل.س</span>` : ''}
+          ${prices.packUsd > 0 ? `<span class="store-price-currency store-price-currency--usd store-num" dir="ltr">$${formatUsd(prices.lineTotalUsd)}</span>` : ''}
         </div>`
       : '';
-    return `<article class="store-order-line-card store-cart-line-card${hasOffer ? ' store-order-line-card--offer' : ''}" data-cart-line="${escapeHtml(guid)}">
+    const noPriceHtml = !lineShowPrice
+      ? `<div class="store-cart-line-card__no-price">
+          <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
+          <span>السعر عند التأكيد</span>
+        </div>`
+      : '';
+    return `<article class="store-order-line-card store-cart-line-card${hasOffer ? ' store-order-line-card--offer' : ''}${priceCardClass}${noPriceClass}" data-cart-line="${escapeHtml(guid)}">
       <div class="store-order-line-card__media">${img}</div>
       <div class="store-order-line-card__body">
         <div class="store-cart-line-card__head">
@@ -358,7 +508,9 @@
           </button>
         </div>
         <div class="store-cart-line-card__foot">
-          ${linePricesHtml(line)}
+          ${priceChangeHtml(line, prices)}
+          ${linePriceChangeDetailHtml(line, prices, lineShowPrice)}
+          ${lineShowPrice ? linePricesHtml(line) : noPriceHtml}
           <div class="store-cart-line-card__controls">
             <div class="store-cart-line-card__qty-row">
               <div class="store-qty-stepper store-qty-stepper--compact" data-cart-qty-control data-guid="${escapeHtml(guid)}">
@@ -373,6 +525,29 @@
         </div>
       </div>
     </article>`;
+  };
+
+  const renderCartSection = (lines, sectionClass, icon, title, subtitle, max, showSectionHeader) => {
+    if (!lines.length) return '';
+    let html = `<section class="store-cart-section ${sectionClass}">`;
+    if (showSectionHeader) {
+      html += `<header class="store-cart-section__head">
+        <div class="store-cart-section__title-row">
+          <span class="material-symbols-outlined store-cart-section__icon" aria-hidden="true">${icon}</span>
+          <div>
+            <h3 class="store-cart-section__title">${escapeHtml(title)}</h3>
+            <p class="store-cart-section__subtitle">${escapeHtml(subtitle)}</p>
+          </div>
+        </div>
+        <span class="store-cart-section__count">${lines.length} صنف</span>
+      </header>`;
+    }
+    html += '<div class="store-cart-lines">';
+    lines.forEach((line) => {
+      html += renderCartLineCard(line, max);
+    });
+    html += '</div></section>';
+    return html;
   };
 
   const formatPackageCount = (amount) => {
@@ -879,12 +1054,41 @@
         if (max) {
           html += `<p class="store-limit-banner">الحد الأقصى للطلب: <strong>${escapeHtml(String(maxLabel))}</strong> طرد لكل مادة.</p>`;
         }
+        const priceChanges = Array.isArray(data.price_changes) ? data.price_changes : [];
+        if (priceChanges.length > 0) {
+          html += `<div class="store-price-change-banner" role="status">
+            <span class="material-symbols-outlined store-price-change-banner__icon" aria-hidden="true">price_change</span>
+            <div>
+              <strong>تغيّرت أسعار ${priceChanges.length} صنف</strong>
+              <span>راجع الأسعار المحدّثة قبل إرسال الطلب.</span>
+            </div>
+          </div>`;
+        }
         if (items.length > 0) {
-          html += '<div class="store-cart-lines">';
-          items.forEach((line) => {
-            html += renderCartLineCard(line, max);
-          });
-          html += '</div>';
+          const partition = partitionCartItems(items);
+          const hasMixed = data.has_mixed_pricing === true || partition.hasMixed;
+          if (partition.priced.length > 0) {
+            html += renderCartSection(
+              partition.priced,
+              'store-cart-section--priced',
+              'sell',
+              'أصناف بسعر محدد',
+              'الأسعار المعروضة قابلة للتحديث حتى إرسال الطلب.',
+              max,
+              hasMixed
+            );
+          }
+          if (partition.unpriced.length > 0) {
+            html += renderCartSection(
+              partition.unpriced,
+              'store-cart-section--unpriced',
+              'receipt_long',
+              'يُسعّر عند التأكيد',
+              'سيُحدد سعر هذه الأصناف عند مراجعة الطلب.',
+              max,
+              hasMixed || partition.unpriced.length > 0
+            );
+          }
         }
         if (unavailable.length > 0) {
           html += renderUnavailableSection(unavailable);
@@ -899,21 +1103,26 @@
     }
 
     if (summaryEl) {
-      const totals = data.totals || {};
+      const totals = data.display_totals || data.totals || {};
       const allowOrder = !!data.allow_order;
       const isLoggedIn = root.dataset.loggedIn === '1' || !!data.logged_in;
       const totalSp = Number(totals.total_sp) || 0;
       const totalUsd = Number(totals.total_usd) || 0;
-      const totalLine = showPrice
+      const unpricedCount = Number(data.unpriced_items_count) || partitionCartItems(items).unpriced.length;
+      const totalLine = showPrice && (totalSp > 0 || totalUsd > 0)
         ? `<div class="store-cart-summary__totals">
             ${totalSp > 0 ? `<div class="store-cart-summary__total store-price-currency store-price-currency--syp">الإجمالي: ${formatMoney(totalSp)} ل.س</div>` : ''}
             ${totalUsd > 0 ? `<div class="store-cart-summary__total store-price-currency store-price-currency--usd">الإجمالي: $${formatUsd(totalUsd)}</div>` : ''}
           </div>`
         : '';
+      const unpricedNote = showPrice && unpricedCount > 0
+        ? `<p class="store-cart-summary__unpriced-note">${unpricedCount} ${unpricedCount === 1 ? 'صنف' : 'أصناف'} بدون سعر محدد — يُسعّر عند التأكيد</p>`
+        : '';
 
       if (isDrawer) {
         summaryEl.innerHTML = `<div class="store-panel store-cart-summary store-cart-summary--drawer space-y-3">
           ${totalLine}
+          ${unpricedNote}
           ${items.length > 0 ? `
             ${allowOrder ? '<button type="button" class="store-btn store-btn--primary w-full" data-cart-checkout-open>متابعة الطلب</button>' : '<p class="text-sm text-amber-800">سياسة المتجر لا تسمح بإرسال الطلبات حالياً.</p>'}
             <button type="button" class="store-btn store-btn--ghost w-full" data-clear-cart>تفريغ السلة</button>
@@ -922,6 +1131,7 @@
       } else {
         summaryEl.innerHTML = `<div class="store-panel store-cart-summary space-y-4">
           ${totalLine}
+          ${unpricedNote}
           ${items.length > 0 ? '<button type="button" class="store-btn store-btn--ghost" data-clear-cart>تفريغ السلة</button>' : ''}
           ${allowOrder && items.length > 0 ? `
             <form data-checkout-form class="space-y-3 border-t border-gray-100 pt-4">
@@ -934,7 +1144,7 @@
                   <input name="guest_name_ar" required class="store-input mt-1" value="${escapeHtml(root.dataset.defaultName || '')}">
                 </label>
                 <label class="block text-sm font-bold">رقم الهاتف *
-                  <input name="guest_phone" required dir="ltr" class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}">
+                  <input name="guest_phone" required type="tel" inputmode="tel" autocomplete="tel" dir="ltr" data-phone-input class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}" placeholder="09xxxxxxxx">
                 </label>
               `}
               <label class="block text-sm font-bold">ملاحظات
@@ -945,6 +1155,7 @@
           ` : !allowOrder && items.length > 0 ? '<p class="text-sm text-amber-800">سياسة المتجر لا تسمح بإرسال الطلبات حالياً.</p>' : ''}
         </div>`;
         bindCheckout(summaryEl);
+        window.portalPhoneInputInit?.(summaryEl);
       }
 
       bindClearCart(summaryEl);
@@ -1042,7 +1253,7 @@
             <input name="guest_name_ar" required class="store-input mt-1" value="${escapeHtml(root.dataset.defaultName || '')}">
           </label>
           <label class="block text-sm font-bold">رقم الهاتف *
-            <input name="guest_phone" required dir="ltr" class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}">
+            <input name="guest_phone" required type="tel" inputmode="tel" autocomplete="tel" dir="ltr" data-phone-input class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}" placeholder="09xxxxxxxx">
           </label>
         `}
         <label class="block text-sm font-bold">ملاحظات
@@ -1069,6 +1280,7 @@
     const body = root.querySelector('[data-cart-checkout-body]');
     if (!sheet || !body) return;
     body.innerHTML = buildCheckoutFormHtml(root, data);
+    window.portalPhoneInputInit?.(body);
     bindCheckout(body);
     sheet.hidden = false;
     sheet.setAttribute('aria-hidden', 'false');
@@ -1104,8 +1316,21 @@
       btn?.classList.add('is-loading');
       const payload = { action: 'submit_order' };
       new FormData(form).forEach((v, k) => { payload[k] = v; });
+      const submitOnce = async (confirmPriceChanges = false) => {
+        if (confirmPriceChanges) payload.confirm_price_changes = '1';
+        else delete payload.confirm_price_changes;
+        return apiRequest(payload);
+      };
       try {
-        const data = await apiRequest(payload);
+        let data = await submitOnce(false);
+        if (data.requires_price_confirmation) {
+          const confirmed = window.confirm(buildPriceChangeConfirmMessage(data.price_changes));
+          if (!confirmed) {
+            applyCartResponse(data);
+            return;
+          }
+          data = await submitOnce(true);
+        }
         if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
         if (data.ok && data.redirect) {
           window.location.href = data.redirect;
@@ -1139,6 +1364,9 @@
     const drawerRoot = drawer?.querySelector('[data-store-cart-drawer-root]');
     if (drawerRoot && drawer.classList.contains('is-open')) {
       renderCartRoot(drawerRoot, data);
+    } else if (drawerRoot && lastCartData) {
+      // Keep drawer content warm for the next open without flashing a reload.
+      renderCartRoot(drawerRoot, data);
     }
 
     if (!silent && data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
@@ -1149,26 +1377,68 @@
 
   const cartDrawer = () => document.getElementById('store-cart-drawer');
 
+  const guardDrawerGhostClick = (event) => {
+    if (Date.now() >= drawerCloseGuardUntil) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === 'function') {
+      event.stopImmediatePropagation();
+    }
+  };
+
+  const closeCartDrawer = (event) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    setCartDrawerOpen(false);
+  };
+
   const setCartDrawerOpen = (open) => {
     const drawer = cartDrawer();
     if (!drawer) return;
-    if (!open) {
-      const root = drawer.querySelector('[data-store-cart-drawer-root]');
-      if (root) closeCheckoutSheet(root);
-      if (document.activeElement instanceof HTMLElement && drawer.contains(document.activeElement)) {
-        document.activeElement.blur();
-      }
+
+    if (drawerCloseTimer) {
+      window.clearTimeout(drawerCloseTimer);
+      drawerCloseTimer = null;
     }
-    drawer.hidden = !open;
-    drawer.classList.toggle('is-open', open);
-    drawer.setAttribute('aria-hidden', open ? 'false' : 'true');
-    document.body.classList.toggle('store-cart-drawer-open', open);
+
+    if (open) {
+      drawer.hidden = false;
+      drawerCloseGuardUntil = 0;
+      requestAnimationFrame(() => {
+        drawer.classList.add('is-open');
+        drawer.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('store-cart-drawer-open');
+        document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
+          btn.setAttribute('aria-expanded', 'true');
+        });
+      });
+      return;
+    }
+
+    const root = drawer.querySelector('[data-store-cart-drawer-root]');
+    if (root) closeCheckoutSheet(root);
+    if (document.activeElement instanceof HTMLElement && drawer.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
+
+    drawer.classList.remove('is-open');
+    drawer.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('store-cart-drawer-open');
     document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      btn.setAttribute('aria-expanded', 'false');
     });
+    drawerCloseGuardUntil = Date.now() + DRAWER_CLOSE_MS + 80;
+    drawerCloseTimer = window.setTimeout(() => {
+      drawerCloseTimer = null;
+      if (!drawer.classList.contains('is-open')) {
+        drawer.hidden = true;
+      }
+    }, DRAWER_CLOSE_MS);
   };
 
-  const loadCartDrawer = async () => {
+  const loadCartDrawer = async ({ force = false } = {}) => {
     const drawer = cartDrawer();
     const root = drawer?.querySelector('[data-store-cart-drawer-root]');
     if (!root) return;
@@ -1176,6 +1446,19 @@
     const loadingEl = root.querySelector('[data-cart-drawer-loading]');
     const bodyEl = root.querySelector('[data-cart-body]');
     const summaryEl = root.querySelector('[data-cart-summary]');
+    const hasCached = !force
+      && lastCartData
+      && typeof lastCartData === 'object'
+      && Array.isArray(lastCartData.items);
+
+    if (hasCached) {
+      if (loadingEl) loadingEl.hidden = true;
+      root.classList.remove('is-loading-cart');
+      renderCartRoot(root, lastCartData);
+      refreshCartFromServer({ silent: true });
+      return;
+    }
+
     if (loadingEl) loadingEl.hidden = false;
     root.classList.add('is-loading-cart');
     if (bodyEl) bodyEl.innerHTML = '';
@@ -1198,6 +1481,12 @@
     if (!drawer || drawer.dataset.bound === '1') return;
     drawer.dataset.bound = '1';
 
+    if (!window.__storeCartDrawerGhostGuard) {
+      window.__storeCartDrawerGhostGuard = true;
+      document.addEventListener('click', guardDrawerGhostClick, true);
+      document.addEventListener('touchend', guardDrawerGhostClick, true);
+    }
+
     document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
       if (btn.dataset.cartOpenBound === '1') return;
       btn.dataset.cartOpenBound = '1';
@@ -1208,19 +1497,15 @@
       });
     });
 
-    drawer.querySelectorAll('[data-store-cart-drawer-close]').forEach((btn) => {
-      btn.addEventListener('click', () => setCartDrawerOpen(false));
-    });
-
     drawer.addEventListener('click', (event) => {
-      if (event.target instanceof Element && event.target.closest('[data-store-cart-drawer-close]')) {
-        setCartDrawerOpen(false);
-      }
+      if (!(event.target instanceof Element)) return;
+      if (!event.target.closest('[data-store-cart-drawer-close]')) return;
+      closeCartDrawer(event);
     });
 
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && drawer.classList.contains('is-open')) {
-        setCartDrawerOpen(false);
+        closeCartDrawer(event);
       }
     });
   };
@@ -1280,5 +1565,6 @@
     refreshCartForms,
     setFormCartMode,
     openDrawer: () => { setCartDrawerOpen(true); return loadCartDrawer(); },
+    closeDrawer: closeCartDrawer,
   };
 })();

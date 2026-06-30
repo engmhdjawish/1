@@ -43,6 +43,62 @@ final class MaterialImageStorageService
         self::$settingsReady = true;
     }
 
+    /**
+     * Ensure PHP and portal temp directories exist for uploads.
+     *
+     * @return array{configured: string, active: string, exists: bool, writable: bool, created: bool}
+     */
+    public static function ensurePhpUploadTempDir(): array
+    {
+        $configured = trim((string) ini_get('upload_tmp_dir'));
+        $candidates = [];
+        if ($configured !== '') {
+            $candidates[] = $configured;
+        }
+        $candidates[] = rtrim(Config::storagePath(), '/\\') . DIRECTORY_SEPARATOR . 'php-upload-tmp';
+
+        $created = false;
+        $active = '';
+        foreach ($candidates as $path) {
+            if (!is_dir($path)) {
+                if (@mkdir($path, 0775, true) && is_dir($path)) {
+                    $created = true;
+                }
+            }
+            if (is_dir($path) && is_writable($path)) {
+                $active = $path;
+                break;
+            }
+        }
+
+        if ($active === '') {
+            $active = $configured !== '' ? $configured : $candidates[count($candidates) - 1];
+        }
+
+        return [
+            'configured' => $configured !== '' ? $configured : $active,
+            'active' => $active,
+            'exists' => is_dir($active),
+            'writable' => is_dir($active) && is_writable($active),
+            'created' => $created,
+        ];
+    }
+
+    public static function writableTempDir(): string
+    {
+        $status = self::ensurePhpUploadTempDir();
+        if ($status['writable']) {
+            return $status['active'];
+        }
+
+        $fallback = sys_get_temp_dir();
+        if (is_dir($fallback) && is_writable($fallback)) {
+            return $fallback;
+        }
+
+        return $status['active'];
+    }
+
     /** @return array{images_dir: string, thumbnails_dir: string} */
     public static function settings(): array
     {
@@ -78,6 +134,44 @@ final class MaterialImageStorageService
      * @param array<string, mixed> $file single $_FILES entry
      * @return array{ok: bool, message: string, file_name?: string, replaced?: bool, local_path?: string}
      */
+    public static function uploadSingleFromBinary(string $binary, string $originalName, ?string $uploadedByUserId = null): array
+    {
+        $settings = self::settings();
+        if (!self::ensureDirectory($settings['images_dir']) || !self::ensureDirectory($settings['thumbnails_dir'])) {
+            return ['ok' => false, 'message' => 'تعذر إنشاء مجلدات التخزين.'];
+        }
+
+        $size = strlen($binary);
+        if ($size <= 0 || $size > self::MAX_BYTES) {
+            return ['ok' => false, 'message' => 'الحجم يجب أن يكون أقل من 10 ميجابايت.'];
+        }
+
+        $tmpPath = tempnam(self::writableTempDir(), 'miu_');
+        if ($tmpPath === false) {
+            return ['ok' => false, 'message' => 'تعذر إنشاء ملف مؤقت على الخادم.'];
+        }
+
+        if (@file_put_contents($tmpPath, $binary) === false) {
+            @unlink($tmpPath);
+
+            return ['ok' => false, 'message' => 'تعذر كتابة الملف المؤقت على الخادم.'];
+        }
+
+        $result = self::uploadOneFromTempPath(
+            $tmpPath,
+            $originalName,
+            $size,
+            $settings['images_dir'],
+            $settings['thumbnails_dir'],
+            false
+        );
+        if (!($result['ok'] ?? false)) {
+            return $result;
+        }
+
+        return self::finalizeUploadedFile($result, $settings, $uploadedByUserId);
+    }
+
     public static function uploadSingle(array $file, ?string $uploadedByUserId = null): array
     {
         $settings = self::settings();
@@ -90,6 +184,16 @@ final class MaterialImageStorageService
             return $result;
         }
 
+        return self::finalizeUploadedFile($result, $settings, $uploadedByUserId);
+    }
+
+    /**
+     * @param array{ok: bool, message: string, file_name?: string, replaced?: bool, renamed?: bool, requested_name?: string} $result
+     * @param array{images_dir: string, thumbnails_dir: string} $settings
+     * @return array{ok: bool, message: string, file_name?: string, replaced?: bool, renamed?: bool, requested_name?: string, local_path?: string}
+     */
+    private static function finalizeUploadedFile(array $result, array $settings, ?string $uploadedByUserId): array
+    {
         $fileName = (string) ($result['file_name'] ?? '');
         $localPath = self::safeJoin($settings['images_dir'], $fileName) ?? '';
         $thumbPath = self::safeJoin($settings['thumbnails_dir'], $fileName);
@@ -1241,6 +1345,20 @@ final class MaterialImageStorageService
             return ['ok' => false, 'message' => 'تعذر إنشاء مجلدات التخزين.'];
         }
 
+        $sourceReal = realpath($sourcePath);
+        $targetReal = realpath($targetPath);
+        if ($sourceReal !== false && $targetReal !== false && $sourceReal === $targetReal) {
+            if (!self::generateThumbnail($targetPath, $thumbPath)) {
+                @copy($targetPath, $thumbPath);
+            }
+
+            return ['ok' => true, 'message' => 'تم', 'file_name' => $targetFileName];
+        }
+
+        if (is_file($targetPath) && ($sourceReal === false || $targetReal === false || $sourceReal !== $targetReal)) {
+            @unlink($targetPath);
+        }
+
         if (!@copy($sourcePath, $targetPath)) {
             return ['ok' => false, 'message' => 'تعذر نسخ الصورة محلياً.'];
         }
@@ -1363,6 +1481,14 @@ final class MaterialImageStorageService
         }
 
         return $empty;
+    }
+
+    public static function resolveLocalSourcePath(string $imageGuid, string $fileName): ?string
+    {
+        $preview = self::resolveSitePreviewUrls($imageGuid, $fileName);
+        $path = trim((string) ($preview['local_path'] ?? ''));
+
+        return ($path !== '' && is_file($path)) ? $path : null;
     }
 
     public static function mimeForPath(string $path): string
@@ -1498,19 +1624,56 @@ final class MaterialImageStorageService
             return ['ok' => false, 'message' => self::uploadErrorMessage($error)];
         }
 
-        $tmpPath = (string) ($file['tmp_name'] ?? '');
-        if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
-            return ['ok' => false, 'message' => 'ملف غير صالح.'];
+        return self::uploadOneFromTempPath(
+            (string) ($file['tmp_name'] ?? ''),
+            (string) ($file['name'] ?? ''),
+            (int) ($file['size'] ?? 0),
+            $imagesDir,
+            $thumbnailsDir,
+            true
+        );
+    }
+
+    /**
+     * @return array{ok: bool, message: string, file_name?: string, replaced?: bool, renamed?: bool, requested_name?: string}
+     */
+    private static function uploadOneFromTempPath(
+        string $tmpPath,
+        string $originalName,
+        int $size,
+        string $imagesDir,
+        string $thumbnailsDir,
+        bool $fromHttpUpload
+    ): array {
+        if ($tmpPath === '' || !is_file($tmpPath) || !is_readable($tmpPath)) {
+            return ['ok' => false, 'message' => $fromHttpUpload
+                ? 'ملف غير صالح (لم يصل الملف إلى PHP — تحقق من upload_tmp_dir وصلاحيات IIS).'
+                : 'ملف غير صالح.'];
         }
 
-        $size = (int) ($file['size'] ?? 0);
+        if ($size <= 0) {
+            $size = (int) (filesize($tmpPath) ?: 0);
+        }
         if ($size <= 0 || $size > self::MAX_BYTES) {
+            if (!$fromHttpUpload) {
+                @unlink($tmpPath);
+            }
+
             return ['ok' => false, 'message' => 'الحجم يجب أن يكون أقل من 10 ميجابايت.'];
         }
 
-        $requestedName = self::sanitizeFileName((string) ($file['name'] ?? ''));
+        $requestedName = self::sanitizeFileName($originalName);
         if ($requestedName === '' || !self::isAllowedFileName($requestedName)) {
+            if (!$fromHttpUpload) {
+                @unlink($tmpPath);
+            }
+
             return ['ok' => false, 'message' => 'اسم الملف أو الامتداد غير مدعوم.'];
+        }
+
+        $idempotent = self::resolveIdempotentUpload($tmpPath, $requestedName, $imagesDir, $thumbnailsDir, $fromHttpUpload);
+        if ($idempotent !== null) {
+            return $idempotent;
         }
 
         $fileName = self::availableFileName($imagesDir, $requestedName);
@@ -1519,10 +1682,28 @@ final class MaterialImageStorageService
         $targetPath = self::safeJoin($imagesDir, $fileName);
         $thumbPath = self::safeJoin($thumbnailsDir, $fileName);
         if ($targetPath === null || $thumbPath === null) {
+            if (!$fromHttpUpload) {
+                @unlink($tmpPath);
+            }
+
             return ['ok' => false, 'message' => 'مسار الملف غير آمن.'];
         }
 
-        if (!move_uploaded_file($tmpPath, $targetPath)) {
+        $saved = false;
+        if ($fromHttpUpload && is_uploaded_file($tmpPath)) {
+            $saved = @move_uploaded_file($tmpPath, $targetPath);
+        }
+        if (!$saved) {
+            $saved = @copy($tmpPath, $targetPath);
+            if ($saved && ($fromHttpUpload || is_file($tmpPath))) {
+                @unlink($tmpPath);
+            }
+        }
+        if (!$saved) {
+            if (!$fromHttpUpload) {
+                @unlink($tmpPath);
+            }
+
             return ['ok' => false, 'message' => 'تعذر حفظ الملف.'];
         }
 
@@ -1538,6 +1719,145 @@ final class MaterialImageStorageService
             'renamed' => $renamed,
             'requested_name' => $requestedName,
         ];
+    }
+
+    /**
+     * Skip saving when the same bytes are already on disk or in the sync queue (resume-safe).
+     *
+     * @return array{ok: bool, message: string, file_name?: string, replaced?: bool, renamed?: bool, requested_name?: string, already_exists?: bool}|null
+     */
+    private static function resolveIdempotentUpload(
+        string $tmpPath,
+        string $requestedName,
+        string $imagesDir,
+        string $thumbnailsDir,
+        bool $fromHttpUpload
+    ): ?array {
+        $incomingHash = hash_file('sha256', $tmpPath);
+        if (!is_string($incomingHash) || $incomingHash === '') {
+            return null;
+        }
+        $incomingHash = strtolower($incomingHash);
+
+        $existingPath = self::safeJoin($imagesDir, $requestedName);
+        if ($existingPath !== null && is_file($existingPath)) {
+            $existingHash = hash_file('sha256', $existingPath);
+            if (is_string($existingHash) && strtolower($existingHash) === $incomingHash) {
+                if (!$fromHttpUpload) {
+                    @unlink($tmpPath);
+                }
+                self::ensureThumbnailForPath($existingPath, $requestedName, $thumbnailsDir);
+
+                return [
+                    'ok' => true,
+                    'message' => 'تم',
+                    'file_name' => $requestedName,
+                    'replaced' => false,
+                    'renamed' => false,
+                    'requested_name' => $requestedName,
+                    'already_exists' => true,
+                ];
+            }
+        }
+
+        $queuedName = MaterialImageSyncService::findQueuedFileNameByHash($incomingHash);
+        if ($queuedName !== null) {
+            $queuedPath = self::safeJoin($imagesDir, $queuedName);
+            if ($queuedPath !== null && is_file($queuedPath)) {
+                $queuedHash = hash_file('sha256', $queuedPath);
+                if (is_string($queuedHash) && strtolower($queuedHash) === $incomingHash) {
+                    if (!$fromHttpUpload) {
+                        @unlink($tmpPath);
+                    }
+
+                    return [
+                        'ok' => true,
+                        'message' => 'تم',
+                        'file_name' => $queuedName,
+                        'replaced' => false,
+                        'renamed' => strcasecmp($queuedName, $requestedName) !== 0,
+                        'requested_name' => $requestedName,
+                        'already_exists' => true,
+                    ];
+                }
+            }
+        }
+
+        $localName = self::findLocalFileNameByHashNearName($imagesDir, $incomingHash, $requestedName);
+        if ($localName !== null) {
+            if (!$fromHttpUpload) {
+                @unlink($tmpPath);
+            }
+
+            return [
+                'ok' => true,
+                'message' => 'تم',
+                'file_name' => $localName,
+                'replaced' => false,
+                'renamed' => strcasecmp($localName, $requestedName) !== 0,
+                'requested_name' => $requestedName,
+                'already_exists' => true,
+            ];
+        }
+
+        return null;
+    }
+
+    private static function findLocalFileNameByHashNearName(string $directory, string $sha256, string $requestedName): ?string
+    {
+        if (!is_dir($directory)) {
+            return null;
+        }
+
+        $base = pathinfo($requestedName, PATHINFO_FILENAME);
+        $extension = strtolower(pathinfo($requestedName, PATHINFO_EXTENSION));
+        if ($base === '') {
+            return null;
+        }
+
+        foreach (scandir($directory) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            if (!self::isListableFileName($entry)) {
+                continue;
+            }
+            if ($extension !== '' && strtolower(pathinfo($entry, PATHINFO_EXTENSION)) !== $extension) {
+                continue;
+            }
+            $entryBase = pathinfo($entry, PATHINFO_FILENAME);
+            if ($entryBase !== $base && !str_starts_with($entryBase, $base . '_')) {
+                continue;
+            }
+
+            $path = $directory . DIRECTORY_SEPARATOR . $entry;
+            if (!is_file($path)) {
+                continue;
+            }
+
+            $hash = hash_file('sha256', $path);
+            if (is_string($hash) && strtolower($hash) === $sha256) {
+                return $entry;
+            }
+        }
+
+        return null;
+    }
+
+    private static function ensureThumbnailForPath(string $sourcePath, string $fileName, string $thumbnailsDir): void
+    {
+        $thumbPath = self::safeJoin($thumbnailsDir, $fileName);
+        if ($thumbPath === null || is_file($thumbPath)) {
+            return;
+        }
+
+        try {
+            if (!self::generateThumbnail($sourcePath, $thumbPath)) {
+                @copy($sourcePath, $thumbPath);
+            }
+        } catch (Throwable) {
+            @copy($sourcePath, $thumbPath);
+        }
     }
 
     public static function renameLocalCopy(string $fromFileName, string $toFileName): bool

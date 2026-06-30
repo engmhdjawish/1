@@ -8,6 +8,7 @@ use Portal\Auth\WebSession;
 use Portal\Services\OrderService;
 use Portal\Services\WebCustomerService;
 use Portal\Support\DashboardNavigation;
+use Portal\Support\DashboardOrderPricePreference;
 
 WebSession::requirePermission('web_customers.view');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -43,6 +44,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash = $ok ? 'تم رفض الطلب.' : 'تعذر رفض الطلب.';
             $flashType = $ok ? 'success' : 'error';
         }
+    } elseif ($action === 'suspend' && $canManageCustomers) {
+        $ok = WebCustomerService::suspend($customerId, $adminId, trim((string) ($_POST['suspend_reason'] ?? '')));
+        $flash = $ok ? 'تم تعليق الحساب وإنهاء جلساته.' : 'تعذر تعليق الحساب.';
+        $flashType = $ok ? 'success' : 'error';
+    } elseif ($action === 'reactivate' && $canApproveCustomers) {
+        $policyId = trim((string) ($_POST['access_policy_id'] ?? ''));
+        $ok = WebCustomerService::reactivate($customerId, $policyId, $adminId);
+        $flash = $ok ? 'تم إعادة تفعيل الحساب.' : 'تعذر إعادة التفعيل. تأكد من اختيار سياسة الوصول.';
+        $flashType = $ok ? 'success' : 'error';
     } elseif ($action === 'save_customer') {
         if (!$canManageCustomers) {
             $flash = 'لا تملك صلاحية إضافة/تعديل العملاء.';
@@ -51,11 +61,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $result = WebCustomerService::saveByAdmin(
                 $customerId !== '' ? $customerId : null,
                 trim((string) ($_POST['name_ar'] ?? '')),
-                trim((string) ($_POST['phone'] ?? '')),
+                portal_normalize_phone(trim((string) ($_POST['phone'] ?? ''))),
                 trim((string) ($_POST['email'] ?? '')),
                 trim((string) ($_POST['access_policy_id'] ?? '')),
                 trim((string) ($_POST['status'] ?? 'pending')),
-                isset($_POST['is_active']),
                 trim((string) ($_POST['plain_password'] ?? '')),
                 trim((string) ($_POST['notes_ar'] ?? '')),
                 trim((string) ($_POST['rejection_reason_ar'] ?? '')),
@@ -75,6 +84,7 @@ $searchFilter = trim((string) ($_GET['q'] ?? ''));
 $sourceFilter = trim((string) ($_GET['source'] ?? ''));
 $editId = trim((string) ($_GET['edit'] ?? ''));
 $detailsId = trim((string) ($_GET['details'] ?? ''));
+$orderPriceCurrency = DashboardOrderPricePreference::current();
 
 $customers = WebCustomerService::listByStatus($statusFilter, $searchFilter, $sourceFilter, 120);
 $statusCounts = WebCustomerService::statusCounts();

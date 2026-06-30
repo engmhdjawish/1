@@ -6,6 +6,7 @@ namespace Portal\Services;
 
 use Portal\Auth\Password;
 use Portal\Database;
+use Portal\Support\DigitNormalizer;
 use PDO;
 
 final class WebCustomerService
@@ -15,6 +16,7 @@ final class WebCustomerService
 
     public static function registerSelf(string $name, string $phone, string $password, ?string $email = null): array
     {
+        $phone = DigitNormalizer::normalizePhone($phone);
         $pdo = Database::pdo();
         $exists = $pdo->prepare('SELECT 1 FROM web_customers WHERE phone = :phone');
         $exists->execute(['phone' => $phone]);
@@ -47,6 +49,7 @@ final class WebCustomerService
         ?string $password = null,
         bool $activateImmediately = true
     ): array {
+        $phone = DigitNormalizer::normalizePhone($phone);
         $pdo = Database::pdo();
         $status = $activateImmediately ? 'active' : 'pending';
         $stmt = $pdo->prepare(
@@ -117,7 +120,6 @@ final class WebCustomerService
         ?string $email,
         string $accessPolicyId,
         string $status,
-        bool $isActive,
         ?string $plainPassword,
         ?string $notes,
         ?string $rejectionReason,
@@ -125,7 +127,7 @@ final class WebCustomerService
     ): array {
         $customerId = trim((string) $customerId);
         $name = trim($name);
-        $phone = trim($phone);
+        $phone = DigitNormalizer::normalizePhone($phone);
         $email = trim((string) $email);
         $accessPolicyId = trim($accessPolicyId);
         $status = trim($status);
@@ -140,6 +142,9 @@ final class WebCustomerService
         if (!in_array($status, self::ALLOWED_STATUSES, true)) {
             $status = 'pending';
         }
+
+        $isActive = $status === 'active';
+        $approvedAt = $status === 'active' ? date('c') : null;
 
         $pdo = Database::pdo();
         $duplicate = $pdo->prepare(
@@ -158,10 +163,6 @@ final class WebCustomerService
             return ['ok' => false, 'message' => 'رقم الهاتف مسجّل مسبقاً لعميل آخر.'];
         }
 
-        if ($status !== 'active') {
-            $isActive = false;
-        }
-        $approvedAt = $status === 'active' ? date('c') : null;
         $approvedBy = $status === 'active' ? $adminUserId : null;
         $safePolicyId = $accessPolicyId !== '' ? $accessPolicyId : null;
         $safeEmail = $email !== '' ? $email : null;
@@ -286,6 +287,10 @@ final class WebCustomerService
             return ['ok' => false, 'message' => 'لم يتم العثور على العميل المطلوب تحديثه.'];
         }
 
+        if (in_array($status, ['suspended', 'rejected', 'pending'], true)) {
+            PortalSessionService::revokeAllForCustomer($customerId);
+        }
+
         return ['ok' => true, 'message' => 'تم تحديث بيانات العميل بنجاح.', 'id' => $customerId];
     }
 
@@ -337,6 +342,7 @@ final class WebCustomerService
         ]);
 
         if ($stmt->rowCount() > 0) {
+            PortalSessionService::revokeAllForCustomer($customerId);
             try {
                 NotificationService::notifyCustomerRejected($customerId, $reason);
             } catch (\Throwable) {
@@ -367,6 +373,10 @@ final class WebCustomerService
             'id' => $customerId,
             'notes' => $reason !== null && trim($reason) !== '' ? trim($reason) : null,
         ]);
+
+        if ($stmt->rowCount() > 0) {
+            PortalSessionService::revokeAllForCustomer($customerId);
+        }
 
         return $stmt->rowCount() > 0;
     }

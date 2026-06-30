@@ -30,7 +30,7 @@ $staffLoggedIn = WebSession::check();
 $storeDisplay = StoreCatalogService::displayOptions();
 StorePricePreference::bootstrap();
 StorePricePreference::applyFromRequest($_GET);
-$storeShowPrice = (bool) ($storeDisplay['show_price'] ?? false);
+$storeShowPrice = StoreCatalogService::headerShowsPriceCurrency();
 $storePriceCurrency = StorePricePreference::current();
 $storeAllowCart = (bool) ($storeDisplay['allow_cart'] ?? false);
 $storeCartCount = $storeAllowCart ? StoreCartService::itemCount() : 0;
@@ -204,6 +204,17 @@ if ($customer) {
   <script src="<?= h(portal_asset_url('/assets/store-pref.js')) ?>" defer></script>
 <?php endif; ?>
 <?php if ($enableStoreCartJs): ?>
+  <script>
+    (() => {
+      if (window.__storeCartSubmitGuard) return;
+      window.__storeCartSubmitGuard = true;
+      document.addEventListener('submit', (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-store-add-cart')) return;
+        event.preventDefault();
+      }, true);
+    })();
+  </script>
   <script src="<?= h(portal_asset_url('/assets/store-image-zoom.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/store-cart.js')) ?>" defer></script>
 <?php endif; ?>
@@ -213,9 +224,50 @@ if ($customer) {
 <?php if ($enableSiteAnalytics): ?>
   <script src="<?= h(portal_asset_url('/assets/site-analytics.js')) ?>" data-endpoint="/api/site-analytics.php" defer></script>
 <?php endif; ?>
+<script src="<?= h(portal_asset_url('/assets/phone-input.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/pwa.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/site-page-loading.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/notifications.js')) ?>" defer></script>
+<?php if ($staffLoggedIn || $customer !== null): ?>
+<script>
+(function () {
+  const visitorId = (() => {
+    try {
+      const key = 'jawish_vid';
+      let id = localStorage.getItem(key);
+      if (!id) {
+        id = window.crypto?.randomUUID?.() || `v-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        localStorage.setItem(key, id);
+      }
+      return id;
+    } catch {
+      return '';
+    }
+  })();
+  const beat = () => fetch('/api/session-heartbeat.php', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ visitor_id: visitorId }),
+  })
+    .then((response) => response.json().catch(() => null))
+    .then((data) => {
+      if (!data || !data.login_required) return;
+      const path = window.location.pathname + window.location.search;
+      if (path.startsWith('/dashboard')) {
+        window.location.href = '/login.php?type=staff&redirect=' + encodeURIComponent(path);
+        return;
+      }
+      if (path.startsWith('/my-') || path.startsWith('/cart.php') || path.startsWith('/store-cart.php')) {
+        window.location.href = '/login.php?type=customer&redirect=' + encodeURIComponent(path);
+      }
+    })
+    .catch(() => {});
+  beat();
+  window.setInterval(beat, 60000);
+})();
+</script>
+<?php endif; ?>
 <?php if (!empty($extraFooter ?? '')): ?>
   <?= $extraFooter ?>
 <?php endif; ?>

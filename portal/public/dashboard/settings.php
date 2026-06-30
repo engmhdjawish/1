@@ -9,8 +9,10 @@ use Portal\Config;
 use Portal\Database;
 use Portal\Services\AccessPolicyService;
 use Portal\Services\ApiClient;
+use Portal\Services\CompanyBrandIconService;
 use Portal\Services\EnvConfigService;
 use Portal\Services\PortalSettingsService;
+use Portal\Services\SiteMediaService;
 use Portal\Services\StorePolicyService;
 use Portal\Support\DashboardHttp;
 
@@ -113,21 +115,21 @@ $buildPolicyStoreOptions = static function () use ($parseValues): array {
         'allow_sorting' => isset($_POST['option_allow_sorting']),
         'client_sort_fields' => $parseValues($_POST['option_client_sort_fields'] ?? []),
         'default_sort' => trim((string) ($_POST['option_default_sort'] ?? 'number:asc')),
+        'default_group_by' => trim((string) ($_POST['option_default_group_by'] ?? 'none')),
     ];
 };
 
 $flash = null;
 $flashType = 'success';
-$pendingBrandIconUrl = null;
-
-if (isset($_SESSION['portal_pending_brand_icon_url'])) {
-    $pendingBrandIconUrl = (string) $_SESSION['portal_pending_brand_icon_url'];
-    unset($_SESSION['portal_pending_brand_icon_url']);
-}
 
 if ($flash === null && isset($_GET['saved']) && $_GET['saved'] === '1') {
     $flash = 'تم حفظ الإعدادات.';
     $flashType = 'success';
+}
+if ($flash === null && isset($_SESSION['portal_settings_icon_warning'])) {
+    $flash = 'تم حفظ الإعدادات، لكن تعذر توليد أيقونات التطبيق: ' . trim((string) $_SESSION['portal_settings_icon_warning']);
+    $flashType = 'error';
+    unset($_SESSION['portal_settings_icon_warning']);
 }
 if ($flash === null && isset($_GET['icon_warning']) && trim((string) $_GET['icon_warning']) !== '') {
     $flash = 'تم حفظ الإعدادات، لكن تعذر توليد أيقونات التطبيق: ' . trim((string) $_GET['icon_warning']);
@@ -152,20 +154,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 $currentCompany = PortalSettingsService::companySettings();
+                $savedLogoUrl = trim((string) ($_POST['company_logo'] ?? ''));
+                $iconWarning = null;
+
+                if ($savedLogoUrl !== '' && !SiteMediaService::logoUrlIsUsable($savedLogoUrl)) {
+                    $iconWarning = 'ملف الشعار غير موجود في مكتبة الوسائط. اختر شعاراً جديداً.';
+                    $savedLogoUrl = '';
+                    CompanyBrandIconService::clearBrandIcons();
+                }
+
                 PortalSettingsService::saveCompanySettings([
                     'company_name' => trim((string) ($_POST['company_name'] ?? '')),
-                    'company_phone' => trim((string) ($_POST['company_phone'] ?? '')),
-                    'company_mobile' => trim((string) ($_POST['company_mobile'] ?? '')),
+                    'company_phone' => portal_normalize_phone(trim((string) ($_POST['company_phone'] ?? ''))),
+                    'company_mobile' => portal_normalize_phone(trim((string) ($_POST['company_mobile'] ?? ''))),
                     'company_whatsapp' => trim((string) ($_POST['company_whatsapp'] ?? '')),
                     'company_email' => trim((string) ($_POST['company_email'] ?? '')),
                     'company_address' => trim((string) ($_POST['company_address'] ?? '')),
-                    'company_logo' => trim((string) ($_POST['company_logo'] ?? '')),
+                    'company_logo' => $savedLogoUrl,
                     'about_us_title_ar' => trim((string) ($_POST['about_us_title_ar'] ?? '')),
                     'about_us_ar' => trim((string) ($_POST['about_us_ar'] ?? '')),
                     'material_images_dir' => (string) ($currentCompany['material_images_dir'] ?? ''),
                     'material_thumbnails_dir' => (string) ($currentCompany['material_thumbnails_dir'] ?? ''),
                 ], isset($user['id']) ? (string) $user['id'] : null);
-                $_SESSION['portal_pending_brand_icon_url'] = trim((string) ($_POST['company_logo'] ?? ''));
+
+                if ($iconWarning === null && $savedLogoUrl !== '') {
+                    ob_start();
+                    try {
+                        @set_time_limit(60);
+                        if (!CompanyBrandIconService::regenerateFromLogoUrlSafe($savedLogoUrl)) {
+                            $iconWarning = trim((string) (CompanyBrandIconService::lastError() ?? ''));
+                        }
+                    } catch (\Throwable $exception) {
+                        $iconWarning = trim($exception->getMessage());
+                    }
+                    ob_end_clean();
+                }
+
+                if ($iconWarning !== null && $iconWarning !== '') {
+                    $_SESSION['portal_settings_icon_warning'] = $iconWarning;
+                }
+
                 header('Location: /dashboard/settings.php?tab=company&saved=1');
                 exit;
             } catch (\Throwable $exception) {
@@ -249,7 +277,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash = $result['message'];
             $flashType = $result['ok'] ? 'success' : 'error';
             if ($result['ok']) {
-                header('Location: /dashboard/settings.php?tab=policies&policy_saved=1');
+                $savedPolicyId = trim((string) ($result['id'] ?? $_POST['id'] ?? ''));
+                $redirect = '/dashboard/settings.php?tab=policies&policy_saved=1';
+                if ($savedPolicyId !== '') {
+                    $redirect .= '&policy_edit=' . rawurlencode($savedPolicyId);
+                }
+                header('Location: ' . $redirect);
                 exit;
             }
             $tab = 'policies';

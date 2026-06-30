@@ -7,6 +7,7 @@
   const imageLoader = document.getElementById('storeProductPreviewImageLoader');
   const titleEl = document.getElementById('storeProductPreviewTitle');
   const subtitleEl = document.getElementById('storeProductPreviewSubtitle');
+  const packagingEl = document.getElementById('storeProductPreviewPackaging');
   const pricesEl = document.getElementById('storeProductPreviewPrices');
   const cartEl = document.getElementById('storeProductPreviewCart');
   const counterEl = document.getElementById('storeProductPreviewCounter');
@@ -256,6 +257,29 @@
     return items;
   };
 
+  const formatPackagingLabel = (item) => {
+    const label = String(item?.packagingLabel || '').trim();
+    if (label) return label;
+    const packaging = Number(item?.packaging) || 0;
+    if (packaging <= 0) return '';
+    const primaryUnit = String(item?.primaryUnit || 'قطعة').trim() || 'قطعة';
+    const packageUnit = String(item?.packageUnit || 'طرد').trim() || 'طرد';
+    const qty = formatQty(packaging).replace(/\.00$/, '');
+    return `${qty} ${primaryUnit} / ${packageUnit}`;
+  };
+
+  const renderPackaging = (item) => {
+    if (!packagingEl) return;
+    const label = formatPackagingLabel(item);
+    if (!label) {
+      packagingEl.innerHTML = '';
+      packagingEl.hidden = true;
+      return;
+    }
+    packagingEl.innerHTML = `<span class="store-product-preview__packaging-label">التعبئة</span><span class="store-product-preview__packaging-value" dir="ltr">${esc(label)}</span>`;
+    packagingEl.hidden = false;
+  };
+
   const renderPrices = (p) => {
     if (!p.showPrice) {
       return '<p class="store-product-preview__no-price">الأسعار غير متاحة لحسابك.</p>';
@@ -489,8 +513,9 @@
       <form
         method="post"
         class="store-add-cart store-add-cart--preview${inCart ? ' store-add-cart--in-cart' : ''}${partial ? ' store-add-cart--locked' : ''}"
-        action="${esc(p.returnUrl || '/store.php')}"
+        action="#"
         data-store-add-cart="1"
+        data-no-page-loading="1"
         data-cart-mode="${esc(cartMode)}"
         data-partial-package="${partial ? '1' : '0'}"
         data-material-guid="${esc(p.guid)}"
@@ -501,6 +526,8 @@
         ${effectiveMaxAttr}
       >
         <input type="hidden" name="action" value="add_to_cart">
+        ${p.storeSection ? `<input type="hidden" name="store_section" value="${esc(p.storeSection)}">` : ''}
+        ${p.storeOffer ? `<input type="hidden" name="store_offer" value="${esc(p.storeOffer)}">` : ''}
         <input type="hidden" name="material_guid" value="${esc(p.guid)}">
         <input type="hidden" name="material_code" value="${esc(p.code)}">
         <input type="hidden" name="material_name_ar" value="${esc(p.name)}">
@@ -656,6 +683,8 @@
       subtitleEl.textContent = parts.join(' · ');
       subtitleEl.hidden = parts.length === 0;
     }
+
+    renderPackaging(item);
 
     if (pricesEl) pricesEl.innerHTML = renderPrices(item);
     mountCartForm(item, cartEl);

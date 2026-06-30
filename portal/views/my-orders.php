@@ -67,6 +67,7 @@ $pageTitle = 'طلباتي';
         <?php foreach ($orders as $row): ?>
           <?php
             $rowStatus = (string) ($row['status'] ?? 'pending');
+            $rowShowsPrices = customer_order_shows_prices($rowStatus);
             $rowId = (string) ($row['id'] ?? '');
             $detailUrl = '/my-orders.php?order=' . rawurlencode($rowId)
                 . ($statusFilter !== '' ? '&status=' . rawurlencode($statusFilter) : '');
@@ -81,7 +82,11 @@ $pageTitle = 'طلباتي';
             </div>
             <div class="customer-order-row__meta">
               <span><strong><?= (int) ($row['items_count'] ?? 0) ?></strong> صنف</span>
-              <span>الإجمالي: <strong class="store-num" dir="ltr"><?= format_money((float) ($row['total_sp'] ?? 0), true) ?> ل.س</strong></span>
+              <?php if ($rowShowsPrices && (float) ($row['total_sp'] ?? 0) > 0): ?>
+                <span>الإجمالي: <strong class="store-num" dir="ltr"><?= format_money((float) ($row['total_sp'] ?? 0), true) ?> ل.س</strong></span>
+              <?php elseif (!$rowShowsPrices && $rowStatus === 'pending'): ?>
+                <span class="text-amber-800 text-sm">يُحدد عند التأكيد</span>
+              <?php endif; ?>
             </div>
           </a>
         <?php endforeach; ?>

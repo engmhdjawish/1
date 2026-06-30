@@ -553,6 +553,35 @@ final class MaterialImageLinkService
         return self::normalizeImageGuid((string) ($data['id'] ?? $data['Id'] ?? ''));
     }
 
+    private static function resolveAuthoritativeAmineSourceGuid(string $sourceFileName, ?string $knownGuid): string
+    {
+        $fromLookup = self::lookupAmineImageGuidByFileName($sourceFileName);
+        if ($fromLookup !== '') {
+            return $fromLookup;
+        }
+
+        $knownGuid = self::normalizeImageGuid((string) $knownGuid);
+        if ($knownGuid !== '' && self::imageGuidExistsOnAmine($knownGuid)) {
+            return $knownGuid;
+        }
+
+        $local = MaterialImageStorageService::resolveLocalSourcePath($knownGuid, $sourceFileName)
+            ?? MaterialImageStorageService::resolveLocalPath($sourceFileName, false);
+        if ($local !== null && is_file($local)) {
+            $resolved = self::resolveAmineSourceGuid($sourceFileName, $local);
+            if ($resolved !== '' && self::imageGuidExistsOnAmine($resolved)) {
+                return $resolved;
+            }
+        }
+
+        $withoutLocal = self::resolveAmineSourceGuidWithoutLocal($sourceFileName);
+        if ($withoutLocal !== '' && self::imageGuidExistsOnAmine($withoutLocal)) {
+            return $withoutLocal;
+        }
+
+        return $knownGuid !== '' ? $knownGuid : $withoutLocal;
+    }
+
     private static function normalizeImageGuid(string $imageGuid): string
     {
         $imageGuid = strtolower(trim($imageGuid));
@@ -650,71 +679,164 @@ final class MaterialImageLinkService
             return self::assignError('الأمين غير متصل.');
         }
 
-        $sourcePath = MaterialImageStorageService::resolveLocalPath($sourceFileName, false);
+        $previousPictureGuids = self::snapshotMaterialPictureGuids($materialGuids);
+
+        $amineSourceGuid = self::resolveAuthoritativeAmineSourceGuid($sourceFileName, $knownAmineSourceGuid);
+
+        $tempSourcePath = null;
+        [$sourcePath, $tempSourcePath] = self::resolveAssignSourcePaths($sourceFileName, $amineSourceGuid);
         $hasLocal = $sourcePath !== null && is_file($sourcePath);
-        $amineSourceGuid = trim((string) $knownAmineSourceGuid);
-        if ($amineSourceGuid === '' && $hasLocal) {
-            $amineSourceGuid = self::resolveAmineSourceGuid($sourceFileName, $sourcePath);
-        } elseif ($amineSourceGuid === '') {
-            $amineSourceGuid = self::resolveAmineSourceGuidWithoutLocal($sourceFileName);
-        }
+        $amineGuidVerified = $amineSourceGuid !== '' && self::imageGuidExistsOnAmine($amineSourceGuid);
 
         if (!$hasLocal && $amineSourceGuid === '') {
+            $reconciled = self::reconcileAssignSuccessFromAmine($materialGuids, $previousPictureGuids, $sourceFileName);
+            if ($reconciled !== null) {
+                return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
+            }
+
             return self::assignError('الصورة غير موجودة على الأمين أو الموقع.');
         }
 
-        if ($processedPathsByMaterial !== []) {
-            return self::finalizeAssignResult(
-                self::assignViaUpload(
-                    $hasLocal ? (string) $sourcePath : '',
+        try {
+            if ($processedPathsByMaterial !== []) {
+                return self::finalizeAssignResult(
+                    self::assignViaUpload(
+                        $hasLocal ? (string) $sourcePath : '',
+                        $sourceFileName,
+                        $materialGuids,
+                        $uploadedByUserId,
+                        $processedPathsByMaterial
+                    ),
                     $sourceFileName,
-                    $materialGuids,
-                    $uploadedByUserId,
-                    $processedPathsByMaterial
-                ),
-                $sourceFileName,
-                $amineSourceGuid
-            );
-        }
-
-        if ($requireProcessedImages) {
-            return self::assignError('تعذر تجهيز الصورة مع تفاصيل المادة.');
-        }
-
-        $effectiveSourcePath = $hasLocal ? $sourcePath : '';
-        if ($amineSourceGuid !== '') {
-            $amineResult = self::assignViaAmine(
-                $effectiveSourcePath,
-                $sourceFileName,
-                $amineSourceGuid,
-                $materialGuids,
-                $uploadedByUserId
-            );
-            if (($amineResult['linked'] ?? 0) > 0) {
-                return self::finalizeAssignResult($amineResult, $sourceFileName, $amineSourceGuid);
+                    $amineSourceGuid
+                );
             }
 
-            if ($hasLocal) {
-                $uploadResult = self::assignViaUpload($sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId);
+            if ($requireProcessedImages) {
+                return self::assignError('تعذر تجهيز الصورة مع تفاصيل المادة.');
+            }
+
+            $effectiveSourcePath = $hasLocal ? (string) $sourcePath : '';
+
+            if ($hasLocal && $sourcePath !== null && !$amineGuidVerified) {
+                $uploadResult = self::assignViaUpload((string) $sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId);
                 if (($uploadResult['linked'] ?? 0) > 0) {
                     return self::finalizeAssignResult($uploadResult, $sourceFileName, $amineSourceGuid);
                 }
 
-                return self::combineAssignFailures($amineResult, $uploadResult);
+                $reconciled = self::reconcileAssignSuccessFromAmine($materialGuids, $previousPictureGuids, $sourceFileName);
+                if ($reconciled !== null) {
+                    return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
+                }
             }
 
-            return $amineResult;
-        }
+            if ($amineSourceGuid !== '') {
+                $amineResult = self::assignViaAmine(
+                    $effectiveSourcePath,
+                    $sourceFileName,
+                    $amineSourceGuid,
+                    $materialGuids,
+                    $uploadedByUserId
+                );
+                if (($amineResult['linked'] ?? 0) > 0) {
+                    return self::finalizeAssignResult($amineResult, $sourceFileName, $amineSourceGuid);
+                }
 
-        if (!$hasLocal) {
-            return self::assignError('الصورة غير موجودة على الموقع ولا يمكن رفعها للأمين.');
-        }
+                if (self::isSourceNotFoundAssignError($amineResult)) {
+                    $resolvedGuid = self::lookupAmineImageGuidByFileName($sourceFileName);
+                    if ($resolvedGuid === '') {
+                        $resolvedGuid = $hasLocal
+                            ? self::resolveAmineSourceGuid($sourceFileName, (string) $sourcePath)
+                            : self::resolveAmineSourceGuidWithoutLocal($sourceFileName);
+                    }
+                    if ($resolvedGuid !== '' && strcasecmp($resolvedGuid, $amineSourceGuid) !== 0) {
+                        $amineSourceGuid = $resolvedGuid;
+                        if ($sourcePath === null || !is_file((string) $sourcePath)) {
+                            [$sourcePath, $moreTemp] = self::resolveAssignSourcePaths($sourceFileName, $amineSourceGuid);
+                            if ($moreTemp !== null) {
+                                $tempSourcePath = $moreTemp;
+                            }
+                            $hasLocal = $sourcePath !== null && is_file((string) $sourcePath);
+                            $effectiveSourcePath = $hasLocal ? (string) $sourcePath : '';
+                        }
+                        $amineResult = self::assignViaAmine(
+                            $effectiveSourcePath,
+                            $sourceFileName,
+                            $amineSourceGuid,
+                            $materialGuids,
+                            $uploadedByUserId
+                        );
+                        if (($amineResult['linked'] ?? 0) > 0) {
+                            return self::finalizeAssignResult($amineResult, $sourceFileName, $amineSourceGuid);
+                        }
+                    }
+                }
 
-        return self::finalizeAssignResult(
-            self::assignViaUpload($sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId),
-            $sourceFileName,
-            $amineSourceGuid
-        );
+                $uploadSource = ($hasLocal && $sourcePath !== null) ? (string) $sourcePath : null;
+                if ($uploadSource === null || !is_file($uploadSource)) {
+                    [$uploadSource, $moreTemp] = self::resolveAssignSourcePaths($sourceFileName, $amineSourceGuid);
+                    if ($moreTemp !== null) {
+                        $tempSourcePath = $moreTemp;
+                    }
+                }
+                if ($uploadSource !== null && is_file($uploadSource)) {
+                    $uploadResult = self::assignViaUpload(
+                        $uploadSource,
+                        $sourceFileName,
+                        $materialGuids,
+                        $uploadedByUserId
+                    );
+                    if (($uploadResult['linked'] ?? 0) > 0) {
+                        return self::finalizeAssignResult($uploadResult, $sourceFileName, $amineSourceGuid);
+                    }
+
+                    $reconciled = self::reconcileAssignSuccessFromAmine($materialGuids, $previousPictureGuids, $sourceFileName);
+                    if ($reconciled !== null) {
+                        return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
+                    }
+
+                    return self::assignFailureOrReconcile(
+                        self::combineAssignFailures($amineResult, $uploadResult),
+                        $materialGuids,
+                        $previousPictureGuids,
+                        $sourceFileName,
+                        $amineSourceGuid
+                    );
+                }
+
+                $reconciled = self::reconcileAssignSuccessFromAmine($materialGuids, $previousPictureGuids, $sourceFileName);
+                if ($reconciled !== null) {
+                    return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
+                }
+
+                return self::assignFailureOrReconcile($amineResult, $materialGuids, $previousPictureGuids, $sourceFileName, $amineSourceGuid);
+            }
+
+            if ($hasLocal && $sourcePath !== null) {
+                $uploadResult = self::assignViaUpload((string) $sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId);
+                if (($uploadResult['linked'] ?? 0) > 0) {
+                    return self::finalizeAssignResult($uploadResult, $sourceFileName, $amineSourceGuid);
+                }
+
+                $reconciled = self::reconcileAssignSuccessFromAmine($materialGuids, $previousPictureGuids, $sourceFileName);
+                if ($reconciled !== null) {
+                    return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
+                }
+
+                return self::assignFailureOrReconcile($uploadResult, $materialGuids, $previousPictureGuids, $sourceFileName, $amineSourceGuid);
+            }
+
+            $reconciled = self::reconcileAssignSuccessFromAmine($materialGuids, $previousPictureGuids, $sourceFileName);
+            if ($reconciled !== null) {
+                return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
+            }
+
+            return self::assignError('تعذر تأكيد الربط. حدّث القائمة وتحقق من المادة على الأمين.');
+        } finally {
+            if ($tempSourcePath !== null && self::isTempProcessingSource($tempSourcePath)) {
+                MaterialImageStorageService::deleteTempProcessedFile($tempSourcePath);
+            }
+        }
     }
 
     /**
@@ -818,9 +940,7 @@ final class MaterialImageLinkService
         }
 
         if (!($response['ok'] ?? false)) {
-            $message = (string) ($response['data']['message'] ?? $response['error'] ?? 'فشل توليد نسخ الصور على الأمين.');
-
-            return self::assignError($message);
+            return self::assignError(self::extractAmineApiError($response, 'فشل توليد نسخ الصور على الأمين.'));
         }
 
         $data = is_array($response['data'] ?? null) ? $response['data'] : [];
@@ -857,34 +977,28 @@ final class MaterialImageLinkService
 
             $hasLocalSource = $sourcePath !== '' && is_file($sourcePath);
             $localPath = '';
+            $copy = ['ok' => true, 'file_name' => $storedFileName];
             if ($hasLocalSource) {
                 $copy = MaterialImageStorageService::copyLocalFromSource($sourcePath, $storedFileName);
-                if (!($copy['ok'] ?? false)) {
-                    $failed++;
-                    $results[] = [
-                        'material_guid' => $materialGuid,
-                        'material_name' => $materialName,
-                        'material_code' => $materialCode,
-                        'ok' => false,
-                        'message' => (string) ($copy['message'] ?? 'فشل النسخ المحلي.'),
-                    ];
-                    continue;
+                if ($copy['ok'] ?? false) {
+                    $localPath = MaterialImageStorageService::settings()['images_dir']
+                        . DIRECTORY_SEPARATOR
+                        . (string) ($copy['file_name'] ?? $storedFileName);
                 }
-                $localPath = MaterialImageStorageService::settings()['images_dir']
-                    . DIRECTORY_SEPARATOR
-                    . (string) ($copy['file_name'] ?? $storedFileName);
-            } else {
-                $copy = ['ok' => true, 'file_name' => $storedFileName];
+            }
+            if ($localPath === '' || !is_file($localPath)) {
                 $download = ApiClient::getBinary('/api/material-images/' . rawurlencode($imageGuid) . '/file');
                 if ($download['ok'] ?? false) {
                     $localPath = MaterialImageStorageService::settings()['images_dir']
                         . DIRECTORY_SEPARATOR
                         . $storedFileName;
                     @file_put_contents($localPath, $download['body'] ?? '');
+                    $copy = ['ok' => true, 'file_name' => $storedFileName];
                 }
             }
 
-            if ($localPath !== '' && is_file($localPath)) {
+            $syncedLocally = $localPath !== '' && is_file($localPath);
+            if ($syncedLocally) {
                 MaterialImageSyncService::recordAssignedCopy(
                     (string) ($copy['file_name'] ?? $storedFileName),
                     $localPath,
@@ -907,7 +1021,7 @@ final class MaterialImageLinkService
                 'image_guid' => $imageGuid,
                 'file_name' => (string) ($copy['file_name'] ?? $storedFileName),
                 'ok' => true,
-                'message' => 'تم الربط.',
+                'message' => $syncedLocally ? 'تم الربط.' : 'تم الربط على الأمين.',
             ];
         }
 
@@ -1021,8 +1135,8 @@ final class MaterialImageLinkService
             }
 
             $data = is_array($response['data'] ?? null) ? $response['data'] : [];
-            $imageGuid = trim((string) ($data['id'] ?? $data['Id'] ?? ''));
-            $storedFileName = trim((string) ($data['storedFileName'] ?? $data['StoredFileName'] ?? ''));
+            $imageGuid = self::extractUploadedImageGuid($response, $materialGuid);
+            $storedFileName = trim((string) ($data['storedFileName'] ?? $data['StoredFileName'] ?? $data['fileName'] ?? $data['FileName'] ?? ''));
             if ($storedFileName !== '' && strcasecmp($storedFileName, $fileName) !== 0) {
                 $resync = MaterialImageStorageService::copyLocalFromSource($localPath, $storedFileName);
                 if ($resync['ok'] ?? false) {
@@ -1041,7 +1155,7 @@ final class MaterialImageLinkService
                     'material_name' => (string) ($material['name'] ?? ''),
                     'material_code' => (string) ($material['material_code'] ?? ''),
                     'ok' => false,
-                    'message' => 'رفع الأمين نجح لكن لم يُرجع معرف الصورة (GUID).',
+                    'message' => 'رفع الأمين نجح لكن لم يُؤكَّد ربط الصورة بالمادة.',
                 ];
                 continue;
             }
@@ -1083,7 +1197,9 @@ final class MaterialImageLinkService
     private static function materialPictureGuid(array $material): string
     {
         $guid = trim((string) (
-            $material['pictureGuid']
+            $material['productImageGuid']
+            ?? $material['ProductImageGuid']
+            ?? $material['pictureGuid']
             ?? $material['PictureGuid']
             ?? $material['imageGuid']
             ?? $material['ImageGuid']
@@ -1181,6 +1297,10 @@ final class MaterialImageLinkService
                 'Unit2' => trim((string) ($data['packageUnit'] ?? $data['PackageUnit'] ?? $data['unit2'] ?? $data['Unit2'] ?? '')),
                 'unit2Fact' => $data['packageConversionFactor'] ?? $data['PackageConversionFactor'] ?? $data['unit2Fact'] ?? $data['Unit2Fact'] ?? null,
                 'Unit2Fact' => $data['packageConversionFactor'] ?? $data['PackageConversionFactor'] ?? $data['unit2Fact'] ?? $data['Unit2Fact'] ?? null,
+                'productImageGuid' => $data['productImageGuid'] ?? $data['ProductImageGuid'] ?? null,
+                'ProductImageGuid' => $data['productImageGuid'] ?? $data['ProductImageGuid'] ?? null,
+                'pictureGuid' => $data['productImageGuid'] ?? $data['ProductImageGuid'] ?? $data['pictureGuid'] ?? $data['PictureGuid'] ?? null,
+                'PictureGuid' => $data['productImageGuid'] ?? $data['ProductImageGuid'] ?? $data['pictureGuid'] ?? $data['PictureGuid'] ?? null,
             ]);
         } catch (Throwable) {
             return null;
@@ -1497,12 +1617,34 @@ final class MaterialImageLinkService
     /** @return array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>} */
     private static function combineAssignFailures(array $amineResult, array $uploadResult): array
     {
+        $uploadLinked = (int) ($uploadResult['linked'] ?? 0);
+        $amineLinked = (int) ($amineResult['linked'] ?? 0);
+        if ($uploadLinked > 0) {
+            return $uploadResult;
+        }
+        if ($amineLinked > 0) {
+            return $amineResult;
+        }
+
         $items = array_merge($uploadResult['items'] ?? [], $amineResult['items'] ?? []);
+        if (self::isSourceNotFoundAssignError($amineResult) && $items !== []) {
+            $uploadMessage = self::formatAssignFailureMessage($uploadResult['items'] ?? [], '');
+            if ($uploadMessage !== 'لم يُربط أي مادة من «». تحقق من صلاحيات حساب API (materials.update) واتصال الأمين.') {
+                return [
+                    'ok' => false,
+                    'message' => $uploadMessage,
+                    'linked' => 0,
+                    'failed' => max((int) ($amineResult['failed'] ?? 0), (int) ($uploadResult['failed'] ?? 0)),
+                    'items' => $items,
+                ];
+            }
+        }
+
         $message = self::formatAssignFailureMessage($items, '');
         if ($message === 'لم يُربط أي مادة من «». تحقق من صلاحيات حساب API (materials.update) واتصال الأمين.') {
             $message = trim((string) ($uploadResult['message'] ?? ''));
             if ($message === '' || str_starts_with($message, 'تم ')) {
-                $message = (string) ($amineResult['message'] ?? 'لم يُربط أي مادة.');
+                $message = self::localizeAmineAssignMessage((string) ($amineResult['message'] ?? 'لم يُربط أي مادة.'));
             }
         }
 
@@ -1513,6 +1655,179 @@ final class MaterialImageLinkService
             'failed' => max((int) ($amineResult['failed'] ?? 0), (int) ($uploadResult['failed'] ?? 0)),
             'items' => $items,
         ];
+    }
+
+    /** @return array{0: string|null, 1: string|null} */
+    private static function resolveAssignSourcePaths(string $sourceFileName, string $amineSourceGuid): array
+    {
+        $amineSourceGuid = trim($amineSourceGuid);
+        $local = MaterialImageStorageService::resolveLocalSourcePath($amineSourceGuid, $sourceFileName);
+        if ($local !== null) {
+            return [$local, null];
+        }
+
+        $local = MaterialImageStorageService::resolveLocalPath($sourceFileName, false);
+        if ($local !== null && is_file($local)) {
+            return [$local, null];
+        }
+
+        if ($amineSourceGuid === '') {
+            return [null, null];
+        }
+
+        $temp = self::resolveSourcePathForProcessing($sourceFileName, $amineSourceGuid);
+        if ($temp === null || !is_file($temp)) {
+            return [null, null];
+        }
+
+        return [$temp, self::isTempProcessingSource($temp) ? $temp : null];
+    }
+
+    /** @param array<string, mixed> $response */
+    private static function extractUploadedImageGuid(array $response, string $materialGuid): string
+    {
+        $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+        $imageGuid = trim((string) ($data['id'] ?? $data['Id'] ?? $data['guid'] ?? $data['Guid'] ?? ''));
+        if ($imageGuid !== '' && strcasecmp($imageGuid, '00000000-0000-0000-0000-000000000000') !== 0) {
+            return $imageGuid;
+        }
+
+        $material = self::fetchMaterial($materialGuid);
+
+        return $material !== null ? self::materialPictureGuid($material) : '';
+    }
+
+    /**
+     * @param list<string> $materialGuids
+     * @param array<string, string> $previousPictureGuids
+     * @return array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>}|null
+     */
+    private static function reconcileAssignSuccessFromAmine(
+        array $materialGuids,
+        array $previousPictureGuids,
+        string $sourceFileName
+    ): ?array {
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            if ($attempt > 0) {
+                usleep(350000);
+            }
+
+            $items = [];
+            $linked = 0;
+
+            foreach ($materialGuids as $materialGuid) {
+                $materialGuid = trim($materialGuid);
+                if ($materialGuid === '') {
+                    continue;
+                }
+
+                $material = self::fetchMaterial($materialGuid);
+                if ($material === null) {
+                    continue;
+                }
+
+                $currentPictureGuid = self::materialPictureGuid($material);
+                $previousPictureGuid = (string) ($previousPictureGuids[$materialGuid] ?? '');
+                if ($currentPictureGuid === '' || strcasecmp($currentPictureGuid, $previousPictureGuid) === 0) {
+                    continue;
+                }
+
+                $linked++;
+                $items[] = [
+                    'material_guid' => $materialGuid,
+                    'material_name' => (string) ($material['name'] ?? ''),
+                    'material_code' => (string) ($material['material_code'] ?? ''),
+                    'image_guid' => $currentPictureGuid,
+                    'ok' => true,
+                    'message' => 'تم التأكد من الربط على الأمين.',
+                ];
+            }
+
+            if ($linked > 0) {
+                return [
+                    'ok' => true,
+                    'message' => 'تم ربط ' . $linked . ' مادة من الصورة «' . $sourceFileName . '».',
+                    'linked' => $linked,
+                    'failed' => max(0, count($materialGuids) - $linked),
+                    'items' => $items,
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>} $failure
+     * @param list<string> $materialGuids
+     * @param array<string, string> $previousPictureGuids
+     * @return array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>}
+     */
+    private static function assignFailureOrReconcile(
+        array $failure,
+        array $materialGuids,
+        array $previousPictureGuids,
+        string $sourceFileName,
+        string $amineSourceGuid
+    ): array {
+        $reconciled = self::reconcileAssignSuccessFromAmine($materialGuids, $previousPictureGuids, $sourceFileName);
+        if ($reconciled !== null) {
+            return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
+        }
+
+        return $failure;
+    }
+
+    /** @param array<string, mixed> $response */
+    private static function extractAmineApiError(array $response, string $fallback): string
+    {
+        $status = (int) ($response['status'] ?? 0);
+        $message = '';
+        $data = $response['data'] ?? null;
+        if (is_array($data)) {
+            $message = trim((string) ($data['message'] ?? $data['Message'] ?? ''));
+            if ($message === '') {
+                $title = trim((string) ($data['title'] ?? ''));
+                $detail = trim((string) ($data['detail'] ?? ''));
+                $message = $detail !== ''
+                    ? ($title !== '' ? ($title . ': ' . $detail) : $detail)
+                    : $title;
+            }
+        }
+        if ($message === '') {
+            $message = trim((string) ($response['error'] ?? ''));
+        }
+        if ($message === '') {
+            $message = $fallback;
+        }
+        if ($status > 0 && !str_starts_with($message, '[')) {
+            $message = '[' . $status . '] ' . $message;
+        }
+
+        return self::localizeAmineAssignMessage($message);
+    }
+
+    private static function localizeAmineAssignMessage(string $message): string
+    {
+        $normalized = strtolower(trim($message));
+
+        return match (true) {
+            str_contains($normalized, 'source image was not found') => 'صورة المصدر غير موجودة على الأمين. جرّب إعادة تحميل القائمة.',
+            str_contains($normalized, 'source image file was not found on disk') => 'ملف الصورة غير موجود على قرص الأمين — سيتم محاولة الرفع من نسخة الموقع.',
+            str_contains($normalized, 'no valid materials were found') => 'لم تُعثر على مواد صالحة للربط.',
+            str_contains($normalized, 'material was not found during linking') => 'تعذر ربط المادة أثناء التنفيذ على الأمين.',
+            str_contains($normalized, 'forbidden') || str_contains($normalized, '403') => 'لا توجد صلاحية materials.update على حساب API.',
+            default => $message,
+        };
+    }
+
+    /** @param array{ok?: bool, message?: string, linked?: int, failed?: int, items?: list<array<string, mixed>>} $result */
+    private static function isSourceNotFoundAssignError(array $result): bool
+    {
+        $message = strtolower(trim((string) ($result['message'] ?? '')));
+
+        return str_contains($message, 'source image was not found')
+            || str_contains($message, 'صورة المصدر غير موجودة');
     }
 
     /** @return array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>} */

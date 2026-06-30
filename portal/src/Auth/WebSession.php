@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Auth;
 
 use Portal\Database;
+use Portal\Services\PortalSessionService;
 use Portal\Support\StaffRoleProvisioner;
 use PDO;
 
@@ -148,11 +149,14 @@ final class WebSession
         $pdo->prepare('UPDATE web_users SET last_login_at = NOW() WHERE id = :id')
             ->execute(['id' => $user['id']]);
 
+        PortalSessionService::registerStaff((string) $user['id']);
+
         return true;
     }
 
     public static function logout(): void
     {
+        PortalSessionService::revokeCurrent();
         unset($_SESSION[self::SESSION_KEY]);
     }
 

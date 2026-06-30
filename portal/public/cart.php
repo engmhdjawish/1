@@ -100,7 +100,7 @@ if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] =
         $notice = 'تم تفريغ قائمة الأصناف غير المتوفرة.';
     } elseif ($action === 'submit_order' && $allowOrder) {
         $guestName = trim((string) ($_POST['guest_name_ar'] ?? ''));
-        $guestPhone = trim((string) ($_POST['guest_phone'] ?? ''));
+        $guestPhone = portal_normalize_phone(trim((string) ($_POST['guest_phone'] ?? '')));
         $notes = trim((string) ($_POST['notes_ar'] ?? ''));
         if ($loggedInCustomer !== null) {
             $guestName = trim((string) ($loggedInCustomer['name_ar'] ?? ''));
@@ -441,7 +441,7 @@ ob_start();
                     <input name="guest_name_ar" required value="<?= h($defaultGuestName) ?>" class="h-11 w-full rounded-lg border border-gray-300 px-3 mt-1">
                   </label>
                   <label class="block text-sm font-bold">رقم الهاتف *
-                    <input name="guest_phone" required dir="ltr" value="<?= h($defaultGuestPhone) ?>" class="h-11 w-full rounded-lg border border-gray-300 px-3 mt-1 text-left" placeholder="09xxxxxxxx">
+                    <input name="guest_phone" required <?= portal_phone_input_attributes() ?> value="<?= h($defaultGuestPhone) ?>" class="h-11 w-full rounded-lg border border-gray-300 px-3 mt-1 text-left" placeholder="09xxxxxxxx">
                   </label>
                 <?php endif; ?>
                 <label class="block text-sm font-bold">ملاحظات

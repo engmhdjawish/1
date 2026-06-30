@@ -30,8 +30,10 @@ final class AccessPolicyService
 
     private const OPTION_ALLOW_SORTING = 'option_allow_sorting';
     private const OPTION_DEFAULT_SORT = 'option_default_sort';
+    private const OPTION_DEFAULT_GROUP_BY = 'option_default_group_by';
     private const OPTION_VISIBLE_CLIENT_FILTER = 'option_visible_client_filter';
     private const OPTION_CLIENT_SORT_FIELD = 'option_client_sort_field';
+    private const VISIBLE_CLIENT_FILTERS_NONE = '__none__';
 
     /** @var list<string> */
     public const ALLOWED_VISIBLE_CLIENT_FILTERS = [
@@ -154,7 +156,8 @@ final class AccessPolicyService
      *   visible_client_filters: list<string>,
      *   allow_sorting: bool,
      *   client_sort_fields: list<string>,
-     *   default_sort: string
+     *   default_sort: string,
+     *   default_group_by: string
      * } */
     public static function storeOptionsForPolicyId(string $policyId): array
     {
@@ -168,9 +171,13 @@ final class AccessPolicyService
     private static function parseAllFilterRows(array $rows): array
     {
         $parsed = self::parseFilterRows($rows);
-        $storeOptions = self::defaultStoreOptions();
+        $defaults = self::defaultStoreOptions();
+        $storeOptions = $defaults;
+        $storeOptions['visible_client_filters'] = [];
+        $storeOptions['client_sort_fields'] = [];
         $hasStoreOptions = false;
         $hasVisibleClientFilters = false;
+        $hasClientSortFields = false;
         $visibleFilterWildcard = false;
 
         foreach ($rows as $row) {
@@ -188,15 +195,19 @@ final class AccessPolicyService
                 case self::OPTION_DEFAULT_SORT:
                     $storeOptions['default_sort'] = $value;
                     break;
+                case self::OPTION_DEFAULT_GROUP_BY:
+                    $storeOptions['default_group_by'] = $value;
+                    break;
                 case self::OPTION_VISIBLE_CLIENT_FILTER:
                     $hasVisibleClientFilters = true;
                     if ($value === '*') {
                         $visibleFilterWildcard = true;
-                    } else {
+                    } elseif ($value !== self::VISIBLE_CLIENT_FILTERS_NONE) {
                         $storeOptions['visible_client_filters'][] = $value;
                     }
                     break;
                 case self::OPTION_CLIENT_SORT_FIELD:
+                    $hasClientSortFields = true;
                     $storeOptions['client_sort_fields'][] = $value;
                     break;
             }
@@ -208,13 +219,21 @@ final class AccessPolicyService
             } else {
                 $storeOptions['visible_client_filters'] = self::normalizeVisibleClientFilters($storeOptions['visible_client_filters']);
             }
+        } else {
+            $storeOptions['visible_client_filters'] = $defaults['visible_client_filters'];
         }
 
-        $storeOptions['client_sort_fields'] = self::normalizeClientSortFields($storeOptions['client_sort_fields']);
+        if ($hasClientSortFields) {
+            $storeOptions['client_sort_fields'] = self::normalizeClientSortFields($storeOptions['client_sort_fields']);
+        } else {
+            $storeOptions['client_sort_fields'] = $defaults['client_sort_fields'];
+        }
+
+        $storeOptions['default_sort'] = self::normalizeDefaultSort((string) $storeOptions['default_sort']);
+        $storeOptions['default_group_by'] = self::normalizeDefaultGroupBy((string) ($storeOptions['default_group_by'] ?? 'none'));
         if ($storeOptions['client_sort_fields'] === []) {
             $storeOptions['client_sort_fields'] = self::clientSortFieldsFromDefaultSort((string) $storeOptions['default_sort']);
         }
-        $storeOptions['default_sort'] = self::normalizeDefaultSort((string) $storeOptions['default_sort']);
 
         return [
             'rules' => $parsed['rules'],
@@ -426,7 +445,7 @@ final class AccessPolicyService
             $insert->execute([
                 'policy_id' => $policyId,
                 'filter_type' => self::OPTION_VISIBLE_CLIENT_FILTER,
-                'value_ar' => '*',
+                'value_ar' => self::VISIBLE_CLIENT_FILTERS_NONE,
             ]);
         } else {
             $insertValues(self::OPTION_VISIBLE_CLIENT_FILTER, $visibleClientFilters);
@@ -444,6 +463,15 @@ final class AccessPolicyService
             'filter_type' => self::OPTION_DEFAULT_SORT,
             'value_ar' => $defaultSort,
         ]);
+
+        $defaultGroupBy = self::normalizeDefaultGroupBy((string) ($storeOptions['default_group_by'] ?? 'none'));
+        if ($defaultGroupBy !== 'none') {
+            $insert->execute([
+                'policy_id' => $policyId,
+                'filter_type' => self::OPTION_DEFAULT_GROUP_BY,
+                'value_ar' => $defaultGroupBy,
+            ]);
+        }
 
         $insertValues(
             self::OPTION_CLIENT_SORT_FIELD,
@@ -617,7 +645,8 @@ final class AccessPolicyService
      *   visible_client_filters: list<string>,
      *   allow_sorting: bool,
      *   client_sort_fields: list<string>,
-     *   default_sort: string
+     *   default_sort: string,
+     *   default_group_by: string
      * } */
     public static function defaultStoreOptions(): array
     {
@@ -626,6 +655,7 @@ final class AccessPolicyService
             'allow_sorting' => true,
             'client_sort_fields' => ['number', 'materialType', 'manufacturer'],
             'default_sort' => 'number:asc',
+            'default_group_by' => 'none',
         ];
     }
 
@@ -705,6 +735,15 @@ final class AccessPolicyService
         ];
 
         return in_array($value, $allowed, true) ? $value : 'number:asc';
+    }
+
+    private static function normalizeDefaultGroupBy(string $value): string
+    {
+        $value = trim($value);
+
+        return in_array($value, ['none', 'ageCategory', 'sizeRange', 'materialType', 'manufacturer', 'countryOfOrigin', 'group'], true)
+            ? $value
+            : 'none';
     }
 
     private static function toBool(string $value, bool $default): bool

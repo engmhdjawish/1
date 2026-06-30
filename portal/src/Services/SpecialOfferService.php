@@ -75,6 +75,28 @@ final class SpecialOfferService
         return $sections;
     }
 
+    /** @return list<array{show_images: bool, price_mode: string}> */
+    public static function activeHomeOfferDisplayOptions(): array
+    {
+        $offerIds = Database::pdo()->query(
+            'SELECT id::text AS id
+             FROM special_offers
+             WHERE is_active = TRUE
+               AND show_on_home = TRUE
+               AND starts_at <= NOW()
+               AND (ends_at IS NULL OR ends_at > NOW())
+             ORDER BY home_sort_order ASC, created_at ASC'
+        )->fetchAll(PDO::FETCH_COLUMN);
+
+        $options = [];
+        foreach ($offerIds as $offerId) {
+            $parsed = self::parseFilterRows(self::filtersForOffer((string) $offerId));
+            $options[] = $parsed['display_options'];
+        }
+
+        return $options;
+    }
+
     /** @return list<array<string, mixed>> */
     public static function adminList(): array
     {
@@ -319,6 +341,7 @@ final class SpecialOfferService
             'subtitle_ar' => (string) ($row['subtitle_ar'] ?? ''),
             'selection_mode' => (string) ($row['selection_mode'] ?? 'filter'),
             'filter_rules' => $parsed['rules'],
+            'display_options' => $parsed['display_options'],
             'material_guids' => self::manualProducts($id),
             'is_offer_section' => true,
         ];

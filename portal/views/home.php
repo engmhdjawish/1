@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
+use Portal\Auth\CustomerSession;
 use Portal\Services\PortalSettingsService;
 use Portal\Services\SpecialOfferService;
 use Portal\Services\StoreCatalogService;
-use Portal\Support\StorePricePreference;
 
 /** @var list<array<string, mixed>> $sections */
 /** @var list<array<string, mixed>> $ads */
@@ -24,7 +24,7 @@ if ($aboutSnippet !== '') {
 $sectionCount = count($sections);
 $offerCount = count(array_filter($sections, static fn (array $s): bool => !empty($s['is_offer_section'])));
 $storeCatalogDisplay = StoreCatalogService::displayOptions();
-$storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
+$homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
 ?>
 <div class="home-page">
   <section class="home-hero home-hero--premium" aria-label="ترحيب">
@@ -45,10 +45,12 @@ $storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
             <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
             تصفّح المتجر
           </a>
-          <a href="/register.php" class="home-btn home-btn--ghost">
-            <span class="material-symbols-outlined" aria-hidden="true">person_add</span>
-            تسجيل عميل
-          </a>
+          <?php if ($homeCustomer === null): ?>
+            <a href="/register.php" class="home-btn home-btn--ghost">
+              <span class="material-symbols-outlined" aria-hidden="true">person_add</span>
+              تسجيل عميل
+            </a>
+          <?php endif; ?>
         </div>
       </div>
 
@@ -142,24 +144,11 @@ $storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
         $products = is_array($section['products'] ?? null) ? $section['products'] : [];
         $sectionId = (string) ($section['slug'] ?? $section['id'] ?? '');
         $displayOptions = is_array($section['display_options'] ?? null) ? $section['display_options'] : [];
-        $showImages = array_key_exists('show_images', $displayOptions) ? (bool) $displayOptions['show_images'] : true;
-        $sectionPriceMode = (string) ($displayOptions['price_mode'] ?? 'both');
-        $sectionShowPrice = array_key_exists('show_price', $displayOptions)
-            ? (bool) $displayOptions['show_price']
-            : $storeShowPrice;
-        if (!$sectionShowPrice || $sectionPriceMode === 'none') {
-            $showAnyPrice = false;
-            $showPriceSyp = false;
-            $showPriceUsd = false;
-        } elseif ($sectionPriceMode === 'both') {
-            $showPriceSyp = StorePricePreference::current() === StorePricePreference::SYP;
-            $showPriceUsd = StorePricePreference::current() === StorePricePreference::USD;
-            $showAnyPrice = $showPriceSyp || $showPriceUsd;
-        } else {
-            $showPriceSyp = $sectionPriceMode === 'syp';
-            $showPriceUsd = $sectionPriceMode === 'usd';
-            $showAnyPrice = $showPriceSyp || $showPriceUsd;
-        }
+        $priceState = section_price_display_state($displayOptions, $storeCatalogDisplay);
+        $showImages = (bool) ($priceState['preview_display_options']['show_images'] ?? true);
+        $showAnyPrice = $priceState['show_any_price'];
+        $showPriceSyp = $priceState['show_price_syp'];
+        $showPriceUsd = $priceState['show_price_usd'];
         $isOfferSection = !empty($section['is_offer_section']);
       ?>
       <section
@@ -200,19 +189,8 @@ $storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
               $sectionSlug = trim((string) ($section['slug'] ?? ''));
               $sectionReturnUrl = home_section_return_url($section);
               $sectionOfferSlug = $isOfferSection && $sectionSlug !== '' ? $sectionSlug : null;
-              $sectionPriceModeResolved = $sectionPriceMode;
-              if ($sectionShowPrice && $storeShowPrice && $sectionPriceMode === 'both') {
-                  $sectionPriceModeResolved = StorePricePreference::current();
-              } elseif (!$sectionShowPrice || !$storeShowPrice || $sectionPriceMode === 'none') {
-                  $sectionPriceModeResolved = 'none';
-              }
-              $previewDisplayOptions = [
-                  'show_images' => $showImages,
-                  'show_price' => $sectionShowPrice && $storeShowPrice,
-                  'show_quantity' => (bool) ($storeCatalogDisplay['show_quantity'] ?? false),
-                  'allow_cart' => (bool) ($storeCatalogDisplay['allow_cart'] ?? false),
-                  'price_mode' => $sectionPriceModeResolved,
-              ];
+              $sectionPriceModeResolved = $priceState['price_mode_resolved'];
+              $previewDisplayOptions = $priceState['preview_display_options'];
               $homeAllowCart = (bool) ($previewDisplayOptions['allow_cart'] ?? false);
             ?>
             <div class="home-strip">
@@ -237,7 +215,14 @@ $storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
                       $cartQtyForItem = (float) ($cartItems[$guid]['quantity'] ?? 0);
                   }
                   $previewPayload = $guid !== ''
-                      ? product_preview_payload($item, $previewDisplayOptions, $cartQtyForItem, $sectionReturnUrl, $sectionOfferSlug)
+                      ? product_preview_payload(
+                          $item,
+                          $previewDisplayOptions,
+                          $cartQtyForItem,
+                          $sectionReturnUrl,
+                          $sectionOfferSlug,
+                          $isOfferSection ? null : ($sectionSlug !== '' ? $sectionSlug : null)
+                      )
                       : null;
                   $previewJson = $previewPayload !== null
                       ? json_encode($previewPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)

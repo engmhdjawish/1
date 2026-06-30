@@ -8,6 +8,11 @@ final class DashboardHttp
 {
     public static function wantsJson(): bool
     {
+        $script = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+        if ($script !== '' && str_ends_with($script, '-api.php')) {
+            return true;
+        }
+
         $accept = strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? ''));
         if (str_contains($accept, 'application/json')) {
             return true;
@@ -22,19 +27,31 @@ final class DashboardHttp
     /** @param array<string, mixed> $payload */
     public static function json(bool $ok, string $message, array $payload = []): never
     {
+        self::emitJson(array_merge(['ok' => $ok, 'message' => $message], $payload), $ok ? 200 : 400);
+    }
+
+    /** @param array<string, mixed> $payload */
+    public static function emitJson(array $payload, int $status = 200): never
+    {
         while (ob_get_level() > 0) {
             ob_end_clean();
         }
 
         if (!headers_sent()) {
-            http_response_code($ok ? 200 : 400);
+            http_response_code($status);
             header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store');
         }
 
-        echo json_encode(
-            array_merge(['ok' => $ok, 'message' => $message], $payload),
-            JSON_UNESCAPED_UNICODE
+        $encoded = json_encode(
+            $payload,
+            JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
         );
+        if ($encoded === false) {
+            $encoded = json_encode(['ok' => false, 'message' => 'تعذر ترميز الاستجابة.'], JSON_UNESCAPED_UNICODE);
+        }
+
+        echo $encoded;
         exit;
     }
 

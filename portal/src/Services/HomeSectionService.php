@@ -64,6 +64,22 @@ final class HomeSectionService
         return $sections;
     }
 
+    /** @return list<array{show_images: bool, price_mode: string}> */
+    public static function activeSectionDisplayOptions(): array
+    {
+        $sectionIds = Database::pdo()->query(
+            'SELECT id::text AS id FROM home_sections WHERE is_active = TRUE ORDER BY sort_order ASC'
+        )->fetchAll(PDO::FETCH_COLUMN);
+
+        $options = [];
+        foreach ($sectionIds as $sectionId) {
+            $parsed = self::parseFilterRows(self::filtersForSection((string) $sectionId));
+            $options[] = $parsed['display_options'];
+        }
+
+        return $options;
+    }
+
     /** @return array<string, mixed>|null */
     public static function storeContextBySlug(string $slug): ?array
     {
@@ -92,6 +108,7 @@ final class HomeSectionService
             'subtitle_ar' => (string) ($row['subtitle_ar'] ?? ''),
             'selection_mode' => (string) ($row['display_mode'] ?? 'filter'),
             'filter_rules' => $parsed['rules'],
+            'display_options' => $parsed['display_options'],
             'material_guids' => self::manualProducts($id),
             'is_offer_section' => false,
         ];
