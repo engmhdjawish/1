@@ -62,25 +62,19 @@ $formatOrderTotal = static function (array $order) use ($orderPriceCurrency, $fo
 $editing = $editCustomer !== null;
 ?>
 <section class="mb-6">
-  <div class="flex flex-col xl:flex-row xl:items-end justify-between gap-4">
-    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3 min-w-0 flex-1">
-      <div class="min-w-0">
-        <h1 class="text-2xl font-extrabold text-slate-900">عملاء الموقع</h1>
-        <p class="text-sm text-text-muted mt-1">
-          تسجيلات وعملاء البوابة الإلكترونية
-          <?php if (!empty($canViewAmineCustomers)): ?>
-            — مختلف عن <a href="/dashboard/accounting-customers.php" class="text-primary font-bold hover:underline">عملاء الأمين</a>.
-          <?php else: ?>
-            .
-          <?php endif; ?>
-        </p>
-      </div>
-      <div class="store-currency-toggle shrink-0" role="group" aria-label="عملة عرض الطلبات">
-        <button type="button" class="store-currency-toggle__btn <?= $orderPriceCurrency === 'syp' ? 'is-active' : '' ?>" data-dashboard-order-currency="syp" title="عرض بالليرة">ل.س</button>
-        <button type="button" class="store-currency-toggle__btn <?= $orderPriceCurrency === 'usd' ? 'is-active' : '' ?>" data-dashboard-order-currency="usd" title="عرض بالدولار">$</button>
-      </div>
+  <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-extrabold text-slate-900">عملاء الموقع</h1>
+      <p class="text-sm text-text-muted mt-1">
+        تسجيلات وعملاء البوابة الإلكترونية
+        <?php if (!empty($canViewAmineCustomers)): ?>
+          — مختلف عن <a href="/dashboard/accounting-customers.php" class="text-primary font-bold hover:underline">عملاء الأمين</a>.
+        <?php else: ?>
+          .
+        <?php endif; ?>
+      </p>
     </div>
-    <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-3 w-full xl:w-auto xl:max-w-3xl">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-3 w-full md:w-auto">
       <input type="hidden" name="status" value="<?= h($statusFilter) ?>">
       <label class="text-sm">
         <span class="text-text-muted block mb-1">بحث</span>
@@ -358,10 +352,6 @@ $editing = $editCustomer !== null;
             تعديل
           </a>
         <?php endif; ?>
-        <div class="store-currency-toggle store-currency-toggle--drawer ms-auto" role="group" aria-label="عملة عرض الطلبات">
-          <button type="button" class="store-currency-toggle__btn <?= $orderPriceCurrency === 'syp' ? 'is-active' : '' ?>" data-dashboard-order-currency="syp" title="عرض بالليرة">ل.س</button>
-          <button type="button" class="store-currency-toggle__btn <?= $orderPriceCurrency === 'usd' ? 'is-active' : '' ?>" data-dashboard-order-currency="usd" title="عرض بالدولار">$</button>
-        </div>
       </div>
     </header>
 

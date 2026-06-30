@@ -84,7 +84,6 @@ $searchFilter = trim((string) ($_GET['q'] ?? ''));
 $sourceFilter = trim((string) ($_GET['source'] ?? ''));
 $editId = trim((string) ($_GET['edit'] ?? ''));
 $detailsId = trim((string) ($_GET['details'] ?? ''));
-DashboardOrderPricePreference::applyFromRequest($_GET);
 $orderPriceCurrency = DashboardOrderPricePreference::current();
 
 $customers = WebCustomerService::listByStatus($statusFilter, $searchFilter, $sourceFilter, 120);
@@ -107,5 +106,4 @@ ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/customers.php';
 $content = ob_get_clean();
 $title = 'عملاء الموقع';
-$extraFooter = '<script src="' . h(portal_asset_url('/assets/dashboard-order-price-pref.js')) . '" defer></script>';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';
