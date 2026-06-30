@@ -1345,6 +1345,20 @@ final class MaterialImageStorageService
             return ['ok' => false, 'message' => 'تعذر إنشاء مجلدات التخزين.'];
         }
 
+        $sourceReal = realpath($sourcePath);
+        $targetReal = realpath($targetPath);
+        if ($sourceReal !== false && $targetReal !== false && $sourceReal === $targetReal) {
+            if (!self::generateThumbnail($targetPath, $thumbPath)) {
+                @copy($targetPath, $thumbPath);
+            }
+
+            return ['ok' => true, 'message' => 'تم', 'file_name' => $targetFileName];
+        }
+
+        if (is_file($targetPath) && ($sourceReal === false || $targetReal === false || $sourceReal !== $targetReal)) {
+            @unlink($targetPath);
+        }
+
         if (!@copy($sourcePath, $targetPath)) {
             return ['ok' => false, 'message' => 'تعذر نسخ الصورة محلياً.'];
         }
