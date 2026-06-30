@@ -650,6 +650,8 @@ final class MaterialImageLinkService
             return self::assignError('الأمين غير متصل.');
         }
 
+        $previousPictureGuids = self::snapshotMaterialPictureGuids($materialGuids);
+
         $amineSourceGuid = trim((string) $knownAmineSourceGuid);
         if ($amineSourceGuid === '') {
             $quickLocal = MaterialImageStorageService::resolveLocalPath($sourceFileName, false);
@@ -746,18 +748,34 @@ final class MaterialImageLinkService
                         return self::finalizeAssignResult($uploadResult, $sourceFileName, $amineSourceGuid);
                     }
 
+                    $reconciled = self::reconcileAssignSuccessFromAmine($materialGuids, $previousPictureGuids, $sourceFileName);
+                    if ($reconciled !== null) {
+                        return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
+                    }
+
                     return self::combineAssignFailures($amineResult, $uploadResult);
+                }
+
+                $reconciled = self::reconcileAssignSuccessFromAmine($materialGuids, $previousPictureGuids, $sourceFileName);
+                if ($reconciled !== null) {
+                    return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
                 }
 
                 return $amineResult;
             }
 
             if ($hasLocal && $sourcePath !== null) {
-                return self::finalizeAssignResult(
-                    self::assignViaUpload((string) $sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId),
-                    $sourceFileName,
-                    $amineSourceGuid
-                );
+                $uploadResult = self::assignViaUpload((string) $sourcePath, $sourceFileName, $materialGuids, $uploadedByUserId);
+                if (($uploadResult['linked'] ?? 0) > 0) {
+                    return self::finalizeAssignResult($uploadResult, $sourceFileName, $amineSourceGuid);
+                }
+
+                $reconciled = self::reconcileAssignSuccessFromAmine($materialGuids, $previousPictureGuids, $sourceFileName);
+                if ($reconciled !== null) {
+                    return self::finalizeAssignResult($reconciled, $sourceFileName, $amineSourceGuid);
+                }
+
+                return $uploadResult;
             }
 
             return self::assignError('الصورة غير موجودة على الموقع ولا يمكن رفعها للأمين.');
@@ -906,34 +924,28 @@ final class MaterialImageLinkService
 
             $hasLocalSource = $sourcePath !== '' && is_file($sourcePath);
             $localPath = '';
+            $copy = ['ok' => true, 'file_name' => $storedFileName];
             if ($hasLocalSource) {
                 $copy = MaterialImageStorageService::copyLocalFromSource($sourcePath, $storedFileName);
-                if (!($copy['ok'] ?? false)) {
-                    $failed++;
-                    $results[] = [
-                        'material_guid' => $materialGuid,
-                        'material_name' => $materialName,
-                        'material_code' => $materialCode,
-                        'ok' => false,
-                        'message' => (string) ($copy['message'] ?? 'فشل النسخ المحلي.'),
-                    ];
-                    continue;
+                if ($copy['ok'] ?? false) {
+                    $localPath = MaterialImageStorageService::settings()['images_dir']
+                        . DIRECTORY_SEPARATOR
+                        . (string) ($copy['file_name'] ?? $storedFileName);
                 }
-                $localPath = MaterialImageStorageService::settings()['images_dir']
-                    . DIRECTORY_SEPARATOR
-                    . (string) ($copy['file_name'] ?? $storedFileName);
-            } else {
-                $copy = ['ok' => true, 'file_name' => $storedFileName];
+            }
+            if ($localPath === '' || !is_file($localPath)) {
                 $download = ApiClient::getBinary('/api/material-images/' . rawurlencode($imageGuid) . '/file');
                 if ($download['ok'] ?? false) {
                     $localPath = MaterialImageStorageService::settings()['images_dir']
                         . DIRECTORY_SEPARATOR
                         . $storedFileName;
                     @file_put_contents($localPath, $download['body'] ?? '');
+                    $copy = ['ok' => true, 'file_name' => $storedFileName];
                 }
             }
 
-            if ($localPath !== '' && is_file($localPath)) {
+            $syncedLocally = $localPath !== '' && is_file($localPath);
+            if ($syncedLocally) {
                 MaterialImageSyncService::recordAssignedCopy(
                     (string) ($copy['file_name'] ?? $storedFileName),
                     $localPath,
@@ -956,7 +968,7 @@ final class MaterialImageLinkService
                 'image_guid' => $imageGuid,
                 'file_name' => (string) ($copy['file_name'] ?? $storedFileName),
                 'ok' => true,
-                'message' => 'تم الربط.',
+                'message' => $syncedLocally ? 'تم الربط.' : 'تم الربط على الأمين.',
             ];
         }
 
@@ -1070,8 +1082,8 @@ final class MaterialImageLinkService
             }
 
             $data = is_array($response['data'] ?? null) ? $response['data'] : [];
-            $imageGuid = trim((string) ($data['id'] ?? $data['Id'] ?? ''));
-            $storedFileName = trim((string) ($data['storedFileName'] ?? $data['StoredFileName'] ?? ''));
+            $imageGuid = self::extractUploadedImageGuid($response, $materialGuid);
+            $storedFileName = trim((string) ($data['storedFileName'] ?? $data['StoredFileName'] ?? $data['fileName'] ?? $data['FileName'] ?? ''));
             if ($storedFileName !== '' && strcasecmp($storedFileName, $fileName) !== 0) {
                 $resync = MaterialImageStorageService::copyLocalFromSource($localPath, $storedFileName);
                 if ($resync['ok'] ?? false) {
@@ -1090,7 +1102,7 @@ final class MaterialImageLinkService
                     'material_name' => (string) ($material['name'] ?? ''),
                     'material_code' => (string) ($material['material_code'] ?? ''),
                     'ok' => false,
-                    'message' => 'رفع الأمين نجح لكن لم يُرجع معرف الصورة (GUID).',
+                    'message' => 'رفع الأمين نجح لكن لم يُؤكَّد ربط الصورة بالمادة.',
                 ];
                 continue;
             }
@@ -1597,6 +1609,74 @@ final class MaterialImageLinkService
         }
 
         return [$temp, self::isTempProcessingSource($temp) ? $temp : null];
+    }
+
+    /** @param array<string, mixed> $response */
+    private static function extractUploadedImageGuid(array $response, string $materialGuid): string
+    {
+        $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+        $imageGuid = trim((string) ($data['id'] ?? $data['Id'] ?? $data['guid'] ?? $data['Guid'] ?? ''));
+        if ($imageGuid !== '' && strcasecmp($imageGuid, '00000000-0000-0000-0000-000000000000') !== 0) {
+            return $imageGuid;
+        }
+
+        $material = self::fetchMaterial($materialGuid);
+
+        return $material !== null ? self::materialPictureGuid($material) : '';
+    }
+
+    /**
+     * @param list<string> $materialGuids
+     * @param array<string, string> $previousPictureGuids
+     * @return array{ok: bool, message: string, linked: int, failed: int, items: list<array<string, mixed>>}|null
+     */
+    private static function reconcileAssignSuccessFromAmine(
+        array $materialGuids,
+        array $previousPictureGuids,
+        string $sourceFileName
+    ): ?array {
+        $items = [];
+        $linked = 0;
+
+        foreach ($materialGuids as $materialGuid) {
+            $materialGuid = trim($materialGuid);
+            if ($materialGuid === '') {
+                continue;
+            }
+
+            $material = self::fetchMaterial($materialGuid);
+            if ($material === null) {
+                continue;
+            }
+
+            $currentPictureGuid = self::materialPictureGuid($material);
+            $previousPictureGuid = (string) ($previousPictureGuids[$materialGuid] ?? '');
+            if ($currentPictureGuid === '' || strcasecmp($currentPictureGuid, $previousPictureGuid) === 0) {
+                continue;
+            }
+
+            $linked++;
+            $items[] = [
+                'material_guid' => $materialGuid,
+                'material_name' => (string) ($material['name'] ?? ''),
+                'material_code' => (string) ($material['material_code'] ?? ''),
+                'image_guid' => $currentPictureGuid,
+                'ok' => true,
+                'message' => 'تم التأكد من الربط على الأمين.',
+            ];
+        }
+
+        if ($linked === 0) {
+            return null;
+        }
+
+        return [
+            'ok' => true,
+            'message' => 'تم ربط ' . $linked . ' مادة من الصورة «' . $sourceFileName . '».',
+            'linked' => $linked,
+            'failed' => max(0, count($materialGuids) - $linked),
+            'items' => $items,
+        ];
     }
 
     /** @param array<string, mixed> $response */
