@@ -30,7 +30,7 @@ $staffLoggedIn = WebSession::check();
 $storeDisplay = StoreCatalogService::displayOptions();
 StorePricePreference::bootstrap();
 StorePricePreference::applyFromRequest($_GET);
-$storeShowPrice = (bool) ($storeDisplay['show_price'] ?? false);
+$storeShowPrice = StoreCatalogService::headerShowsPriceCurrency();
 $storePriceCurrency = StorePricePreference::current();
 $storeAllowCart = (bool) ($storeDisplay['allow_cart'] ?? false);
 $storeCartCount = $storeAllowCart ? StoreCartService::itemCount() : 0;

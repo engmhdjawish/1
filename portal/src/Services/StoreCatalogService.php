@@ -37,6 +37,33 @@ final class StoreCatalogService
         ];
     }
 
+    /** هل يُعرض مبدّل العملة في الهيدر (سياسة الوصول أو أقسام رئيسية بأسعار). */
+    public static function headerShowsPriceCurrency(): bool
+    {
+        $display = self::displayOptions();
+        if ((bool) ($display['show_price'] ?? false)) {
+            return true;
+        }
+
+        if (!function_exists('section_price_display_state')) {
+            require dirname(__DIR__, 2) . '/views/helpers.php';
+        }
+
+        $sectionDisplays = array_merge(
+            HomeSectionService::activeSectionDisplayOptions(),
+            SpecialOfferService::activeHomeOfferDisplayOptions()
+        );
+
+        foreach ($sectionDisplays as $sectionDisplay) {
+            $state = section_price_display_state($sectionDisplay, $display);
+            if ($state['show_any_price']) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** @return array<string, mixed>|null */
     public static function activePolicy(): ?array
     {
