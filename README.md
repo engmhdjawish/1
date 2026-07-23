@@ -114,6 +114,24 @@ http://localhost:5249/portal
 - شاشة عملاء مرتبطة بملخص الحساب وكشف الحساب.
 - الواجهة موجهة للمستخدم النهائي ولا تعرض JSON داخل الشاشة التشغيلية.
 
+### اختبار الضغط (محاكاة استخدام الموقع)
+
+أدوات جاهزة في [`loadtest/`](loadtest/README.md) لضرب الـ API والموقع بعدد زوار متزامنين:
+
+```powershell
+# ضغط على ASP.NET API (مثل حساب الخدمة أثناء تصفح المتجر)
+.\loadtest\run.ps1 -Scenario api-browse -BaseUrl http://127.0.0.1:5249 `
+  -Username portal-service -Password 'YourApiPassword' -Vus 20 -Duration 60
+
+# ضغط على واجهة الزائر (PHP store)
+.\loadtest\run.ps1 -Scenario site-browse -SiteUrl http://127.0.0.1:8080 -Vus 30 -Duration 90
+```
+
+```bash
+node loadtest/run.mjs --scenario api-browse --base-url http://127.0.0.1:5249 \
+  --username portal-service --password 'YourApiPassword' --vus 20 --duration 60
+```
+
 ### تجاوز المصادقة مؤقتًا أثناء التطوير
 
 للتطوير المحلي فقط يمكنك تجاوز تسجيل الدخول في Swagger عبر:
