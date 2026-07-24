@@ -1,10 +1,12 @@
+using System.Linq.Expressions;
 using ExistingDb.Api.Contracts.Materials;
 using ExistingDb.Api.Data;
+using ExistingDb.Api.Data.MainDb;
 using Microsoft.EntityFrameworkCore;
 
 namespace ExistingDb.Api.Services.Materials;
 
-public sealed class MaterialResultFiltersService(MainDbContext mainDbContext, MaterialQueryBuilder queryBuilder)
+public sealed class MaterialResultFiltersService(IDbContextFactory<MainDbContext> contextFactory)
 {
     private const int MaxFacetValues = 100;
 
@@ -13,128 +15,97 @@ public sealed class MaterialResultFiltersService(MainDbContext mainDbContext, Ma
         string? search,
         CancellationToken cancellationToken)
     {
-        var ageCategories = await GetProvenanceFacetAsync(filters, search, cancellationToken);
-        var sizeRanges = await GetDimFacetAsync(filters, search, cancellationToken);
-        var materialTypes = await GetColorFacetAsync(filters, search, cancellationToken);
-        var manufacturers = await GetCompanyFacetAsync(filters, search, cancellationToken);
-        var countryOfOrigins = await GetOriginFacetAsync(filters, search, cancellationToken);
-        var groups = await GetGroupFacetsAsync(filters, search, cancellationToken);
+        var searchResolution = await ResolveSearchAsync(search, cancellationToken);
+
+        var ageCategoriesTask = GetStringFacetAsync(
+            filters,
+            searchResolution,
+            MaterialFilterExclusions.AgeCategories,
+            material => material.Provenance,
+            cancellationToken);
+        var sizeRangesTask = GetStringFacetAsync(
+            filters,
+            searchResolution,
+            MaterialFilterExclusions.SizeRanges,
+            material => material.Dim,
+            cancellationToken);
+        var materialTypesTask = GetStringFacetAsync(
+            filters,
+            searchResolution,
+            MaterialFilterExclusions.MaterialTypes,
+            material => material.Color,
+            cancellationToken);
+        var manufacturersTask = GetStringFacetAsync(
+            filters,
+            searchResolution,
+            MaterialFilterExclusions.Manufacturers,
+            material => material.Company,
+            cancellationToken);
+        var countryOfOriginsTask = GetStringFacetAsync(
+            filters,
+            searchResolution,
+            MaterialFilterExclusions.CountryOfOrigins,
+            material => material.Origin,
+            cancellationToken);
+        var groupsTask = GetGroupFacetsAsync(filters, searchResolution, cancellationToken);
+
+        await Task.WhenAll(
+            ageCategoriesTask,
+            sizeRangesTask,
+            materialTypesTask,
+            manufacturersTask,
+            countryOfOriginsTask,
+            groupsTask);
 
         return new MaterialResultFiltersResponse(
-            ageCategories,
-            sizeRanges,
-            materialTypes,
-            manufacturers,
-            countryOfOrigins,
-            groups);
+            await ageCategoriesTask,
+            await sizeRangesTask,
+            await materialTypesTask,
+            await manufacturersTask,
+            await countryOfOriginsTask,
+            await groupsTask);
     }
 
-    private async Task<IReadOnlyCollection<FacetValueResponse>> GetProvenanceFacetAsync(
-        MaterialListFilters filters,
+    private async Task<MaterialSearchResolution> ResolveSearchAsync(
         string? search,
         CancellationToken cancellationToken)
     {
-        var query = await BuildFacetQueryAsync(filters, search, MaterialFilterExclusions.AgeCategories, cancellationToken);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var queryBuilder = new MaterialQueryBuilder(context);
 
-        var rows = await query
-            .Where(material => material.Provenance != null && material.Provenance != string.Empty)
-            .GroupBy(material => material.Provenance!)
-            .Select(group => new { Value = group.Key, Count = group.Count() })
-            .OrderBy(facet => facet.Value)
-            .Take(MaxFacetValues)
-            .ToListAsync(cancellationToken);
-
-        return rows.Select(row => new FacetValueResponse(row.Value, row.Count)).ToList();
+        return await queryBuilder.ResolveSearchAsync(search, cancellationToken);
     }
 
-    private async Task<IReadOnlyCollection<FacetValueResponse>> GetDimFacetAsync(
+    private async Task<IReadOnlyCollection<FacetValueResponse>> GetStringFacetAsync(
         MaterialListFilters filters,
-        string? search,
-        CancellationToken cancellationToken)
-    {
-        var query = await BuildFacetQueryAsync(filters, search, MaterialFilterExclusions.SizeRanges, cancellationToken);
-
-        var rows = await query
-            .Where(material => material.Dim != null && material.Dim != string.Empty)
-            .GroupBy(material => material.Dim!)
-            .Select(group => new { Value = group.Key, Count = group.Count() })
-            .OrderBy(facet => facet.Value)
-            .Take(MaxFacetValues)
-            .ToListAsync(cancellationToken);
-
-        return rows.Select(row => new FacetValueResponse(row.Value, row.Count)).ToList();
-    }
-
-    private async Task<IReadOnlyCollection<FacetValueResponse>> GetColorFacetAsync(
-        MaterialListFilters filters,
-        string? search,
-        CancellationToken cancellationToken)
-    {
-        var query = await BuildFacetQueryAsync(filters, search, MaterialFilterExclusions.MaterialTypes, cancellationToken);
-
-        var rows = await query
-            .Where(material => material.Color != null && material.Color != string.Empty)
-            .GroupBy(material => material.Color!)
-            .Select(group => new { Value = group.Key, Count = group.Count() })
-            .OrderBy(facet => facet.Value)
-            .Take(MaxFacetValues)
-            .ToListAsync(cancellationToken);
-
-        return rows.Select(row => new FacetValueResponse(row.Value, row.Count)).ToList();
-    }
-
-    private async Task<IReadOnlyCollection<FacetValueResponse>> GetCompanyFacetAsync(
-        MaterialListFilters filters,
-        string? search,
-        CancellationToken cancellationToken)
-    {
-        var query = await BuildFacetQueryAsync(filters, search, MaterialFilterExclusions.Manufacturers, cancellationToken);
-
-        var rows = await query
-            .Where(material => material.Company != null && material.Company != string.Empty)
-            .GroupBy(material => material.Company!)
-            .Select(group => new { Value = group.Key, Count = group.Count() })
-            .OrderBy(facet => facet.Value)
-            .Take(MaxFacetValues)
-            .ToListAsync(cancellationToken);
-
-        return rows.Select(row => new FacetValueResponse(row.Value, row.Count)).ToList();
-    }
-
-    private async Task<IReadOnlyCollection<FacetValueResponse>> GetOriginFacetAsync(
-        MaterialListFilters filters,
-        string? search,
-        CancellationToken cancellationToken)
-    {
-        var query = await BuildFacetQueryAsync(filters, search, MaterialFilterExclusions.CountryOfOrigins, cancellationToken);
-
-        var rows = await query
-            .Where(material => material.Origin != null && material.Origin != string.Empty)
-            .GroupBy(material => material.Origin!)
-            .Select(group => new { Value = group.Key, Count = group.Count() })
-            .OrderBy(facet => facet.Value)
-            .Take(MaxFacetValues)
-            .ToListAsync(cancellationToken);
-
-        return rows.Select(row => new FacetValueResponse(row.Value, row.Count)).ToList();
-    }
-
-    private async Task<IQueryable<ExistingDb.Api.Data.MainDb.MaterialRecord>> BuildFacetQueryAsync(
-        MaterialListFilters filters,
-        string? search,
+        MaterialSearchResolution searchResolution,
         MaterialFilterExclusions excludeDimension,
+        Expression<Func<MaterialRecord, string?>> selector,
         CancellationToken cancellationToken)
     {
-        var query = queryBuilder.Build(filters, excludeDimension);
-        return await queryBuilder.ApplySearchFilterAsync(query, search, cancellationToken);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var queryBuilder = new MaterialQueryBuilder(context);
+        var query = queryBuilder.BuildFacetQuery(filters, searchResolution, excludeDimension);
+
+        var rows = await query
+            .Where(BuildNotEmptyFilter(selector))
+            .GroupBy(selector)
+            .Select(group => new { Value = group.Key!, Count = group.Count() })
+            .OrderBy(facet => facet.Value)
+            .Take(MaxFacetValues)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(row => new FacetValueResponse(row.Value, row.Count)).ToList();
     }
 
     private async Task<IReadOnlyCollection<GroupFacetValueResponse>> GetGroupFacetsAsync(
         MaterialListFilters filters,
-        string? search,
+        MaterialSearchResolution searchResolution,
         CancellationToken cancellationToken)
     {
-        var query = await BuildFacetQueryAsync(filters, search, MaterialFilterExclusions.Groups, cancellationToken);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var queryBuilder = new MaterialQueryBuilder(context);
+        var query = queryBuilder.BuildFacetQuery(filters, searchResolution, MaterialFilterExclusions.Groups);
 
         var groupCounts = await query
             .Where(material => material.GroupGuid.HasValue)
@@ -154,7 +125,7 @@ public sealed class MaterialResultFiltersService(MainDbContext mainDbContext, Ma
         }
 
         var groupGuids = groupCounts.Select(group => group.GroupGuid).ToArray();
-        var groups = await mainDbContext.MaterialGroups
+        var groups = await context.MaterialGroups
             .AsNoTracking()
             .Where(group => groupGuids.Contains(group.Guid))
             .Select(group => new
@@ -178,5 +149,17 @@ public sealed class MaterialResultFiltersService(MainDbContext mainDbContext, Ma
             .OrderBy(group => group.Name)
             .ThenBy(group => group.Code)
             .ToList();
+    }
+
+    private static Expression<Func<MaterialRecord, bool>> BuildNotEmptyFilter(
+        Expression<Func<MaterialRecord, string?>> selector)
+    {
+        var parameter = selector.Parameters[0];
+        var property = selector.Body;
+        var notNull = Expression.NotEqual(property, Expression.Constant(null, typeof(string)));
+        var notEmpty = Expression.NotEqual(property, Expression.Constant(string.Empty, typeof(string)));
+        var body = Expression.AndAlso(notNull, notEmpty);
+
+        return Expression.Lambda<Func<MaterialRecord, bool>>(body, parameter);
     }
 }

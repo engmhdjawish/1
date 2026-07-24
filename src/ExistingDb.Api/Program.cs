@@ -37,6 +37,12 @@ builder.Services.AddDbContext<MainDbContext>(options =>
         // MainDb may run on legacy compatibility levels that do not support OPENJSON ('$').
         sqlServerOptions.UseCompatibilityLevel(120);
     }));
+builder.Services.AddDbContextFactory<MainDbContext>(options =>
+    options.UseSqlServer(mainDbConnection, sqlServerOptions =>
+    {
+        sqlServerOptions.EnableRetryOnFailure();
+        sqlServerOptions.UseCompatibilityLevel(120);
+    }));
 
 var authenticationBuilder = builder.Services
     .AddAuthentication(options =>
