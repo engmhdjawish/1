@@ -143,65 +143,76 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
         $isOfferSection = !empty($section['is_offer_section']);
         $bannerUrl = trim((string) ($section['banner_image_url'] ?? ''));
         $hasCover = $bannerUrl !== '';
+        $toneClass = 'home-section--tone-' . ((int) $sectionIndex % 3);
       ?>
       <section
-        class="home-section home-section--showcase<?= $isOfferSection ? ' home-section--offer' : '' ?><?= $hasCover ? ' home-section--has-cover' : '' ?>"
+        class="home-section home-section--stage<?= $isOfferSection ? ' home-section--offer' : '' ?><?= $hasCover ? ' home-section--has-banner' : '' ?> <?= h($toneClass) ?>"
         id="<?= h($sectionId) ?>"
       >
-        <div class="home-section__layout">
-          <?php if ($hasCover): ?>
-            <div class="home-section__cover">
+        <div class="home-section__stage">
+          <div class="home-section__backdrop" aria-hidden="true">
+            <?php if ($hasCover): ?>
               <img
-                src="<?= h(portal_site_media_display_url($bannerUrl, 960)) ?>"
+                class="home-section__backdrop-img"
+                src="<?= h(portal_site_media_display_url($bannerUrl, 1280)) ?>"
                 alt=""
                 loading="lazy"
                 decoding="async"
-                sizes="(max-width: 767px) 100vw, 220px"
+                sizes="(max-width: 768px) 100vw, 1280px"
               >
-            </div>
-          <?php endif; ?>
+            <?php endif; ?>
+            <div class="home-section__backdrop-glow"></div>
+            <div class="home-section__backdrop-grid"></div>
+          </div>
 
-          <div class="home-section__content">
-            <header class="home-section__head">
-              <div class="home-section__head-text">
+          <header class="home-section__stage-head">
+            <div class="home-section__stage-copy">
+              <div class="home-section__stage-meta">
+                <span class="home-section__stage-index"><?= str_pad((string) ((int) $sectionIndex + 1), 2, '0', STR_PAD_LEFT) ?></span>
                 <?php if ($isOfferSection): ?>
-                  <span class="home-section__badge">عرض خاص</span>
-                <?php endif; ?>
-                <h2 class="home-section__title"><?= h((string) ($section['title_ar'] ?? '')) ?></h2>
-                <?php if (!empty($section['subtitle_ar'])): ?>
-                  <p class="home-section__subtitle"><?= h((string) $section['subtitle_ar']) ?></p>
+                  <span class="home-section__badge home-section__badge--stage">عرض خاص</span>
                 <?php endif; ?>
               </div>
-              <a href="<?= h(home_section_store_url($section)) ?>" class="home-section__more">
-                عرض الكل
-                <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
-              </a>
-            </header>
-
-            <div class="home-section__showcase">
-              <?php if ($deferHomeProducts): ?>
-                <div
-                  class="home-strip-slot"
-                  data-home-products="<?= h($sectionId) ?>"
-                  <?= $embeddedStripHtml === '' ? ' data-home-products-pending="1"' : '' ?>
-                >
-                  <?php if ($embeddedStripHtml !== ''): ?>
-                    <?= $embeddedStripHtml ?>
-                  <?php else: ?>
-                    <div class="home-strip-skeleton" aria-hidden="true">
-                      <?php for ($sk = 0; $sk < 4; $sk++): ?>
-                        <div class="home-product-skeleton"></div>
-                      <?php endfor; ?>
-                    </div>
-                  <?php endif; ?>
-                </div>
-              <?php elseif ($embeddedStripHtml !== ''): ?>
-                <?= $embeddedStripHtml ?>
-              <?php elseif ($products === []): ?>
-                <div class="home-section__empty">لا توجد منتجات في هذا القسم حالياً.</div>
-              <?php else: ?>
-                <?php require __DIR__ . '/partials/home-section-product-strip.php'; ?>
+              <h2 class="home-section__title home-section__title--stage"><?= h((string) ($section['title_ar'] ?? '')) ?></h2>
+              <?php if (!empty($section['subtitle_ar'])): ?>
+                <p class="home-section__subtitle home-section__subtitle--stage"><?= h((string) $section['subtitle_ar']) ?></p>
               <?php endif; ?>
+            </div>
+            <a href="<?= h(home_section_store_url($section)) ?>" class="home-section__stage-cta">
+              <span>استكشف القسم</span>
+              <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+            </a>
+          </header>
+
+          <div class="home-section__deck">
+            <div class="home-section__deck-shell">
+              <span class="home-section__deck-edge" aria-hidden="true"></span>
+              <div class="home-section__deck-body">
+                <?php if ($deferHomeProducts): ?>
+                  <div
+                    class="home-strip-slot"
+                    data-home-products="<?= h($sectionId) ?>"
+                    <?= $embeddedStripHtml === '' ? ' data-home-products-pending="1"' : '' ?>
+                  >
+                    <?php if ($embeddedStripHtml !== ''): ?>
+                      <?= $embeddedStripHtml ?>
+                    <?php else: ?>
+                      <div class="home-strip-skeleton" aria-hidden="true">
+                        <?php for ($sk = 0; $sk < 4; $sk++): ?>
+                          <div class="home-product-skeleton"></div>
+                        <?php endfor; ?>
+                      </div>
+                    <?php endif; ?>
+                  </div>
+                <?php elseif ($embeddedStripHtml !== ''): ?>
+                  <?= $embeddedStripHtml ?>
+                <?php elseif ($products === []): ?>
+                  <div class="home-section__empty">لا توجد منتجات في هذا القسم حالياً.</div>
+                <?php else: ?>
+                  <?php require __DIR__ . '/partials/home-section-product-strip.php'; ?>
+                <?php endif; ?>
+              </div>
+              <span class="home-section__scroll-hint material-symbols-outlined" aria-hidden="true">chevron_left</span>
             </div>
           </div>
         </div>

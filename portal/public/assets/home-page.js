@@ -197,8 +197,27 @@
     }, true);
   };
 
+  const initSectionDeckHints = () => {
+    document.querySelectorAll('.home-section__deck-shell').forEach((shell) => {
+      const strip = shell.querySelector('.home-strip');
+      const hint = shell.querySelector('.home-section__scroll-hint');
+      if (!strip || !hint) return;
+
+      const refresh = () => {
+        const canScroll = strip.scrollWidth > strip.clientWidth + 8;
+        const atStart = strip.scrollLeft <= 4;
+        hint.style.opacity = canScroll && atStart ? '' : '0';
+      };
+
+      strip.addEventListener('scroll', refresh, { passive: true });
+      window.addEventListener('resize', refresh);
+      refresh();
+    });
+  };
+
   const init = () => {
     initSectionNav();
+    initSectionDeckHints();
     initAdCarousel();
     initDeferredProducts();
     initDeferredStoreScripts();
