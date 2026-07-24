@@ -1135,6 +1135,15 @@
           </div>`;
       } else {
         let html = isDrawer ? '<div class="space-y-4">' : '<div class="lg:col-span-8 space-y-4">';
+        if (data.amine_online === false && data.amine_notice) {
+          html += `<div class="amine-service-banner amine-service-banner--compact" role="status">
+            <span class="material-symbols-outlined amine-service-banner__icon" aria-hidden="true">cloud_off</span>
+            <div class="amine-service-banner__body">
+              <strong class="amine-service-banner__title">خدمة مؤقتة — جاري المعالجة</strong>
+              <p class="amine-service-banner__text">${escapeHtml(String(data.amine_notice))}</p>
+            </div>
+          </div>`;
+        }
         if (max) {
           html += `<p class="store-limit-banner">الحد الأقصى للطلب: <strong>${escapeHtml(String(maxLabel))}</strong> طرد لكل مادة.</p>`;
         }

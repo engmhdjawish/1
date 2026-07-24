@@ -301,6 +301,10 @@ final class ShareCartService
             return ['moved' => [], 'restored' => [], 'notices' => []];
         }
 
+        if (!AmineAvailabilityService::isAvailable()) {
+            return ['moved' => [], 'restored' => [], 'notices' => []];
+        }
+
         $moved = [];
         $restored = [];
         $notices = [];

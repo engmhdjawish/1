@@ -191,11 +191,27 @@ final class PortalSettingsService
             ];
         }
 
+        $bodyMessage = '';
+        if (is_string($response) && $response !== '') {
+            $decoded = json_decode($response, true);
+            if (is_array($decoded)) {
+                foreach (['message', 'title', 'detail'] as $field) {
+                    $text = trim((string) ($decoded[$field] ?? ''));
+                    if ($text !== '') {
+                        $bodyMessage = $text;
+                        break;
+                    }
+                }
+            }
+        }
+
         return [
             'base_url' => $base,
             'ok' => false,
             'status' => $status,
-            'message' => 'الـ API أعاد رمزًا غير متوقع: ' . $status,
+            'message' => $bodyMessage !== ''
+                ? $bodyMessage
+                : ($error !== '' ? $error : 'الـ API أعاد رمزًا غير متوقع: ' . $status),
         ];
     }
 }
