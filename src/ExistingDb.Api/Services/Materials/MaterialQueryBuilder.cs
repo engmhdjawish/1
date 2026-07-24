@@ -15,6 +15,11 @@ public sealed class MaterialQueryBuilder(MainDbContext mainDbContext)
     {
         var query = mainDbContext.Materials.AsNoTracking();
 
+        if (filters.MaterialGuids.Count > 0)
+        {
+            query = query.Where(material => filters.MaterialGuids.Contains(material.Guid));
+        }
+
         if (filters.HasImage is true)
         {
             query = query.Where(material =>

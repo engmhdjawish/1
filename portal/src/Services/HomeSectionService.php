@@ -703,25 +703,16 @@ final class HomeSectionService
         shuffle($guids);
 
         $tryGuids = array_slice($guids, 0, min(count($guids), max($maxProducts * 3, $maxProducts)));
-        $requests = [];
-        foreach ($tryGuids as $guid) {
-            $requests[] = [
-                'key' => $guid,
-                'path' => '/api/materials/' . rawurlencode($guid),
-            ];
-        }
-
-        $responses = ApiClient::getMany($requests, 20);
+        $materialsByGuid = MaterialBatchService::fetchByGuids($tryGuids, 20);
         $items = [];
         foreach ($tryGuids as $guid) {
             if (count($items) >= $maxProducts) {
                 break;
             }
-            $response = $responses[$guid] ?? null;
-            if (!is_array($response) || !($response['ok'] ?? false) || !is_array($response['data'] ?? null)) {
+            $item = $materialsByGuid[$guid] ?? null;
+            if (!is_array($item)) {
                 continue;
             }
-            $item = $response['data'];
             if (StockReservationService::isSellable($item)) {
                 $items[] = $item;
             }
@@ -760,6 +751,12 @@ final class HomeSectionService
         } catch (\Throwable) {
             return [];
         }
+    }
+
+    /** @param array<string, mixed> $rules */
+    public static function materialsListQuery(array $rules, int $pageSize): array
+    {
+        return self::buildApiQuery($rules, $pageSize);
     }
 
     /** @param array<string, mixed> $rules */

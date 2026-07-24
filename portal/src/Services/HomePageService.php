@@ -33,7 +33,7 @@ final class HomePageService
     /** @return array<string, string> */
     public static function productStripHtmlBySectionKey(): array
     {
-        $cacheKey = 'home_product_strips_v1:' . self::cacheKey();
+        $cacheKey = 'home_product_strips_v2:' . self::cacheKey();
         $cached = ResponseCache::get($cacheKey);
         if (is_array($cached)) {
             return $cached;
@@ -71,7 +71,7 @@ final class HomePageService
             require dirname(__DIR__, 2) . '/views/helpers.php';
         }
 
-        $sections = self::loadFullSections();
+        $sections = self::loadFullSectionsBatched();
         $storeCatalogDisplay = StoreCatalogService::displayOptions();
         $strips = [];
 
@@ -90,25 +90,114 @@ final class HomePageService
         return $strips;
     }
 
-    /** @return list<array<string, mixed>> */
-    private static function loadFullSections(): array
+    /**
+     * تحميل منتجات كل الأقسام بأقل عدد طلبات: طلب جماعي للمواد اليدوية + طلبات متوازية للفلاتر.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function loadFullSectionsBatched(): array
     {
-        $sections = HomeSectionService::activeSections();
-        foreach ($sections as &$section) {
-            $section['_sort'] = (int) ($section['sort_order'] ?? 0);
+        $sections = self::mergedSectionShells();
+        if ($sections === []) {
+            return [];
+        }
+
+        $manualGuids = [];
+        $filterJobs = [];
+
+        foreach ($sections as $index => $section) {
+            $maxProducts = max(1, (int) ($section['max_products'] ?? 12));
+            $isOffer = !empty($section['is_offer_section']);
+            $isManual = $isOffer
+                ? (string) ($section['selection_mode'] ?? '') === 'manual'
+                : (string) ($section['display_mode'] ?? 'filter') === 'manual';
+
+            if ($isManual) {
+                $guids = is_array($section['material_guids'] ?? null) ? $section['material_guids'] : [];
+                $guids = array_values(array_unique(array_filter(array_map('strval', $guids), static fn (string $g): bool => trim($g) !== '')));
+                shuffle($guids);
+                $tryGuids = array_slice($guids, 0, min(count($guids), max($maxProducts * 3, $maxProducts)));
+                $sections[$index]['_batch_manual_guids'] = $tryGuids;
+                $sections[$index]['_batch_max_products'] = $maxProducts;
+                foreach ($tryGuids as $guid) {
+                    $manualGuids[$guid] = true;
+                }
+                continue;
+            }
+
+            $rules = is_array($section['filter_rules'] ?? null) ? $section['filter_rules'] : [];
+            $poolSize = min(200, max($maxProducts * 8, 48));
+            $query = $isOffer
+                ? SpecialOfferService::materialsListQuery($rules, $poolSize)
+                : HomeSectionService::materialsListQuery($rules, $poolSize);
+
+            $filterJobs[] = [
+                'key' => (string) $index,
+                'max_products' => $maxProducts,
+                'is_offer' => $isOffer,
+                'path' => '/api/materials',
+                'query' => $query,
+            ];
+        }
+
+        $materialsByGuid = MaterialBatchService::fetchByGuids(array_keys($manualGuids), 25);
+
+        $filterResponses = [];
+        if ($filterJobs !== []) {
+            $filterResponses = ApiClient::getMany($filterJobs, 25);
+        }
+
+        foreach ($sections as $index => &$section) {
+            $maxProducts = (int) ($section['_batch_max_products'] ?? max(1, (int) ($section['max_products'] ?? 12)));
+            $isOffer = !empty($section['is_offer_section']);
+            $manualTryGuids = is_array($section['_batch_manual_guids'] ?? null) ? $section['_batch_manual_guids'] : null;
+
+            if ($manualTryGuids !== null) {
+                $items = [];
+                foreach ($manualTryGuids as $guid) {
+                    if (count($items) >= $maxProducts) {
+                        break;
+                    }
+                    $item = $materialsByGuid[$guid] ?? null;
+                    if (!is_array($item)) {
+                        continue;
+                    }
+                    if (!$isOffer && !StockReservationService::isSellable($item)) {
+                        continue;
+                    }
+                    $items[] = $item;
+                }
+                shuffle($items);
+                $section['products'] = array_slice($items, 0, $maxProducts);
+                unset($section['_batch_manual_guids'], $section['_batch_max_products']);
+                if ($isOffer) {
+                    $section['products'] = SpecialOfferService::attachOfferPricing($section['products'], $section);
+                }
+                continue;
+            }
+
+            $response = $filterResponses[(string) $index] ?? null;
+            $items = [];
+            if (is_array($response) && ($response['ok'] ?? false) && is_array($response['data']['items'] ?? null)) {
+                $items = $response['data']['items'];
+            }
+
+            if (!$isOffer) {
+                $items = StockReservationService::filterSellableProducts($items);
+            }
+
+            if ($items !== []) {
+                shuffle($items);
+            }
+
+            $section['products'] = array_slice($items, 0, $maxProducts);
+            if ($isOffer) {
+                $section['products'] = SpecialOfferService::attachOfferPricing($section['products'], $section);
+            }
         }
         unset($section);
 
-        $offers = SpecialOfferService::activeHomeSections();
-        foreach ($offers as &$section) {
-            $section['_sort'] = (int) ($section['home_sort_order'] ?? 0);
-        }
-        unset($section);
-
-        $merged = array_merge($sections, $offers);
-        usort($merged, static fn (array $a, array $b): int => ($a['_sort'] ?? 0) <=> ($b['_sort'] ?? 0));
-
-        return $merged;
+        return $sections;
     }
 
     private static function cacheKey(): string

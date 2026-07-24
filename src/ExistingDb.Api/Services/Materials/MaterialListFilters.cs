@@ -10,6 +10,7 @@ public sealed class MaterialListFilters
     public IReadOnlyCollection<string> MaterialTypes { get; init; } = [];
     public IReadOnlyCollection<string> AgeCategories { get; init; } = [];
     public IReadOnlyCollection<Guid> GroupGuids { get; init; } = [];
+    public IReadOnlyCollection<Guid> MaterialGuids { get; init; } = [];
     public double? MinWarehouseQuantity { get; init; }
     public double? MaxWarehouseQuantity { get; init; }
     public bool? IsAvailable { get; init; }
@@ -38,6 +39,7 @@ public sealed class MaterialListFilters
         string? ageCategories,
         Guid? groupGuid,
         string? groupGuids,
+        string? materialGuids,
         double? minWarehouseQuantity,
         double? maxWarehouseQuantity,
         bool? isAvailable,
@@ -58,6 +60,7 @@ public sealed class MaterialListFilters
             MaterialTypes = ParseTextValues(materialType, materialTypes),
             AgeCategories = ParseTextValues(ageCategory, ageCategories),
             GroupGuids = ParseGuids(groupGuid, groupGuids),
+            MaterialGuids = ParseGuids(null, materialGuids),
             MinWarehouseQuantity = minWarehouseQuantity,
             MaxWarehouseQuantity = maxWarehouseQuantity,
             IsAvailable = isAvailable,

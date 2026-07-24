@@ -853,25 +853,16 @@ final class SpecialOfferService
         $guids = array_values(array_unique(array_filter(array_map('strval', $guids), static fn ($g) => trim($g) !== '')));
         shuffle($guids);
         $tryGuids = array_slice($guids, 0, min(count($guids), max($max * 3, $max)));
-        $requests = [];
-        foreach ($tryGuids as $guid) {
-            $requests[] = [
-                'key' => $guid,
-                'path' => '/api/materials/' . rawurlencode($guid),
-            ];
-        }
-
-        $responses = ApiClient::getMany($requests, 20);
+        $materialsByGuid = MaterialBatchService::fetchByGuids($tryGuids, 20);
         $items = [];
         foreach ($tryGuids as $guid) {
             if (count($items) >= $max) {
                 break;
             }
-            $response = $responses[$guid] ?? null;
-            if (!is_array($response) || !($response['ok'] ?? false) || !is_array($response['data'] ?? null)) {
-                continue;
+            $item = $materialsByGuid[$guid] ?? null;
+            if (is_array($item)) {
+                $items[] = $item;
             }
-            $items[] = $response['data'];
         }
         shuffle($items);
 
@@ -1072,6 +1063,12 @@ final class SpecialOfferService
         $stmt->execute(['id' => $offerId]);
 
         return array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN) ?: []);
+    }
+
+    /** @param array<string, mixed> $rules */
+    public static function materialsListQuery(array $rules, int $pageSize): array
+    {
+        return self::buildApiQuery($rules, $pageSize);
     }
 
     /** @param array<string, mixed> $rules */
