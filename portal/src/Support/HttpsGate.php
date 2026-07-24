@@ -41,7 +41,7 @@ final class HttpsGate
         return str_starts_with($appUrl, 'https://');
     }
 
-    private static function isHttpsRequest(): bool
+    public static function isHttpsRequest(): bool
     {
         $https = $_SERVER['HTTPS'] ?? '';
         if ($https !== '' && $https !== 'off' && $https !== '0') {

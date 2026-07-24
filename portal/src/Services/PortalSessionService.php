@@ -13,7 +13,13 @@ final class PortalSessionService
 {
     private const META_KEY = '_portal_db_session';
     private const ONLINE_MINUTES = 5;
-    private const TTL_DAYS = 14;
+
+    private static function ttlDays(): int
+    {
+        $days = (int) (\Portal\Config::get('PORTAL_SESSION_LIFETIME_DAYS', '30') ?: 30);
+
+        return max(7, min(365, $days));
+    }
 
     private static ?bool $enabled = null;
 
@@ -49,9 +55,15 @@ final class PortalSessionService
 
     public static function bootstrap(): void
     {
-        if (!self::isEnabled() || session_status() !== PHP_SESSION_ACTIVE) {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
             return;
         }
+
+        if (!self::isEnabled()) {
+            return;
+        }
+
+        self::tryRestoreCustomerSession();
 
         if (WebSession::check()) {
             $userId = (string) (WebSession::user()['id'] ?? '');
@@ -152,7 +164,7 @@ final class PortalSessionService
         );
         $stmt->execute([
             'id' => $meta['id'],
-            'days' => (string) self::TTL_DAYS,
+            'days' => (string) self::ttlDays(),
         ]);
 
         if ($stmt->rowCount() < 1) {
@@ -374,7 +386,7 @@ final class PortalSessionService
         $stmt->execute([
             'subject_id' => $subjectId,
             'hash' => $hash,
-            'days' => (string) self::TTL_DAYS,
+            'days' => (string) self::ttlDays(),
             'ip' => $ip !== '' ? substr($ip, 0, 45) : null,
             'ua' => $ua !== '' ? substr($ua, 0, 500) : null,
         ]);
@@ -488,6 +500,54 @@ final class PortalSessionService
         } else {
             unset($_SESSION['web_user']);
         }
+    }
+
+    private static function tryRestoreCustomerSession(): void
+    {
+        if (CustomerSession::check() || WebSession::check()) {
+            return;
+        }
+
+        $sessionId = session_id();
+        if ($sessionId === '') {
+            return;
+        }
+
+        $hash = hash('sha256', $sessionId);
+        $stmt = Database::pdo()->prepare(
+            'SELECT
+                s.id::text AS session_row_id,
+                c.*,
+                ap.show_price,
+                ap.show_quantity,
+                ap.allow_cart,
+                ap.allow_order
+             FROM web_customer_sessions s
+             INNER JOIN web_customers c ON c.id = s.customer_id
+             LEFT JOIN access_policies ap ON ap.id = c.access_policy_id
+             WHERE s.token_hash = :hash
+               AND s.revoked_at IS NULL
+               AND s.expires_at > NOW()
+               AND c.status = :active_status
+               AND c.is_active = TRUE
+             ORDER BY s.last_seen_at DESC NULLS LAST, s.created_at DESC
+             LIMIT 1'
+        );
+        $stmt->execute([
+            'hash' => $hash,
+            'active_status' => 'active',
+        ]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($row) || trim((string) ($row['session_row_id'] ?? '')) === '') {
+            return;
+        }
+
+        CustomerSession::restoreFromDatabaseRow($row);
+        $_SESSION[self::META_KEY] = [
+            'id' => (string) $row['session_row_id'],
+            'kind' => 'customer',
+        ];
+        self::touchCurrent();
     }
 
     private static function clientIp(): string
