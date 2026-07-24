@@ -86,4 +86,5 @@ ob_start();
 require dirname(__DIR__) . '/views/login.php';
 $content = ob_get_clean();
 $title = 'تسجيل الدخول';
+$enableLoginPageJs = true;
 require dirname(__DIR__) . '/views/layout.php';

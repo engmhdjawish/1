@@ -226,6 +226,9 @@ if ($customer) {
   <script src="<?= h(portal_asset_url('/assets/site-analytics.js')) ?>" data-endpoint="/api/site-analytics.php" defer></script>
 <?php endif; ?>
 <?= portal_defer_script('/assets/phone-input.js') ?>
+<?php if (!empty($enableLoginPageJs)): ?>
+  <?= portal_defer_script('/assets/login-page.js') ?>
+<?php endif; ?>
 <?= portal_defer_script('/assets/pwa.js') ?>
 <?= portal_defer_script('/assets/site-page-loading.js') ?>
 <?= portal_defer_script('/assets/notifications.js') ?>

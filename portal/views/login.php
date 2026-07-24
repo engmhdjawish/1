@@ -18,6 +18,8 @@ $staffRedirectQuery = ($redirect ?? null) !== null && ($redirect ?? '') !== '' &
     : '';
 $staffLoginUrl = PortalUrl::loginPagePath('staff') . $staffRedirectQuery;
 $customerLoginUrl = PortalUrl::loginPagePath('customer') . $redirectQuery;
+$inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary';
+$labelClass = 'block text-sm font-medium text-gray-700';
 ?>
 <div class="max-w-xl mx-auto">
   <section class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
@@ -50,64 +52,76 @@ $customerLoginUrl = PortalUrl::loginPagePath('customer') . $redirectQuery;
       </div>
 
       <?php if ($type === 'customer'): ?>
-        <form method="post" action="<?= h($loginPagePath) ?>" class="space-y-4" id="login-form-customer" autocomplete="on">
+        <form method="post" action="<?= h($loginPagePath) ?>" class="space-y-4" id="login-form-customer" autocomplete="off" data-login-kind="customer">
           <input type="hidden" name="type" value="customer">
           <?php if (!empty($redirect)): ?>
             <input type="hidden" name="redirect" value="<?= h((string) $redirect) ?>">
           <?php endif; ?>
-          <label class="block text-sm font-medium text-gray-700">
-            رقم الهاتف
-            <input
-              name="customer_phone"
-              type="tel"
-              inputmode="tel"
-              autocomplete="username"
-              dir="ltr"
-              data-phone-input
-              data-login-phone
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary text-left"
-              required
-              placeholder="09xxxxxxxx"
-            >
-          </label>
-          <label class="block text-sm font-medium text-gray-700">
-            كلمة المرور
-            <input
-              type="password"
-              name="customer_password"
-              autocomplete="current-password"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary"
-              required
-              placeholder="••••••••"
-            >
-          </label>
-          <button type="submit" class="w-full bg-primary text-white rounded-lg py-2.5 font-semibold hover:brightness-110 transition">
-            دخول
-          </button>
+          <div data-customer-login-mount></div>
+          <p class="text-sm text-gray-500" data-customer-login-placeholder>جاري تجهيز نموذج الدخول...</p>
+          <noscript>
+            <label class="<?= h($labelClass) ?>">
+              رقم الهاتف
+              <input
+                name="customer_phone"
+                type="tel"
+                inputmode="tel"
+                autocomplete="section-jawish-customer username"
+                dir="ltr"
+                data-phone-input
+                data-login-phone
+                class="<?= h($inputClass) ?> text-left"
+                required
+                placeholder="09xxxxxxxx"
+              >
+            </label>
+            <label class="<?= h($labelClass) ?>">
+              كلمة المرور
+              <input
+                type="password"
+                name="customer_password"
+                autocomplete="section-jawish-customer current-password"
+                class="<?= h($inputClass) ?>"
+                required
+                placeholder="••••••••"
+              >
+            </label>
+            <button type="submit" class="w-full bg-primary text-white rounded-lg py-2.5 font-semibold hover:brightness-110 transition">
+              دخول
+            </button>
+          </noscript>
         </form>
       <?php else: ?>
-        <form method="post" action="<?= h($loginPagePath) ?>" class="space-y-4" id="login-form-staff" autocomplete="on">
+        <form method="post" action="<?= h($loginPagePath) ?>" class="space-y-4" id="login-form-staff" autocomplete="off" data-login-kind="staff">
           <input type="hidden" name="type" value="staff">
           <?php if (!empty($redirect) && PortalUrl::isDashboardPath((string) $redirect)): ?>
             <input type="hidden" name="redirect" value="<?= h((string) $redirect) ?>">
           <?php endif; ?>
-          <label class="block text-sm font-medium text-gray-700">
+          <div class="absolute -left-[9999px] top-auto h-0 w-0 overflow-hidden" aria-hidden="true">
+            <input type="text" name="username" tabindex="-1" autocomplete="username">
+            <input type="password" name="password" tabindex="-1" autocomplete="current-password">
+          </div>
+          <label class="<?= h($labelClass) ?>">
             اسم المستخدم
             <input
+              id="staff_login_username"
               name="staff_user_name"
-              autocomplete="username"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary"
+              autocomplete="section-jawish-staff username"
+              autocapitalize="none"
+              spellcheck="false"
+              class="<?= h($inputClass) ?>"
               required
               placeholder="admin"
             >
           </label>
-          <label class="block text-sm font-medium text-gray-700">
+          <label class="<?= h($labelClass) ?>">
             كلمة المرور
             <input
+              id="staff_login_password"
               type="password"
               name="staff_password"
-              autocomplete="current-password"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary"
+              autocomplete="section-jawish-staff current-password"
+              class="<?= h($inputClass) ?>"
               required
               placeholder="••••••••"
             >
