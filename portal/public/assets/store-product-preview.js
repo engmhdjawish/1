@@ -94,6 +94,7 @@
     if (!item?.guid) return null;
     const card = findPreviewCard(item.guid);
     return card?.querySelector('.material-image-frame__photo img')
+      || card?.querySelector('.dash-order-item__thumb img')
       || card?.querySelector('.store-order-line-card__thumb img')
       || null;
   };
@@ -565,9 +566,13 @@
         </div>`;
       }
     }
+    const codeHtml = item.code
+      ? `<div class="store-product-preview__order-code"><span>رقم المادة</span><code class="store-num" dir="ltr">${esc(item.code)}</code></div>`
+      : '';
 
     container.innerHTML = `
       <div class="store-product-preview__order-info">
+        ${codeHtml}
         <div class="store-product-preview__order-qty">
           <span class="store-product-preview__order-label">الكمية في الطلب</span>
           <strong class="store-num" dir="ltr">${esc(qty)} ${esc(packageUnit)}</strong>
@@ -1036,6 +1041,7 @@
     const sourceImg = trigger.querySelector('img')
       || trigger.querySelector('.material-image-frame__photo img')
       || card?.querySelector('.material-image-frame__photo img')
+      || card?.querySelector('.dash-order-item__thumb img')
       || card?.querySelector('.store-order-line-card__thumb img');
     open(guid, sourceImg, { cartRoot, orderRoot, itemScope });
   });

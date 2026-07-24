@@ -14,18 +14,17 @@ $itemId = (string) ($item['id'] ?? '');
 $isCancelled = !empty($item['is_cancelled']) || (string) ($item['status'] ?? '') === 'cancelled';
 $showPriceSyp = (string) ($orderPriceCurrency ?? 'usd') === 'syp';
 $showPriceUsd = (string) ($orderPriceCurrency ?? 'usd') === 'usd';
-$lineCardVariant = 'dashboard';
-$previewGuid = trim((string) ($item['material_guid'] ?? ''));
-if ($previewGuid === '') {
-    $previewGuid = $itemId;
-}
 $previewPayload = order_preview_payload($item, [
     'show_price' => !$isCancelled && ($showPriceSyp || $showPriceUsd),
     'price_mode' => $showPriceSyp ? 'syp' : 'usd',
 ]);
+$previewGuid = trim((string) ($item['material_guid'] ?? ''));
+if ($previewGuid === '') {
+    $previewGuid = $itemId;
+}
 ?>
 <div class="dashboard-order-line">
-  <?php require __DIR__ . '/store-order-line-card.php'; ?>
+  <?php require __DIR__ . '/dashboard-order-line-card.php'; ?>
 
   <?php if ($editable && $itemId !== ''): ?>
     <details class="dashboard-order-line__edit">

@@ -505,14 +505,17 @@ $advancedFiltersOpen = ($filters['origin'] ?? '') !== ''
               يمكنك تعديل الأصناف قبل إتمام الطلب — سيظهر السبب لصاحب الطلب.
             </p>
           <?php endif; ?>
-          <div class="flex items-center justify-between gap-2 mb-3">
-            <h3 class="text-sm font-bold text-slate-900">
-              أصناف الطلب
-              <span class="text-text-muted font-normal">(<?= (int) ($summary['items_count'] ?? count($detailItems)) ?>)</span>
-            </h3>
-            <span class="text-[11px] text-text-muted shrink-0">اضغط الصورة للتصفح بين الأصناف</span>
+          <div class="dash-order-items-head">
+            <div>
+              <h3 class="dash-order-items-head__title">أصناف الطلب</h3>
+              <p class="dash-order-items-head__meta"><?= (int) ($summary['items_count'] ?? count($detailItems)) ?> صنف · <?= h($formatPackages((float) ($summary['packages_count'] ?? 0))) ?> طرد</p>
+            </div>
+            <span class="dash-order-items-head__hint">
+              <span class="material-symbols-outlined" aria-hidden="true">touch_app</span>
+              اضغط الصورة للمعاينة
+            </span>
           </div>
-          <div class="store-order-lines" data-store-order-preview-root>
+          <div class="dash-order-items-list store-order-lines" data-store-order-preview-root>
             <?php foreach ($detailItems as $item): ?>
               <?php
                 $showPriceUsd = $orderPriceCurrency === 'usd';
