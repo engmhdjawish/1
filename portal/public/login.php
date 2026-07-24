@@ -11,8 +11,15 @@ use Portal\Support\PortalUrl;
 require dirname(__DIR__) . '/views/helpers.php';
 
 /** @var string|null $loginPagePath */
-$type = $_GET['type'] ?? $_POST['type'] ?? 'staff';
-$type = $type === 'customer' ? 'customer' : 'staff';
+$requestPath = PortalUrl::requestPath();
+if ($requestPath === '/customer-login.php') {
+    $type = 'customer';
+} elseif ($requestPath === '/staff-login.php') {
+    $type = 'staff';
+} else {
+    $type = $_GET['type'] ?? $_POST['type'] ?? 'staff';
+    $type = $type === 'customer' ? 'customer' : 'staff';
+}
 $error = null;
 $message = $_GET['message'] ?? null;
 $redirect = PortalUrl::safeRedirectPath($_GET['redirect'] ?? $_POST['redirect'] ?? null);
