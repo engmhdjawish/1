@@ -1671,6 +1671,21 @@ final class MaterialImageStorageService
             return ['ok' => false, 'message' => 'اسم الملف أو الامتداد غير مدعوم.'];
         }
 
+        if (!self::ensureDirectory($imagesDir) || !is_writable($imagesDir)) {
+            if (!$fromHttpUpload) {
+                @unlink($tmpPath);
+            }
+
+            return ['ok' => false, 'message' => 'مجلد الصور غير قابل للكتابة — راجع صلاحيات: ' . $imagesDir];
+        }
+        if (!self::ensureDirectory($thumbnailsDir) || !is_writable($thumbnailsDir)) {
+            if (!$fromHttpUpload) {
+                @unlink($tmpPath);
+            }
+
+            return ['ok' => false, 'message' => 'مجلد المصغّرات غير قابل للكتابة — راجع صلاحيات: ' . $thumbnailsDir];
+        }
+
         $idempotent = self::resolveIdempotentUpload($tmpPath, $requestedName, $imagesDir, $thumbnailsDir, $fromHttpUpload);
         if ($idempotent !== null) {
             return $idempotent;
