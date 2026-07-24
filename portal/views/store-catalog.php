@@ -513,11 +513,10 @@ require __DIR__ . '/partials/store-filter-group.php';
 
           <div class="store-filter-pending-panel" id="store-filter-pending-panel" aria-live="polite">
             <div class="store-filter-pending-panel-head">
-              <span class="store-filter-pending-panel-title">اختياراتك قبل العرض</span>
-              <button type="button" class="store-filter-pending-clear-all" id="store-filter-pending-clear-all" hidden>مسح الكل</button>
+              <span class="store-filter-pending-panel-title">اختياراتك</span>
+              <button type="button" class="store-filter-pending-clear-all" id="store-filter-pending-clear-all" hidden>مسح</button>
             </div>
             <div class="store-filter-pending-chips" id="store-filter-pending-chips-global"></div>
-            <p class="store-filter-pending-empty" id="store-filter-pending-empty">اختر من القوائم — ستظهر اختياراتك هنا كشرائح قابلة للحذف</p>
           </div>
 
           <?php
@@ -620,12 +619,17 @@ require __DIR__ . '/partials/store-filter-group.php';
 
             <?php if ($isClientFilterVisible('availability')): ?>
               <details class="store-filter-accordion" data-filter-group="availability">
-                <summary class="store-filter-accordion-summary"><span>التوفر</span></summary>
+                <summary class="store-filter-accordion-summary">
+                  <span class="store-filter-accordion-heading">
+                    <span class="material-symbols-outlined store-filter-accordion-icon" aria-hidden="true">inventory_2</span>
+                    <span class="store-filter-accordion-label">التوفر</span>
+                  </span>
+                </summary>
                 <div class="store-filter-accordion-body">
-                  <div class="store-filter-options store-filter-options--radio">
+                  <div class="store-filter-options store-filter-options--pills store-filter-options--radio">
                   <?php foreach (['' => 'الكل', '1' => 'متوفر', '0' => 'غير متوفر'] as $value => $label): ?>
                     <?php $isActive = $availabilityValue === (string) $value; ?>
-                    <label class="store-filter-option">
+                    <label class="store-filter-option store-filter-pill store-filter-pill--radio<?= $isActive && $value !== '' ? ' is-selected' : '' ?><?= $isActive && $value === '' ? ' is-selected is-neutral' : '' ?>">
                       <input type="radio" name="isAvailable" value="<?= h((string) $value) ?>" <?= $isActive ? 'checked' : '' ?>>
                       <span class="store-filter-option-text"><?= h($label) ?></span>
                     </label>
@@ -637,7 +641,12 @@ require __DIR__ . '/partials/store-filter-group.php';
 
             <?php if ($isClientFilterVisible('warehouseRange')): ?>
               <details class="store-filter-accordion" data-filter-group="warehouse">
-                <summary class="store-filter-accordion-summary"><span>مدى الكمية</span></summary>
+                <summary class="store-filter-accordion-summary">
+                  <span class="store-filter-accordion-heading">
+                    <span class="material-symbols-outlined store-filter-accordion-icon" aria-hidden="true">scale</span>
+                    <span class="store-filter-accordion-label">مدى الكمية</span>
+                  </span>
+                </summary>
                 <div class="store-filter-accordion-body">
                   <div class="grid grid-cols-2 gap-2">
                   <div class="store-inline-field mb-0">
@@ -655,7 +664,12 @@ require __DIR__ . '/partials/store-filter-group.php';
 
             <?php if ($isClientFilterVisible('priceSaleSyp') || $isClientFilterVisible('priceSaleUsd') || $isClientFilterVisible('pricePurchaseUsd')): ?>
               <details class="store-filter-accordion" data-filter-group="price">
-                <summary class="store-filter-accordion-summary"><span>المدى السعري</span></summary>
+                <summary class="store-filter-accordion-summary">
+                  <span class="store-filter-accordion-heading">
+                    <span class="material-symbols-outlined store-filter-accordion-icon" aria-hidden="true">payments</span>
+                    <span class="store-filter-accordion-label">المدى السعري</span>
+                  </span>
+                </summary>
                 <div class="store-filter-accordion-body space-y-2">
                   <?php if ($isClientFilterVisible('priceSaleSyp')): ?>
                     <div class="grid grid-cols-2 gap-2">
@@ -697,7 +711,7 @@ require __DIR__ . '/partials/store-filter-group.php';
           </div>
 
           <div class="store-filters-drawer-footer store-filter-actions">
-            <button type="submit" class="store-btn-primary">عرض النتائج</button>
+            <button type="submit" class="store-btn-primary" id="store-filters-submit" data-label-default="عرض النتائج">عرض النتائج</button>
             <a href="<?= h(store_url(array_filter([
                 'section' => (string) ($filters['section'] ?? ''),
                 'offer' => (string) ($filters['offer'] ?? ''),

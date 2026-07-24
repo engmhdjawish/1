@@ -58,10 +58,23 @@ $renderStoreFilterGroup = static function (
     }
     $searchable = $total >= $searchThreshold;
     $collapsible = $total > $initialVisible;
+    $groupIcons = [
+        'materialTypes' => 'category',
+        'ageCategories' => 'child_care',
+        'manufacturers' => 'business',
+        'sizeRanges' => 'straighten',
+        'countryOfOrigins' => 'public',
+        'stores' => 'warehouse',
+        'groups' => 'folder',
+    ];
+    $groupIcon = $groupIcons[$groupId] ?? 'tune';
     ?>
     <details class="store-filter-accordion" data-filter-group="<?= h($groupId) ?>">
       <summary class="store-filter-accordion-summary">
-        <span><?= h($title) ?></span>
+        <span class="store-filter-accordion-heading">
+          <span class="material-symbols-outlined store-filter-accordion-icon" aria-hidden="true"><?= h($groupIcon) ?></span>
+          <span class="store-filter-accordion-label"><?= h($title) ?></span>
+        </span>
         <?php if ($hasSelection): ?>
           <span class="store-filter-accordion-badge"><?= count(array_intersect(array_column($normalized, 'value'), $selectedValues)) ?></span>
         <?php endif; ?>
@@ -76,14 +89,14 @@ $renderStoreFilterGroup = static function (
             autocomplete="off"
           >
         <?php endif; ?>
-        <div class="store-filter-options" data-filter-list="<?= h($groupId) ?>" data-initial-visible="<?= (int) $initialVisible ?>">
+        <div class="store-filter-options store-filter-options--pills" data-filter-list="<?= h($groupId) ?>" data-initial-visible="<?= (int) $initialVisible ?>">
           <?php foreach ($normalized as $index => $item): ?>
             <?php
               $isChecked = in_array($item['value'], $selectedValues, true);
               $isHidden = $collapsible && $index >= $initialVisible && !$isChecked;
             ?>
             <label
-              class="store-filter-option<?= $isHidden ? ' is-collapsed' : '' ?>"
+              class="store-filter-option store-filter-pill<?= $isHidden ? ' is-collapsed' : '' ?><?= $isChecked ? ' is-selected' : '' ?>"
               data-filter-label="<?= h(Text::lower($item['label'])) ?>"
             >
               <input
@@ -93,6 +106,7 @@ $renderStoreFilterGroup = static function (
                 <?= $isChecked ? 'checked' : '' ?>
               >
               <span class="store-filter-option-text"><?= h($item['label']) ?></span>
+              <span class="store-filter-option-action material-symbols-outlined" aria-hidden="true"><?= $isChecked ? 'remove' : 'add' ?></span>
             </label>
           <?php endforeach; ?>
         </div>

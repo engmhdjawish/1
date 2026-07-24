@@ -10,7 +10,7 @@
 
 @media (min-width: 1024px) {
   .store-layout.has-sidebar {
-    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-columns: 300px minmax(0, 1fr);
     align-items: stretch;
   }
 }
@@ -217,7 +217,7 @@
   .store-filters-backdrop {
     position: static;
     inset: auto;
-    width: 280px;
+    width: 300px;
     align-self: stretch;
     display: flex;
     flex-direction: column;
@@ -302,11 +302,15 @@ body.store-filters-drawer-open {
 }
 
 .store-filter-accordion {
-  border-top: 1px solid #eef2f7;
+  border: 1px solid #eef2f7;
+  border-radius: 0.85rem;
+  margin-bottom: 0.55rem;
+  background: #fff;
+  overflow: hidden;
 }
 
 .store-filter-accordion:first-of-type {
-  border-top: none;
+  border-top: 1px solid #eef2f7;
 }
 
 .store-filter-accordion-summary {
@@ -314,12 +318,45 @@ body.store-filters-drawer-open {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.85rem 0;
+  padding: 0.75rem 0.85rem;
   cursor: pointer;
   list-style: none;
   font-size: 0.875rem;
   font-weight: 800;
   color: #1e293b;
+  background: #fafbfc;
+  transition: background 0.15s ease;
+}
+
+.store-filter-accordion-summary:hover {
+  background: #f8fafc;
+}
+
+.store-filter-accordion-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.store-filter-accordion-icon {
+  font-size: 1.05rem;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.store-filter-accordion-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.store-filter-accordion[open] .store-filter-accordion-summary {
+  border-bottom: 1px solid #eef2f7;
+}
+
+.store-filter-accordion[open] .store-filter-accordion-icon {
+  color: var(--color-primary, #dc2626);
 }
 
 .store-filter-accordion-summary::-webkit-details-marker {
@@ -353,15 +390,29 @@ body.store-filters-drawer-open {
 }
 
 .store-filter-accordion-body {
-  padding-bottom: 0.85rem;
+  padding: 0.75rem 0.85rem 0.85rem;
 }
 
 .store-filter-pending-panel {
   margin-bottom: 0.85rem;
-  padding: 0.75rem;
-  border: 1px dashed #e2e8f0;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid #e2e8f0;
   border-radius: 0.85rem;
-  background: #f8fafc;
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+}
+
+.store-filter-pending-panel:not(.has-selection) {
+  display: none;
+}
+
+.store-filter-pending-panel.is-updated {
+  animation: store-filter-pending-pulse 0.55s ease;
+}
+
+@keyframes store-filter-pending-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.18); }
+  100% { box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); }
 }
 
 .store-filter-pending-panel-head {
@@ -395,17 +446,6 @@ body.store-filters-drawer-open {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
-}
-
-.store-filter-pending-empty {
-  margin: 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #94a3b8;
-}
-
-.store-filter-pending-panel.has-selection .store-filter-pending-empty {
-  display: none;
 }
 
 .store-filter-pending-chip {
@@ -530,10 +570,6 @@ body.store-filters-drawer-open {
   color: #0369a1;
 }
 
-.store-filter-option.is-pending-selected {
-  background: #fff7f7;
-}
-
 @media (min-width: 1024px) {
   .store-filter-pending-panel {
     position: sticky;
@@ -552,6 +588,15 @@ body.store-filters-drawer-open {
   padding-left: 0.1rem;
 }
 
+.store-filter-options--pills {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+}
+
 .store-filter-option {
   display: flex;
   align-items: center;
@@ -559,11 +604,74 @@ body.store-filters-drawer-open {
   padding: 0.4rem 0.35rem;
   border-radius: 0.55rem;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
-.store-filter-option:hover {
+.store-filter-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  padding: 0.38rem 0.55rem 0.38rem 0.7rem;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 9999px;
+  background: #fff;
+  user-select: none;
+}
+
+.store-filter-pill:hover {
+  border-color: #cbd5e1;
   background: #f8fafc;
+  transform: translateY(-1px);
+}
+
+.store-filter-pill.is-selected,
+.store-filter-pill:has(input:checked) {
+  border-color: var(--color-primary, #dc2626);
+  background: #fff5f5;
+  color: #991b1b;
+}
+
+.store-filter-pill.is-selected.is-neutral,
+.store-filter-pill--radio:has(input[value=""]:checked) {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.store-filter-pill input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+.store-filter-pill .store-filter-option-text {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.store-filter-pill .store-filter-option-action {
+  font-size: 0.95rem;
+  line-height: 1;
+  color: inherit;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.store-filter-pill:not(:has(input:checked)) .store-filter-option-action {
+  opacity: 0.55;
+}
+
+.store-filter-options:not(.store-filter-options--pills) .store-filter-option input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-primary, #dc2626);
+  flex-shrink: 0;
 }
 
 .store-filter-option.is-collapsed,
@@ -571,11 +679,8 @@ body.store-filters-drawer-open {
   display: none;
 }
 
-.store-filter-option input {
-  width: 1rem;
-  height: 1rem;
-  accent-color: var(--color-primary, #dc2626);
-  flex-shrink: 0;
+.store-filter-options:not(.store-filter-options--pills) .store-filter-option:hover {
+  background: #f8fafc;
 }
 
 .store-filter-option-text {
@@ -864,12 +969,23 @@ body.store-filters-drawer-open {
 
 .store-filter-actions .store-btn-primary {
   flex: 1;
-  height: 2.5rem;
-  border-radius: 0.75rem;
+  height: 2.65rem;
+  border-radius: 0.85rem;
   background: var(--color-primary, #dc2626);
   color: #fff;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 800;
+  box-shadow: 0 8px 20px rgba(220, 38, 38, 0.18);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.store-filter-actions .store-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(220, 38, 38, 0.22);
+}
+
+.store-filter-actions .store-btn-primary.has-pending-count {
+  letter-spacing: 0.01em;
 }
 
 .store-filter-actions .store-btn-secondary {

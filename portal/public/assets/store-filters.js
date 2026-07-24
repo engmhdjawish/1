@@ -293,13 +293,31 @@ window.portalStoreFiltersInit = (root = document) => {
     badge.textContent = String(count);
   };
 
+  let lastPendingChipCount = 0;
+
   const updatePendingOptionStates = () => {
     if (!filterForm) {
       return;
     }
-    filterForm.querySelectorAll('.store-filter-option input[type="checkbox"]').forEach((input) => {
-      input.closest('.store-filter-option')?.classList.toggle('is-pending-selected', input.checked);
+    filterForm.querySelectorAll('.store-filter-pill').forEach((pill) => {
+      const input = pill.querySelector('input');
+      const action = pill.querySelector('.store-filter-option-action');
+      const checked = Boolean(input?.checked);
+      pill.classList.toggle('is-selected', checked);
+      if (action && input?.type === 'checkbox') {
+        action.textContent = checked ? 'remove' : 'add';
+      }
     });
+  };
+
+  const updateSubmitButtonLabel = (count) => {
+    const submitBtn = catalogRoot.querySelector('#store-filters-submit');
+    if (!submitBtn) {
+      return;
+    }
+    const defaultLabel = submitBtn.dataset.labelDefault || 'عرض النتائج';
+    submitBtn.textContent = count > 0 ? `${defaultLabel} (${count})` : defaultLabel;
+    submitBtn.classList.toggle('has-pending-count', count > 0);
   };
 
   const removePendingChip = (button) => {
@@ -386,14 +404,17 @@ window.portalStoreFiltersInit = (root = document) => {
     }
     if (globalPanel) {
       globalPanel.classList.toggle('has-selection', chips.length > 0);
+      if (chips.length > lastPendingChipCount) {
+        globalPanel.classList.remove('is-updated');
+        void globalPanel.offsetWidth;
+        globalPanel.classList.add('is-updated');
+      }
     }
+    lastPendingChipCount = chips.length;
+    updateSubmitButtonLabel(chips.length);
     if (clearAllBtn) {
       clearAllBtn.hidden = chips.length === 0;
     }
-
-    catalogRoot.querySelectorAll('[data-filter-group-chips]').forEach((container) => {
-      container.remove();
-    });
 
     Object.keys(FILTER_GROUP_META).forEach((groupId) => {
       const count = chips.filter((chip) => chip.containerGroup === groupId).length;
@@ -513,9 +534,11 @@ window.portalStoreFiltersInit = (root = document) => {
         return '';
       }
       const checked = selected.has(value) ? ' checked' : '';
-      return `<label class="store-filter-option" data-filter-label="${value.replace(/"/g, '&quot;')}">`
+      const selectedClass = selected.has(value) ? ' is-selected' : '';
+      return `<label class="store-filter-option store-filter-pill${selectedClass}" data-filter-label="${value.replace(/"/g, '&quot;')}">`
         + `<input type="checkbox" name="${paramName}[]" value="${value.replace(/"/g, '&quot;')}"${checked}>`
         + `<span class="store-filter-option-text">${value}</span>`
+        + `<span class="store-filter-option-action material-symbols-outlined" aria-hidden="true">${selected.has(value) ? 'remove' : 'add'}</span>`
         + '</label>';
     }).join('');
     if (!rows) {
@@ -523,6 +546,7 @@ window.portalStoreFiltersInit = (root = document) => {
     }
     list.innerHTML = rows;
     ensureFilterGroupControls(groupId, (facets || []).filter((facet) => String(facet?.value || '').trim() !== '').length);
+    list.classList.add('store-filter-options--pills');
   };
 
   const renderGuidFacetOptions = (groupId, paramName, items) => {
@@ -541,9 +565,11 @@ window.portalStoreFiltersInit = (root = document) => {
       }
       const label = String(item?.name || item?.Name || item?.code || item?.Code || value);
       const checked = selected.has(value.toLowerCase()) ? ' checked' : '';
-      return `<label class="store-filter-option" data-filter-label="${label.replace(/"/g, '&quot;')}">`
+      const selectedClass = selected.has(value.toLowerCase()) ? ' is-selected' : '';
+      return `<label class="store-filter-option store-filter-pill${selectedClass}" data-filter-label="${label.replace(/"/g, '&quot;')}">`
         + `<input type="checkbox" name="${paramName}[]" value="${value.replace(/"/g, '&quot;')}"${checked}>`
         + `<span class="store-filter-option-text">${label}</span>`
+        + `<span class="store-filter-option-action material-symbols-outlined" aria-hidden="true">${selected.has(value.toLowerCase()) ? 'remove' : 'add'}</span>`
         + '</label>';
     }).join('');
     if (!rows) {
@@ -551,6 +577,7 @@ window.portalStoreFiltersInit = (root = document) => {
     }
     list.innerHTML = rows;
     ensureFilterGroupControls(groupId, (items || []).filter((item) => String(item?.guid || item?.Guid || '').trim() !== '').length);
+    list.classList.add('store-filter-options--pills');
   };
 
   const applyDeferredFilters = (data) => {
