@@ -42,7 +42,7 @@ ob_start();
 require dirname(__DIR__) . '/views/home.php';
 $content = ob_get_clean();
 $title = 'الرئيسية';
-$extraHead = portal_preload_stylesheet('/css/home-page.css');
+$extraHead = portal_stylesheet('/css/home-page.css');
 $extraFooter = portal_defer_script('/assets/home-page.js');
 $enableQuickView = false;
 $enableStoreCartJs = false;

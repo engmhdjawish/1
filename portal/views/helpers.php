@@ -43,6 +43,12 @@ function portal_asset_url(string $webPath): string
     return $webPath;
 }
 
+/** Blocking stylesheet (above-the-fold — avoids FOUC). */
+function portal_stylesheet(string $webPath): string
+{
+    return '<link href="' . h(portal_asset_url($webPath)) . '" rel="stylesheet">';
+}
+
 /** Non-blocking stylesheet via rel=preload (footer, store UI, etc.). */
 function portal_preload_stylesheet(string $webPath): string
 {

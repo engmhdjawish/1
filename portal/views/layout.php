@@ -117,15 +117,15 @@ if ($customer) {
     <?php if (!empty($lcpPreloadUrl ?? '')): ?>
       <?= portal_preload_image((string) $lcpPreloadUrl) ?>
     <?php endif; ?>
+    <?= portal_stylesheet('/css/site-app.min.css') ?>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Material+Symbols+Outlined&display=swap" rel="stylesheet">
     <style><?= portal_inline_critical_css() ?>
       body { font-family: Manrope, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f6f6f8; color: #111827; }
       .site-link { color: #374151; }
       .site-link:hover, .site-link.is-active { color: #D81921; }
       .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-      .material-symbols-outlined { font-family: 'Material Symbols Outlined', sans-serif; font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24; vertical-align: middle; line-height: 1; }
+      .material-symbols-outlined { font-family: 'Material Symbols Outlined', sans-serif; font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24; vertical-align: middle; line-height: 1; font-size: 1.35rem; }
     </style>
-    <?= portal_preload_stylesheet('/css/site-app.min.css') ?>
-    <?= portal_preload_font_stylesheet('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Material+Symbols+Outlined&display=swap') ?>
     <?php if ($pagePath === '/index.php'): ?>
       <link rel="prefetch" href="/store.php" as="document">
     <?php endif; ?>
