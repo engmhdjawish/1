@@ -154,64 +154,82 @@
     width: 58%;
     aspect-ratio: 1;
     border-radius: 9999px;
-    background: #fff;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     box-shadow:
-      inset 0 0 0 1px rgba(255, 255, 255, 0.65),
-      0 10px 32px rgba(0, 0, 0, 0.16),
-      0 0 0 6px rgba(255, 255, 255, 0.08);
+      inset 0 0 0 1px rgba(255, 255, 255, 0.24),
+      inset 0 0 28px rgba(255, 255, 255, 0.08),
+      0 10px 32px rgba(0, 0, 0, 0.12);
     overflow: hidden;
     isolation: isolate;
   }
 
   .home-hero__logo-glow {
     position: absolute;
-    inset: -24%;
+    inset: -30%;
     z-index: 0;
     border-radius: inherit;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.75) 0%, transparent 70%);
-    opacity: 0.55;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.55) 0%, transparent 72%);
+    opacity: 0.45;
     animation: home-hero-logo-glow 4.2s ease-in-out infinite;
+  }
+
+  .home-hero__logo-frame {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 76%;
+    height: 76%;
+    overflow: hidden;
+    border-radius: 9999px;
   }
 
   .home-hero__logo-shimmer {
     position: absolute;
-    inset: 0;
-    z-index: 1;
+    inset: -35%;
+    z-index: 2;
     border-radius: inherit;
     background: linear-gradient(
-      120deg,
-      transparent 30%,
-      rgba(255, 255, 255, 0.15) 42%,
-      rgba(255, 255, 255, 0.85) 50%,
-      rgba(255, 255, 255, 0.15) 58%,
-      transparent 70%
+      115deg,
+      transparent 28%,
+      rgba(255, 255, 255, 0.05) 40%,
+      rgba(255, 255, 255, 0.75) 50%,
+      rgba(255, 255, 255, 0.05) 60%,
+      transparent 72%
     );
-    background-size: 220% 100%;
-    mix-blend-mode: soft-light;
-    animation: home-hero-logo-shimmer 4.8s ease-in-out infinite;
+    background-size: 240% 100%;
+    mix-blend-mode: screen;
+    animation: home-hero-logo-shimmer 5s ease-in-out infinite;
     pointer-events: none;
   }
 
   .home-hero__logo {
     position: relative;
-    z-index: 2;
+    z-index: 1;
     display: block;
-    width: 74%;
+    width: 100%;
     height: auto;
-    max-width: 74%;
-    max-height: 74%;
+    max-width: 100%;
+    max-height: 100%;
     object-fit: contain;
-    filter: drop-shadow(0 2px 8px rgba(15, 23, 42, 0.12));
-    animation: home-hero-logo-sparkle 4.8s ease-in-out infinite;
+    opacity: 0.82;
+    filter:
+      brightness(0) invert(1)
+      drop-shadow(0 0 18px rgba(255, 255, 255, 0.35));
+    animation: home-hero-logo-sparkle 5s ease-in-out infinite;
   }
 
   .home-hero__logo-fallback {
     position: relative;
-    z-index: 2;
+    z-index: 1;
     font-size: 2.75rem;
     line-height: 1;
-    color: #D81921;
-    filter: drop-shadow(0 2px 8px rgba(15, 23, 42, 0.12));
+    color: #fff;
+    opacity: 0.82;
+    filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.35));
+    animation: home-hero-logo-fallback-sparkle 5s ease-in-out infinite;
   }
 }
 
@@ -263,13 +281,33 @@
 @keyframes home-hero-logo-sparkle {
   0%,
   100% {
-    filter: drop-shadow(0 2px 8px rgba(15, 23, 42, 0.12));
+    opacity: 0.72;
+    filter:
+      brightness(0) invert(1)
+      drop-shadow(0 0 12px rgba(255, 255, 255, 0.22));
   }
 
   50% {
+    opacity: 0.95;
     filter:
-      drop-shadow(0 0 16px rgba(255, 255, 255, 0.55))
-      drop-shadow(0 2px 8px rgba(15, 23, 42, 0.12));
+      brightness(0) invert(1)
+      drop-shadow(0 0 26px rgba(255, 255, 255, 0.62))
+      drop-shadow(0 0 8px rgba(255, 255, 255, 0.35));
+  }
+}
+
+@keyframes home-hero-logo-fallback-sparkle {
+  0%,
+  100% {
+    opacity: 0.72;
+    filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.22));
+  }
+
+  50% {
+    opacity: 0.95;
+    filter:
+      drop-shadow(0 0 26px rgba(255, 255, 255, 0.62))
+      drop-shadow(0 0 8px rgba(255, 255, 255, 0.35));
   }
 }
 
@@ -278,7 +316,8 @@
   .home-hero__ring--inner,
   .home-hero__logo-glow,
   .home-hero__logo-shimmer,
-  .home-hero__logo {
+  .home-hero__logo,
+  .home-hero__logo-fallback {
     animation: none;
   }
 }
@@ -304,10 +343,9 @@
     width: 60%;
   }
 
-  .home-hero__logo {
+  .home-hero__logo-frame {
     width: 78%;
-    max-width: 78%;
-    max-height: 78%;
+    height: 78%;
   }
 
   .home-hero__logo-fallback {
