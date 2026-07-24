@@ -91,7 +91,7 @@ $buildUrl = static function (array $params = []) use ($days, $sessionId): string
   <div class="mb-6 rounded-2xl border border-border-subtle bg-white shadow-sm overflow-hidden">
     <div class="px-4 py-3 border-b border-border-subtle">
       <h2 class="text-lg font-extrabold text-slate-900">من أين يزورون؟</h2>
-      <p class="text-sm text-text-muted mt-0.5">تقدير من عنوان الشبكة (IP). قد يختلف مع VPN أو الشبكات الخلوية.</p>
+      <p class="text-sm text-text-muted mt-0.5">GPS عند السماح، وإلا تقدير من عنوان الشبكة (IP).</p>
     </div>
     <div class="overflow-x-auto">
       <table class="min-w-full text-sm">
@@ -338,7 +338,7 @@ $buildUrl = static function (array $params = []) use ($days, $sessionId): string
 <div class="rounded-2xl border border-border-subtle bg-white shadow-sm overflow-hidden mb-6">
   <div class="px-4 py-3 border-b border-border-subtle">
     <h2 class="text-lg font-extrabold text-slate-900">خريطة مواقع الزوار</h2>
-    <p class="text-sm text-text-muted mt-0.5">مواقع تقريبية مستنتجة من عنوان IP.</p>
+    <p class="text-sm text-text-muted mt-0.5">النقاط الخضراء = GPS، الحمراء = تقدير IP.</p>
   </div>
   <div id="visitor-map" class="visitor-map" role="img" aria-label="خريطة مواقع الزوار"></div>
   <?php if ($mapPoints === []): ?>
@@ -374,6 +374,8 @@ $buildUrl = static function (array $params = []) use ($days, $sessionId): string
             $city = trim((string) ($row['city_ar'] ?? ''));
             $country = trim((string) ($row['country_ar'] ?? ''));
             $location = $city !== '' && $country !== '' ? $city . '، ' . $country : ($city !== '' ? $city : ($country !== '' ? $country : '—'));
+            $locationSource = (string) ($row['location_source'] ?? 'ip');
+            $locationBadge = $locationSource === 'gps' ? 'GPS' : 'IP';
             ?>
             <tr class="hover:bg-surface-low/60">
               <td class="px-4 py-3 text-text-muted whitespace-nowrap"><?= h((string) ($row['created_at_fmt'] ?? '')) ?></td>
@@ -392,7 +394,10 @@ $buildUrl = static function (array $params = []) use ($days, $sessionId): string
                 <?php endif; ?>
               </td>
               <td class="px-4 py-3 text-text-muted"><?= h((string) ($row['referer_short'] ?? '')) ?></td>
-              <td class="px-4 py-3"><?= h($location) ?></td>
+              <td class="px-4 py-3">
+                <div><?= h($location) ?></div>
+                <span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold mt-1 <?= $locationSource === 'gps' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600' ?>"><?= h($locationBadge) ?></span>
+              </td>
               <td class="px-4 py-3 text-text-muted font-mono text-xs"><?= h((string) ($row['visitor_ip'] ?? '')) ?></td>
             </tr>
           <?php endforeach; ?>
@@ -426,14 +431,16 @@ $buildUrl = static function (array $params = []) use ($days, $sessionId): string
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     const label = [p.city, p.country].filter(Boolean).join('، ');
     const hits = parseInt(p.hits, 10) || 1;
+    const isGps = p.is_gps === true || p.is_gps === 't' || p.is_gps === 1 || p.is_gps === '1';
     const radius = Math.min(28, 8 + Math.sqrt(hits) * 3);
+    const color = isGps ? '#059669' : '#D81921';
     L.circleMarker([lat, lng], {
       radius,
-      color: '#D81921',
-      fillColor: '#D81921',
-      fillOpacity: 0.55,
+      color,
+      fillColor: color,
+      fillOpacity: isGps ? 0.65 : 0.55,
       weight: 2
-    }).bindPopup(`<strong>${label || 'موقع'}</strong><br>زيارات: ${hits}`).addTo(map);
+    }).bindPopup(`<strong>${label || 'موقع'}</strong><br>${isGps ? 'GPS' : 'تقدير IP'}<br>زيارات: ${hits}`).addTo(map);
     bounds.push([lat, lng]);
   });
 

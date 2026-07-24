@@ -99,16 +99,36 @@ final class VisitorLogService
             $payload['label_ar'] = self::buildLabelAr($action, $payload);
         }
 
+        $ip = self::clientIp();
+        $gps = self::parseGpsFromMeta($meta);
+        $geo = [];
+
+        if ($gps !== null) {
+            $payload['location_source'] = 'gps';
+            if ($gps['accuracy'] !== null) {
+                $payload['gps_accuracy_m'] = round($gps['accuracy'], 1);
+            }
+
+            $geo = self::cachedReverseGeo($gps['latitude'], $gps['longitude']) ?? [];
+            if ($geo === []) {
+                $geo = self::fetchReverseGeo($gps['latitude'], $gps['longitude']);
+            }
+            $geo['latitude'] = $gps['latitude'];
+            $geo['longitude'] = $gps['longitude'];
+        } else {
+            $payload['location_source'] = 'ip';
+
+            $geo = self::cachedGeo($ip) ?? [];
+            if ($geo === [] && $ip !== '' && !self::isPrivateIp($ip)) {
+                $geo = self::fetchGeo($ip);
+            }
+        }
+
         $details = json_encode($payload, JSON_UNESCAPED_UNICODE);
         if ($details === false) {
             $details = '{}';
         }
 
-        $ip = self::clientIp();
-        $geo = self::cachedGeo($ip) ?? [];
-        if ($geo === [] && $ip !== '' && !self::isPrivateIp($ip)) {
-            $geo = self::fetchGeo($ip);
-        }
         $webCustomerId = $customer !== null ? trim((string) ($customer['id'] ?? '')) : '';
 
         $params = [
@@ -482,7 +502,8 @@ final class VisitorLogService
                 city_ar AS city,
                 latitude,
                 longitude,
-                COUNT(*)::int AS hits
+                COUNT(*)::int AS hits,
+                BOOL_OR(COALESCE(details_ar::jsonb->>'location_source', 'ip') = 'gps') AS is_gps
              FROM visitor_logs
              WHERE latitude IS NOT NULL
                AND longitude IS NOT NULL
@@ -569,8 +590,129 @@ final class VisitorLogService
         $row['action_label_ar'] = self::actionLabel($action);
         $row['referer_short'] = self::shortReferer((string) ($row['referer'] ?? ''));
         $row['created_at_fmt'] = self::formatTimestamp($row['created_at'] ?? null);
+        $row['location_source'] = (string) ($meta['location_source'] ?? 'ip');
+        $row['location_source_label'] = $row['location_source'] === 'gps' ? 'GPS' : 'IP';
 
         return $row;
+    }
+
+    /** @param array<string, mixed>|null $meta
+     * @return array{latitude: float, longitude: float, accuracy: ?float}|null
+     */
+    private static function parseGpsFromMeta(?array $meta): ?array
+    {
+        if (!is_array($meta)) {
+            return null;
+        }
+
+        if (!isset($meta['gps_latitude'], $meta['gps_longitude'])) {
+            return null;
+        }
+
+        $latitude = (float) $meta['gps_latitude'];
+        $longitude = (float) $meta['gps_longitude'];
+        if (!self::isValidCoordinate($latitude, $longitude)) {
+            return null;
+        }
+
+        $accuracy = isset($meta['gps_accuracy']) && is_numeric($meta['gps_accuracy'])
+            ? (float) $meta['gps_accuracy']
+            : null;
+
+        return [
+            'latitude' => $latitude,
+            'longitude' => $longitude,
+            'accuracy' => $accuracy,
+        ];
+    }
+
+    private static function isValidCoordinate(float $latitude, float $longitude): bool
+    {
+        if ($latitude < -90.0 || $latitude > 90.0 || $longitude < -180.0 || $longitude > 180.0) {
+            return false;
+        }
+
+        return abs($latitude) > 0.000001 || abs($longitude) > 0.000001;
+    }
+
+    /** @return array{country_ar?: string, city_ar?: string} */
+    private static function fetchReverseGeo(float $latitude, float $longitude): array
+    {
+        $query = http_build_query([
+            'format' => 'json',
+            'lat' => number_format($latitude, 6, '.', ''),
+            'lon' => number_format($longitude, 6, '.', ''),
+            'accept-language' => 'ar',
+            'zoom' => '10',
+        ]);
+        $url = 'https://nominatim.openstreetmap.org/reverse?' . $query;
+        $context = stream_context_create([
+            'http' => [
+                'timeout' => 2.0,
+                'header' => "User-Agent: JawishPortal/1.0 (visitor-analytics)\r\n",
+            ],
+        ]);
+        $raw = @file_get_contents($url, false, $context);
+        if ($raw === false) {
+            return [];
+        }
+
+        $data = json_decode($raw, true);
+        if (!is_array($data)) {
+            return [];
+        }
+
+        $address = is_array($data['address'] ?? null) ? $data['address'] : [];
+
+        return [
+            'country_ar' => trim((string) ($address['country'] ?? '')),
+            'city_ar' => trim((string) (
+                $address['city']
+                ?? $address['town']
+                ?? $address['village']
+                ?? $address['municipality']
+                ?? $address['state']
+                ?? ''
+            )),
+        ];
+    }
+
+    /** @return array{country_ar?: string, city_ar?: string}|null */
+    private static function cachedReverseGeo(float $latitude, float $longitude): ?array
+    {
+        try {
+            $stmt = Database::pdo()->prepare(
+                "SELECT country_ar, city_ar
+                 FROM visitor_logs
+                 WHERE details_ar LIKE '{%'
+                   AND COALESCE(details_ar::jsonb->>'location_source', '') = 'gps'
+                   AND latitude BETWEEN :lat_min AND :lat_max
+                   AND longitude BETWEEN :lng_min AND :lng_max
+                   AND (
+                        NULLIF(TRIM(country_ar), '') IS NOT NULL
+                        OR NULLIF(TRIM(city_ar), '') IS NOT NULL
+                   )
+                 ORDER BY created_at DESC
+                 LIMIT 1"
+            );
+            $stmt->execute([
+                'lat_min' => $latitude - 0.05,
+                'lat_max' => $latitude + 0.05,
+                'lng_min' => $longitude - 0.05,
+                'lng_max' => $longitude + 0.05,
+            ]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row === false) {
+                return null;
+            }
+
+            return [
+                'country_ar' => (string) ($row['country_ar'] ?? ''),
+                'city_ar' => (string) ($row['city_ar'] ?? ''),
+            ];
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /** @return array<string, mixed> */
