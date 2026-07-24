@@ -101,13 +101,16 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
             if ($adAlt === '') {
                 $adAlt = trim((string) ($ad['file_name'] ?? 'إعلان'));
             }
+            $adSrc = portal_site_media_display_url((string) ($ad['url'] ?? ''), 1280);
           ?>
           <img
-            src="<?= h((string) ($ad['url'] ?? '')) ?>"
+            src="<?= h($adSrc) ?>"
             alt="<?= h($adAlt) ?>"
             class="home-ad-slide<?= $i === 0 ? ' is-active' : '' ?>"
             loading="<?= $i === 0 ? 'eager' : 'lazy' ?>"
             decoding="async"
+            <?= $i === 0 ? 'fetchpriority="high"' : '' ?>
+            sizes="(max-width: 768px) 100vw, 1280px"
             aria-hidden="<?= $i === 0 ? 'false' : 'true' ?>"
             data-ad-index="<?= (int) $i ?>"
           >
@@ -169,7 +172,13 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
       >
         <?php if (!empty($section['banner_image_url'])): ?>
           <div class="home-section__banner">
-            <img src="<?= h((string) $section['banner_image_url']) ?>" alt="" loading="lazy">
+            <img
+              src="<?= h(portal_site_media_display_url((string) $section['banner_image_url'], 1280)) ?>"
+              alt=""
+              loading="lazy"
+              decoding="async"
+              sizes="(max-width: 768px) 100vw, 1280px"
+            >
           </div>
         <?php endif; ?>
 

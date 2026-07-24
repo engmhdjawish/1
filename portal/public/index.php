@@ -23,6 +23,14 @@ $sections = HomePageService::mergedSectionShells();
 $embeddedProductStrips = HomePageService::embeddedProductStrips();
 $ads = SiteMediaService::listAdsForHome();
 
+$lcpPreloadUrl = null;
+if ($ads !== []) {
+    $firstAdUrl = trim((string) ($ads[0]['url'] ?? ''));
+    if ($firstAdUrl !== '') {
+        $lcpPreloadUrl = portal_site_media_display_url($firstAdUrl, 1280);
+    }
+}
+
 $homeHasEmbeddedStrips = false;
 $homeProductsPending = false;
 foreach ($sections as $section) {

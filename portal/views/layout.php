@@ -17,6 +17,7 @@ use Portal\Support\StorePricePreference;
 /** @var bool|null $enableStoreCartJs */
 /** @var bool|null $deferStoreCartJs */
 /** @var bool|null $enableOnboarding */
+/** @var string|null $lcpPreloadUrl */
 
 require_once __DIR__ . '/helpers.php';
 
@@ -113,11 +114,9 @@ if ($customer) {
     <script type="application/ld+json"><?= json_encode($jsonLdPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="<?= h(portal_asset_url('/css/site-app.min.css')) ?>" rel="stylesheet">
-    <?php if ($pagePath === '/index.php'): ?>
-      <link rel="prefetch" href="/store.php" as="document">
+    <?php if (!empty($lcpPreloadUrl ?? '')): ?>
+      <?= portal_preload_image((string) $lcpPreloadUrl) ?>
     <?php endif; ?>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Material+Symbols+Outlined&display=swap" rel="stylesheet">
     <style><?= portal_inline_critical_css() ?>
       body { font-family: Manrope, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f6f6f8; color: #111827; }
       .site-link { color: #374151; }
@@ -125,6 +124,11 @@ if ($customer) {
       .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
       .material-symbols-outlined { font-family: 'Material Symbols Outlined', sans-serif; font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24; vertical-align: middle; line-height: 1; }
     </style>
+    <?= portal_preload_stylesheet('/css/site-app.min.css') ?>
+    <?= portal_preload_font_stylesheet('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Material+Symbols+Outlined&display=swap') ?>
+    <?php if ($pagePath === '/index.php'): ?>
+      <link rel="prefetch" href="/store.php" as="document">
+    <?php endif; ?>
     <?php if (!empty($extraHead ?? '')): ?>
       <?= $extraHead ?>
     <?php endif; ?>

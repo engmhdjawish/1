@@ -19,10 +19,14 @@ if (!in_array($variant, ['header', 'drawer', 'hero', 'hero-dark', 'hero-home', '
 }
 
 $alt = trim((string) ($siteLogoAlt ?? ''));
+$logoSrc = $url;
+if (in_array($variant, ['header', 'mobile-toolbar'], true)) {
+    $logoSrc = portal_site_media_display_url($url, 640);
+}
 ?>
 <span class="site-logo-wrap site-logo-wrap--<?= h($variant) ?>">
   <img
-    src="<?= h($url) ?>"
+    src="<?= h($logoSrc) ?>"
     alt="<?= h($alt) ?>"
     class="site-logo-img"
     decoding="async"
