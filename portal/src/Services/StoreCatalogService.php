@@ -235,7 +235,7 @@ final class StoreCatalogService
 
         $cachedCatalog = self::readCatalogCache($query, $policy);
         if ($cachedCatalog !== null) {
-            $wantsInlineFilters = $allowClientFilters && self::shouldIncludeResultFilters($query, $requestFilters, $policyRules);
+            $wantsInlineFilters = $allowClientFilters && self::requestWantsInlineResultFilters($query, $requestFilters);
             $cachedDeferred = (bool) ($cachedCatalog['filters_deferred'] ?? false);
             if (!$wantsInlineFilters || !$cachedDeferred) {
                 return $cachedCatalog;
@@ -292,7 +292,7 @@ final class StoreCatalogService
         }
 
         $deferClientFilters = $allowClientFilters
-            && !self::shouldIncludeResultFilters($query, $requestFilters, $policyRules);
+            && !self::requestWantsInlineResultFilters($query, $requestFilters);
 
         $includeResultFilters = $allowClientFilters && !$deferClientFilters;
 
@@ -461,6 +461,7 @@ final class StoreCatalogService
             'store_options' => $storeOptions,
             'allow_client_filters' => $allowClientFilters,
             'filters_deferred' => $deferClientFilters,
+            'filters_scoped' => self::filterRulesHaveImplicitConstraints($policyRules),
             'filters' => $displayFilters,
         ];
 
@@ -2162,7 +2163,7 @@ final class StoreCatalogService
         }
 
         $requestFilters = self::parseRequestFilters($query, $storeOptions, $isClientFilterVisible);
-        $needsScopedFilters = self::shouldIncludeResultFilters($query, $requestFilters, $baseRules);
+        $needsScopedFilters = self::shouldFetchScopedResultFilters($query, $requestFilters, $baseRules);
         if (!$needsScopedFilters) {
             $resultFilters = self::scopeResultFiltersForPolicy(
                 self::buildResultFiltersFromFilterOptions($filterOptions),
@@ -2175,6 +2176,11 @@ final class StoreCatalogService
             ];
         }
 
+        $cachedPayload = self::readScopedFiltersCache($query, $policy);
+        if ($cachedPayload !== null) {
+            return $cachedPayload;
+        }
+
         $resultFilters = self::fetchScopedResultFilters($query, $sectionContext, $baseRules, $policyRules, $requestFilters);
         if (self::resultFiltersAreEmpty($resultFilters) && !self::filterRulesHaveImplicitConstraints($baseRules)) {
             $resultFilters = self::scopeResultFiltersForPolicy(
@@ -2183,10 +2189,15 @@ final class StoreCatalogService
             );
         }
 
-        return [
+        $payload = [
             'filterOptions' => $filterOptions,
             'resultFilters' => $resultFilters,
         ];
+        if ($needsScopedFilters) {
+            self::writeScopedFiltersCache($query, $policy, $payload);
+        }
+
+        return $payload;
     }
 
     /** @param array<string, mixed> $query @param array<string, mixed>|null $sectionContext @param array<string, mixed> $baseRules @param array<string, mixed> $policyRules @param array<string, mixed> $requestFilters @return array<string, mixed> */
@@ -2289,17 +2300,74 @@ final class StoreCatalogService
         ));
     }
 
-    /** @param array<string, mixed> $query @param array<string, mixed> $requestFilters @param array<string, mixed> $policyRules */
-    private static function shouldIncludeResultFilters(array $query, array $requestFilters, array $policyRules = []): bool
+    /** @param array<string, mixed> $query @param array<string, mixed> $requestFilters */
+    private static function requestWantsInlineResultFilters(array $query, array $requestFilters): bool
     {
         if (trim((string) ($query['facetFilters'] ?? '')) === '1') {
             return true;
         }
-        if (self::requestHasActiveFilters($requestFilters)) {
+
+        return self::requestHasActiveFilters($requestFilters);
+    }
+
+    /** @param array<string, mixed> $query @param array<string, mixed> $requestFilters @param array<string, mixed> $baseRules */
+    private static function shouldFetchScopedResultFilters(array $query, array $requestFilters, array $baseRules): bool
+    {
+        if (self::requestWantsInlineResultFilters($query, $requestFilters)) {
             return true;
         }
 
-        return self::filterRulesHaveImplicitConstraints($policyRules);
+        return self::filterRulesHaveImplicitConstraints($baseRules);
+    }
+
+    /** @param array<string, mixed> $query @param array<string, mixed> $policy @return array{filterOptions: array<string, mixed>, resultFilters: array<string, mixed>}|null */
+    private static function readScopedFiltersCache(array $query, array $policy): ?array
+    {
+        $key = self::scopedFiltersCacheKey($query, $policy);
+        if ($key === null) {
+            return null;
+        }
+        $cached = ResponseCache::get($key);
+        if (!is_array($cached)) {
+            return null;
+        }
+        if (!is_array($cached['filterOptions'] ?? null) || !is_array($cached['resultFilters'] ?? null)) {
+            return null;
+        }
+
+        return [
+            'filterOptions' => $cached['filterOptions'],
+            'resultFilters' => $cached['resultFilters'],
+        ];
+    }
+
+    /** @param array<string, mixed> $query @param array<string, mixed> $policy @param array{filterOptions: array<string, mixed>, resultFilters: array<string, mixed>} $payload */
+    private static function writeScopedFiltersCache(array $query, array $policy, array $payload): void
+    {
+        $key = self::scopedFiltersCacheKey($query, $policy);
+        if ($key === null || self::resultFiltersAreEmpty($payload['resultFilters'])) {
+            return;
+        }
+
+        ResponseCache::set($key, $payload, 300);
+    }
+
+    /** @param array<string, mixed> $query @param array<string, mixed> $policy */
+    private static function scopedFiltersCacheKey(array $query, array $policy): ?string
+    {
+        if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'GET') {
+            return null;
+        }
+
+        $readerKey = CustomerSession::check()
+            ? 'customer:' . trim((string) (CustomerSession::customer()['id'] ?? ''))
+            : 'guest:' . trim((string) ($policy['id'] ?? 'none'));
+
+        $params = $query;
+        unset($params['facetFilters'], $params['loadFilterOptions'], $params['page']);
+        ksort($params);
+
+        return 'store_scoped_filters_v1:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
     }
 
     /** @param array<string, mixed> $rules */

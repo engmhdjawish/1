@@ -55,16 +55,20 @@ $assert(
 );
 
 $assert(
-    'policy has_image forces inline result filters',
-    invokePrivate('shouldIncludeResultFilters', [], ['search' => ''], ['has_image' => true]) === true
+    'policy has_image requests scoped deferred filters',
+    invokePrivate('shouldFetchScopedResultFilters', [], ['search' => ''], ['has_image' => true]) === true
+);
+$assert(
+    'policy has_image alone does not force inline catalog facets',
+    invokePrivate('requestWantsInlineResultFilters', [], ['search' => '']) === false
 );
 $assert(
     'user search forces inline result filters',
-    invokePrivate('shouldIncludeResultFilters', [], ['search' => 'abc'], []) === true
+    invokePrivate('requestWantsInlineResultFilters', [], ['search' => 'abc']) === true
 );
 $assert(
     'no policy or user filters keeps deferred mode',
-    invokePrivate('shouldIncludeResultFilters', [], ['search' => ''], []) === false
+    invokePrivate('requestWantsInlineResultFilters', [], ['search' => '']) === false
 );
 
 try {
@@ -77,10 +81,12 @@ try {
         echo "\nGuest policy implicit constraints: " . ($hasImplicit ? 'yes' : 'no') . "\n";
 
         $catalog = StoreCatalogService::catalogFromRequest([]);
-        $assert(
-            'catalog defers filters only when policy has no implicit constraints',
-            ((bool) ($catalog['filters_deferred'] ?? false)) === !$hasImplicit
-        );
+        if ((bool) ($catalog['allow_client_filters'] ?? false)) {
+            $assert(
+                'catalog defers filters on initial load for fast first paint',
+                (bool) ($catalog['filters_deferred'] ?? false) === true
+            );
+        }
 
         $payload = StoreCatalogService::getClientFiltersPayload([]);
         $materialTypes = is_array($payload['resultFilters']['materialTypes'] ?? null)
