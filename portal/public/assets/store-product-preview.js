@@ -349,25 +349,35 @@
 
   const renderOrderStaffPanel = (item) => {
     const packageUnit = item.packageUnit || 'طرد';
+    const primaryUnit = item.primaryUnit || 'زوج';
     const qty = formatPackageCount(item.orderQty ?? 0);
+    const qtyNum = Number(item.orderQty ?? 0);
 
-    let packPriceHtml = '';
+    let packPriceText = '';
+    let unitPriceText = '';
+    let totalText = '';
+
     if (item.showPrice) {
       if (item.showPriceSyp && (item.packageSaleSp > 0 || item.originalPackSp > 0)) {
         const amount = item.packageSaleSp > 0 ? item.packageSaleSp : item.originalPackSp;
-        packPriceHtml = `<span class="store-num" dir="ltr">${formatMoney(amount)} ل.س</span> / ${esc(packageUnit)}`;
+        packPriceText = `${formatMoney(amount)} ل.س`;
       } else if (item.showPriceUsd && (item.packageSaleUsd > 0 || item.originalPackUsd > 0)) {
         const amount = item.packageSaleUsd > 0 ? item.packageSaleUsd : item.originalPackUsd;
-        packPriceHtml = `<span class="store-num" dir="ltr">$${formatUsd(amount)}</span> / ${esc(packageUnit)}`;
+        packPriceText = `$${formatUsd(amount)}`;
       }
-    }
-
-    let totalHtml = '';
-    if (item.showPrice) {
-      if (item.showPriceSyp && Number(item.lineTotalSp) > 0) {
-        totalHtml = `<span class="store-num" dir="ltr">${formatMoney(item.lineTotalSp)} ل.س</span>`;
-      } else if (item.showPriceUsd && Number(item.lineTotalUsd) > 0) {
-        totalHtml = `<span class="store-num" dir="ltr">$${formatUsd(item.lineTotalUsd)}</span>`;
+      if (item.showPriceSyp && (item.unitSaleSp > 0 || item.originalUnitSp > 0)) {
+        const amount = item.unitSaleSp > 0 ? item.unitSaleSp : item.originalUnitSp;
+        unitPriceText = `${formatMoney(amount)} ل.س / ${primaryUnit}`;
+      } else if (item.showPriceUsd && (item.unitSaleUsd > 0 || item.originalUnitUsd > 0)) {
+        const amount = item.unitSaleUsd > 0 ? item.unitSaleUsd : item.originalUnitUsd;
+        unitPriceText = `$${formatUsd(amount)} / ${primaryUnit}`;
+      }
+      if (qtyNum > 1.009) {
+        if (item.showPriceSyp && Number(item.lineTotalSp) > 0) {
+          totalText = `${formatMoney(item.lineTotalSp)} ل.س`;
+        } else if (item.showPriceUsd && Number(item.lineTotalUsd) > 0) {
+          totalText = `$${formatUsd(item.lineTotalUsd)}`;
+        }
       }
     }
 
@@ -380,10 +390,16 @@
     }
 
     if (!item.showPrice && !item.isCancelled) {
-      return '<p class="store-product-preview__staff-note">سعر هذا الصنف يُحدد عند تأكيد الطلب.</p>';
+      return `<div class="store-product-preview__staff-order">
+        ${badges.length > 0 ? `<div class="store-product-preview__staff-badges">${badges.join('')}</div>` : ''}
+        <div class="store-product-preview__staff-pricing">
+          <span class="store-product-preview__staff-qty store-num" dir="ltr">${esc(qty)} ${esc(packageUnit)}</span>
+        </div>
+        <p class="store-product-preview__staff-note">سعر هذا الصنف يُحدد عند تأكيد الطلب.</p>
+      </div>`;
     }
 
-    if (!packPriceHtml && !totalHtml) {
+    if (!packPriceText && !unitPriceText && !totalText) {
       return badges.length > 0
         ? `<div class="store-product-preview__staff-badges">${badges.join('')}</div>`
         : '';
@@ -392,9 +408,11 @@
     return `
       <div class="store-product-preview__staff-order">
         ${badges.length > 0 ? `<div class="store-product-preview__staff-badges">${badges.join('')}</div>` : ''}
-        <div class="store-product-preview__staff-prices">
-          ${packPriceHtml ? `<div class="store-product-preview__staff-price"><span>سعر ${esc(packageUnit)}</span>${packPriceHtml}</div>` : ''}
-          ${totalHtml ? `<div class="store-product-preview__staff-total"><span>${esc(qty)} ${esc(packageUnit)}</span>${totalHtml}</div>` : ''}
+        <div class="store-product-preview__staff-pricing">
+          <span class="store-product-preview__staff-qty store-num" dir="ltr">${esc(qty)} ${esc(packageUnit)}</span>
+          ${packPriceText ? `<strong class="store-product-preview__staff-pack store-num" dir="ltr">${packPriceText}</strong>` : ''}
+          ${unitPriceText ? `<span class="store-product-preview__staff-unit store-num" dir="ltr">${unitPriceText}</span>` : ''}
+          ${totalText ? `<span class="store-product-preview__staff-line-total store-num" dir="ltr">${totalText}</span>` : ''}
         </div>
       </div>`;
   };
@@ -866,20 +884,12 @@
 
     if (subtitleEl) {
       if (state.context === 'order') {
-        const packageUnit = item.packageUnit || 'طرد';
-        const qty = formatPackageCount(item.orderQty ?? 0);
-        const packaging = formatPackagingLabel(item);
         if (item.isCancelled) {
           subtitleEl.textContent = 'صنف ملغى من الطلب';
         } else {
-          const parts = [
-            item.code ? `#${item.code}` : '',
-            `${qty} ${packageUnit}`,
-            packaging,
-          ].filter(Boolean);
-          subtitleEl.textContent = parts.join(' · ');
+          subtitleEl.textContent = item.code ? `#${item.code}` : '';
         }
-        subtitleEl.hidden = false;
+        subtitleEl.hidden = !subtitleEl.textContent;
       } else {
         const parts = [
           item.manufacturer,

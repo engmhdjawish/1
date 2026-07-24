@@ -16,7 +16,6 @@ $hasOffer = !$isCancelled && store_line_has_offer($item);
 $imageUrl = trim((string) ($item['image_url'] ?? ''));
 $materialCode = trim((string) ($item['material_code'] ?? ''));
 $materialName = trim((string) ($item['material_name_ar'] ?? ''));
-$packagingLabel = format_packaging($prices['packaging']) . ' ' . $prices['primary_unit'] . ' / ' . $prices['package_unit'];
 $previewGuid = trim((string) ($previewGuid ?? ($item['material_guid'] ?? $item['id'] ?? '')));
 $previewJson = json_encode($previewPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
 
@@ -24,6 +23,9 @@ $formatUsd = static fn (float $amount): string => '$' . number_format($amount, 2
 $packPriceLabel = $showPriceSyp
     ? format_money($prices['pack_sp'], true) . ' ل.س'
     : $formatUsd($prices['pack_usd']);
+$unitPriceLabel = $showPriceSyp
+    ? format_money($prices['unit_sp'], true) . ' ل.س'
+    : $formatUsd($prices['unit_usd']);
 $lineTotalLabel = $showPriceSyp
     ? format_money($prices['line_total_sp'], true) . ' ل.س'
     : $formatUsd($prices['line_total_usd']);
@@ -34,17 +36,9 @@ $showPrices = !$isCancelled && ($showPriceSyp || $showPriceUsd) && (
     || $prices['line_total_usd'] > 0
 );
 $hasPackPrice = $showPrices && ($prices['pack_sp'] > 0 || $prices['pack_usd'] > 0);
-$metaParts = [];
-if ($materialCode !== '') {
-    $metaParts[] = '#' . $materialCode;
-}
-$metaParts[] = format_packages_display($prices['quantity']) . ' ' . $prices['package_unit'];
-if ($prices['packaging'] > 0) {
-    $metaParts[] = $packagingLabel;
-}
-if ($hasPackPrice) {
-    $metaParts[] = $packPriceLabel . ' / ' . $prices['package_unit'];
-}
+$hasUnitPrice = $showPrices && ($prices['unit_sp'] > 0 || $prices['unit_usd'] > 0);
+$qtyLabel = format_packages_display($prices['quantity']) . ' ' . $prices['package_unit'];
+$showLineTotal = $showPrices && $prices['quantity'] > 1.009;
 ?>
 <article
   class="dash-order-item<?= $hasOffer ? ' dash-order-item--offer' : '' ?><?= $isCancelled ? ' dash-order-item--cancelled' : '' ?>"
@@ -76,15 +70,23 @@ if ($hasPackPrice) {
           <?php endif; ?>
           <h4 class="dash-order-item__name"><?= h($materialName !== '' ? $materialName : '—') ?></h4>
         </div>
-        <p class="dash-order-item__meta">
-          <?php foreach ($metaParts as $index => $part): ?>
-            <?php if ($index > 0): ?><span class="dash-order-item__meta-sep" aria-hidden="true">·</span><?php endif; ?>
-            <span<?= $index === 0 && $materialCode !== '' ? ' class="store-num" dir="ltr"' : ($hasPackPrice && $index === count($metaParts) - 1 ? ' class="store-num" dir="ltr"' : '') ?>><?= h($part) ?></span>
-          <?php endforeach; ?>
-        </p>
+        <?php if ($materialCode !== ''): ?>
+          <p class="dash-order-item__meta"><span class="store-num" dir="ltr">#<?= h($materialCode) ?></span></p>
+        <?php endif; ?>
       </div>
-      <?php if ($showPrices): ?>
-        <strong class="dash-order-item__total store-num" dir="ltr"><?= h($lineTotalLabel) ?></strong>
+      <?php if ($showPrices || $prices['quantity'] > 0): ?>
+        <div class="dash-order-item__pricing">
+          <span class="dash-order-item__qty store-num" dir="ltr"><?= h($qtyLabel) ?></span>
+          <?php if ($hasPackPrice): ?>
+            <strong class="dash-order-item__pack-price store-num" dir="ltr"><?= h($packPriceLabel) ?></strong>
+          <?php endif; ?>
+          <?php if ($hasUnitPrice): ?>
+            <span class="dash-order-item__unit-price store-num" dir="ltr"><?= h($unitPriceLabel) ?> <span class="dash-order-item__unit-label">/ <?= h($prices['primary_unit']) ?></span></span>
+          <?php endif; ?>
+          <?php if ($showLineTotal): ?>
+            <span class="dash-order-item__line-total store-num" dir="ltr"><?= h($lineTotalLabel) ?></span>
+          <?php endif; ?>
+        </div>
       <?php endif; ?>
     </div>
   </div>
