@@ -28,7 +28,7 @@ $ads = SiteMediaService::listAdsForHome();
 
 $lcpPreloadUrl = null;
 if (!empty($companyLogoUrl)) {
-    $lcpPreloadUrl = (string) $companyLogoUrl;
+    $lcpPreloadUrl = portal_site_logo_url((string) $companyLogoUrl, 'header');
 } elseif ($ads !== []) {
     $firstAdUrl = trim((string) ($ads[0]['url'] ?? ''));
     if ($firstAdUrl !== '') {
