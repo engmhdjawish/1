@@ -438,9 +438,13 @@
     const source = findOrderLineEditSource(item);
     if (!source) return;
 
-    const wrap = document.createElement('div');
+    const wrap = document.createElement('details');
     wrap.className = 'store-product-preview__staff-edit';
-    wrap.innerHTML = '<p class="store-product-preview__staff-edit-title"><span class="material-symbols-outlined" aria-hidden="true">edit</span> تعديل الصنف</p>';
+
+    const summary = document.createElement('summary');
+    summary.className = 'store-product-preview__staff-edit-toggle';
+    summary.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">edit</span> تعديل الصنف';
+    wrap.appendChild(summary);
 
     const body = document.createElement('div');
     body.className = 'store-product-preview__staff-edit-body dashboard-order-line__edit-body';
