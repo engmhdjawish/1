@@ -41,7 +41,7 @@
     if (refreshInFlight) return refreshInFlight;
     refreshInFlight = (async () => {
       try {
-        const res = await fetch(`${API}?reconcile=1`, {
+        const res = await fetch(cartApiUrl(options), {
           headers: { Accept: 'application/json' },
           credentials: 'same-origin',
         });
@@ -122,6 +122,16 @@
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  };
+
+  const escapeAttr = (text) => String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;');
+
+  const cartApiUrl = (options = {}) => {
+    const reconcile = options.reconcile === true;
+    return reconcile ? `${API}?reconcile=1` : `${API}?reconcile=0`;
   };
 
   const imageZoomUrl = (url) => {
@@ -546,7 +556,7 @@
     const priceDirection = priceChangeDirection(line?.price_change, line, prices);
     const priceCardClass = priceDirection ? ` store-cart-line-card--price-${priceDirection}` : '';
     const noPriceClass = !lineShowPrice ? ' store-cart-line-card--no-price' : '';
-    const previewJson = escapeHtml(previewPayloadJson(line, data));
+    const previewJson = escapeAttr(previewPayloadJson(line, data));
     const img = line.image_url
       ? (() => {
           const thumb = escapeHtml(line.image_url);
@@ -1433,6 +1443,69 @@
       refreshCartForms(data);
     }
 
+    const canPatchCartResponse = () => {
+      if (options.fullRender === true || !data.ok) return false;
+      if (Array.isArray(data.stock_notices) && data.stock_notices.length > 0) return false;
+      if (Array.isArray(data.price_changes) && data.price_changes.length > 0) return false;
+      if (Array.isArray(data.unavailable) && data.unavailable.length > 0) return false;
+      if (!data.cart_qty_by_guid) return false;
+      const items = Array.isArray(data.items) ? data.items : [];
+      const domLines = document.querySelectorAll('[data-cart-line]').length;
+      if (items.length > domLines) return false;
+      return domLines > 0 || items.length === 0;
+    };
+
+    const patchCartFromResponse = () => {
+      const qtyMap = data.cart_qty_by_guid || {};
+      document.querySelectorAll('[data-cart-line]').forEach((card) => {
+        const guid = card.getAttribute('data-cart-line') || '';
+        if (!guid) return;
+        const raw = qtyMap[guid] ?? qtyMap[guid.toLowerCase()] ?? qtyMap[guid.toUpperCase()];
+        if (raw === undefined || Number(raw) <= 0) {
+          card.remove();
+          return;
+        }
+        const input = card.querySelector('[data-qty-input]');
+        if (input) input.value = formatQty(Number(raw));
+        updateCartPreviewPayload(guid, Number(raw));
+        updatePreviewPayload(guid, Number(raw));
+      });
+
+      const totals = data.display_totals || data.totals || {};
+      const totalSp = Number(totals.total_sp) || 0;
+      const totalUsd = Number(totals.total_usd) || 0;
+      document.querySelectorAll('.store-cart-summary__total.store-price-currency--syp').forEach((el) => {
+        if (totalSp > 0) el.textContent = `الإجمالي: ${formatMoney(totalSp)} ل.س`;
+      });
+      document.querySelectorAll('.store-cart-summary__total.store-price-currency--usd').forEach((el) => {
+        if (totalUsd > 0) el.textContent = `الإجمالي: $${formatUsd(totalUsd)}`;
+      });
+
+      document.querySelectorAll('[data-cart-line] .store-order-line-card__totals').forEach((el) => {
+        const card = el.closest('[data-cart-line]');
+        const guid = card?.getAttribute('data-cart-line') || '';
+        const line = (Array.isArray(data.items) ? data.items : []).find((row) => row.material_guid === guid);
+        if (!line) return;
+        const prices = computeLinePrices(line);
+        el.innerHTML = `
+          ${prices.packSp > 0 ? `<span class="store-price-currency store-price-currency--syp store-num" dir="ltr">${formatMoney(prices.lineTotalSp)} ل.س</span>` : ''}
+          ${prices.packUsd > 0 ? `<span class="store-price-currency store-price-currency--usd store-num" dir="ltr">$${formatUsd(prices.lineTotalUsd)}</span>` : ''}`;
+      });
+
+      const remainingLines = document.querySelectorAll('[data-cart-line]').length;
+      const unavailableCount = Array.isArray(data.unavailable) ? data.unavailable.length : 0;
+      if (remainingLines === 0 && unavailableCount === 0) {
+        return false;
+      }
+      return true;
+    };
+
+    if (canPatchCartResponse() && patchCartFromResponse()) {
+      if (!silent && data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
+      if (!remote && data.cart_qty_by_guid) publishCartSync(data);
+      return;
+    }
+
     const pageRoot = document.querySelector('[data-store-cart-page="1"]');
     if (pageRoot) {
       renderCartRoot(pageRoot, data);
@@ -1533,7 +1606,7 @@
       if (loadingEl) loadingEl.hidden = true;
       root.classList.remove('is-loading-cart');
       renderCartRoot(root, lastCartData);
-      refreshCartFromServer({ silent: true });
+      refreshCartFromServer({ silent: true, reconcile: true });
       return;
     }
 
@@ -1543,10 +1616,11 @@
     if (summaryEl) summaryEl.innerHTML = '';
 
     try {
-      const res = await fetch(`${API}?reconcile=1`, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+      const res = await fetch(cartApiUrl({ reconcile: false }), { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
       const data = await res.json();
       lastCartData = data;
       renderCartRoot(root, data);
+      refreshCartFromServer({ silent: true, reconcile: true });
     } catch {
       showToast('تعذر تحميل السلة.', 'error');
       if (loadingEl) loadingEl.hidden = true;
@@ -1591,8 +1665,12 @@
   const initCartPage = async () => {
     const root = document.querySelector('[data-store-cart-page="1"]');
     if (!root) return;
+    if (root.querySelector('[data-cart-line]')) {
+      refreshCartFromServer({ silent: true, reconcile: false });
+      return;
+    }
     try {
-      const res = await fetch(`${API}?reconcile=1`, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+      const res = await fetch(cartApiUrl({ reconcile: false }), { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
       const data = await res.json();
       renderCartPage(data);
     } catch {
@@ -1614,7 +1692,7 @@
     }
     initCartPage();
     try {
-      const res = await fetch(API, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+      const res = await fetch(cartApiUrl({ reconcile: false }), { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
       const data = await res.json();
       if (data?.cart_qty_by_guid) {
         refreshCartForms(data);

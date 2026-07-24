@@ -26,7 +26,14 @@ final class StoreCartApi
             $notices = [];
         }
 
-        return self::payload(null, true, $notices, 'info', StoreCatalogService::displayOptionsForCartContext([], false));
+        return self::payload(
+            null,
+            true,
+            $notices,
+            'info',
+            StoreCatalogService::displayOptionsForCartContext([], false),
+            reprice: $reconcileStock
+        );
     }
 
     /**
@@ -95,7 +102,7 @@ final class StoreCartApi
         if ($result['ok']) {
             $message = $result['message'] !== '' ? $result['message'] : 'تمت إضافة الطرد إلى السلة.';
 
-            return self::payload($message, true);
+            return self::payload($message, true, reprice: false);
         }
 
         if (!empty($result['moved_unavailable'])) {
@@ -103,13 +110,15 @@ final class StoreCartApi
                 $result['message'] !== '' ? $result['message'] : 'نُقل الصنف إلى قائمة غير المتوفرة.',
                 true,
                 [],
-                'warning'
+                'warning',
+                reprice: false
             );
         }
 
         return self::payload(
             $result['message'] !== '' ? $result['message'] : 'تعذر الإضافة إلى السلة.',
-            false
+            false,
+            reprice: false
         );
     }
 
@@ -129,7 +138,7 @@ final class StoreCartApi
                 $message = $result['message'];
             }
 
-            return self::payload($message, true);
+            return self::payload($message, true, reprice: false);
         }
 
         if (!empty($result['moved_unavailable'])) {
@@ -137,13 +146,15 @@ final class StoreCartApi
                 $result['message'] !== '' ? $result['message'] : 'نُقل الصنف إلى قائمة غير المتوفرة.',
                 true,
                 [],
-                'warning'
+                'warning',
+                reprice: false
             );
         }
 
         return self::payload(
             $result['message'] !== '' ? $result['message'] : 'تعذر تحديث الكمية.',
-            false
+            false,
+            reprice: false
         );
     }
 
@@ -181,14 +192,14 @@ final class StoreCartApi
             return self::payload('تعذر حذف الصنف.', false);
         }
 
-        return self::payload('تم حذف الصنف من السلة.', true);
+        return self::payload('تم حذف الصنف من السلة.', true, reprice: false);
     }
 
     private static function clear(): array
     {
         StoreCartService::clear();
 
-        return self::payload('تم تفريغ السلة.', true);
+        return self::payload('تم تفريغ السلة.', true, reprice: false);
     }
 
     /** @param array<string, mixed> $input */
@@ -199,14 +210,14 @@ final class StoreCartApi
             return self::payload('تعذر إزالة الصنف.', false);
         }
 
-        return self::payload('تمت إزالة الصنف من قائمة غير المتوفرة.', true);
+        return self::payload('تمت إزالة الصنف من قائمة غير المتوفرة.', true, reprice: false);
     }
 
     private static function clearUnavailable(): array
     {
         StoreCartService::clearUnavailable();
 
-        return self::payload('تمت إزالة الأصناف غير المتوفرة.', true);
+        return self::payload('تمت إزالة الأصناف غير المتوفرة.', true, reprice: false);
     }
 
     /** @param array<string, mixed> $display @param array<string, mixed> $input */
@@ -265,10 +276,13 @@ final class StoreCartApi
         bool $ok,
         array $notices = [],
         string $level = 'info',
-        ?array $displayOverride = null
+        ?array $displayOverride = null,
+        bool $reprice = true
     ): array {
         $display = $displayOverride ?? StoreCatalogService::displayOptionsForCartContext([], false);
-        $reprice = StoreCartPricingService::repriceCart(StoreCartService::TOKEN);
+        if ($reprice) {
+            StoreCartPricingService::repriceCart(StoreCartService::TOKEN);
+        }
         $pendingChanges = StoreCartPricingService::pendingPriceChanges(StoreCartService::TOKEN);
         $changesByGuid = [];
         foreach ($pendingChanges as $change) {
