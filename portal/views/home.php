@@ -77,13 +77,11 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
               <span class="home-hero__logo-glow"></span>
               <span class="home-hero__logo-shimmer"></span>
               <?php if ($companyLogoUrl !== ''): ?>
-                <img
-                  class="home-hero__logo"
-                  src="<?= h(portal_site_logo_url($companyLogoUrl, 'header')) ?>"
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                >
+                <?php
+                  $siteLogoVariant = 'hero-home';
+                  $siteLogoAlt = '';
+                  require __DIR__ . '/partials/site-logo.php';
+                ?>
               <?php else: ?>
                 <span class="material-symbols-outlined home-hero__logo-fallback">storefront</span>
               <?php endif; ?>
