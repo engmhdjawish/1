@@ -119,6 +119,6 @@ $content = ob_get_clean();
 $title = 'إدارة الطلبات';
 $dashboardPageAssets = 'orders';
 $extraFooter = $orderDetails !== null
-    ? '<script src="/assets/dashboard-order-price-pref.js" defer></script>'
+    ? portal_defer_script('/assets/dashboard-order-price-pref.js')
     : '';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

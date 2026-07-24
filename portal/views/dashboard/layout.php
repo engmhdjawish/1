@@ -93,9 +93,9 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
   <link href="<?= h(portal_asset_url('/assets/dashboard/dashboard.css')) ?>" rel="stylesheet">
   <link href="<?= h(portal_asset_url('/css/notifications.css')) ?>" rel="stylesheet">
-  <link href="/css/store-ui.css" rel="stylesheet">
-  <link href="/css/store-cart.css" rel="stylesheet">
-  <link href="/css/customer-portal.css" rel="stylesheet">
+  <link href="<?= h(portal_asset_url('/css/store-ui.css')) ?>" rel="stylesheet">
+  <link href="<?= h(portal_asset_url('/css/store-cart.css')) ?>" rel="stylesheet">
+  <link href="<?= h(portal_asset_url('/css/customer-portal.css')) ?>" rel="stylesheet">
   <link href="<?= h(portal_asset_url('/css/tailwind.css')) ?>" rel="stylesheet">
   <style>
     body {
@@ -332,9 +332,9 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   require __DIR__ . '/../partials/store-product-preview.php';
   ?>
   <script src="<?= h(portal_asset_url('/assets/phone-input.js')) ?>" defer></script>
-  <script src="/assets/deferred-images.js" defer></script>
-  <script src="/assets/store-image-zoom.js" defer></script>
-  <script src="/assets/store-product-preview.js" defer></script>
+  <script src="<?= h(portal_asset_url('/assets/deferred-images.js')) ?>" defer></script>
+  <script src="<?= h(portal_asset_url('/assets/store-image-zoom.js')) ?>" defer></script>
+  <script src="<?= h(portal_asset_url('/assets/store-product-preview.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/dashboard/material-images-link.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/dashboard/dashboard.js')) ?>" defer></script>
   <script src="/assets/dashboard/media-picker.js" defer></script>
