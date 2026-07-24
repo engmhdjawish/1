@@ -293,12 +293,21 @@ final class StockReservationService
         }
 
         if ($capped < $requested) {
+            $availableLabel = self::formatPackages($availablePackages);
+            if ($availablePackages <= 0) {
+                $message = 'لا يمكن زيادة الكمية — نفد المخزون المتاح حالياً.';
+            } elseif ($capped > 0 && $capped < $requested) {
+                $message = 'لا يمكن إضافة المزيد — الحد المتاح ' . $availableLabel . ' ' . $packageUnit . '.';
+            } else {
+                $message = 'الحد المتاح لـ «' . $name . '» هو ' . $availableLabel . ' ' . $packageUnit . '.';
+            }
+
             return [
                 'ok' => false,
                 'available_packages' => $availablePackages,
                 'requested_packages' => $requested,
                 'capped_packages' => $capped,
-                'message' => 'الكمية المتاحة لـ «' . $name . '» هي ' . self::formatPackages($capped) . ' ' . $packageUnit . ' فقط.',
+                'message' => $message,
                 'warehouse_primary' => $warehousePrimary,
                 'reserved_primary' => $reserved,
             ];

@@ -99,6 +99,72 @@
 
   let lastToastMessage = '';
   let lastToastAt = 0;
+  let lastInlineMessage = '';
+  let lastInlineAt = 0;
+  let inlineNoticeTimer = null;
+  const INLINE_NOTICE_MS = 6000;
+
+  const cartDrawer = () => document.getElementById('store-cart-drawer');
+
+  const isCartDrawerOpen = () => {
+    const drawer = cartDrawer();
+    return !!drawer && !drawer.hidden && drawer.classList.contains('is-open');
+  };
+
+  const activeCartNoticeHost = () => {
+    if (isCartDrawerOpen()) {
+      return cartDrawer()?.querySelector('[data-cart-stock-notices]') || null;
+    }
+    const pageRoot = document.querySelector('[data-store-cart-page="1"]');
+    return pageRoot?.querySelector('[data-cart-stock-notices]') || null;
+  };
+
+  const syncToastHostLayer = () => {
+    const host = toastHost();
+    host.style.position = 'fixed';
+    host.style.left = '50%';
+    host.style.transform = 'translateX(-50%)';
+    host.style.zIndex = '200000';
+    host.style.width = 'min(92vw, 24rem)';
+    host.style.pointerEvents = 'none';
+    const drawerOpen = document.body.classList.contains('store-cart-drawer-open');
+    if (drawerOpen) {
+      host.style.top = 'max(0.85rem, env(safe-area-inset-top, 0px))';
+      host.style.bottom = 'auto';
+    } else {
+      host.style.top = 'auto';
+      host.style.bottom = '1.25rem';
+    }
+  };
+
+  const buildCartNoticeHtml = (message, level = 'warning') => {
+    const icon = level === 'error' ? 'error' : level === 'success' ? 'check_circle' : 'info';
+    return `<div class="store-cart-inline-notice store-cart-inline-notice--${level}" role="status">
+      <span class="material-symbols-outlined" aria-hidden="true">${icon}</span>
+      <span class="store-cart-inline-notice__text">${escapeHtml(message)}</span>
+      <button type="button" class="store-cart-inline-notice__dismiss" data-cart-notice-dismiss aria-label="إغلاق التنبيه">
+        <span class="material-symbols-outlined" aria-hidden="true">close</span>
+      </button>
+    </div>`;
+  };
+
+  const scheduleInlineNoticeDismiss = () => {
+    if (inlineNoticeTimer) {
+      window.clearTimeout(inlineNoticeTimer);
+    }
+    inlineNoticeTimer = window.setTimeout(() => {
+      inlineNoticeTimer = null;
+      clearCartInlineNotice();
+    }, INLINE_NOTICE_MS);
+  };
+
+  const resolveCartNoticeLevel = (data) => {
+    if (data?.ok) return 'success';
+    if (data?.moved_unavailable) return 'error';
+    const msg = String(data?.message || '');
+    if (/نفدت كمية|غير متوف|تعذر التحقق|نُقل/i.test(msg)) return 'error';
+    return 'warning';
+  };
 
   const showToast = (message, level = 'success') => {
     if (!message) return;
@@ -106,6 +172,7 @@
     if (message === lastToastMessage && now - lastToastAt < 2500) return;
     lastToastMessage = message;
     lastToastAt = now;
+    syncToastHostLayer();
     const el = document.createElement('div');
     el.className = `store-cart-toast store-cart-toast--${level}`;
     const icon = level === 'error' ? 'error' : level === 'warning' ? 'warning' : 'check_circle';
@@ -116,6 +183,50 @@
       el.style.transition = 'opacity 0.25s ease';
       setTimeout(() => el.remove(), 280);
     }, 4200);
+  };
+
+  const showCartInlineNotice = (message, level = 'warning') => {
+    if (!message) return;
+    const now = Date.now();
+    if (message === lastInlineMessage && now - lastInlineAt < 2500) {
+      scheduleInlineNoticeDismiss();
+      return;
+    }
+    lastInlineMessage = message;
+    lastInlineAt = now;
+
+    const host = activeCartNoticeHost();
+    if (!host) return;
+    host.classList.remove('hidden');
+    host.innerHTML = buildCartNoticeHtml(message, level);
+    scheduleInlineNoticeDismiss();
+  };
+
+  const clearCartInlineNotice = () => {
+    if (inlineNoticeTimer) {
+      window.clearTimeout(inlineNoticeTimer);
+      inlineNoticeTimer = null;
+    }
+    lastInlineMessage = '';
+    lastInlineAt = 0;
+    document.querySelectorAll('[data-cart-stock-notices]').forEach((stockEl) => {
+      stockEl.classList.add('hidden');
+      stockEl.innerHTML = '';
+    });
+  };
+
+  const showCartFeedback = (message, level = 'success') => {
+    if (!message) return;
+    if (isCartDrawerOpen()) {
+      if (level === 'error' || level === 'warning') {
+        showCartInlineNotice(message, level);
+      }
+      return;
+    }
+    if (level === 'error' || level === 'warning') {
+      showCartInlineNotice(message, level);
+    }
+    showToast(message, level);
   };
 
   const escapeHtml = (text) => {
@@ -888,9 +999,8 @@
     try {
       const data = await apiRequest({ action: 'bump', material_guid: guid, delta });
       applyCartResponse(data);
-      if (!data.ok && data.message) showToast(data.message, data.level || 'error');
     } catch {
-      showToast('تعذر تحديث الكمية.', 'error');
+      showCartFeedback('تعذر تحديث الكمية.', 'error');
     } finally {
       delete form.dataset.ajaxSubmitting;
       const refreshedQty = lastCartData?.cart_qty_by_guid?.[guid];
@@ -935,7 +1045,7 @@
         const next = step < 1 ? Math.round((val + step) * 100) / 100 : val + step;
         const check = validateQty(form, step, getCurrentInCart(form));
         if (!check.ok && next > val) {
-          showToast(check.message, 'error');
+          showCartFeedback(check.message, 'error');
           return;
         }
         input.value = String(next);
@@ -971,9 +1081,14 @@
     const currentQty = getCurrentInCart(form);
     const check = validateQty(form, addQty, currentQty);
     if (!check.ok) {
-      showToast(check.message, 'error');
+      showCartFeedback(check.message, 'error');
       delete form.dataset.ajaxSubmitting;
       return;
+    }
+    const prevCartData = lastCartData ? { ...lastCartData } : null;
+    const optimisticPackages = (Number(prevCartData?.cart_package_count) || 0) + addQty;
+    if (prevCartData) {
+      updateBadge({ cart_package_count: optimisticPackages });
     }
     btn?.classList.add('is-loading');
     const formData = new FormData(form);
@@ -985,7 +1100,10 @@
     try {
       const data = await apiRequest(payload);
       applyCartResponse(data);
-      if (!data.ok) return;
+      if (!data.ok) {
+        if (prevCartData) updateBadge(prevCartData);
+        return;
+      }
       const flySource = btn || form.querySelector('.store-add-cart__submit') || form;
       flyToCart(flySource);
       if (window.SiteAnalytics) {
@@ -1002,7 +1120,8 @@
         form.querySelector('[name="quantity"]').value = String(step);
       }
     } catch {
-      showToast('تعذر الاتصال بالخادم.', 'error');
+      if (prevCartData) updateBadge(prevCartData);
+      showCartFeedback('تعذر الاتصال بالخادم.', 'error');
     } finally {
       btn?.classList.remove('is-loading');
       delete form.dataset.ajaxSubmitting;
@@ -1263,7 +1382,7 @@
       const uniqueNotices = [...new Set(data.stock_notices.map((n) => String(n || '').trim()).filter(Boolean))];
       if (uniqueNotices.length > 0) {
         stockEl.classList.remove('hidden');
-        stockEl.innerHTML = `<div class="rounded-xl border bg-amber-50 border-amber-200 text-amber-900 px-4 py-3 text-sm"><p class="font-bold mb-1">تنبيه المخزون</p>${uniqueNotices.map((n) => `<p>${escapeHtml(n)}</p>`).join('')}</div>`;
+        stockEl.innerHTML = buildCartNoticeHtml(uniqueNotices.join(' '), 'warning');
       }
     }
   };
@@ -1293,19 +1412,27 @@
         const wrap = btn.closest('[data-cart-qty-control]');
         const guid = wrap?.dataset.guid || '';
         const delta = parseInt(btn.dataset.bump || '0', 10);
-        if (!guid || !delta) return;
+        if (!guid || !delta || btn.disabled) return;
+        clearCartInlineNotice();
         const input = wrap?.querySelector('[data-qty-input]');
         const current = parseFloat(input?.value || '1') || 1;
         if (delta > 0 && maxPackages !== null && maxPackages !== undefined) {
           const max = parseFloat(String(maxPackages));
           if (Number.isFinite(max) && current + delta > max + 0.0001) {
             const maxLabel = String(maxPackages);
-            showToast(`الحد الأقصى للطلب هو ${maxLabel} طرد لهذه المادة.`, 'error');
+            showCartFeedback(`لا يمكن إضافة المزيد — الحد الأقصى ${maxLabel} طرد لهذه المادة.`, 'warning');
             return;
           }
         }
-        const data = await apiRequest({ action: 'bump', material_guid: guid, delta });
-        applyCartResponse(data);
+        btn.disabled = true;
+        const bumpButtons = wrap?.querySelectorAll('[data-bump]') || [];
+        bumpButtons.forEach((control) => { control.disabled = true; });
+        try {
+          const data = await apiRequest({ action: 'bump', material_guid: guid, delta });
+          applyCartResponse(data);
+        } finally {
+          bumpButtons.forEach((control) => { control.disabled = false; });
+        }
       });
     });
     root.querySelectorAll('[data-qty-input]').forEach((input) => {
@@ -1453,13 +1580,19 @@
     }
 
     const canPatchCartResponse = () => {
-      if (options.fullRender === true || !data.ok) return false;
+      if (options.fullRender === true) return false;
       if (Array.isArray(data.stock_notices) && data.stock_notices.length > 0) return false;
       if (Array.isArray(data.price_changes) && data.price_changes.length > 0) return false;
-      if (Array.isArray(data.unavailable) && data.unavailable.length > 0) return false;
       if (!data.cart_qty_by_guid) return false;
       const items = Array.isArray(data.items) ? data.items : [];
+      const unavailable = Array.isArray(data.unavailable) ? data.unavailable : [];
       const domLines = document.querySelectorAll('[data-cart-line]').length;
+      if (!data.ok) {
+        if (data.moved_unavailable || unavailable.length > 0) return false;
+        if (items.length !== domLines) return false;
+      } else if (unavailable.length > 0) {
+        return false;
+      }
       if (items.length > domLines) return false;
       return domLines > 0 || items.length === 0;
     };
@@ -1509,8 +1642,26 @@
       return true;
     };
 
+    const notifyCartMessage = (data, silent) => {
+      if (silent || !data.message) return;
+      const level = resolveCartNoticeLevel(data);
+      if (isCartDrawerOpen()) {
+        if (!data.ok) {
+          showCartInlineNotice(data.message, level);
+        } else {
+          clearCartInlineNotice();
+        }
+        return;
+      }
+      if (!data.ok) {
+        showCartFeedback(data.message, level);
+        return;
+      }
+      showToast(data.message, level);
+    };
+
     if (canPatchCartResponse() && patchCartFromResponse()) {
-      if (!silent && data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
+      notifyCartMessage(data, silent);
       if (!remote && data.cart_qty_by_guid) publishCartSync(data);
       return;
     }
@@ -1529,13 +1680,11 @@
       renderCartRoot(drawerRoot, data);
     }
 
-    if (!silent && data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
+    notifyCartMessage(data, silent);
     if (!remote && data.cart_qty_by_guid) {
       publishCartSync(data);
     }
   };
-
-  const cartDrawer = () => document.getElementById('store-cart-drawer');
 
   const guardDrawerGhostClick = (event) => {
     if (Date.now() >= drawerCloseGuardUntil) return;
@@ -1573,6 +1722,7 @@
         document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
           btn.setAttribute('aria-expanded', 'true');
         });
+        syncToastHostLayer();
       });
       return;
     }
@@ -1586,6 +1736,8 @@
     drawer.classList.remove('is-open');
     drawer.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('store-cart-drawer-open');
+    clearCartInlineNotice();
+    syncToastHostLayer();
     document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
       btn.setAttribute('aria-expanded', 'false');
     });
@@ -1699,6 +1851,14 @@
 
   const init = async () => {
     initCartCrossTabSync();
+    if (!window.__cartNoticeDismissBound) {
+      window.__cartNoticeDismissBound = true;
+      document.addEventListener('click', (event) => {
+        if (event.target.closest('[data-cart-notice-dismiss]')) {
+          clearCartInlineNotice();
+        }
+      });
+    }
     bindAddForms();
     bindCartDrawer();
     const page = document.querySelector('[data-store-cart-page="1"]');

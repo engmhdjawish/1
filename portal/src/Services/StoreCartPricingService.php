@@ -138,15 +138,17 @@ final class StoreCartPricingService
         ];
     }
 
-    /** @param array<string, mixed> $input @return array<string, mixed> */
-    public static function lineFromRequest(array $input): array
+    /** @param array<string, mixed> $input @param array<string, mixed>|null $product @return array<string, mixed> */
+    public static function lineFromRequest(array $input, ?array $product = null): array
     {
         $guid = trim((string) ($input['material_guid'] ?? ''));
         if ($guid === '') {
             return ShareCartService::lineFromForm($input, false);
         }
 
-        $authoritative = self::authoritativeLineForGuid($guid);
+        $authoritative = $product !== null
+            ? self::authoritativeLineFromProduct($product)
+            : self::authoritativeLineForGuid($guid);
         if ($authoritative === null) {
             return ShareCartService::lineFromForm($input, false);
         }
@@ -312,6 +314,12 @@ final class StoreCartPricingService
             return null;
         }
 
+        return self::authoritativeLineFromProduct($product);
+    }
+
+    /** @param array<string, mixed> $product @return array<string, mixed> */
+    private static function authoritativeLineFromProduct(array $product): array
+    {
         $line = ShareCartService::lineFromApiItem($product, true);
 
         return ShareCartService::enrichLineWithOffer($line);
