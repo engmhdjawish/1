@@ -146,10 +146,12 @@ ob_start();
               </div>
               <span class="text-xs text-text-muted"><?= h((string) ($row['created_at'] ?? '')) ?></span>
             </div>
-            <div class="flex gap-2">
-              <a href="/dashboard/customers.php?status=pending" class="flex-1 text-center bg-green-600 text-white rounded-lg py-1.5 text-xs font-bold">موافقة</a>
-              <a href="/dashboard/customers.php?status=pending" class="flex-1 text-center bg-red-600 text-white rounded-lg py-1.5 text-xs font-bold">رفض</a>
-            </div>
+            <a
+              href="/dashboard/customers.php?status=pending&details=<?= h((string) ($row['id'] ?? '')) ?>"
+              class="block text-center bg-primary text-white rounded-lg py-1.5 text-xs font-bold hover:brightness-110 transition"
+            >
+              مراجعة التسجيل
+            </a>
           </div>
         <?php endforeach; ?>
       </div>

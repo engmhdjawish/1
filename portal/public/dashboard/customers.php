@@ -73,10 +73,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash = $result['message'];
             $flashType = $result['ok'] ? 'success' : 'error';
             if ($result['ok']) {
-                $_GET['edit'] = (string) ($result['id'] ?? '');
+                header('Location: /dashboard/customers.php?' . http_build_query(array_filter([
+                    'status' => trim((string) ($_GET['status'] ?? 'pending')),
+                    'q' => trim((string) ($_GET['q'] ?? '')),
+                    'source' => trim((string) ($_GET['source'] ?? '')),
+                    'details' => (string) ($result['id'] ?? ''),
+                    'saved' => '1',
+                ])));
+                exit;
             }
         }
     }
+}
+
+if (isset($_GET['saved']) && $_GET['saved'] === '1' && $flash === null) {
+    $flash = 'تم حفظ بيانات العميل.';
 }
 
 $statusFilter = trim((string) ($_GET['status'] ?? 'pending'));
@@ -85,15 +96,37 @@ $sourceFilter = trim((string) ($_GET['source'] ?? ''));
 $editId = trim((string) ($_GET['edit'] ?? ''));
 $detailsId = trim((string) ($_GET['details'] ?? ''));
 $orderPriceCurrency = DashboardOrderPricePreference::current();
+$listLimit = 120;
 
-$customers = WebCustomerService::listByStatus($statusFilter, $searchFilter, $sourceFilter, 120);
+$customers = WebCustomerService::listByStatus($statusFilter, $searchFilter, $sourceFilter, $listLimit);
 $statusCounts = WebCustomerService::statusCounts();
 $policies = WebCustomerService::listAccessPolicies();
-$editCustomer = $editId !== '' ? WebCustomerService::getById($editId) : null;
-if ($editCustomer === null) {
-    $editId = '';
+$hasPolicies = $policies !== [];
+
+$editCustomer = null;
+$showEditPanel = false;
+if ($editId === 'new') {
+    $editCustomer = [
+        'id' => '',
+        'name_ar' => '',
+        'phone' => '',
+        'email' => '',
+        'access_policy_id' => '',
+        'status' => 'pending',
+        'rejection_reason_ar' => '',
+        'notes_ar' => '',
+    ];
+    $showEditPanel = $canManageCustomers;
+} elseif ($editId !== '') {
+    $editCustomer = WebCustomerService::getById($editId);
+    if ($editCustomer === null) {
+        $editId = '';
+    } else {
+        $showEditPanel = $canManageCustomers;
+    }
 }
-$detailsCustomer = $detailsId !== '' ? WebCustomerService::getById($detailsId) : null;
+
+$detailsCustomer = ($detailsId !== '' && !$showEditPanel) ? WebCustomerService::getById($detailsId) : null;
 $customerOrders = [];
 $customerOrderCount = 0;
 if ($detailsCustomer !== null) {

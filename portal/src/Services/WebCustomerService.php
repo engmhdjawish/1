@@ -143,6 +143,10 @@ final class WebCustomerService
             $status = 'pending';
         }
 
+        if ($status === 'active' && $accessPolicyId === '') {
+            return ['ok' => false, 'message' => 'يجب اختيار سياسة وصول لتفعيل العميل.'];
+        }
+
         $isActive = $status === 'active';
         $approvedAt = $status === 'active' ? date('c') : null;
 

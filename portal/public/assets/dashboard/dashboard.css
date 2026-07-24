@@ -1081,6 +1081,137 @@ button.is-loading::after,
   }
 }
 
+/* ── Site customers dashboard ── */
+.dash-cust-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.dash-cust-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2rem;
+  padding: 0 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid var(--dash-border, #e5e7eb);
+  background: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--dash-muted, #6b7280);
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.dash-cust-tab:hover {
+  background: var(--dash-surface-low, #f9fafb);
+  color: #334155;
+}
+
+.dash-cust-tab.is-active {
+  border-color: var(--dash-primary, #d81921);
+  background: var(--dash-primary, #d81921);
+  color: #fff;
+}
+
+.dash-cust-tab__count {
+  min-width: 1.25rem;
+  padding: 0 0.35rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 0.6875rem;
+  text-align: center;
+}
+
+.dash-cust-tab:not(.is-active) .dash-cust-tab__count {
+  background: var(--dash-surface-low, #f3f4f6);
+  color: #475569;
+}
+
+.dash-cust-cards {
+  display: flex;
+  flex-direction: column;
+}
+
+.dash-cust-table-wrap {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .dash-cust-cards {
+    display: none;
+  }
+
+  .dash-cust-table-wrap {
+    display: block;
+  }
+}
+
+.dash-cust-card__meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  font-size: 0.6875rem;
+}
+
+.dash-cust-card__meta dt {
+  color: var(--dash-muted, #6b7280);
+  margin-bottom: 0.1rem;
+}
+
+.dash-cust-card__meta dd {
+  margin: 0;
+  font-weight: 700;
+  color: #334155;
+}
+
+.dash-cust-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.dash-cust-actions--table {
+  justify-content: flex-end;
+}
+
+.dash-cust-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2rem;
+  padding: 0 0.65rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--dash-border, #e5e7eb);
+  background: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: #475569;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.dash-cust-action:hover {
+  background: var(--dash-surface-low, #f9fafb);
+}
+
+.dash-cust-action--primary {
+  border-color: var(--dash-primary, #d81921);
+  background: var(--dash-primary, #d81921);
+  color: #fff;
+}
+
+.dash-cust-action--primary:hover {
+  filter: brightness(1.05);
+}
+
+.dashboard-slide-panel-backdrop {
+  display: block;
+  text-decoration: none;
+}
+
 /* ── Material images workspace ── */
 .dash-mi-tabs {
   display: flex;
