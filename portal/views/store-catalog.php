@@ -486,24 +486,26 @@ require __DIR__ . '/partials/store-filter-group.php';
   <?php if ($allowClientFilters): ?>
     <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
       <aside class="store-filters-sidebar">
-        <form method="get" class="store-filters-sidebar-inner">
+        <form method="get" id="store-filters-form" class="store-filters-sidebar-inner">
           <input type="hidden" name="page" value="1">
           <?php if (!empty($filters['section'])): ?><input type="hidden" name="section" value="<?= h((string) $filters['section']) ?>"><?php endif; ?>
           <?php if (!empty($filters['offer'])): ?><input type="hidden" name="offer" value="<?= h((string) $filters['offer']) ?>"><?php endif; ?>
 
           <div class="store-filters-sidebar-header">
+            <div class="store-filters-sheet-handle lg:hidden" aria-hidden="true"></div>
             <h2 class="store-filters-sidebar-title">تصفية النتائج</h2>
             <button type="button" id="store-filters-close" class="store-filters-close-btn" aria-label="إغلاق الفلاتر">
               <span class="material-symbols-outlined text-base" aria-hidden="true">close</span>
             </button>
           </div>
 
+          <div class="store-filters-sidebar-scroll">
           <?php if ($isSectionBrowse && $sectionFilterSummary !== []): ?>
             <p class="text-xs text-text-muted mb-3">تصفح ضمن قسم محدد — بعض الفلاتر مقيّدة بهذا القسم.</p>
           <?php endif; ?>
 
           <?php if ($isClientFilterVisible('search')): ?>
-            <div class="store-inline-field">
+            <div class="store-inline-field store-filters-search-desktop">
               <label for="store-search-q">بحث</label>
               <input id="store-search-q" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" placeholder="اسم المادة أو الكود">
             </div>
@@ -679,12 +681,14 @@ require __DIR__ . '/partials/store-filter-group.php';
               </div>
             <?php endif; ?>
 
-          <div class="store-filter-actions">
-            <button type="submit" class="store-btn-primary">تطبيق</button>
+          </div>
+
+          <div class="store-filters-drawer-footer store-filter-actions">
+            <button type="submit" class="store-btn-primary">عرض النتائج</button>
             <a href="<?= h(store_url(array_filter([
                 'section' => (string) ($filters['section'] ?? ''),
                 'offer' => (string) ($filters['offer'] ?? ''),
-            ], static fn (string $value): bool => trim($value) !== ''))) ?>" class="store-btn-secondary inline-flex items-center">مسح</a>
+            ], static fn (string $value): bool => trim($value) !== ''))) ?>" class="store-btn-secondary inline-flex items-center">مسح الكل</a>
           </div>
         </form>
       </aside>
@@ -692,19 +696,37 @@ require __DIR__ . '/partials/store-filter-group.php';
   <?php endif; ?>
 
   <div class="store-results">
-    <?php require __DIR__ . '/partials/store-active-filter-chips.php'; ?>
-
-    <div class="store-results-toolbar">
-      <?php if ($allowClientFilters): ?>
-        <button type="button" id="store-filters-open" class="store-filters-open-btn lg:hidden">
+    <?php if ($allowClientFilters): ?>
+      <div class="store-mobile-filter-bar lg:hidden">
+        <?php if ($isClientFilterVisible('search')): ?>
+          <label class="store-mobile-search" for="store-mobile-search-q">
+            <span class="material-symbols-outlined store-mobile-search-icon" aria-hidden="true">search</span>
+            <input
+              type="search"
+              id="store-mobile-search-q"
+              value="<?= h((string) ($filters['q'] ?? '')) ?>"
+              placeholder="ابحث عن مادة..."
+              autocomplete="off"
+              enterkeyhint="search"
+            >
+          </label>
+        <?php endif; ?>
+        <button type="button" class="store-filters-open-btn" data-store-filters-open aria-label="فتح الفلاتر">
           <span class="material-symbols-outlined text-base" aria-hidden="true">tune</span>
-          فلاتر
+          <span>تصفية</span>
           <?php if ($userActiveFilterCount > 0): ?>
             <span class="badge"><?= (int) $userActiveFilterCount ?></span>
           <?php endif; ?>
         </button>
-      <?php endif; ?>
+      </div>
+    <?php endif; ?>
 
+    <?php
+      $showMobileFilterEdit = $allowClientFilters;
+      require __DIR__ . '/partials/store-active-filter-chips.php';
+    ?>
+
+    <div class="store-results-toolbar">
       <?php if ((int) ($catalog['totalCount'] ?? 0) > 0 && $products !== []): ?>
         <p class="store-results-meta">
           عرض <?= (int) ($catalog['rangeStart'] ?? 0) ?>–<?= (int) ($catalog['rangeEnd'] ?? 0) ?> من <?= (int) ($catalog['totalCount'] ?? 0) ?> مادة

@@ -208,19 +208,19 @@
   }
 
   function updateMobileFilterBadge(chipCount) {
-    const openBtn = document.getElementById('store-filters-open');
-    if (!openBtn) return;
-    let badge = openBtn.querySelector('.badge');
-    if (chipCount <= 0) {
-      badge?.remove();
-      return;
-    }
-    if (!badge) {
-      badge = document.createElement('span');
-      badge.className = 'badge';
-      openBtn.appendChild(badge);
-    }
-    badge.textContent = String(chipCount);
+    document.querySelectorAll('[data-store-filters-open]').forEach((openBtn) => {
+      let badge = openBtn.querySelector('.badge');
+      if (chipCount <= 0) {
+        badge?.remove();
+        return;
+      }
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'badge';
+        openBtn.appendChild(badge);
+      }
+      badge.textContent = String(chipCount);
+    });
   }
 
   function countOptimisticFilterChips(groups) {

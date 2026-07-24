@@ -104,7 +104,8 @@ body.store-catalog-nav-busy {
 
 body.store-catalog-nav-busy .store-pagination a,
 body.store-catalog-nav-busy .store-pagination button,
-body.store-catalog-nav-busy #store-filters-open,
+body.store-catalog-nav-busy [data-store-filters-open],
+body.store-catalog-nav-busy #store-mobile-search-q,
 body.store-catalog-nav-busy [data-store-nav-bound] {
   pointer-events: none;
   opacity: 0.65;

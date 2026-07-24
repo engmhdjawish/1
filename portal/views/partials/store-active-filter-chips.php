@@ -14,7 +14,15 @@ if (!isset($activeFilterChipGroups) || $activeFilterChipGroups === []) {
 <section class="store-active-filters" aria-label="الفلاتر المطبّقة">
   <div class="store-active-filters-head">
     <span class="store-active-filters-title">الفلاتر المختارة</span>
-    <a href="<?= h($clearAllFiltersUrl) ?>" class="store-active-filters-clear">مسح الكل</a>
+    <div class="store-active-filters-actions">
+      <?php if (!empty($showMobileFilterEdit)): ?>
+        <button type="button" class="store-active-filters-edit lg:hidden" data-store-filters-open>
+          <span class="material-symbols-outlined text-sm" aria-hidden="true">tune</span>
+          تعديل
+        </button>
+      <?php endif; ?>
+      <a href="<?= h($clearAllFiltersUrl) ?>" class="store-active-filters-clear">مسح الكل</a>
+    </div>
   </div>
   <?php foreach ($activeFilterChipGroups as $group): ?>
     <?php if (!is_array($group) || ($group['chips'] ?? []) === []) continue; ?>

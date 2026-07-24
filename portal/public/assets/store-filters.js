@@ -28,9 +28,11 @@ window.portalStoreFiltersInit = (root = document) => {
   }
 
   const backdrop = catalogRoot.querySelector('#store-filters-backdrop');
-  const openBtn = catalogRoot.querySelector('#store-filters-open');
+  const openButtons = catalogRoot.querySelectorAll('[data-store-filters-open]');
   const closeBtn = catalogRoot.querySelector('#store-filters-close');
-  const sidebar = catalogRoot.querySelector('.store-filters-sidebar');
+  const filterForm = catalogRoot.querySelector('#store-filters-form');
+  const sidebarSearchInput = catalogRoot.querySelector('#store-search-q');
+  const mobileSearchInput = catalogRoot.querySelector('#store-mobile-search-q');
 
   const setupExclusiveFilterAccordions = () => {
     const accordions = catalogRoot.querySelectorAll('.store-filter-accordion');
@@ -315,10 +317,48 @@ window.portalStoreFiltersInit = (root = document) => {
     }
   };
 
-  if (openBtn && openBtn.dataset.filtersBound !== '1') {
+  const syncMobileSearchFromSidebar = () => {
+    if (!mobileSearchInput || !sidebarSearchInput) {
+      return;
+    }
+    mobileSearchInput.value = sidebarSearchInput.value;
+  };
+
+  const syncSidebarSearchFromMobile = () => {
+    if (!mobileSearchInput || !sidebarSearchInput) {
+      return;
+    }
+    sidebarSearchInput.value = mobileSearchInput.value;
+  };
+
+  const submitFilterForm = () => {
+    if (!filterForm || typeof filterForm.requestSubmit !== 'function') {
+      return;
+    }
+    syncSidebarSearchFromMobile();
+    filterForm.requestSubmit();
+  };
+
+  if (sidebarSearchInput && mobileSearchInput && mobileSearchInput.dataset.filtersBound !== '1') {
+    mobileSearchInput.dataset.filtersBound = '1';
+    syncMobileSearchFromSidebar();
+    mobileSearchInput.addEventListener('input', syncSidebarSearchFromMobile);
+    sidebarSearchInput.addEventListener('input', syncMobileSearchFromSidebar);
+    mobileSearchInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        submitFilterForm();
+      }
+    });
+  }
+
+  openButtons.forEach((openBtn) => {
+    if (openBtn.dataset.filtersBound === '1') {
+      return;
+    }
     openBtn.dataset.filtersBound = '1';
     openBtn.addEventListener('click', () => setDrawerOpen(true));
-  }
+  });
   if (closeBtn && closeBtn.dataset.filtersBound !== '1') {
     closeBtn.dataset.filtersBound = '1';
     closeBtn.addEventListener('click', () => setDrawerOpen(false));
@@ -329,6 +369,16 @@ window.portalStoreFiltersInit = (root = document) => {
       if (event.target === backdrop) {
         setDrawerOpen(false);
       }
+    });
+  }
+
+  if (!catalogRoot.dataset.filtersEscapeBound) {
+    catalogRoot.dataset.filtersEscapeBound = '1';
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !backdrop?.classList.contains('is-open')) {
+        return;
+      }
+      setDrawerOpen(false);
     });
   }
 
