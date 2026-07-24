@@ -216,6 +216,42 @@ SeedAdmin__Enabled=false
 
 ---
 
+## ⚠️ تحذير: `rsync --delete` والصور
+
+**لا تستخدم** أمر rsync يدوي بدون استثناء مجلد `images/`:
+
+```bash
+# ❌ خطير — يفرّغ مجلد images/ على السيرفر لأن الصور غير موجودة في Git
+rsync -av --delete --exclude '.env' --exclude 'storage/' --exclude 'vendor/' portal/ /var/www/jawish-portal/
+```
+
+الصور محفوظة على السيرفر في `images/` و/أو `storage/material-images/` و**ليست** جزءاً من مستودع Git. خيار `--delete` يحذف كل ملف في الوجهة غير موجود في المصدر.
+
+**الطريقة الآمنة:**
+
+```bash
+cd /var/www/jawish-repo
+git pull origin main
+PORTAL_DB_SETUP=migrate bash deploy/portal/publish.sh
+sudo systemctl reload php8.5-fpm
+```
+
+أو النشر اليدوي الآمن:
+
+```bash
+bash deploy/scripts/manual-portal-rsync.sh /var/www/jawish-portal
+sudo systemctl reload php8.5-fpm
+```
+
+قبل أي نشر، تحقق من عدد الصور:
+
+```bash
+ls /var/www/jawish-portal/images/images 2>/dev/null | wc -l
+ls /var/www/jawish-portal/storage/material-images 2>/dev/null | wc -l
+```
+
+---
+
 ## استكشاف الأخطاء
 
 | المشكلة | الحل |
