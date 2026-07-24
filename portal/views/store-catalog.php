@@ -452,8 +452,13 @@ require __DIR__ . '/partials/store-filter-group.php';
   <?php endif; ?>
 </section>
 
-<?php if ($storeShowPrice && StorePricePreference::current() === StorePricePreference::SYP): ?>
-  <p class="store-syp-disclaimer" role="note">
+<?php if ($storeShowPrice): ?>
+  <p
+    class="store-syp-disclaimer"
+    data-store-syp-disclaimer
+    role="note"
+    <?= StorePricePreference::current() !== StorePricePreference::SYP ? 'hidden' : '' ?>
+  >
     <span class="material-symbols-outlined" aria-hidden="true">info</span>
     الأسعار بالليرة السورية تقريبية وقد تتغيّر حسب سعر الصرف وقت إتمام الطلب.
   </p>
