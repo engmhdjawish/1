@@ -117,18 +117,13 @@ const API_URL = '/dashboard/material-images-api.php';
   }
 
   function currentLinkFilter() {
-    const active = panel.querySelector('.link-filter-btn.border-primary.bg-primary');
+    const active = panel.querySelector('.link-filter-btn.is-active');
     return active?.getAttribute('data-filter') || 'unlinked';
   }
 
   function setLinkFilter(filter) {
     linkFilterButtons.forEach((btn) => {
-      const isActive = btn.getAttribute('data-filter') === filter;
-      btn.classList.toggle('border-primary', isActive);
-      btn.classList.toggle('bg-primary', isActive);
-      btn.classList.toggle('text-white', isActive);
-      btn.classList.toggle('border-border-subtle', !isActive);
-      btn.classList.toggle('bg-white', !isActive);
+      btn.classList.toggle('is-active', btn.getAttribute('data-filter') === filter);
     });
     updateDeleteUnlinkedControls();
   }
@@ -333,14 +328,16 @@ const API_URL = '/dashboard/material-images-api.php';
     lightboxImg.style.cursor = 'zoom-in';
     lightboxImg.dataset.zoomed = '0';
     if (lightboxCaption) lightboxCaption.textContent = caption || '';
-    imageLightbox.classList.remove('hidden');
-    imageLightbox.classList.add('flex');
+    imageLightbox.hidden = false;
+    imageLightbox.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
   }
 
   function closeLightbox() {
     if (!imageLightbox || !lightboxImg) return;
-    imageLightbox.classList.add('hidden');
-    imageLightbox.classList.remove('flex');
+    imageLightbox.hidden = true;
+    imageLightbox.classList.remove('is-open');
+    document.body.style.overflow = '';
     lightboxImg.src = '';
     lightboxImg.style.transform = '';
     lightboxImg.dataset.zoomed = '0';
@@ -932,11 +929,11 @@ const API_URL = '/dashboard/material-images-api.php';
         const previewSrc = item.preview_url || item.preview_full_url;
         const previewFullSrc = item.preview_full_url || item.preview_url;
         const preview = previewSrc
-          ? `<button type="button" class="preview-btn group relative w-full h-48 rounded-lg border border-border-subtle bg-surface-low overflow-hidden" title="تكبير الصورة">
-              <img src="${escapeHtml(previewSrc)}" data-full-src="${escapeHtml(previewFullSrc)}" class="w-full h-full object-contain bg-surface-low" alt="" decoding="async">
-              <span class="absolute bottom-2 left-2 rounded-md bg-black/60 text-white text-[10px] px-2 py-1 opacity-90 group-hover:bg-black/80">🔍 تكبير</span>
+          ? `<button type="button" class="preview-btn dash-mi-card__preview" title="تكبير الصورة">
+              <img src="${escapeHtml(previewSrc)}" data-full-src="${escapeHtml(previewFullSrc)}" alt="" decoding="async">
+              <span class="dash-mi-card__zoom-hint">تكبير</span>
             </button>`
-          : '<div class="w-full h-48 rounded-lg border border-border-subtle bg-surface-low"></div>';
+          : '<div class="dash-mi-card__preview bg-surface-low"></div>';
         const reassignBlock = isLinked
           ? `<button type="button" class="reassign-btn h-8 px-3 rounded-lg bg-primary text-white text-xs font-bold w-full">استبدال الربط بمواد جديدة</button>`
           : '';
@@ -952,32 +949,34 @@ const API_URL = '/dashboard/material-images-api.php';
             </label>`
           : '';
 
-        return `<article class="rounded-xl border border-border-subtle p-3 bg-white space-y-2" data-key="${escapeHtml(key)}" data-image-guid="${escapeHtml(item.amine_image_guid || '')}" data-file-name="${escapeHtml(item.file_name || '')}" data-linked="${isLinked ? '1' : '0'}">
-          <div class="flex items-center justify-between gap-2">${selectBlock}${selectBlock ? '' : '<span></span>'}</div>
+        return `<article class="dash-mi-card" data-key="${escapeHtml(key)}" data-image-guid="${escapeHtml(item.amine_image_guid || '')}" data-file-name="${escapeHtml(item.file_name || '')}" data-linked="${isLinked ? '1' : '0'}">
+          <div class="flex items-center justify-between gap-2 min-h-[1.25rem]">${selectBlock}${selectBlock ? '' : '<span></span>'}</div>
           ${preview}
-          <div class="space-y-1">
-            <div class="flex items-center justify-between gap-2">${linkBadge}</div>
-            <p class="material-title text-sm font-bold leading-snug">${materialTitle}</p>
-            ${materialCode}
+          <div class="dash-mi-card__head">
+            <div class="min-w-0">
+              ${linkBadge}
+              <p class="dash-mi-card__title material-title">${materialTitle}</p>
+              ${materialCode}
+            </div>
           </div>
           <div class="relative">
-            <input class="material-input h-9 w-full rounded-lg border border-border-subtle px-3 text-xs" placeholder="ابحث بالاسم أو الرمز (كلمات بأي ترتيب)">
+            <input class="material-input h-9 w-full rounded-lg border border-border-subtle px-3 text-xs" placeholder="ابحث بالاسم أو الرمز">
             <div class="suggestions hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow max-h-48 overflow-auto"></div>
           </div>
           <div class="chips flex flex-wrap gap-1">${chipsHtml(key)}</div>
-          <label class="add-details-wrap flex items-start gap-2 rounded-lg border border-border-subtle bg-surface-low/50 px-2.5 py-2 text-[11px] leading-relaxed cursor-pointer select-none">
-            <input type="checkbox" class="add-details-check mt-0.5 shrink-0" ${CAN_ADD_DETAILS ? 'checked' : 'disabled'}>
-            <span>
-              هامش سفلي في الصورة:
-              <strong dir="ltr">رمز - اسم</strong>،
-              <strong>التعبئة : الكمية الوحدة</strong>،
-              و<strong>اسم الشركة + الموبايل</strong> في الزاوية اليسار
-            </span>
-          </label>
-          <button type="button" class="assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>
-          ${reassignBlock}
-          ${unlinkBlock}
-          <button type="button" class="delete-btn h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold w-full">حذف الصورة</button>
+          <details class="dash-mi-card__details">
+            <summary class="dash-mi-card__details-toggle">هامش سفلي في الصورة</summary>
+            <label class="add-details-wrap flex items-start gap-2 rounded-lg border border-border-subtle bg-surface-low/50 px-2.5 py-2 text-[11px] leading-relaxed cursor-pointer select-none mt-1">
+              <input type="checkbox" class="add-details-check mt-0.5 shrink-0" ${CAN_ADD_DETAILS ? 'checked' : 'disabled'}>
+              <span>رمز + اسم، التعبئة، واسم الشركة في الزاوية</span>
+            </label>
+          </details>
+          <div class="dash-mi-card__actions">
+            <button type="button" class="assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>
+            ${reassignBlock}
+            ${unlinkBlock}
+            <button type="button" class="delete-btn h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold w-full">حذف الصورة</button>
+          </div>
           <p class="card-status text-[11px] text-text-muted"></p>
         </article>`;
       }).join('');

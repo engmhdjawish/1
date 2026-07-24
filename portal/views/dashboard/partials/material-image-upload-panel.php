@@ -102,7 +102,8 @@ $statusLabels = [
       <div id="deletePendingProgressBar" class="h-full bg-red-500 transition-all" style="width:0%"></div>
     </div>
   </div>
-  <div class="overflow-auto">
+  <div id="syncQueueCards" class="dash-mi-sync-cards"></div>
+  <div class="dashboard-table-wrap dash-mi-sync-table">
     <table class="w-full text-sm min-w-[800px]">
       <thead class="bg-surface-low text-text-muted border-b border-border-subtle">
         <tr>
@@ -257,6 +258,7 @@ $statusLabels = [
   const syncProgressBar = document.getElementById('syncProgressBar');
   const syncStatus = document.getElementById('syncStatus');
   const syncQueueBody = document.getElementById('syncQueueBody');
+  const syncQueueCards = document.getElementById('syncQueueCards');
   const syncQueueSummary = document.getElementById('syncQueueSummary');
   const syncQueuePagination = document.getElementById('syncQueuePagination');
   const syncQueuePrevBtn = document.getElementById('syncQueuePrevBtn');
@@ -995,6 +997,19 @@ $statusLabels = [
     if (syncQueueSelectAll) syncQueueSelectAll.checked = false;
   }
 
+  function renderSyncQueueRowCells(row) {
+    const status = row.sync_status || 'pending';
+    const meta = statusLabels[status] || statusLabels.pending;
+    const canDelete = status === 'pending' || status === 'failed';
+    const checkCell = canDelete
+      ? `<input type="checkbox" class="sync-queue-select rounded" data-queue-id="${escapeHtml(row.id || '')}">`
+      : '';
+    const actionCell = canDelete
+      ? `<button type="button" class="delete-pending-queue-btn h-7 px-2 rounded border border-red-200 bg-red-50 text-red-700 font-bold" data-queue-id="${escapeHtml(row.id || '')}" data-file-name="${escapeHtml(row.file_name || '')}">حذف محلي</button>`
+      : '<span class="text-text-muted">—</span>';
+    return { status, meta, canDelete, checkCell, actionCell };
+  }
+
   function renderSyncQueue(queuePayload, sync) {
     if (!syncQueueSummary || !syncQueueBody) return;
     const meta = normalizeQueuePayload(queuePayload);
@@ -1003,27 +1018,42 @@ $statusLabels = [
     syncQueueSummary.textContent = `${syncQueueTotalCount} عنصر`;
     if (!items.length) {
       syncQueueBody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-text-muted">الطابور فارغ.</td></tr>';
+      if (syncQueueCards) {
+        syncQueueCards.innerHTML = '<p class="text-xs text-text-muted text-center py-4">الطابور فارغ.</p>';
+      }
       return;
     }
     syncQueueBody.innerHTML = items.map((row) => {
-      const status = row.sync_status || 'pending';
-      const meta = statusLabels[status] || statusLabels.pending;
-      const canDelete = status === 'pending' || status === 'failed';
-      const checkCell = canDelete
-        ? `<input type="checkbox" class="sync-queue-select rounded" data-queue-id="${escapeHtml(row.id || '')}">`
-        : '';
-      const actionCell = canDelete
-        ? `<button type="button" class="delete-pending-queue-btn h-7 px-2 rounded border border-red-200 bg-red-50 text-red-700 font-bold" data-queue-id="${escapeHtml(row.id || '')}" data-file-name="${escapeHtml(row.file_name || '')}">حذف محلي</button>`
-        : '<span class="text-text-muted">—</span>';
+      const cells = renderSyncQueueRowCells(row);
       return `<tr>
-        <td class="p-3 text-center">${checkCell}</td>
+        <td class="p-3 text-center">${cells.checkCell}</td>
         <td class="p-3 font-mono text-xs" dir="ltr">${escapeHtml(row.file_name || '')}</td>
-        <td class="p-3"><span class="text-xs px-2 py-0.5 rounded-full ${meta.class}">${meta.label}</span></td>
+        <td class="p-3"><span class="text-xs px-2 py-0.5 rounded-full ${cells.meta.class}">${cells.meta.label}</span></td>
         <td class="p-3 font-mono text-xs" dir="ltr">${escapeHtml(row.amine_image_guid || '—')}</td>
         <td class="p-3 text-xs text-text-muted">${escapeHtml(row.amine_sync_error_ar || '')}</td>
-        <td class="p-3 text-xs">${actionCell}</td>
+        <td class="p-3 text-xs">${cells.actionCell}</td>
       </tr>`;
     }).join('');
+    if (syncQueueCards) {
+      syncQueueCards.innerHTML = items.map((row) => {
+        const cells = renderSyncQueueRowCells(row);
+        const note = row.amine_sync_error_ar
+          ? `<p class="dash-mi-sync-card__meta">${escapeHtml(row.amine_sync_error_ar)}</p>`
+          : '';
+        return `<article class="dash-mi-sync-card">
+          <div class="dash-mi-sync-card__head">
+            <p class="dash-mi-sync-card__file">${escapeHtml(row.file_name || '')}</p>
+            ${cells.checkCell}
+          </div>
+          <div class="dash-mi-sync-card__meta">
+            <span class="text-xs px-2 py-0.5 rounded-full ${cells.meta.class}">${cells.meta.label}</span>
+            <span dir="ltr">${escapeHtml(row.amine_image_guid || '—')}</span>
+            ${note}
+          </div>
+          <div class="mt-2">${cells.actionCell}</div>
+        </article>`;
+      }).join('');
+    }
     if (syncQueueSelectAll) syncQueueSelectAll.checked = false;
   }
 
@@ -1333,6 +1363,13 @@ $statusLabels = [
     if (syncQueueHasMore) loadSyncQueuePage(syncQueuePage + 1);
   });
   syncQueueBody?.addEventListener('click', (event) => {
+    const btn = event.target instanceof HTMLElement ? event.target.closest('.delete-pending-queue-btn') : null;
+    if (!btn) return;
+    const queueId = btn.getAttribute('data-queue-id') || '';
+    const fileName = btn.getAttribute('data-file-name') || '';
+    if (queueId) deletePendingQueueItem(queueId, fileName);
+  });
+  syncQueueCards?.addEventListener('click', (event) => {
     const btn = event.target instanceof HTMLElement ? event.target.closest('.delete-pending-queue-btn') : null;
     if (!btn) return;
     const queueId = btn.getAttribute('data-queue-id') || '';

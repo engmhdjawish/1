@@ -344,7 +344,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <script src="/assets/dashboard/special-offers.js" defer></script>
   <script src="/assets/dashboard/about-editor.js" defer></script>
   <script src="/assets/dashboard/accounting-statement.js" defer></script>
-  <script src="/assets/dashboard/material-image-zip-download.js" defer></script>
+  <script src="<?= h(portal_asset_url('/assets/dashboard/material-image-zip-download.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/notifications.js')) ?>" defer></script>
   <script>
   (function () {

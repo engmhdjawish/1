@@ -51,28 +51,28 @@ $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'messag
     </div>
   </div>
 
-  <nav class="mt-4 inline-flex flex-wrap gap-1 rounded-xl border border-border-subtle bg-white p-1 shadow-sm" aria-label="أقسام صور المواد">
+  <nav class="dash-mi-tabs mt-4" aria-label="أقسام صور المواد">
     <?php if ($canUploadImages): ?>
     <a
       href="/dashboard/material-images.php?tab=link"
-      class="h-10 px-4 inline-flex items-center gap-2 rounded-lg text-sm font-bold transition <?= $workspaceTab === 'link' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:bg-surface-low' ?>"
+      class="dash-mi-tab<?= $workspaceTab === 'link' ? ' is-active' : '' ?>"
     >
-      <span class="material-symbols-outlined text-lg">linked_services</span>
+      <span class="material-symbols-outlined" aria-hidden="true">linked_services</span>
       ربط بالمواد
     </a>
     <a
       href="/dashboard/material-images.php?tab=upload"
-      class="h-10 px-4 inline-flex items-center gap-2 rounded-lg text-sm font-bold transition <?= $workspaceTab === 'upload' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:bg-surface-low' ?>"
+      class="dash-mi-tab<?= $workspaceTab === 'upload' ? ' is-active' : '' ?>"
     >
-      <span class="material-symbols-outlined text-lg">cloud_upload</span>
+      <span class="material-symbols-outlined" aria-hidden="true">cloud_upload</span>
       رفع ومزامنة
     </a>
     <?php endif; ?>
     <a
       href="/dashboard/material-images.php?tab=download"
-      class="h-10 px-4 inline-flex items-center gap-2 rounded-lg text-sm font-bold transition <?= $workspaceTab === 'download' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:bg-surface-low' ?>"
+      class="dash-mi-tab<?= $workspaceTab === 'download' ? ' is-active' : '' ?>"
     >
-      <span class="material-symbols-outlined text-lg">folder_zip</span>
+      <span class="material-symbols-outlined" aria-hidden="true">folder_zip</span>
       تحميل ZIP
     </a>
   </nav>
