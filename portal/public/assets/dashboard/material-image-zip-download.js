@@ -6,6 +6,16 @@
 
   const AVAILABILITY_STORAGE_KEY = 'dash-mi-zip-availability';
 
+  const PICKER_IDS = [
+    'mid-material-types',
+    'mid-age-categories',
+    'mid-manufacturers',
+    'mid-size-ranges',
+    'mid-country-origins',
+    'mid-store-guids',
+    'mid-group-guids',
+  ];
+
   const SPLIT_CONFIG = {
     materialTypes: { pickerId: 'mid-material-types', label: 'نوع المادة' },
     ageCategories: { pickerId: 'mid-age-categories', label: 'الفئة العمرية' },
@@ -17,7 +27,7 @@
   };
 
   const AVAILABILITY_LABELS = {
-    '': 'بدون قيد',
+    '': 'الكل',
     '1': 'متوفر',
     '0': 'غير متوفر',
   };
@@ -65,6 +75,19 @@
     return Array.isArray(values) ? values.length : 0;
   }
 
+  function hasNarrowingFilter(form) {
+    const search = form.querySelector('input[name="search"]')?.value.trim();
+    if (search) {
+      return true;
+    }
+    const minQty = form.querySelector('input[name="minWarehouseQuantity"]')?.value.trim();
+    const maxQty = form.querySelector('input[name="maxWarehouseQuantity"]')?.value.trim();
+    if (minQty || maxQty) {
+      return true;
+    }
+    return PICKER_IDS.some((id) => countPickerSelections(id) > 0);
+  }
+
   function updateFilterSummary(form) {
     const summaryEl = form.querySelector('[data-zip-filter-summary]');
     if (!summaryEl) {
@@ -102,9 +125,20 @@
       parts.push('تقسيم: ' + SPLIT_CONFIG[splitKey].label);
     }
 
+    const minQty = form.querySelector('input[name="minWarehouseQuantity"]')?.value.trim();
+    const maxQty = form.querySelector('input[name="maxWarehouseQuantity"]')?.value.trim();
+    if (minQty) {
+      parts.push('مخزون ≥ ' + minQty);
+    }
+    if (maxQty) {
+      parts.push('مخزون ≤ ' + maxQty);
+    }
+
     summaryEl.textContent = parts.length
-      ? 'الفلاتر النشطة: ' + parts.join(' · ')
-      : 'الفلاتر النشطة: التوفر = متوفر (افتراضي)';
+      ? parts.join(' · ')
+      : 'حدّد فلتراً (بحث، نوع، شركة، …) قبل التحميل';
+
+    summaryEl.classList.toggle('dash-mi-zip-summary--warn', !hasNarrowingFilter(form));
   }
 
   function bindAvailabilityTabs(form) {
@@ -164,6 +198,16 @@
     });
 
     form.addEventListener('submit', (event) => {
+      if (!hasNarrowingFilter(form)) {
+        event.preventDefault();
+        showStatus(
+          statusHost,
+          'حدّد فلتراً واحداً على الأقل: بحث، نوع مادة، شركة مصنعة، مخزن، أو نطاق مخزون.',
+          'error'
+        );
+        return;
+      }
+
       const splitKey = splitSelect?.value || '';
       if (!splitKey || !SPLIT_CONFIG[splitKey]) {
         showStatus(statusHost, '', 'success');

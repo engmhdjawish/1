@@ -58,109 +58,96 @@ foreach ($materialFilterOptions['groups'] ?? [] as $group) {
 }
 ?>
 <div data-material-images-download-panel>
-  <p class="mb-4 text-xs text-text-muted max-w-3xl leading-relaxed dash-mi-zip-intro">
-    يُحمَّل من <strong>ملفات الموقع المحلية</strong> فقط — الفلاتر تُطبَّق على قائمة المواد من API ثم تُجمع الصور الموجودة على السيرفر.
-  </p>
-
-  <div class="dash-mi-zip-quick mb-4">
-    <span class="dash-mi-zip-quick__label">تحميل سريع</span>
-    <div class="dash-mi-zip-quick__actions">
-      <a href="/api/material-images-zip.php?mode=materials&amp;isAvailable=1" target="_blank" class="dash-mi-zip-quick-btn dash-mi-zip-quick-btn--primary">
-        <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>
-        متوفر (افتراضي)
-      </a>
-      <a href="/api/material-images-zip.php?mode=linked&amp;linked=true" target="_blank" class="dash-mi-zip-quick-btn">
-        <span class="material-symbols-outlined" aria-hidden="true">link</span>
-        كل المرتبطة
-      </a>
-      <a href="/api/material-images-zip.php?mode=linked&amp;linked=false" target="_blank" class="dash-mi-zip-quick-btn">
-        <span class="material-symbols-outlined" aria-hidden="true">link_off</span>
-        غير المرتبطة
-      </a>
-    </div>
-  </div>
-
   <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
     <section class="rounded-xl border border-border-subtle bg-white overflow-hidden xl:col-span-2">
       <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60">
-        <h2 class="font-bold text-sm">تحميل حسب فلاتر المواد</h2>
-        <p class="text-xs text-text-muted mt-0.5">ابحث، حدّد التوفر، ثم اختر الفلاتر — ZIP واحد أو مقسّم</p>
+        <h2 class="font-bold text-sm">تحميل ZIP حسب فلاتر المواد</h2>
+        <p class="text-xs text-text-muted mt-0.5">من ملفات الموقع المحلية فقط — حدّد الفلاتر ثم حمّل</p>
       </div>
-      <form class="p-4 space-y-4" method="get" action="/api/material-images-zip.php" target="_blank" data-material-zip-form>
+
+      <form class="dash-mi-zip-form" method="get" action="/api/material-images-zip.php" target="_blank" data-material-zip-form>
         <input type="hidden" name="mode" value="materials">
         <input type="hidden" name="isAvailable" value="1" data-zip-availability-input>
 
-        <label class="block">
-          <span class="dash-mi-zip-label">بحث</span>
-          <input type="search" name="search" class="dash-mi-zip-input" placeholder="رمز أو اسم المادة">
-        </label>
+        <div class="dash-mi-zip-form__body">
+          <?php if (!empty($materialFilterOptionsError)): ?>
+            <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><?= h((string) $materialFilterOptionsError) ?></p>
+          <?php endif; ?>
 
-        <div>
-          <span class="dash-mi-zip-label">التوفر</span>
-          <div class="dash-mi-filter-tabs mt-1" role="group" aria-label="التوفر" data-zip-availability-tabs>
-            <button type="button" class="dash-mi-filter-tab" data-availability="">بدون قيد</button>
-            <button type="button" class="dash-mi-filter-tab is-active" data-availability="1">متوفر</button>
-            <button type="button" class="dash-mi-filter-tab" data-availability="0">غير متوفر</button>
-          </div>
-          <p class="text-[11px] text-text-muted mt-1">الافتراضي: <strong>متوفر</strong> — المواد التي لها مخزون متاح.</p>
-        </div>
-
-        <?php if (!empty($materialFilterOptionsError)): ?>
-          <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><?= h((string) $materialFilterOptionsError) ?></p>
-        <?php endif; ?>
-
-        <div class="dash-mi-zip-filters-primary">
-          <?php $renderTokenPicker('نوع المادة', 'materialTypes[]', $toOptionObjects($materialTypeOptions), [], 'mid-material-types', true, false, false, 5); ?>
-          <?php $renderTokenPicker('الفئة العمرية', 'ageCategories[]', $toOptionObjects($ageCategoryOptions), [], 'mid-age-categories', true, false, false, 5); ?>
-        </div>
-
-        <details class="dash-mi-zip-details">
-          <summary class="dash-mi-zip-details__toggle">فلاتر إضافية</summary>
-          <div class="dash-mi-zip-details__body space-y-3">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div><?php $renderTokenPicker('الشركة المصنعة', 'manufacturers[]', $toOptionObjects($manufacturerOptions), [], 'mid-manufacturers', true, false, false, 5); ?></div>
-              <div><?php $renderTokenPicker('القياس', 'sizeRanges[]', $toOptionObjects($sizeRangeOptions), [], 'mid-size-ranges', true, false, false, 5); ?></div>
-              <div class="md:col-span-2"><?php $renderTokenPicker('بلد المنشأ', 'countryOfOrigins[]', $toOptionObjects($countryOriginOptions), [], 'mid-country-origins', true, false, false, 5); ?></div>
-              <div class="md:col-span-2"><?php $renderTokenPicker('المخازن', 'storeGuids[]', $storeOptionObjects, [], 'mid-store-guids', false, false, false, 5); ?></div>
-              <div class="md:col-span-2"><?php $renderTokenPicker('المجموعات', 'groupGuids[]', $groupOptionObjects, [], 'mid-group-guids', false, false, false, 5); ?></div>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <label class="block text-sm">
-                <span class="dash-mi-zip-label">أدنى مخزون</span>
-                <input type="number" step="0.01" min="0" name="minWarehouseQuantity" class="dash-mi-zip-input" placeholder="0">
-              </label>
-              <label class="block text-sm">
-                <span class="dash-mi-zip-label">أعلى مخزون</span>
-                <input type="number" step="0.01" min="0" name="maxWarehouseQuantity" class="dash-mi-zip-input" placeholder="—">
-              </label>
-            </div>
-          </div>
-        </details>
-
-        <details class="dash-mi-zip-details">
-          <summary class="dash-mi-zip-details__toggle">تقسيم التحميل (اختياري)</summary>
-          <div class="dash-mi-zip-details__body">
-            <label class="block text-sm max-w-md">
-              <span class="dash-mi-zip-label">تقسيم حسب</span>
-              <select name="splitBy" data-zip-split-by class="dash-mi-zip-input">
-                <option value="">ملف ZIP واحد لكل النتائج</option>
-                <option value="materialTypes">نوع المادة</option>
-                <option value="ageCategories">الفئة العمرية</option>
-                <option value="manufacturers">الشركة المصنعة</option>
-                <option value="sizeRanges">القياس</option>
-                <option value="countryOfOrigins">بلد المنشأ</option>
-                <option value="storeGuids">المخزن</option>
-                <option value="groupGuids">المجموعة</option>
-              </select>
-              <span class="text-[11px] text-text-muted mt-1 block">يُنتج <strong>split-material-images.zip</strong> — أرشيف رئيسي فيه عدة ZIP.</span>
+          <div class="dash-mi-zip-toolbar">
+            <label class="dash-mi-zip-toolbar__search">
+              <span class="dash-mi-zip-label">بحث</span>
+              <input type="search" name="search" class="dash-mi-zip-input" placeholder="رمز أو اسم المادة" autocomplete="off">
             </label>
+            <div class="dash-mi-zip-toolbar__availability">
+              <span class="dash-mi-zip-label">التوفر</span>
+              <div class="dash-mi-filter-tabs" role="group" aria-label="التوفر" data-zip-availability-tabs>
+                <button type="button" class="dash-mi-filter-tab" data-availability="">الكل</button>
+                <button type="button" class="dash-mi-filter-tab is-active" data-availability="1">متوفر</button>
+                <button type="button" class="dash-mi-filter-tab" data-availability="0">غير متوفر</button>
+              </div>
+            </div>
           </div>
-        </details>
 
-        <p class="dash-mi-zip-summary text-xs text-text-muted" data-zip-filter-summary aria-live="polite"></p>
-        <div data-zip-download-status class="hidden text-sm rounded-lg border px-3 py-2"></div>
+          <div class="dash-mi-zip-filters-grid">
+            <div class="dash-mi-zip-filter-card">
+              <?php $renderTokenPicker('نوع المادة', 'materialTypes[]', $toOptionObjects($materialTypeOptions), [], 'mid-material-types', true, false, false, 4); ?>
+            </div>
+            <div class="dash-mi-zip-filter-card">
+              <?php $renderTokenPicker('الفئة العمرية', 'ageCategories[]', $toOptionObjects($ageCategoryOptions), [], 'mid-age-categories', true, false, false, 4); ?>
+            </div>
+            <div class="dash-mi-zip-filter-card">
+              <?php $renderTokenPicker('الشركة المصنعة', 'manufacturers[]', $toOptionObjects($manufacturerOptions), [], 'mid-manufacturers', true, false, false, 4); ?>
+            </div>
+            <div class="dash-mi-zip-filter-card">
+              <?php $renderTokenPicker('القياس', 'sizeRanges[]', $toOptionObjects($sizeRangeOptions), [], 'mid-size-ranges', true, false, false, 4); ?>
+            </div>
+            <div class="dash-mi-zip-filter-card dash-mi-zip-filter-card--wide">
+              <?php $renderTokenPicker('بلد المنشأ', 'countryOfOrigins[]', $toOptionObjects($countryOriginOptions), [], 'mid-country-origins', true, false, false, 4); ?>
+            </div>
+            <div class="dash-mi-zip-filter-card dash-mi-zip-filter-card--wide">
+              <?php $renderTokenPicker('المخازن', 'storeGuids[]', $storeOptionObjects, [], 'mid-store-guids', false, false, false, 4); ?>
+            </div>
+            <div class="dash-mi-zip-filter-card dash-mi-zip-filter-card--wide">
+              <?php $renderTokenPicker('المجموعات', 'groupGuids[]', $groupOptionObjects, [], 'mid-group-guids', false, false, false, 4); ?>
+            </div>
+          </div>
 
-        <div class="dash-mi-zip-submit">
+          <details class="dash-mi-zip-details">
+            <summary class="dash-mi-zip-details__toggle">خيارات متقدمة (مخزون · تقسيم ZIP)</summary>
+            <div class="dash-mi-zip-details__body">
+              <div class="grid grid-cols-2 gap-3 mb-3">
+                <label class="block text-sm">
+                  <span class="dash-mi-zip-label">أدنى مخزون</span>
+                  <input type="number" step="0.01" min="0" name="minWarehouseQuantity" class="dash-mi-zip-input" placeholder="0">
+                </label>
+                <label class="block text-sm">
+                  <span class="dash-mi-zip-label">أعلى مخزون</span>
+                  <input type="number" step="0.01" min="0" name="maxWarehouseQuantity" class="dash-mi-zip-input" placeholder="—">
+                </label>
+              </div>
+              <label class="block text-sm max-w-md">
+                <span class="dash-mi-zip-label">تقسيم التحميل</span>
+                <select name="splitBy" data-zip-split-by class="dash-mi-zip-input">
+                  <option value="">ملف ZIP واحد</option>
+                  <option value="materialTypes">حسب نوع المادة</option>
+                  <option value="ageCategories">حسب الفئة العمرية</option>
+                  <option value="manufacturers">حسب الشركة المصنعة</option>
+                  <option value="sizeRanges">حسب القياس</option>
+                  <option value="countryOfOrigins">حسب بلد المنشأ</option>
+                  <option value="storeGuids">حسب المخزن</option>
+                  <option value="groupGuids">حسب المجموعة</option>
+                </select>
+                <span class="text-[11px] text-text-muted mt-1 block">مع التقسيم: أضف تشيبات في الفلتر المطابق أولاً.</span>
+              </label>
+            </div>
+          </details>
+        </div>
+
+        <div class="dash-mi-zip-form__footer">
+          <p class="dash-mi-zip-summary" data-zip-filter-summary aria-live="polite"></p>
+          <div data-zip-download-status class="hidden text-sm rounded-lg border px-3 py-2"></div>
+          <p class="dash-mi-zip-hint text-[11px] text-text-muted">يُفضّل تحديد فلتر واحد على الأقل (بحث، نوع، شركة، …) لتجنّب تحميل آلاف الصور دفعة واحدة.</p>
           <button type="submit" class="dash-mi-zip-download-btn">
             <span class="material-symbols-outlined" aria-hidden="true">download</span>
             تحميل ZIP

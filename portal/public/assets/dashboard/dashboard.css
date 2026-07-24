@@ -1495,70 +1495,55 @@ button.is-loading::after,
 }
 
 /* ── Material images ZIP download tab ── */
-.dash-mi-zip-intro strong {
-  font-weight: 800;
+.dash-mi-zip-form {
+  display: flex;
+  flex-direction: column;
 }
 
-.dash-mi-zip-quick {
+.dash-mi-zip-form__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.dash-mi-zip-form__footer {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 0.65rem 0.75rem;
-  border: 1px solid var(--dash-border, #e5e7eb);
-  border-radius: 0.75rem;
-  background: #fff;
+  padding: 0.85rem 1rem 1rem;
+  border-top: 1px solid var(--dash-border, #e5e7eb);
+  background: color-mix(in srgb, var(--dash-surface-low, #f9fafb) 55%, #fff);
 }
 
-.dash-mi-zip-quick__label {
-  font-size: 0.6875rem;
-  font-weight: 800;
-  color: var(--dash-muted, #6b7280);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+.dash-mi-zip-toolbar {
+  display: grid;
+  gap: 0.65rem;
 }
 
-.dash-mi-zip-quick__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
+@media (min-width: 768px) {
+  .dash-mi-zip-toolbar {
+    grid-template-columns: 1fr auto;
+    align-items: end;
+  }
 }
 
-.dash-mi-zip-quick-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  height: 2.125rem;
-  padding: 0 0.75rem;
-  border: 1px solid var(--dash-border, #e5e7eb);
-  border-radius: 9999px;
-  background: #fff;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #334155;
-  text-decoration: none;
-  transition: background 0.15s ease, border-color 0.15s ease;
+.dash-mi-zip-toolbar__search {
+  min-width: 0;
 }
 
-.dash-mi-zip-quick-btn:hover {
-  background: var(--dash-surface-low, #f9fafb);
-}
-
-.dash-mi-zip-quick-btn--primary {
-  border-color: var(--dash-primary, #d81921);
-  background: color-mix(in srgb, var(--dash-primary, #d81921) 8%, #fff);
-  color: var(--dash-primary, #d81921);
-}
-
-.dash-mi-zip-quick-btn .material-symbols-outlined {
-  font-size: 1.125rem;
+.dash-mi-zip-toolbar__availability .dash-mi-filter-tabs {
+  flex-wrap: nowrap;
 }
 
 .dash-mi-zip-label {
   display: block;
   margin-bottom: 0.25rem;
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 800;
-  color: #334155;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .dash-mi-zip-input {
@@ -1572,28 +1557,51 @@ button.is-loading::after,
   background: #fff;
 }
 
-.dash-mi-zip-filters-primary {
+.dash-mi-zip-filters-grid {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.65rem;
 }
 
-@media (min-width: 768px) {
-  .dash-mi-zip-filters-primary {
+@media (min-width: 640px) {
+  .dash-mi-zip-filters-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-.dash-mi-zip-details {
+.dash-mi-zip-filter-card {
+  padding: 0.65rem;
   border: 1px solid var(--dash-border, #e5e7eb);
   border-radius: 0.65rem;
-  background: color-mix(in srgb, var(--dash-surface-low, #f9fafb) 50%, #fff);
+  background: #fff;
+}
+
+.dash-mi-zip-filter-card--wide {
+  grid-column: 1 / -1;
+}
+
+.dash-mi-zip-filter-card .token-picker .text-text-muted {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #334155;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.dash-mi-zip-filter-card .token-picker select[data-role="options"] {
+  max-height: 6.5rem;
+}
+
+.dash-mi-zip-details {
+  border: 1px dashed var(--dash-border, #e5e7eb);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--dash-surface-low, #f9fafb) 40%, #fff);
 }
 
 .dash-mi-zip-details__toggle {
-  padding: 0.55rem 0.75rem;
-  font-size: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 800;
-  color: #475569;
+  color: #64748b;
   cursor: pointer;
   list-style: none;
 }
@@ -1604,19 +1612,28 @@ button.is-loading::after,
 
 .dash-mi-zip-details__body {
   padding: 0 0.75rem 0.75rem;
-  border-top: 1px solid var(--dash-border, #e5e7eb);
+  border-top: 1px dashed var(--dash-border, #e5e7eb);
 }
 
 .dash-mi-zip-summary {
   margin: 0;
-  padding: 0.5rem 0.65rem;
+  padding: 0.45rem 0.65rem;
   border-radius: 0.5rem;
-  background: var(--dash-surface-low, #f9fafb);
+  background: #fff;
+  border: 1px solid var(--dash-border, #e5e7eb);
+  font-size: 0.75rem;
   line-height: 1.5;
+  color: #334155;
 }
 
-.dash-mi-zip-submit {
-  padding-top: 0.25rem;
+.dash-mi-zip-summary--warn {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.dash-mi-zip-hint {
+  margin: 0;
 }
 
 .dash-mi-zip-download-btn {
