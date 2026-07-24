@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>اختبار نطاق معاينة الصفحة الرئيسية</title>
+</head>
+<body>
+  <section class="home-section" id="section-a">
+    <h2>قسم أ</h2>
+    <div class="home-strip">
+      <article class="home-product-card" data-store-preview-card data-preview-guid="guid-a1" data-preview='{"guid":"guid-a1","name":"منتج أ-1","thumbUrl":"","zoomUrl":"","showPrice":false,"allowCart":false}'>
+        <button type="button" data-store-product-preview>معاينة أ-1</button>
+      </article>
+      <article class="home-product-card" data-store-preview-card data-preview-guid="guid-a2" data-preview='{"guid":"guid-a2","name":"منتج أ-2","thumbUrl":"","zoomUrl":"","showPrice":false,"allowCart":false}'>
+        <button type="button" data-store-product-preview>معاينة أ-2</button>
+      </article>
+    </div>
+  </section>
+
+  <section class="home-section" id="section-b">
+    <h2>قسم ب</h2>
+    <div class="home-strip">
+      <article class="home-product-card" data-store-preview-card data-preview-guid="guid-b1" data-preview='{"guid":"guid-b1","name":"منتج ب-1","thumbUrl":"","zoomUrl":"","showPrice":false,"allowCart":false}'>
+        <button type="button" data-store-product-preview>معاينة ب-1</button>
+      </article>
+      <article class="home-product-card" data-store-preview-card data-preview-guid="guid-b2" data-preview='{"guid":"guid-b2","name":"منتج ب-2","thumbUrl":"","zoomUrl":"","showPrice":false,"allowCart":false}'>
+        <button type="button" data-store-product-preview>معاينة ب-2</button>
+      </article>
+    </div>
+  </section>
+
+  <div id="storeProductPreview" class="store-product-preview" hidden aria-hidden="true">
+    <button type="button" data-preview-close>إغلاق</button>
+    <button type="button" data-preview-prev>السابق</button>
+    <button type="button" data-preview-next>التالي</button>
+    <div class="store-product-preview__panel">
+      <div class="store-product-preview__image-wrap">
+        <div id="storeProductPreviewImageStage">
+          <div id="storeProductPreviewImageLoader" hidden></div>
+          <img id="storeProductPreviewImg" src="" alt="">
+        </div>
+      </div>
+      <div class="store-product-preview__meta">
+        <div id="storeProductPreviewCounter"></div>
+        <h2 id="storeProductPreviewTitle"></h2>
+        <p id="storeProductPreviewSubtitle"></p>
+        <div id="storeProductPreviewPackaging" hidden></div>
+        <div id="storeProductPreviewPrices"></div>
+        <div id="storeProductPreviewCart"></div>
+        <a id="storeProductPreviewDetail" href="#">تفاصيل</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/assets/store-product-preview.js"></script>
+</body>
+</html>
