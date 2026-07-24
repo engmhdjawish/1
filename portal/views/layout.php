@@ -15,6 +15,7 @@ use Portal\Support\StorePricePreference;
 /** @var string|null $companyLogoUrl */
 /** @var bool|null $enableQuickView */
 /** @var bool|null $enableStoreCartJs */
+/** @var bool|null $deferStoreCartJs */
 /** @var bool|null $enableOnboarding */
 
 require_once __DIR__ . '/helpers.php';
@@ -41,7 +42,8 @@ $isCatalogPage = portal_is_catalog_page($pagePath);
 $isLightPage = in_array($pagePath, ['/login.php', '/register.php', '/about.php'], true);
 
 $enableQuickView = (bool) ($enableQuickView ?? $isCatalogPage);
-$enableStoreCartJs = (bool) ($enableStoreCartJs ?? ($storeAllowCart && !$isLightPage));
+$deferStoreCartJs = (bool) ($deferStoreCartJs ?? false);
+$enableStoreCartJs = (bool) ($enableStoreCartJs ?? ($storeAllowCart && !$isLightPage && !$deferStoreCartJs));
 $enableOnboarding = (bool) ($enableOnboarding ?? !$isLightPage);
 $enableSiteAnalytics = (bool) ($enableSiteAnalytics ?? true);
 
@@ -167,7 +169,7 @@ if ($customer) {
   <?php require __DIR__ . '/partials/store-image-lightbox.php'; ?>
 <?php endif; ?>
 
-<?php if ($enableStoreCartJs && empty($GLOBALS['storeProductPreviewRendered'])): ?>
+<?php if (($enableStoreCartJs || $deferStoreCartJs) && empty($GLOBALS['storeProductPreviewRendered'])): ?>
   <?php $GLOBALS['storeProductPreviewRendered'] = true; ?>
   <?php require __DIR__ . '/partials/store-product-preview.php'; ?>
 <?php endif; ?>
@@ -234,6 +236,27 @@ if ($customer) {
     <?php $GLOBALS['storeProductPreviewScriptLoaded'] = true; ?>
     <script src="<?= h(portal_asset_url('/assets/store-product-preview.js')) ?>" defer></script>
   <?php endif; ?>
+<?php elseif ($deferStoreCartJs): ?>
+  <script type="application/json" id="storeCartBootstrap"><?= json_encode(
+      StoreCartService::bootstrapPayload(),
+      JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP
+  ) ?></script>
+  <script type="application/json" id="deferStoreScriptUrls"><?= json_encode([
+      portal_asset_url('/assets/store-image-zoom.js'),
+      portal_asset_url('/assets/store-cart.js'),
+      portal_asset_url('/assets/store-product-preview.js'),
+  ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
+  <script>
+    (() => {
+      if (window.__storeCartSubmitGuard) return;
+      window.__storeCartSubmitGuard = true;
+      document.addEventListener('submit', (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-store-add-cart')) return;
+        event.preventDefault();
+      }, true);
+    })();
+  </script>
 <?php endif; ?>
 <?php if ($enableOnboarding): ?>
   <script src="<?= h(portal_asset_url('/assets/site-onboarding.js')) ?>" defer></script>

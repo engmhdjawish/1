@@ -66,13 +66,21 @@ final class HomeSectionService
              FROM home_sections WHERE is_active = TRUE ORDER BY sort_order ASC'
         )->fetchAll(PDO::FETCH_ASSOC);
 
+        if ($sections === []) {
+            return [];
+        }
+
+        $sectionIds = array_map(static fn (array $section): string => (string) $section['id'], $sections);
+        $filtersBySection = self::batchFiltersForSections($sectionIds);
+        $manualBySection = self::batchManualProductsForSections($sectionIds);
+
         foreach ($sections as &$section) {
             $sectionId = (string) $section['id'];
-            $parsed = self::parseFilterRows(self::filtersForSection($sectionId));
+            $parsed = self::parseFilterRows($filtersBySection[$sectionId] ?? []);
             $section['filters'] = $parsed['rows'];
             $section['filter_rules'] = $parsed['rules'];
             $section['display_options'] = $parsed['display_options'];
-            $section['material_guids'] = self::manualProducts($sectionId);
+            $section['material_guids'] = $manualBySection[$sectionId] ?? [];
             $section['products'] = [];
             $section['is_offer_section'] = false;
         }
@@ -546,12 +554,102 @@ final class HomeSectionService
     /** @return list<array{filter_type: string, value_ar: string}> */
     private static function filtersForSection(string $sectionId): array
     {
-        $stmt = Database::pdo()->prepare(
-            'SELECT filter_type, value_ar FROM home_section_filters WHERE section_id = :id'
-        );
-        $stmt->execute(['id' => $sectionId]);
+        return self::batchFiltersForSections([$sectionId])[$sectionId] ?? [];
+    }
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    /**
+     * @param list<string> $sectionIds
+     * @return array<string, list<array{filter_type: string, value_ar: string}>>
+     */
+    private static function batchFiltersForSections(array $sectionIds): array
+    {
+        $sectionIds = array_values(array_unique(array_filter(array_map('strval', $sectionIds), static fn (string $id): bool => trim($id) !== '')));
+        $grouped = [];
+        foreach ($sectionIds as $sectionId) {
+            $grouped[$sectionId] = [];
+        }
+        if ($sectionIds === []) {
+            return $grouped;
+        }
+
+        $placeholders = [];
+        $params = [];
+        foreach ($sectionIds as $index => $sectionId) {
+            $key = 's' . $index;
+            $placeholders[] = ':' . $key;
+            $params[$key] = $sectionId;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT section_id::text AS section_id, filter_type, value_ar
+             FROM home_section_filters
+             WHERE section_id IN (' . implode(', ', $placeholders) . ')'
+        );
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        foreach ($rows as $row) {
+            $sectionId = (string) ($row['section_id'] ?? '');
+            if ($sectionId === '') {
+                continue;
+            }
+            $grouped[$sectionId][] = [
+                'filter_type' => (string) ($row['filter_type'] ?? ''),
+                'value_ar' => (string) ($row['value_ar'] ?? ''),
+            ];
+        }
+
+        return $grouped;
+    }
+
+    /** @return list<string> */
+    private static function manualProducts(string $sectionId): array
+    {
+        return self::batchManualProductsForSections([$sectionId])[$sectionId] ?? [];
+    }
+
+    /**
+     * @param list<string> $sectionIds
+     * @return array<string, list<string>>
+     */
+    private static function batchManualProductsForSections(array $sectionIds): array
+    {
+        $sectionIds = array_values(array_unique(array_filter(array_map('strval', $sectionIds), static fn (string $id): bool => trim($id) !== '')));
+        $grouped = [];
+        foreach ($sectionIds as $sectionId) {
+            $grouped[$sectionId] = [];
+        }
+        if ($sectionIds === []) {
+            return $grouped;
+        }
+
+        $placeholders = [];
+        $params = [];
+        foreach ($sectionIds as $index => $sectionId) {
+            $key = 's' . $index;
+            $placeholders[] = ':' . $key;
+            $params[$key] = $sectionId;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT section_id::text AS section_id, material_guid::text AS material_guid
+             FROM home_section_products
+             WHERE section_id IN (' . implode(', ', $placeholders) . ')
+             ORDER BY section_id, sort_order ASC'
+        );
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        foreach ($rows as $row) {
+            $sectionId = (string) ($row['section_id'] ?? '');
+            $guid = trim((string) ($row['material_guid'] ?? ''));
+            if ($sectionId === '' || $guid === '') {
+                continue;
+            }
+            $grouped[$sectionId][] = $guid;
+        }
+
+        return $grouped;
     }
 
     /**
@@ -632,18 +730,6 @@ final class HomeSectionService
         return ['rows' => $materialRows, 'rules' => $rules, 'display_options' => $displayOptions];
     }
 
-    /** @return list<string> */
-    private static function manualProducts(string $sectionId): array
-    {
-        $stmt = Database::pdo()->prepare(
-            'SELECT material_guid::text FROM home_section_products
-             WHERE section_id = :id ORDER BY sort_order ASC'
-        );
-        $stmt->execute(['id' => $sectionId]);
-
-        return $stmt->fetchAll(PDO::FETCH_COLUMN);
-    }
-
     /** @param list<string> $guids
      * @return list<array{guid: string, name: string, code: string}>
      */
@@ -704,20 +790,14 @@ final class HomeSectionService
 
         $tryGuids = array_slice($guids, 0, min(count($guids), max($maxProducts * 3, $maxProducts)));
         $materialsByGuid = MaterialBatchService::fetchByGuids($tryGuids, 20);
-        $items = [];
+        $candidates = [];
         foreach ($tryGuids as $guid) {
-            if (count($items) >= $maxProducts) {
-                break;
-            }
             $item = $materialsByGuid[$guid] ?? null;
-            if (!is_array($item)) {
-                continue;
-            }
-            if (StockReservationService::isSellable($item)) {
-                $items[] = $item;
+            if (is_array($item)) {
+                $candidates[] = $item;
             }
         }
-
+        $items = StockReservationService::filterSellableProducts($candidates);
         shuffle($items);
 
         return array_slice($items, 0, $maxProducts);

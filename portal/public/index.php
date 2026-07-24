@@ -29,4 +29,6 @@ $title = 'الرئيسية';
 $extraHead = '<link href="' . h(portal_asset_url('/css/home-page.css')) . '" rel="stylesheet">';
 $extraFooter = '<script src="' . h(portal_asset_url('/assets/home-page.js')) . '" defer></script>';
 $enableQuickView = false;
+$enableStoreCartJs = false;
+$deferStoreCartJs = $storeCatalogDisplay['allow_cart'] ?? false;
 require dirname(__DIR__) . '/views/layout.php';

@@ -497,26 +497,23 @@ final class StoreCatalogService
         $search = trim((string) ($requestFilters['search'] ?? ''));
         $sort = self::normalizeSort((string) ($requestFilters['sort'] ?? 'number:asc'));
 
+        $materialsByGuid = MaterialBatchService::fetchByGuids($guids, 25);
         $products = [];
         foreach ($guids as $guid) {
-            try {
-                $material = self::findMaterial($guid);
-                if ($material === null) {
-                    continue;
-                }
-                if ($search !== '') {
-                    $hay = strtolower(
-                        trim((string) ($material['name'] ?? '')) . ' '
-                        . trim((string) ($material['materialCode'] ?? ''))
-                    );
-                    if (!str_contains($hay, strtolower($search))) {
-                        continue;
-                    }
-                }
-                $products[] = $material;
-            } catch (\Throwable) {
+            $material = $materialsByGuid[$guid] ?? null;
+            if (!is_array($material)) {
                 continue;
             }
+            if ($search !== '') {
+                $hay = strtolower(
+                    trim((string) ($material['name'] ?? '')) . ' '
+                    . trim((string) ($material['materialCode'] ?? ''))
+                );
+                if (!str_contains($hay, strtolower($search))) {
+                    continue;
+                }
+            }
+            $products[] = $material;
         }
 
         $products = self::applySellableStockFilter($products);

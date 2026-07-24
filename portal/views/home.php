@@ -226,7 +226,3 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
     </div>
   </section>
 </div>
-<?php if (empty($GLOBALS['storeCatalogPreviewRendered'])): ?>
-  <?php $GLOBALS['storeCatalogPreviewRendered'] = true; ?>
-  <?php require __DIR__ . '/partials/store-product-preview.php'; ?>
-<?php endif; ?>

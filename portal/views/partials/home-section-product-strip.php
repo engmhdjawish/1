@@ -19,6 +19,10 @@ $sectionReturnUrl = home_section_return_url($section);
 $sectionOfferSlug = $isOfferSection && $sectionSlug !== '' ? $sectionSlug : null;
 $previewDisplayOptions = $priceState['preview_display_options'];
 $homeAllowCart = (bool) ($previewDisplayOptions['allow_cart'] ?? false);
+$contextOffer = $isOfferSection && $sectionSlug !== ''
+    ? SpecialOfferService::activeOfferBySlug($sectionSlug)
+    : null;
+$cartItems = $homeAllowCart ? StoreCartService::items() : [];
 
 if ($products === []) {
     echo '<div class="home-section__empty">لا توجد منتجات في هذا القسم حالياً.</div>';
@@ -33,20 +37,15 @@ if ($products === []) {
           continue;
       }
       $guid = material_guid($item);
-      $contextOffer = $isOfferSection && $sectionSlug !== ''
-          ? SpecialOfferService::activeOfferBySlug($sectionSlug)
-          : null;
       if ($guid !== '') {
           $overlay = SpecialOfferService::pricingOverlay($item, $contextOffer);
           if (!empty($overlay['has_offer'])) {
               $item = array_merge($item, $overlay);
           }
       }
-      $cartQtyForItem = 0.0;
-      if ($homeAllowCart && $guid !== '') {
-          $cartItems = StoreCartService::items();
-          $cartQtyForItem = (float) ($cartItems[$guid]['quantity'] ?? 0);
-      }
+      $cartQtyForItem = $homeAllowCart && $guid !== ''
+          ? (float) ($cartItems[$guid]['quantity'] ?? 0)
+          : 0.0;
       $previewPayload = $guid !== ''
           ? product_preview_payload(
               $item,

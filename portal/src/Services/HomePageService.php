@@ -153,22 +153,18 @@ final class HomePageService
             $manualTryGuids = is_array($section['_batch_manual_guids'] ?? null) ? $section['_batch_manual_guids'] : null;
 
             if ($manualTryGuids !== null) {
-                $items = [];
+                $candidates = [];
                 foreach ($manualTryGuids as $guid) {
-                    if (count($items) >= $maxProducts) {
-                        break;
-                    }
                     $item = $materialsByGuid[$guid] ?? null;
-                    if (!is_array($item)) {
-                        continue;
+                    if (is_array($item)) {
+                        $candidates[] = $item;
                     }
-                    if (!$isOffer && !StockReservationService::isSellable($item)) {
-                        continue;
-                    }
-                    $items[] = $item;
                 }
-                shuffle($items);
-                $section['products'] = array_slice($items, 0, $maxProducts);
+                if (!$isOffer) {
+                    $candidates = StockReservationService::filterSellableProducts($candidates);
+                }
+                shuffle($candidates);
+                $section['products'] = array_slice($candidates, 0, $maxProducts);
                 unset($section['_batch_manual_guids'], $section['_batch_max_products']);
                 if ($isOffer) {
                     $section['products'] = SpecialOfferService::attachOfferPricing($section['products'], $section);

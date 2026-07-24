@@ -76,11 +76,19 @@ final class SpecialOfferService
         );
         $sections = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
+        if ($sections === []) {
+            return [];
+        }
+
+        $offerIds = array_map(static fn (array $section): string => (string) $section['id'], $sections);
+        $filtersByOffer = self::batchFiltersForOffers($offerIds);
+        $manualByOffer = self::batchManualProductsForOffers($offerIds);
+
         foreach ($sections as &$section) {
             $offerId = (string) $section['id'];
-            $parsed = self::parseFilterRows(self::filtersForOffer($offerId));
+            $parsed = self::parseFilterRows($filtersByOffer[$offerId] ?? []);
             $section['filter_rules'] = $parsed['rules'];
-            $section['material_guids'] = self::manualProducts($offerId);
+            $section['material_guids'] = $manualByOffer[$offerId] ?? [];
             $section['is_offer_section'] = true;
             $section['products'] = [];
             $section['display_options'] = $parsed['display_options'];
@@ -989,12 +997,102 @@ final class SpecialOfferService
     /** @return list<array{filter_type: string, value_ar: string}> */
     private static function filtersForOffer(string $offerId): array
     {
-        $stmt = Database::pdo()->prepare(
-            'SELECT filter_type, value_ar FROM special_offer_filters WHERE offer_id = :id'
-        );
-        $stmt->execute(['id' => $offerId]);
+        return self::batchFiltersForOffers([$offerId])[$offerId] ?? [];
+    }
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    /**
+     * @param list<string> $offerIds
+     * @return array<string, list<array{filter_type: string, value_ar: string}>>
+     */
+    private static function batchFiltersForOffers(array $offerIds): array
+    {
+        $offerIds = array_values(array_unique(array_filter(array_map('strval', $offerIds), static fn (string $id): bool => trim($id) !== '')));
+        $grouped = [];
+        foreach ($offerIds as $offerId) {
+            $grouped[$offerId] = [];
+        }
+        if ($offerIds === []) {
+            return $grouped;
+        }
+
+        $placeholders = [];
+        $params = [];
+        foreach ($offerIds as $index => $offerId) {
+            $key = 'o' . $index;
+            $placeholders[] = ':' . $key;
+            $params[$key] = $offerId;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT offer_id::text AS offer_id, filter_type, value_ar
+             FROM special_offer_filters
+             WHERE offer_id IN (' . implode(', ', $placeholders) . ')'
+        );
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        foreach ($rows as $row) {
+            $offerId = (string) ($row['offer_id'] ?? '');
+            if ($offerId === '') {
+                continue;
+            }
+            $grouped[$offerId][] = [
+                'filter_type' => (string) ($row['filter_type'] ?? ''),
+                'value_ar' => (string) ($row['value_ar'] ?? ''),
+            ];
+        }
+
+        return $grouped;
+    }
+
+    /** @return list<string> */
+    private static function manualProducts(string $offerId): array
+    {
+        return self::batchManualProductsForOffers([$offerId])[$offerId] ?? [];
+    }
+
+    /**
+     * @param list<string> $offerIds
+     * @return array<string, list<string>>
+     */
+    private static function batchManualProductsForOffers(array $offerIds): array
+    {
+        $offerIds = array_values(array_unique(array_filter(array_map('strval', $offerIds), static fn (string $id): bool => trim($id) !== '')));
+        $grouped = [];
+        foreach ($offerIds as $offerId) {
+            $grouped[$offerId] = [];
+        }
+        if ($offerIds === []) {
+            return $grouped;
+        }
+
+        $placeholders = [];
+        $params = [];
+        foreach ($offerIds as $index => $offerId) {
+            $key = 'o' . $index;
+            $placeholders[] = ':' . $key;
+            $params[$key] = $offerId;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT offer_id::text AS offer_id, material_guid::text AS material_guid
+             FROM special_offer_products
+             WHERE offer_id IN (' . implode(', ', $placeholders) . ')
+             ORDER BY offer_id, sort_order ASC'
+        );
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        foreach ($rows as $row) {
+            $offerId = (string) ($row['offer_id'] ?? '');
+            $guid = trim((string) ($row['material_guid'] ?? ''));
+            if ($offerId === '' || $guid === '') {
+                continue;
+            }
+            $grouped[$offerId][] = $guid;
+        }
+
+        return $grouped;
     }
 
     /** @param list<array{filter_type: string, value_ar: string}> $rows @return array{rules: array<string, mixed>, display_options: array{show_images: bool, price_mode: string}} */
@@ -1052,17 +1150,6 @@ final class SpecialOfferService
         }
 
         return ['rules' => $rules, 'display_options' => $displayOptions];
-    }
-
-    /** @return list<string> */
-    private static function manualProducts(string $offerId): array
-    {
-        $stmt = Database::pdo()->prepare(
-            'SELECT material_guid::text FROM special_offer_products WHERE offer_id = :id ORDER BY sort_order'
-        );
-        $stmt->execute(['id' => $offerId]);
-
-        return array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN) ?: []);
     }
 
     /** @param array<string, mixed> $rules */

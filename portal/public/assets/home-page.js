@@ -134,10 +134,59 @@
       });
   };
 
+  const initDeferredStoreScripts = () => {
+    const urlsEl = document.getElementById('deferStoreScriptUrls');
+    if (!urlsEl || window.__storeScriptsLoaded) return;
+
+    let scriptUrls = [];
+    try {
+      scriptUrls = JSON.parse(urlsEl.textContent || '[]');
+    } catch {
+      return;
+    }
+    if (!Array.isArray(scriptUrls) || scriptUrls.length === 0) return;
+
+    let loadPromise = null;
+    const loadScripts = () => {
+      if (window.__storeScriptsLoaded) return Promise.resolve();
+      if (loadPromise) return loadPromise;
+      loadPromise = scriptUrls.reduce(
+        (chain, src) => chain.then(() => new Promise((resolve, reject) => {
+          const existing = document.querySelector(`script[src="${src}"]`);
+          if (existing) {
+            resolve();
+            return;
+          }
+          const script = document.createElement('script');
+          script.src = src;
+          script.defer = true;
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error(`Failed to load ${src}`));
+          document.body.appendChild(script);
+        })),
+        Promise.resolve(),
+      ).then(() => {
+        window.__storeScriptsLoaded = true;
+      });
+      return loadPromise;
+    };
+
+    document.addEventListener('click', (event) => {
+      const trigger = event.target.closest('[data-store-product-preview], [data-store-cart-open], [data-store-add-cart]');
+      if (!trigger || window.__storeScriptsLoaded) return;
+      event.preventDefault();
+      event.stopPropagation();
+      loadScripts()
+        .then(() => trigger.click())
+        .catch(() => {});
+    }, true);
+  };
+
   const init = () => {
     initSectionNav();
     initAdCarousel();
     initDeferredProducts();
+    initDeferredStoreScripts();
   };
 
   if (document.readyState === 'loading') {
