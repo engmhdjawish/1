@@ -188,6 +188,8 @@
 
 .store-filters-drawer-footer {
   flex-shrink: 0;
+  position: relative;
+  z-index: 3;
   margin-top: 0;
   padding: 0.85rem 1rem calc(0.85rem + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid #eef2f7;
@@ -570,15 +572,6 @@ body.store-filters-drawer-open {
   color: #0369a1;
 }
 
-@media (min-width: 1024px) {
-  .store-filter-pending-panel {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    margin-bottom: 0.65rem;
-  }
-}
-
 .store-filter-options {
   display: flex;
   flex-direction: column;
@@ -595,6 +588,14 @@ body.store-filters-drawer-open {
   max-height: none;
   overflow: visible;
   padding: 0;
+}
+
+.store-filter-accordion[open] .store-filter-options--pills {
+  max-height: min(260px, 42vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-inline-end: 0.15rem;
+  scrollbar-gutter: stable;
 }
 
 .store-filter-option {
@@ -942,28 +943,47 @@ body.store-filters-drawer-open {
 
 @media (min-width: 1024px) {
   .store-filters-sidebar-inner {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    max-height: calc(100vh - var(--site-header-sticky-offset, 5.5rem) - 1rem);
     padding: 1rem;
   }
 
   .store-filters-sidebar-scroll {
+    flex: 1;
+    min-height: 0;
     padding: 0;
-    overflow: visible;
+    overflow: auto;
+    overscroll-behavior: contain;
   }
 
   .store-filters-sidebar-header {
     padding: 0;
     margin-bottom: 0.75rem;
+    flex-shrink: 0;
   }
 
   .store-filters-drawer-footer {
+    flex-shrink: 0;
     padding: 0.75rem 0 0;
     box-shadow: none;
-    margin-top: 0.75rem;
+    margin-top: 0;
+    background: #fff;
   }
 
   .store-filter-actions {
     padding-top: 0.75rem;
     border-top: 1px solid #eef2f7;
+  }
+
+  .store-filter-pending-panel {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    margin-bottom: 0.65rem;
+    background: linear-gradient(180deg, #fff 75%, rgba(255, 255, 255, 0.92) 100%);
   }
 }
 
