@@ -20,13 +20,32 @@ $companyLogoUrl = PortalSettingsService::companyLogoUrl($companyContext);
 $storeCatalogDisplay = StoreCatalogService::displayOptions();
 $deferHomeProducts = true;
 $sections = HomePageService::mergedSectionShells();
+$embeddedProductStrips = HomePageService::embeddedProductStrips();
 $ads = SiteMediaService::listAdsForHome();
+
+$homeHasEmbeddedStrips = false;
+$homeProductsPending = false;
+foreach ($sections as $section) {
+    $sectionKey = trim((string) ($section['slug'] ?? $section['id'] ?? ''));
+    if ($sectionKey === '') {
+        continue;
+    }
+    if (trim((string) ($embeddedProductStrips[$sectionKey] ?? '')) !== '') {
+        $homeHasEmbeddedStrips = true;
+    } else {
+        $homeProductsPending = true;
+    }
+}
 
 ob_start();
 require dirname(__DIR__) . '/views/home.php';
 $content = ob_get_clean();
 $title = 'الرئيسية';
 $extraHead = '<link href="' . h(portal_asset_url('/css/home-page.css')) . '" rel="stylesheet">';
+if ($homeProductsPending) {
+    $extraHead .= '<link rel="preload" href="/api/home-products.php" as="fetch" crossorigin="same-origin">';
+    $extraHead .= '<script>window.__homeProductsFetch=fetch("/api/home-products.php",{credentials:"same-origin",headers:{Accept:"application/json"}});</script>';
+}
 $extraFooter = '<script src="' . h(portal_asset_url('/assets/home-page.js')) . '" defer></script>';
 $enableQuickView = false;
 $enableStoreCartJs = false;

@@ -56,6 +56,7 @@ public sealed class MaterialsController(
         [FromQuery] string? groupBy = null,
         [FromQuery] string? sort = null,
         [FromQuery] bool includeResultFilters = false,
+        [FromQuery] bool includeTotalCount = true,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
@@ -126,11 +127,18 @@ public sealed class MaterialsController(
         var query = materialQueryBuilder.Build(filters);
         query = await materialQueryBuilder.ApplySearchFilterAsync(query, filters.Search, cancellationToken);
 
-        var totalCount = await query.CountAsync(cancellationToken);
+        var skipTotalCount = !includeTotalCount || filters.MaterialGuids.Count > 0;
+        var totalCount = skipTotalCount
+            ? 0
+            : await query.CountAsync(cancellationToken);
         var materials = await ApplyOrdering(query, grouping, sortClauses)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
+        if (skipTotalCount)
+        {
+            totalCount = materials.Count;
+        }
 
         var quantityByMaterial = await GetQuantityByMaterialAsync(materials, filters.StoreGuids, cancellationToken);
         var items = materials

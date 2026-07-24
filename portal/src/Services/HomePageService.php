@@ -31,9 +31,34 @@ final class HomePageService
     }
 
     /** @return array<string, string> */
+    public static function embeddedProductStrips(): array
+    {
+        $cacheKey = self::productStripsCacheKey();
+        $cached = ResponseCache::get($cacheKey);
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        $stale = ResponseCache::getStale($cacheKey);
+        if (is_array($stale)) {
+            register_shutdown_function(static function () use ($cacheKey): void {
+                try {
+                    self::writeProductStripCache($cacheKey);
+                } catch (\Throwable) {
+                    // ignore background refresh failures
+                }
+            });
+
+            return $stale;
+        }
+
+        return [];
+    }
+
+    /** @return array<string, string> */
     public static function productStripHtmlBySectionKey(): array
     {
-        $cacheKey = 'home_product_strips_v2:' . self::cacheKey();
+        $cacheKey = self::productStripsCacheKey();
         $cached = ResponseCache::get($cacheKey);
         if (is_array($cached)) {
             return $cached;
@@ -104,6 +129,8 @@ final class HomePageService
 
         $manualGuids = [];
         $filterJobs = [];
+        $filterJobKeyBySectionIndex = [];
+        $queryKeyToJobKey = [];
 
         foreach ($sections as $index => $section) {
             $maxProducts = max(1, (int) ($section['max_products'] ?? 12));
@@ -126,13 +153,27 @@ final class HomePageService
             }
 
             $rules = is_array($section['filter_rules'] ?? null) ? $section['filter_rules'] : [];
-            $poolSize = min(200, max($maxProducts * 8, 48));
+            $poolSize = min(36, max($maxProducts * 2, $maxProducts + 6));
             $query = $isOffer
                 ? SpecialOfferService::materialsListQuery($rules, $poolSize)
                 : HomeSectionService::materialsListQuery($rules, $poolSize);
+            $query = self::optimizeHomeMaterialsQuery($query, $rules);
+            $queryKey = hash('sha256', json_encode($query, JSON_UNESCAPED_UNICODE));
 
+            if (isset($queryKeyToJobKey[$queryKey])) {
+                $filterJobKeyBySectionIndex[$index] = $queryKeyToJobKey[$queryKey];
+                $sections[$index]['_batch_max_products'] = $maxProducts;
+                $sections[$index]['_batch_is_offer'] = $isOffer;
+                continue;
+            }
+
+            $jobKey = (string) count($filterJobs);
+            $queryKeyToJobKey[$queryKey] = $jobKey;
+            $filterJobKeyBySectionIndex[$index] = $jobKey;
+            $sections[$index]['_batch_max_products'] = $maxProducts;
+            $sections[$index]['_batch_is_offer'] = $isOffer;
             $filterJobs[] = [
-                'key' => (string) $index,
+                'key' => $jobKey,
                 'max_products' => $maxProducts,
                 'is_offer' => $isOffer,
                 'path' => '/api/materials',
@@ -172,7 +213,7 @@ final class HomePageService
                 continue;
             }
 
-            $response = $filterResponses[(string) $index] ?? null;
+            $response = $filterResponses[$filterJobKeyBySectionIndex[$index] ?? ''] ?? null;
             $items = [];
             if (is_array($response) && ($response['ok'] ?? false) && is_array($response['data']['items'] ?? null)) {
                 $items = $response['data']['items'];
@@ -194,6 +235,22 @@ final class HomePageService
         unset($section);
 
         return $sections;
+    }
+
+    private static function productStripsCacheKey(): string
+    {
+        return 'home_product_strips_v2:' . self::cacheKey();
+    }
+
+    /** @param array<string, mixed> $rules */
+    private static function optimizeHomeMaterialsQuery(array $query, array $rules): array
+    {
+        $query['includeTotalCount'] = 'false';
+        if (($rules['is_available'] ?? null) !== false && !isset($query['isAvailable'])) {
+            $query['isAvailable'] = 'true';
+        }
+
+        return $query;
     }
 
     private static function cacheKey(): string

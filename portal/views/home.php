@@ -12,8 +12,11 @@ use Portal\Services\StoreCatalogService;
 /** @var string|null $companyLogoUrl */
 /** @var array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string}|null $storeCatalogDisplay */
 /** @var bool|null $deferHomeProducts */
+/** @var array<string, string>|null $embeddedProductStrips */
 $ads ??= [];
 $deferHomeProducts = (bool) ($deferHomeProducts ?? false);
+$embeddedProductStrips = is_array($embeddedProductStrips ?? null) ? $embeddedProductStrips : [];
+$homeHasEmbeddedStrips = (bool) ($homeHasEmbeddedStrips ?? false);
 
 $company = is_array($companyContext ?? null) ? $companyContext : PortalSettingsService::companySettings();
 $siteName = trim((string) ($company['company_name'] ?? '')) !== '' ? (string) $company['company_name'] : 'جاويش للتجارة';
@@ -146,11 +149,12 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
     </nav>
   <?php endif; ?>
 
-  <div class="home-sections"<?= $deferHomeProducts ? ' data-home-deferred-products="1"' : '' ?>>
+  <div class="home-sections"<?= $deferHomeProducts ? ' data-home-deferred-products="1"' : '' ?><?= $homeHasEmbeddedStrips ? ' data-home-has-embedded-strips="1"' : '' ?>>
     <?php foreach ($sections as $sectionIndex => $section): ?>
       <?php
         $products = is_array($section['products'] ?? null) ? $section['products'] : [];
         $sectionId = (string) ($section['slug'] ?? $section['id'] ?? '');
+        $embeddedStripHtml = trim((string) ($embeddedProductStrips[$sectionId] ?? ''));
         $displayOptions = is_array($section['display_options'] ?? null) ? $section['display_options'] : [];
         $priceState = section_price_display_state($displayOptions, $storeCatalogDisplay);
         $showImages = (bool) ($priceState['preview_display_options']['show_images'] ?? true);
@@ -187,12 +191,20 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
           </header>
 
           <?php if ($deferHomeProducts): ?>
-            <div class="home-strip-slot" data-home-products="<?= h($sectionId) ?>">
-              <div class="home-strip-skeleton" aria-hidden="true">
-                <?php for ($sk = 0; $sk < 4; $sk++): ?>
-                  <div class="home-product-skeleton"></div>
-                <?php endfor; ?>
-              </div>
+            <div
+              class="home-strip-slot"
+              data-home-products="<?= h($sectionId) ?>"
+              <?= $embeddedStripHtml === '' ? ' data-home-products-pending="1"' : '' ?>
+            >
+              <?php if ($embeddedStripHtml !== ''): ?>
+                <?= $embeddedStripHtml ?>
+              <?php else: ?>
+                <div class="home-strip-skeleton" aria-hidden="true">
+                  <?php for ($sk = 0; $sk < 4; $sk++): ?>
+                    <div class="home-product-skeleton"></div>
+                  <?php endfor; ?>
+                </div>
+              <?php endif; ?>
             </div>
           <?php elseif ($products === []): ?>
             <div class="home-section__empty">لا توجد منتجات في هذا القسم حالياً.</div>

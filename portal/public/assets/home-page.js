@@ -104,33 +104,48 @@
     start();
   };
 
+  const applyProductStrips = (root, strips, pendingOnly = false) => {
+    Object.entries(strips).forEach(([key, html]) => {
+      const slot = root.querySelector(`[data-home-products="${CSS.escape(key)}"]`);
+      if (!slot) return;
+      if (pendingOnly && !slot.hasAttribute('data-home-products-pending')) return;
+      slot.innerHTML = typeof html === 'string' ? html : '';
+      slot.removeAttribute('data-home-products-pending');
+    });
+  };
+
   const initDeferredProducts = () => {
     const root = document.querySelector('[data-home-deferred-products="1"]');
     if (!root) return;
 
-    fetch('/api/home-products.php', {
+    const pendingOnly = root.hasAttribute('data-home-has-embedded-strips');
+    const fetchPromise = window.__homeProductsFetch || fetch('/api/home-products.php', {
       credentials: 'same-origin',
       headers: { Accept: 'application/json' },
-    })
+    });
+
+    fetchPromise
       .then((response) => response.json().catch(() => null))
       .then((data) => {
         if (!data?.ok || !data.strips || typeof data.strips !== 'object') {
-          root.querySelectorAll('.home-strip-slot').forEach((slot) => {
-            slot.innerHTML = '<div class="home-section__empty">تعذر تحميل منتجات هذا القسم.</div>';
-          });
+          if (!pendingOnly) {
+            root.querySelectorAll('[data-home-products-pending]').forEach((slot) => {
+              slot.innerHTML = '<div class="home-section__empty">تعذر تحميل منتجات هذا القسم.</div>';
+              slot.removeAttribute('data-home-products-pending');
+            });
+          }
           return;
         }
 
-        Object.entries(data.strips).forEach(([key, html]) => {
-          const slot = root.querySelector(`[data-home-products="${CSS.escape(key)}"]`);
-          if (!slot) return;
-          slot.innerHTML = typeof html === 'string' ? html : '';
-        });
+        applyProductStrips(root, data.strips, pendingOnly);
       })
       .catch(() => {
-        root.querySelectorAll('.home-strip-slot').forEach((slot) => {
-          slot.innerHTML = '<div class="home-section__empty">تعذر تحميل منتجات هذا القسم.</div>';
-        });
+        if (!pendingOnly) {
+          root.querySelectorAll('[data-home-products-pending]').forEach((slot) => {
+            slot.innerHTML = '<div class="home-section__empty">تعذر تحميل منتجات هذا القسم.</div>';
+            slot.removeAttribute('data-home-products-pending');
+          });
+        }
       });
   };
 

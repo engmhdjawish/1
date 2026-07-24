@@ -58,6 +58,7 @@ final class MaterialBatchService
                 'materialGuids' => implode(',', $guids),
                 'page' => 1,
                 'pageSize' => count($guids),
+                'includeTotalCount' => 'false',
             ], $timeoutSeconds);
 
             if (!($response['ok'] ?? false)) {
@@ -76,11 +77,8 @@ final class MaterialBatchService
                     continue;
                 }
                 $guid = self::materialGuid($item);
-                if ($guid === '') {
+                if ($guid === '' || !isset($requested[$guid])) {
                     continue;
-                }
-                if (!isset($requested[$guid])) {
-                    return null;
                 }
                 $materials[$guid] = $item;
             }
