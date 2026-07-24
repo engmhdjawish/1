@@ -62,16 +62,16 @@ final class StoreCartService
     }
 
     /** @param array<string, mixed> $line */
-    public static function add(array $line, float $quantity = 1.0): array
+    public static function add(array $line, float $quantity = 1.0, ?float $warehousePrimary = null): array
     {
         $line = ShareCartService::enrichLineWithOffer($line);
 
-        return ShareCartService::add(self::TOKEN, '', $line, $quantity);
+        return ShareCartService::add(self::TOKEN, '', $line, $quantity, $warehousePrimary);
     }
 
-    public static function updateQuantity(string $materialGuid, float $quantity): array
+    public static function updateQuantity(string $materialGuid, float $quantity, ?float $warehousePrimary = null): array
     {
-        return ShareCartService::updateQuantity(self::TOKEN, $materialGuid, $quantity);
+        return ShareCartService::updateQuantity(self::TOKEN, $materialGuid, $quantity, $warehousePrimary);
     }
 
     public static function remove(string $materialGuid): bool

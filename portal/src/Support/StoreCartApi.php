@@ -69,17 +69,23 @@ final class StoreCartApi
             return self::payload('الكمية غير صالحة.', false);
         }
         $materialGuid = trim((string) ($input['material_guid'] ?? ''));
+        $product = null;
+        $warehousePrimary = null;
         if ($materialGuid !== '') {
+            $product = StoreCatalogService::findMaterial($materialGuid);
+            if ($product !== null) {
+                $warehousePrimary = StockReservationService::warehousePrimaryUnits($product);
+            }
             $cartItems = StoreCartService::items();
             $currentQty = (float) ($cartItems[$materialGuid]['quantity'] ?? 0);
-            $clientCheck = self::clientQuantityCheck($materialGuid, $quantity, $currentQty);
+            $clientCheck = self::clientQuantityCheck($materialGuid, $quantity, $currentQty, $product, $warehousePrimary);
             if (!$clientCheck['ok']) {
                 return self::payload($clientCheck['message'], false);
             }
         }
 
         StoreCartPricingService::rememberCartDisplayContext($display, $input);
-        $line = StoreCartPricingService::lineFromRequest($input);
+        $line = StoreCartPricingService::lineFromRequest($input, $product);
         if ($line['material_guid'] === '') {
             return self::payload('تعذر تحديد المادة.', false);
         }
@@ -99,7 +105,7 @@ final class StoreCartApi
             unset($line['added_store_offer']);
         }
 
-        $result = StoreCartService::add($line, (float) $quantity);
+        $result = StoreCartService::add($line, (float) $quantity, $warehousePrimary);
         if ($result['ok']) {
             $message = $result['message'] !== '' ? $result['message'] : 'تمت إضافة الطرد إلى السلة.';
 
@@ -124,7 +130,7 @@ final class StoreCartApi
     }
 
     /** @param array<string, mixed> $input */
-    private static function update(array $input): array
+    private static function update(array $input, ?float $warehousePrimary = null): array
     {
         $materialGuid = trim((string) ($input['material_guid'] ?? ''));
         $quantity = max(0.0, round((float) ($input['quantity'] ?? 0), 4));
@@ -132,7 +138,7 @@ final class StoreCartApi
             return self::payload('تعذر تحديد المادة.', false);
         }
 
-        $result = StoreCartService::updateQuantity($materialGuid, (float) $quantity);
+        $result = StoreCartService::updateQuantity($materialGuid, (float) $quantity, $warehousePrimary);
         if ($result['ok']) {
             $message = $quantity > 0 ? 'تم تحديث الكمية.' : 'تم حذف الصنف من السلة.';
             if ($result['message'] !== '') {
@@ -172,8 +178,13 @@ final class StoreCartApi
         $current = max(0.0, round((float) ($items[$materialGuid]['quantity'] ?? 0), 4));
         $next = max(0.0, round($current + $delta, 4));
 
+        $product = StoreCatalogService::findMaterial($materialGuid);
+        $warehousePrimary = $product !== null
+            ? StockReservationService::warehousePrimaryUnits($product)
+            : null;
+
         if ($delta > 0) {
-            $clientCheck = self::clientQuantityCheck($materialGuid, $delta, $current);
+            $clientCheck = self::clientQuantityCheck($materialGuid, $delta, $current, $product, $warehousePrimary);
             if (!$clientCheck['ok']) {
                 return self::payload($clientCheck['message'], false);
             }
@@ -182,7 +193,7 @@ final class StoreCartApi
         return self::update([
             'material_guid' => $materialGuid,
             'quantity' => $next,
-        ]);
+        ], $warehousePrimary);
     }
 
     /** @param array<string, mixed> $input */
@@ -370,17 +381,26 @@ final class StoreCartApi
         return $payload;
     }
 
-    /** @return array{ok: bool, message: string} */
-    private static function clientQuantityCheck(string $materialGuid, float $addQty, float $currentQty): array
-    {
+    /** @param array<string, mixed>|null $product @return array{ok: bool, message: string} */
+    private static function clientQuantityCheck(
+        string $materialGuid,
+        float $addQty,
+        float $currentQty,
+        ?array $product = null,
+        ?float $warehousePrimary = null
+    ): array {
         $max = StorePolicyService::maxPackagesPerMaterial();
         $target = $currentQty + $addQty;
 
-        $product = StoreCatalogService::findMaterial($materialGuid);
+        if ($product === null) {
+            $product = StoreCatalogService::findMaterial($materialGuid);
+        }
         if ($product !== null) {
             $packaging = ShareCartService::packaging($product);
-            $warehouse = StockReservationService::warehousePrimaryUnits($product);
-            $available = StockReservationService::availablePackagesExact($materialGuid, $warehouse, $packaging);
+            if ($warehousePrimary === null) {
+                $warehousePrimary = StockReservationService::warehousePrimaryUnits($product);
+            }
+            $available = StockReservationService::availablePackagesExact($materialGuid, $warehousePrimary, $packaging);
             $packageUnit = ShareCartService::packageUnitLabel($product);
             $name = trim((string) ($product['name'] ?? $product['Name'] ?? 'المادة'));
 

@@ -63,7 +63,13 @@ final class ShareCartService
     }
 
     /** @param array<string, mixed> $line */
-    public static function add(string $token, string $shareLinkId, array $line, float $quantity = 1.0): array
+    public static function add(
+        string $token,
+        string $shareLinkId,
+        array $line,
+        float $quantity = 1.0,
+        ?float $warehousePrimary = null
+    ): array
     {
         $token = trim($token);
         $shareLinkId = trim($shareLinkId);
@@ -94,7 +100,8 @@ final class ShareCartService
         $targetQty = $validation['quantity'];
 
         $stockCheck = StockReservationService::validateCartLine(
-            array_merge($line, ['quantity' => $targetQty])
+            array_merge($line, ['quantity' => $targetQty]),
+            $warehousePrimary
         );
         if (!$stockCheck['ok']) {
             if ($stockCheck['capped_packages'] > 0) {
@@ -175,7 +182,12 @@ final class ShareCartService
     }
 
     /** @return array{ok: bool, message: string, quantity: float} */
-    public static function updateQuantity(string $token, string $materialGuid, float $quantity): array
+    public static function updateQuantity(
+        string $token,
+        string $materialGuid,
+        float $quantity,
+        ?float $warehousePrimary = null
+    ): array
     {
         $token = trim($token);
         $materialGuid = trim($materialGuid);
@@ -201,7 +213,8 @@ final class ShareCartService
         $quantity = $validation['quantity'];
 
         $stockCheck = StockReservationService::validateCartLine(
-            array_merge($items[$materialGuid], ['quantity' => $quantity])
+            array_merge($items[$materialGuid], ['quantity' => $quantity]),
+            $warehousePrimary
         );
         if (!$stockCheck['ok']) {
             if ($stockCheck['capped_packages'] <= 0) {

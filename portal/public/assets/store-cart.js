@@ -118,6 +118,26 @@
     }, 4200);
   };
 
+  const showCartInlineNotice = (message, level = 'error') => {
+    if (!message) return;
+    const icon = level === 'warning' ? 'warning' : 'error';
+    document.querySelectorAll('[data-cart-stock-notices]').forEach((stockEl) => {
+      stockEl.classList.remove('hidden');
+      stockEl.innerHTML = `<div class="store-cart-inline-notice store-cart-inline-notice--${level}" role="alert">
+        <span class="material-symbols-outlined" aria-hidden="true">${icon}</span>
+        <span>${escapeHtml(message)}</span>
+      </div>`;
+    });
+  };
+
+  const showCartFeedback = (message, level = 'success') => {
+    if (!message) return;
+    if (level === 'error' || level === 'warning') {
+      showCartInlineNotice(message, level);
+    }
+    showToast(message, level);
+  };
+
   const escapeHtml = (text) => {
     const div = document.createElement('div');
     div.textContent = text;
@@ -888,9 +908,8 @@
     try {
       const data = await apiRequest({ action: 'bump', material_guid: guid, delta });
       applyCartResponse(data);
-      if (!data.ok && data.message) showToast(data.message, data.level || 'error');
     } catch {
-      showToast('تعذر تحديث الكمية.', 'error');
+      showCartFeedback('تعذر تحديث الكمية.', 'error');
     } finally {
       delete form.dataset.ajaxSubmitting;
       const refreshedQty = lastCartData?.cart_qty_by_guid?.[guid];
@@ -1263,7 +1282,10 @@
       const uniqueNotices = [...new Set(data.stock_notices.map((n) => String(n || '').trim()).filter(Boolean))];
       if (uniqueNotices.length > 0) {
         stockEl.classList.remove('hidden');
-        stockEl.innerHTML = `<div class="rounded-xl border bg-amber-50 border-amber-200 text-amber-900 px-4 py-3 text-sm"><p class="font-bold mb-1">تنبيه المخزون</p>${uniqueNotices.map((n) => `<p>${escapeHtml(n)}</p>`).join('')}</div>`;
+        stockEl.innerHTML = `<div class="store-cart-inline-notice store-cart-inline-notice--warning" role="status">
+          <span class="material-symbols-outlined" aria-hidden="true">info</span>
+          <span>${uniqueNotices.map((n) => escapeHtml(n)).join(' ')}</span>
+        </div>`;
       }
     }
   };
@@ -1293,19 +1315,26 @@
         const wrap = btn.closest('[data-cart-qty-control]');
         const guid = wrap?.dataset.guid || '';
         const delta = parseInt(btn.dataset.bump || '0', 10);
-        if (!guid || !delta) return;
+        if (!guid || !delta || btn.disabled) return;
         const input = wrap?.querySelector('[data-qty-input]');
         const current = parseFloat(input?.value || '1') || 1;
         if (delta > 0 && maxPackages !== null && maxPackages !== undefined) {
           const max = parseFloat(String(maxPackages));
           if (Number.isFinite(max) && current + delta > max + 0.0001) {
             const maxLabel = String(maxPackages);
-            showToast(`الحد الأقصى للطلب هو ${maxLabel} طرد لهذه المادة.`, 'error');
+            showCartFeedback(`الحد الأقصى للطلب هو ${maxLabel} طرد لهذه المادة.`, 'error');
             return;
           }
         }
-        const data = await apiRequest({ action: 'bump', material_guid: guid, delta });
-        applyCartResponse(data);
+        btn.disabled = true;
+        const bumpButtons = wrap?.querySelectorAll('[data-bump]') || [];
+        bumpButtons.forEach((control) => { control.disabled = true; });
+        try {
+          const data = await apiRequest({ action: 'bump', material_guid: guid, delta });
+          applyCartResponse(data);
+        } finally {
+          bumpButtons.forEach((control) => { control.disabled = false; });
+        }
       });
     });
     root.querySelectorAll('[data-qty-input]').forEach((input) => {
@@ -1453,13 +1482,19 @@
     }
 
     const canPatchCartResponse = () => {
-      if (options.fullRender === true || !data.ok) return false;
+      if (options.fullRender === true) return false;
       if (Array.isArray(data.stock_notices) && data.stock_notices.length > 0) return false;
       if (Array.isArray(data.price_changes) && data.price_changes.length > 0) return false;
-      if (Array.isArray(data.unavailable) && data.unavailable.length > 0) return false;
       if (!data.cart_qty_by_guid) return false;
       const items = Array.isArray(data.items) ? data.items : [];
+      const unavailable = Array.isArray(data.unavailable) ? data.unavailable : [];
       const domLines = document.querySelectorAll('[data-cart-line]').length;
+      if (!data.ok) {
+        if (data.moved_unavailable || unavailable.length > 0) return false;
+        if (items.length !== domLines) return false;
+      } else if (unavailable.length > 0) {
+        return false;
+      }
       if (items.length > domLines) return false;
       return domLines > 0 || items.length === 0;
     };
@@ -1509,8 +1544,18 @@
       return true;
     };
 
+    const notifyCartMessage = (data, silent) => {
+      if (silent || !data.message) return;
+      const level = data.level || (data.ok ? 'success' : 'error');
+      if (!data.ok) {
+        showCartFeedback(data.message, level);
+        return;
+      }
+      showToast(data.message, level);
+    };
+
     if (canPatchCartResponse() && patchCartFromResponse()) {
-      if (!silent && data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
+      notifyCartMessage(data, silent);
       if (!remote && data.cart_qty_by_guid) publishCartSync(data);
       return;
     }
@@ -1529,7 +1574,7 @@
       renderCartRoot(drawerRoot, data);
     }
 
-    if (!silent && data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
+    notifyCartMessage(data, silent);
     if (!remote && data.cart_qty_by_guid) {
       publishCartSync(data);
     }
