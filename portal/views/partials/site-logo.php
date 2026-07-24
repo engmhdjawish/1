@@ -21,7 +21,8 @@ if (!in_array($variant, ['header', 'drawer', 'hero', 'hero-dark', 'hero-home', '
 $alt = trim((string) ($siteLogoAlt ?? ''));
 $logoSrc = $url;
 if (in_array($variant, ['header', 'mobile-toolbar'], true)) {
-    $logoSrc = portal_site_media_display_url($url, 640);
+    // Keep SVG raster (format=png); avoid lossy WebP on brand logos.
+    $logoSrc = portal_site_media_display_url($url, 640, false);
 }
 ?>
 <span class="site-logo-wrap site-logo-wrap--<?= h($variant) ?>">

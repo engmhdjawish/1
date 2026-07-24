@@ -39,16 +39,26 @@ if ($path === null || !is_readable($path)) {
 }
 
 $mime = trim((string) ($asset['mime_type'] ?? 'application/octet-stream'));
-if ($preferRaster && ($mime === 'image/svg+xml' || str_ends_with(strtolower($path), '.svg'))) {
+$isSvg = $mime === 'image/svg+xml' || str_ends_with(strtolower($path), '.svg');
+if ($preferRaster && $isSvg) {
     $rasterPath = SvgRasterService::rasterCompanionPath($path);
     if (is_file($rasterPath) && is_readable($rasterPath) && filesize($rasterPath) > 128) {
         $path = $rasterPath;
         $mime = 'image/png';
+        $isSvg = false;
     }
 }
 
 $derivativeFormat = $wantsWebp ? 'webp' : '';
 if ($maxWidth > 0 || $wantsWebp) {
+    if ($isSvg) {
+        $rasterPath = SvgRasterService::rasterCompanionPath($path);
+        if (is_file($rasterPath) && is_readable($rasterPath) && filesize($rasterPath) > 128) {
+            $path = $rasterPath;
+            $mime = 'image/png';
+        }
+    }
+
     $derivative = SiteMediaDerivativeService::resolve($path, $mime, $maxWidth, $derivativeFormat);
     if ($derivative !== null) {
         $path = $derivative['path'];

@@ -104,24 +104,34 @@ final class SiteMediaDerivativeService
     public static function displayUrl(string $publicUrl, int $maxWidth = 0, bool $preferWebp = true): string
     {
         $publicUrl = trim($publicUrl);
-        if ($publicUrl === '' || !preg_match('~^/media/site\.php\?id=([^&]+)~i', $publicUrl, $matches)) {
+        if ($publicUrl === '' || !preg_match('~^/media/site\.php\?~i', $publicUrl)) {
             return $publicUrl;
         }
 
+        $query = (string) (parse_url($publicUrl, PHP_URL_QUERY) ?: '');
         $params = [];
+        if ($query !== '') {
+            parse_str($query, $params);
+        }
+
+        $existingFormat = strtolower((string) ($params['format'] ?? ''));
+        $changed = false;
+
         if ($maxWidth > 0) {
             $params['w'] = (string) $maxWidth;
+            $changed = true;
         }
-        if ($preferWebp) {
+
+        if ($preferWebp && !in_array($existingFormat, ['png', 'raster', 'webp'], true)) {
             $params['format'] = 'webp';
+            $changed = true;
         }
-        if ($params === []) {
+
+        if (!$changed) {
             return $publicUrl;
         }
 
-        $separator = str_contains($publicUrl, '?') ? '&' : '?';
-
-        return $publicUrl . $separator . http_build_query($params);
+        return '/media/site.php?' . http_build_query($params);
     }
 
     private static function cacheDir(): string
