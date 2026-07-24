@@ -74,9 +74,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashType = $result['ok'] ? 'success' : 'error';
             if ($result['ok']) {
                 header('Location: /dashboard/customers.php?' . http_build_query(array_filter([
-                    'status' => trim((string) ($_GET['status'] ?? 'pending')),
-                    'q' => trim((string) ($_GET['q'] ?? '')),
-                    'source' => trim((string) ($_GET['source'] ?? '')),
+                    'status' => trim((string) ($_POST['return_status'] ?? $_GET['status'] ?? 'pending')),
+                    'q' => trim((string) ($_POST['return_q'] ?? $_GET['q'] ?? '')),
+                    'source' => trim((string) ($_POST['return_source'] ?? $_GET['source'] ?? '')),
                     'details' => (string) ($result['id'] ?? ''),
                     'saved' => '1',
                 ])));

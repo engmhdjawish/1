@@ -456,6 +456,9 @@ $hitListLimit = $shownCount >= $listLimit && $activeTabCount > $shownCount;
     <form method="post" class="flex flex-col flex-1 min-h-0">
       <input type="hidden" name="action" value="save_customer">
       <input type="hidden" name="customer_id" value="<?= h((string) ($editCustomer['id'] ?? '')) ?>">
+      <input type="hidden" name="return_status" value="<?= h($statusFilter) ?>">
+      <input type="hidden" name="return_q" value="<?= h($searchFilter) ?>">
+      <input type="hidden" name="return_source" value="<?= h($sourceFilter) ?>">
 
       <div class="flex-1 overflow-y-auto p-4 space-y-3">
         <label class="block text-sm">
