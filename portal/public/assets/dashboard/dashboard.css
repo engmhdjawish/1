@@ -1157,6 +1157,33 @@ button.is-loading::after,
   gap: 0.35rem;
 }
 
+.dash-mi-global-details {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--dash-border, #e5e7eb);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--dash-surface-low, #f9fafb) 70%, #fff);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.45;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dash-mi-global-details input {
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+}
+
+.dash-mi-global-details-hint {
+  margin: -0.15rem 0 0;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--dash-muted, #6b7280);
+}
+
 .dash-mi-cards {
   display: grid;
   gap: 0.65rem;
