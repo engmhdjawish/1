@@ -42,10 +42,26 @@ final class SiteMediaDerivativeService
         }
 
         $cacheDir = self::cacheDir();
-        if (!is_dir($cacheDir) && !mkdir($cacheDir, 0775, true) && !is_dir($cacheDir)) {
+        if (!is_dir($cacheDir) && !@mkdir($cacheDir, 0775, true) && !is_dir($cacheDir)) {
             return null;
         }
 
+        try {
+            return self::buildDerivative($sourcePath, $sourceMime, $maxWidth, $wantsWebp, $wantsResize, $cacheDir);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /** @return array{path: string, mime: string}|null */
+    private static function buildDerivative(
+        string $sourcePath,
+        string $sourceMime,
+        int $maxWidth,
+        bool $wantsWebp,
+        bool $wantsResize,
+        string $cacheDir,
+    ): ?array {
         $mtime = (string) (@filemtime($sourcePath) ?: 0);
         $size = (string) (@filesize($sourcePath) ?: 0);
         $cacheKey = sha1($sourcePath . '|' . $mtime . '|' . $size . '|' . $maxWidth . '|' . ($wantsWebp ? 'webp' : 'orig'));

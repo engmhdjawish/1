@@ -215,6 +215,8 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
                 </div>
               <?php endif; ?>
             </div>
+          <?php elseif ($embeddedStripHtml !== ''): ?>
+            <?= $embeddedStripHtml ?>
           <?php elseif ($products === []): ?>
             <div class="home-section__empty">لا توجد منتجات في هذا القسم حالياً.</div>
           <?php else: ?>
