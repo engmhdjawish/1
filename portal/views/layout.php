@@ -119,18 +119,14 @@ if ($customer) {
     <?php endif; ?>
     <?= portal_preload_font_stylesheet('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap') ?>
     <?= portal_preload_font_stylesheet('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&display=swap') ?>
-    <link href="<?= h(portal_asset_url('/css/site-critical.bundle.css')) ?>" rel="stylesheet">
-    <?= portal_preload_stylesheet('/css/site-deferred.bundle.css') ?>
-    <?php if (!$isLightPage): ?>
-      <?= portal_preload_stylesheet('/css/site-store.bundle.css') ?>
-    <?php endif; ?>
-    <style>
+    <style><?= portal_inline_critical_css() ?>
       body { font-family: Manrope, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f6f6f8; color: #111827; }
       .site-link { color: #374151; }
       .site-link:hover, .site-link.is-active { color: #D81921; }
       .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
       .material-symbols-outlined { font-family: 'Material Symbols Outlined', sans-serif; font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24; vertical-align: middle; line-height: 1; }
     </style>
+    <?= portal_preload_stylesheet('/css/site-layout.min.css') ?>
     <?php if (!empty($extraHead ?? '')): ?>
       <?= $extraHead ?>
     <?php endif; ?>
@@ -169,38 +165,13 @@ if ($customer) {
   ?>
 <?php endif; ?>
 
-<script>
-  (() => {
-    const drawer = document.getElementById('publicNavDrawer');
-    const overlay = document.getElementById('publicNavOverlay');
-    const openBtn = document.getElementById('openPublicNavBtn');
-    const closeBtn = document.getElementById('closePublicNavBtn');
-    if (!drawer || !overlay || !openBtn || !closeBtn) return;
-    const setOpen = (open) => {
-      if (!open && document.activeElement instanceof HTMLElement && drawer.contains(document.activeElement)) {
-        document.activeElement.blur();
-      }
-      drawer.classList.toggle('is-open', open);
-      overlay.classList.toggle('is-open', open);
-      drawer.setAttribute('aria-hidden', open ? 'false' : 'true');
-      overlay.setAttribute('aria-hidden', open ? 'false' : 'true');
-      openBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-      document.body.style.overflow = open ? 'hidden' : '';
-    };
-    window.PublicNav = { setOpen };
-    openBtn.addEventListener('click', () => setOpen(true));
-    closeBtn.addEventListener('click', () => setOpen(false));
-    overlay.addEventListener('click', () => setOpen(false));
-    drawer.querySelectorAll('[data-public-nav-link]').forEach((link) => link.addEventListener('click', () => setOpen(false)));
-    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') setOpen(false); });
-  })();
-</script>
+<?= portal_defer_script('/assets/public-nav.js') ?>
 <?php if ($enableQuickView): ?>
   <?php require __DIR__ . '/partials/product-quick-view.php'; ?>
-  <script src="<?= h(portal_asset_url('/assets/product-quick-view.js')) ?>" defer></script>
+  <?= portal_defer_script('/assets/product-quick-view.js') ?>
 <?php endif; ?>
 <?php if ($storeShowPrice): ?>
-  <script src="<?= h(portal_asset_url('/assets/store-pref.js')) ?>" defer></script>
+  <?= portal_defer_script('/assets/store-pref.js') ?>
 <?php endif; ?>
 <?php if ($enableStoreCartJs): ?>
   <script type="application/json" id="storeCartBootstrap"><?= json_encode(
@@ -218,11 +189,11 @@ if ($customer) {
       }, true);
     })();
   </script>
-  <script src="<?= h(portal_asset_url('/assets/store-image-zoom.js')) ?>" defer></script>
-  <script src="<?= h(portal_asset_url('/assets/store-cart.js')) ?>" defer></script>
+  <?= portal_defer_script('/assets/store-image-zoom.js') ?>
+  <?= portal_defer_script('/assets/store-cart.js') ?>
   <?php if (empty($GLOBALS['storeProductPreviewScriptLoaded'])): ?>
     <?php $GLOBALS['storeProductPreviewScriptLoaded'] = true; ?>
-    <script src="<?= h(portal_asset_url('/assets/store-product-preview.js')) ?>" defer></script>
+    <?= portal_defer_script('/assets/store-product-preview.js') ?>
   <?php endif; ?>
 <?php elseif ($deferStoreCartJs): ?>
   <script type="application/json" id="storeCartBootstrap"><?= json_encode(
@@ -247,15 +218,15 @@ if ($customer) {
   </script>
 <?php endif; ?>
 <?php if ($enableOnboarding): ?>
-  <script src="<?= h(portal_asset_url('/assets/site-onboarding.js')) ?>" defer></script>
+  <?= portal_defer_script('/assets/site-onboarding.js') ?>
 <?php endif; ?>
 <?php if ($enableSiteAnalytics): ?>
   <script src="<?= h(portal_asset_url('/assets/site-analytics.js')) ?>" data-endpoint="/api/site-analytics.php" defer></script>
 <?php endif; ?>
-<script src="<?= h(portal_asset_url('/assets/phone-input.js')) ?>" defer></script>
-<script src="<?= h(portal_asset_url('/assets/pwa.js')) ?>" defer></script>
-<script src="<?= h(portal_asset_url('/assets/site-page-loading.js')) ?>" defer></script>
-<script src="<?= h(portal_asset_url('/assets/notifications.js')) ?>" defer></script>
+<?= portal_defer_script('/assets/phone-input.js') ?>
+<?= portal_defer_script('/assets/pwa.js') ?>
+<?= portal_defer_script('/assets/site-page-loading.js') ?>
+<?= portal_defer_script('/assets/notifications.js') ?>
 <?php if ($staffLoggedIn || $customer !== null): ?>
 <script>
 (function () {

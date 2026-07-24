@@ -46,7 +46,7 @@ if ($homeProductsPending) {
     $extraHead .= '<link rel="preload" href="/api/home-products.php" as="fetch" crossorigin="same-origin">';
     $extraHead .= '<script>window.__homeProductsFetch=fetch("/api/home-products.php",{credentials:"same-origin",headers:{Accept:"application/json"}});</script>';
 }
-$extraFooter = '<script src="' . h(portal_asset_url('/assets/home-page.js')) . '" defer></script>';
+$extraFooter = portal_defer_script('/assets/home-page.js');
 $enableQuickView = false;
 $enableStoreCartJs = false;
 $deferStoreCartJs = $storeCatalogDisplay['allow_cart'] ?? false;

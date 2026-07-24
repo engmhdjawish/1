@@ -37,6 +37,12 @@ if [[ "${PORTAL_DB_SETUP:-}" != "migrate" && -n "${PORTAL_ADMIN_USER:-}" && -n "
 fi
 
 php scripts/check-environment.php
+
+if command -v npm >/dev/null 2>&1 && [[ -f package.json ]]; then
+  step "بناء CSS (Tailwind + bundles)"
+  npm run build:css --silent 2>/dev/null || npm run build:css
+fi
+
 popd >/dev/null
 
 templates="$DEPLOY_ROOT/templates/portal"
