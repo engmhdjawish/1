@@ -205,8 +205,8 @@
 
       const refresh = () => {
         const canScroll = strip.scrollWidth > strip.clientWidth + 8;
-        const atStart = strip.scrollLeft <= 4;
-        hint.style.opacity = canScroll && atStart ? '' : '0';
+        const scrolled = Math.abs(strip.scrollLeft) > 6;
+        hint.style.opacity = canScroll && !scrolled ? '' : '0';
       };
 
       strip.addEventListener('scroll', refresh, { passive: true });
