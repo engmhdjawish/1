@@ -100,12 +100,39 @@
   let lastToastMessage = '';
   let lastToastAt = 0;
 
+  const syncToastHostLayer = () => {
+    const host = toastHost();
+    host.style.position = 'fixed';
+    host.style.left = '50%';
+    host.style.transform = 'translateX(-50%)';
+    host.style.zIndex = '200000';
+    host.style.width = 'min(92vw, 24rem)';
+    host.style.pointerEvents = 'none';
+    const drawerOpen = document.body.classList.contains('store-cart-drawer-open');
+    if (drawerOpen) {
+      host.style.top = 'max(0.85rem, env(safe-area-inset-top, 0px))';
+      host.style.bottom = 'auto';
+    } else {
+      host.style.top = 'auto';
+      host.style.bottom = '1.25rem';
+    }
+  };
+
+  const buildCartNoticeHtml = (message, level = 'error') => {
+    const icon = level === 'warning' ? 'warning' : level === 'success' ? 'check_circle' : 'error';
+    return `<div class="store-cart-inline-notice store-cart-inline-notice--${level}" role="alert">
+      <span class="material-symbols-outlined" aria-hidden="true">${icon}</span>
+      <span>${escapeHtml(message)}</span>
+    </div>`;
+  };
+
   const showToast = (message, level = 'success') => {
     if (!message) return;
     const now = Date.now();
     if (message === lastToastMessage && now - lastToastAt < 2500) return;
     lastToastMessage = message;
     lastToastAt = now;
+    syncToastHostLayer();
     const el = document.createElement('div');
     el.className = `store-cart-toast store-cart-toast--${level}`;
     const icon = level === 'error' ? 'error' : level === 'warning' ? 'warning' : 'check_circle';
@@ -120,14 +147,28 @@
 
   const showCartInlineNotice = (message, level = 'error') => {
     if (!message) return;
-    const icon = level === 'warning' ? 'warning' : 'error';
+    const html = buildCartNoticeHtml(message, level);
     document.querySelectorAll('[data-cart-stock-notices]').forEach((stockEl) => {
       stockEl.classList.remove('hidden');
-      stockEl.innerHTML = `<div class="store-cart-inline-notice store-cart-inline-notice--${level}" role="alert">
-        <span class="material-symbols-outlined" aria-hidden="true">${icon}</span>
-        <span>${escapeHtml(message)}</span>
-      </div>`;
+      stockEl.innerHTML = html;
     });
+    const drawerAlert = document.querySelector('[data-cart-drawer-alert]');
+    if (drawerAlert) {
+      drawerAlert.hidden = false;
+      drawerAlert.innerHTML = html;
+    }
+  };
+
+  const clearCartInlineNotice = () => {
+    document.querySelectorAll('[data-cart-stock-notices]').forEach((stockEl) => {
+      stockEl.classList.add('hidden');
+      stockEl.innerHTML = '';
+    });
+    const drawerAlert = document.querySelector('[data-cart-drawer-alert]');
+    if (drawerAlert) {
+      drawerAlert.hidden = true;
+      drawerAlert.innerHTML = '';
+    }
   };
 
   const showCartFeedback = (message, level = 'success') => {
@@ -954,7 +995,7 @@
         const next = step < 1 ? Math.round((val + step) * 100) / 100 : val + step;
         const check = validateQty(form, step, getCurrentInCart(form));
         if (!check.ok && next > val) {
-          showToast(check.message, 'error');
+          showCartFeedback(check.message, 'error');
           return;
         }
         input.value = String(next);
@@ -990,9 +1031,14 @@
     const currentQty = getCurrentInCart(form);
     const check = validateQty(form, addQty, currentQty);
     if (!check.ok) {
-      showToast(check.message, 'error');
+      showCartFeedback(check.message, 'error');
       delete form.dataset.ajaxSubmitting;
       return;
+    }
+    const prevCartData = lastCartData ? { ...lastCartData } : null;
+    const optimisticPackages = (Number(prevCartData?.cart_package_count) || 0) + addQty;
+    if (prevCartData) {
+      updateBadge({ cart_package_count: optimisticPackages });
     }
     btn?.classList.add('is-loading');
     const formData = new FormData(form);
@@ -1004,7 +1050,10 @@
     try {
       const data = await apiRequest(payload);
       applyCartResponse(data);
-      if (!data.ok) return;
+      if (!data.ok) {
+        if (prevCartData) updateBadge(prevCartData);
+        return;
+      }
       const flySource = btn || form.querySelector('.store-add-cart__submit') || form;
       flyToCart(flySource);
       if (window.SiteAnalytics) {
@@ -1021,7 +1070,8 @@
         form.querySelector('[name="quantity"]').value = String(step);
       }
     } catch {
-      showToast('تعذر الاتصال بالخادم.', 'error');
+      if (prevCartData) updateBadge(prevCartData);
+      showCartFeedback('تعذر الاتصال بالخادم.', 'error');
     } finally {
       btn?.classList.remove('is-loading');
       delete form.dataset.ajaxSubmitting;
@@ -1132,6 +1182,13 @@
     if (stockEl) {
       stockEl.classList.add('hidden');
       stockEl.innerHTML = '';
+    }
+    if (isDrawer) {
+      const drawerAlert = document.querySelector('[data-cart-drawer-alert]');
+      if (drawerAlert) {
+        drawerAlert.hidden = true;
+        drawerAlert.innerHTML = '';
+      }
     }
 
     updateBadge(data);
@@ -1281,11 +1338,16 @@
     if (Array.isArray(data.stock_notices) && data.stock_notices.length > 0 && stockEl) {
       const uniqueNotices = [...new Set(data.stock_notices.map((n) => String(n || '').trim()).filter(Boolean))];
       if (uniqueNotices.length > 0) {
+        const html = buildCartNoticeHtml(uniqueNotices.join(' '), 'warning');
         stockEl.classList.remove('hidden');
-        stockEl.innerHTML = `<div class="store-cart-inline-notice store-cart-inline-notice--warning" role="status">
-          <span class="material-symbols-outlined" aria-hidden="true">info</span>
-          <span>${uniqueNotices.map((n) => escapeHtml(n)).join(' ')}</span>
-        </div>`;
+        stockEl.innerHTML = html;
+        if (isDrawer) {
+          const drawerAlert = document.querySelector('[data-cart-drawer-alert]');
+          if (drawerAlert) {
+            drawerAlert.hidden = false;
+            drawerAlert.innerHTML = html;
+          }
+        }
       }
     }
   };
@@ -1618,6 +1680,7 @@
         document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
           btn.setAttribute('aria-expanded', 'true');
         });
+        syncToastHostLayer();
       });
       return;
     }
@@ -1631,6 +1694,7 @@
     drawer.classList.remove('is-open');
     drawer.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('store-cart-drawer-open');
+    syncToastHostLayer();
     document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
       btn.setAttribute('aria-expanded', 'false');
     });

@@ -105,7 +105,7 @@ final class StoreCartApi
             unset($line['added_store_offer']);
         }
 
-        $result = StoreCartService::add($line, (float) $quantity, $warehousePrimary);
+        $result = StoreCartService::add($line, (float) $quantity, $warehousePrimary, $product !== null);
         if ($result['ok']) {
             $message = $result['message'] !== '' ? $result['message'] : 'تمت إضافة الطرد إلى السلة.';
 
@@ -306,8 +306,8 @@ final class StoreCartApi
 
         $maxPackages = StorePolicyService::maxPackagesPerMaterial();
         $items = array_values(array_map(
-            static function (array $line) use ($changesByGuid): array {
-                $enriched = ShareCartService::enrichLineWithOffer($line);
+            static function (array $line) use ($changesByGuid, $reprice): array {
+                $enriched = $reprice ? ShareCartService::enrichLineWithOffer($line) : $line;
                 $guid = trim((string) ($enriched['material_guid'] ?? ''));
                 if ($guid !== '' && isset($changesByGuid[$guid])) {
                     $enriched['price_change'] = $changesByGuid[$guid];

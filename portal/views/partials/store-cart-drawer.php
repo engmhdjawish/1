@@ -23,6 +23,7 @@ $isLoggedInCustomer = is_array($customer ?? null);
         <span class="material-symbols-outlined text-base" aria-hidden="true">close</span>
       </button>
     </header>
+    <div class="store-cart-drawer__alert" data-cart-drawer-alert hidden></div>
     <div
       class="store-cart-drawer__shell"
       data-store-cart-drawer-root

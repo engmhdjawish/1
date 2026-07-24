@@ -62,9 +62,15 @@ final class StoreCartService
     }
 
     /** @param array<string, mixed> $line */
-    public static function add(array $line, float $quantity = 1.0, ?float $warehousePrimary = null): array
-    {
-        $line = ShareCartService::enrichLineWithOffer($line);
+    public static function add(
+        array $line,
+        float $quantity = 1.0,
+        ?float $warehousePrimary = null,
+        bool $skipEnrich = false
+    ): array {
+        if (!$skipEnrich) {
+            $line = ShareCartService::enrichLineWithOffer($line);
+        }
 
         return ShareCartService::add(self::TOKEN, '', $line, $quantity, $warehousePrimary);
     }
