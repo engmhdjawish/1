@@ -1692,23 +1692,6 @@ button.is-loading::after,
   background: #fff;
 }
 
-.dash-mi-zip-summary {
-  margin: 0;
-  padding: 0.45rem 0.65rem;
-  border-radius: 0.5rem;
-  background: #fff;
-  border: 1px solid var(--dash-border, #e5e7eb);
-  font-size: 0.75rem;
-  line-height: 1.5;
-  color: #334155;
-}
-
-.dash-mi-zip-summary--warn {
-  border-color: #fcd34d;
-  background: #fffbeb;
-  color: #92400e;
-}
-
 .dash-mi-zip-hint {
   margin: 0;
 }

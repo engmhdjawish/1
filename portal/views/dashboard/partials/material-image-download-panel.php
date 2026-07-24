@@ -195,14 +195,13 @@ $defaultAvailability = '1';
                       </label>
                     <?php endforeach; ?>
                   </div>
-                  <p class="text-[11px] text-text-muted mt-2 mb-0">مع التقسيم: أضف chip واحداً على الأقل في الفلتر المطابق.</p>
+                  <p class="text-[11px] text-text-muted mt-2 mb-0">عند التقسيم: حدّد خياراً واحداً على الأقل في نفس الفلتر (مثلاً إذا اخترت «حسب نوع المادة» فحدّد نوعاً واحداً أو أكثر).</p>
                 </div>
               </section>
             </div>
           </div>
 
           <div class="dash-mi-zip-form__footer">
-            <p class="dash-mi-zip-summary" data-zip-filter-summary aria-live="polite"></p>
             <div data-zip-download-status class="hidden text-sm rounded-lg border px-3 py-2"></div>
             <p class="dash-mi-zip-hint text-[11px] text-text-muted">يُفضّل تحديد فلتر واحد على الأقل (بحث، نوع، شركة، …) لتجنّب تحميل آلاف الصور دفعة واحدة.</p>
             <button type="submit" class="dash-mi-zip-download-btn">
