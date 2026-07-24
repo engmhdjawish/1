@@ -97,10 +97,6 @@ $labelClass = 'block text-sm font-medium text-gray-700';
           <?php if (!empty($redirect) && PortalUrl::isDashboardPath((string) $redirect)): ?>
             <input type="hidden" name="redirect" value="<?= h((string) $redirect) ?>">
           <?php endif; ?>
-          <div class="absolute -left-[9999px] top-auto h-0 w-0 overflow-hidden" aria-hidden="true">
-            <input type="text" name="username" tabindex="-1" autocomplete="username">
-            <input type="password" name="password" tabindex="-1" autocomplete="current-password">
-          </div>
           <label class="<?= h($labelClass) ?>">
             اسم المستخدم
             <input
