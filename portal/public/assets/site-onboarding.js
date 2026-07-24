@@ -40,14 +40,12 @@
       title: 'المتجر',
       text: 'من هنا تدخل لصفحة المتجر لتصفّح المواد، معرفة الأسعار والكميات المتاحة، وإضافة ما تحتاجه للسلة.',
       target: 'nav-store',
-      openDrawerOnMobile: true,
     },
     register: {
       icon: 'person_add',
       title: 'تسجيل عميل جديد',
       text: 'اضغط «تسجيل» وأدخل بياناتك. بعد موافقة الإدارة وتفعيل حسابك ستظهر لك الأسعار والكميات حسب صلاحياتك.',
       target: 'register',
-      openDrawerOnMobile: true,
       guestOnly: true,
     },
     login: {
@@ -55,23 +53,22 @@
       title: 'تسجيل الدخول',
       text: 'إذا كان حسابك مفعّلاً، استخدم «دخول» برقم الهاتف وكلمة المرور للوصول لحسابك وطلباتك.',
       target: 'login',
-      openDrawerOnMobile: true,
       guestOnly: true,
     },
     myOrders: {
       icon: 'receipt_long',
       title: 'طلباتي',
-      text: 'بعد تسجيل الدخول تظهر «طلباتي» في القائمة — لمتابعة حالة طلباتك وتفاصيلها أو إلغائها قبل مراجعتها.',
+      text: 'بعد تسجيل الدخول تظهر «طلباتي» داخل قائمة حسابك — لمتابعة حالة طلباتك وتفاصيلها أو إلغائها قبل مراجعتها.',
       target: 'my-orders',
-      openDrawerOnMobile: true,
+      openAccountOnMobile: true,
       customerOnly: true,
     },
     myProfile: {
       icon: 'person',
       title: 'الملف الشخصي',
-      text: 'من «الملف الشخصي» يمكنك تحديث اسمك وبريدك وكلمة المرور — منفصلة عن صفحة الطلبات.',
+      text: 'من «الملف الشخصي» داخل قائمة حسابك يمكنك تحديث اسمك وبريدك وكلمة المرور.',
       target: 'my-profile',
-      openDrawerOnMobile: true,
+      openAccountOnMobile: true,
       customerOnly: true,
     },
     cart: {
@@ -85,7 +82,6 @@
       title: 'عملة الأسعار',
       text: 'بدّل بين الليرة السورية والدولار لعرض الأسعار بالعملة التي تفضّلها — يُطبَّق على المتجر مباشرة.',
       target: 'currency',
-      openDrawerOnMobile: true,
     },
     finish: {
       icon: 'celebration',
@@ -136,31 +132,40 @@
     return nodes[0] || null;
   };
 
-  const setPublicNavOpen = (shouldOpen) => {
-    if (typeof window.PublicNav?.setOpen === 'function') {
-      window.PublicNav.setOpen(shouldOpen);
-      return;
+  const setAccountMenuOpen = (shouldOpen) => {
+    if (typeof window.SiteAccountMenu?.setOpen === 'function') {
+      window.SiteAccountMenu.setOpen(shouldOpen);
     }
-    const drawer = document.getElementById('publicNavDrawer');
-    const overlay = document.getElementById('publicNavOverlay');
-    const openBtn = document.getElementById('openPublicNavBtn');
-    if (!drawer || !overlay) return;
-    if (!shouldOpen && document.activeElement instanceof HTMLElement && drawer.contains(document.activeElement)) {
-      document.activeElement.blur();
-    }
-    drawer.classList.toggle('is-open', shouldOpen);
-    overlay.classList.toggle('is-open', shouldOpen);
-    drawer.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
-    overlay.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
-    openBtn?.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
-    document.body.style.overflow = shouldOpen ? 'hidden' : '';
   };
 
-  const clearTargetRing = () => {
-    if (activeTarget) {
-      activeTarget.classList.remove('site-guide__target-ring');
-      activeTarget = null;
+  const prepareTarget = async (step) => {
+    clearTargetRing();
+    if (step.center) {
+      setAccountMenuOpen(false);
+      positionCentered();
+      return null;
     }
+
+    if (step.openAccountOnMobile && isMobile()) {
+      setAccountMenuOpen(true);
+      await new Promise((resolve) => window.setTimeout(resolve, 220));
+    } else {
+      setAccountMenuOpen(false);
+    }
+
+    const target = step.target ? findTarget(step.target) : null;
+
+    if (target) {
+      target.scrollIntoView({ block: 'center', behavior: 'smooth', inline: 'nearest' });
+      await new Promise((resolve) => window.setTimeout(resolve, 320));
+      target.classList.add('site-guide__target-ring');
+      activeTarget = target;
+      positionAroundTarget(target);
+      return target;
+    }
+
+    positionCentered();
+    return null;
   };
 
   const positionCentered = () => {
@@ -219,38 +224,11 @@
     tooltip.style.left = `${tipLeft}px`;
   };
 
-  const prepareTarget = async (step) => {
-    clearTargetRing();
-    if (step.center) {
-      setPublicNavOpen(false);
-      positionCentered();
-      return null;
+  const clearTargetRing = () => {
+    if (activeTarget) {
+      activeTarget.classList.remove('site-guide__target-ring');
+      activeTarget = null;
     }
-
-    if (step.openDrawerOnMobile && isMobile()) {
-      setPublicNavOpen(true);
-      await new Promise((resolve) => window.setTimeout(resolve, 280));
-    } else {
-      setPublicNavOpen(false);
-    }
-
-    let target = step.target ? findTarget(step.target) : null;
-
-    if (!target && step.target === 'nav-store' && isMobile()) {
-      target = findTarget('nav-menu');
-    }
-
-    if (target) {
-      target.scrollIntoView({ block: 'center', behavior: 'smooth', inline: 'nearest' });
-      await new Promise((resolve) => window.setTimeout(resolve, 320));
-      target.classList.add('site-guide__target-ring');
-      activeTarget = target;
-      positionAroundTarget(target);
-      return target;
-    }
-
-    positionCentered();
-    return null;
   };
 
   const renderDots = () => {
@@ -335,7 +313,7 @@
     document.body.style.overflow = '';
     tooltip?.classList.remove('is-visible', 'is-centered');
     clearTargetRing();
-    setPublicNavOpen(false);
+    setAccountMenuOpen(false);
     if (persist) markSeen();
   };
 
