@@ -136,7 +136,7 @@ window.portalStoreFiltersInit = (root = document) => {
     manufacturers: { tone: 'manufacturer', label: 'الشركة', kind: 'checkbox', param: 'manufacturers', containerGroup: 'manufacturers' },
     sizeRanges: { tone: 'size', label: 'القياس', kind: 'checkbox', param: 'sizeRanges', containerGroup: 'sizeRanges' },
     countryOfOrigins: { tone: 'country', label: 'بلد المنشأ', kind: 'checkbox', param: 'countryOfOrigins', containerGroup: 'countryOfOrigins' },
-    stores: { tone: 'stores', label: 'المخازn', kind: 'checkbox', param: 'storeGuids', containerGroup: 'stores' },
+    stores: { tone: 'stores', label: 'المخازن', kind: 'checkbox', param: 'storeGuids', containerGroup: 'stores' },
     groups: { tone: 'groups', label: 'المجموعات', kind: 'checkbox', param: 'groupGuids', containerGroup: 'groups' },
   };
 
@@ -392,10 +392,7 @@ window.portalStoreFiltersInit = (root = document) => {
     }
 
     catalogRoot.querySelectorAll('[data-filter-group-chips]').forEach((container) => {
-      const groupId = container.getAttribute('data-filter-group-chips') || '';
-      const groupChips = chips.filter((chip) => chip.containerGroup === groupId);
-      container.hidden = groupChips.length === 0;
-      container.innerHTML = groupChips.map((chip) => renderPendingChipHtml(chip, false)).join('');
+      container.remove();
     });
 
     Object.keys(FILTER_GROUP_META).forEach((groupId) => {

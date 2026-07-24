@@ -391,15 +391,10 @@ body.store-filters-drawer-open {
   text-decoration: underline;
 }
 
-.store-filter-pending-chips,
-.store-filter-group-chips {
+.store-filter-pending-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
-}
-
-.store-filter-group-chips {
-  margin-bottom: 0.55rem;
 }
 
 .store-filter-pending-empty {
@@ -536,17 +531,7 @@ body.store-filters-drawer-open {
 }
 
 .store-filter-option.is-pending-selected {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-}
-
-.store-filter-option.is-pending-selected .store-filter-option-text::before {
-  content: "check";
-  font-family: "Material Symbols Outlined";
-  font-size: 0.9rem;
-  margin-left: 0.15rem;
-  color: var(--color-primary, #dc2626);
-  vertical-align: middle;
+  background: #fff7f7;
 }
 
 @media (min-width: 1024px) {

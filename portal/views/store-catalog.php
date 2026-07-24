@@ -622,7 +622,6 @@ require __DIR__ . '/partials/store-filter-group.php';
               <details class="store-filter-accordion" data-filter-group="availability">
                 <summary class="store-filter-accordion-summary"><span>التوفر</span></summary>
                 <div class="store-filter-accordion-body">
-                  <div class="store-filter-group-chips" data-filter-group-chips="availability" hidden></div>
                   <div class="store-filter-options store-filter-options--radio">
                   <?php foreach (['' => 'الكل', '1' => 'متوفر', '0' => 'غير متوفر'] as $value => $label): ?>
                     <?php $isActive = $availabilityValue === (string) $value; ?>
@@ -640,7 +639,6 @@ require __DIR__ . '/partials/store-filter-group.php';
               <details class="store-filter-accordion" data-filter-group="warehouse">
                 <summary class="store-filter-accordion-summary"><span>مدى الكمية</span></summary>
                 <div class="store-filter-accordion-body">
-                  <div class="store-filter-group-chips" data-filter-group-chips="warehouse" hidden></div>
                   <div class="grid grid-cols-2 gap-2">
                   <div class="store-inline-field mb-0">
                     <label>من</label>
@@ -659,7 +657,6 @@ require __DIR__ . '/partials/store-filter-group.php';
               <details class="store-filter-accordion" data-filter-group="price">
                 <summary class="store-filter-accordion-summary"><span>المدى السعري</span></summary>
                 <div class="store-filter-accordion-body space-y-2">
-                  <div class="store-filter-group-chips" data-filter-group-chips="price" hidden></div>
                   <?php if ($isClientFilterVisible('priceSaleSyp')): ?>
                     <div class="grid grid-cols-2 gap-2">
                       <div class="store-inline-field mb-0"><label>بيع ل.س من</label><input type="number" step="0.01" min="0" name="minUnitSalePriceSyp" value="<?= h((string) ($filters['minUnitSalePriceSyp'] ?? '')) ?>"></div>
@@ -685,7 +682,6 @@ require __DIR__ . '/partials/store-filter-group.php';
             <?php if ($isClientFilterVisible('groupBy')): ?>
               <div class="store-inline-field" data-filter-group="groupBy">
                 <label for="store-group-by">التجميع</label>
-                <div class="store-filter-group-chips" data-filter-group-chips="groupBy" hidden></div>
                 <select id="store-group-by" name="groupBy">
                   <option value="none" <?= $selectedGroupBy === 'none' ? 'selected' : '' ?>>بدون</option>
                   <option value="ageCategory" <?= $selectedGroupBy === 'ageCategory' ? 'selected' : '' ?>>الفئة العمرية</option>
