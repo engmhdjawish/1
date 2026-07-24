@@ -561,6 +561,86 @@ public sealed class MaterialsController(
             _ => "none"
         };
 
+    [HttpGet("result-filters")]
+    public async Task<ActionResult<MaterialResultFiltersResponse>> GetResultFilters(
+        [FromQuery] string? keyword = null,
+        [FromQuery(Name = "search")] string? legacySearch = null,
+        [FromQuery] Guid? storeGuid = null,
+        [FromQuery] string? storeGuids = null,
+        [FromQuery] string? countryOfOrigin = null,
+        [FromQuery] string? countryOfOrigins = null,
+        [FromQuery] string? manufacturer = null,
+        [FromQuery] string? manufacturers = null,
+        [FromQuery] string? sizeRange = null,
+        [FromQuery] string? sizeRanges = null,
+        [FromQuery] string? materialType = null,
+        [FromQuery] string? materialTypes = null,
+        [FromQuery] string? ageCategory = null,
+        [FromQuery] string? ageCategories = null,
+        [FromQuery] Guid? groupGuid = null,
+        [FromQuery] string? groupGuids = null,
+        [FromQuery] string? materialGuids = null,
+        [FromQuery] double? minWarehouseQuantity = null,
+        [FromQuery] double? maxWarehouseQuantity = null,
+        [FromQuery] bool? isAvailable = null,
+        [FromQuery] bool? hasImage = null,
+        [FromQuery] double? minUnitSalePriceSyp = null,
+        [FromQuery] double? maxUnitSalePriceSyp = null,
+        [FromQuery] double? minUnitSalePriceUsd = null,
+        [FromQuery] double? maxUnitSalePriceUsd = null,
+        [FromQuery] double? minUnitPurchasePriceUsd = null,
+        [FromQuery] double? maxUnitPurchasePriceUsd = null,
+        CancellationToken cancellationToken = default)
+    {
+        var filters = MaterialListFilters.FromQuery(
+            keyword,
+            legacySearch,
+            storeGuid,
+            storeGuids,
+            countryOfOrigin,
+            countryOfOrigins,
+            manufacturer,
+            manufacturers,
+            sizeRange,
+            sizeRanges,
+            materialType,
+            materialTypes,
+            ageCategory,
+            ageCategories,
+            groupGuid,
+            groupGuids,
+            materialGuids,
+            minWarehouseQuantity,
+            maxWarehouseQuantity,
+            isAvailable,
+            hasImage,
+            minUnitSalePriceSyp,
+            maxUnitSalePriceSyp,
+            minUnitSalePriceUsd,
+            maxUnitSalePriceUsd,
+            minUnitPurchasePriceUsd,
+            maxUnitPurchasePriceUsd);
+
+        var fieldAccess = await permissionService.GetFieldAccessAsync(User, ResourceCode, cancellationToken);
+        var priceFilterAccessResult = ValidatePriceFilterAccess(
+            fieldAccess,
+            filters.MinUnitSalePriceSyp,
+            filters.MaxUnitSalePriceSyp,
+            filters.MinUnitSalePriceUsd,
+            filters.MaxUnitSalePriceUsd,
+            filters.MinUnitPurchasePriceUsd,
+            filters.MaxUnitPurchasePriceUsd);
+
+        if (priceFilterAccessResult is not null)
+        {
+            return priceFilterAccessResult;
+        }
+
+        var resultFilters = await materialResultFiltersService.BuildAsync(filters, filters.Search, cancellationToken);
+
+        return Ok(resultFilters);
+    }
+
     [HttpGet("filter-options")]
     public async Task<ActionResult<MaterialFilterOptionsResponse>> GetFilterOptions(CancellationToken cancellationToken)
     {

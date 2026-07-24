@@ -1071,6 +1071,59 @@ final class StoreCatalogService
         ], static fn ($value) => $value !== null && $value !== '');
     }
 
+    /** @param array<string, mixed> $mergedFilters @return array<string, scalar|null> */
+    private static function buildResultFiltersApiQuery(array $mergedFilters): array
+    {
+        return array_filter([
+            'search' => trim((string) ($mergedFilters['search'] ?? '')) !== '' ? $mergedFilters['search'] : null,
+            'materialTypes' => ($mergedFilters['materialTypes'] ?? []) !== [] ? implode(',', $mergedFilters['materialTypes']) : null,
+            'manufacturers' => ($mergedFilters['manufacturers'] ?? []) !== [] ? implode(',', $mergedFilters['manufacturers']) : null,
+            'ageCategories' => ($mergedFilters['ageCategories'] ?? []) !== [] ? implode(',', $mergedFilters['ageCategories']) : null,
+            'sizeRanges' => ($mergedFilters['sizeRanges'] ?? []) !== [] ? implode(',', $mergedFilters['sizeRanges']) : null,
+            'countryOfOrigins' => ($mergedFilters['countryOfOrigins'] ?? []) !== [] ? implode(',', $mergedFilters['countryOfOrigins']) : null,
+            'groupGuids' => ($mergedFilters['groupGuids'] ?? []) !== [] ? implode(',', $mergedFilters['groupGuids']) : null,
+            'storeGuids' => ($mergedFilters['storeGuids'] ?? []) !== [] ? implode(',', $mergedFilters['storeGuids']) : null,
+            'isAvailable' => ($mergedFilters['isAvailable'] ?? null) === null ? null : ($mergedFilters['isAvailable'] ? 'true' : 'false'),
+            'hasImage' => ($mergedFilters['hasImage'] ?? null) === null ? null : ($mergedFilters['hasImage'] ? 'true' : 'false'),
+            'minWarehouseQuantity' => $mergedFilters['minWarehouseQuantity'] ?? null,
+            'maxWarehouseQuantity' => $mergedFilters['maxWarehouseQuantity'] ?? null,
+            'minUnitSalePriceSyp' => $mergedFilters['minUnitSalePriceSyp'] ?? null,
+            'maxUnitSalePriceSyp' => $mergedFilters['maxUnitSalePriceSyp'] ?? null,
+            'minUnitSalePriceUsd' => $mergedFilters['minUnitSalePriceUsd'] ?? null,
+            'maxUnitSalePriceUsd' => $mergedFilters['maxUnitSalePriceUsd'] ?? null,
+            'minUnitPurchasePriceUsd' => $mergedFilters['minUnitPurchasePriceUsd'] ?? null,
+            'maxUnitPurchasePriceUsd' => $mergedFilters['maxUnitPurchasePriceUsd'] ?? null,
+        ], static fn ($value) => $value !== null && $value !== '');
+    }
+
+    /** @param array<string, scalar|null> $apiQuery @return array<string, mixed> */
+    private static function requestResultFiltersFromApi(array $apiQuery): array
+    {
+        $response = ApiClient::get('/api/materials/result-filters', $apiQuery, 30);
+        if ($response['ok']) {
+            $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+
+            return self::extractResultFiltersFromApiData($data);
+        }
+
+        if ((int) ($response['status'] ?? 0) !== 404) {
+            return [];
+        }
+
+        $fallbackQuery = $apiQuery;
+        $fallbackQuery['page'] = 1;
+        $fallbackQuery['pageSize'] = 1;
+        $fallbackQuery['includeResultFilters'] = 'true';
+        $fallbackQuery['includeTotalCount'] = 'false';
+        $materials = ApiClient::get('/api/materials', $fallbackQuery, 30);
+        if (!$materials['ok']) {
+            return [];
+        }
+        $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
+
+        return self::extractResultFiltersFromApiData($data);
+    }
+
     /** @return list<string> */
     private static function parseList(mixed $raw): array
     {
@@ -1962,7 +2015,11 @@ final class StoreCatalogService
     {
         $raw = $data['resultFilters'] ?? $data['ResultFilters'] ?? null;
         if (!is_array($raw)) {
-            return [];
+            if (isset($data['materialTypes']) || isset($data['MaterialTypes']) || isset($data['groups']) || isset($data['Groups'])) {
+                $raw = $data;
+            } else {
+                return [];
+            }
         }
 
         $normalizeStringFacets = static function (mixed $facets): array {
@@ -2213,74 +2270,20 @@ final class StoreCatalogService
             return [];
         }
 
-        if ($sectionContext !== null && (string) ($sectionContext['selection_mode'] ?? '') !== 'manual') {
-            $rules = self::catalogFiltersToPolicyRules($mergedFilters);
-            $sort = self::normalizeSort((string) ($requestFilters['sort'] ?? 'number:asc'));
-            $apiQuery = CatalogSectionResolver::apiQueryFromRules($rules, 1, 1, $sort);
-            $apiQuery['includeResultFilters'] = 'true';
-            if (self::shouldFilterSellableStock() && !isset($apiQuery['minWarehouseQuantity'])) {
-                $apiQuery['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
-            }
-
-            try {
-                $materials = self::requestMaterialsQuery($apiQuery);
-                if (!$materials['ok']) {
-                    return [];
-                }
-                $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
-
-                return self::scopeResultFiltersForPolicy(
-                    self::extractResultFiltersFromApiData($data),
-                    $baseRules
-                );
-            } catch (\Throwable) {
-                return [];
-            }
+        if ((self::shouldApplySellableStockFilter() || self::shouldFilterSellableStock())
+            && ($mergedFilters['minWarehouseQuantity'] ?? null) === null) {
+            $mergedFilters['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
         }
 
-        $sort = (string) ($requestFilters['sort'] ?? 'number:asc');
-        $sellableMode = self::shouldApplySellableStockFilter();
-        $sellableFilter = self::shouldFilterSellableStock();
-        $minWarehouseQuantity = $mergedFilters['minWarehouseQuantity'];
-        if (($sellableMode || $sellableFilter) && $minWarehouseQuantity === null) {
-            $minWarehouseQuantity = self::sellableMinWarehouseQuantity();
-        }
+        $scopeRules = $sectionContext !== null ? $baseRules : $policyRules;
 
         try {
-            $materials = self::fetchMaterialsExtended(
-                1,
-                1,
-                $mergedFilters['search'],
-                $sort,
-                $mergedFilters['materialTypes'],
-                $mergedFilters['manufacturers'],
-                $mergedFilters['ageCategories'],
-                $mergedFilters['sizeRanges'],
-                $mergedFilters['countryOfOrigins'],
-                $mergedFilters['groupGuids'],
-                $mergedFilters['storeGuids'],
-                $mergedFilters['isAvailable'],
-                $mergedFilters['hasImage'],
-                false,
-                true,
-                $minWarehouseQuantity,
-                $mergedFilters['maxWarehouseQuantity'],
-                $mergedFilters['minUnitSalePriceSyp'],
-                $mergedFilters['maxUnitSalePriceSyp'],
-                $mergedFilters['minUnitSalePriceUsd'],
-                $mergedFilters['maxUnitSalePriceUsd'],
-                $mergedFilters['minUnitPurchasePriceUsd'],
-                $mergedFilters['maxUnitPurchasePriceUsd']
-            );
-            if (!$materials['ok']) {
+            $resultFilters = self::requestResultFiltersFromApi(self::buildResultFiltersApiQuery($mergedFilters));
+            if ($resultFilters === []) {
                 return [];
             }
-            $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
 
-            return self::scopeResultFiltersForPolicy(
-                self::extractResultFiltersFromApiData($data),
-                $policyRules
-            );
+            return self::scopeResultFiltersForPolicy($resultFilters, $scopeRules);
         } catch (\Throwable) {
             return [];
         }
@@ -2349,7 +2352,7 @@ final class StoreCatalogService
             return;
         }
 
-        ResponseCache::set($key, $payload, 300);
+        ResponseCache::set($key, $payload, 600);
     }
 
     /** @param array<string, mixed> $query @param array<string, mixed> $policy */

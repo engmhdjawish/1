@@ -44,15 +44,24 @@ public sealed class MaterialQueryBuilder(MainDbContext mainDbContext)
         string? search,
         CancellationToken cancellationToken)
     {
+        var resolution = await ResolveSearchAsync(search, cancellationToken);
+
+        return ApplySearchResolution(query, resolution);
+    }
+
+    public async Task<MaterialSearchResolution> ResolveSearchAsync(
+        string? search,
+        CancellationToken cancellationToken)
+    {
         if (string.IsNullOrWhiteSpace(search))
         {
-            return query;
+            return MaterialSearchResolution.Empty;
         }
 
         var keywords = KeywordSearchTerms.Parse(search);
         if (keywords.Count == 0)
         {
-            return query;
+            return MaterialSearchResolution.Empty;
         }
 
         if (keywords.Count == 1)
@@ -64,16 +73,43 @@ public sealed class MaterialQueryBuilder(MainDbContext mainDbContext)
 
             if (exactCodeExists)
             {
-                return query.Where(material => material.Code == keyword);
+                return new MaterialSearchResolution(keywords, keyword);
             }
         }
 
-        foreach (var keyword in keywords)
+        return new MaterialSearchResolution(keywords, null);
+    }
+
+    public IQueryable<MaterialRecord> ApplySearchResolution(
+        IQueryable<MaterialRecord> query,
+        MaterialSearchResolution searchResolution)
+    {
+        if (searchResolution.IsEmpty)
+        {
+            return query;
+        }
+
+        if (searchResolution.ExactMaterialCode is not null)
+        {
+            return query.Where(material => material.Code == searchResolution.ExactMaterialCode);
+        }
+
+        foreach (var keyword in searchResolution.Keywords)
         {
             query = ApplyKeywordContainsFilter(query, keyword);
         }
 
         return query;
+    }
+
+    public IQueryable<MaterialRecord> BuildFacetQuery(
+        MaterialListFilters filters,
+        MaterialSearchResolution searchResolution,
+        MaterialFilterExclusions excludeDimension)
+    {
+        var query = Build(filters, excludeDimension);
+
+        return ApplySearchResolution(query, searchResolution);
     }
 
     private static IQueryable<MaterialRecord> ApplyKeywordContainsFilter(
