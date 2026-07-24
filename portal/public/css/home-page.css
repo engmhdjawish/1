@@ -24,8 +24,8 @@
   border-radius: 1.75rem;
   color: #fff;
   background:
-    radial-gradient(circle at 85% 15%, rgba(255, 255, 255, 0.12), transparent 40%),
-    radial-gradient(circle at 10% 90%, rgba(0, 0, 0, 0.15), transparent 45%),
+    radial-gradient(circle at 88% 18%, rgba(255, 255, 255, 0.14), transparent 38%),
+    radial-gradient(circle at 12% 88%, rgba(0, 0, 0, 0.16), transparent 42%),
     linear-gradient(135deg, #9f1218 0%, #D81921 42%, #ef4444 100%);
   box-shadow: 0 20px 50px rgba(216, 25, 33, 0.22);
 }
@@ -40,7 +40,7 @@
 .home-hero__glow--left {
   width: 12rem;
   height: 12rem;
-  left: -3rem;
+  inset-inline-start: -3rem;
   top: -2rem;
   background: rgba(255, 255, 255, 0.14);
 }
@@ -48,14 +48,30 @@
 .home-hero__glow--right {
   width: 10rem;
   height: 10rem;
-  right: -2rem;
+  inset-inline-end: -2rem;
   bottom: -2rem;
   background: rgba(0, 0, 0, 0.18);
 }
 
 .home-hero__inner {
   position: relative;
+  z-index: 1;
   padding: 1.35rem 1.15rem;
+}
+
+.home-hero__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.home-hero__content {
+  text-align: start;
+  max-width: 40rem;
+}
+
+.home-hero__visual {
+  display: none;
 }
 
 @media (min-width: 768px) {
@@ -66,13 +82,99 @@
 
 @media (min-width: 1024px) {
   .home-hero__inner {
-    padding: 2.5rem 2rem;
+    padding: 2.35rem 2rem;
+  }
+
+  .home-hero__grid {
+    position: relative;
+    display: block;
+    min-height: 12.5rem;
+  }
+
+  .home-hero__content {
+    position: relative;
+    z-index: 2;
+    max-width: min(100%, 36rem);
+  }
+
+  .home-hero__visual {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    width: min(46%, 22rem);
+    pointer-events: none;
+  }
+
+  .home-hero__visual-rings {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+  }
+
+  .home-hero__visual-rings span {
+    position: absolute;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 9999px;
+  }
+
+  .home-hero__visual-rings span:first-child {
+    width: min(115%, 19rem);
+    aspect-ratio: 1;
+  }
+
+  .home-hero__visual-rings span:last-child {
+    width: min(88%, 14.5rem);
+    aspect-ratio: 1;
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .home-hero__logo {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 240px);
+    max-height: 9rem;
+    object-fit: contain;
+    opacity: 0.3;
+    filter: brightness(0) invert(1);
+  }
+
+  .home-hero__logo-fallback {
+    position: relative;
+    z-index: 1;
+    font-size: 6rem;
+    opacity: 0.22;
+    line-height: 1;
+  }
+}
+
+@media (min-width: 1280px) {
+  .home-hero__inner {
+    padding: 2.5rem 2.25rem;
+  }
+
+  .home-hero__content {
+    max-width: min(100%, 40rem);
+  }
+
+  .home-hero__visual {
+    width: min(42%, 26rem);
+  }
+
+  .home-hero__logo {
+    width: min(100%, 280px);
+    max-height: 10rem;
+    opacity: 0.32;
   }
 }
 
 .home-hero__kicker {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 0.45rem;
   margin: 0 0 0.65rem;
   font-size: 0.8125rem;
@@ -92,13 +194,34 @@
   border-radius: 9999px;
   background: #fff;
   box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
 }
 
 .home-hero__title {
   margin: 0;
-  font-size: clamp(1.5rem, 4.5vw, 2.75rem);
+  font-size: clamp(1.5rem, 4.5vw, 2.65rem);
   font-weight: 800;
-  line-height: 1.35;
+  line-height: 1.3;
+}
+
+.home-hero__title-line {
+  display: block;
+}
+
+@media (min-width: 640px) {
+  .home-hero__title-line {
+    display: inline;
+  }
+
+  .home-hero__title-line + .home-hero__title-line::before {
+    content: ' ';
+  }
+}
+
+@media (min-width: 768px) {
+  .home-hero__title {
+    line-height: 1.22;
+  }
 }
 
 @media (max-width: 639px) {
@@ -121,6 +244,13 @@
     margin-top: 0.85rem;
     font-size: 0.9375rem;
     line-height: 1.75;
+    max-width: 38rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .home-hero__lead {
+    max-width: none;
   }
 }
 
@@ -136,6 +266,7 @@
 .home-hero__actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-start;
   gap: 0.65rem;
   margin-top: 1rem;
 }

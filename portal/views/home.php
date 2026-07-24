@@ -40,25 +40,48 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
     <div class="home-hero__glow home-hero__glow--left" aria-hidden="true"></div>
     <div class="home-hero__glow home-hero__glow--right" aria-hidden="true"></div>
     <div class="home-hero__inner">
-      <div class="home-hero__content">
-        <p class="home-hero__kicker">
-          <span class="home-hero__kicker-dot" aria-hidden="true"></span>
-          مرحباً بكم في <?= h($siteName) ?>
-        </p>
-        <h1 class="home-hero__title">تجربة تسوّق جملة<br>احترافية وسلسة</h1>
-        <p class="home-hero__lead">
-          <?= $aboutSnippet !== '' ? h($aboutSnippet) : 'تصفّح أحدث المواد بأسعار واضحة، أضف للسلة، وتابع طلبك خطوة بخطوة.' ?>
-        </p>
-        <div class="home-hero__actions">
-          <a href="/store.php" class="home-btn home-btn--light">
-            <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
-            تصفّح المتجر
-          </a>
-          <?php if ($homeCustomer === null): ?>
-            <a href="/register.php" class="home-btn home-btn--ghost">
-              <span class="material-symbols-outlined" aria-hidden="true">person_add</span>
-              حساب جديد
+      <div class="home-hero__grid">
+        <div class="home-hero__content">
+          <p class="home-hero__kicker">
+            <span class="home-hero__kicker-dot" aria-hidden="true"></span>
+            مرحباً بكم في <?= h($siteName) ?>
+          </p>
+          <h1 class="home-hero__title">
+            <span class="home-hero__title-line">تجربة تسوّق جملة</span>
+            <span class="home-hero__title-line">احترافية وسلسة</span>
+          </h1>
+          <p class="home-hero__lead">
+            <?= $aboutSnippet !== '' ? h($aboutSnippet) : 'تصفّح أحدث المواد بأسعار واضحة، أضف للسلة، وتابع طلبك خطوة بخطوة.' ?>
+          </p>
+          <div class="home-hero__actions">
+            <a href="/store.php" class="home-btn home-btn--light">
+              <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
+              تصفّح المتجر
             </a>
+            <?php if ($homeCustomer === null): ?>
+              <a href="/register.php" class="home-btn home-btn--ghost">
+                <span class="material-symbols-outlined" aria-hidden="true">person_add</span>
+                حساب جديد
+              </a>
+            <?php endif; ?>
+          </div>
+        </div>
+
+        <div class="home-hero__visual" aria-hidden="true">
+          <div class="home-hero__visual-rings">
+            <span></span>
+            <span></span>
+          </div>
+          <?php if ($companyLogoUrl !== ''): ?>
+            <img
+              class="home-hero__logo"
+              src="<?= h(portal_site_logo_url($companyLogoUrl, 'header')) ?>"
+              alt=""
+              loading="lazy"
+              decoding="async"
+            >
+          <?php else: ?>
+            <span class="material-symbols-outlined home-hero__logo-fallback">storefront</span>
           <?php endif; ?>
         </div>
       </div>
