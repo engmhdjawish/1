@@ -241,7 +241,7 @@
   padding-inline: 0.35rem 0.15rem;
 }
 
-@media (min-width: 480px) {
+@media (min-width: 1280px) {
   .site-header__currency {
     display: inline-flex;
   }
@@ -266,6 +266,105 @@
     padding: 0 0.65rem;
     font-size: 0.75rem;
   }
+}
+
+@media (max-width: 1279px) {
+  .site-header__toolbar .site-header__currency,
+  .site-header__toolbar .site-header__currency + .site-header__divider {
+    display: none;
+  }
+}
+
+.site-header__mobile-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  padding-top: 0.4rem;
+  margin-top: 0.2rem;
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+@media (min-width: 1280px) {
+  .site-header__mobile-bar {
+    display: none;
+  }
+}
+
+.site-header__mobile-nav {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.site-header__mobile-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.site-header__mobile-nav-link {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  min-width: 3.1rem;
+  min-height: 2.65rem;
+  padding: 0.25rem 0.45rem;
+  border-radius: 0.85rem;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  color: #64748b;
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+@media (min-width: 400px) {
+  .site-header__mobile-nav-link {
+    flex-direction: row;
+    gap: 0.3rem;
+    min-width: 0;
+    min-height: 2.35rem;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.75rem;
+  }
+}
+
+.site-header__mobile-nav-link:hover {
+  color: #D81921;
+  background: #fff5f5;
+}
+
+.site-header__mobile-nav-link.is-active {
+  color: #fff;
+  background: linear-gradient(135deg, #b9151c 0%, #D81921 100%);
+  box-shadow: 0 6px 14px rgba(216, 25, 33, 0.2);
+}
+
+.site-header__mobile-nav-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.site-header__mobile-nav-label {
+  white-space: nowrap;
+}
+
+.site-header__mobile-currency {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.store-currency-toggle--mobile .store-currency-toggle__btn {
+  min-width: 2.25rem;
+  height: 2.25rem;
+  padding: 0 0.5rem;
+  font-size: 0.6875rem;
 }
 
 @media (min-width: 640px) and (max-width: 1279px) {

@@ -67,14 +67,10 @@ $jsonLdPayload = count($jsonLdBlocks) === 1
     : ['@context' => 'https://schema.org', '@graph' => $jsonLdBlocks];
 
 $navLinks = [
-    ['href' => '/index.php', 'label' => 'الرئيسية'],
-    ['href' => '/store.php', 'label' => 'المتجر'],
-    ['href' => '/about.php', 'label' => 'من نحن'],
+    ['href' => '/index.php', 'label' => 'الرئيسية', 'icon' => 'home'],
+    ['href' => '/store.php', 'label' => 'المتجر', 'icon' => 'storefront'],
+    ['href' => '/about.php', 'label' => 'من نحن', 'icon' => 'info'],
 ];
-if ($customer) {
-    $navLinks[] = ['href' => '/my-orders.php', 'label' => 'طلباتي'];
-    $navLinks[] = ['href' => '/my-profile.php', 'label' => 'الملف الشخصي'];
-}
 ?>
 <!DOCTYPE html>
 <html class="light" lang="ar" dir="rtl">

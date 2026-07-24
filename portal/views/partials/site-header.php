@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use Portal\Support\StorePricePreference;
 
-/** @var list<array{href: string, label: string}> $navLinks */
+/** @var list<array{href: string, label: string, icon?: string}> $navLinks */
 /** @var string $siteName */
 /** @var string|null $companyLogoUrl */
 /** @var bool $storeShowPrice */
@@ -35,7 +35,7 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
           data-guide="nav-menu"
           aria-controls="publicNavDrawer"
           aria-expanded="false"
-          aria-label="فتح القائمة"
+          aria-label="الحساب والمزيد"
         >
           <span class="material-symbols-outlined">menu</span>
         </button>
@@ -60,8 +60,6 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
               href="<?= h($link['href']) ?>"
               class="site-header__nav-link <?= $isNavActive($link['href']) ? 'is-active' : '' ?>"
               <?php if (str_contains($link['href'], 'store.php')): ?>data-guide="nav-store"<?php endif; ?>
-              <?php if (str_contains($link['href'], 'my-orders.php')): ?>data-guide="my-orders"<?php endif; ?>
-              <?php if (str_contains($link['href'], 'my-profile.php')): ?>data-guide="my-profile"<?php endif; ?>
             >
               <?= h($link['label']) ?>
             </a>
@@ -155,6 +153,42 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
         <?php endif; ?>
       </div>
     </div>
+
+    <div class="site-header__mobile-bar">
+      <nav class="site-header__mobile-nav" aria-label="تنقل سريع">
+        <?php foreach ($navLinks as $link): ?>
+          <a
+            href="<?= h($link['href']) ?>"
+            class="site-header__mobile-nav-link <?= $isNavActive($link['href']) ? 'is-active' : '' ?>"
+            <?php if (str_contains($link['href'], 'store.php')): ?>data-guide="nav-store"<?php endif; ?>
+          >
+            <?php if (!empty($link['icon'])): ?>
+              <span class="material-symbols-outlined site-header__mobile-nav-icon" aria-hidden="true"><?= h((string) $link['icon']) ?></span>
+            <?php endif; ?>
+            <span class="site-header__mobile-nav-label"><?= h($link['label']) ?></span>
+          </a>
+        <?php endforeach; ?>
+      </nav>
+
+      <?php if ($storeShowPrice): ?>
+        <div class="site-header__mobile-currency" data-guide="currency" role="group" aria-label="عملة عرض الأسعار">
+          <div class="store-currency-toggle store-currency-toggle--mobile">
+            <button
+              type="button"
+              class="store-currency-toggle__btn <?= $storePriceCurrency === StorePricePreference::SYP ? 'is-active' : '' ?>"
+              data-store-currency="<?= h(StorePricePreference::SYP) ?>"
+              title="عرض الأسعار بالليرة السورية"
+            >ل.س</button>
+            <button
+              type="button"
+              class="store-currency-toggle__btn <?= $storePriceCurrency === StorePricePreference::USD ? 'is-active' : '' ?>"
+              data-store-currency="<?= h(StorePricePreference::USD) ?>"
+              title="عرض الأسعار بالدولار"
+            >$</button>
+          </div>
+        </div>
+      <?php endif; ?>
+    </div>
   </div>
 </header>
 
@@ -176,29 +210,6 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
     </button>
   </div>
   <nav class="site-drawer__nav" aria-label="قائمة الجوال">
-    <?php foreach ($navLinks as $link): ?>
-      <a
-        href="<?= h($link['href']) ?>"
-        data-public-nav-link="1"
-        class="site-drawer__link <?= $isNavActive($link['href']) ? 'is-active' : '' ?>"
-        <?php if (str_contains($link['href'], 'store.php')): ?>data-guide="nav-store"<?php endif; ?>
-        <?php if (str_contains($link['href'], 'my-orders.php')): ?>data-guide="my-orders"<?php endif; ?>
-        <?php if (str_contains($link['href'], 'my-profile.php')): ?>data-guide="my-profile"<?php endif; ?>
-      ><?= h($link['label']) ?></a>
-    <?php endforeach; ?>
-
-    <?php if ($storeShowPrice): ?>
-      <div class="site-drawer__section">
-        <p class="site-drawer__section-label">عملة الأسعار</p>
-        <div class="site-drawer__currency px-3" data-guide="currency">
-          <div class="store-currency-toggle store-currency-toggle--drawer">
-            <button type="button" class="store-currency-toggle__btn <?= $storePriceCurrency === StorePricePreference::SYP ? 'is-active' : '' ?>" data-store-currency="<?= h(StorePricePreference::SYP) ?>">ل.س</button>
-            <button type="button" class="store-currency-toggle__btn <?= $storePriceCurrency === StorePricePreference::USD ? 'is-active' : '' ?>" data-store-currency="<?= h(StorePricePreference::USD) ?>">$</button>
-          </div>
-        </div>
-      </div>
-    <?php endif; ?>
-
     <div class="site-drawer__section">
       <button type="button" class="site-drawer__link w-full text-right" data-pwa-open>
         <span class="material-symbols-outlined align-middle text-base ml-1" aria-hidden="true">install_mobile</span>
@@ -223,14 +234,6 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
             <span><?= $drawerCustomerPhone !== '' ? h($drawerCustomerPhone) : 'مسجّل الدخول' ?></span>
           </div>
         </div>
-        <a href="/my-profile.php" data-public-nav-link="1" class="site-drawer__link" data-guide="my-profile">
-          <span class="material-symbols-outlined align-middle text-base ml-1" aria-hidden="true">person</span>
-          الملف الشخصي
-        </a>
-        <a href="/my-orders.php" data-public-nav-link="1" class="site-drawer__link" data-guide="my-orders">
-          <span class="material-symbols-outlined align-middle text-base ml-1" aria-hidden="true">inventory_2</span>
-          طلباتي
-        </a>
         <a href="/logout.php" data-public-nav-link="1" class="site-drawer__link site-drawer__link--danger">تسجيل الخروج</a>
       <?php else: ?>
         <a href="<?= h(portal_login_url('customer')) ?>" data-public-nav-link="1" class="site-drawer__link" data-guide="login">دخول العملاء</a>
