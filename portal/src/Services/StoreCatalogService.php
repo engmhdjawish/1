@@ -231,10 +231,11 @@ final class StoreCatalogService
         $allowClientFilters = $visibleClientFilters !== [];
         $isClientFilterVisible = static fn (string $code): bool => in_array($code, $visibleClientFilters, true);
         $requestFilters = self::parseRequestFilters($query, $storeOptions, $isClientFilterVisible);
+        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
 
         $cachedCatalog = self::readCatalogCache($query, $policy);
         if ($cachedCatalog !== null) {
-            $wantsInlineFilters = $allowClientFilters && self::shouldIncludeResultFilters($query, $requestFilters);
+            $wantsInlineFilters = $allowClientFilters && self::shouldIncludeResultFilters($query, $requestFilters, $policyRules);
             $cachedDeferred = (bool) ($cachedCatalog['filters_deferred'] ?? false);
             if (!$wantsInlineFilters || !$cachedDeferred) {
                 return $cachedCatalog;
@@ -260,7 +261,6 @@ final class StoreCatalogService
         $resultFilters = [];
         $apiError = null;
 
-        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
         $mergedFilters = self::mergeCatalogFilters($policyRules, $requestFilters);
         if ($mergedFilters['has_conflict']) {
             return self::emptyCatalogResult(
@@ -292,7 +292,7 @@ final class StoreCatalogService
         }
 
         $deferClientFilters = $allowClientFilters
-            && !self::shouldIncludeResultFilters($query, $requestFilters);
+            && !self::shouldIncludeResultFilters($query, $requestFilters, $policyRules);
 
         $includeResultFilters = $allowClientFilters && !$deferClientFilters;
 
@@ -403,7 +403,10 @@ final class StoreCatalogService
         $filterOptions = ['stores' => [], 'groups' => []];
         if ($allowClientFilters && !$deferClientFilters) {
             $filterOptions = self::getCachedFilterOptions();
-            if (self::resultFiltersAreEmpty($resultFilters)) {
+            if (
+                self::resultFiltersAreEmpty($resultFilters)
+                && !self::filterRulesHaveImplicitConstraints($policyRules)
+            ) {
                 $resultFilters = self::scopeResultFiltersForPolicy(
                     self::buildResultFiltersFromFilterOptions($filterOptions),
                     $policyRules
@@ -670,9 +673,10 @@ final class StoreCatalogService
             self::buildResultFiltersFromFilterOptions($filterOptions),
             $baseRules
         );
-        if (self::resultFiltersAreEmpty($resultFilters)) {
+        $hasImplicitConstraints = self::filterRulesHaveImplicitConstraints($baseRules);
+        if (self::resultFiltersAreEmpty($resultFilters) && !$hasImplicitConstraints) {
             $resultFilters = $fallbackResultFilters;
-        } else {
+        } elseif (!$hasImplicitConstraints) {
             foreach (['materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins', 'groups'] as $facetKey) {
                 $current = is_array($resultFilters[$facetKey] ?? null) ? $resultFilters[$facetKey] : [];
                 if ($current !== []) {
@@ -2111,24 +2115,73 @@ final class StoreCatalogService
         return self::resultFiltersAreEmpty(is_array($catalog['resultFilters'] ?? null) ? $catalog['resultFilters'] : []);
     }
 
-    /** @return array{filterOptions: array<string, mixed>, resultFilters: array<string, mixed>} */
-    public static function getClientFiltersPayload(): array
+    /** @param array<string, mixed> $query @return array{filterOptions: array<string, mixed>, resultFilters: array<string, mixed>} */
+    public static function getClientFiltersPayload(array $query = []): array
     {
         $policy = self::activePolicy();
+        if ($policy === null) {
+            return [
+                'filterOptions' => ['stores' => [], 'groups' => []],
+                'resultFilters' => [],
+            ];
+        }
+
         $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
         $filterOptions = self::getCachedFilterOptions();
-        $forcedStoreGuids = self::parseList($policyRules['store_guids'] ?? []);
-        if ($forcedStoreGuids !== []) {
-            $forcedStoreMap = array_flip(array_map('strtolower', $forcedStoreGuids));
-            $filterOptions['stores'] = array_values(array_filter(
-                is_array($filterOptions['stores'] ?? null) ? $filterOptions['stores'] : [],
-                static fn (array $store): bool => isset($forcedStoreMap[strtolower((string) ($store['guid'] ?? ''))])
-            ));
-        }
-        $resultFilters = self::scopeResultFiltersForPolicy(
-            self::buildResultFiltersFromFilterOptions($filterOptions),
-            $policyRules
+        self::scopeFilterOptionsStoresForPolicy($filterOptions, $policyRules);
+
+        $sectionContext = CatalogSectionResolver::resolve(
+            trim((string) ($query['section'] ?? '')),
+            trim((string) ($query['offer'] ?? ''))
         );
+        $baseRules = $policyRules;
+        if ($sectionContext !== null) {
+            $sectionRules = is_array($sectionContext['filter_rules'] ?? null) ? $sectionContext['filter_rules'] : [];
+            $baseRules = self::mergeFilterRuleSets($policyRules, $sectionRules);
+        }
+
+        $storeOptions = is_array($policy['store_options'] ?? null)
+            ? $policy['store_options']
+            : AccessPolicyService::defaultStoreOptions();
+        $visibleClientFilters = AccessPolicyService::resolvedVisibleClientFilters($storeOptions);
+        if ($sectionContext !== null) {
+            $sectionRules = is_array($sectionContext['filter_rules'] ?? null) ? $sectionContext['filter_rules'] : [];
+            $lockedClientFilters = array_values(array_unique(array_merge(
+                self::lockedPolicyClientFilters($policyRules),
+                self::lockedSectionClientFilters($sectionRules)
+            )));
+            $isClientFilterVisible = static function (string $code) use ($visibleClientFilters, $lockedClientFilters): bool {
+                if (in_array($code, $lockedClientFilters, true)) {
+                    return false;
+                }
+
+                return in_array($code, $visibleClientFilters, true);
+            };
+        } else {
+            $isClientFilterVisible = static fn (string $code): bool => in_array($code, $visibleClientFilters, true);
+        }
+
+        $requestFilters = self::parseRequestFilters($query, $storeOptions, $isClientFilterVisible);
+        $needsScopedFilters = self::shouldIncludeResultFilters($query, $requestFilters, $baseRules);
+        if (!$needsScopedFilters) {
+            $resultFilters = self::scopeResultFiltersForPolicy(
+                self::buildResultFiltersFromFilterOptions($filterOptions),
+                $baseRules
+            );
+
+            return [
+                'filterOptions' => $filterOptions,
+                'resultFilters' => $resultFilters,
+            ];
+        }
+
+        $resultFilters = self::fetchScopedResultFilters($query, $sectionContext, $baseRules, $policyRules, $requestFilters);
+        if (self::resultFiltersAreEmpty($resultFilters) && !self::filterRulesHaveImplicitConstraints($baseRules)) {
+            $resultFilters = self::scopeResultFiltersForPolicy(
+                self::buildResultFiltersFromFilterOptions($filterOptions),
+                $baseRules
+            );
+        }
 
         return [
             'filterOptions' => $filterOptions,
@@ -2136,14 +2189,161 @@ final class StoreCatalogService
         ];
     }
 
-    /** @param array<string, mixed> $query @param array<string, mixed> $requestFilters */
-    private static function shouldIncludeResultFilters(array $query, array $requestFilters): bool
+    /** @param array<string, mixed> $query @param array<string, mixed>|null $sectionContext @param array<string, mixed> $baseRules @param array<string, mixed> $policyRules @param array<string, mixed> $requestFilters @return array<string, mixed> */
+    private static function fetchScopedResultFilters(
+        array $query,
+        ?array $sectionContext,
+        array $baseRules,
+        array $policyRules,
+        array $requestFilters
+    ): array {
+        $mergedFilters = self::mergeCatalogFilters($baseRules, $requestFilters);
+        if ($mergedFilters['has_conflict']) {
+            return [];
+        }
+
+        if ($sectionContext !== null && (string) ($sectionContext['selection_mode'] ?? '') !== 'manual') {
+            $rules = self::catalogFiltersToPolicyRules($mergedFilters);
+            $sort = self::normalizeSort((string) ($requestFilters['sort'] ?? 'number:asc'));
+            $apiQuery = CatalogSectionResolver::apiQueryFromRules($rules, 1, 1, $sort);
+            $apiQuery['includeResultFilters'] = 'true';
+            if (self::shouldFilterSellableStock() && !isset($apiQuery['minWarehouseQuantity'])) {
+                $apiQuery['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
+            }
+
+            try {
+                $materials = self::requestMaterialsQuery($apiQuery);
+                if (!$materials['ok']) {
+                    return [];
+                }
+                $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
+
+                return self::scopeResultFiltersForPolicy(
+                    self::extractResultFiltersFromApiData($data),
+                    $baseRules
+                );
+            } catch (\Throwable) {
+                return [];
+            }
+        }
+
+        $sort = (string) ($requestFilters['sort'] ?? 'number:asc');
+        $sellableMode = self::shouldApplySellableStockFilter();
+        $sellableFilter = self::shouldFilterSellableStock();
+        $minWarehouseQuantity = $mergedFilters['minWarehouseQuantity'];
+        if (($sellableMode || $sellableFilter) && $minWarehouseQuantity === null) {
+            $minWarehouseQuantity = self::sellableMinWarehouseQuantity();
+        }
+
+        try {
+            $materials = self::fetchMaterialsExtended(
+                1,
+                1,
+                $mergedFilters['search'],
+                $sort,
+                $mergedFilters['materialTypes'],
+                $mergedFilters['manufacturers'],
+                $mergedFilters['ageCategories'],
+                $mergedFilters['sizeRanges'],
+                $mergedFilters['countryOfOrigins'],
+                $mergedFilters['groupGuids'],
+                $mergedFilters['storeGuids'],
+                $mergedFilters['isAvailable'],
+                $mergedFilters['hasImage'],
+                false,
+                true,
+                $minWarehouseQuantity,
+                $mergedFilters['maxWarehouseQuantity'],
+                $mergedFilters['minUnitSalePriceSyp'],
+                $mergedFilters['maxUnitSalePriceSyp'],
+                $mergedFilters['minUnitSalePriceUsd'],
+                $mergedFilters['maxUnitSalePriceUsd'],
+                $mergedFilters['minUnitPurchasePriceUsd'],
+                $mergedFilters['maxUnitPurchasePriceUsd']
+            );
+            if (!$materials['ok']) {
+                return [];
+            }
+            $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
+
+            return self::scopeResultFiltersForPolicy(
+                self::extractResultFiltersFromApiData($data),
+                $policyRules
+            );
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    /** @param array<string, mixed> $filterOptions @param array<string, mixed> $policyRules */
+    private static function scopeFilterOptionsStoresForPolicy(array &$filterOptions, array $policyRules): void
+    {
+        $forcedStoreGuids = self::parseList($policyRules['store_guids'] ?? []);
+        if ($forcedStoreGuids === []) {
+            return;
+        }
+        $forcedStoreMap = array_flip(array_map('strtolower', $forcedStoreGuids));
+        $filterOptions['stores'] = array_values(array_filter(
+            is_array($filterOptions['stores'] ?? null) ? $filterOptions['stores'] : [],
+            static fn (array $store): bool => isset($forcedStoreMap[strtolower((string) ($store['guid'] ?? ''))])
+        ));
+    }
+
+    /** @param array<string, mixed> $query @param array<string, mixed> $requestFilters @param array<string, mixed> $policyRules */
+    private static function shouldIncludeResultFilters(array $query, array $requestFilters, array $policyRules = []): bool
     {
         if (trim((string) ($query['facetFilters'] ?? '')) === '1') {
             return true;
         }
+        if (self::requestHasActiveFilters($requestFilters)) {
+            return true;
+        }
 
-        return self::requestHasActiveFilters($requestFilters);
+        return self::filterRulesHaveImplicitConstraints($policyRules);
+    }
+
+    /** @param array<string, mixed> $rules */
+    private static function filterRulesHaveImplicitConstraints(array $rules): bool
+    {
+        if (trim((string) ($rules['keyword'] ?? '')) !== '') {
+            return true;
+        }
+        if (array_key_exists('is_available', $rules) && $rules['is_available'] !== null) {
+            return true;
+        }
+        if (array_key_exists('has_image', $rules) && $rules['has_image'] !== null) {
+            return true;
+        }
+        foreach ([
+            'material_types',
+            'manufacturers',
+            'age_categories',
+            'size_ranges',
+            'country_origins',
+            'group_guids',
+            'store_guids',
+        ] as $key) {
+            if (self::parseList($rules[$key] ?? []) !== []) {
+                return true;
+            }
+        }
+        foreach ([
+            'min_warehouse_quantity',
+            'max_warehouse_quantity',
+            'min_unit_sale_price_syp',
+            'max_unit_sale_price_syp',
+            'min_unit_sale_price_usd',
+            'max_unit_sale_price_usd',
+            'min_unit_purchase_price_usd',
+            'max_unit_purchase_price_usd',
+        ] as $key) {
+            $value = $rules[$key] ?? null;
+            if ($value !== null && $value !== '') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @param array<string, mixed> $requestFilters */

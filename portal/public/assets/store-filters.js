@@ -244,9 +244,7 @@ window.portalStoreFiltersInit = (root = document) => {
       renderStringFacetOptions(groupId, paramName, resultFilters[groupId] || []);
     });
 
-    const groupFacets = Array.isArray(resultFilters.groups) && resultFilters.groups.length > 0
-      ? resultFilters.groups
-      : (filterOptions.groups || []);
+    const groupFacets = Array.isArray(resultFilters.groups) ? resultFilters.groups : [];
     renderGuidFacetOptions('groups', 'groupGuids', groupFacets);
     renderGuidFacetOptions('stores', 'storeGuids', filterOptions.stores || []);
 
@@ -263,7 +261,8 @@ window.portalStoreFiltersInit = (root = document) => {
     }
 
     sidebar?.classList.add('is-loading-options');
-    deferredFiltersPromise = fetch('/api/store-filter-options.php', {
+    const queryString = window.location.search || '';
+    deferredFiltersPromise = fetch(`/api/store-filter-options.php${queryString}`, {
       credentials: 'same-origin',
       headers: { Accept: 'application/json' },
     })

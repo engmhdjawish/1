@@ -71,7 +71,7 @@ try {
         }
 
     $started = microtime(true);
-    $payload = StoreCatalogService::getClientFiltersPayload();
+    $payload = StoreCatalogService::getClientFiltersPayload([]);
     $deferredPayloadMs = (int) round((microtime(true) - $started) * 1000);
     echo "\n--- deferred API payload ---\n";
     $payloadResultFilters = is_array($payload['resultFilters'] ?? null) ? $payload['resultFilters'] : [];
