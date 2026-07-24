@@ -152,4 +152,10 @@ final class CustomerSession
 
         $_SESSION[self::SESSION_KEY] = self::mapCustomer($row);
     }
+
+    /** @param array<string, mixed> $row */
+    public static function restoreFromDatabaseRow(array $row): void
+    {
+        $_SESSION[self::SESSION_KEY] = self::mapCustomer($row);
+    }
 }

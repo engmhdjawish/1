@@ -38,12 +38,30 @@ final class Bootstrap
         date_default_timezone_set('Asia/Damascus');
 
         if (!self::shouldSkipWebRuntime() && session_status() !== PHP_SESSION_ACTIVE) {
+            self::configureSessionCookie();
             session_name(Config::get('PORTAL_SESSION_NAME', 'portal_session'));
             session_start();
             \Portal\Services\PortalSessionService::bootstrap();
         }
 
         self::$booted = true;
+    }
+
+    private static function configureSessionCookie(): void
+    {
+        $lifetimeDays = (int) Config::get('PORTAL_SESSION_LIFETIME_DAYS', '30');
+        $lifetimeDays = max(7, min(365, $lifetimeDays));
+        $lifetimeSeconds = $lifetimeDays * 86400;
+
+        ini_set('session.gc_maxlifetime', (string) $lifetimeSeconds);
+
+        session_set_cookie_params([
+            'lifetime' => $lifetimeSeconds,
+            'path' => '/',
+            'secure' => \Portal\Support\HttpsGate::isHttpsRequest(),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
     }
 
     private static function shouldSkipWebRuntime(): bool
