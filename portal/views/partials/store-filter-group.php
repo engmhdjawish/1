@@ -59,7 +59,7 @@ $renderStoreFilterGroup = static function (
     $searchable = $total >= $searchThreshold;
     $collapsible = $total > $initialVisible;
     ?>
-    <details class="store-filter-accordion" open data-filter-group="<?= h($groupId) ?>">
+    <details class="store-filter-accordion" data-filter-group="<?= h($groupId) ?>">
       <summary class="store-filter-accordion-summary">
         <span><?= h($title) ?></span>
         <?php if ($hasSelection): ?>

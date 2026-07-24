@@ -32,6 +32,26 @@ window.portalStoreFiltersInit = (root = document) => {
   const closeBtn = catalogRoot.querySelector('#store-filters-close');
   const sidebar = catalogRoot.querySelector('.store-filters-sidebar');
 
+  const setupExclusiveFilterAccordions = () => {
+    const accordions = catalogRoot.querySelectorAll('.store-filter-accordion');
+    accordions.forEach((accordion) => {
+      if (accordion.dataset.accordionBound === '1') {
+        return;
+      }
+      accordion.dataset.accordionBound = '1';
+      accordion.addEventListener('toggle', () => {
+        if (!accordion.open) {
+          return;
+        }
+        accordions.forEach((other) => {
+          if (other !== accordion) {
+            other.open = false;
+          }
+        });
+      });
+    });
+  };
+
   const setupFilterList = (list, input, toggleBtn) => {
     if (!list || list.dataset.filtersBound === '1') {
       return;
@@ -313,6 +333,7 @@ window.portalStoreFiltersInit = (root = document) => {
   }
 
   scheduleDeferredFilters();
+  setupExclusiveFilterAccordions();
 };
 
 if (document.readyState === 'loading') {
