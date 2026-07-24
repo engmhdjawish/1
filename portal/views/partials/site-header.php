@@ -31,7 +31,7 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
         <button
           type="button"
           id="openPublicNavBtn"
-          class="site-header__menu-btn"
+          class="site-header__menu-btn<?= $customer ? ' site-header__menu-btn--customer' : '' ?>"
           data-guide="nav-menu"
           aria-controls="publicNavDrawer"
           aria-expanded="false"

@@ -127,6 +127,12 @@
   }
 }
 
+@media (max-width: 1279px) {
+  .site-header__menu-btn--customer {
+    display: none;
+  }
+}
+
 .site-header__nav-list {
   display: inline-flex;
   align-items: center;
