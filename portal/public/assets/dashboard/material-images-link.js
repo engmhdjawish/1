@@ -142,7 +142,7 @@ const API_URL = '/dashboard/material-images-api.php';
 
   function showSourcesLoading() {
     if (!sourceCards) return;
-    sourceCards.innerHTML = '<div class="col-span-full flex flex-col items-center justify-center gap-3 py-16 text-text-muted" aria-busy="true">'
+    sourceCards.innerHTML = '<div class="dash-mi-cards__status" aria-busy="true">'
       + '<div class="dash-spinner" role="status" aria-label="جاري تحميل الصور"></div>'
       + '<p class="text-sm font-medium">جاري تحميل الصور...</p>'
       + '</div>';

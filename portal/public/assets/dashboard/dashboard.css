@@ -1162,6 +1162,17 @@ button.is-loading::after,
   gap: 0.65rem;
 }
 
+.dash-mi-cards__status {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2.5rem 1rem;
+  color: var(--dash-muted);
+}
+
 @media (min-width: 640px) {
   .dash-mi-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1226,6 +1237,11 @@ button.is-loading::after,
   justify-content: space-between;
   gap: 0.5rem;
   min-width: 0;
+}
+
+.dash-mi-card__head .link-badge {
+  display: inline-block;
+  margin-bottom: 0.15rem;
 }
 
 .dash-mi-card__title {
