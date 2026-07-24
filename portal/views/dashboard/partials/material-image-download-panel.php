@@ -107,25 +107,15 @@ $defaultAvailability = '1';
               <div class="store-filter-pending-chips" id="store-filter-pending-chips-global"></div>
             </div>
 
-            <div class="dash-mi-zip-filters-stack">
-              <?php
-                $renderStoreFilterGroup('materialTypes', 'نوع المادة', $materialTypeOptions, [], 'materialTypes');
-                $renderStoreFilterGroup('ageCategories', 'الفئة العمرية', $ageCategoryOptions, [], 'ageCategories');
-                $renderStoreFilterGroup('manufacturers', 'الشركة المصنعة', $manufacturerOptions, [], 'manufacturers');
-                $renderStoreFilterGroup('sizeRanges', 'القياس', $sizeRangeOptions, [], 'sizeRanges');
-                $renderStoreFilterGroup('countryOfOrigins', 'بلد المنشأ', $countryOriginOptions, [], 'countryOfOrigins');
-                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, [], 'stores');
-                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, [], 'groups');
-              ?>
-
-              <details class="store-filter-accordion" data-filter-group="availability">
-                <summary class="store-filter-accordion-summary">
-                  <span class="store-filter-accordion-heading">
-                    <span class="material-symbols-outlined store-filter-accordion-icon" aria-hidden="true">inventory_2</span>
-                    <span class="store-filter-accordion-label">التوفر</span>
+            <div class="dash-mi-zip-filters-stack store-filter-chip-layout">
+              <section class="store-filter-chip-section" data-filter-group="availability">
+                <div class="store-filter-chip-section-head">
+                  <span class="store-filter-chip-section-heading">
+                    <span class="material-symbols-outlined store-filter-chip-section-icon" aria-hidden="true">inventory_2</span>
+                    <span class="store-filter-chip-section-label">التوفر</span>
                   </span>
-                </summary>
-                <div class="store-filter-accordion-body">
+                </div>
+                <div class="store-filter-chip-section-body">
                   <div class="store-filter-options store-filter-options--pills store-filter-options--radio">
                     <?php foreach (['' => 'الكل', '1' => 'متوفر', '0' => 'غير متوفر'] as $value => $label): ?>
                       <?php $isActive = $defaultAvailability === (string) $value; ?>
@@ -136,16 +126,27 @@ $defaultAvailability = '1';
                     <?php endforeach; ?>
                   </div>
                 </div>
-              </details>
+              </section>
 
-              <details class="store-filter-accordion" data-filter-group="warehouse">
-                <summary class="store-filter-accordion-summary">
-                  <span class="store-filter-accordion-heading">
-                    <span class="material-symbols-outlined store-filter-accordion-icon" aria-hidden="true">scale</span>
-                    <span class="store-filter-accordion-label">مدى الكمية</span>
+              <?php
+                $chipFiltersExpanded = true;
+                $renderStoreFilterGroup('materialTypes', 'نوع المادة', $materialTypeOptions, [], 'materialTypes', 5, 8, false, $chipFiltersExpanded);
+                $renderStoreFilterGroup('ageCategories', 'الفئة العمرية', $ageCategoryOptions, [], 'ageCategories', 5, 8, false, $chipFiltersExpanded);
+                $renderStoreFilterGroup('manufacturers', 'الشركة المصنعة', $manufacturerOptions, [], 'manufacturers', 5, 8, false, $chipFiltersExpanded);
+                $renderStoreFilterGroup('sizeRanges', 'القياس', $sizeRangeOptions, [], 'sizeRanges', 5, 8, false, $chipFiltersExpanded);
+                $renderStoreFilterGroup('countryOfOrigins', 'بلد المنشأ', $countryOriginOptions, [], 'countryOfOrigins', 5, 8, false, $chipFiltersExpanded);
+                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, [], 'stores', 5, 8, false, $chipFiltersExpanded);
+                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, [], 'groups', 5, 8, false, $chipFiltersExpanded);
+              ?>
+
+              <section class="store-filter-chip-section" data-filter-group="warehouse">
+                <div class="store-filter-chip-section-head">
+                  <span class="store-filter-chip-section-heading">
+                    <span class="material-symbols-outlined store-filter-chip-section-icon" aria-hidden="true">scale</span>
+                    <span class="store-filter-chip-section-label">مدى الكمية</span>
                   </span>
-                </summary>
-                <div class="store-filter-accordion-body">
+                </div>
+                <div class="store-filter-chip-section-body">
                   <div class="grid grid-cols-2 gap-2">
                     <div class="store-inline-field mb-0">
                       <label for="zip-min-warehouse">من</label>
@@ -157,32 +158,40 @@ $defaultAvailability = '1';
                     </div>
                   </div>
                 </div>
-              </details>
+              </section>
 
-              <details class="store-filter-accordion dash-mi-zip-split-accordion" data-filter-group="splitBy">
-                <summary class="store-filter-accordion-summary">
-                  <span class="store-filter-accordion-heading">
-                    <span class="material-symbols-outlined store-filter-accordion-icon" aria-hidden="true">folder_zip</span>
-                    <span class="store-filter-accordion-label">تقسيم ZIP</span>
+              <section class="store-filter-chip-section" data-filter-group="splitBy">
+                <div class="store-filter-chip-section-head">
+                  <span class="store-filter-chip-section-heading">
+                    <span class="material-symbols-outlined store-filter-chip-section-icon" aria-hidden="true">folder_zip</span>
+                    <span class="store-filter-chip-section-label">تقسيم ZIP</span>
                   </span>
-                </summary>
-                <div class="store-filter-accordion-body">
-                  <div class="store-inline-field mb-0">
-                    <label for="zip-split-by">طريقة التقسيم</label>
-                    <select id="zip-split-by" name="splitBy" data-zip-split-by>
-                      <option value="">ملف ZIP واحد</option>
-                      <option value="materialTypes">حسب نوع المادة</option>
-                      <option value="ageCategories">حسب الفئة العمرية</option>
-                      <option value="manufacturers">حسب الشركة المصنعة</option>
-                      <option value="sizeRanges">حسب القياس</option>
-                      <option value="countryOfOrigins">حسب بلد المنشأ</option>
-                      <option value="storeGuids">حسب المخزن</option>
-                      <option value="groupGuids">حسب المجموعة</option>
-                    </select>
-                  </div>
-                  <p class="text-[11px] text-text-muted mt-2 mb-0">مع التقسيم: أضف خياراً واحداً على الأقل في الفلتر المطابق.</p>
                 </div>
-              </details>
+                <div class="store-filter-chip-section-body">
+                  <div class="store-filter-options store-filter-options--pills store-filter-options--radio">
+                    <?php
+                      $splitOptions = [
+                          '' => 'ملف ZIP واحد',
+                          'materialTypes' => 'حسب نوع المادة',
+                          'ageCategories' => 'حسب الفئة العمرية',
+                          'manufacturers' => 'حسب الشركة المصنعة',
+                          'sizeRanges' => 'حسب القياس',
+                          'countryOfOrigins' => 'حسب بلد المنشأ',
+                          'storeGuids' => 'حسب المخزن',
+                          'groupGuids' => 'حسب المجموعة',
+                      ];
+                    ?>
+                    <?php foreach ($splitOptions as $value => $label): ?>
+                      <?php $isActive = $value === ''; ?>
+                      <label class="store-filter-option store-filter-pill store-filter-pill--radio<?= $isActive ? ' is-selected is-neutral' : '' ?>">
+                        <input type="radio" name="splitBy" value="<?= h((string) $value) ?>" <?= $isActive ? 'checked' : '' ?>>
+                        <span class="store-filter-option-text"><?= h($label) ?></span>
+                      </label>
+                    <?php endforeach; ?>
+                  </div>
+                  <p class="text-[11px] text-text-muted mt-2 mb-0">مع التقسيم: أضف chip واحداً على الأقل في الفلتر المطابق.</p>
+                </div>
+              </section>
             </div>
           </div>
 

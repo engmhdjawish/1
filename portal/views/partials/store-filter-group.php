@@ -12,6 +12,8 @@ use Portal\Support\Text;
  * @param string $groupId
  * @param int $searchThreshold
  * @param int $initialVisible
+ * @param bool $renderWhenEmpty
+ * @param bool $alwaysExpanded Render chips always visible (no accordion), e.g. dashboard ZIP filters
  */
 $renderStoreFilterGroup = static function (
     string $paramName,
@@ -21,7 +23,8 @@ $renderStoreFilterGroup = static function (
     string $groupId,
     int $searchThreshold = 5,
     int $initialVisible = 6,
-    bool $renderWhenEmpty = false
+    bool $renderWhenEmpty = false,
+    bool $alwaysExpanded = false
 ): void {
     $normalized = [];
     foreach ($options as $option) {
@@ -68,7 +71,62 @@ $renderStoreFilterGroup = static function (
         'groups' => 'folder',
     ];
     $groupIcon = $groupIcons[$groupId] ?? 'tune';
-    ?>
+    $selectedCount = count(array_intersect(array_column($normalized, 'value'), $selectedValues));
+
+    ob_start();
+    if ($searchable): ?>
+      <input
+        type="search"
+        class="store-filter-search"
+        placeholder="ابحث في <?= h($title) ?>..."
+        data-filter-search="<?= h($groupId) ?>"
+        autocomplete="off"
+      >
+    <?php endif; ?>
+    <div class="store-filter-options store-filter-options--pills" data-filter-list="<?= h($groupId) ?>" data-initial-visible="<?= (int) $initialVisible ?>">
+      <?php foreach ($normalized as $index => $item): ?>
+        <?php
+          $isChecked = in_array($item['value'], $selectedValues, true);
+          $isHidden = $collapsible && $index >= $initialVisible && !$isChecked;
+        ?>
+        <label
+          class="store-filter-option store-filter-pill<?= $isHidden ? ' is-collapsed' : '' ?><?= $isChecked ? ' is-selected' : '' ?>"
+          data-filter-label="<?= h(Text::lower($item['label'])) ?>"
+        >
+          <input
+            type="checkbox"
+            name="<?= h($paramName) ?>[]"
+            value="<?= h($item['value']) ?>"
+            <?= $isChecked ? 'checked' : '' ?>
+          >
+          <span class="store-filter-option-text"><?= h($item['label']) ?></span>
+          <span class="store-filter-option-action material-symbols-outlined" aria-hidden="true"><?= $isChecked ? 'remove' : 'add' ?></span>
+        </label>
+      <?php endforeach; ?>
+    </div>
+    <?php if ($collapsible): ?>
+      <button type="button" class="store-filter-toggle-more" data-filter-toggle="<?= h($groupId) ?>">
+        عرض المزيد
+      </button>
+    <?php endif;
+    $groupBody = (string) ob_get_clean();
+
+    if ($alwaysExpanded): ?>
+    <section class="store-filter-chip-section" data-filter-group="<?= h($groupId) ?>">
+      <div class="store-filter-chip-section-head">
+        <span class="store-filter-chip-section-heading">
+          <span class="material-symbols-outlined store-filter-chip-section-icon" aria-hidden="true"><?= h($groupIcon) ?></span>
+          <span class="store-filter-chip-section-label"><?= h($title) ?></span>
+        </span>
+        <?php if ($hasSelection): ?>
+          <span class="store-filter-accordion-badge"><?= $selectedCount ?></span>
+        <?php endif; ?>
+      </div>
+      <div class="store-filter-chip-section-body">
+        <?= $groupBody ?>
+      </div>
+    </section>
+    <?php else: ?>
     <details class="store-filter-accordion" data-filter-group="<?= h($groupId) ?>">
       <summary class="store-filter-accordion-summary">
         <span class="store-filter-accordion-heading">
@@ -76,46 +134,12 @@ $renderStoreFilterGroup = static function (
           <span class="store-filter-accordion-label"><?= h($title) ?></span>
         </span>
         <?php if ($hasSelection): ?>
-          <span class="store-filter-accordion-badge"><?= count(array_intersect(array_column($normalized, 'value'), $selectedValues)) ?></span>
+          <span class="store-filter-accordion-badge"><?= $selectedCount ?></span>
         <?php endif; ?>
       </summary>
       <div class="store-filter-accordion-body">
-        <?php if ($searchable): ?>
-          <input
-            type="search"
-            class="store-filter-search"
-            placeholder="ابحث في <?= h($title) ?>..."
-            data-filter-search="<?= h($groupId) ?>"
-            autocomplete="off"
-          >
-        <?php endif; ?>
-        <div class="store-filter-options store-filter-options--pills" data-filter-list="<?= h($groupId) ?>" data-initial-visible="<?= (int) $initialVisible ?>">
-          <?php foreach ($normalized as $index => $item): ?>
-            <?php
-              $isChecked = in_array($item['value'], $selectedValues, true);
-              $isHidden = $collapsible && $index >= $initialVisible && !$isChecked;
-            ?>
-            <label
-              class="store-filter-option store-filter-pill<?= $isHidden ? ' is-collapsed' : '' ?><?= $isChecked ? ' is-selected' : '' ?>"
-              data-filter-label="<?= h(Text::lower($item['label'])) ?>"
-            >
-              <input
-                type="checkbox"
-                name="<?= h($paramName) ?>[]"
-                value="<?= h($item['value']) ?>"
-                <?= $isChecked ? 'checked' : '' ?>
-              >
-              <span class="store-filter-option-text"><?= h($item['label']) ?></span>
-              <span class="store-filter-option-action material-symbols-outlined" aria-hidden="true"><?= $isChecked ? 'remove' : 'add' ?></span>
-            </label>
-          <?php endforeach; ?>
-        </div>
-        <?php if ($collapsible): ?>
-          <button type="button" class="store-filter-toggle-more" data-filter-toggle="<?= h($groupId) ?>">
-            عرض المزيد
-          </button>
-        <?php endif; ?>
+        <?= $groupBody ?>
       </div>
     </details>
-    <?php
+    <?php endif;
 };

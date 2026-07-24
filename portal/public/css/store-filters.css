@@ -1040,3 +1040,52 @@ body.store-filters-drawer-open {
   padding: 0 0.75rem;
   font-size: 0.8125rem;
 }
+
+.store-filter-chip-section {
+  border: 1px solid #eef2f7;
+  border-radius: 0.85rem;
+  background: #fff;
+  overflow: hidden;
+}
+
+.store-filter-chip-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  background: #fafbfc;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.store-filter-chip-section-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.store-filter-chip-section-icon {
+  font-size: 1.05rem;
+  color: var(--color-primary, #dc2626);
+  flex-shrink: 0;
+}
+
+.store-filter-chip-section-label {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.store-filter-chip-section-body {
+  padding: 0.75rem 0.85rem 0.85rem;
+}
+
+.store-filter-chip-section .store-filter-options--pills {
+  max-height: none;
+  overflow: visible;
+}
+
+.store-filter-chip-layout .store-filter-chip-section-head .store-filter-accordion-badge {
+  margin-inline-start: auto;
+}

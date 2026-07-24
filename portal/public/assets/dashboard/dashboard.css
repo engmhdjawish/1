@@ -1540,6 +1540,24 @@ button.is-loading::after,
   gap: 0;
 }
 
+.store-filter-chip-layout .store-filter-chip-section {
+  margin-bottom: 0.85rem;
+}
+
+.store-filter-chip-layout .store-filter-chip-section:last-child {
+  margin-bottom: 0;
+}
+
+.dash-mi-zip-filters-shell .store-filter-pill {
+  display: inline-flex;
+  align-items: center;
+}
+
+.dash-mi-zip-filters-shell .store-filter-options--pills {
+  max-height: none;
+  overflow: visible;
+}
+
 .dash-mi-zip-filters-stack .store-filter-accordion:last-child {
   margin-bottom: 0;
 }

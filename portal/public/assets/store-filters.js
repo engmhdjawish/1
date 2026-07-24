@@ -249,13 +249,15 @@ window.portalStoreFiltersInit = (root = document) => {
       });
     }
 
-    const splitBy = filterForm.querySelector('[data-zip-split-by], select[name="splitBy"]');
-    if (splitBy && splitBy.value) {
-      const text = splitBy.options[splitBy.selectedIndex]?.textContent?.trim() || splitBy.value;
+    const splitByInput = filterForm.querySelector('input[name="splitBy"]:checked');
+    if (splitByInput && splitByInput.value) {
+      const text = splitByInput.closest('.store-filter-option')
+        ?.querySelector('.store-filter-option-text')
+        ?.textContent?.trim() || splitByInput.value;
       chips.push({
-        kind: 'select',
+        kind: 'radio',
         param: 'splitBy',
-        value: splitBy.value,
+        value: splitByInput.value,
         text,
         tone: 'group-by',
         groupLabel: 'تقسيم ZIP',
@@ -299,11 +301,16 @@ window.portalStoreFiltersInit = (root = document) => {
   };
 
   const updateAccordionBadge = (groupId, count) => {
-    const accordion = filtersRoot.querySelector(`[data-filter-group="${groupId}"]`);
-    if (!accordion) {
+    const group = filtersRoot.querySelector(`[data-filter-group="${groupId}"]`);
+    if (!group) {
       return;
     }
-    let badge = accordion.querySelector('.store-filter-accordion-badge');
+    const anchor = group.querySelector('.store-filter-accordion-summary')
+      || group.querySelector('.store-filter-chip-section-head');
+    if (!anchor) {
+      return;
+    }
+    let badge = group.querySelector('.store-filter-accordion-badge');
     if (count <= 0) {
       badge?.remove();
       return;
@@ -311,7 +318,7 @@ window.portalStoreFiltersInit = (root = document) => {
     if (!badge) {
       badge = document.createElement('span');
       badge.className = 'store-filter-accordion-badge';
-      accordion.querySelector('.store-filter-accordion-summary')?.appendChild(badge);
+      anchor.appendChild(badge);
     }
     badge.textContent = String(count);
   };
@@ -327,6 +334,9 @@ window.portalStoreFiltersInit = (root = document) => {
       const action = pill.querySelector('.store-filter-option-action');
       const checked = Boolean(input?.checked);
       pill.classList.toggle('is-selected', checked);
+      if (input?.type === 'radio') {
+        pill.classList.toggle('is-neutral', checked && (input.value === '' || input.value === 'none'));
+      }
       if (action && input?.type === 'checkbox') {
         action.textContent = checked ? 'remove' : 'add';
       }
@@ -359,10 +369,17 @@ window.portalStoreFiltersInit = (root = document) => {
         input.checked = false;
       }
     } else if (kind === 'radio') {
-      const resetInput = filterForm.querySelector(`input[name="${param}"][value="${escapeChipSelector(defaultAvailability)}"]`)
-        || filterForm.querySelector(`input[name="${param}"][value=""]`);
-      if (resetInput) {
-        resetInput.checked = true;
+      if (param === 'splitBy') {
+        const emptySplit = filterForm.querySelector('input[name="splitBy"][value=""]');
+        if (emptySplit) {
+          emptySplit.checked = true;
+        }
+      } else {
+        const resetInput = filterForm.querySelector(`input[name="${param}"][value="${escapeChipSelector(defaultAvailability)}"]`)
+          || filterForm.querySelector(`input[name="${param}"][value=""]`);
+        if (resetInput) {
+          resetInput.checked = true;
+        }
       }
     } else if (kind === 'range') {
       const minInput = minKey ? filterForm.querySelector(`input[name="${minKey}"]`) : null;
@@ -412,9 +429,9 @@ window.portalStoreFiltersInit = (root = document) => {
     if (groupBy) {
       groupBy.value = 'none';
     }
-    const splitBy = filterForm.querySelector('[data-zip-split-by], select[name="splitBy"]');
-    if (splitBy) {
-      splitBy.value = '';
+    const splitByEmpty = filterForm.querySelector('input[name="splitBy"][value=""]');
+    if (splitByEmpty) {
+      splitByEmpty.checked = true;
     }
     if (sidebarSearchInput) {
       sidebarSearchInput.value = '';
@@ -458,6 +475,7 @@ window.portalStoreFiltersInit = (root = document) => {
     updateAccordionBadge('availability', chips.filter((chip) => chip.containerGroup === 'availability').length);
     updateAccordionBadge('warehouse', chips.filter((chip) => chip.containerGroup === 'warehouse').length);
     updateAccordionBadge('price', chips.filter((chip) => chip.containerGroup === 'price').length);
+    updateAccordionBadge('splitBy', chips.filter((chip) => chip.containerGroup === 'splitBy').length);
 
     updatePendingOptionStates();
   };

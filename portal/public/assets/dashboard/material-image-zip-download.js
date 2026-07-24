@@ -108,7 +108,7 @@
       void key;
     });
 
-    const splitKey = form.querySelector('[data-zip-split-by]')?.value || '';
+    const splitKey = form.querySelector('input[name="splitBy"]:checked')?.value || '';
     if (splitKey && SPLIT_CONFIG[splitKey]) {
       parts.push('تقسيم: ' + SPLIT_CONFIG[splitKey].label);
     }
@@ -165,7 +165,7 @@
     form.dataset.zipDownloadInit = '1';
 
     const statusHost = form.querySelector('[data-zip-download-status]');
-    const splitSelect = form.querySelector('[data-zip-split-by]');
+    const splitSelect = form.querySelector('input[name="splitBy"]:checked');
     const filtersShell = form.closest('[data-store-filters-root]');
 
     if (filtersShell && typeof window.portalStoreFiltersInit === 'function') {
