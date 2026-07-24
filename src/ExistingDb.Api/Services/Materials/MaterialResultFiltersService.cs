@@ -1,16 +1,44 @@
 using System.Linq.Expressions;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using ExistingDb.Api.Contracts.Materials;
 using ExistingDb.Api.Data;
 using ExistingDb.Api.Data.MainDb;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace ExistingDb.Api.Services.Materials;
 
-public sealed class MaterialResultFiltersService(IDbContextFactory<MainDbContext> contextFactory)
+public sealed class MaterialResultFiltersService(
+    IDbContextFactory<MainDbContext> contextFactory,
+    IMemoryCache memoryCache)
 {
     private const int MaxFacetValues = 100;
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(15);
+    private static readonly JsonSerializerOptions CacheKeyJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     public async Task<MaterialResultFiltersResponse> BuildAsync(
+        MaterialListFilters filters,
+        string? search,
+        CancellationToken cancellationToken)
+    {
+        var cacheKey = BuildCacheKey(filters, search);
+        if (memoryCache.TryGetValue(cacheKey, out MaterialResultFiltersResponse? cached) && cached is not null)
+        {
+            return cached;
+        }
+
+        var result = await BuildUncachedAsync(filters, search, cancellationToken);
+        memoryCache.Set(cacheKey, result, CacheTtl);
+
+        return result;
+    }
+
+    private async Task<MaterialResultFiltersResponse> BuildUncachedAsync(
         MaterialListFilters filters,
         string? search,
         CancellationToken cancellationToken)
@@ -64,6 +92,36 @@ public sealed class MaterialResultFiltersService(IDbContextFactory<MainDbContext
             await manufacturersTask,
             await countryOfOriginsTask,
             await groupsTask);
+    }
+
+    private static string BuildCacheKey(MaterialListFilters filters, string? search)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            search,
+            storeGuids = filters.StoreGuids.OrderBy(guid => guid).ToArray(),
+            countryOfOrigins = filters.CountryOfOrigins.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+            manufacturers = filters.Manufacturers.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+            sizeRanges = filters.SizeRanges.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+            materialTypes = filters.MaterialTypes.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+            ageCategories = filters.AgeCategories.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+            groupGuids = filters.GroupGuids.OrderBy(guid => guid).ToArray(),
+            materialGuids = filters.MaterialGuids.OrderBy(guid => guid).ToArray(),
+            filters.MinWarehouseQuantity,
+            filters.MaxWarehouseQuantity,
+            filters.IsAvailable,
+            filters.HasImage,
+            filters.MinUnitSalePriceSyp,
+            filters.MaxUnitSalePriceSyp,
+            filters.MinUnitSalePriceUsd,
+            filters.MaxUnitSalePriceUsd,
+            filters.MinUnitPurchasePriceUsd,
+            filters.MaxUnitPurchasePriceUsd
+        }, CacheKeyJsonOptions);
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+
+        return "material_result_filters_v1:" + Convert.ToHexString(hash);
     }
 
     private async Task<MaterialSearchResolution> ResolveSearchAsync(

@@ -85,6 +85,7 @@ authenticationBuilder.AddJwtBearer(options =>
     };
 });
 
+builder.Services.AddMemoryCache();
 builder.Services.AddAuthorization();
 
 builder.Services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
