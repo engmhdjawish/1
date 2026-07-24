@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Database;
+use Portal\Support\ResponseCache;
 use PDO;
 
 final class HomeSectionService
@@ -45,6 +46,14 @@ final class HomeSectionService
     /** @return list<array<string, mixed>> */
     public static function activeSections(): array
     {
+        $cacheKey = self::activeSectionsCacheKey();
+
+        return ResponseCache::remember($cacheKey, 300, static fn (): array => self::buildActiveSections());
+    }
+
+    /** @return list<array<string, mixed>> */
+    private static function buildActiveSections(): array
+    {
         $pdo = Database::pdo();
         $sections = $pdo->query(
             'SELECT id::text AS id, slug, title_ar, subtitle_ar, banner_image_url, display_mode::text AS display_mode, max_products
@@ -64,9 +73,30 @@ final class HomeSectionService
         return $sections;
     }
 
+    private static function activeSectionsCacheKey(): string
+    {
+        $rows = Database::pdo()->query(
+            'SELECT id::text AS id, updated_at::text AS updated_at, max_products, display_mode::text AS display_mode, sort_order
+             FROM home_sections WHERE is_active = TRUE ORDER BY id'
+        )->fetchAll(PDO::FETCH_ASSOC);
+
+        return 'home_sections_v1:' . hash('sha256', json_encode($rows, JSON_UNESCAPED_UNICODE));
+    }
+
+    /** @return list<array<string, mixed>> */
+    public static function activeSectionsUncached(): array
+    {
+        return self::buildActiveSections();
+    }
+
     /** @return list<array{show_images: bool, price_mode: string}> */
     public static function activeSectionDisplayOptions(): array
     {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+
         $sectionIds = Database::pdo()->query(
             'SELECT id::text AS id FROM home_sections WHERE is_active = TRUE ORDER BY sort_order ASC'
         )->fetchAll(PDO::FETCH_COLUMN);
@@ -76,6 +106,8 @@ final class HomeSectionService
             $parsed = self::parseFilterRows(self::filtersForSection((string) $sectionId));
             $options[] = $parsed['display_options'];
         }
+
+        $cache = $options;
 
         return $options;
     }

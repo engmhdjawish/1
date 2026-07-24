@@ -8,9 +8,20 @@ use Portal\Database;
 
 final class StorePolicyService
 {
+    /** @var array<string, mixed>|null */
+    private static ?array $guestPolicyCache = null;
+
+    private static bool $guestPolicyResolved = false;
+
     /** @return array<string, mixed>|null */
     public static function guestPolicy(): ?array
     {
+        if (self::$guestPolicyResolved) {
+            return self::$guestPolicyCache;
+        }
+
+        self::$guestPolicyResolved = true;
+
         $row = Database::pdo()->query(
             'SELECT
                 ap.id,
@@ -29,7 +40,9 @@ final class StorePolicyService
              LIMIT 1'
         )->fetch();
 
-        return $row ?: null;
+        self::$guestPolicyCache = $row ?: null;
+
+        return self::$guestPolicyCache;
     }
 
     public static function maxPackagesPerMaterial(): ?float

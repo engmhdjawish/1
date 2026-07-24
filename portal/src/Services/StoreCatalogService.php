@@ -10,12 +10,24 @@ use Portal\Support\StorePricePreference;
 
 final class StoreCatalogService
 {
+    /** @var array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string}|null */
+    private static ?array $displayOptionsCache = null;
+
+    /** @var array<string, mixed>|null */
+    private static ?array $activePolicyCache = null;
+
+    private static bool $activePolicyResolved = false;
+
     /** @return array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string} */
     public static function displayOptions(): array
     {
+        if (self::$displayOptionsCache !== null) {
+            return self::$displayOptionsCache;
+        }
+
         $policy = self::activePolicy();
         if ($policy === null) {
-            return [
+            self::$displayOptionsCache = [
                 'show_price' => false,
                 'show_quantity' => false,
                 'allow_cart' => false,
@@ -23,11 +35,13 @@ final class StoreCatalogService
                 'show_images' => true,
                 'price_mode' => 'none',
             ];
+
+            return self::$displayOptionsCache;
         }
 
         $showPrice = (bool) ($policy['show_price'] ?? false);
 
-        return [
+        self::$displayOptionsCache = [
             'show_price' => $showPrice,
             'show_quantity' => (bool) ($policy['show_quantity'] ?? false),
             'allow_cart' => (bool) ($policy['allow_cart'] ?? false),
@@ -35,14 +49,21 @@ final class StoreCatalogService
             'show_images' => true,
             'price_mode' => StorePricePreference::priceModeForDisplay($showPrice),
         ];
+
+        return self::$displayOptionsCache;
     }
 
     /** هل يُعرض مبدّل العملة في الهيدر (سياسة الوصول أو أقسام رئيسية بأسعار). */
-    public static function headerShowsPriceCurrency(): bool
+    public static function headerShowsPriceCurrency(?string $pagePath = null): bool
     {
         $display = self::displayOptions();
         if ((bool) ($display['show_price'] ?? false)) {
             return true;
+        }
+
+        $pagePath ??= \Portal\Support\PortalUrl::requestPath();
+        if (!in_array($pagePath, ['/index.php', '/', '/store.php', '/product.php', '/share.php'], true)) {
+            return false;
         }
 
         if (!function_exists('section_price_display_state')) {
@@ -67,40 +88,56 @@ final class StoreCatalogService
     /** @return array<string, mixed>|null */
     public static function activePolicy(): ?array
     {
+        if (self::$activePolicyResolved) {
+            return self::$activePolicyCache;
+        }
+
+        self::$activePolicyResolved = true;
+
         if (CustomerSession::check()) {
             $customer = CustomerSession::customer();
             $policyId = trim((string) ($customer['access_policy_id'] ?? ''));
+            $parsed = $policyId !== ''
+                ? AccessPolicyService::parsedFiltersForPolicyId($policyId)
+                : [
+                    'rules' => AccessPolicyService::defaultFilterRules(),
+                    'store_options' => AccessPolicyService::defaultStoreOptions(),
+                ];
 
-            return [
+            self::$activePolicyCache = [
                 'id' => $policyId,
                 'show_price' => (bool) ($customer['show_price'] ?? false),
                 'show_quantity' => (bool) ($customer['show_quantity'] ?? false),
                 'allow_cart' => (bool) ($customer['allow_cart'] ?? false),
                 'allow_order' => (bool) ($customer['allow_order'] ?? false),
                 'name_ar' => 'عميل مسجّل',
-                'filter_rules' => $policyId !== ''
-                    ? AccessPolicyService::filterRulesForPolicyId($policyId)
-                    : AccessPolicyService::defaultFilterRules(),
-                'store_options' => $policyId !== ''
-                    ? AccessPolicyService::storeOptionsForPolicyId($policyId)
-                    : AccessPolicyService::defaultStoreOptions(),
+                'filter_rules' => $parsed['rules'],
+                'store_options' => $parsed['store_options'],
             ];
+
+            return self::$activePolicyCache;
         }
 
         $guestPolicy = StorePolicyService::guestPolicy();
         if ($guestPolicy === null) {
+            self::$activePolicyCache = null;
+
             return null;
         }
 
         $policyId = trim((string) ($guestPolicy['id'] ?? ''));
-        $guestPolicy['filter_rules'] = $policyId !== ''
-            ? AccessPolicyService::filterRulesForPolicyId($policyId)
-            : AccessPolicyService::defaultFilterRules();
-        $guestPolicy['store_options'] = $policyId !== ''
-            ? AccessPolicyService::storeOptionsForPolicyId($policyId)
-            : AccessPolicyService::defaultStoreOptions();
+        $parsed = $policyId !== ''
+            ? AccessPolicyService::parsedFiltersForPolicyId($policyId)
+            : [
+                'rules' => AccessPolicyService::defaultFilterRules(),
+                'store_options' => AccessPolicyService::defaultStoreOptions(),
+            ];
+        $guestPolicy['filter_rules'] = $parsed['rules'];
+        $guestPolicy['store_options'] = $parsed['store_options'];
 
-        return $guestPolicy;
+        self::$activePolicyCache = $guestPolicy;
+
+        return self::$activePolicyCache;
     }
 
     /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Database;
+use Portal\Support\ResponseCache;
 use PDO;
 
 /**
@@ -47,6 +48,14 @@ final class SpecialOfferService
     /** @return list<array<string, mixed>> */
     public static function activeHomeSections(): array
     {
+        $cacheKey = self::activeHomeSectionsCacheKey();
+
+        return ResponseCache::remember($cacheKey, 300, static fn (): array => self::buildActiveHomeSections());
+    }
+
+    /** @return list<array<string, mixed>> */
+    private static function buildActiveHomeSections(): array
+    {
         $stmt = Database::pdo()->query(
             'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
                     selection_mode::text AS selection_mode, discount_type::text AS discount_type,
@@ -75,9 +84,30 @@ final class SpecialOfferService
         return $sections;
     }
 
+    private static function activeHomeSectionsCacheKey(): string
+    {
+        $rows = Database::pdo()->query(
+            'SELECT id::text AS id, updated_at::text AS updated_at, home_sort_order, max_products,
+                    starts_at::text AS starts_at, ends_at::text AS ends_at
+             FROM special_offers
+             WHERE is_active = TRUE
+               AND show_on_home = TRUE
+               AND starts_at <= NOW()
+               AND (ends_at IS NULL OR ends_at > NOW())
+             ORDER BY id'
+        )->fetchAll(PDO::FETCH_ASSOC);
+
+        return 'home_offers_v1:' . hash('sha256', json_encode($rows, JSON_UNESCAPED_UNICODE));
+    }
+
     /** @return list<array{show_images: bool, price_mode: string}> */
     public static function activeHomeOfferDisplayOptions(): array
     {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+
         $offerIds = Database::pdo()->query(
             'SELECT id::text AS id
              FROM special_offers
@@ -93,6 +123,8 @@ final class SpecialOfferService
             $parsed = self::parseFilterRows(self::filtersForOffer((string) $offerId));
             $options[] = $parsed['display_options'];
         }
+
+        $cache = $options;
 
         return $options;
     }

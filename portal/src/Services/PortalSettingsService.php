@@ -10,9 +10,16 @@ use PDO;
 
 final class PortalSettingsService
 {
+    /** @var array<string, string>|null */
+    private static ?array $companySettingsCache = null;
+
     /** @return array<string, string> */
     public static function companySettings(): array
     {
+        if (self::$companySettingsCache !== null) {
+            return self::$companySettingsCache;
+        }
+
         $stmt = Database::pdo()->query(
             'SELECT key, value_ar
              FROM company_settings'
@@ -40,6 +47,8 @@ final class PortalSettingsService
             }
             $map[$key] = (string) ($row['value_ar'] ?? '');
         }
+
+        self::$companySettingsCache = $map;
 
         return $map;
     }

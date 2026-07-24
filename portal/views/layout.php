@@ -30,7 +30,7 @@ $staffLoggedIn = WebSession::check();
 $storeDisplay = StoreCatalogService::displayOptions();
 StorePricePreference::bootstrap();
 StorePricePreference::applyFromRequest($_GET);
-$storeShowPrice = StoreCatalogService::headerShowsPriceCurrency();
+$storeShowPrice = StoreCatalogService::headerShowsPriceCurrency($pagePath);
 $storePriceCurrency = StorePricePreference::current();
 $storeAllowCart = (bool) ($storeDisplay['allow_cart'] ?? false);
 $storeCartCount = $storeAllowCart ? StoreCartService::itemCount() : 0;
@@ -213,6 +213,10 @@ if ($customer) {
   <script src="<?= h(portal_asset_url('/assets/store-pref.js')) ?>" defer></script>
 <?php endif; ?>
 <?php if ($enableStoreCartJs): ?>
+  <script type="application/json" id="storeCartBootstrap"><?= json_encode(
+      StoreCartService::bootstrapPayload(),
+      JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP
+  ) ?></script>
   <script>
     (() => {
       if (window.__storeCartSubmitGuard) return;

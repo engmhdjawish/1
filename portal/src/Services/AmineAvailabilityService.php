@@ -9,7 +9,9 @@ use Portal\Config;
 /** حالة اتصال API الأمين — للتدهور التدريجي دون إيقاف الموقع. */
 final class AmineAvailabilityService
 {
-    private const CACHE_TTL = 45;
+    private const CACHE_TTL = 120;
+
+    private static bool $refreshScheduled = false;
 
     /** @return array{online: bool, status: string, message: string, user_message: string} */
     public static function snapshot(): array
@@ -19,22 +21,14 @@ final class AmineAvailabilityService
             return $cached;
         }
 
-        $health = PortalSettingsService::apiHealth();
-        $online = (bool) ($health['ok'] ?? false);
-        $status = $online ? 'online' : self::statusFromHealth($health);
-        $technical = trim((string) ($health['message'] ?? ''));
-        $userMessage = $online ? '' : self::userMessageForStatus($status, $technical);
+        $stale = self::readStaleCache();
+        if ($stale !== null) {
+            self::scheduleRefresh();
 
-        $snapshot = [
-            'online' => $online,
-            'status' => $status,
-            'message' => $technical,
-            'user_message' => $userMessage,
-        ];
+            return $stale;
+        }
 
-        self::writeCache($snapshot);
-
-        return $snapshot;
+        return self::buildAndCacheSnapshot();
     }
 
     public static function isAvailable(): bool
@@ -53,6 +47,15 @@ final class AmineAvailabilityService
     {
         return 'نواجه مشكلة مؤقتة في الاتصال بنظام المخزون، ونعمل على حلها خلال دقائق. '
             . 'يمكنك تصفّح آخر نسخة متاحة من المتجر ومراجعة سلتك، وقد تتأخر تحديثات الأسعار والكميات حتى يعود الاتصال.';
+    }
+
+    public static function refreshSnapshotQuietly(): void
+    {
+        try {
+            self::buildAndCacheSnapshot();
+        } catch (\Throwable) {
+            // ignore background refresh failures
+        }
     }
 
     /** @param array{ok?: bool, status?: int, message?: string} $health */
@@ -79,8 +82,70 @@ final class AmineAvailabilityService
         return self::defaultUserMessage();
     }
 
+    /** @return array{online: bool, status: string, message: string, user_message: string} */
+    private static function buildAndCacheSnapshot(): array
+    {
+        $health = PortalSettingsService::apiHealth();
+        $online = (bool) ($health['ok'] ?? false);
+        $status = $online ? 'online' : self::statusFromHealth($health);
+        $technical = trim((string) ($health['message'] ?? ''));
+        $userMessage = $online ? '' : self::userMessageForStatus($status, $technical);
+
+        $snapshot = [
+            'online' => $online,
+            'status' => $status,
+            'message' => $technical,
+            'user_message' => $userMessage,
+        ];
+
+        self::writeCache($snapshot);
+
+        return $snapshot;
+    }
+
+    private static function scheduleRefresh(): void
+    {
+        if (self::$refreshScheduled) {
+            return;
+        }
+
+        self::$refreshScheduled = true;
+        register_shutdown_function([self::class, 'refreshSnapshotQuietly']);
+    }
+
     /** @return array{online: bool, status: string, message: string, user_message: string}|null */
     private static function readCache(): ?array
+    {
+        $payload = self::readCachePayload();
+        if ($payload === null) {
+            return null;
+        }
+
+        $expiresAt = (int) ($payload['expires_at'] ?? 0);
+        if ($expiresAt <= time()) {
+            return null;
+        }
+
+        $data = $payload['data'] ?? null;
+
+        return is_array($data) ? $data : null;
+    }
+
+    /** @return array{online: bool, status: string, message: string, user_message: string}|null */
+    private static function readStaleCache(): ?array
+    {
+        $payload = self::readCachePayload();
+        if ($payload === null) {
+            return null;
+        }
+
+        $data = $payload['data'] ?? null;
+
+        return is_array($data) ? $data : null;
+    }
+
+    /** @return array{expires_at?: int, data?: mixed}|null */
+    private static function readCachePayload(): ?array
     {
         $path = self::cachePath();
         if (!is_file($path)) {
@@ -93,18 +158,8 @@ final class AmineAvailabilityService
         }
 
         $payload = json_decode($raw, true);
-        if (!is_array($payload)) {
-            return null;
-        }
 
-        $expiresAt = (int) ($payload['expires_at'] ?? 0);
-        if ($expiresAt <= time()) {
-            return null;
-        }
-
-        $data = $payload['data'] ?? null;
-
-        return is_array($data) ? $data : null;
+        return is_array($payload) ? $payload : null;
     }
 
     /** @param array{online: bool, status: string, message: string, user_message: string} $snapshot */

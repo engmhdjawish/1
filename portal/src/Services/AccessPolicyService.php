@@ -146,10 +146,29 @@ final class AccessPolicyService
         return $row;
     }
 
+    /** @return array{rules: array<string, mixed>, store_options: array<string, mixed>} */
+    public static function parsedFiltersForPolicyId(string $policyId): array
+    {
+        static $cache = [];
+        $policyId = trim($policyId);
+        if ($policyId === '') {
+            return [
+                'rules' => self::defaultFilterRules(),
+                'store_options' => self::defaultStoreOptions(),
+            ];
+        }
+
+        if (!isset($cache[$policyId])) {
+            $cache[$policyId] = self::parseAllFilterRows(self::loadPolicyFilterRows($policyId));
+        }
+
+        return $cache[$policyId];
+    }
+
     /** @return array<string, mixed> */
     public static function filterRulesForPolicyId(string $policyId): array
     {
-        return self::parseAllFilterRows(self::loadPolicyFilterRows($policyId))['rules'];
+        return self::parsedFiltersForPolicyId($policyId)['rules'];
     }
 
     /** @return array{
@@ -161,7 +180,7 @@ final class AccessPolicyService
      * } */
     public static function storeOptionsForPolicyId(string $policyId): array
     {
-        return self::parseAllFilterRows(self::loadPolicyFilterRows($policyId))['store_options'];
+        return self::parsedFiltersForPolicyId($policyId)['store_options'];
     }
 
     /**

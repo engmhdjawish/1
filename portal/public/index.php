@@ -5,10 +5,16 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Services\HomeSectionService;
+use Portal\Services\PortalSettingsService;
 use Portal\Services\SiteMediaService;
 use Portal\Services\SpecialOfferService;
+use Portal\Services\StoreCatalogService;
 
 require dirname(__DIR__) . '/views/helpers.php';
+
+$companyContext = PortalSettingsService::companySettings();
+$companyLogoUrl = PortalSettingsService::companyLogoUrl($companyContext);
+$storeCatalogDisplay = StoreCatalogService::displayOptions();
 
 $sections = HomeSectionService::activeSections();
 foreach ($sections as &$section) {
@@ -32,7 +38,6 @@ require dirname(__DIR__) . '/views/home.php';
 $content = ob_get_clean();
 $title = 'الرئيسية';
 $extraHead = '<link href="' . h(portal_asset_url('/css/home-page.css')) . '" rel="stylesheet">';
-$previewScript = '<script src="' . h(portal_asset_url('/assets/store-product-preview.js')) . '" defer></script>';
-$extraFooter = '<script src="' . h(portal_asset_url('/assets/home-page.js')) . '" defer></script>' . $previewScript;
+$extraFooter = '<script src="' . h(portal_asset_url('/assets/home-page.js')) . '" defer></script>';
 $enableQuickView = false;
 require dirname(__DIR__) . '/views/layout.php';

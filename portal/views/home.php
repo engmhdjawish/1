@@ -9,11 +9,16 @@ use Portal\Services\StoreCatalogService;
 
 /** @var list<array<string, mixed>> $sections */
 /** @var list<array<string, mixed>> $ads */
+/** @var array<string, string>|null $companyContext */
+/** @var string|null $companyLogoUrl */
+/** @var array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string}|null $storeCatalogDisplay */
 $ads ??= [];
 
-$company = PortalSettingsService::companySettings();
+$company = is_array($companyContext ?? null) ? $companyContext : PortalSettingsService::companySettings();
 $siteName = trim((string) ($company['company_name'] ?? '')) !== '' ? (string) $company['company_name'] : 'جاويش للتجارة';
-$companyLogoUrl = PortalSettingsService::companyLogoUrl($company);
+$companyLogoUrl = trim((string) ($companyLogoUrl ?? '')) !== ''
+    ? (string) $companyLogoUrl
+    : PortalSettingsService::companyLogoUrl($company);
 $aboutSnippet = trim((string) ($company['about_us_ar'] ?? ''));
 if ($aboutSnippet !== '') {
     $aboutSnippet = preg_replace('/\s+/', ' ', $aboutSnippet) ?? $aboutSnippet;
@@ -23,7 +28,9 @@ if ($aboutSnippet !== '') {
 }
 $sectionCount = count($sections);
 $offerCount = count(array_filter($sections, static fn (array $s): bool => !empty($s['is_offer_section'])));
-$storeCatalogDisplay = StoreCatalogService::displayOptions();
+$storeCatalogDisplay = is_array($storeCatalogDisplay ?? null)
+    ? $storeCatalogDisplay
+    : StoreCatalogService::displayOptions();
 $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
 ?>
 <div class="home-page">

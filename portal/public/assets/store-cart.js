@@ -1687,6 +1687,16 @@
     }
   };
 
+  const readCartBootstrap = () => {
+    const el = document.getElementById('storeCartBootstrap');
+    if (!el) return null;
+    try {
+      return JSON.parse(el.textContent || '');
+    } catch {
+      return null;
+    }
+  };
+
   const init = async () => {
     initCartCrossTabSync();
     bindAddForms();
@@ -1700,6 +1710,12 @@
       bindImageZoom(page);
     }
     initCartPage();
+    const bootstrap = readCartBootstrap();
+    if (bootstrap?.cart_qty_by_guid) {
+      refreshCartForms(bootstrap);
+      updateBadge(bootstrap);
+      return;
+    }
     try {
       const res = await fetch(cartApiUrl({ reconcile: false }), { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
       const data = await res.json();

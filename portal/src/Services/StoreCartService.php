@@ -25,6 +25,27 @@ final class StoreCartService
         return ShareCartService::packageCount(self::TOKEN);
     }
 
+    /** @return array<string, float> */
+    public static function cartQtyByGuid(): array
+    {
+        $map = [];
+        foreach (self::items() as $guid => $line) {
+            $map[(string) $guid] = max(0.0, round((float) ($line['quantity'] ?? 0), 4));
+        }
+
+        return $map;
+    }
+
+    /** @return array{cart_count: int, cart_package_count: float, cart_qty_by_guid: array<string, float>} */
+    public static function bootstrapPayload(): array
+    {
+        return [
+            'cart_count' => self::itemCount(),
+            'cart_package_count' => self::packageCount(),
+            'cart_qty_by_guid' => self::cartQtyByGuid(),
+        ];
+    }
+
     /** @return array{total_sp: float, total_usd: float} */
     public static function totals(): array
     {
