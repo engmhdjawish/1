@@ -737,7 +737,15 @@ function order_preview_payload(array $line, array $displayOptions): array
     $imageUrl = trim((string) ($line['image_url'] ?? ''));
     $zoomUrl = $imageUrl !== '' ? material_image_zoom_url($imageUrl) : '';
     $priceMode = (string) ($displayOptions['price_mode'] ?? 'usd');
-    $showPrice = (bool) ($displayOptions['show_price'] ?? true) && store_line_has_display_price($line);
+    $showPrice = (bool) ($displayOptions['show_price'] ?? true);
+    if ($showPrice) {
+        $showPrice = $prices['pack_sp'] > 0
+            || $prices['pack_usd'] > 0
+            || $prices['unit_sp'] > 0
+            || $prices['unit_usd'] > 0
+            || $prices['line_total_sp'] > 0
+            || $prices['line_total_usd'] > 0;
+    }
     $hasOffer = store_line_has_offer($line);
     $packaging = $prices['packaging'];
     $primaryUnit = $prices['primary_unit'];
@@ -774,6 +782,7 @@ function order_preview_payload(array $line, array $displayOptions): array
         'lineTotalUsd' => $prices['line_total_usd'],
         'allowCart' => false,
         'previewContext' => 'order',
+        'isCancelled' => !empty($line['is_cancelled']) || (string) ($line['status'] ?? '') === 'cancelled',
     ];
 }
 

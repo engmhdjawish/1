@@ -347,7 +347,101 @@
     packagingEl.hidden = false;
   };
 
+  const renderOrderStaffPanel = (item) => {
+    const packageUnit = item.packageUnit || 'طرد';
+    const primaryUnit = item.primaryUnit || 'زوج';
+    const qty = formatPackageCount(item.orderQty ?? 0);
+    const packaging = formatPackagingLabel(item);
+    const code = item.code ? `<code class="store-num" dir="ltr">${esc(item.code)}</code>` : '—';
+    const rows = [];
+
+    rows.push(`
+      <div class="store-product-preview__staff-row">
+        <dt>رقم المادة</dt>
+        <dd>${code}</dd>
+      </div>`);
+
+    if (packaging) {
+      rows.push(`
+        <div class="store-product-preview__staff-row">
+          <dt>التعبئة</dt>
+          <dd dir="ltr">${esc(packaging)}</dd>
+        </div>`);
+    }
+
+    rows.push(`
+      <div class="store-product-preview__staff-row">
+        <dt>الكمية</dt>
+        <dd class="store-num" dir="ltr">${esc(qty)} ${esc(packageUnit)}</dd>
+      </div>`);
+
+    if (item.showPrice) {
+      if (item.showPriceSyp && (item.packageSaleSp > 0 || item.originalPackSp > 0)) {
+        rows.push(`
+          <div class="store-product-preview__staff-row">
+            <dt>سعر ${esc(packageUnit)}</dt>
+            <dd class="store-num" dir="ltr">${formatMoney(item.packageSaleSp > 0 ? item.packageSaleSp : item.originalPackSp)} ل.س</dd>
+          </div>`);
+      }
+      if (item.showPriceSyp && (item.unitSaleSp > 0 || item.originalUnitSp > 0)) {
+        rows.push(`
+          <div class="store-product-preview__staff-row">
+            <dt>سعر ${esc(primaryUnit)}</dt>
+            <dd class="store-num" dir="ltr">${formatMoney(item.unitSaleSp > 0 ? item.unitSaleSp : item.originalUnitSp)} ل.س</dd>
+          </div>`);
+      }
+      if (item.showPriceUsd && (item.packageSaleUsd > 0 || item.originalPackUsd > 0)) {
+        rows.push(`
+          <div class="store-product-preview__staff-row">
+            <dt>سعر ${esc(packageUnit)}</dt>
+            <dd class="store-num" dir="ltr">$${formatUsd(item.packageSaleUsd > 0 ? item.packageSaleUsd : item.originalPackUsd)}</dd>
+          </div>`);
+      }
+      if (item.showPriceUsd && (item.unitSaleUsd > 0 || item.originalUnitUsd > 0)) {
+        rows.push(`
+          <div class="store-product-preview__staff-row">
+            <dt>سعر ${esc(primaryUnit)}</dt>
+            <dd class="store-num" dir="ltr">$${formatUsd(item.unitSaleUsd > 0 ? item.unitSaleUsd : item.originalUnitUsd)}</dd>
+          </div>`);
+      }
+    }
+
+    let totalHtml = '';
+    if (item.showPrice) {
+      if (item.showPriceSyp && Number(item.lineTotalSp) > 0) {
+        totalHtml = `<strong class="store-num" dir="ltr">${formatMoney(item.lineTotalSp)} ل.س</strong>`;
+      } else if (item.showPriceUsd && Number(item.lineTotalUsd) > 0) {
+        totalHtml = `<strong class="store-num" dir="ltr">$${formatUsd(item.lineTotalUsd)}</strong>`;
+      }
+    }
+
+    const offerHtml = item.hasOffer
+      ? `<div class="store-product-preview__staff-offer">${esc(item.offerBadge || 'عرض خاص')}</div>`
+      : '';
+
+    const cancelledHtml = item.isCancelled
+      ? '<div class="store-product-preview__staff-cancelled">صنف ملغى من الطلب</div>'
+      : '';
+
+    const noPriceHtml = !item.showPrice && !item.isCancelled
+      ? '<p class="store-product-preview__staff-note">سعر هذا الصنف يُحدد عند تأكيد الطلب.</p>'
+      : '';
+
+    return `
+      <div class="store-product-preview__staff-order">
+        <p class="store-product-preview__staff-kicker">متابعة الطلب — تفاصيل الصنف</p>
+        ${offerHtml}
+        ${cancelledHtml}
+        <dl class="store-product-preview__staff-grid">${rows.join('')}</dl>
+        ${totalHtml ? `<div class="store-product-preview__staff-total"><span>إجمالي الصنف</span>${totalHtml}</div>` : ''}
+        ${noPriceHtml}
+      </div>`;
+  };
+
   const renderPrices = (p) => {
+    if (p.previewContext === 'order') {
+      return '';
+    }
     if (!p.showPrice) {
       return '<p class="store-product-preview__no-price">الأسعار غير متاحة لحسابك.</p>';
     }
@@ -546,39 +640,6 @@
     if (window.StoreCart?.bindCartLineControls) {
       window.StoreCart.bindCartLineControls(container, item.maxPackages ?? null);
     }
-  };
-
-  const mountOrderLineInfo = (item, container) => {
-    if (!container) return;
-    const qty = formatPackageCount(item.orderQty ?? item.cartQty ?? 0);
-    const packageUnit = item.packageUnit || 'طرد';
-    let lineTotalHtml = '';
-    if (item.showPrice) {
-      if (item.showPriceSyp && Number(item.lineTotalSp) > 0) {
-        lineTotalHtml = `<div class="store-product-preview__order-total">
-          <span>إجمالي الصنف</span>
-          <strong class="store-num" dir="ltr">${formatMoney(item.lineTotalSp)} ل.س</strong>
-        </div>`;
-      } else if (item.showPriceUsd && Number(item.lineTotalUsd) > 0) {
-        lineTotalHtml = `<div class="store-product-preview__order-total">
-          <span>إجمالي الصنف</span>
-          <strong class="store-num" dir="ltr">$${formatUsd(item.lineTotalUsd)}</strong>
-        </div>`;
-      }
-    }
-    const codeHtml = item.code
-      ? `<div class="store-product-preview__order-code"><span>رقم المادة</span><code class="store-num" dir="ltr">${esc(item.code)}</code></div>`
-      : '';
-
-    container.innerHTML = `
-      <div class="store-product-preview__order-info">
-        ${codeHtml}
-        <div class="store-product-preview__order-qty">
-          <span class="store-product-preview__order-label">الكمية في الطلب</span>
-          <strong class="store-num" dir="ltr">${esc(qty)} ${esc(packageUnit)}</strong>
-        </div>
-        ${lineTotalHtml}
-      </div>`;
   };
 
   const renderCartFormFallback = (p) => {
@@ -795,9 +856,11 @@
       const pageLabel = !isCart && !isOrder && pageInfo.totalPages > 1
         ? ` — صفحة <span class="store-num" dir="ltr">${pageInfo.page}</span>/<span class="store-num" dir="ltr">${pageInfo.totalPages}</span>`
         : '';
+      const orderLabel = isOrder ? 'صنف ' : '';
       counterEl.innerHTML = total > 0
-        ? `<span class="store-num" dir="ltr">${state.index + 1}</span> / <span class="store-num" dir="ltr">${total}</span>${pageLabel}`
+        ? `${orderLabel}<span class="store-num" dir="ltr">${state.index + 1}</span> / <span class="store-num" dir="ltr">${total}</span>${pageLabel}`
         : '';
+      counterEl.classList.toggle('store-product-preview__counter--order', isOrder);
     }
     if (btnPrev) btnPrev.disabled = state.navigating || (atFirst && !hasPrevPage);
     if (btnNext) btnNext.disabled = state.navigating || (atLast && !hasNextPage);
@@ -826,7 +889,7 @@
     const imageWrap = modal.querySelector('.store-product-preview__image-wrap');
     if (imageWrap) {
       let banner = imageWrap.querySelector('.store-product-preview__offer-banner');
-      if (item.hasOffer) {
+      if (item.hasOffer && state.context !== 'order') {
         if (!banner) {
           banner = document.createElement('div');
           banner.className = 'store-product-preview__offer-banner';
@@ -841,40 +904,47 @@
     if (titleEl) titleEl.textContent = item.name || '—';
 
     if (subtitleEl) {
-      const parts = state.context === 'order'
-        ? [
-            item.code ? `رقم المادة: ${item.code}` : '',
-            formatPackagingLabel(item),
-          ].filter(Boolean)
-        : [
-            item.manufacturer,
-            item.code ? `#${item.code}` : '',
-            item.materialType,
-            item.showQuantity && item.packagesAvailable > 0
-              ? `متوفر ${item.packagesAvailableLabel || formatQty(item.packagesAvailable)} ${item.packageUnit}`
-              : '',
-          ].filter(Boolean);
-      subtitleEl.textContent = parts.join(' · ');
-      subtitleEl.hidden = parts.length === 0;
+      if (state.context === 'order') {
+        subtitleEl.textContent = item.isCancelled ? 'صنف ملغى من الطلب' : 'تفاصيل الصنف للمراجعة';
+        subtitleEl.hidden = false;
+      } else {
+        const parts = [
+          item.manufacturer,
+          item.code ? `#${item.code}` : '',
+          item.materialType,
+          item.showQuantity && item.packagesAvailable > 0
+            ? `متوفر ${item.packagesAvailableLabel || formatQty(item.packagesAvailable)} ${item.packageUnit}`
+            : '',
+        ].filter(Boolean);
+        subtitleEl.textContent = parts.join(' · ');
+        subtitleEl.hidden = parts.length === 0;
+      }
     }
 
-    renderPackaging(item);
-
-    if (pricesEl) pricesEl.innerHTML = renderPrices(item);
     if (state.context === 'order') {
-      mountOrderLineInfo(item, cartEl);
-      if (detailEl) detailEl.classList.add('hidden');
-    } else if (state.context === 'cart') {
-      mountCartLineControls(item, cartEl);
-      updateInCartBanner(item);
+      if (packagingEl) {
+        packagingEl.innerHTML = '';
+        packagingEl.hidden = true;
+      }
+      if (pricesEl) pricesEl.innerHTML = '';
+      if (cartEl) cartEl.innerHTML = renderOrderStaffPanel(item);
       if (detailEl) detailEl.classList.add('hidden');
     } else {
-      mountCartForm(item, cartEl);
-      updateInCartBanner(item);
-      if (detailEl) {
-        const detailHref = detailUrlForItem(item);
-        detailEl.href = detailHref || '/store.php';
-        detailEl.classList.toggle('hidden', !detailHref);
+      if (packagingEl) packagingEl.hidden = false;
+      renderPackaging(item);
+      if (pricesEl) pricesEl.innerHTML = renderPrices(item);
+      if (state.context === 'cart') {
+        mountCartLineControls(item, cartEl);
+        updateInCartBanner(item);
+        if (detailEl) detailEl.classList.add('hidden');
+      } else {
+        mountCartForm(item, cartEl);
+        updateInCartBanner(item);
+        if (detailEl) {
+          const detailHref = detailUrlForItem(item);
+          detailEl.href = detailHref || '/store.php';
+          detailEl.classList.toggle('hidden', !detailHref);
+        }
       }
     }
 

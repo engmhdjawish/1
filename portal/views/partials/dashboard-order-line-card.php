@@ -30,7 +30,14 @@ $unitPriceLabel = $showPriceSyp
 $lineTotalLabel = $showPriceSyp
     ? format_money($prices['line_total_sp'], true) . ' ل.س'
     : $formatUsd($prices['line_total_usd']);
-$showPrices = !$isCancelled && ($showPriceSyp || $showPriceUsd) && store_line_has_display_price($item);
+$showPrices = !$isCancelled && ($showPriceSyp || $showPriceUsd) && (
+    $prices['pack_sp'] > 0
+    || $prices['pack_usd'] > 0
+    || $prices['unit_sp'] > 0
+    || $prices['unit_usd'] > 0
+    || $prices['line_total_sp'] > 0
+    || $prices['line_total_usd'] > 0
+);
 ?>
 <article
   class="dash-order-item<?= $hasOffer ? ' dash-order-item--offer' : '' ?><?= $isCancelled ? ' dash-order-item--cancelled' : '' ?>"

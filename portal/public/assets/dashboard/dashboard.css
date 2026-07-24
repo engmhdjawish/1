@@ -577,13 +577,6 @@ button.is-loading::after,
   display: none;
 }
 
-.dashboard-slide-panel .store-order-line-card--dashboard {
-  border: 1px solid var(--dash-border);
-  border-radius: 0.875rem;
-  padding: 0.75rem;
-  background: #fff;
-}
-
 .dash-order-items-head {
   display: flex;
   align-items: flex-start;
@@ -856,56 +849,134 @@ button.is-loading::after,
   font-size: 0.75rem;
 }
 
-.store-product-preview__panel--order .store-product-preview__order-info {
+.store-product-preview__panel--order .store-product-preview__detail-link {
+  display: none;
+}
+
+.store-product-preview__panel--order .store-product-preview__cart {
+  margin-top: 0.5rem;
+}
+
+.store-product-preview__counter--order {
+  color: var(--dash-primary, #d81921);
+  letter-spacing: 0.01em;
+}
+
+.store-product-preview__staff-order {
   display: grid;
-  gap: 0.55rem;
-  padding: 0.85rem 0 0;
-  border-top: 1px solid rgba(148, 163, 184, 0.35);
+  gap: 0.65rem;
+  padding: 0.75rem;
+  border-radius: 0.85rem;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
 }
 
-.store-product-preview__order-code {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.55rem 0.7rem;
-  border-radius: 0.65rem;
-  background: rgba(15, 23, 42, 0.04);
-  font-size: 0.75rem;
+.store-product-preview__staff-kicker {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: #64748b;
-  font-weight: 700;
 }
 
-.store-product-preview__order-code code {
-  font-size: 0.875rem;
+.store-product-preview__staff-offer {
+  display: inline-flex;
+  align-items: center;
+  align-self: start;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(216, 25, 33, 0.08);
+  color: var(--dash-primary, #d81921);
+  font-size: 0.6875rem;
+  font-weight: 800;
+}
+
+.store-product-preview__staff-cancelled {
+  display: inline-flex;
+  align-items: center;
+  align-self: start;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+  font-size: 0.6875rem;
+  font-weight: 800;
+}
+
+.store-product-preview__staff-grid {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.store-product-preview__staff-row {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 38%) minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.6rem;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.store-product-preview__staff-row dt {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.store-product-preview__staff-row dd {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: #0f172a;
+  text-align: end;
+  word-break: break-word;
+}
+
+.store-product-preview__staff-row dd code {
+  font-size: 0.8125rem;
   font-weight: 800;
   color: #0f172a;
   background: transparent;
 }
 
-.store-product-preview__order-qty,
-.store-product-preview__order-total {
+.store-product-preview__staff-total {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  font-size: 0.8125rem;
-  padding: 0 0.15rem;
+  padding: 0.65rem 0.7rem;
+  border-radius: 0.65rem;
+  background: rgba(216, 25, 33, 0.06);
+  border: 1px solid rgba(216, 25, 33, 0.14);
 }
 
-.store-product-preview__order-total strong {
+.store-product-preview__staff-total > span {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.store-product-preview__staff-total strong {
   font-size: 1rem;
+  font-weight: 900;
   color: var(--dash-primary, #d81921);
 }
 
-.store-product-preview__order-label {
-  color: #64748b;
+.store-product-preview__staff-note {
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.6rem;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  font-size: 0.75rem;
   font-weight: 600;
-}
-
-.store-product-preview__order-qty strong {
-  font-size: 0.9375rem;
-  color: #0f172a;
+  color: #92400e;
+  line-height: 1.45;
 }
 
 @media (max-width: 420px) {
