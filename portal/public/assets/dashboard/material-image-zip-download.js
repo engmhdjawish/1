@@ -220,8 +220,36 @@
   };
 
   window.portalMaterialZipDownloadInit = (root = document) => {
+    root.querySelectorAll('[data-material-images-download-panel]').forEach((panel) => {
+      bindExclusiveDownloadAccordions(panel);
+    });
     root.querySelectorAll('[data-material-zip-form]').forEach((form) => initForm(form));
   };
+
+  function bindExclusiveDownloadAccordions(root) {
+    if (!root || root.dataset.downloadAccordionsInit === '1') {
+      return;
+    }
+    root.dataset.downloadAccordionsInit = '1';
+
+    const accordions = root.querySelectorAll('[data-download-accordion]');
+    accordions.forEach((accordion) => {
+      if (!(accordion instanceof HTMLDetailsElement) || accordion.dataset.downloadAccordionBound === '1') {
+        return;
+      }
+      accordion.dataset.downloadAccordionBound = '1';
+      accordion.addEventListener('toggle', () => {
+        if (!accordion.open) {
+          return;
+        }
+        accordions.forEach((other) => {
+          if (other !== accordion && other instanceof HTMLDetailsElement) {
+            other.open = false;
+          }
+        });
+      });
+    });
+  }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => window.portalMaterialZipDownloadInit(document));

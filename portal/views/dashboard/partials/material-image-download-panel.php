@@ -60,13 +60,19 @@ foreach ($materialFilterOptions['groups'] ?? [] as $group) {
 $defaultAvailability = '1';
 ?>
 <div data-material-images-download-panel>
-  <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
-    <section class="rounded-xl border border-border-subtle bg-white overflow-hidden xl:col-span-2">
-      <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60">
-        <h2 class="font-bold text-sm">تحميل ZIP حسب فلاتر المواد</h2>
-        <p class="text-xs text-text-muted mt-0.5">من ملفات الموقع المحلية فقط — حدّد الفلاتر ثم حمّل</p>
-      </div>
+  <div class="dash-mi-download-accordions">
+    <details class="dash-mi-download-accordion" data-download-accordion="materials">
+      <summary class="dash-mi-download-accordion__summary">
+        <span class="dash-mi-download-accordion__heading">
+          <span class="material-symbols-outlined dash-mi-download-accordion__icon" aria-hidden="true">folder_zip</span>
+          <span class="dash-mi-download-accordion__text">
+            <span class="dash-mi-download-accordion__title">تحميل ZIP حسب فلاتر المواد</span>
+            <span class="dash-mi-download-accordion__subtitle">من ملفات الموقع المحلية فقط — حدّد الفلاتر ثم حمّل</span>
+          </span>
+        </span>
+      </summary>
 
+      <div class="dash-mi-download-accordion__body">
       <div
         class="dash-mi-zip-filters-shell"
         data-store-filters-root
@@ -206,14 +212,22 @@ $defaultAvailability = '1';
           </div>
         </form>
       </div>
-    </section>
-
-    <section class="rounded-xl border border-border-subtle bg-white overflow-hidden h-fit">
-      <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60">
-        <h2 class="font-bold text-sm">تحميل صور فاتورة</h2>
-        <p class="text-xs text-text-muted mt-0.5">نوع الفاتورة + الرقم</p>
       </div>
-      <form class="p-4 space-y-3" method="get" action="/api/material-images-zip.php" target="_blank">
+    </details>
+
+    <details class="dash-mi-download-accordion" data-download-accordion="invoice">
+      <summary class="dash-mi-download-accordion__summary">
+        <span class="dash-mi-download-accordion__heading">
+          <span class="material-symbols-outlined dash-mi-download-accordion__icon" aria-hidden="true">receipt_long</span>
+          <span class="dash-mi-download-accordion__text">
+            <span class="dash-mi-download-accordion__title">تحميل صور فاتورة</span>
+            <span class="dash-mi-download-accordion__subtitle">نوع الفاتورة + الرقم</span>
+          </span>
+        </span>
+      </summary>
+
+      <div class="dash-mi-download-accordion__body">
+      <form class="dash-mi-download-invoice-form space-y-3" method="get" action="/api/material-images-zip.php" target="_blank">
         <input type="hidden" name="mode" value="invoice">
 
         <label class="block text-sm">
@@ -244,6 +258,7 @@ $defaultAvailability = '1';
           تحميل صور الفاتورة
         </button>
       </form>
-    </section>
+      </div>
+    </details>
   </div>
 </div>

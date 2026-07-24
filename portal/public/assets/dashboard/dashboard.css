@@ -1495,6 +1495,102 @@ button.is-loading::after,
 }
 
 /* ── Material images ZIP download tab ── */
+.dash-mi-download-accordions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.dash-mi-download-accordion {
+  border: 1px solid var(--dash-border, #e5e7eb);
+  border-radius: 0.85rem;
+  background: #fff;
+  overflow: hidden;
+}
+
+.dash-mi-download-accordion__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  list-style: none;
+  background: color-mix(in srgb, var(--dash-surface-low, #f9fafb) 65%, #fff);
+  transition: background 0.15s ease;
+}
+
+.dash-mi-download-accordion__summary:hover {
+  background: color-mix(in srgb, var(--dash-surface-low, #f9fafb) 85%, #fff);
+}
+
+.dash-mi-download-accordion__summary::-webkit-details-marker {
+  display: none;
+}
+
+.dash-mi-download-accordion__summary::after {
+  content: "expand_more";
+  font-family: "Material Symbols Outlined";
+  font-size: 1.35rem;
+  color: #94a3b8;
+  flex-shrink: 0;
+  transition: transform 0.2s ease, color 0.15s ease;
+}
+
+.dash-mi-download-accordion[open] .dash-mi-download-accordion__summary {
+  border-bottom: 1px solid var(--dash-border, #e5e7eb);
+}
+
+.dash-mi-download-accordion[open] .dash-mi-download-accordion__summary::after {
+  transform: rotate(180deg);
+  color: var(--dash-primary, #d81921);
+}
+
+.dash-mi-download-accordion[open] .dash-mi-download-accordion__icon {
+  color: var(--dash-primary, #d81921);
+}
+
+.dash-mi-download-accordion__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.dash-mi-download-accordion__icon {
+  font-size: 1.35rem;
+  color: #94a3b8;
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+}
+
+.dash-mi-download-accordion__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.dash-mi-download-accordion__title {
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.dash-mi-download-accordion__subtitle {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.dash-mi-download-accordion__body {
+  background: #fff;
+}
+
+.dash-mi-download-invoice-form {
+  padding: 1rem;
+}
+
 .dash-mi-zip-form {
   display: flex;
   flex-direction: column;
