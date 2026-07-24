@@ -405,6 +405,14 @@ final class StoreCartApi
             $name = trim((string) ($product['name'] ?? $product['Name'] ?? 'المادة'));
 
             if ($available <= 0) {
+                if ($currentQty > 0) {
+                    return [
+                        'ok' => false,
+                        'message' => 'لا يمكن زيادة الكمية — نفد المخزون المتاح حالياً. لديك '
+                            . StockReservationService::formatPackages($currentQty) . ' ' . $packageUnit . ' في السلة.',
+                    ];
+                }
+
                 return [
                     'ok' => false,
                     'message' => 'نفدت كمية «' . $name . '» المتاحة للطلب حالياً.',
@@ -417,16 +425,18 @@ final class StoreCartApi
                     return [
                         'ok' => false,
                         'message' => $remaining > 0
-                            ? 'الكمية المتاحة لـ «' . $name . '» هي ' . StockReservationService::formatPackages($available) . ' ' . $packageUnit
-                                . '. لديك ' . StockReservationService::formatPackages($currentQty) . ' في السلة — يمكنك إضافة '
-                                . StockReservationService::formatPackages($remaining) . ' فقط.'
-                            : 'نفدت الكمية المتاحة لـ «' . $name . '».',
+                            ? 'يمكنك إضافة ' . StockReservationService::formatPackages($remaining) . ' ' . $packageUnit
+                                . ' فقط — لديك ' . StockReservationService::formatPackages($currentQty)
+                                . ' والحد المتاح ' . StockReservationService::formatPackages($available) . '.'
+                            : 'لا يمكن إضافة المزيد — لديك ' . StockReservationService::formatPackages($currentQty)
+                                . ' ' . $packageUnit . ' والحد المتاح ' . StockReservationService::formatPackages($available) . '.',
                     ];
                 }
 
                 return [
                     'ok' => false,
-                    'message' => 'الكمية المتاحة لـ «' . $name . '» هي ' . StockReservationService::formatPackages($available) . ' ' . $packageUnit . ' فقط.',
+                    'message' => 'الحد المتاح لـ «' . $name . '» هو '
+                        . StockReservationService::formatPackages($available) . ' ' . $packageUnit . '.',
                 ];
             }
         }

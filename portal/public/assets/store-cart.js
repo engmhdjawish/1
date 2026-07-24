@@ -101,6 +101,8 @@
   let lastToastAt = 0;
   let lastInlineMessage = '';
   let lastInlineAt = 0;
+  let inlineNoticeTimer = null;
+  const INLINE_NOTICE_MS = 6000;
 
   const cartDrawer = () => document.getElementById('store-cart-drawer');
 
@@ -135,12 +137,33 @@
     }
   };
 
-  const buildCartNoticeHtml = (message, level = 'error') => {
-    const icon = level === 'warning' ? 'warning' : level === 'success' ? 'check_circle' : 'error';
-    return `<div class="store-cart-inline-notice store-cart-inline-notice--${level}" role="alert">
+  const buildCartNoticeHtml = (message, level = 'warning') => {
+    const icon = level === 'error' ? 'error' : level === 'success' ? 'check_circle' : 'info';
+    return `<div class="store-cart-inline-notice store-cart-inline-notice--${level}" role="status">
       <span class="material-symbols-outlined" aria-hidden="true">${icon}</span>
-      <span>${escapeHtml(message)}</span>
+      <span class="store-cart-inline-notice__text">${escapeHtml(message)}</span>
+      <button type="button" class="store-cart-inline-notice__dismiss" data-cart-notice-dismiss aria-label="إغلاق التنبيه">
+        <span class="material-symbols-outlined" aria-hidden="true">close</span>
+      </button>
     </div>`;
+  };
+
+  const scheduleInlineNoticeDismiss = () => {
+    if (inlineNoticeTimer) {
+      window.clearTimeout(inlineNoticeTimer);
+    }
+    inlineNoticeTimer = window.setTimeout(() => {
+      inlineNoticeTimer = null;
+      clearCartInlineNotice();
+    }, INLINE_NOTICE_MS);
+  };
+
+  const resolveCartNoticeLevel = (data) => {
+    if (data?.ok) return 'success';
+    if (data?.moved_unavailable) return 'error';
+    const msg = String(data?.message || '');
+    if (/نفدت كمية|غير متوف|تعذر التحقق|نُقل/i.test(msg)) return 'error';
+    return 'warning';
   };
 
   const showToast = (message, level = 'success') => {
@@ -162,10 +185,13 @@
     }, 4200);
   };
 
-  const showCartInlineNotice = (message, level = 'error') => {
+  const showCartInlineNotice = (message, level = 'warning') => {
     if (!message) return;
     const now = Date.now();
-    if (message === lastInlineMessage && now - lastInlineAt < 2500) return;
+    if (message === lastInlineMessage && now - lastInlineAt < 2500) {
+      scheduleInlineNoticeDismiss();
+      return;
+    }
     lastInlineMessage = message;
     lastInlineAt = now;
 
@@ -173,9 +199,14 @@
     if (!host) return;
     host.classList.remove('hidden');
     host.innerHTML = buildCartNoticeHtml(message, level);
+    scheduleInlineNoticeDismiss();
   };
 
   const clearCartInlineNotice = () => {
+    if (inlineNoticeTimer) {
+      window.clearTimeout(inlineNoticeTimer);
+      inlineNoticeTimer = null;
+    }
     lastInlineMessage = '';
     lastInlineAt = 0;
     document.querySelectorAll('[data-cart-stock-notices]').forEach((stockEl) => {
@@ -1382,13 +1413,14 @@
         const guid = wrap?.dataset.guid || '';
         const delta = parseInt(btn.dataset.bump || '0', 10);
         if (!guid || !delta || btn.disabled) return;
+        clearCartInlineNotice();
         const input = wrap?.querySelector('[data-qty-input]');
         const current = parseFloat(input?.value || '1') || 1;
         if (delta > 0 && maxPackages !== null && maxPackages !== undefined) {
           const max = parseFloat(String(maxPackages));
           if (Number.isFinite(max) && current + delta > max + 0.0001) {
             const maxLabel = String(maxPackages);
-            showCartFeedback(`الحد الأقصى للطلب هو ${maxLabel} طرد لهذه المادة.`, 'error');
+            showCartFeedback(`لا يمكن إضافة المزيد — الحد الأقصى ${maxLabel} طرد لهذه المادة.`, 'warning');
             return;
           }
         }
@@ -1612,11 +1644,11 @@
 
     const notifyCartMessage = (data, silent) => {
       if (silent || !data.message) return;
-      const level = data.level || (data.ok ? 'success' : 'error');
+      const level = resolveCartNoticeLevel(data);
       if (isCartDrawerOpen()) {
-        if (!data.ok && (level === 'error' || level === 'warning')) {
+        if (!data.ok) {
           showCartInlineNotice(data.message, level);
-        } else if (data.ok) {
+        } else {
           clearCartInlineNotice();
         }
         return;
@@ -1704,6 +1736,7 @@
     drawer.classList.remove('is-open');
     drawer.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('store-cart-drawer-open');
+    clearCartInlineNotice();
     syncToastHostLayer();
     document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
       btn.setAttribute('aria-expanded', 'false');
@@ -1818,6 +1851,14 @@
 
   const init = async () => {
     initCartCrossTabSync();
+    if (!window.__cartNoticeDismissBound) {
+      window.__cartNoticeDismissBound = true;
+      document.addEventListener('click', (event) => {
+        if (event.target.closest('[data-cart-notice-dismiss]')) {
+          clearCartInlineNotice();
+        }
+      });
+    }
     bindAddForms();
     bindCartDrawer();
     const page = document.querySelector('[data-store-cart-page="1"]');
