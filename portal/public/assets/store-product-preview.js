@@ -124,6 +124,17 @@
     if (loading) setImageLoading(true);
   };
 
+  const prepareImageTransition = () => {
+    imageRenderToken += 1;
+    setImageLoading(true);
+    if (!imgEl) return;
+    imgEl.removeAttribute('src');
+    imgEl.alt = '';
+    imgEl.classList.remove('is-preview-thumb', 'is-placeholder');
+    imgEl.classList.add('is-loading');
+    delete imgEl.dataset.pendingFull;
+  };
+
   const applyPreviewImage = async (itemOrUrl, options = {}) => {
     const isItem = itemOrUrl && typeof itemOrUrl === 'object';
     const src = isItem ? imageUrlFor(itemOrUrl) : String(itemOrUrl || '').trim();
@@ -248,7 +259,7 @@
     const items = [];
     const scope = root || document;
     const selector = root
-      ? '[data-store-preview-card]'
+      ? '[data-store-cart-preview-line]'
       : '[data-store-preview-card]:not([data-store-cart-preview-line])';
     scope.querySelectorAll(selector).forEach((card) => {
       const raw = card.getAttribute('data-preview');
@@ -709,14 +720,15 @@
 
   const updateNav = () => {
     const total = state.items.length;
-    const pageInfo = paging();
-    const hasPrevPage = !!pageInfo.prevPageUrl;
-    const hasNextPage = !!pageInfo.nextPageUrl;
+    const isCart = state.context === 'cart';
+    const pageInfo = isCart ? {} : paging();
+    const hasPrevPage = !isCart && !!pageInfo.prevPageUrl;
+    const hasNextPage = !isCart && !!pageInfo.nextPageUrl;
     const atFirst = state.index <= 0;
     const atLast = state.index >= total - 1;
 
     if (counterEl) {
-      const pageLabel = pageInfo.totalPages > 1
+      const pageLabel = !isCart && pageInfo.totalPages > 1
         ? ` — صفحة <span class="store-num" dir="ltr">${pageInfo.page}</span>/<span class="store-num" dir="ltr">${pageInfo.totalPages}</span>`
         : '';
       counterEl.innerHTML = total > 0
@@ -729,6 +741,9 @@
 
   const render = (p, imageOptions = {}) => {
     const item = syncCartQtyFromDom(p);
+    if (!imageOptions.preferElement) {
+      prepareImageTransition();
+    }
     const panel = modal.querySelector('.store-product-preview__panel');
     if (panel) {
       panel.classList.toggle('store-product-preview__panel--offer', !!item.hasOffer);
@@ -798,7 +813,9 @@
     state.index = Math.max(0, Math.min(index, state.items.length - 1));
     const item = state.items[state.index];
     if (item?.guid) state.currentGuid = item.guid;
-    const preferElement = imageOptions.preferElement || findCardImageForItem(item);
+    const preferElement = imageOptions.preferElement instanceof HTMLImageElement
+      ? imageOptions.preferElement
+      : null;
     render(item, preferElement ? { preferElement } : {});
   };
 
@@ -848,12 +865,18 @@
     if (state.navigating || state.items.length === 0) return;
 
     const newIndex = state.index + delta;
-    const pageInfo = paging();
 
     if (newIndex >= 0 && newIndex < state.items.length) {
       showAt(newIndex);
       return;
     }
+
+    if (state.context === 'cart') {
+      return;
+    }
+
+    const pageInfo = paging();
+
     if (delta > 0 && newIndex >= state.items.length && pageInfo.nextPageUrl) {
       await goToPreviewPage(pageInfo.nextPageUrl, 'first');
       return;
@@ -978,6 +1001,8 @@
     const qtyMap = event.detail?.cart_qty_by_guid;
 
     if (state.context === 'cart' && state.cartRoot) {
+      const prevIndex = state.index;
+      const prevGuid = state.currentGuid;
       state.items = collectItems(state.cartRoot);
       if (state.items.length === 0) {
         close();
@@ -985,24 +1010,32 @@
       }
 
       if (qtyMap && typeof qtyMap === 'object') {
-        state.items = state.items.map((item) => {
-          if (!item?.guid) return item;
-          const raw = qtyMap[item.guid]
-            ?? qtyMap[item.guid.toLowerCase()]
-            ?? qtyMap[item.guid.toUpperCase()];
-          if (raw !== undefined) {
-            return applyCartQtyToPayload(item, Math.max(0, Number(raw) || 0));
-          }
-          return syncCartQtyFromDom(item);
-        });
+        state.items = state.items
+          .map((item) => {
+            if (!item?.guid) return item;
+            const raw = qtyMap[item.guid]
+              ?? qtyMap[item.guid.toLowerCase()]
+              ?? qtyMap[item.guid.toUpperCase()];
+            if (raw !== undefined) {
+              return applyCartQtyToPayload(item, Math.max(0, Number(raw) || 0));
+            }
+            return syncCartQtyFromDom(item);
+          })
+          .filter((item) => Math.max(0, Number(item?.cartQty) || 0) > 0);
       }
 
-      let idx = state.items.findIndex((item) => item.guid === state.currentGuid);
+      if (state.items.length === 0) {
+        close();
+        return;
+      }
+
+      let idx = state.items.findIndex((item) => item.guid === prevGuid);
       if (idx < 0) {
-        idx = Math.min(state.index, state.items.length - 1);
+        idx = Math.min(prevIndex, state.items.length - 1);
       }
       state.index = idx;
-      render(state.items[state.index]);
+      state.currentGuid = state.items[idx]?.guid || '';
+      showAt(state.index);
       return;
     }
 
