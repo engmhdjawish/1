@@ -57,7 +57,10 @@ $hasContent = $introParagraphs !== [] || $sections !== [];
     <div class="absolute -right-10 bottom-0 h-44 w-44 rounded-full bg-black/10 blur-2xl"></div>
     <div class="relative px-6 py-10 md:px-12 md:py-14 grid gap-8 lg:grid-cols-[1.15fr_0.85fr] items-center">
       <div>
-        <p class="about-hero-kicker text-sm font-bold tracking-wide mb-3 opacity-90">من نحن</p>
+        <p class="about-hero-kicker text-sm font-bold tracking-wide mb-3 opacity-90 inline-flex items-center gap-2">
+          <span class="material-symbols-outlined text-base" aria-hidden="true">groups</span>
+          من نحن
+        </p>
         <h1 class="text-3xl md:text-5xl font-extrabold leading-tight"><?= h($aboutTitle) ?></h1>
         <?php if ($companyName !== ''): ?>
           <p class="mt-4 text-lg md:text-xl font-semibold opacity-95"><?= h($companyName) ?></p>
