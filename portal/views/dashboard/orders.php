@@ -268,7 +268,7 @@ $advancedFiltersOpen = ($filters['origin'] ?? '') !== ''
   <?php if ($orders === []): ?>
     <p class="p-5 text-sm text-text-muted text-center">لا توجد طلبات مطابقة للفلاتر الحالية.</p>
   <?php else: ?>
-    <div class="dashboard-orders-cards lg:hidden divide-y divide-border-subtle">
+    <div class="dashboard-orders-cards divide-y divide-border-subtle">
       <?php foreach ($orders as $row): ?>
         <?php
           $rowStatus = (string) ($row['status'] ?? 'pending');
@@ -332,7 +332,7 @@ $advancedFiltersOpen = ($filters['origin'] ?? '') !== ''
       <?php endforeach; ?>
     </div>
 
-    <div class="dashboard-orders-table-wrap hidden lg:block overflow-auto">
+    <div class="dashboard-orders-table-wrap overflow-auto">
       <table class="w-full text-sm min-w-[1240px]">
         <thead class="bg-surface-low text-text-muted border-b border-border-subtle">
           <tr>

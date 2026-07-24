@@ -523,6 +523,24 @@ button.is-loading::after,
   z-index: 1;
 }
 
+.dashboard-orders-cards {
+  display: block;
+}
+
+.dashboard-orders-table-wrap {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .dashboard-orders-cards {
+    display: none;
+  }
+
+  .dashboard-orders-table-wrap {
+    display: block;
+  }
+}
+
 @media (min-width: 640px) {
   .dashboard-orders-filter-tab {
     font-size: 0.875rem;
