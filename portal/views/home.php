@@ -76,6 +76,7 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
             <div class="home-hero__logo-stage">
               <span class="home-hero__logo-glow"></span>
               <div class="home-hero__logo-frame">
+                <span class="home-hero__logo-shimmer" aria-hidden="true"></span>
                 <?php if ($companyLogoUrl !== ''): ?>
                   <img
                     class="home-hero__logo"
@@ -88,7 +89,6 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
                 <?php else: ?>
                   <span class="material-symbols-outlined home-hero__logo-fallback">storefront</span>
                 <?php endif; ?>
-                <span class="home-hero__logo-shimmer"></span>
               </div>
             </div>
           </div>
