@@ -148,7 +148,9 @@ if ($customer) {
 <body class="min-h-screen text-text-main bg-surface-bg flex flex-col" data-store-price-currency="<?= h($storePriceCurrency) ?>">
 <?php require __DIR__ . '/partials/site-header.php'; ?>
 
-<?php require __DIR__ . '/partials/amine-service-banner.php'; ?>
+<div class="max-w-7xl w-full mx-auto px-4 pt-4 md:pt-6">
+  <?php require __DIR__ . '/partials/amine-service-banner.php'; ?>
+</div>
 
 <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-6 md:py-8">
   <?= $content ?>

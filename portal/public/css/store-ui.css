@@ -574,6 +574,42 @@
   color: #64748b;
 }
 
+.store-empty-state--maintenance {
+  border-style: solid;
+  border-color: #fcd34d;
+  background: linear-gradient(180deg, #fffbeb 0%, #fff 100%);
+  color: #92400e;
+  max-width: 42rem;
+  margin: 0 auto;
+}
+
+.store-empty-state__icon {
+  display: block;
+  font-size: 2.5rem;
+  margin: 0 auto 0.75rem;
+  color: #d97706;
+}
+
+.store-empty-state__title {
+  display: block;
+  font-size: 1.125rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+  color: #92400e;
+}
+
+.store-empty-state__text {
+  margin: 0 0 0.75rem;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.store-empty-state__hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #b45309;
+}
+
 /* Currency toggle */
 .store-currency-toggle {
   display: inline-flex;
