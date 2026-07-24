@@ -7,14 +7,12 @@ declare(strict_types=1);
     <span class="material-symbols-outlined" aria-hidden="true">notifications</span>
     <span class="notif-bell__badge hidden" data-notif-bell-badge>0</span>
   </button>
-  <div class="notif-bell__panel" data-notif-bell-panel role="dialog" aria-label="قائمة الإشعارات">
+  <div class="notif-bell__panel" data-notif-bell-panel role="dialog" aria-label="قائمة الإشعارات" hidden>
     <div class="notif-bell__head">
       <h2>الإشعارات</h2>
       <button type="button" class="notif-bell__mark-all" data-notif-bell-mark-all>تعليم الكل كمقروء</button>
     </div>
     <button type="button" class="notif-bell__enable-push" data-notif-enable-push hidden>تفعيل إشعارات الجهاز</button>
-    <div class="notif-bell__list" data-notif-bell-list>
-      <p class="notif-bell__empty">جاري التحميل...</p>
-    </div>
+    <div class="notif-bell__list" data-notif-bell-list></div>
   </div>
 </div>

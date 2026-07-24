@@ -191,6 +191,13 @@
     let open = false;
     let lastUnread = -1;
 
+    const setPanelOpen = (isOpen) => {
+      open = isOpen;
+      btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      panel.classList.toggle('is-open', isOpen);
+      panel.hidden = !isOpen;
+    };
+
     const setBadge = (count) => {
       const n = Math.max(0, Number(count) || 0);
       badge.textContent = n > 99 ? '99+' : String(n);
@@ -253,6 +260,7 @@
     };
 
     const load = async () => {
+      list.innerHTML = '<p class="notif-bell__empty">جاري التحميل...</p>';
       try {
         const data = await fetchJson(API);
         list.innerHTML = '';
@@ -286,17 +294,14 @@
     btn.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
-      open = !open;
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-      panel.classList.toggle('is-open', open);
-      if (open) load();
+      const nextOpen = !open;
+      setPanelOpen(nextOpen);
+      if (nextOpen) load();
     });
 
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && open) {
-        open = false;
-        btn.setAttribute('aria-expanded', 'false');
-        panel.classList.remove('is-open');
+        setPanelOpen(false);
       }
     });
 
@@ -360,9 +365,7 @@
 
     document.addEventListener('click', (event) => {
       if (!open || root.contains(event.target)) return;
-      open = false;
-      panel.classList.remove('is-open');
-      btn.setAttribute('aria-expanded', 'false');
+      setPanelOpen(false);
     });
 
     fetchJson(API + '?action=count')

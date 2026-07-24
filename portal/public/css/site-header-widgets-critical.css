@@ -1,0 +1,21 @@
+/* Above-the-fold header widgets — must apply before deferred layout CSS. */
+.notif-bell {
+  position: relative;
+  z-index: 60;
+}
+
+.notif-bell__panel {
+  display: none;
+}
+
+.notif-bell__panel.is-open {
+  display: flex;
+}
+
+.notif-bell__panel[hidden] {
+  display: none !important;
+}
+
+.notif-bell__badge.hidden {
+  display: none;
+}

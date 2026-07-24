@@ -41,7 +41,7 @@ ob_start();
 require dirname(__DIR__) . '/views/home.php';
 $content = ob_get_clean();
 $title = 'الرئيسية';
-$extraHead = '<link href="' . h(portal_asset_url('/css/home-page.css')) . '" rel="stylesheet">';
+$extraHead = portal_preload_stylesheet('/css/home-page.css');
 if ($homeProductsPending) {
     $extraHead .= '<link rel="preload" href="/api/home-products.php" as="fetch" crossorigin="same-origin">';
     $extraHead .= '<script>window.__homeProductsFetch=fetch("/api/home-products.php",{credentials:"same-origin",headers:{Accept:"application/json"}});</script>';

@@ -14,6 +14,7 @@ const criticalSources = [
   'material-image-frame.css',
   'site-brand.css',
   'site-header.css',
+  'site-header-widgets-critical.css',
 ];
 
 const deferredSources = [
@@ -49,6 +50,21 @@ if (layoutMin.errors.length > 0) {
 }
 fs.writeFileSync(path.join(cssDir, 'site-layout.min.css'), layoutMin.styles);
 console.log(`Wrote site-layout.min.css (${allSources.length} files, ${layoutMin.styles.length} bytes)`);
+
+const tailwindPath = path.join(cssDir, 'tailwind.css');
+const tailwindCss = fs.existsSync(tailwindPath)
+  ? fs.readFileSync(tailwindPath, 'utf8').trim()
+  : '';
+if (tailwindCss === '') {
+  throw new Error('Missing tailwind.css — run tailwindcss before build-site-css.mjs');
+}
+const appCss = `/* tailwind.css */\n${tailwindCss}\n\n${layoutCss}`;
+const appMin = minifier.minify(appCss);
+if (appMin.errors.length > 0) {
+  throw new Error(appMin.errors.join('\n'));
+}
+fs.writeFileSync(path.join(cssDir, 'site-app.min.css'), appMin.styles);
+console.log(`Wrote site-app.min.css (${appMin.styles.length} bytes)`);
 
 const criticalCss = readSources(criticalSources).join('\n');
 const criticalMin = minifier.minify(criticalCss);
