@@ -157,37 +157,9 @@
   backdrop-filter: blur(10px);
 }
 
-.home-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.55rem;
-}
-
-.home-stat-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.15rem;
-  padding: 0.65rem 0.35rem;
-  border-radius: 0.85rem;
-  background: rgba(255, 255, 255, 0.1);
-  text-align: center;
-  font-size: 0.6875rem;
-  opacity: 0.95;
-}
-
-.home-stat-card .material-symbols-outlined {
-  font-size: 1.15rem;
-}
-
-.home-stat-card strong {
-  font-size: 1rem;
-  font-weight: 800;
-}
-
 .home-trust-list {
   list-style: none;
-  margin: 0.85rem 0 0;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
