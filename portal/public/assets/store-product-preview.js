@@ -809,7 +809,10 @@
   };
 
   const showAt = (index, imageOptions = {}) => {
-    if (state.items.length === 0) return;
+    if (state.items.length === 0) {
+      close();
+      return;
+    }
     state.index = Math.max(0, Math.min(index, state.items.length - 1));
     const item = state.items[state.index];
     if (item?.guid) state.currentGuid = item.guid;
@@ -998,16 +1001,22 @@
   document.addEventListener('store-cart-updated', (event) => {
     if (modal.hidden) return;
 
-    const qtyMap = event.detail?.cart_qty_by_guid;
+    const detail = event.detail || {};
+    const qtyMap = detail.cart_qty_by_guid;
+    const apiItems = Array.isArray(detail.items) ? detail.items : null;
+    const cartIsEmpty = Number(detail.cart_count) === 0
+      || (apiItems && apiItems.length === 0)
+      || (qtyMap && typeof qtyMap === 'object' && Object.keys(qtyMap).length === 0);
 
     if (state.context === 'cart' && state.cartRoot) {
-      const prevIndex = state.index;
-      const prevGuid = state.currentGuid;
-      state.items = collectItems(state.cartRoot);
-      if (state.items.length === 0) {
+      if (cartIsEmpty) {
         close();
         return;
       }
+
+      const prevIndex = state.index;
+      const prevGuid = state.currentGuid;
+      state.items = collectItems(state.cartRoot);
 
       if (qtyMap && typeof qtyMap === 'object') {
         state.items = state.items
@@ -1021,7 +1030,13 @@
             }
             return syncCartQtyFromDom(item);
           })
-          .filter((item) => Math.max(0, Number(item?.cartQty) || 0) > 0);
+          .filter((item) => {
+            if (!item?.guid) return false;
+            const raw = qtyMap[item.guid]
+              ?? qtyMap[item.guid.toLowerCase()]
+              ?? qtyMap[item.guid.toUpperCase()];
+            return raw !== undefined && Number(raw) > 0;
+          });
       }
 
       if (state.items.length === 0) {
