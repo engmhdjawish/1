@@ -90,7 +90,8 @@ final class SiteMediaDerivativeService
 
         if ($wantsResize && $width > $maxWidth) {
             $nextHeight = (int) max(1, round($height * ($maxWidth / $width)));
-            $resized = imagescale($image, $maxWidth, $nextHeight, IMG_BILINEAR_FIXED);
+            $scaleMode = defined('IMG_BILINEAR_FIXED') ? IMG_BILINEAR_FIXED : IMG_BILINEAR_DEFAULT;
+            $resized = imagescale($image, $maxWidth, $nextHeight, $scaleMode);
             imagedestroy($image);
             if ($resized === false) {
                 return null;
