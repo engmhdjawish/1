@@ -29,6 +29,8 @@ try {
     } else {
         echo 'Guest policy: ' . ($guest['name_ar'] ?? '') . ' (' . ($guest['code'] ?? '') . ")\n";
         echo 'Policy id: ' . ($guest['id'] ?? '') . "\n";
+        echo 'Policy show_price: ' . ((int) ($guest['show_price'] ?? 0) === 1 ? 'yes' : 'no') . "\n";
+        echo 'Header currency switcher: ' . (StoreCatalogService::headerShowsPriceCurrency() ? 'yes' : 'no') . "\n";
     }
 
     foreach (['first run (cold)', 'second run (cache)'] as $label) {

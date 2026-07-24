@@ -193,11 +193,11 @@ $tabUrl = static function (string $key) use ($tab): string {
       </label>
       <label class="text-xs">
         <span class="text-text-muted block mb-0.5">الهاتف الثابت</span>
-        <input name="company_phone" value="<?= h($company['company_phone'] ?? '') ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
+        <input name="company_phone" <?= portal_phone_input_attributes() ?> value="<?= h($company['company_phone'] ?? '') ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm text-left">
       </label>
       <label class="text-xs">
         <span class="text-text-muted block mb-0.5">الموبايل</span>
-        <input name="company_mobile" value="<?= h($company['company_mobile'] ?? '') ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
+        <input name="company_mobile" <?= portal_phone_input_attributes() ?> value="<?= h($company['company_mobile'] ?? '') ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm text-left">
       </label>
       <label class="text-xs">
         <span class="text-text-muted block mb-0.5">واتساب</span>

@@ -52,7 +52,7 @@ $staffRedirectQuery = ($redirect ?? null) !== null && ($redirect ?? '') !== '' &
         <?php if ($type === 'customer'): ?>
           <label class="block text-sm font-medium text-gray-700">
             رقم الهاتف
-            <input name="phone" class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary" required placeholder="09xxxxxxxx">
+            <input name="phone" <?= portal_phone_input_attributes() ?> class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary" required placeholder="09xxxxxxxx">
           </label>
         <?php else: ?>
           <label class="block text-sm font-medium text-gray-700">

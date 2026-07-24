@@ -507,6 +507,7 @@ function product_preview_payload(
         'packagesAvailable' => $packagesAvailable,
         'packagesAvailableLabel' => $showQuantity ? format_packages_display($packagesAvailable) : '',
         'packaging' => $packaging,
+        'packagingLabel' => format_packaging($packaging) . ' ' . $primaryUnit . ' / ' . $packageUnit,
         'primaryUnit' => $primaryUnit,
         'packageUnit' => $packageUnit,
         'hasOffer' => $hasOffer,
@@ -567,12 +568,23 @@ function safe_return_url(mixed $return): string
 
 function contact_tel_href(string $phone): string
 {
+    $phone = portal_normalize_phone($phone);
     $digits = preg_replace('/\D+/', '', $phone);
     if ($digits === '') {
         return '';
     }
 
     return 'tel:' . $digits;
+}
+
+function portal_normalize_phone(string $phone): string
+{
+    return \Portal\Support\DigitNormalizer::normalizePhone($phone);
+}
+
+function portal_phone_input_attributes(): string
+{
+    return 'type="tel" inputmode="tel" autocomplete="tel" dir="ltr" data-phone-input';
 }
 
 function contact_maps_href(string $address): string

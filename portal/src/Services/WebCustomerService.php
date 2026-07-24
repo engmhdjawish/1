@@ -6,6 +6,7 @@ namespace Portal\Services;
 
 use Portal\Auth\Password;
 use Portal\Database;
+use Portal\Support\DigitNormalizer;
 use PDO;
 
 final class WebCustomerService
@@ -15,6 +16,7 @@ final class WebCustomerService
 
     public static function registerSelf(string $name, string $phone, string $password, ?string $email = null): array
     {
+        $phone = DigitNormalizer::normalizePhone($phone);
         $pdo = Database::pdo();
         $exists = $pdo->prepare('SELECT 1 FROM web_customers WHERE phone = :phone');
         $exists->execute(['phone' => $phone]);
@@ -47,6 +49,7 @@ final class WebCustomerService
         ?string $password = null,
         bool $activateImmediately = true
     ): array {
+        $phone = DigitNormalizer::normalizePhone($phone);
         $pdo = Database::pdo();
         $status = $activateImmediately ? 'active' : 'pending';
         $stmt = $pdo->prepare(
@@ -124,7 +127,7 @@ final class WebCustomerService
     ): array {
         $customerId = trim((string) $customerId);
         $name = trim($name);
-        $phone = trim($phone);
+        $phone = DigitNormalizer::normalizePhone($phone);
         $email = trim((string) $email);
         $accessPolicyId = trim($accessPolicyId);
         $status = trim($status);

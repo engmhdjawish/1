@@ -23,6 +23,7 @@
       <div class="store-product-preview__counter" id="storeProductPreviewCounter"></div>
       <h2 id="storeProductPreviewTitle" class="store-product-preview__title"></h2>
       <p id="storeProductPreviewSubtitle" class="store-product-preview__subtitle"></p>
+      <div id="storeProductPreviewPackaging" class="store-product-preview__packaging" hidden></div>
       <div id="storeProductPreviewPrices" class="store-product-preview__prices"></div>
       <div id="storeProductPreviewCart" class="store-product-preview__cart"></div>
       <a id="storeProductPreviewDetail" href="/store.php" class="store-product-preview__detail-link">صفحة المادة الكاملة</a>

@@ -357,6 +357,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   portal_render_media_picker_modal();
   require __DIR__ . '/../partials/store-image-lightbox.php';
   ?>
+  <script src="<?= h(portal_asset_url('/assets/phone-input.js')) ?>" defer></script>
   <script src="/assets/deferred-images.js" defer></script>
   <script src="/assets/store-image-zoom.js" defer></script>
   <script src="<?= h(portal_asset_url('/assets/dashboard/material-images-link.js')) ?>" defer></script>

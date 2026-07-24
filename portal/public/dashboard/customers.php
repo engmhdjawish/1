@@ -8,6 +8,7 @@ use Portal\Auth\WebSession;
 use Portal\Services\OrderService;
 use Portal\Services\WebCustomerService;
 use Portal\Support\DashboardNavigation;
+use Portal\Support\DashboardOrderPricePreference;
 
 WebSession::requirePermission('web_customers.view');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -60,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $result = WebCustomerService::saveByAdmin(
                 $customerId !== '' ? $customerId : null,
                 trim((string) ($_POST['name_ar'] ?? '')),
-                trim((string) ($_POST['phone'] ?? '')),
+                portal_normalize_phone(trim((string) ($_POST['phone'] ?? ''))),
                 trim((string) ($_POST['email'] ?? '')),
                 trim((string) ($_POST['access_policy_id'] ?? '')),
                 trim((string) ($_POST['status'] ?? 'pending')),
@@ -83,6 +84,8 @@ $searchFilter = trim((string) ($_GET['q'] ?? ''));
 $sourceFilter = trim((string) ($_GET['source'] ?? ''));
 $editId = trim((string) ($_GET['edit'] ?? ''));
 $detailsId = trim((string) ($_GET['details'] ?? ''));
+DashboardOrderPricePreference::applyFromRequest($_GET);
+$orderPriceCurrency = DashboardOrderPricePreference::current();
 
 $customers = WebCustomerService::listByStatus($statusFilter, $searchFilter, $sourceFilter, 120);
 $statusCounts = WebCustomerService::statusCounts();
@@ -104,4 +107,5 @@ ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/customers.php';
 $content = ob_get_clean();
 $title = 'عملاء الموقع';
+$extraFooter = '<script src="' . h(portal_asset_url('/assets/dashboard-order-price-pref.js')) . '" defer></script>';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

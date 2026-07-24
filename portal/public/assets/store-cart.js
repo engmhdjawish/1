@@ -1144,7 +1144,7 @@
                   <input name="guest_name_ar" required class="store-input mt-1" value="${escapeHtml(root.dataset.defaultName || '')}">
                 </label>
                 <label class="block text-sm font-bold">رقم الهاتف *
-                  <input name="guest_phone" required dir="ltr" class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}">
+                  <input name="guest_phone" required type="tel" inputmode="tel" autocomplete="tel" dir="ltr" data-phone-input class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}" placeholder="09xxxxxxxx">
                 </label>
               `}
               <label class="block text-sm font-bold">ملاحظات
@@ -1155,6 +1155,7 @@
           ` : !allowOrder && items.length > 0 ? '<p class="text-sm text-amber-800">سياسة المتجر لا تسمح بإرسال الطلبات حالياً.</p>' : ''}
         </div>`;
         bindCheckout(summaryEl);
+        window.portalPhoneInputInit?.(summaryEl);
       }
 
       bindClearCart(summaryEl);
@@ -1252,7 +1253,7 @@
             <input name="guest_name_ar" required class="store-input mt-1" value="${escapeHtml(root.dataset.defaultName || '')}">
           </label>
           <label class="block text-sm font-bold">رقم الهاتف *
-            <input name="guest_phone" required dir="ltr" class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}">
+            <input name="guest_phone" required type="tel" inputmode="tel" autocomplete="tel" dir="ltr" data-phone-input class="store-input mt-1 text-left" value="${escapeHtml(root.dataset.defaultPhone || '')}" placeholder="09xxxxxxxx">
           </label>
         `}
         <label class="block text-sm font-bold">ملاحظات
@@ -1279,6 +1280,7 @@
     const body = root.querySelector('[data-cart-checkout-body]');
     if (!sheet || !body) return;
     body.innerHTML = buildCheckoutFormHtml(root, data);
+    window.portalPhoneInputInit?.(body);
     bindCheckout(body);
     sheet.hidden = false;
     sheet.setAttribute('aria-hidden', 'false');

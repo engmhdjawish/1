@@ -30,7 +30,7 @@ $staffLoggedIn = WebSession::check();
 $storeDisplay = StoreCatalogService::displayOptions();
 StorePricePreference::bootstrap();
 StorePricePreference::applyFromRequest($_GET);
-$storeShowPrice = (bool) ($storeDisplay['show_price'] ?? false);
+$storeShowPrice = StoreCatalogService::headerShowsPriceCurrency();
 $storePriceCurrency = StorePricePreference::current();
 $storeAllowCart = (bool) ($storeDisplay['allow_cart'] ?? false);
 $storeCartCount = $storeAllowCart ? StoreCartService::itemCount() : 0;
@@ -224,6 +224,7 @@ if ($customer) {
 <?php if ($enableSiteAnalytics): ?>
   <script src="<?= h(portal_asset_url('/assets/site-analytics.js')) ?>" data-endpoint="/api/site-analytics.php" defer></script>
 <?php endif; ?>
+<script src="<?= h(portal_asset_url('/assets/phone-input.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/pwa.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/site-page-loading.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/notifications.js')) ?>" defer></script>

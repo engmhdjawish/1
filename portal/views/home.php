@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Portal\Auth\CustomerSession;
 use Portal\Services\PortalSettingsService;
 use Portal\Services\SpecialOfferService;
 use Portal\Services\StoreCatalogService;
@@ -23,6 +24,7 @@ if ($aboutSnippet !== '') {
 $sectionCount = count($sections);
 $offerCount = count(array_filter($sections, static fn (array $s): bool => !empty($s['is_offer_section'])));
 $storeCatalogDisplay = StoreCatalogService::displayOptions();
+$homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
 ?>
 <div class="home-page">
   <section class="home-hero home-hero--premium" aria-label="ترحيب">
@@ -43,10 +45,12 @@ $storeCatalogDisplay = StoreCatalogService::displayOptions();
             <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
             تصفّح المتجر
           </a>
-          <a href="/register.php" class="home-btn home-btn--ghost">
-            <span class="material-symbols-outlined" aria-hidden="true">person_add</span>
-            تسجيل عميل
-          </a>
+          <?php if ($homeCustomer === null): ?>
+            <a href="/register.php" class="home-btn home-btn--ghost">
+              <span class="material-symbols-outlined" aria-hidden="true">person_add</span>
+              تسجيل عميل
+            </a>
+          <?php endif; ?>
         </div>
       </div>
 

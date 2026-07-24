@@ -165,8 +165,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 PortalSettingsService::saveCompanySettings([
                     'company_name' => trim((string) ($_POST['company_name'] ?? '')),
-                    'company_phone' => trim((string) ($_POST['company_phone'] ?? '')),
-                    'company_mobile' => trim((string) ($_POST['company_mobile'] ?? '')),
+                    'company_phone' => portal_normalize_phone(trim((string) ($_POST['company_phone'] ?? ''))),
+                    'company_mobile' => portal_normalize_phone(trim((string) ($_POST['company_mobile'] ?? ''))),
                     'company_whatsapp' => trim((string) ($_POST['company_whatsapp'] ?? '')),
                     'company_email' => trim((string) ($_POST['company_email'] ?? '')),
                     'company_address' => trim((string) ($_POST['company_address'] ?? '')),
