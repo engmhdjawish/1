@@ -75,7 +75,7 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
     </section>
   <?php else: ?>
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <div class="lg:col-span-8" data-cart-body>
+      <div class="lg:col-span-8" data-cart-body data-store-cart-preview-root>
         <?php if ($cartItems === [] && $unavailableItems === []): ?>
           <div class="store-cart-empty">
             <span class="material-symbols-outlined text-5xl text-gray-300" aria-hidden="true">shopping_cart</span>
@@ -84,6 +84,12 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
           </div>
         <?php else: ?>
           <?php
+            $cartPreviewDisplay = [
+                'show_price' => $customerShowsPrices,
+                'price_mode' => $priceMode ?? 'syp',
+                'show_quantity' => false,
+                'allow_cart' => $allowCart,
+            ];
             $renderCartSection = static function (
                 array $sectionItems,
                 string $sectionClass,

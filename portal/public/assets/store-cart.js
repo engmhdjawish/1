@@ -467,7 +467,78 @@
     return `تغيّرت أسعار الأصناف التالية:\n${lines.join('\n')}\n\nهل تريد المتابعة بالأسعار الحالية من النظام؟`;
   };
 
-  const renderCartLineCard = (line, max) => {
+  const buildCartPreviewPayload = (line, data = {}) => {
+    const prices = computeLinePrices(line);
+    const guid = line.material_guid || '';
+    const imageUrl = String(line.image_url || '').trim();
+    const thumbUrl = imageUrl;
+    const zoomUrl = imageUrl ? imageZoomUrl(imageUrl) : '';
+    const cartQty = Math.max(0, Number(prices.quantity) || 0);
+    const lineShowPrice = lineHasDisplayPrice(line);
+    const showPrice = !!data.show_price && lineShowPrice;
+    const priceMode = data.price_mode || 'syp';
+    const hasOffer = lineHasOffer(line);
+    const maxPackages = data.max_packages_per_material ?? null;
+    const maxLabel = data.max_packages_label || maxPackages;
+    const packagingLabelQty = formatQty(prices.packaging).replace(/\.00$/, '');
+
+    return {
+      guid,
+      name: line.material_name_ar || '',
+      code: line.material_code || '',
+      manufacturer: line.manufacturer || '',
+      materialType: line.material_type || '',
+      thumbUrl,
+      zoomUrl,
+      detailUrl: guid ? `/product.php?guid=${encodeURIComponent(guid)}&return=${encodeURIComponent('/store-cart.php')}` : '',
+      showPrice,
+      showPriceSyp: priceMode === 'both' || priceMode === 'syp',
+      showPriceUsd: priceMode === 'both' || priceMode === 'usd',
+      showQuantity: false,
+      packagesAvailable: 0,
+      packaging: prices.packaging,
+      packagingLabel: `${packagingLabelQty} ${prices.primaryUnit} / ${prices.packageUnit}`,
+      primaryUnit: prices.primaryUnit,
+      packageUnit: prices.packageUnit,
+      hasOffer,
+      offerBadge: line.offer_badge || line.offer_title_ar || (hasOffer ? 'عرض خاص' : ''),
+      unitSaleSp: prices.unitSp,
+      unitSaleUsd: prices.unitUsd,
+      packageSaleSp: prices.packSp,
+      packageSaleUsd: prices.packUsd,
+      originalUnitSp: prices.origUnitSp,
+      originalUnitUsd: prices.origUnitUsd,
+      originalPackSp: prices.origPackSp,
+      originalPackUsd: prices.origPackUsd,
+      allowCart: !!data.allow_cart,
+      cartQty,
+      maxPackages,
+      maxLabel,
+      previewContext: 'cart',
+    };
+  };
+
+  const previewPayloadJson = (line, data = {}) => {
+    try {
+      return JSON.stringify(buildCartPreviewPayload(line, data));
+    } catch {
+      return '{}';
+    }
+  };
+
+  const updateCartPreviewPayload = (guid, inCartQty) => {
+    const card = document.querySelector(`[data-store-cart-preview-line][data-preview-guid="${CSS.escape(guid)}"]`);
+    if (!card) return;
+    try {
+      const payload = JSON.parse(card.getAttribute('data-preview') || '{}');
+      payload.cartQty = inCartQty;
+      card.setAttribute('data-preview', JSON.stringify(payload));
+    } catch {
+      // ignore invalid preview payload
+    }
+  };
+
+  const renderCartLineCard = (line, max, data = {}) => {
     const guid = line.material_guid || '';
     const prices = computeLinePrices(line);
     const hasOffer = lineHasOffer(line);
@@ -475,11 +546,11 @@
     const priceDirection = priceChangeDirection(line?.price_change, line, prices);
     const priceCardClass = priceDirection ? ` store-cart-line-card--price-${priceDirection}` : '';
     const noPriceClass = !lineShowPrice ? ' store-cart-line-card--no-price' : '';
+    const previewJson = escapeHtml(previewPayloadJson(line, data));
     const img = line.image_url
       ? (() => {
           const thumb = escapeHtml(line.image_url);
-          const zoom = escapeHtml(imageZoomUrl(line.image_url));
-          return `<button type="button" class="store-order-line-card__thumb" data-cart-image-zoom="${zoom}" title="تكبير الصورة للتدقيق"><img src="${thumb}" alt="" loading="lazy"><span class="store-order-line-card__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span></button>`;
+          return `<button type="button" class="store-order-line-card__thumb" data-store-product-preview title="معاينة الصورة والكمية"><img src="${thumb}" alt="" loading="lazy"><span class="store-order-line-card__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span></button>`;
         })()
       : '<div class="store-order-line-card__placeholder"><span class="material-symbols-outlined" aria-hidden="true">inventory_2</span></div>';
     const lineTotalCell = lineShowPrice && (prices.packSp > 0 || prices.packUsd > 0)
@@ -494,7 +565,7 @@
           <span>السعر عند التأكيد</span>
         </div>`
       : '';
-    return `<article class="store-order-line-card store-cart-line-card${hasOffer ? ' store-order-line-card--offer' : ''}${priceCardClass}${noPriceClass}" data-cart-line="${escapeHtml(guid)}">
+    return `<article class="store-order-line-card store-cart-line-card${hasOffer ? ' store-order-line-card--offer' : ''}${priceCardClass}${noPriceClass}" data-cart-line="${escapeHtml(guid)}" data-store-preview-card data-store-cart-preview-line data-preview-guid="${escapeHtml(guid)}" data-preview="${previewJson}">
       <div class="store-order-line-card__media">${img}</div>
       <div class="store-order-line-card__body">
         <div class="store-cart-line-card__head">
@@ -527,7 +598,7 @@
     </article>`;
   };
 
-  const renderCartSection = (lines, sectionClass, icon, title, subtitle, max, showSectionHeader) => {
+  const renderCartSection = (lines, sectionClass, icon, title, subtitle, max, showSectionHeader, data = {}) => {
     if (!lines.length) return '';
     let html = `<section class="store-cart-section ${sectionClass}">`;
     if (showSectionHeader) {
@@ -544,7 +615,7 @@
     }
     html += '<div class="store-cart-lines">';
     lines.forEach((line) => {
-      html += renderCartLineCard(line, max);
+      html += renderCartLineCard(line, max, data);
     });
     html += '</div></section>';
     return html;
@@ -753,7 +824,10 @@
     if (minus) minus.disabled = !canAdjust || inCartQty <= 0;
 
     const guid = form.dataset.materialGuid || form.querySelector('[name="material_guid"]')?.value || '';
-    if (guid) updatePreviewPayload(guid, inCartQty);
+    if (guid) {
+      updatePreviewPayload(guid, inCartQty);
+      updateCartPreviewPayload(guid, inCartQty);
+    }
   };
 
   const refreshCartForms = (data) => {
@@ -1075,7 +1149,8 @@
               'أصناف بسعر محدد',
               'الأسعار المعروضة قابلة للتحديث حتى إرسال الطلب.',
               max,
-              hasMixed
+              hasMixed,
+              data
             );
           }
           if (partition.unpriced.length > 0) {
@@ -1086,7 +1161,8 @@
               'يُسعّر عند التأكيد',
               'سيُحدد سعر هذه الأصناف عند مراجعة الطلب.',
               max,
-              hasMixed || partition.unpriced.length > 0
+              hasMixed || partition.unpriced.length > 0,
+              data
             );
           }
         }
@@ -1230,6 +1306,8 @@
       });
     });
     root.querySelectorAll('[data-remove-item]').forEach((btn) => {
+      if (btn.dataset.removeBound === '1') return;
+      btn.dataset.removeBound = '1';
       btn.addEventListener('click', async () => {
         const guid = btn.dataset.removeItem || '';
         if (!guid) return;
@@ -1562,6 +1640,7 @@
     apiRequest,
     bindAddForms,
     bindQtySteppers,
+    bindCartLineControls,
     refreshCartForms,
     setFormCartMode,
     openDrawer: () => { setCartDrawerOpen(true); return loadCartDrawer(); },
