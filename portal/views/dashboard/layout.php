@@ -169,7 +169,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         >
           <span class="material-symbols-outlined">menu</span>
         </button>
-        <a href="/dashboard/index.php" class="dashboard-header-brand inline-flex items-center gap-2 min-w-0 max-w-[min(100%,14rem)] sm:max-w-[18rem]">
+        <a href="/dashboard/index.php" class="dashboard-header-brand inline-flex items-center gap-1.5 sm:gap-2 min-w-0">
           <?php if ($companyLogoUrl !== ''): ?>
             <?php
               $siteLogoVariant = 'mobile-toolbar';
@@ -177,7 +177,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
               require dirname(__DIR__) . '/partials/site-logo.php';
             ?>
           <?php endif; ?>
-          <span class="font-extrabold text-primary text-sm sm:text-base truncate"><?= h($siteName) ?></span>
+          <span class="font-extrabold text-primary text-xs sm:text-sm truncate"><?= h($siteName) ?></span>
         </a>
         <?php if ($headerQuickLinks !== []): ?>
         <?php $headerQuickLinksClass = $hasAreaTabs ? 'hidden xl:flex' : 'hidden lg:flex'; ?>

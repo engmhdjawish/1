@@ -21,6 +21,56 @@ body.dashboard-app.has-area-tabs {
 .dashboard-header-brand {
   text-decoration: none;
   color: inherit;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: min(48vw, 9.5rem);
+}
+
+.dashboard-header-brand .site-logo-wrap,
+.dashboard-header-brand .site-logo-wrap--mobile-toolbar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: 1.75rem;
+  width: 1.75rem;
+  min-width: 1.75rem;
+  max-width: 2.35rem;
+  padding: 0;
+  overflow: hidden;
+}
+
+.dashboard-header-brand .site-logo-img {
+  display: block;
+  height: 1.75rem;
+  width: auto;
+  max-width: 2.35rem;
+  max-height: 1.75rem;
+  object-fit: contain;
+}
+
+.dashboard-header-brand > span:last-child {
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .dashboard-header-brand {
+    max-width: min(36vw, 13rem);
+  }
+
+  .dashboard-header-brand .site-logo-wrap,
+  .dashboard-header-brand .site-logo-wrap--mobile-toolbar {
+    height: 2rem;
+    width: 2rem;
+    min-width: 2rem;
+    max-width: 2.75rem;
+  }
+
+  .dashboard-header-brand .site-logo-img {
+    height: 2rem;
+    max-width: 2.75rem;
+    max-height: 2rem;
+  }
 }
 
 .dashboard-header-brand:focus-visible {
@@ -70,10 +120,6 @@ body.dashboard-app.has-area-tabs {
 
 .dashboard-area-tab .material-symbols-outlined {
   font-size: 1rem;
-}
-
-.dashboard-area-tabs::-webkit-scrollbar {
-  display: none;
 }
 
 .dashboard-area-tabs::-webkit-scrollbar {
@@ -266,6 +312,10 @@ body.dashboard-app {
     padding: 0;
     display: flex;
     flex-direction: column;
+  }
+
+  #dashboard-drawer > div:first-child {
+    padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
   }
 
   #dashboard-bottom-nav {
