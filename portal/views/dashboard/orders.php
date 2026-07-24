@@ -149,25 +149,9 @@ $advancedFiltersOpen = ($filters['origin'] ?? '') !== ''
     || ($filters['fromDate'] ?? '') !== ''
     || ($filters['toDate'] ?? '') !== '';
 ?>
-<section class="flex flex-col md:flex-row justify-between md:items-center gap-3 mb-4">
-  <div>
-    <h1 class="text-xl font-extrabold text-slate-900">إدارة الطلبات</h1>
-    <p class="text-sm text-text-muted mt-1">متابعة طلبات الجملة — الأصناف والطرود والإجمالي بالدولار.</p>
-  </div>
-  <div class="flex gap-2 flex-wrap">
-    <a href="<?= h($buildOrdersUrl(['status' => 'pending', 'sync' => ''])) ?>" class="bg-white border border-border-subtle rounded-xl px-3 py-2 text-center min-w-24 hover:border-primary/30 hover:shadow-sm transition no-underline text-inherit">
-      <p class="text-lg font-extrabold text-primary"><?= (int) ($statusCounts['pending'] ?? 0) ?></p>
-      <p class="text-[11px] text-text-muted">جديدة</p>
-    </a>
-    <a href="<?= h($buildOrdersUrl(['status' => $statusFormValue, 'sync' => 'pending'])) ?>" class="bg-white border border-border-subtle rounded-xl px-3 py-2 text-center min-w-24 hover:border-amber-200 hover:shadow-sm transition no-underline text-inherit">
-      <p class="text-lg font-extrabold text-amber-600"><?= (int) ($syncCounts['pending'] ?? 0) ?></p>
-      <p class="text-[11px] text-text-muted">بانتظار مزامنة</p>
-    </a>
-    <a href="<?= h($buildOrdersUrl(['status' => 'completed', 'sync' => ''])) ?>" class="bg-white border border-border-subtle rounded-xl px-3 py-2 text-center min-w-24 hover:border-emerald-200 hover:shadow-sm transition no-underline text-inherit">
-      <p class="text-lg font-extrabold text-emerald-700"><?= (int) ($statusCounts['completed'] ?? 0) ?></p>
-      <p class="text-[11px] text-text-muted">مكتملة</p>
-    </a>
-  </div>
+<section class="mb-4">
+  <h1 class="text-xl font-extrabold text-slate-900">إدارة الطلبات</h1>
+  <p class="text-sm text-text-muted mt-1">متابعة طلبات الجملة — الأصناف والطرود والإجمالي بالدولار.</p>
 </section>
 
 <?php require __DIR__ . '/partials/flash.php'; ?>
