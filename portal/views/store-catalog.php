@@ -437,27 +437,19 @@ require __DIR__ . '/partials/store-filter-group.php';
   </section>
 <?php endif; ?>
 
-<section class="store-hero">
-  <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-    <div>
-      <h1 class="store-hero__title">المتجر</h1>
-      <p class="store-hero__subtitle">اكتشف منتجاتنا واطلب بسهولة — تجربة تسوق سريعة وآمنة.</p>
-      <?php
-        $storeMaxPackages = StorePolicyService::maxPackagesPerMaterial();
-        $storeAllowCart = (bool) ($displayOptions['allow_cart'] ?? false);
-        $storeShowPrice = (bool) ($displayOptions['show_price'] ?? false);
-      ?>
-      <?php if ($storeAllowCart && $storeMaxPackages !== null): ?>
-        <p class="store-hero__meta">الحد الأقصى للطلب: <strong><?= h(SpecialOfferService::formatQuantityLabel($storeMaxPackages)) ?></strong> طرد لكل مادة.</p>
-      <?php endif; ?>
-    </div>
-    <?php if ($isCustomer): ?>
-      <span class="store-hero__badge">
-        <span class="material-symbols-outlined text-base" aria-hidden="true">verified_user</span>
-        حساب عميل مفعّل
-      </span>
-    <?php endif; ?>
-  </div>
+<?php
+  $storeMaxPackages = StorePolicyService::maxPackagesPerMaterial();
+  $storeAllowCart = (bool) ($displayOptions['allow_cart'] ?? false);
+  $storeShowPrice = (bool) ($displayOptions['show_price'] ?? false);
+?>
+<section class="store-page-head" aria-label="صفحة المتجر">
+  <h1 class="store-page-head__title">
+    <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
+    المتجر
+  </h1>
+  <?php if ($storeAllowCart && $storeMaxPackages !== null): ?>
+    <p class="store-page-head__meta">الحد الأقصى للطلب: <strong><?= h(SpecialOfferService::formatQuantityLabel($storeMaxPackages)) ?></strong> طرد لكل مادة</p>
+  <?php endif; ?>
 </section>
 
 <?php if ($storeShowPrice && StorePricePreference::current() === StorePricePreference::SYP): ?>
