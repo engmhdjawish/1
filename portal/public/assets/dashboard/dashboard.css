@@ -480,18 +480,53 @@ button.is-loading::after,
 }
 
 .dashboard-orders-filter-tabs {
-  scrollbar-width: none;
-}
-
-.dashboard-orders-filter-tabs::-webkit-scrollbar {
-  display: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .dashboard-orders-filter-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: 9999px;
+  border: 1px solid var(--dash-border);
+  font-size: 0.8125rem;
+  line-height: 1.2;
   text-decoration: none;
   color: var(--dash-muted);
-  border-color: var(--dash-border);
   background: #fff;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.dashboard-orders-filter-tabs--sync {
+  gap: 0.375rem;
+}
+
+.dashboard-orders-filter-tab--compact {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  background: #f8fafc;
+}
+
+.dashboard-order-card {
+  background: #fff;
+}
+
+.dashboard-order-card:active {
+  background: #f8fafc;
+}
+
+.dashboard-order-card__actions {
+  position: relative;
+  z-index: 1;
+}
+
+@media (min-width: 640px) {
+  .dashboard-orders-filter-tab {
+    font-size: 0.875rem;
+  }
 }
 
 .dashboard-orders-filter-tab:hover {
@@ -509,10 +544,6 @@ button.is-loading::after,
 .dashboard-orders-filter-tab.is-active .dashboard-orders-filter-tab__count {
   background: rgba(255, 255, 255, 0.2) !important;
   color: #fff !important;
-}
-
-.dashboard-orders-filter-tab--compact {
-  background: #f8fafc;
 }
 
 .dashboard-orders-filter-tab--compact.is-active {

@@ -207,12 +207,12 @@ $advancedFiltersOpen = ($filters['origin'] ?? '') !== ''
       <?php endif; ?>
     </div>
 
-    <div class="dashboard-orders-filter-tabs flex gap-2 overflow-x-auto pb-0.5" role="tablist" aria-label="حالة الطلب">
+    <div class="dashboard-orders-filter-tabs" role="tablist" aria-label="حالة الطلب">
       <?php foreach ($statusTabs as $tabKey => $tab): ?>
         <?php $isActiveStatus = $activeStatusTab === $tabKey; ?>
         <a
           href="<?= h($buildOrdersUrl(['status' => $tabKey === 'all' ? 'all' : $tabKey])) ?>"
-          class="dashboard-orders-filter-tab whitespace-nowrap inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm transition <?= $isActiveStatus ? 'is-active' : '' ?>"
+          class="dashboard-orders-filter-tab <?= $isActiveStatus ? 'is-active' : '' ?>"
           <?= $isActiveStatus ? 'aria-current="page"' : '' ?>
         >
           <span class="font-bold"><?= h($tab['label']) ?></span>
@@ -221,12 +221,12 @@ $advancedFiltersOpen = ($filters['origin'] ?? '') !== ''
       <?php endforeach; ?>
     </div>
 
-    <div class="dashboard-orders-filter-tabs dashboard-orders-filter-tabs--sync flex gap-2 overflow-x-auto pb-0.5" role="tablist" aria-label="مزامنة الأمين">
+    <div class="dashboard-orders-filter-tabs dashboard-orders-filter-tabs--sync" role="tablist" aria-label="مزامنة الأمين">
       <?php foreach ($syncTabs as $tabKey => $tab): ?>
         <?php $isActiveSync = $activeSyncTab === $tabKey; ?>
         <a
           href="<?= h($buildOrdersUrl(['sync' => $tabKey])) ?>"
-          class="dashboard-orders-filter-tab dashboard-orders-filter-tab--compact whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition <?= $isActiveSync ? 'is-active' : '' ?>"
+          class="dashboard-orders-filter-tab dashboard-orders-filter-tab--compact <?= $isActiveSync ? 'is-active' : '' ?>"
           <?= $isActiveSync ? 'aria-current="page"' : '' ?>
         >
           <span class="font-bold"><?= h($tab['label']) ?></span>
@@ -268,7 +268,71 @@ $advancedFiltersOpen = ($filters['origin'] ?? '') !== ''
   <?php if ($orders === []): ?>
     <p class="p-5 text-sm text-text-muted text-center">لا توجد طلبات مطابقة للفلاتر الحالية.</p>
   <?php else: ?>
-    <div class="overflow-auto">
+    <div class="dashboard-orders-cards lg:hidden divide-y divide-border-subtle">
+      <?php foreach ($orders as $row): ?>
+        <?php
+          $rowStatus = (string) ($row['status'] ?? 'pending');
+          $sync = (string) ($row['amine_sync_status'] ?? 'none');
+          $notes = trim((string) ($row['notes_ar'] ?? ''));
+          $name = $customerName($row);
+          $phone = $customerPhone($row);
+          $detailUrl = $buildOrdersUrl(['details' => (string) ($row['id'] ?? '')]);
+        ?>
+        <article
+          class="dashboard-order-card dashboard-clickable-row p-4"
+          data-dashboard-row-href="<?= h($detailUrl) ?>"
+          aria-label="فتح الطلب <?= h((string) ($row['order_number'] ?? '')) ?>"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="font-extrabold text-primary text-sm truncate"><?= h((string) ($row['order_number'] ?? '')) ?></p>
+              <p class="text-[11px] text-text-muted mt-0.5 truncate"><?= h((string) ($row['share_link_name'] ?? 'طلب مباشر')) ?></p>
+            </div>
+            <p class="font-extrabold text-emerald-700 text-sm shrink-0"><?= h($formatUsd((float) ($row['total_usd'] ?? 0))) ?></p>
+          </div>
+
+          <div class="flex flex-wrap gap-1.5 mt-2.5">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold <?= $statusClass($rowStatus) ?>">
+              <?= h($statusLabels[$rowStatus] ?? $rowStatus) ?>
+            </span>
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold <?= $syncClass($sync) ?>">
+              <?= h($syncLabels[$sync] ?? $sync) ?>
+            </span>
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold <?= $originClass($row) ?>">
+              <?= h(OrderService::orderOriginLabel($row)) ?>
+            </span>
+          </div>
+
+          <div class="mt-2.5">
+            <p class="font-bold text-sm truncate"><?= h($name) ?></p>
+            <p class="text-xs text-text-muted mt-0.5" dir="ltr"><?= h($phone) ?></p>
+          </div>
+
+          <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-text-muted">
+            <span><?= (int) ($row['items_count'] ?? 0) ?> صنف · <?= h($formatPackages((float) ($row['packages_count'] ?? 0))) ?> طرد</span>
+            <span><?= h((string) ($row['created_at'] ?? '')) ?></span>
+          </div>
+
+          <?php if ($notes !== ''): ?>
+            <p class="mt-2 text-xs text-text-muted leading-relaxed line-clamp-2"><?= h($notes) ?></p>
+          <?php endif; ?>
+
+          <?php if ($canManageOrders): ?>
+            <form method="post" data-dashboard-ajax data-dashboard-reload class="dashboard-order-card__actions mt-3 pt-3 border-t border-border-subtle flex items-center gap-2" data-dashboard-row-ignore>
+              <input type="hidden" name="order_id" value="<?= h((string) ($row['id'] ?? '')) ?>">
+              <select name="next_status" class="h-9 flex-1 min-w-0 rounded-lg border border-border-subtle px-2 text-xs" aria-label="حالة الطلب">
+                <?php foreach ($statusLabels as $statusKey => $statusLabel): ?>
+                  <option value="<?= h($statusKey) ?>" <?= ($row['status'] ?? '') === $statusKey ? 'selected' : '' ?>><?= h($statusLabel) ?></option>
+                <?php endforeach; ?>
+              </select>
+              <button type="submit" class="dashboard-btn h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold shrink-0">حفظ</button>
+            </form>
+          <?php endif; ?>
+        </article>
+      <?php endforeach; ?>
+    </div>
+
+    <div class="dashboard-orders-table-wrap hidden lg:block overflow-auto">
       <table class="w-full text-sm min-w-[1240px]">
         <thead class="bg-surface-low text-text-muted border-b border-border-subtle">
           <tr>
