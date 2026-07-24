@@ -4,93 +4,124 @@ declare(strict_types=1);
 
 define('PORTAL_NO_SESSION', true);
 
-require dirname(__DIR__, 2) . '/bootstrap.php';
-
 use Portal\Services\SiteMediaDerivativeService;
 use Portal\Services\SiteMediaService;
 use Portal\Services\SvgRasterService;
 
-$id = trim((string) ($_GET['id'] ?? ''));
-$preferRaster = in_array(strtolower(trim((string) ($_GET['format'] ?? ''))), ['png', 'raster'], true)
-    || (($_GET['raster'] ?? '') === '1');
-$maxWidth = max(0, (int) ($_GET['w'] ?? 0));
-$requestedFormat = strtolower(trim((string) ($_GET['format'] ?? '')));
-$wantsWebp = $requestedFormat === 'webp';
-
-if ($id === '' || preg_match('/^[0-9a-fA-F-]{36}$/', $id) !== 1) {
-    http_response_code(400);
+function site_media_respond_text(int $status, string $message): never
+{
+    http_response_code($status);
     header('Content-Type: text/plain; charset=utf-8');
-    echo 'Invalid image id.';
+    echo $message;
     exit;
 }
 
-$asset = SiteMediaService::getById($id);
-if ($asset === null) {
-    http_response_code(404);
-    header('Content-Type: text/plain; charset=utf-8');
-    echo 'Image not found.';
+function site_media_respond_file(string $path, string $mime, bool $webpFallback = false): never
+{
+    if (!is_file($path) || !is_readable($path)) {
+        site_media_respond_text(404, 'Image file missing.');
+    }
+
+    $size = filesize($path);
+    if ($size === false || $size <= 0) {
+        site_media_respond_text(404, 'Image file missing.');
+    }
+
+    $mime = trim($mime) !== '' ? trim($mime) : 'application/octet-stream';
+    header('Content-Type: ' . $mime);
+    header('Cache-Control: public, max-age=604800, immutable');
+    if ($webpFallback) {
+        header('X-Site-Media-Fallback: png');
+    }
+    header('Content-Length: ' . (string) $size);
+    readfile($path);
     exit;
 }
 
-$originalPath = SiteMediaService::absolutePathForId($id);
-if ($originalPath === null || !is_readable($originalPath)) {
-    http_response_code(404);
-    header('Content-Type: text/plain; charset=utf-8');
-    echo 'Image file missing.';
-    exit;
-}
+/** @return array{path: string, mime: string} */
+function site_media_resolve_raster_path(string $originalPath, string $mime, int $targetSize = 1024): array
+{
+    $path = $originalPath;
+    $mime = trim($mime) !== '' ? trim($mime) : 'application/octet-stream';
+    $isSvg = $mime === 'image/svg+xml' || str_ends_with(strtolower($originalPath), '.svg');
+    if (!$isSvg) {
+        return ['path' => $path, 'mime' => $mime];
+    }
 
-$path = $originalPath;
-$mime = trim((string) ($asset['mime_type'] ?? 'application/octet-stream'));
+    $rasterPath = SvgRasterService::rasterCompanionPath($originalPath);
+    if (!is_file($rasterPath) || !is_readable($rasterPath) || filesize($rasterPath) <= 128) {
+        SvgRasterService::toPngFile($originalPath, $rasterPath, max(512, $targetSize));
+    }
+
+    if (is_file($rasterPath) && is_readable($rasterPath) && filesize($rasterPath) > 128) {
+        return ['path' => $rasterPath, 'mime' => 'image/png'];
+    }
+
+    return ['path' => $path, 'mime' => $mime];
+}
 
 try {
-    $isSvg = $mime === 'image/svg+xml' || str_ends_with(strtolower($path), '.svg');
-    if ($preferRaster && $isSvg) {
-        $rasterPath = SvgRasterService::rasterCompanionPath($path);
-        if (is_file($rasterPath) && is_readable($rasterPath) && filesize($rasterPath) > 128) {
-            $path = $rasterPath;
-            $mime = 'image/png';
-            $isSvg = false;
-        }
+    require dirname(__DIR__, 2) . '/bootstrap.php';
+
+    $id = trim((string) ($_GET['id'] ?? ''));
+    $preferRaster = in_array(strtolower(trim((string) ($_GET['format'] ?? ''))), ['png', 'raster'], true)
+        || (($_GET['raster'] ?? '') === '1');
+    $maxWidth = max(0, (int) ($_GET['w'] ?? 0));
+    $requestedFormat = strtolower(trim((string) ($_GET['format'] ?? '')));
+    $wantsWebp = $requestedFormat === 'webp';
+
+    if ($id === '' || preg_match('/^[0-9a-fA-F-]{36}$/', $id) !== 1) {
+        site_media_respond_text(400, 'Invalid image id.');
+    }
+
+    $asset = SiteMediaService::getById($id);
+    if ($asset === null) {
+        site_media_respond_text(404, 'Image not found.');
+    }
+
+    $originalPath = SiteMediaService::absolutePathForId($id);
+    if ($originalPath === null || !is_readable($originalPath)) {
+        site_media_respond_text(404, 'Image file missing.');
+    }
+
+    $path = $originalPath;
+    $mime = trim((string) ($asset['mime_type'] ?? 'application/octet-stream'));
+    $isLogo = (string) ($asset['category'] ?? '') === 'logo';
+
+    if ($isLogo && $wantsWebp) {
+        $wantsWebp = false;
+    }
+
+    $raster = site_media_resolve_raster_path($originalPath, $mime, max(512, $maxWidth));
+    $path = $raster['path'];
+    $mime = $raster['mime'];
+
+    if ($preferRaster && ($mime === 'image/svg+xml' || str_ends_with(strtolower($path), '.svg'))) {
+        site_media_respond_text(404, 'Image file missing.');
     }
 
     $derivativeFormat = $wantsWebp ? 'webp' : '';
     if ($maxWidth > 0 || $wantsWebp) {
-        if ($isSvg) {
-            $rasterPath = SvgRasterService::rasterCompanionPath($path);
-            if (is_file($rasterPath) && is_readable($rasterPath) && filesize($rasterPath) > 128) {
-                $path = $rasterPath;
-                $mime = 'image/png';
-            }
-        }
-
         $derivative = SiteMediaDerivativeService::resolve($path, $mime, $maxWidth, $derivativeFormat);
         if ($derivative !== null) {
             $path = $derivative['path'];
             $mime = $derivative['mime'];
+        } elseif ($wantsWebp && $mime === 'image/png') {
+            site_media_respond_file($path, $mime, true);
         }
     }
-} catch (\Throwable $exception) {
-    error_log('media/site.php derivative failed: ' . $exception->getMessage());
-    $path = $originalPath;
-    $mime = trim((string) ($asset['mime_type'] ?? 'application/octet-stream'));
-    if ($preferRaster && ($mime === 'image/svg+xml' || str_ends_with(strtolower($path), '.svg'))) {
-        $rasterPath = SvgRasterService::rasterCompanionPath($path);
-        if (is_file($rasterPath) && is_readable($rasterPath) && filesize($rasterPath) > 128) {
-            $path = $rasterPath;
-            $mime = 'image/png';
-        }
+
+    site_media_respond_file($path, $mime);
+} catch (Throwable $exception) {
+    error_log('media/site.php failed: ' . $exception->getMessage());
+
+    if (isset($originalPath) && is_string($originalPath) && is_readable($originalPath)) {
+        $fallbackMime = isset($asset) && is_array($asset)
+            ? trim((string) ($asset['mime_type'] ?? 'application/octet-stream'))
+            : 'application/octet-stream';
+        $fallback = site_media_resolve_raster_path($originalPath, $fallbackMime);
+        site_media_respond_file($fallback['path'], $fallback['mime'], true);
     }
-}
 
-if (!is_file($path) || !is_readable($path)) {
-    http_response_code(404);
-    header('Content-Type: text/plain; charset=utf-8');
-    echo 'Image file missing.';
-    exit;
+    site_media_respond_text(500, 'Image unavailable.');
 }
-
-header('Content-Type: ' . ($mime !== '' ? $mime : 'application/octet-stream'));
-header('Cache-Control: public, max-age=604800, immutable');
-header('Content-Length: ' . (string) filesize($path));
-readfile($path);
