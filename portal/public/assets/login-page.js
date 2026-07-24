@@ -4,16 +4,28 @@
   const STAFF_AUTOCOMPLETE = 'section-jawish-staff';
   const CUSTOMER_AUTOCOMPLETE = 'section-jawish-customer';
   const PHONE_PATTERN = /^09\d{8}$/;
+  const AUTOFILL_SETTLE_MS = 450;
 
   const fieldClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary';
   const labelClass = 'block text-sm font-medium text-gray-700';
 
-  const bindReadonlyUntilFocus = (input) => {
-    if (!(input instanceof HTMLInputElement)) return;
+  const afterAutofillSettles = (callback) => {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(callback, AUTOFILL_SETTLE_MS);
+    });
+  };
+
+  const bindReadonlyUntilInteraction = (input) => {
+    if (!(input instanceof HTMLInputElement) || input.type === 'password') {
+      return;
+    }
     input.setAttribute('readonly', 'readonly');
-    input.addEventListener('focus', () => {
+    const unlock = () => {
       input.removeAttribute('readonly');
-    }, { once: true });
+    };
+    input.addEventListener('focus', unlock, { once: true });
+    input.addEventListener('input', unlock, { once: true });
+    input.addEventListener('change', unlock, { once: true });
   };
 
   const looksLikePhone = (value) => {
@@ -23,7 +35,10 @@
 
   const looksLikeStaffUsername = (value) => {
     const text = String(value || '').trim();
-    if (!text || looksLikePhone(text)) return false;
+    if (!text || looksLikePhone(text)) {
+      return false;
+    }
+
     return /^[a-z0-9._-]+$/i.test(text);
   };
 
@@ -73,21 +88,24 @@
     `;
 
     mount.querySelectorAll('input').forEach((input) => {
-      bindReadonlyUntilFocus(input);
+      bindReadonlyUntilInteraction(input);
     });
 
     if (typeof window.portalPhoneInputInit === 'function') {
       window.portalPhoneInputInit(mount);
     }
 
-    const phone = mount.querySelector('#customer_login_phone');
-    const password = mount.querySelector('#customer_login_password');
-    if (phone instanceof HTMLInputElement && phone.value && !looksLikePhone(phone.value)) {
-      phone.value = '';
-    }
-    if (password instanceof HTMLInputElement && password.value && phone instanceof HTMLInputElement && phone.value === '') {
-      password.value = '';
-    }
+    afterAutofillSettles(() => {
+      const phone = mount.querySelector('#customer_login_phone');
+      const password = mount.querySelector('#customer_login_password');
+      if (!(phone instanceof HTMLInputElement) || !(password instanceof HTMLInputElement)) {
+        return;
+      }
+      if (phone.value && !looksLikePhone(phone.value)) {
+        phone.value = '';
+        password.value = '';
+      }
+    });
   };
 
   const guardStaffLogin = () => {
@@ -100,17 +118,20 @@
     const username = form.querySelector('#staff_login_username, [name="staff_user_name"]');
     const password = form.querySelector('#staff_login_password, [name="staff_password"]');
     if (username instanceof HTMLInputElement) {
-      bindReadonlyUntilFocus(username);
+      bindReadonlyUntilInteraction(username);
+    }
+
+    afterAutofillSettles(() => {
+      if (!(username instanceof HTMLInputElement)) {
+        return;
+      }
       if (username.value && !looksLikeStaffUsername(username.value)) {
         username.value = '';
         if (password instanceof HTMLInputElement) {
           password.value = '';
         }
       }
-    }
-    if (password instanceof HTMLInputElement) {
-      bindReadonlyUntilFocus(password);
-    }
+    });
   };
 
   const boot = () => {
@@ -123,6 +144,5 @@
   };
 
   boot();
-  window.setTimeout(boot, 80);
   document.addEventListener('DOMContentLoaded', boot);
 })();

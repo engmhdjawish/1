@@ -52,7 +52,7 @@ $labelClass = 'block text-sm font-medium text-gray-700';
       </div>
 
       <?php if ($type === 'customer'): ?>
-        <form method="post" action="<?= h($loginPagePath) ?>" class="space-y-4" id="login-form-customer" autocomplete="off" data-login-kind="customer">
+        <form method="post" action="<?= h($loginPagePath) ?>" class="space-y-4" id="login-form-customer" data-login-kind="customer">
           <input type="hidden" name="type" value="customer">
           <?php if (!empty($redirect)): ?>
             <input type="hidden" name="redirect" value="<?= h((string) $redirect) ?>">
@@ -92,7 +92,7 @@ $labelClass = 'block text-sm font-medium text-gray-700';
           </noscript>
         </form>
       <?php else: ?>
-        <form method="post" action="<?= h($loginPagePath) ?>" class="space-y-4" id="login-form-staff" autocomplete="off" data-login-kind="staff">
+        <form method="post" action="<?= h($loginPagePath) ?>" class="space-y-4" id="login-form-staff" data-login-kind="staff">
           <input type="hidden" name="type" value="staff">
           <?php if (!empty($redirect) && PortalUrl::isDashboardPath((string) $redirect)): ?>
             <input type="hidden" name="redirect" value="<?= h((string) $redirect) ?>">
