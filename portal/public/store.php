@@ -26,7 +26,7 @@ try {
         'rangeEnd' => 0,
         'resultFilters' => [],
         'filterOptions' => ['stores' => [], 'groups' => []],
-        'apiError' => 'تعذر تحميل المتجر. تحقق من سياسة الوصول أو اتصال API.',
+        'apiError' => \Portal\Services\AmineAvailabilityService::userMessage(),
         'allow_client_filters' => false,
         'filters' => ['q' => '', 'sort' => 'number:asc'],
         'store_options' => [],

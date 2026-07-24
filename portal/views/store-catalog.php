@@ -468,7 +468,13 @@ require __DIR__ . '/partials/store-filter-group.php';
 <?php endif; ?>
 
 <?php if (!empty($catalog['apiError'])): ?>
-  <p class="mb-4 rounded-xl border bg-red-50 border-red-200 text-red-700 px-4 py-3 text-sm"><?= h((string) $catalog['apiError']) ?></p>
+  <?php $isStaleCatalog = !empty($catalog['catalog_stale']); ?>
+  <p class="mb-4 rounded-xl border px-4 py-3 text-sm<?= $isStaleCatalog ? ' bg-amber-50 border-amber-200 text-amber-900' : ' bg-red-50 border-red-200 text-red-700' ?>">
+    <?php if ($isStaleCatalog): ?>
+      <span class="font-bold block mb-1">عرض نسخة محفوظة من المتجر</span>
+    <?php endif; ?>
+    <?= h((string) $catalog['apiError']) ?>
+  </p>
 <?php endif; ?>
 
 <?php if ($cartNoticeMessage !== ''): ?>

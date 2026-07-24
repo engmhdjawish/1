@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Support;
 
 use Portal\Auth\CustomerSession;
+use Portal\Services\AmineAvailabilityService;
 use Portal\Services\OrderService;
 use Portal\Services\ShareCartService;
 use Portal\Services\SpecialOfferService;
@@ -362,6 +363,8 @@ final class StoreCartApi
             'stock_notices' => $notices,
             'price_changes' => $pendingChanges,
             'logged_in' => CustomerSession::check(),
+            'amine_online' => AmineAvailabilityService::isAvailable(),
+            'amine_notice' => AmineAvailabilityService::isAvailable() ? '' : AmineAvailabilityService::userMessage(),
         ];
 
         return $payload;

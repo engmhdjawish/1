@@ -428,6 +428,17 @@ final class StoreCatalogService
             self::writeCatalogCache($query, $policy, $catalogResult);
         }
 
+        if ($apiError !== null && $apiError !== '') {
+            $stale = self::readStaleCatalogCache($query, $policy);
+            if ($stale !== null) {
+                $stale['apiError'] = AmineAvailabilityService::userMessage();
+                $stale['catalog_stale'] = true;
+
+                return $stale;
+            }
+            $catalogResult['apiError'] = AmineAvailabilityService::userMessage();
+        }
+
         return $catalogResult;
     }
 
@@ -1110,11 +1121,10 @@ final class StoreCatalogService
         $data = $response['data'] ?? null;
         if (is_array($data)) {
             $messages = [];
-            if (!empty($data['title']) && is_string($data['title'])) {
-                $messages[] = trim($data['title']);
-            }
-            if (!empty($data['detail']) && is_string($data['detail'])) {
-                $messages[] = trim($data['detail']);
+            foreach (['message', 'title', 'detail'] as $field) {
+                if (!empty($data[$field]) && is_string($data[$field])) {
+                    $messages[] = trim($data[$field]);
+                }
             }
             if (isset($data['errors']) && is_array($data['errors'])) {
                 foreach ($data['errors'] as $field => $fieldErrors) {
@@ -1854,6 +1864,25 @@ final class StoreCatalogService
         if (self::shouldRejectCachedCatalog($cached)) {
             ResponseCache::forget($key);
 
+            return null;
+        }
+
+        return $cached;
+    }
+
+    /** @param array<string, mixed> $query @param array<string, mixed> $policy @return array<string, mixed>|null */
+    private static function readStaleCatalogCache(array $query, array $policy): ?array
+    {
+        $key = self::catalogCacheKey($query, $policy);
+        if ($key === null) {
+            return null;
+        }
+
+        $cached = ResponseCache::getStale($key);
+        if (!is_array($cached)) {
+            return null;
+        }
+        if (self::shouldRejectCachedCatalog($cached)) {
             return null;
         }
 

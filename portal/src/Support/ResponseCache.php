@@ -38,6 +38,27 @@ final class ResponseCache
         return $payload['data'] ?? null;
     }
 
+    /** @return mixed|null Reads cache even when expired (for stale-if-error fallback). */
+    public static function getStale(string $key)
+    {
+        $path = self::pathForKey($key);
+        if (!is_file($path)) {
+            return null;
+        }
+
+        $raw = file_get_contents($path);
+        if ($raw === false || $raw === '') {
+            return null;
+        }
+
+        $payload = json_decode($raw, true);
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        return $payload['data'] ?? null;
+    }
+
     /** @param mixed $data */
     public static function set(string $key, $data, int $ttlSeconds = self::DEFAULT_TTL): void
     {

@@ -253,6 +253,18 @@ final class StockReservationService
             $warehousePrimary = self::fetchWarehousePrimary($materialGuid);
         }
         if ($warehousePrimary === null) {
+            if (!AmineAvailabilityService::isAvailable()) {
+                return [
+                    'ok' => true,
+                    'available_packages' => $requested,
+                    'requested_packages' => $requested,
+                    'capped_packages' => $requested,
+                    'message' => '',
+                    'warehouse_primary' => 0.0,
+                    'reserved_primary' => self::reservedPrimaryFor($materialGuid),
+                ];
+            }
+
             return [
                 'ok' => false,
                 'available_packages' => 0.0,
