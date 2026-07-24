@@ -15,7 +15,15 @@
   const btnPrev = modal.querySelector('[data-preview-prev]');
   const btnNext = modal.querySelector('[data-preview-next]');
 
-  const state = { items: [], index: 0, navigating: false, context: 'catalog', cartRoot: null, currentGuid: '' };
+  const state = {
+    items: [],
+    index: 0,
+    navigating: false,
+    context: 'catalog',
+    cartRoot: null,
+    itemScope: null,
+    currentGuid: '',
+  };
   const imageCache = new Map();
   let imageRenderToken = 0;
   let touchStartX = 0;
@@ -68,9 +76,22 @@
     return text;
   };
 
+  const resolveItemScope = (element) => {
+    if (!(element instanceof Element)) return null;
+    return element.closest('.home-section');
+  };
+
+  const findPreviewCard = (guid, scope = null) => {
+    if (!guid) return null;
+    const root = scope || state.itemScope || document;
+    return root.querySelector(`[data-preview-guid="${CSS.escape(guid)}"]`);
+  };
+
+  const isScopedCatalog = () => state.context === 'catalog' && state.itemScope instanceof Element;
+
   const findCardImageForItem = (item) => {
     if (!item?.guid) return null;
-    const card = document.querySelector(`[data-preview-guid="${CSS.escape(item.guid)}"]`);
+    const card = findPreviewCard(item.guid);
     return card?.querySelector('.material-image-frame__photo img')
       || card?.querySelector('.store-order-line-card__thumb img')
       || null;
@@ -255,10 +276,10 @@
     }
   };
 
-  const collectItems = (root = null) => {
+  const collectItems = (cartRoot = null, itemScope = null) => {
     const items = [];
-    const scope = root || document;
-    const selector = root
+    const scope = cartRoot || itemScope || document;
+    const selector = cartRoot
       ? '[data-store-cart-preview-line]'
       : '[data-store-preview-card]:not([data-store-cart-preview-line])';
     scope.querySelectorAll(selector).forEach((card) => {
@@ -433,7 +454,7 @@
       return null;
     }
 
-    const card = document.querySelector(`[data-preview-guid="${CSS.escape(item.guid)}"]`);
+    const card = findPreviewCard(item.guid);
     const sourceForm = card?.querySelector('[data-store-add-cart]');
     if (!sourceForm) {
       container.innerHTML = renderCartFormFallback(item);
@@ -691,7 +712,7 @@
       return Math.max(0, parseFloat(previewForm.dataset.cartQty || '0') || 0);
     }
 
-    const card = document.querySelector(`[data-preview-guid="${CSS.escape(guid)}"]`);
+    const card = findPreviewCard(guid);
     const cardForm = card?.querySelector('[data-store-add-cart]');
     if (cardForm) {
       return Math.max(0, parseFloat(cardForm.dataset.cartQty || '0') || 0);
@@ -721,7 +742,8 @@
   const updateNav = () => {
     const total = state.items.length;
     const isCart = state.context === 'cart';
-    const pageInfo = isCart ? {} : paging();
+    const scopedCatalog = isScopedCatalog();
+    const pageInfo = (isCart || scopedCatalog) ? {} : paging();
     const hasPrevPage = !isCart && !!pageInfo.prevPageUrl;
     const hasNextPage = !isCart && !!pageInfo.nextPageUrl;
     const atFirst = state.index <= 0;
@@ -842,6 +864,7 @@
       updateNav();
       try {
         await window.portalStoreCatalogNavigate(targetUrl);
+        state.itemScope = null;
         state.items = collectItems();
         if (state.items.length === 0) {
           close();
@@ -874,7 +897,7 @@
       return;
     }
 
-    if (state.context === 'cart') {
+    if (state.context === 'cart' || isScopedCatalog()) {
       return;
     }
 
@@ -897,9 +920,11 @@
 
   const open = (guid, preferElement = null, options = {}) => {
     const cartRoot = options.cartRoot || null;
+    const itemScope = cartRoot ? null : (options.itemScope || null);
     state.context = cartRoot ? 'cart' : 'catalog';
     state.cartRoot = cartRoot;
-    state.items = collectItems(cartRoot);
+    state.itemScope = itemScope;
+    state.items = collectItems(cartRoot, itemScope);
     if (state.items.length === 0) return;
     const idx = state.items.findIndex((item) => item.guid === guid);
     state.index = idx >= 0 ? idx : 0;
@@ -926,6 +951,7 @@
       imgEl.classList.remove('is-loading', 'is-placeholder');
     }
     document.body.style.overflow = '';
+    state.itemScope = null;
   };
 
   const initFromUrl = () => {
@@ -955,11 +981,12 @@
     const guid = card?.getAttribute('data-preview-guid') || '';
     if (!guid) return;
     const cartRoot = trigger.closest('[data-store-cart-preview-root]');
+    const itemScope = cartRoot ? null : resolveItemScope(trigger);
     const sourceImg = trigger.querySelector('img')
       || trigger.querySelector('.material-image-frame__photo img')
       || card?.querySelector('.material-image-frame__photo img')
       || card?.querySelector('.store-order-line-card__thumb img');
-    open(guid, sourceImg, { cartRoot });
+    open(guid, sourceImg, { cartRoot, itemScope });
   });
 
   modal.querySelectorAll('[data-preview-close]').forEach((el) => {
