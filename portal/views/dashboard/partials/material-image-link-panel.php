@@ -32,26 +32,32 @@
         <input type="search" id="sourceMaterialSearch" class="h-9 flex-1 min-w-0 rounded-lg border border-border-subtle px-3 text-sm" placeholder="بحث مادة بالاسم أو الرمز">
         <button type="button" id="applySourceFiltersBtn" class="h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold shrink-0">بحث</button>
       </div>
-      <div class="dash-mi-toolbar__actions">
-        <button type="button" id="deleteAllUnlinkedBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hidden">حذف الكل</button>
-        <button type="button" id="deleteSelectedUnlinkedBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hidden">حذف المحدد</button>
-        <button type="button" id="pauseDeleteUnlinkedBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold hidden">إيقاف</button>
-        <button type="button" id="resumeDeleteUnlinkedBtn" class="h-8 px-3 rounded-lg bg-primary text-white text-xs font-bold hidden">استئناف</button>
-        <button type="button" id="cancelDeleteUnlinkedBtn" class="h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold hidden">إلغاء</button>
-      </div>
-      <label id="selectAllUnlinkedWrap" class="hidden inline-flex items-center gap-2 text-xs font-bold text-text-muted">
-        <input type="checkbox" id="selectAllUnlinked" class="rounded border-border-subtle">
-        تحديد الكل في الصفحة
-      </label>
-      <div id="deleteUnlinkedProgressWrap" class="hidden">
-        <div class="flex justify-between text-xs text-text-muted mb-1">
-          <span id="deleteUnlinkedProgressLabel">0 / 0</span>
-          <span id="deleteUnlinkedStatusLabel">جاري الحذف...</span>
+      <details class="dash-mi-danger-zone">
+        <summary class="dash-mi-danger-zone__toggle">حذف جماعي (خطير)</summary>
+        <div class="dash-mi-danger-zone__body">
+          <p class="dash-mi-danger-zone__hint">يحذف من bm000 والموقع نهائياً. لا يمكن التراجع.</p>
+          <div class="dash-mi-toolbar__actions">
+            <button type="button" id="deleteAllUnlinkedBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hidden">حذف كل غير المرتبطة</button>
+            <button type="button" id="deleteSelectedUnlinkedBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hidden">حذف المحدد</button>
+            <button type="button" id="pauseDeleteUnlinkedBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold hidden">إيقاف</button>
+            <button type="button" id="resumeDeleteUnlinkedBtn" class="h-8 px-3 rounded-lg bg-primary text-white text-xs font-bold hidden">استئناف</button>
+            <button type="button" id="cancelDeleteUnlinkedBtn" class="h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold hidden">إلغاء</button>
+          </div>
+          <label id="selectAllUnlinkedWrap" class="hidden inline-flex items-center gap-2 text-xs font-bold text-text-muted">
+            <input type="checkbox" id="selectAllUnlinked" class="rounded border-border-subtle">
+            تحديد الكل في الصفحة
+          </label>
+          <div id="deleteUnlinkedProgressWrap" class="hidden">
+            <div class="flex justify-between text-xs text-text-muted mb-1">
+              <span id="deleteUnlinkedProgressLabel">0 / 0</span>
+              <span id="deleteUnlinkedStatusLabel">جاري الحذف...</span>
+            </div>
+            <div class="h-2 rounded-full bg-surface-low overflow-hidden">
+              <div id="deleteUnlinkedProgressBar" class="h-full bg-red-500 transition-all" style="width:0%"></div>
+            </div>
+          </div>
         </div>
-        <div class="h-2 rounded-full bg-surface-low overflow-hidden">
-          <div id="deleteUnlinkedProgressBar" class="h-full bg-red-500 transition-all" style="width:0%"></div>
-        </div>
-      </div>
+      </details>
     </div>
     <div id="sourceCards" class="dash-mi-cards"></div>
     <div class="mt-3 flex items-center justify-between">

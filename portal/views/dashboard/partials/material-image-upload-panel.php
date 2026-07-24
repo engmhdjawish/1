@@ -15,15 +15,18 @@ $statusLabels = [
   </p>
 <?php endif; ?>
 
-<section class="grid gap-4 lg:grid-cols-2 mb-6">
-  <p class="lg:col-span-2 text-sm text-text-muted bg-surface-low/80 border border-border-subtle rounded-xl px-4 py-3">
-    بعد رفع الصور ومزامنتها مع الأمين،
-    <a href="/dashboard/material-images.php?tab=link" class="text-primary font-bold hover:underline">انتقل إلى تبويب «ربط بالمواد»</a>
-    لربط الصور غير المرتبطة.
-  </p>
-  <article class="rounded-xl border border-border-subtle bg-white p-4">
-    <h2 class="font-bold mb-2">① رفع على الموقع</h2>
-    <p class="text-xs text-text-muted mb-3">اختر عدة صور — تُرفع واحدة تلو الأخرى مع شريط تقدم. عند انقطاع الاتصال أو إغلاق المتصفح يمكن الاستئناف من حيث توقفت.</p>
+<section class="rounded-xl border border-border-subtle bg-white overflow-hidden mb-6">
+  <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60">
+    <h2 class="font-bold text-sm">رفع ومزامنة</h2>
+    <p class="text-xs text-text-muted mt-0.5">
+      بعد رفع الصور ومزامنتها مع الأمين،
+      <a href="/dashboard/material-images.php?tab=link" class="text-primary font-bold hover:underline">انتقل إلى «ربط بالمواد»</a>.
+    </p>
+  </div>
+  <div class="p-4 dash-mi-upload-grid">
+  <article class="dash-mi-step-card">
+    <h3 class="dash-mi-step-card__title">① رفع على الموقع</h3>
+    <p class="dash-mi-step-card__desc">اختر عدة صور — تُرفع واحدة تلو الأخرى مع شريط تقدم. عند انقطاع الاتصال يمكن الاستئناف.</p>
 
     <div id="uploadPickPanel" class="space-y-3">
       <input type="file" id="uploadPicker" accept="image/jpeg,image/png,image/gif,image/webp" multiple class="block w-full text-sm">
@@ -52,10 +55,10 @@ $statusLabels = [
     </div>
   </article>
 
-  <article class="rounded-xl border border-border-subtle bg-white p-4">
-    <h2 class="font-bold mb-1">② مزامنة الأمين</h2>
-    <p class="text-xs text-text-muted mb-3">مجلد الموقع هو الأصل. «فحص الملفات المحلية» يقرأ أسماء الملفات من مجلد الموقع ويبحث عنها في سجل الأمين (API) بالاسم — عند التطابق يُربط GUID للعرض. إن اختلف المحتوى تُعلَّم بانتظار الرفع للأمين. الطابور يرسل صورة واحدة في كل مرة.</p>
-    <div class="flex flex-wrap gap-2 mb-3">
+  <article class="dash-mi-step-card">
+    <h3 class="dash-mi-step-card__title">② مزامنة الأمين</h3>
+    <p class="dash-mi-step-card__desc">مجلد الموقع هو الأصل. «فحص الملفات المحلية» يربط GUID من الأمين بالاسم. الطابور يرسل صورة واحدة في كل مرة.</p>
+    <div class="dash-mi-toolbar__actions mb-3">
       <button type="button" id="startSyncBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold">بدء / استئناف المزامنة</button>
       <button type="button" id="pauseSyncBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">إيقاف مؤقت</button>
       <button type="button" id="retryFailedBtn" class="h-9 px-4 rounded-lg border border-amber-200 bg-amber-50 text-xs font-bold text-amber-900">إعادة المحاولة للفاشلة</button>
@@ -72,6 +75,7 @@ $statusLabels = [
     </div>
     <p id="syncStatus" class="text-xs text-text-muted mt-2"><?= !empty($apiHealth['ok']) ? 'جاهز للمزامنة.' : h((string) ($apiHealth['message'] ?? 'الأمين غير متصل.')) ?></p>
   </article>
+  </div>
 </section>
 
 <section id="uploadQueueSection" class="hidden rounded-xl border border-border-subtle bg-white overflow-hidden mb-6">
@@ -84,24 +88,32 @@ $statusLabels = [
 
 <article class="rounded-xl border border-border-subtle bg-white overflow-hidden mb-6">
   <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60 flex flex-wrap items-center justify-between gap-2">
-    <h2 class="font-bold">طابور المزامنة مع الأمين</h2>
+    <h2 class="font-bold text-sm">طابور المزامنة مع الأمين</h2>
     <div class="flex flex-wrap items-center gap-2">
       <button type="button" id="deleteSelectedPendingBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold">حذف المحدد</button>
-      <button type="button" id="deleteAllPendingBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold">حذف كل غير المزامنة</button>
-      <button type="button" id="pauseDeletePendingBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold hidden">إيقاف</button>
-      <button type="button" id="resumeDeletePendingBtn" class="h-8 px-3 rounded-lg bg-primary text-white text-xs font-bold hidden">استئناف</button>
       <span class="text-xs text-text-muted" id="syncQueueSummary"><?= (int) ($queuePage['total_count'] ?? $syncStats['total'] ?? 0) ?> عنصر</span>
     </div>
   </div>
-  <div id="deletePendingProgressWrap" class="hidden px-4 pt-3">
-    <div class="flex justify-between text-xs text-text-muted mb-1">
-      <span id="deletePendingProgressLabel">0 / 0</span>
-      <span id="deletePendingStatusLabel">جاري الحذف...</span>
+  <details class="dash-mi-danger-zone dash-mi-danger-zone--inline">
+    <summary class="dash-mi-danger-zone__toggle">حذف جماعي من الموقع (خطير)</summary>
+    <div class="dash-mi-danger-zone__body">
+      <p class="dash-mi-danger-zone__hint">يحذف من مجلد الموقع والطابور فقط — لا يمس bm000.</p>
+      <div class="dash-mi-toolbar__actions">
+        <button type="button" id="deleteAllPendingBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold">حذف كل غير المزامنة</button>
+        <button type="button" id="pauseDeletePendingBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold hidden">إيقاف</button>
+        <button type="button" id="resumeDeletePendingBtn" class="h-8 px-3 rounded-lg bg-primary text-white text-xs font-bold hidden">استئناف</button>
+      </div>
+      <div id="deletePendingProgressWrap" class="hidden">
+        <div class="flex justify-between text-xs text-text-muted mb-1">
+          <span id="deletePendingProgressLabel">0 / 0</span>
+          <span id="deletePendingStatusLabel">جاري الحذف...</span>
+        </div>
+        <div class="h-2 rounded-full bg-surface-low overflow-hidden mb-3">
+          <div id="deletePendingProgressBar" class="h-full bg-red-500 transition-all" style="width:0%"></div>
+        </div>
+      </div>
     </div>
-    <div class="h-2 rounded-full bg-surface-low overflow-hidden mb-3">
-      <div id="deletePendingProgressBar" class="h-full bg-red-500 transition-all" style="width:0%"></div>
-    </div>
-  </div>
+  </details>
   <div id="syncQueueCards" class="dash-mi-sync-cards"></div>
   <div class="dashboard-table-wrap dash-mi-sync-table">
     <table class="w-full text-sm min-w-[800px]">
@@ -932,9 +944,17 @@ $statusLabels = [
     updateDeletePendingControls();
   }
 
+  function confirmBulkDelete(message, requireTyped = true) {
+    const confirmFn = window.dashboardApp?.confirmDestructive;
+    if (typeof confirmFn === 'function' && requireTyped) {
+      return confirmFn(message, 'حذف');
+    }
+    return confirm(message);
+  }
+
   async function deleteAllPending() {
     if (deletePendingRunning) return;
-    if (!confirm('حذف كل الصور غير المزامنة من مجلد الموقع والطابور؟ (لن يُمس bm000)')) return;
+    if (!confirmBulkDelete('حذف كل الصور غير المزامنة من مجلد الموقع والطابور؟ (لن يُمس bm000)')) return;
     deletePendingRunning = true;
     deletePendingPaused = false;
     deletePendingProcessed = 0;
@@ -951,7 +971,7 @@ $statusLabels = [
       if (syncStatus) syncStatus.textContent = 'حدّد صوراً من الطابور أولاً.';
       return;
     }
-    if (!confirm(`حذف ${ids.length} صورة محددة من الموقع والطابور؟`)) return;
+    if (!confirmBulkDelete(`حذف ${ids.length} صورة محددة من الموقع والطابور؟`, ids.length >= 5)) return;
 
     if (ids.length > 15) {
       deletePendingRunning = true;

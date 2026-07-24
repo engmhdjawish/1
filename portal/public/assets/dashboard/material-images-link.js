@@ -762,10 +762,20 @@ const API_URL = '/dashboard/material-images-api.php';
     resetDeleteUnlinkedState();
   }
 
-  async function startDeleteUnlinked(queue, confirmMessage) {
+  async function startDeleteUnlinked(queue, confirmMessage, options = {}) {
     if (deleteUnlinkedRunning) return;
     if (currentLinkFilter() !== 'unlinked') return;
-    if (!confirm(confirmMessage)) return;
+    const requireTypedConfirm = options.requireTypedConfirm === true;
+    if (requireTypedConfirm) {
+      const confirmFn = window.dashboardApp?.confirmDestructive;
+      if (typeof confirmFn === 'function') {
+        if (!confirmFn(confirmMessage, 'حذف')) return;
+      } else if (!confirm(confirmMessage)) {
+        return;
+      }
+    } else if (!confirm(confirmMessage)) {
+      return;
+    }
 
     deleteUnlinkedRunning = true;
     deleteUnlinkedPaused = false;
@@ -785,7 +795,11 @@ const API_URL = '/dashboard/material-images-api.php';
   }
 
   async function processDeleteAllUnlinked() {
-    await startDeleteUnlinked(null, 'حذف جميع الصور غير المرتبطة من bm000 والموقع؟ لا يمكن التراجع.');
+    await startDeleteUnlinked(
+      null,
+      'حذف جميع الصور غير المرتبطة من bm000 والموقع؟ لا يمكن التراجع.',
+      { requireTypedConfirm: true }
+    );
   }
 
   async function processDeleteSelectedUnlinked() {
@@ -796,7 +810,8 @@ const API_URL = '/dashboard/material-images-api.php';
     }
     await startDeleteUnlinked(
       [...selected],
-      `حذف ${selected.length} صورة محددة من bm000 والموقع؟ لا يمكن التراجع.`
+      `حذف ${selected.length} صورة محددة من bm000 والموقع؟ لا يمكن التراجع.`,
+      { requireTypedConfirm: selected.length >= 5 }
     );
   }
 

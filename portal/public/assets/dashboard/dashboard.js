@@ -65,6 +65,18 @@
     }, duration);
   }
 
+  function confirmDestructive(message, confirmWord = 'حذف') {
+    if (!confirm(message)) return false;
+    const typed = prompt(`للتأكيد اكتب «${confirmWord}» ثم Enter:`);
+    if (typed !== confirmWord) {
+      if (typed !== null) {
+        showToast('لم يتم التأكيد — أُلغيت العملية.', 'info');
+      }
+      return false;
+    }
+    return true;
+  }
+
   function setButtonLoading(btn, loading) {
     if (!btn) return;
     btn.disabled = loading;
@@ -781,6 +793,7 @@
   window.dashboardApp = {
     navigate,
     showToast,
+    confirmDestructive,
     setButtonLoading,
     bindForms(root) {
       bindAjaxForms(root);

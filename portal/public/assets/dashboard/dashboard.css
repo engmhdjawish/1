@@ -1184,6 +1184,74 @@ button.is-loading::after,
   color: var(--dash-muted, #6b7280);
 }
 
+.dash-mi-upload-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 1024px) {
+  .dash-mi-upload-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.dash-mi-step-card {
+  padding: 0.75rem;
+  border: 1px solid var(--dash-border, #e5e7eb);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--dash-surface-low, #f9fafb) 35%, #fff);
+}
+
+.dash-mi-step-card__title {
+  margin: 0 0 0.35rem;
+  font-size: 0.8125rem;
+  font-weight: 800;
+}
+
+.dash-mi-step-card__desc {
+  margin: 0 0 0.65rem;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--dash-muted, #6b7280);
+}
+
+.dash-mi-danger-zone {
+  border: 1px solid #fecaca;
+  border-radius: 0.65rem;
+  background: #fff5f5;
+}
+
+.dash-mi-danger-zone--inline {
+  margin: 0 0.65rem 0.65rem;
+}
+
+.dash-mi-danger-zone__toggle {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  color: #b91c1c;
+  cursor: pointer;
+  list-style: none;
+}
+
+.dash-mi-danger-zone__toggle::-webkit-details-marker {
+  display: none;
+}
+
+.dash-mi-danger-zone__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0 0.75rem 0.65rem;
+}
+
+.dash-mi-danger-zone__hint {
+  margin: 0;
+  font-size: 0.625rem;
+  line-height: 1.45;
+  color: #991b1b;
+}
+
 .dash-mi-cards {
   display: grid;
   gap: 0.65rem;
