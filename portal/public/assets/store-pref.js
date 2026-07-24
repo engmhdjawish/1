@@ -1,6 +1,12 @@
 (() => {
   const API = '/api/store-price-pref.php';
 
+  const syncSypDisclaimer = (currency) => {
+    document.querySelectorAll('[data-store-syp-disclaimer]').forEach((el) => {
+      el.hidden = currency !== 'syp';
+    });
+  };
+
   const applyCurrency = (currency) => {
     document.body.dataset.storePriceCurrency = currency;
     document.querySelectorAll('[data-store-currency]').forEach((btn) => {
@@ -8,6 +14,7 @@
       btn.classList.toggle('is-active', isActive);
       btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
     });
+    syncSypDisclaimer(currency);
     window.dispatchEvent(new CustomEvent('store:currency-changed', { detail: { currency } }));
   };
 
@@ -39,4 +46,6 @@
     current: () => document.body.dataset.storePriceCurrency || 'syp',
     apply: applyCurrency,
   };
+
+  syncSypDisclaimer(window.StorePricePreference.current());
 })();

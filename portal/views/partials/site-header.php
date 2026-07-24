@@ -70,7 +70,7 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
               <?php require __DIR__ . '/site-header-account.php'; ?>
             <?php else: ?>
               <a href="<?= h(portal_login_url('customer')) ?>" class="site-header__btn site-header__btn--ghost site-header__btn--compact" data-guide="login">دخول</a>
-              <a href="/register.php" class="site-header__btn site-header__btn--primary site-header__btn--compact" data-guide="register">تسجيل</a>
+              <a href="/register.php" class="site-header__btn site-header__btn--primary site-header__btn--compact" data-guide="register" title="طلب إنشاء حساب عميل جديد">حساب جديد</a>
             <?php endif; ?>
           </div>
 

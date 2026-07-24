@@ -59,7 +59,7 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
           <?php if ($homeCustomer === null): ?>
             <a href="/register.php" class="home-btn home-btn--ghost">
               <span class="material-symbols-outlined" aria-hidden="true">person_add</span>
-              تسجيل عميل
+              حساب جديد
             </a>
           <?php endif; ?>
         </div>
