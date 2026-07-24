@@ -15,7 +15,7 @@
   const btnPrev = modal.querySelector('[data-preview-prev]');
   const btnNext = modal.querySelector('[data-preview-next]');
 
-  const state = { items: [], index: 0, navigating: false };
+  const state = { items: [], index: 0, navigating: false, context: 'catalog', cartRoot: null, currentGuid: '' };
   const imageCache = new Map();
   let imageRenderToken = 0;
   let touchStartX = 0;
@@ -71,7 +71,9 @@
   const findCardImageForItem = (item) => {
     if (!item?.guid) return null;
     const card = document.querySelector(`[data-preview-guid="${CSS.escape(item.guid)}"]`);
-    return card?.querySelector('.material-image-frame__photo img') || null;
+    return card?.querySelector('.material-image-frame__photo img')
+      || card?.querySelector('.store-order-line-card__thumb img')
+      || null;
   };
 
   const preloadImage = (url) => {
@@ -242,9 +244,13 @@
     }
   };
 
-  const collectItems = () => {
+  const collectItems = (root = null) => {
     const items = [];
-    document.querySelectorAll('[data-store-preview-card]').forEach((card) => {
+    const scope = root || document;
+    const selector = root
+      ? '[data-store-preview-card]'
+      : '[data-store-preview-card]:not([data-store-cart-preview-line])';
+    scope.querySelectorAll(selector).forEach((card) => {
       const raw = card.getAttribute('data-preview');
       if (!raw) return;
       try {
@@ -431,6 +437,54 @@
     }
 
     return clone;
+  };
+
+  const mountCartLineControls = (item, container) => {
+    if (!container || !item?.guid) {
+      if (container) container.innerHTML = '';
+      return;
+    }
+
+    const qty = Math.max(0, Number(item.cartQty) || 0);
+    const packageUnit = item.packageUnit || 'طرد';
+    const maxAttr = item.maxPackages != null ? `max="${esc(item.maxPackages)}"` : '';
+    const qtyLabel = formatPackageCount(qty);
+
+    container.innerHTML = `
+      <div class="store-product-preview__cart-controls">
+        <div class="store-cart-panel store-cart-panel--in-cart">
+          <div class="store-cart-panel__badge">
+            <span class="material-symbols-outlined" aria-hidden="true">shopping_cart</span>
+            <span>في السلة</span>
+          </div>
+          <div class="store-cart-line-card__qty-row store-product-preview__qty-row">
+            <div class="store-qty-stepper store-qty-stepper--compact store-qty-stepper--preview" data-cart-qty-control data-guid="${esc(item.guid)}">
+              <button type="button" data-bump="-1" aria-label="إنقاص">−</button>
+              <input
+                type="number"
+                class="store-num"
+                dir="ltr"
+                min="0.01"
+                step="0.01"
+                ${maxAttr}
+                value="${esc(formatQty(qty))}"
+                data-qty-input
+              >
+              <button type="button" data-bump="1" aria-label="زيادة">+</button>
+            </div>
+            <span class="store-cart-line-card__unit">${esc(packageUnit)}</span>
+            <strong class="store-product-preview__qty-label store-num" dir="ltr">${esc(qtyLabel)}</strong>
+          </div>
+        </div>
+        <button type="button" class="store-product-preview__remove-btn" data-remove-item="${esc(item.guid)}">
+          <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+          إزالة من السلة
+        </button>
+      </div>`;
+
+    if (window.StoreCart?.bindCartLineControls) {
+      window.StoreCart.bindCartLineControls(container, item.maxPackages ?? null);
+    }
   };
 
   const renderCartFormFallback = (p) => {
@@ -655,7 +709,12 @@
   const render = (p, imageOptions = {}) => {
     const item = syncCartQtyFromDom(p);
     const panel = modal.querySelector('.store-product-preview__panel');
-    if (panel) panel.classList.toggle('store-product-preview__panel--offer', !!item.hasOffer);
+    if (panel) {
+      panel.classList.toggle('store-product-preview__panel--offer', !!item.hasOffer);
+      panel.classList.toggle('store-product-preview__panel--cart', state.context === 'cart');
+    }
+
+    state.currentGuid = item.guid || state.currentGuid;
 
     if (imgEl) {
       imgEl.alt = item.name || '';
@@ -696,11 +755,18 @@
     renderPackaging(item);
 
     if (pricesEl) pricesEl.innerHTML = renderPrices(item);
-    mountCartForm(item, cartEl);
-    if (detailEl) {
-      const detailHref = detailUrlForItem(item);
-      detailEl.href = detailHref || '/store.php';
-      detailEl.classList.toggle('hidden', !detailHref);
+    if (state.context === 'cart') {
+      mountCartLineControls(item, cartEl);
+      updateInCartBanner(item);
+      if (detailEl) detailEl.classList.add('hidden');
+    } else {
+      mountCartForm(item, cartEl);
+      updateInCartBanner(item);
+      if (detailEl) {
+        const detailHref = detailUrlForItem(item);
+        detailEl.href = detailHref || '/store.php';
+        detailEl.classList.toggle('hidden', !detailHref);
+      }
     }
 
     updateNav();
@@ -710,6 +776,7 @@
     if (state.items.length === 0) return;
     state.index = Math.max(0, Math.min(index, state.items.length - 1));
     const item = state.items[state.index];
+    if (item?.guid) state.currentGuid = item.guid;
     const preferElement = imageOptions.preferElement || findCardImageForItem(item);
     render(item, preferElement ? { preferElement } : {});
   };
@@ -781,11 +848,15 @@
     document.body.style.overflow = 'hidden';
   };
 
-  const open = (guid, preferElement = null) => {
-    state.items = collectItems();
+  const open = (guid, preferElement = null, options = {}) => {
+    const cartRoot = options.cartRoot || null;
+    state.context = cartRoot ? 'cart' : 'catalog';
+    state.cartRoot = cartRoot;
+    state.items = collectItems(cartRoot);
     if (state.items.length === 0) return;
     const idx = state.items.findIndex((item) => item.guid === guid);
     state.index = idx >= 0 ? idx : 0;
+    state.currentGuid = guid;
     openModal();
     const item = state.items[state.index];
     const sourceImg = preferElement instanceof HTMLImageElement
@@ -836,9 +907,12 @@
     const card = trigger.closest('[data-store-preview-card]');
     const guid = card?.getAttribute('data-preview-guid') || '';
     if (!guid) return;
-    const sourceImg = trigger.querySelector('.material-image-frame__photo img')
-      || card?.querySelector('.material-image-frame__photo img');
-    open(guid, sourceImg);
+    const cartRoot = trigger.closest('[data-store-cart-preview-root]');
+    const sourceImg = trigger.querySelector('img')
+      || trigger.querySelector('.material-image-frame__photo img')
+      || card?.querySelector('.material-image-frame__photo img')
+      || card?.querySelector('.store-order-line-card__thumb img');
+    open(guid, sourceImg, { cartRoot });
   });
 
   modal.querySelectorAll('[data-preview-close]').forEach((el) => {
@@ -878,11 +952,43 @@
   }
 
   document.addEventListener('store-cart-updated', (event) => {
-    if (modal.hidden || state.items.length === 0) return;
+    if (modal.hidden) return;
+
+    const qtyMap = event.detail?.cart_qty_by_guid;
+
+    if (state.context === 'cart' && state.cartRoot) {
+      state.items = collectItems(state.cartRoot);
+      if (state.items.length === 0) {
+        close();
+        return;
+      }
+
+      if (qtyMap && typeof qtyMap === 'object') {
+        state.items = state.items.map((item) => {
+          if (!item?.guid) return item;
+          const raw = qtyMap[item.guid]
+            ?? qtyMap[item.guid.toLowerCase()]
+            ?? qtyMap[item.guid.toUpperCase()];
+          if (raw !== undefined) {
+            return applyCartQtyToPayload(item, Math.max(0, Number(raw) || 0));
+          }
+          return syncCartQtyFromDom(item);
+        });
+      }
+
+      let idx = state.items.findIndex((item) => item.guid === state.currentGuid);
+      if (idx < 0) {
+        idx = Math.min(state.index, state.items.length - 1);
+      }
+      state.index = idx;
+      render(state.items[state.index]);
+      return;
+    }
+
+    if (state.items.length === 0) return;
     const current = state.items[state.index];
     if (!current?.guid) return;
 
-    const qtyMap = event.detail?.cart_qty_by_guid;
     if (qtyMap && typeof qtyMap === 'object') {
       state.items = state.items.map((item) => {
         if (!item?.guid) return item;

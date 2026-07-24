@@ -8,6 +8,7 @@ declare(strict_types=1);
 /** @var bool $lineShowsPrice */
 /** @var bool $customerShowsPrices */
 /** @var float|null $maxPackagesPerMaterial */
+/** @var array<string, mixed>|null $cartPreviewDisplay */
 
 $showPriceSyp = (bool) ($showPriceSyp ?? true);
 $showPriceUsd = (bool) ($showPriceUsd ?? false);
@@ -17,16 +18,26 @@ $prices = store_order_line_prices($item);
 $hasOffer = store_line_has_offer($item);
 $materialGuid = (string) ($item['material_guid'] ?? '');
 $imageUrl = trim((string) ($item['image_url'] ?? ''));
-$zoomUrl = $imageUrl !== '' ? material_image_zoom_url($imageUrl) : '';
 $packageUnit = (string) ($prices['package_unit'] ?? 'طرد');
+$previewPayload = cart_preview_payload($item, $cartPreviewDisplay ?? [
+    'show_price' => $lineShowsPrice && $customerShowsPrices,
+    'price_mode' => $priceMode ?? 'syp',
+    'show_quantity' => false,
+    'allow_cart' => $allowCart ?? true,
+]);
+$previewJson = json_encode($previewPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
 ?>
 <article
   class="store-order-line-card store-cart-line-card<?= $hasOffer ? ' store-order-line-card--offer' : '' ?><?= $customerShowsPrices && !$lineShowsPrice ? ' store-cart-line-card--no-price' : '' ?>"
   data-cart-line="<?= h($materialGuid) ?>"
+  data-store-preview-card
+  data-store-cart-preview-line
+  data-preview-guid="<?= h($materialGuid) ?>"
+  data-preview="<?= h((string) $previewJson) ?>"
 >
   <div class="store-order-line-card__media">
     <?php if ($imageUrl !== ''): ?>
-      <button type="button" class="store-order-line-card__thumb" data-cart-image-zoom="<?= h($zoomUrl) ?>" title="تكبير الصورة للتدقيق">
+      <button type="button" class="store-order-line-card__thumb" data-store-product-preview title="معاينة الصورة والكمية">
         <img src="<?= h($imageUrl) ?>" alt="" loading="lazy">
         <span class="store-order-line-card__zoom-icon material-symbols-outlined" aria-hidden="true">zoom_in</span>
       </button>

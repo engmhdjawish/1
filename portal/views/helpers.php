@@ -537,6 +537,86 @@ function product_preview_payload(
     ];
 }
 
+/**
+ * بيانات معاينة صورة مادة داخل السلة (تنقل + كمية + إزالة).
+ *
+ * @param array<string, mixed> $line
+ * @param array<string, mixed> $displayOptions
+ * @return array<string, mixed>
+ */
+function cart_preview_payload(array $line, array $displayOptions): array
+{
+    $prices = store_order_line_prices($line);
+    $guid = trim((string) ($line['material_guid'] ?? ''));
+    $imageUrl = trim((string) ($line['image_url'] ?? ''));
+    $thumbUrl = $imageUrl;
+    $zoomUrl = $imageUrl !== '' ? material_image_zoom_url($imageUrl) : '';
+    $cartQty = max(0.0, (float) $prices['quantity']);
+
+    $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
+    $lineShowsPrice = store_line_has_display_price($line);
+    $showPrice = (bool) ($displayOptions['show_price'] ?? false) && $lineShowsPrice;
+    $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
+    $allowCart = (bool) ($displayOptions['allow_cart'] ?? false);
+    $hasOffer = store_line_has_offer($line);
+
+    $packaging = $prices['packaging'];
+    $primaryUnit = $prices['primary_unit'];
+    $packageUnit = $prices['package_unit'];
+
+    $maxPackages = \Portal\Services\StorePolicyService::maxPackagesPerMaterial();
+    $maxLabel = $maxPackages !== null
+        ? \Portal\Services\SpecialOfferService::formatQuantityLabel($maxPackages)
+        : null;
+    $qtyBounds = store_cart_qty_bounds($line, $cartQty, $showQuantity);
+    $stockAvailable = (float) ($qtyBounds['stockAvailable'] ?? 0.0);
+
+    return [
+        'guid' => $guid,
+        'name' => (string) ($line['material_name_ar'] ?? ''),
+        'code' => (string) ($line['material_code'] ?? ''),
+        'manufacturer' => (string) ($line['manufacturer'] ?? ''),
+        'materialType' => (string) ($line['material_type'] ?? ''),
+        'thumbUrl' => $thumbUrl,
+        'zoomUrl' => $zoomUrl,
+        'detailUrl' => $guid !== '' ? product_url($guid, '/store-cart.php') : '',
+        'showPrice' => $showPrice,
+        'showPriceSyp' => in_array($priceMode, ['both', 'syp'], true),
+        'showPriceUsd' => in_array($priceMode, ['both', 'usd'], true),
+        'showQuantity' => $showQuantity,
+        'packagesAvailable' => $stockAvailable,
+        'packagesAvailableLabel' => $showQuantity && $stockAvailable > 0
+            ? format_packages_display($stockAvailable)
+            : '',
+        'packaging' => $packaging,
+        'packagingLabel' => format_packaging($packaging) . ' ' . $primaryUnit . ' / ' . $packageUnit,
+        'primaryUnit' => $primaryUnit,
+        'packageUnit' => $packageUnit,
+        'hasOffer' => $hasOffer,
+        'offerBadge' => store_line_offer_badge($line),
+        'unitSaleSp' => $prices['unit_sp'],
+        'unitSaleUsd' => $prices['unit_usd'],
+        'packageSaleSp' => $prices['pack_sp'],
+        'packageSaleUsd' => $prices['pack_usd'],
+        'originalUnitSp' => $prices['orig_unit_sp'],
+        'originalUnitUsd' => $prices['orig_unit_usd'],
+        'originalPackSp' => $prices['orig_pack_sp'],
+        'originalPackUsd' => $prices['orig_pack_usd'],
+        'allowCart' => $allowCart,
+        'cartQty' => $cartQty,
+        'maxPackages' => $maxPackages,
+        'maxLabel' => $maxLabel,
+        'remaining' => $qtyBounds['effectiveMax'],
+        'atLimit' => $qtyBounds['atLimit'],
+        'defaultQty' => $qtyBounds['defaultQty'],
+        'qtyStep' => $qtyBounds['qtyStep'],
+        'qtyMin' => $qtyBounds['qtyMin'],
+        'partialPackage' => $qtyBounds['partialPackage'],
+        'effectiveMax' => $qtyBounds['effectiveMax'],
+        'previewContext' => 'cart',
+    ];
+}
+
 function product_url(string $guid, ?string $return = null, ?string $offer = null): string
 {
     $guid = trim($guid);

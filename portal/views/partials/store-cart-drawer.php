@@ -26,6 +26,7 @@ $isLoggedInCustomer = is_array($customer ?? null);
     <div
       class="store-cart-drawer__shell"
       data-store-cart-drawer-root
+      data-store-cart-preview-root
       data-store-cart-page="drawer"
       data-default-name="<?= h($defaultGuestName) ?>"
       data-default-phone="<?= h($defaultGuestPhone) ?>"

@@ -786,11 +786,13 @@ require __DIR__ . '/partials/store-filter-group.php';
 
 <?php if (empty($GLOBALS['storeCatalogPreviewRendered'])): ?>
   <?php $GLOBALS['storeCatalogPreviewRendered'] = true; ?>
+  <?php $GLOBALS['storeProductPreviewRendered'] = true; ?>
   <?php require __DIR__ . '/partials/store-product-preview.php'; ?>
 <?php endif; ?>
 
 <script src="<?= h(portal_asset_url('/assets/store-filters.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/store-catalog-nav.js')) ?>" defer></script>
+<?php $GLOBALS['storeProductPreviewScriptLoaded'] = true; ?>
 <script src="<?= h(portal_asset_url('/assets/store-product-preview.js')) ?>" defer></script>
 
 <style>

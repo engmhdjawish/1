@@ -163,6 +163,11 @@ if ($customer) {
   <?php require __DIR__ . '/partials/store-image-lightbox.php'; ?>
 <?php endif; ?>
 
+<?php if ($enableStoreCartJs && empty($GLOBALS['storeProductPreviewRendered'])): ?>
+  <?php $GLOBALS['storeProductPreviewRendered'] = true; ?>
+  <?php require __DIR__ . '/partials/store-product-preview.php'; ?>
+<?php endif; ?>
+
 <?php if ($enableOnboarding): ?>
   <?php
     $siteOnboardingAutoStart = true;
@@ -217,6 +222,10 @@ if ($customer) {
   </script>
   <script src="<?= h(portal_asset_url('/assets/store-image-zoom.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/store-cart.js')) ?>" defer></script>
+  <?php if (empty($GLOBALS['storeProductPreviewScriptLoaded'])): ?>
+    <?php $GLOBALS['storeProductPreviewScriptLoaded'] = true; ?>
+    <script src="<?= h(portal_asset_url('/assets/store-product-preview.js')) ?>" defer></script>
+  <?php endif; ?>
 <?php endif; ?>
 <?php if ($enableOnboarding): ?>
   <script src="<?= h(portal_asset_url('/assets/site-onboarding.js')) ?>" defer></script>
