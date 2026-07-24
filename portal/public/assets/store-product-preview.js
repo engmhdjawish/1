@@ -349,92 +349,53 @@
 
   const renderOrderStaffPanel = (item) => {
     const packageUnit = item.packageUnit || 'طرد';
-    const primaryUnit = item.primaryUnit || 'زوج';
     const qty = formatPackageCount(item.orderQty ?? 0);
-    const packaging = formatPackagingLabel(item);
-    const code = item.code ? `<code class="store-num" dir="ltr">${esc(item.code)}</code>` : '—';
-    const rows = [];
 
-    rows.push(`
-      <div class="store-product-preview__staff-row">
-        <dt>رقم المادة</dt>
-        <dd>${code}</dd>
-      </div>`);
-
-    if (packaging) {
-      rows.push(`
-        <div class="store-product-preview__staff-row">
-          <dt>التعبئة</dt>
-          <dd dir="ltr">${esc(packaging)}</dd>
-        </div>`);
-    }
-
-    rows.push(`
-      <div class="store-product-preview__staff-row">
-        <dt>الكمية</dt>
-        <dd class="store-num" dir="ltr">${esc(qty)} ${esc(packageUnit)}</dd>
-      </div>`);
-
+    let packPriceHtml = '';
     if (item.showPrice) {
       if (item.showPriceSyp && (item.packageSaleSp > 0 || item.originalPackSp > 0)) {
-        rows.push(`
-          <div class="store-product-preview__staff-row">
-            <dt>سعر ${esc(packageUnit)}</dt>
-            <dd class="store-num" dir="ltr">${formatMoney(item.packageSaleSp > 0 ? item.packageSaleSp : item.originalPackSp)} ل.س</dd>
-          </div>`);
-      }
-      if (item.showPriceSyp && (item.unitSaleSp > 0 || item.originalUnitSp > 0)) {
-        rows.push(`
-          <div class="store-product-preview__staff-row">
-            <dt>سعر ${esc(primaryUnit)}</dt>
-            <dd class="store-num" dir="ltr">${formatMoney(item.unitSaleSp > 0 ? item.unitSaleSp : item.originalUnitSp)} ل.س</dd>
-          </div>`);
-      }
-      if (item.showPriceUsd && (item.packageSaleUsd > 0 || item.originalPackUsd > 0)) {
-        rows.push(`
-          <div class="store-product-preview__staff-row">
-            <dt>سعر ${esc(packageUnit)}</dt>
-            <dd class="store-num" dir="ltr">$${formatUsd(item.packageSaleUsd > 0 ? item.packageSaleUsd : item.originalPackUsd)}</dd>
-          </div>`);
-      }
-      if (item.showPriceUsd && (item.unitSaleUsd > 0 || item.originalUnitUsd > 0)) {
-        rows.push(`
-          <div class="store-product-preview__staff-row">
-            <dt>سعر ${esc(primaryUnit)}</dt>
-            <dd class="store-num" dir="ltr">$${formatUsd(item.unitSaleUsd > 0 ? item.unitSaleUsd : item.originalUnitUsd)}</dd>
-          </div>`);
+        const amount = item.packageSaleSp > 0 ? item.packageSaleSp : item.originalPackSp;
+        packPriceHtml = `<span class="store-num" dir="ltr">${formatMoney(amount)} ل.س</span> / ${esc(packageUnit)}`;
+      } else if (item.showPriceUsd && (item.packageSaleUsd > 0 || item.originalPackUsd > 0)) {
+        const amount = item.packageSaleUsd > 0 ? item.packageSaleUsd : item.originalPackUsd;
+        packPriceHtml = `<span class="store-num" dir="ltr">$${formatUsd(amount)}</span> / ${esc(packageUnit)}`;
       }
     }
 
     let totalHtml = '';
     if (item.showPrice) {
       if (item.showPriceSyp && Number(item.lineTotalSp) > 0) {
-        totalHtml = `<strong class="store-num" dir="ltr">${formatMoney(item.lineTotalSp)} ل.س</strong>`;
+        totalHtml = `<span class="store-num" dir="ltr">${formatMoney(item.lineTotalSp)} ل.س</span>`;
       } else if (item.showPriceUsd && Number(item.lineTotalUsd) > 0) {
-        totalHtml = `<strong class="store-num" dir="ltr">$${formatUsd(item.lineTotalUsd)}</strong>`;
+        totalHtml = `<span class="store-num" dir="ltr">$${formatUsd(item.lineTotalUsd)}</span>`;
       }
     }
 
-    const offerHtml = item.hasOffer
-      ? `<div class="store-product-preview__staff-offer">${esc(item.offerBadge || 'عرض خاص')}</div>`
-      : '';
+    const badges = [];
+    if (item.hasOffer) {
+      badges.push(`<span class="store-product-preview__staff-tag store-product-preview__staff-tag--offer">${esc(item.offerBadge || 'عرض')}</span>`);
+    }
+    if (item.isCancelled) {
+      badges.push('<span class="store-product-preview__staff-tag store-product-preview__staff-tag--cancelled">ملغى</span>');
+    }
 
-    const cancelledHtml = item.isCancelled
-      ? '<div class="store-product-preview__staff-cancelled">صنف ملغى من الطلب</div>'
-      : '';
+    if (!item.showPrice && !item.isCancelled) {
+      return '<p class="store-product-preview__staff-note">سعر هذا الصنف يُحدد عند تأكيد الطلب.</p>';
+    }
 
-    const noPriceHtml = !item.showPrice && !item.isCancelled
-      ? '<p class="store-product-preview__staff-note">سعر هذا الصنف يُحدد عند تأكيد الطلب.</p>'
-      : '';
+    if (!packPriceHtml && !totalHtml) {
+      return badges.length > 0
+        ? `<div class="store-product-preview__staff-badges">${badges.join('')}</div>`
+        : '';
+    }
 
     return `
       <div class="store-product-preview__staff-order">
-        <p class="store-product-preview__staff-kicker">متابعة الطلب — تفاصيل الصنف</p>
-        ${offerHtml}
-        ${cancelledHtml}
-        <dl class="store-product-preview__staff-grid">${rows.join('')}</dl>
-        ${totalHtml ? `<div class="store-product-preview__staff-total"><span>إجمالي الصنف</span>${totalHtml}</div>` : ''}
-        ${noPriceHtml}
+        ${badges.length > 0 ? `<div class="store-product-preview__staff-badges">${badges.join('')}</div>` : ''}
+        <div class="store-product-preview__staff-prices">
+          ${packPriceHtml ? `<div class="store-product-preview__staff-price"><span>سعر ${esc(packageUnit)}</span>${packPriceHtml}</div>` : ''}
+          ${totalHtml ? `<div class="store-product-preview__staff-total"><span>${esc(qty)} ${esc(packageUnit)}</span>${totalHtml}</div>` : ''}
+        </div>
       </div>`;
   };
 
@@ -905,7 +866,19 @@
 
     if (subtitleEl) {
       if (state.context === 'order') {
-        subtitleEl.textContent = item.isCancelled ? 'صنف ملغى من الطلب' : 'تفاصيل الصنف للمراجعة';
+        const packageUnit = item.packageUnit || 'طرد';
+        const qty = formatPackageCount(item.orderQty ?? 0);
+        const packaging = formatPackagingLabel(item);
+        if (item.isCancelled) {
+          subtitleEl.textContent = 'صنف ملغى من الطلب';
+        } else {
+          const parts = [
+            item.code ? `#${item.code}` : '',
+            `${qty} ${packageUnit}`,
+            packaging,
+          ].filter(Boolean);
+          subtitleEl.textContent = parts.join(' · ');
+        }
         subtitleEl.hidden = false;
       } else {
         const parts = [
