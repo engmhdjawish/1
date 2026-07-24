@@ -130,13 +130,13 @@ $defaultAvailability = '1';
 
               <?php
                 $chipFiltersExpanded = true;
-                $renderStoreFilterGroup('materialTypes', 'نوع المادة', $materialTypeOptions, [], 'materialTypes', 5, 8, false, $chipFiltersExpanded);
-                $renderStoreFilterGroup('ageCategories', 'الفئة العمرية', $ageCategoryOptions, [], 'ageCategories', 5, 8, false, $chipFiltersExpanded);
-                $renderStoreFilterGroup('manufacturers', 'الشركة المصنعة', $manufacturerOptions, [], 'manufacturers', 5, 8, false, $chipFiltersExpanded);
-                $renderStoreFilterGroup('sizeRanges', 'القياس', $sizeRangeOptions, [], 'sizeRanges', 5, 8, false, $chipFiltersExpanded);
-                $renderStoreFilterGroup('countryOfOrigins', 'بلد المنشأ', $countryOriginOptions, [], 'countryOfOrigins', 5, 8, false, $chipFiltersExpanded);
-                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, [], 'stores', 5, 8, false, $chipFiltersExpanded);
-                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, [], 'groups', 5, 8, false, $chipFiltersExpanded);
+                $renderStoreFilterGroup('materialTypes', 'نوع المادة', $materialTypeOptions, [], 'materialTypes', 5, 8, true, $chipFiltersExpanded);
+                $renderStoreFilterGroup('ageCategories', 'الفئة العمرية', $ageCategoryOptions, [], 'ageCategories', 5, 8, true, $chipFiltersExpanded);
+                $renderStoreFilterGroup('manufacturers', 'الشركة المصنعة', $manufacturerOptions, [], 'manufacturers', 5, 8, true, $chipFiltersExpanded);
+                $renderStoreFilterGroup('sizeRanges', 'القياس', $sizeRangeOptions, [], 'sizeRanges', 5, 8, true, $chipFiltersExpanded);
+                $renderStoreFilterGroup('countryOfOrigins', 'بلد المنشأ', $countryOriginOptions, [], 'countryOfOrigins', 5, 8, true, $chipFiltersExpanded);
+                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, [], 'stores', 5, 8, true, $chipFiltersExpanded);
+                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, [], 'groups', 5, 8, true, $chipFiltersExpanded);
               ?>
 
               <section class="store-filter-chip-section" data-filter-group="warehouse">
