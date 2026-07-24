@@ -21,6 +21,8 @@ const NO_CACHE_PREFIXES = [
   '/dashboard/',
   '/api/',
   '/login.php',
+  '/staff-login.php',
+  '/customer-login.php',
   '/logout.php',
   '/register.php',
   '/cart.php',

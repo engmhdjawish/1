@@ -30,7 +30,7 @@ final class WebSession
                 \Portal\Support\DashboardHttp::json(false, 'انتهت جلسة الدخول. سجّل الدخول مجدداً.', ['login' => true]);
             }
             $returnTo = rawurlencode(\Portal\Support\PortalUrl::currentPathWithQuery());
-            header('Location: /login.php?type=staff&redirect=' . $returnTo);
+            header('Location: /staff-login.php?redirect=' . $returnTo);
             exit;
         }
     }

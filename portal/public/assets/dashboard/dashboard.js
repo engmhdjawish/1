@@ -487,7 +487,7 @@
       showToast(err.message || 'تعذر تنفيذ العملية.', 'error');
       if (err.loginRequired) {
         setTimeout(() => {
-          window.location.href = '/login.php?type=staff';
+          window.location.href = '/staff-login.php';
         }, 900);
       }
     } finally {
