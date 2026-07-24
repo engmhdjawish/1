@@ -252,13 +252,34 @@
       : '[data-store-preview-card]:not([data-store-cart-preview-line])';
     scope.querySelectorAll(selector).forEach((card) => {
       const raw = card.getAttribute('data-preview');
-      if (!raw) return;
-      try {
-        const data = JSON.parse(raw);
-        if (data && data.guid) items.push(data);
-      } catch (_) {
-        /* ignore */
+      if (raw) {
+        try {
+          const data = JSON.parse(raw);
+          if (data && data.guid) {
+            items.push(data);
+            return;
+          }
+        } catch (_) {
+          /* fall through */
+        }
       }
+      const guid = card.getAttribute('data-preview-guid') || '';
+      if (!guid) return;
+      const name = card.querySelector('.store-order-line-card__title')?.textContent?.trim() || '';
+      const thumbImg = card.querySelector('.store-order-line-card__thumb img, .material-image-frame__photo img');
+      const thumbUrl = thumbImg?.getAttribute('src') || '';
+      const qtyInput = card.querySelector('[data-qty-input]');
+      const cartQty = Math.max(0, parseFloat(qtyInput?.value || '0') || 0);
+      items.push({
+        guid,
+        name,
+        thumbUrl,
+        zoomUrl: thumbUrl.includes('thumb=1') ? thumbUrl.replace('thumb=1', 'thumb=0') : thumbUrl,
+        cartQty,
+        previewContext: card.hasAttribute('data-store-cart-preview-line') ? 'cart' : 'catalog',
+        showPrice: false,
+        allowCart: true,
+      });
     });
     return items;
   };
