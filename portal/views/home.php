@@ -77,11 +77,14 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
               <span class="home-hero__logo-glow"></span>
               <span class="home-hero__logo-shimmer"></span>
               <?php if ($companyLogoUrl !== ''): ?>
-                <?php
-                  $siteLogoVariant = 'hero-home';
-                  $siteLogoAlt = '';
-                  require __DIR__ . '/partials/site-logo.php';
-                ?>
+                <img
+                  class="home-hero__logo"
+                  src="<?= h(portal_site_logo_url($companyLogoUrl, 'header')) ?>"
+                  alt=""
+                  width="512"
+                  height="512"
+                  decoding="async"
+                >
               <?php else: ?>
                 <span class="material-symbols-outlined home-hero__logo-fallback">storefront</span>
               <?php endif; ?>
@@ -138,18 +141,6 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
         </div>
       <?php endif; ?>
     </section>
-  <?php endif; ?>
-
-  <?php if ($sections !== []): ?>
-    <nav class="home-section-nav home-section-nav--sticky" aria-label="أقسام الرئيسية">
-      <?php foreach ($sections as $section): ?>
-        <?php $anchorId = (string) ($section['slug'] ?? $section['id'] ?? ''); ?>
-        <?php if ($anchorId === '') continue; ?>
-        <a href="#<?= h($anchorId) ?>" class="home-section-nav__link">
-          <?= h((string) ($section['title_ar'] ?? 'قسم')) ?>
-        </a>
-      <?php endforeach; ?>
-    </nav>
   <?php endif; ?>
 
   <div class="home-sections"<?= $deferHomeProducts ? ' data-home-deferred-products="1"' : '' ?><?= $homeHasEmbeddedStrips ? ' data-home-has-embedded-strips="1"' : '' ?>>

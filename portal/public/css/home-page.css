@@ -2,7 +2,7 @@
   --home-accent: #D81921;
   --home-ink: #0f172a;
   --home-muted: #64748b;
-  --home-scroll-offset: 9.5rem;
+  --home-scroll-offset: 5.5rem;
   --home-banner-ratio: 21 / 9;
   --home-ad-max-height: 16rem;
   --home-section-banner-max-height: 14rem;
@@ -154,37 +154,19 @@
     width: 58%;
     aspect-ratio: 1;
     border-radius: 9999px;
-    background: rgba(255, 255, 255, 0.97);
+    background: #fff;
     box-shadow:
       inset 0 0 0 1px rgba(255, 255, 255, 0.65),
       0 10px 32px rgba(0, 0, 0, 0.16),
       0 0 0 6px rgba(255, 255, 255, 0.08);
     overflow: hidden;
-  }
-
-  .home-hero__logo-stage .site-logo-wrap--hero-home {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-  }
-
-  .home-hero__logo-stage .site-logo-wrap--hero-home .site-logo-img {
-    width: 76%;
-    height: auto;
-    max-width: 76%;
-    max-height: 76%;
-    margin: 0;
-    filter: drop-shadow(0 2px 8px rgba(15, 23, 42, 0.12));
+    isolation: isolate;
   }
 
   .home-hero__logo-glow {
     position: absolute;
     inset: -24%;
+    z-index: 0;
     border-radius: inherit;
     background: radial-gradient(circle, rgba(255, 255, 255, 0.75) 0%, transparent 70%);
     opacity: 0.55;
@@ -194,7 +176,7 @@
   .home-hero__logo-shimmer {
     position: absolute;
     inset: 0;
-    z-index: 3;
+    z-index: 1;
     border-radius: inherit;
     background: linear-gradient(
       120deg,
@@ -208,6 +190,19 @@
     mix-blend-mode: soft-light;
     animation: home-hero-logo-shimmer 4.8s ease-in-out infinite;
     pointer-events: none;
+  }
+
+  .home-hero__logo {
+    position: relative;
+    z-index: 2;
+    display: block;
+    width: 74%;
+    height: auto;
+    max-width: 74%;
+    max-height: 74%;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 8px rgba(15, 23, 42, 0.12));
+    animation: home-hero-logo-sparkle 4.8s ease-in-out infinite;
   }
 
   .home-hero__logo-fallback {
@@ -265,11 +260,25 @@
   }
 }
 
+@keyframes home-hero-logo-sparkle {
+  0%,
+  100% {
+    filter: drop-shadow(0 2px 8px rgba(15, 23, 42, 0.12));
+  }
+
+  50% {
+    filter:
+      drop-shadow(0 0 16px rgba(255, 255, 255, 0.55))
+      drop-shadow(0 2px 8px rgba(15, 23, 42, 0.12));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .home-hero__ring--outer,
   .home-hero__ring--inner,
   .home-hero__logo-glow,
-  .home-hero__logo-shimmer {
+  .home-hero__logo-shimmer,
+  .home-hero__logo {
     animation: none;
   }
 }
@@ -295,8 +304,10 @@
     width: 60%;
   }
 
-  .home-hero__logo-stage .site-logo-wrap--hero-home .site-logo-img {
-    max-height: 80%;
+  .home-hero__logo {
+    width: 78%;
+    max-width: 78%;
+    max-height: 78%;
   }
 
   .home-hero__logo-fallback {
