@@ -33,9 +33,19 @@ final class CustomerSession
         }
     }
 
-    public static function login(string $phone, string $password): bool
+    /** @param-out string|null $errorMessage */
+    public static function login(string $phone, string $password, ?string &$errorMessage = null): bool
     {
+        $errorMessage = null;
         $phone = DigitNormalizer::normalizePhone($phone);
+        $password = trim($password);
+
+        if ($phone === '' || $password === '') {
+            $errorMessage = 'أدخل رقم الهاتف وكلمة المرور.';
+
+            return false;
+        }
+
         $pdo = Database::pdo();
         $stmt = $pdo->prepare(
             'SELECT c.*, ap.show_price, ap.show_quantity, ap.allow_cart, ap.allow_order
@@ -45,15 +55,41 @@ final class CustomerSession
         );
         $stmt->execute(['phone' => $phone]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (
-            !$row
-            || ($row['status'] ?? '') !== 'active'
-            || !(bool) ($row['is_active'] ?? false)
-            || empty($row['password_hash'])
-        ) {
+        if (!$row) {
+            $errorMessage = 'بيانات الدخول غير صحيحة.';
+
+            return false;
+        }
+
+        $status = (string) ($row['status'] ?? '');
+        if ($status === 'pending') {
+            $errorMessage = 'حسابك بانتظار موافقة الإدارة.';
+
+            return false;
+        }
+        if ($status === 'rejected') {
+            $errorMessage = 'تم رفض طلب التسجيل.';
+
+            return false;
+        }
+        if ($status === 'suspended') {
+            $errorMessage = 'الحساب موقوف. تواصل مع الإدارة.';
+
+            return false;
+        }
+        if ($status !== 'active' || !(bool) ($row['is_active'] ?? false)) {
+            $errorMessage = 'الحساب غير نشط. تواصل مع الإدارة.';
+
+            return false;
+        }
+        if (empty($row['password_hash'])) {
+            $errorMessage = 'حسابك بانتظار موافقة الإدارة.';
+
             return false;
         }
         if (!Password::verify($password, $row['password_hash'])) {
+            $errorMessage = 'بيانات الدخول غير صحيحة.';
+
             return false;
         }
 

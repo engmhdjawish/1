@@ -768,6 +768,11 @@ function portal_phone_input_attributes(): string
     return 'type="tel" inputmode="tel" autocomplete="tel" dir="ltr" data-phone-input';
 }
 
+function portal_login_phone_attributes(): string
+{
+    return 'type="tel" inputmode="tel" autocomplete="section-customer username" dir="ltr" data-phone-input data-login-phone';
+}
+
 function contact_maps_href(string $address): string
 {
     $address = trim($address);

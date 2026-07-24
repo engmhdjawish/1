@@ -37,12 +37,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = trim((string) ($_POST['password'] ?? ''));
     $redirect = PortalUrl::safeRedirectPath($_POST['redirect'] ?? $redirect);
     if ($type === 'customer') {
-        $ok = CustomerSession::login(portal_normalize_phone(trim($_POST['phone'] ?? '')), $password);
+        $loginError = null;
+        $ok = CustomerSession::login(portal_normalize_phone(trim($_POST['phone'] ?? '')), $password, $loginError);
         if ($ok) {
             header('Location: ' . PortalUrl::loginRedirectTarget('customer', $redirect));
             exit;
         }
-        $error = 'فشل الدخول. تأكد من التفعيل بعد موافقة الإدارة.';
+        $error = $loginError ?? 'بيانات الدخول غير صحيحة.';
     } else {
         $loginError = null;
         $ok = WebSession::login(trim($_POST['user_name'] ?? ''), $password, $loginError);

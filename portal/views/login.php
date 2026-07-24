@@ -44,7 +44,7 @@ $staffRedirectQuery = ($redirect ?? null) !== null && ($redirect ?? '') !== '' &
         </a>
       </div>
 
-      <form method="post" class="space-y-4">
+      <form method="post" class="space-y-4" id="login-form-<?= h($type) ?>" autocomplete="on">
         <input type="hidden" name="type" value="<?= h($type) ?>">
         <?php if (!empty($redirect) && ($type !== 'staff' || \Portal\Support\PortalUrl::isDashboardPath((string) $redirect))): ?>
           <input type="hidden" name="redirect" value="<?= h((string) $redirect) ?>">
@@ -52,17 +52,24 @@ $staffRedirectQuery = ($redirect ?? null) !== null && ($redirect ?? '') !== '' &
         <?php if ($type === 'customer'): ?>
           <label class="block text-sm font-medium text-gray-700">
             رقم الهاتف
-            <input name="phone" <?= portal_phone_input_attributes() ?> class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary" required placeholder="09xxxxxxxx">
+            <input name="phone" <?= portal_login_phone_attributes() ?> class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary" required placeholder="09xxxxxxxx">
           </label>
         <?php else: ?>
           <label class="block text-sm font-medium text-gray-700">
             اسم المستخدم
-            <input name="user_name" class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary" required placeholder="admin">
+            <input name="user_name" autocomplete="section-staff username" class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary" required placeholder="admin">
           </label>
         <?php endif; ?>
         <label class="block text-sm font-medium text-gray-700">
           كلمة المرور
-          <input type="password" name="password" class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary" required placeholder="••••••••">
+          <input
+            type="password"
+            name="password"
+            autocomplete="<?= $type === 'customer' ? 'section-customer current-password' : 'section-staff current-password' ?>"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary"
+            required
+            placeholder="••••••••"
+          >
         </label>
         <button type="submit" class="w-full bg-primary text-white rounded-lg py-2.5 font-semibold hover:brightness-110 transition">
           دخول
