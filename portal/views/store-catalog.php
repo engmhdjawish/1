@@ -511,6 +511,15 @@ require __DIR__ . '/partials/store-filter-group.php';
             </div>
           <?php endif; ?>
 
+          <div class="store-filter-pending-panel" id="store-filter-pending-panel" aria-live="polite">
+            <div class="store-filter-pending-panel-head">
+              <span class="store-filter-pending-panel-title">اختياراتك قبل العرض</span>
+              <button type="button" class="store-filter-pending-clear-all" id="store-filter-pending-clear-all" hidden>مسح الكل</button>
+            </div>
+            <div class="store-filter-pending-chips" id="store-filter-pending-chips-global"></div>
+            <p class="store-filter-pending-empty" id="store-filter-pending-empty">اختر من القوائم — ستظهر اختياراتك هنا كشرائح قابلة للحذف</p>
+          </div>
+
           <?php
             $facetMap = [
                   'materialTypes' => ['param' => 'materialTypes', 'code' => 'materialTypes', 'label' => 'نوع المادة', 'selected' => $selectedMaterialTypes],
@@ -610,9 +619,11 @@ require __DIR__ . '/partials/store-filter-group.php';
             <?php endif; ?>
 
             <?php if ($isClientFilterVisible('availability')): ?>
-              <details class="store-filter-accordion">
+              <details class="store-filter-accordion" data-filter-group="availability">
                 <summary class="store-filter-accordion-summary"><span>التوفر</span></summary>
-                <div class="store-filter-accordion-body store-filter-options">
+                <div class="store-filter-accordion-body">
+                  <div class="store-filter-group-chips" data-filter-group-chips="availability" hidden></div>
+                  <div class="store-filter-options store-filter-options--radio">
                   <?php foreach (['' => 'الكل', '1' => 'متوفر', '0' => 'غير متوفر'] as $value => $label): ?>
                     <?php $isActive = $availabilityValue === (string) $value; ?>
                     <label class="store-filter-option">
@@ -620,14 +631,17 @@ require __DIR__ . '/partials/store-filter-group.php';
                       <span class="store-filter-option-text"><?= h($label) ?></span>
                     </label>
                   <?php endforeach; ?>
+                  </div>
                 </div>
               </details>
             <?php endif; ?>
 
             <?php if ($isClientFilterVisible('warehouseRange')): ?>
-              <details class="store-filter-accordion">
+              <details class="store-filter-accordion" data-filter-group="warehouse">
                 <summary class="store-filter-accordion-summary"><span>مدى الكمية</span></summary>
-                <div class="store-filter-accordion-body grid grid-cols-2 gap-2">
+                <div class="store-filter-accordion-body">
+                  <div class="store-filter-group-chips" data-filter-group-chips="warehouse" hidden></div>
+                  <div class="grid grid-cols-2 gap-2">
                   <div class="store-inline-field mb-0">
                     <label>من</label>
                     <input type="number" step="0.01" min="0" name="minWarehouseQuantity" value="<?= h((string) ($filters['minWarehouseQuantity'] ?? '')) ?>">
@@ -636,14 +650,16 @@ require __DIR__ . '/partials/store-filter-group.php';
                     <label>إلى</label>
                     <input type="number" step="0.01" min="0" name="maxWarehouseQuantity" value="<?= h((string) ($filters['maxWarehouseQuantity'] ?? '')) ?>">
                   </div>
+                  </div>
                 </div>
               </details>
             <?php endif; ?>
 
             <?php if ($isClientFilterVisible('priceSaleSyp') || $isClientFilterVisible('priceSaleUsd') || $isClientFilterVisible('pricePurchaseUsd')): ?>
-              <details class="store-filter-accordion">
+              <details class="store-filter-accordion" data-filter-group="price">
                 <summary class="store-filter-accordion-summary"><span>المدى السعري</span></summary>
                 <div class="store-filter-accordion-body space-y-2">
+                  <div class="store-filter-group-chips" data-filter-group-chips="price" hidden></div>
                   <?php if ($isClientFilterVisible('priceSaleSyp')): ?>
                     <div class="grid grid-cols-2 gap-2">
                       <div class="store-inline-field mb-0"><label>بيع ل.س من</label><input type="number" step="0.01" min="0" name="minUnitSalePriceSyp" value="<?= h((string) ($filters['minUnitSalePriceSyp'] ?? '')) ?>"></div>
@@ -667,8 +683,9 @@ require __DIR__ . '/partials/store-filter-group.php';
             <?php endif; ?>
 
             <?php if ($isClientFilterVisible('groupBy')): ?>
-              <div class="store-inline-field">
+              <div class="store-inline-field" data-filter-group="groupBy">
                 <label for="store-group-by">التجميع</label>
+                <div class="store-filter-group-chips" data-filter-group-chips="groupBy" hidden></div>
                 <select id="store-group-by" name="groupBy">
                   <option value="none" <?= $selectedGroupBy === 'none' ? 'selected' : '' ?>>بدون</option>
                   <option value="ageCategory" <?= $selectedGroupBy === 'ageCategory' ? 'selected' : '' ?>>الفئة العمرية</option>

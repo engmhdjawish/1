@@ -67,6 +67,7 @@ $renderStoreFilterGroup = static function (
         <?php endif; ?>
       </summary>
       <div class="store-filter-accordion-body">
+        <div class="store-filter-group-chips" data-filter-group-chips="<?= h($groupId) ?>" hidden></div>
         <?php if ($searchable): ?>
           <input
             type="search"

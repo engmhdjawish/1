@@ -282,6 +282,10 @@
     if (groupBy) {
       groupBy.value = url.searchParams.get('groupBy') || 'none';
     }
+
+    if (typeof window.portalStoreFiltersRefreshPending === 'function') {
+      window.portalStoreFiltersRefreshPending();
+    }
   }
 
   function removeFilterChipOptimistically(chipLink) {
