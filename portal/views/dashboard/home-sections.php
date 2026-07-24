@@ -147,7 +147,7 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
   <input type="hidden" name="action" value="save_section">
   <input type="hidden" name="id" value="<?= h((string) ($editSection['id'] ?? '')) ?>">
 
-  <div class="sticky top-16 z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
+  <div class="dashboard-sticky-toolbar sticky z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
     <h2 class="font-bold text-base"><?= $editId !== '' ? 'تعديل القسم' : 'قسم جديد' ?></h2>
     <div class="flex flex-wrap items-center gap-2">
       <a href="/dashboard/home-sections.php" class="h-9 px-4 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"><?= $editId !== '' ? 'إلغاء التعديل' : 'إلغاء' ?></a>

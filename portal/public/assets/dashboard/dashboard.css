@@ -5,22 +5,75 @@
   --dash-surface: #ffffff;
   --dash-bg: #f6f6f8;
   --dash-border: #E5E7EB;
-  --dash-muted: #5d3f3c;
+  --dash-muted: #64748b;
   --dash-sidebar: 16rem;
   --dash-header: 4rem;
   --dash-area-tabs: 0px;
   --dash-bottom-nav: 5rem;
+  --dash-sticky-top: var(--dash-header);
 }
 
 body.dashboard-app.has-area-tabs {
-  --dash-area-tabs: 2.85rem;
+  --dash-area-tabs: 3rem;
+  --dash-sticky-top: calc(var(--dash-header) + var(--dash-area-tabs));
+}
+
+.dashboard-header-brand {
+  text-decoration: none;
+  color: inherit;
+}
+
+.dashboard-header-brand:focus-visible {
+  outline: 2px solid var(--dash-primary);
+  outline-offset: 3px;
+  border-radius: 0.75rem;
 }
 
 .dashboard-area-tabs {
   top: var(--dash-header);
+  display: flex;
+  gap: 0.35rem;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  padding: 0.5rem 1rem;
+  background: var(--dash-surface);
+  border-bottom: 1px solid var(--dash-border);
+}
+
+.dashboard-area-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+  border-radius: 0.75rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--dash-muted);
+  border: 1px solid var(--dash-border);
+  background: #fff;
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.dashboard-area-tab:hover {
+  background: #f3f3f5;
+  color: var(--dash-primary);
+}
+
+.dashboard-area-tab.is-active {
+  background: rgba(216, 25, 33, 0.1);
+  border-color: rgba(216, 25, 33, 0.25);
+  color: var(--dash-primary);
+}
+
+.dashboard-area-tab .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.dashboard-area-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .dashboard-area-tabs::-webkit-scrollbar {
@@ -211,7 +264,6 @@ body.dashboard-app {
     overflow-y: auto;
     overflow-x: hidden;
     padding: 0;
-    padding-top: calc(var(--dash-header) + var(--dash-area-tabs));
     display: flex;
     flex-direction: column;
   }
@@ -261,12 +313,24 @@ body.dashboard-app {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.125rem;
-  font-size: 0.625rem;
+  gap: 0.15rem;
+  font-size: 0.6875rem;
   font-weight: 700;
+  line-height: 1.2;
   color: var(--dash-muted);
   min-height: 44px;
+  padding-inline: 0.15rem;
+  text-align: center;
   transition: color 0.15s;
+}
+
+#dashboard-bottom-nav a span:last-child,
+#dashboard-bottom-nav button span:last-child {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 #dashboard-bottom-nav a.is-active,
 #dashboard-bottom-nav button.is-active {
@@ -344,11 +408,11 @@ button.is-loading::after,
   height: 1px;
 }
 
-/* Sticky form toolbar spacing on mobile */
-@media (max-width: 767px) {
-  .dashboard-sticky-toolbar {
-    top: calc(var(--dash-header) + var(--dash-area-tabs, 0px) - 0.25rem) !important;
-  }
+/* Sticky form toolbar — sits below header + area tabs */
+.dashboard-sticky-toolbar {
+  position: sticky;
+  z-index: 30;
+  top: var(--dash-sticky-top) !important;
 }
 
 .dashboard-app .store-image-lightbox {

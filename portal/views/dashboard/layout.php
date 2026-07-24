@@ -41,7 +41,7 @@ $renderSidebarFooter = static function () use ($navArea): void {
     if ($navArea !== DashboardNavigation::AREA_OPERATIONS) {
         ?>
         <a href="/dashboard/index.php" class="flex items-center justify-center gap-2 rounded-xl border border-border-subtle py-2.5 text-sm font-bold text-slate-700 hover:bg-surface-low transition" data-dashboard-nav-link>
-          <span class="material-symbols-outlined">arrow_forward</span>
+          <span class="material-symbols-outlined">arrow_back</span>
           العودة للعمل اليومي
         </a>
         <?php
@@ -89,7 +89,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   require dirname(__DIR__) . '/partials/head-icons.php';
   ?>
   <title><?= h($title) ?> — لوحة التحكم</title>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+Arabic:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
   <link href="<?= h(portal_asset_url('/assets/dashboard/dashboard.css')) ?>" rel="stylesheet">
   <link href="<?= h(portal_asset_url('/css/notifications.css')) ?>" rel="stylesheet">
@@ -98,7 +98,10 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <link href="/css/customer-portal.css" rel="stylesheet">
   <link href="<?= h(portal_asset_url('/css/tailwind.css')) ?>" rel="stylesheet">
   <style>
-    body { font-family: 'Manrope', sans-serif; background-color: #f6f6f8; }
+    body {
+      font-family: 'Noto Sans Arabic', 'Manrope', system-ui, sans-serif;
+      background-color: #f6f6f8;
+    }
     .material-symbols-outlined {
       font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
       font-size: 22px;
@@ -138,46 +141,6 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         display: none !important;
       }
     }
-    .dashboard-area-tabs {
-      display: flex;
-      gap: 0.35rem;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
-      padding: 0.5rem 1rem;
-      background: #ffffff;
-      border-bottom: 1px solid #E5E7EB;
-    }
-    .dashboard-area-tabs::-webkit-scrollbar {
-      display: none;
-    }
-    .dashboard-area-tab {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      white-space: nowrap;
-      border-radius: 0.75rem;
-      padding: 0.45rem 0.85rem;
-      font-size: 0.75rem;
-      font-weight: 800;
-      color: #5d3f3c;
-      border: 1px solid #E5E7EB;
-      background: #fff;
-      text-decoration: none;
-      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-    }
-    .dashboard-area-tab:hover {
-      background: #f3f3f5;
-      color: #D81921;
-    }
-    .dashboard-area-tab.is-active {
-      background: rgba(216, 25, 33, 0.1);
-      border-color: rgba(216, 25, 33, 0.25);
-      color: #D81921;
-    }
-    .dashboard-area-tab .material-symbols-outlined {
-      font-size: 1rem;
-    }
     @media (max-width: 1023px) {
       body.dashboard-app.has-bottom-nav .dashboard-main-content {
         padding-bottom: 0.75rem;
@@ -206,9 +169,19 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
         >
           <span class="material-symbols-outlined">menu</span>
         </button>
-        <a href="/dashboard/index.php" class="font-extrabold text-primary text-lg truncate">Jawish Trading</a>
-        <?php if (!$hasAreaTabs && $headerQuickLinks !== []): ?>
-        <nav class="hidden lg:flex items-center gap-1 text-sm mr-2" data-dashboard-header-quick-links>
+        <a href="/dashboard/index.php" class="dashboard-header-brand inline-flex items-center gap-2 min-w-0 max-w-[min(100%,14rem)] sm:max-w-[18rem]">
+          <?php if ($companyLogoUrl !== ''): ?>
+            <?php
+              $siteLogoVariant = 'mobile-toolbar';
+              $siteLogoAlt = $siteName;
+              require dirname(__DIR__) . '/partials/site-logo.php';
+            ?>
+          <?php endif; ?>
+          <span class="font-extrabold text-primary text-sm sm:text-base truncate"><?= h($siteName) ?></span>
+        </a>
+        <?php if ($headerQuickLinks !== []): ?>
+        <?php $headerQuickLinksClass = $hasAreaTabs ? 'hidden xl:flex' : 'hidden lg:flex'; ?>
+        <nav class="<?= $headerQuickLinksClass ?> items-center gap-1 text-sm mr-2" data-dashboard-header-quick-links>
           <?php foreach ($headerQuickLinks as $item): ?>
             <?php
               $itemRoute = (string) ($item['route'] ?? '');

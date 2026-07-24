@@ -179,7 +179,7 @@ $tabUrl = static function (string $key) use ($tab): string {
 <form method="post" id="settings-company-form" class="space-y-3">
   <input type="hidden" name="action" value="save_company">
 
-  <div class="sticky top-16 z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
+  <div class="dashboard-sticky-toolbar sticky z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
     <h2 class="font-bold text-base">الشركة وصفحة من نحن</h2>
     <button type="submit" class="h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">حفظ</button>
   </div>
@@ -242,7 +242,7 @@ $tabUrl = static function (string $key) use ($tab): string {
 <form method="post" id="settings-integration-form" class="space-y-3">
   <input type="hidden" name="action" value="save_integration">
 
-  <div class="sticky top-16 z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
+  <div class="dashboard-sticky-toolbar sticky z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
     <h2 class="font-bold text-base">اتصال API وقاعدة البيانات</h2>
     <button type="submit" class="h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">حفظ الاتصال</button>
   </div>
@@ -358,7 +358,7 @@ $tabUrl = static function (string $key) use ($tab): string {
     <input type="hidden" name="action" value="save_policy">
     <input type="hidden" name="id" value="<?= h((string) ($editPolicy['id'] ?? '')) ?>">
 
-    <div class="sticky top-16 z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
+    <div class="dashboard-sticky-toolbar sticky z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
       <h2 class="font-bold text-base"><?= $policyEditId !== '' ? 'تعديل السياسة' : 'سياسة جديدة' ?></h2>
       <div class="flex flex-wrap items-center gap-2">
         <a href="/dashboard/settings.php?tab=policies" class="h-9 px-4 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">إلغاء</a>
