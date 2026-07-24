@@ -30,8 +30,6 @@ if ($aboutSnippet !== '') {
         $aboutSnippet = substr($aboutSnippet, 0, 200) . '...';
     }
 }
-$sectionCount = count($sections);
-$offerCount = count(array_filter($sections, static fn (array $s): bool => !empty($s['is_offer_section'])));
 $storeCatalogDisplay = is_array($storeCatalogDisplay ?? null)
     ? $storeCatalogDisplay
     : StoreCatalogService::displayOptions();
@@ -66,23 +64,6 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
       </div>
 
       <div class="home-hero__panel">
-        <div class="home-stat-grid">
-          <article class="home-stat-card">
-            <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>
-            <strong><?= $sectionCount > 0 ? (int) $sectionCount : '—' ?></strong>
-            <span>أقسام نشطة</span>
-          </article>
-          <article class="home-stat-card">
-            <span class="material-symbols-outlined" aria-hidden="true">sell</span>
-            <strong><?= $offerCount > 0 ? (int) $offerCount : '—' ?></strong>
-            <span>عروض خاصة</span>
-          </article>
-          <article class="home-stat-card">
-            <span class="material-symbols-outlined" aria-hidden="true">verified</span>
-            <strong>24/7</strong>
-            <span>متابعة الطلب</span>
-          </article>
-        </div>
         <ul class="home-trust-list">
           <li><span class="material-symbols-outlined" aria-hidden="true">photo_camera</span> صور وأسعار واضحة</li>
           <li><span class="material-symbols-outlined" aria-hidden="true">shopping_cart</span> سلة وطلب فوري</li>
