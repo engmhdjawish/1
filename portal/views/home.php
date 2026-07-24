@@ -62,14 +62,6 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
           <?php endif; ?>
         </div>
       </div>
-
-      <div class="home-hero__panel">
-        <ul class="home-trust-list">
-          <li><span class="material-symbols-outlined" aria-hidden="true">photo_camera</span> صور وأسعار واضحة</li>
-          <li><span class="material-symbols-outlined" aria-hidden="true">shopping_cart</span> سلة وطلب فوري</li>
-          <li><span class="material-symbols-outlined" aria-hidden="true">local_shipping</span> تتبع حالة الطلب</li>
-        </ul>
-      </div>
     </div>
   </section>
 
