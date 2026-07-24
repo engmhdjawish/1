@@ -1,36 +1,38 @@
 /* Public store — catalog & product detail (Amazon-inspired) */
 
-.store-hero {
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  border: 1px solid #e5e7eb;
-  border-radius: 1rem;
-  padding: 1.25rem 1.5rem;
-  margin-bottom: 1.25rem;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+.store-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.85rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid #e5e7eb;
 }
 
-.store-hero__title {
-  font-size: 1.75rem;
+.store-page-head__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 1.125rem;
   font-weight: 800;
   color: #0f172a;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   line-height: 1.2;
 }
 
-.store-hero__subtitle {
-  font-size: 0.875rem;
-  color: #64748b;
-  margin-top: 0.35rem;
-  max-width: 42rem;
+.store-page-head__title .material-symbols-outlined {
+  font-size: 1.2rem;
+  color: #D81921;
 }
 
-.store-hero__meta {
+.store-page-head__meta {
   font-size: 0.75rem;
   color: #94a3b8;
-  margin-top: 0.5rem;
 }
 
-.store-hero__meta strong {
+.store-page-head__meta strong {
   color: #D81921;
   font-weight: 800;
 }
@@ -54,19 +56,6 @@
   font-size: 1.125rem;
   flex-shrink: 0;
   margin-top: 0.1rem;
-}
-
-.store-hero__badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  border-radius: 9999px;
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
-  color: #065f46;
-  padding: 0.4rem 0.85rem;
-  font-size: 0.8125rem;
-  font-weight: 700;
 }
 
 .store-product-grid {
@@ -653,16 +642,6 @@
 
 .store-currency-toggle__btn + .store-currency-toggle__btn {
   border-right: 1px solid #e5e7eb;
-}
-
-.store-hero__currency {
-  margin-top: 0.75rem;
-}
-
-.store-hero__currency-label {
-  font-size: 0.75rem;
-  color: #64748b;
-  margin-bottom: 0.35rem;
 }
 
 /* Price block on cards */
