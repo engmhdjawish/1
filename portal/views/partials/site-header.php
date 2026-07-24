@@ -139,11 +139,7 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
 
           <div class="site-header__auth" data-guide="auth">
             <?php if ($customer): ?>
-              <span class="site-header__user"><?= h((string) ($customer['name_ar'] ?? '')) ?></span>
-              <a href="/logout.php" class="site-header__btn site-header__btn--ghost site-header__btn--compact" title="تسجيل الخروج">
-                <span class="material-symbols-outlined text-base" aria-hidden="true">logout</span>
-                <span class="hidden sm:inline">خروج</span>
-              </a>
+              <?php require __DIR__ . '/site-header-account.php'; ?>
             <?php else: ?>
               <a href="<?= h(portal_login_url('customer')) ?>" class="site-header__btn site-header__btn--ghost hidden sm:inline-flex" data-guide="login">دخول</a>
               <a href="/register.php" class="site-header__btn site-header__btn--primary" data-guide="register">تسجيل</a>
@@ -212,7 +208,29 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
 
     <div class="site-drawer__section">
       <?php if ($customer): ?>
-        <div class="site-drawer__user"><?= h((string) ($customer['name_ar'] ?? '')) ?></div>
+        <?php
+          $drawerCustomerName = trim((string) ($customer['name_ar'] ?? ''));
+          if ($drawerCustomerName === '') {
+              $drawerCustomerName = 'عميل';
+          }
+          $drawerCustomerInitial = mb_strtoupper(mb_substr($drawerCustomerName, 0, 1));
+          $drawerCustomerPhone = trim((string) ($customer['phone'] ?? ''));
+        ?>
+        <div class="site-drawer__account-card">
+          <span class="site-drawer__account-avatar" aria-hidden="true"><?= h($drawerCustomerInitial) ?></span>
+          <div class="site-drawer__account-copy">
+            <strong><?= h($drawerCustomerName) ?></strong>
+            <span><?= $drawerCustomerPhone !== '' ? h($drawerCustomerPhone) : 'مسجّل الدخول' ?></span>
+          </div>
+        </div>
+        <a href="/my-profile.php" data-public-nav-link="1" class="site-drawer__link" data-guide="my-profile">
+          <span class="material-symbols-outlined align-middle text-base ml-1" aria-hidden="true">person</span>
+          الملف الشخصي
+        </a>
+        <a href="/my-orders.php" data-public-nav-link="1" class="site-drawer__link" data-guide="my-orders">
+          <span class="material-symbols-outlined align-middle text-base ml-1" aria-hidden="true">inventory_2</span>
+          طلباتي
+        </a>
         <a href="/logout.php" data-public-nav-link="1" class="site-drawer__link site-drawer__link--danger">تسجيل الخروج</a>
       <?php else: ?>
         <a href="<?= h(portal_login_url('customer')) ?>" data-public-nav-link="1" class="site-drawer__link" data-guide="login">دخول العملاء</a>
