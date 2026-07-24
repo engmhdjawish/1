@@ -40,26 +40,51 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
     <div class="home-hero__glow home-hero__glow--left" aria-hidden="true"></div>
     <div class="home-hero__glow home-hero__glow--right" aria-hidden="true"></div>
     <div class="home-hero__inner">
-      <div class="home-hero__content">
-        <p class="home-hero__kicker">
-          <span class="home-hero__kicker-dot" aria-hidden="true"></span>
-          مرحباً بكم في <?= h($siteName) ?>
-        </p>
-        <h1 class="home-hero__title">تجربة تسوّق جملة<br>احترافية وسلسة</h1>
-        <p class="home-hero__lead">
-          <?= $aboutSnippet !== '' ? h($aboutSnippet) : 'تصفّح أحدث المواد بأسعار واضحة، أضف للسلة، وتابع طلبك خطوة بخطوة.' ?>
-        </p>
-        <div class="home-hero__actions">
-          <a href="/store.php" class="home-btn home-btn--light">
-            <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
-            تصفّح المتجر
-          </a>
-          <?php if ($homeCustomer === null): ?>
-            <a href="/register.php" class="home-btn home-btn--ghost">
-              <span class="material-symbols-outlined" aria-hidden="true">person_add</span>
-              حساب جديد
+      <div class="home-hero__grid">
+        <div class="home-hero__content">
+          <p class="home-hero__kicker">
+            <span class="home-hero__kicker-dot" aria-hidden="true"></span>
+            مرحباً بكم في <?= h($siteName) ?>
+          </p>
+          <h1 class="home-hero__title">
+            <span class="home-hero__title-line">تجربة تسوّق جملة</span>
+            <span class="home-hero__title-line">احترافية وسلسة</span>
+          </h1>
+          <p class="home-hero__lead">
+            <?= $aboutSnippet !== '' ? h($aboutSnippet) : 'تصفّح أحدث المواد بأسعار واضحة، أضف للسلة، وتابع طلبك خطوة بخطوة.' ?>
+          </p>
+          <div class="home-hero__actions">
+            <a href="/store.php" class="home-btn home-btn--light">
+              <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
+              تصفّح المتجر
             </a>
-          <?php endif; ?>
+            <?php if ($homeCustomer === null): ?>
+              <a href="/register.php" class="home-btn home-btn--ghost">
+                <span class="material-symbols-outlined" aria-hidden="true">person_add</span>
+                حساب جديد
+              </a>
+            <?php endif; ?>
+          </div>
+        </div>
+
+        <div class="home-hero__visual" aria-hidden="true">
+          <div class="home-hero__orbits">
+            <svg class="home-hero__orbits-svg" viewBox="0 0 200 200" focusable="false">
+              <g class="home-hero__orbits-layer home-hero__orbits-layer--a">
+                <circle cx="100" cy="100" r="88" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="175 378" stroke-linecap="round" opacity="0.18"></circle>
+                <circle cx="100" cy="12" r="3.6" fill="currentColor" opacity="0.42"></circle>
+              </g>
+              <g class="home-hero__orbits-layer home-hero__orbits-layer--b">
+                <circle cx="100" cy="100" r="62" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="120 270" stroke-linecap="round" opacity="0.14"></circle>
+                <circle cx="162" cy="100" r="3" fill="currentColor" opacity="0.36"></circle>
+              </g>
+              <g class="home-hero__orbits-layer home-hero__orbits-layer--c">
+                <circle cx="100" cy="100" r="38" fill="none" stroke="currentColor" stroke-width="0.9" stroke-dasharray="78 162" stroke-linecap="round" opacity="0.1"></circle>
+                <circle cx="100" cy="138" r="2.6" fill="currentColor" opacity="0.32"></circle>
+              </g>
+            </svg>
+            <span class="home-hero__orbit-core"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -111,18 +136,6 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
         </div>
       <?php endif; ?>
     </section>
-  <?php endif; ?>
-
-  <?php if ($sections !== []): ?>
-    <nav class="home-section-nav home-section-nav--sticky" aria-label="أقسام الرئيسية">
-      <?php foreach ($sections as $section): ?>
-        <?php $anchorId = (string) ($section['slug'] ?? $section['id'] ?? ''); ?>
-        <?php if ($anchorId === '') continue; ?>
-        <a href="#<?= h($anchorId) ?>" class="home-section-nav__link">
-          <?= h((string) ($section['title_ar'] ?? 'قسم')) ?>
-        </a>
-      <?php endforeach; ?>
-    </nav>
   <?php endif; ?>
 
   <div class="home-sections"<?= $deferHomeProducts ? ' data-home-deferred-products="1"' : '' ?><?= $homeHasEmbeddedStrips ? ' data-home-has-embedded-strips="1"' : '' ?>>
