@@ -46,10 +46,13 @@ fi
 
 echo
 ok "أوامر النشر الموصى بها على VPS:"
-echo "  cd /opt/jawish"
+echo "  cd /var/www/jawish-repo"
 echo "  git checkout main && git pull origin main"
 echo "  bash deploy/scripts/check-release-ready.sh"
-echo "  ls /var/www/jawish-portal/images/images | wc -l   # تأكد > 0"
+echo "  ls /var/www/jawish-portal/images/images 2>/dev/null | wc -l   # تأكد > 0 قبل النشر"
+echo "  ls /var/www/jawish-portal/storage/material-images 2>/dev/null | wc -l"
 echo "  PORTAL_DB_SETUP=migrate bash deploy/portal/publish.sh"
 echo "  sudo systemctl reload php8.5-fpm"
-echo "  sudo bash deploy/scripts/enable-nginx-gzip.sh   # مرة واحدة إن لم يكن gzip مفعّلاً"
+echo
+warn "لا تستخدم rsync --delete بدون --exclude 'images/' — راجع deploy/README.md"
+echo "  bash deploy/scripts/manual-portal-rsync.sh   # بديل يدوي آمن"
