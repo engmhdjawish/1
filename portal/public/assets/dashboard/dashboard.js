@@ -609,12 +609,44 @@
     });
   }
 
+  function bindClickableRows(root) {
+    qsa('[data-dashboard-row-href]', root).forEach((row) => {
+      if (row.dataset.rowClickBound === '1') return;
+      row.dataset.rowClickBound = '1';
+      const href = row.getAttribute('data-dashboard-row-href');
+      if (!href) return;
+
+      row.addEventListener('click', (event) => {
+        if (event.defaultPrevented) return;
+        if (event.target.closest('[data-dashboard-row-ignore], a, button, select, input, textarea, label, form')) return;
+        if (event.target.closest('[data-dashboard-no-nav]')) return;
+        if (row.hasAttribute('data-dashboard-no-nav')) return;
+        navigate(href);
+      });
+
+      row.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        if (event.target.closest('[data-dashboard-row-ignore], a, button, select, input, textarea, label, form')) return;
+        event.preventDefault();
+        navigate(href);
+      });
+
+      if (!row.hasAttribute('tabindex')) {
+        row.setAttribute('tabindex', '0');
+      }
+      if (!row.getAttribute('role')) {
+        row.setAttribute('role', 'link');
+      }
+    });
+  }
+
   function bindPage(root) {
     bindNavigation(root);
     bindAjaxForms(root);
     bindExplicitSave(root);
     bindConfirm(root);
     bindFilterForms(root);
+    bindClickableRows(root);
     if (typeof window.portalTokenPickerInit === 'function') {
       window.portalTokenPickerInit(root);
     }

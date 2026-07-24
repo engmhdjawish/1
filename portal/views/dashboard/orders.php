@@ -217,8 +217,19 @@ $truncate = static function (string $text, int $max = 48): string {
               $notes = trim((string) ($row['notes_ar'] ?? ''));
               $name = $customerName($row);
               $phone = $customerPhone($row);
+              $detailUrl = $buildOrdersUrl([
+                  'q' => $filters['q'] ?? '',
+                  'status' => $filters['status'] ?? '',
+                  'sync' => $filters['sync'] ?? '',
+                  'origin' => $filters['origin'] ?? '',
+                  'web_customer_id' => $filters['web_customer_id'] ?? '',
+                  'fromDate' => $filters['fromDate'] ?? '',
+                  'toDate' => $filters['toDate'] ?? '',
+                  'limit' => $filters['limit'] ?? 50,
+                  'details' => (string) ($row['id'] ?? ''),
+              ]);
             ?>
-            <tr class="hover:bg-slate-50/80 transition align-top">
+            <tr class="hover:bg-slate-50/80 transition align-top dashboard-clickable-row" data-dashboard-row-href="<?= h($detailUrl) ?>">
               <td class="px-4 py-3">
                 <div class="font-extrabold text-primary"><?= h((string) ($row['order_number'] ?? '')) ?></div>
                 <div class="text-[11px] text-text-muted mt-0.5"><?= h((string) ($row['share_link_name'] ?? 'طلب مباشر')) ?></div>
@@ -251,20 +262,10 @@ $truncate = static function (string $text, int $max = 48): string {
                 </span>
               </td>
               <td class="px-4 py-3 text-[11px] text-text-muted whitespace-nowrap"><?= h((string) ($row['created_at'] ?? '')) ?></td>
-              <td class="px-4 py-3">
+              <td class="px-4 py-3" data-dashboard-row-ignore>
                 <div class="flex items-center justify-end gap-1.5 flex-wrap">
                   <a
-                    href="<?= h($buildOrdersUrl([
-                        'q' => $filters['q'] ?? '',
-                        'status' => $filters['status'] ?? '',
-                        'sync' => $filters['sync'] ?? '',
-                        'origin' => $filters['origin'] ?? '',
-                        'web_customer_id' => $filters['web_customer_id'] ?? '',
-                        'fromDate' => $filters['fromDate'] ?? '',
-                        'toDate' => $filters['toDate'] ?? '',
-                        'limit' => $filters['limit'] ?? 50,
-                        'details' => (string) ($row['id'] ?? ''),
-                    ])) ?>"
+                    href="<?= h($detailUrl) ?>"
                     data-dashboard-no-nav
                     class="h-8 px-3 inline-flex items-center rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"
                   >تفاصيل</a>
@@ -402,6 +403,24 @@ $truncate = static function (string $text, int $max = 48): string {
     </div>
 
     <footer class="shrink-0 border-t border-border-subtle bg-white px-4 py-3 space-y-2">
+      <?php if ($canManageOrders): ?>
+        <form method="post" data-dashboard-ajax data-dashboard-reload class="rounded-xl border border-border-subtle bg-surface-low/60 px-3 py-2.5">
+          <input type="hidden" name="order_id" value="<?= h((string) ($orderDetails['id'] ?? '')) ?>">
+          <div class="flex flex-wrap items-end gap-2">
+            <label class="flex-1 min-w-[9rem] text-xs">
+              <span class="text-text-muted block mb-1">حالة الطلب</span>
+              <select name="next_status" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
+                <?php foreach ($statusLabels as $statusKey => $statusLabel): ?>
+                  <option value="<?= h($statusKey) ?>" <?= $detailStatus === $statusKey ? 'selected' : '' ?>><?= h($statusLabel) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </label>
+            <button type="submit" class="dashboard-btn h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold hover:brightness-110 transition">
+              تحديث الحالة
+            </button>
+          </div>
+        </form>
+      <?php endif; ?>
       <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-text-muted">
         <span><strong class="text-slate-900"><?= h($formatPackages((float) ($summary['packages_count'] ?? 0))) ?></strong> طرد</span>
         <span class="text-slate-300">|</span>

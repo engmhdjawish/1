@@ -13,7 +13,7 @@ final class StaffPermissions
     public static function catalog(): array
     {
         return [
-            ['code' => 'dashboard.view', 'name_ar' => 'عرض لوحة التحكم', 'category_ar' => 'عام', 'description_ar' => 'الدخول إلى لوحة العمل'],
+            ['code' => 'dashboard.view', 'name_ar' => 'عرض لوحة التحكم', 'category_ar' => 'عام', 'description_ar' => 'الدخول إلى مركز العمليات'],
             ['code' => 'orders.view', 'name_ar' => 'عرض الطلبات', 'category_ar' => 'مبيعات', 'description_ar' => 'متابعة طلبات الموقع'],
             ['code' => 'orders.manage', 'name_ar' => 'إدارة الطلبات', 'category_ar' => 'مبيعات', 'description_ar' => 'تأكيد الطلبات وتغيير حالتها'],
             ['code' => 'share_links.manage', 'name_ar' => 'روابط المشاركة', 'category_ar' => 'مبيعات', 'description_ar' => 'إنشاء وإدارة روابط المشاركة'],

@@ -470,6 +470,15 @@ button.is-loading::after,
 }
 
 /* Slide-over panels (order details, customer profile) above bottom nav */
+.dashboard-clickable-row {
+  cursor: pointer;
+}
+
+.dashboard-clickable-row:focus-visible {
+  outline: 2px solid var(--dash-primary);
+  outline-offset: -2px;
+}
+
 .dashboard-slide-panel-backdrop {
   z-index: 80 !important;
 }

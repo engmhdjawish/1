@@ -28,9 +28,9 @@ $currentRoute = '/dashboard/index.php';
 ob_start();
 ?>
 <section class="mb-6">
-  <h1 class="text-2xl font-extrabold text-slate-900">لوحة العمل</h1>
+  <h1 class="text-2xl font-extrabold text-slate-900">مركز العمليات</h1>
       <p class="text-sm text-text-muted mt-1">
-        متابعة الطلبات و<strong>صور المواد</strong> و<strong>عملاء الموقع</strong>
+        نظرة تشغيلية على الطلبات و<strong>صور المواد</strong> و<strong>عملاء الموقع</strong>
         <?php if (DashboardNavigation::canAccessAccountingArea(WebSession::user())): ?>
           — للمحاسبة انتقل إلى <a href="/dashboard/accounting.php" class="text-primary font-bold hover:underline">لوحة أمين</a>.
         <?php endif; ?>
@@ -167,13 +167,14 @@ ob_start();
           <p class="px-4 py-6 text-sm text-text-muted">لا توجد طلبات قيد المراجعة.</p>
         <?php endif; ?>
         <?php foreach ($reviewOrders as $row): ?>
-          <div class="px-4 py-3 flex items-center justify-between">
+          <?php $reviewOrderUrl = '/dashboard/orders.php?details=' . rawurlencode((string) ($row['id'] ?? '')); ?>
+          <a href="<?= h($reviewOrderUrl) ?>" class="block px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition no-underline text-inherit">
             <div>
               <p class="font-bold text-sm"><?= h((string) ($row['order_number'] ?? '')) ?></p>
               <p class="text-xs text-text-muted"><?= h((string) ($row['customer_name_ar'] ?: $row['guest_name_ar'] ?: 'عميل')) ?></p>
             </div>
             <span class="font-bold text-sm"><?= number_format((float) ($row['total_sp'] ?? 0), 0, '.', ',') ?> ل.س</span>
-          </div>
+          </a>
         <?php endforeach; ?>
       </div>
     </article>
@@ -190,15 +191,14 @@ ob_start();
           <p class="px-4 py-6 text-sm text-text-muted">لا يوجد فشل مزامنة حاليًا.</p>
         <?php endif; ?>
         <?php foreach ($syncQueue as $row): ?>
-          <div class="px-4 py-3 flex items-center justify-between">
+          <?php $syncOrderUrl = '/dashboard/orders.php?details=' . rawurlencode((string) ($row['id'] ?? '')); ?>
+          <a href="<?= h($syncOrderUrl) ?>" class="block px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition no-underline text-inherit">
             <div>
               <p class="font-bold text-sm"><?= h((string) ($row['order_number'] ?? '')) ?></p>
               <p class="text-xs text-text-muted"><?= h((string) ($row['updated_at'] ?? '')) ?></p>
             </div>
-            <?php if (WebSession::hasPermission('accounting.sync.view')): ?>
-              <a href="/dashboard/accounting-sync.php?sync=failed" class="text-primary text-xs font-bold">متابعة</a>
-            <?php endif; ?>
-          </div>
+            <span class="text-primary text-xs font-bold">فتح الطلب</span>
+          </a>
         <?php endforeach; ?>
       </div>
     </article>
@@ -229,7 +229,8 @@ ob_start();
         </thead>
         <tbody class="divide-y divide-border-subtle">
           <?php foreach ($recentOrders as $row): ?>
-            <tr class="hover:bg-slate-50">
+            <?php $recentOrderUrl = '/dashboard/orders.php?details=' . rawurlencode((string) ($row['id'] ?? '')); ?>
+            <tr class="hover:bg-slate-50 dashboard-clickable-row" data-dashboard-row-href="<?= h($recentOrderUrl) ?>">
               <td class="px-4 py-3 font-bold text-primary"><?= h((string) ($row['order_number'] ?? '')) ?></td>
               <td class="px-4 py-3"><?= h((string) ($row['customer_name_ar'] ?: $row['guest_name_ar'] ?: '—')) ?></td>
               <td class="px-4 py-3"><?= h((string) ($row['status'] ?? '')) ?></td>
@@ -245,5 +246,5 @@ ob_start();
 <?php endif; ?>
 <?php
 $content = ob_get_clean();
-$title = 'لوحة العمل';
+$title = 'مركز العمليات';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

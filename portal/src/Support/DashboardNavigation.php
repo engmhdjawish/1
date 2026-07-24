@@ -200,7 +200,7 @@ final class DashboardNavigation
 
         $groups = [
             'البداية' => [
-                ['route' => '/dashboard/index.php', 'label' => 'لوحة العمل', 'icon' => 'dashboard', 'permission' => null],
+                ['route' => '/dashboard/index.php', 'label' => 'مركز العمليات', 'icon' => 'dashboard', 'permission' => null],
             ],
         ];
 
@@ -595,7 +595,7 @@ final class DashboardNavigation
         $tabs = [
             [
                 'route' => '/dashboard/index.php',
-                'label' => 'العمل اليومي',
+                'label' => 'العمليات',
                 'icon' => 'work',
                 'area' => self::AREA_OPERATIONS,
             ],
