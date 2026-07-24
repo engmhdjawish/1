@@ -23,7 +23,7 @@
         <button type="button" class="link-filter-btn h-9 px-3 rounded-lg border border-primary bg-primary text-white text-xs font-bold" data-filter="unlinked">غير المرتبطة</button>
       </div>
       <div class="flex flex-col sm:flex-row gap-2">
-        <input type="search" id="sourceMaterialSearch" class="h-9 flex-1 rounded-lg border border-border-subtle px-3 text-sm" placeholder="بحث مادة بالاسم أو الرمز — Enter أو زر بحث">
+        <input type="search" id="sourceMaterialSearch" class="h-9 flex-1 rounded-lg border border-border-subtle px-3 text-sm" placeholder="بحث مادة بالاسم أو الرمز — يُطبَّق تلقائياً">
         <button type="button" id="applySourceFiltersBtn" class="h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold">بحث</button>
         <button type="button" id="deleteAllUnlinkedBtn" class="h-9 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hidden">حذف كل غير المرتبطة</button>
         <button type="button" id="deleteSelectedUnlinkedBtn" class="h-9 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hidden">حذف المحدد</button>
