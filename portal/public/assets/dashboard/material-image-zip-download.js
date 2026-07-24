@@ -1,29 +1,29 @@
 /**
- * Material ZIP download — availability tabs, filter summary, split validation.
+ * Material ZIP download — store-style filters, validation, availability persistence.
  */
 (function () {
   'use strict';
 
   const AVAILABILITY_STORAGE_KEY = 'dash-mi-zip-availability';
 
-  const PICKER_IDS = [
-    'mid-material-types',
-    'mid-age-categories',
-    'mid-manufacturers',
-    'mid-size-ranges',
-    'mid-country-origins',
-    'mid-store-guids',
-    'mid-group-guids',
-  ];
+  const FILTER_PARAMS = {
+    materialTypes: { param: 'materialTypes[]', label: 'نوع المادة' },
+    ageCategories: { param: 'ageCategories[]', label: 'الفئة العمرية' },
+    manufacturers: { param: 'manufacturers[]', label: 'الشركة المصنعة' },
+    sizeRanges: { param: 'sizeRanges[]', label: 'القياس' },
+    countryOfOrigins: { param: 'countryOfOrigins[]', label: 'بلد المنشأ' },
+    storeGuids: { param: 'storeGuids[]', label: 'المخزن' },
+    groupGuids: { param: 'groupGuids[]', label: 'المجموعة' },
+  };
 
   const SPLIT_CONFIG = {
-    materialTypes: { pickerId: 'mid-material-types', label: 'نوع المادة' },
-    ageCategories: { pickerId: 'mid-age-categories', label: 'الفئة العمرية' },
-    manufacturers: { pickerId: 'mid-manufacturers', label: 'الشركة المصنعة' },
-    sizeRanges: { pickerId: 'mid-size-ranges', label: 'القياس' },
-    countryOfOrigins: { pickerId: 'mid-country-origins', label: 'بلد المنشأ' },
-    storeGuids: { pickerId: 'mid-store-guids', label: 'المخزن' },
-    groupGuids: { pickerId: 'mid-group-guids', label: 'المجموعة' },
+    materialTypes: { param: 'materialTypes[]', label: 'نوع المادة' },
+    ageCategories: { param: 'ageCategories[]', label: 'الفئة العمرية' },
+    manufacturers: { param: 'manufacturers[]', label: 'الشركة المصنعة' },
+    sizeRanges: { param: 'sizeRanges[]', label: 'القياس' },
+    countryOfOrigins: { param: 'countryOfOrigins[]', label: 'بلد المنشأ' },
+    storeGuids: { param: 'storeGuids[]', label: 'المخزن' },
+    groupGuids: { param: 'groupGuids[]', label: 'المجموعة' },
   };
 
   const AVAILABILITY_LABELS = {
@@ -67,12 +67,8 @@
     }
   }
 
-  function countPickerSelections(pickerId) {
-    if (typeof window.portalTokenPickerGetSelected !== 'function') {
-      return 0;
-    }
-    const values = window.portalTokenPickerGetSelected(pickerId);
-    return Array.isArray(values) ? values.length : 0;
+  function countChecked(form, paramName) {
+    return form.querySelectorAll(`input[name="${paramName}"]:checked`).length;
   }
 
   function hasNarrowingFilter(form) {
@@ -85,7 +81,7 @@
     if (minQty || maxQty) {
       return true;
     }
-    return PICKER_IDS.some((id) => countPickerSelections(id) > 0);
+    return Object.values(FILTER_PARAMS).some(({ param }) => countChecked(form, param) > 0);
   }
 
   function updateFilterSummary(form) {
@@ -100,24 +96,16 @@
       parts.push('بحث: «' + search + '»');
     }
 
-    const availabilityInput = form.querySelector('[data-zip-availability-input]');
+    const availabilityInput = form.querySelector('input[name="isAvailable"]:checked');
     const availability = availabilityInput instanceof HTMLInputElement ? availabilityInput.value : '1';
     parts.push('التوفر: ' + (AVAILABILITY_LABELS[availability] || 'متوفر'));
 
-    const pickerCounts = [
-      ['mid-material-types', 'أنواع'],
-      ['mid-age-categories', 'فئات'],
-      ['mid-manufacturers', 'مصنّعين'],
-      ['mid-size-ranges', 'قياسات'],
-      ['mid-country-origins', 'بلدان'],
-      ['mid-store-guids', 'مخازن'],
-      ['mid-group-guids', 'مجموعات'],
-    ];
-    pickerCounts.forEach(([id, label]) => {
-      const count = countPickerSelections(id);
+    Object.entries(FILTER_PARAMS).forEach(([key, config]) => {
+      const count = countChecked(form, config.param);
       if (count > 0) {
-        parts.push(label + ': ' + count);
+        parts.push(config.label + ': ' + count);
       }
+      void key;
     });
 
     const splitKey = form.querySelector('[data-zip-split-by]')?.value || '';
@@ -141,38 +129,32 @@
     summaryEl.classList.toggle('dash-mi-zip-summary--warn', !hasNarrowingFilter(form));
   }
 
-  function bindAvailabilityTabs(form) {
-    const tabsRoot = form.querySelector('[data-zip-availability-tabs]');
-    const input = form.querySelector('[data-zip-availability-input]');
-    if (!(tabsRoot instanceof HTMLElement) || !(input instanceof HTMLInputElement)) {
-      return;
-    }
+  function bindAvailabilityPersistence(form) {
+    const shell = form.closest('[data-store-filters-root]');
+    const defaultValue = shell?.getAttribute('data-store-filters-default-availability') || '1';
 
     const applyAvailability = (value) => {
-      input.value = value;
-      tabsRoot.querySelectorAll('[data-availability]').forEach((btn) => {
-        if (!(btn instanceof HTMLButtonElement)) {
-          return;
+      form.querySelectorAll('input[name="isAvailable"]').forEach((node) => {
+        if (node instanceof HTMLInputElement) {
+          node.checked = node.value === value;
         }
-        const active = (btn.getAttribute('data-availability') ?? '') === value;
-        btn.classList.toggle('is-active', active);
       });
       writeStoredAvailability(value);
       updateFilterSummary(form);
+      if (typeof window.portalStoreFiltersRefreshPending === 'function') {
+        window.portalStoreFiltersRefreshPending();
+      }
     };
 
-    const stored = readStoredAvailability();
-    applyAvailability(stored);
+    applyAvailability(readStoredAvailability() || defaultValue);
 
-    tabsRoot.addEventListener('click', (event) => {
-      const btn = event.target instanceof HTMLElement
-        ? event.target.closest('[data-availability]')
-        : null;
-      if (!(btn instanceof HTMLButtonElement)) {
+    form.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || target.name !== 'isAvailable') {
         return;
       }
-      event.preventDefault();
-      applyAvailability(btn.getAttribute('data-availability') ?? '');
+      writeStoredAvailability(target.value);
+      updateFilterSummary(form);
     });
   }
 
@@ -184,18 +166,17 @@
 
     const statusHost = form.querySelector('[data-zip-download-status]');
     const splitSelect = form.querySelector('[data-zip-split-by]');
+    const filtersShell = form.closest('[data-store-filters-root]');
 
-    bindAvailabilityTabs(form);
+    if (filtersShell && typeof window.portalStoreFiltersInit === 'function') {
+      window.portalStoreFiltersInit(filtersShell);
+    }
+
+    bindAvailabilityPersistence(form);
     updateFilterSummary(form);
 
     form.addEventListener('input', () => updateFilterSummary(form));
     form.addEventListener('change', () => updateFilterSummary(form));
-    form.addEventListener('click', (event) => {
-      const target = event.target;
-      if (target instanceof HTMLElement && target.closest('.token-picker, [data-zip-split-by]')) {
-        window.setTimeout(() => updateFilterSummary(form), 0);
-      }
-    });
 
     form.addEventListener('submit', (event) => {
       if (!hasNarrowingFilter(form)) {
@@ -218,15 +199,13 @@
       }
 
       const config = SPLIT_CONFIG[splitKey];
-      const values = typeof window.portalTokenPickerGetSelected === 'function'
-        ? window.portalTokenPickerGetSelected(config.pickerId)
-        : [];
+      const selectedCount = countChecked(form, config.param);
 
-      if (!Array.isArray(values) || values.length === 0) {
+      if (selectedCount === 0) {
         event.preventDefault();
         showStatus(
           statusHost,
-          'للتقسيم: أضف تشيباً واحداً على الأقل في فلتر «' + config.label + '».',
+          'للتقسيم: أضف خياراً واحداً على الأقل في فلتر «' + config.label + '».',
           'error'
         );
         return;
@@ -234,7 +213,7 @@
 
       showStatus(
         statusHost,
-        'جاري تجهيز أرشيف يحتوي ' + values.length + ' ملف ZIP داخلي...',
+        'جاري تجهيز أرشيف يحتوي ' + selectedCount + ' ملف ZIP داخلي...',
         'progress'
       );
     });

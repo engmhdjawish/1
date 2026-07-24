@@ -107,6 +107,11 @@ if ($workspaceTab === 'download') {
 
 $currentRoute = '/dashboard/material-images.php';
 
+if ($workspaceTab === 'download') {
+    $extraHead = '<link href="' . h(portal_asset_url('/css/store-filters.css')) . '" rel="stylesheet">';
+    $extraScripts = '<script src="' . h(portal_asset_url('/assets/store-filters.js')) . '" defer></script>';
+}
+
 ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/material-images-workspace.php';
 $content = ob_get_clean();

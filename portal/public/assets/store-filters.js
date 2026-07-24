@@ -20,22 +20,26 @@ window.portalStoreFiltersInit = (root = document) => {
     }
   }
 
-  const catalogRoot = root.matches?.('[data-store-catalog-root]')
+  const filtersRoot = root.matches?.('[data-store-catalog-root], [data-store-filters-root]')
     ? root
-    : root.querySelector('[data-store-catalog-root]');
-  if (!catalogRoot) {
+    : root.querySelector('[data-store-catalog-root], [data-store-filters-root]');
+  if (!filtersRoot) {
     return;
   }
 
-  const backdrop = catalogRoot.querySelector('#store-filters-backdrop');
-  const openButtons = catalogRoot.querySelectorAll('[data-store-filters-open]');
-  const closeBtn = catalogRoot.querySelector('#store-filters-close');
-  const filterForm = catalogRoot.querySelector('#store-filters-form');
-  const sidebarSearchInput = catalogRoot.querySelector('#store-search-q');
-  const mobileSearchInput = catalogRoot.querySelector('#store-mobile-search-q');
+  const isStaticFilters = filtersRoot.hasAttribute('data-store-filters-static');
+  const defaultAvailability = filtersRoot.getAttribute('data-store-filters-default-availability') ?? '';
+
+  const backdrop = filtersRoot.querySelector('#store-filters-backdrop');
+  const openButtons = filtersRoot.querySelectorAll('[data-store-filters-open]');
+  const closeBtn = filtersRoot.querySelector('#store-filters-close');
+  const filterForm = filtersRoot.querySelector('[data-store-filters-form], #store-filters-form');
+  const sidebarSearchInput = filtersRoot.querySelector('#store-search-q');
+  const mobileSearchInput = filtersRoot.querySelector('#store-mobile-search-q');
+  const genericSearchInput = filterForm?.querySelector('input[name="search"]') ?? null;
 
   const setupExclusiveFilterAccordions = () => {
-    const accordions = catalogRoot.querySelectorAll('.store-filter-accordion');
+    const accordions = filtersRoot.querySelectorAll('.store-filter-accordion');
     accordions.forEach((accordion) => {
       if (accordion.dataset.accordionBound === '1') {
         return;
@@ -115,13 +119,13 @@ window.portalStoreFiltersInit = (root = document) => {
   };
 
   const bindFilterLists = () => {
-    catalogRoot.querySelectorAll('[data-filter-list]').forEach((list) => {
+    filtersRoot.querySelectorAll('[data-filter-list]').forEach((list) => {
       const groupId = list.getAttribute('data-filter-list');
       if (!groupId) {
         return;
       }
-      const input = catalogRoot.querySelector(`[data-filter-search="${groupId}"]`);
-      const toggleBtn = catalogRoot.querySelector(`[data-filter-toggle="${groupId}"]`);
+      const input = filtersRoot.querySelector(`[data-filter-search="${groupId}"]`);
+      const toggleBtn = filtersRoot.querySelector(`[data-filter-toggle="${groupId}"]`);
       if (list.dataset.filtersBound !== '1') {
         setupFilterList(list, input, toggleBtn);
       }
@@ -245,7 +249,26 @@ window.portalStoreFiltersInit = (root = document) => {
       });
     }
 
-    const searchValue = (sidebarSearchInput?.value || mobileSearchInput?.value || '').trim();
+    const splitBy = filterForm.querySelector('[data-zip-split-by], select[name="splitBy"]');
+    if (splitBy && splitBy.value) {
+      const text = splitBy.options[splitBy.selectedIndex]?.textContent?.trim() || splitBy.value;
+      chips.push({
+        kind: 'select',
+        param: 'splitBy',
+        value: splitBy.value,
+        text,
+        tone: 'group-by',
+        groupLabel: 'تقسيم ZIP',
+        containerGroup: 'splitBy',
+      });
+    }
+
+    const searchValue = (
+      sidebarSearchInput?.value
+      || mobileSearchInput?.value
+      || genericSearchInput?.value
+      || ''
+    ).trim();
     if (searchValue !== '') {
       chips.push({
         kind: 'search',
@@ -276,7 +299,7 @@ window.portalStoreFiltersInit = (root = document) => {
   };
 
   const updateAccordionBadge = (groupId, count) => {
-    const accordion = catalogRoot.querySelector(`[data-filter-group="${groupId}"]`);
+    const accordion = filtersRoot.querySelector(`[data-filter-group="${groupId}"]`);
     if (!accordion) {
       return;
     }
@@ -311,7 +334,7 @@ window.portalStoreFiltersInit = (root = document) => {
   };
 
   const updateSubmitButtonLabel = (count) => {
-    const submitBtn = catalogRoot.querySelector('#store-filters-submit');
+    const submitBtn = filtersRoot.querySelector('#store-filters-submit');
     if (!submitBtn) {
       return;
     }
@@ -336,9 +359,10 @@ window.portalStoreFiltersInit = (root = document) => {
         input.checked = false;
       }
     } else if (kind === 'radio') {
-      const empty = filterForm.querySelector(`input[name="${param}"][value=""]`);
-      if (empty) {
-        empty.checked = true;
+      const resetInput = filterForm.querySelector(`input[name="${param}"][value="${escapeChipSelector(defaultAvailability)}"]`)
+        || filterForm.querySelector(`input[name="${param}"][value=""]`);
+      if (resetInput) {
+        resetInput.checked = true;
       }
     } else if (kind === 'range') {
       const minInput = minKey ? filterForm.querySelector(`input[name="${minKey}"]`) : null;
@@ -352,7 +376,7 @@ window.portalStoreFiltersInit = (root = document) => {
     } else if (kind === 'select') {
       const select = filterForm.querySelector(`select[name="${param}"]`);
       if (select) {
-        select.value = 'none';
+        select.value = param === 'groupBy' ? 'none' : '';
       }
     } else if (kind === 'search') {
       if (sidebarSearchInput) {
@@ -360,6 +384,9 @@ window.portalStoreFiltersInit = (root = document) => {
       }
       if (mobileSearchInput) {
         mobileSearchInput.value = '';
+      }
+      if (genericSearchInput) {
+        genericSearchInput.value = '';
       }
     }
 
@@ -373,9 +400,10 @@ window.portalStoreFiltersInit = (root = document) => {
     filterForm.querySelectorAll('input[type="checkbox"]').forEach((input) => {
       input.checked = false;
     });
-    const emptyAvailability = filterForm.querySelector('input[name="isAvailable"][value=""]');
-    if (emptyAvailability) {
-      emptyAvailability.checked = true;
+    const resetAvailability = filterForm.querySelector(`input[name="isAvailable"][value="${escapeChipSelector(defaultAvailability)}"]`)
+      || filterForm.querySelector('input[name="isAvailable"][value=""]');
+    if (resetAvailability) {
+      resetAvailability.checked = true;
     }
     filterForm.querySelectorAll('input[type="number"]').forEach((input) => {
       input.value = '';
@@ -384,20 +412,27 @@ window.portalStoreFiltersInit = (root = document) => {
     if (groupBy) {
       groupBy.value = 'none';
     }
+    const splitBy = filterForm.querySelector('[data-zip-split-by], select[name="splitBy"]');
+    if (splitBy) {
+      splitBy.value = '';
+    }
     if (sidebarSearchInput) {
       sidebarSearchInput.value = '';
     }
     if (mobileSearchInput) {
       mobileSearchInput.value = '';
     }
+    if (genericSearchInput) {
+      genericSearchInput.value = '';
+    }
     refreshPendingFilterChips();
   };
 
   const refreshPendingFilterChips = () => {
     const chips = collectPendingFilterChips();
-    const globalPanel = catalogRoot.querySelector('#store-filter-pending-panel');
-    const globalContainer = catalogRoot.querySelector('#store-filter-pending-chips-global');
-    const clearAllBtn = catalogRoot.querySelector('#store-filter-pending-clear-all');
+    const globalPanel = filtersRoot.querySelector('#store-filter-pending-panel');
+    const globalContainer = filtersRoot.querySelector('#store-filter-pending-chips-global');
+    const clearAllBtn = filtersRoot.querySelector('#store-filter-pending-clear-all');
 
     if (globalContainer) {
       globalContainer.innerHTML = chips.map((chip) => renderPendingChipHtml(chip, true)).join('');
@@ -437,7 +472,7 @@ window.portalStoreFiltersInit = (root = document) => {
       if (!(target instanceof HTMLElement)) {
         return;
       }
-      if (target.matches('input[type="number"], input[type="search"], #store-search-q')) {
+      if (target.matches('input[type="number"], input[type="search"], #store-search-q, input[name="search"]')) {
         refreshPendingFilterChips();
       }
     });
@@ -451,22 +486,25 @@ window.portalStoreFiltersInit = (root = document) => {
     });
   }
 
-  const clearAllPendingBtn = catalogRoot.querySelector('#store-filter-pending-clear-all');
+  const clearAllPendingBtn = filtersRoot.querySelector('#store-filter-pending-clear-all');
   if (clearAllPendingBtn && clearAllPendingBtn.dataset.filtersBound !== '1') {
     clearAllPendingBtn.dataset.filtersBound = '1';
     clearAllPendingBtn.addEventListener('click', clearAllPendingSelections);
   }
 
   const filterListIsEmpty = (groupId) => {
-    const list = catalogRoot.querySelector(`[data-filter-list="${groupId}"]`);
+    const list = filtersRoot.querySelector(`[data-filter-list="${groupId}"]`);
     return Boolean(list && list.querySelectorAll('.store-filter-option').length === 0);
   };
 
   const needsDeferredFilters = () => {
-    if (catalogRoot.dataset.storeFiltersLoaded === '1') {
+    if (isStaticFilters) {
       return false;
     }
-    if (catalogRoot.hasAttribute('data-store-filters-deferred')) {
+    if (filtersRoot.dataset.storeFiltersLoaded === '1') {
+      return false;
+    }
+    if (filtersRoot.hasAttribute('data-store-filters-deferred')) {
       return true;
     }
     return ['materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins', 'stores', 'groups']
@@ -476,7 +514,7 @@ window.portalStoreFiltersInit = (root = document) => {
   let deferredFiltersPromise = null;
 
   const ensureFilterGroupControls = (groupId, optionCount) => {
-    const accordion = catalogRoot.querySelector(`[data-filter-group="${groupId}"]`);
+    const accordion = filtersRoot.querySelector(`[data-filter-group="${groupId}"]`);
     const body = accordion?.querySelector('.store-filter-accordion-body');
     const list = body?.querySelector(`[data-filter-list="${groupId}"]`);
     if (!body || !list) {
@@ -520,13 +558,13 @@ window.portalStoreFiltersInit = (root = document) => {
   };
 
   const renderStringFacetOptions = (groupId, paramName, facets) => {
-    const list = catalogRoot.querySelector(`[data-filter-list="${groupId}"]`);
+    const list = filtersRoot.querySelector(`[data-filter-list="${groupId}"]`);
     if (!list || list.querySelectorAll('.store-filter-option').length > 0) {
       return;
     }
 
     const selected = new Set(
-      Array.from(catalogRoot.querySelectorAll(`input[name="${paramName}[]"]:checked`)).map((el) => el.value)
+      Array.from(filtersRoot.querySelectorAll(`input[name="${paramName}[]"]:checked`)).map((el) => el.value)
     );
     const rows = (facets || []).map((facet) => {
       const value = String(facet?.value || '').trim();
@@ -550,13 +588,13 @@ window.portalStoreFiltersInit = (root = document) => {
   };
 
   const renderGuidFacetOptions = (groupId, paramName, items) => {
-    const list = catalogRoot.querySelector(`[data-filter-list="${groupId}"]`);
+    const list = filtersRoot.querySelector(`[data-filter-list="${groupId}"]`);
     if (!list || list.querySelectorAll('.store-filter-option').length > 0) {
       return;
     }
 
     const selected = new Set(
-      Array.from(catalogRoot.querySelectorAll(`input[name="${paramName}[]"]:checked`)).map((el) => el.value.toLowerCase())
+      Array.from(filtersRoot.querySelectorAll(`input[name="${paramName}[]"]:checked`)).map((el) => el.value.toLowerCase())
     );
     const rows = (items || []).map((item) => {
       const value = String(item?.guid || item?.Guid || '').trim();
@@ -603,8 +641,8 @@ window.portalStoreFiltersInit = (root = document) => {
     renderGuidFacetOptions('groups', 'groupGuids', groupFacets);
     renderGuidFacetOptions('stores', 'storeGuids', filterOptions.stores || []);
 
-    catalogRoot.dataset.storeFiltersLoaded = '1';
-    catalogRoot.removeAttribute('data-store-filters-deferred');
+    filtersRoot.dataset.storeFiltersLoaded = '1';
+    filtersRoot.removeAttribute('data-store-filters-deferred');
     refreshPendingFilterChips();
     bindFilterLists();
   };
@@ -713,8 +751,8 @@ window.portalStoreFiltersInit = (root = document) => {
     });
   }
 
-  if (!catalogRoot.dataset.filtersEscapeBound) {
-    catalogRoot.dataset.filtersEscapeBound = '1';
+  if (!filtersRoot.dataset.filtersEscapeBound) {
+    filtersRoot.dataset.filtersEscapeBound = '1';
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape' || !backdrop?.classList.contains('is-open')) {
         return;
