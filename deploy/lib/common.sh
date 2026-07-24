@@ -122,6 +122,10 @@ write_portal_env() {
     ok "تم الإبقاء على .env الموجود"
     return 0
   fi
+  local api_base="${API_URL:-${AMINE_API_BASE_URL:-}}"
+  if [[ -z "$api_base" ]]; then
+    die "عيّن API_URL أو AMINE_API_BASE_URL في deploy/deploy.env"
+  fi
   step "إنشاء $env_file"
   cat > "$env_file" <<EOF
 PORTAL_DB_HOST=${PORTAL_DB_HOST}
@@ -130,7 +134,7 @@ PORTAL_DB_NAME=${PORTAL_DB_NAME}
 PORTAL_DB_USER=${PORTAL_DB_USER}
 PORTAL_DB_PASSWORD=${PORTAL_DB_PASSWORD}
 
-AMINE_API_BASE_URL=${API_URL}
+AMINE_API_BASE_URL=${api_base}
 AMINE_API_USERNAME=${AMINE_API_USERNAME}
 AMINE_API_PASSWORD=${AMINE_API_PASSWORD}
 
