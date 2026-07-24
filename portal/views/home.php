@@ -71,16 +71,16 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
           <div class="home-hero__orbits">
             <svg class="home-hero__orbits-svg" viewBox="0 0 200 200" focusable="false">
               <g class="home-hero__orbits-layer home-hero__orbits-layer--a">
-                <circle cx="100" cy="100" r="88" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="175 378" stroke-linecap="round" opacity="0.38"></circle>
-                <circle cx="100" cy="12" r="4.5" fill="currentColor" opacity="0.88"></circle>
+                <circle cx="100" cy="100" r="88" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="175 378" stroke-linecap="round" opacity="0.18"></circle>
+                <circle cx="100" cy="12" r="3.6" fill="currentColor" opacity="0.42"></circle>
               </g>
               <g class="home-hero__orbits-layer home-hero__orbits-layer--b">
-                <circle cx="100" cy="100" r="62" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="120 270" stroke-linecap="round" opacity="0.3"></circle>
-                <circle cx="162" cy="100" r="3.8" fill="currentColor" opacity="0.78"></circle>
+                <circle cx="100" cy="100" r="62" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="120 270" stroke-linecap="round" opacity="0.14"></circle>
+                <circle cx="162" cy="100" r="3" fill="currentColor" opacity="0.36"></circle>
               </g>
               <g class="home-hero__orbits-layer home-hero__orbits-layer--c">
-                <circle cx="100" cy="100" r="38" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="78 162" stroke-linecap="round" opacity="0.24"></circle>
-                <circle cx="100" cy="138" r="3.2" fill="currentColor" opacity="0.72"></circle>
+                <circle cx="100" cy="100" r="38" fill="none" stroke="currentColor" stroke-width="0.9" stroke-dasharray="78 162" stroke-linecap="round" opacity="0.1"></circle>
+                <circle cx="100" cy="138" r="2.6" fill="currentColor" opacity="0.32"></circle>
               </g>
             </svg>
             <span class="home-hero__orbit-core"></span>

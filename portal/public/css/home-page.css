@@ -115,6 +115,7 @@
     width: min(100%, 20rem);
     aspect-ratio: 1;
     color: #fff;
+    opacity: 0.72;
   }
 
   .home-hero__orbits-svg {
@@ -124,32 +125,32 @@
   }
 
   .home-hero__orbits-layer {
-    transform-box: fill-box;
-    transform-origin: center;
+    transform-box: view-box;
+    transform-origin: 100px 100px;
   }
 
   .home-hero__orbits-layer--a {
-    animation: home-hero-orbit-spin 22s linear infinite;
+    animation: home-hero-orbit-spin 28s linear infinite;
   }
 
   .home-hero__orbits-layer--b {
-    animation: home-hero-orbit-spin 16s linear infinite reverse;
+    animation: home-hero-orbit-spin 20s linear infinite reverse;
   }
 
   .home-hero__orbits-layer--c {
-    animation: home-hero-orbit-spin 11s linear infinite;
+    animation: home-hero-orbit-spin 14s linear infinite;
   }
 
   .home-hero__orbit-core {
     position: absolute;
-    width: 0.9rem;
-    height: 0.9rem;
+    width: 0.72rem;
+    height: 0.72rem;
     border-radius: 9999px;
-    background: rgba(255, 255, 255, 0.94);
+    background: rgba(255, 255, 255, 0.52);
     box-shadow:
-      0 0 18px rgba(255, 255, 255, 0.55),
-      0 0 36px rgba(255, 255, 255, 0.22);
-    animation: home-hero-orbit-core 3.6s ease-in-out infinite;
+      0 0 14px rgba(255, 255, 255, 0.28),
+      0 0 28px rgba(255, 255, 255, 0.12);
+    animation: home-hero-orbit-core 4.8s ease-in-out infinite;
   }
 }
 
@@ -166,13 +167,13 @@
 @keyframes home-hero-orbit-core {
   0%,
   100% {
-    transform: scale(0.92);
-    opacity: 0.78;
+    transform: scale(0.94);
+    opacity: 0.42;
   }
 
   50% {
-    transform: scale(1.08);
-    opacity: 1;
+    transform: scale(1.04);
+    opacity: 0.68;
   }
 }
 

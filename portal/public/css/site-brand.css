@@ -9,8 +9,22 @@
 }
 
 .site-header {
-  --site-header-logo-height: 2.35rem;
-  --site-header-logo-max-width: 4.75rem;
+  --site-header-logo-height: 2.2rem;
+  --site-header-logo-max-width: 3.5rem;
+}
+
+@media (min-width: 480px) {
+  .site-header {
+    --site-header-logo-height: 2.55rem;
+    --site-header-logo-max-width: 4.25rem;
+  }
+}
+
+@media (min-width: 640px) {
+  .site-header {
+    --site-header-logo-height: 2.85rem;
+    --site-header-logo-max-width: 5rem;
+  }
 }
 
 .site-logo-wrap {
@@ -29,22 +43,6 @@
   background: transparent;
   border: none;
   box-shadow: none;
-}
-
-/* على الجوال والشاشات الضيقة: إخفاء الشعار من الهيدر (يبقى في القائمة الجانبية) */
-@media (max-width: 1279px) {
-  .site-header {
-    --site-header-logo-height: 0;
-    --site-header-logo-max-width: 0;
-  }
-
-  .site-logo-wrap--header {
-    display: none;
-  }
-
-  .site-header__brand .site-brand-link {
-    display: none;
-  }
 }
 
 .site-logo-wrap--mobile-toolbar {
@@ -150,19 +148,7 @@
   min-width: 0;
 }
 
-@media (min-width: 480px) {
-  .site-header {
-    --site-header-logo-height: 2.75rem;
-    --site-header-logo-max-width: 6.5rem;
-  }
-}
-
 @media (min-width: 640px) {
-  .site-header {
-    --site-header-logo-height: 3.5rem;
-    --site-header-logo-max-width: 9rem;
-  }
-
   .site-logo-wrap--drawer {
     height: 4rem;
     max-width: 16rem;
@@ -220,6 +206,13 @@
     drop-shadow(0 0 1px rgba(0, 0, 0, 0.55));
 }
 
+@media (min-width: 768px) and (max-width: 1279px) {
+  .site-header {
+    --site-header-logo-height: 3rem;
+    --site-header-logo-max-width: 5.5rem;
+  }
+}
+
 @media (min-width: 1280px) {
   .site-header {
     --site-header-logo-height: 3.75rem;
@@ -240,12 +233,5 @@
   .site-header {
     --site-header-logo-height: 5.25rem;
     --site-header-logo-max-width: 20rem;
-  }
-}
-
-@media (min-width: 1280px) {
-  .site-header {
-    --site-header-logo-height: 6rem;
-    --site-header-logo-max-width: 24rem;
   }
 }
