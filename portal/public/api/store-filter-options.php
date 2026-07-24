@@ -10,7 +10,7 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: private, max-age=300');
 
 try {
-    $payload = StoreCatalogService::getClientFiltersPayload();
+    $payload = StoreCatalogService::getClientFiltersPayload($_GET);
     echo json_encode([
         'ok' => true,
         'filterOptions' => $payload['filterOptions'],

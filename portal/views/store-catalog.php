@@ -590,18 +590,6 @@ require __DIR__ . '/partials/store-filter-group.php';
                             'count' => $groupFacet['count'] ?? null,
                         ];
                     }
-                } else {
-                    foreach ($filterOptions['groups'] ?? [] as $group) {
-                        if (!is_array($group)) {
-                            continue;
-                        }
-                        $guid = trim((string) ($group['guid'] ?? ''));
-                        if ($guid === '') {
-                            continue;
-                        }
-                        $label = trim((string) ($group['name'] ?? '')) ?: (trim((string) ($group['code'] ?? '')) ?: $guid);
-                        $groupGroupOptions[] = ['value' => $guid, 'label' => $label];
-                    }
                 }
                 $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, $selectedGroupGuids, 'groups', 5, 6, $filtersDeferred || $groupGroupOptions === []);
               ?>
