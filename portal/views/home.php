@@ -218,7 +218,10 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
         <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
         فتح المتجر
       </a>
-      <a href="/about.php" class="home-btn home-btn--ghost-dark">من نحن</a>
+      <a href="/about.php" class="home-btn home-btn--ghost-dark">
+        <span class="material-symbols-outlined" aria-hidden="true">groups</span>
+        من نحن
+      </a>
     </div>
   </section>
 </div>

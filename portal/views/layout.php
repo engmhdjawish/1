@@ -69,7 +69,7 @@ $jsonLdPayload = count($jsonLdBlocks) === 1
 $navLinks = [
     ['href' => '/index.php', 'label' => 'الرئيسية', 'icon' => 'home'],
     ['href' => '/store.php', 'label' => 'المتجر', 'icon' => 'storefront'],
-    ['href' => '/about.php', 'label' => 'من نحن', 'icon' => 'info'],
+    ['href' => '/about.php', 'label' => 'من نحن', 'icon' => 'groups'],
 ];
 ?>
 <!DOCTYPE html>
