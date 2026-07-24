@@ -855,6 +855,62 @@ function home_section_return_url(array $section): string
     return $slug !== '' ? '/#' . $slug : '/';
 }
 
+/** @param array<string, mixed> $section */
+function home_section_anchor_id(array $section): string
+{
+    $slug = trim((string) ($section['slug'] ?? ''));
+    if ($slug !== '') {
+        return $slug;
+    }
+
+    return trim((string) ($section['id'] ?? ''));
+}
+
+/** @param array<string, mixed> $section */
+function home_section_icon(array $section): string
+{
+    if (!empty($section['is_offer_section'])) {
+        return 'local_offer';
+    }
+
+    $haystack = mb_strtolower(trim((string) ($section['slug'] ?? '') . ' ' . (string) ($section['title_ar'] ?? '')));
+    if (preg_match('/عرض|عروض|offer/u', $haystack)) {
+        return 'local_offer';
+    }
+    if (preg_match('/جديد|new/u', $haystack)) {
+        return 'new_releases';
+    }
+    if (preg_match('/موسم|season/u', $haystack)) {
+        return 'calendar_month';
+    }
+    if (preg_match('/أكثر|مبيع|best/u', $haystack)) {
+        return 'trending_up';
+    }
+
+    return 'category';
+}
+
+/** @param array<string, mixed> $section @param list<array<string, mixed>> $products */
+function home_section_preview_label(array $section, array $products = []): string
+{
+    $count = count($products);
+    if ($count > 0) {
+        return $count === 1 ? 'صنف واحد' : $count . ' أصناف';
+    }
+
+    $max = max(0, (int) ($section['max_products'] ?? 0));
+    if ($max > 0) {
+        return 'حتى ' . $max . ' صنف';
+    }
+
+    $subtitle = trim((string) ($section['subtitle_ar'] ?? ''));
+    if ($subtitle !== '') {
+        return mb_strlen($subtitle) > 42 ? mb_substr($subtitle, 0, 42) . '…' : $subtitle;
+    }
+
+    return 'تصفّح القسم';
+}
+
 /**
  * @param array<string, mixed> $displayOptions
  * @param array<string, mixed>|null $storeCatalogDisplay

@@ -114,11 +114,61 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
   <?php endif; ?>
 
   <?php if ($sections !== []): ?>
-    <nav class="home-section-nav home-section-nav--sticky" aria-label="أقسام الرئيسية">
+    <section class="home-category-grid" aria-label="تصفح الأقسام">
+      <div class="home-category-grid__head">
+        <h2 class="home-category-grid__title">تصفّح الأقسام</h2>
+        <p class="home-category-grid__lead">اختر القسم للانتقال مباشرة إلى منتجاته</p>
+      </div>
+      <div class="home-category-grid__track">
+        <?php foreach ($sections as $section): ?>
+          <?php
+            $anchorId = home_section_anchor_id($section);
+            if ($anchorId === '') {
+                continue;
+            }
+            $isOfferSection = !empty($section['is_offer_section']);
+            $sectionProducts = is_array($section['products'] ?? null) ? $section['products'] : [];
+            $bannerUrl = trim((string) ($section['banner_image_url'] ?? ''));
+          ?>
+          <a
+            href="#<?= h($anchorId) ?>"
+            class="home-category-card<?= $isOfferSection ? ' home-category-card--offer' : '' ?>"
+            data-home-section-link="<?= h($anchorId) ?>"
+          >
+            <div class="home-category-card__media" aria-hidden="true">
+              <?php if ($bannerUrl !== ''): ?>
+                <img
+                  src="<?= h(portal_site_media_display_url($bannerUrl, 480)) ?>"
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                >
+              <?php else: ?>
+                <span class="material-symbols-outlined"><?= h(home_section_icon($section)) ?></span>
+              <?php endif; ?>
+              <?php if ($isOfferSection): ?>
+                <span class="home-category-card__badge">عرض</span>
+              <?php endif; ?>
+            </div>
+            <div class="home-category-card__body">
+              <h3 class="home-category-card__title"><?= h((string) ($section['title_ar'] ?? 'قسم')) ?></h3>
+              <p class="home-category-card__meta"><?= h(home_section_preview_label($section, $sectionProducts)) ?></p>
+            </div>
+          </a>
+        <?php endforeach; ?>
+      </div>
+    </section>
+
+    <nav class="home-section-nav home-section-nav--sticky" aria-label="أقسام الرئيسية" data-home-section-nav>
       <?php foreach ($sections as $section): ?>
-        <?php $anchorId = (string) ($section['slug'] ?? $section['id'] ?? ''); ?>
+        <?php $anchorId = home_section_anchor_id($section); ?>
         <?php if ($anchorId === '') continue; ?>
-        <a href="#<?= h($anchorId) ?>" class="home-section-nav__link">
+        <a
+          href="#<?= h($anchorId) ?>"
+          class="home-section-nav__link"
+          data-home-section-link="<?= h($anchorId) ?>"
+        >
+          <span class="material-symbols-outlined home-section-nav__icon" aria-hidden="true"><?= h(home_section_icon($section)) ?></span>
           <?= h((string) ($section['title_ar'] ?? 'قسم')) ?>
         </a>
       <?php endforeach; ?>
@@ -129,7 +179,10 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
     <?php foreach ($sections as $sectionIndex => $section): ?>
       <?php
         $products = is_array($section['products'] ?? null) ? $section['products'] : [];
-        $sectionId = (string) ($section['slug'] ?? $section['id'] ?? '');
+        $sectionId = home_section_anchor_id($section);
+        if ($sectionId === '') {
+            continue;
+        }
         $embeddedStripHtml = trim((string) ($embeddedProductStrips[$sectionId] ?? ''));
         $displayOptions = is_array($section['display_options'] ?? null) ? $section['display_options'] : [];
         $priceState = section_price_display_state($displayOptions, $storeCatalogDisplay);
@@ -138,39 +191,58 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
         $showPriceSyp = $priceState['show_price_syp'];
         $showPriceUsd = $priceState['show_price_usd'];
         $isOfferSection = !empty($section['is_offer_section']);
+        $bannerUrl = trim((string) ($section['banner_image_url'] ?? ''));
+        $hasEditorialBanner = $bannerUrl !== '';
       ?>
       <section
-        class="home-section<?= $isOfferSection ? ' home-section--offer' : '' ?>"
+        class="home-section<?= $isOfferSection ? ' home-section--offer' : '' ?><?= $hasEditorialBanner ? ' home-section--editorial' : '' ?>"
         id="<?= h($sectionId) ?>"
       >
-        <?php if (!empty($section['banner_image_url'])): ?>
-          <div class="home-section__banner">
-            <img
-              src="<?= h(portal_site_media_display_url((string) $section['banner_image_url'], 1280)) ?>"
-              alt=""
-              loading="lazy"
-              decoding="async"
-              sizes="(max-width: 768px) 100vw, 1280px"
-            >
-          </div>
-        <?php endif; ?>
-
         <div class="home-section__body">
-          <header class="home-section__header">
-            <div class="home-section__title-wrap">
-              <?php if ($isOfferSection): ?>
-                <span class="home-section__badge">عرض خاص</span>
-              <?php endif; ?>
-              <h2 class="home-section__title"><?= h((string) ($section['title_ar'] ?? '')) ?></h2>
-              <?php if (!empty($section['subtitle_ar'])): ?>
-                <p class="home-section__subtitle"><?= h((string) $section['subtitle_ar']) ?></p>
-              <?php endif; ?>
-            </div>
-            <a href="<?= h(home_section_store_url($section)) ?>" class="home-section__more">
-              عرض المزيد
-              <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
-            </a>
-          </header>
+          <?php if ($hasEditorialBanner): ?>
+            <header class="home-section__editorial">
+              <img
+                class="home-section__editorial-bg"
+                src="<?= h(portal_site_media_display_url($bannerUrl, 1280)) ?>"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                sizes="(max-width: 768px) 100vw, 1280px"
+              >
+              <div class="home-section__editorial-overlay">
+                <div class="home-section__editorial-content">
+                  <?php if ($isOfferSection): ?>
+                    <span class="home-section__badge home-section__badge--light">عرض خاص</span>
+                  <?php endif; ?>
+                  <h2 class="home-section__title home-section__title--editorial"><?= h((string) ($section['title_ar'] ?? '')) ?></h2>
+                  <?php if (!empty($section['subtitle_ar'])): ?>
+                    <p class="home-section__subtitle home-section__subtitle--editorial"><?= h((string) $section['subtitle_ar']) ?></p>
+                  <?php endif; ?>
+                  <p class="home-section__editorial-meta"><?= h(home_section_preview_label($section, $products)) ?></p>
+                </div>
+                <a href="<?= h(home_section_store_url($section)) ?>" class="home-section__more home-section__more--editorial">
+                  عرض المزيد
+                  <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+                </a>
+              </div>
+            </header>
+          <?php else: ?>
+            <header class="home-section__header">
+              <div class="home-section__title-wrap">
+                <?php if ($isOfferSection): ?>
+                  <span class="home-section__badge">عرض خاص</span>
+                <?php endif; ?>
+                <h2 class="home-section__title"><?= h((string) ($section['title_ar'] ?? '')) ?></h2>
+                <?php if (!empty($section['subtitle_ar'])): ?>
+                  <p class="home-section__subtitle"><?= h((string) $section['subtitle_ar']) ?></p>
+                <?php endif; ?>
+              </div>
+              <a href="<?= h(home_section_store_url($section)) ?>" class="home-section__more">
+                عرض المزيد
+                <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+              </a>
+            </header>
+          <?php endif; ?>
 
           <?php if ($deferHomeProducts): ?>
             <div
