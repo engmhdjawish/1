@@ -783,6 +783,9 @@ function order_preview_payload(array $line, array $displayOptions): array
         'allowCart' => false,
         'previewContext' => 'order',
         'isCancelled' => !empty($line['is_cancelled']) || (string) ($line['status'] ?? '') === 'cancelled',
+        'editable' => (bool) ($displayOptions['editable'] ?? false),
+        'orderId' => (string) ($displayOptions['order_id'] ?? ''),
+        'itemId' => (string) ($line['id'] ?? ''),
     ];
 }
 

@@ -417,6 +417,43 @@
       </div>`;
   };
 
+  const findOrderLineEditSource = (item) => {
+    if (!state.orderRoot || !item?.guid) return null;
+    const card = state.orderRoot.querySelector(`[data-store-order-preview-line][data-preview-guid="${CSS.escape(item.guid)}"]`);
+    return card?.closest('.dashboard-order-line')?.querySelector('.dashboard-order-line__edit-body') || null;
+  };
+
+  const bindPreviewOrderForms = (root) => {
+    if (!root) return;
+    if (typeof window.dashboardApp?.bindForms === 'function') {
+      window.dashboardApp.bindForms(root);
+    }
+  };
+
+  const mountOrderStaffEdit = (item, container) => {
+    if (!container) return;
+    container.querySelector('.store-product-preview__staff-edit')?.remove();
+    if (!item.editable || item.isCancelled) return;
+
+    const source = findOrderLineEditSource(item);
+    if (!source) return;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'store-product-preview__staff-edit';
+    wrap.innerHTML = '<p class="store-product-preview__staff-edit-title"><span class="material-symbols-outlined" aria-hidden="true">edit</span> تعديل الصنف</p>';
+
+    const body = document.createElement('div');
+    body.className = 'store-product-preview__staff-edit-body dashboard-order-line__edit-body';
+    body.appendChild(source.cloneNode(true));
+    body.querySelectorAll('form').forEach((form) => {
+      form.removeAttribute('data-dashboard-bound');
+      delete form.dataset.dashboardBound;
+    });
+    wrap.appendChild(body);
+    container.appendChild(wrap);
+    bindPreviewOrderForms(wrap);
+  };
+
   const renderPrices = (p) => {
     if (p.previewContext === 'order') {
       return '';
@@ -910,7 +947,10 @@
         packagingEl.hidden = true;
       }
       if (pricesEl) pricesEl.innerHTML = '';
-      if (cartEl) cartEl.innerHTML = renderOrderStaffPanel(item);
+      if (cartEl) {
+        cartEl.innerHTML = renderOrderStaffPanel(item);
+        mountOrderStaffEdit(item, cartEl);
+      }
       if (detailEl) detailEl.classList.add('hidden');
     } else {
       if (packagingEl) packagingEl.hidden = false;
@@ -1212,4 +1252,6 @@
 
     render(state.items[state.index]);
   });
+
+  window.StoreProductPreview = { close };
 })();

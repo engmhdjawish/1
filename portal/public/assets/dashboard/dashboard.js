@@ -481,6 +481,7 @@
       if (target) {
         await navigate(target);
       } else if (reload || data.reload) {
+        window.StoreProductPreview?.close?.();
         await navigate(window.location.href, false);
       }
     } catch (err) {
@@ -777,5 +778,13 @@
     init();
   }
 
-  window.dashboardApp = { navigate, showToast, setButtonLoading };
+  window.dashboardApp = {
+    navigate,
+    showToast,
+    setButtonLoading,
+    bindForms(root) {
+      bindAjaxForms(root);
+      bindConfirm(root);
+    },
+  };
 })();
