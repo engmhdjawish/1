@@ -235,11 +235,7 @@ final class StoreCatalogService
 
         $cachedCatalog = self::readCatalogCache($query, $policy);
         if ($cachedCatalog !== null) {
-            $wantsInlineFilters = $allowClientFilters && self::requestWantsInlineResultFilters($query, $requestFilters);
-            $cachedDeferred = (bool) ($cachedCatalog['filters_deferred'] ?? false);
-            if (!$wantsInlineFilters || !$cachedDeferred) {
-                return $cachedCatalog;
-            }
+            return $cachedCatalog;
         }
 
         $search = $requestFilters['search'];
@@ -291,10 +287,9 @@ final class StoreCatalogService
             $mergedFilters['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
         }
 
-        $deferClientFilters = $allowClientFilters
-            && !self::requestWantsInlineResultFilters($query, $requestFilters);
-
-        $includeResultFilters = $allowClientFilters && !$deferClientFilters;
+        $debugInlineFilters = trim((string) ($query['facetFilters'] ?? '')) === '1';
+        $deferClientFilters = $allowClientFilters && !$debugInlineFilters;
+        $includeResultFilters = $allowClientFilters && $debugInlineFilters;
 
         try {
             if ($sellableMode) {
@@ -461,7 +456,7 @@ final class StoreCatalogService
             'store_options' => $storeOptions,
             'allow_client_filters' => $allowClientFilters,
             'filters_deferred' => $deferClientFilters,
-            'filters_scoped' => self::filterRulesHaveImplicitConstraints($policyRules),
+            'filters_scoped' => $deferClientFilters,
             'filters' => $displayFilters,
         ];
 
@@ -2030,7 +2025,7 @@ final class StoreCatalogService
         unset($params['facetFilters'], $params['loadFilterOptions']);
         ksort($params);
 
-        return 'store_catalog_v4:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
+        return 'store_catalog_v5:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
     }
 
     /** @param array<string, mixed> $data */

@@ -32,6 +32,26 @@ window.portalStoreFiltersInit = (root = document) => {
   const closeBtn = catalogRoot.querySelector('#store-filters-close');
   const sidebar = catalogRoot.querySelector('.store-filters-sidebar');
 
+  const setupExclusiveFilterAccordions = () => {
+    const accordions = catalogRoot.querySelectorAll('.store-filter-accordion');
+    accordions.forEach((accordion) => {
+      if (accordion.dataset.accordionBound === '1') {
+        return;
+      }
+      accordion.dataset.accordionBound = '1';
+      accordion.addEventListener('toggle', () => {
+        if (!accordion.open) {
+          return;
+        }
+        accordions.forEach((other) => {
+          if (other !== accordion) {
+            other.open = false;
+          }
+        });
+      });
+    });
+  };
+
   const setupFilterList = (list, input, toggleBtn) => {
     if (!list || list.dataset.filtersBound === '1') {
       return;
@@ -260,7 +280,6 @@ window.portalStoreFiltersInit = (root = document) => {
       return deferredFiltersPromise;
     }
 
-    sidebar?.classList.add('is-loading-options');
     const queryString = window.location.search || '';
     deferredFiltersPromise = fetch(`/api/store-filter-options.php${queryString}`, {
       credentials: 'same-origin',
@@ -270,8 +289,9 @@ window.portalStoreFiltersInit = (root = document) => {
       .then((data) => {
         applyDeferredFilters(data);
       })
+      .catch(() => {})
       .finally(() => {
-        sidebar?.classList.remove('is-loading-options');
+        deferredFiltersPromise = null;
       });
 
     return deferredFiltersPromise;
@@ -281,34 +301,7 @@ window.portalStoreFiltersInit = (root = document) => {
     if (!needsDeferredFilters()) {
       return;
     }
-    if (catalogRoot.hasAttribute('data-store-filters-scoped')) {
-      const prefetchScopedFilters = () => {
-        loadDeferredFilters().catch(() => {});
-      };
-      if ('requestIdleCallback' in window) {
-        window.requestIdleCallback(prefetchScopedFilters, { timeout: 2500 });
-      } else {
-        window.setTimeout(prefetchScopedFilters, 1200);
-      }
-      catalogRoot.querySelectorAll('.store-filter-accordion-summary').forEach((summary) => {
-        if (summary.dataset.scopedFiltersBound === '1') {
-          return;
-        }
-        summary.dataset.scopedFiltersBound = '1';
-        summary.addEventListener('click', () => {
-          loadDeferredFilters().catch(() => {});
-        });
-      });
-      return;
-    }
-    const run = () => {
-      loadDeferredFilters().catch(() => {});
-    };
-    if ('requestIdleCallback' in window) {
-      window.requestIdleCallback(run, { timeout: 2000 });
-    } else {
-      window.setTimeout(run, 600);
-    }
+    loadDeferredFilters().catch(() => {});
   };
 
   const setDrawerOpen = (open) => {
@@ -340,6 +333,7 @@ window.portalStoreFiltersInit = (root = document) => {
   }
 
   scheduleDeferredFilters();
+  setupExclusiveFilterAccordions();
 };
 
 if (document.readyState === 'loading') {

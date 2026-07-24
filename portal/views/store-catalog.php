@@ -32,7 +32,6 @@ $filterOptions = is_array($catalog['filterOptions'] ?? null) ? $catalog['filterO
 $lockedClientFilters = array_map('strval', is_array($catalog['locked_client_filters'] ?? null) ? $catalog['locked_client_filters'] : []);
 $allowClientFilters = (bool) ($catalog['allow_client_filters'] ?? false);
 $filtersDeferred = (bool) ($catalog['filters_deferred'] ?? false);
-$filtersScoped = (bool) ($catalog['filters_scoped'] ?? false);
 $isSectionBrowse = $sectionContext !== null;
 $storeSectionSlug = '';
 $storeOfferSlug = '';
@@ -483,7 +482,7 @@ require __DIR__ . '/partials/store-filter-group.php';
 <?php endif; ?>
 
 <!-- store-catalog-fragment:start -->
-<div class="store-layout <?= $allowClientFilters ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?><?= $filtersScoped ? ' data-store-filters-scoped="1"' : '' ?>>
+<div class="store-layout <?= $allowClientFilters ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?>>
   <?php if ($allowClientFilters): ?>
     <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
       <aside class="store-filters-sidebar">
@@ -539,6 +538,18 @@ require __DIR__ . '/partials/store-filter-group.php';
                         'label' => $value,
                         'count' => $facet['count'] ?? null,
                     ];
+                }
+                if ($groupOptions === [] && $filtersDeferred && ($facetConfig['selected'] ?? []) !== []) {
+                    foreach ((array) $facetConfig['selected'] as $selectedValue) {
+                        $selectedValue = trim((string) $selectedValue);
+                        if ($selectedValue === '') {
+                            continue;
+                        }
+                        $groupOptions[] = [
+                            'value' => $selectedValue,
+                            'label' => $selectedValue,
+                        ];
+                    }
                 }
                 $renderStoreFilterGroup(
                     (string) $facetConfig['param'],
@@ -597,7 +608,7 @@ require __DIR__ . '/partials/store-filter-group.php';
             <?php endif; ?>
 
             <?php if ($isClientFilterVisible('availability')): ?>
-              <details class="store-filter-accordion" open>
+              <details class="store-filter-accordion">
                 <summary class="store-filter-accordion-summary"><span>التوفر</span></summary>
                 <div class="store-filter-accordion-body store-filter-options">
                   <?php foreach (['' => 'الكل', '1' => 'متوفر', '0' => 'غير متوفر'] as $value => $label): ?>
@@ -612,7 +623,7 @@ require __DIR__ . '/partials/store-filter-group.php';
             <?php endif; ?>
 
             <?php if ($isClientFilterVisible('warehouseRange')): ?>
-              <details class="store-filter-accordion" open>
+              <details class="store-filter-accordion">
                 <summary class="store-filter-accordion-summary"><span>مدى الكمية</span></summary>
                 <div class="store-filter-accordion-body grid grid-cols-2 gap-2">
                   <div class="store-inline-field mb-0">
@@ -628,7 +639,7 @@ require __DIR__ . '/partials/store-filter-group.php';
             <?php endif; ?>
 
             <?php if ($isClientFilterVisible('priceSaleSyp') || $isClientFilterVisible('priceSaleUsd') || $isClientFilterVisible('pricePurchaseUsd')): ?>
-              <details class="store-filter-accordion" open>
+              <details class="store-filter-accordion">
                 <summary class="store-filter-accordion-summary"><span>المدى السعري</span></summary>
                 <div class="store-filter-accordion-body space-y-2">
                   <?php if ($isClientFilterVisible('priceSaleSyp')): ?>
