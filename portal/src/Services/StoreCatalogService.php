@@ -1099,14 +1099,30 @@ final class StoreCatalogService
     /** @param array<string, scalar|null> $apiQuery @return array<string, mixed> */
     private static function requestResultFiltersFromApi(array $apiQuery): array
     {
-        $response = ApiClient::get('/api/materials/result-filters', $apiQuery, 30);
+        ksort($apiQuery);
+        $cacheKey = 'store_result_filters_api_v2:' . hash('sha256', json_encode($apiQuery, JSON_UNESCAPED_UNICODE));
+        $cached = ResponseCache::get($cacheKey);
+        if (is_array($cached) && $cached !== []) {
+            self::$lastFiltersPayloadSource = 'portal-api-cache';
+
+            return $cached;
+        }
+
+        $response = ApiClient::get('/api/materials/result-filters', $apiQuery, 45);
         if ($response['ok']) {
             $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+            $resultFilters = self::extractResultFiltersFromApiData($data);
+            if ($resultFilters !== []) {
+                ResponseCache::set($cacheKey, $resultFilters, 900);
+            }
+            self::$lastFiltersPayloadSource = 'api-result-filters';
 
-            return self::extractResultFiltersFromApiData($data);
+            return $resultFilters;
         }
 
         if ((int) ($response['status'] ?? 0) !== 404) {
+            self::$lastFiltersPayloadSource = 'api-error';
+
             return [];
         }
 
@@ -1115,13 +1131,20 @@ final class StoreCatalogService
         $fallbackQuery['pageSize'] = 1;
         $fallbackQuery['includeResultFilters'] = 'true';
         $fallbackQuery['includeTotalCount'] = 'false';
-        $materials = ApiClient::get('/api/materials', $fallbackQuery, 30);
+        $materials = ApiClient::get('/api/materials', $fallbackQuery, 45);
         if (!$materials['ok']) {
+            self::$lastFiltersPayloadSource = 'api-fallback-error';
+
             return [];
         }
         $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
+        $resultFilters = self::extractResultFiltersFromApiData($data);
+        if ($resultFilters !== []) {
+            ResponseCache::set($cacheKey, $resultFilters, 900);
+        }
+        self::$lastFiltersPayloadSource = 'api-fallback-legacy';
 
-        return self::extractResultFiltersFromApiData($data);
+        return $resultFilters;
     }
 
     /** @return list<string> */
@@ -2174,8 +2197,16 @@ final class StoreCatalogService
     }
 
     /** @param array<string, mixed> $query @return array{filterOptions: array<string, mixed>, resultFilters: array<string, mixed>} */
+    private static string $lastFiltersPayloadSource = 'unknown';
+
+    public static function lastFiltersPayloadSource(): string
+    {
+        return self::$lastFiltersPayloadSource;
+    }
+
     public static function getClientFiltersPayload(array $query = []): array
     {
+        self::$lastFiltersPayloadSource = 'unknown';
         $policy = self::activePolicy();
         if ($policy === null) {
             return [
@@ -2222,6 +2253,7 @@ final class StoreCatalogService
         $requestFilters = self::parseRequestFilters($query, $storeOptions, $isClientFilterVisible);
         $needsScopedFilters = self::shouldFetchScopedResultFilters($query, $requestFilters, $baseRules);
         if (!$needsScopedFilters) {
+            self::$lastFiltersPayloadSource = 'global-options';
             $resultFilters = self::scopeResultFiltersForPolicy(
                 self::buildResultFiltersFromFilterOptions($filterOptions),
                 $baseRules
@@ -2235,6 +2267,8 @@ final class StoreCatalogService
 
         $cachedPayload = self::readScopedFiltersCache($query, $policy);
         if ($cachedPayload !== null) {
+            self::$lastFiltersPayloadSource = 'portal-cache';
+
             return $cachedPayload;
         }
 
@@ -2270,11 +2304,7 @@ final class StoreCatalogService
             return [];
         }
 
-        if ((self::shouldApplySellableStockFilter() || self::shouldFilterSellableStock())
-            && ($mergedFilters['minWarehouseQuantity'] ?? null) === null) {
-            $mergedFilters['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
-        }
-
+        // Facet lists follow policy constraints; sellable stock is applied on product pages only.
         $scopeRules = $sectionContext !== null ? $baseRules : $policyRules;
 
         try {

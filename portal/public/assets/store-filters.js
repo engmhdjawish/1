@@ -282,6 +282,14 @@ window.portalStoreFiltersInit = (root = document) => {
       return;
     }
     if (catalogRoot.hasAttribute('data-store-filters-scoped')) {
+      const prefetchScopedFilters = () => {
+        loadDeferredFilters().catch(() => {});
+      };
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(prefetchScopedFilters, { timeout: 2500 });
+      } else {
+        window.setTimeout(prefetchScopedFilters, 1200);
+      }
       catalogRoot.querySelectorAll('.store-filter-accordion-summary').forEach((summary) => {
         if (summary.dataset.scopedFiltersBound === '1') {
           return;
@@ -289,7 +297,7 @@ window.portalStoreFiltersInit = (root = document) => {
         summary.dataset.scopedFiltersBound = '1';
         summary.addEventListener('click', () => {
           loadDeferredFilters().catch(() => {});
-        }, { once: true });
+        });
       });
       return;
     }

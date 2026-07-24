@@ -7,10 +7,11 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Services\StoreCatalogService;
 
 header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: private, max-age=300');
+header('Cache-Control: private, max-age=600');
 
 try {
     $payload = StoreCatalogService::getClientFiltersPayload($_GET);
+    header('X-Filter-Source: ' . StoreCatalogService::lastFiltersPayloadSource());
     echo json_encode([
         'ok' => true,
         'filterOptions' => $payload['filterOptions'],
