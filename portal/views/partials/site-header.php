@@ -26,19 +26,8 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
 ?>
 <header class="site-header">
   <div class="site-header__shell">
-    <div class="site-header__row">
+    <div class="site-header__row site-header__row--primary">
       <div class="site-header__brand">
-        <button
-          type="button"
-          id="openPublicNavBtn"
-          class="site-header__menu-btn<?= $customer ? ' site-header__menu-btn--customer' : '' ?>"
-          data-guide="nav-menu"
-          aria-controls="publicNavDrawer"
-          aria-expanded="false"
-          aria-label="الحساب والمزيد"
-        >
-          <span class="material-symbols-outlined">menu</span>
-        </button>
         <a href="/index.php" class="site-brand-link font-extrabold text-primary text-base sm:text-lg inline-flex items-center gap-3 min-w-0" aria-label="<?= h($siteName) ?>">
           <?php if (!empty($companyLogoUrl)): ?>
             <?php
@@ -68,17 +57,59 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
       </nav>
 
       <div class="site-header__actions">
-        <?php if (!empty($companyLogoUrl)): ?>
-          <a href="/index.php" class="site-header__mobile-logo" aria-label="<?= h($siteName) ?>">
-            <?php
-              $siteLogoVariant = 'mobile-toolbar';
-              $siteLogoAlt = $siteName;
-              require __DIR__ . '/site-logo.php';
-            ?>
-          </a>
-        <?php endif; ?>
         <div class="site-header__toolbar">
+          <?php if ($staffLoggedIn && !$customer): ?>
+            <a href="/dashboard/index.php" class="site-header__icon-btn site-header__icon-btn--staff" title="لوحة التحكم" aria-label="لوحة التحكم">
+              <span class="material-symbols-outlined">dashboard</span>
+            </a>
+            <span class="site-header__divider site-header__divider--staff" aria-hidden="true"></span>
+          <?php endif; ?>
+
+          <div class="site-header__auth" data-guide="auth">
+            <?php if ($customer): ?>
+              <?php require __DIR__ . '/site-header-account.php'; ?>
+            <?php else: ?>
+              <a href="<?= h(portal_login_url('customer')) ?>" class="site-header__btn site-header__btn--ghost site-header__btn--compact" data-guide="login">دخول</a>
+              <a href="/register.php" class="site-header__btn site-header__btn--primary site-header__btn--compact" data-guide="register">تسجيل</a>
+            <?php endif; ?>
+          </div>
+
+          <?php require __DIR__ . '/notification-bell.php'; ?>
+
+          <?php if ($storeAllowCart): ?>
+            <span class="site-header__divider" aria-hidden="true"></span>
+            <button
+              type="button"
+              class="site-header__icon-btn site-header__icon-btn--cart"
+              data-guide="cart"
+              data-store-cart-open
+              title="السلة"
+              aria-label="السلة"
+              aria-controls="store-cart-drawer"
+              aria-expanded="false"
+            >
+              <span class="material-symbols-outlined">shopping_cart</span>
+              <span
+                data-store-cart-badge
+                class="site-header__badge <?= $storeCartPackageCount > 0 ? '' : 'hidden' ?>"
+                title="<?= $storeCartPackageCount > 0 ? h(format_packages_display($storeCartPackageCount) . ' طرد') : '' ?>"
+              ><span data-store-cart-badge-packages><?= $storeCartPackageCount > 0 ? h(format_packages_display($storeCartPackageCount)) : '0' ?></span></span>
+            </button>
+          <?php endif; ?>
+
+          <span class="site-header__divider" aria-hidden="true"></span>
+          <button
+            type="button"
+            class="site-header__icon-btn"
+            data-pwa-open
+            title="تثبيت التطبيق"
+            aria-label="تثبيت التطبيق"
+          >
+            <span class="material-symbols-outlined">install_mobile</span>
+          </button>
+
           <?php if ($storeShowPrice): ?>
+            <span class="site-header__divider site-header__divider--desktop-currency" aria-hidden="true"></span>
             <div class="site-header__currency" data-guide="currency" role="group" aria-label="عملة عرض الأسعار">
               <span class="site-header__currency-label">العملة</span>
               <div class="store-currency-toggle">
@@ -97,70 +128,25 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
               </div>
             </div>
           <?php endif; ?>
-
-          <span class="site-header__divider" aria-hidden="true"></span>
-          <button
-            type="button"
-            class="site-header__icon-btn"
-            data-pwa-open
-            title="تثبيت التطبيق"
-            aria-label="تثبيت التطبيق"
-          >
-            <span class="material-symbols-outlined">install_mobile</span>
-          </button>
-          <?php require __DIR__ . '/notification-bell.php'; ?>
-
-          <?php if ($storeAllowCart): ?>
-            <?php if ($storeShowPrice): ?>
-              <span class="site-header__divider" aria-hidden="true"></span>
-            <?php endif; ?>
-            <button
-              type="button"
-              class="site-header__icon-btn"
-              data-guide="cart"
-              data-store-cart-open
-              title="السلة"
-              aria-label="السلة"
-              aria-controls="store-cart-drawer"
-              aria-expanded="false"
-            >
-              <span class="material-symbols-outlined">shopping_cart</span>
-              <span
-                data-store-cart-badge
-                class="site-header__badge <?= $storeCartPackageCount > 0 ? '' : 'hidden' ?>"
-                title="<?= $storeCartPackageCount > 0 ? h(format_packages_display($storeCartPackageCount) . ' طرد') : '' ?>"
-              ><span data-store-cart-badge-packages><?= $storeCartPackageCount > 0 ? h(format_packages_display($storeCartPackageCount)) : '0' ?></span></span>
-            </button>
-          <?php endif; ?>
-
-          <span class="site-header__divider" aria-hidden="true"></span>
-
-          <div class="site-header__auth" data-guide="auth">
-            <?php if ($customer): ?>
-              <?php require __DIR__ . '/site-header-account.php'; ?>
-            <?php else: ?>
-              <a href="<?= h(portal_login_url('customer')) ?>" class="site-header__btn site-header__btn--ghost hidden sm:inline-flex" data-guide="login">دخول</a>
-              <a href="/register.php" class="site-header__btn site-header__btn--primary" data-guide="register">تسجيل</a>
-            <?php endif; ?>
-          </div>
         </div>
 
         <?php if ($staffLoggedIn && !$customer): ?>
           <a href="/dashboard/index.php" class="site-header__staff-link" title="لوحة التحكم">
             <span class="material-symbols-outlined" aria-hidden="true">dashboard</span>
-            لوحة التحكم
+            <span class="site-header__staff-link-label">لوحة التحكم</span>
           </a>
         <?php endif; ?>
       </div>
     </div>
 
-    <div class="site-header__mobile-bar">
+    <div class="site-header__row site-header__row--mobile-nav">
       <nav class="site-header__mobile-nav" aria-label="تنقل سريع">
         <?php foreach ($navLinks as $link): ?>
+          <?php $isStoreLink = str_contains($link['href'], 'store.php'); ?>
           <a
             href="<?= h($link['href']) ?>"
-            class="site-header__mobile-nav-link <?= $isNavActive($link['href']) ? 'is-active' : '' ?>"
-            <?php if (str_contains($link['href'], 'store.php')): ?>data-guide="nav-store"<?php endif; ?>
+            class="site-header__mobile-nav-link <?= $isNavActive($link['href']) ? 'is-active' : '' ?><?= $isStoreLink ? ' site-header__mobile-nav-link--store' : '' ?>"
+            <?php if ($isStoreLink): ?>data-guide="nav-store"<?php endif; ?>
           >
             <?php if (!empty($link['icon'])): ?>
               <span class="material-symbols-outlined site-header__mobile-nav-icon" aria-hidden="true"><?= h((string) $link['icon']) ?></span>
@@ -191,57 +177,3 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
     </div>
   </div>
 </header>
-
-<div id="publicNavOverlay" class="fixed inset-0 z-40 bg-black/40 opacity-0 pointer-events-none transition" aria-hidden="true"></div>
-<aside id="publicNavDrawer" class="fixed top-0 right-0 z-50 h-full w-[min(88vw,300px)] bg-white border-l border-gray-200 shadow-2xl flex flex-col translate-x-full" aria-hidden="true">
-  <div class="site-drawer__head">
-    <div class="site-drawer__brand">
-      <?php if (!empty($companyLogoUrl)): ?>
-        <?php
-          $siteLogoVariant = 'drawer';
-          $siteLogoAlt = $siteName;
-          require __DIR__ . '/site-logo.php';
-        ?>
-      <?php endif; ?>
-      <span class="site-drawer__title"><?= h($siteName) ?></span>
-    </div>
-    <button type="button" id="closePublicNavBtn" class="site-drawer__close" aria-label="إغلاق">
-      <span class="material-symbols-outlined">close</span>
-    </button>
-  </div>
-  <nav class="site-drawer__nav" aria-label="قائمة الجوال">
-    <div class="site-drawer__section">
-      <button type="button" class="site-drawer__link w-full text-right" data-pwa-open>
-        <span class="material-symbols-outlined align-middle text-base ml-1" aria-hidden="true">install_mobile</span>
-        تثبيت التطبيق
-      </button>
-    </div>
-
-    <div class="site-drawer__section">
-      <?php if ($customer): ?>
-        <?php
-          $drawerCustomerName = trim((string) ($customer['name_ar'] ?? ''));
-          if ($drawerCustomerName === '') {
-              $drawerCustomerName = 'عميل';
-          }
-          $drawerCustomerInitial = mb_strtoupper(mb_substr($drawerCustomerName, 0, 1));
-          $drawerCustomerPhone = trim((string) ($customer['phone'] ?? ''));
-        ?>
-        <div class="site-drawer__account-card">
-          <span class="site-drawer__account-avatar" aria-hidden="true"><?= h($drawerCustomerInitial) ?></span>
-          <div class="site-drawer__account-copy">
-            <strong><?= h($drawerCustomerName) ?></strong>
-            <span><?= $drawerCustomerPhone !== '' ? h($drawerCustomerPhone) : 'مسجّل الدخول' ?></span>
-          </div>
-        </div>
-        <a href="/logout.php" data-public-nav-link="1" class="site-drawer__link site-drawer__link--danger">تسجيل الخروج</a>
-      <?php else: ?>
-        <a href="<?= h(portal_login_url('customer')) ?>" data-public-nav-link="1" class="site-drawer__link" data-guide="login">دخول العملاء</a>
-        <a href="/register.php" data-public-nav-link="1" class="site-drawer__link is-active" data-guide="register">تسجيل عميل جديد</a>
-      <?php endif; ?>
-      <?php if ($staffLoggedIn && !$customer): ?>
-        <a href="/dashboard/index.php" data-public-nav-link="1" class="site-drawer__link">لوحة التحكم</a>
-      <?php endif; ?>
-    </div>
-  </nav>
-</aside>
