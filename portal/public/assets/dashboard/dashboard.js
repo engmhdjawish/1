@@ -571,6 +571,14 @@
     });
   }
 
+  function submitFilterForm(form) {
+    if (form.method.toLowerCase() !== 'get') return;
+    const params = new URLSearchParams(new FormData(form));
+    const url = formActionUrl(form).replace(/\?.*$/, '') + '?' + params.toString();
+    closeDrawer();
+    navigate(url);
+  }
+
   function bindFilterForms(root) {
     qsa('form[data-dashboard-filter]', root).forEach((form) => {
       if (form.dataset.filterBound === '1') return;
@@ -578,11 +586,29 @@
       form.addEventListener('submit', (event) => {
         if (form.method.toLowerCase() !== 'get') return;
         event.preventDefault();
-        const params = new URLSearchParams(new FormData(form));
-        const url = formActionUrl(form).replace(/\?.*$/, '') + '?' + params.toString();
-        closeDrawer();
-        navigate(url);
+        submitFilterForm(form);
       });
+
+      if (form.hasAttribute('data-dashboard-filter-auto')) {
+        qsa('select, input[type="date"]', form).forEach((el) => {
+          el.addEventListener('change', () => submitFilterForm(form));
+        });
+      }
+
+      const searchInput = form.querySelector('[data-dashboard-filter-search]');
+      if (searchInput) {
+        let debounceTimer = null;
+        searchInput.addEventListener('input', () => {
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => submitFilterForm(form), 420);
+        });
+        searchInput.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter') return;
+          event.preventDefault();
+          clearTimeout(debounceTimer);
+          submitFilterForm(form);
+        });
+      }
     });
   }
 

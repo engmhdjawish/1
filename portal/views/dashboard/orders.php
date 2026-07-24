@@ -56,11 +56,42 @@ $originClass = static function (array $row): string {
         : 'bg-slate-100 text-slate-700';
 };
 
-$buildOrdersUrl = static function (array $params): string {
-    return '/dashboard/orders.php?' . http_build_query(array_filter(
+$truncate = static function (string $text, int $max = 48): string {
+    if (text_length($text) <= $max) {
+        return $text;
+    }
+    if (function_exists('mb_substr')) {
+        return mb_substr($text, 0, $max) . '…';
+    }
+
+    return substr($text, 0, $max) . '…';
+};
+
+$filterParams = static function (array $overrides = []) use ($filters, $statusFormValue): array {
+    $params = [
+        'q' => array_key_exists('q', $overrides) ? $overrides['q'] : ($filters['q'] ?? ''),
+        'status' => array_key_exists('status', $overrides) ? $overrides['status'] : $statusFormValue,
+        'sync' => array_key_exists('sync', $overrides) ? $overrides['sync'] : ($filters['sync'] ?? ''),
+        'origin' => array_key_exists('origin', $overrides) ? $overrides['origin'] : ($filters['origin'] ?? ''),
+        'fromDate' => array_key_exists('fromDate', $overrides) ? $overrides['fromDate'] : ($filters['fromDate'] ?? ''),
+        'toDate' => array_key_exists('toDate', $overrides) ? $overrides['toDate'] : ($filters['toDate'] ?? ''),
+        'web_customer_id' => array_key_exists('web_customer_id', $overrides) ? $overrides['web_customer_id'] : ($filters['web_customer_id'] ?? ''),
+        'limit' => array_key_exists('limit', $overrides) ? $overrides['limit'] : ($filters['limit'] ?? 50),
+    ];
+
+    return array_filter(
         $params,
         static fn ($value) => $value !== null && $value !== ''
-    ));
+    );
+};
+
+$buildOrdersUrl = static function (array $params) use ($filterParams): string {
+    $query = $filterParams($params);
+    if (!empty($params['details'])) {
+        $query['details'] = (string) $params['details'];
+    }
+
+    return '/dashboard/orders.php?' . http_build_query($query);
 };
 
 $formatUsd = static function (float $amount): string {
@@ -90,16 +121,33 @@ $customerPhone = static function (array $row): string {
     return $guest !== '' ? $guest : '—';
 };
 
-$truncate = static function (string $text, int $max = 48): string {
-    if (text_length($text) <= $max) {
-        return $text;
-    }
-    if (function_exists('mb_substr')) {
-        return mb_substr($text, 0, $max) . '…';
-    }
+$statusTabs = [
+    'all' => ['label' => 'الكل', 'count' => array_sum($statusCounts), 'tone' => 'bg-slate-100 text-slate-700'],
+    'pending' => ['label' => 'جديد', 'count' => (int) ($statusCounts['pending'] ?? 0), 'tone' => 'bg-amber-100 text-amber-800'],
+    'confirmed' => ['label' => 'مؤكد', 'count' => (int) ($statusCounts['confirmed'] ?? 0), 'tone' => 'bg-blue-100 text-blue-800'],
+    'completed' => ['label' => 'مكتمل', 'count' => (int) ($statusCounts['completed'] ?? 0), 'tone' => 'bg-emerald-100 text-emerald-800'],
+    'cancelled' => ['label' => 'ملغي', 'count' => (int) ($statusCounts['cancelled'] ?? 0), 'tone' => 'bg-red-100 text-red-800'],
+];
 
-    return substr($text, 0, $max) . '…';
-};
+$syncTabs = [
+    '' => ['label' => 'كل المزامنة', 'count' => null],
+    'pending' => ['label' => 'بانتظار المزامنة', 'count' => (int) ($syncCounts['pending'] ?? 0)],
+    'failed' => ['label' => 'فشل المزامنة', 'count' => (int) ($syncCounts['failed'] ?? 0)],
+    'synced' => ['label' => 'تمت المزامنة', 'count' => (int) ($syncCounts['synced'] ?? 0)],
+];
+
+$activeSyncTab = (string) ($filters['sync'] ?? '');
+$hasExtraFilters = !(
+    $activeStatusTab === 'pending'
+    && $activeSyncTab === ''
+    && ($filters['q'] ?? '') === ''
+    && ($filters['origin'] ?? '') === ''
+    && ($filters['fromDate'] ?? '') === ''
+    && ($filters['toDate'] ?? '') === ''
+);
+$advancedFiltersOpen = ($filters['origin'] ?? '') !== ''
+    || ($filters['fromDate'] ?? '') !== ''
+    || ($filters['toDate'] ?? '') !== '';
 ?>
 <section class="flex flex-col md:flex-row justify-between md:items-center gap-3 mb-4">
   <div>
@@ -107,18 +155,18 @@ $truncate = static function (string $text, int $max = 48): string {
     <p class="text-sm text-text-muted mt-1">متابعة طلبات الجملة — الأصناف والطرود والإجمالي بالدولار.</p>
   </div>
   <div class="flex gap-2 flex-wrap">
-    <article class="bg-white border border-border-subtle rounded-xl px-3 py-2 text-center min-w-24">
+    <a href="<?= h($buildOrdersUrl(['status' => 'pending', 'sync' => ''])) ?>" class="bg-white border border-border-subtle rounded-xl px-3 py-2 text-center min-w-24 hover:border-primary/30 hover:shadow-sm transition no-underline text-inherit">
       <p class="text-lg font-extrabold text-primary"><?= (int) ($statusCounts['pending'] ?? 0) ?></p>
       <p class="text-[11px] text-text-muted">جديدة</p>
-    </article>
-    <article class="bg-white border border-border-subtle rounded-xl px-3 py-2 text-center min-w-24">
+    </a>
+    <a href="<?= h($buildOrdersUrl(['status' => $statusFormValue, 'sync' => 'pending'])) ?>" class="bg-white border border-border-subtle rounded-xl px-3 py-2 text-center min-w-24 hover:border-amber-200 hover:shadow-sm transition no-underline text-inherit">
       <p class="text-lg font-extrabold text-amber-600"><?= (int) ($syncCounts['pending'] ?? 0) ?></p>
       <p class="text-[11px] text-text-muted">بانتظار مزامنة</p>
-    </article>
-    <article class="bg-white border border-border-subtle rounded-xl px-3 py-2 text-center min-w-24">
+    </a>
+    <a href="<?= h($buildOrdersUrl(['status' => 'completed', 'sync' => ''])) ?>" class="bg-white border border-border-subtle rounded-xl px-3 py-2 text-center min-w-24 hover:border-emerald-200 hover:shadow-sm transition no-underline text-inherit">
       <p class="text-lg font-extrabold text-emerald-700"><?= (int) ($statusCounts['completed'] ?? 0) ?></p>
       <p class="text-[11px] text-text-muted">مكتملة</p>
-    </article>
+    </a>
   </div>
 </section>
 
@@ -138,52 +186,97 @@ $truncate = static function (string $text, int $max = 48): string {
   </section>
 <?php endif; ?>
 
-<section class="bg-white border border-border-subtle rounded-xl p-3 mb-3">
-  <form method="get" data-dashboard-filter class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-2 items-end">
+<section class="bg-white border border-border-subtle rounded-xl p-3 mb-3 space-y-3">
+  <form method="get" data-dashboard-filter data-dashboard-filter-auto class="space-y-3">
     <?php if (!empty($filters['web_customer_id'])): ?>
       <input type="hidden" name="web_customer_id" value="<?= h((string) $filters['web_customer_id']) ?>">
     <?php endif; ?>
-    <label class="text-xs lg:col-span-2">
-      <span class="text-text-muted block mb-0.5">البحث</span>
-      <input type="text" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm focus:border-primary focus:ring-primary" placeholder="رقم الطلب، اسم، هاتف...">
-    </label>
-    <label class="text-xs">
-      <span class="text-text-muted block mb-0.5">حالة الطلب</span>
-      <select name="status" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
-        <option value="">الكل</option>
-        <?php foreach ($statusLabels as $key => $label): ?>
-          <option value="<?= h($key) ?>" <?= ($filters['status'] ?? '') === $key ? 'selected' : '' ?>><?= h($label) ?></option>
-        <?php endforeach; ?>
-      </select>
-    </label>
-    <label class="text-xs">
-      <span class="text-text-muted block mb-0.5">المزامنة</span>
-      <select name="sync" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
-        <option value="">الكل</option>
-        <?php foreach ($syncLabels as $key => $label): ?>
-          <option value="<?= h($key) ?>" <?= ($filters['sync'] ?? '') === $key ? 'selected' : '' ?>><?= h($label) ?></option>
-        <?php endforeach; ?>
-      </select>
-    </label>
-    <label class="text-xs">
-      <span class="text-text-muted block mb-0.5">مصدر الطلب</span>
-      <select name="origin" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
-        <option value="">الكل</option>
-        <option value="registered" <?= ($filters['origin'] ?? '') === 'registered' ? 'selected' : '' ?>>عميل مسجّل</option>
-        <option value="guest" <?= ($filters['origin'] ?? '') === 'guest' ? 'selected' : '' ?>>زائر</option>
-      </select>
-    </label>
-    <label class="text-xs">
-      <span class="text-text-muted block mb-0.5">من</span>
-      <input type="date" name="fromDate" value="<?= h((string) ($filters['fromDate'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
-    </label>
-    <label class="text-xs">
-      <span class="text-text-muted block mb-0.5">إلى</span>
-      <input type="date" name="toDate" value="<?= h((string) ($filters['toDate'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
-    </label>
-    <div class="lg:col-span-7 flex justify-end">
-      <button class="dashboard-btn h-9 bg-primary text-white rounded-lg px-5 text-xs font-bold hover:brightness-110 transition">تطبيق الفلاتر</button>
+    <input type="hidden" name="status" value="<?= h($statusFormValue) ?>">
+    <input type="hidden" name="sync" value="<?= h($activeSyncTab) ?>">
+
+    <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
+      <label class="relative flex-1 text-sm">
+        <span class="sr-only">بحث</span>
+        <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-lg pointer-events-none">search</span>
+        <input
+          type="search"
+          name="q"
+          value="<?= h((string) ($filters['q'] ?? '')) ?>"
+          data-dashboard-filter-search
+          data-role="search"
+          class="h-10 w-full rounded-xl border border-border-subtle pr-10 pl-10 text-sm focus:border-primary focus:ring-primary"
+          placeholder="ابحث برقم الطلب، اسم العميل، أو الهاتف..."
+          autocomplete="off"
+        >
+      </label>
+      <?php if (($filters['q'] ?? '') !== ''): ?>
+        <a
+          href="<?= h($buildOrdersUrl(['q' => ''])) ?>"
+          class="h-10 px-3 inline-flex items-center justify-center rounded-xl border border-border-subtle text-xs font-bold text-slate-600 hover:bg-surface-low shrink-0"
+        >مسح البحث</a>
+      <?php endif; ?>
+      <?php if ($hasExtraFilters): ?>
+        <a
+          href="<?= h(!empty($filters['web_customer_id']) ? $buildOrdersUrl(['q' => '', 'status' => 'all', 'sync' => '', 'origin' => '', 'fromDate' => '', 'toDate' => '']) : '/dashboard/orders.php') ?>"
+          class="h-10 px-3 inline-flex items-center justify-center rounded-xl border border-red-200 bg-red-50 text-xs font-bold text-red-700 hover:bg-red-100 shrink-0"
+        >إعادة ضبط</a>
+      <?php endif; ?>
     </div>
+
+    <div class="dashboard-orders-filter-tabs flex gap-2 overflow-x-auto pb-0.5" role="tablist" aria-label="حالة الطلب">
+      <?php foreach ($statusTabs as $tabKey => $tab): ?>
+        <?php $isActiveStatus = $activeStatusTab === $tabKey; ?>
+        <a
+          href="<?= h($buildOrdersUrl(['status' => $tabKey === 'all' ? 'all' : $tabKey])) ?>"
+          class="dashboard-orders-filter-tab whitespace-nowrap inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm transition <?= $isActiveStatus ? 'is-active' : '' ?>"
+          <?= $isActiveStatus ? 'aria-current="page"' : '' ?>
+        >
+          <span class="font-bold"><?= h($tab['label']) ?></span>
+          <span class="dashboard-orders-filter-tab__count text-[11px] px-2 py-0.5 rounded-full <?= h($tab['tone']) ?>"><?= (int) $tab['count'] ?></span>
+        </a>
+      <?php endforeach; ?>
+    </div>
+
+    <div class="dashboard-orders-filter-tabs dashboard-orders-filter-tabs--sync flex gap-2 overflow-x-auto pb-0.5" role="tablist" aria-label="مزامنة الأمين">
+      <?php foreach ($syncTabs as $tabKey => $tab): ?>
+        <?php $isActiveSync = $activeSyncTab === $tabKey; ?>
+        <a
+          href="<?= h($buildOrdersUrl(['sync' => $tabKey])) ?>"
+          class="dashboard-orders-filter-tab dashboard-orders-filter-tab--compact whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition <?= $isActiveSync ? 'is-active' : '' ?>"
+          <?= $isActiveSync ? 'aria-current="page"' : '' ?>
+        >
+          <span class="font-bold"><?= h($tab['label']) ?></span>
+          <?php if ($tab['count'] !== null && (int) $tab['count'] > 0): ?>
+            <span class="dashboard-orders-filter-tab__count text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700"><?= (int) $tab['count'] ?></span>
+          <?php endif; ?>
+        </a>
+      <?php endforeach; ?>
+    </div>
+
+    <details class="dashboard-orders-filter-advanced group" <?= $advancedFiltersOpen ? 'open' : '' ?>>
+      <summary class="cursor-pointer select-none text-xs font-bold text-primary inline-flex items-center gap-1">
+        <span class="material-symbols-outlined text-base transition group-open:rotate-180">expand_more</span>
+        فلاتر إضافية
+      </summary>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-3">
+        <label class="text-xs">
+          <span class="text-text-muted block mb-1">مصدر الطلب</span>
+          <select name="origin" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
+            <option value="">الكل</option>
+            <option value="registered" <?= ($filters['origin'] ?? '') === 'registered' ? 'selected' : '' ?>>عميل مسجّل</option>
+            <option value="guest" <?= ($filters['origin'] ?? '') === 'guest' ? 'selected' : '' ?>>زائر</option>
+          </select>
+        </label>
+        <label class="text-xs">
+          <span class="text-text-muted block mb-1">من تاريخ</span>
+          <input type="date" name="fromDate" value="<?= h((string) ($filters['fromDate'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
+        </label>
+        <label class="text-xs">
+          <span class="text-text-muted block mb-1">إلى تاريخ</span>
+          <input type="date" name="toDate" value="<?= h((string) ($filters['toDate'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm focus:border-primary focus:ring-primary">
+        </label>
+      </div>
+    </details>
   </form>
 </section>
 
@@ -206,7 +299,9 @@ $truncate = static function (string $text, int $max = 48): string {
             <th class="text-right px-4 py-3 font-bold">الحالة</th>
             <th class="text-right px-4 py-3 font-bold">المزامنة</th>
             <th class="text-right px-4 py-3 font-bold">التاريخ</th>
-            <th class="text-left px-4 py-3 font-bold">إجراءات</th>
+            <?php if ($canManageOrders): ?>
+            <th class="text-left px-4 py-3 font-bold">تحديث سريع</th>
+            <?php endif; ?>
           </tr>
         </thead>
         <tbody class="divide-y divide-border-subtle">
@@ -217,17 +312,7 @@ $truncate = static function (string $text, int $max = 48): string {
               $notes = trim((string) ($row['notes_ar'] ?? ''));
               $name = $customerName($row);
               $phone = $customerPhone($row);
-              $detailUrl = $buildOrdersUrl([
-                  'q' => $filters['q'] ?? '',
-                  'status' => $filters['status'] ?? '',
-                  'sync' => $filters['sync'] ?? '',
-                  'origin' => $filters['origin'] ?? '',
-                  'web_customer_id' => $filters['web_customer_id'] ?? '',
-                  'fromDate' => $filters['fromDate'] ?? '',
-                  'toDate' => $filters['toDate'] ?? '',
-                  'limit' => $filters['limit'] ?? 50,
-                  'details' => (string) ($row['id'] ?? ''),
-              ]);
+              $detailUrl = $buildOrdersUrl(['details' => (string) ($row['id'] ?? '')]);
             ?>
             <tr class="hover:bg-slate-50/80 transition align-top dashboard-clickable-row" data-dashboard-row-href="<?= h($detailUrl) ?>">
               <td class="px-4 py-3">
@@ -262,26 +347,19 @@ $truncate = static function (string $text, int $max = 48): string {
                 </span>
               </td>
               <td class="px-4 py-3 text-[11px] text-text-muted whitespace-nowrap"><?= h((string) ($row['created_at'] ?? '')) ?></td>
+              <?php if ($canManageOrders): ?>
               <td class="px-4 py-3" data-dashboard-row-ignore>
-                <div class="flex items-center justify-end gap-1.5 flex-wrap">
-                  <a
-                    href="<?= h($detailUrl) ?>"
-                    data-dashboard-no-nav
-                    class="h-8 px-3 inline-flex items-center rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"
-                  >تفاصيل</a>
-                  <?php if ($canManageOrders): ?>
-                    <form method="post" data-dashboard-ajax data-dashboard-reload class="flex items-center gap-1">
-                      <input type="hidden" name="order_id" value="<?= h((string) ($row['id'] ?? '')) ?>">
-                      <select name="next_status" class="h-8 rounded-lg border border-border-subtle px-2 text-[11px]">
-                        <?php foreach ($statusLabels as $statusKey => $statusLabel): ?>
-                          <option value="<?= h($statusKey) ?>" <?= ($row['status'] ?? '') === $statusKey ? 'selected' : '' ?>><?= h($statusLabel) ?></option>
-                        <?php endforeach; ?>
-                      </select>
-                      <button type="submit" class="dashboard-btn h-8 px-2.5 rounded-lg bg-primary text-white text-[11px] font-bold">حفظ</button>
-                    </form>
-                  <?php endif; ?>
-                </div>
+                <form method="post" data-dashboard-ajax data-dashboard-reload class="flex items-center justify-end gap-1">
+                  <input type="hidden" name="order_id" value="<?= h((string) ($row['id'] ?? '')) ?>">
+                  <select name="next_status" class="h-8 rounded-lg border border-border-subtle px-2 text-[11px]" aria-label="حالة الطلب">
+                    <?php foreach ($statusLabels as $statusKey => $statusLabel): ?>
+                      <option value="<?= h($statusKey) ?>" <?= ($row['status'] ?? '') === $statusKey ? 'selected' : '' ?>><?= h($statusLabel) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                  <button type="submit" class="dashboard-btn h-8 px-2.5 rounded-lg bg-primary text-white text-[11px] font-bold">حفظ</button>
+                </form>
               </td>
+              <?php endif; ?>
             </tr>
           <?php endforeach; ?>
         </tbody>

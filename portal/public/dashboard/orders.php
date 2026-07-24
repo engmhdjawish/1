@@ -71,9 +71,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $filters = [
-    'status' => array_key_exists('status', $_GET)
-        ? trim((string) $_GET['status'])
-        : (trim((string) ($_GET['web_customer_id'] ?? '')) !== '' ? '' : 'pending'),
+    'status' => (static function (): string {
+        if (!array_key_exists('status', $_GET)) {
+            return trim((string) ($_GET['web_customer_id'] ?? '')) !== '' ? '' : 'pending';
+        }
+        $raw = trim((string) $_GET['status']);
+        return $raw === 'all' ? '' : $raw;
+    })(),
     'sync' => trim((string) ($_GET['sync'] ?? '')),
     'q' => trim((string) ($_GET['q'] ?? '')),
     'fromDate' => trim((string) ($_GET['fromDate'] ?? '')),
@@ -82,6 +86,13 @@ $filters = [
     'web_customer_id' => trim((string) ($_GET['web_customer_id'] ?? '')),
     'limit' => (int) ($_GET['limit'] ?? 50),
 ];
+$activeStatusTab = array_key_exists('status', $_GET)
+    ? trim((string) $_GET['status'])
+    : (trim((string) ($_GET['web_customer_id'] ?? '')) !== '' ? 'all' : 'pending');
+if ($activeStatusTab === '') {
+    $activeStatusTab = 'all';
+}
+$statusFormValue = $activeStatusTab === 'all' ? 'all' : $activeStatusTab;
 $detailsId = trim((string) ($_GET['details'] ?? ''));
 DashboardOrderPricePreference::applyFromRequest($_GET);
 $orderPriceCurrency = DashboardOrderPricePreference::current();

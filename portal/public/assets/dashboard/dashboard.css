@@ -479,6 +479,55 @@ button.is-loading::after,
   outline-offset: -2px;
 }
 
+.dashboard-orders-filter-tabs {
+  scrollbar-width: none;
+}
+
+.dashboard-orders-filter-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.dashboard-orders-filter-tab {
+  text-decoration: none;
+  color: var(--dash-muted);
+  border-color: var(--dash-border);
+  background: #fff;
+}
+
+.dashboard-orders-filter-tab:hover {
+  background: #f8fafc;
+  color: #334155;
+}
+
+.dashboard-orders-filter-tab.is-active {
+  background: var(--dash-primary);
+  border-color: var(--dash-primary);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(216, 25, 33, 0.18);
+}
+
+.dashboard-orders-filter-tab.is-active .dashboard-orders-filter-tab__count {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #fff !important;
+}
+
+.dashboard-orders-filter-tab--compact {
+  background: #f8fafc;
+}
+
+.dashboard-orders-filter-tab--compact.is-active {
+  background: #0f172a;
+  border-color: #0f172a;
+}
+
+.dashboard-orders-filter-advanced summary {
+  list-style: none;
+}
+
+.dashboard-orders-filter-advanced summary::-webkit-details-marker {
+  display: none;
+}
+
 .dashboard-slide-panel-backdrop {
   z-index: 80 !important;
 }
