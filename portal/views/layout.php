@@ -28,6 +28,9 @@ $siteName = trim((string) ($companyContext['company_name'] ?? '')) !== ''
 
 $customer = CustomerSession::check() ? CustomerSession::customer() : null;
 $staffLoggedIn = WebSession::check();
+$pagePath = portal_request_path();
+$isCatalogPage = portal_is_catalog_page($pagePath);
+$isLightPage = in_array($pagePath, ['/login.php', '/register.php', '/about.php'], true);
 $storeDisplay = StoreCatalogService::displayOptions();
 StorePricePreference::bootstrap();
 StorePricePreference::applyFromRequest($_GET);
@@ -36,10 +39,6 @@ $storePriceCurrency = StorePricePreference::current();
 $storeAllowCart = (bool) ($storeDisplay['allow_cart'] ?? false);
 $storeCartCount = $storeAllowCart ? StoreCartService::itemCount() : 0;
 $storeCartPackageCount = $storeAllowCart ? StoreCartService::packageCount() : 0.0;
-
-$pagePath = portal_request_path();
-$isCatalogPage = portal_is_catalog_page($pagePath);
-$isLightPage = in_array($pagePath, ['/login.php', '/register.php', '/about.php'], true);
 
 $enableQuickView = (bool) ($enableQuickView ?? $isCatalogPage);
 $deferStoreCartJs = (bool) ($deferStoreCartJs ?? false);
@@ -118,30 +117,19 @@ if ($customer) {
     <?php if ($pagePath === '/index.php'): ?>
       <link rel="prefetch" href="/store.php" as="document">
     <?php endif; ?>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&display=swap" rel="stylesheet">
-    <link href="<?= h(portal_asset_url('/css/material-image-frame.css')) ?>" rel="stylesheet">
-    <link href="<?= h(portal_asset_url('/css/site-brand.css')) ?>" rel="stylesheet">
-    <link href="<?= h(portal_asset_url('/css/site-header.css')) ?>" rel="stylesheet">
-    <link href="<?= h(portal_asset_url('/css/site-footer.css')) ?>" rel="stylesheet">
-    <link href="<?= h(portal_asset_url('/css/pwa-install.css')) ?>" rel="stylesheet">
-    <link href="<?= h(portal_asset_url('/css/site-page-loading.css')) ?>" rel="stylesheet">
-    <link href="<?= h(portal_asset_url('/css/notifications.css')) ?>" rel="stylesheet">
+    <?= portal_preload_font_stylesheet('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap') ?>
+    <?= portal_preload_font_stylesheet('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&display=swap') ?>
+    <link href="<?= h(portal_asset_url('/css/site-critical.bundle.css')) ?>" rel="stylesheet">
+    <?= portal_preload_stylesheet('/css/site-deferred.bundle.css') ?>
     <?php if (!$isLightPage): ?>
-      <link href="<?= h(portal_asset_url('/css/store-ui.css')) ?>" rel="stylesheet">
-    <?php endif; ?>
-    <?php if ($storeAllowCart && !$isLightPage): ?>
-      <link href="<?= h(portal_asset_url('/css/store-cart.css')) ?>" rel="stylesheet">
-    <?php endif; ?>
-    <?php if ($enableOnboarding): ?>
-      <link href="<?= h(portal_asset_url('/css/site-onboarding.css')) ?>" rel="stylesheet">
+      <?= portal_preload_stylesheet('/css/site-store.bundle.css') ?>
     <?php endif; ?>
     <style>
-      body { font-family: Manrope, sans-serif; background: #f6f6f8; color: #111827; }
+      body { font-family: Manrope, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f6f6f8; color: #111827; }
       .site-link { color: #374151; }
       .site-link:hover, .site-link.is-active { color: #D81921; }
       .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-      .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24; vertical-align: middle; line-height: 1; }
+      .material-symbols-outlined { font-family: 'Material Symbols Outlined', sans-serif; font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24; vertical-align: middle; line-height: 1; }
     </style>
     <?php if (!empty($extraHead ?? '')): ?>
       <?= $extraHead ?>

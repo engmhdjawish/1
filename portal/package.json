@@ -2,7 +2,7 @@
   "name": "jawish-portal-assets",
   "private": true,
   "scripts": {
-    "build:css": "tailwindcss -i ./assets-src/tailwind.css -o ./public/css/tailwind.css --minify"
+    "build:css": "tailwindcss -i ./assets-src/tailwind.css -o ./public/css/tailwind.css --minify && node ./scripts/build-site-css.mjs"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.17"

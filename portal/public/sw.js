@@ -1,22 +1,18 @@
 /**
  * Jawish store PWA — cache static assets, network-first for pages.
  */
-const CACHE_VERSION = 'jawish-v8';
+const CACHE_VERSION = 'jawish-v9';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 
 const PRECACHE_URLS = [
   '/favicon.ico',
   '/icons/app-icon.svg',
-  '/css/site-brand.css',
-  '/css/site-header.css',
-  '/css/site-footer.css',
-  '/css/material-image-frame.css',
-  '/css/store-ui.css',
-  '/css/store-cart.css',
+  '/css/site-critical.bundle.css',
+  '/css/site-deferred.bundle.css',
+  '/css/site-store.bundle.css',
   '/css/home-page.css',
   '/assets/store-pref.js',
   '/assets/site-analytics.js',
-  '/css/pwa-install.css',
   '/assets/pwa.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',

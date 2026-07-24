@@ -43,6 +43,24 @@ function portal_asset_url(string $webPath): string
     return $webPath;
 }
 
+/** Non-blocking stylesheet via rel=preload (footer, store UI, etc.). */
+function portal_preload_stylesheet(string $webPath): string
+{
+    $url = h(portal_asset_url($webPath));
+
+    return '<link rel="preload" href="' . $url . '" as="style" onload="this.onload=null;this.rel=\'stylesheet\'">'
+        . '<noscript><link rel="stylesheet" href="' . $url . '"></noscript>';
+}
+
+/** Non-blocking Google Fonts / external stylesheet (display=swap in URL). */
+function portal_preload_font_stylesheet(string $url): string
+{
+    $url = h($url);
+
+    return '<link rel="preload" href="' . $url . '" as="style" onload="this.onload=null;this.rel=\'stylesheet\'">'
+        . '<noscript><link rel="stylesheet" href="' . $url . '"></noscript>';
+}
+
 function portal_is_catalog_page(string $path): bool
 {
     return in_array($path, ['/index.php', '/store.php', '/product.php', '/share.php'], true);
