@@ -17,6 +17,10 @@ final class SiteMediaDerivativeService
             return null;
         }
 
+        if (!extension_loaded('gd')) {
+            return null;
+        }
+
         $maxWidth = max(0, $maxWidth);
         $format = strtolower(trim($format));
         $wantsWebp = $format === 'webp';
@@ -27,18 +31,16 @@ final class SiteMediaDerivativeService
         }
 
         if ($wantsWebp && !function_exists('imagewebp')) {
-            if (!$wantsResize) {
-                return null;
-            }
             $wantsWebp = false;
         }
 
         $sourceMime = strtolower(trim($sourceMime));
         if ($wantsWebp && !in_array($sourceMime, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true)) {
-            if (!$wantsResize) {
-                return null;
-            }
             $wantsWebp = false;
+        }
+
+        if (!$wantsWebp && !$wantsResize) {
+            return null;
         }
 
         $cacheDir = self::cacheDir();
@@ -65,14 +67,20 @@ final class SiteMediaDerivativeService
         $mtime = (string) (@filemtime($sourcePath) ?: 0);
         $size = (string) (@filesize($sourcePath) ?: 0);
         $cacheKey = sha1($sourcePath . '|' . $mtime . '|' . $size . '|' . $maxWidth . '|' . ($wantsWebp ? 'webp' : 'orig'));
-        $targetExt = $wantsWebp ? 'webp' : pathinfo($sourcePath, PATHINFO_EXTENSION);
+        $targetExt = $wantsWebp ? 'webp' : strtolower((string) pathinfo($sourcePath, PATHINFO_EXTENSION));
+        if ($targetExt === '') {
+            $targetExt = 'bin';
+        }
         $targetPath = $cacheDir . DIRECTORY_SEPARATOR . $cacheKey . '.' . $targetExt;
 
-        if (is_file($targetPath) && is_readable($targetPath) && filesize($targetPath) > 0) {
-            return [
-                'path' => $targetPath,
-                'mime' => $wantsWebp ? 'image/webp' : $sourceMime,
-            ];
+        if (is_file($targetPath) && is_readable($targetPath)) {
+            $cachedSize = filesize($targetPath);
+            if ($cachedSize !== false && $cachedSize > 0) {
+                return [
+                    'path' => $targetPath,
+                    'mime' => $wantsWebp ? 'image/webp' : $sourceMime,
+                ];
+            }
         }
 
         $image = self::loadImage($sourcePath, $sourceMime);
@@ -99,15 +107,26 @@ final class SiteMediaDerivativeService
             $image = $resized;
         }
 
+        if ($wantsWebp) {
+            self::prepareImageForWebp($image);
+        }
+
         $saved = $wantsWebp
-            ? imagewebp($image, $targetPath, 82)
+            ? @imagewebp($image, $targetPath, 82)
             : self::saveOriginalFormat($image, $targetPath, $sourceMime);
         imagedestroy($image);
 
-        if (!$saved || !is_file($targetPath) || filesize($targetPath) <= 0) {
+        if (!$saved || !is_file($targetPath)) {
             if (is_file($targetPath)) {
                 @unlink($targetPath);
             }
+
+            return null;
+        }
+
+        $writtenSize = filesize($targetPath);
+        if ($writtenSize === false || $writtenSize <= 0) {
+            @unlink($targetPath);
 
             return null;
         }
@@ -129,6 +148,14 @@ final class SiteMediaDerivativeService
         $params = [];
         if ($query !== '') {
             parse_str($query, $params);
+        }
+
+        $assetId = trim((string) ($params['id'] ?? ''));
+        if ($preferWebp && $assetId !== '') {
+            $asset = SiteMediaService::getById($assetId);
+            if (($asset['category'] ?? '') === 'logo') {
+                $preferWebp = false;
+            }
         }
 
         $existingFormat = strtolower((string) ($params['format'] ?? ''));
@@ -166,6 +193,16 @@ final class SiteMediaDerivativeService
             'image/webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($sourcePath) : false,
             default => false,
         };
+    }
+
+    /** @param \GdImage $image */
+    private static function prepareImageForWebp($image): void
+    {
+        if (function_exists('imagepalettetotruecolor') && !imageistruecolor($image)) {
+            imagepalettetotruecolor($image);
+        }
+        imagealphablending($image, true);
+        imagesavealpha($image, true);
     }
 
     /** @param \GdImage $image */
