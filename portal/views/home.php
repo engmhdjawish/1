@@ -68,21 +68,27 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
         </div>
 
         <div class="home-hero__visual" aria-hidden="true">
-          <div class="home-hero__visual-rings">
-            <span></span>
-            <span></span>
+          <div class="home-hero__emblem">
+            <div class="home-hero__visual-rings">
+              <span class="home-hero__ring home-hero__ring--outer"></span>
+              <span class="home-hero__ring home-hero__ring--inner"></span>
+            </div>
+            <div class="home-hero__logo-stage">
+              <span class="home-hero__logo-glow"></span>
+              <span class="home-hero__logo-shimmer"></span>
+              <?php if ($companyLogoUrl !== ''): ?>
+                <img
+                  class="home-hero__logo"
+                  src="<?= h(portal_site_logo_url($companyLogoUrl, 'header')) ?>"
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                >
+              <?php else: ?>
+                <span class="material-symbols-outlined home-hero__logo-fallback">storefront</span>
+              <?php endif; ?>
+            </div>
           </div>
-          <?php if ($companyLogoUrl !== ''): ?>
-            <img
-              class="home-hero__logo"
-              src="<?= h(portal_site_logo_url($companyLogoUrl, 'header')) ?>"
-              alt=""
-              loading="lazy"
-              decoding="async"
-            >
-          <?php else: ?>
-            <span class="material-symbols-outlined home-hero__logo-fallback">storefront</span>
-          <?php endif; ?>
         </div>
       </div>
     </div>
