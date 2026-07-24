@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Portal\Auth\CustomerSession;
 use Portal\Services\PortalSettingsService;
-use Portal\Services\SpecialOfferService;
 use Portal\Services\StoreCatalogService;
 
 /** @var list<array<string, mixed>> $sections */
@@ -12,7 +11,9 @@ use Portal\Services\StoreCatalogService;
 /** @var array<string, string>|null $companyContext */
 /** @var string|null $companyLogoUrl */
 /** @var array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string}|null $storeCatalogDisplay */
+/** @var bool|null $deferHomeProducts */
 $ads ??= [];
+$deferHomeProducts = (bool) ($deferHomeProducts ?? false);
 
 $company = is_array($companyContext ?? null) ? $companyContext : PortalSettingsService::companySettings();
 $siteName = trim((string) ($company['company_name'] ?? '')) !== '' ? (string) $company['company_name'] : 'جاويش للتجارة';
@@ -145,7 +146,7 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
     </nav>
   <?php endif; ?>
 
-  <div class="home-sections">
+  <div class="home-sections"<?= $deferHomeProducts ? ' data-home-deferred-products="1"' : '' ?>>
     <?php foreach ($sections as $sectionIndex => $section): ?>
       <?php
         $products = is_array($section['products'] ?? null) ? $section['products'] : [];
@@ -185,84 +186,18 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
             </a>
           </header>
 
-          <?php if ($products === []): ?>
+          <?php if ($deferHomeProducts): ?>
+            <div class="home-strip-slot" data-home-products="<?= h($sectionId) ?>">
+              <div class="home-strip-skeleton" aria-hidden="true">
+                <?php for ($sk = 0; $sk < 4; $sk++): ?>
+                  <div class="home-product-skeleton"></div>
+                <?php endfor; ?>
+              </div>
+            </div>
+          <?php elseif ($products === []): ?>
             <div class="home-section__empty">لا توجد منتجات في هذا القسم حالياً.</div>
           <?php else: ?>
-            <?php
-              $sectionGuids = array_values(array_filter(array_map(
-                  static fn ($row): string => is_array($row) ? material_guid($row) : '',
-                  $products
-              ), static fn (string $g): bool => $g !== ''));
-              $sectionSlug = trim((string) ($section['slug'] ?? ''));
-              $sectionReturnUrl = home_section_return_url($section);
-              $sectionOfferSlug = $isOfferSection && $sectionSlug !== '' ? $sectionSlug : null;
-              $sectionPriceModeResolved = $priceState['price_mode_resolved'];
-              $previewDisplayOptions = $priceState['preview_display_options'];
-              $homeAllowCart = (bool) ($previewDisplayOptions['allow_cart'] ?? false);
-            ?>
-            <div class="home-strip">
-              <?php foreach ($products as $item): ?>
-                <?php
-                  if (!is_array($item)) {
-                      continue;
-                  }
-                  $guid = material_guid($item);
-                  $contextOffer = $isOfferSection && $sectionSlug !== ''
-                      ? SpecialOfferService::activeOfferBySlug($sectionSlug)
-                      : null;
-                  if ($guid !== '') {
-                      $overlay = SpecialOfferService::pricingOverlay($item, $contextOffer);
-                      if (!empty($overlay['has_offer'])) {
-                          $item = array_merge($item, $overlay);
-                      }
-                  }
-                  $cartQtyForItem = 0.0;
-                  if ($homeAllowCart && $guid !== '') {
-                      $cartItems = \Portal\Services\StoreCartService::items();
-                      $cartQtyForItem = (float) ($cartItems[$guid]['quantity'] ?? 0);
-                  }
-                  $previewPayload = $guid !== ''
-                      ? product_preview_payload(
-                          $item,
-                          $previewDisplayOptions,
-                          $cartQtyForItem,
-                          $sectionReturnUrl,
-                          $sectionOfferSlug,
-                          $isOfferSection ? null : ($sectionSlug !== '' ? $sectionSlug : null)
-                      )
-                      : null;
-                  $previewJson = $previewPayload !== null
-                      ? json_encode($previewPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)
-                      : '';
-                ?>
-                <article
-                  class="home-product-card"
-                  <?php if ($guid !== '' && $previewJson !== ''): ?>
-                    data-store-preview-card
-                    data-preview-guid="<?= h($guid) ?>"
-                    data-preview="<?= h($previewJson) ?>"
-                  <?php endif; ?>
-                >
-                  <?php if ($showImages): ?>
-                    <button
-                      type="button"
-                      class="home-product-card__media home-product-card__media--preview"
-                      data-store-product-preview
-                      title="معاينة الصورة والأسعار"
-                    >
-                      <span class="home-product-card__zoom-hint material-symbols-outlined" aria-hidden="true">zoom_in</span>
-                      <?php $material = $item; $variant = 'strip'; require __DIR__ . '/partials/material-image-frame.php'; ?>
-                    </button>
-                  <?php endif; ?>
-                  <div class="home-product-card__body">
-                    <div class="home-product-card__name"><?= h((string) ($item['name'] ?? '-')) ?></div>
-                    <?php if ($showAnyPrice): ?>
-                      <?php require __DIR__ . '/partials/offer-price-block.php'; ?>
-                    <?php endif; ?>
-                  </div>
-                </article>
-              <?php endforeach; ?>
-            </div>
+            <?php require __DIR__ . '/partials/home-section-product-strip.php'; ?>
           <?php endif; ?>
         </div>
       </section>

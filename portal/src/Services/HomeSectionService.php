@@ -48,7 +48,36 @@ final class HomeSectionService
     {
         $cacheKey = self::activeSectionsCacheKey();
 
-        return ResponseCache::remember($cacheKey, 300, static fn (): array => self::buildActiveSections());
+        return ResponseCache::remember($cacheKey, 600, static fn (): array => self::buildActiveSections());
+    }
+
+    /** @return list<array<string, mixed>> */
+    public static function activeSectionShells(): array
+    {
+        return self::buildActiveSectionShells();
+    }
+
+    /** @return list<array<string, mixed>> */
+    private static function buildActiveSectionShells(): array
+    {
+        $sections = Database::pdo()->query(
+            'SELECT id::text AS id, slug, title_ar, subtitle_ar, banner_image_url, display_mode::text AS display_mode,
+                    max_products, sort_order
+             FROM home_sections WHERE is_active = TRUE ORDER BY sort_order ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($sections as &$section) {
+            $sectionId = (string) $section['id'];
+            $parsed = self::parseFilterRows(self::filtersForSection($sectionId));
+            $section['filters'] = $parsed['rows'];
+            $section['filter_rules'] = $parsed['rules'];
+            $section['display_options'] = $parsed['display_options'];
+            $section['material_guids'] = self::manualProducts($sectionId);
+            $section['products'] = [];
+            $section['is_offer_section'] = false;
+        }
+
+        return $sections;
     }
 
     /** @return list<array<string, mixed>> */
@@ -56,7 +85,7 @@ final class HomeSectionService
     {
         $pdo = Database::pdo();
         $sections = $pdo->query(
-            'SELECT id::text AS id, slug, title_ar, subtitle_ar, banner_image_url, display_mode::text AS display_mode, max_products
+            'SELECT id::text AS id, slug, title_ar, subtitle_ar, banner_image_url, display_mode::text AS display_mode, max_products, sort_order
              FROM home_sections WHERE is_active = TRUE ORDER BY sort_order ASC'
         )->fetchAll(PDO::FETCH_ASSOC);
 
@@ -68,6 +97,7 @@ final class HomeSectionService
             $section['display_options'] = $parsed['display_options'];
             $section['material_guids'] = self::manualProducts($sectionId);
             $section['products'] = self::loadProducts($section);
+            $section['is_offer_section'] = false;
         }
 
         return $sections;
@@ -672,21 +702,28 @@ final class HomeSectionService
         $guids = array_values(array_unique(array_filter(array_map('strval', $guids), static fn ($g) => trim($g) !== '')));
         shuffle($guids);
 
+        $tryGuids = array_slice($guids, 0, min(count($guids), max($maxProducts * 3, $maxProducts)));
+        $requests = [];
+        foreach ($tryGuids as $guid) {
+            $requests[] = [
+                'key' => $guid,
+                'path' => '/api/materials/' . rawurlencode($guid),
+            ];
+        }
+
+        $responses = ApiClient::getMany($requests, 20);
         $items = [];
-        foreach ($guids as $guid) {
+        foreach ($tryGuids as $guid) {
             if (count($items) >= $maxProducts) {
                 break;
             }
-            try {
-                $response = ApiClient::get('/api/materials/' . rawurlencode($guid));
-                if ($response['ok'] && is_array($response['data'])) {
-                    $item = $response['data'];
-                    if (StockReservationService::isSellable($item)) {
-                        $items[] = $item;
-                    }
-                }
-            } catch (\Throwable) {
+            $response = $responses[$guid] ?? null;
+            if (!is_array($response) || !($response['ok'] ?? false) || !is_array($response['data'] ?? null)) {
                 continue;
+            }
+            $item = $response['data'];
+            if (StockReservationService::isSellable($item)) {
+                $items[] = $item;
             }
         }
 

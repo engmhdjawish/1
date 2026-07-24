@@ -20,6 +20,96 @@ final class ApiClient
         return self::request('GET', $path, null, $query, $timeoutSeconds);
     }
 
+    /**
+     * @param list<array{key: string, path: string, query?: array<string, scalar|null>}> $requests
+     * @return array<string, array{ok: bool, status: int, data: mixed, error?: string}>
+     */
+    public static function getMany(array $requests, int $timeoutSeconds = 25): array
+    {
+        if ($requests === []) {
+            return [];
+        }
+
+        $token = self::accessToken();
+        $base = rtrim(Config::get('AMINE_API_BASE_URL', 'http://127.0.0.1:5000') ?? '', '/');
+        $multi = curl_multi_init();
+        if ($multi === false) {
+            return [];
+        }
+
+        /** @var array<string, \CurlHandle> $handles */
+        $handles = [];
+
+        foreach ($requests as $request) {
+            $key = trim((string) ($request['key'] ?? ''));
+            $path = (string) ($request['path'] ?? '');
+            if ($key === '' || $path === '') {
+                continue;
+            }
+
+            $query = is_array($request['query'] ?? null) ? $request['query'] : [];
+            $url = $base . $path;
+            if ($query !== []) {
+                $url .= '?' . http_build_query($query);
+            }
+
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    'Accept: application/json',
+                    'Authorization: Bearer ' . $token,
+                ],
+                CURLOPT_TIMEOUT => max(10, $timeoutSeconds),
+                CURLOPT_SSL_VERIFYPEER => false,
+            ]);
+            curl_multi_add_handle($multi, $ch);
+            $handles[$key] = $ch;
+        }
+
+        $running = null;
+        do {
+            $status = curl_multi_exec($multi, $running);
+            if ($running > 0) {
+                curl_multi_select($multi, 1.0);
+            }
+        } while ($running > 0 && $status === CURLM_OK);
+
+        $results = [];
+        foreach ($handles as $key => $ch) {
+            $response = curl_multi_getcontent($ch);
+            $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_multi_remove_handle($multi, $ch);
+
+            if ($response === false) {
+                $results[$key] = [
+                    'ok' => false,
+                    'status' => 0,
+                    'data' => null,
+                    'error' => $error !== '' ? $error : 'فشل الاتصال بالـ API',
+                ];
+                continue;
+            }
+
+            $decoded = json_decode($response, true);
+            if ($status === 401) {
+                self::clearToken();
+            }
+
+            $results[$key] = [
+                'ok' => $status >= 200 && $status < 300,
+                'status' => $status,
+                'data' => $decoded,
+                'error' => is_array($decoded) ? (string) ($decoded['message'] ?? '') : '',
+            ];
+        }
+
+        curl_multi_close($multi);
+
+        return $results;
+    }
+
     public static function postJson(string $path, array $body = [], int $timeoutSeconds = 60): array
     {
         return self::request('POST', $path, json_encode($body, JSON_UNESCAPED_UNICODE), [], $timeoutSeconds);

@@ -50,7 +50,43 @@ final class SpecialOfferService
     {
         $cacheKey = self::activeHomeSectionsCacheKey();
 
-        return ResponseCache::remember($cacheKey, 300, static fn (): array => self::buildActiveHomeSections());
+        return ResponseCache::remember($cacheKey, 600, static fn (): array => self::buildActiveHomeSections());
+    }
+
+    /** @return list<array<string, mixed>> */
+    public static function activeHomeSectionShells(): array
+    {
+        return self::buildActiveHomeSectionShells();
+    }
+
+    /** @return list<array<string, mixed>> */
+    private static function buildActiveHomeSectionShells(): array
+    {
+        $stmt = Database::pdo()->query(
+            'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
+                    selection_mode::text AS selection_mode, discount_type::text AS discount_type,
+                    discount_percent, fixed_price_syp, fixed_price_usd,
+                    min_packages, max_packages, max_products, home_sort_order
+             FROM special_offers
+             WHERE is_active = TRUE
+               AND show_on_home = TRUE
+               AND starts_at <= NOW()
+               AND (ends_at IS NULL OR ends_at > NOW())
+             ORDER BY home_sort_order ASC, created_at ASC'
+        );
+        $sections = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        foreach ($sections as &$section) {
+            $offerId = (string) $section['id'];
+            $parsed = self::parseFilterRows(self::filtersForOffer($offerId));
+            $section['filter_rules'] = $parsed['rules'];
+            $section['material_guids'] = self::manualProducts($offerId);
+            $section['is_offer_section'] = true;
+            $section['products'] = [];
+            $section['display_options'] = $parsed['display_options'];
+        }
+
+        return $sections;
     }
 
     /** @return list<array<string, mixed>> */
@@ -816,19 +852,26 @@ final class SpecialOfferService
     {
         $guids = array_values(array_unique(array_filter(array_map('strval', $guids), static fn ($g) => trim($g) !== '')));
         shuffle($guids);
+        $tryGuids = array_slice($guids, 0, min(count($guids), max($max * 3, $max)));
+        $requests = [];
+        foreach ($tryGuids as $guid) {
+            $requests[] = [
+                'key' => $guid,
+                'path' => '/api/materials/' . rawurlencode($guid),
+            ];
+        }
+
+        $responses = ApiClient::getMany($requests, 20);
         $items = [];
-        foreach ($guids as $guid) {
+        foreach ($tryGuids as $guid) {
             if (count($items) >= $max) {
                 break;
             }
-            try {
-                $r = ApiClient::get('/api/materials/' . rawurlencode($guid));
-                if ($r['ok'] && is_array($r['data'])) {
-                    $items[] = $r['data'];
-                }
-            } catch (\Throwable) {
+            $response = $responses[$guid] ?? null;
+            if (!is_array($response) || !($response['ok'] ?? false) || !is_array($response['data'] ?? null)) {
                 continue;
             }
+            $items[] = $response['data'];
         }
         shuffle($items);
 

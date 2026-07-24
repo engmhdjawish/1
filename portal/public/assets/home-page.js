@@ -104,9 +104,40 @@
     start();
   };
 
+  const initDeferredProducts = () => {
+    const root = document.querySelector('[data-home-deferred-products="1"]');
+    if (!root) return;
+
+    fetch('/api/home-products.php', {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    })
+      .then((response) => response.json().catch(() => null))
+      .then((data) => {
+        if (!data?.ok || !data.strips || typeof data.strips !== 'object') {
+          root.querySelectorAll('.home-strip-slot').forEach((slot) => {
+            slot.innerHTML = '<div class="home-section__empty">تعذر تحميل منتجات هذا القسم.</div>';
+          });
+          return;
+        }
+
+        Object.entries(data.strips).forEach(([key, html]) => {
+          const slot = root.querySelector(`[data-home-products="${CSS.escape(key)}"]`);
+          if (!slot) return;
+          slot.innerHTML = typeof html === 'string' ? html : '';
+        });
+      })
+      .catch(() => {
+        root.querySelectorAll('.home-strip-slot').forEach((slot) => {
+          slot.innerHTML = '<div class="home-section__empty">تعذر تحميل منتجات هذا القسم.</div>';
+        });
+      });
+  };
+
   const init = () => {
     initSectionNav();
     initAdCarousel();
+    initDeferredProducts();
   };
 
   if (document.readyState === 'loading') {
