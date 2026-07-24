@@ -12,7 +12,7 @@ $paths = [
     '/index.php',
     '/store.php',
     '/about.php',
-    '/login.php',
+    '/customer-login.php',
     '/register.php',
 ];
 

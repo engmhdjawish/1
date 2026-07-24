@@ -329,6 +329,8 @@ function portal_seo_description(string $pagePath, string $siteName, ?string $ove
         '/store-cart.php', '/cart.php' => 'سلة التسوق في ' . $siteName . '. راجع أصنافك وأكمل طلبك بسهولة.',
         '/about.php' => 'تعرّف على ' . $siteName . ': من نحن، أعمالنا، والتزامنا بجودة الأحذية وخدمة العملاء.',
         '/login.php' => 'تسجيل الدخول إلى حسابك في ' . $siteName . ' لمتابعة الطلبات وإدارة ملفك الشخصي.',
+        '/customer-login.php' => 'تسجيل دخول العملاء في ' . $siteName . ' لمتابعة الطلبات وإدارة ملفك الشخصي.',
+        '/staff-login.php' => 'تسجيل دخول موظفي ' . $siteName . ' إلى لوحة التحكم.',
         '/register.php' => 'إنشاء حساب جديد في ' . $siteName . ' للتسوق ومتابعة الطلبات بسهولة.',
         '/my-orders.php' => 'متابعة طلباتك في ' . $siteName . ' — حالة الطلب، التفاصيل، والتتبع.',
         '/my-profile.php' => 'ملفك الشخصي في ' . $siteName . ' — بيانات الحساب وإعدادات الأمان.',
@@ -766,6 +768,11 @@ function portal_normalize_phone(string $phone): string
 function portal_phone_input_attributes(): string
 {
     return 'type="tel" inputmode="tel" autocomplete="tel" dir="ltr" data-phone-input';
+}
+
+function portal_login_phone_attributes(): string
+{
+    return 'type="tel" inputmode="tel" autocomplete="section-customer username" dir="ltr" data-phone-input data-login-phone';
 }
 
 function contact_maps_href(string $address): string

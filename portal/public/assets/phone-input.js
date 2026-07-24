@@ -44,7 +44,7 @@
     if (!input.getAttribute('inputmode')) {
       input.setAttribute('inputmode', 'tel');
     }
-    if (!input.getAttribute('autocomplete')) {
+    if (!input.getAttribute('autocomplete') && !input.hasAttribute('data-login-phone')) {
       input.setAttribute('autocomplete', 'tel');
     }
     if (!input.getAttribute('dir')) {

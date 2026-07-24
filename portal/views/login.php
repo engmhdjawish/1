@@ -6,13 +6,18 @@ declare(strict_types=1);
 /** @var string|null $error */
 /** @var string|null $message */
 /** @var string|null $redirect */
+/** @var string $loginPagePath */
+
+use Portal\Support\PortalUrl;
 
 $redirectQuery = ($redirect ?? null) !== null && ($redirect ?? '') !== ''
-    ? '&redirect=' . rawurlencode((string) $redirect)
+    ? '?redirect=' . rawurlencode((string) $redirect)
     : '';
-$staffRedirectQuery = ($redirect ?? null) !== null && ($redirect ?? '') !== '' && \Portal\Support\PortalUrl::isDashboardPath((string) $redirect)
-    ? '&redirect=' . rawurlencode((string) $redirect)
+$staffRedirectQuery = ($redirect ?? null) !== null && ($redirect ?? '') !== '' && PortalUrl::isDashboardPath((string) $redirect)
+    ? '?redirect=' . rawurlencode((string) $redirect)
     : '';
+$staffLoginUrl = PortalUrl::loginPagePath('staff') . $staffRedirectQuery;
+$customerLoginUrl = PortalUrl::loginPagePath('customer') . $redirectQuery;
 ?>
 <div class="max-w-xl mx-auto">
   <section class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
@@ -31,43 +36,87 @@ $staffRedirectQuery = ($redirect ?? null) !== null && ($redirect ?? '') !== '' &
 
       <div class="grid grid-cols-2 gap-2 mb-5 text-sm">
         <a
-          href="?type=staff<?= h($staffRedirectQuery) ?>"
+          href="<?= h($staffLoginUrl) ?>"
           class="inline-flex items-center justify-center rounded-lg px-3 py-2 font-semibold transition <?= $type === 'staff' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' ?>"
         >
           موظف
         </a>
         <a
-          href="?type=customer<?= h($redirectQuery) ?>"
+          href="<?= h($customerLoginUrl) ?>"
           class="inline-flex items-center justify-center rounded-lg px-3 py-2 font-semibold transition <?= $type === 'customer' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' ?>"
         >
           عميل
         </a>
       </div>
 
-      <form method="post" class="space-y-4">
-        <input type="hidden" name="type" value="<?= h($type) ?>">
-        <?php if (!empty($redirect) && ($type !== 'staff' || \Portal\Support\PortalUrl::isDashboardPath((string) $redirect))): ?>
-          <input type="hidden" name="redirect" value="<?= h((string) $redirect) ?>">
-        <?php endif; ?>
-        <?php if ($type === 'customer'): ?>
+      <?php if ($type === 'customer'): ?>
+        <form method="post" action="<?= h($loginPagePath) ?>" class="space-y-4" id="login-form-customer" autocomplete="on">
+          <input type="hidden" name="type" value="customer">
+          <?php if (!empty($redirect)): ?>
+            <input type="hidden" name="redirect" value="<?= h((string) $redirect) ?>">
+          <?php endif; ?>
           <label class="block text-sm font-medium text-gray-700">
             رقم الهاتف
-            <input name="phone" <?= portal_phone_input_attributes() ?> class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary" required placeholder="09xxxxxxxx">
+            <input
+              name="customer_phone"
+              type="tel"
+              inputmode="tel"
+              autocomplete="username"
+              dir="ltr"
+              data-phone-input
+              data-login-phone
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary text-left"
+              required
+              placeholder="09xxxxxxxx"
+            >
           </label>
-        <?php else: ?>
+          <label class="block text-sm font-medium text-gray-700">
+            كلمة المرور
+            <input
+              type="password"
+              name="customer_password"
+              autocomplete="current-password"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary"
+              required
+              placeholder="••••••••"
+            >
+          </label>
+          <button type="submit" class="w-full bg-primary text-white rounded-lg py-2.5 font-semibold hover:brightness-110 transition">
+            دخول
+          </button>
+        </form>
+      <?php else: ?>
+        <form method="post" action="<?= h($loginPagePath) ?>" class="space-y-4" id="login-form-staff" autocomplete="on">
+          <input type="hidden" name="type" value="staff">
+          <?php if (!empty($redirect) && PortalUrl::isDashboardPath((string) $redirect)): ?>
+            <input type="hidden" name="redirect" value="<?= h((string) $redirect) ?>">
+          <?php endif; ?>
           <label class="block text-sm font-medium text-gray-700">
             اسم المستخدم
-            <input name="user_name" class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary" required placeholder="admin">
+            <input
+              name="staff_user_name"
+              autocomplete="username"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary"
+              required
+              placeholder="admin"
+            >
           </label>
-        <?php endif; ?>
-        <label class="block text-sm font-medium text-gray-700">
-          كلمة المرور
-          <input type="password" name="password" class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary" required placeholder="••••••••">
-        </label>
-        <button type="submit" class="w-full bg-primary text-white rounded-lg py-2.5 font-semibold hover:brightness-110 transition">
-          دخول
-        </button>
-      </form>
+          <label class="block text-sm font-medium text-gray-700">
+            كلمة المرور
+            <input
+              type="password"
+              name="staff_password"
+              autocomplete="current-password"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary"
+              required
+              placeholder="••••••••"
+            >
+          </label>
+          <button type="submit" class="w-full bg-primary text-white rounded-lg py-2.5 font-semibold hover:brightness-110 transition">
+            دخول
+          </button>
+        </form>
+      <?php endif; ?>
 
       <p class="text-sm text-gray-600 mt-5 text-center">
         <?php if ($type === 'customer'): ?>

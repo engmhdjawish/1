@@ -28,7 +28,7 @@ final class PortalUrl
         if (str_starts_with($path, '//') || str_contains($path, '://')) {
             return null;
         }
-        if (preg_match('#^/login\.php(?:\?|$)#', $path) === 1) {
+        if (preg_match('#^/(?:login|staff-login|customer-login)\.php(?:\?|$)#', $path) === 1) {
             return null;
         }
 
@@ -40,12 +40,17 @@ final class PortalUrl
         $type = $type === 'customer' ? 'customer' : 'staff';
         $redirect ??= self::currentPathWithQuery();
         $safe = self::safeRedirectPath($redirect);
-        $url = '/login.php?type=' . rawurlencode($type);
+        $url = $type === 'customer' ? '/customer-login.php' : '/staff-login.php';
         if ($safe !== null) {
-            $url .= '&redirect=' . rawurlencode($safe);
+            $url .= '?redirect=' . rawurlencode($safe);
         }
 
         return $url;
+    }
+
+    public static function loginPagePath(string $type = 'customer'): string
+    {
+        return $type === 'customer' ? '/customer-login.php' : '/staff-login.php';
     }
 
     public static function isDashboardPath(string $path): bool

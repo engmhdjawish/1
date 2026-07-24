@@ -397,11 +397,11 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
       if (!data || !data.login_required) return;
       const path = window.location.pathname + window.location.search;
       if (path.startsWith('/dashboard')) {
-        window.location.href = '/login.php?type=staff&redirect=' + encodeURIComponent(path);
+        window.location.href = '/staff-login.php?redirect=' + encodeURIComponent(path);
         return;
       }
       if (path.startsWith('/my-') || path.startsWith('/cart.php') || path.startsWith('/store-cart.php')) {
-        window.location.href = '/login.php?type=customer&redirect=' + encodeURIComponent(path);
+        window.location.href = '/customer-login.php?redirect=' + encodeURIComponent(path);
       }
     })
     .catch(() => {});
