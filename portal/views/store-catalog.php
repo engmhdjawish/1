@@ -486,28 +486,38 @@ require __DIR__ . '/partials/store-filter-group.php';
   <?php if ($allowClientFilters): ?>
     <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
       <aside class="store-filters-sidebar">
-        <form method="get" class="store-filters-sidebar-inner">
+        <form method="get" id="store-filters-form" class="store-filters-sidebar-inner">
           <input type="hidden" name="page" value="1">
           <?php if (!empty($filters['section'])): ?><input type="hidden" name="section" value="<?= h((string) $filters['section']) ?>"><?php endif; ?>
           <?php if (!empty($filters['offer'])): ?><input type="hidden" name="offer" value="<?= h((string) $filters['offer']) ?>"><?php endif; ?>
 
           <div class="store-filters-sidebar-header">
+            <div class="store-filters-sheet-handle lg:hidden" aria-hidden="true"></div>
             <h2 class="store-filters-sidebar-title">تصفية النتائج</h2>
             <button type="button" id="store-filters-close" class="store-filters-close-btn" aria-label="إغلاق الفلاتر">
               <span class="material-symbols-outlined text-base" aria-hidden="true">close</span>
             </button>
           </div>
 
+          <div class="store-filters-sidebar-scroll">
           <?php if ($isSectionBrowse && $sectionFilterSummary !== []): ?>
             <p class="text-xs text-text-muted mb-3">تصفح ضمن قسم محدد — بعض الفلاتر مقيّدة بهذا القسم.</p>
           <?php endif; ?>
 
           <?php if ($isClientFilterVisible('search')): ?>
-            <div class="store-inline-field">
+            <div class="store-inline-field store-filters-search-desktop">
               <label for="store-search-q">بحث</label>
               <input id="store-search-q" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" placeholder="اسم المادة أو الكود">
             </div>
           <?php endif; ?>
+
+          <div class="store-filter-pending-panel" id="store-filter-pending-panel" aria-live="polite">
+            <div class="store-filter-pending-panel-head">
+              <span class="store-filter-pending-panel-title">اختياراتك</span>
+              <button type="button" class="store-filter-pending-clear-all" id="store-filter-pending-clear-all" hidden>مسح</button>
+            </div>
+            <div class="store-filter-pending-chips" id="store-filter-pending-chips-global"></div>
+          </div>
 
           <?php
             $facetMap = [
@@ -608,24 +618,37 @@ require __DIR__ . '/partials/store-filter-group.php';
             <?php endif; ?>
 
             <?php if ($isClientFilterVisible('availability')): ?>
-              <details class="store-filter-accordion">
-                <summary class="store-filter-accordion-summary"><span>التوفر</span></summary>
-                <div class="store-filter-accordion-body store-filter-options">
+              <details class="store-filter-accordion" data-filter-group="availability">
+                <summary class="store-filter-accordion-summary">
+                  <span class="store-filter-accordion-heading">
+                    <span class="material-symbols-outlined store-filter-accordion-icon" aria-hidden="true">inventory_2</span>
+                    <span class="store-filter-accordion-label">التوفر</span>
+                  </span>
+                </summary>
+                <div class="store-filter-accordion-body">
+                  <div class="store-filter-options store-filter-options--pills store-filter-options--radio">
                   <?php foreach (['' => 'الكل', '1' => 'متوفر', '0' => 'غير متوفر'] as $value => $label): ?>
                     <?php $isActive = $availabilityValue === (string) $value; ?>
-                    <label class="store-filter-option">
+                    <label class="store-filter-option store-filter-pill store-filter-pill--radio<?= $isActive && $value !== '' ? ' is-selected' : '' ?><?= $isActive && $value === '' ? ' is-selected is-neutral' : '' ?>">
                       <input type="radio" name="isAvailable" value="<?= h((string) $value) ?>" <?= $isActive ? 'checked' : '' ?>>
                       <span class="store-filter-option-text"><?= h($label) ?></span>
                     </label>
                   <?php endforeach; ?>
+                  </div>
                 </div>
               </details>
             <?php endif; ?>
 
             <?php if ($isClientFilterVisible('warehouseRange')): ?>
-              <details class="store-filter-accordion">
-                <summary class="store-filter-accordion-summary"><span>مدى الكمية</span></summary>
-                <div class="store-filter-accordion-body grid grid-cols-2 gap-2">
+              <details class="store-filter-accordion" data-filter-group="warehouse">
+                <summary class="store-filter-accordion-summary">
+                  <span class="store-filter-accordion-heading">
+                    <span class="material-symbols-outlined store-filter-accordion-icon" aria-hidden="true">scale</span>
+                    <span class="store-filter-accordion-label">مدى الكمية</span>
+                  </span>
+                </summary>
+                <div class="store-filter-accordion-body">
+                  <div class="grid grid-cols-2 gap-2">
                   <div class="store-inline-field mb-0">
                     <label>من</label>
                     <input type="number" step="0.01" min="0" name="minWarehouseQuantity" value="<?= h((string) ($filters['minWarehouseQuantity'] ?? '')) ?>">
@@ -634,13 +657,19 @@ require __DIR__ . '/partials/store-filter-group.php';
                     <label>إلى</label>
                     <input type="number" step="0.01" min="0" name="maxWarehouseQuantity" value="<?= h((string) ($filters['maxWarehouseQuantity'] ?? '')) ?>">
                   </div>
+                  </div>
                 </div>
               </details>
             <?php endif; ?>
 
             <?php if ($isClientFilterVisible('priceSaleSyp') || $isClientFilterVisible('priceSaleUsd') || $isClientFilterVisible('pricePurchaseUsd')): ?>
-              <details class="store-filter-accordion">
-                <summary class="store-filter-accordion-summary"><span>المدى السعري</span></summary>
+              <details class="store-filter-accordion" data-filter-group="price">
+                <summary class="store-filter-accordion-summary">
+                  <span class="store-filter-accordion-heading">
+                    <span class="material-symbols-outlined store-filter-accordion-icon" aria-hidden="true">payments</span>
+                    <span class="store-filter-accordion-label">المدى السعري</span>
+                  </span>
+                </summary>
                 <div class="store-filter-accordion-body space-y-2">
                   <?php if ($isClientFilterVisible('priceSaleSyp')): ?>
                     <div class="grid grid-cols-2 gap-2">
@@ -665,7 +694,7 @@ require __DIR__ . '/partials/store-filter-group.php';
             <?php endif; ?>
 
             <?php if ($isClientFilterVisible('groupBy')): ?>
-              <div class="store-inline-field">
+              <div class="store-inline-field" data-filter-group="groupBy">
                 <label for="store-group-by">التجميع</label>
                 <select id="store-group-by" name="groupBy">
                   <option value="none" <?= $selectedGroupBy === 'none' ? 'selected' : '' ?>>بدون</option>
@@ -679,12 +708,14 @@ require __DIR__ . '/partials/store-filter-group.php';
               </div>
             <?php endif; ?>
 
-          <div class="store-filter-actions">
-            <button type="submit" class="store-btn-primary">تطبيق</button>
+          </div>
+
+          <div class="store-filters-drawer-footer store-filter-actions">
+            <button type="submit" class="store-btn-primary" id="store-filters-submit" data-label-default="عرض النتائج">عرض النتائج</button>
             <a href="<?= h(store_url(array_filter([
                 'section' => (string) ($filters['section'] ?? ''),
                 'offer' => (string) ($filters['offer'] ?? ''),
-            ], static fn (string $value): bool => trim($value) !== ''))) ?>" class="store-btn-secondary inline-flex items-center">مسح</a>
+            ], static fn (string $value): bool => trim($value) !== ''))) ?>" class="store-btn-secondary inline-flex items-center">مسح الكل</a>
           </div>
         </form>
       </aside>
@@ -692,19 +723,37 @@ require __DIR__ . '/partials/store-filter-group.php';
   <?php endif; ?>
 
   <div class="store-results">
-    <?php require __DIR__ . '/partials/store-active-filter-chips.php'; ?>
-
-    <div class="store-results-toolbar">
-      <?php if ($allowClientFilters): ?>
-        <button type="button" id="store-filters-open" class="store-filters-open-btn lg:hidden">
+    <?php if ($allowClientFilters): ?>
+      <div class="store-mobile-filter-bar lg:hidden">
+        <?php if ($isClientFilterVisible('search')): ?>
+          <label class="store-mobile-search" for="store-mobile-search-q">
+            <span class="material-symbols-outlined store-mobile-search-icon" aria-hidden="true">search</span>
+            <input
+              type="search"
+              id="store-mobile-search-q"
+              value="<?= h((string) ($filters['q'] ?? '')) ?>"
+              placeholder="ابحث عن مادة..."
+              autocomplete="off"
+              enterkeyhint="search"
+            >
+          </label>
+        <?php endif; ?>
+        <button type="button" class="store-filters-open-btn" data-store-filters-open aria-label="فتح الفلاتر">
           <span class="material-symbols-outlined text-base" aria-hidden="true">tune</span>
-          فلاتر
+          <span>تصفية</span>
           <?php if ($userActiveFilterCount > 0): ?>
             <span class="badge"><?= (int) $userActiveFilterCount ?></span>
           <?php endif; ?>
         </button>
-      <?php endif; ?>
+      </div>
+    <?php endif; ?>
 
+    <?php
+      $showMobileFilterEdit = $allowClientFilters;
+      require __DIR__ . '/partials/store-active-filter-chips.php';
+    ?>
+
+    <div class="store-results-toolbar">
       <?php if ((int) ($catalog['totalCount'] ?? 0) > 0 && $products !== []): ?>
         <p class="store-results-meta">
           عرض <?= (int) ($catalog['rangeStart'] ?? 0) ?>–<?= (int) ($catalog['rangeEnd'] ?? 0) ?> من <?= (int) ($catalog['totalCount'] ?? 0) ?> مادة

@@ -28,9 +28,11 @@ window.portalStoreFiltersInit = (root = document) => {
   }
 
   const backdrop = catalogRoot.querySelector('#store-filters-backdrop');
-  const openBtn = catalogRoot.querySelector('#store-filters-open');
+  const openButtons = catalogRoot.querySelectorAll('[data-store-filters-open]');
   const closeBtn = catalogRoot.querySelector('#store-filters-close');
-  const sidebar = catalogRoot.querySelector('.store-filters-sidebar');
+  const filterForm = catalogRoot.querySelector('#store-filters-form');
+  const sidebarSearchInput = catalogRoot.querySelector('#store-search-q');
+  const mobileSearchInput = catalogRoot.querySelector('#store-mobile-search-q');
 
   const setupExclusiveFilterAccordions = () => {
     const accordions = catalogRoot.querySelectorAll('.store-filter-accordion');
@@ -128,6 +130,333 @@ window.portalStoreFiltersInit = (root = document) => {
 
   bindFilterLists();
 
+  const FILTER_GROUP_META = {
+    materialTypes: { tone: 'material', label: 'نوع المادة', kind: 'checkbox', param: 'materialTypes', containerGroup: 'materialTypes' },
+    ageCategories: { tone: 'age', label: 'الفئة العمرية', kind: 'checkbox', param: 'ageCategories', containerGroup: 'ageCategories' },
+    manufacturers: { tone: 'manufacturer', label: 'الشركة', kind: 'checkbox', param: 'manufacturers', containerGroup: 'manufacturers' },
+    sizeRanges: { tone: 'size', label: 'القياس', kind: 'checkbox', param: 'sizeRanges', containerGroup: 'sizeRanges' },
+    countryOfOrigins: { tone: 'country', label: 'بلد المنشأ', kind: 'checkbox', param: 'countryOfOrigins', containerGroup: 'countryOfOrigins' },
+    stores: { tone: 'stores', label: 'المخازن', kind: 'checkbox', param: 'storeGuids', containerGroup: 'stores' },
+    groups: { tone: 'groups', label: 'المجموعات', kind: 'checkbox', param: 'groupGuids', containerGroup: 'groups' },
+  };
+
+  const PRICE_RANGE_FIELDS = [
+    { tone: 'price-syp', label: 'بيع ل.س', min: 'minUnitSalePriceSyp', max: 'maxUnitSalePriceSyp' },
+    { tone: 'price-usd', label: 'بيع $', min: 'minUnitSalePriceUsd', max: 'maxUnitSalePriceUsd' },
+    { tone: 'price-purchase', label: 'شراء $', min: 'minUnitPurchasePriceUsd', max: 'maxUnitPurchasePriceUsd' },
+  ];
+
+  const escapeChipHtml = (value) => String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/"/g, '&quot;');
+
+  const escapeChipSelector = (value) => {
+    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+      return CSS.escape(String(value));
+    }
+
+    return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  };
+
+  const collectPendingFilterChips = () => {
+    if (!filterForm) {
+      return [];
+    }
+
+    const chips = [];
+
+    Object.entries(FILTER_GROUP_META).forEach(([groupId, meta]) => {
+      filterForm.querySelectorAll(`input[name="${meta.param}[]"]:checked`).forEach((input) => {
+        const text = input.closest('.store-filter-option')
+          ?.querySelector('.store-filter-option-text')
+          ?.textContent?.trim() || input.value;
+        chips.push({
+          kind: 'checkbox',
+          param: meta.param,
+          value: input.value,
+          text,
+          tone: meta.tone,
+          groupLabel: meta.label,
+          containerGroup: meta.containerGroup,
+        });
+      });
+      void groupId;
+    });
+
+    const availabilityInput = filterForm.querySelector('input[name="isAvailable"]:checked');
+    if (availabilityInput && availabilityInput.value !== '') {
+      const text = availabilityInput.closest('.store-filter-option')
+        ?.querySelector('.store-filter-option-text')
+        ?.textContent?.trim() || availabilityInput.value;
+      chips.push({
+        kind: 'radio',
+        param: 'isAvailable',
+        value: availabilityInput.value,
+        text,
+        tone: 'availability',
+        groupLabel: 'التوفر',
+        containerGroup: 'availability',
+      });
+    }
+
+    const minWarehouse = filterForm.querySelector('input[name="minWarehouseQuantity"]')?.value?.trim() || '';
+    const maxWarehouse = filterForm.querySelector('input[name="maxWarehouseQuantity"]')?.value?.trim() || '';
+    if (minWarehouse !== '' || maxWarehouse !== '') {
+      chips.push({
+        kind: 'range',
+        minKey: 'minWarehouseQuantity',
+        maxKey: 'maxWarehouseQuantity',
+        text: `من ${minWarehouse || '…'} إلى ${maxWarehouse || '…'}`,
+        tone: 'warehouse',
+        groupLabel: 'مدى الكمية',
+        containerGroup: 'warehouse',
+      });
+    }
+
+    PRICE_RANGE_FIELDS.forEach((range) => {
+      const min = filterForm.querySelector(`input[name="${range.min}"]`)?.value?.trim() || '';
+      const max = filterForm.querySelector(`input[name="${range.max}"]`)?.value?.trim() || '';
+      if (min === '' && max === '') {
+        return;
+      }
+      chips.push({
+        kind: 'range',
+        minKey: range.min,
+        maxKey: range.max,
+        text: `${range.label}: من ${min || '…'} إلى ${max || '…'}`,
+        tone: range.tone,
+        groupLabel: range.label,
+        containerGroup: 'price',
+      });
+    });
+
+    const groupBy = filterForm.querySelector('#store-group-by');
+    if (groupBy && groupBy.value && groupBy.value !== 'none') {
+      const text = groupBy.options[groupBy.selectedIndex]?.textContent?.trim() || groupBy.value;
+      chips.push({
+        kind: 'select',
+        param: 'groupBy',
+        value: groupBy.value,
+        text,
+        tone: 'group-by',
+        groupLabel: 'التجميع',
+        containerGroup: 'groupBy',
+      });
+    }
+
+    const searchValue = (sidebarSearchInput?.value || mobileSearchInput?.value || '').trim();
+    if (searchValue !== '') {
+      chips.push({
+        kind: 'search',
+        text: searchValue,
+        tone: 'search',
+        groupLabel: 'بحث',
+        containerGroup: 'search',
+      });
+    }
+
+    return chips;
+  };
+
+  const renderPendingChipHtml = (chip, showPrefix) => {
+    const prefix = showPrefix && chip.groupLabel
+      ? `<span class="store-filter-pending-chip-prefix">${escapeChipHtml(chip.groupLabel)}:</span> `
+      : '';
+    return `<button type="button" class="store-filter-pending-chip store-filter-pending-chip--${escapeChipHtml(chip.tone)}"`
+      + ` data-chip-kind="${escapeChipHtml(chip.kind)}"`
+      + ` data-chip-param="${escapeChipHtml(chip.param || '')}"`
+      + ` data-chip-value="${escapeChipHtml(chip.value || '')}"`
+      + ` data-chip-min="${escapeChipHtml(chip.minKey || '')}"`
+      + ` data-chip-max="${escapeChipHtml(chip.maxKey || '')}"`
+      + ` title="إزالة ${escapeChipHtml(chip.text)}">`
+      + `<span class="store-filter-pending-chip-label">${prefix}${escapeChipHtml(chip.text)}</span>`
+      + `<span class="store-filter-pending-chip-remove material-symbols-outlined" aria-hidden="true">remove</span>`
+      + '</button>';
+  };
+
+  const updateAccordionBadge = (groupId, count) => {
+    const accordion = catalogRoot.querySelector(`[data-filter-group="${groupId}"]`);
+    if (!accordion) {
+      return;
+    }
+    let badge = accordion.querySelector('.store-filter-accordion-badge');
+    if (count <= 0) {
+      badge?.remove();
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'store-filter-accordion-badge';
+      accordion.querySelector('.store-filter-accordion-summary')?.appendChild(badge);
+    }
+    badge.textContent = String(count);
+  };
+
+  let lastPendingChipCount = 0;
+
+  const updatePendingOptionStates = () => {
+    if (!filterForm) {
+      return;
+    }
+    filterForm.querySelectorAll('.store-filter-pill').forEach((pill) => {
+      const input = pill.querySelector('input');
+      const action = pill.querySelector('.store-filter-option-action');
+      const checked = Boolean(input?.checked);
+      pill.classList.toggle('is-selected', checked);
+      if (action && input?.type === 'checkbox') {
+        action.textContent = checked ? 'remove' : 'add';
+      }
+    });
+  };
+
+  const updateSubmitButtonLabel = (count) => {
+    const submitBtn = catalogRoot.querySelector('#store-filters-submit');
+    if (!submitBtn) {
+      return;
+    }
+    const defaultLabel = submitBtn.dataset.labelDefault || 'عرض النتائج';
+    submitBtn.textContent = count > 0 ? `${defaultLabel} (${count})` : defaultLabel;
+    submitBtn.classList.toggle('has-pending-count', count > 0);
+  };
+
+  const removePendingChip = (button) => {
+    if (!filterForm || !button) {
+      return;
+    }
+    const kind = button.getAttribute('data-chip-kind') || '';
+    const param = button.getAttribute('data-chip-param') || '';
+    const value = button.getAttribute('data-chip-value') || '';
+    const minKey = button.getAttribute('data-chip-min') || '';
+    const maxKey = button.getAttribute('data-chip-max') || '';
+
+    if (kind === 'checkbox') {
+      const input = filterForm.querySelector(`input[name="${param}[]"][value="${escapeChipSelector(value)}"]`);
+      if (input) {
+        input.checked = false;
+      }
+    } else if (kind === 'radio') {
+      const empty = filterForm.querySelector(`input[name="${param}"][value=""]`);
+      if (empty) {
+        empty.checked = true;
+      }
+    } else if (kind === 'range') {
+      const minInput = minKey ? filterForm.querySelector(`input[name="${minKey}"]`) : null;
+      const maxInput = maxKey ? filterForm.querySelector(`input[name="${maxKey}"]`) : null;
+      if (minInput) {
+        minInput.value = '';
+      }
+      if (maxInput) {
+        maxInput.value = '';
+      }
+    } else if (kind === 'select') {
+      const select = filterForm.querySelector(`select[name="${param}"]`);
+      if (select) {
+        select.value = 'none';
+      }
+    } else if (kind === 'search') {
+      if (sidebarSearchInput) {
+        sidebarSearchInput.value = '';
+      }
+      if (mobileSearchInput) {
+        mobileSearchInput.value = '';
+      }
+    }
+
+    refreshPendingFilterChips();
+  };
+
+  const clearAllPendingSelections = () => {
+    if (!filterForm) {
+      return;
+    }
+    filterForm.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+      input.checked = false;
+    });
+    const emptyAvailability = filterForm.querySelector('input[name="isAvailable"][value=""]');
+    if (emptyAvailability) {
+      emptyAvailability.checked = true;
+    }
+    filterForm.querySelectorAll('input[type="number"]').forEach((input) => {
+      input.value = '';
+    });
+    const groupBy = filterForm.querySelector('#store-group-by');
+    if (groupBy) {
+      groupBy.value = 'none';
+    }
+    if (sidebarSearchInput) {
+      sidebarSearchInput.value = '';
+    }
+    if (mobileSearchInput) {
+      mobileSearchInput.value = '';
+    }
+    refreshPendingFilterChips();
+  };
+
+  const refreshPendingFilterChips = () => {
+    const chips = collectPendingFilterChips();
+    const globalPanel = catalogRoot.querySelector('#store-filter-pending-panel');
+    const globalContainer = catalogRoot.querySelector('#store-filter-pending-chips-global');
+    const clearAllBtn = catalogRoot.querySelector('#store-filter-pending-clear-all');
+
+    if (globalContainer) {
+      globalContainer.innerHTML = chips.map((chip) => renderPendingChipHtml(chip, true)).join('');
+    }
+    if (globalPanel) {
+      globalPanel.classList.toggle('has-selection', chips.length > 0);
+      if (chips.length > lastPendingChipCount) {
+        globalPanel.classList.remove('is-updated');
+        void globalPanel.offsetWidth;
+        globalPanel.classList.add('is-updated');
+      }
+    }
+    lastPendingChipCount = chips.length;
+    updateSubmitButtonLabel(chips.length);
+    if (clearAllBtn) {
+      clearAllBtn.hidden = chips.length === 0;
+    }
+
+    Object.keys(FILTER_GROUP_META).forEach((groupId) => {
+      const count = chips.filter((chip) => chip.containerGroup === groupId).length;
+      updateAccordionBadge(groupId, count);
+    });
+    updateAccordionBadge('availability', chips.filter((chip) => chip.containerGroup === 'availability').length);
+    updateAccordionBadge('warehouse', chips.filter((chip) => chip.containerGroup === 'warehouse').length);
+    updateAccordionBadge('price', chips.filter((chip) => chip.containerGroup === 'price').length);
+
+    updatePendingOptionStates();
+  };
+
+  window.portalStoreFiltersRefreshPending = refreshPendingFilterChips;
+
+  if (filterForm && filterForm.dataset.pendingChipsBound !== '1') {
+    filterForm.dataset.pendingChipsBound = '1';
+    filterForm.addEventListener('change', refreshPendingFilterChips);
+    filterForm.addEventListener('input', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      if (target.matches('input[type="number"], input[type="search"], #store-search-q')) {
+        refreshPendingFilterChips();
+      }
+    });
+    filterForm.addEventListener('click', (event) => {
+      const chipBtn = event.target.closest?.('.store-filter-pending-chip');
+      if (!chipBtn || !filterForm.contains(chipBtn)) {
+        return;
+      }
+      event.preventDefault();
+      removePendingChip(chipBtn);
+    });
+  }
+
+  const clearAllPendingBtn = catalogRoot.querySelector('#store-filter-pending-clear-all');
+  if (clearAllPendingBtn && clearAllPendingBtn.dataset.filtersBound !== '1') {
+    clearAllPendingBtn.dataset.filtersBound = '1';
+    clearAllPendingBtn.addEventListener('click', clearAllPendingSelections);
+  }
+
   const filterListIsEmpty = (groupId) => {
     const list = catalogRoot.querySelector(`[data-filter-list="${groupId}"]`);
     return Boolean(list && list.querySelectorAll('.store-filter-option').length === 0);
@@ -205,9 +534,11 @@ window.portalStoreFiltersInit = (root = document) => {
         return '';
       }
       const checked = selected.has(value) ? ' checked' : '';
-      return `<label class="store-filter-option" data-filter-label="${value.replace(/"/g, '&quot;')}">`
+      const selectedClass = selected.has(value) ? ' is-selected' : '';
+      return `<label class="store-filter-option store-filter-pill${selectedClass}" data-filter-label="${value.replace(/"/g, '&quot;')}">`
         + `<input type="checkbox" name="${paramName}[]" value="${value.replace(/"/g, '&quot;')}"${checked}>`
         + `<span class="store-filter-option-text">${value}</span>`
+        + `<span class="store-filter-option-action material-symbols-outlined" aria-hidden="true">${selected.has(value) ? 'remove' : 'add'}</span>`
         + '</label>';
     }).join('');
     if (!rows) {
@@ -215,6 +546,7 @@ window.portalStoreFiltersInit = (root = document) => {
     }
     list.innerHTML = rows;
     ensureFilterGroupControls(groupId, (facets || []).filter((facet) => String(facet?.value || '').trim() !== '').length);
+    list.classList.add('store-filter-options--pills');
   };
 
   const renderGuidFacetOptions = (groupId, paramName, items) => {
@@ -233,9 +565,11 @@ window.portalStoreFiltersInit = (root = document) => {
       }
       const label = String(item?.name || item?.Name || item?.code || item?.Code || value);
       const checked = selected.has(value.toLowerCase()) ? ' checked' : '';
-      return `<label class="store-filter-option" data-filter-label="${label.replace(/"/g, '&quot;')}">`
+      const selectedClass = selected.has(value.toLowerCase()) ? ' is-selected' : '';
+      return `<label class="store-filter-option store-filter-pill${selectedClass}" data-filter-label="${label.replace(/"/g, '&quot;')}">`
         + `<input type="checkbox" name="${paramName}[]" value="${value.replace(/"/g, '&quot;')}"${checked}>`
         + `<span class="store-filter-option-text">${label}</span>`
+        + `<span class="store-filter-option-action material-symbols-outlined" aria-hidden="true">${selected.has(value.toLowerCase()) ? 'remove' : 'add'}</span>`
         + '</label>';
     }).join('');
     if (!rows) {
@@ -243,6 +577,7 @@ window.portalStoreFiltersInit = (root = document) => {
     }
     list.innerHTML = rows;
     ensureFilterGroupControls(groupId, (items || []).filter((item) => String(item?.guid || item?.Guid || '').trim() !== '').length);
+    list.classList.add('store-filter-options--pills');
   };
 
   const applyDeferredFilters = (data) => {
@@ -270,6 +605,8 @@ window.portalStoreFiltersInit = (root = document) => {
 
     catalogRoot.dataset.storeFiltersLoaded = '1';
     catalogRoot.removeAttribute('data-store-filters-deferred');
+    refreshPendingFilterChips();
+    bindFilterLists();
   };
 
   const loadDeferredFilters = () => {
@@ -315,10 +652,54 @@ window.portalStoreFiltersInit = (root = document) => {
     }
   };
 
-  if (openBtn && openBtn.dataset.filtersBound !== '1') {
+  const syncMobileSearchFromSidebar = () => {
+    if (!mobileSearchInput || !sidebarSearchInput) {
+      return;
+    }
+    mobileSearchInput.value = sidebarSearchInput.value;
+  };
+
+  const syncSidebarSearchFromMobile = () => {
+    if (!mobileSearchInput || !sidebarSearchInput) {
+      return;
+    }
+    sidebarSearchInput.value = mobileSearchInput.value;
+  };
+
+  const submitFilterForm = () => {
+    if (!filterForm || typeof filterForm.requestSubmit !== 'function') {
+      return;
+    }
+    syncSidebarSearchFromMobile();
+    filterForm.requestSubmit();
+  };
+
+  if (sidebarSearchInput && mobileSearchInput && mobileSearchInput.dataset.filtersBound !== '1') {
+    mobileSearchInput.dataset.filtersBound = '1';
+    syncMobileSearchFromSidebar();
+    mobileSearchInput.addEventListener('input', () => {
+      syncSidebarSearchFromMobile();
+      refreshPendingFilterChips();
+    });
+    sidebarSearchInput.addEventListener('input', () => {
+      syncMobileSearchFromSidebar();
+      refreshPendingFilterChips();
+    });
+    mobileSearchInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        submitFilterForm();
+      }
+    });
+  }
+
+  openButtons.forEach((openBtn) => {
+    if (openBtn.dataset.filtersBound === '1') {
+      return;
+    }
     openBtn.dataset.filtersBound = '1';
     openBtn.addEventListener('click', () => setDrawerOpen(true));
-  }
+  });
   if (closeBtn && closeBtn.dataset.filtersBound !== '1') {
     closeBtn.dataset.filtersBound = '1';
     closeBtn.addEventListener('click', () => setDrawerOpen(false));
@@ -332,8 +713,19 @@ window.portalStoreFiltersInit = (root = document) => {
     });
   }
 
+  if (!catalogRoot.dataset.filtersEscapeBound) {
+    catalogRoot.dataset.filtersEscapeBound = '1';
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !backdrop?.classList.contains('is-open')) {
+        return;
+      }
+      setDrawerOpen(false);
+    });
+  }
+
   scheduleDeferredFilters();
   setupExclusiveFilterAccordions();
+  refreshPendingFilterChips();
 };
 
 if (document.readyState === 'loading') {
