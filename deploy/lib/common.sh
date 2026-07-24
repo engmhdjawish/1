@@ -102,6 +102,7 @@ copy_portal_tree() {
   mkdir -p "$dest"
   rsync -a --delete \
     --exclude '.env' \
+    --exclude 'images/' \
     --exclude 'storage/amine-api-token.json' \
     --exclude 'storage/material-images/' \
     --exclude 'storage/site-media/' \

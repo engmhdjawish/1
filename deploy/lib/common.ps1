@@ -190,7 +190,7 @@ function Copy-PortalTree {
     if (-not (Test-Path $Destination)) {
         New-Item -ItemType Directory -Path $Destination -Force | Out-Null
     }
-    robocopy $Source $Destination /MIR /XD storage vendor .git /XF .env amine-api-token.json `
+    robocopy $Source $Destination /MIR /XD storage vendor .git images /XF .env amine-api-token.json `
         /NFL /NDL /NJH /NJS /NC /NS | Out-Null
     if ($LASTEXITCODE -ge 8) {
         throw "Portal copy failed (robocopy exit $LASTEXITCODE)"
