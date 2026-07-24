@@ -162,17 +162,28 @@ final class MaterialImageSyncService
      *   has_more: bool
      * }
      */
-    public static function listQueuePage(int $page = 1, int $pageSize = 20): array
+    public static function listQueuePage(int $page = 1, int $pageSize = 20, ?string $statusFilter = null): array
     {
         self::ensureTable();
         $page = max(1, $page);
         $pageSize = max(5, min(100, $pageSize));
         $offset = ($page - 1) * $pageSize;
+        $statusFilter = $statusFilter !== null && in_array($statusFilter, ['pending', 'syncing', 'synced', 'failed'], true)
+            ? $statusFilter
+            : null;
 
-        $totalStmt = Database::pdo()->query('SELECT COUNT(*)::int FROM material_image_sync_queue');
-        $totalCount = (int) ($totalStmt->fetchColumn() ?: 0);
+        $where = $statusFilter !== null ? ' WHERE sync_status = :status::material_image_sync_status' : '';
+        $pdo = Database::pdo();
 
-        $stmt = Database::pdo()->prepare(
+        if ($statusFilter !== null) {
+            $totalStmt = $pdo->prepare('SELECT COUNT(*)::int FROM material_image_sync_queue' . $where);
+            $totalStmt->execute(['status' => $statusFilter]);
+            $totalCount = (int) ($totalStmt->fetchColumn() ?: 0);
+        } else {
+            $totalCount = (int) ($pdo->query('SELECT COUNT(*)::int FROM material_image_sync_queue')->fetchColumn() ?: 0);
+        }
+
+        $stmt = $pdo->prepare(
             'SELECT
                 id::text AS id,
                 file_name,
@@ -185,8 +196,9 @@ final class MaterialImageSyncService
                 synced_to_amine_at::text AS synced_to_amine_at,
                 created_at::text AS created_at,
                 updated_at::text AS updated_at
-             FROM material_image_sync_queue
-             ORDER BY
+             FROM material_image_sync_queue'
+             . $where
+             . ' ORDER BY
                 CASE sync_status
                     WHEN \'syncing\' THEN 0
                     WHEN \'pending\' THEN 1
@@ -196,10 +208,19 @@ final class MaterialImageSyncService
                 created_at ASC
              LIMIT :limit OFFSET :offset'
         );
+        if ($statusFilter !== null) {
+            $stmt->bindValue('status', $statusFilter);
+        }
         $stmt->bindValue('limit', $pageSize, PDO::PARAM_INT);
         $stmt->bindValue('offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
         $items = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        foreach ($items as &$item) {
+            $fileName = trim((string) ($item['file_name'] ?? ''));
+            $item['preview_url'] = $fileName !== '' ? MaterialImageStorageService::publicUrl($fileName, true) : '';
+        }
+        unset($item);
 
         return [
             'items' => $items,
@@ -207,6 +228,7 @@ final class MaterialImageSyncService
             'page_size' => $pageSize,
             'total_count' => $totalCount,
             'has_more' => ($offset + count($items)) < $totalCount,
+            'status_filter' => $statusFilter,
         ];
     }
 

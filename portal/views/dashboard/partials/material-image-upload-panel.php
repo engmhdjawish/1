@@ -2,11 +2,29 @@
 
 declare(strict_types=1);
 
+/** @var array<string, mixed>|null $flash */
+/** @var string|null $flashType */
+/** @var array{base_url: string, ok: bool, status: int, message: string} $apiHealth */
+/** @var array{images_dir: string, thumbnails_dir: string} $paths */
+/** @var array<string, string> $settingsForm */
+/** @var list<array<string, mixed>> $queue */
+/** @var array<string, mixed> $queuePage */
+/** @var int $pendingDeletable */
+
 $statusLabels = [
     'pending' => ['label' => 'بانتظار الأمين', 'class' => 'bg-amber-100 text-amber-800'],
     'syncing' => ['label' => 'جاري المزامنة', 'class' => 'bg-blue-100 text-blue-800'],
     'synced' => ['label' => 'تمت على الأمين', 'class' => 'bg-green-100 text-green-800'],
     'failed' => ['label' => 'فشل', 'class' => 'bg-red-100 text-red-800'],
+];
+
+$uploadBootstrap = [
+    'statusLabels' => $statusLabels,
+    'queue' => $queue,
+    'queuePage' => $queuePage,
+    'pendingDeletable' => (int) ($pendingDeletable ?? 0),
+    'apiOk' => !empty($apiHealth['ok']),
+    'apiMessage' => (string) ($apiHealth['message'] ?? ''),
 ];
 ?>
 <?php if (!empty($flash)): ?>
@@ -15,1418 +33,227 @@ $statusLabels = [
   </p>
 <?php endif; ?>
 
-<section class="rounded-xl border border-border-subtle bg-white overflow-hidden mb-6">
-  <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60">
-    <h2 class="font-bold text-sm">رفع ومزامنة</h2>
-    <p class="text-xs text-text-muted mt-0.5">
-      بعد رفع الصور ومزامنتها مع الأمين،
-      <a href="/dashboard/material-images.php?tab=link" class="text-primary font-bold hover:underline">انتقل إلى «ربط بالمواد»</a>.
-    </p>
-  </div>
-  <div class="p-4 dash-mi-upload-grid">
-  <article class="dash-mi-step-card">
-    <h3 class="dash-mi-step-card__title">① رفع على الموقع</h3>
-    <p class="dash-mi-step-card__desc">اختر عدة صور — تُرفع واحدة تلو الأخرى مع شريط تقدم. عند انقطاع الاتصال يمكن الاستئناف.</p>
-
-    <div id="uploadPickPanel" class="space-y-3">
-      <input type="file" id="uploadPicker" accept="image/jpeg,image/png,image/gif,image/webp" multiple class="block w-full text-sm">
-      <button type="button" id="startUploadBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold" disabled>بدء الرفع</button>
+<div data-material-images-upload-panel>
+  <nav class="dash-mi-upload-stepper" aria-label="خطوات رفع الصور">
+    <div class="dash-mi-upload-step is-active" data-upload-step="upload">
+      <span class="dash-mi-upload-step__num">1</span>
+      <span class="dash-mi-upload-step__label">رفع على الموقع</span>
     </div>
-
-    <div id="uploadActivePanel" class="hidden space-y-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
-      <p id="uploadActiveStatus" class="text-xs text-amber-900">جاري رفع الصور...</p>
-      <div class="flex flex-wrap gap-2">
-        <button type="button" id="pauseUploadBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">إيقاف مؤقت</button>
-        <button type="button" id="resumeUploadBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold hidden">استئناف</button>
-        <button type="button" id="discardQueueBtn" class="h-9 px-4 rounded-lg border border-red-200 bg-white text-xs font-bold text-red-700">إلغاء</button>
-      </div>
+    <div class="dash-mi-upload-step" data-upload-step="sync">
+      <span class="dash-mi-upload-step__num">2</span>
+      <span class="dash-mi-upload-step__label">مزامنة الأمين</span>
     </div>
+    <a href="/dashboard/material-images.php?tab=link" class="dash-mi-upload-step dash-mi-upload-step--link">
+      <span class="dash-mi-upload-step__num">3</span>
+      <span class="dash-mi-upload-step__label">ربط بالمواد</span>
+      <span class="material-symbols-outlined dash-mi-upload-step__arrow" aria-hidden="true">arrow_back</span>
+    </a>
+  </nav>
 
-    <div class="space-y-3 mt-3">
-      <div id="overallProgressWrap" class="hidden">
-        <div class="flex justify-between text-xs text-text-muted mb-1">
-          <span id="overallProgressLabel">0 / 0</span>
-          <span id="remainingLabel">متبقي: 0</span>
+  <section class="rounded-xl border border-border-subtle bg-white overflow-hidden mb-6">
+    <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60">
+      <h2 class="font-bold text-sm">رفع ومزامنة</h2>
+      <p class="text-xs text-text-muted mt-0.5">ارفع الصور للموقع ثم أرسلها للأمين — بعدها انتقل إلى «ربط بالمواد».</p>
+    </div>
+    <div class="p-4 dash-mi-upload-grid">
+      <article class="dash-mi-step-card">
+        <h3 class="dash-mi-step-card__title">① رفع على الموقع</h3>
+        <p class="dash-mi-step-card__desc">يمكنك اختيار عدة صور أو سحبها — تُرفع بالتوازي مع إمكانية الاستئناف.</p>
+
+        <div id="uploadPickPanel">
+          <div id="uploadDropZone" class="dash-mi-dropzone" tabindex="0" role="button" aria-label="اختر صوراً أو اسحبها هنا">
+            <span class="material-symbols-outlined dash-mi-dropzone__icon" aria-hidden="true">cloud_upload</span>
+            <p class="dash-mi-dropzone__title">اسحب الصور هنا</p>
+            <p class="dash-mi-dropzone__hint">JPEG · PNG · GIF · WebP</p>
+            <button type="button" id="uploadPickBtn" class="dash-mi-dropzone__btn">اختر ملفات</button>
+            <input type="file" id="uploadPicker" accept="image/jpeg,image/png,image/gif,image/webp" multiple class="sr-only">
+          </div>
+          <div class="flex flex-wrap items-center gap-2 mt-3">
+            <button type="button" id="startUploadBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold" disabled>بدء الرفع</button>
+            <span id="uploadPickSummary" class="text-xs text-text-muted"></span>
+          </div>
         </div>
-        <div class="h-2 rounded-full bg-surface-low overflow-hidden">
-          <div id="overallProgressBar" class="h-full bg-primary transition-all duration-300" style="width:0%"></div>
+
+        <div id="uploadActivePanel" class="hidden space-y-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 mt-3">
+          <p id="uploadActiveStatus" class="text-xs text-amber-900">جاري رفع الصور...</p>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" id="pauseUploadBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">إيقاف مؤقت</button>
+            <button type="button" id="resumeUploadBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold hidden">استئناف</button>
+            <button type="button" id="discardQueueBtn" class="h-9 px-4 rounded-lg border border-red-200 bg-white text-xs font-bold text-red-700">إلغاء</button>
+          </div>
+        </div>
+
+        <div id="overallProgressWrap" class="hidden mt-3">
+          <div class="flex justify-between text-xs text-text-muted mb-1">
+            <span id="overallProgressLabel">0 / 0</span>
+            <span id="remainingLabel">متبقي: 0</span>
+          </div>
+          <div class="h-2 rounded-full bg-surface-low overflow-hidden">
+            <div id="overallProgressBar" class="h-full bg-primary transition-all duration-300" style="width:0%"></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="dash-mi-step-card">
+        <h3 class="dash-mi-step-card__title">② مزامنة الأمين</h3>
+        <p class="dash-mi-step-card__desc">يرسل الطابور صورة واحدة في كل طلب — ابدأ المزامنة بعد الرفع أو بعد «فحص الملفات المحلية».</p>
+
+        <div class="dash-mi-sync-primary mb-3">
+          <button type="button" id="startSyncBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold">بدء / استئناف المزامنة</button>
+          <button type="button" id="pauseSyncBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">إيقاف مؤقت</button>
+        </div>
+
+        <label class="dash-mi-auto-sync-toggle">
+          <input type="checkbox" id="autoSyncAfterUpload" checked>
+          <span>مزامنة تلقائية بعد اكتمال الرفع</span>
+        </label>
+
+        <details class="dash-mi-sync-more">
+          <summary class="dash-mi-sync-more__toggle">إجراءات إضافية</summary>
+          <div class="dash-mi-sync-more__body dash-mi-toolbar__actions">
+            <button type="button" id="retryFailedBtn" class="h-9 px-4 rounded-lg border border-amber-200 bg-amber-50 text-xs font-bold text-amber-900">إعادة المحاولة للفاشلة</button>
+            <button type="button" id="scanLocalBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">فحص الملفات المحلية</button>
+            <button type="button" id="purgeOrphanQueueBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">تنظيف الطابور</button>
+          </div>
+        </details>
+
+        <div id="syncProgressWrap" class="hidden mt-3">
+          <div class="flex justify-between text-xs text-text-muted mb-1">
+            <span id="syncProgressLabel">مزامنة...</span>
+          </div>
+          <div class="h-2 rounded-full bg-surface-low overflow-hidden">
+            <div id="syncProgressBar" class="h-full bg-emerald-600 transition-all" style="width:0%"></div>
+          </div>
+        </div>
+        <p id="syncStatus" class="text-xs text-text-muted mt-2"><?= !empty($apiHealth['ok']) ? 'جاهز للمزامنة.' : h((string) ($apiHealth['message'] ?? 'الأمين غير متصل.')) ?></p>
+      </article>
+    </div>
+  </section>
+
+  <section id="uploadQueueSection" class="hidden rounded-xl border border-border-subtle bg-white overflow-hidden mb-6">
+    <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60 flex items-center justify-between">
+      <h2 class="font-bold text-sm">طابور الرفع</h2>
+      <span id="uploadQueueSummary" class="text-xs text-text-muted"></span>
+    </div>
+    <div id="uploadQueueList" class="divide-y divide-border-subtle max-h-[420px] overflow-auto"></div>
+  </section>
+
+  <article class="rounded-xl border border-border-subtle bg-white overflow-hidden mb-6">
+    <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60 flex flex-wrap items-center justify-between gap-2">
+      <h2 class="font-bold text-sm">طابور المزامنة مع الأمين</h2>
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" id="deleteSelectedPendingBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold">حذف المحدد</button>
+        <span class="text-xs text-text-muted" id="syncQueueSummary"><?= (int) ($queuePage['total_count'] ?? 0) ?> عنصر</span>
+      </div>
+    </div>
+
+    <div class="dash-mi-queue-tabs px-4 pt-3" role="tablist" aria-label="تصفية الطابور">
+      <button type="button" class="dash-mi-queue-tab is-active" data-queue-filter="" role="tab">الكل</button>
+      <button type="button" class="dash-mi-queue-tab" data-queue-filter="pending" role="tab">بانتظار</button>
+      <button type="button" class="dash-mi-queue-tab" data-queue-filter="syncing" role="tab">جاري</button>
+      <button type="button" class="dash-mi-queue-tab" data-queue-filter="synced" role="tab">تمت</button>
+      <button type="button" class="dash-mi-queue-tab" data-queue-filter="failed" role="tab">فاشلة</button>
+    </div>
+
+    <details class="dash-mi-danger-zone dash-mi-danger-zone--inline">
+      <summary class="dash-mi-danger-zone__toggle">حذف جماعي من الموقع (خطير)</summary>
+      <div class="dash-mi-danger-zone__body">
+        <p class="dash-mi-danger-zone__hint">يحذف من مجلد الموقع والطابور فقط — لا يمس bm000.</p>
+        <div class="dash-mi-toolbar__actions">
+          <button type="button" id="deleteAllPendingBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold">حذف كل غير المزامنة</button>
+          <button type="button" id="pauseDeletePendingBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold hidden">إيقاف</button>
+          <button type="button" id="resumeDeletePendingBtn" class="h-8 px-3 rounded-lg bg-primary text-white text-xs font-bold hidden">استئناف</button>
+        </div>
+        <div id="deletePendingProgressWrap" class="hidden">
+          <div class="flex justify-between text-xs text-text-muted mb-1">
+            <span id="deletePendingProgressLabel">0 / 0</span>
+            <span id="deletePendingStatusLabel">جاري الحذف...</span>
+          </div>
+          <div class="h-2 rounded-full bg-surface-low overflow-hidden mb-3">
+            <div id="deletePendingProgressBar" class="h-full bg-red-500 transition-all" style="width:0%"></div>
+          </div>
         </div>
       </div>
-    </div>
-  </article>
+    </details>
 
-  <article class="dash-mi-step-card">
-    <h3 class="dash-mi-step-card__title">② مزامنة الأمين</h3>
-    <p class="dash-mi-step-card__desc">مجلد الموقع هو الأصل. «فحص الملفات المحلية» يربط GUID من الأمين بالاسم. الطابور يرسل صورة واحدة في كل مرة.</p>
-    <div class="dash-mi-toolbar__actions mb-3">
-      <button type="button" id="startSyncBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold">بدء / استئناف المزامنة</button>
-      <button type="button" id="pauseSyncBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">إيقاف مؤقت</button>
-      <button type="button" id="retryFailedBtn" class="h-9 px-4 rounded-lg border border-amber-200 bg-amber-50 text-xs font-bold text-amber-900">إعادة المحاولة للفاشلة</button>
-      <button type="button" id="scanLocalBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">فحص الملفات المحلية</button>
-      <button type="button" id="purgeOrphanQueueBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">تنظيف الطابور</button>
-    </div>
-    <div id="syncProgressWrap" class="hidden">
-      <div class="flex justify-between text-xs text-text-muted mb-1">
-        <span id="syncProgressLabel">مزامنة...</span>
-      </div>
-      <div class="h-2 rounded-full bg-surface-low overflow-hidden">
-        <div id="syncProgressBar" class="h-full bg-emerald-600 transition-all" style="width:0%"></div>
-      </div>
-    </div>
-    <p id="syncStatus" class="text-xs text-text-muted mt-2"><?= !empty($apiHealth['ok']) ? 'جاهز للمزامنة.' : h((string) ($apiHealth['message'] ?? 'الأمين غير متصل.')) ?></p>
-  </article>
-  </div>
-</section>
-
-<section id="uploadQueueSection" class="hidden rounded-xl border border-border-subtle bg-white overflow-hidden mb-6">
-  <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60 flex items-center justify-between">
-    <h2 class="font-bold">طابور الرفع</h2>
-    <span id="uploadQueueSummary" class="text-xs text-text-muted"></span>
-  </div>
-  <div id="uploadQueueList" class="divide-y divide-border-subtle max-h-[420px] overflow-auto"></div>
-</section>
-
-<article class="rounded-xl border border-border-subtle bg-white overflow-hidden mb-6">
-  <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60 flex flex-wrap items-center justify-between gap-2">
-    <h2 class="font-bold text-sm">طابور المزامنة مع الأمين</h2>
-    <div class="flex flex-wrap items-center gap-2">
-      <button type="button" id="deleteSelectedPendingBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold">حذف المحدد</button>
-      <span class="text-xs text-text-muted" id="syncQueueSummary"><?= (int) ($queuePage['total_count'] ?? $syncStats['total'] ?? 0) ?> عنصر</span>
-    </div>
-  </div>
-  <details class="dash-mi-danger-zone dash-mi-danger-zone--inline">
-    <summary class="dash-mi-danger-zone__toggle">حذف جماعي من الموقع (خطير)</summary>
-    <div class="dash-mi-danger-zone__body">
-      <p class="dash-mi-danger-zone__hint">يحذف من مجلد الموقع والطابور فقط — لا يمس bm000.</p>
-      <div class="dash-mi-toolbar__actions">
-        <button type="button" id="deleteAllPendingBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold">حذف كل غير المزامنة</button>
-        <button type="button" id="pauseDeletePendingBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold hidden">إيقاف</button>
-        <button type="button" id="resumeDeletePendingBtn" class="h-8 px-3 rounded-lg bg-primary text-white text-xs font-bold hidden">استئناف</button>
-      </div>
-      <div id="deletePendingProgressWrap" class="hidden">
-        <div class="flex justify-between text-xs text-text-muted mb-1">
-          <span id="deletePendingProgressLabel">0 / 0</span>
-          <span id="deletePendingStatusLabel">جاري الحذف...</span>
-        </div>
-        <div class="h-2 rounded-full bg-surface-low overflow-hidden mb-3">
-          <div id="deletePendingProgressBar" class="h-full bg-red-500 transition-all" style="width:0%"></div>
-        </div>
-      </div>
-    </div>
-  </details>
-  <div id="syncQueueCards" class="dash-mi-sync-cards"></div>
-  <div class="dashboard-table-wrap dash-mi-sync-table">
-    <table class="w-full text-sm min-w-[800px]">
-      <thead class="bg-surface-low text-text-muted border-b border-border-subtle">
-        <tr>
-          <th class="p-3 w-10"><input type="checkbox" id="syncQueueSelectAll" class="rounded" title="تحديد الكل في هذه الصفحة"></th>
-          <th class="text-right p-3">الملف</th>
-          <th class="text-right p-3">الحالة</th>
-          <th class="text-right p-3">معرف الأمين</th>
-          <th class="text-right p-3">ملاحظة</th>
-          <th class="text-right p-3">إجراء</th>
-        </tr>
-      </thead>
-      <tbody id="syncQueueBody" class="divide-y divide-border-subtle">
-        <?php if ($queue === []): ?>
-          <tr><td colspan="6" class="p-6 text-center text-text-muted">لا توجد عناصر في الطابور بعد. ارفع صوراً أو اضغط «فحص الملفات المحلية».</td></tr>
-        <?php endif; ?>
-        <?php foreach ($queue as $row): ?>
-          <?php
-            $status = (string) ($row['sync_status'] ?? 'pending');
-            $meta = $statusLabels[$status] ?? $statusLabels['pending'];
-            $canDeletePending = in_array($status, ['pending', 'failed'], true);
-          ?>
+    <div id="syncQueueCards" class="dash-mi-sync-cards"></div>
+    <div class="dashboard-table-wrap dash-mi-sync-table">
+      <table class="w-full text-sm min-w-[800px]">
+        <thead class="bg-surface-low text-text-muted border-b border-border-subtle">
           <tr>
-            <td class="p-3 text-center">
-              <?php if ($canDeletePending): ?>
-                <input type="checkbox" class="sync-queue-select rounded" data-queue-id="<?= h((string) ($row['id'] ?? '')) ?>">
-              <?php endif; ?>
-            </td>
-            <td class="p-3 font-mono text-xs" dir="ltr"><?= h((string) ($row['file_name'] ?? '')) ?></td>
-            <td class="p-3"><span class="text-xs px-2 py-0.5 rounded-full <?= h($meta['class']) ?>"><?= h($meta['label']) ?></span></td>
-            <td class="p-3 font-mono text-xs" dir="ltr"><?= h((string) ($row['amine_image_guid'] ?? '—')) ?></td>
-            <td class="p-3 text-xs text-text-muted"><?= h((string) ($row['amine_sync_error_ar'] ?? '')) ?></td>
-            <td class="p-3 text-xs">
-              <?php if ($canDeletePending): ?>
-                <button type="button" class="delete-pending-queue-btn h-7 px-2 rounded border border-red-200 bg-red-50 text-red-700 font-bold" data-queue-id="<?= h((string) ($row['id'] ?? '')) ?>" data-file-name="<?= h((string) ($row['file_name'] ?? '')) ?>">حذف محلي</button>
-              <?php else: ?>
-                <span class="text-text-muted">—</span>
-              <?php endif; ?>
-            </td>
+            <th class="p-3 w-10"><input type="checkbox" id="syncQueueSelectAll" class="rounded" title="تحديد الكل في هذه الصفحة"></th>
+            <th class="text-right p-3 w-14">معاينة</th>
+            <th class="text-right p-3">الملف</th>
+            <th class="text-right p-3">الحالة</th>
+            <th class="text-right p-3">معرف الأمين</th>
+            <th class="text-right p-3">ملاحظة</th>
+            <th class="text-right p-3">إجراء</th>
           </tr>
-        <?php endforeach; ?>
-      </tbody>
-    </table>
-  </div>
-  <div id="syncQueuePagination" class="px-4 py-3 border-t border-border-subtle bg-surface-low/40 flex items-center justify-between gap-2">
-    <button type="button" id="syncQueuePrevBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold disabled:opacity-40" disabled>السابق</button>
-    <span class="text-xs text-text-muted" id="syncQueuePageLabel">صفحة 1</span>
-    <button type="button" id="syncQueueNextBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold disabled:opacity-40" disabled>التالي</button>
-  </div>
-</article>
-
-<details class="rounded-xl border border-border-subtle bg-white p-4 mb-6">
-  <summary class="font-bold cursor-pointer">مسارات التخزين (متقدم)</summary>
-  <form method="post" class="grid gap-3 mt-4 lg:grid-cols-2">
-    <input type="hidden" name="action" value="save_settings">
-    <label class="text-xs block">
-      <span class="text-text-muted">مجلد الصور على الموقع</span>
-      <input name="material_images_dir" value="<?= h((string) ($settingsForm['material_images_dir'] ?? '')) ?>" class="mt-1 h-9 w-full rounded-lg border border-border-subtle px-3 text-sm font-mono" dir="ltr" placeholder="اتركه فارغاً للافتراضي">
-    </label>
-    <label class="text-xs block">
-      <span class="text-text-muted">مجلد الثامبنيل</span>
-      <input name="material_thumbnails_dir" value="<?= h((string) ($settingsForm['material_thumbnails_dir'] ?? '')) ?>" class="mt-1 h-9 w-full rounded-lg border border-border-subtle px-3 text-sm font-mono" dir="ltr">
-    </label>
-    <div class="lg:col-span-2 text-[11px] text-text-muted font-mono" dir="ltr">
-      images: <?= h((string) ($paths['images_dir'] ?? '')) ?> · thumbs: <?= h((string) ($paths['thumbnails_dir'] ?? '')) ?>
+        </thead>
+        <tbody id="syncQueueBody" class="divide-y divide-border-subtle">
+          <?php if ($queue === []): ?>
+            <tr><td colspan="7" class="p-6 text-center text-text-muted">لا توجد عناصر في الطابور بعد. ارفع صوراً أو اضغط «فحص الملفات المحلية».</td></tr>
+          <?php endif; ?>
+          <?php foreach ($queue as $row): ?>
+            <?php
+              $status = (string) ($row['sync_status'] ?? 'pending');
+              $meta = $statusLabels[$status] ?? $statusLabels['pending'];
+              $canDeletePending = in_array($status, ['pending', 'failed'], true);
+              $fileName = (string) ($row['file_name'] ?? '');
+              $previewUrl = $fileName !== '' ? \Portal\Services\MaterialImageStorageService::publicUrl($fileName, true) : '';
+            ?>
+            <tr>
+              <td class="p-3 text-center">
+                <?php if ($canDeletePending): ?>
+                  <input type="checkbox" class="sync-queue-select rounded" data-queue-id="<?= h((string) ($row['id'] ?? '')) ?>">
+                <?php endif; ?>
+              </td>
+              <td class="p-3">
+                <?php if ($previewUrl !== ''): ?>
+                  <img src="<?= h($previewUrl) ?>" alt="" class="dash-mi-sync-thumb" loading="lazy" decoding="async">
+                <?php endif; ?>
+              </td>
+              <td class="p-3 font-mono text-xs" dir="ltr"><?= h($fileName) ?></td>
+              <td class="p-3"><span class="text-xs px-2 py-0.5 rounded-full <?= h($meta['class']) ?>"><?= h($meta['label']) ?></span></td>
+              <td class="p-3 font-mono text-xs" dir="ltr"><?= h((string) ($row['amine_image_guid'] ?? '—')) ?></td>
+              <td class="p-3 text-xs text-text-muted"><?= h((string) ($row['amine_sync_error_ar'] ?? '')) ?></td>
+              <td class="p-3 text-xs">
+                <?php if ($canDeletePending): ?>
+                  <button type="button" class="delete-pending-queue-btn h-7 px-2 rounded border border-red-200 bg-red-50 text-red-700 font-bold" data-queue-id="<?= h((string) ($row['id'] ?? '')) ?>" data-file-name="<?= h($fileName) ?>">حذف محلي</button>
+                <?php else: ?>
+                  <span class="text-text-muted">—</span>
+                <?php endif; ?>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
     </div>
-    <button class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold lg:col-span-2 lg:justify-self-start">حفظ المسارات</button>
-  </form>
-</details>
+    <div id="syncQueuePagination" class="px-4 py-3 border-t border-border-subtle bg-surface-low/40 flex items-center justify-between gap-2">
+      <button type="button" id="syncQueuePrevBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold disabled:opacity-40" disabled>السابق</button>
+      <span class="text-xs text-text-muted" id="syncQueuePageLabel">صفحة 1</span>
+      <button type="button" id="syncQueueNextBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold disabled:opacity-40" disabled>التالي</button>
+    </div>
+  </article>
 
-<script>
-(() => {
-  const API_URL = '/dashboard/material-images-api.php';
-  const API_HEADERS = {
-    Accept: 'application/json',
-    'X-Dashboard-Ajax': '1',
-    'X-Requested-With': 'XMLHttpRequest',
-  };
-
-  async function apiJson(url, options = {}) {
-    const response = await fetch(url, {
-      credentials: 'same-origin',
-      headers: { ...API_HEADERS, ...(options.headers || {}) },
-      ...options,
-    });
-    const raw = await response.text();
-    let payload = {};
-    if (raw.trim() !== '') {
-      try {
-        payload = JSON.parse(raw);
-      } catch {
-        const preview = raw.replace(/\s+/g, ' ').trim().slice(0, 120);
-        throw new Error(preview ? `استجابة غير صالحة من الخادم [HTTP ${response.status}]: ${preview}` : `استجابة غير صالحة من الخادم [HTTP ${response.status}]`);
-      }
-    }
-    if (payload.login) {
-      throw new Error(payload.message || 'انتهت جلسة الدخول. أعد تحميل الصفحة وسجّل الدخول.');
-    }
-    return { response, payload };
-  }
-
-  function parseUploadResponse(xhr) {
-    const raw = xhr.responseText || '';
-    try {
-      return raw.trim() === '' ? {} : JSON.parse(raw);
-    } catch {
-      const preview = raw.replace(/\s+/g, ' ').trim().slice(0, 120);
-      return {
-        ok: false,
-        message: preview
-          ? `استجابة غير صالحة من الخادم [HTTP ${xhr.status}]: ${preview}`
-          : `استجابة غير صالحة من الخادم [HTTP ${xhr.status}]`,
-      };
-    }
-  }
-  const QUEUE_STORAGE_KEY = 'materialImages.uploadQueue';
-  const DB_NAME = 'materialImagesUploadDb';
-  const DB_STORE = 'files';
-  const DB_VERSION = 1;
-
-  const picker = document.getElementById('uploadPicker');
-  const startBtn = document.getElementById('startUploadBtn');
-  const pauseBtn = document.getElementById('pauseUploadBtn');
-  const queueSection = document.getElementById('uploadQueueSection');
-  const queueList = document.getElementById('uploadQueueList');
-  const uploadQueueSummary = document.getElementById('uploadQueueSummary');
-  const overallWrap = document.getElementById('overallProgressWrap');
-  const overallLabel = document.getElementById('overallProgressLabel');
-  const remainingLabel = document.getElementById('remainingLabel');
-  const overallBar = document.getElementById('overallProgressBar');
-  const uploadPickPanel = document.getElementById('uploadPickPanel');
-  const uploadActivePanel = document.getElementById('uploadActivePanel');
-  const uploadActiveStatus = document.getElementById('uploadActiveStatus');
-  const resumeBtn = document.getElementById('resumeUploadBtn');
-  const discardBtn = document.getElementById('discardQueueBtn');
-
-  const startSyncBtn = document.getElementById('startSyncBtn');
-  const pauseSyncBtn = document.getElementById('pauseSyncBtn');
-  const retryFailedBtn = document.getElementById('retryFailedBtn');
-  const scanLocalBtn = document.getElementById('scanLocalBtn');
-  const purgeOrphanQueueBtn = document.getElementById('purgeOrphanQueueBtn');
-  const deleteSelectedPendingBtn = document.getElementById('deleteSelectedPendingBtn');
-  const deleteAllPendingBtn = document.getElementById('deleteAllPendingBtn');
-  const pauseDeletePendingBtn = document.getElementById('pauseDeletePendingBtn');
-  const resumeDeletePendingBtn = document.getElementById('resumeDeletePendingBtn');
-  const deletePendingProgressWrap = document.getElementById('deletePendingProgressWrap');
-  const deletePendingProgressLabel = document.getElementById('deletePendingProgressLabel');
-  const deletePendingStatusLabel = document.getElementById('deletePendingStatusLabel');
-  const deletePendingProgressBar = document.getElementById('deletePendingProgressBar');
-  const syncQueueSelectAll = document.getElementById('syncQueueSelectAll');
-  const syncProgressWrap = document.getElementById('syncProgressWrap');
-  const syncProgressLabel = document.getElementById('syncProgressLabel');
-  const syncProgressBar = document.getElementById('syncProgressBar');
-  const syncStatus = document.getElementById('syncStatus');
-  const syncQueueBody = document.getElementById('syncQueueBody');
-  const syncQueueCards = document.getElementById('syncQueueCards');
-  const syncQueueSummary = document.getElementById('syncQueueSummary');
-  const syncQueuePagination = document.getElementById('syncQueuePagination');
-  const syncQueuePrevBtn = document.getElementById('syncQueuePrevBtn');
-  const syncQueueNextBtn = document.getElementById('syncQueueNextBtn');
-  const syncQueuePageLabel = document.getElementById('syncQueuePageLabel');
-  const statusLabels = <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE) ?>;
-
-  let syncRunning = false;
-  let syncPaused = false;
-  let scanRunning = false;
-  let autoSyncAfterUpload = true;
-  let syncQueuePage = <?= (int) ($queuePage['page'] ?? 1) ?>;
-  let syncQueuePageSize = <?= (int) ($queuePage['page_size'] ?? 20) ?>;
-  let syncQueueHasMore = <?= !empty($queuePage['has_more']) ? 'true' : 'false' ?>;
-  let syncQueueTotalCount = <?= (int) ($queuePage['total_count'] ?? 0) ?>;
-  let pendingDeletableTotal = <?= (int) ($pendingDeletable ?? 0) ?>;
-  let deletePendingRunning = false;
-  let deletePendingPaused = false;
-  let deletePendingProcessed = 0;
-  let deletePendingFailed = 0;
-  let deletePendingInitialTotal = 0;
-
-  let queue = null;
-  let paused = false;
-  let uploading = false;
-  let uploadSessionStarted = false;
-  let preferBase64Upload = false;
-  let dbPromise = null;
-
-  function hasPendingUploadItems() {
-    return queue?.items.some((item) => ['pending', 'uploading', 'error', 'missing'].includes(item.status)) ?? false;
-  }
-
-  function updateUploadControls() {
-    const hasQueue = !!(queue && queue.items.length > 0);
-    const pending = hasPendingUploadItems();
-    const sessionActive = hasQueue && pending && (uploadSessionStarted || uploading);
-
-    uploadPickPanel?.classList.toggle('hidden', sessionActive || uploading);
-    uploadActivePanel?.classList.toggle('hidden', !(sessionActive || uploading));
-
-    if (startBtn) {
-      startBtn.disabled = !hasQueue || sessionActive || uploading;
-    }
-
-    pauseBtn?.classList.toggle('hidden', !uploading);
-    resumeBtn?.classList.toggle('hidden', uploading || !pending);
-
-    if (uploadActiveStatus) {
-      if (uploading) {
-        uploadActiveStatus.textContent = 'جاري رفع الصور...';
-      } else if (paused) {
-        uploadActiveStatus.textContent = 'متوقف مؤقتاً — يمكنك الاستئناف أو الإلغاء.';
-      } else if (pending) {
-        uploadActiveStatus.textContent = 'يوجد رفع غير مكتمل — يمكنك الاستئناف أو الإلغاء.';
-      } else {
-        uploadActiveStatus.textContent = '';
-      }
-    }
-  }
-
-  function uid() {
-    return crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
-  }
-
-  function openDb() {
-    if (!dbPromise) {
-      dbPromise = new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        request.onupgradeneeded = () => {
-          const db = request.result;
-          if (!db.objectStoreNames.contains(DB_STORE)) {
-            db.createObjectStore(DB_STORE);
-          }
-        };
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-    }
-    return dbPromise;
-  }
-
-  async function idbPut(key, blob) {
-    const db = await openDb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(DB_STORE, 'readwrite');
-      tx.objectStore(DB_STORE).put(blob, key);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  }
-
-  async function idbGet(key) {
-    const db = await openDb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(DB_STORE, 'readonly');
-      const req = tx.objectStore(DB_STORE).get(key);
-      req.onsuccess = () => resolve(req.result ?? null);
-      req.onerror = () => reject(req.error);
-    });
-  }
-
-  async function idbDelete(key) {
-    const db = await openDb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(DB_STORE, 'readwrite');
-      tx.objectStore(DB_STORE).delete(key);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  }
-
-  async function idbClearQueue(queueId) {
-    if (!queue) return;
-    await Promise.all(queue.items.map((item) => idbDelete(`${queue.id}:${item.id}`)));
-  }
-
-  function saveQueue() {
-    if (!queue) {
-      localStorage.removeItem(QUEUE_STORAGE_KEY);
-      return;
-    }
-    localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify({
-      id: queue.id,
-      createdAt: queue.createdAt,
-      items: queue.items.map((item) => ({
-        id: item.id,
-        name: item.name,
-        size: item.size,
-        status: item.status,
-        progress: item.progress,
-        error: item.error || '',
-        replaced: !!item.replaced,
-      })),
-    }));
-  }
-
-  function loadQueueMeta() {
-    const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return null;
-    }
-  }
-
-  function statusLabel(status) {
-    return {
-      pending: 'بالانتظار',
-      uploading: 'جاري الرفع',
-      done: 'مكتمل',
-      error: 'فشل',
-      missing: 'بحاجة إعادة اختيار',
-    }[status] || status;
-  }
-
-  function renderQueue() {
-    if (!queue || queue.items.length === 0) {
-      queueSection.classList.add('hidden');
-      updateUploadControls();
-      return;
-    }
-
-    queueSection.classList.remove('hidden');
-    queueList.innerHTML = queue.items.map((item) => `
-      <div class="p-3" data-item-id="${item.id}">
-        <div class="flex items-center justify-between gap-2 mb-1">
-          <div class="min-w-0">
-            <div class="font-mono text-xs truncate" dir="ltr">${escapeHtml(item.name)}</div>
-            <div class="text-[11px] text-text-muted">${formatBytes(item.size)} · ${statusLabel(item.status)}${item.error ? ' — ' + escapeHtml(item.error) : ''}</div>
-          </div>
-          <span class="text-xs font-bold ${item.status === 'done' ? 'text-status-active' : item.status === 'error' ? 'text-status-rejected' : 'text-text-muted'}">${Math.round(item.progress)}%</span>
-        </div>
-        <div class="h-1.5 rounded-full bg-surface-low overflow-hidden">
-          <div class="h-full ${item.status === 'error' ? 'bg-status-rejected' : 'bg-primary'} transition-all duration-200" style="width:${item.progress}%"></div>
-        </div>
+  <details class="rounded-xl border border-border-subtle bg-white p-4 mb-6">
+    <summary class="font-bold cursor-pointer">مسارات التخزين (متقدم)</summary>
+    <form method="post" class="grid gap-3 mt-4 lg:grid-cols-2">
+      <input type="hidden" name="action" value="save_settings">
+      <label class="text-xs block">
+        <span class="text-text-muted">مجلد الصور على الموقع</span>
+        <input name="material_images_dir" value="<?= h((string) ($settingsForm['material_images_dir'] ?? '')) ?>" class="mt-1 h-9 w-full rounded-lg border border-border-subtle px-3 text-sm font-mono" dir="ltr" placeholder="اتركه فارغاً للافتراضي">
+      </label>
+      <label class="text-xs block">
+        <span class="text-text-muted">مجلد الثامبنيل</span>
+        <input name="material_thumbnails_dir" value="<?= h((string) ($settingsForm['material_thumbnails_dir'] ?? '')) ?>" class="mt-1 h-9 w-full rounded-lg border border-border-subtle px-3 text-sm font-mono" dir="ltr">
+      </label>
+      <div class="lg:col-span-2 text-[11px] text-text-muted font-mono" dir="ltr">
+        images: <?= h((string) ($paths['images_dir'] ?? '')) ?> · thumbs: <?= h((string) ($paths['thumbnails_dir'] ?? '')) ?>
       </div>
-    `).join('');
-
-    const done = queue.items.filter((item) => item.status === 'done').length;
-    const total = queue.items.length;
-    const remaining = queue.items.filter((item) => item.status === 'pending' || item.status === 'uploading' || item.status === 'error').length;
-    uploadQueueSummary.textContent = `${done} مكتمل من ${total}`;
-    overallWrap.classList.remove('hidden');
-    overallLabel.textContent = `${done} / ${total}`;
-    remainingLabel.textContent = `متبقي: ${remaining}`;
-    overallBar.style.width = `${total ? Math.round((done / total) * 100) : 0}%`;
-    updateUploadControls();
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
-  function formatBytes(bytes) {
-    if (!bytes) return '0 B';
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  }
-
-  function guessMimeFromName(name) {
-    const ext = String(name || '').split('.').pop()?.toLowerCase() || '';
-    return ({
-      jpg: 'image/jpeg',
-      jpeg: 'image/jpeg',
-      png: 'image/png',
-      gif: 'image/gif',
-      webp: 'image/webp',
-    })[ext] || 'application/octet-stream';
-  }
-
-  function blobToUploadFile(blob, name) {
-    const type = blob.type || guessMimeFromName(name);
-    if (typeof File !== 'undefined') {
-      return new File([blob], name, { type });
-    }
-    return blob;
-  }
-
-  function uint8ToBase64(bytes) {
-    const chunkSize = 0x8000;
-    let binary = '';
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-    }
-    return btoa(binary);
-  }
-
-  function shouldRetryUploadWithBase64(payload, status) {
-    if (payload?.ok) return false;
-    const message = String(payload?.message || '');
-    if (/<!DOCTYPE|xmlns=|<html/i.test(message)) return true;
-    if (payload?.upload_error_code === 4) return true;
-    return /لم يصل|لم يُرسل|ملف غير صالح|upload_tmp|تعذر استلام/i.test(message)
-      || (status === 400 && /multipart|ملف/i.test(message))
-      || status === 500;
-  }
-
-  async function loadUploadEnvironment() {
-    try {
-      const { payload } = await apiJson(`${API_URL}?action=upload-check`);
-      preferBase64Upload = !payload.upload_tmp_dir_writable;
-    } catch {
-      preferBase64Upload = false;
-    }
-  }
-
-  function dedupeQueueItems(items) {
-    const byName = new Map();
-    for (const item of items) {
-      const key = String(item.name || '').toLowerCase();
-      if (!key) continue;
-      const existing = byName.get(key);
-      if (!existing) {
-        byName.set(key, item);
-        continue;
-      }
-      if (existing.status === 'done' && item.status !== 'done') {
-        byName.set(key, item);
-      } else if (existing.status !== 'done' && item.status === 'done') {
-        continue;
-      } else if (item.status === 'error' && existing.status !== 'error') {
-        byName.set(key, item);
-      }
-    }
-    return Array.from(byName.values());
-  }
-
-  function prepareQueueForResume() {
-    if (!queue) return;
-    queue.items = dedupeQueueItems(queue.items);
-    for (const item of queue.items) {
-      if (item.status === 'error' || item.status === 'uploading') {
-        item.status = 'pending';
-        item.progress = 0;
-        item.error = '';
-      }
-    }
-    saveQueue();
-    renderQueue();
-  }
-
-  async function buildQueueFromFiles(fileList) {
-    const files = Array.from(fileList || []);
-    if (files.length === 0) return;
-
-    if (queue && uploading) {
-      alert('انتظر حتى ينتهي الرفع الحالي أو أوقفه مؤقتاً.');
-      return;
-    }
-
-    if (queue && hasPendingUploadItems()) {
-      if (!confirm('يوجد طابور رفع سابق. استبداله بالملفات الجديدة؟')) {
-        if (picker) picker.value = '';
-        return;
-      }
-      await idbClearQueue(queue.id);
-    }
-
-    const seen = new Set();
-    const uniqueFiles = [];
-    for (const file of files) {
-      const key = String(file.name || '').toLowerCase();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      uniqueFiles.push(file);
-    }
-    if (uniqueFiles.length === 0) return;
-
-    queue = {
-      id: uid(),
-      createdAt: new Date().toISOString(),
-      items: uniqueFiles.map((file) => ({
-        id: uid(),
-        name: file.name,
-        size: file.size,
-        status: 'pending',
-        progress: 0,
-        error: '',
-        replaced: false,
-      })),
-    };
-
-    for (let i = 0; i < uniqueFiles.length; i++) {
-      await idbPut(`${queue.id}:${queue.items[i].id}`, uniqueFiles[i]);
-    }
-
-    saveQueue();
-    uploadSessionStarted = false;
-    paused = false;
-    if (picker) picker.value = '';
-    renderQueue();
-  }
-
-  function uploadViaMultipart(file, item) {
-    const formData = new FormData();
-    formData.append('action', 'upload');
-    formData.append('file', file, item.name);
-
-    return new Promise((resolve) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', API_URL);
-      xhr.setRequestHeader('Accept', 'application/json');
-      xhr.upload.onprogress = (event) => {
-        if (!event.lengthComputable) return;
-        item.progress = Math.max(1, Math.round((event.loaded / event.total) * 100));
-        renderQueue();
-      };
-      xhr.onreadystatechange = () => {
-        if (xhr.readyState !== 4) return;
-        const payload = parseUploadResponse(xhr);
-        resolve({ payload, status: xhr.status });
-      };
-      xhr.onerror = () => {
-        resolve({
-          payload: { ok: false, message: 'انقطع الاتصال أثناء الرفع' },
-          status: 0,
-        });
-      };
-      xhr.send(formData);
-    });
-  }
-
-  async function uploadViaBase64(blob, item) {
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    const form = new FormData();
-    form.append('action', 'upload-data');
-    form.append('file_name', item.name);
-    form.append('file_data', uint8ToBase64(bytes));
-    const { response, payload } = await apiJson(API_URL, { method: 'POST', body: form });
-    return { payload, status: response.status };
-  }
-
-  async function uploadItem(item) {
-    const blob = await idbGet(`${queue.id}:${item.id}`);
-    if (!(blob instanceof Blob)) {
-      item.status = 'missing';
-      item.error = 'الملف غير محفوظ في المتصفح — أعد اختياره';
-      item.progress = 0;
-      saveQueue();
-      renderQueue();
-      return false;
-    }
-
-    item.status = 'uploading';
-    item.progress = 0;
-    item.error = '';
-    saveQueue();
-    renderQueue();
-
-    const file = blobToUploadFile(blob, item.name);
-    let result;
-    try {
-      if (preferBase64Upload) {
-        result = await uploadViaBase64(blob, item);
-      } else {
-        result = await uploadViaMultipart(file, item);
-        if (shouldRetryUploadWithBase64(result.payload, result.status)) {
-          item.progress = Math.max(item.progress, 1);
-          renderQueue();
-          result = await uploadViaBase64(blob, item);
-        }
-      }
-    } catch (error) {
-      try {
-        result = await uploadViaBase64(blob, item);
-      } catch (fallbackError) {
-        item.status = 'error';
-        item.error = fallbackError instanceof Error ? fallbackError.message : 'فشل الرفع';
-        item.progress = 0;
-        saveQueue();
-        renderQueue();
-        return false;
-      }
-    }
-
-    const payload = result.payload || {};
-    if (result.status >= 200 && result.status < 300 && payload.ok) {
-      item.status = 'done';
-      item.progress = 100;
-      item.replaced = !!payload.replaced;
-      idbDelete(`${queue.id}:${item.id}`);
-      saveQueue();
-      renderQueue();
-      return true;
-    }
-
-    item.status = 'error';
-    item.error = payload.message || `فشل الرفع (رمز ${result.status || '—'})`;
-    item.progress = 0;
-    saveQueue();
-    renderQueue();
-    return false;
-  }
-
-  async function processQueue() {
-    if (!queue || uploading) return;
-    prepareQueueForResume();
-    uploading = true;
-    paused = false;
-    uploadSessionStarted = true;
-    updateUploadControls();
-
-    for (const item of queue.items) {
-      if (paused) break;
-      if (item.status === 'done') continue;
-      await uploadItem(item);
-    }
-
-    uploading = false;
-
-    if (paused) {
-      saveQueue();
-      updateUploadControls();
-      return;
-    }
-
-    const pending = hasPendingUploadItems();
-    if (!pending) {
-      await idbClearQueue(queue.id);
-      localStorage.removeItem(QUEUE_STORAGE_KEY);
-      uploadSessionStarted = false;
-      updateUploadControls();
-      await refreshStats();
-      if (autoSyncAfterUpload) {
-        syncPaused = false;
-        processSyncQueue();
-      }
-      setTimeout(() => {
-        if (queue && queue.items.every((item) => item.status === 'done')) {
-          queue = null;
-          queueSection.classList.add('hidden');
-          overallWrap.classList.add('hidden');
-          picker.value = '';
-          updateUploadControls();
-        }
-      }, 1500);
-    } else {
-      saveQueue();
-      updateUploadControls();
-    }
-  }
-
-  async function restoreQueueFromStorage() {
-    const meta = loadQueueMeta();
-    if (!meta || !Array.isArray(meta.items) || meta.items.length === 0) return;
-
-    queue = {
-      id: meta.id,
-      createdAt: meta.createdAt,
-      items: meta.items.map((item) => ({
-        id: item.id,
-        name: item.name,
-        size: item.size,
-        status: item.status === 'uploading' ? 'pending' : item.status,
-        progress: item.status === 'done' ? 100 : 0,
-        error: item.error || '',
-        replaced: !!item.replaced,
-      })),
-    };
-    queue.items = dedupeQueueItems(queue.items);
-
-    for (const item of queue.items) {
-      if (item.status === 'pending' || item.status === 'error') {
-        const blob = await idbGet(`${queue.id}:${item.id}`);
-        if (!(blob instanceof Blob)) {
-          item.status = 'missing';
-          item.error = 'أعد اختيار الملفات المفقودة';
-        }
-      }
-    }
-
-    const pending = hasPendingUploadItems();
-    if (pending) {
-      uploadSessionStarted = true;
-    }
-    saveQueue();
-    renderQueue();
-  }
-
-  async function discardQueue() {
-    if (!confirm('إلغاء الرفع وحذف الطابور؟')) {
-      return;
-    }
-    if (queue) {
-      await idbClearQueue(queue.id);
-    }
-    queue = null;
-    paused = false;
-    uploading = false;
-    uploadSessionStarted = false;
-    localStorage.removeItem(QUEUE_STORAGE_KEY);
-    queueSection.classList.add('hidden');
-    overallWrap.classList.add('hidden');
-    picker.value = '';
-    updateUploadControls();
-  }
-
-  async function refreshStats() {
-    try {
-      const { payload } = await apiJson(`${API_URL}?action=overview`);
-      if (!payload.ok) return;
-
-      const statLocal = document.getElementById('statLocalCount');
-      const statThumb = document.getElementById('statThumbCount');
-      if (statLocal) statLocal.textContent = String(payload.local?.local_count ?? 0);
-      if (statThumb) statThumb.textContent = String(payload.local?.thumbnail_count ?? 0);
-      renderSyncOverview(payload);
-    } catch {
-      // ignore
-    }
-  }
-
-  function renderSyncOverview(data) {
-    const pendingEl = document.getElementById('statPendingCount');
-    const syncedEl = document.getElementById('statSyncedCount');
-    if (pendingEl) pendingEl.textContent = String(data.sync?.pending ?? 0);
-    if (syncedEl) syncedEl.textContent = String(data.sync?.synced ?? 0);
-    const apiPill = document.getElementById('apiStatusPill');
-    if (apiPill) {
-      apiPill.innerHTML = data.api?.ok
-        ? 'API الأمين: <strong class="text-status-active">متصل</strong>'
-        : 'API الأمين: <strong class="text-status-rejected">غير متصل</strong>';
-    }
-    renderSyncQueue(data.queue || {}, data.sync || {});
-  }
-
-  function normalizeQueuePayload(queuePayload) {
-    if (Array.isArray(queuePayload)) {
-      return {
-        items: queuePayload,
-        page: syncQueuePage,
-        page_size: syncQueuePageSize,
-        total_count: queuePayload.length,
-        has_more: false,
-      };
-    }
-    return {
-      items: queuePayload?.items || [],
-      page: queuePayload?.page || syncQueuePage,
-      page_size: queuePayload?.page_size || syncQueuePageSize,
-      total_count: queuePayload?.total_count ?? (queuePayload?.items?.length || 0),
-      has_more: !!queuePayload?.has_more,
-    };
-  }
-
-  function updateSyncQueuePagination(meta) {
-    syncQueuePage = meta.page;
-    syncQueuePageSize = meta.page_size;
-    syncQueueTotalCount = meta.total_count;
-    syncQueueHasMore = meta.has_more;
-    if (syncQueuePageLabel) {
-      syncQueuePageLabel.textContent = `صفحة ${syncQueuePage} — ${syncQueueTotalCount} عنصر`;
-    }
-    if (syncQueuePrevBtn) syncQueuePrevBtn.disabled = syncQueuePage <= 1;
-    if (syncQueueNextBtn) syncQueueNextBtn.disabled = !syncQueueHasMore;
-  }
-
-  function updateDeletePendingControls() {
-    const busy = deletePendingRunning || syncRunning || scanRunning;
-    if (deleteSelectedPendingBtn) deleteSelectedPendingBtn.disabled = busy;
-    if (deleteAllPendingBtn) deleteAllPendingBtn.disabled = busy;
-    deleteAllPendingBtn?.classList.toggle('hidden', deletePendingRunning);
-    pauseDeletePendingBtn?.classList.toggle('hidden', !deletePendingRunning || deletePendingPaused);
-    resumeDeletePendingBtn?.classList.toggle('hidden', !deletePendingRunning || !deletePendingPaused);
-    if (!deletePendingRunning) {
-      deletePendingProgressWrap?.classList.add('hidden');
-    }
-  }
-
-  function getSelectedPendingQueueIds() {
-    return Array.from(document.querySelectorAll('.sync-queue-select:checked'))
-      .map((el) => el.getAttribute('data-queue-id') || '')
-      .filter((id) => id !== '');
-  }
-
-  function renderDeletePendingProgress() {
-    const total = Math.max(1, deletePendingInitialTotal || 1);
-    const done = deletePendingProcessed + deletePendingFailed;
-    deletePendingProgressWrap?.classList.remove('hidden');
-    if (deletePendingProgressLabel) {
-      deletePendingProgressLabel.textContent = `${done} / ${deletePendingInitialTotal}`;
-    }
-    if (deletePendingProgressBar) {
-      deletePendingProgressBar.style.width = `${Math.min(100, Math.round((done / total) * 100))}%`;
-    }
-    if (deletePendingStatusLabel) {
-      deletePendingStatusLabel.textContent = deletePendingPaused
-        ? 'متوقف مؤقتاً'
-        : `تم ${deletePendingProcessed}${deletePendingFailed > 0 ? ` — فشل ${deletePendingFailed}` : ''}`;
-    }
-  }
-
-  async function runDeletePendingLoop() {
-    while (!deletePendingPaused) {
-      let payload;
-      try {
-        const form = new FormData();
-        form.append('action', 'delete-pending-next');
-        form.append('queue_page', String(syncQueuePage));
-        form.append('queue_page_size', String(syncQueuePageSize));
-        const res = await fetch(API_URL, { method: 'POST', body: form });
-        payload = await res.json();
-      } catch {
-        if (syncStatus) syncStatus.textContent = 'انقطع الاتصال — اضغط «استئناف».';
-        deletePendingPaused = true;
-        updateDeletePendingControls();
-        return;
-      }
-
-      if (payload.deleted) deletePendingProcessed += 1;
-      else if (!payload.done) deletePendingFailed += 1;
-      if (typeof payload.pending_deletable === 'number') {
-        pendingDeletableTotal = payload.pending_deletable;
-      }
-      renderDeletePendingProgress();
-      if (syncStatus) syncStatus.textContent = payload.message || syncStatus.textContent;
-      if (payload.queue) renderSyncQueue(payload.queue, payload.sync || {});
-
-      if (payload.done) {
-        if (syncStatus) {
-          syncStatus.textContent = `اكتمل الحذف — نجح ${deletePendingProcessed}${deletePendingFailed > 0 ? `، فشل ${deletePendingFailed}` : ''}.`;
-        }
-        deletePendingRunning = false;
-        updateDeletePendingControls();
-        return;
-      }
-    }
-    updateDeletePendingControls();
-  }
-
-  function confirmBulkDelete(message, requireTyped = true) {
-    const confirmFn = window.dashboardApp?.confirmDestructive;
-    if (typeof confirmFn === 'function' && requireTyped) {
-      return confirmFn(message, 'حذف');
-    }
-    return confirm(message);
-  }
-
-  async function deleteAllPending() {
-    if (deletePendingRunning) return;
-    if (!confirmBulkDelete('حذف كل الصور غير المزامنة من مجلد الموقع والطابور؟ (لن يُمس bm000)')) return;
-    deletePendingRunning = true;
-    deletePendingPaused = false;
-    deletePendingProcessed = 0;
-    deletePendingFailed = 0;
-    deletePendingInitialTotal = pendingDeletableTotal;
-    updateDeletePendingControls();
-    renderDeletePendingProgress();
-    await runDeletePendingLoop();
-  }
-
-  async function deleteSelectedPending() {
-    const ids = getSelectedPendingQueueIds();
-    if (ids.length === 0) {
-      if (syncStatus) syncStatus.textContent = 'حدّد صوراً من الطابور أولاً.';
-      return;
-    }
-    if (!confirmBulkDelete(`حذف ${ids.length} صورة محددة من الموقع والطابور؟`, ids.length >= 5)) return;
-
-    if (ids.length > 15) {
-      deletePendingRunning = true;
-      deletePendingPaused = false;
-      deletePendingProcessed = 0;
-      deletePendingFailed = 0;
-      deletePendingInitialTotal = ids.length;
-      updateDeletePendingControls();
-      renderDeletePendingProgress();
-      for (const id of ids) {
-        if (deletePendingPaused) break;
-        const form = new FormData();
-        form.append('action', 'delete-pending-queue-item');
-        form.append('queue_id', id);
-        form.append('queue_page', String(syncQueuePage));
-        form.append('queue_page_size', String(syncQueuePageSize));
-        try {
-          const res = await fetch(API_URL, { method: 'POST', body: form });
-          const payload = await res.json();
-          if (payload.ok) deletePendingProcessed += 1;
-          else deletePendingFailed += 1;
-          renderDeletePendingProgress();
-          if (payload.queue) renderSyncQueue(payload.queue, payload.sync || {});
-        } catch {
-          deletePendingFailed += 1;
-        }
-      }
-      deletePendingRunning = false;
-      updateDeletePendingControls();
-      if (syncStatus) syncStatus.textContent = `تم حذف ${deletePendingProcessed} صورة.`;
-      return;
-    }
-
-    const form = new FormData();
-    form.append('action', 'delete-pending-batch');
-    ids.forEach((id) => form.append('queue_ids[]', id));
-    form.append('queue_page', String(syncQueuePage));
-    form.append('queue_page_size', String(syncQueuePageSize));
-    const res = await fetch(API_URL, { method: 'POST', body: form });
-    const payload = await res.json();
-    if (syncStatus) syncStatus.textContent = payload.message || '';
-    if (payload.queue) renderSyncQueue(payload.queue, payload.sync || {});
-    if (syncQueueSelectAll) syncQueueSelectAll.checked = false;
-  }
-
-  function renderSyncQueueRowCells(row) {
-    const status = row.sync_status || 'pending';
-    const meta = statusLabels[status] || statusLabels.pending;
-    const canDelete = status === 'pending' || status === 'failed';
-    const checkCell = canDelete
-      ? `<input type="checkbox" class="sync-queue-select rounded" data-queue-id="${escapeHtml(row.id || '')}">`
-      : '';
-    const actionCell = canDelete
-      ? `<button type="button" class="delete-pending-queue-btn h-7 px-2 rounded border border-red-200 bg-red-50 text-red-700 font-bold" data-queue-id="${escapeHtml(row.id || '')}" data-file-name="${escapeHtml(row.file_name || '')}">حذف محلي</button>`
-      : '<span class="text-text-muted">—</span>';
-    return { status, meta, canDelete, checkCell, actionCell };
-  }
-
-  function renderSyncQueue(queuePayload, sync) {
-    if (!syncQueueSummary || !syncQueueBody) return;
-    const meta = normalizeQueuePayload(queuePayload);
-    const items = meta.items;
-    updateSyncQueuePagination(meta);
-    syncQueueSummary.textContent = `${syncQueueTotalCount} عنصر`;
-    if (!items.length) {
-      syncQueueBody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-text-muted">الطابور فارغ.</td></tr>';
-      if (syncQueueCards) {
-        syncQueueCards.innerHTML = '<p class="text-xs text-text-muted text-center py-4">الطابور فارغ.</p>';
-      }
-      return;
-    }
-    syncQueueBody.innerHTML = items.map((row) => {
-      const cells = renderSyncQueueRowCells(row);
-      return `<tr>
-        <td class="p-3 text-center">${cells.checkCell}</td>
-        <td class="p-3 font-mono text-xs" dir="ltr">${escapeHtml(row.file_name || '')}</td>
-        <td class="p-3"><span class="text-xs px-2 py-0.5 rounded-full ${cells.meta.class}">${cells.meta.label}</span></td>
-        <td class="p-3 font-mono text-xs" dir="ltr">${escapeHtml(row.amine_image_guid || '—')}</td>
-        <td class="p-3 text-xs text-text-muted">${escapeHtml(row.amine_sync_error_ar || '')}</td>
-        <td class="p-3 text-xs">${cells.actionCell}</td>
-      </tr>`;
-    }).join('');
-    if (syncQueueCards) {
-      syncQueueCards.innerHTML = items.map((row) => {
-        const cells = renderSyncQueueRowCells(row);
-        const note = row.amine_sync_error_ar
-          ? `<p class="dash-mi-sync-card__meta">${escapeHtml(row.amine_sync_error_ar)}</p>`
-          : '';
-        return `<article class="dash-mi-sync-card">
-          <div class="dash-mi-sync-card__head">
-            <p class="dash-mi-sync-card__file">${escapeHtml(row.file_name || '')}</p>
-            ${cells.checkCell}
-          </div>
-          <div class="dash-mi-sync-card__meta">
-            <span class="text-xs px-2 py-0.5 rounded-full ${cells.meta.class}">${cells.meta.label}</span>
-            <span dir="ltr">${escapeHtml(row.amine_image_guid || '—')}</span>
-            ${note}
-          </div>
-          <div class="mt-2">${cells.actionCell}</div>
-        </article>`;
-      }).join('');
-    }
-    if (syncQueueSelectAll) syncQueueSelectAll.checked = false;
-  }
-
-  async function deletePendingQueueItem(queueId, fileName) {
-    const label = fileName || 'هذه الصورة';
-    if (!confirm(`حذف «${label}» من مجلد الموقع وطابور المزامنة؟\n(لن يُمس سجل الأمين bm000 إن وُجد — استخدم تبويب الربط للحذف الكامل.)`)) {
-      return;
-    }
-    const form = new FormData();
-    form.append('action', 'delete-pending-queue-item');
-    form.append('queue_id', queueId);
-    form.append('queue_page', String(syncQueuePage));
-    form.append('queue_page_size', String(syncQueuePageSize));
-    const res = await fetch(API_URL, { method: 'POST', body: form });
-    const payload = await res.json();
-    if (syncStatus) {
-      syncStatus.textContent = payload.message || (payload.ok ? 'تم الحذف.' : 'تعذر الحذف.');
-    }
-    if (payload.queue) {
-      renderSyncQueue(payload.queue, payload.sync || {});
-    }
-    if (payload.sync) {
-      renderSyncOverview({ sync: payload.sync, api: { ok: true }, queue: payload.queue });
-    }
-  }
-
-  async function purgeOrphanQueue() {
-    if (!confirm('إزالة سجلات الطابور التي فقدت ملفاتها على مجلد الموقع؟')) return;
-    const form = new FormData();
-    form.append('action', 'purge-orphan-queue');
-    form.append('queue_page', String(syncQueuePage));
-    form.append('queue_page_size', String(syncQueuePageSize));
-    const res = await fetch(API_URL, { method: 'POST', body: form });
-    const payload = await res.json();
-    if (syncStatus) syncStatus.textContent = payload.message || 'تم التنظيف.';
-    if (payload.queue) renderSyncQueue(payload.queue, payload.sync || {});
-  }
-
-  async function refreshOverview() {
-    try {
-      const { payload } = await apiJson(`${API_URL}?action=overview&queue_page=${syncQueuePage}&queue_page_size=${syncQueuePageSize}`);
-      if (payload.ok) {
-        if (typeof payload.pending_deletable === 'number') {
-          pendingDeletableTotal = payload.pending_deletable;
-        }
-        renderSyncOverview(payload);
-      }
-      return payload;
-    } catch {
-      return { ok: false };
-    }
-  }
-
-  async function loadSyncQueuePage(page) {
-    syncQueuePage = Math.max(1, page);
-    try {
-      const { payload } = await apiJson(`${API_URL}?action=queue&page=${syncQueuePage}&page_size=${syncQueuePageSize}`);
-      if (payload.ok) {
-        renderSyncQueue(payload, payload.sync || {});
-      }
-      return payload;
-    } catch {
-      return { ok: false };
-    }
-  }
-
-  async function syncNextOnce() {
-    const form = new FormData();
-    form.append('action', 'sync-next');
-    form.append('queue_page', String(syncQueuePage));
-    form.append('queue_page_size', String(syncQueuePageSize));
-    const { payload } = await apiJson(API_URL, { method: 'POST', body: form });
-    return payload;
-  }
-
-  async function processSyncQueue() {
-    if (syncRunning) return;
-    syncRunning = true;
-    syncPaused = false;
-    syncProgressWrap?.classList.remove('hidden');
-    if (syncStatus) syncStatus.textContent = 'جاري مزامنة الأمين...';
-
-    while (!syncPaused) {
-      let result;
-      try {
-        result = await syncNextOnce();
-      } catch {
-        if (syncStatus) syncStatus.textContent = 'انقطع الاتصال — سيتم الاستئناف عند الضغط على «استئناف».';
-        break;
-      }
-
-      if (result.sync) {
-        const total = Math.max(1, (result.sync.synced ?? 0) + (result.sync.pending ?? 0) + (result.sync.failed ?? 0));
-        const done = result.sync.synced ?? 0;
-        if (syncProgressBar) syncProgressBar.style.width = `${Math.round((done / total) * 100)}%`;
-        if (syncProgressLabel) syncProgressLabel.textContent = `تم ${done} — متبقي ${(result.sync.pending ?? 0) + (result.sync.failed ?? 0)}`;
-      }
-
-      if (result.queue || result.sync) {
-        renderSyncQueue(result.queue || {}, result.sync || {});
-        renderSyncOverview({ sync: result.sync, api: { ok: !result.offline }, queue: result.queue });
-      }
-
-      if (result.done) {
-        if (syncStatus) syncStatus.textContent = result.message || 'اكتملت المزامنة.';
-        break;
-      }
-
-      if (result.offline || !result.ok) {
-        if (syncStatus) syncStatus.textContent = result.message || 'توقف بسبب انقطاع الأمين — اضغط «استئناف» لاحقاً.';
-        break;
-      }
-
-      if (syncStatus) syncStatus.textContent = result.message || 'تمت مزامنة صورة.';
-      await new Promise((resolve) => setTimeout(resolve, 400));
-    }
-
-    syncRunning = false;
-    await refreshOverview();
-  }
-
-  picker?.addEventListener('change', async () => {
-    if (!picker?.files?.length) return;
-    await buildQueueFromFiles(picker.files);
-  });
-
-  startBtn?.addEventListener('click', () => processQueue());
-  pauseBtn?.addEventListener('click', () => {
-    paused = true;
-    updateUploadControls();
-  });
-  resumeBtn?.addEventListener('click', () => processQueue());
-  discardBtn?.addEventListener('click', () => discardQueue());
-
-  startSyncBtn?.addEventListener('click', () => {
-    syncPaused = false;
-    processSyncQueue();
-  });
-
-  pauseSyncBtn?.addEventListener('click', () => {
-    syncPaused = true;
-    if (syncStatus) syncStatus.textContent = 'مزامنة الأمين متوقفة مؤقتاً.';
-  });
-
-  retryFailedBtn?.addEventListener('click', async () => {
-    const form = new FormData();
-    form.append('action', 'retry-failed');
-    form.append('queue_page', String(syncQueuePage));
-    form.append('queue_page_size', String(syncQueuePageSize));
-    const res = await fetch(API_URL, { method: 'POST', body: form });
-    const data = await res.json();
-    if (syncStatus) syncStatus.textContent = data.message || '';
-    await refreshOverview();
-  });
-
-  scanLocalBtn?.addEventListener('click', async () => {
-    if (scanRunning) {
-      return;
-    }
-
-    const notify = (message, type = 'info') => {
-      if (window.dashboardApp?.showToast) {
-        window.dashboardApp.showToast(message, type);
-      }
-      if (syncStatus) {
-        syncStatus.textContent = message;
-      }
-    };
-
-    scanRunning = true;
-    scanLocalBtn.disabled = true;
-    startSyncBtn && (startSyncBtn.disabled = true);
-    syncProgressWrap?.classList.remove('hidden');
-    if (syncProgressLabel) syncProgressLabel.textContent = 'فحص محلي: 0%';
-    if (syncProgressBar) syncProgressBar.style.width = '1%';
-    if (syncStatus) syncStatus.textContent = 'جاري تهيئة الفحص...';
-
-    const totals = { added: 0, skipped: 0, reconciled: 0, content_changed: 0 };
-    let offset = 0;
-    let totalFiles = 0;
-    let chunkSize = 15;
-
-    const updateScanProgress = (current, total, label) => {
-      const safeTotal = Math.max(1, total);
-      const pct = Math.min(100, Math.round((current / safeTotal) * 100));
-      if (syncProgressLabel) syncProgressLabel.textContent = label || `فحص محلي: ${current} / ${total}`;
-      if (syncProgressBar) syncProgressBar.style.width = `${Math.max(1, pct)}%`;
-    };
-
-    try {
-      const initForm = new FormData();
-      initForm.append('action', 'scan-local-init');
-      const initRes = await fetch(API_URL, { method: 'POST', body: initForm });
-      const initData = await initRes.json();
-      if (!initData.ok) {
-        notify(initData.message || 'تعذّر بدء الفحص.', 'error');
-        return;
-      }
-
-      totalFiles = Number(initData.init?.total_files || 0);
-      chunkSize = Number(initData.init?.chunk_size || 15);
-      const pendingQueue = Number(initData.init?.pending_queue_count || 0);
-
-      if (pendingQueue > 0) {
-        let reconcileOffset = 0;
-        if (syncStatus) syncStatus.textContent = `مطابقة الطابور المعلّق (0 / ${pendingQueue})...`;
-        while (reconcileOffset < pendingQueue) {
-          updateScanProgress(reconcileOffset, pendingQueue, `مطابقة الطابور: ${reconcileOffset} / ${pendingQueue}`);
-          const reconcileForm = new FormData();
-          reconcileForm.append('action', 'reconcile-queue-chunk');
-          reconcileForm.append('offset', String(reconcileOffset));
-          reconcileForm.append('chunk_size', String(chunkSize));
-          reconcileForm.append('queue_page', String(syncQueuePage));
-          reconcileForm.append('queue_page_size', String(syncQueuePageSize));
-          const reconcileRes = await fetch(API_URL, { method: 'POST', body: reconcileForm });
-          const reconcileData = await reconcileRes.json();
-          if (!reconcileData.ok) {
-            if (syncStatus) syncStatus.textContent = reconcileData.message || 'توقّفت مطابقة الطابور.';
-            return;
-          }
-          const reconcile = reconcileData.reconcile || {};
-          totals.reconciled += Number(reconcile.reconciled || 0);
-          totals.content_changed += Number(reconcile.content_changed || 0);
-          reconcileOffset = Number(reconcile.offset || (reconcileOffset + chunkSize));
-          if (reconcile.done) {
-            break;
-          }
-        }
-      }
-
-      if (totalFiles === 0) {
-        notify(initData.message || 'لا توجد ملفات محلية في المجلد المُعدّ — تحقق من المسارات ثم احفظها.', 'error');
-        await refreshOverview();
-        return;
-      }
-
-      offset = 0;
-      while (offset < totalFiles) {
-        updateScanProgress(offset, totalFiles);
-        if (syncStatus) {
-          syncStatus.textContent = `جاري فحص الملفات المحلية (${offset} / ${totalFiles})...`;
-        }
-
-        const form = new FormData();
-        form.append('action', 'scan-local-chunk');
-        form.append('offset', String(offset));
-        form.append('chunk_size', String(chunkSize));
-        form.append('queue_page', String(syncQueuePage));
-        form.append('queue_page_size', String(syncQueuePageSize));
-
-        const res = await fetch(API_URL, { method: 'POST', body: form });
-        const data = await res.json();
-        if (!data.ok) {
-          if (syncStatus) syncStatus.textContent = data.message || 'توقّف الفحص بسبب خطأ.';
-          break;
-        }
-
-        const scan = data.scan || {};
-        totals.added += Number(scan.added || 0);
-        totals.skipped += Number(scan.skipped || 0);
-        totals.reconciled += Number(scan.reconciled || 0);
-        totals.content_changed += Number(scan.content_changed || 0);
-        offset = Number(scan.offset || (offset + chunkSize));
-
-        if (scan.done) {
-          break;
-        }
-      }
-
-      const parts = [];
-      if (totals.reconciled > 0) parts.push(`تطابقت ${totals.reconciled} مع الأمين`);
-      if (totals.added > 0) parts.push(`أُضيف ${totals.added} للطابور`);
-      if (totals.content_changed > 0) parts.push(`${totals.content_changed} بمحتوى مختلف`);
-      if (totals.skipped > 0) parts.push(`تُخطّى ${totals.skipped}`);
-      if (syncStatus) {
-        syncStatus.textContent = parts.length > 0
-          ? `اكتمل الفحص: ${parts.join('، ')}.`
-          : 'اكتمل الفحص — لا تغييرات.';
-      }
-      notify(
-        parts.length > 0 ? `اكتمل الفحص: ${parts.join('، ')}.` : 'اكتمل الفحص — لا تغييرات.',
-        parts.length > 0 ? 'success' : 'info'
-      );
-      updateScanProgress(totalFiles, totalFiles, `فحص محلي: ${totalFiles} / ${totalFiles}`);
-
-      const finishForm = new FormData();
-      finishForm.append('action', 'scan-local-finish');
-      await fetch(API_URL, { method: 'POST', body: finishForm });
-
-      await refreshOverview();
-    } catch (error) {
-      notify('تعذّر إكمال الفحص المحلي.', 'error');
-      const failForm = new FormData();
-      failForm.append('action', 'scan-local-finish');
-      await fetch(API_URL, { method: 'POST', body: failForm });
-    } finally {
-      scanRunning = false;
-      scanLocalBtn.disabled = false;
-      startSyncBtn && (startSyncBtn.disabled = false);
-    }
-  });
-
-  syncQueuePrevBtn?.addEventListener('click', () => {
-    if (syncQueuePage > 1) loadSyncQueuePage(syncQueuePage - 1);
-  });
-  syncQueueNextBtn?.addEventListener('click', () => {
-    if (syncQueueHasMore) loadSyncQueuePage(syncQueuePage + 1);
-  });
-  syncQueueBody?.addEventListener('click', (event) => {
-    const btn = event.target instanceof HTMLElement ? event.target.closest('.delete-pending-queue-btn') : null;
-    if (!btn) return;
-    const queueId = btn.getAttribute('data-queue-id') || '';
-    const fileName = btn.getAttribute('data-file-name') || '';
-    if (queueId) deletePendingQueueItem(queueId, fileName);
-  });
-  syncQueueCards?.addEventListener('click', (event) => {
-    const btn = event.target instanceof HTMLElement ? event.target.closest('.delete-pending-queue-btn') : null;
-    if (!btn) return;
-    const queueId = btn.getAttribute('data-queue-id') || '';
-    const fileName = btn.getAttribute('data-file-name') || '';
-    if (queueId) deletePendingQueueItem(queueId, fileName);
-  });
-  purgeOrphanQueueBtn?.addEventListener('click', purgeOrphanQueue);
-  deleteSelectedPendingBtn?.addEventListener('click', deleteSelectedPending);
-  deleteAllPendingBtn?.addEventListener('click', deleteAllPending);
-  pauseDeletePendingBtn?.addEventListener('click', () => {
-    deletePendingPaused = true;
-    updateDeletePendingControls();
-    if (syncStatus) syncStatus.textContent = 'متوقف مؤقتاً — اضغط «استئناف».';
-  });
-  resumeDeletePendingBtn?.addEventListener('click', async () => {
-    if (!deletePendingRunning || !deletePendingPaused) return;
-    deletePendingPaused = false;
-    if (syncStatus) syncStatus.textContent = 'جاري الحذف...';
-    await runDeletePendingLoop();
-  });
-  syncQueueSelectAll?.addEventListener('change', () => {
-    const checked = !!syncQueueSelectAll.checked;
-    document.querySelectorAll('.sync-queue-select').forEach((el) => {
-      el.checked = checked;
-    });
-  });
-
-  updateSyncQueuePagination(normalizeQueuePayload({
-    items: <?= json_encode($queue, JSON_UNESCAPED_UNICODE) ?>,
-    page: <?= (int) ($queuePage['page'] ?? 1) ?>,
-    page_size: <?= (int) ($queuePage['page_size'] ?? 20) ?>,
-    total_count: <?= (int) ($queuePage['total_count'] ?? 0) ?>,
-    has_more: <?= !empty($queuePage['has_more']) ? 'true' : 'false' ?>,
-  }));
-
-  restoreQueueFromStorage();
-  loadUploadEnvironment();
-  refreshOverview();
-})();
-</script>
+      <button class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold lg:col-span-2 lg:justify-self-start">حفظ المسارات</button>
+    </form>
+  </details>
+</div>
+
+<script type="application/json" id="material-images-upload-config"><?= json_encode($uploadBootstrap, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>

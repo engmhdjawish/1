@@ -120,12 +120,14 @@ if ($method === 'GET') {
     if ($action === 'overview') {
         $queuePage = max(1, (int) ($_GET['queue_page'] ?? 1));
         $queuePageSize = max(5, min(50, (int) ($_GET['queue_page_size'] ?? 20)));
+        $statusFilter = trim((string) ($_GET['queue_status'] ?? ''));
+        $statusFilter = in_array($statusFilter, ['pending', 'syncing', 'synced', 'failed'], true) ? $statusFilter : null;
         materialImagesApiJson([
             'ok' => true,
             'local' => MaterialImageStorageService::stats(),
             'sync' => MaterialImageSyncService::stats(),
             'api' => PortalSettingsService::apiHealth(),
-            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
+            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize, $statusFilter),
             'pending_deletable' => MaterialImageSyncService::countDeletablePending(),
         ]);
     }
@@ -133,9 +135,11 @@ if ($method === 'GET') {
     if ($action === 'queue') {
         $page = max(1, (int) ($_GET['page'] ?? 1));
         $pageSize = max(5, min(100, (int) ($_GET['page_size'] ?? 20)));
+        $statusFilter = trim((string) ($_GET['status'] ?? ''));
+        $statusFilter = in_array($statusFilter, ['pending', 'syncing', 'synced', 'failed'], true) ? $statusFilter : null;
         echo json_encode(array_merge(
             ['ok' => true, 'sync' => MaterialImageSyncService::stats()],
-            MaterialImageSyncService::listQueuePage($page, $pageSize)
+            MaterialImageSyncService::listQueuePage($page, $pageSize, $statusFilter)
         ), JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -287,10 +291,15 @@ if ($method === 'POST') {
 
     if ($action === 'sync-next') {
         $result = MaterialImageSyncService::syncNext();
-        echo json_encode(array_merge($result, [
+        $payload = array_merge($result, [
             'sync' => MaterialImageSyncService::stats(),
-            'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
-        ]), JSON_UNESCAPED_UNICODE);
+        ]);
+        if (trim((string) ($_POST['light'] ?? '')) !== '1') {
+            $statusFilter = trim((string) ($_POST['queue_status'] ?? ''));
+            $statusFilter = in_array($statusFilter, ['pending', 'syncing', 'synced', 'failed'], true) ? $statusFilter : null;
+            $payload['queue'] = MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize, $statusFilter);
+        }
+        echo json_encode($payload, JSON_UNESCAPED_UNICODE);
         exit;
     }
 

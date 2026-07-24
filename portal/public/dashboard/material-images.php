@@ -107,6 +107,7 @@ if ($workspaceTab === 'download') {
 
 $currentRoute = '/dashboard/material-images.php';
 $materialImagesZipTab = ($workspaceTab === 'download');
+$materialImagesUploadTab = ($workspaceTab === 'upload');
 
 ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/material-images-workspace.php';

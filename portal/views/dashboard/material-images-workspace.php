@@ -40,6 +40,12 @@ $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'messag
       <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">
         بانتظار الأمين: <strong id="statPendingCount"><?= (int) ($syncStats['pending'] ?? 0) ?></strong>
       </span>
+      <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">
+        تمت المزامنة: <strong id="statSyncedCount" class="text-status-active"><?= (int) ($syncStats['synced'] ?? 0) ?></strong>
+      </span>
+      <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">
+        فاشلة: <strong id="statFailedCount" class="text-status-rejected"><?= (int) ($syncStats['failed'] ?? 0) ?></strong>
+      </span>
       <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white" id="apiStatusPill">
         API الأمين:
         <?php if (!empty($apiHealth['ok'])): ?>

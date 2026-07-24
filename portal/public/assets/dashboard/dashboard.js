@@ -707,6 +707,9 @@
     if (typeof window.portalMaterialImagesLinkInit === 'function') {
       window.portalMaterialImagesLinkInit(root);
     }
+    if (typeof window.portalMaterialImagesUploadInit === 'function') {
+      window.portalMaterialImagesUploadInit(root);
+    }
     if (typeof window.portalMaterialZipDownloadInit === 'function') {
       window.portalMaterialZipDownloadInit(root);
     }
