@@ -99,6 +99,23 @@
 
   let lastToastMessage = '';
   let lastToastAt = 0;
+  let lastInlineMessage = '';
+  let lastInlineAt = 0;
+
+  const cartDrawer = () => document.getElementById('store-cart-drawer');
+
+  const isCartDrawerOpen = () => {
+    const drawer = cartDrawer();
+    return !!drawer && !drawer.hidden && drawer.classList.contains('is-open');
+  };
+
+  const activeCartNoticeHost = () => {
+    if (isCartDrawerOpen()) {
+      return cartDrawer()?.querySelector('[data-cart-stock-notices]') || null;
+    }
+    const pageRoot = document.querySelector('[data-store-cart-page="1"]');
+    return pageRoot?.querySelector('[data-cart-stock-notices]') || null;
+  };
 
   const syncToastHostLayer = () => {
     const host = toastHost();
@@ -147,32 +164,34 @@
 
   const showCartInlineNotice = (message, level = 'error') => {
     if (!message) return;
-    const html = buildCartNoticeHtml(message, level);
-    document.querySelectorAll('[data-cart-stock-notices]').forEach((stockEl) => {
-      stockEl.classList.remove('hidden');
-      stockEl.innerHTML = html;
-    });
-    const drawerAlert = document.querySelector('[data-cart-drawer-alert]');
-    if (drawerAlert) {
-      drawerAlert.hidden = false;
-      drawerAlert.innerHTML = html;
-    }
+    const now = Date.now();
+    if (message === lastInlineMessage && now - lastInlineAt < 2500) return;
+    lastInlineMessage = message;
+    lastInlineAt = now;
+
+    const host = activeCartNoticeHost();
+    if (!host) return;
+    host.classList.remove('hidden');
+    host.innerHTML = buildCartNoticeHtml(message, level);
   };
 
   const clearCartInlineNotice = () => {
+    lastInlineMessage = '';
+    lastInlineAt = 0;
     document.querySelectorAll('[data-cart-stock-notices]').forEach((stockEl) => {
       stockEl.classList.add('hidden');
       stockEl.innerHTML = '';
     });
-    const drawerAlert = document.querySelector('[data-cart-drawer-alert]');
-    if (drawerAlert) {
-      drawerAlert.hidden = true;
-      drawerAlert.innerHTML = '';
-    }
   };
 
   const showCartFeedback = (message, level = 'success') => {
     if (!message) return;
+    if (isCartDrawerOpen()) {
+      if (level === 'error' || level === 'warning') {
+        showCartInlineNotice(message, level);
+      }
+      return;
+    }
     if (level === 'error' || level === 'warning') {
       showCartInlineNotice(message, level);
     }
@@ -1183,13 +1202,6 @@
       stockEl.classList.add('hidden');
       stockEl.innerHTML = '';
     }
-    if (isDrawer) {
-      const drawerAlert = document.querySelector('[data-cart-drawer-alert]');
-      if (drawerAlert) {
-        drawerAlert.hidden = true;
-        drawerAlert.innerHTML = '';
-      }
-    }
 
     updateBadge(data);
 
@@ -1338,16 +1350,8 @@
     if (Array.isArray(data.stock_notices) && data.stock_notices.length > 0 && stockEl) {
       const uniqueNotices = [...new Set(data.stock_notices.map((n) => String(n || '').trim()).filter(Boolean))];
       if (uniqueNotices.length > 0) {
-        const html = buildCartNoticeHtml(uniqueNotices.join(' '), 'warning');
         stockEl.classList.remove('hidden');
-        stockEl.innerHTML = html;
-        if (isDrawer) {
-          const drawerAlert = document.querySelector('[data-cart-drawer-alert]');
-          if (drawerAlert) {
-            drawerAlert.hidden = false;
-            drawerAlert.innerHTML = html;
-          }
-        }
+        stockEl.innerHTML = buildCartNoticeHtml(uniqueNotices.join(' '), 'warning');
       }
     }
   };
@@ -1609,6 +1613,14 @@
     const notifyCartMessage = (data, silent) => {
       if (silent || !data.message) return;
       const level = data.level || (data.ok ? 'success' : 'error');
+      if (isCartDrawerOpen()) {
+        if (!data.ok && (level === 'error' || level === 'warning')) {
+          showCartInlineNotice(data.message, level);
+        } else if (data.ok) {
+          clearCartInlineNotice();
+        }
+        return;
+      }
       if (!data.ok) {
         showCartFeedback(data.message, level);
         return;
@@ -1641,8 +1653,6 @@
       publishCartSync(data);
     }
   };
-
-  const cartDrawer = () => document.getElementById('store-cart-drawer');
 
   const guardDrawerGhostClick = (event) => {
     if (Date.now() >= drawerCloseGuardUntil) return;

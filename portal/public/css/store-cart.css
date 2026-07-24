@@ -285,17 +285,15 @@
 }
 
 body.store-cart-drawer-open #storeCartToastHost {
-  top: max(0.85rem, env(safe-area-inset-top, 0px));
-  bottom: auto;
+  top: auto;
+  bottom: 1.25rem;
 }
 
-.store-cart-drawer__alert:not([hidden]) {
-  flex-shrink: 0;
-  padding: 0.75rem 1.25rem 0;
-}
-
-.store-cart-drawer__alert:not([hidden]) .store-cart-inline-notice {
-  margin: 0;
+.store-cart-drawer__scroll [data-cart-stock-notices]:not(.hidden) {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin-bottom: 0.75rem;
 }
 
 .store-cart-inline-notice {
