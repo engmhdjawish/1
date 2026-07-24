@@ -1139,7 +1139,7 @@
           html += `<div class="amine-service-banner amine-service-banner--compact" role="status">
             <span class="material-symbols-outlined amine-service-banner__icon" aria-hidden="true">cloud_off</span>
             <div class="amine-service-banner__body">
-              <strong class="amine-service-banner__title">خدمة مؤقتة — جاري المعالجة</strong>
+              <strong class="amine-service-banner__title">عطل مؤقت — جاري المعالجة</strong>
               <p class="amine-service-banner__text">${escapeHtml(String(data.amine_notice))}</p>
             </div>
           </div>`;

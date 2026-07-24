@@ -749,7 +749,7 @@ require __DIR__ . '/partials/store-filter-group.php';
     <?php if ($products === [] && !empty($catalog['apiError'])): ?>
       <div class="store-empty-state store-empty-state--maintenance" role="status">
         <span class="material-symbols-outlined store-empty-state__icon" aria-hidden="true">cloud_off</span>
-        <strong class="store-empty-state__title">خدمة مؤقتة — جاري المعالجة</strong>
+        <strong class="store-empty-state__title">عطل مؤقت — جاري المعالجة</strong>
         <p class="store-empty-state__text"><?= h((string) $catalog['apiError']) ?></p>
         <p class="store-empty-state__hint">يمكنك العودة لاحقاً أو تصفّح الصفحة الرئيسية — سنعيد الخدمة خلال دقائق.</p>
       </div>
