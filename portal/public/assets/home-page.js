@@ -1,22 +1,8 @@
 (() => {
-  const sectionLinks = () => Array.from(document.querySelectorAll('[data-home-section-link]'));
-
-  const setActiveSection = (sectionId) => {
-    if (!sectionId) return;
-    sectionLinks().forEach((link) => {
-      const isActive = link.getAttribute('data-home-section-link') === sectionId;
-      link.classList.toggle('is-active', isActive);
-      if (link.classList.contains('home-section-nav__link')) {
-        link.setAttribute('aria-current', isActive ? 'true' : 'false');
-      }
-    });
-  };
-
   const initSectionNav = () => {
-    const nav = document.querySelector('[data-home-section-nav]');
+    const nav = document.querySelector('.home-section-nav--sticky');
     if (!nav) return;
 
-    const sections = Array.from(document.querySelectorAll('.home-section[id]'));
     const measureOffset = () => {
       const header = document.querySelector('.site-header');
       const headerHeight = header?.offsetHeight ?? 0;
@@ -32,58 +18,29 @@
       offset = measureOffset();
     });
 
-    const scrollToSection = (target) => {
-      if (!target) return;
-      offset = measureOffset();
-      const top = target.getBoundingClientRect().top + window.scrollY - offset;
-      window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
-    };
-
-    sectionLinks().forEach((link) => {
+    nav.querySelectorAll('.home-section-nav__link[href^="#"]').forEach((link) => {
       link.addEventListener('click', (event) => {
         const hash = link.getAttribute('href') || '';
         if (!hash.startsWith('#')) return;
         const target = document.querySelector(hash);
         if (!target) return;
         event.preventDefault();
-        scrollToSection(target);
+        offset = measureOffset();
+        const top = target.getBoundingClientRect().top + window.scrollY - offset;
+        window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
         history.replaceState(null, '', hash);
-        setActiveSection(link.getAttribute('data-home-section-link') || '');
       });
     });
-
-    if (sections.length > 0 && 'IntersectionObserver' in window) {
-      let activeId = '';
-      const observer = new IntersectionObserver(
-        (entries) => {
-          const visible = entries
-            .filter((entry) => entry.isIntersecting)
-            .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-          const next = visible[0]?.target?.id || activeId;
-          if (next && next !== activeId) {
-            activeId = next;
-            setActiveSection(next);
-          }
-        },
-        {
-          root: null,
-          rootMargin: '-42% 0px -48% 0px',
-          threshold: [0, 0.15, 0.35, 0.55],
-        },
-      );
-      sections.forEach((section) => observer.observe(section));
-    }
 
     if (window.location.hash) {
       const target = document.querySelector(window.location.hash);
       if (target) {
         window.requestAnimationFrame(() => {
-          scrollToSection(target);
-          setActiveSection(window.location.hash.slice(1));
+          offset = measureOffset();
+          const top = target.getBoundingClientRect().top + window.scrollY - offset;
+          window.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
         });
       }
-    } else if (sections[0]?.id) {
-      setActiveSection(sections[0].id);
     }
   };
 

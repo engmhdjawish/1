@@ -114,61 +114,11 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
   <?php endif; ?>
 
   <?php if ($sections !== []): ?>
-    <section class="home-category-grid" aria-label="تصفح الأقسام">
-      <div class="home-category-grid__head">
-        <h2 class="home-category-grid__title">تصفّح الأقسام</h2>
-        <p class="home-category-grid__lead">اختر القسم للانتقال مباشرة إلى منتجاته</p>
-      </div>
-      <div class="home-category-grid__track">
-        <?php foreach ($sections as $section): ?>
-          <?php
-            $anchorId = home_section_anchor_id($section);
-            if ($anchorId === '') {
-                continue;
-            }
-            $isOfferSection = !empty($section['is_offer_section']);
-            $sectionProducts = is_array($section['products'] ?? null) ? $section['products'] : [];
-            $bannerUrl = trim((string) ($section['banner_image_url'] ?? ''));
-          ?>
-          <a
-            href="#<?= h($anchorId) ?>"
-            class="home-category-card<?= $isOfferSection ? ' home-category-card--offer' : '' ?>"
-            data-home-section-link="<?= h($anchorId) ?>"
-          >
-            <div class="home-category-card__media" aria-hidden="true">
-              <?php if ($bannerUrl !== ''): ?>
-                <img
-                  src="<?= h(portal_site_media_display_url($bannerUrl, 480)) ?>"
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                >
-              <?php else: ?>
-                <span class="material-symbols-outlined"><?= h(home_section_icon($section)) ?></span>
-              <?php endif; ?>
-              <?php if ($isOfferSection): ?>
-                <span class="home-category-card__badge">عرض</span>
-              <?php endif; ?>
-            </div>
-            <div class="home-category-card__body">
-              <h3 class="home-category-card__title"><?= h((string) ($section['title_ar'] ?? 'قسم')) ?></h3>
-              <p class="home-category-card__meta"><?= h(home_section_preview_label($section, $sectionProducts)) ?></p>
-            </div>
-          </a>
-        <?php endforeach; ?>
-      </div>
-    </section>
-
-    <nav class="home-section-nav home-section-nav--sticky" aria-label="أقسام الرئيسية" data-home-section-nav>
+    <nav class="home-section-nav home-section-nav--sticky" aria-label="أقسام الرئيسية">
       <?php foreach ($sections as $section): ?>
         <?php $anchorId = home_section_anchor_id($section); ?>
         <?php if ($anchorId === '') continue; ?>
-        <a
-          href="#<?= h($anchorId) ?>"
-          class="home-section-nav__link"
-          data-home-section-link="<?= h($anchorId) ?>"
-        >
-          <span class="material-symbols-outlined home-section-nav__icon" aria-hidden="true"><?= h(home_section_icon($section)) ?></span>
+        <a href="#<?= h($anchorId) ?>" class="home-section-nav__link">
           <?= h((string) ($section['title_ar'] ?? 'قسم')) ?>
         </a>
       <?php endforeach; ?>
@@ -192,43 +142,28 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
         $showPriceUsd = $priceState['show_price_usd'];
         $isOfferSection = !empty($section['is_offer_section']);
         $bannerUrl = trim((string) ($section['banner_image_url'] ?? ''));
-        $hasEditorialBanner = $bannerUrl !== '';
+        $hasCover = $bannerUrl !== '';
       ?>
       <section
-        class="home-section<?= $isOfferSection ? ' home-section--offer' : '' ?><?= $hasEditorialBanner ? ' home-section--editorial' : '' ?>"
+        class="home-section home-section--showcase<?= $isOfferSection ? ' home-section--offer' : '' ?><?= $hasCover ? ' home-section--has-cover' : '' ?>"
         id="<?= h($sectionId) ?>"
       >
-        <div class="home-section__body">
-          <?php if ($hasEditorialBanner): ?>
-            <header class="home-section__editorial">
+        <div class="home-section__layout">
+          <?php if ($hasCover): ?>
+            <div class="home-section__cover">
               <img
-                class="home-section__editorial-bg"
-                src="<?= h(portal_site_media_display_url($bannerUrl, 1280)) ?>"
+                src="<?= h(portal_site_media_display_url($bannerUrl, 960)) ?>"
                 alt=""
                 loading="lazy"
                 decoding="async"
-                sizes="(max-width: 768px) 100vw, 1280px"
+                sizes="(max-width: 767px) 100vw, 220px"
               >
-              <div class="home-section__editorial-overlay">
-                <div class="home-section__editorial-content">
-                  <?php if ($isOfferSection): ?>
-                    <span class="home-section__badge home-section__badge--light">عرض خاص</span>
-                  <?php endif; ?>
-                  <h2 class="home-section__title home-section__title--editorial"><?= h((string) ($section['title_ar'] ?? '')) ?></h2>
-                  <?php if (!empty($section['subtitle_ar'])): ?>
-                    <p class="home-section__subtitle home-section__subtitle--editorial"><?= h((string) $section['subtitle_ar']) ?></p>
-                  <?php endif; ?>
-                  <p class="home-section__editorial-meta"><?= h(home_section_preview_label($section, $products)) ?></p>
-                </div>
-                <a href="<?= h(home_section_store_url($section)) ?>" class="home-section__more home-section__more--editorial">
-                  عرض المزيد
-                  <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
-                </a>
-              </div>
-            </header>
-          <?php else: ?>
-            <header class="home-section__header">
-              <div class="home-section__title-wrap">
+            </div>
+          <?php endif; ?>
+
+          <div class="home-section__content">
+            <header class="home-section__head">
+              <div class="home-section__head-text">
                 <?php if ($isOfferSection): ?>
                   <span class="home-section__badge">عرض خاص</span>
                 <?php endif; ?>
@@ -238,35 +173,37 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
                 <?php endif; ?>
               </div>
               <a href="<?= h(home_section_store_url($section)) ?>" class="home-section__more">
-                عرض المزيد
+                عرض الكل
                 <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
               </a>
             </header>
-          <?php endif; ?>
 
-          <?php if ($deferHomeProducts): ?>
-            <div
-              class="home-strip-slot"
-              data-home-products="<?= h($sectionId) ?>"
-              <?= $embeddedStripHtml === '' ? ' data-home-products-pending="1"' : '' ?>
-            >
-              <?php if ($embeddedStripHtml !== ''): ?>
-                <?= $embeddedStripHtml ?>
-              <?php else: ?>
-                <div class="home-strip-skeleton" aria-hidden="true">
-                  <?php for ($sk = 0; $sk < 4; $sk++): ?>
-                    <div class="home-product-skeleton"></div>
-                  <?php endfor; ?>
+            <div class="home-section__showcase">
+              <?php if ($deferHomeProducts): ?>
+                <div
+                  class="home-strip-slot"
+                  data-home-products="<?= h($sectionId) ?>"
+                  <?= $embeddedStripHtml === '' ? ' data-home-products-pending="1"' : '' ?>
+                >
+                  <?php if ($embeddedStripHtml !== ''): ?>
+                    <?= $embeddedStripHtml ?>
+                  <?php else: ?>
+                    <div class="home-strip-skeleton" aria-hidden="true">
+                      <?php for ($sk = 0; $sk < 4; $sk++): ?>
+                        <div class="home-product-skeleton"></div>
+                      <?php endfor; ?>
+                    </div>
+                  <?php endif; ?>
                 </div>
+              <?php elseif ($embeddedStripHtml !== ''): ?>
+                <?= $embeddedStripHtml ?>
+              <?php elseif ($products === []): ?>
+                <div class="home-section__empty">لا توجد منتجات في هذا القسم حالياً.</div>
+              <?php else: ?>
+                <?php require __DIR__ . '/partials/home-section-product-strip.php'; ?>
               <?php endif; ?>
             </div>
-          <?php elseif ($embeddedStripHtml !== ''): ?>
-            <?= $embeddedStripHtml ?>
-          <?php elseif ($products === []): ?>
-            <div class="home-section__empty">لا توجد منتجات في هذا القسم حالياً.</div>
-          <?php else: ?>
-            <?php require __DIR__ . '/partials/home-section-product-strip.php'; ?>
-          <?php endif; ?>
+          </div>
         </div>
       </section>
     <?php endforeach; ?>
