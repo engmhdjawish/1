@@ -281,6 +281,18 @@ window.portalStoreFiltersInit = (root = document) => {
     if (!needsDeferredFilters()) {
       return;
     }
+    if (catalogRoot.hasAttribute('data-store-filters-scoped')) {
+      catalogRoot.querySelectorAll('.store-filter-accordion-summary').forEach((summary) => {
+        if (summary.dataset.scopedFiltersBound === '1') {
+          return;
+        }
+        summary.dataset.scopedFiltersBound = '1';
+        summary.addEventListener('click', () => {
+          loadDeferredFilters().catch(() => {});
+        }, { once: true });
+      });
+      return;
+    }
     const run = () => {
       loadDeferredFilters().catch(() => {});
     };

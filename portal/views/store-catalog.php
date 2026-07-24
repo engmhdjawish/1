@@ -32,6 +32,7 @@ $filterOptions = is_array($catalog['filterOptions'] ?? null) ? $catalog['filterO
 $lockedClientFilters = array_map('strval', is_array($catalog['locked_client_filters'] ?? null) ? $catalog['locked_client_filters'] : []);
 $allowClientFilters = (bool) ($catalog['allow_client_filters'] ?? false);
 $filtersDeferred = (bool) ($catalog['filters_deferred'] ?? false);
+$filtersScoped = (bool) ($catalog['filters_scoped'] ?? false);
 $isSectionBrowse = $sectionContext !== null;
 $storeSectionSlug = '';
 $storeOfferSlug = '';
@@ -482,7 +483,7 @@ require __DIR__ . '/partials/store-filter-group.php';
 <?php endif; ?>
 
 <!-- store-catalog-fragment:start -->
-<div class="store-layout <?= $allowClientFilters ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?>>
+<div class="store-layout <?= $allowClientFilters ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?><?= $filtersScoped ? ' data-store-filters-scoped="1"' : '' ?>>
   <?php if ($allowClientFilters): ?>
     <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
       <aside class="store-filters-sidebar">
