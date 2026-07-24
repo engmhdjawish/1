@@ -21,6 +21,7 @@
     navigating: false,
     context: 'catalog',
     cartRoot: null,
+    orderRoot: null,
     itemScope: null,
     currentGuid: '',
   };
@@ -276,12 +277,18 @@
     }
   };
 
-  const collectItems = (cartRoot = null, itemScope = null) => {
+  const collectItems = (options = {}) => {
+    const cartRoot = options.cartRoot || null;
+    const orderRoot = options.orderRoot || null;
+    const itemScope = options.itemScope || null;
     const items = [];
-    const scope = cartRoot || itemScope || document;
-    const selector = cartRoot
-      ? '[data-store-cart-preview-line]'
-      : '[data-store-preview-card]:not([data-store-cart-preview-line])';
+    const scope = orderRoot || cartRoot || itemScope || document;
+    let selector = '[data-store-preview-card]:not([data-store-cart-preview-line]):not([data-store-order-preview-line])';
+    if (orderRoot) {
+      selector = '[data-store-order-preview-line]';
+    } else if (cartRoot) {
+      selector = '[data-store-cart-preview-line]';
+    }
     scope.querySelectorAll(selector).forEach((card) => {
       const raw = card.getAttribute('data-preview');
       if (raw) {
@@ -540,6 +547,35 @@
     }
   };
 
+  const mountOrderLineInfo = (item, container) => {
+    if (!container) return;
+    const qty = formatPackageCount(item.orderQty ?? item.cartQty ?? 0);
+    const packageUnit = item.packageUnit || 'طرد';
+    let lineTotalHtml = '';
+    if (item.showPrice) {
+      if (item.showPriceSyp && Number(item.lineTotalSp) > 0) {
+        lineTotalHtml = `<div class="store-product-preview__order-total">
+          <span>إجمالي الصنف</span>
+          <strong class="store-num" dir="ltr">${formatMoney(item.lineTotalSp)} ل.س</strong>
+        </div>`;
+      } else if (item.showPriceUsd && Number(item.lineTotalUsd) > 0) {
+        lineTotalHtml = `<div class="store-product-preview__order-total">
+          <span>إجمالي الصنف</span>
+          <strong class="store-num" dir="ltr">$${formatUsd(item.lineTotalUsd)}</strong>
+        </div>`;
+      }
+    }
+
+    container.innerHTML = `
+      <div class="store-product-preview__order-info">
+        <div class="store-product-preview__order-qty">
+          <span class="store-product-preview__order-label">الكمية في الطلب</span>
+          <strong class="store-num" dir="ltr">${esc(qty)} ${esc(packageUnit)}</strong>
+        </div>
+        ${lineTotalHtml}
+      </div>`;
+  };
+
   const renderCartFormFallback = (p) => {
     const maxAttr = p.maxPackages != null ? `data-max-qty="${esc(p.maxPackages)}" data-max-qty-label="${esc(p.maxLabel || p.maxPackages)}"` : '';
     const effectiveMax = p.effectiveMax != null ? Number(p.effectiveMax) : (p.remaining != null ? Number(p.remaining) : null);
@@ -742,15 +778,16 @@
   const updateNav = () => {
     const total = state.items.length;
     const isCart = state.context === 'cart';
+    const isOrder = state.context === 'order';
     const scopedCatalog = isScopedCatalog();
-    const pageInfo = (isCart || scopedCatalog) ? {} : paging();
-    const hasPrevPage = !isCart && !!pageInfo.prevPageUrl;
-    const hasNextPage = !isCart && !!pageInfo.nextPageUrl;
+    const pageInfo = (isCart || isOrder || scopedCatalog) ? {} : paging();
+    const hasPrevPage = !isCart && !isOrder && !!pageInfo.prevPageUrl;
+    const hasNextPage = !isCart && !isOrder && !!pageInfo.nextPageUrl;
     const atFirst = state.index <= 0;
     const atLast = state.index >= total - 1;
 
     if (counterEl) {
-      const pageLabel = !isCart && pageInfo.totalPages > 1
+      const pageLabel = !isCart && !isOrder && pageInfo.totalPages > 1
         ? ` — صفحة <span class="store-num" dir="ltr">${pageInfo.page}</span>/<span class="store-num" dir="ltr">${pageInfo.totalPages}</span>`
         : '';
       counterEl.innerHTML = total > 0
@@ -762,7 +799,7 @@
   };
 
   const render = (p, imageOptions = {}) => {
-    const item = syncCartQtyFromDom(p);
+    const item = state.context === 'order' ? p : syncCartQtyFromDom(p);
     if (!imageOptions.preferElement) {
       prepareImageTransition();
     }
@@ -770,6 +807,7 @@
     if (panel) {
       panel.classList.toggle('store-product-preview__panel--offer', !!item.hasOffer);
       panel.classList.toggle('store-product-preview__panel--cart', state.context === 'cart');
+      panel.classList.toggle('store-product-preview__panel--order', state.context === 'order');
     }
 
     state.currentGuid = item.guid || state.currentGuid;
@@ -798,14 +836,19 @@
     if (titleEl) titleEl.textContent = item.name || '—';
 
     if (subtitleEl) {
-      const parts = [
-        item.manufacturer,
-        item.code ? `#${item.code}` : '',
-        item.materialType,
-        item.showQuantity && item.packagesAvailable > 0
-          ? `متوفر ${item.packagesAvailableLabel || formatQty(item.packagesAvailable)} ${item.packageUnit}`
-          : '',
-      ].filter(Boolean);
+      const parts = state.context === 'order'
+        ? [
+            item.code ? `رقم المادة: ${item.code}` : '',
+            formatPackagingLabel(item),
+          ].filter(Boolean)
+        : [
+            item.manufacturer,
+            item.code ? `#${item.code}` : '',
+            item.materialType,
+            item.showQuantity && item.packagesAvailable > 0
+              ? `متوفر ${item.packagesAvailableLabel || formatQty(item.packagesAvailable)} ${item.packageUnit}`
+              : '',
+          ].filter(Boolean);
       subtitleEl.textContent = parts.join(' · ');
       subtitleEl.hidden = parts.length === 0;
     }
@@ -813,7 +856,10 @@
     renderPackaging(item);
 
     if (pricesEl) pricesEl.innerHTML = renderPrices(item);
-    if (state.context === 'cart') {
+    if (state.context === 'order') {
+      mountOrderLineInfo(item, cartEl);
+      if (detailEl) detailEl.classList.add('hidden');
+    } else if (state.context === 'cart') {
       mountCartLineControls(item, cartEl);
       updateInCartBanner(item);
       if (detailEl) detailEl.classList.add('hidden');
@@ -897,7 +943,7 @@
       return;
     }
 
-    if (state.context === 'cart' || isScopedCatalog()) {
+    if (state.context === 'cart' || state.context === 'order' || isScopedCatalog()) {
       return;
     }
 
@@ -920,11 +966,13 @@
 
   const open = (guid, preferElement = null, options = {}) => {
     const cartRoot = options.cartRoot || null;
-    const itemScope = cartRoot ? null : (options.itemScope || null);
-    state.context = cartRoot ? 'cart' : 'catalog';
+    const orderRoot = options.orderRoot || null;
+    const itemScope = cartRoot || orderRoot ? null : (options.itemScope || null);
+    state.context = orderRoot ? 'order' : cartRoot ? 'cart' : 'catalog';
     state.cartRoot = cartRoot;
+    state.orderRoot = orderRoot;
     state.itemScope = itemScope;
-    state.items = collectItems(cartRoot, itemScope);
+    state.items = collectItems({ cartRoot, itemScope, orderRoot });
     if (state.items.length === 0) return;
     const idx = state.items.findIndex((item) => item.guid === guid);
     state.index = idx >= 0 ? idx : 0;
@@ -951,6 +999,8 @@
       imgEl.classList.remove('is-loading', 'is-placeholder');
     }
     document.body.style.overflow = '';
+    state.cartRoot = null;
+    state.orderRoot = null;
     state.itemScope = null;
   };
 
@@ -981,12 +1031,13 @@
     const guid = card?.getAttribute('data-preview-guid') || '';
     if (!guid) return;
     const cartRoot = trigger.closest('[data-store-cart-preview-root]');
-    const itemScope = cartRoot ? null : resolveItemScope(trigger);
+    const orderRoot = trigger.closest('[data-store-order-preview-root]');
+    const itemScope = cartRoot || orderRoot ? null : resolveItemScope(trigger);
     const sourceImg = trigger.querySelector('img')
       || trigger.querySelector('.material-image-frame__photo img')
       || card?.querySelector('.material-image-frame__photo img')
       || card?.querySelector('.store-order-line-card__thumb img');
-    open(guid, sourceImg, { cartRoot, itemScope });
+    open(guid, sourceImg, { cartRoot, orderRoot, itemScope });
   });
 
   modal.querySelectorAll('[data-preview-close]').forEach((el) => {
@@ -1043,7 +1094,7 @@
 
       const prevIndex = state.index;
       const prevGuid = state.currentGuid;
-      state.items = collectItems(state.cartRoot);
+      state.items = collectItems({ cartRoot: state.cartRoot });
 
       if (qtyMap && typeof qtyMap === 'object') {
         state.items = state.items

@@ -329,10 +329,12 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   require_once __DIR__ . '/partials/media-picker.php';
   portal_render_media_picker_modal();
   require __DIR__ . '/../partials/store-image-lightbox.php';
+  require __DIR__ . '/../partials/store-product-preview.php';
   ?>
   <script src="<?= h(portal_asset_url('/assets/phone-input.js')) ?>" defer></script>
   <script src="/assets/deferred-images.js" defer></script>
   <script src="/assets/store-image-zoom.js" defer></script>
+  <script src="/assets/store-product-preview.js" defer></script>
   <script src="<?= h(portal_asset_url('/assets/dashboard/material-images-link.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/dashboard/dashboard.js')) ?>" defer></script>
   <script src="/assets/dashboard/media-picker.js" defer></script>
