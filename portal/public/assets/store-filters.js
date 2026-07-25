@@ -33,7 +33,8 @@ window.portalStoreFiltersInit = (root = document) => {
   const backdrop = filtersRoot.querySelector('#store-filters-backdrop');
   const openButtons = filtersRoot.querySelectorAll('[data-store-filters-open]');
   const closeBtn = filtersRoot.querySelector('#store-filters-close');
-  const filterForm = filtersRoot.querySelector('[data-store-filters-form], #store-filters-form');
+  const filterForm = filtersRoot.querySelector('[data-store-filters-form], #store-filters-form')
+    || filtersRoot.closest('form[data-store-filters-form], form#store-filters-form');
   const sidebarSearchInput = filtersRoot.querySelector('#store-search-q');
   const mobileSearchInput = filtersRoot.querySelector('#store-mobile-search-q');
   const genericSearchInput = filterForm?.querySelector('input[name="search"]') ?? null;

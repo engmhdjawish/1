@@ -29,6 +29,32 @@
     });
   }
 
+  function bindFilterPillSync(root) {
+    const form = root.querySelector('form[data-store-filters-form]');
+    if (!form || form.dataset.shareLinkPillSync === '1') {
+      return;
+    }
+    form.dataset.shareLinkPillSync = '1';
+
+    const syncPillStates = () => {
+      form.querySelectorAll('.store-filter-pill').forEach((pill) => {
+        const input = pill.querySelector('input');
+        const action = pill.querySelector('.store-filter-option-action');
+        const checked = Boolean(input?.checked);
+        pill.classList.toggle('is-selected', checked);
+        if (input?.type === 'radio') {
+          pill.classList.toggle('is-neutral', checked && (input.value === '' || input.value === 'none'));
+        }
+        if (action && input?.type === 'checkbox') {
+          action.textContent = checked ? 'remove' : 'add';
+        }
+      });
+    };
+
+    form.addEventListener('change', syncPillStates);
+    syncPillStates();
+  }
+
   function initFilterShells(root) {
     root.querySelectorAll('[data-store-filters-root]').forEach((shell) => {
       if (shell.dataset.shareLinkFiltersInit === '1') {
@@ -39,6 +65,7 @@
         window.portalStoreFiltersInit(shell);
       }
     });
+    bindFilterPillSync(root);
   }
 
   function bindCopyButtons(root) {
