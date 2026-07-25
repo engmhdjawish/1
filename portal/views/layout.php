@@ -19,6 +19,9 @@ use Portal\Support\StorePricePreference;
 /** @var bool|null $enableOnboarding */
 /** @var string|null $lcpPreloadUrl */
 
+/** @var string|null $shareCartUrl */
+/** @var array<string, mixed>|null $storeCartBootstrap */
+
 require_once __DIR__ . '/helpers.php';
 
 $companyContext ??= PortalSettingsService::companySettings();
@@ -37,9 +40,16 @@ StorePricePreference::bootstrap();
 StorePricePreference::applyFromRequest($_GET);
 $storeShowPrice = StoreCatalogService::headerShowsPriceCurrency($pagePath);
 $storePriceCurrency = StorePricePreference::current();
-$storeAllowCart = (bool) ($storeDisplay['allow_cart'] ?? false);
-$storeCartCount = $storeAllowCart ? StoreCartService::itemCount() : 0;
-$storeCartPackageCount = $storeAllowCart ? StoreCartService::packageCount() : 0.0;
+if (isset($storeCartBootstrap) && is_array($storeCartBootstrap)) {
+    $storeAllowCart = (bool) ($storeAllowCart ?? ($storeCartBootstrap['share_token'] ?? '') !== '');
+    $storeCartCount = (int) ($storeCartCount ?? ($storeCartBootstrap['cart_count'] ?? 0));
+    $storeCartPackageCount = (float) ($storeCartPackageCount ?? ($storeCartBootstrap['cart_package_count'] ?? 0));
+} else {
+    $storeAllowCart = (bool) ($storeAllowCart ?? ($storeDisplay['allow_cart'] ?? false));
+    $storeCartCount = (int) ($storeCartCount ?? ($storeAllowCart ? StoreCartService::itemCount() : 0));
+    $storeCartPackageCount = (float) ($storeCartPackageCount ?? ($storeAllowCart ? StoreCartService::packageCount() : 0.0));
+}
+$shareCartUrl = isset($shareCartUrl) ? (string) $shareCartUrl : '';
 
 $enableQuickView = (bool) ($enableQuickView ?? $isCatalogPage);
 $deferStoreCartJs = (bool) ($deferStoreCartJs ?? false);
@@ -147,7 +157,9 @@ $navLinks = [
 </button>
 
 <?php if ($storeAllowCart && !in_array($pagePath, ['/store-cart.php', '/cart.php'], true)): ?>
-  <?php require __DIR__ . '/partials/store-cart-drawer.php'; ?>
+  <?php if ($shareCartUrl === ''): ?>
+    <?php require __DIR__ . '/partials/store-cart-drawer.php'; ?>
+  <?php endif; ?>
   <?php require __DIR__ . '/partials/store-image-lightbox.php'; ?>
 <?php endif; ?>
 
@@ -173,7 +185,7 @@ $navLinks = [
 <?php endif; ?>
 <?php if ($enableStoreCartJs): ?>
   <script type="application/json" id="storeCartBootstrap"><?= json_encode(
-      StoreCartService::bootstrapPayload(),
+      is_array($storeCartBootstrap ?? null) ? $storeCartBootstrap : StoreCartService::bootstrapPayload(),
       JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP
   ) ?></script>
   <script>
@@ -195,7 +207,7 @@ $navLinks = [
   <?php endif; ?>
 <?php elseif ($deferStoreCartJs): ?>
   <script type="application/json" id="storeCartBootstrap"><?= json_encode(
-      StoreCartService::bootstrapPayload(),
+      is_array($storeCartBootstrap ?? null) ? $storeCartBootstrap : StoreCartService::bootstrapPayload(),
       JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP
   ) ?></script>
   <script type="application/json" id="deferStoreScriptUrls"><?= json_encode([

@@ -157,6 +157,22 @@ test('save form markup no longer forces reload after submit', () => {
   assert.match(markup, /data-dashboard-redirect="\/dashboard\/share-links\.php\?deleted=1"/);
 });
 
+test('share link load defaults keep sorting disabled without ghost sort fields', () => {
+  const servicePath = path.resolve(__dirname, '../src/Services/ShareLinkService.php');
+  const source = fs.readFileSync(servicePath, 'utf8');
+  assert.match(source, /'allow_sorting' => \(bool\) \$defaultOptions\['allow_sorting'\]/);
+  assert.match(source, /'client_sort_fields' => \$defaultOptions\['client_sort_fields'\]/);
+  assert.match(source, /if \(empty\(\$result\['options'\]\['allow_sorting'\]\)\)/);
+  assert.doesNotMatch(source, /if \(!\$hasClientSortFields && !empty\(\$result\['options'\]\['allow_sorting'\]\)\)/);
+});
+
+test('share add-to-cart forms use ajax hook', () => {
+  const formPath = path.resolve(__dirname, '../views/partials/store-add-to-cart-form.php');
+  const markup = fs.readFileSync(formPath, 'utf8');
+  assert.match(markup, /data-store-add-cart="1"/);
+  assert.doesNotMatch(markup, /shareTokenActive \? '' : 'data-store-add-cart/);
+});
+
 test('share-links save JSON response redirects to list', () => {
   const controller = fs.readFileSync(
     path.resolve(__dirname, '../public/dashboard/share-links.php'),
@@ -164,4 +180,5 @@ test('share-links save JSON response redirects to list', () => {
   );
   assert.match(controller, /'redirect' => '\/dashboard\/share-links\.php\?saved=1'/);
   assert.match(controller, /'redirect' => '\/dashboard\/share-links\.php\?deleted=1'/);
+  assert.match(controller, /if \(!\$allowSorting\) \{\s*\$clientSortFields = \[\];/);
 });

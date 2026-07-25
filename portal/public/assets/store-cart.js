@@ -806,6 +806,10 @@
   };
 
   const apiRequest = async (payload) => {
+    const bootstrap = readCartBootstrap();
+    if (bootstrap?.share_token && !payload.token) {
+      payload.token = bootstrap.share_token;
+    }
     const res = await fetch(API, {
       method: 'POST',
       headers: {
@@ -1802,6 +1806,9 @@
 
     document.querySelectorAll('[data-store-cart-open]').forEach((btn) => {
       if (btn.dataset.cartOpenBound === '1') return;
+      if (btn instanceof HTMLAnchorElement && (btn.getAttribute('href') || '').trim() !== '') {
+        return;
+      }
       btn.dataset.cartOpenBound = '1';
       btn.addEventListener('click', async (event) => {
         event.preventDefault();

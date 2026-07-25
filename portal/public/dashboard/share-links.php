@@ -68,6 +68,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             };
         };
         $clientSortFields = $parseValues($_POST['option_client_sort_fields'] ?? []);
+        $allowSorting = isset($_POST['option_allow_sorting']);
+        if (!$allowSorting) {
+            $clientSortFields = [];
+        }
         $defaultSortField = $clientSortFields[0] ?? 'number';
         $defaultSortValue = $defaultSortField . ':asc';
         $visibleClientFilters = $parseValues($_POST['option_visible_client_filters'] ?? []);
@@ -104,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             isset($_POST['option_show_images']),
             trim((string) ($_POST['option_price_mode'] ?? 'both')),
             $allowClientFilters,
-            isset($_POST['option_allow_sorting']),
+            $allowSorting,
             $allowClientFilters,
             $visibleClientFilters,
             $clientSortFields,

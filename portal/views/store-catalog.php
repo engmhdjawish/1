@@ -470,15 +470,6 @@ require __DIR__ . '/partials/store-filter-group.php';
       <p class="store-page-head__meta">سياسة الوصول: <?= h((string) $shareContext['access_policy_name_ar']) ?></p>
     <?php endif; ?>
   </div>
-  <?php if ($storeAllowCart && $shareToken !== ''): ?>
-    <a href="/cart.php?token=<?= h(rawurlencode($shareToken)) ?>" class="store-share-cart-btn">
-      <span class="material-symbols-outlined" aria-hidden="true">shopping_cart</span>
-      <span>السلة</span>
-      <?php if ($shareCartCount > 0): ?>
-        <span class="store-share-cart-btn__count"><?= (int) $shareCartCount ?></span>
-      <?php endif; ?>
-    </a>
-  <?php endif; ?>
 </section>
 <?php else: ?>
 <section class="store-page-head" aria-label="صفحة المتجر">
@@ -588,6 +579,18 @@ require __DIR__ . '/partials/store-filter-group.php';
                         'label' => $value,
                         'count' => $facet['count'] ?? null,
                     ];
+                }
+                if ($groupOptions === [] && is_array($filterOptions[$facetKey] ?? null)) {
+                    foreach ($filterOptions[$facetKey] as $optionValue) {
+                        $optionValue = trim((string) $optionValue);
+                        if ($optionValue === '') {
+                            continue;
+                        }
+                        $groupOptions[] = [
+                            'value' => $optionValue,
+                            'label' => $optionValue,
+                        ];
+                    }
                 }
                 if ($groupOptions === [] && $filtersDeferred && ($facetConfig['selected'] ?? []) !== []) {
                     foreach ((array) $facetConfig['selected'] as $selectedValue) {

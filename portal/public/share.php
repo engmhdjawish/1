@@ -602,8 +602,20 @@ if (is_string($cartNotice) && $cartNotice !== '') {
 
 $extraHead = '<link href="' . h(portal_asset_url('/css/store-filters.css')) . '" rel="stylesheet">';
 $enableQuickView = false;
-$enableStoreCartJs = false;
-$deferStoreCartJs = true;
+$shareCartUrl = ($shareToken !== null && ($displayOptions['allow_cart'] ?? false))
+    ? '/cart.php?token=' . rawurlencode($shareToken)
+    : null;
+$storeAllowCart = (bool) ($displayOptions['allow_cart'] ?? false);
+$storeCartCount = ($shareToken !== null && $storeAllowCart) ? ShareCartService::itemCount($shareToken) : 0;
+$storeCartPackageCount = ($shareToken !== null && $storeAllowCart) ? ShareCartService::packageCount($shareToken) : 0.0;
+$storeCartBootstrap = ($shareToken !== null && $storeAllowCart)
+    ? array_merge(ShareCartService::bootstrapPayload($shareToken), [
+        'share_token' => $shareToken,
+        'cart_url' => $shareCartUrl,
+    ])
+    : null;
+$enableStoreCartJs = $storeAllowCart && $hasAccess;
+$deferStoreCartJs = false;
 $metaDescription = 'قائمة مواد مخصصة عبر رابط مشاركة — ' . (string) ($shareContext['name_ar'] ?? '');
 
 ob_start();

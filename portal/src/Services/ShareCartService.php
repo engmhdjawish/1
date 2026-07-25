@@ -48,6 +48,22 @@ final class ShareCartService
         return round($total, 4);
     }
 
+    /** @return array{cart_count: int, cart_package_count: float, cart_qty_by_guid: array<string, float>} */
+    public static function bootstrapPayload(string $token): array
+    {
+        $token = trim($token);
+        $qtyByGuid = [];
+        foreach (self::items($token) as $guid => $line) {
+            $qtyByGuid[(string) $guid] = max(0.0, round((float) ($line['quantity'] ?? 0), 4));
+        }
+
+        return [
+            'cart_count' => self::itemCount($token),
+            'cart_package_count' => self::packageCount($token),
+            'cart_qty_by_guid' => $qtyByGuid,
+        ];
+    }
+
     /** @return array{total_sp: float, total_usd: float} */
     public static function totals(string $token): array
     {

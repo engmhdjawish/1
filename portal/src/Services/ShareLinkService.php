@@ -696,16 +696,17 @@ final class ShareLinkService
      */
     private static function loadLinkFilters(string $linkId): array
     {
+        $defaultOptions = self::defaultLinkOptions();
         $defaults = [
-            'show_images' => true,
-            'price_mode' => 'both',
-            'allow_client_filters' => true,
-            'allow_sorting' => true,
-            'include_result_filters' => true,
-            'visible_client_filters' => self::DEFAULT_VISIBLE_CLIENT_FILTERS,
-            'client_sort_fields' => ['number', 'materialType', 'manufacturer'],
-            'default_sort' => 'number:asc',
-            'default_group_by' => 'none',
+            'show_images' => (bool) $defaultOptions['show_images'],
+            'price_mode' => (string) $defaultOptions['price_mode'],
+            'allow_client_filters' => (bool) $defaultOptions['allow_client_filters'],
+            'allow_sorting' => (bool) $defaultOptions['allow_sorting'],
+            'include_result_filters' => (bool) $defaultOptions['include_result_filters'],
+            'visible_client_filters' => $defaultOptions['visible_client_filters'],
+            'client_sort_fields' => $defaultOptions['client_sort_fields'],
+            'default_sort' => (string) $defaultOptions['default_sort'],
+            'default_group_by' => (string) $defaultOptions['default_group_by'],
         ];
         $constraintDefaults = [
             'is_available' => null,
@@ -825,7 +826,7 @@ final class ShareLinkService
                     $result['options']['allow_client_filters'] = self::toBool($value, true);
                     break;
                 case self::OPTION_ALLOW_SORTING:
-                    $result['options']['allow_sorting'] = self::toBool($value, true);
+                    $result['options']['allow_sorting'] = self::toBool($value, false);
                     break;
                 case self::OPTION_INCLUDE_RESULT_FILTERS:
                     $result['options']['include_result_filters'] = self::toBool($value, true);
@@ -868,8 +869,12 @@ final class ShareLinkService
         $result['forced_group_guids'] = self::normalizeGuidFilterValues($result['forced_group_guids']);
         $result['options']['visible_client_filters'] = self::normalizeVisibleClientFilters($result['options']['visible_client_filters'] ?? []);
         $result['options']['client_sort_fields'] = self::normalizeClientSortFields($result['options']['client_sort_fields'] ?? []);
-        if (!$hasClientSortFields && !empty($result['options']['allow_sorting'])) {
-            $result['options']['client_sort_fields'] = self::clientSortFieldsFromDefaultSort((string) ($result['options']['default_sort'] ?? 'number:asc'));
+        if (empty($result['options']['allow_sorting'])) {
+            $result['options']['client_sort_fields'] = [];
+            $result['options']['visible_client_filters'] = array_values(array_filter(
+                $result['options']['visible_client_filters'],
+                static fn (string $code): bool => $code !== 'sort'
+            ));
         }
 
         return $result;

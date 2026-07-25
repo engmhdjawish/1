@@ -13,6 +13,9 @@ use Portal\Support\StorePricePreference;
 /** @var int $storeCartCount */
 /** @var array<string, mixed>|null $customer */
 /** @var bool $staffLoggedIn */
+/** @var string $shareCartUrl */
+
+$shareCartUrl = isset($shareCartUrl) ? trim((string) $shareCartUrl) : '';
 
 $requestPath = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: '');
 $isNavActive = static function (string $href) use ($requestPath): bool {
@@ -78,6 +81,22 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
 
           <?php if ($storeAllowCart): ?>
             <span class="site-header__divider" aria-hidden="true"></span>
+            <?php if ($shareCartUrl !== ''): ?>
+              <a
+                href="<?= h($shareCartUrl) ?>"
+                class="site-header__icon-btn site-header__icon-btn--cart"
+                data-store-cart-open
+                title="السلة"
+                aria-label="السلة"
+              >
+                <span class="material-symbols-outlined">shopping_cart</span>
+                <span
+                  data-store-cart-badge
+                  class="site-header__badge <?= $storeCartPackageCount > 0 ? '' : 'hidden' ?>"
+                  title="<?= $storeCartPackageCount > 0 ? h(format_packages_display($storeCartPackageCount) . ' طرد') : '' ?>"
+                ><span data-store-cart-badge-packages><?= $storeCartPackageCount > 0 ? h(format_packages_display($storeCartPackageCount)) : '0' ?></span></span>
+              </a>
+            <?php else: ?>
             <button
               type="button"
               class="site-header__icon-btn site-header__icon-btn--cart"
@@ -95,6 +114,7 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
                 title="<?= $storeCartPackageCount > 0 ? h(format_packages_display($storeCartPackageCount) . ' طرد') : '' ?>"
               ><span data-store-cart-badge-packages><?= $storeCartPackageCount > 0 ? h(format_packages_display($storeCartPackageCount)) : '0' ?></span></span>
             </button>
+            <?php endif; ?>
           <?php endif; ?>
 
           <span class="site-header__divider" aria-hidden="true"></span>

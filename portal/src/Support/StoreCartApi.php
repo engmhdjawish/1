@@ -8,6 +8,7 @@ use Portal\Auth\CustomerSession;
 use Portal\Services\AmineAvailabilityService;
 use Portal\Services\OrderService;
 use Portal\Services\ShareCartService;
+use Portal\Services\ShareLinkService;
 use Portal\Services\SpecialOfferService;
 use Portal\Services\StockReservationService;
 use Portal\Services\StoreCartPricingService;
@@ -17,6 +18,55 @@ use Portal\Services\StorePolicyService;
 
 final class StoreCartApi
 {
+    private static function shareTokenFromInput(array $input): string
+    {
+        return trim((string) ($input['token'] ?? ''));
+    }
+
+    private static function isShareCartToken(string $token): bool
+    {
+        return $token !== '' && $token !== StoreCartService::TOKEN;
+    }
+
+    /** @return array<string, mixed>|null */
+    private static function shareLinkForToken(string $token): ?array
+    {
+        if (!self::isShareCartToken($token)) {
+            return null;
+        }
+
+        return ShareLinkService::getByPublicToken($token);
+    }
+
+    /** @return array<string, mixed> */
+    private static function shareBootstrapPayload(
+        string $token,
+        ?string $message = null,
+        bool $ok = true,
+        string $level = 'success'
+    ): array {
+        $payload = ShareCartService::bootstrapPayload($token);
+        $payload['share_token'] = $token;
+        $payload['ok'] = $ok;
+        $payload['level'] = $level;
+        $payload['message'] = $message ?? '';
+        $payload['items'] = [];
+        $payload['unavailable'] = [];
+
+        return $payload;
+    }
+
+    /** @return array<string, mixed> */
+    public static function shareState(string $token): array
+    {
+        $token = trim($token);
+        if ($token === '' || ShareLinkService::getByPublicToken($token) === null) {
+            return self::shareBootstrapPayload($token, 'الرابط غير صالح.', false, 'error');
+        }
+
+        return self::shareBootstrapPayload($token, null, true, 'success');
+    }
+
     /** @return array<string, mixed> */
     public static function state(bool $reconcileStock = true): array
     {
@@ -64,6 +114,11 @@ final class StoreCartApi
     /** @param array<string, mixed> $display @param array<string, mixed> $input */
     private static function add(array $input, array $display): array
     {
+        $shareToken = self::shareTokenFromInput($input);
+        if (self::isShareCartToken($shareToken)) {
+            return self::addShare($input, $shareToken);
+        }
+
         $quantity = max(0.0, round((float) ($input['quantity'] ?? 1), 4));
         if ($quantity <= 0) {
             return self::payload('الكمية غير صالحة.', false);
@@ -130,8 +185,49 @@ final class StoreCartApi
     }
 
     /** @param array<string, mixed> $input */
+    private static function addShare(array $input, string $token): array
+    {
+        $link = self::shareLinkForToken($token);
+        if ($link === null) {
+            return self::shareBootstrapPayload($token, 'الرابط غير صالح.', false, 'error');
+        }
+        if (!(bool) (($link['allow_cart'] ?? 0) ? true : false)) {
+            return self::shareBootstrapPayload($token, 'سياسة الرابط لا تسمح باستخدام السلة.', false, 'error');
+        }
+
+        $quantity = max(0.0, round((float) ($input['quantity'] ?? 1), 4));
+        if ($quantity <= 0) {
+            return self::shareBootstrapPayload($token, 'الكمية غير صالحة.', false, 'error');
+        }
+
+        $capturePrices = (bool) (($link['show_price'] ?? 0) ? true : false);
+        $line = ShareCartService::lineFromForm($input, $capturePrices);
+        if ($line['material_guid'] === '') {
+            return self::shareBootstrapPayload($token, 'تعذر تحديد المادة.', false, 'error');
+        }
+
+        $result = ShareCartService::add($token, (string) ($link['id'] ?? ''), $line, $quantity);
+        $message = trim((string) ($result['message'] ?? ''));
+        if ($message === '') {
+            $message = ($result['ok'] ?? false) ? 'تمت إضافة الطرد إلى السلة.' : 'تعذر الإضافة إلى السلة.';
+        }
+
+        return self::shareBootstrapPayload(
+            $token,
+            $message,
+            (bool) ($result['ok'] ?? false),
+            ($result['ok'] ?? false) ? 'success' : 'error'
+        );
+    }
+
+    /** @param array<string, mixed> $input */
     private static function update(array $input, ?float $warehousePrimary = null): array
     {
+        $shareToken = self::shareTokenFromInput($input);
+        if (self::isShareCartToken($shareToken)) {
+            return self::updateShare($input, $shareToken);
+        }
+
         $materialGuid = trim((string) ($input['material_guid'] ?? ''));
         $quantity = max(0.0, round((float) ($input['quantity'] ?? 0), 4));
         if ($materialGuid === '') {
@@ -166,8 +262,40 @@ final class StoreCartApi
     }
 
     /** @param array<string, mixed> $input */
+    private static function updateShare(array $input, string $token): array
+    {
+        if (self::shareLinkForToken($token) === null) {
+            return self::shareBootstrapPayload($token, 'الرابط غير صالح.', false, 'error');
+        }
+
+        $materialGuid = trim((string) ($input['material_guid'] ?? ''));
+        $quantity = max(0.0, round((float) ($input['quantity'] ?? 0), 4));
+        if ($materialGuid === '') {
+            return self::shareBootstrapPayload($token, 'تعذر تحديد المادة.', false, 'error');
+        }
+
+        $result = ShareCartService::updateQuantity($token, $materialGuid, $quantity);
+        $message = trim((string) ($result['message'] ?? ''));
+        if ($message === '') {
+            $message = $quantity > 0 ? 'تم تحديث الكمية.' : 'تم حذف الصنف من السلة.';
+        }
+
+        return self::shareBootstrapPayload(
+            $token,
+            $message,
+            (bool) ($result['ok'] ?? false),
+            ($result['ok'] ?? false) ? 'success' : 'error'
+        );
+    }
+
+    /** @param array<string, mixed> $input */
     private static function bump(array $input): array
     {
+        $shareToken = self::shareTokenFromInput($input);
+        if (self::isShareCartToken($shareToken)) {
+            return self::bumpShare($input, $shareToken);
+        }
+
         $materialGuid = trim((string) ($input['material_guid'] ?? ''));
         $delta = (float) ($input['delta'] ?? 0);
         if ($materialGuid === '' || abs($delta) < 0.0001) {
@@ -193,7 +321,32 @@ final class StoreCartApi
         return self::update([
             'material_guid' => $materialGuid,
             'quantity' => $next,
+            'token' => $input['token'] ?? null,
         ], $warehousePrimary);
+    }
+
+    /** @param array<string, mixed> $input */
+    private static function bumpShare(array $input, string $token): array
+    {
+        if (self::shareLinkForToken($token) === null) {
+            return self::shareBootstrapPayload($token, 'الرابط غير صالح.', false, 'error');
+        }
+
+        $materialGuid = trim((string) ($input['material_guid'] ?? ''));
+        $delta = (float) ($input['delta'] ?? 0);
+        if ($materialGuid === '' || abs($delta) < 0.0001) {
+            return self::shareBootstrapPayload($token, 'تعذر تحديث الكمية.', false, 'error');
+        }
+
+        $items = ShareCartService::items($token);
+        $current = max(0.0, round((float) ($items[$materialGuid]['quantity'] ?? 0), 4));
+        $next = max(0.0, round($current + $delta, 4));
+
+        return self::updateShare([
+            'material_guid' => $materialGuid,
+            'quantity' => $next,
+            'token' => $token,
+        ], $token);
     }
 
     /** @param array<string, mixed> $input */
