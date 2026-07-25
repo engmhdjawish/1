@@ -249,6 +249,7 @@ try {
 }
 
 $currentRoute = '/dashboard/share-links.php';
+$shareLinksFormTab = $showForm;
 
 ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/share-links.php';

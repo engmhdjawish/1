@@ -2045,3 +2045,30 @@ button.is-loading::after,
 .dash-mi-zip-download-btn .material-symbols-outlined {
   font-size: 1.25rem;
 }
+
+/* ── Share link create/edit form (store-style) ── */
+.dash-sl-form .dash-mi-download-accordions {
+  margin-top: 0;
+}
+
+.dash-sl-form .store-inline-field label,
+.dash-sl-form .dash-mi-zip-filters-shell .store-inline-field label {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.dash-sl-form .store-inline-field input,
+.dash-sl-form .store-inline-field select,
+.dash-sl-form .dash-mi-zip-filters-shell .store-inline-field input,
+.dash-sl-form .dash-mi-zip-filters-shell .store-inline-field select {
+  width: 100%;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--dash-border, #e5e7eb);
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  background: #fff;
+}

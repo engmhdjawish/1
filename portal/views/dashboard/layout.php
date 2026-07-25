@@ -97,7 +97,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <link href="<?= h(portal_asset_url('/css/store-cart.css')) ?>" rel="stylesheet">
   <link href="<?= h(portal_asset_url('/css/customer-portal.css')) ?>" rel="stylesheet">
   <link href="<?= h(portal_asset_url('/css/tailwind.css')) ?>" rel="stylesheet">
-  <?php if (!empty($materialImagesZipTab ?? false)): ?>
+  <?php if (!empty($materialImagesZipTab ?? false) || !empty($shareLinksFormTab ?? false)): ?>
     <?= portal_stylesheet('/css/store-filters.css') ?>
   <?php endif; ?>
   <style>
@@ -347,9 +347,14 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <script src="/assets/dashboard/special-offers.js" defer></script>
   <script src="/assets/dashboard/about-editor.js" defer></script>
   <script src="/assets/dashboard/accounting-statement.js" defer></script>
-  <?php if (!empty($materialImagesZipTab ?? false)): ?>
+  <?php if (!empty($materialImagesZipTab ?? false) || !empty($shareLinksFormTab ?? false)): ?>
     <script src="<?= h(portal_asset_url('/assets/store-filters.js')) ?>" defer></script>
+  <?php endif; ?>
+  <?php if (!empty($materialImagesZipTab ?? false)): ?>
     <script src="<?= h(portal_asset_url('/assets/dashboard/material-image-zip-download.js')) ?>" defer></script>
+  <?php endif; ?>
+  <?php if (!empty($shareLinksFormTab ?? false)): ?>
+    <script src="<?= h(portal_asset_url('/assets/dashboard/share-links-form.js')) ?>" defer></script>
   <?php endif; ?>
   <?php if (!empty($materialImagesUploadTab ?? false)): ?>
     <script src="<?= h(portal_asset_url('/assets/dashboard/material-image-upload.js')) ?>" defer></script>
