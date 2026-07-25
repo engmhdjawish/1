@@ -2503,4 +2503,22 @@ final class StoreCatalogService
 
         return false;
     }
+
+    /** @param array<string, mixed> $baseRules @param array<string, mixed> $overlayRules @return array<string, mixed> */
+    public static function mergeShareFilterRules(array $baseRules, array $overlayRules): array
+    {
+        return self::mergeFilterRuleSets($baseRules, $overlayRules);
+    }
+
+    /** @param array<string, mixed> $baseRules @param array<string, mixed> $userFilters @return array<string, mixed> */
+    public static function mergeShareCatalogFilters(array $baseRules, array $userFilters): array
+    {
+        return self::mergeCatalogFilters($baseRules, $userFilters);
+    }
+
+    /** @param array<string, mixed> $rules @return list<string> */
+    public static function lockedClientFiltersForRules(array $rules): array
+    {
+        return self::lockedPolicyClientFilters($rules);
+    }
 }

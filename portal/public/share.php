@@ -5,8 +5,10 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Services\ApiClient;
+use Portal\Services\AccessPolicyService;
 use Portal\Services\ShareCartService;
 use Portal\Services\ShareLinkService;
+use Portal\Services\StoreCatalogService;
 use Portal\Support\SharePageAccess;
 use Portal\Support\Text;
 
@@ -86,21 +88,16 @@ $parseNullableBool = static function (string $key): ?bool {
 };
 
 $shareOptions = is_array($shareLink) ? (array) ($shareLink['options'] ?? []) : [];
-$visibleClientFilters = array_values(array_map(
-    'strval',
-    is_array($shareOptions['visible_client_filters'] ?? null)
-        ? $shareOptions['visible_client_filters']
-        : []
-));
-$allowClientFilters = $visibleClientFilters !== []
-    || (bool) (($shareOptions['allow_client_filters'] ?? false) ? true : false);
-$allowSorting = (bool) (($shareOptions['allow_sorting'] ?? true) ? true : false);
+$policyId = is_array($shareLink) ? trim((string) ($shareLink['access_policy_id'] ?? '')) : '';
+$policyRules = $policyId !== '' ? AccessPolicyService::filterRulesForPolicyId($policyId) : AccessPolicyService::defaultFilterRules();
+$policyStoreOptions = $policyId !== '' ? AccessPolicyService::storeOptionsForPolicyId($policyId) : AccessPolicyService::defaultStoreOptions();
+$effectiveStoreOptions = ShareLinkService::resolveShareStoreOptions($policyStoreOptions, $shareOptions);
+$visibleClientFilters = AccessPolicyService::resolvedVisibleClientFilters($effectiveStoreOptions);
+$allowClientFilters = $visibleClientFilters !== [];
+$allowSorting = (bool) ($effectiveStoreOptions['allow_sorting'] ?? false);
 $useDynamicResultFilters = $allowClientFilters && (bool) (($shareOptions['include_result_filters'] ?? true) ? true : false);
-$defaultSort = trim((string) ($shareOptions['default_sort'] ?? 'number:asc'));
-$clientSortFields = array_values(array_map('strval', is_array($shareOptions['client_sort_fields'] ?? null) ? $shareOptions['client_sort_fields'] : []));
-if ($clientSortFields === []) {
-    $clientSortFields = ['number', 'materialType', 'manufacturer'];
-}
+$defaultSort = trim((string) ($effectiveStoreOptions['default_sort'] ?? 'number:asc'));
+$clientSortFields = array_values(array_map('strval', is_array($effectiveStoreOptions['client_sort_fields'] ?? null) ? $effectiveStoreOptions['client_sort_fields'] : []));
 $sortFieldLabels = [
     'number' => 'رقم المادة',
     'materialType' => 'نوع المادة',
@@ -112,52 +109,26 @@ $sortFieldLabels = [
     'unitSalePriceUsd' => 'سعر البيع $',
 ];
 $clientSortFields = array_values(array_filter($clientSortFields, static fn (string $field): bool => isset($sortFieldLabels[$field])));
-if ($clientSortFields === []) {
-    $clientSortFields = ['number'];
-}
 $defaultSort = $defaultSort !== '' ? $defaultSort : 'number:asc';
-$defaultGroupBy = trim((string) ($shareOptions['default_group_by'] ?? 'none'));
-$defaultGroupBy = in_array($defaultGroupBy, ['none', 'ageCategory', 'sizeRange', 'materialType', 'manufacturer', 'countryOfOrigin', 'group'], true)
-    ? $defaultGroupBy
-    : 'none';
+$defaultGroupBy = (string) ($effectiveStoreOptions['default_group_by'] ?? 'none');
 $isClientFilterVisible = static function (string $code) use ($visibleClientFilters): bool {
     return in_array($code, $visibleClientFilters, true);
 };
 
-$forcedMaterialTypes = array_map('strval', is_array($shareLink) ? ($shareLink['forced_material_types'] ?? []) : []);
-$forcedAgeCategories = array_map('strval', is_array($shareLink) ? ($shareLink['forced_age_categories'] ?? []) : []);
-$forcedManufacturers = array_map('strval', is_array($shareLink) ? ($shareLink['forced_manufacturers'] ?? []) : []);
-$forcedSizeRanges = array_map('strval', is_array($shareLink) ? ($shareLink['forced_size_ranges'] ?? []) : []);
-$forcedCountryOrigins = array_map('strval', is_array($shareLink) ? ($shareLink['forced_country_origins'] ?? []) : []);
-$forcedStoreGuids = array_map('strval', is_array($shareLink) ? ($shareLink['forced_store_guids'] ?? []) : []);
-$forcedGroupGuids = array_map('strval', is_array($shareLink) ? ($shareLink['forced_group_guids'] ?? []) : []);
-$constraints = is_array($shareLink) && is_array($shareLink['constraints'] ?? null) ? $shareLink['constraints'] : [];
-$forcedIsAvailable = array_key_exists('is_available', $constraints) ? $constraints['is_available'] : null;
-$forcedHasImage = array_key_exists('has_image', $constraints) ? $constraints['has_image'] : null;
-$forcedMinWarehouseQuantity = isset($constraints['min_warehouse_quantity']) && is_numeric((string) $constraints['min_warehouse_quantity'])
-    ? (float) $constraints['min_warehouse_quantity']
-    : null;
-$forcedMaxWarehouseQuantity = isset($constraints['max_warehouse_quantity']) && is_numeric((string) $constraints['max_warehouse_quantity'])
-    ? (float) $constraints['max_warehouse_quantity']
-    : null;
-$forcedMinUnitSalePriceSyp = isset($constraints['min_unit_sale_price_syp']) && is_numeric((string) $constraints['min_unit_sale_price_syp'])
-    ? (float) $constraints['min_unit_sale_price_syp']
-    : null;
-$forcedMaxUnitSalePriceSyp = isset($constraints['max_unit_sale_price_syp']) && is_numeric((string) $constraints['max_unit_sale_price_syp'])
-    ? (float) $constraints['max_unit_sale_price_syp']
-    : null;
-$forcedMinUnitSalePriceUsd = isset($constraints['min_unit_sale_price_usd']) && is_numeric((string) $constraints['min_unit_sale_price_usd'])
-    ? (float) $constraints['min_unit_sale_price_usd']
-    : null;
-$forcedMaxUnitSalePriceUsd = isset($constraints['max_unit_sale_price_usd']) && is_numeric((string) $constraints['max_unit_sale_price_usd'])
-    ? (float) $constraints['max_unit_sale_price_usd']
-    : null;
-$forcedMinUnitPurchasePriceUsd = isset($constraints['min_unit_purchase_price_usd']) && is_numeric((string) $constraints['min_unit_purchase_price_usd'])
-    ? (float) $constraints['min_unit_purchase_price_usd']
-    : null;
-$forcedMaxUnitPurchasePriceUsd = isset($constraints['max_unit_purchase_price_usd']) && is_numeric((string) $constraints['max_unit_purchase_price_usd'])
-    ? (float) $constraints['max_unit_purchase_price_usd']
-    : null;
+$linkRules = ShareLinkService::filterRulesFromLink(is_array($shareLink) ? $shareLink : []);
+$baseRules = StoreCatalogService::mergeShareFilterRules($policyRules, $linkRules);
+$rulesList = static function (array $rules, string $key): array {
+    $values = is_array($rules[$key] ?? null) ? $rules[$key] : [];
+
+    return array_values(array_map('strval', $values));
+};
+$scopeMaterialTypes = $rulesList($baseRules, 'material_types');
+$scopeAgeCategories = $rulesList($baseRules, 'age_categories');
+$scopeManufacturers = $rulesList($baseRules, 'manufacturers');
+$scopeSizeRanges = $rulesList($baseRules, 'size_ranges');
+$scopeCountryOrigins = $rulesList($baseRules, 'country_origins');
+$scopeStoreGuids = $rulesList($baseRules, 'store_guids');
+$scopeGroupGuids = $rulesList($baseRules, 'group_guids');
 
 $selectedMaterialTypes = ($allowClientFilters && $isClientFilterVisible('materialTypes')) ? $parseList('materialTypes') : [];
 $selectedAgeCategories = ($allowClientFilters && $isClientFilterVisible('ageCategories')) ? $parseList('ageCategories') : [];
@@ -175,99 +146,47 @@ $selectedMinUnitSalePriceUsd = ($allowClientFilters && $isClientFilterVisible('p
 $selectedMaxUnitSalePriceUsd = ($allowClientFilters && $isClientFilterVisible('priceSaleUsd')) ? $parseNullableFloat('maxUnitSalePriceUsd') : null;
 $selectedMinUnitPurchasePriceUsd = ($allowClientFilters && $isClientFilterVisible('pricePurchaseUsd')) ? $parseNullableFloat('minUnitPurchasePriceUsd') : null;
 $selectedMaxUnitPurchasePriceUsd = ($allowClientFilters && $isClientFilterVisible('pricePurchaseUsd')) ? $parseNullableFloat('maxUnitPurchasePriceUsd') : null;
-
-$mergeConstrainedValues = static function (array $forced, array $selected, bool &$hasConflict): array {
-    if ($forced === []) {
-        return $selected;
-    }
-    if ($selected === []) {
-        return $forced;
-    }
-
-    $forcedMap = [];
-    foreach ($forced as $value) {
-        $forcedMap[strtolower($value)] = $value;
-    }
-    $intersection = [];
-    foreach ($selected as $value) {
-        $key = strtolower($value);
-        if (isset($forcedMap[$key])) {
-            $intersection[] = $forcedMap[$key];
-        }
-    }
-    $intersection = array_values(array_unique($intersection));
-    if ($intersection === []) {
-        $hasConflict = true;
-    }
-    return $intersection;
-};
-
-$hasConstraintConflict = false;
-$queryMaterialTypes = $mergeConstrainedValues($forcedMaterialTypes, $selectedMaterialTypes, $hasConstraintConflict);
-$queryAgeCategories = $mergeConstrainedValues($forcedAgeCategories, $selectedAgeCategories, $hasConstraintConflict);
-$queryManufacturers = $mergeConstrainedValues($forcedManufacturers, $selectedManufacturers, $hasConstraintConflict);
-$querySizeRanges = $mergeConstrainedValues($forcedSizeRanges, $selectedSizeRanges, $hasConstraintConflict);
-$queryCountryOrigins = $mergeConstrainedValues($forcedCountryOrigins, $selectedCountryOrigins, $hasConstraintConflict);
-$queryStoreGuids = $mergeConstrainedValues($forcedStoreGuids, $selectedStoreGuids, $hasConstraintConflict);
-$queryGroupGuids = $mergeConstrainedValues($forcedGroupGuids, $selectedGroupGuids, $hasConstraintConflict);
-
-$mergeMin = static function (?float $forced, ?float $selected): ?float {
-    if ($forced === null) {
-        return $selected;
-    }
-    if ($selected === null) {
-        return $forced;
-    }
-
-    return max($forced, $selected);
-};
-$mergeMax = static function (?float $forced, ?float $selected): ?float {
-    if ($forced === null) {
-        return $selected;
-    }
-    if ($selected === null) {
-        return $forced;
-    }
-
-    return min($forced, $selected);
-};
-$validateRange = static function (?float $min, ?float $max, bool &$hasConflict): void {
-    if ($min !== null && $max !== null && $min > $max) {
-        $hasConflict = true;
-    }
-};
-$mergeBool = static function (?bool $forced, ?bool $selected, bool &$hasConflict): ?bool {
-    if ($forced === null) {
-        return $selected;
-    }
-    if ($selected === null) {
-        return $forced;
-    }
-    if ($forced !== $selected) {
-        $hasConflict = true;
-    }
-    return $forced;
-};
-
-$queryIsAvailable = $mergeBool(is_bool($forcedIsAvailable) ? $forcedIsAvailable : null, $selectedIsAvailable, $hasConstraintConflict);
-$queryHasImage = is_bool($forcedHasImage) ? $forcedHasImage : null;
-$queryMinWarehouseQuantity = $mergeMin($forcedMinWarehouseQuantity, $selectedMinWarehouseQuantity);
-$queryMaxWarehouseQuantity = $mergeMax($forcedMaxWarehouseQuantity, $selectedMaxWarehouseQuantity);
-$queryMinUnitSalePriceSyp = $mergeMin($forcedMinUnitSalePriceSyp, $selectedMinUnitSalePriceSyp);
-$queryMaxUnitSalePriceSyp = $mergeMax($forcedMaxUnitSalePriceSyp, $selectedMaxUnitSalePriceSyp);
-$queryMinUnitSalePriceUsd = $mergeMin($forcedMinUnitSalePriceUsd, $selectedMinUnitSalePriceUsd);
-$queryMaxUnitSalePriceUsd = $mergeMax($forcedMaxUnitSalePriceUsd, $selectedMaxUnitSalePriceUsd);
-$queryMinUnitPurchasePriceUsd = $mergeMin($forcedMinUnitPurchasePriceUsd, $selectedMinUnitPurchasePriceUsd);
-$queryMaxUnitPurchasePriceUsd = $mergeMax($forcedMaxUnitPurchasePriceUsd, $selectedMaxUnitPurchasePriceUsd);
-
-$validateRange($queryMinWarehouseQuantity, $queryMaxWarehouseQuantity, $hasConstraintConflict);
-$validateRange($queryMinUnitSalePriceSyp, $queryMaxUnitSalePriceSyp, $hasConstraintConflict);
-$validateRange($queryMinUnitSalePriceUsd, $queryMaxUnitSalePriceUsd, $hasConstraintConflict);
-$validateRange($queryMinUnitPurchasePriceUsd, $queryMaxUnitPurchasePriceUsd, $hasConstraintConflict);
-
-$baseKeyword = trim((string) (is_array($shareLink) ? ($shareLink['keyword'] ?? '') : ''));
 $userKeyword = ($allowClientFilters && $isClientFilterVisible('search')) ? trim((string) ($_GET['q'] ?? '')) : '';
-$search = trim($baseKeyword . ' ' . $userKeyword);
+
+$mergedFilters = StoreCatalogService::mergeShareCatalogFilters($baseRules, [
+    'search' => $userKeyword,
+    'materialTypes' => $selectedMaterialTypes,
+    'manufacturers' => $selectedManufacturers,
+    'ageCategories' => $selectedAgeCategories,
+    'sizeRanges' => $selectedSizeRanges,
+    'countryOfOrigins' => $selectedCountryOrigins,
+    'groupGuids' => $selectedGroupGuids,
+    'storeGuids' => $selectedStoreGuids,
+    'isAvailable' => $selectedIsAvailable,
+    'hasImage' => null,
+    'minWarehouseQuantity' => $selectedMinWarehouseQuantity,
+    'maxWarehouseQuantity' => $selectedMaxWarehouseQuantity,
+    'minUnitSalePriceSyp' => $selectedMinUnitSalePriceSyp,
+    'maxUnitSalePriceSyp' => $selectedMaxUnitSalePriceSyp,
+    'minUnitSalePriceUsd' => $selectedMinUnitSalePriceUsd,
+    'maxUnitSalePriceUsd' => $selectedMaxUnitSalePriceUsd,
+    'minUnitPurchasePriceUsd' => $selectedMinUnitPurchasePriceUsd,
+    'maxUnitPurchasePriceUsd' => $selectedMaxUnitPurchasePriceUsd,
+]);
+$hasConstraintConflict = (bool) ($mergedFilters['has_conflict'] ?? false);
+$queryMaterialTypes = $mergedFilters['materialTypes'] ?? [];
+$queryAgeCategories = $mergedFilters['ageCategories'] ?? [];
+$queryManufacturers = $mergedFilters['manufacturers'] ?? [];
+$querySizeRanges = $mergedFilters['sizeRanges'] ?? [];
+$queryCountryOrigins = $mergedFilters['countryOfOrigins'] ?? [];
+$queryStoreGuids = $mergedFilters['storeGuids'] ?? [];
+$queryGroupGuids = $mergedFilters['groupGuids'] ?? [];
+$queryIsAvailable = $mergedFilters['isAvailable'] ?? null;
+$queryHasImage = $mergedFilters['hasImage'] ?? null;
+$queryMinWarehouseQuantity = $mergedFilters['minWarehouseQuantity'] ?? null;
+$queryMaxWarehouseQuantity = $mergedFilters['maxWarehouseQuantity'] ?? null;
+$queryMinUnitSalePriceSyp = $mergedFilters['minUnitSalePriceSyp'] ?? null;
+$queryMaxUnitSalePriceSyp = $mergedFilters['maxUnitSalePriceSyp'] ?? null;
+$queryMinUnitSalePriceUsd = $mergedFilters['minUnitSalePriceUsd'] ?? null;
+$queryMaxUnitSalePriceUsd = $mergedFilters['maxUnitSalePriceUsd'] ?? null;
+$queryMinUnitPurchasePriceUsd = $mergedFilters['minUnitPurchasePriceUsd'] ?? null;
+$queryMaxUnitPurchasePriceUsd = $mergedFilters['maxUnitPurchasePriceUsd'] ?? null;
+$search = trim((string) ($mergedFilters['search'] ?? ''));
 $search = $search !== '' ? $search : null;
 
 $parseSortClause = static function (string $clause): array {
@@ -286,12 +205,12 @@ $parseSortClause = static function (string $clause): array {
     ];
 };
 $defaultSortParsed = $parseSortClause(explode(',', $defaultSort)[0] ?? 'number:asc');
-$requestedSort = $allowSorting ? trim((string) ($_GET['sort'] ?? '')) : '';
+$requestedSort = $allowSorting && $clientSortFields !== [] ? trim((string) ($_GET['sort'] ?? '')) : '';
 $activeSortParsed = $requestedSort !== ''
     ? $parseSortClause(explode(',', $requestedSort)[0] ?? $requestedSort)
     : $defaultSortParsed;
-if (!in_array($activeSortParsed['field'], $clientSortFields, true)) {
-    $activeSortParsed = ['field' => $clientSortFields[0], 'dir' => 'asc'];
+if ($clientSortFields === [] || !in_array($activeSortParsed['field'], $clientSortFields, true)) {
+    $activeSortParsed = ['field' => $clientSortFields[0] ?? 'number', 'dir' => 'asc'];
 }
 $selectedSort = $activeSortParsed['field'] . ':' . $activeSortParsed['dir'];
 $buildNextSortValue = static function (string $field) use ($activeSortParsed): string {
@@ -489,27 +408,27 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
 
             $resultFilters['materialTypes'] = $scopeStringFacets(
                 is_array($resultFilters['materialTypes'] ?? null) ? $resultFilters['materialTypes'] : [],
-                $forcedMaterialTypes
+                $scopeMaterialTypes
             );
             $resultFilters['ageCategories'] = $scopeStringFacets(
                 is_array($resultFilters['ageCategories'] ?? null) ? $resultFilters['ageCategories'] : [],
-                $forcedAgeCategories
+                $scopeAgeCategories
             );
             $resultFilters['manufacturers'] = $scopeStringFacets(
                 is_array($resultFilters['manufacturers'] ?? null) ? $resultFilters['manufacturers'] : [],
-                $forcedManufacturers
+                $scopeManufacturers
             );
             $resultFilters['sizeRanges'] = $scopeStringFacets(
                 is_array($resultFilters['sizeRanges'] ?? null) ? $resultFilters['sizeRanges'] : [],
-                $forcedSizeRanges
+                $scopeSizeRanges
             );
             $resultFilters['countryOfOrigins'] = $scopeStringFacets(
                 is_array($resultFilters['countryOfOrigins'] ?? null) ? $resultFilters['countryOfOrigins'] : [],
-                $forcedCountryOrigins
+                $scopeCountryOrigins
             );
             $resultFilters['groups'] = $scopeGroupFacets(
                 is_array($resultFilters['groups'] ?? null) ? $resultFilters['groups'] : [],
-                $forcedGroupGuids
+                $scopeGroupGuids
             );
         } else {
             $apiError = $extractApiError($materials);
@@ -540,8 +459,8 @@ $groupOptions = array_values(array_filter($filterOptions['groups'] ?? [], static
     }
     return trim((string) ($row['guid'] ?? $row['Guid'] ?? '')) !== '';
 }));
-if ($forcedStoreGuids !== []) {
-    $forcedStoreMap = array_flip(array_map('strtolower', $forcedStoreGuids));
+if ($scopeStoreGuids !== []) {
+    $forcedStoreMap = array_flip(array_map('strtolower', $scopeStoreGuids));
     $storeOptions = array_values(array_filter($storeOptions, static function (array $store) use ($forcedStoreMap): bool {
         $guid = strtolower((string) ($store['guid'] ?? $store['Guid'] ?? ''));
 
@@ -564,8 +483,8 @@ if (isset($resultFilters['groups']) && is_array($resultFilters['groups']) && $re
             'code' => $groupFacet['code'] ?? null,
         ];
     }
-} elseif ($forcedGroupGuids !== []) {
-    $forcedGroupMap = array_flip(array_map('strtolower', $forcedGroupGuids));
+} elseif ($scopeGroupGuids !== []) {
+    $forcedGroupMap = array_flip(array_map('strtolower', $scopeGroupGuids));
     $groupOptions = array_values(array_filter($groupOptions, static function (array $group) use ($forcedGroupMap): bool {
         $guid = strtolower((string) ($group['guid'] ?? $group['Guid'] ?? ''));
 
@@ -607,43 +526,10 @@ if ($page > $totalPages) {
 $rangeStart = $totalCount === 0 ? 0 : (($page - 1) * $pageSize + 1);
 $rangeEnd = min($totalCount, $page * $pageSize);
 
-$lockedClientFilters = [];
-if ($forcedMaterialTypes !== []) {
-    $lockedClientFilters[] = 'materialTypes';
-}
-if ($forcedAgeCategories !== []) {
-    $lockedClientFilters[] = 'ageCategories';
-}
-if ($forcedManufacturers !== []) {
-    $lockedClientFilters[] = 'manufacturers';
-}
-if ($forcedSizeRanges !== []) {
-    $lockedClientFilters[] = 'sizeRanges';
-}
-if ($forcedCountryOrigins !== []) {
-    $lockedClientFilters[] = 'countryOfOrigins';
-}
-if ($forcedStoreGuids !== []) {
-    $lockedClientFilters[] = 'stores';
-}
-if ($forcedGroupGuids !== []) {
-    $lockedClientFilters[] = 'groups';
-}
-if ($forcedIsAvailable !== null) {
-    $lockedClientFilters[] = 'availability';
-}
-if ($forcedMinWarehouseQuantity !== null || $forcedMaxWarehouseQuantity !== null) {
-    $lockedClientFilters[] = 'warehouseRange';
-}
-if ($forcedMinUnitSalePriceSyp !== null || $forcedMaxUnitSalePriceSyp !== null) {
-    $lockedClientFilters[] = 'priceSaleSyp';
-}
-if ($forcedMinUnitSalePriceUsd !== null || $forcedMaxUnitSalePriceUsd !== null) {
-    $lockedClientFilters[] = 'priceSaleUsd';
-}
-if ($forcedMinUnitPurchasePriceUsd !== null || $forcedMaxUnitPurchasePriceUsd !== null) {
-    $lockedClientFilters[] = 'pricePurchaseUsd';
-}
+$lockedClientFilters = array_values(array_unique(array_merge(
+    StoreCatalogService::lockedClientFiltersForRules($baseRules),
+    ShareLinkService::lockedClientFiltersFromLink(is_array($shareLink) ? $shareLink : [])
+)));
 
 $filterOptions['stores'] = $storeOptions;
 $filterOptions['groups'] = $groupOptions;
@@ -661,12 +547,8 @@ $catalog = [
     'apiError' => $apiError,
     'allow_client_filters' => $allowClientFilters && $hasAccess && !$hasConstraintConflict,
     'filters_deferred' => false,
-    'locked_client_filters' => array_values(array_unique($lockedClientFilters)),
-    'store_options' => [
-        'allow_sorting' => $allowSorting,
-        'client_sort_fields' => $clientSortFields,
-        'visible_client_filters' => $visibleClientFilters,
-    ],
+    'locked_client_filters' => $lockedClientFilters,
+    'store_options' => $effectiveStoreOptions,
     'filters' => [
         'q' => $userKeyword,
         'sort' => $selectedSort,

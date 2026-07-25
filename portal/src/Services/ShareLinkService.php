@@ -1147,4 +1147,165 @@ final class ShareLinkService
             default => $default,
         };
     }
+
+    /** @param array<string, mixed> $link @return array<string, mixed> */
+    public static function filterRulesFromLink(array $link): array
+    {
+        $rules = AccessPolicyService::defaultFilterRules();
+        $rules['keyword'] = trim((string) ($link['keyword'] ?? ''));
+        $rules['material_types'] = array_values(array_map('strval', is_array($link['forced_material_types'] ?? null) ? $link['forced_material_types'] : []));
+        $rules['age_categories'] = array_values(array_map('strval', is_array($link['forced_age_categories'] ?? null) ? $link['forced_age_categories'] : []));
+        $rules['manufacturers'] = array_values(array_map('strval', is_array($link['forced_manufacturers'] ?? null) ? $link['forced_manufacturers'] : []));
+        $rules['size_ranges'] = array_values(array_map('strval', is_array($link['forced_size_ranges'] ?? null) ? $link['forced_size_ranges'] : []));
+        $rules['country_origins'] = array_values(array_map('strval', is_array($link['forced_country_origins'] ?? null) ? $link['forced_country_origins'] : []));
+        $rules['store_guids'] = array_values(array_map('strval', is_array($link['forced_store_guids'] ?? null) ? $link['forced_store_guids'] : []));
+        $rules['group_guids'] = array_values(array_map('strval', is_array($link['forced_group_guids'] ?? null) ? $link['forced_group_guids'] : []));
+        $constraints = is_array($link['constraints'] ?? null) ? $link['constraints'] : [];
+        $rules['is_available'] = array_key_exists('is_available', $constraints) ? $constraints['is_available'] : null;
+        $rules['has_image'] = array_key_exists('has_image', $constraints) ? $constraints['has_image'] : null;
+        $rules['min_warehouse_quantity'] = isset($constraints['min_warehouse_quantity']) && is_numeric((string) $constraints['min_warehouse_quantity'])
+            ? (float) $constraints['min_warehouse_quantity']
+            : null;
+        $rules['max_warehouse_quantity'] = isset($constraints['max_warehouse_quantity']) && is_numeric((string) $constraints['max_warehouse_quantity'])
+            ? (float) $constraints['max_warehouse_quantity']
+            : null;
+        $rules['min_unit_sale_price_syp'] = isset($constraints['min_unit_sale_price_syp']) && is_numeric((string) $constraints['min_unit_sale_price_syp'])
+            ? (float) $constraints['min_unit_sale_price_syp']
+            : null;
+        $rules['max_unit_sale_price_syp'] = isset($constraints['max_unit_sale_price_syp']) && is_numeric((string) $constraints['max_unit_sale_price_syp'])
+            ? (float) $constraints['max_unit_sale_price_syp']
+            : null;
+        $rules['min_unit_sale_price_usd'] = isset($constraints['min_unit_sale_price_usd']) && is_numeric((string) $constraints['min_unit_sale_price_usd'])
+            ? (float) $constraints['min_unit_sale_price_usd']
+            : null;
+        $rules['max_unit_sale_price_usd'] = isset($constraints['max_unit_sale_price_usd']) && is_numeric((string) $constraints['max_unit_sale_price_usd'])
+            ? (float) $constraints['max_unit_sale_price_usd']
+            : null;
+        $rules['min_unit_purchase_price_usd'] = isset($constraints['min_unit_purchase_price_usd']) && is_numeric((string) $constraints['min_unit_purchase_price_usd'])
+            ? (float) $constraints['min_unit_purchase_price_usd']
+            : null;
+        $rules['max_unit_purchase_price_usd'] = isset($constraints['max_unit_purchase_price_usd']) && is_numeric((string) $constraints['max_unit_purchase_price_usd'])
+            ? (float) $constraints['max_unit_purchase_price_usd']
+            : null;
+
+        return $rules;
+    }
+
+    /**
+     * @param array<string, mixed> $policyOptions
+     * @param array<string, mixed> $linkOptions
+     * @return array{
+     *   visible_client_filters: list<string>,
+     *   allow_sorting: bool,
+     *   client_sort_fields: list<string>,
+     *   default_sort: string,
+     *   default_group_by: string
+     * }
+     */
+    public static function resolveShareStoreOptions(array $policyOptions, array $linkOptions): array
+    {
+        $policyVisible = AccessPolicyService::resolvedVisibleClientFilters($policyOptions);
+        $linkVisible = AccessPolicyService::normalizeVisibleClientFilters(
+            is_array($linkOptions['visible_client_filters'] ?? null) ? $linkOptions['visible_client_filters'] : []
+        );
+
+        if ($linkVisible === []) {
+            $effectiveVisible = $policyVisible;
+        } elseif ($policyVisible === []) {
+            $effectiveVisible = $linkVisible;
+        } else {
+            $effectiveVisible = array_values(array_intersect($linkVisible, $policyVisible));
+            if ($effectiveVisible === []) {
+                $effectiveVisible = $policyVisible;
+            }
+        }
+
+        $linkAllowSorting = array_key_exists('allow_sorting', $linkOptions)
+            ? (bool) $linkOptions['allow_sorting']
+            : false;
+        $policyAllowSorting = (bool) ($policyOptions['allow_sorting'] ?? true);
+        $allowSorting = $linkAllowSorting && $policyAllowSorting;
+
+        $policySortFields = array_values(array_map('strval', is_array($policyOptions['client_sort_fields'] ?? null) ? $policyOptions['client_sort_fields'] : []));
+        $linkSortFields = array_values(array_map('strval', is_array($linkOptions['client_sort_fields'] ?? null) ? $linkOptions['client_sort_fields'] : []));
+
+        if (!$allowSorting) {
+            $clientSortFields = [];
+            $effectiveVisible = array_values(array_filter(
+                $effectiveVisible,
+                static fn (string $code): bool => $code !== 'sort'
+            ));
+        } elseif ($linkSortFields === []) {
+            $clientSortFields = $policySortFields;
+        } elseif ($policySortFields === []) {
+            $clientSortFields = $linkSortFields;
+        } else {
+            $clientSortFields = array_values(array_intersect($linkSortFields, $policySortFields));
+        }
+
+        return [
+            'visible_client_filters' => $effectiveVisible,
+            'allow_sorting' => $allowSorting,
+            'client_sort_fields' => $clientSortFields,
+            'default_sort' => trim((string) ($linkOptions['default_sort'] ?? $policyOptions['default_sort'] ?? 'number:asc')) ?: 'number:asc',
+            'default_group_by' => in_array(
+                (string) ($linkOptions['default_group_by'] ?? $policyOptions['default_group_by'] ?? 'none'),
+                ['none', 'ageCategory', 'sizeRange', 'materialType', 'manufacturer', 'countryOfOrigin', 'group'],
+                true
+            )
+                ? (string) ($linkOptions['default_group_by'] ?? $policyOptions['default_group_by'] ?? 'none')
+                : 'none',
+        ];
+    }
+
+    /** @param array<string, mixed> $link @return list<string> */
+    public static function lockedClientFiltersFromLink(array $link): array
+    {
+        $locked = [];
+        if ((is_array($link['forced_material_types'] ?? null) ? $link['forced_material_types'] : []) !== []) {
+            $locked[] = 'materialTypes';
+        }
+        if ((is_array($link['forced_age_categories'] ?? null) ? $link['forced_age_categories'] : []) !== []) {
+            $locked[] = 'ageCategories';
+        }
+        if ((is_array($link['forced_manufacturers'] ?? null) ? $link['forced_manufacturers'] : []) !== []) {
+            $locked[] = 'manufacturers';
+        }
+        if ((is_array($link['forced_size_ranges'] ?? null) ? $link['forced_size_ranges'] : []) !== []) {
+            $locked[] = 'sizeRanges';
+        }
+        if ((is_array($link['forced_country_origins'] ?? null) ? $link['forced_country_origins'] : []) !== []) {
+            $locked[] = 'countryOfOrigins';
+        }
+        if ((is_array($link['forced_store_guids'] ?? null) ? $link['forced_store_guids'] : []) !== []) {
+            $locked[] = 'stores';
+        }
+        if ((is_array($link['forced_group_guids'] ?? null) ? $link['forced_group_guids'] : []) !== []) {
+            $locked[] = 'groups';
+        }
+        $constraints = is_array($link['constraints'] ?? null) ? $link['constraints'] : [];
+        if (array_key_exists('is_available', $constraints) && $constraints['is_available'] !== null) {
+            $locked[] = 'availability';
+        }
+        if (isset($constraints['min_warehouse_quantity']) && is_numeric((string) $constraints['min_warehouse_quantity'])) {
+            $locked[] = 'warehouseRange';
+        }
+        if (isset($constraints['max_warehouse_quantity']) && is_numeric((string) $constraints['max_warehouse_quantity'])) {
+            $locked[] = 'warehouseRange';
+        }
+        foreach ([
+            'min_unit_sale_price_syp' => 'priceSaleSyp',
+            'max_unit_sale_price_syp' => 'priceSaleSyp',
+            'min_unit_sale_price_usd' => 'priceSaleUsd',
+            'max_unit_sale_price_usd' => 'priceSaleUsd',
+            'min_unit_purchase_price_usd' => 'pricePurchaseUsd',
+            'max_unit_purchase_price_usd' => 'pricePurchaseUsd',
+        ] as $constraintKey => $filterCode) {
+            if (isset($constraints[$constraintKey]) && is_numeric((string) $constraints[$constraintKey])) {
+                $locked[] = $filterCode;
+            }
+        }
+
+        return array_values(array_unique($locked));
+    }
 }
