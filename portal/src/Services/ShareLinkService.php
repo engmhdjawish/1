@@ -39,7 +39,7 @@ final class ShareLinkService
     private const OPTION_CLIENT_SORT_FIELD = 'option_client_sort_field';
 
     /** @var list<string> */
-    private const DEFAULT_VISIBLE_CLIENT_FILTERS = [];
+    private const DEFAULT_VISIBLE_CLIENT_FILTERS = ['search', 'materialTypes', 'manufacturers', 'availability'];
 
     /** @var list<string> */
     private const ALLOWED_VISIBLE_CLIENT_FILTERS = [

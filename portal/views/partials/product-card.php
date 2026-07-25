@@ -36,6 +36,7 @@ $showPriceSyp = $showAnyPrice;
 $showPriceUsd = $showAnyPrice;
 $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
 $allowCart = (bool) ($displayOptions['allow_cart'] ?? false);
+$shareTokenActive = trim((string) ($shareToken ?? '')) !== '';
 
 $contextOffer = null;
 if ($productOfferSlug !== null) {
@@ -62,7 +63,9 @@ $manufacturer = trim((string) ($item['manufacturer'] ?? ''));
 $showAnyPrice = ($showPriceSyp || $showPriceUsd) && (bool) ($displayOptions['show_price'] ?? false);
 $hasOffer = !empty($item['has_offer']);
 $offerBadge = trim((string) ($item['offer_badge'] ?? ''));
-$cartItems = $allowCart ? StoreCartService::items() : [];
+$cartItems = $allowCart
+    ? ($shareTokenActive ? ShareCartService::items($shareToken) : StoreCartService::items())
+    : [];
 $cartQtyForItem = $guid !== '' ? (float) ($cartItems[$guid]['quantity'] ?? 0) : 0.0;
 $previewPayload = $useImagePreview
     ? product_preview_payload($item, $displayOptions, $cartQtyForItem, $productReturnUrl, $productOfferSlug)

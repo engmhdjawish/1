@@ -12,15 +12,23 @@ use Portal\Services\StorePolicyService;
 /** @var float $cartQtyForItem */
 /** @var bool $showQuantity */
 
+/** @var string|null $shareToken */
+/** @var string|null $shareLinkId */
+
 $capturePrices = (bool) ($capturePrices ?? false);
+$shareTokenActive = trim((string) ($shareToken ?? '')) !== '';
 $returnUrl = isset($returnUrl) ? (string) $returnUrl : ($_SERVER['REQUEST_URI'] ?? '/store.php');
-$cartQtyForItem = max(0.0, (float) ($cartQtyForItem ?? 0));
 $showQuantity = (bool) ($showQuantity ?? false);
 
 $materialGuid = material_guid($item);
 if ($materialGuid === '') {
     return;
 }
+
+$cartItems = $shareTokenActive
+    ? ShareCartService::items($shareToken)
+    : \Portal\Services\StoreCartService::items();
+$cartQtyForItem = max(0.0, (float) ($cartItems[$materialGuid]['quantity'] ?? ($cartQtyForItem ?? 0)));
 
 $maxPackages = StorePolicyService::maxPackagesPerMaterial();
 $maxLabel = $maxPackages !== null ? SpecialOfferService::formatQuantityLabel($maxPackages) : null;
@@ -52,10 +60,9 @@ $cartMode = $inCart
 ?>
 <form
   method="post"
-  class="store-add-cart<?= $inCart ? ' store-add-cart--in-cart' : '' ?><?= ($partialPackage || $atLimit) ? ' store-add-cart--locked' : '' ?>"
-  action="#"
-  data-store-add-cart="1"
-  data-no-page-loading="1"
+  class="store-add-cart<?= $inCart ? ' store-add-cart--in-cart' : '' ?><?= ($partialPackage || $atLimit) ? ' store-add-cart--locked' : '' ?><?= $shareTokenActive ? ' store-add-cart--share' : '' ?>"
+  action="<?= $shareTokenActive ? h(share_url(['token' => $shareToken])) : '#' ?>"
+  <?= $shareTokenActive ? '' : 'data-store-add-cart="1" data-no-page-loading="1"' ?>
   data-cart-mode="<?= h($cartMode) ?>"
   data-partial-package="<?= $partialPackage ? '1' : '0' ?>"
   data-material-guid="<?= h($materialGuid) ?>"
@@ -72,6 +79,9 @@ $cartMode = $inCart
   data-primary-unit="<?= h($primaryUnit) ?>"
 >
   <input type="hidden" name="action" value="add_to_cart">
+  <?php if ($shareTokenActive): ?>
+    <input type="hidden" name="token" value="<?= h($shareToken) ?>">
+  <?php endif; ?>
   <?php if (!empty($storeSectionSlug ?? '')): ?>
     <input type="hidden" name="store_section" value="<?= h((string) $storeSectionSlug) ?>">
   <?php endif; ?>

@@ -16,6 +16,17 @@ use Portal\Support\StorePricePreference;
 
 $catalog = is_array($catalog ?? null) ? $catalog : [];
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
+$shareContext = is_array($shareContext ?? null) ? $shareContext : null;
+$shareToken = trim((string) ($shareToken ?? ($shareContext['token'] ?? '')));
+$shareLinkId = trim((string) ($shareLinkId ?? ($shareContext['share_link_id'] ?? '')));
+$catalogUrl = static function (array $params = []) use ($shareContext): string {
+    if ($shareContext !== null) {
+        $params['token'] = (string) ($shareContext['token'] ?? '');
+        return share_url($params);
+    }
+
+    return store_url($params);
+};
 $cartNoticeMessage = '';
 $cartNoticeOk = true;
 if (is_array($cartNotice ?? null)) {
@@ -169,7 +180,7 @@ $buildFilterRemoveUrl = static function (
     array $removeScalarKeys = [],
     ?string $arrayParam = null,
     ?string $arrayValue = null
-): string {
+) use ($catalogUrl): string {
     $params = $_GET;
     foreach ($removeScalarKeys as $key) {
         unset($params[$key]);
@@ -191,7 +202,7 @@ $buildFilterRemoveUrl = static function (
     }
     $params['page'] = 1;
 
-    return store_url($params);
+    return $catalogUrl($params);
 };
 
 $storeLabelByGuid = [];
@@ -389,23 +400,26 @@ $facetChipMap = [
     ]]);
 }
 
-$clearAllFiltersUrl = store_url(array_filter([
+$clearAllFiltersUrl = $catalogUrl($shareContext !== null ? ['token' => (string) ($shareContext['token'] ?? '')] : array_filter([
     'section' => (string) ($filters['section'] ?? ''),
     'offer' => (string) ($filters['offer'] ?? ''),
 ], static fn (string $value): bool => trim($value) !== ''));
 
-$buildStoreUrl = static function (int $targetPage) use ($filters, $isSectionBrowse): string {
+$buildStoreUrl = static function (int $targetPage) use ($filters, $isSectionBrowse, $catalogUrl, $shareContext): string {
     $params = $_GET;
     $params['page'] = max(1, $targetPage);
     unset($params['section'], $params['offer']);
-    if ($isSectionBrowse) {
+    if ($shareContext === null && $isSectionBrowse) {
         $params = array_merge($params, array_filter([
             'section' => (string) ($filters['section'] ?? ''),
             'offer' => (string) ($filters['offer'] ?? ''),
         ], static fn (string $value): bool => trim($value) !== ''));
     }
+    if ($shareContext !== null) {
+        $params['token'] = (string) ($shareContext['token'] ?? '');
+    }
 
-    return store_url($params);
+    return $catalogUrl($params);
 };
 
 $productReturnUrl = catalog_current_return_url();
@@ -441,7 +455,32 @@ require __DIR__ . '/partials/store-filter-group.php';
   $storeMaxPackages = StorePolicyService::maxPackagesPerMaterial();
   $storeAllowCart = (bool) ($displayOptions['allow_cart'] ?? false);
   $storeShowPrice = (bool) ($displayOptions['show_price'] ?? false);
+  $shareCartCount = ($shareContext !== null && $shareToken !== '' && $storeAllowCart)
+    ? \Portal\Services\ShareCartService::itemCount($shareToken)
+    : 0;
 ?>
+<?php if ($shareContext !== null): ?>
+<section class="store-page-head store-page-head--share" aria-label="رابط مشاركة">
+  <div class="store-page-head__main">
+    <h1 class="store-page-head__title">
+      <span class="material-symbols-outlined" aria-hidden="true">link</span>
+      <?= h((string) ($shareContext['name_ar'] ?? 'رابط مشاركة')) ?>
+    </h1>
+    <?php if ((string) ($shareContext['access_policy_name_ar'] ?? '') !== ''): ?>
+      <p class="store-page-head__meta">سياسة الوصول: <?= h((string) $shareContext['access_policy_name_ar']) ?></p>
+    <?php endif; ?>
+  </div>
+  <?php if ($storeAllowCart && $shareToken !== ''): ?>
+    <a href="/cart.php?token=<?= h(rawurlencode($shareToken)) ?>" class="store-share-cart-btn">
+      <span class="material-symbols-outlined" aria-hidden="true">shopping_cart</span>
+      <span>السلة</span>
+      <?php if ($shareCartCount > 0): ?>
+        <span class="store-share-cart-btn__count"><?= (int) $shareCartCount ?></span>
+      <?php endif; ?>
+    </a>
+  <?php endif; ?>
+</section>
+<?php else: ?>
 <section class="store-page-head" aria-label="صفحة المتجر">
   <h1 class="store-page-head__title">
     <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
@@ -451,6 +490,7 @@ require __DIR__ . '/partials/store-filter-group.php';
     <p class="store-page-head__meta">الحد الأقصى للطلب: <strong><?= h(SpecialOfferService::formatQuantityLabel($storeMaxPackages)) ?></strong> طرد لكل مادة</p>
   <?php endif; ?>
 </section>
+<?php endif; ?>
 
 <?php if ($storeShowPrice): ?>
   <p
@@ -485,6 +525,9 @@ require __DIR__ . '/partials/store-filter-group.php';
       <aside class="store-filters-sidebar">
         <form method="get" id="store-filters-form" class="store-filters-sidebar-inner">
           <input type="hidden" name="page" value="1">
+          <?php if ($shareContext !== null && $shareToken !== ''): ?>
+            <input type="hidden" name="token" value="<?= h($shareToken) ?>">
+          <?php endif; ?>
           <?php if (!empty($filters['section'])): ?><input type="hidden" name="section" value="<?= h((string) $filters['section']) ?>"><?php endif; ?>
           <?php if (!empty($filters['offer'])): ?><input type="hidden" name="offer" value="<?= h((string) $filters['offer']) ?>"><?php endif; ?>
 
@@ -709,10 +752,7 @@ require __DIR__ . '/partials/store-filter-group.php';
 
           <div class="store-filters-drawer-footer store-filter-actions">
             <button type="submit" class="store-btn-primary" id="store-filters-submit" data-label-default="عرض النتائج">عرض النتائج</button>
-            <a href="<?= h(store_url(array_filter([
-                'section' => (string) ($filters['section'] ?? ''),
-                'offer' => (string) ($filters['offer'] ?? ''),
-            ], static fn (string $value): bool => trim($value) !== ''))) ?>" class="store-btn-secondary inline-flex items-center">مسح الكل</a>
+            <a href="<?= h($clearAllFiltersUrl) ?>" class="store-btn-secondary inline-flex items-center">مسح الكل</a>
           </div>
         </form>
       </aside>
@@ -810,7 +850,8 @@ require __DIR__ . '/partials/store-filter-group.php';
           <?php
             $useImagePreview = true;
             $useQuickView = false;
-            $linkToDetail = false;
+            $linkToDetail = $shareContext === null;
+            $capturePrices = (bool) ($displayOptions['show_price'] ?? false);
             require __DIR__ . '/partials/product-card.php';
           ?>
         <?php endforeach; ?>

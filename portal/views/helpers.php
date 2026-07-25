@@ -1027,6 +1027,33 @@ function store_url(array $params = []): string
     return '/store.php' . ($query !== '' ? '?' . $query : '');
 }
 
+/** @param array<string, mixed> $params */
+function share_url(array $params = []): string
+{
+    $filtered = [];
+    foreach ($params as $key => $value) {
+        if ($value === null) {
+            continue;
+        }
+        if (is_array($value)) {
+            $items = array_values(array_filter(array_map(static fn ($item): string => trim((string) $item), $value), static fn (string $item): bool => $item !== ''));
+            if ($items === []) {
+                continue;
+            }
+            $filtered[$key] = $items;
+            continue;
+        }
+        $text = trim((string) $value);
+        if ($text !== '') {
+            $filtered[$key] = $text;
+        }
+    }
+
+    $query = http_build_query($filtered);
+
+    return '/share.php' . ($query !== '' ? '?' . $query : '');
+}
+
 function order_tracking_url(string $token): string
 {
     $token = trim($token);

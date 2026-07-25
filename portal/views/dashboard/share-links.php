@@ -185,32 +185,45 @@ $visibleFilterOptions = [
 $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
     return $publicBaseUrl . '/share.php?token=' . rawurlencode($token);
 };
+
+$buildShareLinksUrl = static function (array $params = []) use ($filters): string {
+    $query = array_merge([
+        'q' => (string) ($filters['q'] ?? ''),
+        'active' => (string) ($filters['active'] ?? ''),
+        'limit' => (string) ($filters['limit'] ?? '100'),
+    ], $params);
+
+    return '/dashboard/share-links.php?' . http_build_query(array_filter(
+        $query,
+        static fn ($value) => $value !== null && $value !== ''
+    ));
+};
+
+$activeFilter = (string) ($filters['active'] ?? '');
+$statusTabs = [
+    '' => ['label' => 'الكل', 'count' => (int) $stats['total']],
+    '1' => ['label' => 'نشط', 'count' => (int) $stats['active']],
+    '0' => ['label' => 'متوقف', 'count' => max(0, (int) $stats['total'] - (int) $stats['active'])],
+];
 ?>
-<section class="flex flex-col md:flex-row justify-between md:items-center gap-3 mb-4">
-  <div>
-    <h1 class="text-2xl font-extrabold text-slate-900">إدارة روابط المشاركة</h1>
-    <p class="text-sm text-text-muted mt-1">إنشاء الروابط التسويقية وضبط صلاحيات الوصول والفلاتر المرتبطة بها.</p>
-  </div>
-  <div class="flex flex-wrap items-center gap-2">
+<section class="mb-4">
+  <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div>
+      <h1 class="text-2xl font-extrabold text-slate-900">روابط المشاركة</h1>
+      <p class="text-sm text-text-muted mt-1 max-w-3xl">إنشاء روابط تسويقية مخصّصة مع فلاتر وصلاحيات وصول — الصفحة العامة تستخدم نفس تصميم المتجر.</p>
+    </div>
     <?php if (!$showForm): ?>
-      <a href="/dashboard/share-links.php?new=1" class="h-9 px-4 inline-flex items-center rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">رابط جديد</a>
+      <a href="/dashboard/share-links.php?new=1" class="inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-xl bg-primary text-white text-sm font-bold hover:brightness-110 transition shrink-0">
+        <span class="material-symbols-outlined text-lg">add_link</span>
+        رابط جديد
+      </a>
     <?php endif; ?>
-    <article class="bg-white border border-border-subtle rounded-xl px-3 py-2 min-w-20 text-center">
-      <p class="text-lg font-extrabold"><?= (int) $stats['total'] ?></p>
-      <p class="text-[11px] text-text-muted">إجمالي</p>
-    </article>
-    <article class="bg-white border border-border-subtle rounded-xl px-3 py-2 min-w-20 text-center">
-      <p class="text-lg font-extrabold text-emerald-700"><?= (int) $stats['active'] ?></p>
-      <p class="text-[11px] text-text-muted">نشط</p>
-    </article>
-    <article class="bg-white border border-border-subtle rounded-xl px-3 py-2 min-w-20 text-center">
-      <p class="text-lg font-extrabold text-amber-700"><?= (int) $stats['expired'] ?></p>
-      <p class="text-[11px] text-text-muted">منتهي</p>
-    </article>
-    <article class="bg-white border border-border-subtle rounded-xl px-3 py-2 min-w-20 text-center">
-      <p class="text-lg font-extrabold text-blue-700"><?= (int) $stats['protected'] ?></p>
-      <p class="text-[11px] text-text-muted">محمي</p>
-    </article>
+  </div>
+  <div class="flex flex-wrap gap-2 mt-4 text-xs">
+    <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">إجمالي: <strong><?= (int) $stats['total'] ?></strong></span>
+    <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">نشط: <strong class="text-emerald-700"><?= (int) $stats['active'] ?></strong></span>
+    <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">منتهي: <strong class="text-amber-700"><?= (int) $stats['expired'] ?></strong></span>
+    <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">محمي: <strong class="text-blue-700"><?= (int) $stats['protected'] ?></strong></span>
   </div>
 </section>
 
@@ -424,11 +437,11 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
           <label class="text-xs">
             <span class="text-text-muted block mb-0.5">اسم مستخدم الوصول</span>
-            <input name="access_username" value="<?= h((string) ($editLink['access_username'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="guest-username">
+            <input name="access_username" autocomplete="off" value="<?= h((string) ($editLink['access_username'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="guest-username">
           </label>
           <label class="text-xs">
             <span class="text-text-muted block mb-0.5">كلمة مرور الوصول <?= $editId !== '' ? '(اختياري للتغيير)' : '' ?></span>
-            <input name="plain_password" type="password" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="••••••••">
+            <input name="plain_password" type="password" autocomplete="new-password" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="••••••••">
           </label>
         </div>
       </div>
@@ -447,34 +460,36 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
 <?php endif; ?>
 
 <?php if (!$showForm): ?>
-<section class="bg-white border border-border-subtle rounded-xl p-3 mb-4">
-  <form method="get" class="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">
-    <label class="text-xs md:col-span-2">
-      <span class="text-text-muted block mb-0.5">بحث</span>
-      <input type="text" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="اسم الرابط أو التوكن">
+<section class="bg-white border border-border-subtle rounded-xl p-3 mb-4 space-y-3">
+  <form method="get" data-dashboard-filter class="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 md:items-end">
+    <?php if ($activeFilter !== ''): ?>
+      <input type="hidden" name="active" value="<?= h($activeFilter) ?>">
+    <?php endif; ?>
+    <label class="text-sm">
+      <span class="text-text-muted block mb-1 text-xs">بحث</span>
+      <input type="search" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" class="h-10 w-full rounded-xl border border-border-subtle px-4 text-sm" placeholder="اسم الرابط أو التوكن">
     </label>
-    <label class="text-xs">
-      <span class="text-text-muted block mb-0.5">الحالة</span>
-      <select name="active" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
-        <option value="">الكل</option>
-        <option value="1" <?= ($filters['active'] ?? '') === '1' ? 'selected' : '' ?>>نشط</option>
-        <option value="0" <?= ($filters['active'] ?? '') === '0' ? 'selected' : '' ?>>متوقف</option>
-      </select>
-    </label>
-    <label class="text-xs">
-      <span class="text-text-muted block mb-0.5">عدد النتائج</span>
-      <select name="limit" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+    <label class="text-sm">
+      <span class="text-text-muted block mb-1 text-xs">عدد النتائج</span>
+      <select name="limit" class="h-10 w-full md:w-32 rounded-xl border border-border-subtle px-3 text-sm">
         <option value="50" <?= ((int) ($filters['limit'] ?? 100)) === 50 ? 'selected' : '' ?>>50</option>
         <option value="100" <?= ((int) ($filters['limit'] ?? 100)) === 100 ? 'selected' : '' ?>>100</option>
         <option value="200" <?= ((int) ($filters['limit'] ?? 100)) === 200 ? 'selected' : '' ?>>200</option>
       </select>
     </label>
-    <button class="h-9 rounded-lg bg-primary text-white text-xs font-extrabold px-4 hover:brightness-110">تطبيق</button>
+    <button class="h-10 px-5 rounded-xl bg-primary text-white text-sm font-bold hover:brightness-110 transition">تطبيق</button>
   </form>
+  <nav class="dash-cust-tabs" aria-label="حالة الروابط">
+    <?php foreach ($statusTabs as $key => $tab): ?>
+      <a href="<?= h($buildShareLinksUrl(['active' => $key])) ?>" class="dash-cust-tab<?= $activeFilter === (string) $key ? ' is-active' : '' ?>">
+        <span><?= h($tab['label']) ?></span>
+        <span class="dash-cust-tab__count"><?= (int) $tab['count'] ?></span>
+      </a>
+    <?php endforeach; ?>
+  </nav>
 </section>
-<?php endif; ?>
 
-<section class="bg-white border border-border-subtle rounded-xl overflow-hidden">
+<section class="bg-white border border-border-subtle rounded-2xl shadow-sm overflow-hidden">
   <?php if ($links === []): ?>
     <p class="p-6 text-sm text-text-muted text-center">لا توجد روابط مطابقة.</p>
   <?php else: ?>
@@ -546,6 +561,7 @@ $shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
     </div>
   <?php endif; ?>
 </section>
+<?php endif; ?>
 
 <?php if ($showForm): ?>
 <?php portal_render_token_picker_script(); ?>

@@ -607,455 +607,125 @@ if ($page > $totalPages) {
 $rangeStart = $totalCount === 0 ? 0 : (($page - 1) * $pageSize + 1);
 $rangeEnd = min($totalCount, $page * $pageSize);
 
-$buildShareUrl = static function (int $targetPage) use ($token): string {
-    $params = $_GET;
-    $params['token'] = $token;
-    $params['page'] = max(1, $targetPage);
+$lockedClientFilters = [];
+if ($forcedMaterialTypes !== []) {
+    $lockedClientFilters[] = 'materialTypes';
+}
+if ($forcedAgeCategories !== []) {
+    $lockedClientFilters[] = 'ageCategories';
+}
+if ($forcedManufacturers !== []) {
+    $lockedClientFilters[] = 'manufacturers';
+}
+if ($forcedSizeRanges !== []) {
+    $lockedClientFilters[] = 'sizeRanges';
+}
+if ($forcedCountryOrigins !== []) {
+    $lockedClientFilters[] = 'countryOfOrigins';
+}
+if ($forcedStoreGuids !== []) {
+    $lockedClientFilters[] = 'stores';
+}
+if ($forcedGroupGuids !== []) {
+    $lockedClientFilters[] = 'groups';
+}
+if ($forcedIsAvailable !== null) {
+    $lockedClientFilters[] = 'availability';
+}
+if ($forcedMinWarehouseQuantity !== null || $forcedMaxWarehouseQuantity !== null) {
+    $lockedClientFilters[] = 'warehouseRange';
+}
+if ($forcedMinUnitSalePriceSyp !== null || $forcedMaxUnitSalePriceSyp !== null) {
+    $lockedClientFilters[] = 'priceSaleSyp';
+}
+if ($forcedMinUnitSalePriceUsd !== null || $forcedMaxUnitSalePriceUsd !== null) {
+    $lockedClientFilters[] = 'priceSaleUsd';
+}
+if ($forcedMinUnitPurchasePriceUsd !== null || $forcedMaxUnitPurchasePriceUsd !== null) {
+    $lockedClientFilters[] = 'pricePurchaseUsd';
+}
 
-    return '/share.php?' . http_build_query($params);
-};
+$filterOptions['stores'] = $storeOptions;
+$filterOptions['groups'] = $groupOptions;
 
-$renderFilterChips = static function (string $paramName, array $options, array $selectedValues): void {
-    if ($options === []) {
-        return;
-    }
+$catalog = [
+    'products' => $products,
+    'totalCount' => $totalCount,
+    'page' => $page,
+    'pageSize' => $pageSize,
+    'totalPages' => $totalPages,
+    'rangeStart' => $rangeStart,
+    'rangeEnd' => $rangeEnd,
+    'resultFilters' => $resultFilters,
+    'filterOptions' => $filterOptions,
+    'apiError' => $apiError,
+    'allow_client_filters' => $allowClientFilters && $hasAccess && !$hasConstraintConflict,
+    'filters_deferred' => false,
+    'locked_client_filters' => array_values(array_unique($lockedClientFilters)),
+    'store_options' => [
+        'allow_sorting' => $allowSorting,
+        'client_sort_fields' => $clientSortFields,
+        'visible_client_filters' => $visibleClientFilters,
+    ],
+    'filters' => [
+        'q' => $userKeyword,
+        'sort' => $selectedSort,
+        'materialTypes' => $selectedMaterialTypes,
+        'ageCategories' => $selectedAgeCategories,
+        'manufacturers' => $selectedManufacturers,
+        'sizeRanges' => $selectedSizeRanges,
+        'countryOfOrigins' => $selectedCountryOrigins,
+        'storeGuids' => $selectedStoreGuids,
+        'groupGuids' => $selectedGroupGuids,
+        'isAvailable' => $selectedIsAvailable,
+        'minWarehouseQuantity' => $selectedMinWarehouseQuantity,
+        'maxWarehouseQuantity' => $selectedMaxWarehouseQuantity,
+        'minUnitSalePriceSyp' => $selectedMinUnitSalePriceSyp,
+        'maxUnitSalePriceSyp' => $selectedMaxUnitSalePriceSyp,
+        'minUnitSalePriceUsd' => $selectedMinUnitSalePriceUsd,
+        'maxUnitSalePriceUsd' => $selectedMaxUnitSalePriceUsd,
+        'minUnitPurchasePriceUsd' => $selectedMinUnitPurchasePriceUsd,
+        'maxUnitPurchasePriceUsd' => $selectedMaxUnitPurchasePriceUsd,
+        'groupBy' => $selectedGroupBy,
+    ],
+];
 
-    echo '<div class="flex flex-wrap gap-2 mt-2">';
-    foreach ($options as $option) {
-        $value = (string) ($option['value'] ?? '');
-        if ($value === '') {
-            continue;
-        }
-        $label = (string) ($option['label'] ?? $value);
-        $count = $option['count'] ?? null;
-        $isChecked = in_array($value, $selectedValues, true);
-        $countSuffix = $count !== null ? ' (' . (int) $count . ')' : '';
-        echo '<label class="cursor-pointer">';
-        echo '<input type="checkbox" class="peer sr-only" name="' . h($paramName) . '[]" value="' . h($value) . '"' . ($isChecked ? ' checked' : '') . '>';
-        echo '<span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-bold border transition ';
-        echo 'border-gray-300 bg-white text-gray-700 hover:border-primary ';
-        echo 'peer-checked:bg-primary peer-checked:text-white peer-checked:border-primary">';
-        echo h($label . $countSuffix);
-        echo '</span></label>';
-    }
-    echo '</div>';
-};
+$displayOptions = [
+    'show_images' => $showImages,
+    'show_price' => $showPriceSyp || $showPriceUsd,
+    'show_quantity' => $showQuantity,
+    'allow_cart' => $allowCart && $hasAccess,
+    'allow_order' => $allowOrder && $hasAccess,
+    'price_mode' => $priceMode,
+];
+
+$shareContext = [
+    'token' => $token,
+    'name_ar' => (string) (is_array($shareLink) ? ($shareLink['name_ar'] ?? 'رابط مشاركة') : 'رابط مشاركة'),
+    'access_policy_name_ar' => (string) (is_array($shareLink) ? ($shareLink['access_policy_name_ar'] ?? '') : ''),
+    'share_link_id' => (string) (is_array($shareLink) ? ($shareLink['id'] ?? '') : ''),
+    'has_access' => $hasAccess,
+    'requires_password' => $requiresPassword,
+    'error' => $error,
+    'constraint_conflict' => $hasConstraintConflict,
+];
+
+$shareToken = ($hasAccess && $token !== '') ? $token : null;
+$shareLinkId = (string) (is_array($shareLink) ? ($shareLink['id'] ?? '') : '');
+$isCustomer = false;
+
+if (is_string($cartNotice) && $cartNotice !== '') {
+    $cartNotice = ['ok' => true, 'message' => $cartNotice];
+}
+
+$extraHead = '<link href="' . h(portal_asset_url('/css/store-filters.css')) . '" rel="stylesheet">';
+$enableQuickView = false;
+$enableStoreCartJs = false;
+$deferStoreCartJs = true;
+$metaDescription = 'قائمة مواد مخصصة عبر رابط مشاركة — ' . (string) ($shareContext['name_ar'] ?? '');
 
 ob_start();
-?>
-<div class="bg-white rounded-xl p-6 shadow-sm border">
-  <div class="flex flex-wrap items-start justify-between gap-3 mb-2">
-    <div>
-      <h1 class="text-2xl font-extrabold"><?= h((string) (is_array($shareLink) ? ($shareLink['name_ar'] ?? 'رابط مشاركة') : 'رابط مشاركة')) ?></h1>
-      <p class="text-sm text-gray-600 mt-1">سياسة الوصول: <?= h((string) (is_array($shareLink) ? ($shareLink['access_policy_name_ar'] ?? '—') : '—')) ?></p>
-    </div>
-    <?php if ($allowCart && $hasAccess && $token !== '' && !$error): ?>
-      <?php $cartCount = ShareCartService::itemCount($token); ?>
-      <a
-        href="/cart.php?token=<?= urlencode($token) ?>"
-        class="relative h-11 inline-flex items-center gap-2 rounded-full bg-primary text-white pl-5 pr-4 text-sm font-extrabold shadow-md hover:opacity-95 transition"
-      >
-        <span class="material-symbols-outlined text-[22px]" aria-hidden="true">shopping_cart</span>
-        السلة
-        <?php if ($cartCount > 0): ?>
-          <span class="min-w-[22px] h-[22px] px-1 rounded-full bg-white text-primary text-xs font-extrabold flex items-center justify-center"><?= (int) $cartCount ?></span>
-        <?php endif; ?>
-      </a>
-    <?php endif; ?>
-  </div>
-
-  <?php if ($cartNotice): ?>
-    <p class="mb-4 rounded border bg-green-50 border-green-200 text-green-700 px-3 py-2 text-sm"><?= h($cartNotice) ?></p>
-  <?php endif; ?>
-
-  <?php if ($error): ?>
-    <p class="mb-4 rounded border bg-red-50 border-red-200 text-red-700 px-3 py-2 text-sm"><?= h($error) ?></p>
-  <?php endif; ?>
-  <?php if ($apiError): ?>
-    <p class="mb-4 rounded border bg-red-50 border-red-200 text-red-700 px-3 py-2 text-sm"><?= h($apiError) ?></p>
-  <?php endif; ?>
-  <?php if ($hasConstraintConflict): ?>
-    <p class="mb-4 rounded border bg-amber-50 border-amber-200 text-amber-700 px-3 py-2 text-sm">الفلاتر المختارة لا تتطابق مع قيود هذا الرابط.</p>
-  <?php endif; ?>
-
-  <?php if ($shareLink !== null && !$hasAccess): ?>
-    <form method="post" class="max-w-md rounded-xl border border-gray-200 p-4 space-y-3">
-      <input type="hidden" name="action" value="unlock">
-      <input type="hidden" name="token" value="<?= h($token) ?>">
-      <label class="block text-sm">
-        <span class="text-gray-600 block mb-1">اسم المستخدم</span>
-        <input name="access_username" class="h-11 w-full rounded border border-gray-300 px-3">
-      </label>
-      <label class="block text-sm">
-        <span class="text-gray-600 block mb-1">كلمة المرور</span>
-        <input type="password" name="access_password" class="h-11 w-full rounded border border-gray-300 px-3">
-      </label>
-      <button class="h-11 rounded bg-primary text-white px-5 font-bold">دخول للرابط</button>
-    </form>
-  <?php endif; ?>
-
-  <?php if ($shareLink !== null && $hasAccess): ?>
-    <?php if ($allowClientFilters): ?>
-      <form method="get" class="mb-5 grid grid-cols-1 md:grid-cols-4 gap-3">
-        <input type="hidden" name="token" value="<?= h($token) ?>">
-        <input type="hidden" name="page" value="1">
-        <?php if ($isClientFilterVisible('search')): ?>
-          <label class="text-sm md:col-span-2">
-            <span class="text-gray-600 block mb-1">بحث</span>
-            <input name="q" value="<?= h((string) ($_GET['q'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3" placeholder="اسم المادة أو الكود">
-          </label>
-        <?php endif; ?>
-        <?php if ($isClientFilterVisible('warehouseRange')): ?>
-          <label class="text-sm">
-            <span class="text-gray-600 block mb-1">أقل كمية</span>
-            <input type="number" name="minWarehouseQuantity" min="0" step="0.01" value="<?= h((string) ($_GET['minWarehouseQuantity'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-          </label>
-          <label class="text-sm">
-            <span class="text-gray-600 block mb-1">أعلى كمية</span>
-            <input type="number" name="maxWarehouseQuantity" min="0" step="0.01" value="<?= h((string) ($_GET['maxWarehouseQuantity'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-          </label>
-        <?php endif; ?>
-        <?php if ($isClientFilterVisible('availability')): ?>
-          <?php $availabilityValue = (string) ($_GET['isAvailable'] ?? ''); ?>
-          <div class="text-sm md:col-span-2">
-            <span class="text-gray-600 block mb-1">التوفر</span>
-            <div class="flex flex-wrap gap-2 mt-1">
-              <?php foreach (['' => 'الكل', '1' => 'متوفر', '0' => 'غير متوفر'] as $value => $label): ?>
-                <?php $isActive = $availabilityValue === (string) $value; ?>
-                <label class="cursor-pointer">
-                  <input type="radio" class="peer sr-only" name="isAvailable" value="<?= h((string) $value) ?>" <?= $isActive ? 'checked' : '' ?>>
-                  <span class="inline-flex px-3 py-1.5 rounded-full text-sm font-bold border transition border-gray-300 bg-white text-gray-700 hover:border-primary peer-checked:bg-primary peer-checked:text-white peer-checked:border-primary"><?= h($label) ?></span>
-                </label>
-              <?php endforeach; ?>
-            </div>
-          </div>
-        <?php endif; ?>
-        <?php if ($allowSorting && $clientSortFields !== []): ?>
-          <div class="text-sm md:col-span-4">
-            <span class="text-gray-600 block mb-1">الترتيب</span>
-            <div class="flex flex-wrap gap-2 mt-1">
-              <?php foreach ($clientSortFields as $sortField): ?>
-                <?php
-                  $isActiveSort = $activeSortParsed['field'] === $sortField;
-                  $sortLabel = $sortFieldLabels[$sortField] ?? $sortField;
-                  $sortArrow = $isActiveSort ? ($activeSortParsed['dir'] === 'asc' ? ' ↑' : ' ↓') : '';
-                  $nextSortValue = $buildNextSortValue($sortField);
-                ?>
-                <button
-                  type="submit"
-                  name="sort"
-                  value="<?= h($nextSortValue) ?>"
-                  class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-bold border transition <?= $isActiveSort ? 'bg-primary text-white border-primary' : 'border-gray-300 bg-white text-gray-700 hover:border-primary' ?>"
-                >
-                  <?= h($sortLabel . $sortArrow) ?>
-                </button>
-              <?php endforeach; ?>
-            </div>
-            <p class="text-xs text-gray-500 mt-1">اضغط على الخيار للتبديل بين تصاعدي وتنازلي.</p>
-          </div>
-        <?php endif; ?>
-        <?php if ($isClientFilterVisible('groupBy')): ?>
-          <label class="text-sm">
-            <span class="text-gray-600 block mb-1">التجميع</span>
-            <select name="groupBy" class="h-11 w-full rounded border border-gray-300 px-3">
-              <option value="none" <?= $selectedGroupBy === 'none' ? 'selected' : '' ?>>بدون</option>
-              <option value="ageCategory" <?= $selectedGroupBy === 'ageCategory' ? 'selected' : '' ?>>الفئة العمرية</option>
-              <option value="sizeRange" <?= $selectedGroupBy === 'sizeRange' ? 'selected' : '' ?>>القياس</option>
-              <option value="materialType" <?= $selectedGroupBy === 'materialType' ? 'selected' : '' ?>>النوع</option>
-              <option value="manufacturer" <?= $selectedGroupBy === 'manufacturer' ? 'selected' : '' ?>>الشركة</option>
-              <option value="countryOfOrigin" <?= $selectedGroupBy === 'countryOfOrigin' ? 'selected' : '' ?>>بلد المنشأ</option>
-              <option value="group" <?= $selectedGroupBy === 'group' ? 'selected' : '' ?>>المجموعة</option>
-            </select>
-          </label>
-        <?php endif; ?>
-
-        <?php if ($isClientFilterVisible('stores') && $storeOptions !== []): ?>
-          <?php
-            $storeChipOptions = [];
-            foreach ($storeOptions as $store) {
-                $storeGuid = (string) ($store['guid'] ?? $store['Guid'] ?? '');
-                if ($storeGuid === '') {
-                    continue;
-                }
-                $storeLabel = trim((string) ($store['name'] ?? $store['Name'] ?? '')) !== ''
-                    ? (string) ($store['name'] ?? $store['Name'])
-                    : ((string) ($store['code'] ?? $store['Code'] ?? '') !== '' ? (string) ($store['code'] ?? $store['Code']) : $storeGuid);
-                $storeChipOptions[] = ['value' => $storeGuid, 'label' => $storeLabel];
-            }
-          ?>
-          <fieldset class="md:col-span-4 rounded border border-gray-200 p-3">
-            <legend class="text-sm font-bold text-gray-700 px-1">المخازن</legend>
-            <?php $renderFilterChips('storeGuids', $storeChipOptions, $selectedStoreGuids); ?>
-          </fieldset>
-        <?php endif; ?>
-
-        <?php if ($isClientFilterVisible('groups') && $groupOptions !== []): ?>
-          <?php
-            $groupChipOptions = [];
-            $groupFacetCounts = [];
-            foreach (is_array($resultFilters['groups'] ?? null) ? $resultFilters['groups'] : [] as $groupFacet) {
-                if (!is_array($groupFacet)) {
-                    continue;
-                }
-                $facetGuid = (string) ($groupFacet['guid'] ?? '');
-                if ($facetGuid !== '') {
-                    $groupFacetCounts[strtolower($facetGuid)] = $groupFacet['count'] ?? null;
-                }
-            }
-            foreach ($groupOptions as $group) {
-                $groupGuid = (string) ($group['guid'] ?? $group['Guid'] ?? '');
-                if ($groupGuid === '') {
-                    continue;
-                }
-                $groupLabel = trim((string) ($group['name'] ?? $group['Name'] ?? '')) !== ''
-                    ? (string) ($group['name'] ?? $group['Name'])
-                    : ((string) ($group['code'] ?? $group['Code'] ?? '') !== '' ? (string) ($group['code'] ?? $group['Code']) : $groupGuid);
-                $groupChipOptions[] = [
-                    'value' => $groupGuid,
-                    'label' => $groupLabel,
-                    'count' => $groupFacetCounts[strtolower($groupGuid)] ?? null,
-                ];
-            }
-          ?>
-          <fieldset class="md:col-span-4 rounded border border-gray-200 p-3">
-            <legend class="text-sm font-bold text-gray-700 px-1">المجموعات</legend>
-            <?php $renderFilterChips('groupGuids', $groupChipOptions, $selectedGroupGuids); ?>
-          </fieldset>
-        <?php endif; ?>
-
-        <?php if ($isClientFilterVisible('priceSaleSyp') || $isClientFilterVisible('priceSaleUsd') || $isClientFilterVisible('pricePurchaseUsd')): ?>
-          <fieldset class="md:col-span-4 rounded border border-gray-200 p-3">
-            <legend class="text-sm text-gray-600 px-1">المدى السعري (اختياري)</legend>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
-              <?php if ($isClientFilterVisible('priceSaleSyp')): ?>
-                <label class="text-sm">
-                  <span class="text-gray-600 block mb-1">سعر البيع ل.س (من)</span>
-                  <input type="number" name="minUnitSalePriceSyp" min="0" step="0.01" value="<?= h((string) ($_GET['minUnitSalePriceSyp'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-                </label>
-                <label class="text-sm">
-                  <span class="text-gray-600 block mb-1">سعر البيع ل.س (إلى)</span>
-                  <input type="number" name="maxUnitSalePriceSyp" min="0" step="0.01" value="<?= h((string) ($_GET['maxUnitSalePriceSyp'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-                </label>
-              <?php endif; ?>
-              <?php if ($isClientFilterVisible('priceSaleUsd')): ?>
-                <label class="text-sm">
-                  <span class="text-gray-600 block mb-1">سعر البيع $ (من)</span>
-                  <input type="number" name="minUnitSalePriceUsd" min="0" step="0.01" value="<?= h((string) ($_GET['minUnitSalePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-                </label>
-                <label class="text-sm">
-                  <span class="text-gray-600 block mb-1">سعر البيع $ (إلى)</span>
-                  <input type="number" name="maxUnitSalePriceUsd" min="0" step="0.01" value="<?= h((string) ($_GET['maxUnitSalePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-                </label>
-              <?php endif; ?>
-              <?php if ($isClientFilterVisible('pricePurchaseUsd')): ?>
-                <label class="text-sm">
-                  <span class="text-gray-600 block mb-1">سعر الشراء $ (من)</span>
-                  <input type="number" name="minUnitPurchasePriceUsd" min="0" step="0.01" value="<?= h((string) ($_GET['minUnitPurchasePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-                </label>
-                <label class="text-sm">
-                  <span class="text-gray-600 block mb-1">سعر الشراء $ (إلى)</span>
-                  <input type="number" name="maxUnitPurchasePriceUsd" min="0" step="0.01" value="<?= h((string) ($_GET['maxUnitPurchasePriceUsd'] ?? '')) ?>" class="h-11 w-full rounded border border-gray-300 px-3">
-                </label>
-              <?php endif; ?>
-            </div>
-          </fieldset>
-        <?php endif; ?>
-
-        <?php
-          $facetMap = [
-              'materialTypes' => ['label' => 'نوع المادة', 'visible' => $isClientFilterVisible('materialTypes')],
-              'ageCategories' => ['label' => 'الفئة العمرية', 'visible' => $isClientFilterVisible('ageCategories')],
-              'manufacturers' => ['label' => 'الشركة', 'visible' => $isClientFilterVisible('manufacturers')],
-              'sizeRanges' => ['label' => 'القياس', 'visible' => $isClientFilterVisible('sizeRanges')],
-              'countryOfOrigins' => ['label' => 'بلد المنشأ', 'visible' => $isClientFilterVisible('countryOfOrigins')],
-          ];
-        ?>
-        <?php foreach ($facetMap as $facetKey => $facetConfig): ?>
-          <?php if (empty($facetConfig['visible'])) {
-              continue;
-          } ?>
-          <?php $values = $resultFilters[$facetKey] ?? []; ?>
-          <?php if ($values !== []): ?>
-            <?php
-              $facetChipOptions = [];
-              $selectedFacetValues = $parseList($facetKey);
-              foreach ($values as $facet) {
-                  $facetValue = (string) ($facet['value'] ?? '');
-                  if ($facetValue === '') {
-                      continue;
-                  }
-                  $facetChipOptions[] = [
-                      'value' => $facetValue,
-                      'label' => $facetValue,
-                      'count' => $facet['count'] ?? null,
-                  ];
-              }
-            ?>
-            <fieldset class="md:col-span-4 rounded border border-gray-200 p-3">
-              <legend class="text-sm font-bold text-gray-700 px-1"><?= h((string) $facetConfig['label']) ?></legend>
-              <?php $renderFilterChips($facetKey, $facetChipOptions, $selectedFacetValues); ?>
-            </fieldset>
-          <?php endif; ?>
-        <?php endforeach; ?>
-
-        <div class="md:col-span-4 flex gap-2 justify-end">
-          <button class="h-11 rounded bg-primary text-white px-6 font-bold">تطبيق الفلاتر</button>
-          <a href="/share.php?token=<?= urlencode($token) ?>" class="h-11 inline-flex items-center rounded border border-gray-300 px-6 text-sm">إعادة ضبط</a>
-        </div>
-      </form>
-    <?php endif; ?>
-
-    <?php if ($totalCount > 0): ?>
-      <p class="text-sm text-gray-600 mb-3">
-        عرض <?= (int) $rangeStart ?>–<?= (int) $rangeEnd ?> من <?= (int) $totalCount ?> مادة
-        <?php if ($totalPages > 1): ?>
-          <span class="text-gray-400">(صفحة <?= (int) $page ?> من <?= (int) $totalPages ?>)</span>
-        <?php endif; ?>
-      </p>
-    <?php endif; ?>
-
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <?php foreach ($products as $item): ?>
-        <?php
-          $packaging = ShareCartService::packaging($item);
-          $primaryUnit = ShareCartService::primaryUnitLabel($item);
-          $packageUnit = ShareCartService::packageUnitLabel($item);
-          $unitSaleSp = ShareCartService::unitSalePriceSp($item);
-          $unitSaleUsd = ShareCartService::unitSalePriceUsd($item);
-          $packageSaleSp = ShareCartService::packageSalePriceSp($item);
-          $packageSaleUsd = ShareCartService::packageSalePriceUsd($item);
-          $warehouseQty = (float) ($item['warehouseQuantity'] ?? 0);
-          $packagesAvailable = packages_available_display($item);
-        ?>
-        <article class="border border-gray-200 rounded-xl p-4 bg-white shadow-sm flex flex-col">
-          <?php if ($showImages): ?>
-            <div class="h-24 rounded bg-gray-100 flex items-center justify-center text-gray-500 text-xs mb-3">
-              <?php if (!empty($item['productImageGuid'])): ?>
-                <img
-                  src="/api/image.php?id=<?= urlencode((string) $item['productImageGuid']) ?>&thumb=1"
-                  alt="<?= h((string) ($item['name'] ?? 'صورة مادة')) ?>"
-                  class="h-24 w-full object-cover rounded"
-                  loading="lazy"
-                >
-              <?php else: ?>
-                بدون صورة
-              <?php endif; ?>
-            </div>
-          <?php endif; ?>
-          <div class="font-semibold"><?= h((string) ($item['name'] ?? '-')) ?></div>
-          <div class="text-xs text-gray-500"><?= h((string) ($item['materialCode'] ?? '')) ?></div>
-          <div class="text-xs text-gray-500 mt-1">
-            <?= h((string) ($item['manufacturer'] ?? '')) ?><?= !empty($item['materialType']) ? ' • ' . h((string) $item['materialType']) : '' ?>
-          </div>
-
-          <div class="mt-2 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-bold text-gray-700">
-            التعبئة:
-            <span class="text-primary"><?= h(rtrim(rtrim(number_format($packaging, 2, '.', ','), '0'), '.')) ?></span>
-            <?= h($primaryUnit) ?> / <?= h($packageUnit) ?>
-          </div>
-
-          <?php if ($showPriceSyp): ?>
-            <div class="text-xs text-gray-500 mt-2">
-              سعر <?= h($primaryUnit) ?>: <?= format_money($unitSaleSp, true) ?> ل.س
-            </div>
-            <div class="text-primary font-extrabold mt-0.5">
-              سعر <?= h($packageUnit) ?>: <?= format_money($packageSaleSp, true) ?> ل.س
-            </div>
-          <?php endif; ?>
-          <?php if ($showPriceUsd): ?>
-            <div class="text-xs text-gray-500 mt-1">
-              سعر <?= h($primaryUnit) ?>: $<?= number_format($unitSaleUsd, 2, '.', ',') ?>
-            </div>
-            <div class="text-emerald-700 font-bold mt-0.5">
-              سعر <?= h($packageUnit) ?>: $<?= number_format($packageSaleUsd, 2, '.', ',') ?>
-            </div>
-          <?php endif; ?>
-          <?php if ($showQuantity): ?>
-            <div class="text-xs text-gray-500 mt-1">
-              متاح: <?= number_format($packagesAvailable, 0, '.', ',') ?> <?= h($packageUnit) ?>
-              <span class="text-gray-400">(<?= number_format($warehouseQty, 0, '.', ',') ?> <?= h($primaryUnit) ?>)</span>
-            </div>
-          <?php endif; ?>
-
-          <?php if ($allowCart && $hasAccess): ?>
-            <?php
-              $materialGuid = trim((string) ($item['materialGuid'] ?? $item['MaterialGuid'] ?? ''));
-              $imageGuid = trim((string) ($item['productImageGuid'] ?? $item['ProductImageGuid'] ?? ''));
-              $imageUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '';
-            ?>
-            <?php if ($materialGuid !== ''): ?>
-              <form method="post" class="mt-auto pt-3 border-t border-gray-100 space-y-2">
-                <input type="hidden" name="token" value="<?= h($token) ?>">
-                <input type="hidden" name="action" value="add_to_cart">
-                <input type="hidden" name="material_guid" value="<?= h($materialGuid) ?>">
-                <input type="hidden" name="material_code" value="<?= h((string) ($item['materialCode'] ?? $item['MaterialCode'] ?? '')) ?>">
-                <input type="hidden" name="material_name_ar" value="<?= h((string) ($item['name'] ?? $item['Name'] ?? 'مادة')) ?>">
-                <input type="hidden" name="primary_unit" value="<?= h($primaryUnit) ?>">
-                <input type="hidden" name="package_unit" value="<?= h($packageUnit) ?>">
-                <input type="hidden" name="packaging" value="<?= h((string) $packaging) ?>">
-                <input type="hidden" name="unit_sale_price_sp" value="<?= h((string) $unitSaleSp) ?>">
-                <input type="hidden" name="unit_sale_price_usd" value="<?= h((string) $unitSaleUsd) ?>">
-                <?php if ($imageUrl !== ''): ?>
-                  <input type="hidden" name="image_url" value="<?= h($imageUrl) ?>">
-                <?php endif; ?>
-                <div class="flex items-center justify-between gap-2">
-                  <label class="text-xs font-bold text-gray-600 shrink-0">عدد <?= h($packageUnit) ?></label>
-                  <input
-                    type="number"
-                    name="quantity"
-                    min="1"
-                    step="1"
-                    value="1"
-                    class="h-10 w-20 rounded-lg border border-gray-300 px-2 text-center font-bold"
-                  >
-                </div>
-                <button
-                  type="submit"
-                  class="w-full h-11 rounded-lg bg-primary text-white text-sm font-extrabold shadow-md hover:opacity-95 transition inline-flex items-center justify-center gap-2"
-                >
-                  <span class="material-symbols-outlined text-[20px]" aria-hidden="true">add_shopping_cart</span>
-                  إضافة للسلة
-                </button>
-              </form>
-            <?php endif; ?>
-          <?php endif; ?>
-        </article>
-      <?php endforeach; ?>
-    </div>
-
-    <?php if ($products === [] && !$apiError && !$hasConstraintConflict): ?>
-      <p class="text-gray-500 mt-4">لا توجد نتائج مطابقة.</p>
-    <?php endif; ?>
-
-    <?php if ($totalPages > 1): ?>
-      <nav class="mt-8 flex flex-wrap items-center justify-center gap-2" aria-label="ترقيم الصفحات">
-        <?php if ($page > 1): ?>
-          <a href="<?= h($buildShareUrl($page - 1)) ?>" class="h-10 inline-flex items-center px-4 rounded-full border border-gray-300 text-sm font-bold hover:border-primary">السابق</a>
-        <?php endif; ?>
-        <?php
-          $windowStart = max(1, $page - 2);
-          $windowEnd = min($totalPages, $page + 2);
-          if ($windowEnd - $windowStart < 4) {
-              $windowStart = max(1, $windowEnd - 4);
-              $windowEnd = min($totalPages, $windowStart + 4);
-          }
-          for ($pageNumber = $windowStart; $pageNumber <= $windowEnd; $pageNumber++):
-            $isCurrent = $pageNumber === $page;
-        ?>
-          <a
-            href="<?= h($buildShareUrl($pageNumber)) ?>"
-            class="h-10 min-w-10 inline-flex items-center justify-center px-3 rounded-full text-sm font-bold border <?= $isCurrent ? 'bg-primary text-white border-primary' : 'border-gray-300 hover:border-primary' ?>"
-            <?= $isCurrent ? 'aria-current="page"' : '' ?>
-          ><?= (int) $pageNumber ?></a>
-        <?php endfor; ?>
-        <?php if ($page < $totalPages): ?>
-          <a href="<?= h($buildShareUrl($page + 1)) ?>" class="h-10 inline-flex items-center px-4 rounded-full border border-gray-300 text-sm font-bold hover:border-primary">التالي</a>
-        <?php endif; ?>
-      </nav>
-    <?php endif; ?>
-  <?php endif; ?>
-</div>
-<?php
+require dirname(__DIR__) . '/views/share-page.php';
 $content = ob_get_clean();
-$title = 'رابط مشاركة';
+$title = (string) ($shareContext['name_ar'] ?? 'رابط مشاركة');
 require dirname(__DIR__) . '/views/layout.php';
