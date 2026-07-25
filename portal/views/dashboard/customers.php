@@ -453,27 +453,31 @@ $hitListLimit = $shownCount >= $listLimit && $activeTabCount > $shownCount;
       </a>
     </header>
 
-    <form method="post" class="flex flex-col flex-1 min-h-0">
+    <form method="post" class="flex flex-col flex-1 min-h-0" autocomplete="off" data-customer-admin-form>
       <input type="hidden" name="action" value="save_customer">
       <input type="hidden" name="customer_id" value="<?= h((string) ($editCustomer['id'] ?? '')) ?>">
       <input type="hidden" name="return_status" value="<?= h($statusFilter) ?>">
       <input type="hidden" name="return_q" value="<?= h($searchFilter) ?>">
       <input type="hidden" name="return_source" value="<?= h($sourceFilter) ?>">
+      <div class="sr-only" aria-hidden="true">
+        <input type="text" tabindex="-1" autocomplete="username">
+        <input type="password" tabindex="-1" autocomplete="current-password">
+      </div>
 
       <div class="flex-1 overflow-y-auto p-4 space-y-3">
         <label class="block text-sm">
           <span class="text-text-muted block mb-1 text-xs">الاسم</span>
-          <input name="name_ar" required value="<?= h((string) ($editCustomer['name_ar'] ?? '')) ?>" class="h-10 w-full rounded-xl border border-border-subtle px-4 text-sm focus:border-primary focus:ring-primary">
+          <input name="name_ar" required autocomplete="off" value="<?= h((string) ($editCustomer['name_ar'] ?? '')) ?>" class="h-10 w-full rounded-xl border border-border-subtle px-4 text-sm focus:border-primary focus:ring-primary">
         </label>
 
         <label class="block text-sm">
           <span class="text-text-muted block mb-1 text-xs">الهاتف</span>
-          <input name="phone" required <?= portal_phone_input_attributes() ?> value="<?= h((string) ($editCustomer['phone'] ?? '')) ?>" class="h-10 w-full rounded-xl border border-border-subtle px-4 text-sm focus:border-primary focus:ring-primary text-left" placeholder="09xxxxxxxx">
+          <input name="phone" required autocomplete="tel" <?= portal_phone_input_attributes() ?> value="<?= h((string) ($editCustomer['phone'] ?? '')) ?>" class="h-10 w-full rounded-xl border border-border-subtle px-4 text-sm focus:border-primary focus:ring-primary text-left" placeholder="09xxxxxxxx">
         </label>
 
         <label class="block text-sm">
           <span class="text-text-muted block mb-1 text-xs">البريد الإلكتروني</span>
-          <input type="email" name="email" value="<?= h((string) ($editCustomer['email'] ?? '')) ?>" class="h-10 w-full rounded-xl border border-border-subtle px-4 text-sm focus:border-primary focus:ring-primary">
+          <input type="text" name="email" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false" value="<?= h((string) ($editCustomer['email'] ?? '')) ?>" class="h-10 w-full rounded-xl border border-border-subtle px-4 text-sm focus:border-primary focus:ring-primary" dir="ltr">
         </label>
 
         <label class="block text-sm">
@@ -501,17 +505,17 @@ $hitListLimit = $shownCount >= $listLimit && $activeTabCount > $shownCount;
 
         <label class="block text-sm">
           <span class="text-text-muted block mb-1 text-xs"><?= $editingExisting ? 'كلمة مرور جديدة (اختياري)' : 'كلمة المرور (اختياري)' ?></span>
-          <input type="password" name="plain_password" class="h-10 w-full rounded-xl border border-border-subtle px-4 text-sm focus:border-primary focus:ring-primary">
+          <input type="password" name="plain_password" autocomplete="new-password" data-lpignore="true" data-1p-ignore class="h-10 w-full rounded-xl border border-border-subtle px-4 text-sm focus:border-primary focus:ring-primary">
         </label>
 
         <label class="block text-sm">
           <span class="text-text-muted block mb-1 text-xs">سبب الرفض (عند الرفض)</span>
-          <input name="rejection_reason_ar" value="<?= h((string) ($editCustomer['rejection_reason_ar'] ?? '')) ?>" class="h-10 w-full rounded-xl border border-border-subtle px-4 text-sm focus:border-primary focus:ring-primary">
+          <input name="rejection_reason_ar" autocomplete="off" value="<?= h((string) ($editCustomer['rejection_reason_ar'] ?? '')) ?>" class="h-10 w-full rounded-xl border border-border-subtle px-4 text-sm focus:border-primary focus:ring-primary">
         </label>
 
         <label class="block text-sm">
           <span class="text-text-muted block mb-1 text-xs">ملاحظات</span>
-          <textarea name="notes_ar" rows="3" class="w-full rounded-xl border border-border-subtle px-4 py-2 text-sm focus:border-primary focus:ring-primary"><?= h((string) ($editCustomer['notes_ar'] ?? '')) ?></textarea>
+          <textarea name="notes_ar" rows="3" autocomplete="off" class="w-full rounded-xl border border-border-subtle px-4 py-2 text-sm focus:border-primary focus:ring-primary"><?= h((string) ($editCustomer['notes_ar'] ?? '')) ?></textarea>
         </label>
       </div>
 
