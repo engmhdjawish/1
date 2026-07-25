@@ -130,6 +130,36 @@ $scopeCountryOrigins = $rulesList($baseRules, 'country_origins');
 $scopeStoreGuids = $rulesList($baseRules, 'store_guids');
 $scopeGroupGuids = $rulesList($baseRules, 'group_guids');
 
+$scopeStringOptionList = static function (array $options, array $forced): array {
+    if ($forced === []) {
+        return $options;
+    }
+    $allowed = [];
+    foreach ($forced as $value) {
+        $allowed[Text::lower((string) $value)] = true;
+    }
+
+    return array_values(array_filter($options, static function (string $option) use ($allowed): bool {
+        return isset($allowed[Text::lower($option)]);
+    }));
+};
+$applyScopedShareFilterOptions = static function (array $options) use (
+    $scopeStringOptionList,
+    $scopeMaterialTypes,
+    $scopeAgeCategories,
+    $scopeManufacturers,
+    $scopeSizeRanges,
+    $scopeCountryOrigins
+): array {
+    $options['materialTypes'] = $scopeStringOptionList($options['materialTypes'] ?? [], $scopeMaterialTypes);
+    $options['ageCategories'] = $scopeStringOptionList($options['ageCategories'] ?? [], $scopeAgeCategories);
+    $options['manufacturers'] = $scopeStringOptionList($options['manufacturers'] ?? [], $scopeManufacturers);
+    $options['sizeRanges'] = $scopeStringOptionList($options['sizeRanges'] ?? [], $scopeSizeRanges);
+    $options['countryOfOrigins'] = $scopeStringOptionList($options['countryOfOrigins'] ?? [], $scopeCountryOrigins);
+
+    return $options;
+};
+
 $selectedMaterialTypes = ($allowClientFilters && $isClientFilterVisible('materialTypes')) ? $parseList('materialTypes') : [];
 $selectedAgeCategories = ($allowClientFilters && $isClientFilterVisible('ageCategories')) ? $parseList('ageCategories') : [];
 $selectedManufacturers = ($allowClientFilters && $isClientFilterVisible('manufacturers')) ? $parseList('manufacturers') : [];
@@ -271,6 +301,7 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
                         'unitPurchasePriceUsd' => null,
                     ],
             ];
+            $filterOptions = $applyScopedShareFilterOptions($filterOptions);
         }
 
         $params = array_filter([
@@ -596,22 +627,22 @@ $shareToken = ($hasAccess && $token !== '') ? $token : null;
 $shareLinkId = (string) (is_array($shareLink) ? ($shareLink['id'] ?? '') : '');
 $isCustomer = false;
 
+if ($shareToken !== null) {
+    ShareCartService::rememberActiveToken($shareToken);
+}
+
 if (is_string($cartNotice) && $cartNotice !== '') {
     $cartNotice = ['ok' => true, 'message' => $cartNotice];
 }
 
 $extraHead = '<link href="' . h(portal_asset_url('/css/store-filters.css')) . '" rel="stylesheet">';
 $enableQuickView = false;
-$shareCartUrl = ($shareToken !== null && ($displayOptions['allow_cart'] ?? false))
-    ? '/cart.php?token=' . rawurlencode($shareToken)
-    : null;
 $storeAllowCart = (bool) ($displayOptions['allow_cart'] ?? false);
 $storeCartCount = ($shareToken !== null && $storeAllowCart) ? ShareCartService::itemCount($shareToken) : 0;
 $storeCartPackageCount = ($shareToken !== null && $storeAllowCart) ? ShareCartService::packageCount($shareToken) : 0.0;
 $storeCartBootstrap = ($shareToken !== null && $storeAllowCart)
     ? array_merge(ShareCartService::bootstrapPayload($shareToken), [
         'share_token' => $shareToken,
-        'cart_url' => $shareCartUrl,
     ])
     : null;
 $enableStoreCartJs = $storeAllowCart && $hasAccess;

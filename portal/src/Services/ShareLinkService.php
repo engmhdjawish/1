@@ -1213,13 +1213,12 @@ final class ShareLinkService
         $linkVisible = AccessPolicyService::normalizeVisibleClientFilters(
             is_array($linkOptions['visible_client_filters'] ?? null) ? $linkOptions['visible_client_filters'] : []
         );
-        $policyVisible = AccessPolicyService::resolvedVisibleClientFilters($policyOptions);
 
         if ($linkVisible !== []) {
             $effectiveVisible = $linkVisible;
-        } elseif ($policyVisible !== []) {
-            $effectiveVisible = $policyVisible;
         } else {
+            // Prefer link defaults over policy so configured share links are not
+            // narrowed to the access policy's visible filter subset.
             $effectiveVisible = $defaults['visible_client_filters'];
         }
 

@@ -182,3 +182,80 @@ test('share-links save JSON response redirects to list', () => {
   assert.match(controller, /'redirect' => '\/dashboard\/share-links\.php\?deleted=1'/);
   assert.match(controller, /if \(!\$allowSorting\) \{\s*\$clientSortFields = \[\];/);
 });
+
+test('share page keeps all link-configured visible filters in the sidebar', () => {
+  const catalogView = fs.readFileSync(
+    path.resolve(__dirname, '../views/store-catalog.php'),
+    'utf8',
+  );
+  assert.match(catalogView, /if \(\$shareContext !== null\) \{\s*return true;\s*\}/);
+  assert.match(catalogView, /\$renderEmptyFilterGroups = \$filtersDeferred \|\| \$shareContext !== null;/);
+  assert.match(catalogView, /filterOptions\['groups'\]/);
+});
+
+test('share store options prefer link defaults over policy visible filters', () => {
+  const servicePath = path.resolve(__dirname, '../src/Services/ShareLinkService.php');
+  const source = fs.readFileSync(servicePath, 'utf8');
+  assert.match(source, /Prefer link defaults over policy/);
+  assert.doesNotMatch(source, /elseif \(\$policyVisible !== \[\]\)/);
+});
+
+test('share page scopes string filter options to merged link/policy rules', () => {
+  const sharePage = fs.readFileSync(
+    path.resolve(__dirname, '../public/share.php'),
+    'utf8',
+  );
+  assert.match(sharePage, /\$applyScopedShareFilterOptions\(\$filterOptions\)/);
+  assert.match(sharePage, /\$scopeStringOptionList\(\$options\['manufacturers'\]/);
+});
+
+test('share pages use the same cart drawer as the store', () => {
+  const layout = fs.readFileSync(path.resolve(__dirname, '../views/layout.php'), 'utf8');
+  const header = fs.readFileSync(path.resolve(__dirname, '../views/partials/site-header.php'), 'utf8');
+  const cartJs = fs.readFileSync(path.resolve(__dirname, '../public/assets/store-cart.js'), 'utf8');
+  assert.match(layout, /require __DIR__ \. '\/partials\/store-cart-drawer\.php'/);
+  assert.doesNotMatch(layout, /if \(\$shareCartUrl === ''\)/);
+  assert.doesNotMatch(header, /href=<\?= h\(\$shareCartUrl\)/);
+  assert.match(header, /data-store-cart-open[\s\S]*aria-controls="store-cart-drawer"/);
+  assert.match(cartJs, /bootstrap\?\.share_token[\s\S]*params\.set\('token'/);
+});
+
+test('share cart API returns full drawer payload and supports token reconcile', () => {
+  const api = fs.readFileSync(path.resolve(__dirname, '../public/api/store-cart.php'), 'utf8');
+  const service = fs.readFileSync(path.resolve(__dirname, '../src/Support/StoreCartApi.php'), 'utf8');
+  assert.match(api, /shareState\(\$shareToken, \$reconcile\)/);
+  assert.match(service, /private static function sharePayload\(/);
+  assert.match(service, /private static function submitShareOrder\(/);
+  assert.match(service, /private static function dispatchShare\(/);
+});
+
+test('share cart persists across product page navigation via browse context', () => {
+  const productPage = fs.readFileSync(path.resolve(__dirname, '../public/product.php'), 'utf8');
+  const shareAccess = fs.readFileSync(path.resolve(__dirname, '../src/Support/SharePageAccess.php'), 'utf8');
+  const shareCart = fs.readFileSync(path.resolve(__dirname, '../src/Services/ShareCartService.php'), 'utf8');
+  const helpers = fs.readFileSync(path.resolve(__dirname, '../views/helpers.php'), 'utf8');
+  assert.match(productPage, /SharePageAccess::resolveShareBrowseContext/);
+  assert.match(productPage, /ShareCartService::rememberActiveToken/);
+  assert.match(productPage, /'share_token' => \$shareToken/);
+  assert.match(shareAccess, /resolveShareBrowseContext/);
+  assert.match(shareAccess, /ShareCartService::activeToken/);
+  assert.match(shareCart, /rememberActiveToken/);
+  assert.match(shareCart, /clearActiveToken/);
+  assert.match(helpers, /function share_token_from_return_url/);
+  assert.match(helpers, /params\['token'\] = \$shareToken/);
+});
+
+test('share page remembers active token and store clears it', () => {
+  const sharePage = fs.readFileSync(path.resolve(__dirname, '../public/share.php'), 'utf8');
+  const storePage = fs.readFileSync(path.resolve(__dirname, '../public/store.php'), 'utf8');
+  assert.match(sharePage, /ShareCartService::rememberActiveToken\(\$shareToken\)/);
+  assert.match(storePage, /ShareCartService::clearActiveToken\(\)/);
+});
+
+test('share cart drawer prefetches full payload and scopes cross-tab sync', () => {
+  const cartJs = fs.readFileSync(path.resolve(__dirname, '../public/assets/store-cart.js'), 'utf8');
+  const previewJs = fs.readFileSync(path.resolve(__dirname, '../public/assets/store-product-preview.js'), 'utf8');
+  assert.match(cartJs, /bootstrap\?\.share_token[\s\S]*lastCartData = data/);
+  assert.match(cartJs, /jawish-share-cart-sync:/);
+  assert.match(previewJs, /path !== '\/share\.php'/);
+});

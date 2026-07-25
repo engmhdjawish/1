@@ -8,6 +8,29 @@ final class ShareCartService
 {
     private const SESSION_KEY = 'share_carts';
     private const UNAVAILABLE_KEY = 'unavailable_items';
+    private const ACTIVE_TOKEN_KEY = 'share_cart_active_token';
+
+    public static function rememberActiveToken(string $token): void
+    {
+        $token = trim($token);
+        if ($token === '') {
+            return;
+        }
+
+        $_SESSION[self::ACTIVE_TOKEN_KEY] = $token;
+    }
+
+    public static function activeToken(): ?string
+    {
+        $token = trim((string) ($_SESSION[self::ACTIVE_TOKEN_KEY] ?? ''));
+
+        return $token !== '' ? $token : null;
+    }
+
+    public static function clearActiveToken(): void
+    {
+        unset($_SESSION[self::ACTIVE_TOKEN_KEY]);
+    }
 
     /** @return array<string, array<string, mixed>> */
     public static function items(string $token): array

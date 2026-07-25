@@ -4,13 +4,25 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+use Portal\Services\ShareCartService;
 use Portal\Services\StoreCatalogService;
+use Portal\Support\SharePageAccess;
 
 require dirname(__DIR__) . '/views/helpers.php';
 
 $guid = trim((string) ($_GET['guid'] ?? ''));
 $returnUrl = trim((string) ($_GET['return'] ?? ''));
 $offerSlug = trim((string) ($_GET['offer'] ?? ''));
+$explicitShareToken = trim((string) ($_GET['token'] ?? ''));
+$shareBrowse = SharePageAccess::resolveShareBrowseContext(
+    $explicitShareToken !== '' ? $explicitShareToken : null,
+    $returnUrl !== '' ? $returnUrl : null
+);
+
+if ($shareBrowse !== null) {
+    ShareCartService::rememberActiveToken($shareBrowse['token']);
+}
+
 $product = $guid !== '' ? StoreCatalogService::findMaterial($guid, $offerSlug !== '' ? $offerSlug : null) : null;
 
 if ($product === null) {
@@ -30,7 +42,26 @@ if ($product === null) {
     exit;
 }
 
-$displayOptions = StoreCatalogService::displayOptions();
+if ($shareBrowse !== null) {
+    $displayOptions = $shareBrowse['display_options'];
+    $shareToken = $shareBrowse['token'];
+    $shareLinkId = $shareBrowse['share_link_id'];
+    $capturePrices = (bool) ($displayOptions['show_price'] ?? false);
+    $storeAllowCart = (bool) ($displayOptions['allow_cart'] ?? false);
+    $storeCartCount = $storeAllowCart ? ShareCartService::itemCount($shareToken) : 0;
+    $storeCartPackageCount = $storeAllowCart ? ShareCartService::packageCount($shareToken) : 0.0;
+    $storeCartBootstrap = $storeAllowCart
+        ? array_merge(ShareCartService::bootstrapPayload($shareToken), [
+            'share_token' => $shareToken,
+        ])
+        : null;
+    $enableStoreCartJs = $storeAllowCart;
+} else {
+    $displayOptions = StoreCatalogService::displayOptions();
+    $shareToken = null;
+    $shareLinkId = null;
+    $capturePrices = false;
+}
 
 ob_start();
 require dirname(__DIR__) . '/views/product.php';

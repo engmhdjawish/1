@@ -55,7 +55,7 @@ $primaryUnit = ShareCartService::primaryUnitLabel($item);
 $packageUnit = ShareCartService::packageUnitLabel($item);
 $packagesAvailable = $showQuantity ? packages_available_display($item) : 0.0;
 $guid = material_guid($item);
-$detailUrl = $guid !== '' ? product_url($guid, $productReturnUrl, $productOfferSlug) : '';
+$detailUrl = $guid !== '' ? product_url($guid, $productReturnUrl, $productOfferSlug, $shareTokenActive ? (string) $shareToken : null) : '';
 $quickViewGuidsJson = $quickViewGuids !== [] ? json_encode($quickViewGuids, JSON_UNESCAPED_UNICODE) : '';
 $materialCode = trim((string) ($item['materialCode'] ?? $item['code'] ?? ''));
 $materialType = trim((string) ($item['materialType'] ?? ''));

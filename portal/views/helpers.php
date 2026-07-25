@@ -602,7 +602,7 @@ function product_preview_payload(
         'materialType' => (string) ($item['materialType'] ?? ''),
         'thumbUrl' => $thumbUrl,
         'zoomUrl' => $zoomUrl,
-        'detailUrl' => $guid !== '' ? product_url($guid, $returnUrl, $offerSlug) : '',
+        'detailUrl' => $guid !== '' ? product_url($guid, $returnUrl, $offerSlug, share_token_from_return_url($returnUrl)) : '',
         'showPrice' => $showPrice,
         'showPriceSyp' => $showPriceSyp,
         'showPriceUsd' => $showPriceUsd,
@@ -789,7 +789,7 @@ function order_preview_payload(array $line, array $displayOptions): array
     ];
 }
 
-function product_url(string $guid, ?string $return = null, ?string $offer = null): string
+function product_url(string $guid, ?string $return = null, ?string $offer = null, ?string $shareToken = null): string
 {
     $guid = trim($guid);
     if ($guid === '') {
@@ -803,6 +803,13 @@ function product_url(string $guid, ?string $return = null, ?string $offer = null
     $offer = trim((string) $offer);
     if ($offer !== '') {
         $params['offer'] = $offer;
+    }
+    $shareToken = trim((string) ($shareToken ?? ''));
+    if ($shareToken === '' && $return !== null) {
+        $shareToken = share_token_from_return_url($return);
+    }
+    if ($shareToken !== '') {
+        $params['token'] = $shareToken;
     }
 
     return '/product.php?' . http_build_query($params);
@@ -894,10 +901,31 @@ function catalog_current_return_url(): string
     return $query === [] ? $path : $path . '?' . http_build_query($query);
 }
 
+function share_token_from_return_url(?string $returnUrl): string
+{
+    $returnUrl = trim((string) $returnUrl);
+    if ($returnUrl === '' || !str_contains($returnUrl, 'share.php')) {
+        return '';
+    }
+
+    $parts = parse_url($returnUrl);
+    if (empty($parts['query'])) {
+        return '';
+    }
+
+    $query = [];
+    parse_str((string) $parts['query'], $query);
+
+    return trim((string) ($query['token'] ?? ''));
+}
+
 function return_link_label(string $returnUrl): string
 {
     if ($returnUrl === '/' || str_starts_with($returnUrl, '/#') || str_contains($returnUrl, 'index.php')) {
         return 'العودة للرئيسية';
+    }
+    if (str_contains($returnUrl, 'share.php')) {
+        return 'العودة لرابط المشاركة';
     }
     if (str_contains($returnUrl, 'store.php') || str_contains($returnUrl, '/store')) {
         if (str_contains($returnUrl, '?')) {
