@@ -24,27 +24,10 @@ require __DIR__ . '/../../partials/store-filter-group.php';
 $linkOptions = (array) (($editLink['options'] ?? null) ?: []);
 $showImages = array_key_exists('show_images', $linkOptions) ? (bool) $linkOptions['show_images'] : true;
 $priceMode = (string) ($linkOptions['price_mode'] ?? 'both');
-$allowSorting = array_key_exists('allow_sorting', $linkOptions) ? (bool) $linkOptions['allow_sorting'] : true;
+$allowSorting = array_key_exists('allow_sorting', $linkOptions) ? (bool) $linkOptions['allow_sorting'] : false;
 $defaultGroupBy = (string) ($linkOptions['default_group_by'] ?? 'none');
 $visibleClientFilters = array_map('strval', is_array($linkOptions['visible_client_filters'] ?? null) ? $linkOptions['visible_client_filters'] : []);
-$clientSortFields = array_map('strval', is_array($linkOptions['client_sort_fields'] ?? null) ? $linkOptions['client_sort_fields'] : []);
-if ($clientSortFields === []) {
-    $defaultSort = (string) ($linkOptions['default_sort'] ?? 'number:asc');
-    foreach (array_filter(array_map('trim', explode(',', $defaultSort))) as $clause) {
-        if ($clause === '') {
-            continue;
-        }
-        $field = str_starts_with($clause, '-') ? substr($clause, 1) : explode(':', $clause, 2)[0];
-        $field = trim((string) $field);
-        if ($field !== '') {
-            $clientSortFields[] = $field;
-        }
-    }
-}
-if ($clientSortFields === []) {
-    $clientSortFields = ['number', 'materialType', 'manufacturer'];
-}
-$clientSortFields = array_values(array_unique($clientSortFields));
+$clientSortFields = array_values(array_unique(array_map('strval', is_array($linkOptions['client_sort_fields'] ?? null) ? $linkOptions['client_sort_fields'] : [])));
 
 $selectedMaterialTypes = array_map('strval', $editLink['forced_material_types'] ?? []);
 $selectedAgeCategories = array_map('strval', $editLink['forced_age_categories'] ?? []);

@@ -39,7 +39,7 @@ final class ShareLinkService
     private const OPTION_CLIENT_SORT_FIELD = 'option_client_sort_field';
 
     /** @var list<string> */
-    private const DEFAULT_VISIBLE_CLIENT_FILTERS = ['search', 'materialTypes', 'manufacturers', 'availability'];
+    private const DEFAULT_VISIBLE_CLIENT_FILTERS = ['search', 'materialTypes', 'manufacturers', 'sizeRanges', 'ageCategories'];
 
     /** @var list<string> */
     private const ALLOWED_VISIBLE_CLIENT_FILTERS = [
@@ -287,10 +287,10 @@ final class ShareLinkService
             'show_images' => true,
             'price_mode' => 'both',
             'allow_client_filters' => true,
-            'allow_sorting' => true,
+            'allow_sorting' => false,
             'include_result_filters' => true,
             'visible_client_filters' => self::DEFAULT_VISIBLE_CLIENT_FILTERS,
-            'client_sort_fields' => ['number', 'materialType', 'manufacturer'],
+            'client_sort_fields' => [],
             'default_sort' => 'number:asc',
             'default_group_by' => 'none',
         ];
@@ -868,7 +868,7 @@ final class ShareLinkService
         $result['forced_group_guids'] = self::normalizeGuidFilterValues($result['forced_group_guids']);
         $result['options']['visible_client_filters'] = self::normalizeVisibleClientFilters($result['options']['visible_client_filters'] ?? []);
         $result['options']['client_sort_fields'] = self::normalizeClientSortFields($result['options']['client_sort_fields'] ?? []);
-        if (!$hasClientSortFields) {
+        if (!$hasClientSortFields && !empty($result['options']['allow_sorting'])) {
             $result['options']['client_sort_fields'] = self::clientSortFieldsFromDefaultSort((string) ($result['options']['default_sort'] ?? 'number:asc'));
         }
 
@@ -1110,7 +1110,7 @@ final class ShareLinkService
         }
 
         if ($filtered === []) {
-            return ['number', 'materialType', 'manufacturer'];
+            return [];
         }
 
         return array_values(array_unique($filtered));

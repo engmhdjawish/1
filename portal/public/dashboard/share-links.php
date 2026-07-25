@@ -196,7 +196,10 @@ if ($showForm && $editLink === null) {
         'forced_country_origins' => [],
         'forced_store_guids' => [],
         'forced_group_guids' => [],
-        'constraints' => [],
+        'constraints' => [
+            'is_available' => true,
+            'has_image' => true,
+        ],
         'options' => ShareLinkService::defaultLinkOptions(),
     ];
 }
