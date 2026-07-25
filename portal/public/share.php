@@ -627,6 +627,10 @@ $shareToken = ($hasAccess && $token !== '') ? $token : null;
 $shareLinkId = (string) (is_array($shareLink) ? ($shareLink['id'] ?? '') : '');
 $isCustomer = false;
 
+if ($shareToken !== null) {
+    ShareCartService::rememberActiveToken($shareToken);
+}
+
 if (is_string($cartNotice) && $cartNotice !== '') {
     $cartNotice = ['ok' => true, 'message' => $cartNotice];
 }

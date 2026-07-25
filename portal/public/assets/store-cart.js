@@ -2,8 +2,28 @@
   const API = '/api/store-cart.php';
   let lastCartData = null;
 
-  const CART_SYNC_KEY = 'jawish-store-cart-sync';
-  const CART_SYNC_CHANNEL = 'jawish-store-cart';
+  const readBootstrapFromDom = () => {
+    const el = document.getElementById('storeCartBootstrap');
+    if (!el) return null;
+    try {
+      return JSON.parse(el.textContent || '');
+    } catch {
+      return null;
+    }
+  };
+
+  const cartSyncStorageKey = () => {
+    const bootstrap = readBootstrapFromDom();
+    const token = String(bootstrap?.share_token || '').trim();
+    return token ? `jawish-share-cart-sync:${token}` : 'jawish-store-cart-sync';
+  };
+
+  const cartSyncChannelName = () => {
+    const bootstrap = readBootstrapFromDom();
+    const token = String(bootstrap?.share_token || '').trim();
+    return token ? `jawish-share-cart:${token}` : 'jawish-store-cart';
+  };
+
   const DRAWER_CLOSE_MS = 260;
   const tabId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   let lastRemoteSyncAt = 0;
@@ -31,7 +51,7 @@
       // ignore channel errors
     }
     try {
-      localStorage.setItem(CART_SYNC_KEY, JSON.stringify(message));
+      localStorage.setItem(cartSyncStorageKey(), JSON.stringify(message));
     } catch {
       // ignore private mode / quota errors
     }
@@ -59,7 +79,7 @@
   const initCartCrossTabSync = () => {
     if (typeof BroadcastChannel !== 'undefined') {
       try {
-        cartSyncChannel = new BroadcastChannel(CART_SYNC_CHANNEL);
+        cartSyncChannel = new BroadcastChannel(cartSyncChannelName());
         cartSyncChannel.onmessage = (event) => handleCartSyncMessage(event.data);
       } catch {
         cartSyncChannel = null;
@@ -67,7 +87,7 @@
     }
 
     window.addEventListener('storage', (event) => {
-      if (event.key !== CART_SYNC_KEY || !event.newValue) return;
+      if (event.key !== cartSyncStorageKey() || !event.newValue) return;
       try {
         handleCartSyncMessage(JSON.parse(event.newValue));
       } catch {
@@ -1860,15 +1880,7 @@
     }
   };
 
-  const readCartBootstrap = () => {
-    const el = document.getElementById('storeCartBootstrap');
-    if (!el) return null;
-    try {
-      return JSON.parse(el.textContent || '');
-    } catch {
-      return null;
-    }
-  };
+  const readCartBootstrap = () => readBootstrapFromDom();
 
   const init = async () => {
     initCartCrossTabSync();
@@ -1895,6 +1907,26 @@
     if (bootstrap?.cart_qty_by_guid) {
       refreshCartForms(bootstrap);
       updateBadge(bootstrap);
+    }
+    if (bootstrap?.share_token) {
+      try {
+        const res = await fetch(cartApiUrl({ reconcile: false }), { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+        const data = await res.json();
+        if (data?.cart_qty_by_guid) {
+          refreshCartForms(data);
+          updateBadge(data);
+        }
+        if (data && Array.isArray(data.items)) {
+          lastCartData = data;
+        }
+      } catch {
+        document.querySelectorAll('[data-store-add-cart]').forEach((form) => {
+          setFormCartMode(form, getCurrentInCart(form));
+        });
+      }
+      return;
+    }
+    if (bootstrap?.cart_qty_by_guid) {
       return;
     }
     try {

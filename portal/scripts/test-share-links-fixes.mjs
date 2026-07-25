@@ -228,3 +228,34 @@ test('share cart API returns full drawer payload and supports token reconcile', 
   assert.match(service, /private static function submitShareOrder\(/);
   assert.match(service, /private static function dispatchShare\(/);
 });
+
+test('share cart persists across product page navigation via browse context', () => {
+  const productPage = fs.readFileSync(path.resolve(__dirname, '../public/product.php'), 'utf8');
+  const shareAccess = fs.readFileSync(path.resolve(__dirname, '../src/Support/SharePageAccess.php'), 'utf8');
+  const shareCart = fs.readFileSync(path.resolve(__dirname, '../src/Services/ShareCartService.php'), 'utf8');
+  const helpers = fs.readFileSync(path.resolve(__dirname, '../views/helpers.php'), 'utf8');
+  assert.match(productPage, /SharePageAccess::resolveShareBrowseContext/);
+  assert.match(productPage, /ShareCartService::rememberActiveToken/);
+  assert.match(productPage, /'share_token' => \$shareToken/);
+  assert.match(shareAccess, /resolveShareBrowseContext/);
+  assert.match(shareAccess, /ShareCartService::activeToken/);
+  assert.match(shareCart, /rememberActiveToken/);
+  assert.match(shareCart, /clearActiveToken/);
+  assert.match(helpers, /function share_token_from_return_url/);
+  assert.match(helpers, /params\['token'\] = \$shareToken/);
+});
+
+test('share page remembers active token and store clears it', () => {
+  const sharePage = fs.readFileSync(path.resolve(__dirname, '../public/share.php'), 'utf8');
+  const storePage = fs.readFileSync(path.resolve(__dirname, '../public/store.php'), 'utf8');
+  assert.match(sharePage, /ShareCartService::rememberActiveToken\(\$shareToken\)/);
+  assert.match(storePage, /ShareCartService::clearActiveToken\(\)/);
+});
+
+test('share cart drawer prefetches full payload and scopes cross-tab sync', () => {
+  const cartJs = fs.readFileSync(path.resolve(__dirname, '../public/assets/store-cart.js'), 'utf8');
+  const previewJs = fs.readFileSync(path.resolve(__dirname, '../public/assets/store-product-preview.js'), 'utf8');
+  assert.match(cartJs, /bootstrap\?\.share_token[\s\S]*lastCartData = data/);
+  assert.match(cartJs, /jawish-share-cart-sync:/);
+  assert.match(previewJs, /path !== '\/share\.php'/);
+});

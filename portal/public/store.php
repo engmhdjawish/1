@@ -5,9 +5,12 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Auth\CustomerSession;
+use Portal\Services\ShareCartService;
 use Portal\Services\StoreCatalogService;
 
 require dirname(__DIR__) . '/views/helpers.php';
+
+ShareCartService::clearActiveToken();
 
 if (session_status() === PHP_SESSION_ACTIVE) {
     session_write_close();

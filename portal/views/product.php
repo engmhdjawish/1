@@ -81,7 +81,7 @@ $specs = array_filter([
 <nav class="store-breadcrumb" aria-label="مسار التنقل">
   <a href="/index.php">الرئيسية</a>
   <span class="store-breadcrumb__sep" aria-hidden="true">›</span>
-  <a href="<?= h(str_contains($returnUrl, 'store') ? $returnUrl : '/store.php') ?>">المتجر</a>
+  <a href="<?= h(str_contains($returnUrl, 'store') || str_contains($returnUrl, 'share.php') ? $returnUrl : '/store.php') ?>"><?= h(str_contains($returnUrl, 'share.php') ? 'رابط المشاركة' : 'المتجر') ?></a>
   <span class="store-breadcrumb__sep" aria-hidden="true">›</span>
   <span class="store-breadcrumb__current" title="<?= h($productName) ?>"><?= h($productName) ?></span>
 </nav>
@@ -197,7 +197,10 @@ $specs = array_filter([
       <?php if ($allowCart && !$outOfStock): ?>
         <?php
           $item = $product;
-          $cartItems = StoreCartService::items();
+          $shareTokenActive = trim((string) ($shareToken ?? '')) !== '';
+          $cartItems = $shareTokenActive
+              ? ShareCartService::items((string) $shareToken)
+              : StoreCartService::items();
           $cartQtyForItem = $guid !== '' ? (int) round((float) ($cartItems[$guid]['quantity'] ?? 0)) : 0;
           require __DIR__ . '/partials/store-add-to-cart-form.php';
         ?>
