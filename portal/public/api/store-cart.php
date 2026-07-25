@@ -14,11 +14,11 @@ $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 
 if ($method === 'GET') {
     $shareToken = trim((string) ($_GET['token'] ?? ''));
+    $reconcile = ($_GET['reconcile'] ?? '1') !== '0';
     if ($shareToken !== '') {
-        echo json_encode(StoreCartApi::shareState($shareToken), JSON_UNESCAPED_UNICODE);
+        echo json_encode(StoreCartApi::shareState($shareToken, $reconcile), JSON_UNESCAPED_UNICODE);
         exit;
     }
-    $reconcile = ($_GET['reconcile'] ?? '1') !== '0';
     echo json_encode(StoreCartApi::state($reconcile), JSON_UNESCAPED_UNICODE);
     exit;
 }

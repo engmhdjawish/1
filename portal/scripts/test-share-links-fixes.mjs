@@ -208,3 +208,23 @@ test('share page scopes string filter options to merged link/policy rules', () =
   assert.match(sharePage, /\$applyScopedShareFilterOptions\(\$filterOptions\)/);
   assert.match(sharePage, /\$scopeStringOptionList\(\$options\['manufacturers'\]/);
 });
+
+test('share pages use the same cart drawer as the store', () => {
+  const layout = fs.readFileSync(path.resolve(__dirname, '../views/layout.php'), 'utf8');
+  const header = fs.readFileSync(path.resolve(__dirname, '../views/partials/site-header.php'), 'utf8');
+  const cartJs = fs.readFileSync(path.resolve(__dirname, '../public/assets/store-cart.js'), 'utf8');
+  assert.match(layout, /require __DIR__ \. '\/partials\/store-cart-drawer\.php'/);
+  assert.doesNotMatch(layout, /if \(\$shareCartUrl === ''\)/);
+  assert.doesNotMatch(header, /href=<\?= h\(\$shareCartUrl\)/);
+  assert.match(header, /data-store-cart-open[\s\S]*aria-controls="store-cart-drawer"/);
+  assert.match(cartJs, /bootstrap\?\.share_token[\s\S]*params\.set\('token'/);
+});
+
+test('share cart API returns full drawer payload and supports token reconcile', () => {
+  const api = fs.readFileSync(path.resolve(__dirname, '../public/api/store-cart.php'), 'utf8');
+  const service = fs.readFileSync(path.resolve(__dirname, '../src/Support/StoreCartApi.php'), 'utf8');
+  assert.match(api, /shareState\(\$shareToken, \$reconcile\)/);
+  assert.match(service, /private static function sharePayload\(/);
+  assert.match(service, /private static function submitShareOrder\(/);
+  assert.match(service, /private static function dispatchShare\(/);
+});

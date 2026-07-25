@@ -19,7 +19,6 @@ use Portal\Support\StorePricePreference;
 /** @var bool|null $enableOnboarding */
 /** @var string|null $lcpPreloadUrl */
 
-/** @var string|null $shareCartUrl */
 /** @var array<string, mixed>|null $storeCartBootstrap */
 
 require_once __DIR__ . '/helpers.php';
@@ -49,7 +48,6 @@ if (isset($storeCartBootstrap) && is_array($storeCartBootstrap)) {
     $storeCartCount = (int) ($storeCartCount ?? ($storeAllowCart ? StoreCartService::itemCount() : 0));
     $storeCartPackageCount = (float) ($storeCartPackageCount ?? ($storeAllowCart ? StoreCartService::packageCount() : 0.0));
 }
-$shareCartUrl = isset($shareCartUrl) ? (string) $shareCartUrl : '';
 
 $enableQuickView = (bool) ($enableQuickView ?? $isCatalogPage);
 $deferStoreCartJs = (bool) ($deferStoreCartJs ?? false);
@@ -157,9 +155,7 @@ $navLinks = [
 </button>
 
 <?php if ($storeAllowCart && !in_array($pagePath, ['/store-cart.php', '/cart.php'], true)): ?>
-  <?php if ($shareCartUrl === ''): ?>
-    <?php require __DIR__ . '/partials/store-cart-drawer.php'; ?>
-  <?php endif; ?>
+  <?php require __DIR__ . '/partials/store-cart-drawer.php'; ?>
   <?php require __DIR__ . '/partials/store-image-lightbox.php'; ?>
 <?php endif; ?>
 

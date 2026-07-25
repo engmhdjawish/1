@@ -39,32 +39,98 @@ final class StoreCartApi
     }
 
     /** @return array<string, mixed> */
-    private static function shareBootstrapPayload(
+    private static function sharePayload(
         string $token,
         ?string $message = null,
         bool $ok = true,
-        string $level = 'success'
+        string $level = 'success',
+        bool $reconcile = false
     ): array {
-        $payload = ShareCartService::bootstrapPayload($token);
-        $payload['share_token'] = $token;
-        $payload['ok'] = $ok;
-        $payload['level'] = $level;
-        $payload['message'] = $message ?? '';
-        $payload['items'] = [];
-        $payload['unavailable'] = [];
+        $token = trim($token);
+        $link = ShareLinkService::getByPublicToken($token);
+        if ($link === null) {
+            return array_merge(ShareCartService::bootstrapPayload($token), [
+                'ok' => false,
+                'level' => 'error',
+                'message' => $message ?? 'الرابط غير صالح.',
+                'share_token' => $token,
+                'items' => [],
+                'unavailable' => [],
+                'totals' => ['total_sp' => 0.0, 'total_usd' => 0.0],
+                'display_totals' => ['total_sp' => 0.0, 'total_usd' => 0.0],
+                'allow_cart' => false,
+                'allow_order' => false,
+                'show_price' => false,
+            ]);
+        }
 
-        return $payload;
+        $notices = [];
+        if ($reconcile) {
+            $reconcileResult = ShareCartService::reconcileStock($token);
+            $notices = is_array($reconcileResult['notices'] ?? null) ? $reconcileResult['notices'] : [];
+        }
+
+        $policy = SharePageAccess::policyFlags($link);
+        $showPrice = (bool) ($policy['show_price'] ?? false);
+        $items = array_values(array_map(
+            static function (array $line) use ($showPrice): array {
+                $enriched = ShareCartService::enrichLineWithOffer($line);
+                $enriched['customer_show_price'] = $showPrice;
+                $enriched['display_has_price'] = $showPrice && StoreCartPricingService::lineHasDisplayPrice($enriched);
+
+                return $enriched;
+            },
+            ShareCartService::items($token)
+        ));
+        $partition = StoreCartPricingService::partitionItems($items);
+        $unavailable = array_values(ShareCartService::unavailableItems($token));
+        $totals = ShareCartService::totals($token);
+        $cartQtyByGuid = [];
+        foreach (ShareCartService::items($token) as $guid => $line) {
+            $cartQtyByGuid[(string) $guid] = max(0.0, round((float) ($line['quantity'] ?? 0), 4));
+        }
+        $maxPackages = StorePolicyService::maxPackagesPerMaterial();
+
+        return [
+            'ok' => $ok,
+            'level' => $ok ? ($level === 'warning' ? 'warning' : 'success') : 'error',
+            'message' => $message ?? '',
+            'share_token' => $token,
+            'cart_count' => ShareCartService::itemCount($token),
+            'cart_package_count' => ShareCartService::packageCount($token),
+            'cart_qty_by_guid' => $cartQtyByGuid,
+            'items' => $items,
+            'unavailable' => $unavailable,
+            'totals' => $totals,
+            'display_totals' => $totals,
+            'has_mixed_pricing' => $partition['has_mixed'],
+            'priced_items_count' => count($partition['priced']),
+            'unpriced_items_count' => count($partition['unpriced']),
+            'max_packages_per_material' => $maxPackages,
+            'max_packages_label' => $maxPackages !== null
+                ? SpecialOfferService::formatQuantityLabel($maxPackages)
+                : null,
+            'allow_cart' => (bool) ($policy['allow_cart'] ?? false),
+            'allow_order' => (bool) ($policy['allow_order'] ?? false),
+            'show_price' => $showPrice,
+            'price_mode' => $showPrice ? 'both' : 'none',
+            'stock_notices' => $notices,
+            'price_changes' => [],
+            'logged_in' => CustomerSession::check(),
+            'amine_online' => AmineAvailabilityService::isAvailable(),
+            'amine_notice' => AmineAvailabilityService::isAvailable() ? '' : AmineAvailabilityService::userMessage(),
+        ];
     }
 
     /** @return array<string, mixed> */
-    public static function shareState(string $token): array
+    public static function shareState(string $token, bool $reconcileStock = true): array
     {
         $token = trim($token);
         if ($token === '' || ShareLinkService::getByPublicToken($token) === null) {
-            return self::shareBootstrapPayload($token, 'الرابط غير صالح.', false, 'error');
+            return self::sharePayload($token, 'الرابط غير صالح.', false, 'error');
         }
 
-        return self::shareBootstrapPayload($token, null, true, 'success');
+        return self::sharePayload($token, null, true, 'success', $reconcileStock);
     }
 
     /** @return array<string, mixed> */
@@ -93,6 +159,11 @@ final class StoreCartApi
      */
     public static function dispatch(string $action, array $input): array
     {
+        $shareToken = self::shareTokenFromInput($input);
+        if (self::isShareCartToken($shareToken)) {
+            return self::dispatchShare($action, $input, $shareToken);
+        }
+
         $display = StoreCatalogService::displayOptionsForCartContext($input, false);
         if (!($display['allow_cart'] ?? false) && $action !== 'submit_order') {
             return self::payload('سياسة المتجر لا تسمح باستخدام السلة.', false, [], 'info', $display);
@@ -108,6 +179,32 @@ final class StoreCartApi
             'clear' => self::clear(),
             'submit_order' => self::submitOrder($input, $display),
             default => self::payload('إجراء غير معروف.', false, [], 'info', $display),
+        };
+    }
+
+    /** @param array<string, mixed> $input */
+    private static function dispatchShare(string $action, array $input, string $token): array
+    {
+        $link = self::shareLinkForToken($token);
+        if ($link === null) {
+            return self::sharePayload($token, 'الرابط غير صالح.', false, 'error');
+        }
+
+        $allowCart = (bool) (($link['allow_cart'] ?? 0) ? true : false);
+        if (!$allowCart && $action !== 'submit_order') {
+            return self::sharePayload($token, 'سياسة الرابط لا تسمح باستخدام السلة.', false, 'error');
+        }
+
+        return match ($action) {
+            'add', 'add_to_cart' => self::addShare($input, $token),
+            'update' => self::updateShare($input, $token),
+            'bump' => self::bumpShare($input, $token),
+            'remove' => self::removeShare($input, $token),
+            'remove_unavailable' => self::removeUnavailableShare($input, $token),
+            'clear_unavailable' => self::clearUnavailableShare($token),
+            'clear' => self::clearShare($token),
+            'submit_order' => self::submitShareOrder($input, $token),
+            default => self::sharePayload($token, 'إجراء غير معروف.', false, 'error'),
         };
     }
 
@@ -189,21 +286,21 @@ final class StoreCartApi
     {
         $link = self::shareLinkForToken($token);
         if ($link === null) {
-            return self::shareBootstrapPayload($token, 'الرابط غير صالح.', false, 'error');
+            return self::sharePayload($token, 'الرابط غير صالح.', false, 'error');
         }
         if (!(bool) (($link['allow_cart'] ?? 0) ? true : false)) {
-            return self::shareBootstrapPayload($token, 'سياسة الرابط لا تسمح باستخدام السلة.', false, 'error');
+            return self::sharePayload($token, 'سياسة الرابط لا تسمح باستخدام السلة.', false, 'error');
         }
 
         $quantity = max(0.0, round((float) ($input['quantity'] ?? 1), 4));
         if ($quantity <= 0) {
-            return self::shareBootstrapPayload($token, 'الكمية غير صالحة.', false, 'error');
+            return self::sharePayload($token, 'الكمية غير صالحة.', false, 'error');
         }
 
         $capturePrices = (bool) (($link['show_price'] ?? 0) ? true : false);
         $line = ShareCartService::lineFromForm($input, $capturePrices);
         if ($line['material_guid'] === '') {
-            return self::shareBootstrapPayload($token, 'تعذر تحديد المادة.', false, 'error');
+            return self::sharePayload($token, 'تعذر تحديد المادة.', false, 'error');
         }
 
         $result = ShareCartService::add($token, (string) ($link['id'] ?? ''), $line, $quantity);
@@ -212,7 +309,7 @@ final class StoreCartApi
             $message = ($result['ok'] ?? false) ? 'تمت إضافة الطرد إلى السلة.' : 'تعذر الإضافة إلى السلة.';
         }
 
-        return self::shareBootstrapPayload(
+        return self::sharePayload(
             $token,
             $message,
             (bool) ($result['ok'] ?? false),
@@ -265,13 +362,13 @@ final class StoreCartApi
     private static function updateShare(array $input, string $token): array
     {
         if (self::shareLinkForToken($token) === null) {
-            return self::shareBootstrapPayload($token, 'الرابط غير صالح.', false, 'error');
+            return self::sharePayload($token, 'الرابط غير صالح.', false, 'error');
         }
 
         $materialGuid = trim((string) ($input['material_guid'] ?? ''));
         $quantity = max(0.0, round((float) ($input['quantity'] ?? 0), 4));
         if ($materialGuid === '') {
-            return self::shareBootstrapPayload($token, 'تعذر تحديد المادة.', false, 'error');
+            return self::sharePayload($token, 'تعذر تحديد المادة.', false, 'error');
         }
 
         $result = ShareCartService::updateQuantity($token, $materialGuid, $quantity);
@@ -280,7 +377,7 @@ final class StoreCartApi
             $message = $quantity > 0 ? 'تم تحديث الكمية.' : 'تم حذف الصنف من السلة.';
         }
 
-        return self::shareBootstrapPayload(
+        return self::sharePayload(
             $token,
             $message,
             (bool) ($result['ok'] ?? false),
@@ -329,13 +426,13 @@ final class StoreCartApi
     private static function bumpShare(array $input, string $token): array
     {
         if (self::shareLinkForToken($token) === null) {
-            return self::shareBootstrapPayload($token, 'الرابط غير صالح.', false, 'error');
+            return self::sharePayload($token, 'الرابط غير صالح.', false, 'error');
         }
 
         $materialGuid = trim((string) ($input['material_guid'] ?? ''));
         $delta = (float) ($input['delta'] ?? 0);
         if ($materialGuid === '' || abs($delta) < 0.0001) {
-            return self::shareBootstrapPayload($token, 'تعذر تحديث الكمية.', false, 'error');
+            return self::sharePayload($token, 'تعذر تحديث الكمية.', false, 'error');
         }
 
         $items = ShareCartService::items($token);
@@ -347,6 +444,144 @@ final class StoreCartApi
             'quantity' => $next,
             'token' => $token,
         ], $token);
+    }
+
+    /** @param array<string, mixed> $input */
+    private static function removeShare(array $input, string $token): array
+    {
+        if (self::shareLinkForToken($token) === null) {
+            return self::sharePayload($token, 'الرابط غير صالح.', false, 'error');
+        }
+
+        $materialGuid = trim((string) ($input['material_guid'] ?? ''));
+        if ($materialGuid === '' || !ShareCartService::remove($token, $materialGuid)) {
+            return self::sharePayload($token, 'تعذر حذف الصنف.', false, 'error');
+        }
+
+        return self::sharePayload($token, 'تم حذف الصنف من السلة.', true, 'success');
+    }
+
+    private static function clearShare(string $token): array
+    {
+        if (self::shareLinkForToken($token) === null) {
+            return self::sharePayload($token, 'الرابط غير صالح.', false, 'error');
+        }
+
+        ShareCartService::clear($token);
+
+        return self::sharePayload($token, 'تم تفريغ السلة.', true, 'success');
+    }
+
+    /** @param array<string, mixed> $input */
+    private static function removeUnavailableShare(array $input, string $token): array
+    {
+        if (self::shareLinkForToken($token) === null) {
+            return self::sharePayload($token, 'الرابط غير صالح.', false, 'error');
+        }
+
+        $materialGuid = trim((string) ($input['material_guid'] ?? ''));
+        if ($materialGuid === '' || !ShareCartService::removeUnavailable($token, $materialGuid)) {
+            return self::sharePayload($token, 'تعذر إزالة الصنف.', false, 'error');
+        }
+
+        return self::sharePayload($token, 'تمت إزالة الصنف من قائمة غير المتوفرة.', true, 'success');
+    }
+
+    private static function clearUnavailableShare(string $token): array
+    {
+        if (self::shareLinkForToken($token) === null) {
+            return self::sharePayload($token, 'الرابط غير صالح.', false, 'error');
+        }
+
+        ShareCartService::clearUnavailable($token);
+
+        return self::sharePayload($token, 'تمت إزالة الأصناف غير المتوفرة.', true, 'success');
+    }
+
+    /** @param array<string, mixed> $input */
+    private static function submitShareOrder(array $input, string $token): array
+    {
+        $link = self::shareLinkForToken($token);
+        if ($link === null) {
+            return self::sharePayload($token, 'الرابط غير صالح.', false, 'error');
+        }
+
+        $policy = SharePageAccess::policyFlags($link);
+        if (!(bool) ($policy['allow_order'] ?? false)) {
+            return self::sharePayload($token, 'سياسة هذا الرابط لا تسمح بإرسال الطلبات.', false, 'error');
+        }
+
+        $loggedInCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
+        $guestName = trim((string) ($input['guest_name_ar'] ?? ''));
+        $guestPhone = trim((string) ($input['guest_phone'] ?? ''));
+        if ($loggedInCustomer !== null) {
+            $guestName = trim((string) ($loggedInCustomer['name_ar'] ?? ''));
+            $guestPhone = trim((string) ($loggedInCustomer['phone'] ?? ''));
+        } else {
+            if (function_exists('portal_normalize_phone')) {
+                $guestPhone = portal_normalize_phone($guestPhone);
+            }
+        }
+
+        $notes = trim((string) ($input['notes_ar'] ?? ''));
+        $cartItems = array_values(ShareCartService::items($token));
+        if ($guestName === '' || (function_exists('text_length') ? text_length($guestName) : strlen($guestName)) < 2) {
+            return self::sharePayload($token, 'يرجى إدخال اسم صحيح (حرفان على الأقل).', false, 'error');
+        }
+        if ($guestPhone === '' || preg_match('/\d{8,}/', preg_replace('/\D+/', '', $guestPhone)) !== 1) {
+            return self::sharePayload($token, 'يرجى إدخال رقم هاتف صحيح (8 أرقام على الأقل).', false, 'error');
+        }
+        if ($cartItems === []) {
+            return self::sharePayload($token, 'السلة فارغة.', false, 'error');
+        }
+
+        $shareLinkId = (string) ($link['id'] ?? ShareCartService::shareLinkId($token) ?? '');
+        $result = OrderService::createGuestShareOrder(
+            $shareLinkId,
+            $guestName,
+            $guestPhone,
+            $notes !== '' ? $notes : null,
+            $cartItems,
+            $loggedInCustomer !== null ? (string) ($loggedInCustomer['id'] ?? '') : null
+        );
+        if (!($result['ok'] ?? false)) {
+            ShareCartService::stashUnavailableLines(
+                $token,
+                is_array($result['unavailable_items'] ?? null) ? $result['unavailable_items'] : []
+            );
+
+            return self::sharePayload(
+                $token,
+                (string) ($result['message'] ?? 'تعذر حفظ الطلب. حاول مرة أخرى أو تواصل معنا.'),
+                false,
+                'error'
+            );
+        }
+
+        $order = is_array($result['order'] ?? null) ? $result['order'] : null;
+        if ($order === null) {
+            return self::sharePayload($token, 'تعذر حفظ الطلب. حاول مرة أخرى أو تواصل معنا.', false, 'error');
+        }
+
+        ShareCartService::finalizeAfterSuccessfulOrder(
+            $token,
+            is_array($result['submitted_material_guids'] ?? null) ? $result['submitted_material_guids'] : [],
+            is_array($result['unavailable_items'] ?? null) ? $result['unavailable_items'] : []
+        );
+        if (!isset($_SESSION['share_order_success']) || !is_array($_SESSION['share_order_success'])) {
+            $_SESSION['share_order_success'] = [];
+        }
+        $order['partial_notices'] = is_array($result['notices'] ?? null) ? $result['notices'] : [];
+        $order['had_unavailable_items'] = is_array($result['unavailable_items'] ?? null) && $result['unavailable_items'] !== [];
+        $_SESSION['share_order_success'][$token] = $order;
+
+        $payload = self::sharePayload($token, (string) ($result['message'] ?? 'تم إرسال الطلب بنجاح.'), true, 'success');
+        $payload['redirect'] = '/order-confirmation.php?token=' . rawurlencode($token);
+        if (!empty($result['order_number'])) {
+            $payload['order_number'] = (string) $result['order_number'];
+        }
+
+        return $payload;
     }
 
     /** @param array<string, mixed> $input */

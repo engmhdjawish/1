@@ -241,8 +241,22 @@
     .replace(/</g, '&lt;');
 
   const cartApiUrl = (options = {}) => {
+    const bootstrap = (() => {
+      const el = document.getElementById('storeCartBootstrap');
+      if (!el) return null;
+      try {
+        return JSON.parse(el.textContent || '');
+      } catch {
+        return null;
+      }
+    })();
     const reconcile = options.reconcile === true;
-    return reconcile ? `${API}?reconcile=1` : `${API}?reconcile=0`;
+    const params = new URLSearchParams();
+    params.set('reconcile', reconcile ? '1' : '0');
+    if (bootstrap?.share_token) {
+      params.set('token', bootstrap.share_token);
+    }
+    return `${API}?${params.toString()}`;
   };
 
   const imageZoomUrl = (url) => {
