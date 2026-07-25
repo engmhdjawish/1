@@ -245,11 +245,25 @@ test('share cart persists across product page navigation via browse context', ()
   assert.match(helpers, /params\['token'\] = \$shareToken/);
 });
 
-test('share page remembers active token and store clears it', () => {
+test('share page remembers active token and store keeps share cart in session', () => {
   const sharePage = fs.readFileSync(path.resolve(__dirname, '../public/share.php'), 'utf8');
   const storePage = fs.readFileSync(path.resolve(__dirname, '../public/store.php'), 'utf8');
+  const cartPage = fs.readFileSync(path.resolve(__dirname, '../public/cart.php'), 'utf8');
   assert.match(sharePage, /ShareCartService::rememberActiveToken\(\$shareToken\)/);
+  assert.match(storePage, /SharePageAccess::resolveShareBrowseContext/);
   assert.match(storePage, /ShareCartService::clearActiveToken\(\)/);
+  assert.match(cartPage, /share_page_url\(\$token, \['open_cart' => '1'\]\)/);
+});
+
+test('legacy share cart page redirects to unified drawer', () => {
+  const orderConfirmation = fs.readFileSync(path.resolve(__dirname, '../public/order-confirmation.php'), 'utf8');
+  const cartJs = fs.readFileSync(path.resolve(__dirname, '../public/assets/store-cart.js'), 'utf8');
+  const helpers = fs.readFileSync(path.resolve(__dirname, '../views/helpers.php'), 'utf8');
+  assert.match(helpers, /function share_page_url/);
+  assert.match(orderConfirmation, /open_cart=1/);
+  assert.doesNotMatch(orderConfirmation, /\/cart\.php\?token=/);
+  assert.match(cartJs, /maybeOpenCartFromQuery/);
+  assert.match(cartJs, /params\.get\('open_cart'\)/);
 });
 
 test('share cart drawer prefetches full payload and scopes cross-tab sync', () => {

@@ -48,6 +48,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'unloc
     }
 }
 
+$redirectShareCartToDrawer = static function () use ($token, &$notice, &$error): void {
+    if ($token === '') {
+        return;
+    }
+
+    ShareCartService::rememberActiveToken($token);
+    if (!isset($_SESSION['share_cart_flash']) || !is_array($_SESSION['share_cart_flash'])) {
+        $_SESSION['share_cart_flash'] = [];
+    }
+    if (is_string($notice) && $notice !== '') {
+        $_SESSION['share_cart_flash'][$token] = ['ok' => true, 'message' => $notice];
+    } elseif (is_string($error) && $error !== '') {
+        $_SESSION['share_cart_flash'][$token] = ['ok' => false, 'message' => $error];
+    }
+
+    header('Location: ' . share_page_url($token, ['open_cart' => '1']), true, 303);
+    exit;
+};
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && $token !== '') {
+    $redirectShareCartToDrawer();
+}
+
 if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string) ($_POST['action'] ?? '');
     $materialGuid = trim((string) ($_POST['material_guid'] ?? ''));
@@ -150,6 +173,8 @@ if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] =
     } elseif ($action === 'submit_order' && !$allowOrder) {
         $error = 'سياسة هذا الرابط لا تسمح بإرسال الطلبات.';
     }
+
+    $redirectShareCartToDrawer();
 }
 
 $stockNotices = [];

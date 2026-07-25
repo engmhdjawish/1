@@ -7,10 +7,25 @@ require dirname(__DIR__) . '/bootstrap.php';
 use Portal\Auth\CustomerSession;
 use Portal\Services\ShareCartService;
 use Portal\Services\StoreCatalogService;
+use Portal\Support\SharePageAccess;
 
 require dirname(__DIR__) . '/views/helpers.php';
 
-ShareCartService::clearActiveToken();
+$shareBrowse = SharePageAccess::resolveShareBrowseContext(null, null);
+if ($shareBrowse !== null) {
+    ShareCartService::rememberActiveToken($shareBrowse['token']);
+    $shareStoreAllowCart = (bool) ($shareBrowse['display_options']['allow_cart'] ?? false);
+    if ($shareStoreAllowCart) {
+        $storeAllowCart = true;
+        $storeCartCount = ShareCartService::itemCount($shareBrowse['token']);
+        $storeCartPackageCount = ShareCartService::packageCount($shareBrowse['token']);
+        $storeCartBootstrap = array_merge(ShareCartService::bootstrapPayload($shareBrowse['token']), [
+            'share_token' => $shareBrowse['token'],
+        ]);
+    }
+} else {
+    ShareCartService::clearActiveToken();
+}
 
 if (session_status() === PHP_SESSION_ACTIVE) {
     session_write_close();
