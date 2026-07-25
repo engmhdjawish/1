@@ -182,3 +182,29 @@ test('share-links save JSON response redirects to list', () => {
   assert.match(controller, /'redirect' => '\/dashboard\/share-links\.php\?deleted=1'/);
   assert.match(controller, /if \(!\$allowSorting\) \{\s*\$clientSortFields = \[\];/);
 });
+
+test('share page keeps all link-configured visible filters in the sidebar', () => {
+  const catalogView = fs.readFileSync(
+    path.resolve(__dirname, '../views/store-catalog.php'),
+    'utf8',
+  );
+  assert.match(catalogView, /if \(\$shareContext !== null\) \{\s*return true;\s*\}/);
+  assert.match(catalogView, /\$renderEmptyFilterGroups = \$filtersDeferred \|\| \$shareContext !== null;/);
+  assert.match(catalogView, /filterOptions\['groups'\]/);
+});
+
+test('share store options prefer link defaults over policy visible filters', () => {
+  const servicePath = path.resolve(__dirname, '../src/Services/ShareLinkService.php');
+  const source = fs.readFileSync(servicePath, 'utf8');
+  assert.match(source, /Prefer link defaults over policy/);
+  assert.doesNotMatch(source, /elseif \(\$policyVisible !== \[\]\)/);
+});
+
+test('share page scopes string filter options to merged link/policy rules', () => {
+  const sharePage = fs.readFileSync(
+    path.resolve(__dirname, '../public/share.php'),
+    'utf8',
+  );
+  assert.match(sharePage, /\$applyScopedShareFilterOptions\(\$filterOptions\)/);
+  assert.match(sharePage, /\$scopeStringOptionList\(\$options\['manufacturers'\]/);
+});

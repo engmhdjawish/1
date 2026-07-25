@@ -67,12 +67,17 @@ $resultFilters = is_array($catalog['resultFilters'] ?? null) ? $catalog['resultF
 $visibleClientFilters = AccessPolicyService::resolvedVisibleClientFilters($storeOptions);
 $allowSorting = (bool) ($storeOptions['allow_sorting'] ?? true);
 $clientSortFields = array_map('strval', $storeOptions['client_sort_fields'] ?? ['number', 'materialType', 'manufacturer']);
-$isClientFilterVisible = static function (string $code) use ($visibleClientFilters, $lockedClientFilters): bool {
-    if (in_array($code, $lockedClientFilters, true)) {
+$isClientFilterVisible = static function (string $code) use ($visibleClientFilters, $lockedClientFilters, $shareContext): bool {
+    if (!in_array($code, $visibleClientFilters, true)) {
         return false;
     }
 
-    return in_array($code, $visibleClientFilters, true);
+    // Share links: always render filters the admin marked visible for clients.
+    if ($shareContext !== null) {
+        return true;
+    }
+
+    return !in_array($code, $lockedClientFilters, true);
 };
 
 $selectedMaterialTypes = is_array($filters['materialTypes'] ?? null) ? $filters['materialTypes'] : [];
@@ -434,6 +439,8 @@ if ($sectionContext !== null) {
 }
 
 require __DIR__ . '/partials/store-filter-group.php';
+
+$renderEmptyFilterGroups = $filtersDeferred || $shareContext !== null;
 ?>
 
 <?php if ($sectionContext !== null): ?>
@@ -592,7 +599,7 @@ require __DIR__ . '/partials/store-filter-group.php';
                         ];
                     }
                 }
-                if ($groupOptions === [] && $filtersDeferred && ($facetConfig['selected'] ?? []) !== []) {
+                if ($groupOptions === [] && $renderEmptyFilterGroups && ($facetConfig['selected'] ?? []) !== []) {
                     foreach ((array) $facetConfig['selected'] as $selectedValue) {
                         $selectedValue = trim((string) $selectedValue);
                         if ($selectedValue === '') {
@@ -612,7 +619,7 @@ require __DIR__ . '/partials/store-filter-group.php';
                     (string) $facetConfig['code'],
                     5,
                     6,
-                    $filtersDeferred || $groupOptions === []
+                    $renderEmptyFilterGroups || $groupOptions === []
                 );
               ?>
             <?php endforeach; ?>
@@ -631,7 +638,7 @@ require __DIR__ . '/partials/store-filter-group.php';
                     $label = trim((string) ($store['name'] ?? '')) ?: (trim((string) ($store['code'] ?? '')) ?: $guid);
                     $storeGroupOptions[] = ['value' => $guid, 'label' => $label];
                 }
-                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, $selectedStoreGuids, 'stores', 5, 6, $filtersDeferred || $storeGroupOptions === []);
+                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, $selectedStoreGuids, 'stores', 5, 6, $renderEmptyFilterGroups || $storeGroupOptions === []);
               ?>
             <?php endif; ?>
 
@@ -656,7 +663,21 @@ require __DIR__ . '/partials/store-filter-group.php';
                         ];
                     }
                 }
-                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, $selectedGroupGuids, 'groups', 5, 6, $filtersDeferred || $groupGroupOptions === []);
+                if ($groupGroupOptions === [] && is_array($filterOptions['groups'] ?? null)) {
+                    foreach ($filterOptions['groups'] as $groupRow) {
+                        if (!is_array($groupRow)) {
+                            continue;
+                        }
+                        $guid = trim((string) ($groupRow['guid'] ?? ''));
+                        if ($guid === '') {
+                            continue;
+                        }
+                        $label = trim((string) ($groupRow['name'] ?? ''))
+                            ?: (trim((string) ($groupRow['code'] ?? '')) ?: $guid);
+                        $groupGroupOptions[] = ['value' => $guid, 'label' => $label];
+                    }
+                }
+                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, $selectedGroupGuids, 'groups', 5, 6, $renderEmptyFilterGroups || $groupGroupOptions === []);
               ?>
             <?php endif; ?>
 
