@@ -2,7 +2,8 @@
   "name": "jawish-portal-assets",
   "private": true,
   "scripts": {
-    "build:css": "tailwindcss -i ./assets-src/tailwind.css -o ./public/css/tailwind.css --minify && node ./scripts/build-site-css.mjs"
+    "build:css": "tailwindcss -i ./assets-src/tailwind.css -o ./public/css/tailwind.css --minify && node ./scripts/build-site-css.mjs",
+    "test:share-links": "node --test ./scripts/test-share-links-fixes.mjs"
   },
   "devDependencies": {
     "clean-css": "^5.3.3",
