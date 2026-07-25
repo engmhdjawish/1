@@ -153,7 +153,7 @@ $hasImageValue = $forcedHasImage === null ? '' : ($forcedHasImage ? '1' : '0');
 ?>
 <div data-share-link-form-panel>
   <?php if ($editId !== ''): ?>
-    <form method="post" id="sl-delete-form" class="hidden" data-dashboard-ajax data-dashboard-reload onsubmit="return confirm('هل أنت متأكد من حذف هذا الرابط؟');">
+    <form method="post" id="sl-delete-form" class="hidden" data-dashboard-ajax data-dashboard-redirect="/dashboard/share-links.php?deleted=1" onsubmit="return confirm('هل أنت متأكد من حذف هذا الرابط؟');">
       <input type="hidden" name="action" value="delete">
       <input type="hidden" name="id" value="<?= h($editId) ?>">
     </form>
@@ -164,7 +164,6 @@ $hasImageValue = $forcedHasImage === null ? '' : ($forcedHasImage ? '1' : '0');
     id="share-link-form"
     data-dashboard-explicit-save
     data-dashboard-ajax
-    data-dashboard-reload
     data-store-filters-form
     class="dash-sl-form mb-4"
   >

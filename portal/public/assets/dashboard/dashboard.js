@@ -259,7 +259,34 @@
         '/css/customer-portal.css',
       ],
     },
+    'share-links-form': {
+      styles: ['/css/store-filters.css'],
+      scripts: [
+        '/assets/store-filters.js',
+        '/assets/dashboard/share-links-form.js',
+      ],
+    },
   };
+
+  function loadScript(src) {
+    const normalized = src.split('?')[0];
+    const existing = Array.from(document.querySelectorAll('script[src]')).find((node) => {
+      const current = (node.getAttribute('src') || '').split('?')[0];
+      return current === normalized || current.endsWith(normalized);
+    });
+    if (existing) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.defer = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(src));
+      document.body.appendChild(script);
+    });
+  }
 
   function loadStylesheet(href) {
     const existing = document.querySelector(`link[rel="stylesheet"][href="${href}"]`);
@@ -290,7 +317,12 @@
   async function ensurePageAssets(key) {
     const bundle = PAGE_ASSETS[key];
     if (!bundle) return;
-    await Promise.all((bundle.styles || []).map((href) => loadStylesheet(href)));
+    for (const href of bundle.styles || []) {
+      await loadStylesheet(href);
+    }
+    for (const src of bundle.scripts || []) {
+      await loadScript(src);
+    }
   }
 
   function bindOrderImageZoom(root) {
@@ -712,6 +744,9 @@
     }
     if (typeof window.portalMaterialZipDownloadInit === 'function') {
       window.portalMaterialZipDownloadInit(root);
+    }
+    if (typeof window.portalShareLinksFormInit === 'function') {
+      window.portalShareLinksFormInit(root);
     }
     if (typeof window.portalSiteMediaInit === 'function') {
       window.portalSiteMediaInit(root);

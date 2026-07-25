@@ -56,14 +56,16 @@
   }
 
   function initFilterShells(root) {
+    if (typeof window.portalStoreFiltersInit !== 'function') {
+      return;
+    }
+
     root.querySelectorAll('[data-store-filters-root]').forEach((shell) => {
       if (shell.dataset.shareLinkFiltersInit === '1') {
         return;
       }
+      window.portalStoreFiltersInit(shell);
       shell.dataset.shareLinkFiltersInit = '1';
-      if (typeof window.portalStoreFiltersInit === 'function') {
-        window.portalStoreFiltersInit(shell);
-      }
     });
     bindFilterPillSync(root);
   }
@@ -123,9 +125,4 @@
     });
   };
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => window.portalShareLinksFormInit(document));
-  } else {
-    window.portalShareLinksFormInit(document);
-  }
 })();

@@ -93,7 +93,7 @@ $policyRules = $policyId !== '' ? AccessPolicyService::filterRulesForPolicyId($p
 $policyStoreOptions = $policyId !== '' ? AccessPolicyService::storeOptionsForPolicyId($policyId) : AccessPolicyService::defaultStoreOptions();
 $effectiveStoreOptions = ShareLinkService::resolveShareStoreOptions($policyStoreOptions, $shareOptions);
 $visibleClientFilters = AccessPolicyService::resolvedVisibleClientFilters($effectiveStoreOptions);
-$allowClientFilters = $visibleClientFilters !== [];
+$allowClientFilters = (bool) ($shareOptions['allow_client_filters'] ?? true) && $visibleClientFilters !== [];
 $allowSorting = (bool) ($effectiveStoreOptions['allow_sorting'] ?? false);
 $useDynamicResultFilters = $allowClientFilters && (bool) (($shareOptions['include_result_filters'] ?? true) ? true : false);
 $defaultSort = trim((string) ($effectiveStoreOptions['default_sort'] ?? 'number:asc'));

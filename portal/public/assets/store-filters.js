@@ -786,7 +786,13 @@ window.portalStoreFiltersInit = (root = document) => {
 };
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => window.portalStoreFiltersInit());
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-store-filters-root], [data-store-catalog-root]').forEach((root) => {
+      window.portalStoreFiltersInit(root);
+    });
+  });
 } else {
-  window.portalStoreFiltersInit();
+  document.querySelectorAll('[data-store-filters-root], [data-store-catalog-root]').forEach((root) => {
+    window.portalStoreFiltersInit(root);
+  });
 }

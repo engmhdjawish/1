@@ -1204,30 +1204,28 @@ final class ShareLinkService
      */
     public static function resolveShareStoreOptions(array $policyOptions, array $linkOptions): array
     {
-        $policyVisible = AccessPolicyService::resolvedVisibleClientFilters($policyOptions);
+        $defaults = self::defaultLinkOptions();
         $linkVisible = AccessPolicyService::normalizeVisibleClientFilters(
             is_array($linkOptions['visible_client_filters'] ?? null) ? $linkOptions['visible_client_filters'] : []
         );
+        $policyVisible = AccessPolicyService::resolvedVisibleClientFilters($policyOptions);
 
-        if ($linkVisible === []) {
-            $effectiveVisible = $policyVisible;
-        } elseif ($policyVisible === []) {
+        if ($linkVisible !== []) {
             $effectiveVisible = $linkVisible;
+        } elseif ($policyVisible !== []) {
+            $effectiveVisible = $policyVisible;
         } else {
-            $effectiveVisible = array_values(array_intersect($linkVisible, $policyVisible));
-            if ($effectiveVisible === []) {
-                $effectiveVisible = $policyVisible;
-            }
+            $effectiveVisible = $defaults['visible_client_filters'];
         }
 
-        $linkAllowSorting = array_key_exists('allow_sorting', $linkOptions)
+        $allowSorting = array_key_exists('allow_sorting', $linkOptions)
             ? (bool) $linkOptions['allow_sorting']
-            : false;
-        $policyAllowSorting = (bool) ($policyOptions['allow_sorting'] ?? true);
-        $allowSorting = $linkAllowSorting && $policyAllowSorting;
+            : (bool) ($defaults['allow_sorting'] ?? false);
 
-        $policySortFields = array_values(array_map('strval', is_array($policyOptions['client_sort_fields'] ?? null) ? $policyOptions['client_sort_fields'] : []));
-        $linkSortFields = array_values(array_map('strval', is_array($linkOptions['client_sort_fields'] ?? null) ? $linkOptions['client_sort_fields'] : []));
+        $linkSortFields = array_values(array_map(
+            'strval',
+            is_array($linkOptions['client_sort_fields'] ?? null) ? $linkOptions['client_sort_fields'] : []
+        ));
 
         if (!$allowSorting) {
             $clientSortFields = [];
@@ -1235,19 +1233,15 @@ final class ShareLinkService
                 $effectiveVisible,
                 static fn (string $code): bool => $code !== 'sort'
             ));
-        } elseif ($linkSortFields === []) {
-            $clientSortFields = $policySortFields;
-        } elseif ($policySortFields === []) {
-            $clientSortFields = $linkSortFields;
         } else {
-            $clientSortFields = array_values(array_intersect($linkSortFields, $policySortFields));
+            $clientSortFields = $linkSortFields;
         }
 
         return [
             'visible_client_filters' => $effectiveVisible,
             'allow_sorting' => $allowSorting,
             'client_sort_fields' => $clientSortFields,
-            'default_sort' => trim((string) ($linkOptions['default_sort'] ?? $policyOptions['default_sort'] ?? 'number:asc')) ?: 'number:asc',
+            'default_sort' => trim((string) ($linkOptions['default_sort'] ?? $policyOptions['default_sort'] ?? $defaults['default_sort'])) ?: 'number:asc',
             'default_group_by' => in_array(
                 (string) ($linkOptions['default_group_by'] ?? $policyOptions['default_group_by'] ?? 'none'),
                 ['none', 'ageCategory', 'sizeRange', 'materialType', 'manufacturer', 'countryOfOrigin', 'group'],

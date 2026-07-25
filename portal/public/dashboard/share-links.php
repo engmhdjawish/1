@@ -116,7 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashType = 'success';
             if (DashboardHttp::wantsJson()) {
                 DashboardHttp::json(true, $flash, [
-                    'reload' => true,
+                    'redirect' => '/dashboard/share-links.php?saved=1',
                     'id' => $result['id'] ?? null,
                 ]);
             }
@@ -141,7 +141,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $flashType = $deleteResult['ok'] ? 'success' : 'error';
         if ($deleteResult['ok']) {
             if (DashboardHttp::wantsJson()) {
-                DashboardHttp::json(true, $flash, ['reload' => true]);
+                DashboardHttp::json(true, $flash, ['redirect' => '/dashboard/share-links.php?deleted=1']);
             }
             header('Location: /dashboard/share-links.php?deleted=1');
             exit;
@@ -253,6 +253,7 @@ try {
 
 $currentRoute = '/dashboard/share-links.php';
 $shareLinksFormTab = $showForm;
+$dashboardPageAssets = $showForm ? 'share-links-form' : '';
 
 ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/share-links.php';
