@@ -1882,6 +1882,17 @@
 
   const readCartBootstrap = () => readBootstrapFromDom();
 
+  const maybeOpenCartFromQuery = async () => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('open_cart') !== '1') return;
+    params.delete('open_cart');
+    const query = params.toString();
+    const nextUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+    window.history.replaceState({}, '', nextUrl);
+    setCartDrawerOpen(true);
+    await loadCartDrawer();
+  };
+
   const init = async () => {
     initCartCrossTabSync();
     if (!window.__cartNoticeDismissBound) {
@@ -1924,9 +1935,11 @@
           setFormCartMode(form, getCurrentInCart(form));
         });
       }
+      await maybeOpenCartFromQuery();
       return;
     }
     if (bootstrap?.cart_qty_by_guid) {
+      await maybeOpenCartFromQuery();
       return;
     }
     try {
@@ -1941,6 +1954,7 @@
         setFormCartMode(form, getCurrentInCart(form));
       });
     }
+    await maybeOpenCartFromQuery();
   };
 
   if (document.readyState === 'loading') {

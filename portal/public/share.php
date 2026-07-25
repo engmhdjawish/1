@@ -631,6 +631,11 @@ if ($shareToken !== null) {
     ShareCartService::rememberActiveToken($shareToken);
 }
 
+if ($shareToken !== null && isset($_SESSION['share_cart_flash'][$shareToken]) && is_array($_SESSION['share_cart_flash'][$shareToken])) {
+    $cartNotice = $_SESSION['share_cart_flash'][$shareToken];
+    unset($_SESSION['share_cart_flash'][$shareToken]);
+}
+
 if (is_string($cartNotice) && $cartNotice !== '') {
     $cartNotice = ['ok' => true, 'message' => $cartNotice];
 }

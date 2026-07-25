@@ -82,7 +82,7 @@ ob_start();
     <div class="flex flex-wrap gap-2 justify-center">
       <a href="/share.php?token=<?= urlencode($token) ?>" class="h-11 inline-flex items-center rounded bg-primary text-white px-6 font-bold">متابعة التصفح</a>
       <?php if (!empty($order['had_unavailable_items'])): ?>
-        <a href="/cart.php?token=<?= urlencode($token) ?>" class="h-11 inline-flex items-center rounded border border-amber-300 bg-amber-50 text-amber-900 px-6 text-sm font-bold">مراجعة السلة</a>
+        <a href="/share.php?token=<?= urlencode($token) ?>&amp;open_cart=1" class="h-11 inline-flex items-center rounded border border-amber-300 bg-amber-50 text-amber-900 px-6 text-sm font-bold">مراجعة السلة</a>
       <?php endif; ?>
       <a href="/index.php" class="h-11 inline-flex items-center rounded border border-gray-300 px-6 text-sm font-bold">الرئيسية</a>
     </div>

@@ -919,6 +919,19 @@ function share_token_from_return_url(?string $returnUrl): string
     return trim((string) ($query['token'] ?? ''));
 }
 
+/** @param array<string, scalar|null> $extraParams */
+function share_page_url(string $token, array $extraParams = []): string
+{
+    $token = trim($token);
+    if ($token === '') {
+        return '/share.php';
+    }
+
+    $params = array_merge(['token' => $token], $extraParams);
+
+    return '/share.php?' . http_build_query($params);
+}
+
 function return_link_label(string $returnUrl): string
 {
     if ($returnUrl === '/' || str_starts_with($returnUrl, '/#') || str_contains($returnUrl, 'index.php')) {
