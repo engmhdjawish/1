@@ -31,21 +31,51 @@
   margin-bottom: 0.85rem;
 }
 
-/* Keep search + filter button reachable while scrolling the catalog
-   (store, section browse, and share links share this markup). */
+.store-mobile-filter-bar-anchor {
+  display: contents;
+}
+
+/* Fixed (not sticky): sticky failed inside the catalog grid/card on mobile. */
 @media (max-width: 1023px) {
-  .store-mobile-filter-bar {
-    position: sticky;
-    top: var(--site-header-sticky-offset, 5.5rem);
-    z-index: 30;
-    margin-inline: -0.35rem;
+  .store-mobile-filter-bar-anchor {
+    display: block;
+    height: var(--store-mobile-filter-bar-height, 3.9rem);
     margin-bottom: 0.85rem;
-    padding: 0.45rem 0.35rem 0.55rem;
-    background: rgba(255, 255, 255, 0.96);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-bottom: 1px solid #eef2f7;
-    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+  }
+
+  .store-mobile-filter-bar {
+    position: fixed;
+    top: var(--site-header-sticky-offset, 5.5rem);
+    left: 0;
+    right: 0;
+    z-index: 35;
+    margin: 0;
+    padding: 0.55rem max(1rem, env(safe-area-inset-right)) 0.65rem max(1rem, env(safe-area-inset-left));
+    background: rgba(246, 246, 248, 0.97);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid #e2e8f0;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  }
+
+  .store-mobile-filter-bar-inner {
+    display: flex;
+    align-items: stretch;
+    gap: 0.55rem;
+    width: min(100%, 80rem);
+    margin-inline: auto;
+  }
+
+  body.store-filters-drawer-open .store-mobile-filter-bar {
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  .store-mobile-filter-bar-anchor,
+  .store-mobile-filter-bar {
+    display: none !important;
   }
 }
 

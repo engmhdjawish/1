@@ -828,27 +828,31 @@ $appliedClientFiltersJson = json_encode(
 
   <div class="store-results">
     <?php if ($allowClientFilters): ?>
-      <div class="store-mobile-filter-bar lg:hidden">
-        <?php if ($isClientFilterVisible('search')): ?>
-          <label class="store-mobile-search" for="store-mobile-search-q">
-            <span class="material-symbols-outlined store-mobile-search-icon" aria-hidden="true">search</span>
-            <input
-              type="search"
-              id="store-mobile-search-q"
-              value="<?= h((string) ($filters['q'] ?? '')) ?>"
-              placeholder="ابحث عن مادة..."
-              autocomplete="off"
-              enterkeyhint="search"
-            >
-          </label>
-        <?php endif; ?>
-        <button type="button" class="store-filters-open-btn" data-store-filters-open aria-label="فتح الفلاتر">
-          <span class="material-symbols-outlined text-base" aria-hidden="true">tune</span>
-          <span>تصفية</span>
-          <?php if ($userActiveFilterCount > 0): ?>
-            <span class="badge"><?= (int) $userActiveFilterCount ?></span>
-          <?php endif; ?>
-        </button>
+      <div class="store-mobile-filter-bar-anchor lg:hidden">
+        <div class="store-mobile-filter-bar" data-store-mobile-filter-bar>
+          <div class="store-mobile-filter-bar-inner">
+            <?php if ($isClientFilterVisible('search')): ?>
+              <label class="store-mobile-search" for="store-mobile-search-q">
+                <span class="material-symbols-outlined store-mobile-search-icon" aria-hidden="true">search</span>
+                <input
+                  type="search"
+                  id="store-mobile-search-q"
+                  value="<?= h((string) ($filters['q'] ?? '')) ?>"
+                  placeholder="ابحث عن مادة..."
+                  autocomplete="off"
+                  enterkeyhint="search"
+                >
+              </label>
+            <?php endif; ?>
+            <button type="button" class="store-filters-open-btn" data-store-filters-open aria-label="فتح الفلاتر">
+              <span class="material-symbols-outlined text-base" aria-hidden="true">tune</span>
+              <span>تصفية</span>
+              <?php if ($userActiveFilterCount > 0): ?>
+                <span class="badge"><?= (int) $userActiveFilterCount ?></span>
+              <?php endif; ?>
+            </button>
+          </div>
+        </div>
       </div>
     <?php endif; ?>
 

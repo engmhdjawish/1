@@ -8,16 +8,43 @@ window.portalStoreFiltersInit = (root = document) => {
     document.documentElement.style.setProperty('--site-header-sticky-offset', `${height}px`);
   };
 
-  syncHeaderStickyOffset();
+  const syncMobileFilterBarOffset = () => {
+    const bar = document.querySelector('[data-store-mobile-filter-bar]');
+    if (!bar || window.matchMedia('(min-width: 1024px)').matches) {
+      document.documentElement.style.removeProperty('--store-mobile-filter-bar-height');
+      return;
+    }
+    const height = Math.ceil(bar.getBoundingClientRect().height);
+    if (height > 0) {
+      document.documentElement.style.setProperty('--store-mobile-filter-bar-height', `${height}px`);
+    }
+  };
+
+  const syncStickyOffsets = () => {
+    syncHeaderStickyOffset();
+    syncMobileFilterBarOffset();
+  };
+
+  syncStickyOffsets();
   if (!window.__storeFiltersHeaderSyncBound) {
     window.__storeFiltersHeaderSyncBound = true;
-    window.addEventListener('resize', syncHeaderStickyOffset, { passive: true });
-    window.addEventListener('load', syncHeaderStickyOffset, { passive: true });
+    window.addEventListener('resize', syncStickyOffsets, { passive: true });
+    window.addEventListener('load', syncStickyOffsets, { passive: true });
+    window.addEventListener('orientationchange', () => {
+      window.setTimeout(syncStickyOffsets, 120);
+    }, { passive: true });
 
     const header = document.querySelector('.site-header');
     if (header && typeof ResizeObserver !== 'undefined') {
-      new ResizeObserver(syncHeaderStickyOffset).observe(header);
+      new ResizeObserver(syncStickyOffsets).observe(header);
     }
+  }
+
+  const mobileFilterBar = (root.querySelector?.('[data-store-mobile-filter-bar]')
+    || document.querySelector('[data-store-mobile-filter-bar]'));
+  if (mobileFilterBar && typeof ResizeObserver !== 'undefined' && !mobileFilterBar.__storeFilterBarObserved) {
+    mobileFilterBar.__storeFilterBarObserved = true;
+    new ResizeObserver(syncMobileFilterBarOffset).observe(mobileFilterBar);
   }
 
   const filtersRoot = root.matches?.('[data-store-catalog-root], [data-store-filters-root]')
