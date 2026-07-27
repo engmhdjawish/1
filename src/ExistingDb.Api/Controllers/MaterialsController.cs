@@ -686,7 +686,10 @@ public sealed class MaterialsController(
         var selectedStoreGuids = ParseStoreGuids(storeGuid, storeGuids);
         var quantityByMaterial = await GetQuantityByMaterialAsync([material], selectedStoreGuids, cancellationToken);
         var fieldAccess = await permissionService.GetFieldAccessAsync(User, ResourceCode, cancellationToken);
-        return Ok(ToResponse(material, fieldAccess, quantityByMaterial.GetValueOrDefault(material.Guid, material.Qty)));
+        var warehouseQuantity = selectedStoreGuids.Count > 0
+            ? quantityByMaterial.GetValueOrDefault(material.Guid, 0)
+            : quantityByMaterial.GetValueOrDefault(material.Guid, material.Qty);
+        return Ok(ToResponse(material, fieldAccess, warehouseQuantity));
     }
 
     private MaterialResponse ToResponse(

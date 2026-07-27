@@ -933,6 +933,33 @@ window.portalStoreFiltersInit = (root = document) => {
     filtersRoot.removeAttribute('data-store-filters-deferred');
     refreshPendingFilterChips();
     bindFilterLists();
+    syncAccordionSelectionBadges();
+  };
+
+  const syncAccordionSelectionBadges = () => {
+    Object.entries(FILTER_GROUP_META).forEach(([groupId, meta]) => {
+      const accordion = filtersRoot.querySelector(`[data-filter-group="${groupId}"]`);
+      if (!accordion) {
+        return;
+      }
+      const summary = accordion.querySelector('.store-filter-accordion-summary')
+        || accordion.querySelector('.store-filter-chip-section-head');
+      if (!summary) {
+        return;
+      }
+      const selectedCount = readSelectedFilterValues(`${meta.param}[]`).length;
+      let badge = summary.querySelector('.store-filter-accordion-badge');
+      if (selectedCount <= 0) {
+        badge?.remove();
+        return;
+      }
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'store-filter-accordion-badge';
+        summary.appendChild(badge);
+      }
+      badge.textContent = String(selectedCount);
+    });
   };
 
   const buildFilterOptionsQuery = () => {

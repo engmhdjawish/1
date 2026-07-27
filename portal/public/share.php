@@ -332,7 +332,18 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
 
         $materials = ApiClient::get('/api/materials', $params);
         if (!$materials['ok'] && (int) ($materials['status'] ?? 0) === 400) {
-            // Fallback to a safer query if strict filters are rejected.
+            $hasForcedConstraints = $queryStoreGuids !== []
+                || $queryGroupGuids !== []
+                || $queryMaterialTypes !== []
+                || $queryAgeCategories !== []
+                || $queryManufacturers !== []
+                || $querySizeRanges !== []
+                || $queryCountryOrigins !== []
+                || $queryIsAvailable !== null
+                || $queryHasImage !== null
+                || $queryMinWarehouseQuantity !== null
+                || $queryMaxWarehouseQuantity !== null;
+
             $fallbackParams = array_filter([
                 'page' => $page,
                 'pageSize' => 24,
@@ -342,6 +353,12 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
                 'manufacturers' => $queryManufacturers !== [] ? implode(',', $queryManufacturers) : null,
                 'sizeRanges' => $querySizeRanges !== [] ? implode(',', $querySizeRanges) : null,
                 'countryOfOrigins' => $queryCountryOrigins !== [] ? implode(',', $queryCountryOrigins) : null,
+                'groupGuids' => $queryGroupGuids !== [] ? implode(',', $queryGroupGuids) : null,
+                'storeGuids' => $queryStoreGuids !== [] ? implode(',', $queryStoreGuids) : null,
+                'isAvailable' => $queryIsAvailable === null ? null : ($queryIsAvailable ? 'true' : 'false'),
+                'hasImage' => $queryHasImage === null ? null : ($queryHasImage ? 'true' : 'false'),
+                'minWarehouseQuantity' => $queryMinWarehouseQuantity,
+                'maxWarehouseQuantity' => $queryMaxWarehouseQuantity,
                 'sort' => 'number:asc',
                 'includeResultFilters' => $useDynamicResultFilters ? 'true' : 'false',
             ], static fn ($value) => $value !== null && $value !== '');
@@ -349,7 +366,9 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
             $retry = ApiClient::get('/api/materials', $fallbackParams);
             if ($retry['ok']) {
                 $materials = $retry;
-                $apiError = 'تم تجاهل بعض قيود الرابط لعدم توافقها مع API وتم عرض النتائج بالوضع الآمن.';
+                if (!$hasForcedConstraints) {
+                    $apiError = 'تم تجاهل بعض قيود الرابط لعدم توافقها مع API وتم عرض النتائج بالوضع الآمن.';
+                }
             }
         }
 

@@ -61,7 +61,11 @@ internal static class MaterialStoreInventoryQuery
         else if (isAvailable is false)
         {
             query = query.Where(material =>
-                (mainDbContext.MaterialInventory
+                mainDbContext.MaterialInventory.Any(inventory =>
+                    inventory.MaterialGuid == material.Guid
+                    && inventory.StoreGuid.HasValue
+                    && selectedStoreGuids.Contains(inventory.StoreGuid.Value))
+                && (mainDbContext.MaterialInventory
                     .Where(inventory => inventory.MaterialGuid == material.Guid
                         && inventory.StoreGuid.HasValue
                         && selectedStoreGuids.Contains(inventory.StoreGuid.Value))

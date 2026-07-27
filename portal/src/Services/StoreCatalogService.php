@@ -173,6 +173,40 @@ final class StoreCatalogService
         return section_catalog_display_options($sectionDisplay, $display);
     }
 
+    /**
+     * Allowed store GUIDs from the active access policy, optionally merged with a section context.
+     *
+     * @return list<string>
+     */
+    public static function resolvedPolicyStoreGuids(?array $sectionContext = null): array
+    {
+        $policy = self::activePolicy();
+        if ($policy === null) {
+            return [];
+        }
+
+        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
+        if ($sectionContext !== null) {
+            $sectionRules = is_array($sectionContext['filter_rules'] ?? null) ? $sectionContext['filter_rules'] : [];
+            $policyRules = self::mergeFilterRuleSets($policyRules, $sectionRules);
+        }
+
+        return self::parseList($policyRules['store_guids'] ?? []);
+    }
+
+    /** @param array<string, mixed> $overlayRules @return array<string, mixed> */
+    public static function mergePolicyFilterRules(array $overlayRules): array
+    {
+        $policy = self::activePolicy();
+        if ($policy === null) {
+            return $overlayRules;
+        }
+
+        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
+
+        return self::mergeFilterRuleSets($policyRules, $overlayRules);
+    }
+
     /** @param array<string, mixed> $query */
     public static function catalogFromRequest(array $query): array
     {
@@ -268,6 +302,11 @@ final class StoreCatalogService
                 $sectionContext,
                 self::lockedClientFilters($policyRules)
             );
+        }
+
+        $forcedPolicyStoreGuids = self::parseList($policyRules['store_guids'] ?? []);
+        if ($forcedPolicyStoreGuids !== [] && ($mergedFilters['storeGuids'] ?? []) === []) {
+            $mergedFilters['storeGuids'] = $forcedPolicyStoreGuids;
         }
 
         $search = $mergedFilters['search'];
@@ -533,7 +572,11 @@ final class StoreCatalogService
         $search = trim((string) ($requestFilters['search'] ?? ''));
         $sort = self::normalizeSort((string) ($requestFilters['sort'] ?? 'number:asc'));
 
-        $materialsByGuid = MaterialBatchService::fetchByGuids($guids, 25);
+        $materialsByGuid = MaterialBatchService::fetchByGuids(
+            $guids,
+            25,
+            self::resolvedPolicyStoreGuids($sectionContext)
+        );
         $products = [];
         foreach ($guids as $guid) {
             $material = $materialsByGuid[$guid] ?? null;
@@ -845,7 +888,33 @@ final class StoreCatalogService
             return null;
         }
 
+        $sectionContext = null;
+        if ($offerSlug !== null && trim($offerSlug) !== '') {
+            $sectionContext = CatalogSectionResolver::resolve('', trim($offerSlug));
+        }
+        $policyStoreGuids = self::resolvedPolicyStoreGuids($sectionContext);
+
         try {
+            if ($policyStoreGuids !== []) {
+                $response = ApiClient::get('/api/materials', [
+                    'materialGuids' => $guid,
+                    'storeGuids' => implode(',', $policyStoreGuids),
+                    'page' => 1,
+                    'pageSize' => 1,
+                    'includeTotalCount' => 'false',
+                ]);
+                if (!($response['ok'] ?? false)) {
+                    return null;
+                }
+                $items = is_array($response['data']['items'] ?? null) ? $response['data']['items'] : [];
+                $data = is_array($items[0] ?? null) ? $items[0] : null;
+                if ($data === null) {
+                    return null;
+                }
+
+                return self::withOfferPricing([$data], $offerSlug)[0] ?? $data;
+            }
+
             $result = ApiClient::get('/api/materials/' . rawurlencode($guid));
             if (!$result['ok']) {
                 return null;
@@ -882,6 +951,96 @@ final class StoreCatalogService
         }
 
         return StockReservationService::filterSellableProducts($products);
+    }
+
+    /**
+     * Keep only materials that belong to the policy's allowed warehouses.
+     *
+     * @param list<array<string, mixed>> $products
+     * @param list<string> $storeGuids
+     * @return list<array<string, mixed>>
+     */
+    private static function filterProductsByPolicyWarehouse(array $products, array $storeGuids, ?bool $isAvailable = null): array
+    {
+        if ($storeGuids === [] || $products === []) {
+            return $products;
+        }
+
+        $guids = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $guid = trim((string) ($product['guid'] ?? $product['Guid'] ?? ''));
+            if ($guid !== '') {
+                $guids[] = $guid;
+            }
+        }
+        if ($guids === []) {
+            return [];
+        }
+
+        $allowed = self::fetchAllowedMaterialGuids($guids, $storeGuids, $isAvailable);
+
+        return array_values(array_filter($products, static function (array $product) use ($allowed): bool {
+            $guid = strtolower(trim((string) ($product['guid'] ?? $product['Guid'] ?? '')));
+
+            return $guid !== '' && isset($allowed[$guid]);
+        }));
+    }
+
+    /**
+     * @param list<string> $guids
+     * @param list<string> $storeGuids
+     * @return array<string, true> lowercase guid => true
+     */
+    private static function fetchAllowedMaterialGuids(array $guids, array $storeGuids, ?bool $isAvailable = null): array
+    {
+        $guids = array_values(array_unique(array_filter(
+            array_map(static fn ($guid): string => trim((string) $guid), $guids),
+            static fn (string $guid): bool => $guid !== ''
+        )));
+        if ($guids === [] || $storeGuids === []) {
+            return [];
+        }
+
+        $allowed = [];
+        foreach (array_chunk($guids, self::MAX_GUIDS_PER_REQUEST) as $chunk) {
+            $query = [
+                'materialGuids' => implode(',', $chunk),
+                'storeGuids' => implode(',', $storeGuids),
+                'page' => 1,
+                'pageSize' => count($chunk),
+                'includeTotalCount' => 'false',
+            ];
+            if ($isAvailable === true) {
+                $query['isAvailable'] = 'true';
+            } elseif ($isAvailable === false) {
+                $query['isAvailable'] = 'false';
+            }
+
+            try {
+                $response = ApiClient::get('/api/materials', $query, 15);
+            } catch (\Throwable) {
+                continue;
+            }
+            if (!($response['ok'] ?? false)) {
+                continue;
+            }
+
+            $items = is_array($response['data']['items'] ?? null) ? $response['data']['items'] : [];
+            foreach ($items as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $guid = trim((string) ($item['guid'] ?? $item['Guid'] ?? ''));
+                if ($guid !== '') {
+                    $allowed[strtolower($guid)] = true;
+                }
+            }
+        }
+
+        return $allowed;
     }
 
     /** @param array<string, mixed>|null $sectionContext */
@@ -2207,7 +2366,7 @@ final class StoreCatalogService
         unset($params['facetFilters'], $params['loadFilterOptions']);
         ksort($params);
 
-        return 'store_catalog_v5:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
+        return 'store_catalog_v6:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
     }
 
     /** @param array<string, mixed> $data */

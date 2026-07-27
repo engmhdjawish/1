@@ -166,6 +166,23 @@ $locked = invokePrivate('lockedPolicyClientFilters', [
 $assert('policy store_guids lock stores filter', in_array('stores', $locked, true));
 $assert('policy group_guids lock groups filter', in_array('groups', $locked, true));
 
+$policyStoreMerge = invokePrivate('mergeFilterRuleSets', [
+    'store_guids' => ['store-a', 'store-b'],
+], [
+    'store_guids' => ['store-b', 'store-c'],
+]);
+$assert(
+    'policy store intersection keeps only shared warehouses',
+    ($policyStoreMerge['store_guids'] ?? []) === ['store-b']
+);
+
+$assert(
+    'resolvedPolicyStoreGuids returns empty list without active policy context in unit scope',
+    is_array(StoreCatalogService::resolvedPolicyStoreGuids(null))
+);
+
+echo "\n";
+
 try {
     $guest = \Portal\Services\StorePolicyService::guestPolicy();
     if ($guest === null) {
