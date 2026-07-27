@@ -7,8 +7,7 @@ window.portalStoreFiltersInit = (root = document) => {
     // Include the mobile nav row; prefer the larger of layout vs painted height.
     const height = Math.max(
       Math.ceil(header.offsetHeight || 0),
-      Math.ceil(header.getBoundingClientRect().height || 0),
-      Math.ceil(header.getBoundingClientRect().bottom || 0)
+      Math.ceil(header.getBoundingClientRect().height || 0)
     );
     if (height > 0) {
       document.documentElement.style.setProperty('--site-header-sticky-offset', `${height}px`);
