@@ -80,18 +80,65 @@ $mergedFilters = invokePrivate('mergeDisplayResultFilters', [
 ], [
     'materialTypes' => [
         ['value' => 'Alpha', 'count' => 4],
+        ['value' => 'Beta', 'count' => 0],
     ],
     'groups' => [
         ['guid' => 'g1', 'name' => 'Group 1', 'code' => 'G1', 'count' => 2],
     ],
-]);
+], [
+    'materialTypes' => ['Gamma'],
+], false);
 $assert(
-    'merge keeps all global string facets after scoped filtering',
-    is_array($mergedFilters['materialTypes'] ?? null) && count($mergedFilters['materialTypes']) === 3
+    'available-only merge keeps positive-count and selected facets',
+    is_array($mergedFilters['materialTypes'] ?? null)
+        && count($mergedFilters['materialTypes']) === 2
+        && ($mergedFilters['materialTypes'][0]['value'] ?? '') === 'Alpha'
 );
 $assert(
-    'merge keeps all global group facets after scoped filtering',
-    is_array($mergedFilters['groups'] ?? null) && count($mergedFilters['groups']) === 2
+    'available-only merge drops zero-count facets that are not selected',
+    !array_filter(
+        is_array($mergedFilters['materialTypes'] ?? null) ? $mergedFilters['materialTypes'] : [],
+        static fn (array $facet): bool => ($facet['value'] ?? '') === 'Beta'
+    )
+);
+$assert(
+    'available-only merge keeps selected zero-count facet',
+    array_filter(
+        is_array($mergedFilters['materialTypes'] ?? null) ? $mergedFilters['materialTypes'] : [],
+        static fn (array $facet): bool => ($facet['value'] ?? '') === 'Gamma'
+    ) !== []
+);
+
+$allFilters = invokePrivate('mergeDisplayResultFilters', [
+    'materialTypes' => ['Alpha', 'Beta'],
+], [
+    'materialTypes' => [
+        ['value' => 'Alpha', 'count' => 0],
+    ],
+], [], true);
+$assert(
+    'unavailable merge includes all global facets',
+    is_array($allFilters['materialTypes'] ?? null) && count($allFilters['materialTypes']) === 2
+);
+
+$assert(
+    'unavailable availability includes zero-count options',
+    invokePrivate('shouldIncludeZeroCountFilterOptions', [false]) === true
+);
+$assert(
+    'available/default availability hides zero-count options',
+    invokePrivate('shouldIncludeZeroCountFilterOptions', [true]) === false
+        && invokePrivate('shouldIncludeZeroCountFilterOptions', [null]) === false
+);
+
+$displayFacetRules = invokePrivate('mergedFiltersForDisplayFacets', [
+    'isAvailable' => null,
+    'storeGuids' => ['store-a'],
+]);
+$assert(
+    'display facets default to available stock',
+    ($displayFacetRules['isAvailable'] ?? null) === true
+        && ($displayFacetRules['storeGuids'] ?? []) === ['store-a']
 );
 
 $locked = invokePrivate('lockedPolicyClientFilters', [

@@ -407,7 +407,12 @@ final class StoreCatalogService
                     $policyRules
                 );
             } elseif (!self::resultFiltersAreEmpty($resultFilters)) {
-                $resultFilters = self::mergeDisplayResultFilters($filterOptions, $resultFilters);
+                $resultFilters = self::mergeDisplayResultFilters(
+                    $filterOptions,
+                    $resultFilters,
+                    $requestFilters,
+                    self::shouldIncludeZeroCountFilterOptions($mergedFilters['isAvailable'] ?? null)
+                );
             }
         }
         if ($storeGuids !== [] || self::parseList($policyRules['store_guids'] ?? []) !== []) {
@@ -675,7 +680,12 @@ final class StoreCatalogService
         if (self::resultFiltersAreEmpty($resultFilters) && !$hasImplicitConstraints) {
             $resultFilters = $fallbackResultFilters;
         } elseif (!$hasImplicitConstraints) {
-            $resultFilters = self::mergeDisplayResultFilters($filterOptions, $resultFilters);
+            $resultFilters = self::mergeDisplayResultFilters(
+                $filterOptions,
+                $resultFilters,
+                $requestFilters,
+                self::shouldIncludeZeroCountFilterOptions($merged['isAvailable'] ?? null)
+            );
         }
 
         $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
@@ -1101,6 +1111,36 @@ final class StoreCatalogService
             'minUnitPurchasePriceUsd' => $mergedFilters['minUnitPurchasePriceUsd'] ?? null,
             'maxUnitPurchasePriceUsd' => $mergedFilters['maxUnitPurchasePriceUsd'] ?? null,
         ], static fn ($value) => $value !== null && $value !== '');
+    }
+
+    /** Facet lists follow availability unless the client explicitly chose "unavailable". */
+    private static function shouldIncludeZeroCountFilterOptions(?bool $isAvailable): bool
+    {
+        return $isAvailable === false;
+    }
+
+    /**
+     * @param array<string, mixed> $mergedFilters
+     * @return array<string, mixed>
+     */
+    private static function mergedFiltersForDisplayFacets(array $mergedFilters): array
+    {
+        if (($mergedFilters['isAvailable'] ?? null) === false) {
+            return $mergedFilters;
+        }
+
+        $displayFilters = $mergedFilters;
+        $displayFilters['isAvailable'] = true;
+
+        return $displayFilters;
+    }
+
+    /** @param array<string, mixed> $facet */
+    private static function facetHasPositiveCount(array $facet): bool
+    {
+        $count = $facet['count'] ?? null;
+
+        return $count === null || (int) $count > 0;
     }
 
     /** @param array<string, scalar|null> $apiQuery @return array<string, mixed> */
@@ -2163,16 +2203,26 @@ final class StoreCatalogService
     }
 
     /**
-     * Keep every policy-visible filter choice on screen after scoped filtering,
-     * overlaying live counts from the current result set when available.
+     * Merge scoped facet counts with policy-visible options.
+     * By default only in-stock/available choices are shown; selecting "unavailable"
+     * includes zero-count options. Active selections are always kept visible.
      *
      * @param array<string, mixed> $filterOptions
      * @param array<string, mixed> $scopedFilters
-     * @return array<string, mixed>
+     * @param array<string, mixed> $selectedFilters
      */
-    private static function mergeDisplayResultFilters(array $filterOptions, array $scopedFilters): array
-    {
-        $mergeStringFacets = static function (array $globalValues, array $scopedFacets): array {
+    private static function mergeDisplayResultFilters(
+        array $filterOptions,
+        array $scopedFilters,
+        array $selectedFilters = [],
+        bool $includeZeroCountOptions = false
+    ): array {
+        $mergeStringFacets = static function (
+            array $globalValues,
+            array $scopedFacets,
+            array $selectedValues,
+            bool $includeZeroCountOptions
+        ): array {
             $countByValue = [];
             foreach ($scopedFacets as $facet) {
                 if (!is_array($facet)) {
@@ -2187,45 +2237,61 @@ final class StoreCatalogService
 
             $merged = [];
             $seen = [];
-            foreach ($globalValues as $value) {
-                $value = trim((string) $value);
+            $append = static function (string $value, mixed $count) use (&$merged, &$seen): void {
+                $value = trim($value);
                 if ($value === '') {
-                    continue;
+                    return;
                 }
                 $key = strtolower($value);
                 if (isset($seen[$key])) {
-                    continue;
+                    return;
                 }
                 $seen[$key] = true;
-                $merged[] = [
-                    'value' => $value,
-                    'count' => $countByValue[$key] ?? 0,
-                ];
+                $merged[] = ['value' => $value, 'count' => $count];
+            };
+
+            if ($includeZeroCountOptions) {
+                foreach ($globalValues as $value) {
+                    $value = trim((string) $value);
+                    if ($value === '') {
+                        continue;
+                    }
+                    $append($value, $countByValue[strtolower($value)] ?? 0);
+                }
+                foreach ($scopedFacets as $facet) {
+                    if (!is_array($facet)) {
+                        continue;
+                    }
+                    $value = trim((string) ($facet['value'] ?? ''));
+                    if ($value === '') {
+                        continue;
+                    }
+                    $append($value, $facet['count'] ?? null);
+                }
+            } else {
+                foreach ($scopedFacets as $facet) {
+                    if (!is_array($facet) || !self::facetHasPositiveCount($facet)) {
+                        continue;
+                    }
+                    $append((string) ($facet['value'] ?? ''), $facet['count'] ?? null);
+                }
             }
-            foreach ($scopedFacets as $facet) {
-                if (!is_array($facet)) {
-                    continue;
-                }
-                $value = trim((string) ($facet['value'] ?? ''));
-                if ($value === '') {
-                    continue;
-                }
-                $key = strtolower($value);
-                if (isset($seen[$key])) {
-                    continue;
-                }
-                $seen[$key] = true;
-                $merged[] = [
-                    'value' => $value,
-                    'count' => $facet['count'] ?? null,
-                ];
+
+            foreach ($selectedValues as $value) {
+                $append((string) $value, $countByValue[strtolower(trim((string) $value))] ?? 0);
             }
 
             return $merged;
         };
 
-        $mergeGroupFacets = static function (array $globalGroups, array $scopedFacets): array {
+        $mergeGroupFacets = static function (
+            array $globalGroups,
+            array $scopedFacets,
+            array $selectedGuids,
+            bool $includeZeroCountOptions
+        ): array {
             $countByGuid = [];
+            $scopedByGuid = [];
             foreach ($scopedFacets as $facet) {
                 if (!is_array($facet)) {
                     continue;
@@ -2235,67 +2301,114 @@ final class StoreCatalogService
                     continue;
                 }
                 $countByGuid[$guid] = $facet['count'] ?? null;
+                $scopedByGuid[$guid] = $facet;
             }
 
-            $merged = [];
-            $seen = [];
+            $globalByGuid = [];
             foreach ($globalGroups as $group) {
                 if (!is_array($group)) {
                     continue;
                 }
-                $guid = trim((string) ($group['guid'] ?? ''));
+                $guid = strtolower(trim((string) ($group['guid'] ?? '')));
                 if ($guid === '') {
                     continue;
                 }
+                $globalByGuid[$guid] = $group;
+            }
+
+            $merged = [];
+            $seen = [];
+            $appendGroup = static function (string $guid, array $row) use (&$merged, &$seen): void {
                 $key = strtolower($guid);
-                if (isset($seen[$key])) {
-                    continue;
+                if ($guid === '' || isset($seen[$key])) {
+                    return;
                 }
                 $seen[$key] = true;
-                $merged[] = [
-                    'guid' => $guid,
-                    'code' => trim((string) ($group['code'] ?? '')),
-                    'name' => trim((string) ($group['name'] ?? '')),
-                    'count' => $countByGuid[$key] ?? 0,
-                ];
+                $merged[] = $row;
+            };
+
+            if ($includeZeroCountOptions) {
+                foreach ($globalGroups as $group) {
+                    if (!is_array($group)) {
+                        continue;
+                    }
+                    $guid = trim((string) ($group['guid'] ?? ''));
+                    if ($guid === '') {
+                        continue;
+                    }
+                    $key = strtolower($guid);
+                    $appendGroup($guid, [
+                        'guid' => $guid,
+                        'code' => trim((string) ($group['code'] ?? '')),
+                        'name' => trim((string) ($group['name'] ?? '')),
+                        'count' => $countByGuid[$key] ?? 0,
+                    ]);
+                }
             }
+
             foreach ($scopedFacets as $facet) {
-                if (!is_array($facet)) {
+                if (!is_array($facet) || !self::facetHasPositiveCount($facet)) {
                     continue;
                 }
                 $guid = trim((string) ($facet['guid'] ?? ''));
                 if ($guid === '') {
                     continue;
                 }
-                $key = strtolower($guid);
-                if (isset($seen[$key])) {
-                    continue;
-                }
-                $seen[$key] = true;
-                $merged[] = [
+                $appendGroup($guid, [
                     'guid' => $guid,
                     'code' => trim((string) ($facet['code'] ?? '')),
                     'name' => trim((string) ($facet['name'] ?? '')),
                     'count' => $facet['count'] ?? null,
-                ];
+                ]);
+            }
+
+            foreach ($selectedGuids as $guid) {
+                $guid = trim((string) $guid);
+                if ($guid === '') {
+                    continue;
+                }
+                $key = strtolower($guid);
+                if (isset($seen[$key])) {
+                    continue;
+                }
+                $source = $scopedByGuid[$key] ?? $globalByGuid[$key] ?? null;
+                $appendGroup($guid, [
+                    'guid' => $guid,
+                    'code' => trim((string) (is_array($source) ? ($source['code'] ?? '') : '')),
+                    'name' => trim((string) (is_array($source) ? ($source['name'] ?? '') : '')),
+                    'count' => $countByGuid[$key] ?? 0,
+                ]);
             }
 
             return $merged;
         };
 
         $result = $scopedFilters;
-        foreach (['materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins'] as $key) {
+        foreach ([
+            'materialTypes' => 'materialTypes',
+            'ageCategories' => 'ageCategories',
+            'manufacturers' => 'manufacturers',
+            'sizeRanges' => 'sizeRanges',
+            'countryOfOrigins' => 'countryOfOrigins',
+        ] as $key => $selectedKey) {
             $global = is_array($filterOptions[$key] ?? null) ? $filterOptions[$key] : [];
             $scoped = is_array($scopedFilters[$key] ?? null) ? $scopedFilters[$key] : [];
-            if ($global !== [] || $scoped !== []) {
-                $result[$key] = $mergeStringFacets($global, $scoped);
+            $selected = self::parseList($selectedFilters[$selectedKey] ?? []);
+            if ($global !== [] || $scoped !== [] || $selected !== []) {
+                $result[$key] = $mergeStringFacets($global, $scoped, $selected, $includeZeroCountOptions);
             }
         }
 
         $globalGroups = is_array($filterOptions['groups'] ?? null) ? $filterOptions['groups'] : [];
         $scopedGroups = is_array($scopedFilters['groups'] ?? null) ? $scopedFilters['groups'] : [];
-        if ($globalGroups !== [] || $scopedGroups !== []) {
-            $result['groups'] = $mergeGroupFacets($globalGroups, $scopedGroups);
+        $selectedGroups = self::parseList($selectedFilters['groupGuids'] ?? []);
+        if ($globalGroups !== [] || $scopedGroups !== [] || $selectedGroups !== []) {
+            $result['groups'] = $mergeGroupFacets(
+                $globalGroups,
+                $scopedGroups,
+                $selectedGroups,
+                $includeZeroCountOptions
+            );
         }
 
         return $result;
@@ -2436,6 +2549,7 @@ final class StoreCatalogService
         }
 
         $requestFilters = self::parseRequestFilters($query, $storeOptions, $isClientFilterVisible);
+        $includeZeroCountOptions = self::shouldIncludeZeroCountFilterOptions($requestFilters['isAvailable'] ?? null);
         $needsScopedFilters = self::shouldFetchScopedResultFilters($query, $requestFilters, $baseRules);
         if (!$needsScopedFilters) {
             self::$lastFiltersPayloadSource = 'global-options';
@@ -2455,7 +2569,9 @@ final class StoreCatalogService
             self::$lastFiltersPayloadSource = 'portal-cache';
             $cachedPayload['resultFilters'] = self::mergeDisplayResultFilters(
                 $cachedPayload['filterOptions'],
-                $cachedPayload['resultFilters']
+                $cachedPayload['resultFilters'],
+                $requestFilters,
+                $includeZeroCountOptions
             );
 
             return $cachedPayload;
@@ -2468,7 +2584,12 @@ final class StoreCatalogService
                 $baseRules
             );
         } else {
-            $resultFilters = self::mergeDisplayResultFilters($filterOptions, $resultFilters);
+            $resultFilters = self::mergeDisplayResultFilters(
+                $filterOptions,
+                $resultFilters,
+                $requestFilters,
+                $includeZeroCountOptions
+            );
         }
 
         $payload = [
@@ -2499,7 +2620,8 @@ final class StoreCatalogService
         $scopeRules = $sectionContext !== null ? $baseRules : $policyRules;
 
         try {
-            $resultFilters = self::requestResultFiltersFromApi(self::buildResultFiltersApiQuery($mergedFilters));
+            $displayFilters = self::mergedFiltersForDisplayFacets($mergedFilters);
+            $resultFilters = self::requestResultFiltersFromApi(self::buildResultFiltersApiQuery($displayFilters));
             if ($resultFilters === []) {
                 return [];
             }

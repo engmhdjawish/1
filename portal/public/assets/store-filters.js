@@ -637,7 +637,7 @@ window.portalStoreFiltersInit = (root = document) => {
     list.classList.add('store-filter-options--pills');
   };
 
-  const mergeStringFacets = (globalValues, scopedFacets) => {
+  const mergeStringFacets = (globalValues, scopedFacets, selectedValues, includeZeroCountOptions) => {
     const countByValue = new Map();
     (scopedFacets || []).forEach((facet) => {
       const value = String(facet?.value || '').trim();
@@ -649,7 +649,7 @@ window.portalStoreFiltersInit = (root = document) => {
 
     const merged = [];
     const seen = new Set();
-    (globalValues || []).forEach((value) => {
+    const append = (value, count) => {
       const normalized = String(value || '').trim();
       if (!normalized) {
         return;
@@ -659,10 +659,69 @@ window.portalStoreFiltersInit = (root = document) => {
         return;
       }
       seen.add(key);
-      merged.push({ value: normalized, count: countByValue.has(key) ? countByValue.get(key) : 0 });
+      merged.push({ value: normalized, count });
+    };
+
+    if (includeZeroCountOptions) {
+      (globalValues || []).forEach((value) => {
+        const normalized = String(value || '').trim();
+        if (!normalized) {
+          return;
+        }
+        const key = normalized.toLowerCase();
+        append(normalized, countByValue.has(key) ? countByValue.get(key) : 0);
+      });
+      (scopedFacets || []).forEach((facet) => {
+        append(facet?.value, facet?.count ?? null);
+      });
+    } else {
+      (scopedFacets || []).forEach((facet) => {
+        const count = facet?.count ?? null;
+        if (count !== null && Number(count) <= 0) {
+          return;
+        }
+        append(facet?.value, count);
+      });
+    }
+
+    (selectedValues || []).forEach((value) => {
+      const normalized = String(value || '').trim();
+      if (!normalized) {
+        return;
+      }
+      const key = normalized.toLowerCase();
+      append(normalized, countByValue.has(key) ? countByValue.get(key) : 0);
     });
+
+    return merged;
+  };
+
+  const mergeGroupFacets = (globalGroups, scopedFacets, selectedGuids, includeZeroCountOptions) => {
+    const countByGuid = new Map();
+    const scopedByGuid = new Map();
     (scopedFacets || []).forEach((facet) => {
-      const normalized = String(facet?.value || '').trim();
+      const guid = String(facet?.guid || facet?.Guid || '').trim();
+      if (!guid) {
+        return;
+      }
+      const key = guid.toLowerCase();
+      countByGuid.set(key, facet?.count ?? null);
+      scopedByGuid.set(key, facet);
+    });
+
+    const globalByGuid = new Map();
+    (globalGroups || []).forEach((group) => {
+      const guid = String(group?.guid || group?.Guid || '').trim();
+      if (!guid) {
+        return;
+      }
+      globalByGuid.set(guid.toLowerCase(), group);
+    });
+
+    const merged = [];
+    const seen = new Set();
+    const appendGroup = (guid, row) => {
+      const normalized = String(guid || '').trim();
       if (!normalized) {
         return;
       }
@@ -671,60 +730,79 @@ window.portalStoreFiltersInit = (root = document) => {
         return;
       }
       seen.add(key);
-      merged.push({ value: normalized, count: facet?.count ?? null });
+      merged.push(row);
+    };
+
+    if (includeZeroCountOptions) {
+      (globalGroups || []).forEach((group) => {
+        const guid = String(group?.guid || group?.Guid || '').trim();
+        if (!guid) {
+          return;
+        }
+        const key = guid.toLowerCase();
+        appendGroup(guid, {
+          guid,
+          code: String(group?.code || group?.Code || ''),
+          name: String(group?.name || group?.Name || ''),
+          count: countByGuid.has(key) ? countByGuid.get(key) : 0,
+        });
+      });
+      (scopedFacets || []).forEach((facet) => {
+        const guid = String(facet?.guid || facet?.Guid || '').trim();
+        if (!guid) {
+          return;
+        }
+        appendGroup(guid, {
+          guid,
+          code: String(facet?.code || facet?.Code || ''),
+          name: String(facet?.name || facet?.Name || ''),
+          count: facet?.count ?? null,
+        });
+      });
+    } else {
+      (scopedFacets || []).forEach((facet) => {
+        const count = facet?.count ?? null;
+        if (count !== null && Number(count) <= 0) {
+          return;
+        }
+        const guid = String(facet?.guid || facet?.Guid || '').trim();
+        if (!guid) {
+          return;
+        }
+        appendGroup(guid, {
+          guid,
+          code: String(facet?.code || facet?.Code || ''),
+          name: String(facet?.name || facet?.Name || ''),
+          count,
+        });
+      });
+    }
+
+    (selectedGuids || []).forEach((guid) => {
+      const normalized = String(guid || '').trim();
+      if (!normalized) {
+        return;
+      }
+      const key = normalized.toLowerCase();
+      const source = scopedByGuid.get(key) || globalByGuid.get(key) || {};
+      appendGroup(normalized, {
+        guid: normalized,
+        code: String(source?.code || source?.Code || ''),
+        name: String(source?.name || source?.Name || ''),
+        count: countByGuid.has(key) ? countByGuid.get(key) : 0,
+      });
     });
 
     return merged;
   };
 
-  const mergeGroupFacets = (globalGroups, scopedFacets) => {
-    const countByGuid = new Map();
-    (scopedFacets || []).forEach((facet) => {
-      const guid = String(facet?.guid || facet?.Guid || '').trim();
-      if (!guid) {
-        return;
-      }
-      countByGuid.set(guid.toLowerCase(), facet?.count ?? null);
-    });
+  const readSelectedFilterValues = (inputName) => Array.from(
+    filtersRoot.querySelectorAll(`input[name="${inputName}"]:checked`)
+  ).map((el) => el.value);
 
-    const merged = [];
-    const seen = new Set();
-    (globalGroups || []).forEach((group) => {
-      const guid = String(group?.guid || group?.Guid || '').trim();
-      if (!guid) {
-        return;
-      }
-      const key = guid.toLowerCase();
-      if (seen.has(key)) {
-        return;
-      }
-      seen.add(key);
-      merged.push({
-        guid,
-        code: String(group?.code || group?.Code || ''),
-        name: String(group?.name || group?.Name || ''),
-        count: countByGuid.has(key) ? countByGuid.get(key) : 0,
-      });
-    });
-    (scopedFacets || []).forEach((facet) => {
-      const guid = String(facet?.guid || facet?.Guid || '').trim();
-      if (!guid) {
-        return;
-      }
-      const key = guid.toLowerCase();
-      if (seen.has(key)) {
-        return;
-      }
-      seen.add(key);
-      merged.push({
-        guid,
-        code: String(facet?.code || facet?.Code || ''),
-        name: String(facet?.name || facet?.Name || ''),
-        count: facet?.count ?? null,
-      });
-    });
-
-    return merged;
+  const shouldIncludeZeroCountFilterOptions = () => {
+    const availability = filterForm?.querySelector('input[name="isAvailable"]:checked')?.value;
+    return availability === '0';
   };
 
   const applyDeferredFilters = (data) => {
@@ -734,6 +812,7 @@ window.portalStoreFiltersInit = (root = document) => {
 
     const resultFilters = data.resultFilters || {};
     const filterOptions = data.filterOptions || {};
+    const includeZeroCountOptions = shouldIncludeZeroCountFilterOptions();
     const facetMap = [
       ['materialTypes', 'materialTypes'],
       ['ageCategories', 'ageCategories'],
@@ -745,10 +824,20 @@ window.portalStoreFiltersInit = (root = document) => {
     facetMap.forEach(([groupId, paramName]) => {
       const scoped = resultFilters[groupId] || [];
       const global = Array.isArray(filterOptions[groupId]) ? filterOptions[groupId] : [];
-      renderStringFacetOptions(groupId, paramName, mergeStringFacets(global, scoped));
+      const selected = readSelectedFilterValues(`${paramName}[]`);
+      renderStringFacetOptions(
+        groupId,
+        paramName,
+        mergeStringFacets(global, scoped, selected, includeZeroCountOptions)
+      );
     });
 
-    const groupFacets = mergeGroupFacets(filterOptions.groups || [], resultFilters.groups || []);
+    const groupFacets = mergeGroupFacets(
+      filterOptions.groups || [],
+      resultFilters.groups || [],
+      readSelectedFilterValues('groupGuids[]'),
+      includeZeroCountOptions
+    );
     renderGuidFacetOptions('groups', 'groupGuids', groupFacets);
     renderGuidFacetOptions('stores', 'storeGuids', filterOptions.stores || []);
 
