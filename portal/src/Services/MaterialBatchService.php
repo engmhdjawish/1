@@ -70,6 +70,7 @@ final class MaterialBatchService
             ];
             if ($storeGuids !== []) {
                 $query['storeGuids'] = implode(',', $storeGuids);
+                $query['isAvailable'] = 'true';
             }
             $response = ApiClient::get('/api/materials', $query, $timeoutSeconds);
 

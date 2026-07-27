@@ -207,7 +207,12 @@ $queryCountryOrigins = $mergedFilters['countryOfOrigins'] ?? [];
 $queryStoreGuids = $mergedFilters['storeGuids'] ?? [];
 $queryGroupGuids = $mergedFilters['groupGuids'] ?? [];
 $queryIsAvailable = $mergedFilters['isAvailable'] ?? null;
-if ($queryStoreGuids !== [] && $queryIsAvailable === null) {
+if ($scopeStoreGuids !== []) {
+    $queryStoreGuids = $scopeStoreGuids;
+    if ($queryIsAvailable !== false) {
+        $queryIsAvailable = true;
+    }
+} elseif ($queryStoreGuids !== [] && $queryIsAvailable === null) {
     $queryIsAvailable = true;
 }
 $queryHasImage = $mergedFilters['hasImage'] ?? null;
