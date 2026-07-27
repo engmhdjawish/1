@@ -52,20 +52,16 @@ internal static class MaterialStoreInventoryQuery
         }
         else
         {
-            // Policy warehouses are an exclusive allow-list:
-            // 1) positive qty in at least one selected store
-            // 2) no positive qty in any store outside the selection
+            // Inclusion allow-list: show when selected stores have positive qty.
+            // Quantity returned to clients is summed from selected stores only
+            // (see MaterialsController.GetQuantityByMaterialAsync) — stock in
+            // excluded warehouses does not add to warehouseQuantity.
             query = query.Where(material =>
                 (mainDbContext.MaterialInventory
                     .Where(inventory => inventory.MaterialGuid == material.Guid
                         && inventory.StoreGuid.HasValue
                         && selectedStoreGuids.Contains(inventory.StoreGuid.Value))
-                    .Sum(inventory => (double?)(inventory.Qty ?? 0)) ?? 0) > 0
-                && !mainDbContext.MaterialInventory.Any(inventory =>
-                    inventory.MaterialGuid == material.Guid
-                    && inventory.StoreGuid.HasValue
-                    && !selectedStoreGuids.Contains(inventory.StoreGuid.Value)
-                    && (inventory.Qty ?? 0) > 0));
+                    .Sum(inventory => (double?)(inventory.Qty ?? 0)) ?? 0) > 0);
         }
 
         if (minWarehouseQuantity is not null)
@@ -90,15 +86,4 @@ internal static class MaterialStoreInventoryQuery
 
         return query;
     }
-
-    public static bool HasPositiveQuantityOutsideSelectedStores(
-        MainDbContext mainDbContext,
-        Guid materialGuid,
-        IReadOnlyCollection<Guid> selectedStoreGuids) =>
-        selectedStoreGuids.Count > 0
-        && mainDbContext.MaterialInventory.Any(inventory =>
-            inventory.MaterialGuid == materialGuid
-            && inventory.StoreGuid.HasValue
-            && !selectedStoreGuids.Contains(inventory.StoreGuid.Value)
-            && (inventory.Qty ?? 0) > 0);
 }
