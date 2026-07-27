@@ -101,8 +101,8 @@ function portal_site_logo_url(string $logoUrl, string $variant = 'header'): stri
         return '';
     }
 
-    if (\Portal\Services\CompanyBrandIconService::hasBrandIcons()
-        && in_array($variant, ['header', 'mobile-toolbar', 'drawer'], true)) {
+    // Prefer on-demand brand PNG (works even before storage/branding is writable).
+    if (in_array($variant, ['header', 'mobile-toolbar', 'drawer'], true)) {
         $size = $variant === 'mobile-toolbar' ? 192 : 512;
 
         return \Portal\Services\CompanyBrandIconService::iconPublicUrl($size);
@@ -230,7 +230,8 @@ function portal_image_mime_from_url(string $url): string
  */
 function portal_manifest_icon(int $size, string $purpose = 'any'): array
 {
-    if (\Portal\Services\CompanyBrandIconService::hasBrandIcons()) {
+    $logoUrl = trim((string) (\Portal\Services\PortalSettingsService::companyLogoUrl() ?? ''));
+    if ($logoUrl !== '' || \Portal\Services\CompanyBrandIconService::hasBrandIcons()) {
         return [
             'src' => \Portal\Services\CompanyBrandIconService::iconPublicUrl($size),
             'sizes' => $size . 'x' . $size,
@@ -264,7 +265,6 @@ function portal_site_icons(?string $companyLogoUrl = null): array
     $faviconIco = portal_asset_url('/favicon.ico');
 
     $brandIcon = static fn (int $size): string => \Portal\Services\CompanyBrandIconService::iconPublicUrl($size);
-    $hasBrandIcons = \Portal\Services\CompanyBrandIconService::hasBrandIcons();
 
     $manifestIcons = [
         portal_manifest_icon(192, 'any'),
@@ -277,8 +277,10 @@ function portal_site_icons(?string $companyLogoUrl = null): array
             'uses_company_logo' => true,
             'favicon_ico' => $faviconIco,
             'favicon_svg' => $iconSvg,
-            'favicon_png_32' => $hasBrandIcons ? $brandIcon(32) : $logoAbs,
-            'apple_touch' => $hasBrandIcons ? $brandIcon(180) : $logoAbs,
+            // Route through brand-icon.php so icons generate on demand even when
+            // storage/branding is not writable yet.
+            'favicon_png_32' => $brandIcon(32),
+            'apple_touch' => $brandIcon(180),
             'manifest_icons' => $manifestIcons,
         ];
     }

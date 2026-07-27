@@ -298,9 +298,23 @@ final class CompanyBrandIconService
 
     private static function generateSquarePng(string $sourcePath, string $targetPath, int $size): bool
     {
+        $binary = self::renderSquarePngBinary($sourcePath, $size);
+        if ($binary === null) {
+            return false;
+        }
+
+        return file_put_contents($targetPath, $binary) !== false;
+    }
+
+    /**
+     * Build a square PNG with an opaque background so PWA / Android icons
+     * do not disappear when the company logo is a transparent PNG.
+     */
+    public static function renderSquarePngBinary(string $sourcePath, int $size): ?string
+    {
         $source = self::loadImage($sourcePath);
         if ($source === false) {
-            return false;
+            return null;
         }
 
         $srcW = imagesx($source);
@@ -308,21 +322,21 @@ final class CompanyBrandIconService
         if ($srcW <= 0 || $srcH <= 0) {
             imagedestroy($source);
 
-            return false;
+            return null;
         }
 
         $canvas = imagecreatetruecolor($size, $size);
         if ($canvas === false) {
             imagedestroy($source);
 
-            return false;
+            return null;
         }
 
-        imagealphablending($canvas, false);
-        imagesavealpha($canvas, true);
-        $transparent = imagecolorallocatealpha($canvas, 0, 0, 0, 127);
-        imagefilledrectangle($canvas, 0, 0, $size, $size, $transparent);
         imagealphablending($canvas, true);
+        imagesavealpha($canvas, false);
+        // Match manifest background_color — opaque so adaptive icons stay visible.
+        $background = imagecolorallocate($canvas, 246, 246, 248);
+        imagefilledrectangle($canvas, 0, 0, $size, $size, $background);
 
         $padding = (int) round($size * 0.1);
         $maxBox = $size - ($padding * 2);
@@ -337,10 +351,67 @@ final class CompanyBrandIconService
         imagecopyresampled($canvas, $source, $dstX, $dstY, 0, 0, $dstW, $dstH, $srcW, $srcH);
         imagedestroy($source);
 
-        imagesavealpha($canvas, true);
-        $saved = imagepng($canvas, $targetPath);
+        ob_start();
+        $saved = imagepng($canvas, null, 6);
         imagedestroy($canvas);
+        $binary = ob_get_clean();
 
-        return (bool) $saved;
+        if ($saved === false || !is_string($binary) || $binary === '') {
+            return null;
+        }
+
+        return $binary;
     }
+
+    /**
+     * Serve (and optionally cache) a brand icon for the configured company logo.
+     * Works even when storage/branding is not writable by streaming a generated PNG.
+     */
+    public static function resolveIconBinary(int $size, ?string $logoUrl = null): ?string
+    {
+        $size = max(16, min(1024, $size));
+        $cached = self::iconAbsolutePath($size);
+        if (is_file($cached) && is_readable($cached) && filesize($cached) > 64) {
+            $data = @file_get_contents($cached);
+
+            return is_string($data) && $data !== '' ? $data : null;
+        }
+
+        $logoUrl = trim((string) ($logoUrl ?? ''));
+        if ($logoUrl === '') {
+            return null;
+        }
+
+        $sourcePath = self::resolveSourcePath($logoUrl);
+        if ($sourcePath === null || !is_file($sourcePath)) {
+            return null;
+        }
+
+        $iconSourcePath = self::iconSourcePath($sourcePath);
+        if (self::isSvgPath($iconSourcePath) || !is_readable($iconSourcePath)) {
+            return null;
+        }
+
+        if (!function_exists('imagecreatetruecolor')) {
+            self::$lastError = 'امتداد PHP GD غير مفعّل.';
+
+            return null;
+        }
+
+        $binary = self::renderSquarePngBinary($iconSourcePath, $size);
+        if ($binary === null) {
+            return null;
+        }
+
+        // Best-effort cache; PWA still works if the directory is not writable.
+        $brandingDir = self::brandingDir();
+        if ((is_dir($brandingDir) || @mkdir($brandingDir, 0775, true) || is_dir($brandingDir))
+            && is_writable($brandingDir)
+        ) {
+            @file_put_contents($cached, $binary);
+        }
+
+        return $binary;
+    }
+
 }
