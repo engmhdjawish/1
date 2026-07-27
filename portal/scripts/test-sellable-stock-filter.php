@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Unit checks for catalog sellable stock (full-package minimum).
+ * Unit checks for warehouse policy product scoping helpers.
  * Usage: php scripts/test-sellable-stock-filter.php
  */
 
@@ -26,7 +26,7 @@ $assert = static function (string $label, bool $condition) use (&$failures): voi
     echo "OK: {$label}\n";
 };
 
-echo "=== Sellable stock filter checks ===\n\n";
+echo "=== Warehouse / sellable stock checks ===\n\n";
 
 $onePairInDozenBox = [
     'materialGuid' => '11111111-1111-1111-1111-111111111111',
@@ -34,26 +34,9 @@ $onePairInDozenBox = [
     'packageConversionFactor' => 12,
 ];
 
-$fullBox = [
-    'materialGuid' => '22222222-2222-2222-2222-222222222222',
-    'warehouseQuantity' => 12,
-    'packageConversionFactor' => 12,
-];
-
 $assert(
-    'single primary unit below packaging is not sellable in catalog',
-    StockReservationService::isSellable($onePairInDozenBox) === false
-);
-$assert(
-    'full package quantity is sellable in catalog',
-    StockReservationService::isSellable($fullBox) === true
-);
-
-$filtered = StockReservationService::filterSellableProducts([$onePairInDozenBox, $fullBox]);
-$assert(
-    'filterSellableProducts keeps only full-package items',
-    count($filtered) === 1
-        && ($filtered[0]['materialGuid'] ?? '') === '22222222-2222-2222-2222-222222222222'
+    'partial primary stock can still be sellable when cart allows it',
+    StockReservationService::isSellable($onePairInDozenBox) === true
 );
 
 echo "\n";

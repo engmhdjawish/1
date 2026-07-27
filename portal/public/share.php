@@ -207,6 +207,9 @@ $queryCountryOrigins = $mergedFilters['countryOfOrigins'] ?? [];
 $queryStoreGuids = $mergedFilters['storeGuids'] ?? [];
 $queryGroupGuids = $mergedFilters['groupGuids'] ?? [];
 $queryIsAvailable = $mergedFilters['isAvailable'] ?? null;
+if ($queryStoreGuids !== [] && $queryIsAvailable === null) {
+    $queryIsAvailable = true;
+}
 $queryHasImage = $mergedFilters['hasImage'] ?? null;
 $queryMinWarehouseQuantity = $mergedFilters['minWarehouseQuantity'] ?? null;
 $queryMaxWarehouseQuantity = $mergedFilters['maxWarehouseQuantity'] ?? null;
@@ -412,8 +415,12 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
 
         if ($materials['ok']) {
             $products = $materials['data']['items'] ?? [];
-            if ($queryIsAvailable !== false && is_array($products)) {
-                $products = \Portal\Services\StockReservationService::filterSellableProducts($products);
+            if ($queryStoreGuids !== [] && is_array($products)) {
+                $products = StoreCatalogService::filterProductsForStoreGuids(
+                    $products,
+                    $queryStoreGuids,
+                    $queryIsAvailable
+                );
             }
             $totalCount = max(0, (int) ($materials['data']['totalCount'] ?? 0));
             $page = max(1, (int) ($materials['data']['page'] ?? $page));

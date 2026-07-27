@@ -269,6 +269,8 @@ final class StoreCatalogService
 
         $cachedCatalog = self::readCatalogCache($query, $policy);
         if ($cachedCatalog !== null) {
+            $cachedCatalog = self::applyPolicyScopeToCachedCatalog($cachedCatalog, $policy, $sectionContext);
+
             return self::attachClientFiltersPayload($cachedCatalog, $query);
         }
 
@@ -308,6 +310,9 @@ final class StoreCatalogService
         if ($forcedPolicyStoreGuids !== [] && ($mergedFilters['storeGuids'] ?? []) === []) {
             $mergedFilters['storeGuids'] = $forcedPolicyStoreGuids;
         }
+        if ($forcedPolicyStoreGuids !== [] && ($mergedFilters['isAvailable'] ?? null) === null) {
+            $mergedFilters['isAvailable'] = true;
+        }
 
         $search = $mergedFilters['search'];
         $materialTypes = $mergedFilters['materialTypes'];
@@ -321,7 +326,7 @@ final class StoreCatalogService
         $hasImage = $mergedFilters['hasImage'];
         $lockedClientFilters = self::lockedClientFilters($policyRules);
         $sellableMode = self::shouldApplySellableStockFilter();
-        $sellableFilter = self::shouldFilterSellableStock($isAvailable);
+        $sellableFilter = self::shouldFilterSellableStock();
         if (($sellableMode || $sellableFilter) && $mergedFilters['minWarehouseQuantity'] === null) {
             $mergedFilters['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
         }
@@ -434,6 +439,11 @@ final class StoreCatalogService
             $apiError = $exception->getMessage();
         }
 
+        $products = self::scopeCatalogProductsForPolicy($products, $policyRules, $isAvailable, $sectionContext, $storeGuids);
+        if ($apiError === null && $products === []) {
+            $totalCount = 0;
+        }
+
         $filterOptions = ['stores' => [], 'groups' => []];
         if ($allowClientFilters && !$deferClientFilters) {
             $filterOptions = self::getCachedFilterOptions();
@@ -527,6 +537,7 @@ final class StoreCatalogService
         if ($apiError !== null && $apiError !== '') {
             $stale = self::readStaleCatalogCache($query, $policy);
             if ($stale !== null) {
+                $stale = self::applyPolicyScopeToCachedCatalog($stale, $policy, $sectionContext);
                 $stale['apiError'] = AmineAvailabilityService::userMessage();
                 $stale['catalog_stale'] = true;
 
@@ -596,6 +607,9 @@ final class StoreCatalogService
         }
 
         $products = self::applySellableStockFilter($products);
+        $policy = self::activePolicy();
+        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
+        $products = self::scopeCatalogProductsForPolicy($products, $policyRules, null, $sectionContext, []);
         $products = self::sortProducts($products, $sort);
         $totalCount = count($products);
         $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
@@ -604,8 +618,6 @@ final class StoreCatalogService
         $products = array_slice($products, $offset, $pageSize);
         $contextOfferSlug = self::contextOfferSlug($sectionContext);
         $sectionRules = is_array($sectionContext['filter_rules'] ?? null) ? $sectionContext['filter_rules'] : [];
-        $policy = self::activePolicy();
-        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
         $baseRules = self::mergeFilterRuleSets($policyRules, $sectionRules);
         $filterOptions = self::getCachedFilterOptions();
         $resultFilters = self::scopeResultFiltersForPolicy(
@@ -670,6 +682,10 @@ final class StoreCatalogService
             return self::emptyCatalogResult($page, $pageSize, 'لا توجد مواد مطابقة لسياسة الوصول والفلاتر المحددة.');
         }
 
+        if (self::parseList($baseRules['store_guids'] ?? []) !== [] && ($merged['isAvailable'] ?? null) === null) {
+            $merged['isAvailable'] = true;
+        }
+
         $rules = self::catalogFiltersToPolicyRules($merged);
         $sort = self::normalizeSort((string) ($requestFilters['sort'] ?? 'number:asc'));
         $contextOfferSlug = self::contextOfferSlug($sectionContext);
@@ -682,7 +698,7 @@ final class StoreCatalogService
         $apiError = null;
         $isAvailable = $merged['isAvailable'] ?? null;
         $sellableMode = self::shouldApplySellableStockFilter();
-        $sellableFilter = self::shouldFilterSellableStock($isAvailable);
+        $sellableFilter = self::shouldFilterSellableStock();
 
         try {
             if ($sellableFilter && !isset($apiQuery['minWarehouseQuantity'])) {
@@ -732,6 +748,14 @@ final class StoreCatalogService
         } catch (\Throwable $exception) {
             $apiError = $exception->getMessage();
         }
+
+        $products = self::scopeCatalogProductsForPolicy(
+            $products,
+            $policyRules,
+            $isAvailable,
+            $sectionContext,
+            self::parseList($merged['storeGuids'] ?? [])
+        );
 
         $filterOptions = self::getCachedFilterOptions();
         $forcedStoreGuids = self::parseList($baseRules['store_guids'] ?? []);
@@ -900,6 +924,7 @@ final class StoreCatalogService
                 $response = ApiClient::get('/api/materials', [
                     'materialGuids' => $guid,
                     'storeGuids' => implode(',', $policyStoreGuids),
+                    'isAvailable' => 'true',
                     'page' => 1,
                     'pageSize' => 1,
                     'includeTotalCount' => 'false',
@@ -961,6 +986,65 @@ final class StoreCatalogService
      * @param list<string> $storeGuids
      * @return list<array<string, mixed>>
      */
+    public static function filterProductsForStoreGuids(array $products, array $storeGuids, ?bool $isAvailable = null): array
+    {
+        if ($storeGuids === []) {
+            return $products;
+        }
+
+        $availabilityMode = $isAvailable === false ? false : true;
+
+        return self::filterProductsByPolicyWarehouse($products, $storeGuids, $availabilityMode);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $products
+     * @return list<array<string, mixed>>
+     */
+    private static function scopeCatalogProductsForPolicy(
+        array $products,
+        array $policyRules,
+        ?bool $isAvailable,
+        ?array $sectionContext,
+        array $mergedStoreGuids
+    ): array {
+        $storeGuids = self::resolvedPolicyStoreGuids($sectionContext);
+        if ($storeGuids === []) {
+            $storeGuids = self::parseList($policyRules['store_guids'] ?? []);
+        }
+        if ($storeGuids === [] && $mergedStoreGuids !== []) {
+            $storeGuids = $mergedStoreGuids;
+        }
+
+        return self::filterProductsForStoreGuids($products, $storeGuids, $isAvailable);
+    }
+
+    /** @param array<string, mixed> $catalog @param array<string, mixed> $policy */
+    private static function applyPolicyScopeToCachedCatalog(array $catalog, array $policy, ?array $sectionContext): array
+    {
+        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
+        $filters = is_array($catalog['filters'] ?? null) ? $catalog['filters'] : [];
+        $isAvailable = array_key_exists('isAvailable', $filters) ? $filters['isAvailable'] : null;
+        $storeGuids = self::parseList($filters['storeGuids'] ?? []);
+        $products = is_array($catalog['products'] ?? null) ? $catalog['products'] : [];
+        $beforeCount = count($products);
+        $scoped = self::scopeCatalogProductsForPolicy($products, $policyRules, $isAvailable, $sectionContext, $storeGuids);
+        $catalog['products'] = $scoped;
+        if ($beforeCount > count($scoped)) {
+            $removed = $beforeCount - count($scoped);
+            $catalog['totalCount'] = max(0, (int) ($catalog['totalCount'] ?? 0) - $removed);
+        }
+
+        return $catalog;
+    }
+
+    /**
+     * Keep only materials that belong to the policy's allowed warehouses.
+     *
+     * @param list<array<string, mixed>> $products
+     * @param list<string> $storeGuids
+     * @return list<array<string, mixed>>
+     */
     private static function filterProductsByPolicyWarehouse(array $products, array $storeGuids, ?bool $isAvailable = null): array
     {
         if ($storeGuids === [] || $products === []) {
@@ -972,7 +1056,7 @@ final class StoreCatalogService
             if (!is_array($product)) {
                 continue;
             }
-            $guid = trim((string) ($product['guid'] ?? $product['Guid'] ?? ''));
+            $guid = trim((string) ($product['guid'] ?? $product['Guid'] ?? $product['materialGuid'] ?? $product['MaterialGuid'] ?? ''));
             if ($guid !== '') {
                 $guids[] = $guid;
             }
@@ -984,7 +1068,7 @@ final class StoreCatalogService
         $allowed = self::fetchAllowedMaterialGuids($guids, $storeGuids, $isAvailable);
 
         return array_values(array_filter($products, static function (array $product) use ($allowed): bool {
-            $guid = strtolower(trim((string) ($product['guid'] ?? $product['Guid'] ?? '')));
+            $guid = strtolower(trim((string) ($product['guid'] ?? $product['Guid'] ?? $product['materialGuid'] ?? $product['MaterialGuid'] ?? '')));
 
             return $guid !== '' && isset($allowed[$guid]);
         }));
@@ -2187,10 +2271,10 @@ final class StoreCatalogService
         return false;
     }
 
-    /** Hide fractional stock from catalog unless the client explicitly browses unavailable items. */
-    private static function shouldFilterSellableStock(?bool $isAvailable = null): bool
+    /** Lightweight sellable filter on a single API page (no multi-page scan). */
+    private static function shouldFilterSellableStock(): bool
     {
-        return $isAvailable !== false;
+        return (bool) (self::displayOptions()['allow_cart'] ?? false);
     }
 
     private static function sellableMinWarehouseQuantity(): float
@@ -2365,9 +2449,11 @@ final class StoreCatalogService
 
         $params = $query;
         unset($params['facetFilters'], $params['loadFilterOptions']);
+        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
+        $params['_policyStoreGuids'] = self::parseList($policyRules['store_guids'] ?? []);
         ksort($params);
 
-        return 'store_catalog_v6:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
+        return 'store_catalog_v7:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
     }
 
     /** @param array<string, mixed> $data */

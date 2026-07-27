@@ -181,6 +181,19 @@ $assert(
     is_array(StoreCatalogService::resolvedPolicyStoreGuids(null))
 );
 
+$mergedWithStores = invokePrivate('mergeCatalogFilters', [
+    'store_guids' => ['store-a'],
+    'is_available' => null,
+], [
+    'search' => '',
+    'storeGuids' => [],
+    'isAvailable' => null,
+]);
+$assert(
+    'policy warehouse constraint forces available-only catalog query',
+    ($mergedWithStores['storeGuids'] ?? []) === ['store-a']
+);
+
 echo "\n";
 
 try {

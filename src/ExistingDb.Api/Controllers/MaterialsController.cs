@@ -141,8 +141,14 @@ public sealed class MaterialsController(
         }
 
         var quantityByMaterial = await GetQuantityByMaterialAsync(materials, filters.StoreGuids, cancellationToken);
+        var selectedStoreGuids = filters.StoreGuids;
         var items = materials
-            .Select(material => ToResponse(material, fieldAccess, quantityByMaterial.GetValueOrDefault(material.Guid, material.Qty)))
+            .Select(material => ToResponse(
+                material,
+                fieldAccess,
+                selectedStoreGuids.Count > 0
+                    ? quantityByMaterial.GetValueOrDefault(material.Guid, 0)
+                    : quantityByMaterial.GetValueOrDefault(material.Guid, material.Qty)))
             .ToArray();
 
         MaterialAppliedFiltersResponse? appliedFilters = null;
