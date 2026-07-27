@@ -53,18 +53,22 @@
   }
 
   .store-mobile-filter-bar {
-    position: fixed;
+    position: fixed !important;
     top: calc(var(--site-header-sticky-offset, 8.75rem) + var(--store-mobile-filter-bar-gap, 2px));
     left: 0;
     right: 0;
     z-index: 39;
-    margin: 0;
+    margin: 0 !important;
     padding: 0.55rem max(1rem, env(safe-area-inset-right)) 0.65rem max(1rem, env(safe-area-inset-left));
     background: rgba(246, 246, 248, 0.97);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid #e2e8f0;
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  }
+
+  body > .store-mobile-filter-bar {
+    display: flex;
   }
 
   .store-mobile-filter-bar-inner {

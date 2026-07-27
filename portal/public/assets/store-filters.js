@@ -1154,6 +1154,22 @@ window.portalStoreFiltersInit = (root = document) => {
   scheduleDeferredFilters();
   setupExclusiveFilterAccordions();
   refreshPendingFilterChips();
+
+  // Move the fixed bar to <body> so it is not trapped by transformed/filtered
+  // ancestors inside the catalog grid (otherwise it scrolls away with content).
+  const mobileBar = filtersRoot.querySelector('[data-store-mobile-filter-bar]');
+  if (mobileBar) {
+    document.querySelectorAll('body > [data-store-mobile-filter-bar]').forEach((el) => {
+      if (el !== mobileBar) {
+        el.remove();
+      }
+    });
+    if (mobileBar.parentElement !== document.body) {
+      document.body.appendChild(mobileBar);
+    }
+    mobileBar.setAttribute('data-portaled', '1');
+    syncStickyOffsetsSoon();
+  }
 };
 
 if (document.readyState === 'loading') {
