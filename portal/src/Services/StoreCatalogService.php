@@ -2686,8 +2686,6 @@ final class StoreCatalogService
         array $policyRules,
         array $requestFilters
     ): array {
-        unset($query);
-
         $independentFilters = self::buildIndependentDisplayFacetFilters($baseRules, $requestFilters);
         if ($independentFilters['has_conflict'] ?? false) {
             return [];

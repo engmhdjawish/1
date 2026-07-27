@@ -141,6 +141,24 @@ $assert(
         && ($displayFacetRules['storeGuids'] ?? []) === ['store-a']
 );
 
+$independentFacetRules = invokePrivate('buildIndependentDisplayFacetFilters', [
+    'store_guids' => ['store-a'],
+    'manufacturers' => ['PolicyCo'],
+], [
+    'search' => 'shirt',
+    'manufacturers' => ['UserCo'],
+    'materialTypes' => ['TypeA'],
+    'isAvailable' => null,
+]);
+$assert(
+    'display facets ignore client search and facet selections',
+    ($independentFacetRules['search'] ?? null) === ''
+        && ($independentFacetRules['manufacturers'] ?? []) === ['PolicyCo']
+        && ($independentFacetRules['materialTypes'] ?? []) === []
+        && ($independentFacetRules['storeGuids'] ?? []) === ['store-a']
+        && ($independentFacetRules['isAvailable'] ?? null) === true
+);
+
 $locked = invokePrivate('lockedPolicyClientFilters', [
     'store_guids' => ['store-a'],
     'group_guids' => ['group-a'],
