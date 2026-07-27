@@ -84,6 +84,9 @@ $renderStoreFilterGroup = static function (
       >
     <?php endif; ?>
     <div class="store-filter-options store-filter-options--pills" data-filter-list="<?= h($groupId) ?>" data-initial-visible="<?= (int) $initialVisible ?>">
+      <?php if ($normalized === []): ?>
+        <p class="store-filter-loading" data-filter-loading="<?= h($groupId) ?>">جاري تحميل الخيارات...</p>
+      <?php endif; ?>
       <?php foreach ($normalized as $index => $item): ?>
         <?php
           $isChecked = in_array($item['value'], $selectedValues, true);

@@ -10,6 +10,73 @@ final class ApiClient
 {
     private const TOKEN_FILE = 'amine-api-token.json';
 
+    /**
+     * Build a query string without turning CSV GUID lists into a single unparsable value.
+     *
+     * PHP http_build_query() encodes commas as %2C. Some API hosts / proxies then fail to
+     * decode before splitting, so storeGuids=a,b becomes one invalid token and StoreGuids
+     * parses empty — falling back to total material.Qty (warehouse leak).
+     *
+     * @param array<string, scalar|null> $query
+     */
+    public static function buildQueryString(array $query): string
+    {
+        $parts = [];
+        foreach ($query as $key => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+            if (is_bool($value)) {
+                $value = $value ? 'true' : 'false';
+            }
+
+            $keyString = (string) $key;
+            $valueString = is_scalar($value) ? (string) $value : '';
+            if ($valueString === '') {
+                continue;
+            }
+
+            if (self::isCsvGuidList($valueString)) {
+                $encodedGuids = [];
+                foreach (preg_split('/\s*,\s*/', $valueString) ?: [] as $guid) {
+                    $guid = trim((string) $guid);
+                    if ($guid === '') {
+                        continue;
+                    }
+                    $encodedGuids[] = rawurlencode($guid);
+                }
+                if ($encodedGuids === []) {
+                    continue;
+                }
+                $parts[] = rawurlencode($keyString) . '=' . implode(',', $encodedGuids);
+                continue;
+            }
+
+            $parts[] = rawurlencode($keyString) . '=' . rawurlencode($valueString);
+        }
+
+        return implode('&', $parts);
+    }
+
+    private static function isCsvGuidList(string $value): bool
+    {
+        if (!str_contains($value, ',')) {
+            return false;
+        }
+
+        foreach (preg_split('/\s*,\s*/', $value) ?: [] as $part) {
+            $part = trim((string) $part);
+            if ($part === '') {
+                continue;
+            }
+            if (!preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $part)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public static function delete(string $path): array
     {
         return self::request('DELETE', $path);
@@ -50,7 +117,7 @@ final class ApiClient
             $query = is_array($request['query'] ?? null) ? $request['query'] : [];
             $url = $base . $path;
             if ($query !== []) {
-                $url .= '?' . http_build_query($query);
+                $url .= '?' . self::buildQueryString($query);
             }
 
             $ch = curl_init($url);
@@ -183,7 +250,7 @@ final class ApiClient
         $base = rtrim(Config::get('AMINE_API_BASE_URL', 'http://127.0.0.1:5000') ?? '', '/');
         $url = $base . $path;
         if ($query !== []) {
-            $url .= '?' . http_build_query($query);
+            $url .= '?' . self::buildQueryString($query);
         }
 
         $token = self::accessToken();
@@ -231,7 +298,7 @@ final class ApiClient
         $base = rtrim(Config::get('AMINE_API_BASE_URL', 'http://127.0.0.1:5000') ?? '', '/');
         $url = $base . $path;
         if ($query !== []) {
-            $url .= '?' . http_build_query($query);
+            $url .= '?' . self::buildQueryString($query);
         }
 
         $token = self::accessToken();
@@ -299,7 +366,7 @@ final class ApiClient
         $base = rtrim(Config::get('AMINE_API_BASE_URL', 'http://127.0.0.1:5000') ?? '', '/');
         $url = $base . $path;
         if ($query !== []) {
-            $url .= '?' . http_build_query($query);
+            $url .= '?' . self::buildQueryString($query);
         }
 
         $token = self::accessToken();
@@ -375,7 +442,7 @@ final class ApiClient
         $base = rtrim(Config::get('AMINE_API_BASE_URL', 'http://127.0.0.1:5000') ?? '', '/');
         $url = $base . $path;
         if ($query !== []) {
-            $url .= '?' . http_build_query($query);
+            $url .= '?' . self::buildQueryString($query);
         }
 
         $token = self::accessToken();

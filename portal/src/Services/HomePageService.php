@@ -132,6 +132,8 @@ final class HomePageService
         $filterJobKeyBySectionIndex = [];
         $queryKeyToJobKey = [];
 
+        $policyStoreGuids = StoreCatalogService::resolvedPolicyStoreGuids(null);
+
         foreach ($sections as $index => $section) {
             $maxProducts = max(1, (int) ($section['max_products'] ?? 12));
             $isOffer = !empty($section['is_offer_section']);
@@ -153,6 +155,7 @@ final class HomePageService
             }
 
             $rules = is_array($section['filter_rules'] ?? null) ? $section['filter_rules'] : [];
+            $rules = StoreCatalogService::mergePolicyFilterRules($rules);
             $poolSize = min(36, max($maxProducts * 2, $maxProducts + 6));
             $query = $isOffer
                 ? SpecialOfferService::materialsListQuery($rules, $poolSize)
@@ -181,7 +184,7 @@ final class HomePageService
             ];
         }
 
-        $materialsByGuid = MaterialBatchService::fetchByGuids(array_keys($manualGuids), 25);
+        $materialsByGuid = MaterialBatchService::fetchByGuids(array_keys($manualGuids), 25, $policyStoreGuids);
 
         $filterResponses = [];
         if ($filterJobs !== []) {
@@ -219,6 +222,10 @@ final class HomePageService
                 $items = $response['data']['items'];
             }
 
+            if ($policyStoreGuids !== []) {
+                $items = StoreCatalogService::filterProductsForStoreGuids($items, $policyStoreGuids, true);
+            }
+
             if (!$isOffer) {
                 $items = StockReservationService::filterSellableProducts($items);
             }
@@ -239,7 +246,7 @@ final class HomePageService
 
     private static function productStripsCacheKey(): string
     {
-        return 'home_product_strips_v2:' . self::cacheKey();
+        return 'home_product_strips_v3:' . self::cacheKey();
     }
 
     /** @param array<string, mixed> $rules */
@@ -269,6 +276,14 @@ final class HomePageService
              ORDER BY id'
         )->fetchAll(\PDO::FETCH_ASSOC);
 
-        return hash('sha256', json_encode(['home' => $home, 'offers' => $offers], JSON_UNESCAPED_UNICODE));
+        $policy = StoreCatalogService::activePolicy();
+        $policyFingerprint = is_array($policy)
+            ? [
+                'id' => (string) ($policy['id'] ?? ''),
+                'store_guids' => StoreCatalogService::resolvedPolicyStoreGuids(null),
+            ]
+            : null;
+
+        return hash('sha256', json_encode(['home' => $home, 'offers' => $offers, 'policy' => $policyFingerprint], JSON_UNESCAPED_UNICODE));
     }
 }

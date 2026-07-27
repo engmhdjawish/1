@@ -192,10 +192,4 @@
       });
     });
   }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => window.portalMaterialZipDownloadInit(document));
-  } else {
-    window.portalMaterialZipDownloadInit(document);
-  }
 })();

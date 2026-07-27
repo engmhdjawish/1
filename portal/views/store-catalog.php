@@ -441,6 +441,20 @@ if ($sectionContext !== null) {
 require __DIR__ . '/partials/store-filter-group.php';
 
 $renderEmptyFilterGroups = $filtersDeferred || $shareContext !== null;
+$clientFiltersPayload = is_array($catalog['client_filters_payload'] ?? null) ? $catalog['client_filters_payload'] : null;
+$appliedClientFilters = [
+    'materialTypes' => array_values($selectedMaterialTypes),
+    'ageCategories' => array_values($selectedAgeCategories),
+    'manufacturers' => array_values($selectedManufacturers),
+    'sizeRanges' => array_values($selectedSizeRanges),
+    'countryOfOrigins' => array_values($selectedCountryOrigins),
+    'storeGuids' => array_values($selectedStoreGuids),
+    'groupGuids' => array_values($selectedGroupGuids),
+];
+$appliedClientFiltersJson = json_encode(
+    $appliedClientFilters,
+    JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+);
 ?>
 
 <?php if ($sectionContext !== null): ?>
@@ -512,12 +526,34 @@ $renderEmptyFilterGroups = $filtersDeferred || $shareContext !== null;
   </p>
 <?php endif; ?>
 
+<?php if (trim((string) ($_GET['whDebug'] ?? '')) === '1'): ?>
+  <?php
+    $debugPolicyStores = is_array($catalog['policy_store_guids'] ?? null) ? $catalog['policy_store_guids'] : [];
+    $debugAppliedStores = is_array($catalog['policy_store_guids_applied'] ?? null) ? $catalog['policy_store_guids_applied'] : [];
+    $debugSampleQty = null;
+    if ($products !== []) {
+        $debugSampleQty = $products[0]['warehouseQuantity'] ?? $products[0]['WarehouseQuantity'] ?? null;
+    }
+  ?>
+  <div class="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs text-sky-950 font-mono" dir="ltr">
+    <div>policy_store_guids: <?= (int) count($debugPolicyStores) ?></div>
+    <div>applied_store_guids: <?= (int) count($debugAppliedStores) ?></div>
+    <div>products: <?= (int) count($products) ?> / totalCount=<?= (int) ($catalog['totalCount'] ?? 0) ?></div>
+    <div>sample warehouseQuantity: <?= $debugSampleQty === null ? 'n/a' : h((string) $debugSampleQty) ?></div>
+    <?php if ($debugAppliedStores !== []): ?>
+      <div class="mt-1 break-all"><?= h(implode(', ', $debugAppliedStores)) ?></div>
+    <?php else: ?>
+      <div class="mt-1 text-red-700">WARNING: no storeGuids applied — catalog is not warehouse-scoped</div>
+    <?php endif; ?>
+  </div>
+<?php endif; ?>
+
 <?php if ($cartNoticeMessage !== ''): ?>
   <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $cartNoticeOk ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700' ?>"><?= h($cartNoticeMessage) ?></p>
 <?php endif; ?>
 
 <!-- store-catalog-fragment:start -->
-<div class="store-layout <?= $allowClientFilters ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?>>
+<div class="store-layout <?= $allowClientFilters ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?><?= $allowClientFilters ? ' data-applied-filters="' . h((string) $appliedClientFiltersJson) . '"' : '' ?>>
   <?php if ($allowClientFilters): ?>
     <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
       <aside class="store-filters-sidebar">
@@ -599,7 +635,7 @@ $renderEmptyFilterGroups = $filtersDeferred || $shareContext !== null;
                         ];
                     }
                 }
-                if ($groupOptions === [] && $renderEmptyFilterGroups && ($facetConfig['selected'] ?? []) !== []) {
+                if (!$filtersDeferred && $groupOptions === [] && $renderEmptyFilterGroups && ($facetConfig['selected'] ?? []) !== []) {
                     foreach ((array) $facetConfig['selected'] as $selectedValue) {
                         $selectedValue = trim((string) $selectedValue);
                         if ($selectedValue === '') {
@@ -773,6 +809,13 @@ $renderEmptyFilterGroups = $filtersDeferred || $shareContext !== null;
             <?php endif; ?>
 
           </div>
+          <?php if ($clientFiltersPayload !== null): ?>
+            <script type="application/json" id="store-filters-bootstrap"><?= json_encode([
+                'ok' => true,
+                'filterOptions' => $clientFiltersPayload['filterOptions'] ?? [],
+                'resultFilters' => $clientFiltersPayload['resultFilters'] ?? [],
+            ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+          <?php endif; ?>
 
           <div class="store-filters-drawer-footer store-filter-actions">
             <button type="submit" class="store-btn-primary" id="store-filters-submit" data-label-default="عرض النتائج">عرض النتائج</button>

@@ -576,15 +576,16 @@ window.portalStoreFiltersInit = (root = document) => {
     );
   };
 
-  const renderStringFacetOptions = (groupId, paramName, facets) => {
+  const renderStringFacetOptions = (groupId, paramName, facets, replace = false) => {
     const list = filtersRoot.querySelector(`[data-filter-list="${groupId}"]`);
-    if (!list || list.querySelectorAll('.store-filter-option').length > 0) {
+    if (!list) {
+      return;
+    }
+    if (!replace && list.querySelectorAll('.store-filter-option').length > 0) {
       return;
     }
 
-    const selected = new Set(
-      Array.from(filtersRoot.querySelectorAll(`input[name="${paramName}[]"]:checked`)).map((el) => el.value)
-    );
+    const selected = new Set(readSelectedFilterValues(`${paramName}[]`));
     const rows = (facets || []).map((facet) => {
       const value = String(facet?.value || '').trim();
       if (!value) {
@@ -602,18 +603,22 @@ window.portalStoreFiltersInit = (root = document) => {
       return;
     }
     list.innerHTML = rows;
+    list.querySelector(`[data-filter-loading="${groupId}"]`)?.remove();
     ensureFilterGroupControls(groupId, (facets || []).filter((facet) => String(facet?.value || '').trim() !== '').length);
     list.classList.add('store-filter-options--pills');
   };
 
-  const renderGuidFacetOptions = (groupId, paramName, items) => {
+  const renderGuidFacetOptions = (groupId, paramName, items, replace = false) => {
     const list = filtersRoot.querySelector(`[data-filter-list="${groupId}"]`);
-    if (!list || list.querySelectorAll('.store-filter-option').length > 0) {
+    if (!list) {
+      return;
+    }
+    if (!replace && list.querySelectorAll('.store-filter-option').length > 0) {
       return;
     }
 
     const selected = new Set(
-      Array.from(filtersRoot.querySelectorAll(`input[name="${paramName}[]"]:checked`)).map((el) => el.value.toLowerCase())
+      readSelectedFilterValues(`${paramName}[]`).map((value) => value.toLowerCase())
     );
     const rows = (items || []).map((item) => {
       const value = String(item?.guid || item?.Guid || '').trim();
@@ -633,8 +638,258 @@ window.portalStoreFiltersInit = (root = document) => {
       return;
     }
     list.innerHTML = rows;
+    list.querySelector(`[data-filter-loading="${groupId}"]`)?.remove();
     ensureFilterGroupControls(groupId, (items || []).filter((item) => String(item?.guid || item?.Guid || '').trim() !== '').length);
     list.classList.add('store-filter-options--pills');
+  };
+
+  const mergeStringFacets = (globalValues, scopedFacets, selectedValues, includeZeroCountOptions) => {
+    const countByValue = new Map();
+    (scopedFacets || []).forEach((facet) => {
+      const value = String(facet?.value || '').trim();
+      if (!value) {
+        return;
+      }
+      countByValue.set(value.toLowerCase(), facet?.count ?? null);
+    });
+
+    const merged = [];
+    const seen = new Set();
+    const append = (value, count) => {
+      const normalized = String(value || '').trim();
+      if (!normalized) {
+        return;
+      }
+      const key = normalized.toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      merged.push({ value: normalized, count });
+    };
+
+    if (includeZeroCountOptions) {
+      (globalValues || []).forEach((value) => {
+        const normalized = String(value || '').trim();
+        if (!normalized) {
+          return;
+        }
+        const key = normalized.toLowerCase();
+        append(normalized, countByValue.has(key) ? countByValue.get(key) : 0);
+      });
+      (scopedFacets || []).forEach((facet) => {
+        append(facet?.value, facet?.count ?? null);
+      });
+    } else {
+      if ((globalValues || []).length > 0) {
+        (globalValues || []).forEach((value) => {
+          const normalized = String(value || '').trim();
+          if (!normalized) {
+            return;
+          }
+          const key = normalized.toLowerCase();
+          if (!countByValue.has(key)) {
+            return;
+          }
+          const count = countByValue.get(key);
+          if (count !== null && Number(count) <= 0) {
+            return;
+          }
+          append(normalized, count);
+        });
+      } else {
+        (scopedFacets || []).forEach((facet) => {
+          const count = facet?.count ?? null;
+          if (count !== null && Number(count) <= 0) {
+            return;
+          }
+          append(facet?.value, count);
+        });
+      }
+    }
+
+    (selectedValues || []).forEach((value) => {
+      const normalized = String(value || '').trim();
+      if (!normalized) {
+        return;
+      }
+      const key = normalized.toLowerCase();
+      append(normalized, countByValue.has(key) ? countByValue.get(key) : 0);
+    });
+
+    return merged;
+  };
+
+  const mergeGroupFacets = (globalGroups, scopedFacets, selectedGuids, includeZeroCountOptions) => {
+    const countByGuid = new Map();
+    const scopedByGuid = new Map();
+    (scopedFacets || []).forEach((facet) => {
+      const guid = String(facet?.guid || facet?.Guid || '').trim();
+      if (!guid) {
+        return;
+      }
+      const key = guid.toLowerCase();
+      countByGuid.set(key, facet?.count ?? null);
+      scopedByGuid.set(key, facet);
+    });
+
+    const globalByGuid = new Map();
+    (globalGroups || []).forEach((group) => {
+      const guid = String(group?.guid || group?.Guid || '').trim();
+      if (!guid) {
+        return;
+      }
+      globalByGuid.set(guid.toLowerCase(), group);
+    });
+
+    const merged = [];
+    const seen = new Set();
+    const appendGroup = (guid, row) => {
+      const normalized = String(guid || '').trim();
+      if (!normalized) {
+        return;
+      }
+      const key = normalized.toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      merged.push(row);
+    };
+
+    if (includeZeroCountOptions) {
+      (globalGroups || []).forEach((group) => {
+        const guid = String(group?.guid || group?.Guid || '').trim();
+        if (!guid) {
+          return;
+        }
+        const key = guid.toLowerCase();
+        appendGroup(guid, {
+          guid,
+          code: String(group?.code || group?.Code || ''),
+          name: String(group?.name || group?.Name || ''),
+          count: countByGuid.has(key) ? countByGuid.get(key) : 0,
+        });
+      });
+      (scopedFacets || []).forEach((facet) => {
+        const guid = String(facet?.guid || facet?.Guid || '').trim();
+        if (!guid) {
+          return;
+        }
+        appendGroup(guid, {
+          guid,
+          code: String(facet?.code || facet?.Code || ''),
+          name: String(facet?.name || facet?.Name || ''),
+          count: facet?.count ?? null,
+        });
+      });
+    } else if ((globalGroups || []).length > 0) {
+      (globalGroups || []).forEach((group) => {
+        const guid = String(group?.guid || group?.Guid || '').trim();
+        if (!guid) {
+          return;
+        }
+        const key = guid.toLowerCase();
+        if (!countByGuid.has(key)) {
+          return;
+        }
+        const count = countByGuid.get(key);
+        if (count !== null && Number(count) <= 0) {
+          return;
+        }
+        appendGroup(guid, {
+          guid,
+          code: String(group?.code || group?.Code || ''),
+          name: String(group?.name || group?.Name || ''),
+          count,
+        });
+      });
+    } else {
+      (scopedFacets || []).forEach((facet) => {
+        const count = facet?.count ?? null;
+        if (count !== null && Number(count) <= 0) {
+          return;
+        }
+        const guid = String(facet?.guid || facet?.Guid || '').trim();
+        if (!guid) {
+          return;
+        }
+        appendGroup(guid, {
+          guid,
+          code: String(facet?.code || facet?.Code || ''),
+          name: String(facet?.name || facet?.Name || ''),
+          count,
+        });
+      });
+    }
+
+    (selectedGuids || []).forEach((guid) => {
+      const normalized = String(guid || '').trim();
+      if (!normalized) {
+        return;
+      }
+      const key = normalized.toLowerCase();
+      const source = scopedByGuid.get(key) || globalByGuid.get(key) || {};
+      appendGroup(normalized, {
+        guid: normalized,
+        code: String(source?.code || source?.Code || ''),
+        name: String(source?.name || source?.Name || ''),
+        count: countByGuid.has(key) ? countByGuid.get(key) : 0,
+      });
+    });
+
+    return merged;
+  };
+
+  const readAppliedFiltersState = () => {
+    const raw = filtersRoot.getAttribute('data-applied-filters');
+    if (!raw) {
+      return {};
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const readUrlFilterValues = (paramName) => {
+    const params = new URLSearchParams(window.location.search || '');
+    const values = [];
+    params.forEach((value, key) => {
+      if (key === `${paramName}[]` || key === paramName) {
+        const normalized = String(value || '').trim();
+        if (normalized !== '') {
+          values.push(normalized);
+        }
+      }
+    });
+
+    return values;
+  };
+
+  const readSelectedFilterValues = (inputName) => {
+    const paramName = String(inputName || '').replace(/\[\]$/, '');
+    const checked = Array.from(
+      filtersRoot.querySelectorAll(`input[name="${inputName}"]:checked`)
+    ).map((el) => el.value).filter((value) => String(value || '').trim() !== '');
+    if (checked.length > 0) {
+      return checked;
+    }
+
+    const applied = readAppliedFiltersState();
+    const fromApplied = applied[paramName];
+    if (Array.isArray(fromApplied) && fromApplied.length > 0) {
+      return fromApplied.map((value) => String(value)).filter((value) => value.trim() !== '');
+    }
+
+    return readUrlFilterValues(paramName);
+  };
+
+  const shouldIncludeZeroCountFilterOptions = () => {
+    const availability = filterForm?.querySelector('input[name="isAvailable"]:checked')?.value;
+    return availability === '0';
   };
 
   const applyDeferredFilters = (data) => {
@@ -644,6 +899,7 @@ window.portalStoreFiltersInit = (root = document) => {
 
     const resultFilters = data.resultFilters || {};
     const filterOptions = data.filterOptions || {};
+    const includeZeroCountOptions = shouldIncludeZeroCountFilterOptions();
     const facetMap = [
       ['materialTypes', 'materialTypes'],
       ['ageCategories', 'ageCategories'],
@@ -653,17 +909,83 @@ window.portalStoreFiltersInit = (root = document) => {
     ];
 
     facetMap.forEach(([groupId, paramName]) => {
-      renderStringFacetOptions(groupId, paramName, resultFilters[groupId] || []);
+      const scoped = resultFilters[groupId] || [];
+      const global = Array.isArray(filterOptions[groupId]) ? filterOptions[groupId] : [];
+      const selected = readSelectedFilterValues(`${paramName}[]`);
+      renderStringFacetOptions(
+        groupId,
+        paramName,
+        mergeStringFacets(global, scoped, selected, includeZeroCountOptions),
+        true
+      );
     });
 
-    const groupFacets = Array.isArray(resultFilters.groups) ? resultFilters.groups : [];
-    renderGuidFacetOptions('groups', 'groupGuids', groupFacets);
-    renderGuidFacetOptions('stores', 'storeGuids', filterOptions.stores || []);
+    const groupFacets = mergeGroupFacets(
+      filterOptions.groups || [],
+      resultFilters.groups || [],
+      readSelectedFilterValues('groupGuids[]'),
+      includeZeroCountOptions
+    );
+    renderGuidFacetOptions('groups', 'groupGuids', groupFacets, true);
+    renderGuidFacetOptions('stores', 'storeGuids', filterOptions.stores || [], true);
 
     filtersRoot.dataset.storeFiltersLoaded = '1';
     filtersRoot.removeAttribute('data-store-filters-deferred');
     refreshPendingFilterChips();
     bindFilterLists();
+    syncAccordionSelectionBadges();
+  };
+
+  const syncAccordionSelectionBadges = () => {
+    Object.entries(FILTER_GROUP_META).forEach(([groupId, meta]) => {
+      const accordion = filtersRoot.querySelector(`[data-filter-group="${groupId}"]`);
+      if (!accordion) {
+        return;
+      }
+      const summary = accordion.querySelector('.store-filter-accordion-summary')
+        || accordion.querySelector('.store-filter-chip-section-head');
+      if (!summary) {
+        return;
+      }
+      const selectedCount = readSelectedFilterValues(`${meta.param}[]`).length;
+      let badge = summary.querySelector('.store-filter-accordion-badge');
+      if (selectedCount <= 0) {
+        badge?.remove();
+        return;
+      }
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'store-filter-accordion-badge';
+        summary.appendChild(badge);
+      }
+      badge.textContent = String(selectedCount);
+    });
+  };
+
+  const buildFilterOptionsQuery = () => {
+    const current = new URLSearchParams(window.location.search || '');
+    const minimal = new URLSearchParams();
+    ['section', 'offer', 'isAvailable', 'token'].forEach((key) => {
+      const value = current.get(key);
+      if (value !== null && value !== '') {
+        minimal.set(key, value);
+      }
+    });
+    const query = minimal.toString();
+    return query ? `?${query}` : '';
+  };
+
+  const readEmbeddedFiltersPayload = () => {
+    const node = document.getElementById('store-filters-bootstrap');
+    if (!node) {
+      return null;
+    }
+    try {
+      const data = JSON.parse(node.textContent || '');
+      return data?.ok ? data : null;
+    } catch {
+      return null;
+    }
   };
 
   const loadDeferredFilters = () => {
@@ -674,8 +996,13 @@ window.portalStoreFiltersInit = (root = document) => {
       return deferredFiltersPromise;
     }
 
-    const queryString = window.location.search || '';
-    deferredFiltersPromise = fetch(`/api/store-filter-options.php${queryString}`, {
+    const embedded = readEmbeddedFiltersPayload();
+    if (embedded) {
+      applyDeferredFilters(embedded);
+      return Promise.resolve();
+    }
+
+    deferredFiltersPromise = fetch(`/api/store-filter-options.php${buildFilterOptionsQuery()}`, {
       credentials: 'same-origin',
       headers: { Accept: 'application/json' },
     })

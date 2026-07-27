@@ -71,6 +71,151 @@ $assert(
     invokePrivate('requestWantsInlineResultFilters', [], ['search' => '']) === false
 );
 
+$mergedFilters = invokePrivate('mergeDisplayResultFilters', [
+    'materialTypes' => ['Alpha', 'Beta', 'Gamma'],
+    'groups' => [
+        ['guid' => 'g1', 'name' => 'Group 1', 'code' => 'G1'],
+        ['guid' => 'g2', 'name' => 'Group 2', 'code' => 'G2'],
+    ],
+], [
+    'materialTypes' => [
+        ['value' => 'Alpha', 'count' => 4],
+        ['value' => 'Beta', 'count' => 0],
+    ],
+    'groups' => [
+        ['guid' => 'g1', 'name' => 'Group 1', 'code' => 'G1', 'count' => 2],
+    ],
+], [
+    'materialTypes' => ['Gamma'],
+], false);
+$assert(
+    'available-only merge keeps positive-count and selected facets',
+    is_array($mergedFilters['materialTypes'] ?? null)
+        && count($mergedFilters['materialTypes']) === 2
+        && ($mergedFilters['materialTypes'][0]['value'] ?? '') === 'Alpha'
+);
+$assert(
+    'available-only merge drops zero-count facets that are not selected',
+    !array_filter(
+        is_array($mergedFilters['materialTypes'] ?? null) ? $mergedFilters['materialTypes'] : [],
+        static fn (array $facet): bool => ($facet['value'] ?? '') === 'Beta'
+    )
+);
+$assert(
+    'available-only merge keeps selected zero-count facet',
+    array_filter(
+        is_array($mergedFilters['materialTypes'] ?? null) ? $mergedFilters['materialTypes'] : [],
+        static fn (array $facet): bool => ($facet['value'] ?? '') === 'Gamma'
+    ) !== []
+);
+
+$allFilters = invokePrivate('mergeDisplayResultFilters', [
+    'materialTypes' => ['Alpha', 'Beta'],
+], [
+    'materialTypes' => [
+        ['value' => 'Alpha', 'count' => 0],
+    ],
+], [], true);
+$assert(
+    'unavailable merge includes all global facets',
+    is_array($allFilters['materialTypes'] ?? null) && count($allFilters['materialTypes']) === 2
+);
+
+$assert(
+    'unavailable availability includes zero-count options',
+    invokePrivate('shouldIncludeZeroCountFilterOptions', [false]) === true
+);
+$assert(
+    'available/default availability hides zero-count options',
+    invokePrivate('shouldIncludeZeroCountFilterOptions', [true]) === false
+        && invokePrivate('shouldIncludeZeroCountFilterOptions', [null]) === false
+);
+
+$displayFacetRules = invokePrivate('mergedFiltersForDisplayFacets', [
+    'isAvailable' => null,
+    'storeGuids' => ['store-a'],
+]);
+$assert(
+    'display facets default to available stock',
+    ($displayFacetRules['isAvailable'] ?? null) === true
+        && ($displayFacetRules['storeGuids'] ?? []) === ['store-a']
+);
+
+$independentFacetRules = invokePrivate('buildIndependentDisplayFacetFilters', [
+    'store_guids' => ['store-a'],
+    'manufacturers' => ['PolicyCo'],
+], [
+    'search' => 'shirt',
+    'manufacturers' => ['UserCo'],
+    'materialTypes' => ['TypeA'],
+    'isAvailable' => null,
+]);
+$assert(
+    'display facets ignore client search and facet selections',
+    ($independentFacetRules['search'] ?? null) === ''
+        && ($independentFacetRules['manufacturers'] ?? []) === ['PolicyCo']
+        && ($independentFacetRules['materialTypes'] ?? []) === []
+        && ($independentFacetRules['storeGuids'] ?? []) === ['store-a']
+        && ($independentFacetRules['isAvailable'] ?? null) === true
+);
+
+$locked = invokePrivate('lockedPolicyClientFilters', [
+    'store_guids' => ['store-a'],
+    'group_guids' => ['group-a'],
+]);
+$assert('policy store_guids lock stores filter', in_array('stores', $locked, true));
+$assert('policy group_guids lock groups filter', in_array('groups', $locked, true));
+
+$policyStoreMerge = invokePrivate('mergeFilterRuleSets', [
+    'store_guids' => ['store-a', 'store-b'],
+], [
+    'store_guids' => ['store-b', 'store-c'],
+]);
+$assert(
+    'policy store intersection keeps only shared warehouses',
+    ($policyStoreMerge['store_guids'] ?? []) === ['store-b']
+);
+
+$assert(
+    'resolvedPolicyStoreGuids returns empty list without active policy context in unit scope',
+    is_array(StoreCatalogService::resolvedPolicyStoreGuids(null))
+);
+
+$mergedWithStores = invokePrivate('mergeCatalogFilters', [
+    'store_guids' => ['store-a'],
+    'is_available' => null,
+], [
+    'search' => '',
+    'storeGuids' => [],
+    'isAvailable' => null,
+]);
+$assert(
+    'policy warehouse constraint forces available-only catalog query',
+    ($mergedWithStores['storeGuids'] ?? []) === ['store-a']
+);
+
+$qtyFiltered = StoreCatalogService::filterProductsForStoreGuids([
+    ['guid' => 'm1', 'warehouseQuantity' => 2],
+    ['guid' => 'm2', 'warehouseQuantity' => 0],
+    ['guid' => 'm3', 'WarehouseQuantity' => 1.5],
+    ['guid' => 'm4'],
+], ['store-a'], true);
+$assert(
+    'local warehouse filter keeps only positive scoped quantities',
+    count($qtyFiltered) === 2
+        && ($qtyFiltered[0]['guid'] ?? '') === 'm1'
+        && ($qtyFiltered[1]['guid'] ?? '') === 'm3'
+);
+
+$assert(
+    'local warehouse filter is a no-op without store guids',
+    count(StoreCatalogService::filterProductsForStoreGuids([
+        ['guid' => 'm1', 'warehouseQuantity' => 0],
+    ], [], true)) === 1
+);
+
+echo "\n";
+
 try {
     $guest = \Portal\Services\StorePolicyService::guestPolicy();
     if ($guest === null) {

@@ -37,31 +37,14 @@ internal static class MaterialStoreInventoryQuery
             return query;
         }
 
-        var needsQuantityAggregate = isAvailable is not null
-            || minWarehouseQuantity is not null
-            || maxWarehouseQuantity is not null;
-
-        if (!needsQuantityAggregate)
-        {
-            return query.Where(material => mainDbContext.MaterialInventory.Any(inventory =>
-                inventory.MaterialGuid == material.Guid
-                && inventory.StoreGuid.HasValue
-                && selectedStoreGuids.Contains(inventory.StoreGuid.Value)));
-        }
-
-        if (isAvailable is true)
+        if (isAvailable is false)
         {
             query = query.Where(material =>
-                (mainDbContext.MaterialInventory
-                    .Where(inventory => inventory.MaterialGuid == material.Guid
-                        && inventory.StoreGuid.HasValue
-                        && selectedStoreGuids.Contains(inventory.StoreGuid.Value))
-                    .Sum(inventory => (double?)(inventory.Qty ?? 0)) ?? 0) > 0);
-        }
-        else if (isAvailable is false)
-        {
-            query = query.Where(material =>
-                (mainDbContext.MaterialInventory
+                mainDbContext.MaterialInventory.Any(inventory =>
+                    inventory.MaterialGuid == material.Guid
+                    && inventory.StoreGuid.HasValue
+                    && selectedStoreGuids.Contains(inventory.StoreGuid.Value))
+                && (mainDbContext.MaterialInventory
                     .Where(inventory => inventory.MaterialGuid == material.Guid
                         && inventory.StoreGuid.HasValue
                         && selectedStoreGuids.Contains(inventory.StoreGuid.Value))
@@ -69,10 +52,16 @@ internal static class MaterialStoreInventoryQuery
         }
         else
         {
-            query = query.Where(material => mainDbContext.MaterialInventory.Any(inventory =>
-                inventory.MaterialGuid == material.Guid
-                && inventory.StoreGuid.HasValue
-                && selectedStoreGuids.Contains(inventory.StoreGuid.Value)));
+            // Inclusion allow-list: show when selected stores have positive qty.
+            // Quantity returned to clients is summed from selected stores only
+            // (see MaterialsController.GetQuantityByMaterialAsync) — stock in
+            // excluded warehouses does not add to warehouseQuantity.
+            query = query.Where(material =>
+                (mainDbContext.MaterialInventory
+                    .Where(inventory => inventory.MaterialGuid == material.Guid
+                        && inventory.StoreGuid.HasValue
+                        && selectedStoreGuids.Contains(inventory.StoreGuid.Value))
+                    .Sum(inventory => (double?)(inventory.Qty ?? 0)) ?? 0) > 0);
         }
 
         if (minWarehouseQuantity is not null)

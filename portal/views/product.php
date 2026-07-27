@@ -33,7 +33,7 @@ $showImages = (bool) ($displayOptions['show_images'] ?? true);
 
 $contextOffer = $offerSlug !== '' ? SpecialOfferService::activeOfferBySlug($offerSlug) : null;
 $guid = material_guid($product);
-if ($guid !== '') {
+if ($guid !== '' && empty($product['has_offer'])) {
     $overlay = SpecialOfferService::pricingOverlay($product, $contextOffer);
     if (!empty($overlay['has_offer'])) {
         $product = array_merge($product, $overlay);

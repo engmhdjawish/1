@@ -141,8 +141,14 @@ public sealed class MaterialsController(
         }
 
         var quantityByMaterial = await GetQuantityByMaterialAsync(materials, filters.StoreGuids, cancellationToken);
+        var selectedStoreGuids = filters.StoreGuids;
         var items = materials
-            .Select(material => ToResponse(material, fieldAccess, quantityByMaterial.GetValueOrDefault(material.Guid, material.Qty)))
+            .Select(material => ToResponse(
+                material,
+                fieldAccess,
+                selectedStoreGuids.Count > 0
+                    ? quantityByMaterial.GetValueOrDefault(material.Guid, 0)
+                    : quantityByMaterial.GetValueOrDefault(material.Guid, material.Qty)))
             .ToArray();
 
         MaterialAppliedFiltersResponse? appliedFilters = null;
@@ -686,7 +692,64 @@ public sealed class MaterialsController(
         var selectedStoreGuids = ParseStoreGuids(storeGuid, storeGuids);
         var quantityByMaterial = await GetQuantityByMaterialAsync([material], selectedStoreGuids, cancellationToken);
         var fieldAccess = await permissionService.GetFieldAccessAsync(User, ResourceCode, cancellationToken);
-        return Ok(ToResponse(material, fieldAccess, quantityByMaterial.GetValueOrDefault(material.Guid, material.Qty)));
+        var warehouseQuantity = selectedStoreGuids.Count > 0
+            ? quantityByMaterial.GetValueOrDefault(material.Guid, 0)
+            : quantityByMaterial.GetValueOrDefault(material.Guid, material.Qty);
+
+        if (selectedStoreGuids.Count > 0 && (warehouseQuantity ?? 0) <= 0)
+        {
+            return NotFound();
+        }
+
+        return Ok(ToResponse(material, fieldAccess, warehouseQuantity));
+    }
+
+    [HttpGet("{guid:guid}/store-quantities")]
+    public async Task<ActionResult<IReadOnlyList<MaterialStoreQuantityResponse>>> GetMaterialStoreQuantities(
+        Guid guid,
+        CancellationToken cancellationToken = default)
+    {
+        var exists = await mainDbContext.Materials
+            .AsNoTracking()
+            .AnyAsync(record => record.Guid == guid, cancellationToken);
+        if (!exists)
+        {
+            return NotFound();
+        }
+
+        var quantities = await mainDbContext.MaterialInventory
+            .AsNoTracking()
+            .Where(inventory => inventory.MaterialGuid == guid && inventory.StoreGuid.HasValue)
+            .GroupBy(inventory => inventory.StoreGuid!.Value)
+            .Select(group => new
+            {
+                StoreGuid = group.Key,
+                Quantity = group.Sum(inventory => inventory.Qty ?? 0)
+            })
+            .ToListAsync(cancellationToken);
+
+        if (quantities.Count == 0)
+        {
+            return Ok(Array.Empty<MaterialStoreQuantityResponse>());
+        }
+
+        var storeGuids = quantities.Select(row => row.StoreGuid).ToArray();
+        var stores = await mainDbContext.Stores
+            .AsNoTracking()
+            .Where(store => storeGuids.Contains(store.Guid))
+            .Select(store => new { store.Guid, store.Name })
+            .ToDictionaryAsync(store => store.Guid, store => store.Name, cancellationToken);
+
+        var response = quantities
+            .OrderByDescending(row => row.Quantity)
+            .ThenBy(row => stores.GetValueOrDefault(row.StoreGuid) ?? row.StoreGuid.ToString())
+            .Select(row => new MaterialStoreQuantityResponse(
+                row.StoreGuid,
+                stores.GetValueOrDefault(row.StoreGuid),
+                row.Quantity))
+            .ToArray();
+
+        return Ok(response);
     }
 
     private MaterialResponse ToResponse(
@@ -776,9 +839,25 @@ public sealed class MaterialsController(
 
     private async Task<IReadOnlyCollection<LookupOptionResponse>> GetStoresAsync(CancellationToken cancellationToken)
     {
+        // Prefer active st000 rows. In some Amine DBs every store has IsActive=0
+        // even when warehouses are in use — then fall back to the full st000 list
+        // (do not use ms000-only fallback first, or empty warehouses disappear).
         var stores = await mainDbContext.Stores
             .AsNoTracking()
             .Where(store => store.IsActive == null || store.IsActive == true)
+            .OrderBy(store => store.Number)
+            .ThenBy(store => store.Name)
+            .Take(MaxFilterOptions)
+            .Select(store => new LookupOptionResponse(store.Guid, store.Code, store.Name, store.LatinName))
+            .ToListAsync(cancellationToken);
+
+        if (stores.Count > 0)
+        {
+            return stores;
+        }
+
+        stores = await mainDbContext.Stores
+            .AsNoTracking()
             .OrderBy(store => store.Number)
             .ThenBy(store => store.Name)
             .Take(MaxFilterOptions)
@@ -1003,7 +1082,11 @@ public sealed class MaterialsController(
 
         if (!string.IsNullOrWhiteSpace(commaSeparatedGuids))
         {
-            foreach (var value in commaSeparatedGuids.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            var normalized = commaSeparatedGuids
+                .Replace("%2C", ",", StringComparison.OrdinalIgnoreCase)
+                .Replace("%2c", ",", StringComparison.OrdinalIgnoreCase);
+
+            foreach (var value in normalized.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
             {
                 if (Guid.TryParse(value, out var parsedGuid))
                 {
