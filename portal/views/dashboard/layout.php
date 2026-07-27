@@ -339,6 +339,9 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <script src="<?= h(portal_asset_url('/assets/store-image-zoom.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/store-product-preview.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/dashboard/material-images-link.js')) ?>" defer></script>
+  <script src="<?= h(portal_asset_url('/assets/dashboard/material-image-upload.js')) ?>" defer></script>
+  <script src="<?= h(portal_asset_url('/assets/dashboard/material-image-zip-download.js')) ?>" defer></script>
+  <script src="<?= h(portal_asset_url('/assets/dashboard/share-links-form.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/dashboard/dashboard.js')) ?>" defer></script>
   <script src="/assets/dashboard/media-picker.js" defer></script>
   <script src="/assets/dashboard/site-media-upload.js" defer></script>
@@ -349,15 +352,6 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <script src="/assets/dashboard/accounting-statement.js" defer></script>
   <?php if (!empty($materialImagesZipTab ?? false) || !empty($shareLinksFormTab ?? false)): ?>
     <script src="<?= h(portal_asset_url('/assets/store-filters.js')) ?>" defer></script>
-  <?php endif; ?>
-  <?php if (!empty($materialImagesZipTab ?? false)): ?>
-    <script src="<?= h(portal_asset_url('/assets/dashboard/material-image-zip-download.js')) ?>" defer></script>
-  <?php endif; ?>
-  <?php if (!empty($shareLinksFormTab ?? false)): ?>
-    <script src="<?= h(portal_asset_url('/assets/dashboard/share-links-form.js')) ?>" defer></script>
-  <?php endif; ?>
-  <?php if (!empty($materialImagesUploadTab ?? false)): ?>
-    <script src="<?= h(portal_asset_url('/assets/dashboard/material-image-upload.js')) ?>" defer></script>
   <?php endif; ?>
   <script src="<?= h(portal_asset_url('/assets/notifications.js')) ?>" defer></script>
   <script>

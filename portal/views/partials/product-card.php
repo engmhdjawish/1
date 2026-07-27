@@ -43,7 +43,7 @@ if ($productOfferSlug !== null) {
     $contextOffer = SpecialOfferService::activeOfferBySlug($productOfferSlug);
 }
 $guid = material_guid($item);
-if ($guid !== '') {
+if ($guid !== '' && empty($item['has_offer'])) {
     $overlay = SpecialOfferService::pricingOverlay($item, $contextOffer);
     if (!empty($overlay['has_offer'])) {
         $item = array_merge($item, $overlay);

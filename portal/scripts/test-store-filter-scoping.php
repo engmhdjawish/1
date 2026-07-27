@@ -71,6 +71,36 @@ $assert(
     invokePrivate('requestWantsInlineResultFilters', [], ['search' => '']) === false
 );
 
+$mergedFilters = invokePrivate('mergeDisplayResultFilters', [
+    'materialTypes' => ['Alpha', 'Beta', 'Gamma'],
+    'groups' => [
+        ['guid' => 'g1', 'name' => 'Group 1', 'code' => 'G1'],
+        ['guid' => 'g2', 'name' => 'Group 2', 'code' => 'G2'],
+    ],
+], [
+    'materialTypes' => [
+        ['value' => 'Alpha', 'count' => 4],
+    ],
+    'groups' => [
+        ['guid' => 'g1', 'name' => 'Group 1', 'code' => 'G1', 'count' => 2],
+    ],
+]);
+$assert(
+    'merge keeps all global string facets after scoped filtering',
+    is_array($mergedFilters['materialTypes'] ?? null) && count($mergedFilters['materialTypes']) === 3
+);
+$assert(
+    'merge keeps all global group facets after scoped filtering',
+    is_array($mergedFilters['groups'] ?? null) && count($mergedFilters['groups']) === 2
+);
+
+$locked = invokePrivate('lockedPolicyClientFilters', [
+    'store_guids' => ['store-a'],
+    'group_guids' => ['group-a'],
+]);
+$assert('policy store_guids lock stores filter', in_array('stores', $locked, true));
+$assert('policy group_guids lock groups filter', in_array('groups', $locked, true));
+
 try {
     $guest = \Portal\Services\StorePolicyService::guestPolicy();
     if ($guest === null) {

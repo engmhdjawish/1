@@ -481,6 +481,26 @@ final class SpecialOfferService
     /** @param array<string, mixed> $material */
     public static function pricingOverlay(array $material, ?array $offer = null, ?string $offerSlug = null): array
     {
+        if (!empty($material['has_offer'])
+            && isset($material['effective_unit_sale_price_sp'], $material['original_unit_sale_price_sp'])) {
+            return array_merge([
+                'has_offer' => true,
+                'offer' => is_array($material['offer'] ?? null) ? $material['offer'] : null,
+                'offer_badge' => trim((string) ($material['offer_badge'] ?? '')),
+            ], array_intersect_key($material, array_flip([
+                'original_unit_sale_price_sp',
+                'original_unit_sale_price_usd',
+                'original_package_sale_price_sp',
+                'original_package_sale_price_usd',
+                'effective_unit_sale_price_sp',
+                'effective_unit_sale_price_usd',
+                'effective_package_sale_price_sp',
+                'effective_package_sale_price_usd',
+                'unitSalePriceSyp',
+                'unitSalePriceUsd',
+            ])));
+        }
+
         $guid = trim((string) ($material['materialGuid'] ?? $material['MaterialGuid'] ?? ''));
         if ($offer === null && $offerSlug !== null && trim($offerSlug) !== '') {
             $offer = self::activeOfferBySlug($offerSlug);
@@ -623,8 +643,12 @@ final class SpecialOfferService
     public static function computePricing(array $material, array $offer): array
     {
         $packaging = ShareCartService::packaging($material);
-        $baseUnitSp = ShareCartService::unitSalePriceSp($material);
-        $baseUnitUsd = ShareCartService::unitSalePriceUsd($material);
+        $baseUnitSp = isset($material['original_unit_sale_price_sp']) && is_numeric((string) $material['original_unit_sale_price_sp'])
+            ? (float) $material['original_unit_sale_price_sp']
+            : ShareCartService::unitSalePriceSp($material);
+        $baseUnitUsd = isset($material['original_unit_sale_price_usd']) && is_numeric((string) $material['original_unit_sale_price_usd'])
+            ? (float) $material['original_unit_sale_price_usd']
+            : ShareCartService::unitSalePriceUsd($material);
         $basePackSp = $baseUnitSp * $packaging;
         $basePackUsd = $baseUnitUsd * $packaging;
 

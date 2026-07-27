@@ -406,6 +406,8 @@ final class StoreCatalogService
                     self::buildResultFiltersFromFilterOptions($filterOptions),
                     $policyRules
                 );
+            } elseif (!self::resultFiltersAreEmpty($resultFilters)) {
+                $resultFilters = self::mergeDisplayResultFilters($filterOptions, $resultFilters);
             }
         }
         if ($storeGuids !== [] || self::parseList($policyRules['store_guids'] ?? []) !== []) {
@@ -673,15 +675,7 @@ final class StoreCatalogService
         if (self::resultFiltersAreEmpty($resultFilters) && !$hasImplicitConstraints) {
             $resultFilters = $fallbackResultFilters;
         } elseif (!$hasImplicitConstraints) {
-            foreach (['materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins', 'groups'] as $facetKey) {
-                $current = is_array($resultFilters[$facetKey] ?? null) ? $resultFilters[$facetKey] : [];
-                if ($current !== []) {
-                    continue;
-                }
-                $resultFilters[$facetKey] = is_array($fallbackResultFilters[$facetKey] ?? null)
-                    ? $fallbackResultFilters[$facetKey]
-                    : [];
-            }
+            $resultFilters = self::mergeDisplayResultFilters($filterOptions, $resultFilters);
         }
 
         $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
@@ -952,7 +946,25 @@ final class StoreCatalogService
             return $materials;
         }
 
-        if (!$preserveFiltersOnRetry) {
+        $hasPolicyConstraints = $storeGuids !== []
+            || $groupGuids !== []
+            || $materialTypes !== []
+            || $manufacturers !== []
+            || $ageCategories !== []
+            || $sizeRanges !== []
+            || $countryOfOrigins !== []
+            || $isAvailable !== null
+            || $hasImage !== null
+            || $minWarehouseQuantity !== null
+            || $maxWarehouseQuantity !== null
+            || $minUnitSalePriceSyp !== null
+            || $maxUnitSalePriceSyp !== null
+            || $minUnitSalePriceUsd !== null
+            || $maxUnitSalePriceUsd !== null
+            || $minUnitPurchasePriceUsd !== null
+            || $maxUnitPurchasePriceUsd !== null;
+
+        if (!$preserveFiltersOnRetry && !$hasPolicyConstraints) {
             $fallbackQuery = self::buildExtendedApiQuery(
                 $page,
                 $pageSize,
@@ -981,35 +993,35 @@ final class StoreCatalogService
             if ($retry['ok']) {
                 return $retry;
             }
-        } else {
-            $retryQuery = self::buildExtendedApiQuery(
-                $page,
-                $pageSize,
-                $search,
-                'number:asc',
-                $materialTypes,
-                $manufacturers,
-                $ageCategories,
-                $sizeRanges,
-                $countryOfOrigins,
-                $groupGuids,
-                $storeGuids,
-                $isAvailable,
-                $hasImage,
-                $includeResultFilters,
-                $minWarehouseQuantity,
-                $maxWarehouseQuantity,
-                $minUnitSalePriceSyp,
-                $maxUnitSalePriceSyp,
-                $minUnitSalePriceUsd,
-                $maxUnitSalePriceUsd,
-                $minUnitPurchasePriceUsd,
-                $maxUnitPurchasePriceUsd
-            );
-            $retry = ApiClient::get('/api/materials', $retryQuery, 15);
-            if ($retry['ok']) {
-                return $retry;
-            }
+        }
+
+        $retryQuery = self::buildExtendedApiQuery(
+            $page,
+            $pageSize,
+            $search,
+            'number:asc',
+            $materialTypes,
+            $manufacturers,
+            $ageCategories,
+            $sizeRanges,
+            $countryOfOrigins,
+            $groupGuids,
+            $storeGuids,
+            $isAvailable,
+            $hasImage,
+            $includeResultFilters,
+            $minWarehouseQuantity,
+            $maxWarehouseQuantity,
+            $minUnitSalePriceSyp,
+            $maxUnitSalePriceSyp,
+            $minUnitSalePriceUsd,
+            $maxUnitSalePriceUsd,
+            $minUnitPurchasePriceUsd,
+            $maxUnitPurchasePriceUsd
+        );
+        $retry = ApiClient::get('/api/materials', $retryQuery, 15);
+        if ($retry['ok']) {
+            return $retry;
         }
 
         return $materials;
@@ -1783,11 +1795,50 @@ final class StoreCatalogService
     private static function lockedPolicyClientFilters(array $policyRules): array
     {
         $locked = [];
+        if (trim((string) ($policyRules['keyword'] ?? '')) !== '') {
+            $locked[] = 'search';
+        }
         if (array_key_exists('is_available', $policyRules) && $policyRules['is_available'] !== null) {
             $locked[] = 'availability';
         }
+        if (self::parseList($policyRules['material_types'] ?? []) !== []) {
+            $locked[] = 'materialTypes';
+        }
+        if (self::parseList($policyRules['age_categories'] ?? []) !== []) {
+            $locked[] = 'ageCategories';
+        }
+        if (self::parseList($policyRules['manufacturers'] ?? []) !== []) {
+            $locked[] = 'manufacturers';
+        }
+        if (self::parseList($policyRules['size_ranges'] ?? []) !== []) {
+            $locked[] = 'sizeRanges';
+        }
+        if (self::parseList($policyRules['country_origins'] ?? []) !== []) {
+            $locked[] = 'countryOfOrigins';
+        }
+        if (self::parseList($policyRules['store_guids'] ?? []) !== []) {
+            $locked[] = 'stores';
+        }
+        if (self::parseList($policyRules['group_guids'] ?? []) !== []) {
+            $locked[] = 'groups';
+        }
+        foreach ([
+            'min_warehouse_quantity' => 'warehouseRange',
+            'max_warehouse_quantity' => 'warehouseRange',
+            'min_unit_sale_price_syp' => 'priceSaleSyp',
+            'max_unit_sale_price_syp' => 'priceSaleSyp',
+            'min_unit_sale_price_usd' => 'priceSaleUsd',
+            'max_unit_sale_price_usd' => 'priceSaleUsd',
+            'min_unit_purchase_price_usd' => 'pricePurchaseUsd',
+            'max_unit_purchase_price_usd' => 'pricePurchaseUsd',
+        ] as $ruleKey => $filterCode) {
+            $value = $policyRules[$ruleKey] ?? null;
+            if ($value !== null && $value !== '') {
+                $locked[] = $filterCode;
+            }
+        }
 
-        return $locked;
+        return array_values(array_unique($locked));
     }
 
     /** @param array<string, mixed> $sectionRules @return list<string> */
@@ -2111,6 +2162,145 @@ final class StoreCatalogService
         return true;
     }
 
+    /**
+     * Keep every policy-visible filter choice on screen after scoped filtering,
+     * overlaying live counts from the current result set when available.
+     *
+     * @param array<string, mixed> $filterOptions
+     * @param array<string, mixed> $scopedFilters
+     * @return array<string, mixed>
+     */
+    private static function mergeDisplayResultFilters(array $filterOptions, array $scopedFilters): array
+    {
+        $mergeStringFacets = static function (array $globalValues, array $scopedFacets): array {
+            $countByValue = [];
+            foreach ($scopedFacets as $facet) {
+                if (!is_array($facet)) {
+                    continue;
+                }
+                $value = trim((string) ($facet['value'] ?? ''));
+                if ($value === '') {
+                    continue;
+                }
+                $countByValue[strtolower($value)] = $facet['count'] ?? null;
+            }
+
+            $merged = [];
+            $seen = [];
+            foreach ($globalValues as $value) {
+                $value = trim((string) $value);
+                if ($value === '') {
+                    continue;
+                }
+                $key = strtolower($value);
+                if (isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                $merged[] = [
+                    'value' => $value,
+                    'count' => $countByValue[$key] ?? 0,
+                ];
+            }
+            foreach ($scopedFacets as $facet) {
+                if (!is_array($facet)) {
+                    continue;
+                }
+                $value = trim((string) ($facet['value'] ?? ''));
+                if ($value === '') {
+                    continue;
+                }
+                $key = strtolower($value);
+                if (isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                $merged[] = [
+                    'value' => $value,
+                    'count' => $facet['count'] ?? null,
+                ];
+            }
+
+            return $merged;
+        };
+
+        $mergeGroupFacets = static function (array $globalGroups, array $scopedFacets): array {
+            $countByGuid = [];
+            foreach ($scopedFacets as $facet) {
+                if (!is_array($facet)) {
+                    continue;
+                }
+                $guid = strtolower(trim((string) ($facet['guid'] ?? '')));
+                if ($guid === '') {
+                    continue;
+                }
+                $countByGuid[$guid] = $facet['count'] ?? null;
+            }
+
+            $merged = [];
+            $seen = [];
+            foreach ($globalGroups as $group) {
+                if (!is_array($group)) {
+                    continue;
+                }
+                $guid = trim((string) ($group['guid'] ?? ''));
+                if ($guid === '') {
+                    continue;
+                }
+                $key = strtolower($guid);
+                if (isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                $merged[] = [
+                    'guid' => $guid,
+                    'code' => trim((string) ($group['code'] ?? '')),
+                    'name' => trim((string) ($group['name'] ?? '')),
+                    'count' => $countByGuid[$key] ?? 0,
+                ];
+            }
+            foreach ($scopedFacets as $facet) {
+                if (!is_array($facet)) {
+                    continue;
+                }
+                $guid = trim((string) ($facet['guid'] ?? ''));
+                if ($guid === '') {
+                    continue;
+                }
+                $key = strtolower($guid);
+                if (isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                $merged[] = [
+                    'guid' => $guid,
+                    'code' => trim((string) ($facet['code'] ?? '')),
+                    'name' => trim((string) ($facet['name'] ?? '')),
+                    'count' => $facet['count'] ?? null,
+                ];
+            }
+
+            return $merged;
+        };
+
+        $result = $scopedFilters;
+        foreach (['materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins'] as $key) {
+            $global = is_array($filterOptions[$key] ?? null) ? $filterOptions[$key] : [];
+            $scoped = is_array($scopedFilters[$key] ?? null) ? $scopedFilters[$key] : [];
+            if ($global !== [] || $scoped !== []) {
+                $result[$key] = $mergeStringFacets($global, $scoped);
+            }
+        }
+
+        $globalGroups = is_array($filterOptions['groups'] ?? null) ? $filterOptions['groups'] : [];
+        $scopedGroups = is_array($scopedFilters['groups'] ?? null) ? $scopedFilters['groups'] : [];
+        if ($globalGroups !== [] || $scopedGroups !== []) {
+            $result['groups'] = $mergeGroupFacets($globalGroups, $scopedGroups);
+        }
+
+        return $result;
+    }
+
     /** @param array<string, mixed> $filterOptions @return array<string, mixed> */
     private static function buildResultFiltersFromFilterOptions(array $filterOptions): array
     {
@@ -2263,6 +2453,10 @@ final class StoreCatalogService
         $cachedPayload = self::readScopedFiltersCache($query, $policy);
         if ($cachedPayload !== null) {
             self::$lastFiltersPayloadSource = 'portal-cache';
+            $cachedPayload['resultFilters'] = self::mergeDisplayResultFilters(
+                $cachedPayload['filterOptions'],
+                $cachedPayload['resultFilters']
+            );
 
             return $cachedPayload;
         }
@@ -2273,6 +2467,8 @@ final class StoreCatalogService
                 self::buildResultFiltersFromFilterOptions($filterOptions),
                 $baseRules
             );
+        } else {
+            $resultFilters = self::mergeDisplayResultFilters($filterOptions, $resultFilters);
         }
 
         $payload = [

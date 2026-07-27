@@ -1422,10 +1422,4 @@
     restoreQueueFromStorage();
     refreshOverview();
   };
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => window.portalMaterialImagesUploadInit());
-  } else {
-    window.portalMaterialImagesUploadInit();
-  }
 }());

@@ -637,6 +637,96 @@ window.portalStoreFiltersInit = (root = document) => {
     list.classList.add('store-filter-options--pills');
   };
 
+  const mergeStringFacets = (globalValues, scopedFacets) => {
+    const countByValue = new Map();
+    (scopedFacets || []).forEach((facet) => {
+      const value = String(facet?.value || '').trim();
+      if (!value) {
+        return;
+      }
+      countByValue.set(value.toLowerCase(), facet?.count ?? null);
+    });
+
+    const merged = [];
+    const seen = new Set();
+    (globalValues || []).forEach((value) => {
+      const normalized = String(value || '').trim();
+      if (!normalized) {
+        return;
+      }
+      const key = normalized.toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      merged.push({ value: normalized, count: countByValue.has(key) ? countByValue.get(key) : 0 });
+    });
+    (scopedFacets || []).forEach((facet) => {
+      const normalized = String(facet?.value || '').trim();
+      if (!normalized) {
+        return;
+      }
+      const key = normalized.toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      merged.push({ value: normalized, count: facet?.count ?? null });
+    });
+
+    return merged;
+  };
+
+  const mergeGroupFacets = (globalGroups, scopedFacets) => {
+    const countByGuid = new Map();
+    (scopedFacets || []).forEach((facet) => {
+      const guid = String(facet?.guid || facet?.Guid || '').trim();
+      if (!guid) {
+        return;
+      }
+      countByGuid.set(guid.toLowerCase(), facet?.count ?? null);
+    });
+
+    const merged = [];
+    const seen = new Set();
+    (globalGroups || []).forEach((group) => {
+      const guid = String(group?.guid || group?.Guid || '').trim();
+      if (!guid) {
+        return;
+      }
+      const key = guid.toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      merged.push({
+        guid,
+        code: String(group?.code || group?.Code || ''),
+        name: String(group?.name || group?.Name || ''),
+        count: countByGuid.has(key) ? countByGuid.get(key) : 0,
+      });
+    });
+    (scopedFacets || []).forEach((facet) => {
+      const guid = String(facet?.guid || facet?.Guid || '').trim();
+      if (!guid) {
+        return;
+      }
+      const key = guid.toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      merged.push({
+        guid,
+        code: String(facet?.code || facet?.Code || ''),
+        name: String(facet?.name || facet?.Name || ''),
+        count: facet?.count ?? null,
+      });
+    });
+
+    return merged;
+  };
+
   const applyDeferredFilters = (data) => {
     if (!data?.ok) {
       throw new Error(data?.message || 'تعذر تحميل خيارات الفلاتر.');
@@ -653,10 +743,12 @@ window.portalStoreFiltersInit = (root = document) => {
     ];
 
     facetMap.forEach(([groupId, paramName]) => {
-      renderStringFacetOptions(groupId, paramName, resultFilters[groupId] || []);
+      const scoped = resultFilters[groupId] || [];
+      const global = Array.isArray(filterOptions[groupId]) ? filterOptions[groupId] : [];
+      renderStringFacetOptions(groupId, paramName, mergeStringFacets(global, scoped));
     });
 
-    const groupFacets = Array.isArray(resultFilters.groups) ? resultFilters.groups : [];
+    const groupFacets = mergeGroupFacets(filterOptions.groups || [], resultFilters.groups || []);
     renderGuidFacetOptions('groups', 'groupGuids', groupFacets);
     renderGuidFacetOptions('stores', 'storeGuids', filterOptions.stores || []);
 
