@@ -2392,7 +2392,7 @@ final class StoreCatalogService
         $params['_policyStoreGuids'] = self::parseList($policyRules['store_guids'] ?? []);
         ksort($params);
 
-        return 'store_catalog_v10:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
+        return 'store_catalog_v11:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
     }
 
     /** @param array<string, mixed> $data */

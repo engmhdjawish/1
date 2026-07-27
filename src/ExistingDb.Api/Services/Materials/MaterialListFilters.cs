@@ -83,7 +83,11 @@ public sealed class MaterialListFilters
 
         if (!string.IsNullOrWhiteSpace(commaSeparatedGuids))
         {
-            foreach (var value in commaSeparatedGuids.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            var normalized = commaSeparatedGuids
+                .Replace("%2C", ",", StringComparison.OrdinalIgnoreCase)
+                .Replace("%2c", ",", StringComparison.OrdinalIgnoreCase);
+
+            foreach (var value in normalized.Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
             {
                 if (Guid.TryParse(value, out var parsedGuid))
                 {
