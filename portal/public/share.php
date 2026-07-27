@@ -415,13 +415,6 @@ if ($shareLink !== null && $hasAccess && !$hasConstraintConflict) {
 
         if ($materials['ok']) {
             $products = $materials['data']['items'] ?? [];
-            if ($queryStoreGuids !== [] && is_array($products)) {
-                $products = StoreCatalogService::filterProductsForStoreGuids(
-                    $products,
-                    $queryStoreGuids,
-                    $queryIsAvailable
-                );
-            }
             $totalCount = max(0, (int) ($materials['data']['totalCount'] ?? 0));
             $page = max(1, (int) ($materials['data']['page'] ?? $page));
             $pageSize = max(1, (int) ($materials['data']['pageSize'] ?? $pageSize));
