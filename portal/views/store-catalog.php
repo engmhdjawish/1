@@ -526,6 +526,28 @@ $appliedClientFiltersJson = json_encode(
   </p>
 <?php endif; ?>
 
+<?php if (trim((string) ($_GET['whDebug'] ?? '')) === '1'): ?>
+  <?php
+    $debugPolicyStores = is_array($catalog['policy_store_guids'] ?? null) ? $catalog['policy_store_guids'] : [];
+    $debugAppliedStores = is_array($catalog['policy_store_guids_applied'] ?? null) ? $catalog['policy_store_guids_applied'] : [];
+    $debugSampleQty = null;
+    if ($products !== []) {
+        $debugSampleQty = $products[0]['warehouseQuantity'] ?? $products[0]['WarehouseQuantity'] ?? null;
+    }
+  ?>
+  <div class="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs text-sky-950 font-mono" dir="ltr">
+    <div>policy_store_guids: <?= (int) count($debugPolicyStores) ?></div>
+    <div>applied_store_guids: <?= (int) count($debugAppliedStores) ?></div>
+    <div>products: <?= (int) count($products) ?> / totalCount=<?= (int) ($catalog['totalCount'] ?? 0) ?></div>
+    <div>sample warehouseQuantity: <?= $debugSampleQty === null ? 'n/a' : h((string) $debugSampleQty) ?></div>
+    <?php if ($debugAppliedStores !== []): ?>
+      <div class="mt-1 break-all"><?= h(implode(', ', $debugAppliedStores)) ?></div>
+    <?php else: ?>
+      <div class="mt-1 text-red-700">WARNING: no storeGuids applied — catalog is not warehouse-scoped</div>
+    <?php endif; ?>
+  </div>
+<?php endif; ?>
+
 <?php if ($cartNoticeMessage !== ''): ?>
   <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $cartNoticeOk ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700' ?>"><?= h($cartNoticeMessage) ?></p>
 <?php endif; ?>
