@@ -152,10 +152,15 @@ final class CompanyBrandIconService
 
     public static function clearBrandIcons(): void
     {
-        foreach (self::SIZES as $size) {
-            $path = self::iconAbsolutePath($size);
-            if (is_file($path)) {
-                @unlink($path);
+        $patterns = [
+            self::brandingDir() . DIRECTORY_SEPARATOR . 'brand-*.png',
+            self::brandingDir() . DIRECTORY_SEPARATOR . 'brand-v2-*.png',
+        ];
+        foreach ($patterns as $pattern) {
+            foreach (glob($pattern) ?: [] as $path) {
+                if (is_file($path)) {
+                    @unlink($path);
+                }
             }
         }
     }
