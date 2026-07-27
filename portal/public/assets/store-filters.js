@@ -4,8 +4,15 @@ window.portalStoreFiltersInit = (root = document) => {
     if (!header) {
       return;
     }
-    const height = Math.ceil(header.getBoundingClientRect().height);
-    document.documentElement.style.setProperty('--site-header-sticky-offset', `${height}px`);
+    // Include the mobile nav row; prefer the larger of layout vs painted height.
+    const height = Math.max(
+      Math.ceil(header.offsetHeight || 0),
+      Math.ceil(header.getBoundingClientRect().height || 0),
+      Math.ceil(header.getBoundingClientRect().bottom || 0)
+    );
+    if (height > 0) {
+      document.documentElement.style.setProperty('--site-header-sticky-offset', `${height}px`);
+    }
   };
 
   const syncMobileFilterBarOffset = () => {
@@ -14,7 +21,10 @@ window.portalStoreFiltersInit = (root = document) => {
       document.documentElement.style.removeProperty('--store-mobile-filter-bar-height');
       return;
     }
-    const height = Math.ceil(bar.getBoundingClientRect().height);
+    const height = Math.max(
+      Math.ceil(bar.offsetHeight || 0),
+      Math.ceil(bar.getBoundingClientRect().height || 0)
+    );
     if (height > 0) {
       document.documentElement.style.setProperty('--store-mobile-filter-bar-height', `${height}px`);
     }
@@ -25,18 +35,26 @@ window.portalStoreFiltersInit = (root = document) => {
     syncMobileFilterBarOffset();
   };
 
-  syncStickyOffsets();
+  const syncStickyOffsetsSoon = () => {
+    syncStickyOffsets();
+    window.requestAnimationFrame(() => {
+      syncStickyOffsets();
+      window.setTimeout(syncStickyOffsets, 80);
+    });
+  };
+
+  syncStickyOffsetsSoon();
   if (!window.__storeFiltersHeaderSyncBound) {
     window.__storeFiltersHeaderSyncBound = true;
-    window.addEventListener('resize', syncStickyOffsets, { passive: true });
-    window.addEventListener('load', syncStickyOffsets, { passive: true });
+    window.addEventListener('resize', syncStickyOffsetsSoon, { passive: true });
+    window.addEventListener('load', syncStickyOffsetsSoon, { passive: true });
     window.addEventListener('orientationchange', () => {
-      window.setTimeout(syncStickyOffsets, 120);
+      window.setTimeout(syncStickyOffsetsSoon, 120);
     }, { passive: true });
 
     const header = document.querySelector('.site-header');
     if (header && typeof ResizeObserver !== 'undefined') {
-      new ResizeObserver(syncStickyOffsets).observe(header);
+      new ResizeObserver(syncStickyOffsetsSoon).observe(header);
     }
   }
 
