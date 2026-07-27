@@ -398,7 +398,21 @@ final class StoreCatalogService
         $filterOptions = ['stores' => [], 'groups' => []];
         if ($allowClientFilters && !$deferClientFilters) {
             $filterOptions = self::getCachedFilterOptions();
-            if (
+            $independentFilters = self::fetchScopedResultFilters(
+                $query,
+                $sectionContext,
+                $policyRules,
+                $policyRules,
+                $requestFilters
+            );
+            if (!self::resultFiltersAreEmpty($independentFilters)) {
+                $resultFilters = self::mergeDisplayResultFilters(
+                    $filterOptions,
+                    $independentFilters,
+                    $requestFilters,
+                    self::shouldIncludeZeroCountFilterOptions($mergedFilters['isAvailable'] ?? null)
+                );
+            } elseif (
                 self::resultFiltersAreEmpty($resultFilters)
                 && !self::filterRulesHaveImplicitConstraints($policyRules)
             ) {
@@ -659,10 +673,6 @@ final class StoreCatalogService
             $apiError = $exception->getMessage();
         }
 
-        if ($apiError === null) {
-            $resultFilters = self::scopeResultFiltersForPolicy($resultFilters, $baseRules);
-        }
-
         $filterOptions = self::getCachedFilterOptions();
         $forcedStoreGuids = self::parseList($baseRules['store_guids'] ?? []);
         if ($forcedStoreGuids !== []) {
@@ -672,20 +682,41 @@ final class StoreCatalogService
                 static fn (array $store): bool => isset($forcedStoreMap[strtolower((string) ($store['guid'] ?? ''))])
             ));
         }
-        $fallbackResultFilters = self::scopeResultFiltersForPolicy(
-            self::buildResultFiltersFromFilterOptions($filterOptions),
-            $baseRules
-        );
-        $hasImplicitConstraints = self::filterRulesHaveImplicitConstraints($baseRules);
-        if (self::resultFiltersAreEmpty($resultFilters) && !$hasImplicitConstraints) {
-            $resultFilters = $fallbackResultFilters;
-        } elseif (!$hasImplicitConstraints) {
-            $resultFilters = self::mergeDisplayResultFilters(
-                $filterOptions,
-                $resultFilters,
-                $requestFilters,
-                self::shouldIncludeZeroCountFilterOptions($merged['isAvailable'] ?? null)
+
+        if ($apiError === null) {
+            $independentFilters = self::fetchScopedResultFilters(
+                [],
+                $sectionContext,
+                $baseRules,
+                $policyRules,
+                $requestFilters
             );
+            $includeZeroCount = self::shouldIncludeZeroCountFilterOptions($merged['isAvailable'] ?? null);
+            if (!self::resultFiltersAreEmpty($independentFilters)) {
+                $resultFilters = self::mergeDisplayResultFilters(
+                    $filterOptions,
+                    $independentFilters,
+                    $requestFilters,
+                    $includeZeroCount
+                );
+            } else {
+                $resultFilters = self::scopeResultFiltersForPolicy($resultFilters, $baseRules);
+                $fallbackResultFilters = self::scopeResultFiltersForPolicy(
+                    self::buildResultFiltersFromFilterOptions($filterOptions),
+                    $baseRules
+                );
+                $hasImplicitConstraints = self::filterRulesHaveImplicitConstraints($baseRules);
+                if (self::resultFiltersAreEmpty($resultFilters) && !$hasImplicitConstraints) {
+                    $resultFilters = $fallbackResultFilters;
+                } elseif (!$hasImplicitConstraints) {
+                    $resultFilters = self::mergeDisplayResultFilters(
+                        $filterOptions,
+                        $resultFilters,
+                        $requestFilters,
+                        $includeZeroCount
+                    );
+                }
+            }
         }
 
         $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
@@ -1117,6 +1148,50 @@ final class StoreCatalogService
     private static function shouldIncludeZeroCountFilterOptions(?bool $isAvailable): bool
     {
         return $isAvailable === false;
+    }
+
+    /**
+     * Client selections that must not narrow displayed facet options.
+     *
+     * @return array<string, mixed>
+     */
+    private static function emptyClientFilterOverlay(array $requestFilters): array
+    {
+        return [
+            'search' => '',
+            'materialTypes' => [],
+            'manufacturers' => [],
+            'ageCategories' => [],
+            'sizeRanges' => [],
+            'countryOfOrigins' => [],
+            'groupGuids' => [],
+            'storeGuids' => [],
+            'isAvailable' => $requestFilters['isAvailable'] ?? null,
+            'hasImage' => null,
+            'minWarehouseQuantity' => null,
+            'maxWarehouseQuantity' => null,
+            'minUnitSalePriceSyp' => null,
+            'maxUnitSalePriceSyp' => null,
+            'minUnitSalePriceUsd' => null,
+            'maxUnitSalePriceUsd' => null,
+            'minUnitPurchasePriceUsd' => null,
+            'maxUnitPurchasePriceUsd' => null,
+        ];
+    }
+
+    /**
+     * Build facet-query filters from policy/section rules only.
+     * User search and facet selections affect products, not the filter sidebar.
+     *
+     * @param array<string, mixed> $baseRules
+     * @param array<string, mixed> $requestFilters
+     * @return array<string, mixed>
+     */
+    private static function buildIndependentDisplayFacetFilters(array $baseRules, array $requestFilters): array
+    {
+        $independentFilters = self::mergeCatalogFilters($baseRules, self::emptyClientFilterOverlay($requestFilters));
+
+        return self::mergedFiltersForDisplayFacets($independentFilters);
     }
 
     /**
@@ -2611,8 +2686,10 @@ final class StoreCatalogService
         array $policyRules,
         array $requestFilters
     ): array {
-        $mergedFilters = self::mergeCatalogFilters($baseRules, $requestFilters);
-        if ($mergedFilters['has_conflict']) {
+        unset($query);
+
+        $independentFilters = self::buildIndependentDisplayFacetFilters($baseRules, $requestFilters);
+        if ($independentFilters['has_conflict'] ?? false) {
             return [];
         }
 
@@ -2620,8 +2697,7 @@ final class StoreCatalogService
         $scopeRules = $sectionContext !== null ? $baseRules : $policyRules;
 
         try {
-            $displayFilters = self::mergedFiltersForDisplayFacets($mergedFilters);
-            $resultFilters = self::requestResultFiltersFromApi(self::buildResultFiltersApiQuery($displayFilters));
+            $resultFilters = self::requestResultFiltersFromApi(self::buildResultFiltersApiQuery($independentFilters));
             if ($resultFilters === []) {
                 return [];
             }
@@ -2709,11 +2785,14 @@ final class StoreCatalogService
             ? 'customer:' . trim((string) (CustomerSession::customer()['id'] ?? ''))
             : 'guest:' . trim((string) ($policy['id'] ?? 'none'));
 
-        $params = $query;
-        unset($params['facetFilters'], $params['loadFilterOptions'], $params['page']);
-        ksort($params);
+        // Display facets depend on policy/section context and availability mode only.
+        $params = [
+            'section' => trim((string) ($query['section'] ?? '')),
+            'offer' => trim((string) ($query['offer'] ?? '')),
+            'isAvailable' => trim((string) ($query['isAvailable'] ?? '')),
+        ];
 
-        return 'store_scoped_filters_v2:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
+        return 'store_scoped_filters_v3:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
     }
 
     /** @param array<string, mixed> $rules */
