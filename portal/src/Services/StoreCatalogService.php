@@ -269,6 +269,8 @@ final class StoreCatalogService
 
         $cachedCatalog = self::readCatalogCache($query, $policy);
         if ($cachedCatalog !== null) {
+            $cachedCatalog = self::applyPolicyScopeToCachedCatalog($cachedCatalog, $policy, $sectionContext);
+
             return self::attachClientFiltersPayload($cachedCatalog, $query);
         }
 
@@ -540,6 +542,7 @@ final class StoreCatalogService
         if ($apiError !== null && $apiError !== '') {
             $stale = self::readStaleCatalogCache($query, $policy);
             if ($stale !== null) {
+                $stale = self::applyPolicyScopeToCachedCatalog($stale, $policy, $sectionContext);
                 $stale['apiError'] = AmineAvailabilityService::userMessage();
                 $stale['catalog_stale'] = true;
 
