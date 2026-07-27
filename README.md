@@ -830,8 +830,10 @@ warehouseQuantity
 هي مجموع كمية المادة في المستودع أو المستودعات المحددة، اعتماداً على:
 
 ```text
-vwMaterialInventory -> MaterialGuid, StoreGuid, Qty
+ms000 -> MatGUID, StoreGUID, Qty
 ```
+
+(أرصدة المستودعات الحية في الأمين — وليس `vwMaterialInventory` الذي يجمّع حركات الفواتير وقد يُظهر أرصدة موجبة/سالبة متعادلة.)
 
 بدون فلتر مستودعات، تبقى `warehouseQuantity` قادمة من `mt000.Qty`، وهي كمية المادة في جميع المستودعات.
 

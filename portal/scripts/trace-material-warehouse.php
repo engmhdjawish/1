@@ -262,7 +262,7 @@ if ($guid !== '') {
             echo "    - {$line}\n";
         }
         echo "  If Amine UI shows only «ستوك كجون», that warehouse GUID is likely one of the 6 selected,\n";
-        echo "  or vwMaterialInventory maps that stock under a different/allowed StoreGuid.\n";
+        echo "  or ms000 maps that stock under a different/allowed StoreGuid.\n";
     }
 
     $excludedHits = array_values(array_filter($positiveAnywhere, static fn (array $row): bool => !$row['allowed']));

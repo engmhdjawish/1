@@ -89,7 +89,12 @@ SELECT 'mt000' AS Src, GUID AS MaterialGuid, CAST(NULL AS uniqueidentifier) AS S
 FROM mt000
 WHERE GUID = @MaterialGuid;
 
--- current API source
+-- current API source (live balances)
+SELECT 'ms000' AS Src, MatGUID AS MaterialGuid, StoreGUID AS StoreGuid, Qty
+FROM ms000
+WHERE MatGUID = @MaterialGuid;
+
+-- legacy bill aggregate (do not use for store policy)
 SELECT 'vwMaterialInventory' AS Src, MaterialGuid, StoreGuid, Qty
 FROM vwMaterialInventory
 WHERE MaterialGuid = @MaterialGuid;

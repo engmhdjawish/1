@@ -335,12 +335,16 @@ public sealed class MainDbContext(DbContextOptions<MainDbContext> options) : DbC
 
         modelBuilder.Entity<MaterialInventoryRecord>(entity =>
         {
-            entity.ToView("vwMaterialInventory");
-            entity.HasNoKey();
+            // Live per-warehouse balances (Amine). Do not use vwMaterialInventory —
+            // that view aggregates bill movements and can show offsetting +/- across stores.
+            entity.ToTable("ms000");
+            entity.HasKey(inventory => inventory.Guid);
 
-            entity.Property(inventory => inventory.MaterialGuid).HasColumnName("MaterialGuid");
-            entity.Property(inventory => inventory.StoreGuid).HasColumnName("StoreGuid");
+            entity.Property(inventory => inventory.Guid).HasColumnName("GUID");
+            entity.Property(inventory => inventory.MaterialGuid).HasColumnName("MatGUID");
+            entity.Property(inventory => inventory.StoreGuid).HasColumnName("StoreGUID");
             entity.Property(inventory => inventory.Qty).HasColumnName("Qty");
+            entity.Property(inventory => inventory.Book).HasColumnName("Book");
         });
 
         modelBuilder.Entity<MaterialGroupRecord>(entity =>
