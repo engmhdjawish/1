@@ -194,6 +194,26 @@ $assert(
     ($mergedWithStores['storeGuids'] ?? []) === ['store-a']
 );
 
+$qtyFiltered = StoreCatalogService::filterProductsForStoreGuids([
+    ['guid' => 'm1', 'warehouseQuantity' => 2],
+    ['guid' => 'm2', 'warehouseQuantity' => 0],
+    ['guid' => 'm3', 'WarehouseQuantity' => 1.5],
+    ['guid' => 'm4'],
+], ['store-a'], true);
+$assert(
+    'local warehouse filter keeps only positive scoped quantities',
+    count($qtyFiltered) === 2
+        && ($qtyFiltered[0]['guid'] ?? '') === 'm1'
+        && ($qtyFiltered[1]['guid'] ?? '') === 'm3'
+);
+
+$assert(
+    'local warehouse filter is a no-op without store guids',
+    count(StoreCatalogService::filterProductsForStoreGuids([
+        ['guid' => 'm1', 'warehouseQuantity' => 0],
+    ], [], true)) === 1
+);
+
 echo "\n";
 
 try {

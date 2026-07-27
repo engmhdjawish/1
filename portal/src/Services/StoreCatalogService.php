@@ -437,6 +437,16 @@ final class StoreCatalogService
             $apiError = $exception->getMessage();
         }
 
+        $beforeScopeCount = count($products);
+        $products = self::scopeCatalogProductsForPolicy($products, $policyRules, $isAvailable, $sectionContext, $storeGuids);
+        if ($apiError === null && $beforeScopeCount > count($products)) {
+            $removed = $beforeScopeCount - count($products);
+            $totalCount = max(0, $totalCount - $removed);
+            if ($products === []) {
+                $totalCount = 0;
+            }
+        }
+
         $filterOptions = ['stores' => [], 'groups' => []];
         if ($allowClientFilters && !$deferClientFilters) {
             $filterOptions = self::getCachedFilterOptions();
@@ -599,6 +609,9 @@ final class StoreCatalogService
         }
 
         $products = self::applySellableStockFilter($products);
+        $policy = self::activePolicy();
+        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
+        $products = self::scopeCatalogProductsForPolicy($products, $policyRules, true, $sectionContext, []);
         $products = self::sortProducts($products, $sort);
         $totalCount = count($products);
         $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
@@ -742,6 +755,22 @@ final class StoreCatalogService
             }
         } catch (\Throwable $exception) {
             $apiError = $exception->getMessage();
+        }
+
+        $beforeScopeCount = count($products);
+        $products = self::scopeCatalogProductsForPolicy(
+            $products,
+            $policyRules,
+            $isAvailable,
+            $sectionContext,
+            self::parseList($merged['storeGuids'] ?? [])
+        );
+        if ($apiError === null && $beforeScopeCount > count($products)) {
+            $removed = $beforeScopeCount - count($products);
+            $totalCount = max(0, $totalCount - $removed);
+            if ($products === []) {
+                $totalCount = 0;
+            }
         }
 
         $filterOptions = self::getCachedFilterOptions();
@@ -967,7 +996,11 @@ final class StoreCatalogService
     }
 
     /**
-     * Keep only materials that belong to the policy's allowed warehouses.
+     * Keep only materials with positive stock in the policy's allowed warehouses.
+     *
+     * Relies on the API scoped warehouseQuantity (sum in storeGuids). This catches
+     * the common leak where an inventory row exists in an allowed store at qty=0
+     * while real stock sits only in excluded warehouses — without a second API call.
      *
      * @param list<array<string, mixed>> $products
      * @param list<string> $storeGuids
@@ -979,13 +1012,13 @@ final class StoreCatalogService
             return $products;
         }
 
-        try {
-            $availabilityMode = $isAvailable === false ? false : true;
+        $requireAvailable = $isAvailable !== false;
 
-            return self::filterProductsByPolicyWarehouse($products, $storeGuids, $availabilityMode);
-        } catch (\Throwable) {
-            return $products;
-        }
+        return array_values(array_filter($products, static function (array $product) use ($requireAvailable): bool {
+            $qty = (float) ($product['warehouseQuantity'] ?? $product['WarehouseQuantity'] ?? 0);
+
+            return $requireAvailable ? $qty > 0 : $qty <= 0;
+        }));
     }
 
     /**
@@ -2444,7 +2477,7 @@ final class StoreCatalogService
         $params['_policyStoreGuids'] = self::parseList($policyRules['store_guids'] ?? []);
         ksort($params);
 
-        return 'store_catalog_v9:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
+        return 'store_catalog_v10:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
     }
 
     /** @param array<string, mixed> $data */

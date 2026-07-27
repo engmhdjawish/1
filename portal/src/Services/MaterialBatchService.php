@@ -84,19 +84,33 @@ final class MaterialBatchService
             }
 
             $materials = [];
-            $requested = array_fill_keys($guids, true);
+            $requested = [];
+            foreach ($guids as $guid) {
+                $requested[strtolower($guid)] = $guid;
+            }
             foreach ($items as $item) {
                 if (!is_array($item)) {
                     continue;
                 }
                 $guid = self::materialGuid($item);
-                if ($guid === '' || !isset($requested[$guid])) {
+                if ($guid === '') {
                     continue;
                 }
-                $materials[$guid] = $item;
+                $key = strtolower($guid);
+                if (!isset($requested[$key])) {
+                    continue;
+                }
+                if ($storeGuids !== []) {
+                    $warehouseQuantity = (float) ($item['warehouseQuantity'] ?? $item['WarehouseQuantity'] ?? 0);
+                    if ($warehouseQuantity <= 0) {
+                        continue;
+                    }
+                }
+                $materials[$requested[$key]] = $item;
             }
 
-            if ($materials === [] && $guids !== []) {
+            // Empty result with store scope means all materials were correctly excluded.
+            if ($materials === [] && $guids !== [] && $storeGuids === []) {
                 return null;
             }
 

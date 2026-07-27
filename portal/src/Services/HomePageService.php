@@ -222,6 +222,10 @@ final class HomePageService
                 $items = $response['data']['items'];
             }
 
+            if ($policyStoreGuids !== []) {
+                $items = StoreCatalogService::filterProductsForStoreGuids($items, $policyStoreGuids, true);
+            }
+
             if (!$isOffer) {
                 $items = StockReservationService::filterSellableProducts($items);
             }
