@@ -4,20 +4,64 @@ window.portalStoreFiltersInit = (root = document) => {
     if (!header) {
       return;
     }
-    const height = Math.ceil(header.getBoundingClientRect().height);
-    document.documentElement.style.setProperty('--site-header-sticky-offset', `${height}px`);
+    // Include the mobile nav row; prefer the larger of layout vs painted height.
+    const height = Math.max(
+      Math.ceil(header.offsetHeight || 0),
+      Math.ceil(header.getBoundingClientRect().height || 0)
+    );
+    if (height > 0) {
+      document.documentElement.style.setProperty('--site-header-sticky-offset', `${height}px`);
+    }
   };
 
-  syncHeaderStickyOffset();
+  const syncMobileFilterBarOffset = () => {
+    const bar = document.querySelector('[data-store-mobile-filter-bar]');
+    if (!bar || window.matchMedia('(min-width: 1024px)').matches) {
+      document.documentElement.style.removeProperty('--store-mobile-filter-bar-height');
+      return;
+    }
+    const height = Math.max(
+      Math.ceil(bar.offsetHeight || 0),
+      Math.ceil(bar.getBoundingClientRect().height || 0)
+    );
+    if (height > 0) {
+      document.documentElement.style.setProperty('--store-mobile-filter-bar-height', `${height}px`);
+    }
+  };
+
+  const syncStickyOffsets = () => {
+    syncHeaderStickyOffset();
+    syncMobileFilterBarOffset();
+  };
+
+  const syncStickyOffsetsSoon = () => {
+    syncStickyOffsets();
+    window.requestAnimationFrame(() => {
+      syncStickyOffsets();
+      window.setTimeout(syncStickyOffsets, 80);
+    });
+  };
+
+  syncStickyOffsetsSoon();
   if (!window.__storeFiltersHeaderSyncBound) {
     window.__storeFiltersHeaderSyncBound = true;
-    window.addEventListener('resize', syncHeaderStickyOffset, { passive: true });
-    window.addEventListener('load', syncHeaderStickyOffset, { passive: true });
+    window.addEventListener('resize', syncStickyOffsetsSoon, { passive: true });
+    window.addEventListener('load', syncStickyOffsetsSoon, { passive: true });
+    window.addEventListener('orientationchange', () => {
+      window.setTimeout(syncStickyOffsetsSoon, 120);
+    }, { passive: true });
 
     const header = document.querySelector('.site-header');
     if (header && typeof ResizeObserver !== 'undefined') {
-      new ResizeObserver(syncHeaderStickyOffset).observe(header);
+      new ResizeObserver(syncStickyOffsetsSoon).observe(header);
     }
+  }
+
+  const mobileFilterBar = (root.querySelector?.('[data-store-mobile-filter-bar]')
+    || document.querySelector('[data-store-mobile-filter-bar]'));
+  if (mobileFilterBar && typeof ResizeObserver !== 'undefined' && !mobileFilterBar.__storeFilterBarObserved) {
+    mobileFilterBar.__storeFilterBarObserved = true;
+    new ResizeObserver(syncMobileFilterBarOffset).observe(mobileFilterBar);
   }
 
   const filtersRoot = root.matches?.('[data-store-catalog-root], [data-store-filters-root]')
@@ -1110,6 +1154,22 @@ window.portalStoreFiltersInit = (root = document) => {
   scheduleDeferredFilters();
   setupExclusiveFilterAccordions();
   refreshPendingFilterChips();
+
+  // Move the fixed bar to <body> so it is not trapped by transformed/filtered
+  // ancestors inside the catalog grid (otherwise it scrolls away with content).
+  const mobileBar = filtersRoot.querySelector('[data-store-mobile-filter-bar]');
+  if (mobileBar) {
+    document.querySelectorAll('body > [data-store-mobile-filter-bar]').forEach((el) => {
+      if (el !== mobileBar) {
+        el.remove();
+      }
+    });
+    if (mobileBar.parentElement !== document.body) {
+      document.body.appendChild(mobileBar);
+    }
+    mobileBar.setAttribute('data-portaled', '1');
+    syncStickyOffsetsSoon();
+  }
 };
 
 if (document.readyState === 'loading') {
