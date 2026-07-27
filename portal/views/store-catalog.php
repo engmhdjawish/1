@@ -441,6 +441,7 @@ if ($sectionContext !== null) {
 require __DIR__ . '/partials/store-filter-group.php';
 
 $renderEmptyFilterGroups = $filtersDeferred || $shareContext !== null;
+$clientFiltersPayload = is_array($catalog['client_filters_payload'] ?? null) ? $catalog['client_filters_payload'] : null;
 ?>
 
 <?php if ($sectionContext !== null): ?>
@@ -599,7 +600,7 @@ $renderEmptyFilterGroups = $filtersDeferred || $shareContext !== null;
                         ];
                     }
                 }
-                if ($groupOptions === [] && $renderEmptyFilterGroups && ($facetConfig['selected'] ?? []) !== []) {
+                if (!$filtersDeferred && $groupOptions === [] && $renderEmptyFilterGroups && ($facetConfig['selected'] ?? []) !== []) {
                     foreach ((array) $facetConfig['selected'] as $selectedValue) {
                         $selectedValue = trim((string) $selectedValue);
                         if ($selectedValue === '') {
@@ -773,6 +774,13 @@ $renderEmptyFilterGroups = $filtersDeferred || $shareContext !== null;
             <?php endif; ?>
 
           </div>
+          <?php if ($clientFiltersPayload !== null): ?>
+            <script type="application/json" id="store-filters-bootstrap"><?= json_encode([
+                'ok' => true,
+                'filterOptions' => $clientFiltersPayload['filterOptions'] ?? [],
+                'resultFilters' => $clientFiltersPayload['resultFilters'] ?? [],
+            ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+          <?php endif; ?>
 
           <div class="store-filters-drawer-footer store-filter-actions">
             <button type="submit" class="store-btn-primary" id="store-filters-submit" data-label-default="عرض النتائج">عرض النتائج</button>

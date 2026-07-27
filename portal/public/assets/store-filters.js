@@ -576,9 +576,12 @@ window.portalStoreFiltersInit = (root = document) => {
     );
   };
 
-  const renderStringFacetOptions = (groupId, paramName, facets) => {
+  const renderStringFacetOptions = (groupId, paramName, facets, replace = false) => {
     const list = filtersRoot.querySelector(`[data-filter-list="${groupId}"]`);
-    if (!list || list.querySelectorAll('.store-filter-option').length > 0) {
+    if (!list) {
+      return;
+    }
+    if (!replace && list.querySelectorAll('.store-filter-option').length > 0) {
       return;
     }
 
@@ -602,13 +605,17 @@ window.portalStoreFiltersInit = (root = document) => {
       return;
     }
     list.innerHTML = rows;
+    list.querySelector(`[data-filter-loading="${groupId}"]`)?.remove();
     ensureFilterGroupControls(groupId, (facets || []).filter((facet) => String(facet?.value || '').trim() !== '').length);
     list.classList.add('store-filter-options--pills');
   };
 
-  const renderGuidFacetOptions = (groupId, paramName, items) => {
+  const renderGuidFacetOptions = (groupId, paramName, items, replace = false) => {
     const list = filtersRoot.querySelector(`[data-filter-list="${groupId}"]`);
-    if (!list || list.querySelectorAll('.store-filter-option').length > 0) {
+    if (!list) {
+      return;
+    }
+    if (!replace && list.querySelectorAll('.store-filter-option').length > 0) {
       return;
     }
 
@@ -633,6 +640,7 @@ window.portalStoreFiltersInit = (root = document) => {
       return;
     }
     list.innerHTML = rows;
+    list.querySelector(`[data-filter-loading="${groupId}"]`)?.remove();
     ensureFilterGroupControls(groupId, (items || []).filter((item) => String(item?.guid || item?.Guid || '').trim() !== '').length);
     list.classList.add('store-filter-options--pills');
   };
@@ -675,13 +683,31 @@ window.portalStoreFiltersInit = (root = document) => {
         append(facet?.value, facet?.count ?? null);
       });
     } else {
-      (scopedFacets || []).forEach((facet) => {
-        const count = facet?.count ?? null;
-        if (count !== null && Number(count) <= 0) {
-          return;
-        }
-        append(facet?.value, count);
-      });
+      if ((globalValues || []).length > 0) {
+        (globalValues || []).forEach((value) => {
+          const normalized = String(value || '').trim();
+          if (!normalized) {
+            return;
+          }
+          const key = normalized.toLowerCase();
+          if (!countByValue.has(key)) {
+            return;
+          }
+          const count = countByValue.get(key);
+          if (count !== null && Number(count) <= 0) {
+            return;
+          }
+          append(normalized, count);
+        });
+      } else {
+        (scopedFacets || []).forEach((facet) => {
+          const count = facet?.count ?? null;
+          if (count !== null && Number(count) <= 0) {
+            return;
+          }
+          append(facet?.value, count);
+        });
+      }
     }
 
     (selectedValues || []).forEach((value) => {
@@ -828,7 +854,8 @@ window.portalStoreFiltersInit = (root = document) => {
       renderStringFacetOptions(
         groupId,
         paramName,
-        mergeStringFacets(global, scoped, selected, includeZeroCountOptions)
+        mergeStringFacets(global, scoped, selected, includeZeroCountOptions),
+        true
       );
     });
 
@@ -838,13 +865,39 @@ window.portalStoreFiltersInit = (root = document) => {
       readSelectedFilterValues('groupGuids[]'),
       includeZeroCountOptions
     );
-    renderGuidFacetOptions('groups', 'groupGuids', groupFacets);
-    renderGuidFacetOptions('stores', 'storeGuids', filterOptions.stores || []);
+    renderGuidFacetOptions('groups', 'groupGuids', groupFacets, true);
+    renderGuidFacetOptions('stores', 'storeGuids', filterOptions.stores || [], true);
 
     filtersRoot.dataset.storeFiltersLoaded = '1';
     filtersRoot.removeAttribute('data-store-filters-deferred');
     refreshPendingFilterChips();
     bindFilterLists();
+  };
+
+  const buildFilterOptionsQuery = () => {
+    const current = new URLSearchParams(window.location.search || '');
+    const minimal = new URLSearchParams();
+    ['section', 'offer', 'isAvailable', 'token'].forEach((key) => {
+      const value = current.get(key);
+      if (value !== null && value !== '') {
+        minimal.set(key, value);
+      }
+    });
+    const query = minimal.toString();
+    return query ? `?${query}` : '';
+  };
+
+  const readEmbeddedFiltersPayload = () => {
+    const node = document.getElementById('store-filters-bootstrap');
+    if (!node) {
+      return null;
+    }
+    try {
+      const data = JSON.parse(node.textContent || '');
+      return data?.ok ? data : null;
+    } catch {
+      return null;
+    }
   };
 
   const loadDeferredFilters = () => {
@@ -855,8 +908,13 @@ window.portalStoreFiltersInit = (root = document) => {
       return deferredFiltersPromise;
     }
 
-    const queryString = window.location.search || '';
-    deferredFiltersPromise = fetch(`/api/store-filter-options.php${queryString}`, {
+    const embedded = readEmbeddedFiltersPayload();
+    if (embedded) {
+      applyDeferredFilters(embedded);
+      return Promise.resolve();
+    }
+
+    deferredFiltersPromise = fetch(`/api/store-filter-options.php${buildFilterOptionsQuery()}`, {
       credentials: 'same-origin',
       headers: { Accept: 'application/json' },
     })

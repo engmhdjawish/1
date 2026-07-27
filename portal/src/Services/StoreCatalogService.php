@@ -235,7 +235,7 @@ final class StoreCatalogService
 
         $cachedCatalog = self::readCatalogCache($query, $policy);
         if ($cachedCatalog !== null) {
-            return $cachedCatalog;
+            return self::attachClientFiltersPayload($cachedCatalog, $query);
         }
 
         $search = $requestFilters['search'];
@@ -491,12 +491,28 @@ final class StoreCatalogService
                 $stale['apiError'] = AmineAvailabilityService::userMessage();
                 $stale['catalog_stale'] = true;
 
-                return $stale;
+                return self::attachClientFiltersPayload($stale, $query);
             }
             $catalogResult['apiError'] = AmineAvailabilityService::userMessage();
         }
 
-        return $catalogResult;
+        return self::attachClientFiltersPayload($catalogResult, $query);
+    }
+
+    /** @param array<string, mixed> $catalog @param array<string, mixed> $query @return array<string, mixed> */
+    private static function attachClientFiltersPayload(array $catalog, array $query): array
+    {
+        if (!(bool) ($catalog['allow_client_filters'] ?? false) || !(bool) ($catalog['filters_deferred'] ?? false)) {
+            return $catalog;
+        }
+
+        try {
+            $catalog['client_filters_payload'] = self::getClientFiltersPayload($query);
+        } catch (\Throwable) {
+            $catalog['client_filters_payload'] = null;
+        }
+
+        return $catalog;
     }
 
     /** @param array<string, mixed> $sectionContext */
@@ -2344,11 +2360,29 @@ final class StoreCatalogService
                     $append($value, $facet['count'] ?? null);
                 }
             } else {
-                foreach ($scopedFacets as $facet) {
-                    if (!is_array($facet) || !self::facetHasPositiveCount($facet)) {
-                        continue;
+                if ($globalValues !== []) {
+                    foreach ($globalValues as $value) {
+                        $value = trim((string) $value);
+                        if ($value === '') {
+                            continue;
+                        }
+                        $key = strtolower($value);
+                        if (!array_key_exists($key, $countByValue)) {
+                            continue;
+                        }
+                        $count = $countByValue[$key];
+                        if ($count !== null && (int) $count <= 0) {
+                            continue;
+                        }
+                        $append($value, $count);
                     }
-                    $append((string) ($facet['value'] ?? ''), $facet['count'] ?? null);
+                } else {
+                    foreach ($scopedFacets as $facet) {
+                        if (!is_array($facet) || !self::facetHasPositiveCount($facet)) {
+                            continue;
+                        }
+                        $append((string) ($facet['value'] ?? ''), $facet['count'] ?? null);
+                    }
                 }
             }
 
@@ -2419,22 +2453,61 @@ final class StoreCatalogService
                         'count' => $countByGuid[$key] ?? 0,
                     ]);
                 }
-            }
-
-            foreach ($scopedFacets as $facet) {
-                if (!is_array($facet) || !self::facetHasPositiveCount($facet)) {
-                    continue;
+                foreach ($scopedFacets as $facet) {
+                    if (!is_array($facet)) {
+                        continue;
+                    }
+                    $guid = trim((string) ($facet['guid'] ?? ''));
+                    if ($guid === '') {
+                        continue;
+                    }
+                    $appendGroup($guid, [
+                        'guid' => $guid,
+                        'code' => trim((string) ($facet['code'] ?? '')),
+                        'name' => trim((string) ($facet['name'] ?? '')),
+                        'count' => $facet['count'] ?? null,
+                    ]);
                 }
-                $guid = trim((string) ($facet['guid'] ?? ''));
-                if ($guid === '') {
-                    continue;
+            } elseif ($globalGroups !== []) {
+                foreach ($globalGroups as $group) {
+                    if (!is_array($group)) {
+                        continue;
+                    }
+                    $guid = trim((string) ($group['guid'] ?? ''));
+                    if ($guid === '') {
+                        continue;
+                    }
+                    $key = strtolower($guid);
+                    if (!array_key_exists($key, $countByGuid)) {
+                        continue;
+                    }
+                    $count = $countByGuid[$key];
+                    if ($count !== null && (int) $count <= 0) {
+                        continue;
+                    }
+                    $appendGroup($guid, [
+                        'guid' => $guid,
+                        'code' => trim((string) ($group['code'] ?? '')),
+                        'name' => trim((string) ($group['name'] ?? '')),
+                        'count' => $count,
+                    ]);
                 }
-                $appendGroup($guid, [
-                    'guid' => $guid,
-                    'code' => trim((string) ($facet['code'] ?? '')),
-                    'name' => trim((string) ($facet['name'] ?? '')),
-                    'count' => $facet['count'] ?? null,
-                ]);
+            } else {
+                foreach ($scopedFacets as $facet) {
+                    if (!is_array($facet) || !self::facetHasPositiveCount($facet)) {
+                        continue;
+                    }
+                    $guid = trim((string) ($facet['guid'] ?? ''));
+                    if ($guid === '') {
+                        continue;
+                    }
+                    $appendGroup($guid, [
+                        'guid' => $guid,
+                        'code' => trim((string) ($facet['code'] ?? '')),
+                        'name' => trim((string) ($facet['name'] ?? '')),
+                        'count' => $facet['count'] ?? null,
+                    ]);
+                }
             }
 
             foreach ($selectedGuids as $guid) {

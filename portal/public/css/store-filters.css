@@ -590,6 +590,13 @@ body.store-filters-drawer-open {
   padding: 0;
 }
 
+.store-filter-loading {
+  margin: 0;
+  padding: 0.35rem 0;
+  font-size: 0.8125rem;
+  color: var(--store-text-muted, #64748b);
+}
+
 .store-filter-accordion[open] .store-filter-options--pills {
   max-height: min(260px, 42vh);
   overflow: auto;
