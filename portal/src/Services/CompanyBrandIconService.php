@@ -27,7 +27,8 @@ final class CompanyBrandIconService
 
     public static function iconFileName(int $size): string
     {
-        return 'brand-' . $size . '.png';
+        // v2: edge-to-edge transparent logo (no padded light frame).
+        return 'brand-v2-' . $size . '.png';
     }
 
     public static function iconAbsolutePath(int $size): string
@@ -37,7 +38,7 @@ final class CompanyBrandIconService
 
     public static function iconPublicUrl(int $size): string
     {
-        return '/icons/brand-icon.php?size=' . $size;
+        return '/icons/brand-icon.php?size=' . $size . '&v=2';
     }
 
     public static function hasBrandIcons(): bool
@@ -151,10 +152,15 @@ final class CompanyBrandIconService
 
     public static function clearBrandIcons(): void
     {
-        foreach (self::SIZES as $size) {
-            $path = self::iconAbsolutePath($size);
-            if (is_file($path)) {
-                @unlink($path);
+        $patterns = [
+            self::brandingDir() . DIRECTORY_SEPARATOR . 'brand-*.png',
+            self::brandingDir() . DIRECTORY_SEPARATOR . 'brand-v2-*.png',
+        ];
+        foreach ($patterns as $pattern) {
+            foreach (glob($pattern) ?: [] as $path) {
+                if (is_file($path)) {
+                    @unlink($path);
+                }
             }
         }
     }
@@ -307,8 +313,8 @@ final class CompanyBrandIconService
     }
 
     /**
-     * Build a square PNG with an opaque background so PWA / Android icons
-     * do not disappear when the company logo is a transparent PNG.
+     * Square PNG of the logo only: transparent canvas, no padded frame.
+     * Scales the artwork to fill the square as much as possible (contain, 0 padding).
      */
     public static function renderSquarePngBinary(string $sourcePath, int $size): ?string
     {
@@ -332,15 +338,14 @@ final class CompanyBrandIconService
             return null;
         }
 
+        imagealphablending($canvas, false);
+        imagesavealpha($canvas, true);
+        $transparent = imagecolorallocatealpha($canvas, 0, 0, 0, 127);
+        imagefilledrectangle($canvas, 0, 0, $size, $size, $transparent);
         imagealphablending($canvas, true);
-        imagesavealpha($canvas, false);
-        // Match manifest background_color — opaque so adaptive icons stay visible.
-        $background = imagecolorallocate($canvas, 246, 246, 248);
-        imagefilledrectangle($canvas, 0, 0, $size, $size, $background);
 
-        $padding = (int) round($size * 0.1);
-        $maxBox = $size - ($padding * 2);
-        $scale = min($maxBox / $srcW, $maxBox / $srcH);
+        // Fill the square with the logo (no margin / white frame).
+        $scale = min($size / $srcW, $size / $srcH);
         $dstW = max(1, (int) round($srcW * $scale));
         $dstH = max(1, (int) round($srcH * $scale));
         $dstX = (int) round(($size - $dstW) / 2);
@@ -351,6 +356,7 @@ final class CompanyBrandIconService
         imagecopyresampled($canvas, $source, $dstX, $dstY, 0, 0, $dstW, $dstH, $srcW, $srcH);
         imagedestroy($source);
 
+        imagesavealpha($canvas, true);
         ob_start();
         $saved = imagepng($canvas, null, 6);
         imagedestroy($canvas);
