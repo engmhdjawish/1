@@ -839,9 +839,25 @@ public sealed class MaterialsController(
 
     private async Task<IReadOnlyCollection<LookupOptionResponse>> GetStoresAsync(CancellationToken cancellationToken)
     {
+        // Prefer active st000 rows. In some Amine DBs every store has IsActive=0
+        // even when warehouses are in use — then fall back to the full st000 list
+        // (do not use ms000-only fallback first, or empty warehouses disappear).
         var stores = await mainDbContext.Stores
             .AsNoTracking()
             .Where(store => store.IsActive == null || store.IsActive == true)
+            .OrderBy(store => store.Number)
+            .ThenBy(store => store.Name)
+            .Take(MaxFilterOptions)
+            .Select(store => new LookupOptionResponse(store.Guid, store.Code, store.Name, store.LatinName))
+            .ToListAsync(cancellationToken);
+
+        if (stores.Count > 0)
+        {
+            return stores;
+        }
+
+        stores = await mainDbContext.Stores
+            .AsNoTracking()
             .OrderBy(store => store.Number)
             .ThenBy(store => store.Name)
             .Take(MaxFilterOptions)
