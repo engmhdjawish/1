@@ -101,12 +101,12 @@ function portal_site_logo_url(string $logoUrl, string $variant = 'header'): stri
         return '';
     }
 
-    // Prefer on-demand brand PNG (works even before storage/branding is writable).
-    if (in_array($variant, ['header', 'mobile-toolbar', 'drawer'], true)) {
-        $size = $variant === 'mobile-toolbar' ? 192 : 512;
+        // Prefer brand PNG without padded frame (on-demand / cached v2 icons).
+        if (in_array($variant, ['header', 'mobile-toolbar', 'drawer'], true)) {
+            $size = $variant === 'mobile-toolbar' ? 192 : 512;
 
-        return \Portal\Services\CompanyBrandIconService::iconPublicUrl($size);
-    }
+            return \Portal\Services\CompanyBrandIconService::iconPublicUrl($size);
+        }
 
     if (!preg_match('~^/media/site\.php\?~i', $logoUrl)) {
         return $logoUrl;
