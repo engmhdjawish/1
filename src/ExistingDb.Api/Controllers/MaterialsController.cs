@@ -704,6 +704,54 @@ public sealed class MaterialsController(
         return Ok(ToResponse(material, fieldAccess, warehouseQuantity));
     }
 
+    [HttpGet("{guid:guid}/store-quantities")]
+    public async Task<ActionResult<IReadOnlyList<MaterialStoreQuantityResponse>>> GetMaterialStoreQuantities(
+        Guid guid,
+        CancellationToken cancellationToken = default)
+    {
+        var exists = await mainDbContext.Materials
+            .AsNoTracking()
+            .AnyAsync(record => record.Guid == guid, cancellationToken);
+        if (!exists)
+        {
+            return NotFound();
+        }
+
+        var quantities = await mainDbContext.MaterialInventory
+            .AsNoTracking()
+            .Where(inventory => inventory.MaterialGuid == guid && inventory.StoreGuid.HasValue)
+            .GroupBy(inventory => inventory.StoreGuid!.Value)
+            .Select(group => new
+            {
+                StoreGuid = group.Key,
+                Quantity = group.Sum(inventory => inventory.Qty ?? 0)
+            })
+            .ToListAsync(cancellationToken);
+
+        if (quantities.Count == 0)
+        {
+            return Ok(Array.Empty<MaterialStoreQuantityResponse>());
+        }
+
+        var storeGuids = quantities.Select(row => row.StoreGuid).ToArray();
+        var stores = await mainDbContext.Stores
+            .AsNoTracking()
+            .Where(store => storeGuids.Contains(store.Guid))
+            .Select(store => new { store.Guid, store.Name })
+            .ToDictionaryAsync(store => store.Guid, store => store.Name, cancellationToken);
+
+        var response = quantities
+            .OrderByDescending(row => row.Quantity)
+            .ThenBy(row => stores.GetValueOrDefault(row.StoreGuid) ?? row.StoreGuid.ToString())
+            .Select(row => new MaterialStoreQuantityResponse(
+                row.StoreGuid,
+                stores.GetValueOrDefault(row.StoreGuid),
+                row.Quantity))
+            .ToArray();
+
+        return Ok(response);
+    }
+
     private MaterialResponse ToResponse(
         MaterialRecord material,
         IReadOnlyDictionary<string, FieldAccessDecision> fieldAccess,
