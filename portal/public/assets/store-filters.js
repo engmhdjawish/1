@@ -585,9 +585,7 @@ window.portalStoreFiltersInit = (root = document) => {
       return;
     }
 
-    const selected = new Set(
-      Array.from(filtersRoot.querySelectorAll(`input[name="${paramName}[]"]:checked`)).map((el) => el.value)
-    );
+    const selected = new Set(readSelectedFilterValues(`${paramName}[]`));
     const rows = (facets || []).map((facet) => {
       const value = String(facet?.value || '').trim();
       if (!value) {
@@ -620,7 +618,7 @@ window.portalStoreFiltersInit = (root = document) => {
     }
 
     const selected = new Set(
-      Array.from(filtersRoot.querySelectorAll(`input[name="${paramName}[]"]:checked`)).map((el) => el.value.toLowerCase())
+      readSelectedFilterValues(`${paramName}[]`).map((value) => value.toLowerCase())
     );
     const rows = (items || []).map((item) => {
       const value = String(item?.guid || item?.Guid || '').trim();
@@ -785,6 +783,27 @@ window.portalStoreFiltersInit = (root = document) => {
           count: facet?.count ?? null,
         });
       });
+    } else if ((globalGroups || []).length > 0) {
+      (globalGroups || []).forEach((group) => {
+        const guid = String(group?.guid || group?.Guid || '').trim();
+        if (!guid) {
+          return;
+        }
+        const key = guid.toLowerCase();
+        if (!countByGuid.has(key)) {
+          return;
+        }
+        const count = countByGuid.get(key);
+        if (count !== null && Number(count) <= 0) {
+          return;
+        }
+        appendGroup(guid, {
+          guid,
+          code: String(group?.code || group?.Code || ''),
+          name: String(group?.name || group?.Name || ''),
+          count,
+        });
+      });
     } else {
       (scopedFacets || []).forEach((facet) => {
         const count = facet?.count ?? null;
@@ -822,9 +841,51 @@ window.portalStoreFiltersInit = (root = document) => {
     return merged;
   };
 
-  const readSelectedFilterValues = (inputName) => Array.from(
-    filtersRoot.querySelectorAll(`input[name="${inputName}"]:checked`)
-  ).map((el) => el.value);
+  const readAppliedFiltersState = () => {
+    const raw = filtersRoot.getAttribute('data-applied-filters');
+    if (!raw) {
+      return {};
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const readUrlFilterValues = (paramName) => {
+    const params = new URLSearchParams(window.location.search || '');
+    const values = [];
+    params.forEach((value, key) => {
+      if (key === `${paramName}[]` || key === paramName) {
+        const normalized = String(value || '').trim();
+        if (normalized !== '') {
+          values.push(normalized);
+        }
+      }
+    });
+
+    return values;
+  };
+
+  const readSelectedFilterValues = (inputName) => {
+    const paramName = String(inputName || '').replace(/\[\]$/, '');
+    const checked = Array.from(
+      filtersRoot.querySelectorAll(`input[name="${inputName}"]:checked`)
+    ).map((el) => el.value).filter((value) => String(value || '').trim() !== '');
+    if (checked.length > 0) {
+      return checked;
+    }
+
+    const applied = readAppliedFiltersState();
+    const fromApplied = applied[paramName];
+    if (Array.isArray(fromApplied) && fromApplied.length > 0) {
+      return fromApplied.map((value) => String(value)).filter((value) => value.trim() !== '');
+    }
+
+    return readUrlFilterValues(paramName);
+  };
 
   const shouldIncludeZeroCountFilterOptions = () => {
     const availability = filterForm?.querySelector('input[name="isAvailable"]:checked')?.value;

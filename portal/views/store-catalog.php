@@ -442,6 +442,19 @@ require __DIR__ . '/partials/store-filter-group.php';
 
 $renderEmptyFilterGroups = $filtersDeferred || $shareContext !== null;
 $clientFiltersPayload = is_array($catalog['client_filters_payload'] ?? null) ? $catalog['client_filters_payload'] : null;
+$appliedClientFilters = [
+    'materialTypes' => array_values($selectedMaterialTypes),
+    'ageCategories' => array_values($selectedAgeCategories),
+    'manufacturers' => array_values($selectedManufacturers),
+    'sizeRanges' => array_values($selectedSizeRanges),
+    'countryOfOrigins' => array_values($selectedCountryOrigins),
+    'storeGuids' => array_values($selectedStoreGuids),
+    'groupGuids' => array_values($selectedGroupGuids),
+];
+$appliedClientFiltersJson = json_encode(
+    $appliedClientFilters,
+    JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+);
 ?>
 
 <?php if ($sectionContext !== null): ?>
@@ -518,7 +531,7 @@ $clientFiltersPayload = is_array($catalog['client_filters_payload'] ?? null) ? $
 <?php endif; ?>
 
 <!-- store-catalog-fragment:start -->
-<div class="store-layout <?= $allowClientFilters ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?>>
+<div class="store-layout <?= $allowClientFilters ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?><?= $allowClientFilters ? ' data-applied-filters="' . h((string) $appliedClientFiltersJson) . '"' : '' ?>>
   <?php if ($allowClientFilters): ?>
     <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
       <aside class="store-filters-sidebar">
