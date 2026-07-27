@@ -321,7 +321,7 @@ final class StoreCatalogService
         $hasImage = $mergedFilters['hasImage'];
         $lockedClientFilters = self::lockedClientFilters($policyRules);
         $sellableMode = self::shouldApplySellableStockFilter();
-        $sellableFilter = self::shouldFilterSellableStock();
+        $sellableFilter = self::shouldFilterSellableStock($isAvailable);
         if (($sellableMode || $sellableFilter) && $mergedFilters['minWarehouseQuantity'] === null) {
             $mergedFilters['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
         }
@@ -680,8 +680,9 @@ final class StoreCatalogService
         $totalCount = 0;
         $resultFilters = [];
         $apiError = null;
+        $isAvailable = $merged['isAvailable'] ?? null;
         $sellableMode = self::shouldApplySellableStockFilter();
-        $sellableFilter = self::shouldFilterSellableStock();
+        $sellableFilter = self::shouldFilterSellableStock($isAvailable);
 
         try {
             if ($sellableFilter && !isset($apiQuery['minWarehouseQuantity'])) {
@@ -2186,10 +2187,10 @@ final class StoreCatalogService
         return false;
     }
 
-    /** Lightweight sellable filter on a single API page (no multi-page scan). */
-    private static function shouldFilterSellableStock(): bool
+    /** Hide fractional stock from catalog unless the client explicitly browses unavailable items. */
+    private static function shouldFilterSellableStock(?bool $isAvailable = null): bool
     {
-        return (bool) (self::displayOptions()['allow_cart'] ?? false);
+        return $isAvailable !== false;
     }
 
     private static function sellableMinWarehouseQuantity(): float

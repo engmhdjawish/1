@@ -13,6 +13,9 @@ use PDO;
  */
 final class StockReservationService
 {
+    /** Minimum whole packages required for catalog/search listing. */
+    public const MIN_CATALOG_PACKAGES = 1.0;
+
     private static ?bool $hasActiveItemStatus = null;
 
     private static function activeOrderItemsFilter(): string
@@ -168,7 +171,7 @@ final class StockReservationService
     /** @param array<string, mixed> $material */
     public static function isSellable(array $material): bool
     {
-        return self::displayPackagesAvailable($material) > 0;
+        return self::displayPackagesAvailable($material) >= self::MIN_CATALOG_PACKAGES;
     }
 
     /**
@@ -207,7 +210,7 @@ final class StockReservationService
             $reserved = $reservedMap[$guid] ?? 0.0;
             $availablePrimary = max(0.0, $warehouse - $reserved);
             $availablePackages = max(0.0, round($availablePrimary / max(0.0001, $packaging), 4));
-            if ($availablePackages > 0) {
+            if ($availablePackages >= self::MIN_CATALOG_PACKAGES) {
                 $sellable[] = $product;
             }
         }
