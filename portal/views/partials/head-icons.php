@@ -13,7 +13,7 @@ $icons = portal_site_icons($companyLogoUrl ?? null);
 <link rel="manifest" href="/manifest.php">
 <script>
   if ('serviceWorker' in navigator && window.isSecureContext) {
-    navigator.serviceWorker.register('/sw.js?v=6', { scope: '/', updateViaCache: 'none' }).catch(function () {});
+    navigator.serviceWorker.register('/sw.js?v=7', { scope: '/', updateViaCache: 'none' }).catch(function () {});
   }
 </script>
 <link rel="icon" href="<?= h($icons['favicon_ico']) ?>" sizes="48x48">

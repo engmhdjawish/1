@@ -128,6 +128,12 @@
     deferredPrompt = null;
   }
 
+  function clearInstalledMark() {
+    try {
+      localStorage.removeItem(INSTALLED_KEY);
+    } catch (_) {}
+  }
+
   function isMarkedInstalled() {
     try {
       return localStorage.getItem(INSTALLED_KEY) === '1';
@@ -136,10 +142,26 @@
     }
   }
 
+  function showInstallTriggers() {
+    document.querySelectorAll('[data-pwa-open], [data-pwa-trigger]').forEach((el) => {
+      el.classList.remove('hidden');
+      el.removeAttribute('hidden');
+      el.setAttribute('aria-hidden', 'false');
+    });
+  }
+
   async function detectInstalledApp() {
-    if (isStandalone || isMarkedInstalled()) {
+    // Already running as installed app.
+    if (isStandalone) {
       return true;
     }
+
+    // Browser offering install again => previous uninstall; drop stale flag.
+    if (deferredPrompt) {
+      clearInstalledMark();
+      return false;
+    }
+
     if (typeof navigator.getInstalledRelatedApps === 'function') {
       try {
         const relatedApps = await navigator.getInstalledRelatedApps();
@@ -147,7 +169,17 @@
           markInstalled();
           return true;
         }
+        // Related-apps API says nothing is installed — clear stale localStorage
+        // left behind after the user uninstalled the PWA.
+        clearInstalledMark();
+        return false;
       } catch (_) {}
+    }
+
+    // Without related-apps support, do not trust a persistent localStorage flag
+    // alone (it survives uninstall). Prefer showing install UI again.
+    if (isMarkedInstalled()) {
+      clearInstalledMark();
     }
     return false;
   }
@@ -170,12 +202,18 @@
     }
     try {
       deferredPrompt.prompt();
-      await deferredPrompt.userChoice;
+      const choice = await deferredPrompt.userChoice;
       deferredPrompt = null;
-      markInstalled();
-      closeModal();
-      document.getElementById('pwa-install-banner')?.remove();
-      return true;
+      if (choice && choice.outcome === 'accepted') {
+        markInstalled();
+        closeModal();
+        document.getElementById('pwa-install-banner')?.remove();
+        return true;
+      }
+      // User dismissed — keep install UI available.
+      updateHeaderButtonMode('manual');
+      showInstallTriggers();
+      return false;
     } catch (_) {
       openModal('manual');
       return false;
@@ -323,7 +361,7 @@
       if (existing) {
         return existing;
       }
-      return navigator.serviceWorker.register('/sw.js?v=6', { scope: '/', updateViaCache: 'none' });
+      return navigator.serviceWorker.register('/sw.js?v=7', { scope: '/', updateViaCache: 'none' });
     }).catch(() => null);
   }
 
@@ -349,21 +387,20 @@
   }
 
   window.addEventListener('beforeinstallprompt', (event) => {
-    if (isStandalone || isMarkedInstalled()) {
+    if (isStandalone) {
       return;
     }
+    // Chrome only fires this when the app is not installed — clear stale flag
+    // left from a previous install after the user deleted the PWA.
+    clearInstalledMark();
     event.preventDefault();
     deferredPrompt = event;
     updateHeaderButtonMode('native');
-    if (!autoDismissedRecently() && !isStandalone) {
+    showInstallTriggers();
+    if (!autoDismissedRecently()) {
       document.getElementById('pwa-install-banner')?.remove();
       showAutoBanner();
     }
-    document.querySelectorAll('[data-pwa-open]').forEach((btn) => {
-      btn.classList.remove('hidden');
-      btn.removeAttribute('hidden');
-      btn.setAttribute('aria-hidden', 'false');
-    });
   });
 
   window.addEventListener('appinstalled', () => {
@@ -377,6 +414,7 @@
       return;
     }
 
+    showInstallTriggers();
     updateHeaderButtonMode(detectMode());
     bindTriggers();
     registerServiceWorker();
