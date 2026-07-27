@@ -52,13 +52,20 @@ internal static class MaterialStoreInventoryQuery
         }
         else
         {
-            // When stores are scoped, require positive quantity in those stores (not just a zero-qty row).
+            // Policy warehouses are an exclusive allow-list:
+            // 1) positive qty in at least one selected store
+            // 2) no positive qty in any store outside the selection
             query = query.Where(material =>
                 (mainDbContext.MaterialInventory
                     .Where(inventory => inventory.MaterialGuid == material.Guid
                         && inventory.StoreGuid.HasValue
                         && selectedStoreGuids.Contains(inventory.StoreGuid.Value))
-                    .Sum(inventory => (double?)(inventory.Qty ?? 0)) ?? 0) > 0);
+                    .Sum(inventory => (double?)(inventory.Qty ?? 0)) ?? 0) > 0
+                && !mainDbContext.MaterialInventory.Any(inventory =>
+                    inventory.MaterialGuid == material.Guid
+                    && inventory.StoreGuid.HasValue
+                    && !selectedStoreGuids.Contains(inventory.StoreGuid.Value)
+                    && (inventory.Qty ?? 0) > 0));
         }
 
         if (minWarehouseQuantity is not null)
@@ -83,4 +90,15 @@ internal static class MaterialStoreInventoryQuery
 
         return query;
     }
+
+    public static bool HasPositiveQuantityOutsideSelectedStores(
+        MainDbContext mainDbContext,
+        Guid materialGuid,
+        IReadOnlyCollection<Guid> selectedStoreGuids) =>
+        selectedStoreGuids.Count > 0
+        && mainDbContext.MaterialInventory.Any(inventory =>
+            inventory.MaterialGuid == materialGuid
+            && inventory.StoreGuid.HasValue
+            && !selectedStoreGuids.Contains(inventory.StoreGuid.Value)
+            && (inventory.Qty ?? 0) > 0);
 }

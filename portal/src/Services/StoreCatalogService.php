@@ -533,6 +533,8 @@ final class StoreCatalogService
             'filters_deferred' => $deferClientFilters,
             'filters_scoped' => $deferClientFilters,
             'filters' => $displayFilters,
+            'policy_store_guids' => self::parseList($policyRules['store_guids'] ?? []),
+            'policy_store_guids_applied' => $storeGuids,
         ];
 
         if (($apiError === null || $apiError === '') && !self::shouldRejectCachedCatalog($catalogResult)) {
@@ -1063,96 +1065,6 @@ final class StoreCatalogService
         }
 
         return $catalog;
-    }
-
-    /**
-     * Keep only materials that belong to the policy's allowed warehouses.
-     *
-     * @param list<array<string, mixed>> $products
-     * @param list<string> $storeGuids
-     * @return list<array<string, mixed>>
-     */
-    private static function filterProductsByPolicyWarehouse(array $products, array $storeGuids, ?bool $isAvailable = null): array
-    {
-        if ($storeGuids === [] || $products === []) {
-            return $products;
-        }
-
-        $guids = [];
-        foreach ($products as $product) {
-            if (!is_array($product)) {
-                continue;
-            }
-            $guid = trim((string) ($product['guid'] ?? $product['Guid'] ?? $product['materialGuid'] ?? $product['MaterialGuid'] ?? ''));
-            if ($guid !== '') {
-                $guids[] = $guid;
-            }
-        }
-        if ($guids === []) {
-            return [];
-        }
-
-        $allowed = self::fetchAllowedMaterialGuids($guids, $storeGuids, $isAvailable);
-
-        return array_values(array_filter($products, static function (array $product) use ($allowed): bool {
-            $guid = strtolower(trim((string) ($product['guid'] ?? $product['Guid'] ?? $product['materialGuid'] ?? $product['MaterialGuid'] ?? '')));
-
-            return $guid !== '' && isset($allowed[$guid]);
-        }));
-    }
-
-    /**
-     * @param list<string> $guids
-     * @param list<string> $storeGuids
-     * @return array<string, true> lowercase guid => true
-     */
-    private static function fetchAllowedMaterialGuids(array $guids, array $storeGuids, ?bool $isAvailable = null): array
-    {
-        $guids = array_values(array_unique(array_filter(
-            array_map(static fn ($guid): string => trim((string) $guid), $guids),
-            static fn (string $guid): bool => $guid !== ''
-        )));
-        if ($guids === [] || $storeGuids === []) {
-            return [];
-        }
-
-        $allowed = [];
-        foreach (array_chunk($guids, MaterialBatchService::MAX_GUIDS_PER_REQUEST) as $chunk) {
-            $query = [
-                'materialGuids' => implode(',', $chunk),
-                'storeGuids' => implode(',', $storeGuids),
-                'page' => 1,
-                'pageSize' => count($chunk),
-                'includeTotalCount' => 'false',
-            ];
-            if ($isAvailable === true) {
-                $query['isAvailable'] = 'true';
-            } elseif ($isAvailable === false) {
-                $query['isAvailable'] = 'false';
-            }
-
-            try {
-                $response = ApiClient::get('/api/materials', $query, 15);
-            } catch (\Throwable) {
-                continue;
-            }
-            if (!($response['ok'] ?? false)) {
-                continue;
-            }
-
-            $items = is_array($response['data']['items'] ?? null) ? $response['data']['items'] : [];
-            foreach ($items as $item) {
-                if (!is_array($item)) {
-                    continue;
-                }
-                $guid = trim((string) ($item['guid'] ?? $item['Guid'] ?? ''));
-                if ($guid !== '') {
-                    $allowed[strtolower($guid)] = true;
-                }
-            }
-        }
-
-        return $allowed;
     }
 
     /** @param array<string, mixed>|null $sectionContext */

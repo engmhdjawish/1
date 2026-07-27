@@ -696,7 +696,12 @@ public sealed class MaterialsController(
             ? quantityByMaterial.GetValueOrDefault(material.Guid, 0)
             : quantityByMaterial.GetValueOrDefault(material.Guid, material.Qty);
 
-        if (selectedStoreGuids.Count > 0 && (warehouseQuantity ?? 0) <= 0)
+        if (selectedStoreGuids.Count > 0
+            && ((warehouseQuantity ?? 0) <= 0
+                || MaterialStoreInventoryQuery.HasPositiveQuantityOutsideSelectedStores(
+                    mainDbContext,
+                    material.Guid,
+                    selectedStoreGuids)))
         {
             return NotFound();
         }
