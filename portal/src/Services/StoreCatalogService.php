@@ -269,8 +269,6 @@ final class StoreCatalogService
 
         $cachedCatalog = self::readCatalogCache($query, $policy);
         if ($cachedCatalog !== null) {
-            $cachedCatalog = self::applyPolicyScopeToCachedCatalog($cachedCatalog, $policy, $sectionContext);
-
             return self::attachClientFiltersPayload($cachedCatalog, $query);
         }
 
@@ -439,11 +437,6 @@ final class StoreCatalogService
             $apiError = $exception->getMessage();
         }
 
-        $products = self::scopeCatalogProductsForPolicy($products, $policyRules, $isAvailable, $sectionContext, $storeGuids);
-        if ($apiError === null && $products === []) {
-            $totalCount = 0;
-        }
-
         $filterOptions = ['stores' => [], 'groups' => []];
         if ($allowClientFilters && !$deferClientFilters) {
             $filterOptions = self::getCachedFilterOptions();
@@ -537,7 +530,6 @@ final class StoreCatalogService
         if ($apiError !== null && $apiError !== '') {
             $stale = self::readStaleCatalogCache($query, $policy);
             if ($stale !== null) {
-                $stale = self::applyPolicyScopeToCachedCatalog($stale, $policy, $sectionContext);
                 $stale['apiError'] = AmineAvailabilityService::userMessage();
                 $stale['catalog_stale'] = true;
 
@@ -607,9 +599,6 @@ final class StoreCatalogService
         }
 
         $products = self::applySellableStockFilter($products);
-        $policy = self::activePolicy();
-        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
-        $products = self::scopeCatalogProductsForPolicy($products, $policyRules, true, $sectionContext, []);
         $products = self::sortProducts($products, $sort);
         $totalCount = count($products);
         $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
@@ -754,14 +743,6 @@ final class StoreCatalogService
         } catch (\Throwable $exception) {
             $apiError = $exception->getMessage();
         }
-
-        $products = self::scopeCatalogProductsForPolicy(
-            $products,
-            $policyRules,
-            $isAvailable,
-            $sectionContext,
-            self::parseList($merged['storeGuids'] ?? [])
-        );
 
         $filterOptions = self::getCachedFilterOptions();
         $forcedStoreGuids = self::parseList($baseRules['store_guids'] ?? []);
@@ -2463,7 +2444,7 @@ final class StoreCatalogService
         $params['_policyStoreGuids'] = self::parseList($policyRules['store_guids'] ?? []);
         ksort($params);
 
-        return 'store_catalog_v8:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
+        return 'store_catalog_v9:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
     }
 
     /** @param array<string, mixed> $data */
