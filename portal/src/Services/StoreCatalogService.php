@@ -2713,7 +2713,7 @@ final class StoreCatalogService
         unset($params['facetFilters'], $params['loadFilterOptions'], $params['page']);
         ksort($params);
 
-        return 'store_scoped_filters_v1:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
+        return 'store_scoped_filters_v2:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));
     }
 
     /** @param array<string, mixed> $rules */
