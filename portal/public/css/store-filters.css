@@ -31,6 +31,24 @@
   margin-bottom: 0.85rem;
 }
 
+/* Keep search + filter button reachable while scrolling the catalog
+   (store, section browse, and share links share this markup). */
+@media (max-width: 1023px) {
+  .store-mobile-filter-bar {
+    position: sticky;
+    top: var(--site-header-sticky-offset, 5.5rem);
+    z-index: 30;
+    margin-inline: -0.35rem;
+    margin-bottom: 0.85rem;
+    padding: 0.45rem 0.35rem 0.55rem;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid #eef2f7;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+  }
+}
+
 .store-mobile-search {
   flex: 1;
   min-width: 0;
