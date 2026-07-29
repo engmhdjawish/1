@@ -115,89 +115,77 @@
     return url.toString();
   }
 
-  function parseFilenameFromDisposition(headerValue) {
-    if (!headerValue) {
+  let zipDownloadFrame = null;
+
+  function getZipDownloadFrame() {
+    if (zipDownloadFrame && document.body.contains(zipDownloadFrame)) {
+      return zipDownloadFrame;
+    }
+    zipDownloadFrame = document.createElement('iframe');
+    zipDownloadFrame.name = 'portal-material-zip-download';
+    zipDownloadFrame.title = 'Material ZIP download';
+    zipDownloadFrame.setAttribute('aria-hidden', 'true');
+    zipDownloadFrame.tabIndex = -1;
+    zipDownloadFrame.style.cssText = 'position:absolute;width:0;height:0;border:0;clip:rect(0,0,0,0);overflow:hidden';
+    document.body.appendChild(zipDownloadFrame);
+    return zipDownloadFrame;
+  }
+
+  function readIframeErrorMessage(frame) {
+    try {
+      const doc = frame.contentDocument;
+      if (!doc?.body) {
+        return '';
+      }
+      const raw = (doc.body.innerText || doc.body.textContent || '').trim();
+      if (!raw.startsWith('{')) {
+        return '';
+      }
+      const data = JSON.parse(raw);
+      return data?.message ? String(data.message) : '';
+    } catch {
       return '';
     }
-    const utfMatch = /filename\*=UTF-8''([^;]+)/i.exec(headerValue);
-    if (utfMatch?.[1]) {
-      try {
-        return decodeURIComponent(utfMatch[1].replace(/"/g, ''));
-      } catch {
-        return utfMatch[1].replace(/"/g, '');
-      }
-    }
-    const plainMatch = /filename="?([^";]+)"?/i.exec(headerValue);
-    return plainMatch?.[1] ? plainMatch[1].trim() : '';
   }
 
-  async function parseZipErrorResponse(response) {
-    const contentType = (response.headers.get('content-type') || '').toLowerCase();
-    const raw = await response.text();
-    if (contentType.includes('application/json') || raw.trim().startsWith('{')) {
-      try {
-        const data = JSON.parse(raw);
-        if (data?.message) {
-          return String(data.message);
-        }
-      } catch {
-        /* fall through */
-      }
+  function setSubmitBusy(submitButton, busy) {
+    if (!submitButton) {
+      return;
     }
-    if (raw.trim()) {
-      return raw.trim().slice(0, 240);
-    }
-    return 'تعذر تحضير الملف (رمز ' + response.status + ').';
+    submitButton.disabled = busy;
+    submitButton.classList.toggle('is-loading', busy);
   }
 
-  function triggerBlobDownload(blob, filename) {
-    const objectUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = objectUrl;
-    anchor.download = filename || 'download.zip';
-    anchor.style.display = 'none';
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-  }
-
-  async function downloadZipFromForm(form, statusHost, submitButton, preparingMessage) {
+  function downloadZipFromForm(form, statusHost, submitButton, preparingMessage) {
     const url = buildDownloadUrl(form);
-    showStatus(statusHost, preparingMessage, 'preparing');
-    if (submitButton) {
-      submitButton.disabled = true;
-      submitButton.classList.add('is-loading');
-    }
+    const frame = getZipDownloadFrame();
 
-    try {
-      const response = await fetch(url, {
-        credentials: 'same-origin',
-        headers: { Accept: 'application/zip, application/json;q=0.9, */*;q=0.8' },
-      });
+    showStatus(
+      statusHost,
+      preparingMessage + ' عند الجاهزية يظهر التحميل في شريط المتصفح ويمكنك متابعة التصفّح.',
+      'preparing'
+    );
+    setSubmitBusy(submitButton, true);
 
-      const contentType = (response.headers.get('content-type') || '').toLowerCase();
-      if (!response.ok || contentType.includes('application/json')) {
-        throw new Error(await parseZipErrorResponse(response));
+    const onLoad = () => {
+      const errorMessage = readIframeErrorMessage(frame);
+      setSubmitBusy(submitButton, false);
+      if (errorMessage) {
+        showStatus(statusHost, errorMessage, 'error');
+        return;
       }
+      showStatus(statusHost, 'بدأ التحميل — تابع التقدّم من شريط التحميل في المتصفح.', 'success');
+    };
 
-      const blob = await response.blob();
-      if (!blob || blob.size === 0) {
-        throw new Error('الملف فارغ — لا توجد صور للتحميل.');
-      }
+    frame.addEventListener('load', onLoad, { once: true });
+    window.setTimeout(() => {
+      setSubmitBusy(submitButton, false);
+    }, 3000);
 
-      const filename = parseFilenameFromDisposition(response.headers.get('content-disposition'))
-        || 'material-images.zip';
-      triggerBlobDownload(blob, filename);
-      showStatus(statusHost, 'تم تحضير الملف — بدأ التحميل.', 'success');
-    } catch (error) {
-      showStatus(statusHost, error?.message || 'تعذر تحضير الملف.', 'error');
-    } finally {
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.classList.remove('is-loading');
-      }
-    }
+    frame.src = 'about:blank';
+    window.requestAnimationFrame(() => {
+      frame.src = url;
+    });
   }
 
   function bindAvailabilityPersistence(form) {
