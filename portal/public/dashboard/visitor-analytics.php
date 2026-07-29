@@ -306,5 +306,6 @@ ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/visitor-analytics.php';
 $content = ob_get_clean();
 $title = 'سجل الزوار';
-$extraHead = '<link href="' . h(portal_asset_url('/css/visitor-log.css')) . '" rel="stylesheet">';
+$dashboardPageAssets = 'visitor-log';
+$extraHead = portal_stylesheet('/css/visitor-log.css');
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

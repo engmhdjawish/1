@@ -59,6 +59,15 @@ $renderIdentityName = static function (array $row): string {
     return $name;
 };
 
+$initialChar = static function (string $text): string {
+    $text = trim($text);
+    if ($text === '') {
+        return '?';
+    }
+
+    return function_exists('mb_substr') ? mb_substr($text, 0, 1) : substr($text, 0, 1);
+};
+
 $renderFunnelMini = static function (array $funnel): void {
     if ($funnel === []) {
         return;
@@ -172,7 +181,7 @@ $visitorsTotalPages = max(1, (int) ceil($visitorsTotal / $visitorsPerPage));
           ?>
           <li class="<?= $isActive ? 'is-active' : '' ?>">
             <a href="<?= h($buildUrl(['tab' => 'log', 'account' => $key, 'session' => null, 'sp' => null, 'tp' => null, 'ecat' => null])) ?>" class="visitor-log__visitor-row">
-              <span class="visitor-log__visitor-avatar visitor-log__pill <?= h($identityPill($group)) ?>"><?= h(mb_substr($renderIdentityName($group), 0, 1)) ?></span>
+              <span class="visitor-log__visitor-avatar visitor-log__pill <?= h($identityPill($group)) ?>"><?= h($initialChar($renderIdentityName($group))) ?></span>
               <span class="visitor-log__visitor-main">
                 <strong><?= h($renderIdentityName($group)) ?></strong>
                 <span class="visitor-log__visitor-meta">
@@ -198,7 +207,7 @@ $visitorsTotalPages = max(1, (int) ceil($visitorsTotal / $visitorsPerPage));
           </li>
         <?php endforeach; ?>
       </ul>
-      <?php $renderPagination((int) ($visitorsPage ?? 1), $visitorsTotalPages, $visitorsTotal, $buildUrl, 'vp'); ?>
+      <?php $renderPagination((int) ($visitorsPage ?? 1), $visitorsTotalPages, $visitorsTotal, 'vp'); ?>
     <?php endif; ?>
   </aside>
 
@@ -239,7 +248,7 @@ $visitorsTotalPages = max(1, (int) ceil($visitorsTotal / $visitorsPerPage));
 
       <header class="visitor-log__profile-head">
         <div class="visitor-log__profile-identity">
-          <span class="visitor-log__profile-avatar visitor-log__pill <?= h($identityPill($accountProfile)) ?>"><?= h(mb_substr((string) ($accountProfile['display_name'] ?? 'ز'), 0, 1)) ?></span>
+          <span class="visitor-log__profile-avatar visitor-log__pill <?= h($identityPill($accountProfile)) ?>"><?= h($initialChar((string) ($accountProfile['display_name'] ?? 'ز'))) ?></span>
           <div>
             <h2><?= h((string) ($accountProfile['display_name'] ?? 'زائر')) ?></h2>
             <p class="visitor-log__profile-sub">
@@ -384,7 +393,7 @@ $visitorsTotalPages = max(1, (int) ceil($visitorsTotal / $visitorsPerPage));
               </a>
             <?php endforeach; ?>
           </div>
-          <?php $renderPagination((int) ($sessionsMeta['page'] ?? 1), (int) ($sessionsMeta['total_pages'] ?? 1), (int) ($sessionsMeta['total'] ?? 0), $buildUrl, 'sp'); ?>
+          <?php $renderPagination((int) ($sessionsMeta['page'] ?? 1), (int) ($sessionsMeta['total_pages'] ?? 1), (int) ($sessionsMeta['total'] ?? 0), 'sp'); ?>
         </section>
       <?php endif; ?>
 
@@ -427,7 +436,7 @@ $visitorsTotalPages = max(1, (int) ceil($visitorsTotal / $visitorsPerPage));
               </ol>
             </div>
           <?php endforeach; ?>
-          <?php $renderPagination((int) ($timelineMeta['page'] ?? 1), (int) ($timelineMeta['total_pages'] ?? 1), (int) ($timelineMeta['total'] ?? 0), $buildUrl, 'tp'); ?>
+          <?php $renderPagination((int) ($timelineMeta['page'] ?? 1), (int) ($timelineMeta['total_pages'] ?? 1), (int) ($timelineMeta['total'] ?? 0), 'tp'); ?>
         <?php endif; ?>
       </section>
 
