@@ -92,10 +92,12 @@ $summary = $schemaReady ? VisitorLogService::summaryForDays($days) : [
 $recent = ($schemaReady && $tab === 'log') ? VisitorLogService::recent(80, null, $days, $logFilters) : [];
 $topProducts = ($schemaReady && $tab === 'insights') ? VisitorLogService::topProducts($days, 12) : [];
 $topPages = ($schemaReady && $tab === 'insights') ? VisitorLogService::topPages($days, 10) : [];
-$sessions = ($schemaReady && $tab === 'log') ? VisitorLogService::sessionSummaries($days, 40, $logFilters) : [];
+$sessions = ($schemaReady && $tab === 'log') ? VisitorLogService::sessionSummaries($days, 60, $logFilters) : [];
+$accountGroups = ($schemaReady && $tab === 'log') ? VisitorLogService::groupSessionsByAccount($sessions) : [];
 $sessionEvents = ($schemaReady && $tab === 'log' && $sessionId !== '')
-    ? VisitorLogService::sessionEvents($sessionId, 100)
+    ? VisitorLogService::sessionEvents($sessionId, 200)
     : [];
+$sessionDigest = ($sessionEvents !== []) ? VisitorLogService::buildSessionDigest($sessionEvents) : null;
 $mapPoints = ($schemaReady && $tab === 'insights') ? VisitorLogService::mapPoints($days, 200) : [];
 $locationStats = ($schemaReady && $tab === 'insights') ? VisitorLogService::locationStats($days, 10) : [];
 

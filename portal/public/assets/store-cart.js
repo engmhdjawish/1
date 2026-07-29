@@ -1120,6 +1120,30 @@
     });
   };
 
+  const trackCartLineAnalytics = (action, guid, sourceEl) => {
+    if (!window.SiteAnalytics || !guid) return;
+    const card = sourceEl?.closest?.('[data-cart-line]')
+      || document.querySelector(`[data-cart-line="${guid}"]`);
+    const name = card?.querySelector('.store-order-line-card__title')?.textContent?.trim() || 'صنف';
+    const code = card?.querySelector('.store-order-line-card__code')?.textContent?.trim() || '';
+    const labelPrefix = action === 'remove_from_cart' ? 'إزالة من السلة' : 'إضافة للسلة';
+    window.SiteAnalytics.track(action, {
+      product_guid: guid,
+      product_code: code,
+      product_name: name,
+      label_ar: `${labelPrefix}: ${name}`,
+    });
+  };
+
+  const trackOrderPlaced = (data) => {
+    if (!window.SiteAnalytics) return;
+    const orderNumber = String(data?.order_number || '').trim();
+    window.SiteAnalytics.track('order_placed', {
+      order_number: orderNumber,
+      label_ar: orderNumber !== '' ? `طلب: ${orderNumber}` : 'إرسال طلب',
+    });
+  };
+
   const submitAddCartForm = async (form) => {
     if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-store-add-cart')) {
       return;
@@ -1510,6 +1534,9 @@
         const guid = btn.dataset.removeItem || '';
         if (!guid) return;
         const data = await apiRequest({ action: 'remove', material_guid: guid });
+        if (data?.ok) {
+          trackCartLineAnalytics('remove_from_cart', guid, btn);
+        }
         applyCartResponse(data);
       });
     });
@@ -1618,6 +1645,7 @@
         }
         if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
         if (data.ok && data.redirect) {
+          trackOrderPlaced(data);
           window.location.href = data.redirect;
           return;
         }

@@ -10,7 +10,10 @@ use Portal\Services\VisitorLogService;
 /** @var list<array<string, mixed>> $topProducts */
 /** @var list<array<string, mixed>> $topPages */
 /** @var list<array<string, mixed>> $sessions */
-/** @var list<array<string, mixed>> $sessionEvents */
+/** @var list<array<string, mixed>> $accountGroups */
+/** @var array<string, mixed>|null $sessionDigest */
+$accountGroups = $accountGroups ?? [];
+$sessionDigest = $sessionDigest ?? null;
 /** @var list<array<string, mixed>> $mapPoints */
 /** @var list<array<string, mixed>> $locationStats */
 /** @var list<array<string, mixed>> $onlineStaff */
@@ -101,6 +104,27 @@ $locationLabel = static function (?string $city, ?string $country): string {
     }
 
     return $city !== '' ? $city : ($country !== '' ? $country : '—');
+};
+
+$renderAccountBrief = static function (array $group): string {
+    $parts = [];
+    $sessions = (int) ($group['session_count'] ?? count($group['sessions'] ?? []));
+    $parts[] = $sessions . ' جلس';
+    $events = (int) ($group['events'] ?? 0);
+    if ($events > 0) {
+        $parts[] = number_format($events) . ' ح';
+    }
+    if ((int) ($group['orders'] ?? 0) > 0) {
+        $parts[] = (int) $group['orders'] . ' طلب';
+    }
+    if ((int) ($group['cart_adds'] ?? 0) > 0) {
+        $parts[] = '+' . (int) $group['cart_adds'] . ' سلة';
+    }
+    if ((int) ($group['cart_removals'] ?? 0) > 0) {
+        $parts[] = '−' . (int) $group['cart_removals'];
+    }
+
+    return implode(' · ', $parts);
 };
 
 $guestSessionFromPresence = static function (array $row): string {
@@ -327,54 +351,76 @@ $guestSessionFromPresence = static function (array $row): string {
     <div class="visitor-log__split">
       <article class="visitor-log__panel">
         <header class="visitor-log__panel-head">
-          <h2>جلسات الزيارة</h2>
-          <span><?= count($sessions) ?> جلسة</span>
+          <h2>حسب الحساب</h2>
+          <span><?= count($accountGroups) ?> زائر · <?= count($sessions) ?> جلسة</span>
         </header>
-        <?php if ($sessions === []): ?>
+        <?php if ($accountGroups === []): ?>
           <p class="visitor-log__empty">لا توجد جلسات في هذه الفترة.</p>
         <?php else: ?>
-          <ul class="visitor-log__session-list">
-            <?php foreach ($sessions as $row): ?>
+          <div class="visitor-log__accounts visitor-log__accounts--compact">
+            <?php foreach ($accountGroups as $group): ?>
               <?php
-              $sid = (string) ($row['session_id'] ?? '');
-              $isActive = $sessionId !== '' && $sessionId === $sid;
+              $groupCustomerId = trim((string) ($group['web_customer_id'] ?? ''));
+              $groupSessions = is_array($group['sessions'] ?? null) ? $group['sessions'] : [];
+              $sessionCount = count($groupSessions);
+              $hasActiveSession = $sessionId !== '' && array_filter(
+                  $groupSessions,
+                  static fn (array $s): bool => (string) ($s['session_id'] ?? '') === $sessionId
+              ) !== [];
+              $kindLabel = match ((string) ($group['identity_kind'] ?? '')) {
+                  'customer' => 'عميل',
+                  'guest_order' => 'معروف',
+                  default => 'زائر',
+              };
               ?>
-              <li class="<?= $isActive ? 'is-active' : '' ?>">
-                <a href="<?= h($buildUrl(['tab' => 'log', 'session' => $sid])) ?>" class="visitor-log__session-link">
-                  <div class="visitor-log__session-top">
-                    <span class="visitor-log__pill <?= h($identityPill($row)) ?>">
+              <?php if ($sessionCount === 1): ?>
+                <?php
+                $row = $groupSessions[0];
+                $sid = (string) ($row['session_id'] ?? '');
+                $isActive = $sessionId !== '' && $sessionId === $sid;
+                ?>
+                <a href="<?= h($buildUrl(['tab' => 'log', 'session' => $sid])) ?>" class="visitor-log__account-row<?= $isActive ? ' is-active' : '' ?>">
+                  <span class="visitor-log__pill <?= h($identityPill($group)) ?>"><?= h($kindLabel) ?></span>
+                  <span class="visitor-log__account-row-name"><?= h($renderIdentityName($group)) ?></span>
+                  <span class="visitor-log__account-row-brief"><?= h($renderAccountBrief($group)) ?></span>
+                  <time><?= h((string) ($group['last_seen_fmt'] ?? '')) ?></time>
+                </a>
+              <?php else: ?>
+                <details class="visitor-log__account"<?= $hasActiveSession ? ' open' : '' ?>>
+                  <summary class="visitor-log__account-summary">
+                    <span class="visitor-log__pill <?= h($identityPill($group)) ?>"><?= h($kindLabel) ?></span>
+                    <span class="visitor-log__account-row-name"><?= h($renderIdentityName($group)) ?></span>
+                    <span class="visitor-log__account-row-brief"><?= h($renderAccountBrief($group)) ?></span>
+                    <time><?= h((string) ($group['last_seen_fmt'] ?? '')) ?></time>
+                  </summary>
+                  <ul class="visitor-log__account-sessions">
+                    <?php foreach (array_slice($groupSessions, 0, 6) as $row): ?>
                       <?php
-                      $kind = (string) ($row['identity_kind'] ?? '');
-                      echo h(match ($kind) {
-                          'customer' => 'عميل',
-                          'guest_order' => 'زائر معروف',
-                          default => 'زائر',
-                      });
+                      $sid = (string) ($row['session_id'] ?? '');
+                      $isActive = $sessionId !== '' && $sessionId === $sid;
                       ?>
-                    </span>
-                    <time><?= h((string) ($row['last_seen_fmt'] ?? '')) ?></time>
-                  </div>
-                  <div class="visitor-log__session-name"><?= h($renderIdentityName($row)) ?></div>
-                  <div class="visitor-log__session-stats">
-                    <span><?= number_format((int) ($row['events'] ?? 0)) ?> حدث</span>
-                    <span><?= number_format((int) ($row['product_views'] ?? 0)) ?> منتج</span>
-                    <span><?= number_format((int) ($row['cart_adds'] ?? 0)) ?> سلة</span>
-                  </div>
-                  <div class="visitor-log__session-location">
-                    <?= h($locationLabel((string) ($row['city_ar'] ?? ''), (string) ($row['country_ar'] ?? ''))) ?>
-                    <?php if (!empty($row['map_url'])): ?>
-                      <a href="<?= h((string) $row['map_url']) ?>" class="visitor-log__map-link" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation();">خريطة</a>
+                      <li>
+                        <a href="<?= h($buildUrl(['tab' => 'log', 'session' => $sid])) ?>" class="visitor-log__account-session<?= $isActive ? ' is-active' : '' ?>">
+                          <span><?= h((string) ($row['last_seen_fmt'] ?? '')) ?></span>
+                          <span><?= number_format((int) ($row['events'] ?? 0)) ?> ح</span>
+                          <?php if ((int) ($row['orders'] ?? 0) > 0): ?><span class="visitor-log__tag-order"><?= (int) $row['orders'] ?> طلب</span><?php endif; ?>
+                          <?php if ((int) ($row['cart_removals'] ?? 0) > 0): ?><span class="visitor-log__tag-remove">−<?= (int) $row['cart_removals'] ?></span><?php endif; ?>
+                        </a>
+                      </li>
+                    <?php endforeach; ?>
+                    <?php if ($sessionCount > 6): ?>
+                      <li class="visitor-log__account-more">+<?= $sessionCount - 6 ?> جلسات — <?= h($renderAccountBrief($group)) ?></li>
                     <?php endif; ?>
-                  </div>
-                  <?php if (!empty($row['web_customer_id'])): ?>
-                    <div class="visitor-log__session-links">
-                      <a href="<?= h($buildUrl(['customer_id' => (string) $row['web_customer_id'], 'session' => null])) ?>" class="visitor-log__inline-link" onclick="event.stopPropagation();">كل نشاطه</a>
+                  </ul>
+                  <?php if ($groupCustomerId !== ''): ?>
+                    <div class="visitor-log__account-foot">
+                      <a href="<?= h($buildUrl(['customer_id' => $groupCustomerId, 'session' => null])) ?>" class="visitor-log__inline-link">كل نشاط الحساب</a>
                     </div>
                   <?php endif; ?>
-                </a>
-              </li>
+                </details>
+              <?php endif; ?>
             <?php endforeach; ?>
-          </ul>
+          </div>
         <?php endif; ?>
       </article>
 
@@ -382,66 +428,123 @@ $guestSessionFromPresence = static function (array $row): string {
         <?php if ($sessionId === ''): ?>
           <div class="visitor-log__detail-empty">
             <span class="material-symbols-outlined" aria-hidden="true">touch_app</span>
-            <p>اختر جلسة من القائمة لعرض مسار الزائر خطوة بخطوة.</p>
+            <p>اختر جلسة لعرض ملخص واضح لنشاط الزائر — بدون تكرار كل صفحة.</p>
           </div>
-        <?php elseif ($sessionEvents === []): ?>
+        <?php elseif ($sessionDigest === null || ($sessionDigest['raw_count'] ?? 0) === 0): ?>
           <div class="visitor-log__detail-empty">
             <p>لا أحداث مسجّلة لهذه الجلسة.</p>
             <a href="<?= h($buildUrl(['tab' => 'log', 'session' => null])) ?>" class="visitor-log__action">عودة</a>
           </div>
         <?php else: ?>
-          <header class="visitor-log__panel-head">
+          <?php $digestStats = is_array($sessionDigest['stats'] ?? null) ? $sessionDigest['stats'] : []; ?>
+          <header class="visitor-log__panel-head visitor-log__panel-head--digest">
             <div>
-              <h2>مسار الجلسة</h2>
+              <h2>ملخص الجلسة</h2>
               <?php if (is_array($sessionIdentity)): ?>
                 <p class="visitor-log__session-identity">
                   <strong><?= h((string) ($sessionIdentity['display_name'] ?? 'زائر')) ?></strong>
-                  <?php if (trim((string) ($sessionIdentity['identity_subtitle'] ?? '')) !== ''): ?>
-                    <span> · <?= h((string) $sessionIdentity['identity_subtitle']) ?></span>
-                  <?php endif; ?>
                   <?php if (trim((string) ($sessionIdentity['identity_phone'] ?? '')) !== ''): ?>
                     <span dir="ltr"> · <?= h((string) $sessionIdentity['identity_phone']) ?></span>
                   <?php endif; ?>
                 </p>
-                <?php if (trim((string) ($sessionIdentity['web_customer_id'] ?? '')) !== ''): ?>
-                  <p class="visitor-log__session-identity-links">
-                    <a href="/dashboard/customers.php?details=<?= h((string) $sessionIdentity['web_customer_id']) ?>" class="visitor-log__inline-link">ملف العميل</a>
-                    <a href="<?= h($buildUrl(['customer_id' => (string) $sessionIdentity['web_customer_id'], 'session' => null])) ?>" class="visitor-log__inline-link">كل جلساته</a>
-                  </p>
-                <?php endif; ?>
               <?php endif; ?>
-              <p class="visitor-log__mono"><?= h($sessionId) ?></p>
+              <p class="visitor-log__digest-period">
+                <?= h((string) ($digestStats['started_fmt'] ?? '')) ?>
+                <?php if (!empty($digestStats['ended_fmt']) && ($digestStats['ended_fmt'] ?? '') !== ($digestStats['started_fmt'] ?? '')): ?>
+                  → <?= h((string) $digestStats['ended_fmt']) ?>
+                <?php endif; ?>
+                · <?= h((string) ($digestStats['duration_label'] ?? '—')) ?>
+              </p>
             </div>
             <a href="<?= h($buildUrl(['tab' => 'log', 'session' => null])) ?>" class="visitor-log__action">إغلاق</a>
           </header>
-          <ol class="visitor-log__timeline">
-            <?php foreach ($sessionEvents as $row): ?>
-              <li>
-                <div class="visitor-log__timeline-time"><?= h((string) ($row['created_at_fmt'] ?? '')) ?></div>
-                <div class="visitor-log__timeline-body">
-                  <span class="visitor-log__pill"><?= h((string) ($row['action_label_ar'] ?? '')) ?></span>
-                  <p><?= h((string) ($row['label_ar'] ?? '')) ?></p>
-                  <?php if (trim((string) ($row['city_ar'] ?? '')) !== '' || trim((string) ($row['country_ar'] ?? '')) !== ''): ?>
-                    <p class="visitor-log__timeline-location">
-                      <?= h($locationLabel((string) ($row['city_ar'] ?? ''), (string) ($row['country_ar'] ?? ''))) ?>
-                      <?php if (!empty($row['map_url'])): ?>
-                        <a href="<?= h((string) $row['map_url']) ?>" class="visitor-log__map-link" target="_blank" rel="noopener noreferrer">عرض على الخريطة</a>
+
+          <div class="visitor-log__digest-stats">
+            <div class="visitor-log__digest-stat"><span>صفحات</span><strong><?= number_format((int) ($digestStats['page_views'] ?? 0)) ?></strong></div>
+            <div class="visitor-log__digest-stat"><span>منتجات</span><strong><?= number_format((int) ($digestStats['product_views'] ?? 0)) ?></strong></div>
+            <div class="visitor-log__digest-stat"><span>+سلة</span><strong><?= number_format((int) ($digestStats['cart_adds'] ?? 0)) ?></strong></div>
+            <div class="visitor-log__digest-stat"><span>−سلة</span><strong><?= number_format((int) ($digestStats['cart_removals'] ?? 0)) ?></strong></div>
+            <div class="visitor-log__digest-stat"><span>طلبات</span><strong><?= number_format((int) ($digestStats['orders'] ?? 0)) ?></strong></div>
+          </div>
+
+          <?php if (trim((string) ($digestStats['location_label'] ?? '')) !== '' && ($digestStats['location_label'] ?? '') !== '—'): ?>
+            <div class="visitor-log__digest-location">
+              <span class="material-symbols-outlined" aria-hidden="true">location_on</span>
+              <span><?= h((string) $digestStats['location_label']) ?></span>
+              <?php if (trim((string) ($digestStats['location_source_label'] ?? '')) !== ''): ?>
+                <span class="visitor-log__digest-tag"><?= h((string) $digestStats['location_source_label']) ?></span>
+              <?php endif; ?>
+              <?php if (!empty($digestStats['map_url'])): ?>
+                <a href="<?= h((string) $digestStats['map_url']) ?>" class="visitor-log__map-link" target="_blank" rel="noopener noreferrer">عرض على الخريطة</a>
+              <?php endif; ?>
+            </div>
+          <?php endif; ?>
+
+          <?php if (trim((string) ($digestStats['visitor_ip'] ?? '')) !== ''): ?>
+            <p class="visitor-log__digest-ip" dir="ltr">IP: <?= h((string) $digestStats['visitor_ip']) ?></p>
+          <?php endif; ?>
+
+          <?php
+          $topPages = is_array($digestStats['top_pages'] ?? null) ? $digestStats['top_pages'] : [];
+          $topProducts = is_array($digestStats['top_products'] ?? null) ? $digestStats['top_products'] : [];
+          ?>
+          <?php if ($topPages !== []): ?>
+            <section class="visitor-log__digest-block">
+              <h3>الصفحات الأكثر زيارة</h3>
+              <ul class="visitor-log__digest-chips">
+                <?php foreach ($topPages as $page): ?>
+                  <li>
+                    <span class="visitor-log__mono"><?= h((string) ($page['path'] ?? '')) ?></span>
+                    <?php if ((int) ($page['count'] ?? 0) > 1): ?>
+                      <span class="visitor-log__digest-count"><?= (int) $page['count'] ?>×</span>
+                    <?php endif; ?>
+                  </li>
+                <?php endforeach; ?>
+              </ul>
+            </section>
+          <?php endif; ?>
+
+          <?php if ($topProducts !== []): ?>
+            <section class="visitor-log__digest-block">
+              <h3>المنتجات التي شاهدها</h3>
+              <ul class="visitor-log__digest-list">
+                <?php foreach ($topProducts as $product): ?>
+                  <li><?= h((string) ($product['product_name'] ?? 'صنف')) ?></li>
+                <?php endforeach; ?>
+              </ul>
+            </section>
+          <?php endif; ?>
+
+          <?php $highlights = is_array($sessionDigest['highlights'] ?? null) ? $sessionDigest['highlights'] : []; ?>
+          <?php if ($highlights !== []): ?>
+            <section class="visitor-log__digest-block">
+              <h3>أهم الأحداث</h3>
+              <ol class="visitor-log__highlights">
+                <?php foreach ($highlights as $row): ?>
+                  <li>
+                    <span class="material-symbols-outlined" aria-hidden="true"><?= h((string) ($row['icon'] ?? 'trip_origin')) ?></span>
+                    <div>
+                      <strong><?= h((string) ($row['action_label_ar'] ?? $row['label_ar'] ?? '')) ?></strong>
+                      <?php if (trim((string) ($row['label_ar'] ?? '')) !== '' && trim((string) ($row['action_label_ar'] ?? '')) !== trim((string) ($row['label_ar'] ?? ''))): ?>
+                        <p><?= h((string) $row['label_ar']) ?></p>
                       <?php endif; ?>
-                    </p>
-                  <?php elseif (!empty($row['map_url'])): ?>
-                    <p class="visitor-log__timeline-location">
-                      <a href="<?= h((string) $row['map_url']) ?>" class="visitor-log__map-link" target="_blank" rel="noopener noreferrer">عرض الموقع على الخريطة</a>
-                    </p>
-                  <?php endif; ?>
-                </div>
-              </li>
-            <?php endforeach; ?>
-          </ol>
+                    </div>
+                    <time><?= h((string) ($row['created_at_fmt'] ?? '')) ?></time>
+                  </li>
+                <?php endforeach; ?>
+              </ol>
+            </section>
+          <?php endif; ?>
+
+          <p class="visitor-log__hint">
+            <?= number_format((int) ($sessionDigest['highlight_count'] ?? 0)) ?> حدث مهم
+            من <?= number_format((int) ($sessionDigest['raw_count'] ?? 0)) ?> مسجّل — الصفحات والمنتجات مجمّعة أعلاه.
+          </p>
         <?php endif; ?>
       </article>
     </div>
 
-    <?php if ($recent !== []): ?>
+    <?php if ($recent !== [] && $sessionId === ''): ?>
       <article class="visitor-log__panel visitor-log__panel--wide visitor-log__panel--compact">
         <header class="visitor-log__panel-head">
           <h2>آخر النشاط</h2>
