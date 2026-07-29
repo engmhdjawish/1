@@ -104,42 +104,81 @@ final class MaterialImageZipJobService
         return $jobId;
     }
 
-    public static function spawnWorker(): void
+    public static function getStatus(string $jobId, ?string $userId): array
     {
-        $lockPath = self::workerLockPath();
-        $lockHandle = @fopen($lockPath, 'c+');
-        if ($lockHandle === false) {
-            return;
+        self::ensureTable();
+        self::recoverStaleBuildingJobs();
+        $job = self::getJobForUser($jobId, $userId, false);
+
+        if (($job['status'] ?? '') === 'queued') {
+            self::spawnWorker();
         }
 
-        if (!flock($lockHandle, LOCK_EX | LOCK_NB)) {
-            fclose($lockHandle);
-            return;
+        $queuedSeconds = 0;
+        if (($job['status'] ?? '') === 'queued' && !empty($job['created_at'])) {
+            $createdAt = strtotime((string) $job['created_at']);
+            if ($createdAt !== false) {
+                $queuedSeconds = max(0, time() - $createdAt);
+            }
         }
 
-        flock($lockHandle, LOCK_UN);
-        fclose($lockHandle);
+        return [
+            'jobId' => $job['id'],
+            'status' => $job['status'],
+            'progressPct' => (int) ($job['progress_pct'] ?? 0),
+            'progressMessage' => (string) ($job['progress_message'] ?? ''),
+            'imageCount' => (int) ($job['image_count'] ?? 0),
+            'fileName' => (string) ($job['file_name'] ?? ''),
+            'errorMessage' => (string) ($job['error_message'] ?? ''),
+            'queuedSeconds' => $queuedSeconds,
+            'downloadUrl' => ($job['status'] ?? '') === 'ready'
+                ? '/api/material-images-zip-jobs.php?jobId=' . rawurlencode((string) $job['id']) . '&download=1'
+                : null,
+        ];
+    }
+
+    public static function spawnWorker(): bool
+    {
+        if (self::isWorkerRunning()) {
+            return true;
+        }
 
         $php = self::phpBinary();
-        $script = dirname(__DIR__, 2) . '/scripts/build-material-zip-job.php';
+        $script = self::workerScriptPath();
         if (!is_file($script)) {
-            return;
+            self::logSpawn('worker script missing: ' . $script);
+
+            return false;
         }
 
         $logPath = self::jobsDir(true) . '/worker.log';
-        $command = sprintf(
-            'nohup %s %s >> %s 2>&1 &',
-            escapeshellarg($php),
-            escapeshellarg($script),
-            escapeshellarg($logPath)
+        $spawned = self::dispatchBackgroundProcess($php, $script, $logPath);
+        self::logSpawn($spawned
+            ? 'spawned worker with ' . $php . ' ' . $script
+            : 'failed to spawn worker with ' . $php . ' ' . $script);
+
+        return $spawned;
+    }
+
+    public static function countQueuedJobs(): int
+    {
+        self::ensureTable();
+        $stmt = Database::pdo()->query(
+            'SELECT COUNT(*) FROM material_image_zip_jobs WHERE status = \'queued\''
         );
-        exec($command);
+
+        return (int) ($stmt?->fetchColumn() ?: 0);
     }
 
     public static function runWorker(): void
     {
         self::ensureTable();
         self::cleanupExpiredJobs();
+        self::recoverStaleBuildingJobs();
+
+        if (self::countQueuedJobs() === 0) {
+            exit(0);
+        }
 
         $lockPath = self::workerLockPath();
         $lockHandle = @fopen($lockPath, 'c+');
@@ -288,25 +327,6 @@ final class MaterialImageZipJobService
             }
             self::markFailed($jobId, $exception->getMessage());
         }
-    }
-
-    public static function getStatus(string $jobId, ?string $userId): array
-    {
-        self::ensureTable();
-        $job = self::getJobForUser($jobId, $userId, false);
-
-        return [
-            'jobId' => $job['id'],
-            'status' => $job['status'],
-            'progressPct' => (int) ($job['progress_pct'] ?? 0),
-            'progressMessage' => (string) ($job['progress_message'] ?? ''),
-            'imageCount' => (int) ($job['image_count'] ?? 0),
-            'fileName' => (string) ($job['file_name'] ?? ''),
-            'errorMessage' => (string) ($job['error_message'] ?? ''),
-            'downloadUrl' => ($job['status'] ?? '') === 'ready'
-                ? '/api/material-images-zip-jobs.php?jobId=' . rawurlencode((string) $job['id']) . '&download=1'
-                : null,
-        ];
     }
 
     public static function streamDownload(string $jobId, ?string $userId): void
@@ -472,6 +492,106 @@ final class MaterialImageZipJobService
         return self::jobsDir(true) . '/worker.lock';
     }
 
+    public static function recoverStaleBuildingJobs(): void
+    {
+        self::ensureTable();
+        Database::pdo()->exec(
+            'UPDATE material_image_zip_jobs
+             SET status = \'queued\',
+                 progress_pct = 0,
+                 progress_message = \'إعادة محاولة التحضير...\',
+                 started_at = NULL,
+                 updated_at = NOW()
+             WHERE status = \'building\'
+               AND started_at IS NOT NULL
+               AND started_at < NOW() - INTERVAL \'20 minutes\''
+        );
+    }
+
+    private static function isWorkerRunning(): bool
+    {
+        $lockPath = self::workerLockPath();
+        $lockHandle = @fopen($lockPath, 'c+');
+        if ($lockHandle === false) {
+            return false;
+        }
+
+        $running = !flock($lockHandle, LOCK_EX | LOCK_NB);
+        if (!$running) {
+            flock($lockHandle, LOCK_UN);
+        }
+        fclose($lockHandle);
+
+        return $running;
+    }
+
+    private static function dispatchBackgroundProcess(string $php, string $script, string $logPath): bool
+    {
+        $cwd = self::portalRoot();
+        $command = sprintf(
+            'cd %s && %s %s >> %s 2>&1 &',
+            escapeshellarg($cwd),
+            escapeshellarg($php),
+            escapeshellarg($script),
+            escapeshellarg($logPath)
+        );
+
+        if (function_exists('proc_open') && !self::isFunctionDisabled('proc_open')) {
+            $process = @proc_open(
+                $command,
+                [
+                    0 => ['file', '/dev/null', 'r'],
+                    1 => ['file', '/dev/null', 'w'],
+                    2 => ['file', '/dev/null', 'w'],
+                ],
+                $pipes,
+                $cwd
+            );
+            if (is_resource($process)) {
+                proc_close($process);
+
+                return true;
+            }
+        }
+
+        if (function_exists('exec') && !self::isFunctionDisabled('exec')) {
+            exec($command);
+
+            return true;
+        }
+
+        if (function_exists('shell_exec') && !self::isFunctionDisabled('shell_exec')) {
+            shell_exec($command);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static function isFunctionDisabled(string $function): bool
+    {
+        $disabled = array_map('trim', explode(',', (string) ini_get('disable_functions')));
+
+        return in_array($function, $disabled, true);
+    }
+
+    private static function logSpawn(string $message): void
+    {
+        $line = '[' . date('c') . '] ' . $message . PHP_EOL;
+        @file_put_contents(self::jobsDir(true) . '/spawn.log', $line, FILE_APPEND);
+    }
+
+    private static function portalRoot(): string
+    {
+        return dirname(__DIR__, 2);
+    }
+
+    private static function workerScriptPath(): string
+    {
+        return self::portalRoot() . '/scripts/build-material-zip-job.php';
+    }
+
     private static function phpBinary(): string
     {
         $configured = Config::get('PORTAL_PHP_CLI_BIN');
@@ -479,26 +599,31 @@ final class MaterialImageZipJobService
             return trim($configured);
         }
 
-        if (\PHP_SAPI === 'cli' && defined('PHP_BINARY') && str_contains((string) PHP_BINARY, 'php')) {
-            return (string) PHP_BINARY;
+        $candidates = [];
+        if (defined('PHP_BINARY')) {
+            $binary = (string) PHP_BINARY;
+            if (str_contains($binary, 'php-fpm')) {
+                $candidates[] = preg_replace('#php-fpm#', 'php', $binary) ?: '';
+                $candidates[] = dirname($binary) . '/php' . PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
+            } elseif (str_contains($binary, 'php')) {
+                $candidates[] = $binary;
+            }
+        }
+
+        foreach (['8.5', '8.4', '8.3', '8.2', ''] as $suffix) {
+            $candidates[] = $suffix === '' ? '/usr/bin/php' : '/usr/bin/php' . $suffix;
+        }
+        $candidates[] = 'php';
+
+        foreach (array_unique(array_filter($candidates)) as $candidate) {
+            if (str_contains($candidate, 'php-fpm')) {
+                continue;
+            }
+            if ($candidate === 'php' || @is_executable($candidate)) {
+                return $candidate;
+            }
         }
 
         return 'php';
-    }
-
-    private static function isProcessAlive(int $pid): bool
-    {
-        if ($pid <= 0) {
-            return false;
-        }
-
-        if (\PHP_OS_FAMILY === 'Windows') {
-            $output = [];
-            exec('tasklist /FI "PID eq ' . $pid . '" 2>NUL', $output);
-
-            return implode("\n", $output) !== '' && !str_contains(implode("\n", $output), 'No tasks');
-        }
-
-        return function_exists('posix_kill') ? @posix_kill($pid, 0) : is_dir('/proc/' . $pid);
     }
 }

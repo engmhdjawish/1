@@ -109,7 +109,7 @@ copy_portal_tree() {
     --exclude 'vendor/' \
     --exclude '.git/' \
     "$src/" "$dest/"
-  mkdir -p "$dest/storage/material-images/thumbnails" "$dest/storage/site-media" "$dest/storage/fonts"
+  mkdir -p "$dest/storage/material-images/thumbnails" "$dest/storage/site-media" "$dest/storage/fonts" "$dest/storage/zip-jobs"
   chmod -R u+rwX,g+rwX "$dest/storage" 2>/dev/null || true
   if [[ -d "$dest/images" ]]; then
     mkdir -p "$dest/images/images/_processed" "$dest/images/images/thumbnails" 2>/dev/null || true
@@ -142,6 +142,7 @@ AMINE_API_PASSWORD=${AMINE_API_PASSWORD}
 PORTAL_APP_URL=${PORTAL_APP_URL}
 PORTAL_SESSION_NAME=${PORTAL_SESSION_NAME:-portal_session}
 PORTAL_STORAGE_PATH=${PORTAL_STORAGE_PATH:-}
+PORTAL_PHP_CLI_BIN=${PORTAL_PHP_CLI_BIN:-/usr/bin/php8.5}
 PORTAL_REPO_DOCS_PATH=${PORTAL_REPO_DOCS_PATH:-../docs}
 PORTAL_DETAILS_FONT_PATH=${PORTAL_DETAILS_FONT_PATH:-}
 EOF
