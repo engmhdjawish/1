@@ -144,7 +144,8 @@ if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] =
                 $guestPhone,
                 $notes !== '' ? $notes : null,
                 $cartItems,
-                $loggedInCustomer !== null ? (string) ($loggedInCustomer['id'] ?? '') : null
+                $loggedInCustomer !== null ? (string) ($loggedInCustomer['id'] ?? '') : null,
+                StoreCartRequest::visitorSessionIdFromInput($_POST)
             );
             if (!$result['ok']) {
                 ShareCartService::stashUnavailableLines($token, is_array($result['unavailable_items'] ?? null) ? $result['unavailable_items'] : []);
@@ -458,6 +459,7 @@ ob_start();
               <form method="post" class="space-y-3 border-t border-gray-100 pt-4">
                 <input type="hidden" name="token" value="<?= h($token) ?>">
                 <input type="hidden" name="action" value="submit_order">
+                <input type="hidden" name="visitor_session_id" value="" data-visitor-session-id>
                 <?php if ($loggedInCustomer): ?>
                   <p class="text-xs text-gray-600 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">إرسال الطلب بحسابك المسجّل — بياناتك مأخوذة من ملفك.</p>
                 <?php else: ?>
@@ -489,6 +491,16 @@ ob_start();
     <?php endif; ?>
   <?php endif; ?>
 </div>
+<script>
+(() => {
+  try {
+    const id = localStorage.getItem('jawish_vid') || '';
+    document.querySelectorAll('[data-visitor-session-id]').forEach((el) => {
+      if (id) el.value = id;
+    });
+  } catch { /* ignore */ }
+})();
+</script>
 <?php
 $content = ob_get_clean();
 $title = 'السلة';

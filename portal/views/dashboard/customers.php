@@ -204,6 +204,7 @@ $hitListLimit = $shownCount >= $listLimit && $activeTabCount > $shownCount;
           <div class="dash-cust-actions">
             <a href="<?= h($detailsUrl) ?>" class="dash-cust-action">التفاصيل</a>
             <a href="/dashboard/orders.php?web_customer_id=<?= h($rowId) ?>" class="dash-cust-action">الطلبات</a>
+            <a href="/dashboard/visitor-analytics.php?tab=log&amp;customer_id=<?= h($rowId) ?>" class="dash-cust-action">سجل الزيارات</a>
             <?php if ($canManageCustomers): ?>
               <a href="<?= h($buildCustomerUrl(array_merge($listBaseParams, ['edit' => $rowId]))) ?>" class="dash-cust-action">تعديل</a>
             <?php endif; ?>
@@ -258,6 +259,7 @@ $hitListLimit = $shownCount >= $listLimit && $activeTabCount > $shownCount;
                     <a href="<?= h($detailsUrl) ?>" class="dash-cust-action">التفاصيل</a>
                   <?php endif; ?>
                   <a href="/dashboard/orders.php?web_customer_id=<?= h($rowId) ?>" class="dash-cust-action">الطلبات</a>
+                  <a href="/dashboard/visitor-analytics.php?tab=log&amp;customer_id=<?= h($rowId) ?>" class="dash-cust-action">سجل الزيارات</a>
                   <?php if ($canManageCustomers): ?>
                     <a href="<?= h($buildCustomerUrl(array_merge($listBaseParams, ['edit' => $rowId]))) ?>" class="dash-cust-action">تعديل</a>
                   <?php endif; ?>
@@ -302,6 +304,13 @@ $hitListLimit = $shownCount >= $listLimit && $activeTabCount > $shownCount;
             تعديل
           </a>
         <?php endif; ?>
+        <a
+          href="/dashboard/visitor-analytics.php?tab=log&amp;customer_id=<?= h((string) ($detailsCustomer['id'] ?? '')) ?>"
+          class="inline-flex items-center gap-1 h-8 px-3 rounded-lg border border-border-subtle bg-white text-[11px] font-bold text-slate-700 hover:bg-surface-low"
+        >
+          <span class="material-symbols-outlined text-sm">history</span>
+          سجل الزيارات
+        </a>
       </div>
     </header>
 

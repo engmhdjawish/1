@@ -1586,12 +1586,21 @@
     const form = root.querySelector('[data-checkout-form]');
     if (!form || form.dataset.bound === '1') return;
     form.dataset.bound = '1';
+    const getVisitorSessionId = () => {
+      try {
+        return localStorage.getItem('jawish_vid') || '';
+      } catch {
+        return '';
+      }
+    };
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const btn = form.querySelector('[type="submit"]');
       btn?.classList.add('is-loading');
       const payload = { action: 'submit_order' };
       new FormData(form).forEach((v, k) => { payload[k] = v; });
+      const visitorSessionId = getVisitorSessionId();
+      if (visitorSessionId) payload.visitor_session_id = visitorSessionId;
       const submitOnce = async (confirmPriceChanges = false) => {
         if (confirmPriceChanges) payload.confirm_price_changes = '1';
         else delete payload.confirm_price_changes;

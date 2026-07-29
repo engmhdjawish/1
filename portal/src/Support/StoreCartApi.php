@@ -542,7 +542,8 @@ final class StoreCartApi
             $guestPhone,
             $notes !== '' ? $notes : null,
             $cartItems,
-            $loggedInCustomer !== null ? (string) ($loggedInCustomer['id'] ?? '') : null
+            $loggedInCustomer !== null ? (string) ($loggedInCustomer['id'] ?? '') : null,
+            StoreCartRequest::visitorSessionIdFromInput($input)
         );
         if (!($result['ok'] ?? false)) {
             ShareCartService::stashUnavailableLines(

@@ -11,6 +11,8 @@ final class VisitorLogService
 {
     private static ?bool $hasSchema = null;
 
+    private static ?bool $ordersHaveVisitorSession = null;
+
   /** @var array<string, string> */
     private const ACTION_LABELS = [
         'page_view' => 'زيارة صفحة',
@@ -22,6 +24,7 @@ final class VisitorLogService
         'store_search' => 'بحث في المتجر',
         'store_filter' => 'تصفية المتجر',
         'order_start' => 'بدء طلب',
+        'order_placed' => 'إرسال طلب',
         'login' => 'تسجيل دخول',
     ];
 
@@ -168,6 +171,404 @@ final class VisitorLogService
         return ['ok' => true];
     }
 
+    /**
+     * @param array<string, mixed>|null $customer
+     */
+    public static function recordOrderPlaced(
+        string $sessionId,
+        string $orderId,
+        string $orderNumber,
+        ?string $webCustomerId,
+        string $guestNameAr,
+        string $guestPhone,
+        ?array $customer = null
+    ): void {
+        if (!self::hasSchema() || trim($sessionId) === '' || trim($orderId) === '') {
+            return;
+        }
+
+        $guestNameAr = trim($guestNameAr);
+        $guestPhone = trim($guestPhone);
+        $label = $guestNameAr !== ''
+            ? ('طلب جديد: ' . $guestNameAr . ($orderNumber !== '' ? ' (' . $orderNumber . ')' : ''))
+            : ('طلب جديد' . ($orderNumber !== '' ? ': ' . $orderNumber : ''));
+
+        self::recordEvent(
+            $sessionId,
+            'order_placed',
+            '/order',
+            'إرسال طلب',
+            '',
+            $customer,
+            [
+                'order_id' => $orderId,
+                'order_number' => $orderNumber,
+                'guest_name' => $guestNameAr,
+                'guest_phone' => $guestPhone,
+                'label_ar' => $label,
+            ]
+        );
+    }
+
+    public static function mapExternalUrl(?float $latitude, ?float $longitude): ?string
+    {
+        if ($latitude === null || $longitude === null) {
+            return null;
+        }
+        if (!self::isValidCoordinate($latitude, $longitude)) {
+            return null;
+        }
+
+        return 'https://www.google.com/maps?q='
+            . rawurlencode(number_format($latitude, 6, '.', '') . ',' . number_format($longitude, 6, '.', ''));
+    }
+
+    public static function ordersHaveVisitorSessionColumn(): bool
+    {
+        if (self::$ordersHaveVisitorSession !== null) {
+            return self::$ordersHaveVisitorSession;
+        }
+
+        try {
+            self::$ordersHaveVisitorSession = (bool) Database::pdo()->query(
+                "SELECT 1 FROM information_schema.columns
+                 WHERE table_schema = 'public'
+                   AND table_name = 'orders'
+                   AND column_name = 'visitor_session_id'
+                 LIMIT 1"
+            )->fetchColumn();
+        } catch (\Throwable) {
+            self::$ordersHaveVisitorSession = false;
+        }
+
+        return self::$ordersHaveVisitorSession;
+    }
+
+    /**
+     * @param list<string> $sessionIds
+     * @return array<string, array<string, mixed>>
+     */
+    public static function resolveIdentitiesForSessions(array $sessionIds): array
+    {
+        $sessionIds = array_values(array_unique(array_filter(array_map(
+            static fn ($id): string => trim((string) $id),
+            $sessionIds
+        ))));
+        if ($sessionIds === [] || !self::hasSchema()) {
+            return [];
+        }
+
+        $identities = [];
+
+        try {
+            $placeholders = implode(', ', array_fill(0, count($sessionIds), '?'));
+            $stmt = Database::pdo()->prepare(
+                "SELECT DISTINCT ON (vl.session_id)
+                    vl.session_id,
+                    vl.web_customer_id::text AS web_customer_id,
+                    wc.name_ar,
+                    wc.phone
+                 FROM visitor_logs vl
+                 INNER JOIN web_customers wc ON wc.id = vl.web_customer_id
+                 WHERE vl.session_id IN ($placeholders)
+                 ORDER BY vl.session_id, vl.created_at DESC"
+            );
+            $stmt->execute($sessionIds);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+                $sid = (string) ($row['session_id'] ?? '');
+                if ($sid === '') {
+                    continue;
+                }
+                $identities[$sid] = self::identityFromParts(
+                    'customer',
+                    'registered',
+                    (string) ($row['name_ar'] ?? ''),
+                    (string) ($row['phone'] ?? ''),
+                    (string) ($row['web_customer_id'] ?? ''),
+                    null,
+                    null
+                );
+            }
+
+            $stmt = Database::pdo()->prepare(
+                "SELECT DISTINCT ON (session_id)
+                    session_id,
+                    details_ar::jsonb->>'guest_name' AS guest_name,
+                    details_ar::jsonb->>'guest_phone' AS guest_phone,
+                    details_ar::jsonb->>'order_id' AS order_id,
+                    details_ar::jsonb->>'order_number' AS order_number,
+                    web_customer_id::text AS web_customer_id
+                 FROM visitor_logs
+                 WHERE session_id IN ($placeholders)
+                   AND action = 'order_placed'
+                 ORDER BY session_id, created_at DESC"
+            );
+            $stmt->execute($sessionIds);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+                $sid = (string) ($row['session_id'] ?? '');
+                if ($sid === '' || isset($identities[$sid])) {
+                    continue;
+                }
+                $customerId = trim((string) ($row['web_customer_id'] ?? ''));
+                $name = trim((string) ($row['guest_name'] ?? ''));
+                $phone = trim((string) ($row['guest_phone'] ?? ''));
+                if ($customerId !== '') {
+                    continue;
+                }
+                if ($name === '') {
+                    continue;
+                }
+                $identities[$sid] = self::identityFromParts(
+                    'guest_order',
+                    'order_event',
+                    $name,
+                    $phone,
+                    null,
+                    trim((string) ($row['order_id'] ?? '')),
+                    trim((string) ($row['order_number'] ?? ''))
+                );
+            }
+
+            if (self::ordersHaveVisitorSessionColumn()) {
+                $stmt = Database::pdo()->prepare(
+                    "SELECT DISTINCT ON (o.visitor_session_id)
+                        o.visitor_session_id AS session_id,
+                        o.web_customer_id::text AS web_customer_id,
+                        COALESCE(NULLIF(TRIM(wc.name_ar), ''), NULLIF(TRIM(o.guest_name_ar), '')) AS name_ar,
+                        COALESCE(NULLIF(TRIM(wc.phone), ''), NULLIF(TRIM(o.guest_phone), '')) AS phone,
+                        o.id::text AS order_id,
+                        o.order_number
+                     FROM orders o
+                     LEFT JOIN web_customers wc ON wc.id = o.web_customer_id
+                     WHERE o.visitor_session_id IN ($placeholders)
+                     ORDER BY o.visitor_session_id, o.created_at DESC"
+                );
+                $stmt->execute($sessionIds);
+                foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+                    $sid = (string) ($row['session_id'] ?? '');
+                    if ($sid === '' || isset($identities[$sid])) {
+                        continue;
+                    }
+                    $customerId = trim((string) ($row['web_customer_id'] ?? ''));
+                    $name = trim((string) ($row['name_ar'] ?? ''));
+                    if ($name === '') {
+                        continue;
+                    }
+                    $identities[$sid] = self::identityFromParts(
+                        $customerId !== '' ? 'customer' : 'guest_order',
+                        'last_order',
+                        $name,
+                        (string) ($row['phone'] ?? ''),
+                        $customerId !== '' ? $customerId : null,
+                        trim((string) ($row['order_id'] ?? '')),
+                        trim((string) ($row['order_number'] ?? ''))
+                    );
+                }
+            }
+        } catch (\Throwable) {
+            return $identities;
+        }
+
+        return $identities;
+    }
+
+    /** @return array<string, mixed>|null */
+    public static function resolveIdentityForIp(string $ip): ?array
+    {
+        $ip = trim($ip);
+        if ($ip === '' || !self::hasSchema()) {
+            return null;
+        }
+
+        try {
+            if (self::ordersHaveVisitorSessionColumn()) {
+                $stmt = Database::pdo()->prepare(
+                    "SELECT
+                        o.web_customer_id::text AS web_customer_id,
+                        COALESCE(NULLIF(TRIM(wc.name_ar), ''), NULLIF(TRIM(o.guest_name_ar), '')) AS name_ar,
+                        COALESCE(NULLIF(TRIM(wc.phone), ''), NULLIF(TRIM(o.guest_phone), '')) AS phone,
+                        o.id::text AS order_id,
+                        o.order_number
+                     FROM orders o
+                     LEFT JOIN web_customers wc ON wc.id = o.web_customer_id
+                     WHERE o.visitor_session_id IN (
+                         SELECT DISTINCT session_id
+                         FROM visitor_logs
+                         WHERE visitor_ip = :ip AND session_id <> ''
+                     )
+                     ORDER BY o.created_at DESC
+                     LIMIT 1"
+                );
+                $stmt->execute(['ip' => $ip]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                if ($row !== false) {
+                    $name = trim((string) ($row['name_ar'] ?? ''));
+                    if ($name !== '') {
+                        $customerId = trim((string) ($row['web_customer_id'] ?? ''));
+
+                        return self::identityFromParts(
+                            $customerId !== '' ? 'customer' : 'guest_order',
+                            'last_order',
+                            $name,
+                            (string) ($row['phone'] ?? ''),
+                            $customerId !== '' ? $customerId : null,
+                            trim((string) ($row['order_id'] ?? '')),
+                            trim((string) ($row['order_number'] ?? ''))
+                        );
+                    }
+                }
+            }
+
+            $stmt = Database::pdo()->prepare(
+                "SELECT DISTINCT ON (vl.session_id)
+                    vl.session_id,
+                    vl.web_customer_id::text AS web_customer_id,
+                    wc.name_ar,
+                    wc.phone
+                 FROM visitor_logs vl
+                 INNER JOIN web_customers wc ON wc.id = vl.web_customer_id
+                 WHERE vl.visitor_ip = :ip
+                 ORDER BY vl.session_id, vl.created_at DESC
+                 LIMIT 1"
+            );
+            $stmt->execute(['ip' => $ip]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row !== false && trim((string) ($row['name_ar'] ?? '')) !== '') {
+                return self::identityFromParts(
+                    'customer',
+                    'registered',
+                    (string) ($row['name_ar'] ?? ''),
+                    (string) ($row['phone'] ?? ''),
+                    (string) ($row['web_customer_id'] ?? ''),
+                    null,
+                    null
+                );
+            }
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @param array<string, array<string, mixed>> $identities
+     * @return array<string, mixed>
+     */
+    public static function applyIdentity(array $row, array $identities): array
+    {
+        $sessionId = trim((string) ($row['session_id'] ?? ''));
+        $identity = $sessionId !== '' && isset($identities[$sessionId])
+            ? $identities[$sessionId]
+            : null;
+
+        if ($identity === null) {
+            $customerId = trim((string) ($row['web_customer_id'] ?? ''));
+            if ($customerId !== '') {
+                $names = self::lookupCustomerNames([$customerId]);
+                if (isset($names[$customerId])) {
+                    $identity = self::identityFromParts(
+                        'customer',
+                        'registered',
+                        (string) ($names[$customerId]['name_ar'] ?? ''),
+                        (string) ($names[$customerId]['phone'] ?? ''),
+                        $customerId,
+                        null,
+                        null
+                    );
+                }
+            } else {
+                $ip = trim((string) ($row['visitor_ip'] ?? ''));
+                if ($ip !== '') {
+                    $identity = self::resolveIdentityForIp($ip);
+                }
+            }
+        }
+
+        if ($identity === null) {
+            $row['display_name'] = 'زائر';
+            $row['identity_kind'] = 'guest';
+            $row['identity_subtitle'] = '';
+            $row['identity_source'] = null;
+
+            return $row;
+        }
+
+        $row['display_name'] = (string) ($identity['display_name'] ?? 'زائر');
+        $row['identity_kind'] = (string) ($identity['identity_kind'] ?? 'guest');
+        $row['identity_subtitle'] = (string) ($identity['identity_subtitle'] ?? '');
+        $row['identity_source'] = $identity['identity_source'] ?? null;
+        $row['identity_phone'] = (string) ($identity['phone'] ?? '');
+        if (!empty($identity['web_customer_id'])) {
+            $row['web_customer_id'] = (string) $identity['web_customer_id'];
+        }
+        if (!empty($identity['order_id'])) {
+            $row['last_order_id'] = (string) $identity['order_id'];
+        }
+        if (!empty($identity['order_number'])) {
+            $row['last_order_number'] = (string) $identity['order_number'];
+        }
+
+        return $row;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function identityFromParts(
+        string $kind,
+        ?string $source,
+        string $name,
+        string $phone,
+        ?string $webCustomerId,
+        ?string $orderId,
+        ?string $orderNumber
+    ): array {
+        $name = trim($name);
+        $phone = trim($phone);
+        $webCustomerId = $webCustomerId !== null && trim($webCustomerId) !== '' ? trim($webCustomerId) : null;
+
+        $displayName = $name !== '' ? $name : ($kind === 'customer' ? 'عميل' : 'زائر');
+        $subtitle = '';
+        if ($kind === 'guest_order' && $source === 'last_order') {
+            $subtitle = 'آخر طلب';
+        } elseif ($kind === 'guest_order' && $orderNumber !== null && trim($orderNumber) !== '') {
+            $subtitle = trim($orderNumber);
+        }
+
+        return [
+            'display_name' => $displayName,
+            'identity_kind' => $kind,
+            'identity_subtitle' => $subtitle,
+            'identity_source' => $source,
+            'phone' => $phone,
+            'web_customer_id' => $webCustomerId,
+            'order_id' => $orderId,
+            'order_number' => $orderNumber,
+        ];
+    }
+
+    /** @param array<string, mixed> $filters */
+    private static function sessionMatchesSearch(array $row, string $search): bool
+    {
+        $search = mb_strtolower(trim($search));
+        if ($search === '') {
+            return true;
+        }
+
+        $haystack = mb_strtolower(implode(' ', array_filter([
+            (string) ($row['display_name'] ?? ''),
+            (string) ($row['identity_subtitle'] ?? ''),
+            (string) ($row['identity_phone'] ?? ''),
+            (string) ($row['session_id'] ?? ''),
+            (string) ($row['visitor_ip'] ?? ''),
+            (string) ($row['last_order_number'] ?? ''),
+        ])));
+
+        return str_contains($haystack, $search);
+    }
+
     /** @param array<string, mixed> $payload */
     private static function buildLabelAr(string $action, array $payload): string
     {
@@ -243,13 +644,14 @@ final class VisitorLogService
     }
 
     /** @return list<array<string, mixed>> */
-    public static function recent(int $limit = 100, ?string $action = null, ?int $days = null): array
+    public static function recent(int $limit = 100, ?string $action = null, ?int $days = null, array $filters = []): array
     {
         if (!self::hasSchema()) {
             return [];
         }
 
         $limit = max(1, min(500, $limit));
+        $customerId = trim((string) ($filters['customer_id'] ?? ''));
         $sql = 'SELECT
                     id::text AS id,
                     session_id,
@@ -275,6 +677,10 @@ final class VisitorLogService
             $sql .= " AND created_at >= NOW() - (:days || ' days')::interval";
             $params['days'] = (string) max(1, min(365, $days));
         }
+        if ($customerId !== '') {
+            $sql .= ' AND web_customer_id::text = :customer_id';
+            $params['customer_id'] = $customerId;
+        }
         $sql .= ' ORDER BY created_at DESC LIMIT :limit';
         $stmt = Database::pdo()->prepare($sql);
         foreach ($params as $key => $value) {
@@ -283,7 +689,12 @@ final class VisitorLogService
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->execute();
 
-        return array_map([self::class, 'enrichRow'], $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+        $rows = array_map([self::class, 'enrichRow'], $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+        $identities = self::resolveIdentitiesForSessions(array_column($rows, 'session_id'));
+
+        return array_map(static function (array $row) use ($identities): array {
+            return self::applyIdentity($row, $identities);
+        }, $rows);
     }
 
     /** @return list<array<string, mixed>> */
@@ -404,8 +815,8 @@ final class VisitorLogService
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
-    /** @return list<array<string, mixed>> */
-    public static function sessionSummaries(int $days = 7, int $limit = 25): array
+    /** @param array{customer_id?: string, q?: string} $filters @return list<array<string, mixed>> */
+    public static function sessionSummaries(int $days = 7, int $limit = 25, array $filters = []): array
     {
         if (!self::hasSchema()) {
             return [];
@@ -413,8 +824,10 @@ final class VisitorLogService
 
         $days = max(1, min(365, $days));
         $limit = max(1, min(100, $limit));
-        $stmt = Database::pdo()->prepare(
-            "SELECT
+        $customerId = trim((string) ($filters['customer_id'] ?? ''));
+        $search = trim((string) ($filters['q'] ?? ''));
+
+        $sql = "SELECT
                 session_id,
                 COUNT(*)::int AS events,
                 COUNT(*) FILTER (WHERE action = 'page_view')::int AS page_views,
@@ -426,28 +839,82 @@ final class VisitorLogService
                 MAX(visitor_ip) AS visitor_ip,
                 MAX(country_ar) AS country_ar,
                 MAX(city_ar) AS city_ar,
+                MAX(latitude) AS latitude,
+                MAX(longitude) AS longitude,
                 MIN(created_at) AS first_seen,
                 MAX(created_at) AS last_seen
              FROM visitor_logs
-             WHERE created_at >= NOW() - (:days || ' days')::interval
-             GROUP BY session_id
-             ORDER BY last_seen DESC
-             LIMIT :limit"
-        );
-        $stmt->bindValue(':days', (string) $days);
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+             WHERE created_at >= NOW() - (:days || ' days')::interval";
+        $params = ['days' => (string) $days];
+
+        if ($customerId !== '') {
+            $sessionFilter = 'web_customer_id::text = :customer_id';
+            if (self::ordersHaveVisitorSessionColumn()) {
+                $sessionFilter .= " OR session_id IN (
+                    SELECT DISTINCT visitor_session_id
+                    FROM orders
+                    WHERE web_customer_id::text = :customer_id
+                      AND visitor_session_id IS NOT NULL
+                      AND visitor_session_id <> ''
+                )";
+            }
+            $sql .= " AND ($sessionFilter)";
+            $params['customer_id'] = $customerId;
+        }
+
+        $sql .= ' GROUP BY session_id ORDER BY last_seen DESC LIMIT :limit';
+
+        $stmt = Database::pdo()->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value);
+        }
+        $fetchLimit = $search !== '' ? min(500, $limit * 4) : $limit;
+        $stmt->bindValue(':limit', $fetchLimit, PDO::PARAM_INT);
         $stmt->execute();
 
-        return array_map(static function (array $row): array {
+        $rawRows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $identities = self::resolveIdentitiesForSessions(array_column($rawRows, 'session_id'));
+        $customerNames = self::lookupCustomerNames(array_filter(array_map(
+            static fn (array $row): string => trim((string) ($row['web_customer_id'] ?? '')),
+            $rawRows
+        )));
+
+        $rows = [];
+        foreach ($rawRows as $row) {
             $row['events'] = (int) ($row['events'] ?? 0);
             $row['page_views'] = (int) ($row['page_views'] ?? 0);
             $row['product_views'] = (int) ($row['product_views'] ?? 0);
             $row['cart_adds'] = (int) ($row['cart_adds'] ?? 0);
             $row['first_seen_fmt'] = self::formatTimestamp($row['first_seen'] ?? null);
             $row['last_seen_fmt'] = self::formatTimestamp($row['last_seen'] ?? null);
+            $lat = isset($row['latitude']) ? (float) $row['latitude'] : null;
+            $lng = isset($row['longitude']) ? (float) $row['longitude'] : null;
+            $row['map_url'] = self::mapExternalUrl($lat, $lng);
 
-            return $row;
-        }, $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+            $cid = trim((string) ($row['web_customer_id'] ?? ''));
+            if ($cid !== '' && isset($customerNames[$cid])) {
+                $identities[(string) $row['session_id']] = self::identityFromParts(
+                    'customer',
+                    'registered',
+                    (string) ($customerNames[$cid]['name_ar'] ?? ''),
+                    (string) ($customerNames[$cid]['phone'] ?? ''),
+                    $cid,
+                    null,
+                    null
+                );
+            }
+
+            $row = self::applyIdentity($row, $identities);
+            if (!self::sessionMatchesSearch($row, $search)) {
+                continue;
+            }
+            $rows[] = $row;
+            if (count($rows) >= $limit) {
+                break;
+            }
+        }
+
+        return $rows;
     }
 
     /** @return list<array<string, mixed>> */
@@ -471,6 +938,8 @@ final class VisitorLogService
                 visitor_ip,
                 country_ar,
                 city_ar,
+                latitude,
+                longitude,
                 referer,
                 details_ar,
                 web_customer_id::text AS web_customer_id,
@@ -484,7 +953,17 @@ final class VisitorLogService
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->execute();
 
-        return array_map([self::class, 'enrichRow'], $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+        $rows = array_map([self::class, 'enrichRow'], $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+        $identities = self::resolveIdentitiesForSessions([$sessionId]);
+
+        return array_map(static function (array $row) use ($identities): array {
+            $row = self::applyIdentity($row, $identities);
+            $lat = isset($row['latitude']) ? (float) $row['latitude'] : null;
+            $lng = isset($row['longitude']) ? (float) $row['longitude'] : null;
+            $row['map_url'] = self::mapExternalUrl($lat, $lng);
+
+            return $row;
+        }, $rows);
     }
 
     /** @return list<array<string, mixed>> */
@@ -592,8 +1071,51 @@ final class VisitorLogService
         $row['created_at_fmt'] = self::formatTimestamp($row['created_at'] ?? null);
         $row['location_source'] = (string) ($meta['location_source'] ?? 'ip');
         $row['location_source_label'] = $row['location_source'] === 'gps' ? 'GPS' : 'IP';
+        $lat = isset($row['latitude']) ? (float) $row['latitude'] : null;
+        $lng = isset($row['longitude']) ? (float) $row['longitude'] : null;
+        $row['map_url'] = self::mapExternalUrl($lat, $lng);
 
         return $row;
+    }
+
+    /**
+     * @param list<string> $customerIds
+     * @return array<string, array{name_ar: string, phone: string}>
+     */
+    private static function lookupCustomerNames(array $customerIds): array
+    {
+        $customerIds = array_values(array_unique(array_filter(array_map(
+            static fn ($id): string => trim((string) $id),
+            $customerIds
+        ))));
+        if ($customerIds === []) {
+            return [];
+        }
+
+        try {
+            $placeholders = implode(', ', array_fill(0, count($customerIds), '?'));
+            $stmt = Database::pdo()->prepare(
+                "SELECT id::text AS id, name_ar, phone
+                 FROM web_customers
+                 WHERE id::text IN ($placeholders)"
+            );
+            $stmt->execute($customerIds);
+            $map = [];
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+                $id = (string) ($row['id'] ?? '');
+                if ($id === '') {
+                    continue;
+                }
+                $map[$id] = [
+                    'name_ar' => (string) ($row['name_ar'] ?? ''),
+                    'phone' => (string) ($row['phone'] ?? ''),
+                ];
+            }
+
+            return $map;
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     /** @param array<string, mixed>|null $meta

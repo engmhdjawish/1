@@ -310,6 +310,7 @@ CREATE TABLE orders (
     amine_synced_at         TIMESTAMPTZ,
     amine_sync_error_ar     VARCHAR(1000),
     reservation_notes_ar    VARCHAR(1000),
+    visitor_session_id      VARCHAR(120),
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -317,6 +318,8 @@ CREATE TABLE orders (
 CREATE INDEX ix_orders_created ON orders (created_at DESC);
 CREATE INDEX ix_orders_customer ON orders (web_customer_id, created_at DESC);
 CREATE INDEX ix_orders_share_link ON orders (share_link_id, created_at DESC);
+CREATE INDEX ix_orders_visitor_session ON orders (visitor_session_id, created_at DESC)
+    WHERE visitor_session_id IS NOT NULL AND visitor_session_id <> '';
 CREATE INDEX ix_orders_amine_sync ON orders (amine_sync_status) WHERE amine_sync_status <> 'none';
 
 CREATE TABLE order_items (
