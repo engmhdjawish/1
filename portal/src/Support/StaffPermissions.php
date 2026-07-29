@@ -17,7 +17,7 @@ final class StaffPermissions
             ['code' => 'orders.view', 'name_ar' => 'عرض الطلبات', 'category_ar' => 'مبيعات', 'description_ar' => 'متابعة طلبات الموقع'],
             ['code' => 'orders.manage', 'name_ar' => 'إدارة الطلبات', 'category_ar' => 'مبيعات', 'description_ar' => 'تأكيد الطلبات وتغيير حالتها'],
             ['code' => 'share_links.manage', 'name_ar' => 'روابط المشاركة', 'category_ar' => 'مبيعات', 'description_ar' => 'إنشاء وإدارة روابط المشاركة'],
-            ['code' => 'visitors.view', 'name_ar' => 'نشاط الزوار', 'category_ar' => 'تحليلات', 'description_ar' => 'سجل زيارات الروابط والمتجر'],
+            ['code' => 'visitors.view', 'name_ar' => 'سجل الزوار', 'category_ar' => 'تحليلات', 'description_ar' => 'سجل زيارات المتجر والمتصلين الآن'],
             ['code' => 'web_customers.view', 'name_ar' => 'عرض عملاء الويب', 'category_ar' => 'عملاء', 'description_ar' => 'قائمة عملاء التسجيل'],
             ['code' => 'web_customers.approve', 'name_ar' => 'موافقة العملاء', 'category_ar' => 'عملاء', 'description_ar' => 'تفعيل أو رفض تسجيلات العملاء'],
             ['code' => 'web_customers.manage', 'name_ar' => 'إدارة عملاء الويب', 'category_ar' => 'عملاء', 'description_ar' => 'إنشاء وتعديل حسابات العملاء'],

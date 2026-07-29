@@ -239,7 +239,7 @@ $navLinks = [
 <?= portal_defer_script('/assets/pwa.js') ?>
 <?= portal_defer_script('/assets/site-page-loading.js') ?>
 <?= portal_defer_script('/assets/notifications.js') ?>
-<?php if ($staffLoggedIn || $customer !== null): ?>
+<?php if ($enableSiteAnalytics): ?>
 <script>
 (function () {
   const visitorId = (() => {
@@ -255,6 +255,7 @@ $navLinks = [
       return '';
     }
   })();
+  if (!visitorId) return;
   const beat = () => fetch('/api/session-heartbeat.php', {
     method: 'POST',
     credentials: 'same-origin',
