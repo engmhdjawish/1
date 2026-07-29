@@ -978,8 +978,11 @@ function home_section_return_url(array $section): string
  *   preview_display_options: array<string, mixed>
  * }
  */
-function section_price_display_state(array $displayOptions, ?array $storeCatalogDisplay = null): array
-{
+function section_price_display_state(
+    array $displayOptions,
+    ?array $storeCatalogDisplay = null,
+    string $context = 'home'
+): array {
     $storeCatalogDisplay ??= [];
     $storeShowPrice = (bool) ($storeCatalogDisplay['show_price'] ?? false);
     $sectionPriceMode = trim((string) ($displayOptions['price_mode'] ?? 'both'));
@@ -990,8 +993,13 @@ function section_price_display_state(array $displayOptions, ?array $storeCatalog
     $sectionShowPrice = array_key_exists('show_price', $displayOptions)
         ? (bool) $displayOptions['show_price']
         : ($sectionPriceMode !== 'none');
-    // سياسة المتجر/الزائر هي السقف — لا تُعرض أسعار الأقسام إذا منعت سياسة الوصول ذلك.
-    $effectiveSectionShowPrice = $sectionShowPrice && $storeShowPrice;
+    if ($context === 'store') {
+        // المتجر: سياسة الوصول (زائر/عميل) هي المرجع الوحيد للأسعار.
+        $effectiveSectionShowPrice = $sectionShowPrice && $storeShowPrice;
+    } else {
+        // الرئيسية: الأقسام قد تعرض الأسعار بإعدادها حتى لو المتجر يخفيه للزائر.
+        $effectiveSectionShowPrice = $sectionShowPrice && ($storeShowPrice || $sectionPriceMode !== 'none');
+    }
 
     if (!$effectiveSectionShowPrice || $sectionPriceMode === 'none') {
         return [
@@ -1037,7 +1045,7 @@ function section_price_display_state(array $displayOptions, ?array $storeCatalog
 /** @param array<string, mixed> $sectionDisplayOptions @param array<string, mixed> $baseDisplayOptions @return array<string, mixed> */
 function section_catalog_display_options(array $sectionDisplayOptions, array $baseDisplayOptions): array
 {
-    $priceState = section_price_display_state($sectionDisplayOptions, $baseDisplayOptions);
+    $priceState = section_price_display_state($sectionDisplayOptions, $baseDisplayOptions, 'store');
     $merged = array_merge($baseDisplayOptions, $priceState['preview_display_options']);
     if (!(bool) ($baseDisplayOptions['show_price'] ?? false)) {
         $merged['show_price'] = false;

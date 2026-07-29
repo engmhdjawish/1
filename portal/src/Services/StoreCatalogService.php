@@ -109,6 +109,36 @@ final class StoreCatalogService
         return self::$displayOptionsCache;
     }
 
+    /**
+     * خيارات عرض صفحة المتجر — لا تسمح لسياق القسم بتجاوز سياسة الوصول للأسعار.
+     *
+     * @param array<string, mixed>|null $sectionContext
+     * @return array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string}
+     */
+    public static function storePageDisplayOptions(?array $sectionContext = null): array
+    {
+        $policyDisplay = self::displayOptions();
+        if ($sectionContext === null || !is_array($sectionContext['display_options'] ?? null)) {
+            return $policyDisplay;
+        }
+
+        if (!function_exists('section_catalog_display_options')) {
+            require dirname(__DIR__, 2) . '/views/helpers.php';
+        }
+
+        $merged = section_catalog_display_options(
+            $sectionContext['display_options'],
+            $policyDisplay
+        );
+
+        if (!(bool) ($policyDisplay['show_price'] ?? false)) {
+            $merged['show_price'] = false;
+            $merged['price_mode'] = 'none';
+        }
+
+        return $merged;
+    }
+
     /** هل يُعرض مبدّل العملة في الهيدر (سياسة الوصول أو أقسام رئيسية بأسعار). */
     public static function headerShowsPriceCurrency(?string $pagePath = null): bool
     {
@@ -118,7 +148,11 @@ final class StoreCatalogService
         }
 
         $pagePath ??= \Portal\Support\PortalUrl::requestPath();
-        if (!in_array($pagePath, ['/index.php', '/', '/store.php', '/product.php', '/share.php'], true)) {
+        if (in_array($pagePath, ['/store.php', '/product.php'], true)) {
+            return false;
+        }
+
+        if (!in_array($pagePath, ['/index.php', '/', '/share.php'], true)) {
             return false;
         }
 
@@ -132,7 +166,7 @@ final class StoreCatalogService
         );
 
         foreach ($sectionDisplays as $sectionDisplay) {
-            $state = section_price_display_state($sectionDisplay, $display);
+            $state = section_price_display_state($sectionDisplay, $display, 'home');
             if ($state['show_any_price']) {
                 return true;
             }

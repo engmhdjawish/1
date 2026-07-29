@@ -10,7 +10,7 @@ use Portal\Services\StoreCartService;
 /** @var array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string} $storeCatalogDisplay */
 
 $displayOptions = is_array($section['display_options'] ?? null) ? $section['display_options'] : [];
-$priceState = section_price_display_state($displayOptions, $storeCatalogDisplay);
+$priceState = section_price_display_state($displayOptions, $storeCatalogDisplay, 'home');
 $showImages = (bool) ($priceState['show_images'] ?? true);
 $showAnyPrice = (bool) ($priceState['show_any_price'] ?? false);
 $isOfferSection = !empty($section['is_offer_section']);

@@ -50,14 +50,8 @@ try {
         'store_options' => [],
     ];
 }
-$displayOptions = StoreCatalogService::displayOptions();
 $sectionContext = is_array($catalog['section_context'] ?? null) ? $catalog['section_context'] : null;
-if ($sectionContext !== null && is_array($sectionContext['display_options'] ?? null)) {
-    $displayOptions = section_catalog_display_options(
-        $sectionContext['display_options'],
-        $displayOptions
-    );
-}
+$displayOptions = StoreCatalogService::storePageDisplayOptions($sectionContext);
 $isCustomer = CustomerSession::check();
 
 $isStoreAjaxNav = strtolower(trim((string) ($_SERVER['HTTP_X_STORE_NAV'] ?? ''))) === '1';
