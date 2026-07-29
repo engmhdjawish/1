@@ -529,7 +529,7 @@ final class MaterialImageZipJobService
     {
         $cwd = self::portalRoot();
         $command = sprintf(
-            'cd %s && %s %s >> %s 2>&1 &',
+            'cd %s && nohup %s %s >> %s 2>&1 &',
             escapeshellarg($cwd),
             escapeshellarg($php),
             escapeshellarg($script),
