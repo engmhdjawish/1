@@ -101,7 +101,7 @@ final class MaterialImageZipJobService
             throw new \RuntimeException('تعذر إنشاء طلب التحميل.');
         }
 
-        self::spawnWorker();
+        self::spawnWorker(true);
 
         return $jobId;
     }
@@ -112,11 +112,11 @@ final class MaterialImageZipJobService
         self::recoverStaleBuildingJobs();
         self::expireStaleQueuedJobs();
 
-        if (self::countQueuedJobs() > 0) {
-            self::spawnWorker();
-        }
-
         $job = self::getJobForUser($jobId, $userId, false);
+
+        if (($job['status'] ?? '') === 'queued') {
+            self::spawnWorker(false);
+        }
 
         $queuedSeconds = 0;
         if (($job['status'] ?? '') === 'queued' && !empty($job['created_at'])) {
@@ -141,8 +141,12 @@ final class MaterialImageZipJobService
         ];
     }
 
-    public static function spawnWorker(): bool
+    public static function spawnWorker(bool $force = false): bool
     {
+        if (!$force && !self::shouldAttemptSpawn()) {
+            return false;
+        }
+
         if (self::isWorkerRunning()) {
             self::logSpawn('worker already running — skipped spawn');
 
@@ -188,6 +192,7 @@ final class MaterialImageZipJobService
         self::cleanupExpiredJobs();
         self::recoverStaleBuildingJobs();
         self::expireStaleQueuedJobs();
+        self::cleanupPendingDownloadFiles();
 
         $queuedCount = self::countQueuedJobs();
         self::logWorker('runWorker: queued=' . $queuedCount);
@@ -370,16 +375,124 @@ final class MaterialImageZipJobService
         }
 
         $fileName = trim((string) ($job['file_name'] ?? 'material-images'));
-        MaterialImageZipService::streamExistingZipFile($path, $fileName);
 
+        if (self::tryNginxAccelDownload($path, $fileName)) {
+            self::markJobDownloaded($jobId);
+            self::scheduleDownloadedFileCleanup($path);
+
+            return;
+        }
+
+        MaterialImageZipService::streamExistingZipFile($path, $fileName);
+        self::markJobDownloaded($jobId);
+        @unlink($path);
+    }
+
+    private static function markJobDownloaded(string $jobId): void
+    {
         $stmt = Database::pdo()->prepare(
             'UPDATE material_image_zip_jobs
              SET downloaded_at = NOW(), updated_at = NOW(), status = \'downloaded\'
              WHERE id = :id'
         );
         $stmt->execute(['id' => $jobId]);
+    }
 
-        @unlink($path);
+    private static function scheduleDownloadedFileCleanup(string $path): void
+    {
+        $cleanupList = self::jobsDir(true) . '/pending-unlink.txt';
+        @file_put_contents($cleanupList, $path . PHP_EOL, FILE_APPEND | LOCK_EX);
+    }
+
+    public static function cleanupPendingDownloadFiles(): void
+    {
+        $cleanupList = self::jobsDir(true) . '/pending-unlink.txt';
+        if (!is_file($cleanupList)) {
+            return;
+        }
+
+        $paths = file($cleanupList, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if (!is_array($paths)) {
+            return;
+        }
+
+        $remaining = [];
+        $cutoff = time() - 300;
+        foreach ($paths as $path) {
+            $path = trim((string) $path);
+            if ($path === '') {
+                continue;
+            }
+            $meta = @stat($path);
+            if ($meta !== false && ($meta['mtime'] ?? time()) <= $cutoff && is_file($path)) {
+                @unlink($path);
+                continue;
+            }
+            if (is_file($path)) {
+                $remaining[] = $path;
+            }
+        }
+
+        if ($remaining === []) {
+            @unlink($cleanupList);
+
+            return;
+        }
+
+        @file_put_contents($cleanupList, implode(PHP_EOL, $remaining) . PHP_EOL, LOCK_EX);
+    }
+
+    private static function tryNginxAccelDownload(string $path, string $fileName): bool
+    {
+        if (Config::get('PORTAL_ZIP_X_ACCEL', '1') === '0') {
+            return false;
+        }
+
+        $jobsDir = realpath(self::jobsDir());
+        $realPath = realpath($path);
+        if ($jobsDir === false || $realPath === false) {
+            return false;
+        }
+
+        $normalizedJobs = rtrim(str_replace('\\', '/', $jobsDir), '/');
+        $normalizedPath = str_replace('\\', '/', $realPath);
+        if (!str_starts_with($normalizedPath, $normalizedJobs . '/')) {
+            return false;
+        }
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        header('X-Accel-Buffering: no');
+        header('Content-Type: application/zip');
+        header(
+            'Content-Disposition: attachment; filename="'
+            . MaterialImageZipService::sanitizeFilename($fileName)
+            . '.zip"'
+        );
+        header('X-Accel-Redirect: /internal/zip-jobs/' . rawurlencode(basename($realPath)));
+
+        return true;
+    }
+
+    private static function shouldAttemptSpawn(): bool
+    {
+        $path = self::jobsDir(true) . '/spawn-throttle.txt';
+        $now = time();
+        $last = is_file($path) ? (int) trim((string) @file_get_contents($path)) : 0;
+        if ($now - $last < 15) {
+            return false;
+        }
+
+        @file_put_contents($path, (string) $now, LOCK_EX);
+
+        return true;
     }
 
     /**

@@ -22,6 +22,10 @@ if (@file_put_contents($logPath, '[' . date('c') . '] worker invoked' . PHP_EOL,
 
 define('PORTAL_NO_SESSION', true);
 
+if (function_exists('proc_nice')) {
+    @proc_nice(10);
+}
+
 try {
     require $base . '/bootstrap.php';
 } catch (Throwable $exception) {

@@ -13,6 +13,9 @@ require dirname(__DIR__, 2) . '/views/helpers.php';
 
 $user = WebSession::user();
 $userId = isset($user['id']) ? (string) $user['id'] : null;
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 $jobId = trim((string) ($_GET['jobId'] ?? ''));
 $download = (string) ($_GET['download'] ?? '') === '1';
 

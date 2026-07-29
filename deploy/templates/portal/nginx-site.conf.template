@@ -43,6 +43,12 @@ server {
         include fastcgi_params;
     }
 
+    # ZIP job downloads — PHP auth then nginx serves file (no PHP-FPM streaming)
+    location /internal/zip-jobs/ {
+        internal;
+        alias {{PORTAL_PUBLISH_DIR}}/storage/zip-jobs/;
+    }
+
     location ~* \.(css|js|jpg|jpeg|png|gif|ico|svg|webp|avif|woff2?)$ {
         expires 30d;
         add_header Cache-Control "public, immutable";
@@ -99,6 +105,11 @@ server {
 #         fastcgi_pass unix:/run/php/php8.2-fpm.sock;
 #         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
 #         include fastcgi_params;
+#     }
+#
+#     location /internal/zip-jobs/ {
+#         internal;
+#         alias {{PORTAL_PUBLISH_DIR}}/storage/zip-jobs/;
 #     }
 #
 #     location ~* \.(css|js|jpg|jpeg|png|gif|ico|svg|webp|avif|woff2?)$ {
