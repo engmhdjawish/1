@@ -1,0 +1,8 @@
+# Material image ZIP background worker (runs every minute).
+# Install on the VPS:
+#   sudo cp deploy/templates/portal/material-zip-worker.cron /etc/cron.d/jawish-material-zip-worker
+#   sudo chmod 644 /etc/cron.d/jawish-material-zip-worker
+#
+# Replace __PORTAL_DIR__ with the published portal path (e.g. /var/www/jawish-portal).
+
+* * * * * www-data cd __PORTAL_DIR__ && __PHP_BIN__ scripts/build-material-zip-job.php >> storage/zip-jobs/worker.log 2>&1

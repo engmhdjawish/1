@@ -51,7 +51,12 @@ render_template "$templates/nginx-site.conf.template" \
   "$DEPLOY_ROOT/output/nginx-jawish-portal.conf"
 cp "$templates/iis-web.config.template" \
   "$PORTAL_PUBLISH_DIR/public/web.config"
+if [[ -f "$templates/material-zip-worker.cron" ]]; then
+  sed "s|__PORTAL_DIR__|$PORTAL_PUBLISH_DIR|g; s|__PHP_BIN__|${PORTAL_PHP_CLI_BIN:-/usr/bin/php8.5}|g" \
+    "$templates/material-zip-worker.cron" > "$DEPLOY_ROOT/output/material-zip-worker.cron"
+fi
 
 ok "تم تجهيز الموقع"
 echo "  nginx: deploy/output/nginx-jawish-portal.conf"
 echo "  جذر الويب: $PORTAL_PUBLISH_DIR/public"
+echo "  ZIP worker cron: deploy/output/material-zip-worker.cron"

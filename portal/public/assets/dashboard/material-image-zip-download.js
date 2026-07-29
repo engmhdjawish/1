@@ -151,6 +151,7 @@
       const data = await fetchZipJobJson('/api/material-images-zip-jobs.php?jobId=' + encodeURIComponent(jobId));
       const status = String(data.status || '');
       const progressMessage = String(data.progressMessage || 'جاري تحضير الملف...');
+      const queuedSeconds = Number(data.queuedSeconds || 0);
 
       if (status === 'failed') {
         throw new Error(String(data.errorMessage || data.message || 'تعذر تحضير الملف.'));
@@ -166,11 +167,11 @@
         return;
       }
 
-      showStatus(
-        statusHost,
-        progressMessage + ' (التحضير يتم على السيرفر دون إيقاف الموقع)',
-        'preparing'
-      );
+      let waitMessage = progressMessage + ' (التحضير يتم على السيرفر دون إيقاف الموقع)';
+      if (queuedSeconds >= 20) {
+        waitMessage += ' — إذا استمر الانتظار، اطلب تفعيل cron لـ build-material-zip-job.php على السيرفر';
+      }
+      showStatus(statusHost, waitMessage, 'preparing');
     }
 
     throw new Error('انتهى وقت الانتظار. جرّب مجدداً أو حدّد فلاتر أضيق.');
