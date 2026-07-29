@@ -69,14 +69,8 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
             <?php if ($customer): ?>
               <?php require __DIR__ . '/site-header-account.php'; ?>
             <?php elseif (!$staffSiteMode): ?>
-              <div class="site-header__guest-auth">
-                <a href="<?= h(portal_login_url('customer')) ?>" class="site-header__guest-auth-link" data-guide="login">
-                  <span class="material-symbols-outlined" aria-hidden="true">login</span>
-                  <span class="site-header__guest-auth-label">تسجيل الدخول</span>
-                </a>
-                <span class="site-header__guest-auth-sep" aria-hidden="true"></span>
-                <a href="/register.php" class="site-header__guest-auth-link site-header__guest-auth-link--register" data-guide="register" title="طلب إنشاء حساب عميل جديد">حساب جديد</a>
-              </div>
+              <a href="<?= h(portal_login_url('customer')) ?>" class="site-header__btn site-header__btn--ghost site-header__btn--compact" data-guide="login">دخول</a>
+              <a href="/register.php" class="site-header__btn site-header__btn--primary site-header__btn--compact" data-guide="register" title="طلب إنشاء حساب عميل جديد">حساب جديد</a>
             <?php endif; ?>
           </div>
 
