@@ -966,6 +966,289 @@ final class VisitorLogService
         }, $rows);
     }
 
+    /**
+     * @param list<array<string, mixed>> $sessions
+     * @return list<array<string, mixed>>
+     */
+    public static function groupSessionsByAccount(array $sessions): array
+    {
+        if ($sessions === []) {
+            return [];
+        }
+
+        $groups = [];
+        foreach ($sessions as $session) {
+            $key = self::accountKeyForSession($session);
+            if (!isset($groups[$key])) {
+                $groups[$key] = [
+                    'account_key' => $key,
+                    'display_name' => (string) ($session['display_name'] ?? 'زائر'),
+                    'identity_kind' => (string) ($session['identity_kind'] ?? 'guest'),
+                    'identity_subtitle' => (string) ($session['identity_subtitle'] ?? ''),
+                    'identity_phone' => (string) ($session['identity_phone'] ?? ''),
+                    'web_customer_id' => trim((string) ($session['web_customer_id'] ?? '')),
+                    'sessions' => [],
+                    'session_count' => 0,
+                    'events' => 0,
+                    'page_views' => 0,
+                    'product_views' => 0,
+                    'cart_adds' => 0,
+                    'first_seen' => null,
+                    'last_seen' => null,
+                    'first_seen_fmt' => '—',
+                    'last_seen_fmt' => '—',
+                ];
+            }
+
+            $group = &$groups[$key];
+            $group['sessions'][] = $session;
+            $group['session_count']++;
+            $group['events'] += (int) ($session['events'] ?? 0);
+            $group['page_views'] += (int) ($session['page_views'] ?? 0);
+            $group['product_views'] += (int) ($session['product_views'] ?? 0);
+            $group['cart_adds'] += (int) ($session['cart_adds'] ?? 0);
+
+            if ($group['display_name'] === 'زائر' && trim((string) ($session['display_name'] ?? '')) !== 'زائر') {
+                $group['display_name'] = (string) $session['display_name'];
+            }
+            if ($group['identity_phone'] === '' && trim((string) ($session['identity_phone'] ?? '')) !== '') {
+                $group['identity_phone'] = (string) $session['identity_phone'];
+            }
+            if ($group['web_customer_id'] === '' && trim((string) ($session['web_customer_id'] ?? '')) !== '') {
+                $group['web_customer_id'] = (string) $session['web_customer_id'];
+            }
+
+            $firstSeen = $session['first_seen'] ?? null;
+            $lastSeen = $session['last_seen'] ?? null;
+            if ($firstSeen !== null && ($group['first_seen'] === null || strtotime((string) $firstSeen) < strtotime((string) $group['first_seen']))) {
+                $group['first_seen'] = $firstSeen;
+                $group['first_seen_fmt'] = (string) ($session['first_seen_fmt'] ?? self::formatTimestamp($firstSeen));
+            }
+            if ($lastSeen !== null && ($group['last_seen'] === null || strtotime((string) $lastSeen) > strtotime((string) $group['last_seen']))) {
+                $group['last_seen'] = $lastSeen;
+                $group['last_seen_fmt'] = (string) ($session['last_seen_fmt'] ?? self::formatTimestamp($lastSeen));
+            }
+            unset($group);
+        }
+
+        usort($groups, static function (array $a, array $b): int {
+            $aTs = strtotime((string) ($a['last_seen'] ?? '')) ?: 0;
+            $bTs = strtotime((string) ($b['last_seen'] ?? '')) ?: 0;
+
+            return $bTs <=> $aTs;
+        });
+
+        foreach ($groups as &$group) {
+            usort($group['sessions'], static function (array $a, array $b): int {
+                $aTs = strtotime((string) ($a['last_seen'] ?? '')) ?: 0;
+                $bTs = strtotime((string) ($b['last_seen'] ?? '')) ?: 0;
+
+                return $bTs <=> $aTs;
+            });
+        }
+        unset($group);
+
+        return array_values($groups);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $events
+     * @return array{
+     *   stats: array<string, mixed>,
+     *   highlights: list<array<string, mixed>>,
+     *   raw_count: int,
+     *   highlight_count: int
+     * }
+     */
+    public static function buildSessionDigest(array $events): array
+    {
+        if ($events === []) {
+            return [
+                'stats' => [],
+                'highlights' => [],
+                'raw_count' => 0,
+                'highlight_count' => 0,
+            ];
+        }
+
+        $stats = [
+            'page_views' => 0,
+            'product_views' => 0,
+            'cart_adds' => 0,
+            'cart_removals' => 0,
+            'orders' => 0,
+            'searches' => 0,
+            'logins' => 0,
+            'unique_pages' => 0,
+            'duration_label' => '—',
+            'location_label' => '—',
+            'location_source_label' => '',
+            'map_url' => null,
+            'visitor_ip' => '',
+        ];
+
+        $firstTs = null;
+        $lastTs = null;
+        $pageBuckets = [];
+        $productBuckets = [];
+        $highlights = [];
+        $locationShown = false;
+
+        foreach ($events as $row) {
+            $action = (string) ($row['action'] ?? '');
+            $ts = strtotime((string) ($row['created_at'] ?? ''));
+            if ($ts !== false) {
+                $firstTs = $firstTs === null ? $ts : min($firstTs, $ts);
+                $lastTs = $lastTs === null ? $ts : max($lastTs, $ts);
+            }
+
+            if ($stats['visitor_ip'] === '' && trim((string) ($row['visitor_ip'] ?? '')) !== '') {
+                $stats['visitor_ip'] = (string) $row['visitor_ip'];
+            }
+
+            if (!$locationShown) {
+                $city = trim((string) ($row['city_ar'] ?? ''));
+                $country = trim((string) ($row['country_ar'] ?? ''));
+                if ($city !== '' || $country !== '') {
+                    $stats['location_label'] = $city !== '' && $country !== ''
+                        ? ($city . '، ' . $country)
+                        : ($city !== '' ? $city : $country);
+                    $stats['location_source_label'] = (string) ($row['location_source_label'] ?? '');
+                    $stats['map_url'] = $row['map_url'] ?? null;
+                    $locationShown = true;
+                } elseif (!empty($row['map_url'])) {
+                    $stats['map_url'] = $row['map_url'];
+                }
+            }
+
+            if ($action === 'page_view') {
+                $stats['page_views']++;
+                $path = trim((string) ($row['page_path'] ?? ''));
+                if ($path === '') {
+                    $path = '—';
+                }
+                if (!isset($pageBuckets[$path])) {
+                    $pageBuckets[$path] = [
+                        'path' => $path,
+                        'title' => trim((string) ($row['page_title'] ?? '')),
+                        'count' => 0,
+                        'first_at' => (string) ($row['created_at'] ?? ''),
+                        'last_at' => (string) ($row['created_at'] ?? ''),
+                        'first_fmt' => (string) ($row['created_at_fmt'] ?? ''),
+                        'last_fmt' => (string) ($row['created_at_fmt'] ?? ''),
+                    ];
+                }
+                $pageBuckets[$path]['count']++;
+                $pageBuckets[$path]['last_at'] = (string) ($row['created_at'] ?? '');
+                $pageBuckets[$path]['last_fmt'] = (string) ($row['created_at_fmt'] ?? '');
+
+                continue;
+            }
+
+            if (in_array($action, ['product_view', 'product_quick_view'], true)) {
+                $stats['product_views']++;
+                $guid = trim((string) ($row['product_guid'] ?? ''));
+                $key = $guid !== '' ? $guid : (string) ($row['label_ar'] ?? 'product');
+                $productBuckets[$key] = [
+                    'product_name' => trim((string) ($row['product_name'] ?? '')) ?: (string) ($row['label_ar'] ?? 'صنف'),
+                    'product_code' => (string) ($row['product_code'] ?? ''),
+                    'created_at_fmt' => (string) ($row['created_at_fmt'] ?? ''),
+                    'created_at' => (string) ($row['created_at'] ?? ''),
+                ];
+
+                continue;
+            }
+
+            if ($action === 'add_to_cart') {
+                $stats['cart_adds']++;
+            } elseif ($action === 'remove_from_cart') {
+                $stats['cart_removals']++;
+            } elseif ($action === 'order_placed') {
+                $stats['orders']++;
+            } elseif ($action === 'store_search') {
+                $stats['searches']++;
+            } elseif ($action === 'login') {
+                $stats['logins']++;
+            }
+
+            $highlights[] = [
+                'kind' => 'moment',
+                'action' => $action,
+                'action_label_ar' => (string) ($row['action_label_ar'] ?? self::actionLabel($action)),
+                'label_ar' => (string) ($row['label_ar'] ?? ''),
+                'created_at' => (string) ($row['created_at'] ?? ''),
+                'created_at_fmt' => (string) ($row['created_at_fmt'] ?? ''),
+                'icon' => self::actionIcon($action),
+            ];
+        }
+
+        uasort($pageBuckets, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
+        $stats['unique_pages'] = count($pageBuckets);
+        $stats['top_pages'] = array_slice(array_values($pageBuckets), 0, 6);
+        $stats['top_products'] = array_slice(array_values($productBuckets), 0, 6);
+
+        if ($firstTs !== null && $lastTs !== null) {
+            $minutes = max(1, (int) round(($lastTs - $firstTs) / 60));
+            if ($lastTs - $firstTs < 60) {
+                $stats['duration_label'] = 'أقل من دقيقة';
+            } elseif ($minutes < 60) {
+                $stats['duration_label'] = $minutes . ' د';
+            } else {
+                $hours = intdiv($minutes, 60);
+                $mins = $minutes % 60;
+                $stats['duration_label'] = $mins > 0 ? ($hours . ' س ' . $mins . ' د') : ($hours . ' س');
+            }
+            $stats['started_fmt'] = date('Y-m-d H:i', $firstTs);
+            $stats['ended_fmt'] = date('Y-m-d H:i', $lastTs);
+        }
+
+        usort($highlights, static fn (array $a, array $b): int => strcmp((string) ($a['created_at'] ?? ''), (string) ($b['created_at'] ?? '')));
+
+        return [
+            'stats' => $stats,
+            'highlights' => $highlights,
+            'raw_count' => count($events),
+            'highlight_count' => count($highlights),
+        ];
+    }
+
+    /** @param array<string, mixed> $session */
+    private static function accountKeyForSession(array $session): string
+    {
+        $customerId = trim((string) ($session['web_customer_id'] ?? ''));
+        if ($customerId !== '') {
+            return 'customer:' . $customerId;
+        }
+
+        $phone = preg_replace('/\D+/', '', (string) ($session['identity_phone'] ?? ''));
+        if (is_string($phone) && strlen($phone) >= 8) {
+            return 'guest_phone:' . $phone;
+        }
+
+        $kind = (string) ($session['identity_kind'] ?? '');
+        $name = mb_strtolower(trim((string) ($session['display_name'] ?? '')));
+        if ($kind === 'guest_order' && $name !== '' && $name !== 'زائر') {
+            return 'guest_name:' . $name;
+        }
+
+        return 'session:' . trim((string) ($session['session_id'] ?? ''));
+    }
+
+    private static function actionIcon(string $action): string
+    {
+        return match ($action) {
+            'order_placed' => 'shopping_bag',
+            'add_to_cart' => 'add_shopping_cart',
+            'remove_from_cart' => 'remove_shopping_cart',
+            'product_view', 'product_quick_view' => 'inventory_2',
+            'cart_view' => 'shopping_cart',
+            'store_search' => 'search',
+            'store_filter' => 'tune',
+            'login' => 'login',
+            default => 'trip_origin',
+        };
+    }
+
     /** @return list<array<string, mixed>> */
     public static function mapPoints(int $days = 30, int $limit = 200): array
     {
