@@ -914,6 +914,8 @@ final class VisitorLogService
             }
 
             $row = self::applyIdentity($row, $identities);
+            $row['account_key'] = self::accountKeyForSessionPrivate($row);
+            $row['last_seen_relative'] = self::formatRelativeTime($row['last_seen'] ?? null);
             if (!self::sessionMatchesSearch($row, $search)) {
                 continue;
             }
@@ -924,6 +926,483 @@ final class VisitorLogService
         }
 
         return $rows;
+    }
+
+    /**
+     * @param list<string> $sessionIds
+     * @return list<array<string, mixed>>
+     */
+    public static function eventsForSessions(array $sessionIds, int $limit = 200, ?int $days = null): array
+    {
+        if (!self::hasSchema()) {
+            return [];
+        }
+
+        $sessionIds = array_values(array_unique(array_filter(array_map(
+            static fn ($id): string => trim((string) $id),
+            $sessionIds
+        ))));
+        if ($sessionIds === []) {
+            return [];
+        }
+
+        $limit = max(1, min(500, $limit));
+        $placeholders = implode(', ', array_fill(0, count($sessionIds), '?'));
+        $sql = "SELECT
+                id::text AS id,
+                session_id,
+                action,
+                visitor_ip,
+                country_ar,
+                city_ar,
+                latitude,
+                longitude,
+                referer,
+                details_ar,
+                web_customer_id::text AS web_customer_id,
+                created_at
+             FROM visitor_logs
+             WHERE session_id IN ($placeholders)";
+        $params = $sessionIds;
+
+        if ($days !== null && $days > 0) {
+            $sql .= " AND created_at >= NOW() - (? || ' days')::interval";
+            $params[] = (string) max(1, min(365, $days));
+        }
+
+        $sql .= ' ORDER BY created_at DESC LIMIT ?';
+        $params[] = $limit;
+
+        $stmt = Database::pdo()->prepare($sql);
+        foreach ($params as $i => $value) {
+            $stmt->bindValue($i + 1, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+        }
+        $stmt->execute();
+
+        $rows = array_map([self::class, 'enrichRow'], $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+        $identities = self::resolveIdentitiesForSessions($sessionIds);
+
+        return array_map(static function (array $row) use ($identities): array {
+            $row = self::applyIdentity($row, $identities);
+            $row['created_at_relative'] = self::formatRelativeTime($row['created_at'] ?? null);
+            $lat = isset($row['latitude']) ? (float) $row['latitude'] : null;
+            $lng = isset($row['longitude']) ? (float) $row['longitude'] : null;
+            $row['map_url'] = self::mapExternalUrl($lat, $lng);
+
+            return $row;
+        }, $rows);
+    }
+
+    /**
+     * @param array<string, mixed> $group from groupSessionsByAccount
+     * @param list<array<string, mixed>> $events
+     * @return array<string, mixed>
+     */
+    public static function buildAccountProfile(array $group, array $events): array
+    {
+        $stats = [
+            'session_count' => (int) ($group['session_count'] ?? count($group['sessions'] ?? [])),
+            'events' => (int) ($group['events'] ?? 0),
+            'page_views' => (int) ($group['page_views'] ?? 0),
+            'product_views' => (int) ($group['product_views'] ?? 0),
+            'cart_adds' => (int) ($group['cart_adds'] ?? 0),
+            'cart_removals' => (int) ($group['cart_removals'] ?? 0),
+            'orders' => (int) ($group['orders'] ?? 0),
+            'first_seen_fmt' => (string) ($group['first_seen_fmt'] ?? '—'),
+            'last_seen_fmt' => (string) ($group['last_seen_fmt'] ?? '—'),
+            'last_seen_relative' => self::formatRelativeTime($group['last_seen'] ?? null),
+        ];
+
+        $funnel = self::buildFunnel($stats);
+        $digest = self::buildSessionDigest(array_reverse($events));
+        $timeline = self::buildAccountTimeline($events);
+        $sessions = is_array($group['sessions'] ?? null) ? $group['sessions'] : [];
+        $location = self::resolveProfileLocation($events, $sessions);
+
+        foreach ($sessions as &$session) {
+            $session['last_seen_relative'] = self::formatRelativeTime($session['last_seen'] ?? null);
+        }
+        unset($session);
+
+        return [
+            'account_key' => (string) ($group['account_key'] ?? ''),
+            'display_name' => (string) ($group['display_name'] ?? 'زائر'),
+            'identity_kind' => (string) ($group['identity_kind'] ?? 'guest'),
+            'identity_subtitle' => (string) ($group['identity_subtitle'] ?? ''),
+            'identity_phone' => (string) ($group['identity_phone'] ?? ''),
+            'web_customer_id' => trim((string) ($group['web_customer_id'] ?? '')),
+            'stats' => $stats,
+            'funnel' => $funnel,
+            'digest' => $digest,
+            'timeline' => $timeline,
+            'sessions' => $sessions,
+            'location' => $location,
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $events
+     * @param list<array<string, mixed>> $sessions
+     * @return array{location_label: string, location_source_label: string, map_url: ?string, visitor_ip: string}
+     */
+    public static function resolveProfileLocation(array $events, array $sessions): array
+    {
+        $result = [
+            'location_label' => '—',
+            'location_source_label' => '',
+            'map_url' => null,
+            'visitor_ip' => '',
+        ];
+
+        foreach ($events as $row) {
+            $city = trim((string) ($row['city_ar'] ?? ''));
+            $country = trim((string) ($row['country_ar'] ?? ''));
+            if ($city !== '' || $country !== '') {
+                $result['location_label'] = $city !== '' && $country !== ''
+                    ? ($city . '، ' . $country)
+                    : ($city !== '' ? $city : $country);
+                $result['location_source_label'] = (string) ($row['location_source_label'] ?? '');
+                $result['map_url'] = $row['map_url'] ?? null;
+                $result['visitor_ip'] = trim((string) ($row['visitor_ip'] ?? ''));
+
+                return $result;
+            }
+            if ($result['map_url'] === null && !empty($row['map_url'])) {
+                $result['map_url'] = $row['map_url'];
+            }
+            if ($result['visitor_ip'] === '' && trim((string) ($row['visitor_ip'] ?? '')) !== '') {
+                $result['visitor_ip'] = (string) $row['visitor_ip'];
+            }
+        }
+
+        foreach ($sessions as $sess) {
+            $city = trim((string) ($sess['city_ar'] ?? ''));
+            $country = trim((string) ($sess['country_ar'] ?? ''));
+            if ($city !== '' || $country !== '') {
+                $result['location_label'] = $city !== '' && $country !== ''
+                    ? ($city . '، ' . $country)
+                    : ($city !== '' ? $city : $country);
+                $result['map_url'] = $sess['map_url'] ?? $result['map_url'];
+                if ($result['visitor_ip'] === '' && trim((string) ($sess['visitor_ip'] ?? '')) !== '') {
+                    $result['visitor_ip'] = (string) $sess['visitor_ip'];
+                }
+
+                return $result;
+            }
+            if ($result['map_url'] === null && !empty($sess['map_url'])) {
+                $result['map_url'] = $sess['map_url'];
+            }
+            if ($result['visitor_ip'] === '' && trim((string) ($sess['visitor_ip'] ?? '')) !== '') {
+                $result['visitor_ip'] = (string) $sess['visitor_ip'];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param list<mixed> $items
+     * @return array{items: list<mixed>, page: int, per_page: int, total: int, total_pages: int}
+     */
+    public static function paginateList(array $items, int $page, int $perPage): array
+    {
+        $page = max(1, $page);
+        $perPage = max(1, min(100, $perPage));
+        $total = count($items);
+        $totalPages = max(1, (int) ceil($total / $perPage));
+        if ($page > $totalPages) {
+            $page = $totalPages;
+        }
+        $offset = ($page - 1) * $perPage;
+
+        return [
+            'items' => array_slice($items, $offset, $perPage),
+            'page' => $page,
+            'per_page' => $perPage,
+            'total' => $total,
+            'total_pages' => $totalPages,
+        ];
+    }
+
+    /**
+     * @param list<array{day: string, day_label: string, items: list<array<string, mixed>>}> $timeline
+     * @return list<array{day: string, day_label: string, items: list<array<string, mixed>>}>
+     */
+    public static function filterTimelineByCategory(array $timeline, string $category): array
+    {
+        $category = trim($category);
+        if ($category === '' || $category === 'all') {
+            return $timeline;
+        }
+
+        $filtered = [];
+        foreach ($timeline as $dayGroup) {
+            $items = array_values(array_filter(
+                is_array($dayGroup['items'] ?? null) ? $dayGroup['items'] : [],
+                static fn (array $item): bool => (string) ($item['category'] ?? '') === $category
+            ));
+            if ($items === []) {
+                continue;
+            }
+            $filtered[] = [
+                'day' => (string) ($dayGroup['day'] ?? ''),
+                'day_label' => (string) ($dayGroup['day_label'] ?? ''),
+                'items' => $items,
+            ];
+        }
+
+        return $filtered;
+    }
+
+    /**
+     * @param list<array{day: string, day_label: string, items: list<array<string, mixed>>}> $timeline
+     * @return array{
+     *   days: list<array{day: string, day_label: string, items: list<array<string, mixed>>}>,
+     *   page: int, per_page: int, total: int, total_pages: int
+     * }
+     */
+    public static function paginateTimeline(array $timeline, int $page, int $perPage): array
+    {
+        $flat = [];
+        foreach ($timeline as $dayGroup) {
+            foreach (is_array($dayGroup['items'] ?? null) ? $dayGroup['items'] : [] as $item) {
+                $flat[] = [
+                    'day' => (string) ($dayGroup['day'] ?? ''),
+                    'day_label' => (string) ($dayGroup['day_label'] ?? ''),
+                    'item' => $item,
+                ];
+            }
+        }
+
+        $paged = self::paginateList($flat, $page, $perPage);
+        $days = [];
+        foreach ($paged['items'] as $row) {
+            $day = (string) ($row['day'] ?? '');
+            if (!isset($days[$day])) {
+                $days[$day] = [
+                    'day' => $day,
+                    'day_label' => (string) ($row['day_label'] ?? ''),
+                    'items' => [],
+                ];
+            }
+            $days[$day]['items'][] = is_array($row['item'] ?? null) ? $row['item'] : [];
+        }
+
+        return [
+            'days' => array_values($days),
+            'page' => $paged['page'],
+            'per_page' => $paged['per_page'],
+            'total' => $paged['total'],
+            'total_pages' => $paged['total_pages'],
+        ];
+    }
+
+    /** @return array<string, string> */
+    public static function timelineCategoryLabels(): array
+    {
+        return [
+            'all' => 'الكل',
+            'browse' => 'تصفّح',
+            'product' => 'منتجات',
+            'cart' => 'سلة',
+            'order' => 'طلبات',
+            'search' => 'بحث',
+        ];
+    }
+
+    public static function timelineCategoryForAction(string $action): string
+    {
+        return match ($action) {
+            'page_view' => 'browse',
+            'product_view', 'product_quick_view' => 'product',
+            'add_to_cart', 'remove_from_cart', 'cart_view' => 'cart',
+            'order_placed', 'order_start' => 'order',
+            'store_search', 'store_filter' => 'search',
+            default => 'other',
+        };
+    }
+
+    /**
+     * @param array<string, int> $stats
+     * @return list<array{key: string, label: string, count: int, pct: int, reached: bool}>
+     */
+    public static function buildFunnel(array $stats): array
+    {
+        $steps = [
+            ['key' => 'visit', 'label' => 'زيارة', 'count' => max(1, (int) ($stats['page_views'] ?? 0))],
+            ['key' => 'product', 'label' => 'منتج', 'count' => (int) ($stats['product_views'] ?? 0)],
+            ['key' => 'cart', 'label' => 'سلة', 'count' => (int) ($stats['cart_adds'] ?? 0)],
+            ['key' => 'order', 'label' => 'طلب', 'count' => (int) ($stats['orders'] ?? 0)],
+        ];
+
+        $base = max(1, $steps[0]['count']);
+        $result = [];
+        foreach ($steps as $step) {
+            $count = (int) $step['count'];
+            $result[] = [
+                'key' => $step['key'],
+                'label' => $step['label'],
+                'count' => $count,
+                'pct' => (int) min(100, round(($count / $base) * 100)),
+                'reached' => $count > 0,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $events newest first
+     * @return list<array{day: string, day_label: string, items: list<array<string, mixed>>}>
+     */
+    public static function buildAccountTimeline(array $events): array
+    {
+        if ($events === []) {
+            return [];
+        }
+
+        $byDay = [];
+        $pageCounts = [];
+
+        foreach ($events as $row) {
+            $action = (string) ($row['action'] ?? '');
+            $ts = strtotime((string) ($row['created_at'] ?? ''));
+            if ($ts === false) {
+                continue;
+            }
+            $day = date('Y-m-d', $ts);
+
+            if ($action === 'page_view') {
+                $path = trim((string) ($row['page_path'] ?? '')) ?: '—';
+                $bucketKey = $day . '|' . $path;
+                if (!isset($pageCounts[$bucketKey])) {
+                    $pageCounts[$bucketKey] = [
+                        'day' => $day,
+                        'path' => $path,
+                        'count' => 0,
+                        'last_at' => (string) ($row['created_at'] ?? ''),
+                        'last_fmt' => (string) ($row['created_at_fmt'] ?? ''),
+                        'last_relative' => (string) ($row['created_at_relative'] ?? self::formatRelativeTime($row['created_at'] ?? null)),
+                    ];
+                }
+                $pageCounts[$bucketKey]['count']++;
+                $pageCounts[$bucketKey]['last_at'] = (string) ($row['created_at'] ?? '');
+                $pageCounts[$bucketKey]['last_fmt'] = (string) ($row['created_at_fmt'] ?? '');
+                $pageCounts[$bucketKey]['last_relative'] = (string) ($row['created_at_relative'] ?? self::formatRelativeTime($row['created_at'] ?? null));
+
+                continue;
+            }
+
+            if (in_array($action, ['product_view', 'product_quick_view'], true)) {
+                if (!isset($byDay[$day])) {
+                    $byDay[$day] = [
+                        'day' => $day,
+                        'day_label' => self::formatDayLabel($day),
+                        'items' => [],
+                    ];
+                }
+                $productName = trim((string) ($row['product_name'] ?? '')) ?: (string) ($row['label_ar'] ?? 'صنف');
+                $byDay[$day]['items'][] = [
+                    'kind' => 'product',
+                    'category' => 'product',
+                    'action' => $action,
+                    'action_label_ar' => (string) ($row['action_label_ar'] ?? self::actionLabel($action)),
+                    'label_ar' => $productName,
+                    'created_at' => (string) ($row['created_at'] ?? ''),
+                    'created_at_fmt' => (string) ($row['created_at_fmt'] ?? ''),
+                    'created_at_relative' => (string) ($row['created_at_relative'] ?? self::formatRelativeTime($row['created_at'] ?? null)),
+                    'icon' => self::actionIcon($action),
+                    'session_id' => (string) ($row['session_id'] ?? ''),
+                ];
+
+                continue;
+            }
+
+            if (!isset($byDay[$day])) {
+                $byDay[$day] = [
+                    'day' => $day,
+                    'day_label' => self::formatDayLabel($day),
+                    'items' => [],
+                ];
+            }
+
+            $byDay[$day]['items'][] = [
+                'kind' => 'moment',
+                'category' => self::timelineCategoryForAction($action),
+                'action' => $action,
+                'action_label_ar' => (string) ($row['action_label_ar'] ?? self::actionLabel($action)),
+                'label_ar' => (string) ($row['label_ar'] ?? ''),
+                'created_at' => (string) ($row['created_at'] ?? ''),
+                'created_at_fmt' => (string) ($row['created_at_fmt'] ?? ''),
+                'created_at_relative' => (string) ($row['created_at_relative'] ?? self::formatRelativeTime($row['created_at'] ?? null)),
+                'icon' => self::actionIcon($action),
+                'session_id' => (string) ($row['session_id'] ?? ''),
+            ];
+        }
+
+        foreach ($pageCounts as $bucket) {
+            $day = $bucket['day'];
+            if (!isset($byDay[$day])) {
+                $byDay[$day] = [
+                    'day' => $day,
+                    'day_label' => self::formatDayLabel($day),
+                    'items' => [],
+                ];
+            }
+            $label = 'تصفّح ' . $bucket['path'];
+            if ($bucket['count'] > 1) {
+                $label .= ' (' . $bucket['count'] . '×)';
+            }
+            $byDay[$day]['items'][] = [
+                'kind' => 'browse',
+                'category' => 'browse',
+                'action' => 'page_view',
+                'action_label_ar' => 'تصفّح',
+                'label_ar' => $label,
+                'created_at' => $bucket['last_at'],
+                'created_at_fmt' => $bucket['last_fmt'],
+                'created_at_relative' => $bucket['last_relative'],
+                'icon' => 'language',
+                'session_id' => '',
+            ];
+        }
+
+        foreach ($byDay as &$dayGroup) {
+            usort($dayGroup['items'], static fn (array $a, array $b): int => strcmp((string) ($b['created_at'] ?? ''), (string) ($a['created_at'] ?? '')));
+        }
+        unset($dayGroup);
+
+        uksort($byDay, static fn (string $a, string $b): int => strcmp($b, $a));
+
+        return array_values($byDay);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $groups
+     * @return list<array<string, mixed>>
+     */
+    public static function filterAccountGroups(array $groups, string $filter): array
+    {
+        $filter = trim($filter);
+        if ($filter === '' || $filter === 'all') {
+            return $groups;
+        }
+
+        return array_values(array_filter($groups, static function (array $group) use ($filter): bool {
+            return match ($filter) {
+                'customers' => (string) ($group['identity_kind'] ?? '') === 'customer',
+                'ordered' => (int) ($group['orders'] ?? 0) > 0,
+                'cart' => (int) ($group['cart_adds'] ?? 0) > 0 || (int) ($group['cart_removals'] ?? 0) > 0,
+                'known' => trim((string) ($group['display_name'] ?? '')) !== 'زائر',
+                default => true,
+            };
+        }));
+    }
+
+    /** @param array<string, mixed> $session */
+    public static function accountKeyForSession(array $session): string
+    {
+        return self::accountKeyForSessionPrivate($session);
     }
 
     /** @return list<array<string, mixed>> */
@@ -987,7 +1466,7 @@ final class VisitorLogService
 
         $groups = [];
         foreach ($sessions as $session) {
-            $key = self::accountKeyForSession($session);
+            $key = self::accountKeyForSessionPrivate($session);
             if (!isset($groups[$key])) {
                 $groups[$key] = [
                     'account_key' => $key,
@@ -1058,6 +1537,13 @@ final class VisitorLogService
 
                 return $bTs <=> $aTs;
             });
+            $group['funnel'] = self::buildFunnel([
+                'page_views' => (int) ($group['page_views'] ?? 0),
+                'product_views' => (int) ($group['product_views'] ?? 0),
+                'cart_adds' => (int) ($group['cart_adds'] ?? 0),
+                'orders' => (int) ($group['orders'] ?? 0),
+            ]);
+            $group['last_seen_relative'] = self::formatRelativeTime($group['last_seen'] ?? null);
         }
         unset($group);
 
@@ -1240,7 +1726,7 @@ final class VisitorLogService
     }
 
     /** @param array<string, mixed> $session */
-    private static function accountKeyForSession(array $session): string
+    private static function accountKeyForSessionPrivate(array $session): string
     {
         $customerId = trim((string) ($session['web_customer_id'] ?? ''));
         if ($customerId !== '') {
@@ -1379,6 +1865,7 @@ final class VisitorLogService
         $row['action_label_ar'] = self::actionLabel($action);
         $row['referer_short'] = self::shortReferer((string) ($row['referer'] ?? ''));
         $row['created_at_fmt'] = self::formatTimestamp($row['created_at'] ?? null);
+        $row['created_at_relative'] = self::formatRelativeTime($row['created_at'] ?? null);
         $row['location_source'] = (string) ($meta['location_source'] ?? 'ip');
         $row['location_source_label'] = $row['location_source'] === 'gps' ? 'GPS' : 'IP';
         $lat = isset($row['latitude']) ? (float) $row['latitude'] : null;
@@ -1573,6 +2060,65 @@ final class VisitorLogService
         }
 
         return strlen($referer) > 48 ? substr($referer, 0, 45) . '...' : $referer;
+    }
+
+    public static function formatRelativeTime(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '—';
+        }
+
+        $timestamp = strtotime((string) $value);
+        if ($timestamp === false) {
+            return (string) $value;
+        }
+
+        $diff = time() - $timestamp;
+        if ($diff < 0) {
+            return self::formatTimestamp($value);
+        }
+        if ($diff < 60) {
+            return 'الآن';
+        }
+        if ($diff < 3600) {
+            $mins = (int) floor($diff / 60);
+
+            return 'منذ ' . $mins . ($mins === 1 ? ' دقيقة' : ' د');
+        }
+        if ($diff < 86400) {
+            $hours = (int) floor($diff / 3600);
+
+            return 'منذ ' . $hours . ($hours === 1 ? ' ساعة' : ' س');
+        }
+        if ($diff < 172800) {
+            return 'أمس ' . date('H:i', $timestamp);
+        }
+        if ($diff < 604800) {
+            $days = (int) floor($diff / 86400);
+
+            return 'منذ ' . $days . ($days === 1 ? ' يوم' : ' أيام');
+        }
+
+        return self::formatTimestamp($value);
+    }
+
+    private static function formatDayLabel(string $day): string
+    {
+        $ts = strtotime($day . ' 12:00:00');
+        if ($ts === false) {
+            return $day;
+        }
+
+        $today = date('Y-m-d');
+        $yesterday = date('Y-m-d', strtotime('-1 day'));
+        if ($day === $today) {
+            return 'اليوم';
+        }
+        if ($day === $yesterday) {
+            return 'أمس';
+        }
+
+        return date('j M Y', $ts);
     }
 
     private static function formatTimestamp(mixed $value): string

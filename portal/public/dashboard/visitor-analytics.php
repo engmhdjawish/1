@@ -29,7 +29,25 @@ if (!in_array($days, [1, 7, 30, 90], true)) {
 
 $sessionId = trim((string) ($_GET['session'] ?? ''));
 $customerId = trim((string) ($_GET['customer_id'] ?? ''));
+$accountKey = trim((string) ($_GET['account'] ?? ''));
 $searchQ = trim((string) ($_GET['q'] ?? ''));
+$visitorFilter = trim((string) ($_GET['filter'] ?? 'all'));
+if (!in_array($visitorFilter, ['all', 'customers', 'ordered', 'cart', 'known'], true)) {
+    $visitorFilter = 'all';
+}
+
+$eventCategory = trim((string) ($_GET['ecat'] ?? 'all'));
+if (!array_key_exists($eventCategory, VisitorLogService::timelineCategoryLabels())) {
+    $eventCategory = 'all';
+}
+
+$visitorsPage = max(1, (int) ($_GET['vp'] ?? 1));
+$sessionsPage = max(1, (int) ($_GET['sp'] ?? 1));
+$timelinePage = max(1, (int) ($_GET['tp'] ?? 1));
+
+$visitorsPerPage = 20;
+$sessionsPerPage = 6;
+$timelinePerPage = 15;
 
 $logFilters = array_filter([
     'customer_id' => $customerId,
@@ -92,12 +110,118 @@ $summary = $schemaReady ? VisitorLogService::summaryForDays($days) : [
 $recent = ($schemaReady && $tab === 'log') ? VisitorLogService::recent(80, null, $days, $logFilters) : [];
 $topProducts = ($schemaReady && $tab === 'insights') ? VisitorLogService::topProducts($days, 12) : [];
 $topPages = ($schemaReady && $tab === 'insights') ? VisitorLogService::topPages($days, 10) : [];
-$sessions = ($schemaReady && $tab === 'log') ? VisitorLogService::sessionSummaries($days, 60, $logFilters) : [];
-$accountGroups = ($schemaReady && $tab === 'log') ? VisitorLogService::groupSessionsByAccount($sessions) : [];
-$sessionEvents = ($schemaReady && $tab === 'log' && $sessionId !== '')
-    ? VisitorLogService::sessionEvents($sessionId, 200)
+$sessions = ($schemaReady && $tab === 'log') ? VisitorLogService::sessionSummaries($days, 80, $logFilters) : [];
+$allAccountGroups = ($schemaReady && $tab === 'log') ? VisitorLogService::groupSessionsByAccount($sessions) : [];
+$accountGroups = ($schemaReady && $tab === 'log')
+    ? VisitorLogService::filterAccountGroups($allAccountGroups, $visitorFilter)
     : [];
-$sessionDigest = ($sessionEvents !== []) ? VisitorLogService::buildSessionDigest($sessionEvents) : null;
+$visitorsPagination = VisitorLogService::paginateList($accountGroups, $visitorsPage, $visitorsPerPage);
+$accountGroupsPage = $visitorsPagination['items'];
+$visitorsTotal = (int) $visitorsPagination['total'];
+
+// Resolve account from session or customer_id when not explicitly set
+if ($tab === 'log' && $accountKey === '' && $sessionId !== '') {
+    foreach ($allAccountGroups as $group) {
+        foreach ($group['sessions'] ?? [] as $sess) {
+            if ((string) ($sess['session_id'] ?? '') === $sessionId) {
+                $accountKey = (string) ($group['account_key'] ?? '');
+                break 2;
+            }
+        }
+    }
+    if ($accountKey === '') {
+        $accountKey = 'session:' . $sessionId;
+    }
+}
+if ($tab === 'log' && $accountKey === '' && $customerId !== '') {
+    $accountKey = 'customer:' . $customerId;
+}
+
+$selectedAccount = null;
+$accountProfile = null;
+$sessionDigest = null;
+$sessionEvents = [];
+$sessionsPagination = ['items' => [], 'page' => 1, 'per_page' => $sessionsPerPage, 'total' => 0, 'total_pages' => 1];
+$timelinePagination = ['days' => [], 'page' => 1, 'per_page' => $timelinePerPage, 'total' => 0, 'total_pages' => 1];
+
+if ($schemaReady && $tab === 'log' && $accountKey !== '') {
+    foreach ($allAccountGroups as $group) {
+        if ((string) ($group['account_key'] ?? '') === $accountKey) {
+            $selectedAccount = $group;
+            break;
+        }
+    }
+    if ($selectedAccount === null && str_starts_with($accountKey, 'session:')) {
+        $fallbackSid = substr($accountKey, 8);
+        foreach ($sessions as $sess) {
+            if ((string) ($sess['session_id'] ?? '') === $fallbackSid) {
+                $selectedAccount = [
+                    'account_key' => $accountKey,
+                    'display_name' => (string) ($sess['display_name'] ?? 'زائر'),
+                    'identity_kind' => (string) ($sess['identity_kind'] ?? 'guest'),
+                    'identity_subtitle' => (string) ($sess['identity_subtitle'] ?? ''),
+                    'identity_phone' => (string) ($sess['identity_phone'] ?? ''),
+                    'web_customer_id' => trim((string) ($sess['web_customer_id'] ?? '')),
+                    'sessions' => [$sess],
+                    'session_count' => 1,
+                    'events' => (int) ($sess['events'] ?? 0),
+                    'page_views' => (int) ($sess['page_views'] ?? 0),
+                    'product_views' => (int) ($sess['product_views'] ?? 0),
+                    'cart_adds' => (int) ($sess['cart_adds'] ?? 0),
+                    'cart_removals' => (int) ($sess['cart_removals'] ?? 0),
+                    'orders' => (int) ($sess['orders'] ?? 0),
+                    'first_seen_fmt' => (string) ($sess['first_seen_fmt'] ?? '—'),
+                    'last_seen_fmt' => (string) ($sess['last_seen_fmt'] ?? '—'),
+                    'last_seen' => $sess['last_seen'] ?? null,
+                    'funnel' => VisitorLogService::buildFunnel([
+                        'page_views' => (int) ($sess['page_views'] ?? 0),
+                        'product_views' => (int) ($sess['product_views'] ?? 0),
+                        'cart_adds' => (int) ($sess['cart_adds'] ?? 0),
+                        'orders' => (int) ($sess['orders'] ?? 0),
+                    ]),
+                ];
+                break;
+            }
+        }
+    }
+
+    if ($selectedAccount !== null) {
+        $profileSessionIds = array_values(array_filter(array_map(
+            static fn (array $s): string => trim((string) ($s['session_id'] ?? '')),
+            is_array($selectedAccount['sessions'] ?? null) ? $selectedAccount['sessions'] : []
+        )));
+        $profileEvents = VisitorLogService::eventsForSessions($profileSessionIds, 250, $days);
+        $accountProfile = VisitorLogService::buildAccountProfile($selectedAccount, $profileEvents);
+
+        $allProfileSessions = is_array($accountProfile['sessions'] ?? null) ? $accountProfile['sessions'] : [];
+        $sessionsPagination = VisitorLogService::paginateList($allProfileSessions, $sessionsPage, $sessionsPerPage);
+        $accountProfile['sessions_page'] = $sessionsPagination['items'];
+
+        $filteredTimeline = VisitorLogService::filterTimelineByCategory(
+            is_array($accountProfile['timeline'] ?? null) ? $accountProfile['timeline'] : [],
+            $eventCategory
+        );
+        $timelinePagination = VisitorLogService::paginateTimeline($filteredTimeline, $timelinePage, $timelinePerPage);
+        $accountProfile['timeline_page'] = $timelinePagination['days'];
+        $accountProfile['timeline_meta'] = [
+            'page' => $timelinePagination['page'],
+            'per_page' => $timelinePagination['per_page'],
+            'total' => $timelinePagination['total'],
+            'total_pages' => $timelinePagination['total_pages'],
+        ];
+        $accountProfile['sessions_meta'] = [
+            'page' => $sessionsPagination['page'],
+            'per_page' => $sessionsPagination['per_page'],
+            'total' => $sessionsPagination['total'],
+            'total_pages' => $sessionsPagination['total_pages'],
+        ];
+    }
+}
+
+if ($schemaReady && $tab === 'log' && $sessionId !== '') {
+    $sessionEvents = VisitorLogService::sessionEvents($sessionId, 200);
+    $sessionDigest = ($sessionEvents !== []) ? VisitorLogService::buildSessionDigest($sessionEvents) : null;
+}
 $mapPoints = ($schemaReady && $tab === 'insights') ? VisitorLogService::mapPoints($days, 200) : [];
 $locationStats = ($schemaReady && $tab === 'insights') ? VisitorLogService::locationStats($days, 10) : [];
 
@@ -142,11 +266,29 @@ $onlineCounts = ($tab === 'now' && ($sessionsReady || $presenceReady))
     ? PortalSessionService::onlineCounts()
     : ['staff' => 0, 'customers' => 0, 'guests' => 0, 'total' => 0];
 
-$queryBase = static function (array $params = []) use ($days, $tab, $sessionId, $customerId, $searchQ): string {
+$queryBase = static function (array $params = []) use (
+    $days,
+    $tab,
+    $sessionId,
+    $customerId,
+    $accountKey,
+    $searchQ,
+    $visitorFilter,
+    $eventCategory,
+    $visitorsPage,
+    $sessionsPage,
+    $timelinePage
+): string {
     $query = array_merge([
         'tab' => $tab,
         'days' => $days,
         'customer_id' => $customerId,
+        'account' => $accountKey,
+        'filter' => $visitorFilter !== 'all' ? $visitorFilter : '',
+        'ecat' => $eventCategory !== 'all' ? $eventCategory : '',
+        'vp' => $visitorsPage > 1 ? $visitorsPage : '',
+        'sp' => $sessionsPage > 1 ? $sessionsPage : '',
+        'tp' => $timelinePage > 1 ? $timelinePage : '',
         'q' => $searchQ,
     ], $params);
     if ($sessionId !== '' && !array_key_exists('session', $params)) {
@@ -164,5 +306,6 @@ ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/visitor-analytics.php';
 $content = ob_get_clean();
 $title = 'سجل الزوار';
-$extraHead = '<link href="' . h(portal_asset_url('/css/visitor-log.css')) . '" rel="stylesheet">';
+$dashboardPageAssets = 'visitor-log';
+$extraHead = portal_stylesheet('/css/visitor-log.css');
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

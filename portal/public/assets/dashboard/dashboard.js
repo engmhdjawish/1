@@ -270,6 +270,9 @@
       styles: ['/css/store-filters.css'],
       scripts: ['/assets/store-filters.js'],
     },
+    'visitor-log': {
+      styles: ['/css/visitor-log.css'],
+    },
   };
 
   function loadScript(src) {
