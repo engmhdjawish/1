@@ -589,6 +589,11 @@ final class VisitorLogService
                 ? 'تصفية: ' . (string) $payload['filter_summary']
                 : self::actionLabel($action),
             'page_view' => $path !== '' ? 'زيارة: ' . $path : self::actionLabel($action),
+            'order_placed' => trim((string) ($payload['order_number'] ?? '')) !== ''
+                ? ('طلب: ' . (string) $payload['order_number'])
+                : (trim((string) ($payload['guest_name'] ?? '')) !== ''
+                    ? ('طلب: ' . (string) $payload['guest_name'])
+                    : self::actionLabel($action)),
             default => self::actionLabel($action),
         };
     }
@@ -835,6 +840,8 @@ final class VisitorLogService
                     WHERE action IN ('product_view', 'product_quick_view')
                 )::int AS product_views,
                 COUNT(*) FILTER (WHERE action = 'add_to_cart')::int AS cart_adds,
+                COUNT(*) FILTER (WHERE action = 'remove_from_cart')::int AS cart_removals,
+                COUNT(*) FILTER (WHERE action = 'order_placed')::int AS orders,
                 MAX(web_customer_id::text) AS web_customer_id,
                 MAX(visitor_ip) AS visitor_ip,
                 MAX(country_ar) AS country_ar,
@@ -885,6 +892,8 @@ final class VisitorLogService
             $row['page_views'] = (int) ($row['page_views'] ?? 0);
             $row['product_views'] = (int) ($row['product_views'] ?? 0);
             $row['cart_adds'] = (int) ($row['cart_adds'] ?? 0);
+            $row['cart_removals'] = (int) ($row['cart_removals'] ?? 0);
+            $row['orders'] = (int) ($row['orders'] ?? 0);
             $row['first_seen_fmt'] = self::formatTimestamp($row['first_seen'] ?? null);
             $row['last_seen_fmt'] = self::formatTimestamp($row['last_seen'] ?? null);
             $lat = isset($row['latitude']) ? (float) $row['latitude'] : null;
@@ -993,6 +1002,8 @@ final class VisitorLogService
                     'page_views' => 0,
                     'product_views' => 0,
                     'cart_adds' => 0,
+                    'cart_removals' => 0,
+                    'orders' => 0,
                     'first_seen' => null,
                     'last_seen' => null,
                     'first_seen_fmt' => '—',
@@ -1007,6 +1018,8 @@ final class VisitorLogService
             $group['page_views'] += (int) ($session['page_views'] ?? 0);
             $group['product_views'] += (int) ($session['product_views'] ?? 0);
             $group['cart_adds'] += (int) ($session['cart_adds'] ?? 0);
+            $group['cart_removals'] += (int) ($session['cart_removals'] ?? 0);
+            $group['orders'] += (int) ($session['orders'] ?? 0);
 
             if ($group['display_name'] === 'زائر' && trim((string) ($session['display_name'] ?? '')) !== 'زائر') {
                 $group['display_name'] = (string) $session['display_name'];
@@ -1093,9 +1106,11 @@ final class VisitorLogService
         $productBuckets = [];
         $highlights = [];
         $locationShown = false;
+        $seenOrders = [];
 
         foreach ($events as $row) {
             $action = (string) ($row['action'] ?? '');
+            $meta = is_array($row['meta'] ?? null) ? $row['meta'] : [];
             $ts = strtotime((string) ($row['created_at'] ?? ''));
             if ($ts !== false) {
                 $firstTs = $firstTs === null ? $ts : min($firstTs, $ts);
@@ -1164,6 +1179,16 @@ final class VisitorLogService
             } elseif ($action === 'remove_from_cart') {
                 $stats['cart_removals']++;
             } elseif ($action === 'order_placed') {
+                $orderKey = trim((string) ($meta['order_number'] ?? ''));
+                if ($orderKey === '') {
+                    $orderKey = trim((string) ($meta['order_id'] ?? ''));
+                }
+                if ($orderKey !== '' && isset($seenOrders[$orderKey])) {
+                    continue;
+                }
+                if ($orderKey !== '') {
+                    $seenOrders[$orderKey] = true;
+                }
                 $stats['orders']++;
             } elseif ($action === 'store_search') {
                 $stats['searches']++;
@@ -1171,15 +1196,17 @@ final class VisitorLogService
                 $stats['logins']++;
             }
 
-            $highlights[] = [
-                'kind' => 'moment',
-                'action' => $action,
-                'action_label_ar' => (string) ($row['action_label_ar'] ?? self::actionLabel($action)),
-                'label_ar' => (string) ($row['label_ar'] ?? ''),
-                'created_at' => (string) ($row['created_at'] ?? ''),
-                'created_at_fmt' => (string) ($row['created_at_fmt'] ?? ''),
-                'icon' => self::actionIcon($action),
-            ];
+            if (!in_array($action, ['page_view', 'product_view', 'product_quick_view'], true)) {
+                $highlights[] = [
+                    'kind' => 'moment',
+                    'action' => $action,
+                    'action_label_ar' => (string) ($row['action_label_ar'] ?? self::actionLabel($action)),
+                    'label_ar' => (string) ($row['label_ar'] ?? ''),
+                    'created_at' => (string) ($row['created_at'] ?? ''),
+                    'created_at_fmt' => (string) ($row['created_at_fmt'] ?? ''),
+                    'icon' => self::actionIcon($action),
+                ];
+            }
         }
 
         uasort($pageBuckets, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
