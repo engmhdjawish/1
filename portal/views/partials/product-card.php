@@ -61,6 +61,7 @@ $materialCode = trim((string) ($item['materialCode'] ?? $item['code'] ?? ''));
 $materialType = trim((string) ($item['materialType'] ?? ''));
 $manufacturer = trim((string) ($item['manufacturer'] ?? ''));
 $showAnyPrice = ($showPriceSyp || $showPriceUsd) && (bool) ($displayOptions['show_price'] ?? false);
+$pricePolicyHidden = !(bool) ($displayOptions['show_price'] ?? false);
 $hasOffer = !empty($item['has_offer']);
 $offerBadge = trim((string) ($item['offer_badge'] ?? ''));
 $cartItems = $allowCart
@@ -150,6 +151,8 @@ $previewJson = $previewPayload !== null
         <div class="store-product-card__price">
           <?php require __DIR__ . '/offer-price-block.php'; ?>
         </div>
+      <?php elseif ($pricePolicyHidden): ?>
+        <?php $context = 'card'; require __DIR__ . '/store-price-lock.php'; ?>
       <?php endif; ?>
       <?php if ($showQuantity && $packagesAvailable > 0): ?>
         <div class="store-product-card__stock">

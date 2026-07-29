@@ -13,6 +13,8 @@ use Portal\Support\StorePricePreference;
 /** @var int $storeCartCount */
 /** @var array<string, mixed>|null $customer */
 /** @var bool $staffLoggedIn */
+/** @var array<string, mixed>|null $staffUser */
+/** @var bool $staffSiteMode */
 
 $requestPath = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: '');
 $isNavActive = static function (string $href) use ($requestPath): bool {
@@ -58,17 +60,15 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
 
       <div class="site-header__actions">
         <div class="site-header__toolbar">
-          <?php if ($staffLoggedIn && !$customer): ?>
-            <a href="/dashboard/index.php" class="site-header__icon-btn site-header__icon-btn--staff" title="لوحة التحكم" aria-label="لوحة التحكم">
-              <span class="material-symbols-outlined">dashboard</span>
-            </a>
+          <?php if ($staffSiteMode): ?>
+            <?php require __DIR__ . '/site-header-staff.php'; ?>
             <span class="site-header__divider site-header__divider--staff" aria-hidden="true"></span>
           <?php endif; ?>
 
           <div class="site-header__auth" data-guide="auth">
             <?php if ($customer): ?>
               <?php require __DIR__ . '/site-header-account.php'; ?>
-            <?php else: ?>
+            <?php elseif (!$staffSiteMode): ?>
               <a href="<?= h(portal_login_url('customer')) ?>" class="site-header__btn site-header__btn--ghost site-header__btn--compact" data-guide="login">دخول</a>
               <a href="/register.php" class="site-header__btn site-header__btn--primary site-header__btn--compact" data-guide="register" title="طلب إنشاء حساب عميل جديد">حساب جديد</a>
             <?php endif; ?>
@@ -129,13 +129,6 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
             </div>
           <?php endif; ?>
         </div>
-
-        <?php if ($staffLoggedIn && !$customer): ?>
-          <a href="/dashboard/index.php" class="site-header__staff-link" title="لوحة التحكم">
-            <span class="material-symbols-outlined" aria-hidden="true">dashboard</span>
-            <span class="site-header__staff-link-label">لوحة التحكم</span>
-          </a>
-        <?php endif; ?>
       </div>
     </div>
 

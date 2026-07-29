@@ -31,6 +31,8 @@ $siteName = trim((string) ($companyContext['company_name'] ?? '')) !== ''
 
 $customer = CustomerSession::check() ? CustomerSession::customer() : null;
 $staffLoggedIn = WebSession::check();
+$staffUser = $staffLoggedIn ? WebSession::user() : null;
+$staffSiteMode = $staffLoggedIn && $customer === null;
 $pagePath = portal_request_path();
 $isCatalogPage = portal_is_catalog_page($pagePath);
 $isLightPage = in_array($pagePath, ['/login.php', '/staff-login.php', '/customer-login.php', '/register.php', '/about.php'], true);
@@ -137,7 +139,7 @@ $navLinks = [
       <?= $extraHead ?>
     <?php endif; ?>
 </head>
-<body class="min-h-screen text-text-main bg-surface-bg flex flex-col" data-store-price-currency="<?= h($storePriceCurrency) ?>">
+<body class="min-h-screen text-text-main bg-surface-bg flex flex-col<?= $staffSiteMode ? ' site-staff-mode' : '' ?>" data-store-price-currency="<?= h($storePriceCurrency) ?>">
 <?php require __DIR__ . '/partials/site-header.php'; ?>
 
 <div class="max-w-7xl w-full mx-auto px-4 pt-4 md:pt-6">

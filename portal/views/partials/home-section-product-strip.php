@@ -83,6 +83,8 @@ if ($products === []) {
         <div class="home-product-card__name"><?= h((string) ($item['name'] ?? '-')) ?></div>
         <?php if ($showAnyPrice): ?>
           <?php require __DIR__ . '/offer-price-block.php'; ?>
+        <?php elseif (!(bool) ($storeCatalogDisplay['show_price'] ?? false)): ?>
+          <?php $context = 'card'; require __DIR__ . '/store-price-lock.php'; ?>
         <?php endif; ?>
       </div>
     </article>

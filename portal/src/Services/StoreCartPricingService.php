@@ -29,10 +29,6 @@ final class StoreCartPricingService
     /** @param array<string, mixed> $line */
     public static function resolveLineCustomerShowPrice(array $line): bool
     {
-        if (array_key_exists('customer_show_price', $line)) {
-            return (bool) $line['customer_show_price'];
-        }
-
         $section = trim((string) ($line['added_store_section'] ?? ''));
         $offer = trim((string) ($line['added_store_offer'] ?? ''));
         if ($section !== '' || $offer !== '') {

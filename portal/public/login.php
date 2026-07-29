@@ -6,6 +6,9 @@ require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Auth\CustomerSession;
 use Portal\Auth\WebSession;
+use Portal\Services\ShareCartService;
+use Portal\Services\StoreCartPricingService;
+use Portal\Services\StoreCartService;
 use Portal\Support\PortalUrl;
 
 require dirname(__DIR__) . '/views/helpers.php';
@@ -66,6 +69,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $loginError,
         );
         if ($ok) {
+            ShareCartService::reconcileStock(StoreCartService::TOKEN);
+            StoreCartPricingService::repriceCart(StoreCartService::TOKEN);
             header('Location: ' . PortalUrl::loginRedirectTarget('customer', $redirect));
             exit;
         }

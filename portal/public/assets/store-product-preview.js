@@ -463,7 +463,11 @@
       return '';
     }
     if (!p.showPrice) {
-      return '<p class="store-product-preview__no-price">الأسعار غير متاحة لحسابك.</p>';
+      const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+      return `<div class="store-price-hidden store-price-hidden--preview" role="note">
+        <span class="store-price-hidden__label" aria-hidden="true"><span class="material-symbols-outlined">lock</span><span>سعر مخفي</span></span>
+        <a href="/customer-login.php?redirect=${redirect}" class="store-price-hidden__link">سجّل الدخول لعرض السعر</a>
+      </div>`;
     }
 
     const badge = p.offerBadge
