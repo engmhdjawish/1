@@ -21,6 +21,8 @@ $envFile = $portalRoot . '/.env';
 $jobsDir = rtrim(Config::storagePath(), '/\\') . '/zip-jobs';
 $phpCandidates = ['/usr/bin/php8.5', '/usr/bin/php8.4', '/usr/bin/php', 'php'];
 
+$runWorker = in_array('--run', $argv ?? [], true);
+
 echo "=== Material ZIP worker diagnostics ===\n";
 echo 'Portal root: ' . $portalRoot . "\n";
 echo 'Storage: ' . Config::storagePath() . "\n";
@@ -53,6 +55,24 @@ if (!is_dir($jobsDir)) {
     echo '[4] Jobs dir: OK';
     echo is_writable($jobsDir) ? ' (writable)' : ' (NOT writable)';
     echo "\n";
+    $probe = $jobsDir . '/.write-probe-' . getmypid();
+    if (@file_put_contents($probe, 'ok') === false) {
+        echo "[4b] Jobs dir write test: FAILED (current user cannot create files)\n";
+        echo "     Fix: sudo chown -R www-data:www-data $jobsDir\n";
+    } else {
+        @unlink($probe);
+        echo "[4b] Jobs dir write test: OK (current user)\n";
+    }
+    $wwwProbeCmd = 'sudo -u www-data /bin/bash -c ' . escapeshellarg(
+        'test -w ' . escapeshellarg($jobsDir) . ' && echo ok || echo fail'
+    );
+    $wwwWritable = trim((string) shell_exec($wwwProbeCmd));
+    if ($wwwWritable === 'ok') {
+        echo "[4c] Jobs dir writable by www-data: OK\n";
+    } elseif ($wwwWritable === 'fail') {
+        echo "[4c] Jobs dir writable by www-data: FAILED\n";
+        echo "     Fix: sudo chown -R www-data:www-data $jobsDir\n";
+    }
 }
 
 try {
@@ -62,6 +82,31 @@ try {
     $building = (int) $pdo->query("SELECT COUNT(*) FROM material_image_zip_jobs WHERE status = 'building'")->fetchColumn();
     $ready = (int) $pdo->query("SELECT COUNT(*) FROM material_image_zip_jobs WHERE status = 'ready'")->fetchColumn();
     echo "[5] Database: OK (queued={$queued}, building={$building}, ready={$ready})\n";
+
+    $recent = $pdo->query(
+        "SELECT id, status, file_name, requested_by_web_user_id, created_at
+         FROM material_image_zip_jobs
+         WHERE status IN ('queued', 'building', 'ready')
+         ORDER BY created_at DESC
+         LIMIT 10"
+    );
+    $rows = $recent ? $recent->fetchAll(PDO::FETCH_ASSOC) : [];
+    if ($rows !== []) {
+        echo "\n--- active jobs (latest 10) ---\n";
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            echo sprintf(
+                "%s | %s | %s | user=%s | %s\n",
+                substr((string) ($row['id'] ?? ''), 0, 8),
+                (string) ($row['status'] ?? ''),
+                (string) ($row['file_name'] ?? '-'),
+                substr((string) ($row['requested_by_web_user_id'] ?? '-'), 0, 8),
+                (string) ($row['created_at'] ?? '')
+            );
+        }
+    }
 } catch (Throwable $exception) {
     echo '[5] Database: FAILED — ' . $exception->getMessage() . "\n";
 }
@@ -71,14 +116,38 @@ $workerLog = $jobsDir . '/worker.log';
 echo '[6] spawn.log: ' . (is_file($spawnLog) ? 'exists' : 'missing') . "\n";
 echo '[7] worker.log: ' . (is_file($workerLog) ? 'exists' : 'missing') . "\n";
 
+if (is_file($spawnLog)) {
+    $spawnTail = trim((string) shell_exec('tail -n 5 ' . escapeshellarg($spawnLog)));
+    if ($spawnTail !== '') {
+        echo "\n--- spawn.log (last 5 lines) ---\n" . $spawnTail . "\n";
+    }
+}
+
 if (is_file($workerLog)) {
-    $tail = trim((string) shell_exec('tail -n 5 ' . escapeshellarg($workerLog)));
+    $tail = trim((string) shell_exec('tail -n 10 ' . escapeshellarg($workerLog)));
     if ($tail !== '') {
-        echo "\n--- worker.log (last 5 lines) ---\n" . $tail . "\n";
+        echo "\n--- worker.log (last 10 lines) ---\n" . $tail . "\n";
+    }
+}
+
+if ($runWorker) {
+    echo "\n==> Running worker now...\n";
+    MaterialImageZipJobService::runWorker();
+    MaterialImageZipJobService::ensureTable();
+    $queuedAfter = (int) Database::pdo()->query("SELECT COUNT(*) FROM material_image_zip_jobs WHERE status = 'queued'")->fetchColumn();
+    $buildingAfter = (int) Database::pdo()->query("SELECT COUNT(*) FROM material_image_zip_jobs WHERE status = 'building'")->fetchColumn();
+    $readyAfter = (int) Database::pdo()->query("SELECT COUNT(*) FROM material_image_zip_jobs WHERE status = 'ready'")->fetchColumn();
+    echo "After run: queued={$queuedAfter}, building={$buildingAfter}, ready={$readyAfter}\n";
+    if (is_file($workerLog)) {
+        $tailAfter = trim((string) shell_exec('tail -n 10 ' . escapeshellarg($workerLog)));
+        if ($tailAfter !== '') {
+            echo "\n--- worker.log (last 10 lines) ---\n" . $tailAfter . "\n";
+        }
     }
 }
 
 echo "\nManual run:\n";
 echo '  sudo -u www-data ' . ($phpBin ?? 'php') . ' ' . $script . "\n";
+echo '  sudo -u www-data ' . ($phpBin ?? 'php') . ' ' . $portalRoot . '/scripts/diagnose-zip-worker.php --run' . "\n";
 echo "\nCron (install once):\n";
 echo '  * * * * * www-data cd ' . $portalRoot . ' && ' . ($phpBin ?? 'php') . ' scripts/build-material-zip-job.php >> storage/zip-jobs/worker.log 2>&1' . "\n";

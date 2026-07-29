@@ -111,6 +111,7 @@ copy_portal_tree() {
     "$src/" "$dest/"
   mkdir -p "$dest/storage/material-images/thumbnails" "$dest/storage/site-media" "$dest/storage/fonts" "$dest/storage/zip-jobs"
   chmod -R u+rwX,g+rwX "$dest/storage" 2>/dev/null || true
+  chown -R www-data:www-data "$dest/storage" 2>/dev/null || true
   if [[ -d "$dest/images" ]]; then
     mkdir -p "$dest/images/images/_processed" "$dest/images/images/thumbnails" 2>/dev/null || true
     chown -R www-data:www-data "$dest/images" 2>/dev/null || chmod -R u+rwX,g+rwX "$dest/images" 2>/dev/null || true
@@ -143,6 +144,7 @@ PORTAL_APP_URL=${PORTAL_APP_URL}
 PORTAL_SESSION_NAME=${PORTAL_SESSION_NAME:-portal_session}
 PORTAL_STORAGE_PATH=${PORTAL_STORAGE_PATH:-}
 PORTAL_PHP_CLI_BIN=${PORTAL_PHP_CLI_BIN:-/usr/bin/php8.5}
+PORTAL_ZIP_X_ACCEL=${PORTAL_ZIP_X_ACCEL:-1}
 PORTAL_REPO_DOCS_PATH=${PORTAL_REPO_DOCS_PATH:-../docs}
 PORTAL_DETAILS_FONT_PATH=${PORTAL_DETAILS_FONT_PATH:-}
 EOF

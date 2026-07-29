@@ -10,7 +10,26 @@ use Portal\Services\MaterialImageZipService;
 WebSession::requireAnyPermission(['images.upload', 'images.view', 'orders.view']);
 require dirname(__DIR__, 2) . '/views/helpers.php';
 
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+
 $mode = trim((string) ($_GET['mode'] ?? 'materials'));
+
+if (
+    ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET'
+    && !isset($_SERVER['HTTP_X_DASHBOARD_AJAX'])
+    && in_array($mode, ['materials', 'invoice'], true)
+) {
+    http_response_code(503);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'ok' => false,
+        'message' => 'التحميل المتزامن معطّل لحماية الموقع. استخدم زر «تحميل ZIP» في لوحة التحكم (التحضير يتم في الخلفية).',
+        'useAsync' => true,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 try {
     if ($mode === 'invoice') {

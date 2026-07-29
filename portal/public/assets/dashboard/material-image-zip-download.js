@@ -133,21 +133,23 @@
   }
 
   function triggerBrowserDownload(url) {
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.rel = 'noopener';
-    anchor.style.display = 'none';
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.tabIndex = -1;
+    iframe.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden';
+    iframe.src = url;
+    document.body.appendChild(iframe);
+    window.setTimeout(() => {
+      iframe.remove();
+    }, 120000);
   }
 
-  async function pollZipJob(jobId, statusHost) {
+  async function pollZipJob(jobId, statusHost, jobsPanel) {
     const startedAt = Date.now();
     const maxWaitMs = 30 * 60 * 1000;
 
     while (Date.now() - startedAt < maxWaitMs) {
-      await sleep(3000);
+      await sleep(5000);
       const data = await fetchZipJobJson('/api/material-images-zip-jobs.php?jobId=' + encodeURIComponent(jobId));
       const status = String(data.status || '');
       const progressMessage = String(data.progressMessage || 'جاري تحضير الملف...');
@@ -158,20 +160,22 @@
       }
 
       if (status === 'ready') {
-        showStatus(statusHost, 'الملف جاهز — جاري فتح نافذة التحميل...', 'success');
+        showStatus(statusHost, 'الملف جاهز — جاري بدء التحميل...', 'success');
         const downloadUrl = String(
           data.downloadUrl || ('/api/material-images-zip-jobs.php?jobId=' + encodeURIComponent(jobId) + '&download=1')
         );
         triggerBrowserDownload(downloadUrl);
         showStatus(statusHost, 'بدأ التحميل — تابع التقدّم من شريط التحميل في المتصفح.', 'success');
+        await refreshZipJobsPanel(jobsPanel, statusHost);
         return;
       }
 
       let waitMessage = progressMessage + ' (التحضير يتم على السيرفر دون إيقاف الموقع)';
       if (queuedSeconds >= 20) {
-        waitMessage += ' — إذا استمر الانتظار، اطلب تفعيل cron لـ build-material-zip-job.php على السيرفر';
+        waitMessage += ' — إذا استمر الانتظار، شغّل يدوياً: sudo -u www-data php8.5 scripts/build-material-zip-job.php';
       }
       showStatus(statusHost, waitMessage, 'preparing');
+      await refreshZipJobsPanel(jobsPanel, statusHost);
     }
 
     throw new Error('انتهى وقت الانتظار. جرّب مجدداً أو حدّد فلاتر أضيق.');
@@ -182,7 +186,7 @@
     return Array.isArray(data.jobs) ? data.jobs : [];
   }
 
-  function renderZipJobsPanel(panel, jobs) {
+  function renderZipJobsPanel(panel, jobs, statusHost) {
     if (!panel) {
       return;
     }
@@ -192,9 +196,10 @@
       return;
     }
 
+    const readyCount = jobs.filter((job) => String(job.status || '') === 'ready').length;
     panel.classList.remove('hidden');
     panel.innerHTML = [
-      '<div class="dash-mi-zip-jobs-panel__title">طلبات ZIP النشطة</div>',
+      '<div class="dash-mi-zip-jobs-panel__title">طلبات ZIP النشطة' + (readyCount > 0 ? ' — ' + readyCount + ' جاهز للتحميل' : '') + '</div>',
       '<ul class="dash-mi-zip-jobs-panel__list">',
       ...jobs.map((job) => {
         const status = String(job.status || '');
@@ -219,18 +224,19 @@
         const url = button.getAttribute('data-zip-job-download');
         if (url) {
           triggerBrowserDownload(url);
+          showStatus(statusHost, 'جاري تحميل الملف...', 'success');
         }
       });
     });
   }
 
-  async function refreshZipJobsPanel(panel) {
+  async function refreshZipJobsPanel(panel, statusHost) {
     if (!panel) {
       return [];
     }
     try {
       const jobs = await fetchActiveZipJobs();
-      renderZipJobsPanel(panel, jobs);
+      renderZipJobsPanel(panel, jobs, statusHost);
       return jobs;
     } catch {
       return [];
@@ -256,11 +262,12 @@
         throw new Error('تعذر إنشاء طلب التحميل.');
       }
       showStatus(statusHost, String(created.progressMessage || 'في قائمة الانتظار...'), 'preparing');
-      await pollZipJob(jobId, statusHost);
-      await refreshZipJobsPanel(jobsPanel);
+      await refreshZipJobsPanel(jobsPanel, statusHost);
+      await pollZipJob(jobId, statusHost, jobsPanel);
+      await refreshZipJobsPanel(jobsPanel, statusHost);
     } catch (error) {
       showStatus(statusHost, error?.message || 'تعذر تحضير الملف.', 'error');
-      await refreshZipJobsPanel(jobsPanel);
+      await refreshZipJobsPanel(jobsPanel, statusHost);
     } finally {
       setSubmitBusy(submitButton, false);
     }
@@ -345,10 +352,10 @@
     }
 
     bindAvailabilityPersistence(form);
-    refreshZipJobsPanel(jobsPanel);
+    refreshZipJobsPanel(jobsPanel, statusHost);
     window.setInterval(() => {
-      refreshZipJobsPanel(jobsPanel);
-    }, 15000);
+      refreshZipJobsPanel(jobsPanel, statusHost);
+    }, 30000);
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();

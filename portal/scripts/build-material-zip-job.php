@@ -14,9 +14,17 @@ if (!is_dir($logDir)) {
     @mkdir($logDir, 0775, true);
 }
 $logPath = $logDir . '/worker.log';
-@file_put_contents($logPath, '[' . date('c') . '] worker invoked' . PHP_EOL, FILE_APPEND);
+if (@file_put_contents($logPath, '[' . date('c') . '] worker invoked' . PHP_EOL, FILE_APPEND) === false) {
+    $message = 'Cannot write worker log: ' . $logPath . ' — fix ownership: chown -R www-data:www-data ' . $logDir;
+    fwrite(STDERR, $message . PHP_EOL);
+    exit(1);
+}
 
 define('PORTAL_NO_SESSION', true);
+
+if (function_exists('proc_nice')) {
+    @proc_nice(10);
+}
 
 try {
     require $base . '/bootstrap.php';
@@ -38,8 +46,10 @@ $log = static function (string $message) use ($logPath): void {
 
 try {
     $log('worker bootstrap ok');
+    $queued = MaterialImageZipJobService::countQueuedJobs();
+    $log('queued jobs: ' . $queued);
     MaterialImageZipJobService::runWorker();
-    $log('worker finished');
+    $log('worker finished (queued remaining: ' . MaterialImageZipJobService::countQueuedJobs() . ')');
 } catch (Throwable $exception) {
     $log('worker failed: ' . $exception->getMessage());
     fwrite(STDERR, $exception->getMessage() . PHP_EOL);

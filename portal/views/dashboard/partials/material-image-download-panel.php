@@ -81,8 +81,8 @@ $defaultAvailability = '1';
       >
         <form
           class="dash-mi-zip-form"
-          method="get"
-          action="/api/material-images-zip.php"
+          method="post"
+          action="#"
           data-material-zip-form
           data-store-filters-form
         >
@@ -226,7 +226,7 @@ $defaultAvailability = '1';
       </summary>
 
       <div class="dash-mi-download-accordion__body">
-      <form class="dash-mi-download-invoice-form space-y-3" method="get" action="/api/material-images-zip.php" data-invoice-zip-form>
+      <form class="dash-mi-download-invoice-form space-y-3" method="post" action="#" data-invoice-zip-form>
         <input type="hidden" name="mode" value="invoice">
 
         <label class="block text-sm">

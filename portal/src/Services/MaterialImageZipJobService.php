@@ -67,12 +67,12 @@ final class MaterialImageZipJobService
             $pendingStmt = Database::pdo()->prepare(
                 'SELECT COUNT(*) FROM material_image_zip_jobs
                  WHERE requested_by_web_user_id = :user_id
-                   AND status IN (\'queued\', \'building\', \'ready\')'
+                   AND status IN (\'queued\', \'building\')'
             );
             $pendingStmt->execute(['user_id' => $userId]);
             $pendingCount = (int) $pendingStmt->fetchColumn();
             if ($pendingCount >= self::MAX_PENDING_JOBS_PER_USER) {
-                throw new \RuntimeException('لديك طلبات تحضير ZIP قيد الانتظار. انتظر انتهاءها أو حمّل الملف الجاهز.');
+                throw new \RuntimeException('لديك طلبات تحضير ZIP قيد التنفيذ. انتظر انتهاءها ثم حاول مجدداً.');
             }
         }
 
@@ -101,7 +101,7 @@ final class MaterialImageZipJobService
             throw new \RuntimeException('تعذر إنشاء طلب التحميل.');
         }
 
-        self::spawnWorker();
+        self::spawnWorker(true);
 
         return $jobId;
     }
@@ -110,10 +110,12 @@ final class MaterialImageZipJobService
     {
         self::ensureTable();
         self::recoverStaleBuildingJobs();
+        self::expireStaleQueuedJobs();
+
         $job = self::getJobForUser($jobId, $userId, false);
 
         if (($job['status'] ?? '') === 'queued') {
-            self::spawnWorker();
+            self::spawnWorker(false);
         }
 
         $queuedSeconds = 0;
@@ -139,9 +141,15 @@ final class MaterialImageZipJobService
         ];
     }
 
-    public static function spawnWorker(): bool
+    public static function spawnWorker(bool $force = false): bool
     {
+        if (!$force && !self::shouldAttemptSpawn()) {
+            return false;
+        }
+
         if (self::isWorkerRunning()) {
+            self::logSpawn('worker already running — skipped spawn');
+
             return true;
         }
 
@@ -162,6 +170,12 @@ final class MaterialImageZipJobService
         return $spawned;
     }
 
+    public static function logWorker(string $message): void
+    {
+        $line = '[' . date('c') . '] ' . $message . PHP_EOL;
+        @file_put_contents(self::jobsDir(true) . '/worker.log', $line, FILE_APPEND);
+    }
+
     public static function countQueuedJobs(): int
     {
         self::ensureTable();
@@ -177,20 +191,29 @@ final class MaterialImageZipJobService
         self::ensureTable();
         self::cleanupExpiredJobs();
         self::recoverStaleBuildingJobs();
+        self::expireStaleQueuedJobs();
+        self::cleanupPendingDownloadFiles();
 
-        if (self::countQueuedJobs() === 0) {
-            exit(0);
+        $queuedCount = self::countQueuedJobs();
+        self::logWorker('runWorker: queued=' . $queuedCount);
+        if ($queuedCount === 0) {
+            return;
         }
 
         $lockPath = self::workerLockPath();
         $lockHandle = @fopen($lockPath, 'c+');
         if ($lockHandle === false) {
-            exit(1);
+            self::logWorker('runWorker: failed to open worker.lock');
+
+            return;
         }
 
         if (!flock($lockHandle, LOCK_EX | LOCK_NB)) {
             fclose($lockHandle);
-            exit(0);
+            self::logSpawn('worker lock busy — another worker is active (queued=' . $queuedCount . ')');
+            self::logWorker('runWorker: lock busy (queued=' . $queuedCount . ')');
+
+            return;
         }
 
         ftruncate($lockHandle, 0);
@@ -202,9 +225,12 @@ final class MaterialImageZipJobService
             while (true) {
                 $job = self::claimNextQueuedJob();
                 if ($job === null) {
+                    self::logWorker('runWorker: no queued job claimed (remaining=' . self::countQueuedJobs() . ')');
                     break;
                 }
+                self::logWorker('runWorker: processing job ' . (string) ($job['id'] ?? ''));
                 self::processJob($job);
+                self::logWorker('runWorker: finished job ' . (string) ($job['id'] ?? ''));
             }
         } finally {
             flock($lockHandle, LOCK_UN);
@@ -218,54 +244,29 @@ final class MaterialImageZipJobService
     private static function claimNextQueuedJob(): ?array
     {
         $pdo = Database::pdo();
-        if (!$pdo->beginTransaction()) {
-            return null;
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
         }
 
-        try {
-            $select = $pdo->query(
-                'SELECT id FROM material_image_zip_jobs
+        $stmt = $pdo->query(
+            'UPDATE material_image_zip_jobs
+             SET status = \'building\',
+                 started_at = NOW(),
+                 updated_at = NOW(),
+                 progress_pct = 5,
+                 progress_message = \'جاري تحضير الملف...\'
+             WHERE id = (
+                 SELECT id FROM material_image_zip_jobs
                  WHERE status = \'queued\'
                  ORDER BY created_at ASC
                  LIMIT 1
-                 FOR UPDATE SKIP LOCKED'
-            );
-            $candidate = $select?->fetch(PDO::FETCH_ASSOC);
-            if (!is_array($candidate)) {
-                $pdo->rollBack();
+                 FOR UPDATE SKIP LOCKED
+             )
+             RETURNING *'
+        );
+        $row = $stmt?->fetch(PDO::FETCH_ASSOC);
 
-                return null;
-            }
-
-            $jobId = trim((string) ($candidate['id'] ?? ''));
-            if ($jobId === '') {
-                $pdo->rollBack();
-
-                return null;
-            }
-
-            $update = $pdo->prepare(
-                'UPDATE material_image_zip_jobs
-                 SET status = \'building\',
-                     started_at = NOW(),
-                     updated_at = NOW(),
-                     progress_pct = 5,
-                     progress_message = \'جاري تحضير الملف...\'
-                 WHERE id = :id
-                 RETURNING *'
-            );
-            $update->execute(['id' => $jobId]);
-            $row = $update->fetch(PDO::FETCH_ASSOC);
-            $pdo->commit();
-
-            return is_array($row) ? self::normalizeJobRow($row) : null;
-        } catch (Throwable $exception) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-
-            throw $exception;
-        }
+        return is_array($row) ? self::normalizeJobRow($row) : null;
     }
 
     /**
@@ -374,16 +375,124 @@ final class MaterialImageZipJobService
         }
 
         $fileName = trim((string) ($job['file_name'] ?? 'material-images'));
-        MaterialImageZipService::streamExistingZipFile($path, $fileName);
 
+        if (self::tryNginxAccelDownload($path, $fileName)) {
+            self::markJobDownloaded($jobId);
+            self::scheduleDownloadedFileCleanup($path);
+
+            return;
+        }
+
+        MaterialImageZipService::streamExistingZipFile($path, $fileName);
+        self::markJobDownloaded($jobId);
+        @unlink($path);
+    }
+
+    private static function markJobDownloaded(string $jobId): void
+    {
         $stmt = Database::pdo()->prepare(
             'UPDATE material_image_zip_jobs
              SET downloaded_at = NOW(), updated_at = NOW(), status = \'downloaded\'
              WHERE id = :id'
         );
         $stmt->execute(['id' => $jobId]);
+    }
 
-        @unlink($path);
+    private static function scheduleDownloadedFileCleanup(string $path): void
+    {
+        $cleanupList = self::jobsDir(true) . '/pending-unlink.txt';
+        @file_put_contents($cleanupList, $path . PHP_EOL, FILE_APPEND | LOCK_EX);
+    }
+
+    public static function cleanupPendingDownloadFiles(): void
+    {
+        $cleanupList = self::jobsDir(true) . '/pending-unlink.txt';
+        if (!is_file($cleanupList)) {
+            return;
+        }
+
+        $paths = file($cleanupList, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if (!is_array($paths)) {
+            return;
+        }
+
+        $remaining = [];
+        $cutoff = time() - 300;
+        foreach ($paths as $path) {
+            $path = trim((string) $path);
+            if ($path === '') {
+                continue;
+            }
+            $meta = @stat($path);
+            if ($meta !== false && ($meta['mtime'] ?? time()) <= $cutoff && is_file($path)) {
+                @unlink($path);
+                continue;
+            }
+            if (is_file($path)) {
+                $remaining[] = $path;
+            }
+        }
+
+        if ($remaining === []) {
+            @unlink($cleanupList);
+
+            return;
+        }
+
+        @file_put_contents($cleanupList, implode(PHP_EOL, $remaining) . PHP_EOL, LOCK_EX);
+    }
+
+    private static function tryNginxAccelDownload(string $path, string $fileName): bool
+    {
+        if (Config::get('PORTAL_ZIP_X_ACCEL', '1') === '0') {
+            return false;
+        }
+
+        $jobsDir = realpath(self::jobsDir());
+        $realPath = realpath($path);
+        if ($jobsDir === false || $realPath === false) {
+            return false;
+        }
+
+        $normalizedJobs = rtrim(str_replace('\\', '/', $jobsDir), '/');
+        $normalizedPath = str_replace('\\', '/', $realPath);
+        if (!str_starts_with($normalizedPath, $normalizedJobs . '/')) {
+            return false;
+        }
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        header('X-Accel-Buffering: no');
+        header('Content-Type: application/zip');
+        header(
+            'Content-Disposition: attachment; filename="'
+            . MaterialImageZipService::sanitizeFilename($fileName)
+            . '.zip"'
+        );
+        header('X-Accel-Redirect: /internal/zip-jobs/' . rawurlencode(basename($realPath)));
+
+        return true;
+    }
+
+    private static function shouldAttemptSpawn(): bool
+    {
+        $path = self::jobsDir(true) . '/spawn-throttle.txt';
+        $now = time();
+        $last = is_file($path) ? (int) trim((string) @file_get_contents($path)) : 0;
+        if ($now - $last < 15) {
+            return false;
+        }
+
+        @file_put_contents($path, (string) $now, LOCK_EX);
+
+        return true;
     }
 
     /**
@@ -609,29 +718,53 @@ final class MaterialImageZipJobService
             return false;
         }
 
-        $running = !flock($lockHandle, LOCK_EX | LOCK_NB);
-        if (!$running) {
+        if (flock($lockHandle, LOCK_EX | LOCK_NB)) {
             flock($lockHandle, LOCK_UN);
+            fclose($lockHandle);
+
+            return false;
         }
+
         fclose($lockHandle);
 
-        return $running;
+        $pid = (int) trim((string) @file_get_contents($lockPath));
+        if ($pid > 0 && !self::isProcessAlive($pid)) {
+            @unlink($lockPath);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private static function isProcessAlive(int $pid): bool
+    {
+        if ($pid <= 0) {
+            return false;
+        }
+
+        if (function_exists('posix_kill')) {
+            return @posix_kill($pid, 0);
+        }
+
+        return is_file('/proc/' . $pid . '/stat');
     }
 
     private static function dispatchBackgroundProcess(string $php, string $script, string $logPath): bool
     {
         $cwd = self::portalRoot();
-        $command = sprintf(
-            'cd %s && nohup %s %s >> %s 2>&1 &',
+        $shellCommand = sprintf(
+            'cd %s && exec %s %s >> %s 2>&1',
             escapeshellarg($cwd),
             escapeshellarg($php),
             escapeshellarg($script),
             escapeshellarg($logPath)
         );
+        $backgroundCommand = '/bin/bash -c ' . escapeshellarg($shellCommand . ' &');
 
         if (function_exists('proc_open') && !self::isFunctionDisabled('proc_open')) {
             $process = @proc_open(
-                $command,
+                $backgroundCommand,
                 [
                     0 => ['file', '/dev/null', 'r'],
                     1 => ['file', '/dev/null', 'w'],
@@ -648,13 +781,13 @@ final class MaterialImageZipJobService
         }
 
         if (function_exists('exec') && !self::isFunctionDisabled('exec')) {
-            exec($command);
+            exec($backgroundCommand);
 
             return true;
         }
 
         if (function_exists('shell_exec') && !self::isFunctionDisabled('shell_exec')) {
-            shell_exec($command);
+            shell_exec($backgroundCommand);
 
             return true;
         }

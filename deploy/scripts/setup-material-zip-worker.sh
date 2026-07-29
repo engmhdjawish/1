@@ -9,7 +9,9 @@ echo "Portal: $PORTAL_DIR"
 echo "PHP:    $PHP_BIN"
 
 mkdir -p "$PORTAL_DIR/storage/zip-jobs"
-chown -R www-data:www-data "$PORTAL_DIR/storage/zip-jobs" 2>/dev/null || true
+if ! chown -R www-data:www-data "$PORTAL_DIR/storage/zip-jobs"; then
+  echo "WARN: could not chown storage/zip-jobs to www-data — run: chown -R www-data:www-data $PORTAL_DIR/storage/zip-jobs" >&2
+fi
 chmod -R u+rwX,g+rwX "$PORTAL_DIR/storage/zip-jobs" 2>/dev/null || true
 
 if [[ ! -f "$PORTAL_DIR/scripts/build-material-zip-job.php" ]]; then
