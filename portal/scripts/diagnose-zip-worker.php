@@ -55,6 +55,24 @@ if (!is_dir($jobsDir)) {
     echo '[4] Jobs dir: OK';
     echo is_writable($jobsDir) ? ' (writable)' : ' (NOT writable)';
     echo "\n";
+    $probe = $jobsDir . '/.write-probe-' . getmypid();
+    if (@file_put_contents($probe, 'ok') === false) {
+        echo "[4b] Jobs dir write test: FAILED (current user cannot create files)\n";
+        echo "     Fix: sudo chown -R www-data:www-data $jobsDir\n";
+    } else {
+        @unlink($probe);
+        echo "[4b] Jobs dir write test: OK (current user)\n";
+    }
+    $wwwProbeCmd = 'sudo -u www-data /bin/bash -c ' . escapeshellarg(
+        'test -w ' . escapeshellarg($jobsDir) . ' && echo ok || echo fail'
+    );
+    $wwwWritable = trim((string) shell_exec($wwwProbeCmd));
+    if ($wwwWritable === 'ok') {
+        echo "[4c] Jobs dir writable by www-data: OK\n";
+    } elseif ($wwwWritable === 'fail') {
+        echo "[4c] Jobs dir writable by www-data: FAILED\n";
+        echo "     Fix: sudo chown -R www-data:www-data $jobsDir\n";
+    }
 }
 
 try {

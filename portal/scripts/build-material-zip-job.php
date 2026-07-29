@@ -14,7 +14,11 @@ if (!is_dir($logDir)) {
     @mkdir($logDir, 0775, true);
 }
 $logPath = $logDir . '/worker.log';
-@file_put_contents($logPath, '[' . date('c') . '] worker invoked' . PHP_EOL, FILE_APPEND);
+if (@file_put_contents($logPath, '[' . date('c') . '] worker invoked' . PHP_EOL, FILE_APPEND) === false) {
+    $message = 'Cannot write worker log: ' . $logPath . ' — fix ownership: chown -R www-data:www-data ' . $logDir;
+    fwrite(STDERR, $message . PHP_EOL);
+    exit(1);
+}
 
 define('PORTAL_NO_SESSION', true);
 
