@@ -177,7 +177,67 @@
     throw new Error('انتهى وقت الانتظار. جرّب مجدداً أو حدّد فلاتر أضيق.');
   }
 
-  async function downloadZipFromForm(form, statusHost, submitButton, preparingMessage) {
+  async function fetchActiveZipJobs() {
+    const data = await fetchZipJobJson('/api/material-images-zip-jobs.php?list=1');
+    return Array.isArray(data.jobs) ? data.jobs : [];
+  }
+
+  function renderZipJobsPanel(panel, jobs) {
+    if (!panel) {
+      return;
+    }
+    if (!jobs.length) {
+      panel.classList.add('hidden');
+      panel.innerHTML = '';
+      return;
+    }
+
+    panel.classList.remove('hidden');
+    panel.innerHTML = [
+      '<div class="dash-mi-zip-jobs-panel__title">طلبات ZIP النشطة</div>',
+      '<ul class="dash-mi-zip-jobs-panel__list">',
+      ...jobs.map((job) => {
+        const status = String(job.status || '');
+        const label = String(job.fileName || 'material-images');
+        const message = String(job.progressMessage || status);
+        if (status === 'ready' && job.downloadUrl) {
+          return `<li class="dash-mi-zip-jobs-panel__item dash-mi-zip-jobs-panel__item--ready">
+            <span>${label} — جاهز (${Number(job.imageCount || 0)} صورة)</span>
+            <button type="button" class="dash-mi-zip-jobs-panel__download" data-zip-job-download="${String(job.downloadUrl)}">تحميل</button>
+          </li>`;
+        }
+        return `<li class="dash-mi-zip-jobs-panel__item">
+          <span>${message}</span>
+          <span class="dash-mi-zip-jobs-panel__badge">${status === 'building' ? 'جاري' : 'انتظار'}</span>
+        </li>`;
+      }),
+      '</ul>',
+    ].join('');
+
+    panel.querySelectorAll('[data-zip-job-download]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const url = button.getAttribute('data-zip-job-download');
+        if (url) {
+          triggerBrowserDownload(url);
+        }
+      });
+    });
+  }
+
+  async function refreshZipJobsPanel(panel) {
+    if (!panel) {
+      return [];
+    }
+    try {
+      const jobs = await fetchActiveZipJobs();
+      renderZipJobsPanel(panel, jobs);
+      return jobs;
+    } catch {
+      return [];
+    }
+  }
+
+  async function downloadZipFromForm(form, statusHost, submitButton, preparingMessage, jobsPanel) {
     showStatus(
       statusHost,
       preparingMessage + ' سيتم إرسال الطلب إلى السيرفر دون إيقاف الموقع.',
@@ -197,8 +257,10 @@
       }
       showStatus(statusHost, String(created.progressMessage || 'في قائمة الانتظار...'), 'preparing');
       await pollZipJob(jobId, statusHost);
+      await refreshZipJobsPanel(jobsPanel);
     } catch (error) {
       showStatus(statusHost, error?.message || 'تعذر تحضير الملف.', 'error');
+      await refreshZipJobsPanel(jobsPanel);
     } finally {
       setSubmitBusy(submitButton, false);
     }
@@ -274,6 +336,7 @@
     form.dataset.zipDownloadInit = '1';
 
     const statusHost = form.querySelector('[data-zip-download-status]');
+    const jobsPanel = form.querySelector('[data-zip-jobs-panel]');
     const submitButton = form.querySelector('[type="submit"]');
     const filtersShell = form.closest('[data-store-filters-root]');
 
@@ -282,13 +345,17 @@
     }
 
     bindAvailabilityPersistence(form);
+    refreshZipJobsPanel(jobsPanel);
+    window.setInterval(() => {
+      refreshZipJobsPanel(jobsPanel);
+    }, 15000);
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       if (!validateMaterialZipForm(form, statusHost)) {
         return;
       }
-      downloadZipFromForm(form, statusHost, submitButton, materialPreparingMessage(form));
+      downloadZipFromForm(form, statusHost, submitButton, materialPreparingMessage(form), jobsPanel);
     });
   };
 

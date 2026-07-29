@@ -14,6 +14,7 @@ final class MaterialImageZipJobService
 {
     public const JOB_TTL_SECONDS = 7200;
     public const MAX_PENDING_JOBS_PER_USER = 5;
+    public const STALE_QUEUED_SECONDS = 1800;
 
     public static function ensureTable(): void
     {
@@ -55,6 +56,7 @@ final class MaterialImageZipJobService
     {
         self::ensureTable();
         self::cleanupExpiredJobs();
+        self::expireStaleQueuedJobs();
 
         $mode = trim((string) ($params['mode'] ?? 'materials'));
         if (!in_array($mode, ['materials', 'invoice'], true)) {
@@ -451,6 +453,68 @@ final class MaterialImageZipJobService
             'pct' => max(0, min(100, $pct)),
             'message' => Utf8Text::substr($message, 0, 480),
         ]);
+    }
+
+    public static function expireStaleQueuedJobs(): void
+    {
+        self::ensureTable();
+        Database::pdo()->exec(
+            'UPDATE material_image_zip_jobs
+             SET status = \'failed\',
+                 progress_pct = 100,
+                 progress_message = \'انتهت مهلة الانتظار — أعد المحاولة.\',
+                 error_message = \'تعذر بدء التحضير في الوقت المحدد. تأكد من cron/worker على السيرفر.\',
+                 finished_at = NOW(),
+                 updated_at = NOW()
+             WHERE status = \'queued\'
+               AND created_at < NOW() - INTERVAL \'' . (int) self::STALE_QUEUED_SECONDS . ' seconds\''
+        );
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function listActiveJobsForUser(?string $userId, int $limit = 10): array
+    {
+        self::ensureTable();
+        self::expireStaleQueuedJobs();
+        self::recoverStaleBuildingJobs();
+
+        if ($userId === null || $userId === '') {
+            return [];
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT * FROM material_image_zip_jobs
+             WHERE requested_by_web_user_id = :user_id
+               AND status IN (\'queued\', \'building\', \'ready\')
+             ORDER BY CASE status WHEN \'ready\' THEN 0 WHEN \'building\' THEN 1 ELSE 2 END, created_at DESC
+             LIMIT :limit'
+        );
+        $stmt->bindValue('user_id', $userId);
+        $stmt->bindValue('limit', max(1, min(20, $limit)), PDO::PARAM_INT);
+        $stmt->execute();
+
+        $jobs = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $job = self::normalizeJobRow($row);
+            $jobs[] = [
+                'jobId' => $job['id'],
+                'status' => $job['status'],
+                'progressMessage' => (string) ($job['progress_message'] ?? ''),
+                'fileName' => (string) ($job['file_name'] ?? ''),
+                'imageCount' => (int) ($job['image_count'] ?? 0),
+                'createdAt' => (string) ($job['created_at'] ?? ''),
+                'downloadUrl' => ($job['status'] ?? '') === 'ready'
+                    ? '/api/material-images-zip-jobs.php?jobId=' . rawurlencode((string) $job['id']) . '&download=1'
+                    : null,
+            ];
+        }
+
+        return $jobs;
     }
 
     public static function cleanupExpiredJobs(): void
