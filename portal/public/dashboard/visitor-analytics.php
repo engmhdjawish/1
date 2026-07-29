@@ -36,6 +36,19 @@ if (!in_array($visitorFilter, ['all', 'customers', 'ordered', 'cart', 'known'], 
     $visitorFilter = 'all';
 }
 
+$eventCategory = trim((string) ($_GET['ecat'] ?? 'all'));
+if (!array_key_exists($eventCategory, VisitorLogService::timelineCategoryLabels())) {
+    $eventCategory = 'all';
+}
+
+$visitorsPage = max(1, (int) ($_GET['vp'] ?? 1));
+$sessionsPage = max(1, (int) ($_GET['sp'] ?? 1));
+$timelinePage = max(1, (int) ($_GET['tp'] ?? 1));
+
+$visitorsPerPage = 20;
+$sessionsPerPage = 6;
+$timelinePerPage = 15;
+
 $logFilters = array_filter([
     'customer_id' => $customerId,
     'q' => $searchQ,
@@ -102,6 +115,9 @@ $allAccountGroups = ($schemaReady && $tab === 'log') ? VisitorLogService::groupS
 $accountGroups = ($schemaReady && $tab === 'log')
     ? VisitorLogService::filterAccountGroups($allAccountGroups, $visitorFilter)
     : [];
+$visitorsPagination = VisitorLogService::paginateList($accountGroups, $visitorsPage, $visitorsPerPage);
+$accountGroupsPage = $visitorsPagination['items'];
+$visitorsTotal = (int) $visitorsPagination['total'];
 
 // Resolve account from session or customer_id when not explicitly set
 if ($tab === 'log' && $accountKey === '' && $sessionId !== '') {
@@ -125,6 +141,8 @@ $selectedAccount = null;
 $accountProfile = null;
 $sessionDigest = null;
 $sessionEvents = [];
+$sessionsPagination = ['items' => [], 'page' => 1, 'per_page' => $sessionsPerPage, 'total' => 0, 'total_pages' => 1];
+$timelinePagination = ['days' => [], 'page' => 1, 'per_page' => $timelinePerPage, 'total' => 0, 'total_pages' => 1];
 
 if ($schemaReady && $tab === 'log' && $accountKey !== '') {
     foreach ($allAccountGroups as $group) {
@@ -174,6 +192,29 @@ if ($schemaReady && $tab === 'log' && $accountKey !== '') {
         )));
         $profileEvents = VisitorLogService::eventsForSessions($profileSessionIds, 250, $days);
         $accountProfile = VisitorLogService::buildAccountProfile($selectedAccount, $profileEvents);
+
+        $allProfileSessions = is_array($accountProfile['sessions'] ?? null) ? $accountProfile['sessions'] : [];
+        $sessionsPagination = VisitorLogService::paginateList($allProfileSessions, $sessionsPage, $sessionsPerPage);
+        $accountProfile['sessions_page'] = $sessionsPagination['items'];
+
+        $filteredTimeline = VisitorLogService::filterTimelineByCategory(
+            is_array($accountProfile['timeline'] ?? null) ? $accountProfile['timeline'] : [],
+            $eventCategory
+        );
+        $timelinePagination = VisitorLogService::paginateTimeline($filteredTimeline, $timelinePage, $timelinePerPage);
+        $accountProfile['timeline_page'] = $timelinePagination['days'];
+        $accountProfile['timeline_meta'] = [
+            'page' => $timelinePagination['page'],
+            'per_page' => $timelinePagination['per_page'],
+            'total' => $timelinePagination['total'],
+            'total_pages' => $timelinePagination['total_pages'],
+        ];
+        $accountProfile['sessions_meta'] = [
+            'page' => $sessionsPagination['page'],
+            'per_page' => $sessionsPagination['per_page'],
+            'total' => $sessionsPagination['total'],
+            'total_pages' => $sessionsPagination['total_pages'],
+        ];
     }
 }
 
@@ -225,13 +266,29 @@ $onlineCounts = ($tab === 'now' && ($sessionsReady || $presenceReady))
     ? PortalSessionService::onlineCounts()
     : ['staff' => 0, 'customers' => 0, 'guests' => 0, 'total' => 0];
 
-$queryBase = static function (array $params = []) use ($days, $tab, $sessionId, $customerId, $accountKey, $searchQ, $visitorFilter): string {
+$queryBase = static function (array $params = []) use (
+    $days,
+    $tab,
+    $sessionId,
+    $customerId,
+    $accountKey,
+    $searchQ,
+    $visitorFilter,
+    $eventCategory,
+    $visitorsPage,
+    $sessionsPage,
+    $timelinePage
+): string {
     $query = array_merge([
         'tab' => $tab,
         'days' => $days,
         'customer_id' => $customerId,
         'account' => $accountKey,
         'filter' => $visitorFilter !== 'all' ? $visitorFilter : '',
+        'ecat' => $eventCategory !== 'all' ? $eventCategory : '',
+        'vp' => $visitorsPage > 1 ? $visitorsPage : '',
+        'sp' => $sessionsPage > 1 ? $sessionsPage : '',
+        'tp' => $timelinePage > 1 ? $timelinePage : '',
         'q' => $searchQ,
     ], $params);
     if ($sessionId !== '' && !array_key_exists('session', $params)) {

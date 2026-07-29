@@ -222,6 +222,29 @@ if (count($filtered) === 1 && (int) ($filtered[0]['orders'] ?? 0) === 1) {
     $bad('filterAccountGroups failed');
 }
 
+$paged = VisitorLogService::paginateList(range(1, 25), 2, 10);
+if (count($paged['items']) === 10 && ($paged['page'] ?? 0) === 2 && ($paged['total'] ?? 0) === 25) {
+    $ok('paginateList page 2 works');
+} else {
+    $bad('paginateList failed');
+}
+
+if (VisitorLogService::timelineCategoryForAction('add_to_cart') === 'cart') {
+    $ok('timelineCategoryForAction(cart) works');
+} else {
+    $bad('timelineCategoryForAction failed');
+}
+
+$loc = VisitorLogService::resolveProfileLocation(
+    [['city_ar' => 'دمشق', 'country_ar' => 'سورia', 'location_source_label' => 'IP', 'map_url' => 'https://maps.test', 'visitor_ip' => '1.2.3.4']],
+    []
+);
+if (($loc['location_label'] ?? '') !== '—' && ($loc['map_url'] ?? '') !== '') {
+    $ok('resolveProfileLocation returns location + map');
+} else {
+    $bad('resolveProfileLocation failed');
+}
+
 $section('Dashboard route files');
 $files = [
     $base . '/public/dashboard/visitor-analytics.php',

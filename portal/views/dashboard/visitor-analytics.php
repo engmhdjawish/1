@@ -104,7 +104,13 @@ $guestSessionFromPresence = static function (array $row): string {
     return '';
 };
 ?>
-<section class="visitor-log">
+<?php
+$visitorLogClass = 'visitor-log';
+if ($tab === 'log' && trim((string) ($accountKey ?? '')) !== '') {
+    $visitorLogClass .= ' visitor-log--profile-open';
+}
+?>
+<section class="<?= h($visitorLogClass) ?>">
   <div class="visitor-log__head">
     <div>
       <h1 class="visitor-log__title">سجل الزوار</h1>

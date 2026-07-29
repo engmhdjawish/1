@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /** @var callable(array<string, mixed>): string $buildUrl */
-/** @var list<array<string, mixed>> $accountGroups */
+/** @var list<array<string, mixed>> $accountGroupsPage */
 /** @var array<string, mixed>|null $accountProfile */
 /** @var array<string, mixed>|null $sessionDigest */
 /** @var string $accountKey */
@@ -11,11 +11,19 @@ declare(strict_types=1);
 /** @var string $customerId */
 /** @var string $searchQ */
 /** @var string $visitorFilter */
+/** @var string $eventCategory */
+/** @var int $visitorsPage */
+/** @var int $visitorsTotal */
 /** @var int $days */
 /** @var array<string, mixed>|null $filteredCustomer */
 
+use Portal\Services\VisitorLogService;
+
 $accountProfile = $accountProfile ?? null;
+$accountGroupsPage = $accountGroupsPage ?? ($accountGroups ?? []);
+$visitorsTotal = (int) ($visitorsTotal ?? count($accountGroupsPage));
 $visitorFilter = trim((string) ($visitorFilter ?? 'all'));
+$eventCategory = trim((string) ($eventCategory ?? 'all'));
 $accountKey = trim((string) ($accountKey ?? ''));
 
 $identityPill = static function (array $row): string {
@@ -66,6 +74,26 @@ $renderFunnelMini = static function (array $funnel): void {
     echo '</div>';
 };
 
+$renderPagination = static function (
+    int $page,
+    int $totalPages,
+    int $total,
+    string $pageParam
+) use ($buildUrl): void {
+    if ($totalPages <= 1) {
+        return;
+    }
+    echo '<nav class="visitor-log__pager" aria-label="ترقيم الصفحات">';
+    if ($page > 1) {
+        echo '<a href="' . h($buildUrl([$pageParam => $page - 1])) . '" class="visitor-log__pager-btn">السابق</a>';
+    }
+    echo '<span class="visitor-log__pager-info">' . $page . ' / ' . $totalPages . ' · ' . number_format($total) . '</span>';
+    if ($page < $totalPages) {
+        echo '<a href="' . h($buildUrl([$pageParam => $page + 1])) . '" class="visitor-log__pager-btn">التالي</a>';
+    }
+    echo '</nav>';
+};
+
 $filterChips = [
     'all' => 'الكل',
     'known' => 'معروفون',
@@ -73,6 +101,10 @@ $filterChips = [
     'cart' => 'سلة',
     'ordered' => 'طلبات',
 ];
+
+$eventCategories = VisitorLogService::timelineCategoryLabels();
+$visitorsPerPage = 20;
+$visitorsTotalPages = max(1, (int) ceil($visitorsTotal / $visitorsPerPage));
 ?>
 <?php if ($filteredCustomer !== null): ?>
   <div class="visitor-log__filter-banner">
@@ -85,7 +117,7 @@ $filterChips = [
     <div class="visitor-log__filter-banner-actions">
       <a href="/dashboard/customers.php?details=<?= h($customerId) ?>" class="visitor-log__action">ملف العميل</a>
       <a href="/dashboard/orders.php?web_customer_id=<?= h($customerId) ?>" class="visitor-log__action">طلباته</a>
-      <a href="<?= h($buildUrl(['customer_id' => null, 'account' => null, 'session' => null])) ?>" class="visitor-log__action">إزالة التصفية</a>
+      <a href="<?= h($buildUrl(['customer_id' => null, 'account' => null, 'session' => null, 'vp' => null, 'sp' => null, 'tp' => null])) ?>" class="visitor-log__action">إزالة التصفية</a>
     </div>
   </div>
 <?php endif; ?>
@@ -103,40 +135,43 @@ $filterChips = [
     <?php if ($visitorFilter !== 'all'): ?>
       <input type="hidden" name="filter" value="<?= h($visitorFilter) ?>">
     <?php endif; ?>
+    <?php if ($eventCategory !== 'all'): ?>
+      <input type="hidden" name="ecat" value="<?= h($eventCategory) ?>">
+    <?php endif; ?>
     <span class="material-symbols-outlined visitor-log__search-icon" aria-hidden="true">search</span>
     <input type="search" name="q" value="<?= h($searchQ) ?>" placeholder="ابحث بالاسم، الهاتف، أو IP..." class="visitor-log__search-input">
     <?php if ($searchQ !== ''): ?>
-      <a href="<?= h($buildUrl(['q' => null])) ?>" class="visitor-log__search-clear" aria-label="مسح البحث">×</a>
+      <a href="<?= h($buildUrl(['q' => null, 'vp' => null])) ?>" class="visitor-log__search-clear" aria-label="مسح البحث">×</a>
     <?php endif; ?>
   </form>
 
   <div class="visitor-log__chips" role="group" aria-label="تصفية الزوار">
     <?php foreach ($filterChips as $key => $label): ?>
-      <a href="<?= h($buildUrl(['filter' => $key === 'all' ? null : $key, 'account' => $accountKey !== '' ? $accountKey : null, 'session' => $sessionId !== '' ? $sessionId : null])) ?>"
+      <a href="<?= h($buildUrl(['filter' => $key === 'all' ? null : $key, 'account' => $accountKey !== '' ? $accountKey : null, 'session' => $sessionId !== '' ? $sessionId : null, 'vp' => null, 'sp' => null, 'tp' => null])) ?>"
          class="visitor-log__chip<?= $visitorFilter === $key ? ' is-active' : '' ?>"><?= h($label) ?></a>
     <?php endforeach; ?>
   </div>
 </div>
 
-<div class="visitor-log__crm">
+<div class="visitor-log__crm<?= $accountKey !== '' ? ' visitor-log__crm--profile' : '' ?>">
   <aside class="visitor-log__crm-list">
     <header class="visitor-log__crm-list-head">
       <h2>الزوار</h2>
-      <span><?= count($accountGroups) ?></span>
+      <span><?= number_format($visitorsTotal) ?></span>
     </header>
 
-    <?php if ($accountGroups === []): ?>
+    <?php if ($accountGroupsPage === []): ?>
       <p class="visitor-log__empty">لا زوار في هذه الفترة<?= $visitorFilter !== 'all' || $searchQ !== '' ? ' — جرّب توسيع البحث أو إزالة التصفية' : '' ?>.</p>
     <?php else: ?>
       <ul class="visitor-log__visitor-table">
-        <?php foreach ($accountGroups as $group): ?>
+        <?php foreach ($accountGroupsPage as $group): ?>
           <?php
           $key = (string) ($group['account_key'] ?? '');
           $isActive = $accountKey !== '' && $accountKey === $key;
           $funnel = is_array($group['funnel'] ?? null) ? $group['funnel'] : [];
           ?>
           <li class="<?= $isActive ? 'is-active' : '' ?>">
-            <a href="<?= h($buildUrl(['tab' => 'log', 'account' => $key, 'session' => null])) ?>" class="visitor-log__visitor-row">
+            <a href="<?= h($buildUrl(['tab' => 'log', 'account' => $key, 'session' => null, 'sp' => null, 'tp' => null, 'ecat' => null])) ?>" class="visitor-log__visitor-row">
               <span class="visitor-log__visitor-avatar visitor-log__pill <?= h($identityPill($group)) ?>"><?= h(mb_substr($renderIdentityName($group), 0, 1)) ?></span>
               <span class="visitor-log__visitor-main">
                 <strong><?= h($renderIdentityName($group)) ?></strong>
@@ -163,10 +198,18 @@ $filterChips = [
           </li>
         <?php endforeach; ?>
       </ul>
+      <?php $renderPagination((int) ($visitorsPage ?? 1), $visitorsTotalPages, $visitorsTotal, $buildUrl, 'vp'); ?>
     <?php endif; ?>
   </aside>
 
   <main class="visitor-log__crm-detail">
+    <?php if ($accountKey !== '' && $accountProfile !== null): ?>
+      <a href="<?= h($buildUrl(['account' => null, 'session' => null, 'sp' => null, 'tp' => null, 'ecat' => null])) ?>" class="visitor-log__mobile-back">
+        <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+        <span>عودة للزوار</span>
+      </a>
+    <?php endif; ?>
+
     <?php if ($accountKey === '' || $accountProfile === null): ?>
       <div class="visitor-log__detail-empty visitor-log__detail-empty--pro">
         <span class="material-symbols-outlined" aria-hidden="true">groups</span>
@@ -177,11 +220,21 @@ $filterChips = [
       <?php
       $stats = is_array($accountProfile['stats'] ?? null) ? $accountProfile['stats'] : [];
       $funnel = is_array($accountProfile['funnel'] ?? null) ? $accountProfile['funnel'] : [];
-      $timeline = is_array($accountProfile['timeline'] ?? null) ? $accountProfile['timeline'] : [];
-      $profileSessions = is_array($accountProfile['sessions'] ?? null) ? $accountProfile['sessions'] : [];
+      $timeline = is_array($accountProfile['timeline_page'] ?? null) ? $accountProfile['timeline_page'] : [];
+      $timelineMeta = is_array($accountProfile['timeline_meta'] ?? null) ? $accountProfile['timeline_meta'] : [];
+      $profileSessions = is_array($accountProfile['sessions_page'] ?? null) ? $accountProfile['sessions_page'] : [];
+      $sessionsMeta = is_array($accountProfile['sessions_meta'] ?? null) ? $accountProfile['sessions_meta'] : [];
       $digest = is_array($accountProfile['digest'] ?? null) ? $accountProfile['digest'] : [];
       $digestStats = is_array($digest['stats'] ?? null) ? $digest['stats'] : [];
+      $location = is_array($accountProfile['location'] ?? null) ? $accountProfile['location'] : [];
       $profileCustomerId = trim((string) ($accountProfile['web_customer_id'] ?? ''));
+
+      $funnelCategoryMap = [
+          'visit' => 'browse',
+          'product' => 'product',
+          'cart' => 'cart',
+          'order' => 'order',
+      ];
       ?>
 
       <header class="visitor-log__profile-head">
@@ -203,22 +256,62 @@ $filterChips = [
             <a href="/dashboard/customers.php?details=<?= h($profileCustomerId) ?>" class="visitor-log__action">الملف</a>
             <a href="/dashboard/orders.php?web_customer_id=<?= h($profileCustomerId) ?>" class="visitor-log__action">الطلبات</a>
           <?php endif; ?>
-          <a href="<?= h($buildUrl(['account' => null, 'session' => null])) ?>" class="visitor-log__action">إغلاق</a>
+          <a href="<?= h($buildUrl(['account' => null, 'session' => null, 'sp' => null, 'tp' => null, 'ecat' => null])) ?>" class="visitor-log__action visitor-log__action--close">إغلاق</a>
         </div>
       </header>
+
+      <?php
+      $locationLabel = trim((string) ($location['location_label'] ?? ''));
+      $mapUrl = trim((string) ($location['map_url'] ?? ''));
+      if ($locationLabel !== '' && $locationLabel !== '—'):
+      ?>
+        <div class="visitor-log__digest-location visitor-log__digest-location--profile">
+          <span class="material-symbols-outlined" aria-hidden="true">location_on</span>
+          <span><?= h($locationLabel) ?></span>
+          <?php if (trim((string) ($location['location_source_label'] ?? '')) !== ''): ?>
+            <span class="visitor-log__digest-tag"><?= h((string) $location['location_source_label']) ?></span>
+          <?php endif; ?>
+          <?php if ($mapUrl !== ''): ?>
+            <a href="<?= h($mapUrl) ?>" class="visitor-log__map-link" target="_blank" rel="noopener noreferrer">عرض على الخريطة</a>
+          <?php endif; ?>
+          <?php if (trim((string) ($location['visitor_ip'] ?? '')) !== ''): ?>
+            <span class="visitor-log__digest-ip-inline" dir="ltr">IP: <?= h((string) $location['visitor_ip']) ?></span>
+          <?php endif; ?>
+        </div>
+      <?php elseif ($mapUrl !== ''): ?>
+        <div class="visitor-log__digest-location visitor-log__digest-location--profile">
+          <span class="material-symbols-outlined" aria-hidden="true">location_on</span>
+          <a href="<?= h($mapUrl) ?>" class="visitor-log__map-link" target="_blank" rel="noopener noreferrer">عرض الموقع على الخريطة</a>
+          <?php if (trim((string) ($location['visitor_ip'] ?? '')) !== ''): ?>
+            <span class="visitor-log__digest-ip-inline" dir="ltr">IP: <?= h((string) $location['visitor_ip']) ?></span>
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
 
       <?php if ($funnel !== []): ?>
         <section class="visitor-log__funnel" aria-label="مسار التحويل">
           <div class="visitor-log__funnel-track">
             <?php foreach ($funnel as $i => $step): ?>
+              <?php
+              $stepKey = (string) ($step['key'] ?? '');
+              $ecatForStep = $funnelCategoryMap[$stepKey] ?? null;
+              ?>
               <?php if ($i > 0): ?>
                 <span class="visitor-log__funnel-arrow material-symbols-outlined" aria-hidden="true">chevron_left</span>
               <?php endif; ?>
-              <div class="visitor-log__funnel-step<?= !empty($step['reached']) ? ' is-reached' : '' ?>">
-                <strong><?= number_format((int) ($step['count'] ?? 0)) ?></strong>
-                <span><?= h((string) ($step['label'] ?? '')) ?></span>
-                <em><?= (int) ($step['pct'] ?? 0) ?>%</em>
-              </div>
+              <?php if ($ecatForStep !== null): ?>
+                <a href="<?= h($buildUrl(['ecat' => $ecatForStep, 'tp' => null])) ?>" class="visitor-log__funnel-step visitor-log__funnel-step--link<?= !empty($step['reached']) ? ' is-reached' : '' ?><?= $eventCategory === $ecatForStep ? ' is-active' : '' ?>">
+                  <strong><?= number_format((int) ($step['count'] ?? 0)) ?></strong>
+                  <span><?= h((string) ($step['label'] ?? '')) ?></span>
+                  <em><?= (int) ($step['pct'] ?? 0) ?>%</em>
+                </a>
+              <?php else: ?>
+                <div class="visitor-log__funnel-step<?= !empty($step['reached']) ? ' is-reached' : '' ?>">
+                  <strong><?= number_format((int) ($step['count'] ?? 0)) ?></strong>
+                  <span><?= h((string) ($step['label'] ?? '')) ?></span>
+                  <em><?= (int) ($step['pct'] ?? 0) ?>%</em>
+                </div>
+              <?php endif; ?>
             <?php endforeach; ?>
           </div>
         </section>
@@ -247,6 +340,15 @@ $filterChips = [
             <?php endif; ?>
             · <?= h((string) ($sessStats['duration_label'] ?? '—')) ?>
           </p>
+          <?php if (trim((string) ($sessStats['location_label'] ?? '')) !== '' && ($sessStats['location_label'] ?? '') !== '—'): ?>
+            <div class="visitor-log__digest-location visitor-log__digest-location--compact">
+              <span class="material-symbols-outlined" aria-hidden="true">location_on</span>
+              <span><?= h((string) $sessStats['location_label']) ?></span>
+              <?php if (!empty($sessStats['map_url'])): ?>
+                <a href="<?= h((string) $sessStats['map_url']) ?>" class="visitor-log__map-link" target="_blank" rel="noopener noreferrer">خريطة</a>
+              <?php endif; ?>
+            </div>
+          <?php endif; ?>
           <div class="visitor-log__digest-stats visitor-log__digest-stats--inline">
             <div class="visitor-log__digest-stat"><span>صفحات</span><strong><?= (int) ($sessStats['page_views'] ?? 0) ?></strong></div>
             <div class="visitor-log__digest-stat"><span>منتجات</span><strong><?= (int) ($sessStats['product_views'] ?? 0) ?></strong></div>
@@ -254,30 +356,56 @@ $filterChips = [
             <div class="visitor-log__digest-stat"><span>طلبات</span><strong><?= (int) ($sessStats['orders'] ?? 0) ?></strong></div>
           </div>
         </section>
-      <?php elseif (count($profileSessions) > 1): ?>
+      <?php elseif ((int) ($sessionsMeta['total'] ?? 0) > 0): ?>
         <section class="visitor-log__sessions-strip">
-          <h3>الجلسات</h3>
+          <header class="visitor-log__sessions-strip-head">
+            <h3>الجلسات</h3>
+            <span><?= number_format((int) ($sessionsMeta['total'] ?? 0)) ?> جلسة</span>
+          </header>
           <div class="visitor-log__sessions-scroll">
             <?php foreach ($profileSessions as $sess): ?>
               <?php
               $sid = (string) ($sess['session_id'] ?? '');
               $isSessActive = $sessionId !== '' && $sessionId === $sid;
               ?>
-              <a href="<?= h($buildUrl(['session' => $sid])) ?>" class="visitor-log__session-card<?= $isSessActive ? ' is-active' : '' ?>">
+              <a href="<?= h($buildUrl(['session' => $sid, 'tp' => null])) ?>" class="visitor-log__session-card<?= $isSessActive ? ' is-active' : '' ?>">
                 <time><?= h((string) ($sess['last_seen_relative'] ?? $sess['last_seen_fmt'] ?? '')) ?></time>
                 <span><?= number_format((int) ($sess['events'] ?? 0)) ?> حدث</span>
                 <?php if ((int) ($sess['orders'] ?? 0) > 0): ?>
                   <span class="visitor-log__badge visitor-log__badge--order"><?= (int) $sess['orders'] ?> طلب</span>
                 <?php endif; ?>
+                <?php
+                $sessCity = trim((string) ($sess['city_ar'] ?? ''));
+                $sessCountry = trim((string) ($sess['country_ar'] ?? ''));
+                if ($sessCity !== '' || $sessCountry !== ''):
+                ?>
+                  <span class="visitor-log__session-loc"><?= h($sessCity !== '' && $sessCountry !== '' ? $sessCity . '، ' . $sessCountry : ($sessCity ?: $sessCountry)) ?></span>
+                <?php endif; ?>
               </a>
             <?php endforeach; ?>
           </div>
+          <?php $renderPagination((int) ($sessionsMeta['page'] ?? 1), (int) ($sessionsMeta['total_pages'] ?? 1), (int) ($sessionsMeta['total'] ?? 0), $buildUrl, 'sp'); ?>
         </section>
       <?php endif; ?>
 
-      <?php if ($timeline !== []): ?>
-        <section class="visitor-log__timeline-pro">
+      <section class="visitor-log__timeline-pro">
+        <header class="visitor-log__timeline-head">
           <h3>الخط الزمني</h3>
+          <?php if ((int) ($timelineMeta['total'] ?? 0) > 0): ?>
+            <span><?= number_format((int) ($timelineMeta['total'] ?? 0)) ?> حدث</span>
+          <?php endif; ?>
+        </header>
+
+        <div class="visitor-log__chips visitor-log__chips--timeline" role="group" aria-label="تصفية الأحداث">
+          <?php foreach ($eventCategories as $catKey => $catLabel): ?>
+            <a href="<?= h($buildUrl(['ecat' => $catKey === 'all' ? null : $catKey, 'tp' => null])) ?>"
+               class="visitor-log__chip<?= $eventCategory === $catKey ? ' is-active' : '' ?>"><?= h($catLabel) ?></a>
+          <?php endforeach; ?>
+        </div>
+
+        <?php if ($timeline === []): ?>
+          <p class="visitor-log__empty visitor-log__empty--inline">لا أحداث<?= $eventCategory !== 'all' ? ' في هذا التصنيف' : '' ?> في الفترة المحددة.</p>
+        <?php else: ?>
           <?php foreach ($timeline as $dayGroup): ?>
             <div class="visitor-log__timeline-day">
               <h4><?= h((string) ($dayGroup['day_label'] ?? '')) ?></h4>
@@ -299,10 +427,9 @@ $filterChips = [
               </ol>
             </div>
           <?php endforeach; ?>
-        </section>
-      <?php else: ?>
-        <p class="visitor-log__empty">لا أحداث مسجّلة لهذا الزائر في الفترة المحددة.</p>
-      <?php endif; ?>
+          <?php $renderPagination((int) ($timelineMeta['page'] ?? 1), (int) ($timelineMeta['total_pages'] ?? 1), (int) ($timelineMeta['total'] ?? 0), $buildUrl, 'tp'); ?>
+        <?php endif; ?>
+      </section>
 
       <?php
       $topProducts = is_array($digestStats['top_products'] ?? null) ? $digestStats['top_products'] : [];
