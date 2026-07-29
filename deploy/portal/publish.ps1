@@ -2,7 +2,7 @@
 param(
     [string]$EnvFile,
     [ValidateSet('fresh', 'migrate', 'skip')]
-    [string]$DbSetup = 'fresh',
+    [string]$DbSetup = 'migrate',
     [switch]$UseUrlRewrite
 )
 $ErrorActionPreference = 'Stop'

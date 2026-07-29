@@ -11,11 +11,8 @@ VALUES
     ('customer_vip', 'عميل مفعّل — مميز', 'عرض كميات + طلب', TRUE, TRUE, TRUE, TRUE)
 ON CONFLICT (code) DO UPDATE SET
     name_ar = EXCLUDED.name_ar,
-    description_ar = EXCLUDED.description_ar,
-    show_price = EXCLUDED.show_price,
-    show_quantity = EXCLUDED.show_quantity,
-    allow_cart = EXCLUDED.allow_cart,
-    allow_order = EXCLUDED.allow_order;
+    description_ar = EXCLUDED.description_ar;
+    -- لا نُعيد كتابة show_price / allow_* — تُدار من لوحة التحكم ولا يجب مسحها عند إعادة البذر
 
 -- Web roles
 INSERT INTO web_roles (code, name_ar, description_ar, is_system)
@@ -110,10 +107,10 @@ JOIN web_permissions p ON p.code IN (
 WHERE r.code = 'accountant'
 ON CONFLICT DO NOTHING;
 
--- Default store guest policy (متجر عام)
+-- Default store guest policy (تصفح فقط — بدون أسعار للزائر)
 INSERT INTO store_guest_settings (id, access_policy_id)
-SELECT 1, id FROM access_policies WHERE code = 'guest_full'
-ON CONFLICT (id) DO UPDATE SET access_policy_id = EXCLUDED.access_policy_id;
+SELECT 1, id FROM access_policies WHERE code = 'guest_browse'
+ON CONFLICT (id) DO NOTHING;
 
 -- Default company settings
 INSERT INTO company_settings (key, value_ar)

@@ -17,12 +17,13 @@ write_portal_env "$PORTAL_PUBLISH_DIR" "$env_preserve"
 pushd "$PORTAL_PUBLISH_DIR" >/dev/null
 composer install --no-dev --optimize-autoloader --no-interaction
 
-if [[ "${PORTAL_DB_SETUP:-fresh}" == "fresh" ]]; then
+# الافتراضي migrate — fresh يعيد تشغيل البذور وقد يمسح سياسات الوصول المخصصة
+if [[ "${PORTAL_DB_SETUP:-migrate}" == "fresh" ]]; then
   step "إنشاء قاعدة البيانات (مخطط + بذور)"
   php scripts/setup-database.php
   step "ترحيلات إضافية"
   php scripts/run-migrations.php
-elif [[ "${PORTAL_DB_SETUP:-}" == "migrate" ]]; then
+elif [[ "${PORTAL_DB_SETUP:-migrate}" == "migrate" ]]; then
   step "ترحيل قاعدة البيانات"
   php scripts/run-migrations.php
 else
