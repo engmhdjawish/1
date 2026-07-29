@@ -201,6 +201,7 @@ $defaultAvailability = '1';
           </div>
 
           <div class="dash-mi-zip-form__footer">
+            <div data-zip-jobs-panel class="hidden dash-mi-zip-jobs-panel text-sm rounded-lg border border-border-subtle bg-white px-3 py-2"></div>
             <div data-zip-download-status class="hidden text-sm rounded-lg border px-3 py-2"></div>
             <p class="dash-mi-zip-hint text-[11px] text-text-muted">يُفضّل تحديد فلتر واحد على الأقل (بحث، نوع، شركة، …) لتجنّب تحميل آلاف الصور دفعة واحدة.</p>
             <button type="submit" class="dash-mi-zip-download-btn">

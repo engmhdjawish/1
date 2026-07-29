@@ -46,6 +46,12 @@ try {
         DashboardHttp::json(true, '', MaterialImageZipJobService::getStatus($jobId, $userId));
     }
 
+    if ((string) ($_GET['list'] ?? '') === '1') {
+        DashboardHttp::json(true, '', [
+            'jobs' => MaterialImageZipJobService::listActiveJobsForUser($userId),
+        ]);
+    }
+
     DashboardHttp::json(false, 'طلب غير صالح.');
 } catch (\Throwable $exception) {
     if ($download && !headers_sent()) {
