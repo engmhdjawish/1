@@ -67,12 +67,12 @@ final class MaterialImageZipJobService
             $pendingStmt = Database::pdo()->prepare(
                 'SELECT COUNT(*) FROM material_image_zip_jobs
                  WHERE requested_by_web_user_id = :user_id
-                   AND status IN (\'queued\', \'building\', \'ready\')'
+                   AND status IN (\'queued\', \'building\')'
             );
             $pendingStmt->execute(['user_id' => $userId]);
             $pendingCount = (int) $pendingStmt->fetchColumn();
             if ($pendingCount >= self::MAX_PENDING_JOBS_PER_USER) {
-                throw new \RuntimeException('لديك طلبات تحضير ZIP قيد الانتظار. انتظر انتهاءها أو حمّل الملف الجاهز.');
+                throw new \RuntimeException('لديك طلبات تحضير ZIP قيد التنفيذ. انتظر انتهاءها ثم حاول مجدداً.');
             }
         }
 
