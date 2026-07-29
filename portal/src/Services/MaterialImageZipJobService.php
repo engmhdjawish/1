@@ -215,26 +215,55 @@ final class MaterialImageZipJobService
      */
     private static function claimNextQueuedJob(): ?array
     {
-        $stmt = Database::pdo()->query(
-            'UPDATE material_image_zip_jobs
-             SET status = \'building\',
-                 started_at = NOW(),
-                 updated_at = NOW(),
-                 progress_pct = 5,
-                 progress_message = \'جاري تحضير الملف...\'
-             WHERE id = (
-                 SELECT id FROM material_image_zip_jobs
+        $pdo = Database::pdo();
+        if (!$pdo->beginTransaction()) {
+            return null;
+        }
+
+        try {
+            $select = $pdo->query(
+                'SELECT id FROM material_image_zip_jobs
                  WHERE status = \'queued\'
                  ORDER BY created_at ASC
                  LIMIT 1
-                 FOR UPDATE SKIP LOCKED
-             )
-             RETURNING *'
-        );
+                 FOR UPDATE SKIP LOCKED'
+            );
+            $candidate = $select?->fetch(PDO::FETCH_ASSOC);
+            if (!is_array($candidate)) {
+                $pdo->rollBack();
 
-        $row = $stmt?->fetch(PDO::FETCH_ASSOC);
+                return null;
+            }
 
-        return is_array($row) ? self::normalizeJobRow($row) : null;
+            $jobId = trim((string) ($candidate['id'] ?? ''));
+            if ($jobId === '') {
+                $pdo->rollBack();
+
+                return null;
+            }
+
+            $update = $pdo->prepare(
+                'UPDATE material_image_zip_jobs
+                 SET status = \'building\',
+                     started_at = NOW(),
+                     updated_at = NOW(),
+                     progress_pct = 5,
+                     progress_message = \'جاري تحضير الملف...\'
+                 WHERE id = :id
+                 RETURNING *'
+            );
+            $update->execute(['id' => $jobId]);
+            $row = $update->fetch(PDO::FETCH_ASSOC);
+            $pdo->commit();
+
+            return is_array($row) ? self::normalizeJobRow($row) : null;
+        } catch (Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            throw $exception;
+        }
     }
 
     /**
