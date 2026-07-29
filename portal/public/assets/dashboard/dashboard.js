@@ -292,8 +292,23 @@
     });
   }
 
+  function assetPathname(href) {
+    try {
+      return new URL(href, window.location.origin).pathname;
+    } catch {
+      return String(href || '').split('?')[0];
+    }
+  }
+
+  function findStylesheetLink(href) {
+    const targetPath = assetPathname(href);
+    return Array.from(document.querySelectorAll('link[rel="stylesheet"]')).find((node) => {
+      return assetPathname(node.getAttribute('href') || '') === targetPath;
+    }) || null;
+  }
+
   function loadStylesheet(href) {
-    const existing = document.querySelector(`link[rel="stylesheet"][href="${href}"]`);
+    const existing = findStylesheetLink(href);
     if (existing) {
       if (existing.sheet) {
         return Promise.resolve();
@@ -475,12 +490,14 @@
         window.location.href = url;
         return;
       }
+      const pageAssetsKey = newMain.getAttribute('data-dashboard-page-assets') || '';
+      await ensurePageAssets(pageAssetsKey);
+      if (generation !== navGeneration) return;
       main.innerHTML = newMain.innerHTML;
       main.classList.remove('is-nav-loading');
       main.removeAttribute('aria-busy');
       runInlineScripts(newMain);
       syncDashboardChrome(doc);
-      await ensurePageAssets(newMain.getAttribute('data-dashboard-page-assets') || '');
       const route = newMain.getAttribute('data-current-route') || normalizeDashboardRoute(url);
       if (route) {
         main.setAttribute('data-current-route', route);

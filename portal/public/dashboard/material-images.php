@@ -106,9 +106,10 @@ if ($workspaceTab === 'download') {
 }
 
 $currentRoute = '/dashboard/material-images.php';
+$materialImagesWorkspace = true;
 $materialImagesZipTab = ($workspaceTab === 'download');
 $materialImagesUploadTab = ($workspaceTab === 'upload');
-$dashboardPageAssets = $materialImagesZipTab ? 'material-images-zip' : '';
+$dashboardPageAssets = 'material-images-zip';
 
 ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/material-images-workspace.php';
