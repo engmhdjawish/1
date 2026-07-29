@@ -8,6 +8,7 @@ use Portal\Auth\WebSession;
 use Portal\Services\PortalPresenceService;
 use Portal\Services\PortalSessionService;
 use Portal\Services\VisitorLogService;
+use Portal\Services\WebCustomerService;
 
 WebSession::requireAnyPermission(['visitors.view', 'orders.view', 'sessions.manage']);
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -27,6 +28,15 @@ if (!in_array($days, [1, 7, 30, 90], true)) {
 }
 
 $sessionId = trim((string) ($_GET['session'] ?? ''));
+$customerId = trim((string) ($_GET['customer_id'] ?? ''));
+$searchQ = trim((string) ($_GET['q'] ?? ''));
+
+$logFilters = array_filter([
+    'customer_id' => $customerId,
+    'q' => $searchQ,
+], static fn ($value) => $value !== null && $value !== '');
+
+$filteredCustomer = $customerId !== '' ? WebCustomerService::getById($customerId) : null;
 
 $flash = null;
 $flashType = 'success';
@@ -79,10 +89,10 @@ $summary = $schemaReady ? VisitorLogService::summaryForDays($days) : [
     'registered_hits' => 0,
 ];
 
-$recent = ($schemaReady && $tab === 'log') ? VisitorLogService::recent(80, null, $days) : [];
+$recent = ($schemaReady && $tab === 'log') ? VisitorLogService::recent(80, null, $days, $logFilters) : [];
 $topProducts = ($schemaReady && $tab === 'insights') ? VisitorLogService::topProducts($days, 12) : [];
 $topPages = ($schemaReady && $tab === 'insights') ? VisitorLogService::topPages($days, 10) : [];
-$sessions = ($schemaReady && $tab === 'log') ? VisitorLogService::sessionSummaries($days, 40) : [];
+$sessions = ($schemaReady && $tab === 'log') ? VisitorLogService::sessionSummaries($days, 40, $logFilters) : [];
 $sessionEvents = ($schemaReady && $tab === 'log' && $sessionId !== '')
     ? VisitorLogService::sessionEvents($sessionId, 100)
     : [];
@@ -92,12 +102,51 @@ $locationStats = ($schemaReady && $tab === 'insights') ? VisitorLogService::loca
 $onlineStaff = ($tab === 'now' && $sessionsReady) ? PortalSessionService::onlineStaff() : [];
 $onlineCustomers = ($tab === 'now' && $sessionsReady) ? PortalSessionService::onlineCustomers() : [];
 $onlineGuests = ($tab === 'now' && $presenceReady) ? PortalPresenceService::onlineGuests() : [];
+if ($tab === 'now' && $onlineGuests !== []) {
+    $guestSessionIds = [];
+    foreach ($onlineGuests as $guestRow) {
+        $key = (string) ($guestRow['presence_key'] ?? '');
+        if (str_starts_with($key, 'guest:')) {
+            $guestSessionIds[] = substr($key, 6);
+        }
+    }
+    $guestIdentities = VisitorLogService::resolveIdentitiesForSessions($guestSessionIds);
+    $onlineGuests = array_map(static function (array $row) use ($guestIdentities): array {
+        $key = (string) ($row['presence_key'] ?? '');
+        $sessionKey = str_starts_with($key, 'guest:') ? substr($key, 6) : '';
+        $row['visitor_session_id'] = $sessionKey;
+        if ($sessionKey !== '') {
+            $row = VisitorLogService::applyIdentity(['session_id' => $sessionKey, 'visitor_ip' => $row['visitor_ip'] ?? ''], $guestIdentities);
+        } else {
+            $ipIdentity = VisitorLogService::resolveIdentityForIp((string) ($row['visitor_ip'] ?? ''));
+            if ($ipIdentity !== null) {
+                $row['display_name'] = (string) ($ipIdentity['display_name'] ?? 'زائر');
+                $row['identity_kind'] = (string) ($ipIdentity['identity_kind'] ?? 'guest');
+                $row['identity_subtitle'] = (string) ($ipIdentity['identity_subtitle'] ?? '');
+                $row['web_customer_id'] = $ipIdentity['web_customer_id'] ?? null;
+            } else {
+                $row['display_name'] = 'زائر';
+                $row['identity_kind'] = 'guest';
+            }
+        }
+        $lat = isset($row['latitude']) ? (float) $row['latitude'] : null;
+        $lng = isset($row['longitude']) ? (float) $row['longitude'] : null;
+        $row['map_url'] = VisitorLogService::mapExternalUrl($lat, $lng);
+
+        return $row;
+    }, $onlineGuests);
+}
 $onlineCounts = ($tab === 'now' && ($sessionsReady || $presenceReady))
     ? PortalSessionService::onlineCounts()
     : ['staff' => 0, 'customers' => 0, 'guests' => 0, 'total' => 0];
 
-$queryBase = static function (array $params = []) use ($days, $tab, $sessionId): string {
-    $query = array_merge(['tab' => $tab, 'days' => $days], $params);
+$queryBase = static function (array $params = []) use ($days, $tab, $sessionId, $customerId, $searchQ): string {
+    $query = array_merge([
+        'tab' => $tab,
+        'days' => $days,
+        'customer_id' => $customerId,
+        'q' => $searchQ,
+    ], $params);
     if ($sessionId !== '' && !array_key_exists('session', $params)) {
         $query['session'] = $sessionId;
     }

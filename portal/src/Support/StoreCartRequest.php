@@ -87,7 +87,8 @@ final class StoreCartRequest
             $guestPhone,
             $notes !== '' ? $notes : null,
             $cartItems,
-            $loggedInCustomer !== null ? (string) ($loggedInCustomer['id'] ?? '') : null
+            $loggedInCustomer !== null ? (string) ($loggedInCustomer['id'] ?? '') : null,
+            self::visitorSessionIdFromInput($input)
         );
 
         if (!$result['ok']) {
@@ -135,5 +136,16 @@ final class StoreCartRequest
             'order_number' => $orderNumber,
             'tracking_url' => $quoteToken !== '' ? order_tracking_url($quoteToken) : '',
         ];
+    }
+
+    /** @param array<string, mixed> $input */
+    public static function visitorSessionIdFromInput(array $input): ?string
+    {
+        $id = trim((string) ($input['visitor_session_id'] ?? ''));
+        if ($id === '') {
+            return null;
+        }
+
+        return substr($id, 0, 120);
     }
 }

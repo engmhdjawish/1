@@ -6,6 +6,7 @@ namespace Portal\Services;
 
 use Portal\Database;
 use Portal\Services\NotificationService;
+use Portal\Services\VisitorLogService;
 use PDO;
 
 final class OrderService
@@ -93,7 +94,8 @@ final class OrderService
         string $guestPhone,
         ?string $notesAr,
         array $items,
-        ?string $webCustomerId = null
+        ?string $webCustomerId = null,
+        ?string $visitorSessionId = null
     ): array {
         $shareLinkId = trim($shareLinkId);
         $guestNameAr = trim($guestNameAr);
@@ -160,6 +162,11 @@ final class OrderService
         $pdo = Database::pdo();
         $orderNumber = self::generateOrderNumber();
         $quoteToken = bin2hex(random_bytes(32));
+        $visitorSessionId = trim((string) ($visitorSessionId ?? ''));
+        if (strlen($visitorSessionId) > 120) {
+            $visitorSessionId = substr($visitorSessionId, 0, 120);
+        }
+        $storeVisitorSession = $visitorSessionId !== '' && VisitorLogService::ordersHaveVisitorSessionColumn();
 
         try {
             $pdo->beginTransaction();
@@ -217,33 +224,41 @@ final class OrderService
             $unavailableItems = array_merge($unavailableItems, $recheck['unavailable']);
             $notices = array_values(array_unique(array_merge($notices, $recheck['notices'])));
 
+            $orderColumns = [
+                'order_number',
+                'share_link_id',
+                'web_customer_id',
+                'guest_name_ar',
+                'guest_phone',
+                'status',
+                'total_sp',
+                'total_usd',
+                'notes_ar',
+                'quote_access_token',
+            ];
+            $orderValues = [
+                ':order_number',
+                ':share_link_id',
+                ':web_customer_id',
+                ':guest_name_ar',
+                ':guest_phone',
+                ':status',
+                ':total_sp',
+                ':total_usd',
+                ':notes_ar',
+                ':quote_access_token',
+            ];
+            if ($storeVisitorSession) {
+                $orderColumns[] = 'visitor_session_id';
+                $orderValues[] = ':visitor_session_id';
+            }
+
             $orderStmt = $pdo->prepare(
-                'INSERT INTO orders (
-                    order_number,
-                    share_link_id,
-                    web_customer_id,
-                    guest_name_ar,
-                    guest_phone,
-                    status,
-                    total_sp,
-                    total_usd,
-                    notes_ar,
-                    quote_access_token
-                 ) VALUES (
-                    :order_number,
-                    :share_link_id,
-                    :web_customer_id,
-                    :guest_name_ar,
-                    :guest_phone,
-                    :status,
-                    :total_sp,
-                    :total_usd,
-                    :notes_ar,
-                    :quote_access_token
-                 )
+                'INSERT INTO orders (' . implode(', ', $orderColumns) . ')
+                 VALUES (' . implode(', ', $orderValues) . ')
                  RETURNING id::text'
             );
-            $orderStmt->execute([
+            $orderParams = [
                 'order_number' => $orderNumber,
                 'share_link_id' => $shareLinkId !== '' ? $shareLinkId : null,
                 'web_customer_id' => $webCustomerId !== null && trim($webCustomerId) !== '' ? trim($webCustomerId) : null,
@@ -254,7 +269,11 @@ final class OrderService
                 'total_usd' => $totalUsd,
                 'notes_ar' => $notesAr !== '' ? $notesAr : null,
                 'quote_access_token' => $quoteToken,
-            ]);
+            ];
+            if ($storeVisitorSession) {
+                $orderParams['visitor_session_id'] = $visitorSessionId;
+            }
+            $orderStmt->execute($orderParams);
             $orderId = (string) $orderStmt->fetchColumn();
             if ($orderId === '') {
                 $pdo->rollBack();
@@ -328,6 +347,22 @@ final class OrderService
             $guestPhone,
             count($normalizedItems)
         );
+
+        if ($visitorSessionId !== '') {
+            $customerPayload = null;
+            if ($webCustomerId !== null && trim($webCustomerId) !== '') {
+                $customerPayload = ['id' => trim($webCustomerId), 'name_ar' => $guestNameAr, 'phone' => $guestPhone];
+            }
+            VisitorLogService::recordOrderPlaced(
+                $visitorSessionId,
+                $orderId,
+                $orderNumber,
+                $webCustomerId !== null && trim($webCustomerId) !== '' ? trim($webCustomerId) : null,
+                $guestNameAr,
+                $guestPhone,
+                $customerPayload
+            );
+        }
 
         return [
             'ok' => true,

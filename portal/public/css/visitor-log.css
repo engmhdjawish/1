@@ -431,7 +431,7 @@
 
 .visitor-log__feed-row {
   display: grid;
-  grid-template-columns: 5.5rem auto minmax(0, 1fr) auto;
+  grid-template-columns: 5.5rem auto 7rem minmax(0, 1fr) auto;
   gap: 0.5rem 0.75rem;
   align-items: center;
   padding: 0.65rem 1rem;
@@ -495,6 +495,121 @@
   padding: 0.65rem 1rem;
   border-bottom: 1px solid #f1f5f9;
   font-size: 0.8125rem;
+}
+
+.visitor-log__pill.is-known-guest {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.visitor-log__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.visitor-log__filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 10rem;
+  flex: 1 1 12rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.visitor-log__filter-field input {
+  height: 2.5rem;
+  border-radius: 0.65rem;
+  border: 1px solid #e2e8f0;
+  padding: 0 0.75rem;
+  font-size: 0.875rem;
+}
+
+.visitor-log__filter-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #14532d;
+}
+
+.visitor-log__filter-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.visitor-log__session-name {
+  font-size: 0.9375rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.visitor-log__session-links,
+.visitor-log__session-identity-links {
+  margin-top: 0.25rem;
+}
+
+.visitor-log__inline-link {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #b91c1c;
+  text-decoration: none;
+}
+
+.visitor-log__inline-link:hover {
+  text-decoration: underline;
+}
+
+.visitor-log__map-link {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #0369a1;
+  text-decoration: none;
+}
+
+.visitor-log__map-link:hover {
+  text-decoration: underline;
+}
+
+.visitor-log__action--map {
+  color: #0369a1;
+}
+
+.visitor-log__session-identity {
+  margin-top: 0.15rem;
+  font-size: 0.875rem;
+  color: #334155;
+}
+
+.visitor-log__timeline-location {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.visitor-log__feed-who {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .visitor-log__map {
