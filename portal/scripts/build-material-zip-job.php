@@ -38,6 +38,8 @@ $log = static function (string $message) use ($logPath): void {
 
 try {
     $log('worker bootstrap ok');
+    $queued = MaterialImageZipJobService::countQueuedJobs();
+    $log('queued jobs: ' . $queued);
     MaterialImageZipJobService::runWorker();
     $log('worker finished');
 } catch (Throwable $exception) {

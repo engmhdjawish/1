@@ -62,6 +62,31 @@ try {
     $building = (int) $pdo->query("SELECT COUNT(*) FROM material_image_zip_jobs WHERE status = 'building'")->fetchColumn();
     $ready = (int) $pdo->query("SELECT COUNT(*) FROM material_image_zip_jobs WHERE status = 'ready'")->fetchColumn();
     echo "[5] Database: OK (queued={$queued}, building={$building}, ready={$ready})\n";
+
+    $recent = $pdo->query(
+        "SELECT id, status, file_name, requested_by_web_user_id, created_at
+         FROM material_image_zip_jobs
+         WHERE status IN ('queued', 'building', 'ready')
+         ORDER BY created_at DESC
+         LIMIT 10"
+    );
+    $rows = $recent ? $recent->fetchAll(PDO::FETCH_ASSOC) : [];
+    if ($rows !== []) {
+        echo "\n--- active jobs (latest 10) ---\n";
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            echo sprintf(
+                "%s | %s | %s | user=%s | %s\n",
+                substr((string) ($row['id'] ?? ''), 0, 8),
+                (string) ($row['status'] ?? ''),
+                (string) ($row['file_name'] ?? '-'),
+                substr((string) ($row['requested_by_web_user_id'] ?? '-'), 0, 8),
+                (string) ($row['created_at'] ?? '')
+            );
+        }
+    }
 } catch (Throwable $exception) {
     echo '[5] Database: FAILED — ' . $exception->getMessage() . "\n";
 }

@@ -67,12 +67,12 @@ final class MaterialImageZipJobService
             $pendingStmt = Database::pdo()->prepare(
                 'SELECT COUNT(*) FROM material_image_zip_jobs
                  WHERE requested_by_web_user_id = :user_id
-                   AND status IN (\'queued\', \'building\', \'ready\')'
+                   AND status IN (\'queued\', \'building\')'
             );
             $pendingStmt->execute(['user_id' => $userId]);
             $pendingCount = (int) $pendingStmt->fetchColumn();
             if ($pendingCount >= self::MAX_PENDING_JOBS_PER_USER) {
-                throw new \RuntimeException('لديك طلبات تحضير ZIP قيد الانتظار. انتظر انتهاءها أو حمّل الملف الجاهز.');
+                throw new \RuntimeException('لديك طلبات تحضير ZIP قيد التنفيذ. انتظر انتهاءها ثم حاول مجدداً.');
             }
         }
 
@@ -142,6 +142,8 @@ final class MaterialImageZipJobService
     public static function spawnWorker(): bool
     {
         if (self::isWorkerRunning()) {
+            self::logSpawn('worker already running — skipped spawn');
+
             return true;
         }
 
@@ -177,8 +179,10 @@ final class MaterialImageZipJobService
         self::ensureTable();
         self::cleanupExpiredJobs();
         self::recoverStaleBuildingJobs();
+        self::expireStaleQueuedJobs();
 
-        if (self::countQueuedJobs() === 0) {
+        $queuedCount = self::countQueuedJobs();
+        if ($queuedCount === 0) {
             exit(0);
         }
 
@@ -190,6 +194,7 @@ final class MaterialImageZipJobService
 
         if (!flock($lockHandle, LOCK_EX | LOCK_NB)) {
             fclose($lockHandle);
+            self::logSpawn('worker lock busy — another worker is active (queued=' . $queuedCount . ')');
             exit(0);
         }
 
@@ -609,13 +614,36 @@ final class MaterialImageZipJobService
             return false;
         }
 
-        $running = !flock($lockHandle, LOCK_EX | LOCK_NB);
-        if (!$running) {
+        if (flock($lockHandle, LOCK_EX | LOCK_NB)) {
             flock($lockHandle, LOCK_UN);
+            fclose($lockHandle);
+
+            return false;
         }
+
         fclose($lockHandle);
 
-        return $running;
+        $pid = (int) trim((string) @file_get_contents($lockPath));
+        if ($pid > 0 && !self::isProcessAlive($pid)) {
+            @unlink($lockPath);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private static function isProcessAlive(int $pid): bool
+    {
+        if ($pid <= 0) {
+            return false;
+        }
+
+        if (function_exists('posix_kill')) {
+            return @posix_kill($pid, 0);
+        }
+
+        return is_file('/proc/' . $pid . '/stat');
     }
 
     private static function dispatchBackgroundProcess(string $php, string $script, string $logPath): bool
