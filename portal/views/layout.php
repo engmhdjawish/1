@@ -29,7 +29,7 @@ $siteName = trim((string) ($companyContext['company_name'] ?? '')) !== ''
     ? (string) $companyContext['company_name']
     : 'جاويش للتجارة';
 
-$customer = CustomerSession::check() ? CustomerSession::customer() : null;
+$customer = CustomerSession::isLoggedIn() ? CustomerSession::customer() : null;
 $staffLoggedIn = WebSession::check();
 $staffUser = $staffLoggedIn ? WebSession::user() : null;
 $staffSiteMode = $staffLoggedIn && $customer === null;

@@ -4,9 +4,15 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+use Portal\Auth\CustomerSession;
 use Portal\Services\WebCustomerService;
 
 require dirname(__DIR__) . '/views/helpers.php';
+
+if (CustomerSession::isLoggedIn()) {
+    header('Location: /store.php');
+    exit;
+}
 
 $error = null;
 $message = null;
@@ -19,6 +25,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         trim($_POST['email'] ?? '') ?: null
     );
     if ($result['ok']) {
+        if (!empty($result['logged_in'])) {
+            header('Location: /store.php');
+            exit;
+        }
         $message = $result['message'];
     } else {
         $error = $result['message'];

@@ -25,6 +25,24 @@ final class CustomerSession
         return $customer !== null && ($customer['status'] ?? '') === 'active';
     }
 
+    /** مسجّل دخول (نشط أو بانتظار التفعيل). */
+    public static function isLoggedIn(): bool
+    {
+        $customer = self::customer();
+        if ($customer === null) {
+            return false;
+        }
+
+        return in_array((string) ($customer['status'] ?? ''), ['pending', 'active'], true);
+    }
+
+    public static function isPending(): bool
+    {
+        $customer = self::customer();
+
+        return $customer !== null && ($customer['status'] ?? '') === 'pending';
+    }
+
     public static function requireLogin(): void
     {
         if (!self::check()) {
@@ -62,11 +80,6 @@ final class CustomerSession
         }
 
         $status = (string) ($row['status'] ?? '');
-        if ($status === 'pending') {
-            $errorMessage = 'حسابك بانتظار موافقة الإدارة.';
-
-            return false;
-        }
         if ($status === 'rejected') {
             $errorMessage = 'تم رفض طلب التسجيل.';
 
@@ -74,11 +87,6 @@ final class CustomerSession
         }
         if ($status === 'suspended') {
             $errorMessage = 'الحساب موقوف. تواصل مع الإدارة.';
-
-            return false;
-        }
-        if ($status !== 'active' || !(bool) ($row['is_active'] ?? false)) {
-            $errorMessage = 'الحساب غير نشط. تواصل مع الإدارة.';
 
             return false;
         }
@@ -93,13 +101,19 @@ final class CustomerSession
             return false;
         }
 
-        WebSession::logout();
+        if ($status === 'pending') {
+            self::establishFromRow($row, $pdo);
 
-        $_SESSION[self::SESSION_KEY] = self::mapCustomer($row);
-        $pdo->prepare('UPDATE web_customers SET last_login_at = NOW() WHERE id = :id')
-            ->execute(['id' => $row['id']]);
+            return true;
+        }
 
-        PortalSessionService::registerCustomer((string) $row['id']);
+        if ($status !== 'active' || !(bool) ($row['is_active'] ?? false)) {
+            $errorMessage = 'الحساب غير نشط. تواصل مع الإدارة.';
+
+            return false;
+        }
+
+        self::establishFromRow($row, $pdo);
 
         return true;
     }
@@ -113,18 +127,35 @@ final class CustomerSession
     /** @param array<string, mixed> $row */
     private static function mapCustomer(array $row): array
     {
+        $status = (string) ($row['status'] ?? '');
+        $isFullyActive = $status === 'active' && (bool) ($row['is_active'] ?? false);
+
         return [
             'id' => $row['id'],
             'name_ar' => $row['name_ar'],
             'phone' => $row['phone'],
             'email' => $row['email'] ?? null,
-            'status' => $row['status'],
-            'access_policy_id' => $row['access_policy_id'],
-            'show_price' => (bool) ($row['show_price'] ?? false),
-            'show_quantity' => (bool) ($row['show_quantity'] ?? false),
-            'allow_cart' => (bool) ($row['allow_cart'] ?? false),
-            'allow_order' => (bool) ($row['allow_order'] ?? false),
+            'status' => $status,
+            'access_policy_id' => $isFullyActive ? ($row['access_policy_id'] ?? null) : null,
+            'show_price' => $isFullyActive ? (bool) ($row['show_price'] ?? false) : false,
+            'show_quantity' => $isFullyActive ? (bool) ($row['show_quantity'] ?? false) : false,
+            'allow_cart' => $isFullyActive ? (bool) ($row['allow_cart'] ?? false) : false,
+            'allow_order' => $isFullyActive ? (bool) ($row['allow_order'] ?? false) : false,
         ];
+    }
+
+    /** @param array<string, mixed> $row */
+    public static function establishFromRow(array $row, ?PDO $pdo = null): void
+    {
+        WebSession::logout();
+
+        $_SESSION[self::SESSION_KEY] = self::mapCustomer($row);
+
+        $pdo ??= Database::pdo();
+        $pdo->prepare('UPDATE web_customers SET last_login_at = NOW() WHERE id = :id')
+            ->execute(['id' => $row['id']]);
+
+        PortalSessionService::registerCustomer((string) $row['id']);
     }
 
     public static function refresh(): void
@@ -144,7 +175,26 @@ final class CustomerSession
         );
         $stmt->execute(['id' => $customer['id']]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$row || ($row['status'] ?? '') !== 'active' || !(bool) ($row['is_active'] ?? false)) {
+        if (!$row) {
+            self::logout();
+
+            return;
+        }
+
+        $status = (string) ($row['status'] ?? '');
+        if (in_array($status, ['rejected', 'suspended'], true)) {
+            self::logout();
+
+            return;
+        }
+
+        if ($status === 'active' && !(bool) ($row['is_active'] ?? false)) {
+            self::logout();
+
+            return;
+        }
+
+        if (!in_array($status, ['pending', 'active'], true)) {
             self::logout();
 
             return;

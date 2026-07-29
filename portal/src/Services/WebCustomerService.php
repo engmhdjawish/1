@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Portal\Services;
 
+use Portal\Auth\CustomerSession;
 use Portal\Auth\Password;
 use Portal\Database;
 use Portal\Support\DigitNormalizer;
@@ -41,7 +42,25 @@ final class WebCustomerService
         $customerId = (string) $stmt->fetchColumn();
         NotificationService::notifyStaffNewRegistration($customerId, $name, $phone);
 
-        return ['ok' => true, 'message' => 'تم التسجيل. سيتم تفعيل حسابك بعد موافقة الإدارة.', 'id' => $customerId];
+        $sessionRow = $pdo->prepare(
+            'SELECT c.*, ap.show_price, ap.show_quantity, ap.allow_cart, ap.allow_order
+             FROM web_customers c
+             LEFT JOIN access_policies ap ON ap.id = c.access_policy_id
+             WHERE c.id = :id
+             LIMIT 1'
+        );
+        $sessionRow->execute(['id' => $customerId]);
+        $row = $sessionRow->fetch(PDO::FETCH_ASSOC);
+        if (is_array($row)) {
+            CustomerSession::establishFromRow($row, $pdo);
+        }
+
+        return [
+            'ok' => true,
+            'message' => 'تم التسجيل. سيتم تفعيل حسابك بعد موافقة الإدارة.',
+            'id' => $customerId,
+            'logged_in' => is_array($row),
+        ];
     }
 
     public static function createByAdmin(

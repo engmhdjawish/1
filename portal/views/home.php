@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Portal\Auth\CustomerSession;
-use Portal\Auth\WebSession;
 use Portal\Services\PortalSettingsService;
 use Portal\Services\StoreCatalogService;
 
@@ -34,8 +33,7 @@ if ($aboutSnippet !== '') {
 $storeCatalogDisplay = is_array($storeCatalogDisplay ?? null)
     ? $storeCatalogDisplay
     : StoreCatalogService::displayOptions();
-$homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
-$homeShowGuestRegister = $homeCustomer === null && !WebSession::check();
+$homeShowGuestRegister = portal_show_guest_auth_links();
 ?>
 <div class="home-page">
   <section class="home-hero home-hero--premium" aria-label="ترحيب">

@@ -6,7 +6,6 @@ declare(strict_types=1);
 /** @var string|null $companyLogoUrl */
 /** @var string $siteName */
 /** @var bool|null $customer */
-/** @var bool|null $staffSiteMode */
 
 $companyContext = is_array($companyContext ?? null) ? $companyContext : [];
 $siteName = trim((string) ($siteName ?? '')) !== ''
@@ -14,8 +13,7 @@ $siteName = trim((string) ($siteName ?? '')) !== ''
     : (trim((string) ($companyContext['company_name'] ?? '')) !== '' ? (string) $companyContext['company_name'] : 'جاويش للتجارة');
 $companyLogoUrl = $companyLogoUrl ?? null;
 $customer = (bool) ($customer ?? false);
-$staffSiteMode = (bool) ($staffSiteMode ?? false);
-$showGuestAuthLinks = !$customer && !$staffSiteMode;
+$showGuestAuthLinks = portal_show_guest_auth_links();
 
 $aboutSnippet = trim((string) ($companyContext['about_us_ar'] ?? ''));
 if ($aboutSnippet !== '') {

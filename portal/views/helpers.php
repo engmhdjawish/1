@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Portal\Auth\CustomerSession;
 use Portal\Auth\WebSession;
 use Portal\Services\CatalogSectionResolver;
 use Portal\Services\ShareCartService;
@@ -25,6 +26,12 @@ function portal_safe_redirect_path(?string $path): ?string
 function portal_login_url(string $type = 'customer', ?string $redirect = null): string
 {
     return \Portal\Support\PortalUrl::loginUrl($type, $redirect);
+}
+
+/** روابط تسجيل/دخول الزائر — للضيوف فقط (لا موظف ولا عميل مسجّل). */
+function portal_show_guest_auth_links(): bool
+{
+    return !CustomerSession::isLoggedIn() && !WebSession::check();
 }
 
 function portal_login_redirect_target(string $type, ?string $rawRedirect = null): string
