@@ -144,9 +144,18 @@ test('store-filters bootstraps all filter shells on the page', () => {
 test('dashboard ensurePageAssets loads share-links scripts sequentially', () => {
   const source = loadScript('assets/dashboard/dashboard.js');
   assert.match(source, /'share-links-form':\s*\{[\s\S]*?scripts:\s*\[[\s\S]*?'\/assets\/store-filters\.js'[\s\S]*?'\/assets\/dashboard\/share-links-form\.js'/);
+  assert.match(source, /'material-images-zip':\s*\{[\s\S]*?styles:\s*\[[\s\S]*?'\/css\/store-filters\.css'[\s\S]*?scripts:\s*\[[\s\S]*?'\/assets\/store-filters\.js'/);
   assert.match(source, /for \(const href of bundle\.styles \|\| \[\]\)/);
   assert.match(source, /for \(const src of bundle\.scripts \|\| \[\]\)/);
   assert.doesNotMatch(source, /Promise\.all\([\s\S]*bundle\.scripts/);
+});
+
+test('material images download tab registers dashboard page assets', () => {
+  const controller = fs.readFileSync(
+    path.resolve(__dirname, '../public/dashboard/material-images.php'),
+    'utf8',
+  );
+  assert.match(controller, /\$dashboardPageAssets = \$materialImagesZipTab \? 'material-images-zip' : '';/);
 });
 
 test('save form markup no longer forces reload after submit', () => {

@@ -2018,6 +2018,29 @@ button.is-loading::after,
   margin: 0;
 }
 
+.dash-mi-zip-status--preparing {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dash-mi-zip-status--preparing::before {
+  content: '';
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: dash-mi-zip-spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes dash-mi-zip-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .dash-mi-zip-download-btn {
   display: inline-flex;
   align-items: center;

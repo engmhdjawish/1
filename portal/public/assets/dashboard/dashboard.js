@@ -266,6 +266,10 @@
         '/assets/dashboard/share-links-form.js',
       ],
     },
+    'material-images-zip': {
+      styles: ['/css/store-filters.css'],
+      scripts: ['/assets/store-filters.js'],
+    },
   };
 
   function loadScript(src) {
