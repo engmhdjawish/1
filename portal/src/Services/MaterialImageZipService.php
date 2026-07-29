@@ -191,6 +191,19 @@ final class MaterialImageZipService
         fclose($handle);
     }
 
+    public static function streamExistingZipFile(string $path, string $filename): void
+    {
+        if (headers_sent()) {
+            throw new \RuntimeException('لا يمكن بدء التحميل بعد إرسال المخرجات.');
+        }
+
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        self::streamLocalZipFile($path, $filename);
+    }
+
     private static function readApiZipErrorMessage(string $path, int $status, string $fallback): string
     {
         $body = is_file($path) ? (string) file_get_contents($path) : '';
@@ -264,14 +277,164 @@ final class MaterialImageZipService
     /**
      * @param array<string, mixed> $input
      */
-    public static function streamLocalMaterialImagesZip(array $input, string $archiveName): void
+    public static function buildLocalMaterialImagesZipFile(array $input, string $archiveName, string $outputPath): int
     {
-        self::prepareZipDownload();
-
         $entries = self::collectLocalMaterialImageEntries($input);
         if ($entries === []) {
             throw new \RuntimeException('لا توجد صور محلية على الموقع للفلاتر المختارة.');
         }
+
+        self::buildZipFromFileEntries($outputPath, $entries);
+
+        return count($entries);
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     */
+    public static function buildSplitMaterialImagesZipFile(array $input, string $outputPath): int
+    {
+        $splitBy = trim((string) ($input['splitBy'] ?? ''));
+        $dimensions = self::splitDimensionKeys();
+        if (!isset($dimensions[$splitBy])) {
+            throw new \RuntimeException('بُعد التقسيم غير مدعوم.');
+        }
+
+        $splitValues = self::extractFilterValues($input, $dimensions[$splitBy]);
+        if ($splitValues === []) {
+            throw new \RuntimeException('اختر قيمة واحدة على الأقل (تشيب) في فلتر التقسيم المختار.');
+        }
+        if (count($splitValues) > self::MAX_SPLIT_PACKAGES) {
+            throw new \RuntimeException('الحد الأقصى للتقسيم ' . self::MAX_SPLIT_PACKAGES . ' ملف داخل الأرشيف.');
+        }
+
+        $baseInput = $input;
+        unset($baseInput['splitBy'], $baseInput['archiveName']);
+        foreach ($dimensions[$splitBy] as $key) {
+            unset($baseInput[$key]);
+        }
+
+        $childPaths = [];
+        $archiveEntries = [];
+        $usedNames = [];
+        $imageCount = 0;
+
+        try {
+            foreach ($splitValues as $value) {
+                $childInput = $baseInput;
+                $childInput[$splitBy] = $value;
+
+                $childEntries = self::collectLocalMaterialImageEntries($childInput);
+                if ($childEntries === []) {
+                    continue;
+                }
+
+                $childPath = tempnam(sys_get_temp_dir(), 'childzip_');
+                if ($childPath === false) {
+                    continue;
+                }
+                $childPaths[] = $childPath;
+
+                self::buildZipFromFileEntries($childPath, $childEntries);
+                $imageCount += count($childEntries);
+
+                $childSize = filesize($childPath);
+                if ($childSize === false || $childSize < 22) {
+                    continue;
+                }
+
+                $entryName = self::uniqueEntryName(self::sanitizeFilename($value) . '.zip', $usedNames);
+                $archiveEntries[] = ['path' => $childPath, 'name' => $entryName];
+            }
+
+            if ($archiveEntries === []) {
+                throw new \RuntimeException('لا توجد صور محلية على الموقع لخيارات التقسيم المحددة.');
+            }
+
+            self::buildZipFromFileEntries($outputPath, $archiveEntries);
+        } finally {
+            foreach ($childPaths as $childPath) {
+                if (is_file($childPath)) {
+                    @unlink($childPath);
+                }
+            }
+        }
+
+        return $imageCount;
+    }
+
+    public static function buildLocalInvoiceImagesZipFile(string $billGuid, string $archiveName, string $outputPath): int
+    {
+        unset($archiveName);
+
+        $billGuid = trim($billGuid);
+        if ($billGuid === '') {
+            throw new \RuntimeException('معرّف الفاتورة مطلوب.');
+        }
+
+        $invoice = AccountingApiService::getInvoice($billGuid);
+        $items = is_array($invoice['items'] ?? null) ? $invoice['items'] : [];
+
+        $entries = [];
+        $usedNames = [];
+        $seenImageGuids = [];
+
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $materialGuid = trim((string) ($item['materialGuid'] ?? $item['MaterialGuid'] ?? ''));
+            if ($materialGuid === '') {
+                continue;
+            }
+
+            $imageGuid = self::resolveMaterialImageGuid($materialGuid);
+            if ($imageGuid === '' || isset($seenImageGuids[$imageGuid])) {
+                continue;
+            }
+
+            $localPath = MaterialImageStorageService::resolvePathForGuid($imageGuid, false);
+            if ($localPath === null || !is_file($localPath)) {
+                continue;
+            }
+
+            $seenImageGuids[$imageGuid] = true;
+            $code = trim((string) ($item['materialCode'] ?? $item['MaterialCode'] ?? ''));
+            $name = trim((string) ($item['materialName'] ?? $item['MaterialName'] ?? ''));
+            $baseName = $code !== '' ? $code : 'item-' . (count($entries) + 1);
+            if ($name !== '') {
+                $baseName .= '-' . self::sanitizeFilename($name);
+            }
+            $extension = pathinfo($localPath, PATHINFO_EXTENSION);
+            if ($extension === '') {
+                $extension = 'jpg';
+            }
+            $entries[] = [
+                'path' => $localPath,
+                'name' => self::uniqueEntryName($baseName . '.' . $extension, $usedNames),
+            ];
+
+            if (count($entries) >= self::MAX_LOCAL_ZIP_IMAGES) {
+                break;
+            }
+        }
+
+        if ($entries === []) {
+            throw new \RuntimeException('لا توجد صور محلية على الموقع لأصناف هذه الفاتورة.');
+        }
+
+        self::buildZipFromFileEntries($outputPath, $entries);
+
+        return count($entries);
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     */
+    public static function streamLocalMaterialImagesZip(array $input, string $archiveName): void
+    {
+        self::prepareZipDownload();
 
         $zipPath = tempnam(sys_get_temp_dir(), 'loczip_');
         if ($zipPath === false) {
@@ -279,7 +442,7 @@ final class MaterialImageZipService
         }
 
         try {
-            self::buildZipFromFileEntries($zipPath, $entries);
+            self::buildLocalMaterialImagesZipFile($input, $archiveName, $zipPath);
             self::streamLocalZipFile($zipPath, $archiveName);
         } finally {
             if (is_file($zipPath)) {

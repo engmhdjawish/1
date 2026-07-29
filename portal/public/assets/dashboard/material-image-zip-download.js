@@ -100,54 +100,6 @@
     return Object.values(FILTER_PARAMS).some(({ param }) => countChecked(form, param) > 0);
   }
 
-  function formActionUrl(form) {
-    const raw = form.getAttribute('action');
-    if (!raw) {
-      return window.location.href;
-    }
-    return new URL(raw, window.location.href).href;
-  }
-
-  function buildDownloadUrl(form) {
-    const url = new URL(formActionUrl(form));
-    const params = new URLSearchParams(new FormData(form));
-    url.search = params.toString();
-    return url.toString();
-  }
-
-  let zipDownloadFrame = null;
-
-  function getZipDownloadFrame() {
-    if (zipDownloadFrame && document.body.contains(zipDownloadFrame)) {
-      return zipDownloadFrame;
-    }
-    zipDownloadFrame = document.createElement('iframe');
-    zipDownloadFrame.name = 'portal-material-zip-download';
-    zipDownloadFrame.title = 'Material ZIP download';
-    zipDownloadFrame.setAttribute('aria-hidden', 'true');
-    zipDownloadFrame.tabIndex = -1;
-    zipDownloadFrame.style.cssText = 'position:absolute;width:0;height:0;border:0;clip:rect(0,0,0,0);overflow:hidden';
-    document.body.appendChild(zipDownloadFrame);
-    return zipDownloadFrame;
-  }
-
-  function readIframeErrorMessage(frame) {
-    try {
-      const doc = frame.contentDocument;
-      if (!doc?.body) {
-        return '';
-      }
-      const raw = (doc.body.innerText || doc.body.textContent || '').trim();
-      if (!raw.startsWith('{')) {
-        return '';
-      }
-      const data = JSON.parse(raw);
-      return data?.message ? String(data.message) : '';
-    } catch {
-      return '';
-    }
-  }
-
   function setSubmitBusy(submitButton, busy) {
     if (!submitButton) {
       return;
@@ -156,36 +108,99 @@
     submitButton.classList.toggle('is-loading', busy);
   }
 
-  function downloadZipFromForm(form, statusHost, submitButton, preparingMessage) {
-    const url = buildDownloadUrl(form);
-    const frame = getZipDownloadFrame();
+  function sleep(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
 
+  async function fetchZipJobJson(url, options = {}) {
+    const response = await fetch(url, {
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'X-Dashboard-Ajax': '1',
+        ...(options.headers || {}),
+      },
+      ...options,
+    });
+    const data = await response.json().catch(() => null);
+    if (!data) {
+      throw new Error('استجابة غير صالحة من الخادم.');
+    }
+    if (!response.ok || data.ok === false) {
+      throw new Error(data.message || ('خطأ ' + response.status));
+    }
+    return data;
+  }
+
+  function triggerBrowserDownload(url) {
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.rel = 'noopener';
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+
+  async function pollZipJob(jobId, statusHost) {
+    const startedAt = Date.now();
+    const maxWaitMs = 30 * 60 * 1000;
+
+    while (Date.now() - startedAt < maxWaitMs) {
+      await sleep(2000);
+      const data = await fetchZipJobJson('/api/material-images-zip-jobs.php?jobId=' + encodeURIComponent(jobId));
+      const status = String(data.status || '');
+      const progressMessage = String(data.progressMessage || 'جاري تحضير الملف...');
+
+      if (status === 'failed') {
+        throw new Error(String(data.errorMessage || data.message || 'تعذر تحضير الملف.'));
+      }
+
+      if (status === 'ready') {
+        showStatus(statusHost, 'الملف جاهز — جاري فتح نافذة التحميل...', 'success');
+        const downloadUrl = String(
+          data.downloadUrl || ('/api/material-images-zip-jobs.php?jobId=' + encodeURIComponent(jobId) + '&download=1')
+        );
+        triggerBrowserDownload(downloadUrl);
+        showStatus(statusHost, 'بدأ التحميل — تابع التقدّم من شريط التحميل في المتصفح.', 'success');
+        return;
+      }
+
+      showStatus(
+        statusHost,
+        progressMessage + ' (التحضير يتم على السيرفر دون إيقاف الموقع)',
+        'preparing'
+      );
+    }
+
+    throw new Error('انتهى وقت الانتظار. جرّب مجدداً أو حدّد فلاتر أضيق.');
+  }
+
+  async function downloadZipFromForm(form, statusHost, submitButton, preparingMessage) {
     showStatus(
       statusHost,
-      preparingMessage + ' عند الجاهزية يظهر التحميل في شريط المتصفح ويمكنك متابعة التصفّح.',
+      preparingMessage + ' سيتم إرسال الطلب إلى السيرفر دون إيقاف الموقع.',
       'preparing'
     );
     setSubmitBusy(submitButton, true);
 
-    const onLoad = () => {
-      const errorMessage = readIframeErrorMessage(frame);
-      setSubmitBusy(submitButton, false);
-      if (errorMessage) {
-        showStatus(statusHost, errorMessage, 'error');
-        return;
+    try {
+      const body = new FormData(form);
+      const created = await fetchZipJobJson('/api/material-images-zip-jobs.php', {
+        method: 'POST',
+        body,
+      });
+      const jobId = String(created.jobId || '');
+      if (!jobId) {
+        throw new Error('تعذر إنشاء طلب التحميل.');
       }
-      showStatus(statusHost, 'بدأ التحميل — تابع التقدّم من شريط التحميل في المتصفح.', 'success');
-    };
-
-    frame.addEventListener('load', onLoad, { once: true });
-    window.setTimeout(() => {
+      showStatus(statusHost, String(created.progressMessage || 'في قائمة الانتظار...'), 'preparing');
+      await pollZipJob(jobId, statusHost);
+    } catch (error) {
+      showStatus(statusHost, error?.message || 'تعذر تحضير الملف.', 'error');
+    } finally {
       setSubmitBusy(submitButton, false);
-    }, 3000);
-
-    frame.src = 'about:blank';
-    window.requestAnimationFrame(() => {
-      frame.src = url;
-    });
+    }
   }
 
   function bindAvailabilityPersistence(form) {
