@@ -30,7 +30,7 @@ $loginPagePath = isset($loginPagePath) ? (string) $loginPagePath : PortalUrl::lo
 
 if ($type === 'customer' && WebSession::check()) {
     WebSession::logout();
-} elseif ($type === 'staff' && CustomerSession::check()) {
+} elseif ($type === 'staff' && CustomerSession::isLoggedIn()) {
     CustomerSession::logout();
 }
 
@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         header('Location: ' . PortalUrl::loginRedirectTarget('staff', $redirect));
         exit;
     }
-    if ($type === 'customer' && CustomerSession::check()) {
+    if ($type === 'customer' && CustomerSession::isLoggedIn()) {
         header('Location: ' . PortalUrl::loginRedirectTarget('customer', $redirect));
         exit;
     }

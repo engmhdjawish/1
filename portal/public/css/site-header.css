@@ -625,6 +625,29 @@
   color: #64748b;
 }
 
+.site-header__account-menu-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.site-header__account-menu-note {
+  margin: 0 0.35rem 0.25rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #475569;
+  background: #f8fafc;
+}
+
 .site-header__account-menu-link {
   display: flex;
   align-items: center;

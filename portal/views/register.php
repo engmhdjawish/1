@@ -9,7 +9,7 @@ declare(strict_types=1);
   <section class="bg-white rounded-2xl shadow-sm border overflow-hidden">
     <header class="px-6 py-5 border-b bg-gray-50">
       <h1 class="text-2xl font-extrabold">تسجيل عميل جديد</h1>
-      <p class="text-sm text-gray-600 mt-1">بعد التسجيل يتم مراجعة طلبك وتفعيل الحساب من الإدارة.</p>
+      <p class="text-sm text-gray-600 mt-1">بعد التسجيل تُسجَّل دخولك مباشرة بصلاحيات الزائر حتى موافقة الإدارة — وستصلك إشعار عند التفعيل.</p>
     </header>
     <div class="p-6">
   <?php if ($error): ?><p class="mb-3 text-sm text-red-600"><?= h($error) ?></p><?php endif; ?>

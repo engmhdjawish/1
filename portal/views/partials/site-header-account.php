@@ -10,6 +10,7 @@ if ($customerName === '') {
 }
 $customerInitial = mb_strtoupper(mb_substr($customerName, 0, 1));
 $customerPhone = trim((string) ($customer['phone'] ?? ''));
+$customerPending = ($customer['status'] ?? '') === 'pending';
 ?>
 <div class="site-header__account" data-site-account-menu>
   <button
@@ -32,13 +33,16 @@ $customerPhone = trim((string) ($customer['phone'] ?? ''));
       <span class="site-header__account-menu-avatar" aria-hidden="true"><?= h($customerInitial) ?></span>
       <div class="site-header__account-menu-copy">
         <strong><?= h($customerName) ?></strong>
-        <?php if ($customerPhone !== ''): ?>
+        <?php if ($customerPending): ?>
+          <span class="site-header__account-menu-badge">بانتظار التفعيل</span>
+        <?php elseif ($customerPhone !== ''): ?>
           <span dir="ltr"><?= h($customerPhone) ?></span>
         <?php else: ?>
           <span>مسجّل الدخول</span>
         <?php endif; ?>
       </div>
     </div>
+    <?php if (!$customerPending): ?>
     <a href="/my-profile.php" class="site-header__account-menu-link" role="menuitem" data-guide="my-profile">
       <span class="material-symbols-outlined" aria-hidden="true">person</span>
       الملف الشخصي
@@ -47,6 +51,9 @@ $customerPhone = trim((string) ($customer['phone'] ?? ''));
       <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>
       طلباتي
     </a>
+    <?php else: ?>
+    <p class="site-header__account-menu-note">حسابك قيد المراجعة. يمكنك التصفح بصلاحيات الزائر حتى التفعيل.</p>
+    <?php endif; ?>
     <a href="/logout.php" class="site-header__account-menu-link site-header__account-menu-link--danger" role="menuitem">
       <span class="material-symbols-outlined" aria-hidden="true">logout</span>
       تسجيل الخروج

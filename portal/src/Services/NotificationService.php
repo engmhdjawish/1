@@ -132,7 +132,7 @@ final class NotificationService
             ];
         }
 
-        if (CustomerSession::check()) {
+        if (CustomerSession::isLoggedIn()) {
             $customer = CustomerSession::customer();
 
             return [
@@ -529,6 +529,18 @@ final class NotificationService
             '/store.php',
             'verified',
             'customer_approved'
+        );
+    }
+
+    public static function notifyCustomerRegistrationPending(string $customerId): void
+    {
+        self::createPrivateForCustomer(
+            $customerId,
+            'طلب التسجيل قيد المراجعة',
+            'تم استلام طلبك بنجاح. يمكنك التصفح بصلاحيات الزائر حتى تفعيل حسابك — سنُعلمك فور الموافقة.',
+            '/store.php',
+            'hourglass_top',
+            'customer_pending'
         );
     }
 
