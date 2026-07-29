@@ -41,7 +41,7 @@ try {
     $queued = MaterialImageZipJobService::countQueuedJobs();
     $log('queued jobs: ' . $queued);
     MaterialImageZipJobService::runWorker();
-    $log('worker finished');
+    $log('worker finished (queued remaining: ' . MaterialImageZipJobService::countQueuedJobs() . ')');
 } catch (Throwable $exception) {
     $log('worker failed: ' . $exception->getMessage());
     fwrite(STDERR, $exception->getMessage() . PHP_EOL);

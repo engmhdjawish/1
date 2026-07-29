@@ -110,11 +110,13 @@ final class MaterialImageZipJobService
     {
         self::ensureTable();
         self::recoverStaleBuildingJobs();
-        $job = self::getJobForUser($jobId, $userId, false);
+        self::expireStaleQueuedJobs();
 
-        if (($job['status'] ?? '') === 'queued') {
+        if (self::countQueuedJobs() > 0) {
             self::spawnWorker();
         }
+
+        $job = self::getJobForUser($jobId, $userId, false);
 
         $queuedSeconds = 0;
         if (($job['status'] ?? '') === 'queued' && !empty($job['created_at'])) {
@@ -164,6 +166,12 @@ final class MaterialImageZipJobService
         return $spawned;
     }
 
+    public static function logWorker(string $message): void
+    {
+        $line = '[' . date('c') . '] ' . $message . PHP_EOL;
+        @file_put_contents(self::jobsDir(true) . '/worker.log', $line, FILE_APPEND);
+    }
+
     public static function countQueuedJobs(): int
     {
         self::ensureTable();
@@ -182,20 +190,25 @@ final class MaterialImageZipJobService
         self::expireStaleQueuedJobs();
 
         $queuedCount = self::countQueuedJobs();
+        self::logWorker('runWorker: queued=' . $queuedCount);
         if ($queuedCount === 0) {
-            exit(0);
+            return;
         }
 
         $lockPath = self::workerLockPath();
         $lockHandle = @fopen($lockPath, 'c+');
         if ($lockHandle === false) {
-            exit(1);
+            self::logWorker('runWorker: failed to open worker.lock');
+
+            return;
         }
 
         if (!flock($lockHandle, LOCK_EX | LOCK_NB)) {
             fclose($lockHandle);
             self::logSpawn('worker lock busy — another worker is active (queued=' . $queuedCount . ')');
-            exit(0);
+            self::logWorker('runWorker: lock busy (queued=' . $queuedCount . ')');
+
+            return;
         }
 
         ftruncate($lockHandle, 0);
@@ -207,9 +220,12 @@ final class MaterialImageZipJobService
             while (true) {
                 $job = self::claimNextQueuedJob();
                 if ($job === null) {
+                    self::logWorker('runWorker: no queued job claimed (remaining=' . self::countQueuedJobs() . ')');
                     break;
                 }
+                self::logWorker('runWorker: processing job ' . (string) ($job['id'] ?? ''));
                 self::processJob($job);
+                self::logWorker('runWorker: finished job ' . (string) ($job['id'] ?? ''));
             }
         } finally {
             flock($lockHandle, LOCK_UN);
@@ -223,54 +239,29 @@ final class MaterialImageZipJobService
     private static function claimNextQueuedJob(): ?array
     {
         $pdo = Database::pdo();
-        if (!$pdo->beginTransaction()) {
-            return null;
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
         }
 
-        try {
-            $select = $pdo->query(
-                'SELECT id FROM material_image_zip_jobs
+        $stmt = $pdo->query(
+            'UPDATE material_image_zip_jobs
+             SET status = \'building\',
+                 started_at = NOW(),
+                 updated_at = NOW(),
+                 progress_pct = 5,
+                 progress_message = \'جاري تحضير الملف...\'
+             WHERE id = (
+                 SELECT id FROM material_image_zip_jobs
                  WHERE status = \'queued\'
                  ORDER BY created_at ASC
                  LIMIT 1
-                 FOR UPDATE SKIP LOCKED'
-            );
-            $candidate = $select?->fetch(PDO::FETCH_ASSOC);
-            if (!is_array($candidate)) {
-                $pdo->rollBack();
+                 FOR UPDATE SKIP LOCKED
+             )
+             RETURNING *'
+        );
+        $row = $stmt?->fetch(PDO::FETCH_ASSOC);
 
-                return null;
-            }
-
-            $jobId = trim((string) ($candidate['id'] ?? ''));
-            if ($jobId === '') {
-                $pdo->rollBack();
-
-                return null;
-            }
-
-            $update = $pdo->prepare(
-                'UPDATE material_image_zip_jobs
-                 SET status = \'building\',
-                     started_at = NOW(),
-                     updated_at = NOW(),
-                     progress_pct = 5,
-                     progress_message = \'جاري تحضير الملف...\'
-                 WHERE id = :id
-                 RETURNING *'
-            );
-            $update->execute(['id' => $jobId]);
-            $row = $update->fetch(PDO::FETCH_ASSOC);
-            $pdo->commit();
-
-            return is_array($row) ? self::normalizeJobRow($row) : null;
-        } catch (Throwable $exception) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-
-            throw $exception;
-        }
+        return is_array($row) ? self::normalizeJobRow($row) : null;
     }
 
     /**
@@ -649,17 +640,18 @@ final class MaterialImageZipJobService
     private static function dispatchBackgroundProcess(string $php, string $script, string $logPath): bool
     {
         $cwd = self::portalRoot();
-        $command = sprintf(
-            'cd %s && nohup %s %s >> %s 2>&1 &',
+        $shellCommand = sprintf(
+            'cd %s && exec %s %s >> %s 2>&1',
             escapeshellarg($cwd),
             escapeshellarg($php),
             escapeshellarg($script),
             escapeshellarg($logPath)
         );
+        $backgroundCommand = '/bin/bash -c ' . escapeshellarg($shellCommand . ' &');
 
         if (function_exists('proc_open') && !self::isFunctionDisabled('proc_open')) {
             $process = @proc_open(
-                $command,
+                $backgroundCommand,
                 [
                     0 => ['file', '/dev/null', 'r'],
                     1 => ['file', '/dev/null', 'w'],
@@ -676,13 +668,13 @@ final class MaterialImageZipJobService
         }
 
         if (function_exists('exec') && !self::isFunctionDisabled('exec')) {
-            exec($command);
+            exec($backgroundCommand);
 
             return true;
         }
 
         if (function_exists('shell_exec') && !self::isFunctionDisabled('shell_exec')) {
-            shell_exec($command);
+            shell_exec($backgroundCommand);
 
             return true;
         }

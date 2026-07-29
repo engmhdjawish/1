@@ -21,6 +21,8 @@ $envFile = $portalRoot . '/.env';
 $jobsDir = rtrim(Config::storagePath(), '/\\') . '/zip-jobs';
 $phpCandidates = ['/usr/bin/php8.5', '/usr/bin/php8.4', '/usr/bin/php', 'php'];
 
+$runWorker = in_array('--run', $argv ?? [], true);
+
 echo "=== Material ZIP worker diagnostics ===\n";
 echo 'Portal root: ' . $portalRoot . "\n";
 echo 'Storage: ' . Config::storagePath() . "\n";
@@ -96,14 +98,38 @@ $workerLog = $jobsDir . '/worker.log';
 echo '[6] spawn.log: ' . (is_file($spawnLog) ? 'exists' : 'missing') . "\n";
 echo '[7] worker.log: ' . (is_file($workerLog) ? 'exists' : 'missing') . "\n";
 
+if (is_file($spawnLog)) {
+    $spawnTail = trim((string) shell_exec('tail -n 5 ' . escapeshellarg($spawnLog)));
+    if ($spawnTail !== '') {
+        echo "\n--- spawn.log (last 5 lines) ---\n" . $spawnTail . "\n";
+    }
+}
+
 if (is_file($workerLog)) {
-    $tail = trim((string) shell_exec('tail -n 5 ' . escapeshellarg($workerLog)));
+    $tail = trim((string) shell_exec('tail -n 10 ' . escapeshellarg($workerLog)));
     if ($tail !== '') {
-        echo "\n--- worker.log (last 5 lines) ---\n" . $tail . "\n";
+        echo "\n--- worker.log (last 10 lines) ---\n" . $tail . "\n";
+    }
+}
+
+if ($runWorker) {
+    echo "\n==> Running worker now...\n";
+    MaterialImageZipJobService::runWorker();
+    MaterialImageZipJobService::ensureTable();
+    $queuedAfter = (int) Database::pdo()->query("SELECT COUNT(*) FROM material_image_zip_jobs WHERE status = 'queued'")->fetchColumn();
+    $buildingAfter = (int) Database::pdo()->query("SELECT COUNT(*) FROM material_image_zip_jobs WHERE status = 'building'")->fetchColumn();
+    $readyAfter = (int) Database::pdo()->query("SELECT COUNT(*) FROM material_image_zip_jobs WHERE status = 'ready'")->fetchColumn();
+    echo "After run: queued={$queuedAfter}, building={$buildingAfter}, ready={$readyAfter}\n";
+    if (is_file($workerLog)) {
+        $tailAfter = trim((string) shell_exec('tail -n 10 ' . escapeshellarg($workerLog)));
+        if ($tailAfter !== '') {
+            echo "\n--- worker.log (last 10 lines) ---\n" . $tailAfter . "\n";
+        }
     }
 }
 
 echo "\nManual run:\n";
 echo '  sudo -u www-data ' . ($phpBin ?? 'php') . ' ' . $script . "\n";
+echo '  sudo -u www-data ' . ($phpBin ?? 'php') . ' ' . $portalRoot . '/scripts/diagnose-zip-worker.php --run' . "\n";
 echo "\nCron (install once):\n";
 echo '  * * * * * www-data cd ' . $portalRoot . ' && ' . ($phpBin ?? 'php') . ' scripts/build-material-zip-job.php >> storage/zip-jobs/worker.log 2>&1' . "\n";
