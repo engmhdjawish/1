@@ -697,7 +697,15 @@
 
   const currentRedirect = () => window.location.pathname + window.location.search;
 
+  const priceLockAuth = () => document.body?.dataset?.priceLockAuth || 'guest';
+
   const priceLockHtml = (context = 'cart') => {
+    if (priceLockAuth() === 'pending') {
+      return `<div class="store-price-hidden store-price-hidden--${escapeHtml(context)}" role="note">
+      <span class="store-price-hidden__label" aria-hidden="true"><span class="material-symbols-outlined">lock</span><span>سعر مخفي</span></span>
+      <span class="store-price-hidden__note">حسابك بانتظار التفعيل — ستظهر الأسعار بعد موافقة الإدارة.</span>
+    </div>`;
+    }
     const redirect = encodeURIComponent(currentRedirect());
     return `<div class="store-price-hidden store-price-hidden--${escapeHtml(context)}" role="note">
       <span class="store-price-hidden__label" aria-hidden="true"><span class="material-symbols-outlined">lock</span><span>سعر مخفي</span></span>

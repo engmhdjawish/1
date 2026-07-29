@@ -34,6 +34,37 @@ function portal_show_guest_auth_links(): bool
     return !CustomerSession::isLoggedIn() && !WebSession::check();
 }
 
+/** guest | pending | active */
+function portal_price_lock_auth(): string
+{
+    if (CustomerSession::isPending()) {
+        return 'pending';
+    }
+    if (CustomerSession::isLoggedIn()) {
+        return 'active';
+    }
+
+    return 'guest';
+}
+
+/** @return array{message: string, href: ?string} */
+function portal_price_lock_hint(?string $redirect = null): array
+{
+    if (CustomerSession::isPending()) {
+        return [
+            'message' => 'حسابك بانتظار التفعيل — ستظهر الأسعار بعد موافقة الإدارة.',
+            'href' => null,
+        ];
+    }
+
+    $redirect ??= portal_request_path();
+
+    return [
+        'message' => 'سجّل الدخول لعرض السعر',
+        'href' => portal_login_url('customer', $redirect),
+    ];
+}
+
 function portal_login_redirect_target(string $type, ?string $rawRedirect = null): string
 {
     return \Portal\Support\PortalUrl::loginRedirectTarget($type, $rawRedirect);
