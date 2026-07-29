@@ -321,6 +321,14 @@ final class OrderService
             return ['ok' => false, 'message' => 'تعذر حفظ الطلب. حاول مرة أخرى.'];
         }
 
+        NotificationService::notifyStaffNewOrder(
+            $orderId,
+            $orderNumber,
+            $guestNameAr,
+            $guestPhone,
+            count($normalizedItems)
+        );
+
         return [
             'ok' => true,
             'order' => [

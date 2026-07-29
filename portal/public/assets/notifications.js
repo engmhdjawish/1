@@ -48,6 +48,16 @@
     return output;
   }
 
+  function notifReaderType() {
+    const value = String(document.body?.dataset?.notifReader || '').trim();
+    return value || 'guest';
+  }
+
+  function shouldAutoSubscribePush() {
+    const reader = notifReaderType();
+    return reader === 'staff' || reader === 'customer';
+  }
+
   async function fetchJson(url, options = {}) {
     const res = await fetch(url, {
       credentials: 'same-origin',
@@ -382,7 +392,7 @@
       window.setTimeout(() => {
         updatePushButton();
       }, 1200);
-    } else if (supportsPush() && Notification.permission === 'granted') {
+    } else if (supportsPush() && Notification.permission === 'granted' && shouldAutoSubscribePush()) {
       subscribeToPush().catch(() => {});
     }
 

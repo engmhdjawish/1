@@ -49,6 +49,22 @@ final class PushSubscriptionService
             $userAgent = substr($userAgent, 0, 500);
         }
 
+        $existingStmt = Database::pdo()->prepare(
+            'SELECT reader_type
+             FROM portal_push_subscriptions
+             WHERE endpoint = :endpoint
+             LIMIT 1'
+        );
+        $existingStmt->execute(['endpoint' => $endpoint]);
+        $existingType = (string) ($existingStmt->fetchColumn() ?: '');
+        $currentType = (string) ($reader['reader_type'] ?? '');
+        if (
+            ($existingType === NotificationService::READER_STAFF || $existingType === NotificationService::READER_CUSTOMER)
+            && $currentType === NotificationService::READER_GUEST
+        ) {
+            return true;
+        }
+
         $stmt = Database::pdo()->prepare(
             'INSERT INTO portal_push_subscriptions (
                 reader_type, reader_id, endpoint, p256dh, auth, user_agent, updated_at
