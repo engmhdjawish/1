@@ -400,8 +400,181 @@
     });
   }
 
+  function isConsentAudience() {
+    if (!document.body || document.body.classList.contains('dashboard-app')) {
+      return false;
+    }
+    const reader = String(document.body.dataset.notifReader || 'guest').trim();
+    return reader === 'guest' || reader === 'customer';
+  }
+
+  async function isPushServerSupported() {
+    if (!supportsPush()) {
+      return false;
+    }
+    try {
+      const config = await fetchJson(PUSH_CONFIG_API);
+      return Boolean(config.supported && config.publicKey);
+    } catch {
+      return false;
+    }
+  }
+
+  async function isPushFullyEnabled() {
+    if (!supportsPush() || !(await isPushServerSupported())) {
+      return true;
+    }
+    if (Notification.permission !== 'granted') {
+      return false;
+    }
+    const registration = await getServiceWorkerRegistration();
+    if (!registration) {
+      return false;
+    }
+    return Boolean(await registration.pushManager.getSubscription());
+  }
+
+  function shouldPromptPwaInstall() {
+    if (typeof window.PortalPwa?.shouldPromptInstall === 'function') {
+      return window.PortalPwa.shouldPromptInstall();
+    }
+    return !(
+      window.matchMedia('(display-mode: standalone)').matches
+      || window.matchMedia('(display-mode: fullscreen)').matches
+      || window.matchMedia('(display-mode: minimal-ui)').matches
+      || window.navigator.standalone === true
+    );
+  }
+
+  function showNotificationSettingsHelp() {
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const message = isIOS
+      ? 'من iPhone: الإعدادات → Safari → إشعارات → ابحث عن الموقع وفعّل الإشعارات.\n\nأو: اضغط أيقونة القفل/الموقع في شريط العنوان → إشعارات → سماح.'
+      : 'من Chrome/Edge: اضغط أيقونة القفل بجانب العنوان → إعدادات الموقع → الإشعارات → «سماح».';
+    window.alert(message);
+  }
+
+  async function refreshSiteConsentBanner(banner) {
+    const pushNeeded = !(await isPushFullyEnabled()) && (await isPushServerSupported());
+    const pwaNeeded = shouldPromptPwaInstall();
+    if (!pushNeeded && !pwaNeeded) {
+      banner.remove();
+      return;
+    }
+
+    const permission = typeof Notification !== 'undefined' ? Notification.permission : 'default';
+    const denied = permission === 'denied';
+    const titleEl = banner.querySelector('[data-site-consent-title]');
+    const textEl = banner.querySelector('[data-site-consent-text]');
+    const actionsEl = banner.querySelector('[data-site-consent-actions]');
+    if (!titleEl || !textEl || !actionsEl) {
+      return;
+    }
+
+    titleEl.textContent = denied && pushNeeded
+      ? 'الإشعارات معطّلة في المتصفح'
+      : 'فعّل الإشعارات والتطبيق';
+    textEl.textContent = denied && pushNeeded
+      ? 'لتلقي العروض والتحديثات، فعّل الإشعارات من إعدادات المتصفح لهذا الموقع.'
+      : 'ابقَ على اطلاع بالعروض والتحديثات — فعّل إشعارات الجهاز'
+        + (pwaNeeded ? ' وثبّت التطبيق على جهازك.' : '.');
+
+    let actionsHtml = '';
+    if (pushNeeded && !denied) {
+      actionsHtml += '<button type="button" class="site-consent-banner__btn site-consent-banner__btn--primary" data-site-consent-push>تفعيل الإشعارات</button>';
+    }
+    if (pwaNeeded) {
+      actionsHtml += '<button type="button" class="site-consent-banner__btn" data-site-consent-pwa>تثبيت التطبيق</button>';
+    }
+    if (pushNeeded && denied) {
+      actionsHtml += '<button type="button" class="site-consent-banner__btn" data-site-consent-help>كيف أفعّلها؟</button>';
+    }
+    actionsEl.innerHTML = actionsHtml;
+    bindSiteConsentBannerActions(banner);
+  }
+
+  function bindSiteConsentBannerActions(banner) {
+    banner.querySelector('[data-site-consent-push]')?.addEventListener('click', async () => {
+      const btn = banner.querySelector('[data-site-consent-push]');
+      if (btn) {
+        btn.disabled = true;
+      }
+      try {
+        await subscribeToPush();
+        await refreshSiteConsentBanner(banner);
+      } catch (error) {
+        if (btn) {
+          btn.disabled = false;
+        }
+        window.alert(error instanceof Error ? error.message : 'تعذر تفعيل إشعارات الجهاز.');
+      }
+    });
+
+    banner.querySelector('[data-site-consent-pwa]')?.addEventListener('click', async () => {
+      if (typeof window.PortalPwa?.install === 'function') {
+        const installed = await window.PortalPwa.install();
+        if (installed) {
+          await refreshSiteConsentBanner(banner);
+          return;
+        }
+      }
+      window.PortalPwa?.open?.();
+    });
+
+    banner.querySelector('[data-site-consent-help]')?.addEventListener('click', () => {
+      showNotificationSettingsHelp();
+    });
+  }
+
+  function renderSiteConsentBanner() {
+    if (document.getElementById('site-consent-banner')) {
+      return;
+    }
+
+    const banner = document.createElement('div');
+    banner.id = 'site-consent-banner';
+    banner.className = 'site-consent-banner';
+    banner.setAttribute('data-site-consent-banner', '1');
+    banner.innerHTML =
+      '<div class="site-consent-banner__inner">' +
+      '<span class="material-symbols-outlined" aria-hidden="true">notifications_active</span>' +
+      '<div class="site-consent-banner__copy">' +
+      '<strong data-site-consent-title>فعّل الإشعارات والتطبيق</strong>' +
+      '<span data-site-consent-text>ابقَ على اطلاع بالعروض والتحديثات.</span>' +
+      '</div>' +
+      '<div class="site-consent-banner__actions" data-site-consent-actions></div>' +
+      '<button type="button" class="site-consent-banner__close" data-site-consent-close aria-label="إغلاق">×</button>' +
+      '</div>';
+
+    banner.querySelector('[data-site-consent-close]')?.addEventListener('click', () => {
+      banner.remove();
+    });
+
+    document.body.appendChild(banner);
+    refreshSiteConsentBanner(banner).then(() => {
+      if (document.body.contains(banner)) {
+        requestAnimationFrame(() => banner.classList.add('is-visible'));
+      }
+    });
+  }
+
+  async function initSiteConsentPrompt() {
+    if (!isConsentAudience()) {
+      return;
+    }
+
+    const pushNeeded = !(await isPushFullyEnabled()) && (await isPushServerSupported());
+    const pwaNeeded = shouldPromptPwaInstall();
+    if (!pushNeeded && !pwaNeeded) {
+      return;
+    }
+
+    window.setTimeout(renderSiteConsentBanner, 1500);
+  }
+
   function init() {
     document.querySelectorAll('[data-notif-bell]').forEach(initBell);
+    initSiteConsentPrompt();
   }
 
   if (document.readyState === 'loading') {
