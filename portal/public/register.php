@@ -5,6 +5,7 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Services\WebCustomerService;
+use Portal\Support\PortalUrl;
 
 require dirname(__DIR__) . '/views/helpers.php';
 
@@ -19,6 +20,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         trim($_POST['email'] ?? '') ?: null
     );
     if ($result['ok']) {
+        if (!empty($result['logged_in'])) {
+            header('Location: ' . (PortalUrl::safeRedirectPath('/store.php') ?? '/store.php'));
+            exit;
+        }
         $message = $result['message'];
     } else {
         $error = $result['message'];

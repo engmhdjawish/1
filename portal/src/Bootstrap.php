@@ -42,6 +42,9 @@ final class Bootstrap
             session_name(Config::get('PORTAL_SESSION_NAME', 'portal_session'));
             session_start();
             \Portal\Services\PortalSessionService::bootstrap();
+            if (\Portal\Auth\CustomerSession::isLoggedIn()) {
+                \Portal\Auth\CustomerSession::refresh();
+            }
         }
 
         self::$booted = true;

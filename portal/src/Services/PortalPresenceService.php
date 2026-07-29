@@ -51,7 +51,7 @@ final class PortalPresenceService
             }
         }
 
-        if (CustomerSession::check()) {
+        if (CustomerSession::isLoggedIn()) {
             $customer = CustomerSession::customer();
             $customerId = trim((string) ($customer['id'] ?? ''));
             if ($customerId !== '') {

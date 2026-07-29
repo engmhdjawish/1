@@ -77,7 +77,7 @@ final class PortalSessionService
             return;
         }
 
-        if (CustomerSession::check()) {
+        if (CustomerSession::isLoggedIn()) {
             $customerId = (string) (CustomerSession::customer()['id'] ?? '');
             if ($customerId === '' || !self::assertCurrentSession('customer', $customerId)) {
                 self::forceLogoutForKind('customer');
@@ -504,7 +504,7 @@ final class PortalSessionService
 
     private static function tryRestoreCustomerSession(): void
     {
-        if (CustomerSession::check() || WebSession::check()) {
+        if (CustomerSession::isLoggedIn() || WebSession::check()) {
             return;
         }
 
@@ -528,14 +528,17 @@ final class PortalSessionService
              WHERE s.token_hash = :hash
                AND s.revoked_at IS NULL
                AND s.expires_at > NOW()
-               AND c.status = :active_status
-               AND c.is_active = TRUE
+               AND (
+                    (c.status = :active_status AND c.is_active = TRUE)
+                    OR c.status = :pending_status
+               )
              ORDER BY s.last_seen_at DESC NULLS LAST, s.created_at DESC
              LIMIT 1'
         );
         $stmt->execute([
             'hash' => $hash,
             'active_status' => 'active',
+            'pending_status' => 'pending',
         ]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!is_array($row) || trim((string) ($row['session_row_id'] ?? '')) === '') {
