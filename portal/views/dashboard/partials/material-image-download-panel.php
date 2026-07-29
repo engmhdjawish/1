@@ -83,7 +83,6 @@ $defaultAvailability = '1';
           class="dash-mi-zip-form"
           method="get"
           action="/api/material-images-zip.php"
-          target="_blank"
           data-material-zip-form
           data-store-filters-form
         >
@@ -226,7 +225,7 @@ $defaultAvailability = '1';
       </summary>
 
       <div class="dash-mi-download-accordion__body">
-      <form class="dash-mi-download-invoice-form space-y-3" method="get" action="/api/material-images-zip.php" target="_blank">
+      <form class="dash-mi-download-invoice-form space-y-3" method="get" action="/api/material-images-zip.php" data-invoice-zip-form>
         <input type="hidden" name="mode" value="invoice">
 
         <label class="block text-sm">
@@ -251,6 +250,8 @@ $defaultAvailability = '1';
         <?php if (!empty($invoiceTypesError)): ?>
           <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><?= h((string) $invoiceTypesError) ?></p>
         <?php endif; ?>
+
+        <div data-zip-download-status class="hidden text-sm rounded-lg border px-3 py-2"></div>
 
         <button type="submit" class="dash-mi-zip-download-btn dash-mi-zip-download-btn--secondary w-full justify-center">
           <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
