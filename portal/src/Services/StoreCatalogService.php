@@ -18,6 +18,62 @@ final class StoreCatalogService
 
     private static bool $activePolicyResolved = false;
 
+    private static function policyFlag(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        if (is_int($value) || is_float($value)) {
+            return (int) $value === 1;
+        }
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+            if (in_array($normalized, ['1', 't', 'true', 'yes', 'on'], true)) {
+                return true;
+            }
+            if (in_array($normalized, ['0', 'f', 'false', 'no', 'off', ''], true)) {
+                return false;
+            }
+        }
+
+        return (bool) $value;
+    }
+
+    /** @return array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string} */
+    public static function guestDisplayOptions(): array
+    {
+        static $guestDisplayCache = null;
+        if ($guestDisplayCache !== null) {
+            return $guestDisplayCache;
+        }
+
+        $policy = StorePolicyService::guestPolicy();
+        if ($policy === null) {
+            $guestDisplayCache = [
+                'show_price' => false,
+                'show_quantity' => false,
+                'allow_cart' => false,
+                'allow_order' => false,
+                'show_images' => true,
+                'price_mode' => 'none',
+            ];
+
+            return $guestDisplayCache;
+        }
+
+        $showPrice = self::policyFlag($policy['show_price'] ?? false);
+        $guestDisplayCache = [
+            'show_price' => $showPrice,
+            'show_quantity' => self::policyFlag($policy['show_quantity'] ?? false),
+            'allow_cart' => self::policyFlag($policy['allow_cart'] ?? false),
+            'allow_order' => self::policyFlag($policy['allow_order'] ?? false),
+            'show_images' => true,
+            'price_mode' => StorePricePreference::priceModeForDisplay($showPrice),
+        ];
+
+        return $guestDisplayCache;
+    }
+
     /** @return array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string} */
     public static function displayOptions(): array
     {
@@ -39,13 +95,13 @@ final class StoreCatalogService
             return self::$displayOptionsCache;
         }
 
-        $showPrice = (bool) ($policy['show_price'] ?? false);
+        $showPrice = self::policyFlag($policy['show_price'] ?? false);
 
         self::$displayOptionsCache = [
             'show_price' => $showPrice,
-            'show_quantity' => (bool) ($policy['show_quantity'] ?? false),
-            'allow_cart' => (bool) ($policy['allow_cart'] ?? false),
-            'allow_order' => (bool) ($policy['allow_order'] ?? false),
+            'show_quantity' => self::policyFlag($policy['show_quantity'] ?? false),
+            'allow_cart' => self::policyFlag($policy['allow_cart'] ?? false),
+            'allow_order' => self::policyFlag($policy['allow_order'] ?? false),
             'show_images' => true,
             'price_mode' => StorePricePreference::priceModeForDisplay($showPrice),
         ];
@@ -106,10 +162,10 @@ final class StoreCatalogService
 
             self::$activePolicyCache = [
                 'id' => $policyId,
-                'show_price' => (bool) ($customer['show_price'] ?? false),
-                'show_quantity' => (bool) ($customer['show_quantity'] ?? false),
-                'allow_cart' => (bool) ($customer['allow_cart'] ?? false),
-                'allow_order' => (bool) ($customer['allow_order'] ?? false),
+                'show_price' => self::policyFlag($customer['show_price'] ?? false),
+                'show_quantity' => self::policyFlag($customer['show_quantity'] ?? false),
+                'allow_cart' => self::policyFlag($customer['allow_cart'] ?? false),
+                'allow_order' => self::policyFlag($customer['allow_order'] ?? false),
                 'name_ar' => 'عميل مسجّل',
                 'filter_rules' => $parsed['rules'],
                 'store_options' => $parsed['store_options'],

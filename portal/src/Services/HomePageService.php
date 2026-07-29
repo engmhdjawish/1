@@ -97,7 +97,8 @@ final class HomePageService
         }
 
         $sections = self::loadFullSectionsBatched();
-        $storeCatalogDisplay = StoreCatalogService::displayOptions();
+        // شرائط الرئيسية عامة ومخبّأة — تُبنى دائماً بسياسة الزائر لا بجلسة عميل مسجّل.
+        $storeCatalogDisplay = StoreCatalogService::guestDisplayOptions();
         $strips = [];
 
         foreach ($sections as $section) {
@@ -246,7 +247,7 @@ final class HomePageService
 
     private static function productStripsCacheKey(): string
     {
-        return 'home_product_strips_v3:' . self::cacheKey();
+        return 'home_product_strips_v4:' . self::cacheKey();
     }
 
     /** @param array<string, mixed> $rules */
@@ -276,10 +277,15 @@ final class HomePageService
              ORDER BY id'
         )->fetchAll(\PDO::FETCH_ASSOC);
 
-        $policy = StoreCatalogService::activePolicy();
+        $guestDisplay = StoreCatalogService::guestDisplayOptions();
+        $policy = StorePolicyService::guestPolicy();
         $policyFingerprint = is_array($policy)
             ? [
                 'id' => (string) ($policy['id'] ?? ''),
+                'show_price' => (bool) ($guestDisplay['show_price'] ?? false),
+                'show_quantity' => (bool) ($guestDisplay['show_quantity'] ?? false),
+                'allow_cart' => (bool) ($guestDisplay['allow_cart'] ?? false),
+                'allow_order' => (bool) ($guestDisplay['allow_order'] ?? false),
                 'store_guids' => StoreCatalogService::resolvedPolicyStoreGuids(null),
             ]
             : null;

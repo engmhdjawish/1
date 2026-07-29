@@ -565,9 +565,9 @@ function product_preview_payload(
     ?string $sectionSlug = null
 ): array {
     $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
-    $showPriceSyp = in_array($priceMode, ['both', 'syp'], true);
-    $showPriceUsd = in_array($priceMode, ['both', 'usd'], true);
     $showPrice = (bool) ($displayOptions['show_price'] ?? false);
+    $showPriceSyp = $showPrice && in_array($priceMode, ['both', 'syp'], true);
+    $showPriceUsd = $showPrice && in_array($priceMode, ['both', 'usd'], true);
     $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
     $allowCart = (bool) ($displayOptions['allow_cart'] ?? false);
     $hasOffer = !empty($item['has_offer']);
@@ -1038,8 +1038,13 @@ function section_price_display_state(array $displayOptions, ?array $storeCatalog
 function section_catalog_display_options(array $sectionDisplayOptions, array $baseDisplayOptions): array
 {
     $priceState = section_price_display_state($sectionDisplayOptions, $baseDisplayOptions);
+    $merged = array_merge($baseDisplayOptions, $priceState['preview_display_options']);
+    if (!(bool) ($baseDisplayOptions['show_price'] ?? false)) {
+        $merged['show_price'] = false;
+        $merged['price_mode'] = 'none';
+    }
 
-    return array_merge($baseDisplayOptions, $priceState['preview_display_options']);
+    return $merged;
 }
 
 /** @param array<string, mixed> $params */
