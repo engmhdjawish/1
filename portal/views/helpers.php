@@ -990,7 +990,8 @@ function section_price_display_state(array $displayOptions, ?array $storeCatalog
     $sectionShowPrice = array_key_exists('show_price', $displayOptions)
         ? (bool) $displayOptions['show_price']
         : ($sectionPriceMode !== 'none');
-    $effectiveSectionShowPrice = $sectionShowPrice && ($storeShowPrice || $sectionPriceMode !== 'none');
+    // سياسة المتجر/الزائر هي السقف — لا تُعرض أسعار الأقسام إذا منعت سياسة الوصول ذلك.
+    $effectiveSectionShowPrice = $sectionShowPrice && $storeShowPrice;
 
     if (!$effectiveSectionShowPrice || $sectionPriceMode === 'none') {
         return [
@@ -1009,9 +1010,7 @@ function section_price_display_state(array $displayOptions, ?array $storeCatalog
     }
 
     if ($sectionPriceMode === 'both') {
-        $resolved = $storeShowPrice
-            ? StorePricePreference::priceModeForDisplay(true)
-            : StorePricePreference::current();
+        $resolved = StorePricePreference::priceModeForDisplay(true);
         $showPriceSyp = $resolved === StorePricePreference::SYP;
         $showPriceUsd = $resolved === StorePricePreference::USD;
     } else {

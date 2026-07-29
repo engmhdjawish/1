@@ -26,8 +26,9 @@ if (is_array($cartNotice ?? null)) {
 $allowCart = (bool) ($displayOptions['allow_cart'] ?? false);
 $offerSlug = trim((string) ($offerSlug ?? $_GET['offer'] ?? ''));
 $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
-$showPriceSyp = in_array($priceMode, ['both', 'syp'], true);
-$showPriceUsd = in_array($priceMode, ['both', 'usd'], true);
+$policyAllowsPrice = (bool) ($displayOptions['show_price'] ?? false);
+$showPriceSyp = $policyAllowsPrice && in_array($priceMode, ['both', 'syp'], true);
+$showPriceUsd = $policyAllowsPrice && in_array($priceMode, ['both', 'usd'], true);
 $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
 $showImages = (bool) ($displayOptions['show_images'] ?? true);
 
