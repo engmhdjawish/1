@@ -44,6 +44,7 @@ $ordered = [
     '010-sessions-permission.sql',
     '011-portal-presence.sql',
     '007-staff-roles-reorganization.sql',
+    '012-material-image-zip-jobs.sql',
 ];
 
 $files = [];
