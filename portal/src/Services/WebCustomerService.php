@@ -38,7 +38,10 @@ final class WebCustomerService
             'hash' => Password::hash($password),
         ]);
 
-        return ['ok' => true, 'message' => 'تم التسجيل. سيتم تفعيل حسابك بعد موافقة الإدارة.', 'id' => $stmt->fetchColumn()];
+        $customerId = (string) $stmt->fetchColumn();
+        NotificationService::notifyStaffNewRegistration($customerId, $name, $phone);
+
+        return ['ok' => true, 'message' => 'تم التسجيل. سيتم تفعيل حسابك بعد موافقة الإدارة.', 'id' => $customerId];
     }
 
     public static function createByAdmin(

@@ -284,54 +284,8 @@
   }
 
   function showAutoBanner() {
-    if (isStandalone || isMarkedInstalled() || autoDismissedRecently() || document.getElementById('pwa-install-banner')) {
-      return;
-    }
-
-    const mode = detectMode();
-    const copy = copyForMode(mode);
-    const canNativeInstall = mode === 'native' && deferredPrompt;
-    const primaryLabel = canNativeInstall
-      ? 'تثبيت الآن'
-      : mode === 'http'
-        ? 'فتح HTTPS'
-        : 'التعليمات';
-
-    const banner = document.createElement('div');
-    banner.id = 'pwa-install-banner';
-    banner.className = 'pwa-install-banner' + (mode === 'http' ? ' pwa-install-banner--http' : '');
-    banner.innerHTML =
-      '<div class="pwa-install-banner__inner">' +
-      '<span class="material-symbols-outlined" aria-hidden="true">install_mobile</span>' +
-      '<div class="pwa-install-banner__text">' +
-      '<strong>' + copy.title + '</strong>' +
-      '<span>' + (copy.steps[0] || '') + '</span>' +
-      '</div>' +
-      '<button type="button" class="pwa-install-banner__btn" data-pwa-banner-primary>' + primaryLabel + '</button>' +
-      '<button type="button" class="pwa-install-banner__close" data-pwa-banner-close aria-label="إغلاق">×</button>' +
-      '</div>';
-
-    banner.querySelector('[data-pwa-banner-primary]')?.addEventListener('click', async () => {
-      if (canNativeInstall) {
-        await triggerNativeInstall();
-        return;
-      }
-      if (mode === 'http') {
-        openHttpsUrl();
-        return;
-      }
-      openModal(mode);
-    });
-
-    banner.querySelector('[data-pwa-banner-close]')?.addEventListener('click', () => {
-      markAutoDismissed();
-      banner.remove();
-    });
-
-    document.body.appendChild(banner);
-    requestAnimationFrame(() => {
-      banner.classList.add('is-visible');
-    });
+    // Public-site install + notification consent uses the unified banner in notifications.js.
+    return;
   }
 
   function bindTriggers() {
@@ -399,7 +353,6 @@
     showInstallTriggers();
     if (!autoDismissedRecently()) {
       document.getElementById('pwa-install-banner')?.remove();
-      showAutoBanner();
     }
   });
 
@@ -431,7 +384,12 @@
     window.setTimeout(markEngagementReady, ENGAGE_MS);
   }
 
-  window.PortalPwa = { open: openModal, close: closeModal, install: triggerNativeInstall };
+  window.PortalPwa = {
+    open: openModal,
+    close: closeModal,
+    install: triggerNativeInstall,
+    shouldPromptInstall: () => !isStandalone && !isMarkedInstalled(),
+  };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

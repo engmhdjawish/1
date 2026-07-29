@@ -158,7 +158,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
     <?= $extraHead ?>
   <?php endif; ?>
 </head>
-<body class="min-h-screen text-slate-900 dashboard-app<?= $hasAreaTabs ? ' has-area-tabs' : '' ?><?= $bottomNavLinks !== [] ? ' has-bottom-nav' : '' ?>" data-dashboard-has-area-tabs="<?= $hasAreaTabs ? '1' : '0' ?>">
+<body class="min-h-screen text-slate-900 dashboard-app<?= $hasAreaTabs ? ' has-area-tabs' : '' ?><?= $bottomNavLinks !== [] ? ' has-bottom-nav' : '' ?>" data-dashboard-has-area-tabs="<?= $hasAreaTabs ? '1' : '0' ?>" data-notif-reader="staff">
   <header class="sticky top-0 z-50 h-16 bg-surface-white shadow-sm border-b border-border-subtle">
     <div class="h-full px-4 lg:px-10 flex items-center justify-between gap-3">
       <div class="flex items-center gap-2 min-w-0">

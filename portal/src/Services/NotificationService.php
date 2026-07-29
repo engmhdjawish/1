@@ -549,6 +549,78 @@ final class NotificationService
         );
     }
 
+    public static function notifyStaffNewOrder(
+        string $orderId,
+        string $orderNumber,
+        string $customerName,
+        string $customerPhone,
+        int $itemCount
+    ): void {
+        try {
+            $orderId = trim($orderId);
+            $orderNumber = trim($orderNumber);
+            if ($orderId === '' || $orderNumber === '') {
+                return;
+            }
+
+            $customerName = trim($customerName);
+            $customerPhone = trim($customerPhone);
+            $body = 'طلب رقم ' . $orderNumber;
+            if ($customerName !== '') {
+                $body .= ' — ' . $customerName;
+            }
+            if ($customerPhone !== '') {
+                $body .= ' · ' . $customerPhone;
+            }
+            if ($itemCount > 0) {
+                $body .= ' · ' . $itemCount . ' صنف';
+            }
+
+            self::createPublic(
+                'طلب جديد',
+                $body,
+                self::AUDIENCE_STAFF,
+                '/dashboard/orders.php?details=' . rawurlencode($orderId),
+                'shopping_cart',
+                null,
+                null,
+                'new_order'
+            );
+        } catch (\Throwable) {
+            // Never block order creation.
+        }
+    }
+
+    public static function notifyStaffNewRegistration(string $customerId, string $name, string $phone): void
+    {
+        try {
+            $customerId = trim($customerId);
+            $name = trim($name);
+            $phone = trim($phone);
+            if ($customerId === '' || $name === '') {
+                return;
+            }
+
+            $body = $name;
+            if ($phone !== '') {
+                $body .= ' · ' . $phone;
+            }
+
+            self::createPublic(
+                'طلب تسجيل عميل جديد',
+                $body,
+                self::AUDIENCE_STAFF,
+                '/dashboard/customers.php?status=pending&details=' . rawurlencode($customerId),
+                'person_add',
+                null,
+                null,
+                'new_registration'
+            );
+        } catch (\Throwable) {
+            // Never block registration.
+        }
+    }
+
     /**
      * @param array{reader_type: string, reader_id: string, is_customer: bool, is_staff: bool} $reader
      * @return array{parts: list<string>, params: array<string, string>}

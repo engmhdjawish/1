@@ -354,7 +354,7 @@
   if (autoStart) {
     const delayMs = 4500;
     window.setTimeout(() => {
-      if (document.getElementById('pwa-install-modal') || document.getElementById('pwa-install-banner')) {
+      if (document.getElementById('pwa-install-modal') || document.getElementById('pwa-install-banner') || document.getElementById('site-consent-banner')) {
         return;
       }
       show(false);
