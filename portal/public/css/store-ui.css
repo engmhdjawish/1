@@ -1964,6 +1964,13 @@
   text-decoration: underline;
 }
 
+.store-price-hidden__note {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #64748b;
+}
+
 .store-price-hidden--preview {
   padding: 0.35rem 0;
 }

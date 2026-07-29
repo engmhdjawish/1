@@ -33,7 +33,7 @@ if ($aboutSnippet !== '') {
 $storeCatalogDisplay = is_array($storeCatalogDisplay ?? null)
     ? $storeCatalogDisplay
     : StoreCatalogService::displayOptions();
-$homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
+$homeShowGuestRegister = portal_show_guest_auth_links();
 ?>
 <div class="home-page">
   <section class="home-hero home-hero--premium" aria-label="ترحيب">
@@ -58,7 +58,7 @@ $homeCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
               <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
               تصفّح المتجر
             </a>
-            <?php if ($homeCustomer === null): ?>
+            <?php if ($homeShowGuestRegister): ?>
               <a href="/register.php" class="home-btn home-btn--ghost">
                 <span class="material-symbols-outlined" aria-hidden="true">person_add</span>
                 حساب جديد

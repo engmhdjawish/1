@@ -34,6 +34,7 @@ $staffLoggedIn = WebSession::check();
 $staffUser = $staffLoggedIn ? WebSession::user() : null;
 $staffSiteMode = $staffLoggedIn && $customer === null;
 $notifReader = $customer !== null ? 'customer' : ($staffLoggedIn ? 'staff' : 'guest');
+$priceLockAuth = portal_price_lock_auth();
 $pagePath = portal_request_path();
 $isCatalogPage = portal_is_catalog_page($pagePath);
 $isLightPage = in_array($pagePath, ['/login.php', '/staff-login.php', '/customer-login.php', '/register.php', '/about.php'], true);
@@ -140,7 +141,7 @@ $navLinks = [
       <?= $extraHead ?>
     <?php endif; ?>
 </head>
-<body class="min-h-screen text-text-main bg-surface-bg flex flex-col<?= $staffSiteMode ? ' site-staff-mode' : '' ?>" data-store-price-currency="<?= h($storePriceCurrency) ?>" data-notif-reader="<?= h($notifReader) ?>">
+<body class="min-h-screen text-text-main bg-surface-bg flex flex-col<?= $staffSiteMode ? ' site-staff-mode' : '' ?>" data-store-price-currency="<?= h($storePriceCurrency) ?>" data-notif-reader="<?= h($notifReader) ?>" data-price-lock-auth="<?= h($priceLockAuth) ?>">
 <?php require __DIR__ . '/partials/site-header.php'; ?>
 
 <div class="max-w-7xl w-full mx-auto px-4 pt-4 md:pt-6">

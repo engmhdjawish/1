@@ -4,10 +4,16 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+use Portal\Auth\CustomerSession;
 use Portal\Services\WebCustomerService;
 use Portal\Support\PortalUrl;
 
 require dirname(__DIR__) . '/views/helpers.php';
+
+if (CustomerSession::isLoggedIn()) {
+    header('Location: /store.php');
+    exit;
+}
 
 $error = null;
 $message = null;

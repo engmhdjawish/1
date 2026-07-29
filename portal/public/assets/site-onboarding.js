@@ -18,7 +18,8 @@
   const btnSkip = document.getElementById('siteGuideSkip');
 
   const isMobile = () => window.matchMedia(`(max-width: ${MOBILE_MAX}px)`).matches;
-  const isGuest = () => root.getAttribute('data-auth') === 'guest';
+  const authMode = () => root.getAttribute('data-auth') || 'guest';
+  const isGuest = () => authMode() === 'guest';
   const hasCart = () => root.getAttribute('data-cart') === '1';
   const hasCurrency = () => root.getAttribute('data-currency') === '1';
 
@@ -93,10 +94,10 @@
 
   const buildSteps = () => {
     const order = ['welcome', 'store'];
-    if (isGuest()) {
-      order.push('register', 'login');
-    } else {
+    if (authMode() === 'customer') {
       order.push('myOrders', 'myProfile');
+    } else if (isGuest()) {
+      order.push('register', 'login');
     }
     if (hasCart()) order.push('cart');
     if (hasCurrency()) order.push('currency');
@@ -107,7 +108,7 @@
       .filter((step) => {
         if (!step) return false;
         if (step.guestOnly && !isGuest()) return false;
-        if (step.customerOnly && isGuest()) return false;
+        if (step.customerOnly && authMode() !== 'customer') return false;
         return true;
       });
   };

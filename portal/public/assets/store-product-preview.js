@@ -463,6 +463,12 @@
       return '';
     }
     if (!p.showPrice) {
+      if (document.body?.dataset?.priceLockAuth === 'pending') {
+        return `<div class="store-price-hidden store-price-hidden--preview" role="note">
+        <span class="store-price-hidden__label" aria-hidden="true"><span class="material-symbols-outlined">lock</span><span>سعر مخفي</span></span>
+        <span class="store-price-hidden__note">حسابك بانتظار التفعيل — ستظهر الأسعار بعد موافقة الإدارة.</span>
+      </div>`;
+      }
       const redirect = encodeURIComponent(window.location.pathname + window.location.search);
       return `<div class="store-price-hidden store-price-hidden--preview" role="note">
         <span class="store-price-hidden__label" aria-hidden="true"><span class="material-symbols-outlined">lock</span><span>سعر مخفي</span></span>
