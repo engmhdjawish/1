@@ -6,6 +6,7 @@ declare(strict_types=1);
 /** @var string|null $companyLogoUrl */
 /** @var string $siteName */
 /** @var bool|null $customer */
+/** @var bool|null $staffSiteMode */
 
 $companyContext = is_array($companyContext ?? null) ? $companyContext : [];
 $siteName = trim((string) ($siteName ?? '')) !== ''
@@ -13,6 +14,8 @@ $siteName = trim((string) ($siteName ?? '')) !== ''
     : (trim((string) ($companyContext['company_name'] ?? '')) !== '' ? (string) $companyContext['company_name'] : 'جاويش للتجارة');
 $companyLogoUrl = $companyLogoUrl ?? null;
 $customer = (bool) ($customer ?? false);
+$staffSiteMode = (bool) ($staffSiteMode ?? false);
+$showGuestAuthLinks = !$customer && !$staffSiteMode;
 
 $aboutSnippet = trim((string) ($companyContext['about_us_ar'] ?? ''));
 if ($aboutSnippet !== '') {
@@ -54,7 +57,7 @@ $address = trim((string) ($companyContext['company_address'] ?? ''));
           <a href="/index.php" class="block">الرئيسية</a>
           <a href="/store.php" class="block">المتجر</a>
           <a href="/about.php" class="block">من نحن</a>
-          <?php if (!$customer): ?>
+          <?php if ($showGuestAuthLinks): ?>
             <a href="<?= h(portal_login_url('customer')) ?>" class="block">دخول العملاء</a>
             <a href="/register.php" class="block">إنشاء حساب جديد</a>
           <?php endif; ?>

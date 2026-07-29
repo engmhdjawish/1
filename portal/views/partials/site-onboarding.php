@@ -6,11 +6,14 @@ declare(strict_types=1);
 /** @var bool $storeAllowCart */
 /** @var bool $storeShowPrice */
 /** @var array<string, mixed>|null $customer */
+/** @var bool|null $staffLoggedIn */
 
 $siteOnboardingAutoStart = (bool) ($siteOnboardingAutoStart ?? false);
 $storeAllowCart = (bool) ($storeAllowCart ?? false);
 $storeShowPrice = (bool) ($storeShowPrice ?? false);
 $customer = $customer ?? null;
+$staffLoggedIn = (bool) ($staffLoggedIn ?? false);
+$onboardingAuth = $customer !== null ? 'customer' : ($staffLoggedIn ? 'staff' : 'guest');
 ?>
 <div
   id="siteOnboarding"
@@ -18,7 +21,7 @@ $customer = $customer ?? null;
   hidden
   aria-hidden="true"
   data-auto-start="<?= $siteOnboardingAutoStart ? '1' : '0' ?>"
-  data-auth="<?= $customer ? 'customer' : 'guest' ?>"
+  data-auth="<?= h($onboardingAuth) ?>"
   data-cart="<?= $storeAllowCart ? '1' : '0' ?>"
   data-currency="<?= $storeShowPrice ? '1' : '0' ?>"
 >
