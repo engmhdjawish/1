@@ -745,3 +745,103 @@
 .store-currency-toggle__btn + .store-currency-toggle__btn {
   border-right: 1px solid #e5e7eb;
 }
+
+body.site-staff-mode {
+  background: #eef2ff;
+}
+
+body.site-staff-mode .site-header {
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+}
+
+body.site-staff-mode .site-header__nav-link,
+body.site-staff-mode .site-brand-link,
+body.site-staff-mode .site-header__mobile-nav-link {
+  color: #e2e8f0;
+}
+
+body.site-staff-mode .site-header__nav-link.is-active,
+body.site-staff-mode .site-header__nav-link:hover,
+body.site-staff-mode .site-header__mobile-nav-link.is-active,
+body.site-staff-mode .site-header__mobile-nav-link:hover,
+body.site-staff-mode .site-brand-link:hover {
+  color: #fff;
+}
+
+body.site-staff-mode .site-header__icon-btn {
+  color: #e2e8f0;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+body.site-staff-mode .site-header__divider {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.site-header__staff-panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.site-header__staff-chip {
+  display: none;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.35rem;
+  padding: 0.2rem 0.65rem 0.2rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+  text-decoration: none;
+}
+
+@media (min-width: 900px) {
+  .site-header__staff-chip {
+    display: inline-flex;
+  }
+}
+
+.site-header__staff-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 1rem;
+}
+
+.site-header__staff-chip-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.site-header__staff-chip-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  opacity: 0.82;
+}
+
+.site-header__staff-chip-name {
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+body.site-staff-mode .site-header__staff-logout {
+  color: #fecaca;
+  border-color: rgba(254, 202, 202, 0.35);
+}
+
+body.site-staff-mode .site-header__staff-link {
+  color: #bfdbfe;
+  border-color: rgba(191, 219, 254, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+}

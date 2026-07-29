@@ -14,6 +14,7 @@ $showPriceSyp = (bool) ($showPriceSyp ?? true);
 $showPriceUsd = (bool) ($showPriceUsd ?? false);
 $lineShowsPrice = (bool) ($lineShowsPrice ?? false);
 $customerShowsPrices = (bool) ($customerShowsPrices ?? false);
+$pricePolicyHidden = !$customerShowsPrices;
 $prices = store_order_line_prices($item);
 $hasOffer = store_line_has_offer($item);
 $materialGuid = (string) ($item['material_guid'] ?? '');
@@ -67,6 +68,8 @@ $previewJson = json_encode($previewPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TA
     <div class="store-cart-line-card__foot">
       <?php if ($lineShowsPrice && ($showPriceSyp || $showPriceUsd)): ?>
         <?php $size = 'compact'; require __DIR__ . '/store-order-line-prices.php'; ?>
+      <?php elseif ($pricePolicyHidden): ?>
+        <?php $context = 'cart'; require __DIR__ . '/store-price-lock.php'; ?>
       <?php elseif (!$lineShowsPrice): ?>
         <div class="store-cart-line-card__no-price">
           <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>

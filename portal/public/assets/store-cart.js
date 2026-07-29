@@ -25,6 +25,8 @@
   };
 
   const DRAWER_CLOSE_MS = 260;
+  const DRAWER_POLL_MS = 20000;
+  let drawerPollTimer = null;
   const tabId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   let lastRemoteSyncAt = 0;
   let tabHiddenAt = 0;
@@ -693,6 +695,23 @@
     }
   };
 
+  const currentRedirect = () => window.location.pathname + window.location.search;
+
+  const priceLockHtml = (context = 'cart') => {
+    const redirect = encodeURIComponent(currentRedirect());
+    return `<div class="store-price-lock store-price-lock--${escapeHtml(context)}" role="note">
+      <span class="store-price-lock__badge" aria-hidden="true"><span class="material-symbols-outlined">lock</span></span>
+      <div class="store-price-lock__copy">
+        <strong class="store-price-lock__title">السعر مقفول</strong>
+        <span class="store-price-lock__hint">سجّل الدخول أو أنشئ حساباً لعرض الأسعار</span>
+      </div>
+      <div class="store-price-lock__actions">
+        <a href="/customer-login.php?redirect=${redirect}" class="store-price-lock__btn store-price-lock__btn--primary">دخول</a>
+        <a href="/register.php?redirect=${redirect}" class="store-price-lock__btn store-price-lock__btn--ghost">حساب جديد</a>
+      </div>
+    </div>`;
+  };
+
   const renderCartLineCard = (line, max, data = {}) => {
     const guid = line.material_guid || '';
     const prices = computeLinePrices(line);
@@ -715,10 +734,12 @@
         </div>`
       : '';
     const noPriceHtml = !lineShowPrice
-      ? `<div class="store-cart-line-card__no-price">
+      ? (data.price_policy_allows === false
+        ? priceLockHtml('cart')
+        : `<div class="store-cart-line-card__no-price">
           <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
           <span>السعر عند التأكيد</span>
-        </div>`
+        </div>`)
       : '';
     return `<article class="store-order-line-card store-cart-line-card${hasOffer ? ' store-order-line-card--offer' : ''}${priceCardClass}${noPriceClass}" data-cart-line="${escapeHtml(guid)}" data-store-preview-card data-store-cart-preview-line data-preview-guid="${escapeHtml(guid)}" data-preview="${previewJson}">
       <div class="store-order-line-card__media">${img}</div>
@@ -1741,6 +1762,25 @@
     setCartDrawerOpen(false);
   };
 
+  const stopDrawerPolling = () => {
+    if (drawerPollTimer) {
+      window.clearInterval(drawerPollTimer);
+      drawerPollTimer = null;
+    }
+  };
+
+  const startDrawerPolling = () => {
+    stopDrawerPolling();
+    drawerPollTimer = window.setInterval(() => {
+      const drawer = cartDrawer();
+      if (!drawer?.classList.contains('is-open')) {
+        stopDrawerPolling();
+        return;
+      }
+      refreshCartFromServer({ silent: true, reconcile: true });
+    }, DRAWER_POLL_MS);
+  };
+
   const setCartDrawerOpen = (open) => {
     const drawer = cartDrawer();
     if (!drawer) return;
@@ -1761,10 +1801,12 @@
           btn.setAttribute('aria-expanded', 'true');
         });
         syncToastHostLayer();
+        startDrawerPolling();
       });
       return;
     }
 
+    stopDrawerPolling();
     const root = drawer.querySelector('[data-store-cart-drawer-root]');
     if (root) closeCheckoutSheet(root);
     if (document.activeElement instanceof HTMLElement && drawer.contains(document.activeElement)) {
