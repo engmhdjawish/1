@@ -49,6 +49,8 @@ check_file() {
 }
 
 check_file "public/css/visitor-log.css" "visitor-log__tabs" || true
+check_file "public/dashboard/visitor-analytics.php" "dashboardPageAssets = 'visitor-log'" || true
+check_file "public/assets/dashboard/dashboard.js" "'visitor-log'" || true
 check_file "views/dashboard/visitor-analytics.php" "عرض على الخريطة" || true
 check_file "public/dashboard/visitor-analytics.php" "VisitorLogService" || true
 check_file "public/dashboard/sessions.php" "visitor-analytics.php?tab=now" || true
