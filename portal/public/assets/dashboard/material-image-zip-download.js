@@ -147,7 +147,7 @@
     const maxWaitMs = 30 * 60 * 1000;
 
     while (Date.now() - startedAt < maxWaitMs) {
-      await sleep(2000);
+      await sleep(3000);
       const data = await fetchZipJobJson('/api/material-images-zip-jobs.php?jobId=' + encodeURIComponent(jobId));
       const status = String(data.status || '');
       const progressMessage = String(data.progressMessage || 'جاري تحضير الملف...');

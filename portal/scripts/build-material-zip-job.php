@@ -20,6 +20,17 @@ if (!is_dir($logDir)) {
     mkdir($logDir, 0775, true);
 }
 $logPath = $logDir . '/worker.log';
-@file_put_contents($logPath, '[' . date('c') . '] worker start' . PHP_EOL, FILE_APPEND);
 
-MaterialImageZipJobService::runWorker();
+$log = static function (string $message) use ($logPath): void {
+    @file_put_contents($logPath, '[' . date('c') . '] ' . $message . PHP_EOL, FILE_APPEND);
+};
+
+try {
+    $log('worker bootstrap');
+    MaterialImageZipJobService::runWorker();
+    $log('worker finished');
+} catch (Throwable $exception) {
+    $log('worker failed: ' . $exception->getMessage());
+    fwrite(STDERR, $exception->getMessage() . PHP_EOL);
+    exit(1);
+}
