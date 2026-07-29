@@ -1112,22 +1112,9 @@
     border-radius: 0.75rem;
   }
 
-  .visitor-log__mobile-back {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.55rem 0.65rem;
-    border-bottom: 1px solid #f1f5f9;
-    background: #f8fafc;
-    font-size: 0.8125rem;
-    font-weight: 800;
-    color: #334155;
-    text-decoration: none;
-  }
-
-  .visitor-log__mobile-back .material-symbols-outlined {
-    font-size: 1.1rem;
-    color: #64748b;
+  .visitor-log__profile-back {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.55rem;
   }
 
   .visitor-log__detail-empty {
@@ -1170,10 +1157,6 @@
 
   .visitor-log__profile-actions {
     width: 100%;
-  }
-
-  .visitor-log__action--close {
-    display: none;
   }
 
   .visitor-log__digest-location {
@@ -1304,12 +1287,6 @@
 
   .visitor-log__map {
     height: 240px;
-  }
-}
-
-@media (min-width: 768px) {
-  .visitor-log__mobile-back {
-    display: none;
   }
 }
 
@@ -1583,6 +1560,41 @@
   padding: 1rem 1.15rem;
   border-bottom: 1px solid #f1f5f9;
   background: linear-gradient(180deg, #fafafa 0%, #fff 100%);
+}
+
+.visitor-log__profile-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  margin-bottom: 0.15rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.65rem;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: #334155;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.visitor-log__profile-back:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.visitor-log__profile-back .material-symbols-outlined {
+  font-size: 1.1rem;
+  color: #64748b;
+}
+
+@media (min-width: 768px) {
+  .visitor-log__profile-back {
+    width: auto;
+    margin-bottom: 0;
+    order: 3;
+  }
 }
 
 .visitor-log__profile-identity {
@@ -1929,10 +1941,6 @@
 .visitor-log__session-loc {
   font-size: 0.625rem;
   color: #64748b;
-}
-
-.visitor-log__mobile-back {
-  display: none;
 }
 
 .visitor-log__timeline-item--product .material-symbols-outlined {

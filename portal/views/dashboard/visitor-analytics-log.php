@@ -165,7 +165,7 @@ $visitorsTotalPages = max(1, (int) ceil($visitorsTotal / $visitorsPerPage));
 <div class="visitor-log__crm<?= $accountKey !== '' ? ' visitor-log__crm--profile' : '' ?>">
   <aside class="visitor-log__crm-list">
     <header class="visitor-log__crm-list-head">
-      <h2>الزوار</h2>
+      <h2><?= $accountKey !== '' ? 'الزوار — اضغط للتبديل' : 'الزوار' ?></h2>
       <span><?= number_format($visitorsTotal) ?></span>
     </header>
 
@@ -212,13 +212,6 @@ $visitorsTotalPages = max(1, (int) ceil($visitorsTotal / $visitorsPerPage));
   </aside>
 
   <main class="visitor-log__crm-detail">
-    <?php if ($accountKey !== '' && $accountProfile !== null): ?>
-      <a href="<?= h($buildUrl(['account' => null, 'session' => null, 'sp' => null, 'tp' => null, 'ecat' => null])) ?>" class="visitor-log__mobile-back">
-        <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
-        <span>عودة للزوار</span>
-      </a>
-    <?php endif; ?>
-
     <?php if ($accountKey === '' || $accountProfile === null): ?>
       <div class="visitor-log__detail-empty visitor-log__detail-empty--pro">
         <span class="material-symbols-outlined" aria-hidden="true">groups</span>
@@ -247,6 +240,10 @@ $visitorsTotalPages = max(1, (int) ceil($visitorsTotal / $visitorsPerPage));
       ?>
 
       <header class="visitor-log__profile-head">
+        <a href="<?= h($buildUrl(['account' => null, 'session' => null, 'sp' => null, 'tp' => null, 'ecat' => null])) ?>" class="visitor-log__profile-back">
+          <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+          <span>اختر زائراً آخر</span>
+        </a>
         <div class="visitor-log__profile-identity">
           <span class="visitor-log__profile-avatar visitor-log__pill <?= h($identityPill($accountProfile)) ?>"><?= h($initialChar((string) ($accountProfile['display_name'] ?? 'ز'))) ?></span>
           <div>
@@ -265,7 +262,6 @@ $visitorsTotalPages = max(1, (int) ceil($visitorsTotal / $visitorsPerPage));
             <a href="/dashboard/customers.php?details=<?= h($profileCustomerId) ?>" class="visitor-log__action">الملف</a>
             <a href="/dashboard/orders.php?web_customer_id=<?= h($profileCustomerId) ?>" class="visitor-log__action">الطلبات</a>
           <?php endif; ?>
-          <a href="<?= h($buildUrl(['account' => null, 'session' => null, 'sp' => null, 'tp' => null, 'ecat' => null])) ?>" class="visitor-log__action visitor-log__action--close">إغلاق</a>
         </div>
       </header>
 
