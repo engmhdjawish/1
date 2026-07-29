@@ -699,16 +699,9 @@
 
   const priceLockHtml = (context = 'cart') => {
     const redirect = encodeURIComponent(currentRedirect());
-    return `<div class="store-price-lock store-price-lock--${escapeHtml(context)}" role="note">
-      <span class="store-price-lock__badge" aria-hidden="true"><span class="material-symbols-outlined">lock</span></span>
-      <div class="store-price-lock__copy">
-        <strong class="store-price-lock__title">السعر مقفول</strong>
-        <span class="store-price-lock__hint">سجّل الدخول أو أنشئ حساباً لعرض الأسعار</span>
-      </div>
-      <div class="store-price-lock__actions">
-        <a href="/customer-login.php?redirect=${redirect}" class="store-price-lock__btn store-price-lock__btn--primary">دخول</a>
-        <a href="/register.php?redirect=${redirect}" class="store-price-lock__btn store-price-lock__btn--ghost">حساب جديد</a>
-      </div>
+    return `<div class="store-price-hidden store-price-hidden--${escapeHtml(context)}" role="note">
+      <span class="store-price-hidden__label" aria-hidden="true"><span class="material-symbols-outlined">lock</span><span>سعر مخفي</span></span>
+      <a href="/customer-login.php?redirect=${redirect}" class="store-price-hidden__link">سجّل الدخول لعرض السعر</a>
     </div>`;
   };
 

@@ -1917,89 +1917,57 @@
   100% { background-position: -100% 0; }
 }
 
-.store-price-lock {
+.store-price-hidden {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.55rem 0.75rem;
-  padding: 0.55rem 0.65rem;
-  border-radius: 0.85rem;
-  border: 1px dashed #cbd5e1;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
+  min-width: 0;
 }
 
-.store-price-lock--card {
-  margin-top: 0.35rem;
+.store-price-hidden--card {
+  margin-top: 0.25rem;
 }
 
-.store-price-lock--cart,
-.store-price-lock--preview {
+.store-price-hidden--cart,
+.store-price-hidden--preview {
   width: 100%;
 }
 
-.store-price-lock__badge {
+.store-price-hidden__label {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 999px;
-  background: #fff;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
-  flex-shrink: 0;
+  gap: 0.28rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
 }
 
-.store-price-lock__badge .material-symbols-outlined {
-  font-size: 1.05rem;
+.store-price-hidden__label .material-symbols-outlined {
+  font-size: 0.95rem;
+  opacity: 0.9;
 }
 
-.store-price-lock__copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
-  flex: 1 1 8rem;
-}
-
-.store-price-lock__title {
-  font-size: 0.78rem;
-  font-weight: 800;
-  color: #334155;
-}
-
-.store-price-lock__hint {
-  font-size: 0.68rem;
+.store-price-hidden__link {
+  font-size: 0.6875rem;
+  font-weight: 600;
   line-height: 1.35;
   color: #64748b;
-}
-
-.store-price-lock__actions {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-}
-
-.store-price-lock__btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 1.85rem;
-  padding: 0 0.65rem;
-  border-radius: 0.65rem;
-  font-size: 0.72rem;
-  font-weight: 800;
   text-decoration: none;
-  border: 1px solid transparent;
+  transition: color 0.15s ease;
 }
 
-.store-price-lock__btn--primary {
-  background: #D81921;
-  color: #fff;
+.store-price-hidden__link:hover {
+  color: #D81921;
+  text-decoration: underline;
 }
 
-.store-price-lock__btn--ghost {
-  background: #fff;
-  color: #334155;
-  border-color: #e2e8f0;
+.store-price-hidden--preview {
+  padding: 0.35rem 0;
+}
+
+.store-price-hidden--cart .store-price-hidden__label {
+  font-size: 0.78rem;
 }
