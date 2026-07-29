@@ -48,16 +48,6 @@
     return output;
   }
 
-  function notifReaderType() {
-    const value = String(document.body?.dataset?.notifReader || '').trim();
-    return value || 'guest';
-  }
-
-  function shouldAutoSubscribePush() {
-    const reader = notifReaderType();
-    return reader === 'staff' || reader === 'customer';
-  }
-
   async function fetchJson(url, options = {}) {
     const res = await fetch(url, {
       credentials: 'same-origin',
@@ -170,19 +160,21 @@
   }
 
   function renderItem(item) {
-    const el = document.createElement('a');
+    const url = resolveNotificationUrl(item);
+    const el = document.createElement('article');
     el.className = 'notif-bell__item' + (item.is_read ? '' : ' is-unread');
-    el.href = resolveNotificationUrl(item);
     el.dataset.notificationId = item.id || '';
     el.innerHTML =
+      '<a href="' + escapeHtml(url) + '" class="notif-bell__link">' +
       '<span class="notif-bell__icon"><span class="material-symbols-outlined" aria-hidden="true">' +
       (item.icon || 'notifications') +
       '</span></span>' +
-      '<div class="notif-bell__body">' +
-      '<div class="notif-bell__title">' + escapeHtml(item.title_ar || '') + '</div>' +
-      '<div class="notif-bell__text">' + escapeHtml(item.body_ar || '') + '</div>' +
-      '<div class="notif-bell__time">' + escapeHtml(formatTime(item.created_at)) + '</div>' +
-      '</div>' +
+      '<span class="notif-bell__body">' +
+      '<span class="notif-bell__title">' + escapeHtml(item.title_ar || '') + '</span>' +
+      '<span class="notif-bell__text">' + escapeHtml(item.body_ar || '') + '</span>' +
+      '<span class="notif-bell__time">' + escapeHtml(formatTime(item.created_at)) + '</span>' +
+      '</span>' +
+      '</a>' +
       '<button type="button" class="notif-bell__dismiss" aria-label="حذف الإشعار" title="حذف">' +
       '<span class="material-symbols-outlined" aria-hidden="true">close</span>' +
       '</button>';
@@ -324,7 +316,7 @@
         });
         element?.remove();
         setBadge(data.unread ?? 0);
-        if (list && !list.querySelector('[data-notification-id]')) {
+        if (list && !list.querySelector('.notif-bell__item')) {
           list.innerHTML = '<p class="notif-bell__empty">لا توجد إشعارات حالياً.</p>';
         }
       } catch {
@@ -333,18 +325,22 @@
     };
 
     list.addEventListener('click', (event) => {
-      if (event.target.closest('.notif-bell__dismiss')) {
+      const dismissBtn = event.target.closest('.notif-bell__dismiss');
+      if (dismissBtn) {
         event.preventDefault();
         event.stopPropagation();
-        const item = event.target.closest('[data-notification-id]');
+        const item = dismissBtn.closest('[data-notification-id]');
         if (item) {
           dismissItem(item.dataset.notificationId || '', item);
         }
         return;
       }
-      const item = event.target.closest('[data-notification-id]');
-      if (!item) return;
-      markRead(item.dataset.notificationId || '');
+      const link = event.target.closest('.notif-bell__link');
+      if (!link) return;
+      const item = link.closest('[data-notification-id]');
+      if (item) {
+        markRead(item.dataset.notificationId || '');
+      }
     });
 
     markAll?.addEventListener('click', async (event) => {
@@ -392,7 +388,7 @@
       window.setTimeout(() => {
         updatePushButton();
       }, 1200);
-    } else if (supportsPush() && Notification.permission === 'granted' && shouldAutoSubscribePush()) {
+    } else if (supportsPush() && Notification.permission === 'granted') {
       subscribeToPush().catch(() => {});
     }
 
