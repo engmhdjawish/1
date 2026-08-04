@@ -38,12 +38,14 @@ final class PriceCheckerService
             }
 
             self::$configCache = self::normalizeRow($row, $defaults);
+            self::$configCache['slideshow_material_guids'] = self::loadManualMaterialGuids();
 
             return self::$configCache;
         } catch (\Throwable) {
             self::$configCache = $defaults;
+            self::$configCache['slideshow_material_guids'] = [];
 
-            return $defaults;
+            return self::$configCache;
         }
     }
 
@@ -57,74 +59,131 @@ final class PriceCheckerService
     {
         $current = self::config();
         $allowedIps = self::normalizeIpListText((string) ($input['allowed_ips'] ?? ''));
-        $manufacturers = self::normalizeManufacturerListText((string) ($input['slideshow_manufacturers'] ?? ''));
+        $mode = self::normalizeSlideshowMode((string) ($input['slideshow_mode'] ?? $current['slideshow_mode']));
+        $filterRules = is_array($input['slideshow_filter_rules'] ?? null)
+            ? $input['slideshow_filter_rules']
+            : self::decodeFilterRules($input['slideshow_filter_rules'] ?? $current['slideshow_filter_rules']);
+        $manualGuids = self::stringList($input['slideshow_material_guids'] ?? []);
 
-        $stmt = Database::pdo()->prepare(
-            'INSERT INTO price_checker_settings (
-                id,
-                enabled,
-                allowed_ips,
-                page_title_ar,
-                display_seconds,
-                error_display_seconds,
-                slideshow_enabled,
-                slideshow_count,
-                slideshow_interval_ms,
-                slideshow_cache_seconds,
-                slideshow_show_price,
-                slideshow_manufacturers,
-                updated_at,
-                updated_by_user_id
-             ) VALUES (
-                :id,
-                :enabled,
-                :allowed_ips,
-                :page_title_ar,
-                :display_seconds,
-                :error_display_seconds,
-                :slideshow_enabled,
-                :slideshow_count,
-                :slideshow_interval_ms,
-                :slideshow_cache_seconds,
-                :slideshow_show_price,
-                :slideshow_manufacturers,
-                NOW(),
-                :updated_by_user_id
-             )
-             ON CONFLICT (id) DO UPDATE SET
-                enabled = EXCLUDED.enabled,
-                allowed_ips = EXCLUDED.allowed_ips,
-                page_title_ar = EXCLUDED.page_title_ar,
-                display_seconds = EXCLUDED.display_seconds,
-                error_display_seconds = EXCLUDED.error_display_seconds,
-                slideshow_enabled = EXCLUDED.slideshow_enabled,
-                slideshow_count = EXCLUDED.slideshow_count,
-                slideshow_interval_ms = EXCLUDED.slideshow_interval_ms,
-                slideshow_cache_seconds = EXCLUDED.slideshow_cache_seconds,
-                slideshow_show_price = EXCLUDED.slideshow_show_price,
-                slideshow_manufacturers = EXCLUDED.slideshow_manufacturers,
-                updated_at = NOW(),
-                updated_by_user_id = EXCLUDED.updated_by_user_id'
-        );
+        $pdo = Database::pdo();
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare(
+                'INSERT INTO price_checker_settings (
+                    id,
+                    enabled,
+                    allowed_ips,
+                    page_title_ar,
+                    display_seconds,
+                    error_display_seconds,
+                    slideshow_enabled,
+                    slideshow_count,
+                    slideshow_interval_ms,
+                    slideshow_cache_seconds,
+                    slideshow_show_price,
+                    slideshow_manufacturers,
+                    slideshow_mode,
+                    slideshow_filter_rules,
+                    slideshow_offer_slug,
+                    slideshow_use_offer_prices,
+                    updated_at,
+                    updated_by_user_id
+                 ) VALUES (
+                    :id,
+                    :enabled,
+                    :allowed_ips,
+                    :page_title_ar,
+                    :display_seconds,
+                    :error_display_seconds,
+                    :slideshow_enabled,
+                    :slideshow_count,
+                    :slideshow_interval_ms,
+                    :slideshow_cache_seconds,
+                    :slideshow_show_price,
+                    :slideshow_manufacturers,
+                    :slideshow_mode,
+                    CAST(:slideshow_filter_rules AS jsonb),
+                    :slideshow_offer_slug,
+                    :slideshow_use_offer_prices,
+                    NOW(),
+                    :updated_by_user_id
+                 )
+                 ON CONFLICT (id) DO UPDATE SET
+                    enabled = EXCLUDED.enabled,
+                    allowed_ips = EXCLUDED.allowed_ips,
+                    page_title_ar = EXCLUDED.page_title_ar,
+                    display_seconds = EXCLUDED.display_seconds,
+                    error_display_seconds = EXCLUDED.error_display_seconds,
+                    slideshow_enabled = EXCLUDED.slideshow_enabled,
+                    slideshow_count = EXCLUDED.slideshow_count,
+                    slideshow_interval_ms = EXCLUDED.slideshow_interval_ms,
+                    slideshow_cache_seconds = EXCLUDED.slideshow_cache_seconds,
+                    slideshow_show_price = EXCLUDED.slideshow_show_price,
+                    slideshow_manufacturers = EXCLUDED.slideshow_manufacturers,
+                    slideshow_mode = EXCLUDED.slideshow_mode,
+                    slideshow_filter_rules = EXCLUDED.slideshow_filter_rules,
+                    slideshow_offer_slug = EXCLUDED.slideshow_offer_slug,
+                    slideshow_use_offer_prices = EXCLUDED.slideshow_use_offer_prices,
+                    updated_at = NOW(),
+                    updated_by_user_id = EXCLUDED.updated_by_user_id'
+            );
 
-        $stmt->execute([
-            'id' => self::SETTINGS_ID,
-            'enabled' => self::boolValue($input['enabled'] ?? $current['enabled']),
-            'allowed_ips' => $allowedIps,
-            'page_title_ar' => self::clipString((string) ($input['page_title_ar'] ?? $current['page_title_ar']), 200),
-            'display_seconds' => self::intInRange((int) ($input['display_seconds'] ?? $current['display_seconds']), 2, 120, 5),
-            'error_display_seconds' => self::intInRange((int) ($input['error_display_seconds'] ?? $current['error_display_seconds']), 2, 60, 5),
-            'slideshow_enabled' => self::boolValue($input['slideshow_enabled'] ?? $current['slideshow_enabled']),
-            'slideshow_count' => self::intInRange((int) ($input['slideshow_count'] ?? $current['slideshow_count']), 1, 20, 5),
-            'slideshow_interval_ms' => self::intInRange((int) ($input['slideshow_interval_ms'] ?? $current['slideshow_interval_ms']), 3000, 120000, 20000),
-            'slideshow_cache_seconds' => self::intInRange((int) ($input['slideshow_cache_seconds'] ?? $current['slideshow_cache_seconds']), 30, 3600, 300),
-            'slideshow_show_price' => self::boolValue($input['slideshow_show_price'] ?? $current['slideshow_show_price']),
-            'slideshow_manufacturers' => $manufacturers,
-            'updated_by_user_id' => $updatedByUserId ?: null,
-        ]);
+            $legacyManufacturers = self::manufacturersFromRules($filterRules);
+
+            $stmt->execute([
+                'id' => self::SETTINGS_ID,
+                'enabled' => self::boolValue($input['enabled'] ?? $current['enabled']),
+                'allowed_ips' => $allowedIps,
+                'page_title_ar' => self::clipString((string) ($input['page_title_ar'] ?? $current['page_title_ar']), 200),
+                'display_seconds' => self::intInRange((int) ($input['display_seconds'] ?? $current['display_seconds']), 2, 120, 5),
+                'error_display_seconds' => self::intInRange((int) ($input['error_display_seconds'] ?? $current['error_display_seconds']), 2, 60, 5),
+                'slideshow_enabled' => self::boolValue($input['slideshow_enabled'] ?? $current['slideshow_enabled']),
+                'slideshow_count' => self::intInRange((int) ($input['slideshow_count'] ?? $current['slideshow_count']), 1, 20, 5),
+                'slideshow_interval_ms' => self::intInRange((int) ($input['slideshow_interval_ms'] ?? $current['slideshow_interval_ms']), 3000, 120000, 20000),
+                'slideshow_cache_seconds' => self::intInRange((int) ($input['slideshow_cache_seconds'] ?? $current['slideshow_cache_seconds']), 30, 3600, 300),
+                'slideshow_show_price' => self::boolValue($input['slideshow_show_price'] ?? $current['slideshow_show_price']),
+                'slideshow_manufacturers' => implode("\n", $legacyManufacturers),
+                'slideshow_mode' => $mode,
+                'slideshow_filter_rules' => json_encode($filterRules, JSON_UNESCAPED_UNICODE) ?: '{}',
+                'slideshow_offer_slug' => self::clipString((string) ($input['slideshow_offer_slug'] ?? $current['slideshow_offer_slug']), 120),
+                'slideshow_use_offer_prices' => self::boolValue($input['slideshow_use_offer_prices'] ?? $current['slideshow_use_offer_prices']),
+                'updated_by_user_id' => $updatedByUserId ?: null,
+            ]);
+
+            self::syncManualMaterials($manualGuids);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
 
         self::clearCache();
         self::clearSlideshowCache();
+    }
+
+    /** @return array<string, mixed> */
+    public static function parseFilterPayloadFromPost(array $post): array
+    {
+        return [
+            'keyword' => trim((string) ($post['filter_keyword'] ?? '')),
+            'material_types' => self::stringList($post['filter_material_types'] ?? []),
+            'age_categories' => self::stringList($post['filter_age_categories'] ?? []),
+            'manufacturers' => self::stringList($post['filter_manufacturers'] ?? []),
+            'size_ranges' => self::stringList($post['filter_size_ranges'] ?? []),
+            'country_origins' => self::stringList($post['filter_country_origins'] ?? []),
+            'store_guids' => self::stringList($post['filter_store_guids'] ?? []),
+            'group_guids' => self::stringList($post['filter_group_guids'] ?? []),
+            'is_available' => self::toNullableBool((string) ($post['filter_is_available'] ?? '')),
+            'has_image' => self::toNullableBool((string) ($post['filter_has_image'] ?? '')),
+            'min_warehouse_quantity' => self::toNullableFloat((string) ($post['filter_min_warehouse_quantity'] ?? '')),
+            'max_warehouse_quantity' => self::toNullableFloat((string) ($post['filter_max_warehouse_quantity'] ?? '')),
+            'min_unit_sale_price_syp' => self::toNullableFloat((string) ($post['filter_min_unit_sale_price_syp'] ?? '')),
+            'max_unit_sale_price_syp' => self::toNullableFloat((string) ($post['filter_max_unit_sale_price_syp'] ?? '')),
+            'min_unit_sale_price_usd' => self::toNullableFloat((string) ($post['filter_min_unit_sale_price_usd'] ?? '')),
+            'max_unit_sale_price_usd' => self::toNullableFloat((string) ($post['filter_max_unit_sale_price_usd'] ?? '')),
+            'min_unit_purchase_price_usd' => self::toNullableFloat((string) ($post['filter_min_unit_purchase_price_usd'] ?? '')),
+            'max_unit_purchase_price_usd' => self::toNullableFloat((string) ($post['filter_max_unit_purchase_price_usd'] ?? '')),
+        ];
     }
 
     public static function isEnabled(): bool
@@ -172,10 +231,7 @@ final class PriceCheckerService
     {
         $ip = trim($ip ?? self::clientIp());
         $allowed = self::allowedIps();
-        if ($allowed === []) {
-            return false;
-        }
-        if ($ip === '') {
+        if ($allowed === [] || $ip === '') {
             return false;
         }
 
@@ -185,11 +241,8 @@ final class PriceCheckerService
     public static function publicUrl(): string
     {
         $base = rtrim((string) (Config::get('PORTAL_APP_URL', '') ?? ''), '/');
-        if ($base === '') {
-            return '/price-checker.php';
-        }
 
-        return $base . '/price-checker.php';
+        return $base !== '' ? $base . '/price-checker.php' : '/price-checker.php';
     }
 
     /** @return array<string, mixed>|null */
@@ -254,83 +307,14 @@ final class PriceCheckerService
             }
         }
 
-        $query = [
-            'hasImage' => 'true',
-            'isAvailable' => 'true',
-            'page' => 1,
-            'pageSize' => $forceRefresh ? 120 : 80,
-        ];
-
-        $manufacturers = self::slideshowManufacturers();
-        if ($manufacturers !== []) {
-            $query['manufacturers'] = implode(',', $manufacturers);
-        }
-
         try {
-            $response = ApiClient::get('/api/materials', $query, 25);
-            if (!($response['ok'] ?? false) || !is_array($response['data'])) {
-                return [];
-            }
-
-            $excludeSet = [];
-            foreach ($excludeGuids as $guid) {
-                $guid = strtolower(trim($guid));
-                if ($guid !== '' && preg_match('/^[0-9a-f-]{36}$/', $guid) === 1) {
-                    $excludeSet[$guid] = true;
-                }
-            }
-
-            $allowedManufacturers = array_map('mb_strtolower', $manufacturers);
-            $pool = [];
-            foreach ($response['data']['items'] ?? [] as $row) {
-                if (!is_array($row) || !empty($row['isHidden'])) {
-                    continue;
-                }
-                $imageGuid = trim((string) ($row['productImageGuid'] ?? ''));
-                if ($imageGuid === '' || isset($excludeSet[strtolower($imageGuid)])) {
-                    continue;
-                }
-
-                $manufacturer = trim((string) ($row['manufacturer'] ?? ''));
-                if ($allowedManufacturers !== [] && !in_array(mb_strtolower($manufacturer), $allowedManufacturers, true)) {
-                    continue;
-                }
-
-                $pool[] = [
-                    'imageGuid' => $imageGuid,
-                    'name' => (string) ($row['name'] ?? ''),
-                    'manufacturer' => $manufacturer,
-                    'image' => self::materialImageUrl($imageGuid, true),
-                    'priceSp' => (float) ($row['unitSalePriceSyp'] ?? 0),
-                    'priceUsd' => (float) ($row['unitSalePriceUsd'] ?? 0),
-                ];
-            }
-
+            $pool = self::buildSlideshowPool($config, $forceRefresh);
             self::writeSlideshowCache($cacheKey, $pool, $cacheSeconds);
 
             return self::pickSlideshowBatch($pool, (int) ($config['slideshow_count'] ?? 5), $excludeGuids);
         } catch (\Throwable) {
             return [];
         }
-    }
-
-    /** @return list<string> */
-    public static function slideshowManufacturers(): array
-    {
-        $raw = trim((string) (self::config()['slideshow_manufacturers'] ?? ''));
-        if ($raw === '') {
-            return [];
-        }
-
-        $items = [];
-        foreach (preg_split('/\R+/', $raw) ?: [] as $line) {
-            $line = trim((string) $line);
-            if ($line !== '') {
-                $items[] = $line;
-            }
-        }
-
-        return array_values(array_unique($items));
     }
 
     public static function materialImageUrl(string $imageGuid, bool $thumb = true): string
@@ -346,11 +330,8 @@ final class PriceCheckerService
     public static function logoUrl(): string
     {
         $logo = PortalSettingsService::companyLogoUrl();
-        if (is_string($logo) && trim($logo) !== '') {
-            return $logo;
-        }
 
-        return '';
+        return is_string($logo) && trim($logo) !== '' ? $logo : '';
     }
 
     public static function siteName(): string
@@ -359,6 +340,178 @@ final class PriceCheckerService
         $name = trim((string) ($company['company_name'] ?? ''));
 
         return $name !== '' ? $name : 'جويش للتجارة';
+    }
+
+    public static function clearSlideshowCache(): void
+    {
+        $path = self::slideshowCachePath();
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    }
+
+    /** @param array<string, mixed> $config @return list<array<string, mixed>> */
+    private static function buildSlideshowPool(array $config, bool $forceRefresh): array
+    {
+        $mode = self::normalizeSlideshowMode((string) ($config['slideshow_mode'] ?? 'filter'));
+        $count = (int) ($config['slideshow_count'] ?? 5);
+        $poolSize = min(200, max($count * 8, 48));
+        $offerSlug = trim((string) ($config['slideshow_offer_slug'] ?? ''));
+        $useOfferPrices = (bool) ($config['slideshow_use_offer_prices'] ?? false);
+
+        if ($mode === 'offer') {
+            $offer = $offerSlug !== '' ? SpecialOfferService::activeOfferBySlug($offerSlug) : null;
+            if ($offer === null) {
+                return [];
+            }
+            $offerSlug = (string) ($offer['slug'] ?? $offerSlug);
+            $selectionMode = (string) ($offer['selection_mode'] ?? 'filter');
+            if ($selectionMode === 'manual') {
+                $items = self::fetchManualMaterials(is_array($offer['material_guids'] ?? null) ? $offer['material_guids'] : [], $poolSize);
+            } else {
+                $rules = is_array($offer['filter_rules'] ?? null) ? $offer['filter_rules'] : [];
+                $items = self::fetchFilteredMaterials($rules, $poolSize);
+            }
+
+            return self::mapSlideshowItems($items, $offerSlug, true);
+        }
+
+        if ($mode === 'manual') {
+            $guids = is_array($config['slideshow_material_guids'] ?? null)
+                ? $config['slideshow_material_guids']
+                : self::loadManualMaterialGuids();
+            $items = self::fetchManualMaterials($guids, $poolSize);
+            $priceOfferSlug = $useOfferPrices ? $offerSlug : null;
+
+            return self::mapSlideshowItems($items, $priceOfferSlug !== '' ? $priceOfferSlug : null, $useOfferPrices && $priceOfferSlug !== '');
+        }
+
+        $rules = is_array($config['slideshow_filter_rules'] ?? null) ? $config['slideshow_filter_rules'] : [];
+        if ($rules === []) {
+            $rules = ['has_image' => true, 'is_available' => true];
+        }
+        $items = self::fetchFilteredMaterials($rules, $forceRefresh ? 120 : 80);
+        $priceOfferSlug = $useOfferPrices ? $offerSlug : null;
+
+        return self::mapSlideshowItems($items, $priceOfferSlug !== '' ? $priceOfferSlug : null, $useOfferPrices && $priceOfferSlug !== '');
+    }
+
+    /** @param array<string, mixed> $rules @return list<array<string, mixed>> */
+    private static function fetchFilteredMaterials(array $rules, int $pageSize): array
+    {
+        $query = HomeSectionService::materialsListQuery($rules, $pageSize);
+        $response = ApiClient::get('/api/materials', $query, 25);
+        if (!($response['ok'] ?? false)) {
+            return [];
+        }
+
+        $items = is_array($response['data']['items'] ?? null) ? $response['data']['items'] : [];
+
+        return StockReservationService::filterSellableProducts($items);
+    }
+
+    /** @param list<string> $guids @return list<array<string, mixed>> */
+    private static function fetchManualMaterials(array $guids, int $maxProducts): array
+    {
+        $guids = array_values(array_unique(array_filter(array_map('strval', $guids), static fn (string $g): bool => trim($g) !== '')));
+        if ($guids === []) {
+            return [];
+        }
+
+        shuffle($guids);
+        $tryGuids = array_slice($guids, 0, min(count($guids), max($maxProducts * 3, $maxProducts)));
+        $materialsByGuid = MaterialBatchService::fetchByGuids($tryGuids, 20);
+        $candidates = [];
+        foreach ($tryGuids as $guid) {
+            $item = $materialsByGuid[$guid] ?? null;
+            if (is_array($item)) {
+                $candidates[] = $item;
+            }
+        }
+
+        return StockReservationService::filterSellableProducts($candidates);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $items
+     * @return list<array<string, mixed>>
+     */
+    private static function mapSlideshowItems(array $items, ?string $offerSlug, bool $forceOfferPricing): array
+    {
+        if ($items === []) {
+            return [];
+        }
+
+        if ($forceOfferPricing && $offerSlug !== null && trim($offerSlug) !== '') {
+            $items = StoreCatalogService::withOfferPricing($items, trim($offerSlug));
+        } elseif (!$forceOfferPricing) {
+            $items = SpecialOfferService::applyPricingOverlays($items, null);
+        }
+
+        $pool = [];
+        foreach ($items as $row) {
+            if (!is_array($row) || !empty($row['isHidden'])) {
+                continue;
+            }
+            $imageGuid = trim((string) ($row['productImageGuid'] ?? ''));
+            if ($imageGuid === '') {
+                continue;
+            }
+            $pool[] = [
+                'imageGuid' => $imageGuid,
+                'name' => (string) ($row['name'] ?? ''),
+                'manufacturer' => trim((string) ($row['manufacturer'] ?? '')),
+                'image' => self::materialImageUrl($imageGuid, true),
+                'priceSp' => (float) ($row['unitSalePriceSyp'] ?? 0),
+                'priceUsd' => (float) ($row['unitSalePriceUsd'] ?? 0),
+                'isOfferPrice' => !empty($row['offerPricingApplied']) || !empty($row['isOfferPrice']),
+            ];
+        }
+
+        return $pool;
+    }
+
+    /** @param list<string> $guids */
+    private static function syncManualMaterials(array $guids): void
+    {
+        $pdo = Database::pdo();
+        $pdo->exec('DELETE FROM price_checker_slideshow_materials');
+        if ($guids === []) {
+            return;
+        }
+
+        $stmt = $pdo->prepare(
+            'INSERT INTO price_checker_slideshow_materials (material_guid, sort_order)
+             VALUES (:guid, :sort_order)'
+        );
+        foreach (array_values($guids) as $index => $guid) {
+            if (!preg_match('/^[0-9a-f-]{36}$/i', $guid)) {
+                continue;
+            }
+            $stmt->execute([
+                'guid' => $guid,
+                'sort_order' => $index,
+            ]);
+        }
+    }
+
+    /** @return list<string> */
+    private static function loadManualMaterialGuids(): array
+    {
+        try {
+            $rows = Database::pdo()->query(
+                'SELECT material_guid::text AS material_guid
+                 FROM price_checker_slideshow_materials
+                 ORDER BY sort_order ASC, created_at ASC'
+            )->fetchAll(PDO::FETCH_ASSOC);
+
+            return array_values(array_filter(array_map(
+                static fn (array $row): string => trim((string) ($row['material_guid'] ?? '')),
+                is_array($rows) ? $rows : []
+            ), static fn (string $guid): bool => $guid !== ''));
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     /** @param list<array<string, mixed>> $items */
@@ -402,12 +555,26 @@ final class PriceCheckerService
             'slideshow_cache_seconds' => 300,
             'slideshow_show_price' => true,
             'slideshow_manufacturers' => '',
+            'slideshow_mode' => 'filter',
+            'slideshow_filter_rules' => ['has_image' => true, 'is_available' => true],
+            'slideshow_offer_slug' => '',
+            'slideshow_use_offer_prices' => false,
+            'slideshow_material_guids' => [],
         ];
     }
 
     /** @param array<string, mixed> $row @param array<string, mixed> $defaults @return array<string, mixed> */
     private static function normalizeRow(array $row, array $defaults): array
     {
+        $filterRules = self::decodeFilterRules($row['slideshow_filter_rules'] ?? $defaults['slideshow_filter_rules']);
+        if ($filterRules === [] && trim((string) ($row['slideshow_manufacturers'] ?? '')) !== '') {
+            $filterRules = [
+                'manufacturers' => self::stringList((string) $row['slideshow_manufacturers']),
+                'has_image' => true,
+                'is_available' => true,
+            ];
+        }
+
         return [
             'enabled' => filter_var($row['enabled'] ?? $defaults['enabled'], FILTER_VALIDATE_BOOLEAN),
             'allowed_ips' => (string) ($row['allowed_ips'] ?? ''),
@@ -420,7 +587,71 @@ final class PriceCheckerService
             'slideshow_cache_seconds' => self::intInRange((int) ($row['slideshow_cache_seconds'] ?? $defaults['slideshow_cache_seconds']), 30, 3600, 300),
             'slideshow_show_price' => filter_var($row['slideshow_show_price'] ?? $defaults['slideshow_show_price'], FILTER_VALIDATE_BOOLEAN),
             'slideshow_manufacturers' => (string) ($row['slideshow_manufacturers'] ?? ''),
+            'slideshow_mode' => self::normalizeSlideshowMode((string) ($row['slideshow_mode'] ?? $defaults['slideshow_mode'])),
+            'slideshow_filter_rules' => $filterRules,
+            'slideshow_offer_slug' => self::clipString((string) ($row['slideshow_offer_slug'] ?? ''), 120),
+            'slideshow_use_offer_prices' => filter_var($row['slideshow_use_offer_prices'] ?? false, FILTER_VALIDATE_BOOLEAN),
         ];
+    }
+
+    private static function normalizeSlideshowMode(string $mode): string
+    {
+        return in_array($mode, ['filter', 'manual', 'offer'], true) ? $mode : 'filter';
+    }
+
+    /** @return array<string, mixed> */
+    private static function decodeFilterRules(mixed $raw): array
+    {
+        if (is_array($raw)) {
+            return $raw;
+        }
+        if (is_string($raw) && trim($raw) !== '') {
+            $decoded = json_decode($raw, true);
+
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return [];
+    }
+
+    /** @param array<string, mixed> $rules @return list<string> */
+    private static function manufacturersFromRules(array $rules): array
+    {
+        return self::stringList($rules['manufacturers'] ?? []);
+    }
+
+    /** @return list<string> */
+    private static function stringList(mixed $value): array
+    {
+        if (!is_array($value)) {
+            $value = preg_split('/[,|\n]+/u', (string) $value) ?: [];
+        }
+
+        $result = [];
+        foreach ($value as $item) {
+            $item = trim((string) $item);
+            if ($item !== '') {
+                $result[] = $item;
+            }
+        }
+
+        return array_values(array_unique($result));
+    }
+
+    private static function toNullableBool(string $value): ?bool
+    {
+        return match (strtolower(trim($value))) {
+            '1', 'true', 'yes', 'on' => true,
+            '0', 'false', 'no', 'off' => false,
+            default => null,
+        };
+    }
+
+    private static function toNullableFloat(string $value): ?float
+    {
+        $value = trim($value);
+
+        return $value !== '' && is_numeric($value) ? (float) $value : null;
     }
 
     private static function boolValue(mixed $value): bool
@@ -429,27 +660,18 @@ final class PriceCheckerService
             return $value;
         }
 
-        $normalized = strtolower(trim((string) $value));
-
-        return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
+        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
     }
 
     private static function intInRange(int $value, int $min, int $max, int $fallback): int
     {
-        if ($value < $min || $value > $max) {
-            return $fallback;
-        }
-
-        return $value;
+        return ($value >= $min && $value <= $max) ? $value : $fallback;
     }
 
     private static function clipString(string $value, int $max): string
     {
         $value = trim($value);
-        if ($value === '') {
-            return '';
-        }
-        if (mb_strlen($value) <= $max) {
+        if ($value === '' || mb_strlen($value) <= $max) {
             return $value;
         }
 
@@ -461,33 +683,23 @@ final class PriceCheckerService
         $ips = [];
         foreach (preg_split('/\R+/', $text) ?: [] as $line) {
             $line = trim((string) $line);
-            if ($line === '' || !filter_var($line, FILTER_VALIDATE_IP)) {
-                continue;
+            if ($line !== '' && filter_var($line, FILTER_VALIDATE_IP)) {
+                $ips[] = $line;
             }
-            $ips[] = $line;
         }
 
         return implode("\n", array_values(array_unique($ips)));
-    }
-
-    private static function normalizeManufacturerListText(string $text): string
-    {
-        $items = [];
-        foreach (preg_split('/\R+/', $text) ?: [] as $line) {
-            $line = trim((string) $line);
-            if ($line !== '') {
-                $items[] = $line;
-            }
-        }
-
-        return implode("\n", array_values(array_unique($items)));
     }
 
     /** @param array<string, mixed> $config */
     private static function slideshowCacheKey(array $config): string
     {
         return hash('sha256', json_encode([
-            'manufacturers' => self::slideshowManufacturers(),
+            'mode' => $config['slideshow_mode'] ?? 'filter',
+            'rules' => $config['slideshow_filter_rules'] ?? [],
+            'offer' => $config['slideshow_offer_slug'] ?? '',
+            'use_offer_prices' => $config['slideshow_use_offer_prices'] ?? false,
+            'manual' => $config['slideshow_material_guids'] ?? [],
             'count' => (int) ($config['slideshow_count'] ?? 5),
         ], JSON_UNESCAPED_UNICODE));
     }
@@ -530,18 +742,8 @@ final class PriceCheckerService
             'pool' => $pool,
         ], JSON_UNESCAPED_UNICODE);
 
-        if ($payload === false) {
-            return;
-        }
-
-        file_put_contents(self::slideshowCachePath(), $payload, LOCK_EX);
-    }
-
-    public static function clearSlideshowCache(): void
-    {
-        $path = self::slideshowCachePath();
-        if (is_file($path)) {
-            @unlink($path);
+        if ($payload !== false) {
+            file_put_contents(self::slideshowCachePath(), $payload, LOCK_EX);
         }
     }
 

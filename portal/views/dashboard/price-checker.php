@@ -10,6 +10,12 @@ declare(strict_types=1);
 /** @var bool $ipAllowedForViewer */
 /** @var string $flashOk */
 /** @var string $flashError */
+/** @var array<string, array<int, mixed>> $materialFilterOptions */
+/** @var string|null $materialFilterOptionsError */
+/** @var list<array<string, mixed>> $specialOffers */
+/** @var list<array<string, mixed>> $manualProducts */
+
+require __DIR__ . '/partials/token-picker.php';
 ?>
 <section class="mb-6">
   <div class="flex flex-wrap items-start justify-between gap-3">
@@ -112,14 +118,6 @@ declare(strict_types=1);
         <h2 class="text-lg font-extrabold text-slate-900">عناوين IP المسموحة</h2>
         <p class="text-sm text-text-muted mt-1">سطر واحد لكل عنوان. فقط هذه الأجهزة يمكنها فتح الشاشة — بدون كلمة مرور.</p>
       </div>
-      <?php if ($viewerIp !== ''): ?>
-        <form method="post" class="inline">
-          <input type="hidden" name="action" value="add_current_ip">
-          <button type="submit" class="h-10 px-4 rounded-xl border border-primary/30 bg-primary/5 text-sm font-bold text-primary hover:bg-primary/10">
-            إضافة IP الحالي (<?= h($viewerIp) ?>)
-          </button>
-        </form>
-      <?php endif; ?>
     </div>
 
     <textarea
@@ -134,6 +132,17 @@ declare(strict_types=1);
       أضف <strong>الـ IP العام</strong> لشبكة المحل (ما يظهر لموقع jawishco.sy عند فتحه من المحل).
       إذا كان الموقع خلف Cloudflare، استخدم IP العام للمحل وليس IP داخلي مثل 192.168.x.x.
     </p>
+    <?php if ($viewerIp !== ''): ?>
+      <button
+        type="submit"
+        formaction="/dashboard/price-checker.php"
+        name="action"
+        value="add_current_ip"
+        class="h-10 px-4 rounded-xl border border-primary/30 bg-primary/5 text-sm font-bold text-primary hover:bg-primary/10"
+      >
+        إضافة IP الحالي (<?= h($viewerIp) ?>)
+      </button>
+    <?php endif; ?>
   </section>
 
   <section class="bg-white border border-border-subtle rounded-2xl p-5 space-y-4">
@@ -165,31 +174,21 @@ declare(strict_types=1);
       </div>
     </div>
 
-    <div>
-      <label class="block text-sm font-bold text-slate-800 mb-1" for="slideshow_manufacturers">الشركات المصنعة في الإعلانات</label>
-      <textarea
-        id="slideshow_manufacturers"
-        name="slideshow_manufacturers"
-        rows="5"
-        class="w-full rounded-xl border border-border-subtle px-4 py-3 text-sm focus:border-primary focus:ring-primary"
-        placeholder="توباكو&#10;خيمي&#10;مدراتي"
-      ><?= h((string) ($config['slideshow_manufacturers'] ?? '')) ?></textarea>
-      <p class="text-xs text-text-muted mt-1">سطر لكل شركة كما في الأمين. اترك الحقل فارغاً لعرض كل الشركات (مواد بصورة ومتوافرة فقط).</p>
-    </div>
-
-    <div class="pt-2">
-      <form method="post" class="inline">
-        <input type="hidden" name="action" value="clear_slideshow_cache">
-        <button type="submit" class="h-10 px-4 rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-700 hover:bg-slate-50">
-          مسح ذاكرة الإعلانات
-        </button>
-      </form>
-    </div>
+    <?php require __DIR__ . '/partials/price-checker-slideshow-settings.php'; ?>
   </section>
 
   <div class="flex flex-wrap gap-3">
     <button type="submit" class="h-11 px-6 rounded-xl bg-primary text-white text-sm font-extrabold hover:bg-primary/90">
       حفظ الإعدادات
+    </button>
+    <button
+      type="submit"
+      formaction="/dashboard/price-checker.php"
+      name="action"
+      value="clear_slideshow_cache"
+      class="h-11 px-6 rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-700 hover:bg-slate-50"
+    >
+      مسح ذاكرة الإعلانات
     </button>
     <a href="/price-checker.php" target="_blank" rel="noopener" class="h-11 px-6 inline-flex items-center rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-700 hover:bg-slate-50">
       معاينة الشاشة
