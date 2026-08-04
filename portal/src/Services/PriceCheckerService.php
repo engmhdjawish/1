@@ -12,9 +12,14 @@ use RuntimeException;
 final class PriceCheckerService
 {
     private const SETTINGS_ID = 1;
+    private const BARCODE_CACHE_TTL_SECONDS = 120;
+    private const BARCODE_CACHE_MAX_ENTRIES = 400;
 
     /** @var array<string, mixed>|null */
     private static ?array $configCache = null;
+
+    /** @var array<string, array{exp: int, data: array<string, mixed>}> */
+    private static array $barcodeMemoryCache = [];
 
     /** @return array<string, mixed> */
     public static function config(): array
@@ -253,25 +258,73 @@ final class PriceCheckerService
             return null;
         }
 
-        $response = ApiClient::get('/api/materials', [
-            'search' => $barcode,
-            'page' => 1,
-            'pageSize' => 20,
-        ], 20);
-
-        if (!($response['ok'] ?? false)) {
-            $message = is_array($response['data'] ?? null)
-                ? (string) (($response['data']['message'] ?? $response['data']['title'] ?? $response['error'] ?? '') ?: 'فشل جلب المواد')
-                : (string) ($response['error'] ?? 'فشل جلب المواد');
-            throw new RuntimeException($message);
+        $cacheKey = self::barcodeCacheKey($barcode);
+        $cached = self::readBarcodeCache($cacheKey);
+        if ($cached !== null) {
+            return $cached;
         }
 
-        $items = is_array($response['data']['items'] ?? null) ? $response['data']['items'] : [];
-        $material = self::pickMaterial($items, $barcode);
+        $material = self::fetchMaterialByBarcode($barcode);
         if ($material === null || !empty($material['isHidden'])) {
             return null;
         }
 
+        $result = self::mapLookupMaterial($material);
+        self::writeBarcodeCache($cacheKey, $result);
+
+        return $result;
+    }
+
+    /** @return array<string, mixed>|null */
+    private static function fetchMaterialByBarcode(string $barcode): ?array
+    {
+        foreach ([3, 12] as $pageSize) {
+            $response = ApiClient::get('/api/materials', [
+                'keyword' => $barcode,
+                'page' => 1,
+                'pageSize' => $pageSize,
+                'includeTotalCount' => 'false',
+            ], 12);
+
+            if (!($response['ok'] ?? false)) {
+                $message = is_array($response['data'] ?? null)
+                    ? (string) (($response['data']['message'] ?? $response['data']['title'] ?? $response['error'] ?? '') ?: 'فشل جلب المواد')
+                    : (string) ($response['error'] ?? 'فشل جلب المواد');
+                throw new RuntimeException($message);
+            }
+
+            $items = is_array($response['data']['items'] ?? null) ? $response['data']['items'] : [];
+            $material = self::pickMaterial($items, $barcode);
+            if ($material !== null) {
+                return $material;
+            }
+
+            if ($items === []) {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    public static function warmConnection(): void
+    {
+        self::config();
+        ApiClient::ensureToken();
+    }
+
+    public static function clearBarcodeCache(): void
+    {
+        self::$barcodeMemoryCache = [];
+        $path = self::barcodeCachePath();
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    }
+
+    /** @param array<string, mixed> $material @return array<string, mixed> */
+    private static function mapLookupMaterial(array $material): array
+    {
         $perBox = (float) ($material['packageConversionFactor'] ?? 0);
         if ($perBox <= 0) {
             $perBox = 1.0;
@@ -285,6 +338,94 @@ final class PriceCheckerService
             'availableQuantity' => (float) ($material['warehouseQuantity'] ?? 0),
             'availableQunatity' => (float) ($material['warehouseQuantity'] ?? 0),
         ];
+    }
+
+    private static function barcodeCacheKey(string $barcode): string
+    {
+        return hash('sha256', strtolower(trim($barcode)));
+    }
+
+    /** @return array<string, mixed>|null */
+    private static function readBarcodeCache(string $cacheKey): ?array
+    {
+        $now = time();
+        if (isset(self::$barcodeMemoryCache[$cacheKey]) && self::$barcodeMemoryCache[$cacheKey]['exp'] >= $now) {
+            return self::$barcodeMemoryCache[$cacheKey]['data'];
+        }
+
+        $path = self::barcodeCachePath();
+        if (!is_readable($path)) {
+            return null;
+        }
+
+        $raw = file_get_contents($path);
+        if ($raw === false || $raw === '') {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return null;
+        }
+
+        $entry = $decoded[$cacheKey] ?? null;
+        if (!is_array($entry) || (int) ($entry['exp'] ?? 0) < $now) {
+            return null;
+        }
+
+        $data = $entry['data'] ?? null;
+        if (!is_array($data)) {
+            return null;
+        }
+
+        self::$barcodeMemoryCache[$cacheKey] = ['exp' => (int) $entry['exp'], 'data' => $data];
+
+        return $data;
+    }
+
+    /** @param array<string, mixed> $data */
+    private static function writeBarcodeCache(string $cacheKey, array $data): void
+    {
+        $exp = time() + self::BARCODE_CACHE_TTL_SECONDS;
+        self::$barcodeMemoryCache[$cacheKey] = ['exp' => $exp, 'data' => $data];
+
+        $path = self::barcodeCachePath();
+        $dir = dirname($path);
+        if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+            return;
+        }
+
+        $store = [];
+        if (is_readable($path)) {
+            $existing = json_decode((string) file_get_contents($path), true);
+            if (is_array($existing)) {
+                $store = $existing;
+            }
+        }
+
+        $now = time();
+        foreach ($store as $key => $entry) {
+            if (!is_array($entry) || (int) ($entry['exp'] ?? 0) < $now) {
+                unset($store[$key]);
+            }
+        }
+
+        $store[$cacheKey] = ['exp' => $exp, 'data' => $data];
+
+        if (count($store) > self::BARCODE_CACHE_MAX_ENTRIES) {
+            uasort($store, static fn (array $a, array $b): int => (int) ($a['exp'] ?? 0) <=> (int) ($b['exp'] ?? 0));
+            $store = array_slice($store, -self::BARCODE_CACHE_MAX_ENTRIES, null, true);
+        }
+
+        $payload = json_encode($store, JSON_UNESCAPED_UNICODE);
+        if ($payload !== false) {
+            file_put_contents($path, $payload, LOCK_EX);
+        }
+    }
+
+    private static function barcodeCachePath(): string
+    {
+        return rtrim(Config::storagePath(), '/\\') . '/cache/price-checker-barcodes.json';
     }
 
     /**
@@ -348,6 +489,12 @@ final class PriceCheckerService
         if (is_file($path)) {
             @unlink($path);
         }
+    }
+
+    public static function clearLookupCaches(): void
+    {
+        self::clearSlideshowCache();
+        self::clearBarcodeCache();
     }
 
     /** @param array<string, mixed> $config @return list<array<string, mixed>> */
@@ -525,7 +672,7 @@ final class PriceCheckerService
             if (!is_array($item)) {
                 continue;
             }
-            foreach (['barcode', 'materialCode'] as $field) {
+            foreach (['barcode', 'barCode', 'barCode2', 'barCode3', 'materialCode', 'code'] as $field) {
                 $value = trim((string) ($item[$field] ?? ''));
                 if ($value !== '' && strcasecmp($value, $barcode) === 0) {
                     return $item;
@@ -533,11 +680,7 @@ final class PriceCheckerService
             }
         }
 
-        if (count($items) === 1 && is_array($items[0])) {
-            return $items[0];
-        }
-
-        return is_array($items[0] ?? null) ? $items[0] : null;
+        return null;
     }
 
     /** @return array<string, mixed> */

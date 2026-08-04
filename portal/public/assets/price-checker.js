@@ -1,6 +1,7 @@
 (function () {
   const cfg = window.PRICE_CHECKER || {};
   const API_URL = cfg.apiUrl || '?action=lookup&barcode=';
+  const WARMUP_URL = cfg.warmupUrl || '?action=warmup';
   const PROMO_URL = cfg.promoUrl || '?action=slideshow';
   const DISPLAY_SECONDS = Number(cfg.displaySeconds || 5);
   const ERROR_SECONDS = Number(cfg.errorSeconds || 5);
@@ -25,6 +26,7 @@
   let promoReloading = false;
   let promoReloadAbort = null;
   let ssBgFlip = false;
+  let lookupOverlayTimer = null;
   const promoImageReady = new Set();
   const promoImageLoading = new Map();
 
@@ -185,13 +187,50 @@
     errorTimeout = setTimeout(() => showState('standby'), ERROR_SECONDS * 1000);
   }
 
+  function setLookupLoading(on) {
+    if (lookupOverlayTimer) {
+      clearTimeout(lookupOverlayTimer);
+      lookupOverlayTimer = null;
+    }
+    if (on) {
+      lookupOverlayTimer = setTimeout(() => {
+        lookupOverlayTimer = null;
+        setLoading(true);
+      }, 250);
+      return;
+    }
+    setLoading(false);
+  }
+
+  function showLookupPending(barcode) {
+    showState('product');
+    const nameEl = $('product-badge-name');
+    if (nameEl) {
+      nameEl.textContent = 'جاري التحميل...';
+      nameEl.className = 'text-zinc-500 font-extrabold text-2xl md:text-3xl leading-tight break-words line-clamp-2 w-full';
+    }
+    const barcodeEl = $('product-barcode');
+    if (barcodeEl) barcodeEl.textContent = barcode;
+    ['price-sp-unit', 'price-sp-box', 'price-usd-unit', 'price-usd-box', 'pcs-per-box', 'available-qty'].forEach((id) => {
+      const el = $(id);
+      if (el) el.textContent = '…';
+    });
+    startProductCountdown(DISPLAY_SECONDS + 3);
+  }
+
   async function loadByBarcode(barcode) {
     if (isLoading) return;
     pausePromo();
     lastBarcode = barcode;
-    setLoading(true);
+    isLoading = true;
+    showLookupPending(barcode);
+    setLookupLoading(true);
     try {
-      const res = await fetch(API_URL + encodeURIComponent(barcode), { cache: 'no-store', priority: 'high' });
+      const res = await fetch(API_URL + encodeURIComponent(barcode), {
+        cache: 'no-store',
+        priority: 'high',
+        headers: { Accept: 'application/json' },
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (data.error === 'api_error') return showError(barcode, 'خطأ في النظام', data.message || '');
@@ -204,7 +243,8 @@
     } catch {
       showError(barcode, 'خطأ في الاتصال', 'تحقق من الشبكة');
     } finally {
-      setLoading(false);
+      isLoading = false;
+      setLookupLoading(false);
     }
   }
 
@@ -424,6 +464,8 @@
   if (SLIDESHOW_ENABLED) {
     initPromo(false);
   }
+
+  fetch(WARMUP_URL, { cache: 'no-store', priority: 'low' }).catch(() => {});
 
   const testBarcode = new URLSearchParams(location.search).get('barcode')?.trim();
   if (testBarcode) loadByBarcode(testBarcode);

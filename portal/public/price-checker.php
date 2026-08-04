@@ -18,6 +18,7 @@ if ($action !== '') {
 
 if ($action === 'lookup') {
     header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
     if (!PriceCheckerService::isEnabled() || !PriceCheckerService::isIpAllowed()) {
         http_response_code(403);
         echo json_encode(['error' => 'forbidden'], JSON_UNESCAPED_UNICODE);
@@ -42,6 +43,24 @@ if ($action === 'lookup') {
     } catch (Throwable $e) {
         http_response_code(502);
         echo json_encode(['error' => 'api_error', 'message' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
+    exit;
+}
+
+if ($action === 'warmup') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    if (!PriceCheckerService::isEnabled() || !PriceCheckerService::isIpAllowed()) {
+        http_response_code(403);
+        echo json_encode(['ok' => false], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    try {
+        PriceCheckerService::warmConnection();
+        echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable) {
+        echo json_encode(['ok' => false], JSON_UNESCAPED_UNICODE);
     }
     exit;
 }

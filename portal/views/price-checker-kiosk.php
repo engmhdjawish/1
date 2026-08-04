@@ -201,6 +201,7 @@ declare(strict_types=1);
   <script>
     window.PRICE_CHECKER = {
       apiUrl: <?= json_encode($self . '?action=lookup&barcode=', JSON_UNESCAPED_UNICODE) ?>,
+      warmupUrl: <?= json_encode($self . '?action=warmup', JSON_UNESCAPED_UNICODE) ?>,
       promoUrl: <?= json_encode($self . '?action=slideshow', JSON_UNESCAPED_UNICODE) ?>,
       displaySeconds: <?= (int) $displaySec ?>,
       errorSeconds: <?= (int) $errorSec ?>,

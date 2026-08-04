@@ -40,8 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashOk = 'عنوان IP الحالي موجود مسبقاً في القائمة.';
         }
     } elseif ($action === 'clear_slideshow_cache') {
-        PriceCheckerService::clearSlideshowCache();
-        $flashOk = 'تم مسح ذاكرة التخزين المؤقت لإعلانات الشاشة.';
+        PriceCheckerService::clearLookupCaches();
+        $flashOk = 'تم مسح ذاكرة التخزين المؤقت لإعلانات الشاشة ونتائج المسح.';
     } else {
         try {
             $mode = trim((string) ($_POST['slideshow_mode'] ?? 'filter'));
