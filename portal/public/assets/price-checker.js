@@ -164,6 +164,18 @@
     $('offer-sp-unit-old') && ($('offer-sp-unit-old').textContent = formatNumber(oldUnitSp, 0));
     $('offer-sp-unit-new') && ($('offer-sp-unit-new').textContent = formatNumber(unitSp, 0));
 
+    const savingsEl = $('offer-sp-savings');
+    if (savingsEl) {
+      if (showOldSp && oldUnitSp > unitSp + 0.01) {
+        const saved = oldUnitSp - unitSp;
+        savingsEl.textContent = 'وفّر ' + formatNumber(saved, 0) + ' ل.س على كل قطعة';
+        savingsEl.classList.remove('hidden');
+      } else {
+        savingsEl.textContent = '';
+        savingsEl.classList.add('hidden');
+      }
+    }
+
     const showBoxSp = oldBoxSp > boxSp + 0.01;
     $('offer-sp-box-row')?.classList.toggle('hidden', !showBoxSp);
     $('offer-sp-box-old') && ($('offer-sp-box-old').textContent = formatNumber(oldBoxSp, 0) + ' ل.س');

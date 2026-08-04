@@ -190,6 +190,8 @@ declare(strict_types=1);
           </div>
         </div>
 
+        <p id="offer-sp-savings" class="pc-offer-board__savings hidden"></p>
+
         <div id="offer-sp-box-row" class="pc-offer-board__row hidden">
           <span class="pc-offer-board__row-label">سعر الطرد</span>
           <span id="offer-sp-box-old" class="pc-offer-board__row-old">—</span>

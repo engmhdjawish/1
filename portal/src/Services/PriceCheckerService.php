@@ -269,6 +269,7 @@ final class PriceCheckerService
             return null;
         }
 
+        $material = self::hydrateMaterialForLookup($material);
         $offerOverlay = SpecialOfferService::pricingOverlay($material);
         $result = self::mapLookupMaterial($material, $offerOverlay);
         self::writeBarcodeCache($cacheKey, $result);
@@ -360,9 +361,52 @@ final class PriceCheckerService
             $result['originalBoxSalePrice_SP'] = $originalUnitSp * $perBox;
             $result['originalBoxSalePrice_Usd'] = $originalUnitUsd * $perBox;
             $result['discountPercent'] = self::discountPercent($originalUnitSp, $unitSp, $originalUnitUsd, $unitUsd);
+            if ($originalUnitSp > $unitSp + 0.01) {
+                $result['savings_SP'] = $originalUnitSp - $unitSp;
+                $result['savingsBox_SP'] = ($originalUnitSp - $unitSp) * $perBox;
+            }
+            if ($originalUnitUsd > $unitUsd + 0.0001) {
+                $result['savings_Usd'] = $originalUnitUsd - $unitUsd;
+                $result['savingsBox_Usd'] = ($originalUnitUsd - $unitUsd) * $perBox;
+            }
         }
 
         return $result;
+    }
+
+    /** @param array<string, mixed> $material @return array<string, mixed> */
+    private static function normalizeMaterialRow(array $material): array
+    {
+        $guid = trim((string) (
+            $material['materialGuid'] ?? $material['MaterialGuid'] ?? $material['guid'] ?? $material['Guid'] ?? ''
+        ));
+        if ($guid !== '') {
+            $material['materialGuid'] = $guid;
+        }
+
+        return $material;
+    }
+
+    /** @param array<string, mixed> $material @return array<string, mixed> */
+    private static function hydrateMaterialForLookup(array $material): array
+    {
+        $material = self::normalizeMaterialRow($material);
+        $guid = trim((string) ($material['materialGuid'] ?? ''));
+        if ($guid === '' || !preg_match('/^[0-9a-f-]{36}$/i', $guid)) {
+            return $material;
+        }
+
+        try {
+            $fetched = MaterialBatchService::fetchByGuids([$guid], 12);
+            $full = $fetched[$guid] ?? null;
+            if (is_array($full)) {
+                return self::normalizeMaterialRow(array_merge($material, $full));
+            }
+        } catch (\Throwable) {
+            // keep search row
+        }
+
+        return $material;
     }
 
     private static function discountPercent(float $originalSp, float $currentSp, float $originalUsd, float $currentUsd): int
@@ -380,7 +424,7 @@ final class PriceCheckerService
 
     private static function barcodeCacheKey(string $barcode): string
     {
-        return hash('sha256', strtolower(trim($barcode)));
+        return hash('sha256', 'v4|' . strtolower(trim($barcode)));
     }
 
     /** @return array<string, mixed>|null */
