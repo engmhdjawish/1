@@ -115,6 +115,53 @@
     return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
   }
 
+  function setOldPrice(el, value, formatter) {
+    if (!el) return;
+    if (value == null || !Number.isFinite(value) || value <= 0) {
+      el.classList.add('hidden');
+      el.textContent = '';
+      return;
+    }
+    el.textContent = formatter(value);
+    el.classList.remove('hidden');
+  }
+
+  function setOfferChrome(m, perBox) {
+    const hasOffer = !!m.hasOffer;
+    const strip = $('product-offer-strip');
+    strip?.classList.toggle('hidden', !hasOffer);
+    $('price-card-sp')?.classList.toggle('pc-price-card--offer', hasOffer);
+    $('price-card-usd')?.classList.toggle('pc-price-card--offer', hasOffer);
+
+    if (!hasOffer) {
+      ['price-sp-unit-old', 'price-sp-box-old', 'price-usd-unit-old', 'price-usd-box-old'].forEach((id) => {
+        const el = $(id);
+        if (el) {
+          el.classList.add('hidden');
+          el.textContent = '';
+        }
+      });
+      return;
+    }
+
+    const badgeEl = $('product-offer-badge');
+    if (badgeEl) badgeEl.textContent = m.offerBadge || 'عرض خاص';
+    const titleEl = $('product-offer-title');
+    if (titleEl) titleEl.textContent = m.offerTitle || '';
+
+    const unitSp = Number(m.salePrice_SP || 0);
+    const unitUsd = Number(m.salePrice_Usd || 0);
+    const oldUnitSp = Number(m.originalSalePrice_SP || 0);
+    const oldUnitUsd = Number(m.originalSalePrice_Usd || 0);
+    const oldBoxSp = Number(m.originalBoxSalePrice_SP || oldUnitSp * perBox);
+    const oldBoxUsd = Number(m.originalBoxSalePrice_Usd || oldUnitUsd * perBox);
+
+    setOldPrice($('price-sp-unit-old'), oldUnitSp > unitSp + 0.01 ? oldUnitSp : null, (v) => formatNumber(v, 0) + ' ل.س');
+    setOldPrice($('price-sp-box-old'), oldBoxSp > unitSp * perBox + 0.01 ? oldBoxSp : null, (v) => formatNumber(v, 0) + ' ل.س');
+    setOldPrice($('price-usd-unit-old'), oldUnitUsd > unitUsd + 0.0001 ? oldUnitUsd : null, (v) => '$' + formatNumber(v, 2));
+    setOldPrice($('price-usd-box-old'), oldBoxUsd > unitUsd * perBox + 0.0001 ? oldBoxUsd : null, (v) => '$' + formatNumber(v, 2));
+  }
+
   function updateProductUI(m, barcode) {
     const qty = Number(m.availableQuantity ?? m.availableQunatity ?? 0);
     const perBox = Number(m.pcsPerBox || 1);
@@ -137,6 +184,7 @@
     if (usdUnit) usdUnit.textContent = '$' + formatNumber(unitUsd, 2);
     const usdBox = $('price-usd-box');
     if (usdBox) usdBox.textContent = '$' + formatNumber(unitUsd * perBox, 2);
+    setOfferChrome(m, perBox);
     const pcsBox = $('pcs-per-box');
     if (pcsBox) pcsBox.textContent = perBox + ' قطعة';
     const qtyEl = $('available-qty');
@@ -215,6 +263,9 @@
       const el = $(id);
       if (el) el.textContent = '…';
     });
+    $('product-offer-strip')?.classList.add('hidden');
+    $('price-card-sp')?.classList.remove('pc-price-card--offer');
+    $('price-card-usd')?.classList.remove('pc-price-card--offer');
     startProductCountdown(DISPLAY_SECONDS + 3);
   }
 

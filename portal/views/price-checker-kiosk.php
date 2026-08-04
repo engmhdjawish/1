@@ -162,28 +162,40 @@ declare(strict_types=1);
         <div id="product-progress-bar" class="h-full bg-primary" style="width:100%"></div>
       </div>
     </header>
+    <div id="product-offer-strip" class="pc-offer-strip hidden" aria-live="polite">
+      <span id="product-offer-badge" class="pc-offer-badge">عرض خاص</span>
+      <span id="product-offer-title" class="pc-offer-title"></span>
+    </div>
     <main class="flex-1 p-4 md:p-8 flex flex-col gap-4 md:gap-8 overflow-hidden bg-[#f0f2f5] min-h-0">
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8 flex-1 min-h-0">
-        <div class="bg-white rounded-3xl shadow-xl border flex flex-col overflow-hidden">
+        <div id="price-card-sp" class="bg-white rounded-3xl shadow-xl border flex flex-col overflow-hidden">
           <div class="flex-1 flex flex-col items-center justify-center p-6 bg-gradient-to-br from-primary/5 to-transparent relative min-h-[180px]">
             <span class="absolute top-4 right-6 bg-primary text-white px-5 py-1.5 font-extrabold text-lg rounded-full">SYP</span>
             <p class="text-zinc-500 text-xl font-bold mb-2">سعر القطعة</p>
+            <p id="price-sp-unit-old" class="pc-price-old hidden"></p>
             <div id="price-sp-unit" class="text-primary text-5xl md:text-7xl font-extrabold tabular-nums">0</div>
           </div>
-          <div class="bg-zinc-900 p-5 flex justify-between items-center">
+          <div class="bg-zinc-900 p-5 flex justify-between items-center gap-3">
             <span class="text-zinc-400 text-xl font-bold">سعر الطرد</span>
-            <div id="price-sp-box" class="text-white text-3xl md:text-5xl font-extrabold tabular-nums">0</div>
+            <div class="text-left">
+              <p id="price-sp-box-old" class="pc-price-old pc-price-old--on-dark hidden"></p>
+              <div id="price-sp-box" class="text-white text-3xl md:text-5xl font-extrabold tabular-nums">0</div>
+            </div>
           </div>
         </div>
-        <div class="bg-white rounded-3xl shadow-xl border flex flex-col overflow-hidden">
+        <div id="price-card-usd" class="bg-white rounded-3xl shadow-xl border flex flex-col overflow-hidden">
           <div class="flex-1 flex flex-col items-center justify-center p-6 bg-gradient-to-br from-tertiary/5 to-transparent relative min-h-[180px]">
             <span class="absolute top-4 right-6 bg-tertiary text-white px-5 py-1.5 font-extrabold text-lg rounded-full">USD</span>
             <p class="text-zinc-500 text-xl font-bold mb-2">سعر القطعة</p>
+            <p id="price-usd-unit-old" class="pc-price-old hidden"></p>
             <div id="price-usd-unit" class="text-tertiary text-5xl md:text-7xl font-extrabold tabular-nums">$0.00</div>
           </div>
-          <div class="bg-zinc-900 p-5 flex justify-between items-center">
+          <div class="bg-zinc-900 p-5 flex justify-between items-center gap-3">
             <span class="text-zinc-500 text-xl font-bold">سعر الطرد</span>
-            <div id="price-usd-box" class="text-white text-3xl md:text-5xl font-extrabold tabular-nums">$0.00</div>
+            <div class="text-left">
+              <p id="price-usd-box-old" class="pc-price-old pc-price-old--on-dark hidden"></p>
+              <div id="price-usd-box" class="text-white text-3xl md:text-5xl font-extrabold tabular-nums">$0.00</div>
+            </div>
           </div>
         </div>
       </div>

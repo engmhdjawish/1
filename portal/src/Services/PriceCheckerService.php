@@ -269,7 +269,8 @@ final class PriceCheckerService
             return null;
         }
 
-        $result = self::mapLookupMaterial($material);
+        $offerOverlay = SpecialOfferService::pricingOverlay($material);
+        $result = self::mapLookupMaterial($material, $offerOverlay);
         self::writeBarcodeCache($cacheKey, $result);
 
         return $result;
@@ -322,22 +323,45 @@ final class PriceCheckerService
         }
     }
 
-    /** @param array<string, mixed> $material @return array<string, mixed> */
-    private static function mapLookupMaterial(array $material): array
+    /** @param array<string, mixed> $material @param array<string, mixed> $offerOverlay @return array<string, mixed> */
+    private static function mapLookupMaterial(array $material, array $offerOverlay = []): array
     {
         $perBox = (float) ($material['packageConversionFactor'] ?? 0);
         if ($perBox <= 0) {
             $perBox = 1.0;
         }
 
-        return [
+        $hasOffer = !empty($offerOverlay['has_offer']);
+        $unitSp = (float) ($material['unitSalePriceSyp'] ?? 0);
+        $unitUsd = (float) ($material['unitSalePriceUsd'] ?? 0);
+        if ($hasOffer) {
+            $unitSp = (float) ($offerOverlay['effective_unit_sale_price_sp'] ?? $unitSp);
+            $unitUsd = (float) ($offerOverlay['effective_unit_sale_price_usd'] ?? $unitUsd);
+        }
+
+        $result = [
             'name' => (string) ($material['name'] ?? ''),
-            'salePrice_SP' => (float) ($material['unitSalePriceSyp'] ?? 0),
-            'salePrice_Usd' => (float) ($material['unitSalePriceUsd'] ?? 0),
+            'salePrice_SP' => $unitSp,
+            'salePrice_Usd' => $unitUsd,
             'pcsPerBox' => $perBox,
             'availableQuantity' => (float) ($material['warehouseQuantity'] ?? 0),
             'availableQunatity' => (float) ($material['warehouseQuantity'] ?? 0),
+            'hasOffer' => $hasOffer,
         ];
+
+        if ($hasOffer) {
+            $offer = is_array($offerOverlay['offer'] ?? null) ? $offerOverlay['offer'] : [];
+            $originalUnitSp = (float) ($offerOverlay['original_unit_sale_price_sp'] ?? $unitSp);
+            $originalUnitUsd = (float) ($offerOverlay['original_unit_sale_price_usd'] ?? $unitUsd);
+            $result['offerBadge'] = trim((string) ($offerOverlay['offer_badge'] ?? '')) ?: 'عرض خاص';
+            $result['offerTitle'] = trim((string) ($offer['title_ar'] ?? ''));
+            $result['originalSalePrice_SP'] = $originalUnitSp;
+            $result['originalSalePrice_Usd'] = $originalUnitUsd;
+            $result['originalBoxSalePrice_SP'] = $originalUnitSp * $perBox;
+            $result['originalBoxSalePrice_Usd'] = $originalUnitUsd * $perBox;
+        }
+
+        return $result;
     }
 
     private static function barcodeCacheKey(string $barcode): string
