@@ -115,39 +115,16 @@
     return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
   }
 
-  function setComparePrice(wrapId, valueId, tagId, value, formatter, show) {
-    const wrap = $(wrapId);
-    const el = $(valueId);
-    const tag = tagId ? $(tagId) : null;
-    if (!wrap || !el) return;
-    if (!show) {
-      wrap.classList.add('hidden');
-      el.textContent = '';
-      tag?.classList.add('hidden');
-      return;
-    }
-    el.textContent = formatter(value);
-    wrap.classList.remove('hidden');
-    tag?.classList.remove('hidden');
-  }
-
   function setOfferChrome(m, perBox) {
     const hasOffer = !!m.hasOffer;
     const productScreen = $('state-product');
     productScreen?.classList.toggle('pc-product--offer', hasOffer);
     $('product-header')?.classList.toggle('pc-product-header--offer', hasOffer);
     $('product-main')?.classList.toggle('pc-product-main--offer', hasOffer);
-
-    const hero = $('product-offer-hero');
-    hero?.classList.toggle('hidden', !hasOffer);
+    $('product-prices-offer')?.classList.toggle('hidden', !hasOffer);
+    $('product-prices-normal')?.classList.toggle('hidden', hasOffer);
 
     if (!hasOffer) {
-      [
-        ['price-sp-unit-old-wrap', 'price-sp-unit-old', 'price-sp-unit-tag'],
-        ['price-sp-box-old-wrap', 'price-sp-box-old', 'price-sp-box-tag'],
-        ['price-usd-unit-old-wrap', 'price-usd-unit-old', 'price-usd-unit-tag'],
-        ['price-usd-box-old-wrap', 'price-usd-box-old', 'price-usd-box-tag'],
-      ].forEach(([wrapId, valueId, tagId]) => setComparePrice(wrapId, valueId, tagId, 0, String, false));
       $('product-offer-discount')?.classList.add('hidden');
       return;
     }
@@ -157,54 +134,54 @@
     const titleEl = $('product-offer-title');
     if (titleEl) titleEl.textContent = m.offerTitle || '';
 
-    const discountEl = $('product-offer-discount');
-    const discountValue = Number(m.discountPercent || 0);
-    if (discountEl) {
-      const showDiscount = discountValue > 0;
-      discountEl.classList.toggle('hidden', !showDiscount);
-      const valueNode = discountEl.querySelector('.pc-offer-discount__value');
-      if (valueNode) valueNode.textContent = showDiscount ? ('-' + discountValue + '%') : '0%';
-    }
-
     const unitSp = Number(m.salePrice_SP || 0);
     const unitUsd = Number(m.salePrice_Usd || 0);
     const oldUnitSp = Number(m.originalSalePrice_SP || 0);
     const oldUnitUsd = Number(m.originalSalePrice_Usd || 0);
+    const boxSp = unitSp * perBox;
+    const boxUsd = unitUsd * perBox;
     const oldBoxSp = Number(m.originalBoxSalePrice_SP || oldUnitSp * perBox);
     const oldBoxUsd = Number(m.originalBoxSalePrice_Usd || oldUnitUsd * perBox);
 
-    setComparePrice(
-      'price-sp-unit-old-wrap',
-      'price-sp-unit-old',
-      'price-sp-unit-tag',
-      oldUnitSp,
-      (v) => formatNumber(v, 0) + ' ل.س',
-      oldUnitSp > unitSp + 0.01
-    );
-    setComparePrice(
-      'price-sp-box-old-wrap',
-      'price-sp-box-old',
-      'price-sp-box-tag',
-      oldBoxSp,
-      (v) => formatNumber(v, 0) + ' ل.س',
-      oldBoxSp > unitSp * perBox + 0.01
-    );
-    setComparePrice(
-      'price-usd-unit-old-wrap',
-      'price-usd-unit-old',
-      'price-usd-unit-tag',
-      oldUnitUsd,
-      (v) => '$' + formatNumber(v, 2),
-      oldUnitUsd > unitUsd + 0.0001
-    );
-    setComparePrice(
-      'price-usd-box-old-wrap',
-      'price-usd-box-old',
-      'price-usd-box-tag',
-      oldBoxUsd,
-      (v) => '$' + formatNumber(v, 2),
-      oldBoxUsd > unitUsd * perBox + 0.0001
-    );
+    let discountValue = Number(m.discountPercent || 0);
+    if (discountValue <= 0) {
+      const candidates = [];
+      if (oldUnitSp > unitSp + 0.01 && oldUnitSp > 0) candidates.push(Math.round((1 - unitSp / oldUnitSp) * 100));
+      if (oldUnitUsd > unitUsd + 0.0001 && oldUnitUsd > 0) candidates.push(Math.round((1 - unitUsd / oldUnitUsd) * 100));
+      discountValue = candidates.length ? Math.max(...candidates) : 0;
+    }
+
+    const discountWrap = $('product-offer-discount');
+    if (discountWrap) {
+      const showDiscount = discountValue > 0;
+      discountWrap.classList.toggle('hidden', !showDiscount);
+      const valueNode = discountWrap.querySelector('.pc-offer-board__discount-value');
+      if (valueNode) valueNode.textContent = showDiscount ? ('-' + discountValue + '%') : '0%';
+    }
+
+    const showOldSp = oldUnitSp > unitSp + 0.01;
+    $('offer-sp-unit-old-col')?.classList.toggle('hidden', !showOldSp);
+    $('offer-sp-unit-old') && ($('offer-sp-unit-old').textContent = formatNumber(oldUnitSp, 0));
+    $('offer-sp-unit-new') && ($('offer-sp-unit-new').textContent = formatNumber(unitSp, 0));
+
+    const showBoxSp = oldBoxSp > boxSp + 0.01;
+    $('offer-sp-box-row')?.classList.toggle('hidden', !showBoxSp);
+    $('offer-sp-box-old') && ($('offer-sp-box-old').textContent = formatNumber(oldBoxSp, 0) + ' ل.س');
+    $('offer-sp-box-new') && ($('offer-sp-box-new').textContent = formatNumber(boxSp, 0) + ' ل.س');
+
+    const hasUsd = unitUsd > 0 || oldUnitUsd > 0;
+    $('offer-usd-block')?.classList.toggle('hidden', !hasUsd);
+    if (hasUsd) {
+      const showOldUsd = oldUnitUsd > unitUsd + 0.0001;
+      $('offer-usd-unit-old-wrap')?.classList.toggle('hidden', !showOldUsd);
+      $('offer-usd-unit-old') && ($('offer-usd-unit-old').textContent = '$' + formatNumber(oldUnitUsd, 2));
+      $('offer-usd-unit-new') && ($('offer-usd-unit-new').textContent = '$' + formatNumber(unitUsd, 2));
+
+      const showBoxUsd = oldBoxUsd > boxUsd + 0.0001;
+      $('offer-usd-box-row')?.classList.toggle('hidden', !showBoxUsd);
+      $('offer-usd-box-old') && ($('offer-usd-box-old').textContent = '$' + formatNumber(oldBoxUsd, 2));
+      $('offer-usd-box-new') && ($('offer-usd-box-new').textContent = '$' + formatNumber(boxUsd, 2));
+    }
   }
 
   function updateProductUI(m, barcode) {
@@ -308,7 +285,8 @@
       const el = $(id);
       if (el) el.textContent = '…';
     });
-    $('product-offer-hero')?.classList.add('hidden');
+    $('product-prices-offer')?.classList.add('hidden');
+    $('product-prices-normal')?.classList.remove('hidden');
     $('state-product')?.classList.remove('pc-product--offer');
     startProductCountdown(DISPLAY_SECONDS + 3);
   }

@@ -162,22 +162,63 @@ declare(strict_types=1);
         <div id="product-progress-bar" class="h-full bg-primary" style="width:100%"></div>
       </div>
     </header>
-    <div id="product-offer-hero" class="pc-offer-hero hidden" aria-live="polite">
-      <div class="pc-offer-hero__pattern" aria-hidden="true"></div>
-      <div class="pc-offer-hero__content">
-        <div id="product-offer-discount" class="pc-offer-discount hidden">
-          <span class="pc-offer-discount__value">0%</span>
-          <span class="pc-offer-discount__label">حسم</span>
+    <main id="product-main" class="pc-product-main flex-1 p-4 md:p-8 flex flex-col gap-4 md:gap-6 overflow-hidden bg-[#f0f2f5] min-h-0">
+      <div id="product-prices-offer" class="pc-offer-board hidden" aria-live="polite">
+        <div class="pc-offer-board__top">
+          <div id="product-offer-discount" class="pc-offer-board__discount hidden">
+            <span class="pc-offer-board__discount-value">-0%</span>
+            <span class="pc-offer-board__discount-label">حسم</span>
+          </div>
+          <div class="pc-offer-board__headlines">
+            <p class="pc-offer-board__eyebrow">عرض خاص على هذا المنتج</p>
+            <p id="product-offer-badge" class="pc-offer-board__badge">عرض خاص</p>
+            <p id="product-offer-title" class="pc-offer-board__title"></p>
+          </div>
         </div>
-        <div class="pc-offer-hero__copy">
-          <p class="pc-offer-hero__eyebrow">عرض خاص — لفترة محدودة</p>
-          <p id="product-offer-badge" class="pc-offer-hero__badge">عرض خاص</p>
-          <p id="product-offer-title" class="pc-offer-hero__title"></p>
+
+        <div class="pc-offer-board__syp">
+          <div id="offer-sp-unit-old-col" class="pc-offer-board__col pc-offer-board__col--before hidden">
+            <span class="pc-offer-board__label">السعر قبل الحسم</span>
+            <p id="offer-sp-unit-old" class="pc-offer-board__price-old">—</p>
+            <span class="pc-offer-board__hint">ل.س للقطعة</span>
+          </div>
+          <div class="pc-offer-board__arrow" aria-hidden="true">←</div>
+          <div class="pc-offer-board__col pc-offer-board__col--after">
+            <span class="pc-offer-board__label pc-offer-board__label--hot">سعر العرض الآن</span>
+            <p id="offer-sp-unit-new" class="pc-offer-board__price-new">0</p>
+            <span class="pc-offer-board__hint">ل.س للقطعة</span>
+          </div>
+        </div>
+
+        <div id="offer-sp-box-row" class="pc-offer-board__row hidden">
+          <span class="pc-offer-board__row-label">سعر الطرد</span>
+          <span id="offer-sp-box-old" class="pc-offer-board__row-old">—</span>
+          <span class="pc-offer-board__row-arrow" aria-hidden="true">←</span>
+          <span id="offer-sp-box-new" class="pc-offer-board__row-new">—</span>
+        </div>
+
+        <div id="offer-usd-block" class="pc-offer-board__usd hidden">
+          <div class="pc-offer-board__usd-head">السعر بالدولار</div>
+          <div class="pc-offer-board__usd-grid">
+            <div id="offer-usd-unit-old-wrap" class="pc-offer-board__usd-col hidden">
+              <span class="pc-offer-board__label">قبل</span>
+              <p id="offer-usd-unit-old" class="pc-offer-board__usd-old">—</p>
+            </div>
+            <div class="pc-offer-board__usd-col">
+              <span class="pc-offer-board__label pc-offer-board__label--hot">العرض</span>
+              <p id="offer-usd-unit-new" class="pc-offer-board__usd-new">$0</p>
+            </div>
+          </div>
+          <div id="offer-usd-box-row" class="pc-offer-board__usd-box hidden">
+            <span>الطرد:</span>
+            <span id="offer-usd-box-old" class="pc-offer-board__row-old">—</span>
+            <span>←</span>
+            <span id="offer-usd-box-new" class="pc-offer-board__row-new">—</span>
+          </div>
         </div>
       </div>
-    </div>
-    <main id="product-main" class="pc-product-main flex-1 p-4 md:p-8 flex flex-col gap-4 md:gap-8 overflow-hidden bg-[#f0f2f5] min-h-0">
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8 flex-1 min-h-0">
+
+      <div id="product-prices-normal" class="pc-prices-normal grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8 flex-1 min-h-0">
         <div id="price-card-sp" class="pc-price-card pc-price-card--syp bg-white rounded-3xl shadow-xl border flex flex-col overflow-hidden">
           <div class="pc-price-card__body flex-1 flex flex-col items-center justify-center p-5 md:p-6 bg-gradient-to-br from-primary/5 to-transparent relative min-h-[180px]">
             <span class="pc-price-card__currency absolute top-4 right-6 bg-primary text-white px-5 py-1.5 font-extrabold text-lg rounded-full">SYP</span>
@@ -237,7 +278,8 @@ declare(strict_types=1);
           </div>
         </div>
       </div>
-      <div class="grid grid-cols-2 gap-3 md:gap-6 shrink-0">
+
+      <div id="product-meta-row" class="grid grid-cols-2 gap-3 md:gap-6 shrink-0">
         <div class="bg-white rounded-2xl shadow-lg border flex items-center px-4 md:px-8 py-4 gap-4">
           <div><p class="text-zinc-400 text-base md:text-xl font-bold">تعبئة الطرد</p><p id="pcs-per-box" class="text-2xl md:text-4xl font-extrabold">0</p></div>
         </div>
