@@ -501,7 +501,9 @@ final class SpecialOfferService
             ])));
         }
 
-        $guid = trim((string) ($material['materialGuid'] ?? $material['MaterialGuid'] ?? ''));
+        $guid = trim((string) (
+            $material['materialGuid'] ?? $material['MaterialGuid'] ?? $material['guid'] ?? $material['Guid'] ?? ''
+        ));
         if ($offer === null && $offerSlug !== null && trim($offerSlug) !== '') {
             $offer = self::activeOfferBySlug($offerSlug);
             if ($offer !== null && !self::offerIncludesMaterial($offer, $guid, $material)) {
@@ -741,7 +743,14 @@ final class SpecialOfferService
     public static function offerIncludesMaterial(array $offer, string $guid, array $material): bool
     {
         if ((string) ($offer['selection_mode'] ?? '') === 'manual') {
-            return in_array($guid, $offer['material_guids'] ?? [], true);
+            $guidLower = strtolower($guid);
+            foreach ($offer['material_guids'] ?? [] as $offerGuid) {
+                if (strtolower(trim((string) $offerGuid)) === $guidLower) {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         return self::materialMatchesRules($material, is_array($offer['filter_rules'] ?? null) ? $offer['filter_rules'] : []);
