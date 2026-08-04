@@ -115,32 +115,40 @@
     return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
   }
 
-  function setOldPrice(el, value, formatter) {
-    if (!el) return;
-    if (value == null || !Number.isFinite(value) || value <= 0) {
-      el.classList.add('hidden');
+  function setComparePrice(wrapId, valueId, tagId, value, formatter, show) {
+    const wrap = $(wrapId);
+    const el = $(valueId);
+    const tag = tagId ? $(tagId) : null;
+    if (!wrap || !el) return;
+    if (!show) {
+      wrap.classList.add('hidden');
       el.textContent = '';
+      tag?.classList.add('hidden');
       return;
     }
     el.textContent = formatter(value);
-    el.classList.remove('hidden');
+    wrap.classList.remove('hidden');
+    tag?.classList.remove('hidden');
   }
 
   function setOfferChrome(m, perBox) {
     const hasOffer = !!m.hasOffer;
-    const strip = $('product-offer-strip');
-    strip?.classList.toggle('hidden', !hasOffer);
-    $('price-card-sp')?.classList.toggle('pc-price-card--offer', hasOffer);
-    $('price-card-usd')?.classList.toggle('pc-price-card--offer', hasOffer);
+    const productScreen = $('state-product');
+    productScreen?.classList.toggle('pc-product--offer', hasOffer);
+    $('product-header')?.classList.toggle('pc-product-header--offer', hasOffer);
+    $('product-main')?.classList.toggle('pc-product-main--offer', hasOffer);
+
+    const hero = $('product-offer-hero');
+    hero?.classList.toggle('hidden', !hasOffer);
 
     if (!hasOffer) {
-      ['price-sp-unit-old', 'price-sp-box-old', 'price-usd-unit-old', 'price-usd-box-old'].forEach((id) => {
-        const el = $(id);
-        if (el) {
-          el.classList.add('hidden');
-          el.textContent = '';
-        }
-      });
+      [
+        ['price-sp-unit-old-wrap', 'price-sp-unit-old', 'price-sp-unit-tag'],
+        ['price-sp-box-old-wrap', 'price-sp-box-old', 'price-sp-box-tag'],
+        ['price-usd-unit-old-wrap', 'price-usd-unit-old', 'price-usd-unit-tag'],
+        ['price-usd-box-old-wrap', 'price-usd-box-old', 'price-usd-box-tag'],
+      ].forEach(([wrapId, valueId, tagId]) => setComparePrice(wrapId, valueId, tagId, 0, String, false));
+      $('product-offer-discount')?.classList.add('hidden');
       return;
     }
 
@@ -149,6 +157,15 @@
     const titleEl = $('product-offer-title');
     if (titleEl) titleEl.textContent = m.offerTitle || '';
 
+    const discountEl = $('product-offer-discount');
+    const discountValue = Number(m.discountPercent || 0);
+    if (discountEl) {
+      const showDiscount = discountValue > 0;
+      discountEl.classList.toggle('hidden', !showDiscount);
+      const valueNode = discountEl.querySelector('.pc-offer-discount__value');
+      if (valueNode) valueNode.textContent = showDiscount ? ('-' + discountValue + '%') : '0%';
+    }
+
     const unitSp = Number(m.salePrice_SP || 0);
     const unitUsd = Number(m.salePrice_Usd || 0);
     const oldUnitSp = Number(m.originalSalePrice_SP || 0);
@@ -156,10 +173,38 @@
     const oldBoxSp = Number(m.originalBoxSalePrice_SP || oldUnitSp * perBox);
     const oldBoxUsd = Number(m.originalBoxSalePrice_Usd || oldUnitUsd * perBox);
 
-    setOldPrice($('price-sp-unit-old'), oldUnitSp > unitSp + 0.01 ? oldUnitSp : null, (v) => formatNumber(v, 0) + ' ل.س');
-    setOldPrice($('price-sp-box-old'), oldBoxSp > unitSp * perBox + 0.01 ? oldBoxSp : null, (v) => formatNumber(v, 0) + ' ل.س');
-    setOldPrice($('price-usd-unit-old'), oldUnitUsd > unitUsd + 0.0001 ? oldUnitUsd : null, (v) => '$' + formatNumber(v, 2));
-    setOldPrice($('price-usd-box-old'), oldBoxUsd > unitUsd * perBox + 0.0001 ? oldBoxUsd : null, (v) => '$' + formatNumber(v, 2));
+    setComparePrice(
+      'price-sp-unit-old-wrap',
+      'price-sp-unit-old',
+      'price-sp-unit-tag',
+      oldUnitSp,
+      (v) => formatNumber(v, 0) + ' ل.س',
+      oldUnitSp > unitSp + 0.01
+    );
+    setComparePrice(
+      'price-sp-box-old-wrap',
+      'price-sp-box-old',
+      'price-sp-box-tag',
+      oldBoxSp,
+      (v) => formatNumber(v, 0) + ' ل.س',
+      oldBoxSp > unitSp * perBox + 0.01
+    );
+    setComparePrice(
+      'price-usd-unit-old-wrap',
+      'price-usd-unit-old',
+      'price-usd-unit-tag',
+      oldUnitUsd,
+      (v) => '$' + formatNumber(v, 2),
+      oldUnitUsd > unitUsd + 0.0001
+    );
+    setComparePrice(
+      'price-usd-box-old-wrap',
+      'price-usd-box-old',
+      'price-usd-box-tag',
+      oldBoxUsd,
+      (v) => '$' + formatNumber(v, 2),
+      oldBoxUsd > unitUsd * perBox + 0.0001
+    );
   }
 
   function updateProductUI(m, barcode) {
@@ -263,9 +308,8 @@
       const el = $(id);
       if (el) el.textContent = '…';
     });
-    $('product-offer-strip')?.classList.add('hidden');
-    $('price-card-sp')?.classList.remove('pc-price-card--offer');
-    $('price-card-usd')?.classList.remove('pc-price-card--offer');
+    $('product-offer-hero')?.classList.add('hidden');
+    $('state-product')?.classList.remove('pc-product--offer');
     startProductCountdown(DISPLAY_SECONDS + 3);
   }
 

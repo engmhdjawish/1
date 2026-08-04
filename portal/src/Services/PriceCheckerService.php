@@ -359,9 +359,23 @@ final class PriceCheckerService
             $result['originalSalePrice_Usd'] = $originalUnitUsd;
             $result['originalBoxSalePrice_SP'] = $originalUnitSp * $perBox;
             $result['originalBoxSalePrice_Usd'] = $originalUnitUsd * $perBox;
+            $result['discountPercent'] = self::discountPercent($originalUnitSp, $unitSp, $originalUnitUsd, $unitUsd);
         }
 
         return $result;
+    }
+
+    private static function discountPercent(float $originalSp, float $currentSp, float $originalUsd, float $currentUsd): int
+    {
+        $percents = [];
+        if ($originalSp > $currentSp + 0.01 && $originalSp > 0) {
+            $percents[] = (int) round((1 - ($currentSp / $originalSp)) * 100);
+        }
+        if ($originalUsd > $currentUsd + 0.0001 && $originalUsd > 0) {
+            $percents[] = (int) round((1 - ($currentUsd / $originalUsd)) * 100);
+        }
+
+        return $percents !== [] ? max($percents) : 0;
     }
 
     private static function barcodeCacheKey(string $barcode): string

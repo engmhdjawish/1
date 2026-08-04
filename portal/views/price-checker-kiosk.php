@@ -148,7 +148,7 @@ declare(strict_types=1);
   </section>
 
   <section id="state-product" class="state-screen hidden-state is-hidden bg-surface h-screen max-h-screen flex flex-col overflow-hidden">
-    <header class="bg-white border-b-4 border-primary/10 flex flex-row-reverse justify-between items-center px-6 md:px-10 h-24 md:h-28 relative shadow-md shrink-0">
+    <header id="product-header" class="pc-product-header bg-white border-b-4 border-primary/10 flex flex-row-reverse justify-between items-center px-6 md:px-10 h-24 md:h-28 relative shadow-md shrink-0">
       <div class="shrink-0 bg-white p-1.5 rounded-xl border shadow-sm">
         <?php if ($logoUrl !== ''): ?>
           <img src="<?= h($logoUrl) ?>" alt="<?= h($siteName) ?>" class="h-14 w-auto max-w-[120px] object-contain" decoding="async" onerror="this.style.display='none'" />
@@ -162,39 +162,77 @@ declare(strict_types=1);
         <div id="product-progress-bar" class="h-full bg-primary" style="width:100%"></div>
       </div>
     </header>
-    <div id="product-offer-strip" class="pc-offer-strip hidden" aria-live="polite">
-      <span id="product-offer-badge" class="pc-offer-badge">عرض خاص</span>
-      <span id="product-offer-title" class="pc-offer-title"></span>
+    <div id="product-offer-hero" class="pc-offer-hero hidden" aria-live="polite">
+      <div class="pc-offer-hero__pattern" aria-hidden="true"></div>
+      <div class="pc-offer-hero__content">
+        <div id="product-offer-discount" class="pc-offer-discount hidden">
+          <span class="pc-offer-discount__value">0%</span>
+          <span class="pc-offer-discount__label">حسم</span>
+        </div>
+        <div class="pc-offer-hero__copy">
+          <p class="pc-offer-hero__eyebrow">عرض خاص — لفترة محدودة</p>
+          <p id="product-offer-badge" class="pc-offer-hero__badge">عرض خاص</p>
+          <p id="product-offer-title" class="pc-offer-hero__title"></p>
+        </div>
+      </div>
     </div>
-    <main class="flex-1 p-4 md:p-8 flex flex-col gap-4 md:gap-8 overflow-hidden bg-[#f0f2f5] min-h-0">
+    <main id="product-main" class="pc-product-main flex-1 p-4 md:p-8 flex flex-col gap-4 md:gap-8 overflow-hidden bg-[#f0f2f5] min-h-0">
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8 flex-1 min-h-0">
-        <div id="price-card-sp" class="bg-white rounded-3xl shadow-xl border flex flex-col overflow-hidden">
-          <div class="flex-1 flex flex-col items-center justify-center p-6 bg-gradient-to-br from-primary/5 to-transparent relative min-h-[180px]">
-            <span class="absolute top-4 right-6 bg-primary text-white px-5 py-1.5 font-extrabold text-lg rounded-full">SYP</span>
-            <p class="text-zinc-500 text-xl font-bold mb-2">سعر القطعة</p>
-            <p id="price-sp-unit-old" class="pc-price-old hidden"></p>
-            <div id="price-sp-unit" class="text-primary text-5xl md:text-7xl font-extrabold tabular-nums">0</div>
+        <div id="price-card-sp" class="pc-price-card pc-price-card--syp bg-white rounded-3xl shadow-xl border flex flex-col overflow-hidden">
+          <div class="pc-price-card__body flex-1 flex flex-col items-center justify-center p-5 md:p-6 bg-gradient-to-br from-primary/5 to-transparent relative min-h-[180px]">
+            <span class="pc-price-card__currency absolute top-4 right-6 bg-primary text-white px-5 py-1.5 font-extrabold text-lg rounded-full">SYP</span>
+            <p class="text-zinc-500 text-lg md:text-xl font-bold mb-3">سعر القطعة</p>
+            <div class="pc-price-compare w-full max-w-md">
+              <div id="price-sp-unit-old-wrap" class="pc-price-compare__before hidden">
+                <span class="pc-price-compare__tag">قبل الحسم</span>
+                <p id="price-sp-unit-old" class="pc-price-compare__old"></p>
+              </div>
+              <div class="pc-price-compare__after">
+                <span id="price-sp-unit-tag" class="pc-price-compare__tag pc-price-compare__tag--offer hidden">سعر العرض</span>
+                <div id="price-sp-unit" class="pc-price-compare__new text-primary text-5xl md:text-7xl font-extrabold tabular-nums">0</div>
+              </div>
+            </div>
           </div>
-          <div class="bg-zinc-900 p-5 flex justify-between items-center gap-3">
-            <span class="text-zinc-400 text-xl font-bold">سعر الطرد</span>
-            <div class="text-left">
-              <p id="price-sp-box-old" class="pc-price-old pc-price-old--on-dark hidden"></p>
-              <div id="price-sp-box" class="text-white text-3xl md:text-5xl font-extrabold tabular-nums">0</div>
+          <div class="pc-price-card__footer bg-zinc-900 p-5 flex justify-between items-center gap-4">
+            <span class="text-zinc-400 text-lg md:text-xl font-bold">سعر الطرد</span>
+            <div class="pc-price-compare pc-price-compare--compact pc-price-compare--dark text-left">
+              <div id="price-sp-box-old-wrap" class="pc-price-compare__before hidden">
+                <span class="pc-price-compare__tag">قبل</span>
+                <p id="price-sp-box-old" class="pc-price-compare__old pc-price-compare__old--dark"></p>
+              </div>
+              <div class="pc-price-compare__after">
+                <span id="price-sp-box-tag" class="pc-price-compare__tag pc-price-compare__tag--offer hidden">العرض</span>
+                <div id="price-sp-box" class="pc-price-compare__new text-white text-3xl md:text-5xl font-extrabold tabular-nums">0</div>
+              </div>
             </div>
           </div>
         </div>
-        <div id="price-card-usd" class="bg-white rounded-3xl shadow-xl border flex flex-col overflow-hidden">
-          <div class="flex-1 flex flex-col items-center justify-center p-6 bg-gradient-to-br from-tertiary/5 to-transparent relative min-h-[180px]">
-            <span class="absolute top-4 right-6 bg-tertiary text-white px-5 py-1.5 font-extrabold text-lg rounded-full">USD</span>
-            <p class="text-zinc-500 text-xl font-bold mb-2">سعر القطعة</p>
-            <p id="price-usd-unit-old" class="pc-price-old hidden"></p>
-            <div id="price-usd-unit" class="text-tertiary text-5xl md:text-7xl font-extrabold tabular-nums">$0.00</div>
+        <div id="price-card-usd" class="pc-price-card pc-price-card--usd bg-white rounded-3xl shadow-xl border flex flex-col overflow-hidden">
+          <div class="pc-price-card__body flex-1 flex flex-col items-center justify-center p-5 md:p-6 bg-gradient-to-br from-tertiary/5 to-transparent relative min-h-[180px]">
+            <span class="pc-price-card__currency absolute top-4 right-6 bg-tertiary text-white px-5 py-1.5 font-extrabold text-lg rounded-full">USD</span>
+            <p class="text-zinc-500 text-lg md:text-xl font-bold mb-3">سعر القطعة</p>
+            <div class="pc-price-compare w-full max-w-md">
+              <div id="price-usd-unit-old-wrap" class="pc-price-compare__before hidden">
+                <span class="pc-price-compare__tag">قبل الحسم</span>
+                <p id="price-usd-unit-old" class="pc-price-compare__old"></p>
+              </div>
+              <div class="pc-price-compare__after">
+                <span id="price-usd-unit-tag" class="pc-price-compare__tag pc-price-compare__tag--offer hidden">سعر العرض</span>
+                <div id="price-usd-unit" class="pc-price-compare__new text-tertiary text-5xl md:text-7xl font-extrabold tabular-nums">$0.00</div>
+              </div>
+            </div>
           </div>
-          <div class="bg-zinc-900 p-5 flex justify-between items-center gap-3">
-            <span class="text-zinc-500 text-xl font-bold">سعر الطرد</span>
-            <div class="text-left">
-              <p id="price-usd-box-old" class="pc-price-old pc-price-old--on-dark hidden"></p>
-              <div id="price-usd-box" class="text-white text-3xl md:text-5xl font-extrabold tabular-nums">$0.00</div>
+          <div class="pc-price-card__footer bg-zinc-900 p-5 flex justify-between items-center gap-4">
+            <span class="text-zinc-500 text-lg md:text-xl font-bold">سعر الطرد</span>
+            <div class="pc-price-compare pc-price-compare--compact pc-price-compare--dark text-left">
+              <div id="price-usd-box-old-wrap" class="pc-price-compare__before hidden">
+                <span class="pc-price-compare__tag">قبل</span>
+                <p id="price-usd-box-old" class="pc-price-compare__old pc-price-compare__old--dark"></p>
+              </div>
+              <div class="pc-price-compare__after">
+                <span id="price-usd-box-tag" class="pc-price-compare__tag pc-price-compare__tag--offer hidden">العرض</span>
+                <div id="price-usd-box" class="pc-price-compare__new text-white text-3xl md:text-5xl font-extrabold tabular-nums">$0.00</div>
+              </div>
             </div>
           </div>
         </div>
