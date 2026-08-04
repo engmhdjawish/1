@@ -316,6 +316,76 @@ body { font-family: Manrope, sans-serif; user-select: none; margin: 0; }
   border-color: #e2e2e4 !important;
 }
 
+/* Manual barcode entry — mobile + ?manual=1 */
+.pc-barcode-form {
+  display: none;
+  max-width: 40rem;
+  margin: 0.65rem auto 0;
+  padding: 0 1rem;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.pc-barcode-form__label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #5d3f3c;
+  flex-shrink: 0;
+}
+
+.pc-barcode-form__input {
+  flex: 1 1 10rem;
+  min-width: 0;
+  height: 2.65rem;
+  padding: 0 0.85rem;
+  border: 2px solid rgba(216, 25, 33, 0.22);
+  border-radius: 0.75rem;
+  font-family: ui-monospace, monospace;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+  background: #fff;
+  color: #1a1c1d;
+}
+
+.pc-barcode-form__input:focus {
+  outline: none;
+  border-color: #D81921;
+  box-shadow: 0 0 0 3px rgba(216, 25, 33, 0.12);
+}
+
+.pc-barcode-form__btn {
+  flex-shrink: 0;
+  height: 2.65rem;
+  padding: 0 1rem;
+  border: none;
+  border-radius: 0.75rem;
+  background: #D81921;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pc-barcode-form__btn:active {
+  transform: scale(0.98);
+}
+
+@media (max-width: 768px) {
+  .pc-barcode-form {
+    display: flex;
+  }
+
+  #scan-preview {
+    bottom: calc(8.5rem + env(safe-area-inset-bottom));
+  }
+}
+
+body.pc-show-manual-entry .pc-barcode-form {
+  display: flex;
+}
+
 /* --- Product price cards: centered label + value stack --- */
 .pc-price-card__body {
   text-align: center;

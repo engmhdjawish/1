@@ -118,6 +118,22 @@ declare(strict_types=1);
             <p>ضع المنتج أمام الماسح الضوئي — النظام جاهز</p>
           </div>
         </div>
+        <form id="barcode-form" class="pc-barcode-form" autocomplete="off" aria-label="إدخال الباركود يدوياً">
+          <label class="pc-barcode-form__label" for="barcode-input">أو اكتب الباركود</label>
+          <input
+            id="barcode-input"
+            name="barcode"
+            type="text"
+            class="pc-barcode-form__input"
+            inputmode="numeric"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+            enterkeyhint="search"
+            placeholder="رقم الباركود"
+          />
+          <button type="submit" class="pc-barcode-form__btn">عرض السعر</button>
+        </form>
       </footer>
 
       <?php if ($slideshowEnabled): ?>

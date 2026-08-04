@@ -8,8 +8,12 @@
   const PROMO_INTERVAL = Number(cfg.promoInterval || 20000);
   const PROMO_SHOW_PRICE = cfg.promoShowPrice !== false;
   const SLIDESHOW_ENABLED = cfg.slideshowEnabled !== false;
+  const urlParams = new URLSearchParams(location.search);
+  const MANUAL_ENTRY = urlParams.has('manual');
+  const IS_MOBILE_UI = window.matchMedia('(max-width: 768px)').matches;
 
   document.documentElement.style.setProperty('--pc-error-seconds', ERROR_SECONDS + 's');
+  if (MANUAL_ENTRY) document.body.classList.add('pc-show-manual-entry');
 
   const states = ['standby', 'product', 'error'];
   let activeState = 'standby';
@@ -99,8 +103,27 @@
       el.classList.toggle('is-hidden', !show);
     });
     if (name !== 'standby') updateScanPreview('');
-    if (name === 'standby') resumePromo();
-    else updatePromoVisibility();
+    if (name === 'standby') {
+      resumePromo();
+      clearBarcodeInput();
+    } else {
+      updatePromoVisibility();
+    }
+  }
+
+  function clearBarcodeInput() {
+    const input = $('barcode-input');
+    if (input) input.value = '';
+  }
+
+  function submitBarcode(code) {
+    const trimmed = String(code || '').trim();
+    if (!trimmed || isLoading) return;
+    clearBarcodeInput();
+    scanBuffer = '';
+    updateScanPreview('');
+    if (activeState === 'product') clearInterval(timerInterval);
+    loadByBarcode(trimmed);
   }
 
   function updateScanPreview(v) {
@@ -509,16 +532,27 @@
     }
   }
 
+  const barcodeForm = $('barcode-form');
+  const barcodeInput = $('barcode-input');
+  if (barcodeForm && barcodeInput) {
+    barcodeForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      submitBarcode(barcodeInput.value);
+    });
+    barcodeInput.addEventListener('input', () => {
+      updateScanPreview(barcodeInput.value);
+      if (barcodeInput.value && activeState === 'standby') pausePromo();
+    });
+  }
+
   window.addEventListener('keydown', (e) => {
+    if (e.target === barcodeInput) return;
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     if (e.key === 'Enter') {
       const code = scanBuffer.trim();
       scanBuffer = '';
       updateScanPreview('');
-      if (code && !isLoading) {
-        if (activeState === 'product') clearInterval(timerInterval);
-        loadByBarcode(code);
-      }
+      if (code) submitBarcode(code);
       return;
     }
     if (/^[0-9A-Za-z-]$/.test(e.key)) {
@@ -540,6 +574,6 @@
 
   fetch(WARMUP_URL, { cache: 'no-store', priority: 'low' }).catch(() => {});
 
-  const testBarcode = new URLSearchParams(location.search).get('barcode')?.trim();
-  if (testBarcode) loadByBarcode(testBarcode);
+  const testBarcode = urlParams.get('barcode')?.trim();
+  if (testBarcode) submitBarcode(testBarcode);
 })();
