@@ -115,16 +115,32 @@
     return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
   }
 
+  function setOldPrice(el, value, formatter, show) {
+    if (!el) return;
+    if (!show) {
+      el.classList.add('hidden');
+      el.textContent = '';
+      return;
+    }
+    el.textContent = formatter(value);
+    el.classList.remove('hidden');
+  }
+
   function setOfferChrome(m, perBox) {
     const hasOffer = !!m.hasOffer;
-    const productScreen = $('state-product');
-    productScreen?.classList.toggle('pc-product--offer', hasOffer);
-    $('product-header')?.classList.toggle('pc-product-header--offer', hasOffer);
-    $('product-main')?.classList.toggle('pc-product-main--offer', hasOffer);
-    $('product-prices-offer')?.classList.toggle('hidden', !hasOffer);
-    $('product-prices-normal')?.classList.toggle('hidden', hasOffer);
+    $('state-product')?.classList.toggle('pc-product--offer', hasOffer);
+    $('product-offer-strip')?.classList.toggle('hidden', !hasOffer);
+    $('price-card-sp')?.classList.toggle('pc-price-card--offer', hasOffer);
+    $('price-card-usd')?.classList.toggle('pc-price-card--offer', hasOffer);
 
     if (!hasOffer) {
+      ['price-sp-unit-old', 'price-sp-box-old', 'price-usd-unit-old', 'price-usd-box-old'].forEach((id) => {
+        const el = $(id);
+        if (el) {
+          el.classList.add('hidden');
+          el.textContent = '';
+        }
+      });
       $('product-offer-discount')?.classList.add('hidden');
       return;
     }
@@ -151,49 +167,20 @@
       discountValue = candidates.length ? Math.max(...candidates) : 0;
     }
 
-    const discountWrap = $('product-offer-discount');
-    if (discountWrap) {
-      const showDiscount = discountValue > 0;
-      discountWrap.classList.toggle('hidden', !showDiscount);
-      const valueNode = discountWrap.querySelector('.pc-offer-board__discount-value');
-      if (valueNode) valueNode.textContent = showDiscount ? ('-' + discountValue + '%') : '0%';
-    }
-
-    const showOldSp = oldUnitSp > unitSp + 0.01;
-    $('offer-sp-unit-old-col')?.classList.toggle('hidden', !showOldSp);
-    $('offer-sp-unit-old') && ($('offer-sp-unit-old').textContent = formatNumber(oldUnitSp, 0));
-    $('offer-sp-unit-new') && ($('offer-sp-unit-new').textContent = formatNumber(unitSp, 0));
-
-    const savingsEl = $('offer-sp-savings');
-    if (savingsEl) {
-      if (showOldSp && oldUnitSp > unitSp + 0.01) {
-        const saved = oldUnitSp - unitSp;
-        savingsEl.textContent = 'وفّر ' + formatNumber(saved, 0) + ' ل.س على كل قطعة';
-        savingsEl.classList.remove('hidden');
+    const discountEl = $('product-offer-discount');
+    if (discountEl) {
+      if (discountValue > 0) {
+        discountEl.textContent = '-' + discountValue + '%';
+        discountEl.classList.remove('hidden');
       } else {
-        savingsEl.textContent = '';
-        savingsEl.classList.add('hidden');
+        discountEl.classList.add('hidden');
       }
     }
 
-    const showBoxSp = oldBoxSp > boxSp + 0.01;
-    $('offer-sp-box-row')?.classList.toggle('hidden', !showBoxSp);
-    $('offer-sp-box-old') && ($('offer-sp-box-old').textContent = formatNumber(oldBoxSp, 0) + ' ل.س');
-    $('offer-sp-box-new') && ($('offer-sp-box-new').textContent = formatNumber(boxSp, 0) + ' ل.س');
-
-    const hasUsd = unitUsd > 0 || oldUnitUsd > 0;
-    $('offer-usd-block')?.classList.toggle('hidden', !hasUsd);
-    if (hasUsd) {
-      const showOldUsd = oldUnitUsd > unitUsd + 0.0001;
-      $('offer-usd-unit-old-wrap')?.classList.toggle('hidden', !showOldUsd);
-      $('offer-usd-unit-old') && ($('offer-usd-unit-old').textContent = '$' + formatNumber(oldUnitUsd, 2));
-      $('offer-usd-unit-new') && ($('offer-usd-unit-new').textContent = '$' + formatNumber(unitUsd, 2));
-
-      const showBoxUsd = oldBoxUsd > boxUsd + 0.0001;
-      $('offer-usd-box-row')?.classList.toggle('hidden', !showBoxUsd);
-      $('offer-usd-box-old') && ($('offer-usd-box-old').textContent = '$' + formatNumber(oldBoxUsd, 2));
-      $('offer-usd-box-new') && ($('offer-usd-box-new').textContent = '$' + formatNumber(boxUsd, 2));
-    }
+    setOldPrice($('price-sp-unit-old'), oldUnitSp, (v) => formatNumber(v, 0) + ' ل.س', oldUnitSp > unitSp + 0.01);
+    setOldPrice($('price-sp-box-old'), oldBoxSp, (v) => formatNumber(v, 0) + ' ل.س', oldBoxSp > boxSp + 0.01);
+    setOldPrice($('price-usd-unit-old'), oldUnitUsd, (v) => '$' + formatNumber(v, 2), oldUnitUsd > unitUsd + 0.0001);
+    setOldPrice($('price-usd-box-old'), oldBoxUsd, (v) => '$' + formatNumber(v, 2), oldBoxUsd > boxUsd + 0.0001);
   }
 
   function updateProductUI(m, barcode) {
@@ -297,9 +284,10 @@
       const el = $(id);
       if (el) el.textContent = '…';
     });
-    $('product-prices-offer')?.classList.add('hidden');
-    $('product-prices-normal')?.classList.remove('hidden');
+    $('product-offer-strip')?.classList.add('hidden');
     $('state-product')?.classList.remove('pc-product--offer');
+    $('price-card-sp')?.classList.remove('pc-price-card--offer');
+    $('price-card-usd')?.classList.remove('pc-price-card--offer');
     startProductCountdown(DISPLAY_SECONDS + 3);
   }
 
