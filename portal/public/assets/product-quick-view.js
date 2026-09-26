@@ -30,9 +30,9 @@
       return '';
     }
     if (p.imageGuid) {
-      return `<div class="material-image-frame material-image-frame--detail"><div class="material-image-frame__photo"><img src="/api/image.php?id=${encodeURIComponent(p.imageGuid)}&thumb=0" alt="${esc(p.name)}" loading="lazy" decoding="async"></div></div>`;
+      return `<div class="material-image-frame material-image-frame--detail"><div class="material-image-frame__photo"><img src="/api/image.php?id=${encodeURIComponent(p.imageGuid)}&thumb=0" alt="${esc(p.name)}" loading="lazy" decoding="async" class="material-image-frame__img" onerror="window.portalMaterialImageFrameEmpty&&window.portalMaterialImageFrameEmpty(this)"></div></div>`;
     }
-    return `<div class="material-image-frame material-image-frame--detail"><div class="material-image-frame__photo"><span class="material-symbols-outlined material-image-frame__placeholder" aria-hidden="true">inventory_2</span></div></div>`;
+    return `<div class="material-image-frame material-image-frame--detail material-image-frame--empty"><div class="material-image-frame__photo"><div class="material-image-frame__empty" role="img" aria-label="بلا صورة"><span class="material-symbols-outlined material-image-frame__empty-icon" aria-hidden="true">hide_image</span><span class="material-image-frame__empty-label">بلا صورة</span></div></div></div>`;
   };
 
   const renderProduct = (p) => {

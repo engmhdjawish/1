@@ -26,57 +26,9 @@
     const signal = abort.signal;
 
     const CAN_ADD_DETAILS = panel.dataset.canAddDetails === '1';
-    const GLOBAL_ADD_DETAILS_KEY = 'dash-mi-global-add-details';
-    const globalAddDetailsCheck = panel.querySelector('#globalAddDetails');
 
-    function readGlobalAddDetailsPreference() {
-      if (!CAN_ADD_DETAILS) return false;
-      try {
-        const stored = localStorage.getItem(GLOBAL_ADD_DETAILS_KEY);
-        if (stored === '0') return false;
-        if (stored === '1') return true;
-      } catch {
-        /* ignore storage errors */
-      }
-      return true;
-    }
-
-    function writeGlobalAddDetailsPreference(checked) {
-      try {
-        localStorage.setItem(GLOBAL_ADD_DETAILS_KEY, checked ? '1' : '0');
-      } catch {
-        /* ignore storage errors */
-      }
-    }
-
-    function isGlobalAddDetailsEnabled() {
-      if (!CAN_ADD_DETAILS) return false;
-      if (globalAddDetailsCheck instanceof HTMLInputElement) {
-        return globalAddDetailsCheck.checked;
-      }
-      return readGlobalAddDetailsPreference();
-    }
-
-    function shouldAddDetailsForCard(card) {
-      if (!CAN_ADD_DETAILS) return false;
-      if (isGlobalAddDetailsEnabled()) return true;
-      const detailsCheck = card?.querySelector('.add-details-check');
-      return detailsCheck instanceof HTMLInputElement && detailsCheck.checked && !detailsCheck.disabled;
-    }
-
-    function syncCardDetailsChecksFromGlobal() {
-      if (!CAN_ADD_DETAILS || !(globalAddDetailsCheck instanceof HTMLInputElement)) return;
-      const checked = globalAddDetailsCheck.checked;
-      sourceCards?.querySelectorAll('.add-details-check').forEach((box) => {
-        if (box instanceof HTMLInputElement && !box.disabled) {
-          box.checked = checked;
-        }
-      });
-    }
-
-    function applyGlobalAddDetailsInitialState() {
-      if (!(globalAddDetailsCheck instanceof HTMLInputElement)) return;
-      globalAddDetailsCheck.checked = readGlobalAddDetailsPreference();
+    function shouldAddDetailsForCard(_card) {
+      return CAN_ADD_DETAILS;
     }
 
 const API_URL = '/dashboard/material-images-api.php';
@@ -1030,13 +982,7 @@ const API_URL = '/dashboard/material-images-api.php';
             <div class="suggestions hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow max-h-48 overflow-auto"></div>
           </div>
           <div class="chips flex flex-wrap gap-1">${chipsHtml(key)}</div>
-          <details class="dash-mi-card__details">
-            <summary class="dash-mi-card__details-toggle">هامش سفلي في الصورة</summary>
-            <label class="add-details-wrap flex items-start gap-2 rounded-lg border border-border-subtle bg-surface-low/50 px-2.5 py-2 text-[11px] leading-relaxed cursor-pointer select-none mt-1">
-              <input type="checkbox" class="add-details-check mt-0.5 shrink-0" ${CAN_ADD_DETAILS ? (isGlobalAddDetailsEnabled() ? 'checked' : '') : 'disabled'}>
-              <span>رمز + اسم، التعبئة، واسم الشركة في الزاوية</span>
-            </label>
-          </details>
+          ${CAN_ADD_DETAILS ? '<p class="dash-mi-card__template-hint">يُطبَّق قالب جاويش تلقائياً (اسم، تعبئة، باركود)</p>' : ''}
           <div class="dash-mi-card__actions">
             <button type="button" class="assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>
             ${reassignBlock}
@@ -1158,13 +1104,6 @@ const API_URL = '/dashboard/material-images-api.php';
       loadSources(1);
     }, { signal });
   });
-
-  applyGlobalAddDetailsInitialState();
-  globalAddDetailsCheck?.addEventListener('change', () => {
-    if (!(globalAddDetailsCheck instanceof HTMLInputElement)) return;
-    writeGlobalAddDetailsPreference(globalAddDetailsCheck.checked);
-    syncCardDetailsChecksFromGlobal();
-  }, { signal });
 
   sourceMaterialSearch?.addEventListener('input', () => {
     if (sourceSearchTimer) clearTimeout(sourceSearchTimer);

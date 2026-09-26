@@ -14,11 +14,11 @@ declare(strict_types=1);
       <h1 class="text-2xl font-extrabold">ربط الصور بالمواد</h1>
       <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
         اضغط على الصورة للتكبير والتحقق قبل الربط. يمكن اختيار عدة مواد لإنشاء نسخة مستقلة لكل مادة.
-        لكل صورة يمكن تفعيل <strong>هامش سفلي</strong> يُدمج في ملف الصورة عند الربط.
+        عند الربط تُدمج الصورة تلقائياً في <strong>قالب جاويش</strong> مع اسم المنتج والتعبئة وباركود رقم المادة.
       </p>
       <?php if (empty($detailsBanner['ok'])): ?>
         <p class="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 max-w-3xl">
-          <?= h((string) ($detailsBanner['message'] ?? 'البانر السفلي غير متاح على هذا السيرفر.')) ?>
+          <?= h((string) ($detailsBanner['message'] ?? 'قالب صورة المادة غير متاح على هذا السيرفر.')) ?>
         </p>
       <?php endif; ?>
     </div>
@@ -301,8 +301,7 @@ declare(strict_types=1);
     form.append('source_file_name', item.file_name || '');
     form.append('amine_image_guid', item.amine_image_guid || '');
     items.forEach((row) => form.append('material_guids[]', row.guid));
-    const detailsCheck = card?.querySelector('.add-details-check');
-    if (detailsCheck instanceof HTMLInputElement && detailsCheck.checked && !detailsCheck.disabled) {
+    if (CAN_ADD_DETAILS) {
       form.append('add_details', '1');
     }
 
@@ -630,15 +629,7 @@ declare(strict_types=1);
             <div class="suggestions hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow max-h-48 overflow-auto"></div>
           </div>
           <div class="chips flex flex-wrap gap-1">${chipsHtml(key)}</div>
-          <label class="add-details-wrap flex items-start gap-2 rounded-lg border border-border-subtle bg-surface-low/50 px-2.5 py-2 text-[11px] leading-relaxed cursor-pointer select-none">
-            <input type="checkbox" class="add-details-check mt-0.5 shrink-0" ${CAN_ADD_DETAILS ? 'checked' : 'disabled'}>
-            <span>
-              هامش سفلي في الصورة:
-              <strong dir="ltr">رمز - اسم</strong>،
-              <strong>التعبئة : الكمية الوحدة</strong>،
-              و<strong>اسم الشركة + الموبايل</strong> في الزاوية اليسار
-            </span>
-          </label>
+          ${CAN_ADD_DETAILS ? '<p class="text-[11px] text-text-muted">يُطبَّق قالب جاويش تلقائياً (اسم، تعبئة، باركود)</p>' : ''}
           <button type="button" class="assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>
           ${reassignBlock}
           ${unlinkBlock}

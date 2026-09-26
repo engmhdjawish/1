@@ -1353,11 +1353,14 @@ final class MaterialImageLinkService
             $line2Override = self::detailLineForMaterial($line2ByMaterial, $materialGuid);
             $line1 = self::buildProductBannerLine($material, $line1Override);
             $line2 = self::buildPackagingBannerLine($material, $line2Override);
-            if ($line1 === '' && $line2 === '') {
-                continue;
-            }
+            $barcode = self::resolveMaterialBannerCode($material);
 
-            $processed = MaterialImageStorageService::renderImageWithDetailsBanner($tempSource, $line1, $line2);
+            $processed = MaterialImageStorageService::renderImageWithDetailsBanner(
+                $tempSource,
+                $line1,
+                $line2,
+                $barcode !== '' ? $barcode : null
+            );
             if ($processed !== null) {
                 $map[strtolower($materialGuid)] = $processed;
             }
@@ -1475,7 +1478,7 @@ final class MaterialImageLinkService
             return self::assignError(MaterialImageStorageService::detailsBannerRequirements()['message']);
         }
 
-        return self::assignError('تعذر تجهيز الصورة مع البانر السفلي. تحقق من الصورة والنصوص.');
+        return self::assignError('تعذر تجهيز الصورة على قالب جاويش. تحقق من الصورة وبيانات المادة.');
     }
 
     /** @param array<string, mixed>|null $material */

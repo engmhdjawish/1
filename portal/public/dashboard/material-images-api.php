@@ -322,7 +322,8 @@ if ($method === 'POST') {
         if (!is_array($materialGuids)) {
             $materialGuids = [$materialGuids];
         }
-        $addDetails = (string) ($_POST['add_details'] ?? '') === '1';
+        // Always composite onto the Jawish card template when the server can process it.
+        $addDetails = MaterialImageStorageService::canProcessImageDetails();
         $processed = [];
         $result = MaterialImageLinkService::assignError('خطأ غير متوقع أثناء الربط.');
 
@@ -433,7 +434,7 @@ if ($method === 'POST') {
         if (!is_array($materialGuids)) {
             $materialGuids = [$materialGuids];
         }
-        $addDetails = (string) ($_POST['add_details'] ?? '') === '1';
+        $addDetails = MaterialImageStorageService::canProcessImageDetails();
         $processed = [];
         $result = MaterialImageLinkService::assignError('خطأ غير متوقع أثناء الاستبدال.');
 

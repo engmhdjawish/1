@@ -22,11 +22,7 @@
         <button type="button" class="link-filter-btn dash-mi-filter-tab is-active" data-filter="unlinked">غير المرتبطة</button>
       </div>
       <?php if (!empty($detailsBanner['ok'])): ?>
-        <label class="dash-mi-global-details">
-          <input type="checkbox" id="globalAddDetails" class="global-add-details-check" checked>
-          <span>الهامش السفلي — مفعّل لجميع عمليات الربط</span>
-        </label>
-        <p class="dash-mi-global-details-hint">يمكنك أيضاً التحكم لكل صورة من «هامش سفلي في الصورة» أسفل البطاقة.</p>
+        <p class="dash-mi-template-note">عند الربط تُدمج الصورة تلقائياً في <strong>قالب جاويش</strong> مع اسم المنتج والتعبئة وباركود رقم المادة في أماكن ثابتة.</p>
       <?php endif; ?>
       <div class="flex flex-col sm:flex-row gap-2">
         <input type="search" id="sourceMaterialSearch" class="h-9 flex-1 min-w-0 rounded-lg border border-border-subtle px-3 text-sm" placeholder="بحث مادة بالاسم أو الرمز">
