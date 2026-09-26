@@ -8,6 +8,7 @@ declare(strict_types=1);
  * Usage:
  *   php scripts/pull-missing-material-images.php
  *   php scripts/pull-missing-material-images.php --max-pages=20 --page-size=15
+ *   php scripts/pull-missing-material-images.php --count-only
  */
 
 error_reporting(E_ALL);
@@ -23,7 +24,12 @@ use Portal\Services\MaterialImageStorageService;
 
 $maxPages = 50;
 $pageSize = 15;
+$countOnly = false;
 foreach (array_slice($argv, 1) as $arg) {
+    if ($arg === '--count-only') {
+        $countOnly = true;
+        continue;
+    }
     if (preg_match('/^--max-pages=(\d+)$/', $arg, $m) === 1) {
         $maxPages = max(1, (int) $m[1]);
     }
@@ -38,6 +44,25 @@ $log = static function (string $message): void {
         flush();
     }
 };
+
+if ($countOnly) {
+    $log('=== إحصاء سريع للصور الناقصة محلياً ===');
+    $result = MaterialImageStorageService::countMissingLocals(
+        static function (string $message) use ($log): void {
+            $log('  ' . $message);
+        }
+    );
+    if (!($result['ok'] ?? false)) {
+        fwrite(STDERR, (string) ($result['message'] ?? 'فشل الإحصاء') . "\n");
+        exit(1);
+    }
+    $log('');
+    $log('مواد لها صورة في الأمين: ' . (int) ($result['amine_with_image'] ?? 0));
+    $log('منها موجودة محلياً:     ' . (int) ($result['local_for_amine'] ?? 0));
+    $log('ناقصة محلياً (المطلوب):  ' . (int) ($result['missing'] ?? 0));
+    $log('حجم فهرس الملفات المحلي: ' . (int) ($result['local_guid_index_size'] ?? 0));
+    exit(0);
+}
 
 $log('=== Pull missing material images from Amine ===');
 $log("page_size={$pageSize} max_pages={$maxPages}");
