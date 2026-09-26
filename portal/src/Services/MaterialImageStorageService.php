@@ -2605,6 +2605,10 @@ final class MaterialImageStorageService
         if ($imageGuid !== '') {
             // Local-only: never call Amine per row here (browse/filter would hang for minutes).
             $localPath = self::resolvePathForGuid($imageGuid, false, true);
+            $candidates = self::$fileNameByGuid[$imageGuid] ?? [];
+            if ($candidates !== []) {
+                $storedFileName = (string) $candidates[0];
+            }
         }
 
         return [
