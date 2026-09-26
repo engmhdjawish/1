@@ -179,7 +179,6 @@
         const label = [meta.code, meta.name].filter(Boolean).join(' — ') || guid;
         perMaterialRows.appendChild(renderOverrideRow(guid, label));
       });
-      perMaterialRows.lastElementChild?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     };
 
     const syncPricingScope = () => {
@@ -302,6 +301,7 @@
       }
       if (pricingScope?.value === 'per_material') {
         syncPerMaterialRows();
+        perMaterialRows?.lastElementChild?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
       searchInput.value = '';
       hideResults();
