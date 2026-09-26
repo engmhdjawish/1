@@ -402,7 +402,6 @@ final class MaterialImageStorageService
         $width = imagesx($image);
         $height = imagesy($image);
         if ($width <= 0 || $height <= 0) {
-            imagedestroy($image);
 
             return null;
         }
@@ -466,20 +465,17 @@ final class MaterialImageStorageService
         $innerBlockHeight = max($brandBlockHeight, $contentBlockHeight, (int) round($titleSize * 1.1));
         $bannerHeight = $paddingY * 2 + $innerBlockHeight;
         if ($bannerHeight <= 0) {
-            imagedestroy($image);
 
             return null;
         }
 
         $canvas = imagecreatetruecolor($width, $height + $bannerHeight);
         if ($canvas === false) {
-            imagedestroy($image);
 
             return null;
         }
 
         imagecopy($canvas, $image, 0, 0, 0, 0, $width, $height);
-        imagedestroy($image);
 
         self::fillDetailsBannerBackground($canvas, 0, $height, $width, $bannerHeight);
         self::drawDetailsBannerHairline($canvas, 0, $height, $width);
@@ -591,14 +587,12 @@ final class MaterialImageStorageService
         $settings = self::settings();
         $directory = $settings['images_dir'] . DIRECTORY_SEPARATOR . '_processed';
         if (!self::ensureDirectory($directory)) {
-            imagedestroy($canvas);
 
             return null;
         }
 
         $dest = $directory . DIRECTORY_SEPARATOR . ('detail_' . bin2hex(random_bytes(8)) . '.jpg');
         $saved = imagejpeg($canvas, $dest, 92);
-        imagedestroy($canvas);
 
         return $saved ? $dest : null;
     }
@@ -2321,7 +2315,6 @@ final class MaterialImageStorageService
         $width = imagesx($image);
         $height = imagesy($image);
         if ($width <= 0 || $height <= 0) {
-            imagedestroy($image);
             return false;
         }
 
@@ -2331,7 +2324,6 @@ final class MaterialImageStorageService
 
         $thumb = imagecreatetruecolor($newWidth, $newHeight);
         if ($thumb === false) {
-            imagedestroy($image);
             return false;
         }
 
@@ -2341,7 +2333,6 @@ final class MaterialImageStorageService
         }
 
         imagecopyresampled($thumb, $image, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
-        imagedestroy($image);
 
         $saved = match ($mime) {
             'image/jpeg' => imagejpeg($thumb, $targetPath, 85),
@@ -2350,7 +2341,6 @@ final class MaterialImageStorageService
             'image/webp' => function_exists('imagewebp') ? imagewebp($thumb, $targetPath, 85) : false,
             default => false,
         };
-        imagedestroy($thumb);
 
         return (bool) $saved;
     }
