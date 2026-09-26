@@ -1779,7 +1779,233 @@ final class MaterialImageStorageService
     }
 
     /**
+     * Fast pull: build local GUID index once, page Amine for missing GUIDs, then download
+     * each missing image once — no per-row disk resolve and no restart-from-page-1 loop.
+     *
+     * @param null|callable(string):void $onProgress
+     * @return array{
+     *   ok: bool,
+     *   message: string,
+     *   missing_found: int,
+     *   scanned: int,
+     *   pulled: int,
+     *   failed: int,
+     *   skipped_already_local: int,
+     *   items: list<array{material_guid: string, material_code: string, image_guid: string, ok: bool, message: string}>
+     * }
+     */
+    public static function pullAllMissingLocals(int $limit = 500, ?callable $onProgress = null): array
+    {
+        $limit = max(1, min(5000, $limit));
+        $listed = self::listMissingLocalImageTargets($limit, $onProgress);
+        if (!($listed['ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'message' => (string) ($listed['message'] ?? 'تعذر جمع الصور الناقصة.'),
+                'missing_found' => 0,
+                'scanned' => 0,
+                'pulled' => 0,
+                'failed' => 0,
+                'skipped_already_local' => 0,
+                'items' => [],
+            ];
+        }
+
+        /** @var list<array{image_guid: string, material_guid: string, material_code: string}> $targets */
+        $targets = is_array($listed['items'] ?? null) ? $listed['items'] : [];
+        $missingFound = count($targets);
+        if ($onProgress !== null) {
+            $onProgress("بدء سحب {$missingFound} صورة ناقصة…");
+        }
+
+        $items = [];
+        $pulled = 0;
+        $failed = 0;
+        $skipped = 0;
+        $index = 0;
+        foreach ($targets as $target) {
+            $imageGuid = (string) ($target['image_guid'] ?? '');
+            $materialGuid = (string) ($target['material_guid'] ?? '');
+            $code = (string) ($target['material_code'] ?? '');
+            if ($imageGuid === '') {
+                continue;
+            }
+
+            $index++;
+            if ($onProgress !== null) {
+                $label = $code !== '' ? $code : $imageGuid;
+                $onProgress("[{$index}/{$missingFound}] سحب {$label}…");
+            }
+
+            // Skip if another process already wrote the file since the list was built.
+            $already = self::resolvePathForGuid($imageGuid, false, true);
+            if ($already !== null && is_readable($already)) {
+                $skipped++;
+                $items[] = [
+                    'material_guid' => $materialGuid,
+                    'material_code' => $code,
+                    'image_guid' => $imageGuid,
+                    'ok' => true,
+                    'message' => 'موجودة محلياً مسبقاً.',
+                ];
+                continue;
+            }
+
+            $path = self::ensureLocalCopyFromAmine(
+                $imageGuid,
+                $onProgress !== null
+                    ? static function (string $message) use ($onProgress): void {
+                        $onProgress('    ' . $message);
+                    }
+                    : null
+            );
+            if ($path !== null) {
+                $pulled++;
+                $items[] = [
+                    'material_guid' => $materialGuid,
+                    'material_code' => $code,
+                    'image_guid' => $imageGuid,
+                    'ok' => true,
+                    'message' => 'تم سحب النسخة إلى الموقع.',
+                ];
+            } else {
+                $failed++;
+                $items[] = [
+                    'material_guid' => $materialGuid,
+                    'material_code' => $code,
+                    'image_guid' => $imageGuid,
+                    'ok' => false,
+                    'message' => 'تعذر سحب الملف من الأمين.',
+                ];
+            }
+        }
+
+        $scanned = count($items);
+
+        return [
+            'ok' => $failed === 0 || $pulled > 0 || $scanned === 0,
+            'message' => $scanned === 0
+                ? 'لا توجد مواد بصورة أمين ناقصة على الموقع.'
+                : ('سُحبت ' . $pulled . ' صورة.'
+                    . ($skipped > 0 ? (' تخطّي ' . $skipped . ' موجودة.') : '')
+                    . ($failed > 0 ? (' فشل ' . $failed . '.') : '')),
+            'missing_found' => $missingFound,
+            'scanned' => $scanned,
+            'pulled' => $pulled,
+            'failed' => $failed,
+            'skipped_already_local' => $skipped,
+            'items' => $items,
+        ];
+    }
+
+    /**
+     * Collect Amine materials that have an image GUID not present in the local GUID index.
+     * One directory/queue index + Amine pages — no per-row resolvePathForGuid.
+     *
+     * @param null|callable(string):void $onProgress
+     * @return array{
+     *   ok: bool,
+     *   message: string,
+     *   items: list<array{image_guid: string, material_guid: string, material_code: string}>,
+     *   amine_with_image: int,
+     *   local_guid_index_size: int
+     * }
+     */
+    public static function listMissingLocalImageTargets(int $limit = 500, ?callable $onProgress = null): array
+    {
+        $limit = max(1, min(5000, $limit));
+        if ($onProgress !== null) {
+            $onProgress('بناء فهرس الصور المحلية…');
+        }
+        $localGuids = self::localImageGuidIndex();
+        $indexSize = count($localGuids);
+        if ($onProgress !== null) {
+            $onProgress("فهرس محلي: {$indexSize} معرّف. مسح أمين لجمع الناقص (حد {$limit})…");
+        }
+
+        /** @var array<string, array{image_guid: string, material_guid: string, material_code: string}> $missingByGuid */
+        $missingByGuid = [];
+        $amineWithImage = 0;
+        $apiPage = 1;
+        $apiPageSize = 200;
+        $hasMoreApi = true;
+
+        while ($hasMoreApi && count($missingByGuid) < $limit && $apiPage <= 500) {
+            try {
+                $response = ApiClient::get('/api/materials', [
+                    'hasImage' => 'true',
+                    'page' => $apiPage,
+                    'pageSize' => $apiPageSize,
+                ], 45);
+            } catch (Throwable $exception) {
+                return [
+                    'ok' => false,
+                    'message' => 'تعذر الاتصال بـ API المواد: ' . $exception->getMessage(),
+                    'items' => [],
+                    'amine_with_image' => $amineWithImage,
+                    'local_guid_index_size' => $indexSize,
+                ];
+            }
+
+            if (!($response['ok'] ?? false)) {
+                return [
+                    'ok' => false,
+                    'message' => 'تعذر جلب المواد من API (رمز ' . (int) ($response['status'] ?? 0) . ').',
+                    'items' => [],
+                    'amine_with_image' => $amineWithImage,
+                    'local_guid_index_size' => $indexSize,
+                ];
+            }
+
+            $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+            $rows = is_array($data['items'] ?? null) ? $data['items'] : [];
+            $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+            $hasMoreApi = ($apiPage * $apiPageSize) < $totalCount;
+
+            foreach ($rows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $imageGuid = strtolower(trim((string) ($row['productImageGuid'] ?? $row['ProductImageGuid'] ?? '')));
+                if ($imageGuid === '' || preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $imageGuid) !== 1) {
+                    continue;
+                }
+                $amineWithImage++;
+                if (isset($localGuids[$imageGuid]) || isset($missingByGuid[$imageGuid])) {
+                    continue;
+                }
+                $missingByGuid[$imageGuid] = [
+                    'image_guid' => $imageGuid,
+                    'material_guid' => trim((string) ($row['materialGuid'] ?? $row['MaterialGuid'] ?? '')),
+                    'material_code' => trim((string) ($row['materialCode'] ?? $row['MaterialCode'] ?? '')),
+                ];
+                if (count($missingByGuid) >= $limit) {
+                    break;
+                }
+            }
+
+            if ($onProgress !== null) {
+                $onProgress('صفحة أمين ' . $apiPage . ': ناقص مجمّع ' . count($missingByGuid) . ' / ب صورة ' . $amineWithImage);
+            }
+
+            if ($rows === []) {
+                break;
+            }
+            $apiPage++;
+        }
+
+        return [
+            'ok' => true,
+            'message' => '',
+            'items' => array_values($missingByGuid),
+            'amine_with_image' => $amineWithImage,
+            'local_guid_index_size' => $indexSize,
+        ];
+    }
+
+    /**
      * Pull a page of materials that have an Amine image GUID but no local portal file.
+     * Legacy chunk path (dashboard / --legacy CLI). Prefer pullAllMissingLocals for bulk repair.
      *
      * @param null|callable(string):void $onProgress
      * @return array{
@@ -2084,7 +2310,8 @@ final class MaterialImageStorageService
     }
 
     /**
-     * Lowercase image GUID keys present on portal disk (queue paths + GUID-named files).
+     * Lowercase image GUID keys present on portal disk (GUID-named files + queue paths).
+     * Directory scan first; queue rows only fill gaps.
      *
      * @return array<string, true>
      */
@@ -2092,6 +2319,23 @@ final class MaterialImageStorageService
     {
         /** @var array<string, true> $index */
         $index = [];
+
+        $settings = self::settings();
+        $dir = $settings['images_dir'];
+        if (is_dir($dir)) {
+            foreach (scandir($dir) ?: [] as $entry) {
+                if ($entry === '.' || $entry === '..') {
+                    continue;
+                }
+                if (preg_match('/^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\./', $entry, $m) !== 1) {
+                    continue;
+                }
+                if (!is_file($dir . DIRECTORY_SEPARATOR . $entry)) {
+                    continue;
+                }
+                $index[strtolower($m[1])] = true;
+            }
+        }
 
         try {
             MaterialImageSyncService::ensureTable();
@@ -2105,7 +2349,7 @@ final class MaterialImageStorageService
             $rows = $stmt !== false ? ($stmt->fetchAll(\PDO::FETCH_ASSOC) ?: []) : [];
             foreach ($rows as $row) {
                 $guid = strtolower(trim((string) ($row['amine_image_guid'] ?? '')));
-                if ($guid === '') {
+                if ($guid === '' || isset($index[$guid])) {
                     continue;
                 }
                 $path = trim((string) ($row['local_file_path'] ?? ''));
@@ -2119,20 +2363,7 @@ final class MaterialImageStorageService
                 }
             }
         } catch (Throwable) {
-            // Queue table may be unavailable; still use directory scan.
-        }
-
-        $settings = self::settings();
-        $dir = $settings['images_dir'];
-        if (is_dir($dir)) {
-            foreach (scandir($dir) ?: [] as $entry) {
-                if ($entry === '.' || $entry === '..' || !is_file($dir . DIRECTORY_SEPARATOR . $entry)) {
-                    continue;
-                }
-                if (preg_match('/^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\./', $entry, $m) === 1) {
-                    $index[strtolower($m[1])] = true;
-                }
-            }
+            // Queue table may be unavailable; directory scan is enough for GUID-named files.
         }
 
         return $index;
