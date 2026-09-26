@@ -9,7 +9,6 @@ declare(strict_types=1);
  *   php scripts/pull-missing-material-images.php
  *   php scripts/pull-missing-material-images.php --max-pages=20 --page-size=15
  *   php scripts/pull-missing-material-images.php --count-only
- *   php scripts/pull-missing-material-images.php --count-exact
  */
 
 error_reporting(E_ALL);
@@ -26,15 +25,9 @@ use Portal\Services\MaterialImageStorageService;
 $maxPages = 50;
 $pageSize = 15;
 $countOnly = false;
-$countExact = false;
 foreach (array_slice($argv, 1) as $arg) {
     if ($arg === '--count-only') {
         $countOnly = true;
-        continue;
-    }
-    if ($arg === '--count-exact') {
-        $countOnly = true;
-        $countExact = true;
         continue;
     }
     if (preg_match('/^--max-pages=(\d+)$/', $arg, $m) === 1) {
@@ -53,30 +46,21 @@ $log = static function (string $message): void {
 };
 
 if ($countOnly) {
-    $modeLabel = $countExact ? 'دقيق (صفحات أمين)' : 'تقدير فوري (طلب أمين واحد)';
-    $log("=== إحصاء الصور الناقصة محلياً — {$modeLabel} ===");
+    $log('=== إحصاء سريع للصور الناقصة محلياً ===');
     $result = MaterialImageStorageService::countMissingLocals(
         static function (string $message) use ($log): void {
             $log('  ' . $message);
-        },
-        $countExact
+        }
     );
     if (!($result['ok'] ?? false)) {
         fwrite(STDERR, (string) ($result['message'] ?? 'فشل الإحصاء') . "\n");
         exit(1);
     }
     $log('');
-    $exact = (bool) ($result['exact'] ?? false);
-    $log('النوع: ' . ($exact ? 'دقيق' : 'تقدير سريع'));
     $log('مواد لها صورة في الأمين: ' . (int) ($result['amine_with_image'] ?? 0));
     $log('منها موجودة محلياً:     ' . (int) ($result['local_for_amine'] ?? 0));
     $log('ناقصة محلياً (المطلوب):  ' . (int) ($result['missing'] ?? 0));
     $log('حجم فهرس الملفات المحلي: ' . (int) ($result['local_guid_index_size'] ?? 0));
-    if (!$exact) {
-        $log('');
-        $log('ملاحظة: التقدير = إجمالي أمين − ملفات GUID المحلية.');
-        $log('للعد الدقيق (أبطأ): php scripts/pull-missing-material-images.php --count-exact');
-    }
     exit(0);
 }
 
