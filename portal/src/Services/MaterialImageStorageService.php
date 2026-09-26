@@ -1779,22 +1779,6 @@ final class MaterialImageStorageService
     }
 
     /**
-     * Pull a page of materials that have an Amine image GUID but no local portal file.
-     *
-     * @param null|callable(string):void $onProgress
-     * @return array{
-     *   ok: bool,
-     *   message: string,
-     *   page: int,
-     *   page_size: int,
-     *   has_more: bool,
-     *   scanned: int,
-     *   pulled: int,
-     *   failed: int,
-     *   items: list<array{material_guid: string, material_code: string, image_guid: string, ok: bool, message: string}>
-     * }
-     */
-    /**
      * Fast pull: build local GUID index once, page Amine for missing GUIDs, then download
      * each missing image once — no per-row disk resolve and no restart-from-page-1 loop.
      *
