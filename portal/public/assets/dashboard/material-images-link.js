@@ -338,10 +338,74 @@ const API_URL = '/dashboard/material-images-api.php';
 
   function assignSucceeded(payload) {
     if (!payload || typeof payload !== 'object') return false;
-    if (payload.ok) return true;
-    if (Number(payload.linked || 0) > 0) return true;
-    if (Array.isArray(payload.items) && payload.items.some((row) => row && row.ok === true)) return true;
+    const linked = Number(payload.linked || 0);
+    const failed = Number(payload.failed || 0);
+    if (linked <= 0 || failed > 0) return false;
+    if (payload.staging_kept === true) return false;
+    if (payload.ok === true) return true;
+    if (Array.isArray(payload.items) && payload.items.length) {
+      return payload.items.every((row) => row && row.ok === true && row.local_synced !== false);
+    }
     return false;
+  }
+
+  function assignProgressMessage(materialCount, elapsedSec = 0) {
+    const countLabel = materialCount === 1 ? 'مادة واحدة' : `${materialCount} مواد`;
+    if (elapsedSec <= 0) {
+      return `جاري الربط وحفظ النسخ على الموقع… قد يستغرق بضع ثوانٍ لكل مادة (${countLabel}).`;
+    }
+    return `جاري الربط وحفظ النسخ على الموقع… مضى ${elapsedSec}ث — ${countLabel}. لا تغلق الصفحة.`;
+  }
+
+  function formatAssignFailureDetail(payload) {
+    const base = String(payload?.message || '').trim();
+    if (Array.isArray(payload?.items) && payload.items.length) {
+      const firstFail = payload.items.find((row) => row && row.ok === false);
+      if (firstFail?.message) {
+        const extra = `${firstFail.material_code || ''} ${firstFail.material_name || ''}`.trim();
+        const detail = extra ? `${extra}: ${firstFail.message}` : firstFail.message;
+        return base && !base.includes(detail) ? `${base} — ${detail}` : detail;
+      }
+    }
+    return base;
+  }
+
+  function showAssignOutcome(payload, statusEl, fallbackSuccess) {
+    const linked = Number(payload?.linked || 0);
+    const failed = Number(payload?.failed || 0);
+    const message = String(payload?.message || fallbackSuccess || '').trim();
+
+    if (assignSucceeded(payload)) {
+      linkStatus.textContent = message || fallbackSuccess;
+      if (statusEl) statusEl.textContent = '';
+      if (window.dashboardApp?.showToast) {
+        window.dashboardApp.showToast(message || fallbackSuccess, 'success');
+      }
+      return 'success';
+    }
+
+    const detail = formatAssignFailureDetail(payload) || 'تعذر إكمال الربط مع النسخ المحلية.';
+    linkStatus.textContent = detail;
+    if (statusEl) statusEl.textContent = detail;
+
+    if (linked > 0 && failed > 0) {
+      if (window.dashboardApp?.showToast) {
+        window.dashboardApp.showToast(detail, 'info');
+      }
+      return 'partial';
+    }
+
+    if (payload?.staging_kept === true && linked > 0) {
+      if (window.dashboardApp?.showToast) {
+        window.dashboardApp.showToast(detail, 'info');
+      }
+      return 'partial';
+    }
+
+    if (window.dashboardApp?.showToast) {
+      window.dashboardApp.showToast(detail, 'error');
+    }
+    return 'error';
   }
 
   function itemImageGuid(item, card = null) {
@@ -465,7 +529,7 @@ const API_URL = '/dashboard/material-images-api.php';
     try {
       const payload = await fetchJson(`${API_URL}?action=link-sources-page&page=1&page_size=${Math.max(pageSize, 24)}&link_filter=unlinked`);
       if (!payload.ok || itemStillInUnlinkedList(payload.items, item)) return false;
-      const successMessage = 'تم الربط (تأكيد من قائمة الأمين).';
+      const successMessage = 'تم الربط وحفظ النسخ على الموقع (تأكيد من القائمة).';
       linkStatus.textContent = successMessage;
       const cardStatus = card?.querySelector('.card-status');
       if (cardStatus) cardStatus.textContent = '';
@@ -506,36 +570,36 @@ const API_URL = '/dashboard/material-images-api.php';
     }
     button.disabled = true;
     setCardAssigning(card, true);
-    linkStatus.textContent = 'جاري الربط...';
-    if (statusEl) statusEl.textContent = 'جاري الربط...';
+    const progressStart = assignProgressMessage(items.length);
+    linkStatus.textContent = progressStart;
+    if (statusEl) statusEl.textContent = progressStart;
+    let elapsed = 0;
+    const progressTimer = window.setInterval(() => {
+      elapsed += 1;
+      const msg = assignProgressMessage(items.length, elapsed);
+      linkStatus.textContent = msg;
+      if (statusEl) statusEl.textContent = msg;
+    }, 1000);
     try {
       const payload = await postAssignForm('assign-materials', item, items, card);
-      if (assignSucceeded(payload)) {
-        linkStatus.textContent = payload.message || 'تم الربط.';
-        if (statusEl) statusEl.textContent = '';
-        if (window.dashboardApp?.showToast) {
-          window.dashboardApp.showToast(payload.message || 'تم الربط.', 'success');
-        }
+      const outcome = showAssignOutcome(payload, statusEl, 'تم الربط مع حفظ النسخ على الموقع.');
+      if (outcome === 'success') {
         handleCardAfterAssign(card, item, payload);
         return;
       }
-      linkStatus.textContent = payload.message || '';
-      if (statusEl) statusEl.textContent = payload.message || '';
-      if (payload.items && payload.items.length) {
-        const firstFail = payload.items.find((row) => row && row.ok === false);
-        if (firstFail?.message) {
-          const extra = `${firstFail.material_code || ''} ${firstFail.material_name || ''}`.trim();
-          const detail = extra ? `${extra}: ${firstFail.message}` : firstFail.message;
-          linkStatus.textContent = detail;
-          if (statusEl) statusEl.textContent = detail;
-        }
+      if (outcome === 'partial') {
+        return;
       }
       if (await recoverCardIfAssignSucceededOnServer(item, card)) return;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر تنفيذ الربط.';
       linkStatus.textContent = message;
       if (statusEl) statusEl.textContent = message;
+      if (window.dashboardApp?.showToast) {
+        window.dashboardApp.showToast(message, 'error');
+      }
     } finally {
+      window.clearInterval(progressTimer);
       setCardAssigning(card, false);
       button.disabled = false;
     }
@@ -550,21 +614,31 @@ const API_URL = '/dashboard/material-images-api.php';
     if (!confirm('سيتم فك الربط الحالي ثم ربط الصورة بالمواد المختارة. متابعة؟')) return;
     button.disabled = true;
     setCardAssigning(card, true);
-    if (statusEl) statusEl.textContent = 'جاري الاستبدال...';
+    const progressStart = assignProgressMessage(items.length);
+    if (statusEl) statusEl.textContent = progressStart;
+    linkStatus.textContent = progressStart;
+    let elapsed = 0;
+    const progressTimer = window.setInterval(() => {
+      elapsed += 1;
+      const msg = assignProgressMessage(items.length, elapsed);
+      linkStatus.textContent = msg;
+      if (statusEl) statusEl.textContent = msg;
+    }, 1000);
     try {
       const payload = await postAssignForm('reassign-materials', item, items, card);
-      if (assignSucceeded(payload)) {
-        linkStatus.textContent = payload.message || 'تم الاستبدال.';
-        if (statusEl) statusEl.textContent = '';
+      const outcome = showAssignOutcome(payload, statusEl, 'تم الاستبدال مع حفظ النسخ على الموقع.');
+      if (outcome === 'success') {
         handleCardAfterAssign(card, item, payload);
-        return;
       }
-      if (statusEl) statusEl.textContent = payload.message || '';
-      linkStatus.textContent = payload.message || '';
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر تنفيذ الاستبدال.';
       if (statusEl) statusEl.textContent = message;
+      linkStatus.textContent = message;
+      if (window.dashboardApp?.showToast) {
+        window.dashboardApp.showToast(message, 'error');
+      }
     } finally {
+      window.clearInterval(progressTimer);
       setCardAssigning(card, false);
       button.disabled = false;
     }
