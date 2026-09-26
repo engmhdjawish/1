@@ -829,15 +829,28 @@ final class SpecialOfferService
     /** @return list<array<string, mixed>> */
     private static function activeOffers(): array
     {
-        $stmt = Database::pdo()->query(
-            'SELECT id::text AS id, slug, title_ar, badge_text_ar, selection_mode::text AS selection_mode,
-                    pricing_scope, discount_type::text AS discount_type, discount_percent,
-                    fixed_price_syp, fixed_price_usd, fixed_amount_syp, fixed_amount_usd,
-                    priority, min_packages, max_packages, starts_at
-             FROM special_offers
-             WHERE is_active = TRUE AND starts_at <= NOW() AND (ends_at IS NULL OR ends_at > NOW())
-             ORDER BY priority DESC, starts_at DESC'
-        )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        try {
+            $rows = Database::pdo()->query(
+                'SELECT id::text AS id, slug, title_ar, badge_text_ar, selection_mode::text AS selection_mode,
+                        pricing_scope, discount_type::text AS discount_type, discount_percent,
+                        fixed_price_syp, fixed_price_usd, fixed_amount_syp, fixed_amount_usd,
+                        priority, min_packages, max_packages, starts_at
+                 FROM special_offers
+                 WHERE is_active = TRUE AND starts_at <= NOW() AND (ends_at IS NULL OR ends_at > NOW())
+                 ORDER BY priority DESC, starts_at DESC'
+            )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable) {
+            // Pre-014 schema: pricing_scope / fixed_amount_* columns may be missing.
+            $rows = Database::pdo()->query(
+                'SELECT id::text AS id, slug, title_ar, badge_text_ar, selection_mode::text AS selection_mode,
+                        discount_type::text AS discount_type, discount_percent,
+                        fixed_price_syp, fixed_price_usd,
+                        priority, min_packages, max_packages, starts_at
+                 FROM special_offers
+                 WHERE is_active = TRUE AND starts_at <= NOW() AND (ends_at IS NULL OR ends_at > NOW())
+                 ORDER BY priority DESC, starts_at DESC'
+            )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        }
 
         $offerIds = array_map(static fn (array $row): string => (string) $row['id'], $rows);
         $filtersByOffer = self::batchFiltersForOffers($offerIds);
@@ -852,6 +865,7 @@ final class SpecialOfferService
             $row['product_overrides'] = $manual['overrides'];
             $row['pricing_scope'] = (string) ($row['pricing_scope'] ?? 'offer');
         }
+        unset($row);
 
         return $rows;
     }
@@ -1282,8 +1296,21 @@ final class SpecialOfferService
              WHERE offer_id IN (' . implode(', ', $placeholders) . ')
              ORDER BY offer_id, sort_order ASC'
         );
-        $stmt->execute($params);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        try {
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable) {
+            $stmt = Database::pdo()->prepare(
+                'SELECT offer_id::text AS offer_id, material_guid::text AS material_guid,
+                        discount_type::text AS discount_type, discount_percent,
+                        fixed_price_syp, fixed_price_usd
+                 FROM special_offer_products
+                 WHERE offer_id IN (' . implode(', ', $placeholders) . ')
+                 ORDER BY offer_id, sort_order ASC'
+            );
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        }
 
         foreach ($rows as $row) {
             $offerId = (string) ($row['offer_id'] ?? '');
