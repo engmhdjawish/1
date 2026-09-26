@@ -41,8 +41,23 @@ $log = static function (string $message): void {
 
 $log('=== Pull missing material images from Amine ===');
 $log("page_size={$pageSize} max_pages={$maxPages}");
-$log('ملاحظة: أول دفعة قد تستغرق وقتاً إن كان API بطيئاً — سيظهر تقدّم فوري.');
+$log('ملاحظة: لكل صورة ستظهر خطوات (قفل / بيانات / تنزيل ≤60ث / مصغّرة).');
 $log('');
+
+// Drop stale lock files from killed previous runs (advisory locks die with process,
+// but leftover empty lock files are confusing when debugging).
+$lockDir = rtrim((string) (\Portal\Config::storagePath()), '/\\') . DIRECTORY_SEPARATOR . 'locks';
+if (is_dir($lockDir)) {
+    $cleared = 0;
+    foreach (glob($lockDir . DIRECTORY_SEPARATOR . 'amine-image-pull-*.lock') ?: [] as $lockFile) {
+        if (@unlink($lockFile)) {
+            $cleared++;
+        }
+    }
+    if ($cleared > 0) {
+        $log("تم مسح {$cleared} ملف قفل قديم من storage/locks.");
+    }
+}
 
 $totalPulled = 0;
 $totalFailed = 0;

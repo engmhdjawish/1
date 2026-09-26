@@ -1540,8 +1540,10 @@ final class MaterialImageStorageService
      * download once from the Amine API and register it as synced locally.
      *
      * Storefront serving (/api/image.php) and bulk repair both use this.
+     *
+     * @param null|callable(string):void $onProgress
      */
-    public static function ensureLocalCopyFromAmine(string $imageGuid): ?string
+    public static function ensureLocalCopyFromAmine(string $imageGuid, ?callable $onProgress = null): ?string
     {
         $imageGuid = strtolower(trim($imageGuid));
         if ($imageGuid === '' || preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $imageGuid) !== 1) {
@@ -1556,13 +1558,13 @@ final class MaterialImageStorageService
             return $existing;
         }
 
-        foreach (self::fileNamesFromAmineApi($imageGuid) as $fileName) {
-            $path = self::resolveLocalPath($fileName, false);
+        // Fast local guess by GUID filename — avoid an extra Amine meta round-trip before download.
+        foreach ([$imageGuid . '.jpg', $imageGuid . '.jpeg', $imageGuid . '.png', $imageGuid . '.webp', $imageGuid . '.gif'] as $guess) {
+            $path = self::resolveLocalPath($guess, false);
             if ($path !== null && is_readable($path)) {
                 try {
-                    MaterialImageSyncService::recordAssignedCopy($fileName, $path, $imageGuid);
+                    MaterialImageSyncService::recordAssignedCopy($guess, $path, $imageGuid);
                 } catch (Throwable) {
-                    // Serving still works even if the queue row cannot be written.
                 }
 
                 return $path;
@@ -1580,7 +1582,22 @@ final class MaterialImageStorageService
         }
 
         try {
-            if (!flock($lockHandle, LOCK_EX)) {
+            if ($onProgress !== null) {
+                $onProgress('انتظار قفل السحب…');
+            }
+            $locked = false;
+            for ($attempt = 0; $attempt < 30; $attempt++) {
+                if (flock($lockHandle, LOCK_EX | LOCK_NB)) {
+                    $locked = true;
+                    break;
+                }
+                usleep(500000);
+            }
+            if (!$locked) {
+                if ($onProgress !== null) {
+                    $onProgress('تعذر الحصول على قفل السحب (عملية أخرى ما زالت تعمل؟).');
+                }
+
                 return null;
             }
 
@@ -1590,7 +1607,7 @@ final class MaterialImageStorageService
                 return $existingAfterLock;
             }
 
-            return self::downloadAmineImageToLocal($imageGuid);
+            return self::downloadAmineImageToLocal($imageGuid, $onProgress);
         } finally {
             flock($lockHandle, LOCK_UN);
             fclose($lockHandle);
@@ -1598,16 +1615,21 @@ final class MaterialImageStorageService
         }
     }
 
-    private static function downloadAmineImageToLocal(string $imageGuid): ?string
+    /** @param null|callable(string):void $onProgress */
+    private static function downloadAmineImageToLocal(string $imageGuid, ?callable $onProgress = null): ?string
     {
         $settings = self::settings();
         if (!self::ensureDirectory($settings['images_dir']) || !self::ensureDirectory($settings['thumbnails_dir'])) {
             return null;
         }
 
+        if ($onProgress !== null) {
+            $onProgress('طلب بيانات الصورة من الأمين…');
+        }
+
         $meta = null;
         try {
-            $response = ApiClient::get('/api/material-images/' . rawurlencode($imageGuid));
+            $response = ApiClient::get('/api/material-images/' . rawurlencode($imageGuid), [], 30);
             if (($response['ok'] ?? false) && is_array($response['data'] ?? null)) {
                 $meta = $response['data'];
                 $candidates = self::fileNameCandidates(
@@ -1618,10 +1640,28 @@ final class MaterialImageStorageService
                 );
                 if ($candidates !== []) {
                     self::$fileNameByGuid[$imageGuid] = $candidates;
+                    // File may already exist under Amine's stored name.
+                    foreach ($candidates as $candidate) {
+                        $path = self::resolveLocalPath($candidate, false);
+                        if ($path !== null && is_readable($path)) {
+                            try {
+                                MaterialImageSyncService::recordAssignedCopy($candidate, $path, $imageGuid);
+                            } catch (Throwable) {
+                            }
+
+                            return $path;
+                        }
+                    }
                 }
+            } elseif ($onProgress !== null) {
+                $status = (int) ($response['status'] ?? 0);
+                $onProgress('بيانات الصورة من الأمين فشلت (HTTP ' . $status . ') — المتابعة باسم افتراضي.');
             }
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
             $meta = null;
+            if ($onProgress !== null) {
+                $onProgress('تعذر جلب بيانات الصورة: ' . $exception->getMessage());
+            }
         }
 
         $fileName = '';
@@ -1642,23 +1682,39 @@ final class MaterialImageStorageService
         }
 
         $tmpPath = $settings['images_dir'] . DIRECTORY_SEPARATOR . ('.pull-' . $imageGuid . '.tmp');
+        if ($onProgress !== null) {
+            $onProgress('تنزيل الملف من الأمين (مهلة 60ث)…');
+        }
         try {
             $download = ApiClient::downloadToFile(
                 '/api/material-images/' . rawurlencode($imageGuid) . '/file',
                 [],
                 $tmpPath,
-                120
+                60
             );
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
             @unlink($tmpPath);
+            if ($onProgress !== null) {
+                $onProgress('فشل التنزيل: ' . $exception->getMessage());
+            }
 
             return null;
         }
 
         if (!($download['ok'] ?? false) || !is_file($tmpPath) || filesize($tmpPath) === 0) {
             @unlink($tmpPath);
+            if ($onProgress !== null) {
+                $detail = trim((string) ($download['error'] ?? ''));
+                $status = (int) ($download['status'] ?? 0);
+                $onProgress('التنزيل فشل' . ($status > 0 ? (' HTTP ' . $status) : '') . ($detail !== '' ? (': ' . $detail) : '.'));
+            }
 
             return null;
+        }
+
+        if ($onProgress !== null) {
+            $sizeKb = (int) round(((int) filesize($tmpPath)) / 1024);
+            $onProgress("اكتمل التنزيل ({$sizeKb} ك.ب) — حفظ محلي…");
         }
 
         $detectedExt = self::extensionFromMime((string) ($download['contentType'] ?? ''));
@@ -1690,6 +1746,9 @@ final class MaterialImageStorageService
         }
         @unlink($tmpPath);
 
+        if ($onProgress !== null) {
+            $onProgress('توليد المصغّرة…');
+        }
         if (!self::generateThumbnail($targetPath, $thumbPath)) {
             @copy($targetPath, $thumbPath);
         }
@@ -1779,7 +1838,14 @@ final class MaterialImageStorageService
                 $onProgress("[{$index}/" . count($browseItems) . "] سحب {$label}…");
             }
 
-            $path = self::ensureLocalCopyFromAmine($imageGuid);
+            $path = self::ensureLocalCopyFromAmine(
+                $imageGuid,
+                $onProgress !== null
+                    ? static function (string $message) use ($onProgress): void {
+                        $onProgress('    ' . $message);
+                    }
+                    : null
+            );
             if ($path !== null) {
                 $pulled++;
                 $items[] = [

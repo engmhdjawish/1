@@ -318,6 +318,7 @@ final class ApiClient
             CURLOPT_FILE => $handle,
             CURLOPT_CUSTOMREQUEST => 'GET',
             CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_TIMEOUT => max(30, $timeoutSeconds),
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_HEADERFUNCTION => static function ($curl, string $headerLine) use (&$responseHeaders): int {
@@ -339,6 +340,7 @@ final class ApiClient
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
         fclose($handle);
+        curl_close($ch);
 
         if ($ok === false) {
             return ['ok' => false, 'status' => 0, 'error' => $error ?: 'فشل الاتصال بالـ API'];
@@ -459,6 +461,7 @@ final class ApiClient
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CUSTOMREQUEST => $method,
             CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_TIMEOUT => max(15, $timeoutSeconds),
             CURLOPT_SSL_VERIFYPEER => false,
         ]);
