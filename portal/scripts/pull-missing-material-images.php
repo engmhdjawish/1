@@ -12,6 +12,10 @@ declare(strict_types=1);
 
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
+ini_set('implicit_flush', '1');
+while (ob_get_level() > 0) {
+    ob_end_flush();
+}
 
 require dirname(__DIR__) . '/bootstrap.php';
 
@@ -28,8 +32,17 @@ foreach (array_slice($argv, 1) as $arg) {
     }
 }
 
-echo "=== Pull missing material images from Amine ===\n";
-echo "page_size={$pageSize} max_pages={$maxPages}\n\n";
+$log = static function (string $message): void {
+    echo $message . "\n";
+    if (function_exists('flush')) {
+        flush();
+    }
+};
+
+$log('=== Pull missing material images from Amine ===');
+$log("page_size={$pageSize} max_pages={$maxPages}");
+$log('ملاحظة: أول دفعة قد تستغرق وقتاً إن كان API بطيئاً — سيظهر تقدّم فوري.');
+$log('');
 
 $totalPulled = 0;
 $totalFailed = 0;
@@ -37,7 +50,14 @@ $totalScanned = 0;
 $page = 1;
 
 for ($i = 0; $i < $maxPages; $i++) {
-    $result = MaterialImageStorageService::pullMissingLocalsChunk($page, $pageSize);
+    $log('--- pass ' . ($i + 1) . " / page {$page} ---");
+    $result = MaterialImageStorageService::pullMissingLocalsChunk(
+        $page,
+        $pageSize,
+        static function (string $message) use ($log): void {
+            $log('  ' . $message);
+        }
+    );
     $scanned = (int) ($result['scanned'] ?? 0);
     $pulled = (int) ($result['pulled'] ?? 0);
     $failed = (int) ($result['failed'] ?? 0);
@@ -47,7 +67,7 @@ for ($i = 0; $i < $maxPages; $i++) {
     $totalPulled += $pulled;
     $totalFailed += $failed;
 
-    echo "pass " . ($i + 1) . " (page {$page}): " . (string) ($result['message'] ?? '') . "\n";
+    $log('نتيجة: ' . (string) ($result['message'] ?? ''));
     foreach (($result['items'] ?? []) as $item) {
         if (!is_array($item)) {
             continue;
@@ -55,11 +75,11 @@ for ($i = 0; $i < $maxPages; $i++) {
         $mark = ($item['ok'] ?? false) ? 'OK' : 'FAIL';
         $code = (string) ($item['material_code'] ?? '');
         $guid = (string) ($item['image_guid'] ?? '');
-        echo "  [{$mark}] {$code} {$guid}\n";
+        $log("  [{$mark}] {$code} {$guid}");
     }
 
     if (!($result['ok'] ?? false) && $scanned === 0 && $i === 0) {
-        fwrite(STDERR, "Stopped: " . (string) ($result['message'] ?? 'unknown error') . "\n");
+        fwrite(STDERR, 'Stopped: ' . (string) ($result['message'] ?? 'unknown error') . "\n");
         exit(1);
     }
 
@@ -82,5 +102,6 @@ for ($i = 0; $i < $maxPages; $i++) {
     break;
 }
 
-echo "\nDone. scanned={$totalScanned} pulled={$totalPulled} failed={$totalFailed}\n";
+$log('');
+$log("Done. scanned={$totalScanned} pulled={$totalPulled} failed={$totalFailed}");
 exit($totalFailed > 0 && $totalPulled === 0 ? 1 : 0);

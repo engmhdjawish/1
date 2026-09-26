@@ -1711,6 +1711,7 @@ final class MaterialImageStorageService
     /**
      * Pull a page of materials that have an Amine image GUID but no local portal file.
      *
+     * @param null|callable(string):void $onProgress
      * @return array{
      *   ok: bool,
      *   message: string,
@@ -1723,10 +1724,14 @@ final class MaterialImageStorageService
      *   items: list<array{material_guid: string, material_code: string, image_guid: string, ok: bool, message: string}>
      * }
      */
-    public static function pullMissingLocalsChunk(int $page = 1, int $pageSize = 15): array
+    public static function pullMissingLocalsChunk(int $page = 1, int $pageSize = 15, ?callable $onProgress = null): array
     {
         $page = max(1, $page);
         $pageSize = max(1, min(30, $pageSize));
+        if ($onProgress !== null) {
+            $onProgress("جلب صفحة المواد الناقصة (page={$page}, size={$pageSize}) من API…");
+        }
+
         $browse = self::browseMaterials([
             'page' => $page,
             'page_size' => $pageSize,
@@ -1748,10 +1753,16 @@ final class MaterialImageStorageService
             ];
         }
 
+        $browseItems = is_array($browse['items'] ?? null) ? $browse['items'] : [];
+        if ($onProgress !== null) {
+            $onProgress('وُجدت ' . count($browseItems) . ' مادة ناقصة في هذه الدفعة — بدء السحب…');
+        }
+
         $items = [];
         $pulled = 0;
         $failed = 0;
-        foreach (($browse['items'] ?? []) as $row) {
+        $index = 0;
+        foreach ($browseItems as $row) {
             if (!is_array($row)) {
                 continue;
             }
@@ -1760,6 +1771,12 @@ final class MaterialImageStorageService
             $code = trim((string) ($row['material_code'] ?? ''));
             if ($imageGuid === '') {
                 continue;
+            }
+
+            $index++;
+            if ($onProgress !== null) {
+                $label = $code !== '' ? $code : $imageGuid;
+                $onProgress("[{$index}/" . count($browseItems) . "] سحب {$label}…");
             }
 
             $path = self::ensureLocalCopyFromAmine($imageGuid);
@@ -2522,7 +2539,7 @@ final class MaterialImageStorageService
             $apiQuery['pageSize'] = $apiPageSize;
 
             try {
-                $response = ApiClient::get('/api/materials', $apiQuery);
+                $response = ApiClient::get('/api/materials', $apiQuery, 45);
             } catch (Throwable $exception) {
                 return self::browseError('تعذر الاتصال بـ API المواد: ' . $exception->getMessage());
             }
@@ -2586,11 +2603,8 @@ final class MaterialImageStorageService
 
         $localPath = null;
         if ($imageGuid !== '') {
-            $localPath = self::resolvePathForGuid($imageGuid, false);
-            $candidates = self::$fileNameByGuid[$imageGuid] ?? [];
-            if ($candidates !== []) {
-                $storedFileName = (string) $candidates[0];
-            }
+            // Local-only: never call Amine per row here (browse/filter would hang for minutes).
+            $localPath = self::resolvePathForGuid($imageGuid, false, true);
         }
 
         return [
