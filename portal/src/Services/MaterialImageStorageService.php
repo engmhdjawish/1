@@ -1511,20 +1511,31 @@ final class MaterialImageStorageService
 
     public static function resolvePathForGuid(string $imageGuid, bool $thumb = false, bool $localOnly = false): ?string
     {
-        $imageGuid = trim($imageGuid);
-        if ($imageGuid === '') {
+        $imageGuid = strtolower(trim($imageGuid));
+        if ($imageGuid === '' || preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $imageGuid) !== 1) {
             return null;
         }
 
-        $fromQueue = MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, $thumb, !$localOnly);
+        // Prefer any local queue mapping (synced or not) — never block storefront on Amine.
+        $fromQueue = MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, $thumb, false);
         if ($fromQueue !== null) {
             return $fromQueue;
+        }
+
+        // Common on-disk names after assign/pull (GUID as filename).
+        foreach ([$imageGuid . '.jpg', $imageGuid . '.jpeg', $imageGuid . '.png', $imageGuid . '.webp', $imageGuid . '.gif'] as $guess) {
+            $path = self::resolveLocalPath($guess, $thumb);
+            if ($path !== null) {
+                return $path;
+            }
         }
 
         if ($localOnly) {
             return null;
         }
 
+        // Optional: ask Amine for the stored file name, then look for that name on local disk only.
+        // Does not download; used by admin/repair paths, not by storefront image.php.
         foreach (self::fileNamesFromAmineApi($imageGuid) as $fileName) {
             $path = self::resolveLocalPath($fileName, $thumb);
             if ($path !== null) {
@@ -1539,7 +1550,7 @@ final class MaterialImageStorageService
      * When Amine has the image linked but the portal disk copy is missing,
      * download once from the Amine API and register it as synced locally.
      *
-     * Storefront serving (/api/image.php) and bulk repair both use this.
+     * Used by bulk repair (CLI / dashboard). Storefront /api/image.php stays local-only.
      *
      * @param null|callable(string):void $onProgress
      */
