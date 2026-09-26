@@ -41,6 +41,77 @@ final class CatalogSectionResolver
         return ['section' => $slug];
     }
 
+    /**
+     * Store query params that reproduce a section's filter rules in the normal catalog.
+     *
+     * @param array<string, mixed> $rules
+     * @return array<string, string|list<string>>
+     */
+    public static function storeQueryFromRules(array $rules): array
+    {
+        $params = [];
+        $keyword = trim((string) ($rules['keyword'] ?? ''));
+        if ($keyword !== '') {
+            $params['q'] = $keyword;
+        }
+
+        $lists = [
+            'materialTypes' => $rules['material_types'] ?? [],
+            'ageCategories' => $rules['age_categories'] ?? [],
+            'manufacturers' => $rules['manufacturers'] ?? [],
+            'sizeRanges' => $rules['size_ranges'] ?? [],
+            'countryOfOrigins' => $rules['country_origins'] ?? [],
+            'storeGuids' => $rules['store_guids'] ?? [],
+            'groupGuids' => $rules['group_guids'] ?? [],
+        ];
+        foreach ($lists as $key => $values) {
+            if (!is_array($values)) {
+                continue;
+            }
+            $items = [];
+            foreach ($values as $value) {
+                $text = trim((string) $value);
+                if ($text !== '') {
+                    $items[] = $text;
+                }
+            }
+            if ($items !== []) {
+                $params[$key] = array_values(array_unique($items));
+            }
+        }
+
+        if (($rules['is_available'] ?? null) === true) {
+            $params['isAvailable'] = '1';
+        } elseif (($rules['is_available'] ?? null) === false) {
+            $params['isAvailable'] = '0';
+        }
+
+        if (($rules['has_image'] ?? null) === true) {
+            $params['hasImage'] = '1';
+        } elseif (($rules['has_image'] ?? null) === false) {
+            $params['hasImage'] = '0';
+        }
+
+        foreach ([
+            'min_warehouse_quantity' => 'minWarehouseQuantity',
+            'max_warehouse_quantity' => 'maxWarehouseQuantity',
+            'min_unit_sale_price_syp' => 'minUnitSalePriceSyp',
+            'max_unit_sale_price_syp' => 'maxUnitSalePriceSyp',
+            'min_unit_sale_price_usd' => 'minUnitSalePriceUsd',
+            'max_unit_sale_price_usd' => 'maxUnitSalePriceUsd',
+            'min_unit_purchase_price_usd' => 'minUnitPurchasePriceUsd',
+            'max_unit_purchase_price_usd' => 'maxUnitPurchasePriceUsd',
+        ] as $ruleKey => $queryKey) {
+            $value = $rules[$ruleKey] ?? null;
+            if ($value === null || $value === '') {
+                continue;
+            }
+            $params[$queryKey] = is_numeric($value) ? (string) $value : trim((string) $value);
+        }
+
+        return $params;
+    }
+
     /** Human-readable chips for section filter rules shown in the store UI. */
     public static function filterSummaryLabels(array $rules): array
     {
