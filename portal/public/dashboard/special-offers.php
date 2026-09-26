@@ -103,10 +103,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'badge_text_ar' => trim((string) ($_POST['badge_text_ar'] ?? '')),
                 'banner_image_url' => trim((string) ($_POST['banner_image_url'] ?? '')),
                 'selection_mode' => $selectionMode,
+                'pricing_scope' => trim((string) ($_POST['pricing_scope'] ?? 'offer')),
                 'discount_type' => trim((string) ($_POST['discount_type'] ?? 'percent')),
                 'discount_percent' => $_POST['discount_percent'] ?? null,
                 'fixed_price_syp' => $_POST['fixed_price_syp'] ?? null,
                 'fixed_price_usd' => $_POST['fixed_price_usd'] ?? null,
+                'fixed_amount_syp' => $_POST['fixed_amount_syp'] ?? null,
+                'fixed_amount_usd' => $_POST['fixed_amount_usd'] ?? null,
                 'starts_at' => trim((string) ($_POST['starts_at'] ?? '')),
                 'ends_at' => trim((string) ($_POST['ends_at'] ?? '')),
                 'is_active' => isset($_POST['is_active']),
@@ -118,6 +121,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'home_sort_order' => (int) ($_POST['home_sort_order'] ?? 0),
                 'filter_rules' => $selectionMode === 'filter' ? $buildFilterPayload() : [],
                 'material_guids' => $selectionMode === 'manual' ? $parseValues($_POST['manual_material_guids'] ?? []) : [],
+                'product_overrides' => $selectionMode === 'manual'
+                    ? (is_array($_POST['material_override'] ?? null) ? $_POST['material_override'] : [])
+                    : [],
                 'display_options' => $buildDisplayOptions(),
             ];
             $result = SpecialOfferService::save($payload, isset($user['id']) ? (string) $user['id'] : null);

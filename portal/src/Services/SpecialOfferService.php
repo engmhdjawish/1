@@ -178,8 +178,10 @@ final class SpecialOfferService
     {
         return Database::pdo()->query(
             'SELECT so.id::text AS id, so.slug, so.title_ar, so.subtitle_ar, so.badge_text_ar,
-                    so.selection_mode::text AS selection_mode, so.discount_type::text AS discount_type,
+                    so.selection_mode::text AS selection_mode, so.pricing_scope,
+                    so.discount_type::text AS discount_type,
                     so.discount_percent, so.fixed_price_syp, so.fixed_price_usd,
+                    so.fixed_amount_syp, so.fixed_amount_usd,
                     so.starts_at, so.ends_at,
                     CASE WHEN so.is_active THEN 1 ELSE 0 END AS is_active,
                     so.priority, so.min_packages, so.max_packages, so.max_products,
@@ -228,8 +230,10 @@ final class SpecialOfferService
     {
         $stmt = Database::pdo()->prepare(
             'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
-                    selection_mode::text AS selection_mode, discount_type::text AS discount_type,
+                    selection_mode::text AS selection_mode, pricing_scope,
+                    discount_type::text AS discount_type,
                     discount_percent, fixed_price_syp, fixed_price_usd,
+                    fixed_amount_syp, fixed_amount_usd,
                     starts_at::text AS starts_at, ends_at::text AS ends_at,
                     CASE WHEN is_active THEN 1 ELSE 0 END AS is_active,
                     priority, min_packages, max_packages, max_products,
@@ -246,7 +250,11 @@ final class SpecialOfferService
         $parsed = self::parseFilterRows(self::filtersForOffer($id));
         $row['filter_rules'] = $parsed['rules'];
         $row['display_options'] = $parsed['display_options'];
-        $row['material_guids'] = self::manualProducts($id);
+        $manual = self::batchManualProductRowsForOffers([$id])[$id]
+            ?? ['guids' => [], 'overrides' => []];
+        $row['material_guids'] = $manual['guids'];
+        $row['product_overrides'] = $manual['overrides'];
+        $row['pricing_scope'] = (string) ($row['pricing_scope'] ?? 'offer');
         $row['manual_products'] = self::loadManualProductDetails($row['material_guids']);
         $row['preview_products'] = self::attachOfferPricing(self::loadOfferProducts($row), $row);
 
@@ -271,13 +279,21 @@ final class SpecialOfferService
         }
 
         $discountType = (string) ($payload['discount_type'] ?? 'percent');
-        if (!in_array($discountType, ['percent', 'fixed_price'], true)) {
+        if (!in_array($discountType, ['percent', 'fixed_price', 'fixed_amount'], true)) {
             $discountType = 'percent';
         }
 
         $selectionMode = (string) ($payload['selection_mode'] ?? 'filter');
         if (!in_array($selectionMode, ['manual', 'filter'], true)) {
             $selectionMode = 'filter';
+        }
+
+        $pricingScope = (string) ($payload['pricing_scope'] ?? 'offer');
+        if (!in_array($pricingScope, ['offer', 'per_material'], true)) {
+            $pricingScope = 'offer';
+        }
+        if ($selectionMode !== 'manual') {
+            $pricingScope = 'offer';
         }
 
         $pdo = Database::pdo();
@@ -288,10 +304,13 @@ final class SpecialOfferService
             'badge_text_ar' => trim((string) ($payload['badge_text_ar'] ?? '')) ?: null,
             'banner_image_url' => trim((string) ($payload['banner_image_url'] ?? '')) ?: null,
             'selection_mode' => $selectionMode,
+            'pricing_scope' => $pricingScope,
             'discount_type' => $discountType,
             'discount_percent' => $discountType === 'percent' ? self::toNullableFloat((string) ($payload['discount_percent'] ?? '')) : null,
             'fixed_price_syp' => $discountType === 'fixed_price' ? self::toNullableFloat((string) ($payload['fixed_price_syp'] ?? '')) : null,
             'fixed_price_usd' => $discountType === 'fixed_price' ? self::toNullableFloat((string) ($payload['fixed_price_usd'] ?? '')) : null,
+            'fixed_amount_syp' => $discountType === 'fixed_amount' ? self::toNullableFloat((string) ($payload['fixed_amount_syp'] ?? '')) : null,
+            'fixed_amount_usd' => $discountType === 'fixed_amount' ? self::toNullableFloat((string) ($payload['fixed_amount_usd'] ?? '')) : null,
             'starts_at' => trim((string) ($payload['starts_at'] ?? '')) ?: date('Y-m-d H:i:s'),
             'ends_at' => trim((string) ($payload['ends_at'] ?? '')) ?: null,
             'is_active' => !empty($payload['is_active']),
@@ -308,12 +327,14 @@ final class SpecialOfferService
             $stmt = $pdo->prepare(
                 'INSERT INTO special_offers (
                     slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
-                    selection_mode, discount_type, discount_percent, fixed_price_syp, fixed_price_usd,
+                    selection_mode, pricing_scope, discount_type, discount_percent,
+                    fixed_price_syp, fixed_price_usd, fixed_amount_syp, fixed_amount_usd,
                     starts_at, ends_at, is_active, priority, min_packages, max_packages,
                     max_products, show_on_home, home_sort_order, updated_by_web_user_id
                  ) VALUES (
                     :slug, :title_ar, :subtitle_ar, :badge_text_ar, :banner_image_url,
-                    :selection_mode, :discount_type, :discount_percent, :fixed_price_syp, :fixed_price_usd,
+                    :selection_mode, :pricing_scope, :discount_type, :discount_percent,
+                    :fixed_price_syp, :fixed_price_usd, :fixed_amount_syp, :fixed_amount_usd,
                     :starts_at, :ends_at, :is_active, :priority, :min_packages, :max_packages,
                     :max_products, :show_on_home, :home_sort_order, :updated_by_web_user_id
                  ) RETURNING id::text'
@@ -326,8 +347,10 @@ final class SpecialOfferService
                 'UPDATE special_offers SET
                     slug = :slug, title_ar = :title_ar, subtitle_ar = :subtitle_ar,
                     badge_text_ar = :badge_text_ar, banner_image_url = :banner_image_url,
-                    selection_mode = :selection_mode, discount_type = :discount_type,
-                    discount_percent = :discount_percent, fixed_price_syp = :fixed_price_syp, fixed_price_usd = :fixed_price_usd,
+                    selection_mode = :selection_mode, pricing_scope = :pricing_scope,
+                    discount_type = :discount_type, discount_percent = :discount_percent,
+                    fixed_price_syp = :fixed_price_syp, fixed_price_usd = :fixed_price_usd,
+                    fixed_amount_syp = :fixed_amount_syp, fixed_amount_usd = :fixed_amount_usd,
                     starts_at = :starts_at, ends_at = :ends_at, is_active = :is_active,
                     priority = :priority, min_packages = :min_packages, max_packages = :max_packages,
                     max_products = :max_products, show_on_home = :show_on_home,
@@ -345,7 +368,9 @@ final class SpecialOfferService
             is_array($payload['filter_rules'] ?? null) ? $payload['filter_rules'] : [],
             $displayOptions
         );
-        self::syncManualProducts($id, is_array($payload['material_guids'] ?? null) ? $payload['material_guids'] : []);
+        $materialGuids = is_array($payload['material_guids'] ?? null) ? $payload['material_guids'] : [];
+        $productOverrides = is_array($payload['product_overrides'] ?? null) ? $payload['product_overrides'] : [];
+        self::syncManualProducts($id, $materialGuids, $pricingScope === 'per_material' ? $productOverrides : []);
 
         return ['ok' => true, 'message' => 'تم حفظ العرض.', 'id' => $id];
     }
@@ -360,8 +385,10 @@ final class SpecialOfferService
 
         $stmt = Database::pdo()->prepare(
             'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
-                    selection_mode::text AS selection_mode, discount_type::text AS discount_type,
+                    selection_mode::text AS selection_mode, pricing_scope,
+                    discount_type::text AS discount_type,
                     discount_percent, fixed_price_syp, fixed_price_usd,
+                    fixed_amount_syp, fixed_amount_usd,
                     min_packages, max_packages, max_products, priority, starts_at
              FROM special_offers
              WHERE slug = :slug
@@ -379,7 +406,11 @@ final class SpecialOfferService
         $id = (string) $row['id'];
         $parsed = self::parseFilterRows(self::filtersForOffer($id));
         $row['filter_rules'] = $parsed['rules'];
-        $row['material_guids'] = self::manualProducts($id);
+        $manual = self::batchManualProductRowsForOffers([$id])[$id]
+            ?? ['guids' => [], 'overrides' => []];
+        $row['material_guids'] = $manual['guids'];
+        $row['product_overrides'] = $manual['overrides'];
+        $row['pricing_scope'] = (string) ($row['pricing_scope'] ?? 'offer');
 
         return $row;
     }
@@ -518,7 +549,7 @@ final class SpecialOfferService
         return array_merge([
             'has_offer' => true,
             'offer' => $offer,
-            'offer_badge' => trim((string) ($offer['badge_text_ar'] ?? '')) ?: self::defaultBadge($offer),
+            'offer_badge' => trim((string) ($offer['badge_text_ar'] ?? '')) ?: self::defaultBadge($offer, $guid),
         ], $pricing);
     }
 
@@ -535,10 +566,11 @@ final class SpecialOfferService
                 continue;
             }
             $overlay = self::computePricing($product, $offer);
+            $guid = trim((string) ($product['materialGuid'] ?? $product['MaterialGuid'] ?? ''));
             $result[] = array_merge($product, [
                 'offer' => $offer,
                 'has_offer' => true,
-                'offer_badge' => trim((string) ($offer['badge_text_ar'] ?? '')) ?: self::defaultBadge($offer),
+                'offer_badge' => trim((string) ($offer['badge_text_ar'] ?? '')) ?: self::defaultBadge($offer, $guid),
             ], $overlay);
         }
 
@@ -591,7 +623,7 @@ final class SpecialOfferService
             $result[] = array_merge($product, [
                 'has_offer' => true,
                 'offer' => $best,
-                'offer_badge' => trim((string) ($best['badge_text_ar'] ?? '')) ?: self::defaultBadge($best),
+                'offer_badge' => trim((string) ($best['badge_text_ar'] ?? '')) ?: self::defaultBadge($best, $guid),
             ], self::computePricing($product, $best));
         }
 
@@ -652,20 +684,41 @@ final class SpecialOfferService
         $basePackSp = $baseUnitSp * $packaging;
         $basePackUsd = $baseUnitUsd * $packaging;
 
-        $discountType = (string) ($offer['discount_type'] ?? 'percent');
+        $materialGuid = trim((string) (
+            $material['materialGuid']
+            ?? $material['MaterialGuid']
+            ?? $material['material_guid']
+            ?? ''
+        ));
+        $spec = self::resolveDiscountSpec($offer, $materialGuid);
+        $discountType = (string) ($spec['discount_type'] ?? 'percent');
+
         if ($discountType === 'fixed_price') {
-            $effPackSp = is_numeric((string) ($offer['fixed_price_syp'] ?? ''))
-                ? (float) $offer['fixed_price_syp'] : $basePackSp;
-            $effPackUsd = is_numeric((string) ($offer['fixed_price_usd'] ?? ''))
-                ? (float) $offer['fixed_price_usd'] : $basePackUsd;
-            if ($offer['fixed_price_syp'] === null || $offer['fixed_price_syp'] === '') {
+            $effPackSp = is_numeric((string) ($spec['fixed_price_syp'] ?? ''))
+                ? (float) $spec['fixed_price_syp'] : $basePackSp;
+            $effPackUsd = is_numeric((string) ($spec['fixed_price_usd'] ?? ''))
+                ? (float) $spec['fixed_price_usd'] : $basePackUsd;
+            if ($spec['fixed_price_syp'] === null || $spec['fixed_price_syp'] === '') {
                 $effPackSp = $basePackSp;
             }
-            if ($offer['fixed_price_usd'] === null || $offer['fixed_price_usd'] === '') {
+            if ($spec['fixed_price_usd'] === null || $spec['fixed_price_usd'] === '') {
+                $effPackUsd = $basePackUsd;
+            }
+        } elseif ($discountType === 'fixed_amount') {
+            $amountSp = is_numeric((string) ($spec['fixed_amount_syp'] ?? ''))
+                ? max(0.0, (float) $spec['fixed_amount_syp']) : 0.0;
+            $amountUsd = is_numeric((string) ($spec['fixed_amount_usd'] ?? ''))
+                ? max(0.0, (float) $spec['fixed_amount_usd']) : 0.0;
+            $effPackSp = max(0.0, $basePackSp - $amountSp);
+            $effPackUsd = max(0.0, $basePackUsd - $amountUsd);
+            if (($spec['fixed_amount_syp'] === null || $spec['fixed_amount_syp'] === '') && $amountSp <= 0) {
+                $effPackSp = $basePackSp;
+            }
+            if (($spec['fixed_amount_usd'] === null || $spec['fixed_amount_usd'] === '') && $amountUsd <= 0) {
                 $effPackUsd = $basePackUsd;
             }
         } else {
-            $pct = min(100.0, max(0.0, (float) ($offer['discount_percent'] ?? 0)));
+            $pct = min(100.0, max(0.0, (float) ($spec['discount_percent'] ?? 0)));
             $factor = 1.0 - ($pct / 100.0);
             $effPackSp = $basePackSp * $factor;
             $effPackUsd = $basePackUsd * $factor;
@@ -688,14 +741,72 @@ final class SpecialOfferService
         ];
     }
 
+    /**
+     * Resolve effective discount fields for a material (offer-level or per-material override).
+     *
+     * @param array<string, mixed> $offer
+     * @return array{
+     *   discount_type: string,
+     *   discount_percent: mixed,
+     *   fixed_price_syp: mixed,
+     *   fixed_price_usd: mixed,
+     *   fixed_amount_syp: mixed,
+     *   fixed_amount_usd: mixed
+     * }
+     */
+    public static function resolveDiscountSpec(array $offer, string $materialGuid = ''): array
+    {
+        $header = [
+            'discount_type' => (string) ($offer['discount_type'] ?? 'percent'),
+            'discount_percent' => $offer['discount_percent'] ?? null,
+            'fixed_price_syp' => $offer['fixed_price_syp'] ?? null,
+            'fixed_price_usd' => $offer['fixed_price_usd'] ?? null,
+            'fixed_amount_syp' => $offer['fixed_amount_syp'] ?? null,
+            'fixed_amount_usd' => $offer['fixed_amount_usd'] ?? null,
+        ];
+
+        $scope = (string) ($offer['pricing_scope'] ?? 'offer');
+        if ($scope !== 'per_material' || $materialGuid === '') {
+            return $header;
+        }
+
+        $overrides = is_array($offer['product_overrides'] ?? null) ? $offer['product_overrides'] : [];
+        $row = $overrides[$materialGuid] ?? $overrides[strtolower($materialGuid)] ?? null;
+        if (!is_array($row)) {
+            return $header;
+        }
+
+        $type = trim((string) ($row['discount_type'] ?? ''));
+        if (!in_array($type, ['percent', 'fixed_price', 'fixed_amount'], true)) {
+            return $header;
+        }
+
+        return [
+            'discount_type' => $type,
+            'discount_percent' => $row['discount_percent'] ?? null,
+            'fixed_price_syp' => $row['fixed_price_syp'] ?? null,
+            'fixed_price_usd' => $row['fixed_price_usd'] ?? null,
+            'fixed_amount_syp' => $row['fixed_amount_syp'] ?? null,
+            'fixed_amount_usd' => $row['fixed_amount_usd'] ?? null,
+        ];
+    }
+
     /** @param array<string, mixed> $offer */
     public static function applyToCartLine(array $line, array $offer): array
     {
         $material = [
+            'materialGuid' => trim((string) ($line['material_guid'] ?? '')),
             'unitSalePriceSyp' => (float) ($line['unit_sale_price_sp'] ?? 0),
             'unitSalePriceUsd' => (float) ($line['unit_sale_price_usd'] ?? 0),
             'packageConversionFactor' => (float) ($line['packaging'] ?? $line['package_factor'] ?? 1),
         ];
+        if (isset($line['original_unit_sale_price_sp']) && is_numeric((string) $line['original_unit_sale_price_sp'])) {
+            $material['original_unit_sale_price_sp'] = (float) $line['original_unit_sale_price_sp'];
+        }
+        if (isset($line['original_unit_sale_price_usd']) && is_numeric((string) $line['original_unit_sale_price_usd'])) {
+            $material['original_unit_sale_price_usd'] = (float) $line['original_unit_sale_price_usd'];
+        }
+
         $pricing = self::computePricing($material, $offer);
         $line['original_unit_sale_price_sp'] = $pricing['original_unit_sale_price_sp'];
         $line['original_unit_sale_price_usd'] = $pricing['original_unit_sale_price_usd'];
@@ -706,7 +817,7 @@ final class SpecialOfferService
         $line['sale_price_sp'] = $pricing['effective_package_sale_price_sp'];
         $line['sale_price_usd'] = $pricing['effective_package_sale_price_usd'];
         $line['special_offer_id'] = (string) ($offer['id'] ?? '');
-        $line['offer_badge'] = trim((string) ($offer['badge_text_ar'] ?? '')) ?: self::defaultBadge($offer);
+        $line['offer_badge'] = trim((string) ($offer['badge_text_ar'] ?? '')) ?: self::defaultBadge($offer, (string) ($line['material_guid'] ?? ''));
         $line['has_offer'] = true;
         $line['offer_title_ar'] = trim((string) ($offer['title_ar'] ?? ''));
 
@@ -718,20 +829,28 @@ final class SpecialOfferService
     /** @return list<array<string, mixed>> */
     private static function activeOffers(): array
     {
-        $rows = Database::pdo()->query(
+        $stmt = Database::pdo()->query(
             'SELECT id::text AS id, slug, title_ar, badge_text_ar, selection_mode::text AS selection_mode,
-                    discount_type::text AS discount_type, discount_percent, fixed_price_syp, fixed_price_usd,
+                    pricing_scope, discount_type::text AS discount_type, discount_percent,
+                    fixed_price_syp, fixed_price_usd, fixed_amount_syp, fixed_amount_usd,
                     priority, min_packages, max_packages, starts_at
              FROM special_offers
              WHERE is_active = TRUE AND starts_at <= NOW() AND (ends_at IS NULL OR ends_at > NOW())
              ORDER BY priority DESC, starts_at DESC'
         )->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
+        $offerIds = array_map(static fn (array $row): string => (string) $row['id'], $rows);
+        $filtersByOffer = self::batchFiltersForOffers($offerIds);
+        $manualByOffer = self::batchManualProductRowsForOffers($offerIds);
+
         foreach ($rows as &$row) {
             $id = (string) $row['id'];
-            $parsed = self::parseFilterRows(self::filtersForOffer($id));
+            $parsed = self::parseFilterRows($filtersByOffer[$id] ?? []);
             $row['filter_rules'] = $parsed['rules'];
-            $row['material_guids'] = self::manualProducts($id);
+            $manual = $manualByOffer[$id] ?? ['guids' => [], 'overrides' => []];
+            $row['material_guids'] = $manual['guids'];
+            $row['product_overrides'] = $manual['overrides'];
+            $row['pricing_scope'] = (string) ($row['pricing_scope'] ?? 'offer');
         }
 
         return $rows;
@@ -854,12 +973,20 @@ final class SpecialOfferService
     }
 
     /** @param array<string, mixed> $offer */
-    private static function defaultBadge(array $offer): string
+    private static function defaultBadge(array $offer, string $materialGuid = ''): string
     {
-        if ((string) ($offer['discount_type'] ?? '') === 'percent') {
-            $pct = (float) ($offer['discount_percent'] ?? 0);
+        $spec = self::resolveDiscountSpec($offer, $materialGuid);
+        $type = (string) ($spec['discount_type'] ?? '');
+        if ($type === 'percent') {
+            $pct = (float) ($spec['discount_percent'] ?? 0);
             if ($pct > 0) {
                 return '-' . rtrim(rtrim(number_format($pct, 2, '.', ''), '0'), '.') . '%';
+            }
+        }
+        if ($type === 'fixed_amount') {
+            $amountSp = (float) ($spec['fixed_amount_syp'] ?? 0);
+            if ($amountSp > 0) {
+                return '-' . rtrim(rtrim(number_format($amountSp, 0, '.', ''), '0'), '.') . ' ل.س';
             }
         }
 
@@ -1004,17 +1131,51 @@ final class SpecialOfferService
         $insert(self::OPTION_PRICE_MODE, $priceMode);
     }
 
-    /** @param list<string> $guids */
-    private static function syncManualProducts(string $offerId, array $guids): void
+    /** @param list<string> $guids @param array<string, array<string, mixed>> $overrides */
+    private static function syncManualProducts(string $offerId, array $guids, array $overrides = []): void
     {
         $pdo = Database::pdo();
         $pdo->prepare('DELETE FROM special_offer_products WHERE offer_id = :id')->execute(['id' => $offerId]);
         $stmt = $pdo->prepare(
-            'INSERT INTO special_offer_products (offer_id, material_guid, sort_order) VALUES (:offer_id, :guid, :sort)'
+            'INSERT INTO special_offer_products (
+                offer_id, material_guid, sort_order,
+                discount_type, discount_percent, fixed_price_syp, fixed_price_usd,
+                fixed_amount_syp, fixed_amount_usd
+             ) VALUES (
+                :offer_id, :guid, :sort,
+                :discount_type, :discount_percent, :fixed_price_syp, :fixed_price_usd,
+                :fixed_amount_syp, :fixed_amount_usd
+             )'
         );
         $sort = 0;
         foreach (self::stringList($guids) as $guid) {
-            $stmt->execute(['offer_id' => $offerId, 'guid' => $guid, 'sort' => $sort++]);
+            $override = is_array($overrides[$guid] ?? null) ? $overrides[$guid] : [];
+            $type = trim((string) ($override['discount_type'] ?? ''));
+            if (!in_array($type, ['percent', 'fixed_price', 'fixed_amount'], true)) {
+                $type = '';
+            }
+
+            $stmt->execute([
+                'offer_id' => $offerId,
+                'guid' => $guid,
+                'sort' => $sort++,
+                'discount_type' => $type !== '' ? $type : null,
+                'discount_percent' => $type === 'percent'
+                    ? self::toNullableFloat((string) ($override['discount_percent'] ?? ''))
+                    : null,
+                'fixed_price_syp' => $type === 'fixed_price'
+                    ? self::toNullableFloat((string) ($override['fixed_price_syp'] ?? ''))
+                    : null,
+                'fixed_price_usd' => $type === 'fixed_price'
+                    ? self::toNullableFloat((string) ($override['fixed_price_usd'] ?? ''))
+                    : null,
+                'fixed_amount_syp' => $type === 'fixed_amount'
+                    ? self::toNullableFloat((string) ($override['fixed_amount_syp'] ?? ''))
+                    : null,
+                'fixed_amount_usd' => $type === 'fixed_amount'
+                    ? self::toNullableFloat((string) ($override['fixed_amount_usd'] ?? ''))
+                    : null,
+            ]);
         }
     }
 
@@ -1072,7 +1233,7 @@ final class SpecialOfferService
     /** @return list<string> */
     private static function manualProducts(string $offerId): array
     {
-        return self::batchManualProductsForOffers([$offerId])[$offerId] ?? [];
+        return self::batchManualProductRowsForOffers([$offerId])[$offerId]['guids'] ?? [];
     }
 
     /**
@@ -1081,10 +1242,25 @@ final class SpecialOfferService
      */
     private static function batchManualProductsForOffers(array $offerIds): array
     {
+        $rows = self::batchManualProductRowsForOffers($offerIds);
+        $grouped = [];
+        foreach ($rows as $offerId => $payload) {
+            $grouped[$offerId] = $payload['guids'];
+        }
+
+        return $grouped;
+    }
+
+    /**
+     * @param list<string> $offerIds
+     * @return array<string, array{guids: list<string>, overrides: array<string, array<string, mixed>>}>
+     */
+    private static function batchManualProductRowsForOffers(array $offerIds): array
+    {
         $offerIds = array_values(array_unique(array_filter(array_map('strval', $offerIds), static fn (string $id): bool => trim($id) !== '')));
         $grouped = [];
         foreach ($offerIds as $offerId) {
-            $grouped[$offerId] = [];
+            $grouped[$offerId] = ['guids' => [], 'overrides' => []];
         }
         if ($offerIds === []) {
             return $grouped;
@@ -1099,7 +1275,9 @@ final class SpecialOfferService
         }
 
         $stmt = Database::pdo()->prepare(
-            'SELECT offer_id::text AS offer_id, material_guid::text AS material_guid
+            'SELECT offer_id::text AS offer_id, material_guid::text AS material_guid,
+                    discount_type::text AS discount_type, discount_percent,
+                    fixed_price_syp, fixed_price_usd, fixed_amount_syp, fixed_amount_usd
              FROM special_offer_products
              WHERE offer_id IN (' . implode(', ', $placeholders) . ')
              ORDER BY offer_id, sort_order ASC'
@@ -1110,10 +1288,21 @@ final class SpecialOfferService
         foreach ($rows as $row) {
             $offerId = (string) ($row['offer_id'] ?? '');
             $guid = trim((string) ($row['material_guid'] ?? ''));
-            if ($offerId === '' || $guid === '') {
+            if ($offerId === '' || $guid === '' || !isset($grouped[$offerId])) {
                 continue;
             }
-            $grouped[$offerId][] = $guid;
+            $grouped[$offerId]['guids'][] = $guid;
+            $type = trim((string) ($row['discount_type'] ?? ''));
+            if ($type !== '') {
+                $grouped[$offerId]['overrides'][$guid] = [
+                    'discount_type' => $type,
+                    'discount_percent' => $row['discount_percent'] ?? null,
+                    'fixed_price_syp' => $row['fixed_price_syp'] ?? null,
+                    'fixed_price_usd' => $row['fixed_price_usd'] ?? null,
+                    'fixed_amount_syp' => $row['fixed_amount_syp'] ?? null,
+                    'fixed_amount_usd' => $row['fixed_amount_usd'] ?? null,
+                ];
+            }
         }
 
         return $grouped;
