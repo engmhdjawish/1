@@ -1639,6 +1639,7 @@ final class MaterialImageStorageService
         }
 
         $meta = null;
+        $aminePreferredExt = 'jpg';
         try {
             $response = ApiClient::get('/api/material-images/' . rawurlencode($imageGuid), [], 30);
             if (($response['ok'] ?? false) && is_array($response['data'] ?? null)) {
@@ -1651,16 +1652,27 @@ final class MaterialImageStorageService
                 );
                 if ($candidates !== []) {
                     self::$fileNameByGuid[$imageGuid] = $candidates;
-                    // File may already exist under Amine's stored name.
+                    foreach ($candidates as $candidate) {
+                        $ext = strtolower(pathinfo($candidate, PATHINFO_EXTENSION));
+                        if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
+                            $aminePreferredExt = $ext === 'jpeg' ? 'jpg' : $ext;
+                            break;
+                        }
+                    }
+                    // Reuse an existing on-disk file only when we can materialize a GUID-named
+                    // copy (or it already is GUID-named). Otherwise the fast index never sees it
+                    // and the next CLI run reports the same "missing" set again.
                     foreach ($candidates as $candidate) {
                         $path = self::resolveLocalPath($candidate, false);
-                        if ($path !== null && is_readable($path)) {
-                            try {
-                                MaterialImageSyncService::recordAssignedCopy($candidate, $path, $imageGuid);
-                            } catch (Throwable) {
-                            }
-
-                            return $path;
+                        if ($path === null || !is_readable($path)) {
+                            continue;
+                        }
+                        if ($onProgress !== null) {
+                            $onProgress('وُجد ملف محلي باسم الأمين — ضمان نسخة باسم GUID…');
+                        }
+                        $ensured = self::materializeGuidNamedLocalCopy($imageGuid, $path, $aminePreferredExt, $onProgress);
+                        if ($ensured !== null) {
+                            return $ensured;
                         }
                     }
                 }
@@ -1675,10 +1687,8 @@ final class MaterialImageStorageService
             }
         }
 
-        $fileName = '';
-        if (is_array($meta)) {
-            $fileName = self::sanitizeFileName((string) ($meta['storedFileName'] ?? $meta['fileName'] ?? ''));
-        }
+        // Always store under {guid}.{ext} so localImageGuidIndex / storefront resolve work.
+        $fileName = self::sanitizeFileName($imageGuid . '.' . $aminePreferredExt);
         if ($fileName === '' || !self::isAllowedFileName($fileName)) {
             $fileName = self::sanitizeFileName($imageGuid . '.jpg');
         }
@@ -1690,6 +1700,19 @@ final class MaterialImageStorageService
         $thumbPath = self::safeJoin($settings['thumbnails_dir'], $fileName);
         if ($targetPath === null || $thumbPath === null) {
             return null;
+        }
+
+        if (is_file($targetPath) && is_readable($targetPath) && filesize($targetPath) > 0) {
+            try {
+                MaterialImageSyncService::recordAssignedCopy($fileName, $targetPath, $imageGuid);
+            } catch (Throwable) {
+            }
+            self::$fileNameByGuid[$imageGuid] = array_values(array_unique(array_merge(
+                self::$fileNameByGuid[$imageGuid] ?? [],
+                [$fileName]
+            )));
+
+            return $targetPath;
         }
 
         $tmpPath = $settings['images_dir'] . DIRECTORY_SEPARATOR . ('.pull-' . $imageGuid . '.tmp');
@@ -1732,8 +1755,7 @@ final class MaterialImageStorageService
         if ($detectedExt !== '') {
             $currentExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
             if ($currentExt === '' || ($currentExt === 'jpg' && $detectedExt !== 'jpg' && $detectedExt !== 'jpeg')) {
-                $base = pathinfo($fileName, PATHINFO_FILENAME);
-                $renamed = self::sanitizeFileName($base . '.' . $detectedExt);
+                $renamed = self::sanitizeFileName($imageGuid . '.' . $detectedExt);
                 if ($renamed !== '' && self::isAllowedFileName($renamed)) {
                     $fileName = $renamed;
                     $targetPath = self::safeJoin($settings['images_dir'], $fileName);
@@ -1767,7 +1789,7 @@ final class MaterialImageStorageService
         try {
             MaterialImageSyncService::recordAssignedCopy($fileName, $targetPath, $imageGuid);
         } catch (Throwable) {
-            // Local file is enough for storefront serving.
+            // Local GUID-named file is enough for storefront + missing index.
         }
 
         self::$fileNameByGuid[$imageGuid] = array_values(array_unique(array_merge(
@@ -1776,6 +1798,91 @@ final class MaterialImageStorageService
         )));
 
         return $targetPath;
+    }
+
+    /**
+     * Ensure a readable copy exists as {guid}.{ext} (and queue row), from an existing local file.
+     *
+     * @param null|callable(string):void $onProgress
+     */
+    private static function materializeGuidNamedLocalCopy(
+        string $imageGuid,
+        string $sourcePath,
+        string $preferredExt = 'jpg',
+        ?callable $onProgress = null
+    ): ?string {
+        $imageGuid = strtolower(trim($imageGuid));
+        if ($imageGuid === '' || !is_file($sourcePath) || !is_readable($sourcePath)) {
+            return null;
+        }
+
+        $settings = self::settings();
+        if (!self::ensureDirectory($settings['images_dir']) || !self::ensureDirectory($settings['thumbnails_dir'])) {
+            return null;
+        }
+
+        $sourceExt = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION));
+        if (!in_array($sourceExt, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
+            $sourceExt = in_array($preferredExt, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)
+                ? ($preferredExt === 'jpeg' ? 'jpg' : $preferredExt)
+                : 'jpg';
+        }
+        if ($sourceExt === 'jpeg') {
+            $sourceExt = 'jpg';
+        }
+
+        $fileName = self::sanitizeFileName($imageGuid . '.' . $sourceExt);
+        if ($fileName === '' || !self::isAllowedFileName($fileName)) {
+            return null;
+        }
+
+        $targetPath = self::safeJoin($settings['images_dir'], $fileName);
+        $thumbPath = self::safeJoin($settings['thumbnails_dir'], $fileName);
+        if ($targetPath === null || $thumbPath === null) {
+            return null;
+        }
+
+        $sourceReal = realpath($sourcePath) ?: $sourcePath;
+        $targetReal = is_file($targetPath) ? (realpath($targetPath) ?: $targetPath) : '';
+        if ($targetReal !== '' && strcasecmp($sourceReal, $targetReal) === 0) {
+            try {
+                MaterialImageSyncService::recordAssignedCopy($fileName, $targetPath, $imageGuid);
+            } catch (Throwable) {
+            }
+            self::$fileNameByGuid[$imageGuid] = array_values(array_unique(array_merge(
+                self::$fileNameByGuid[$imageGuid] ?? [],
+                [$fileName]
+            )));
+
+            return $targetPath;
+        }
+
+        if (!is_file($targetPath) || filesize($targetPath) === 0) {
+            if ($onProgress !== null) {
+                $onProgress('نسخ إلى ' . $fileName . '…');
+            }
+            if (!@copy($sourcePath, $targetPath)) {
+                return null;
+            }
+        }
+
+        if (!is_file($thumbPath) || filesize($thumbPath) === 0) {
+            if (!self::generateThumbnail($targetPath, $thumbPath)) {
+                @copy($targetPath, $thumbPath);
+            }
+        }
+
+        try {
+            MaterialImageSyncService::recordAssignedCopy($fileName, $targetPath, $imageGuid);
+        } catch (Throwable) {
+        }
+
+        self::$fileNameByGuid[$imageGuid] = array_values(array_unique(array_merge(
+            self::$fileNameByGuid[$imageGuid] ?? [],
+            [$fileName]
+        )));
+
+        return is_readable($targetPath) ? $targetPath : null;
     }
 
     /**
