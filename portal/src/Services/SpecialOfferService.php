@@ -323,12 +323,12 @@ final class SpecialOfferService
             'fixed_amount_usd' => $discountType === 'fixed_amount' ? self::toNullableFloat((string) ($payload['fixed_amount_usd'] ?? '')) : null,
             'starts_at' => trim((string) ($payload['starts_at'] ?? '')) ?: date('Y-m-d H:i:s'),
             'ends_at' => trim((string) ($payload['ends_at'] ?? '')) ?: null,
-            'is_active' => !empty($payload['is_active']),
+            'is_active' => !empty($payload['is_active']) ? 'true' : 'false',
             'priority' => (int) ($payload['priority'] ?? 0),
             'min_packages' => self::toNullableFloat((string) ($payload['min_packages'] ?? '')),
             'max_packages' => self::toNullableFloat((string) ($payload['max_packages'] ?? '')),
             'max_products' => max(1, min(48, (int) ($payload['max_products'] ?? 12))),
-            'show_on_home' => !empty($payload['show_on_home']),
+            'show_on_home' => !empty($payload['show_on_home']) ? 'true' : 'false',
             'home_sort_order' => (int) ($payload['home_sort_order'] ?? 0),
             'updated_by_web_user_id' => $userId ?: null,
         ];
@@ -481,7 +481,7 @@ final class SpecialOfferService
     public static function toggleActive(string $id, bool $active): bool
     {
         $stmt = Database::pdo()->prepare('UPDATE special_offers SET is_active = :active WHERE id = :id');
-        $stmt->execute(['id' => $id, 'active' => $active]);
+        $stmt->execute(['id' => $id, 'active' => $active ? 'true' : 'false']);
 
         return $stmt->rowCount() > 0;
     }
@@ -1107,7 +1107,7 @@ final class SpecialOfferService
         }
     }
 
-    /** @param list<string> $guids @return list<array{guid: string, name: string, code: string}> */
+    /** @param list<string> $guids @return list<array{guid: string, name: string, code: string, image: string}> */
     private static function loadManualProductDetails(array $guids): array
     {
         $items = [];
@@ -1120,6 +1120,9 @@ final class SpecialOfferService
                         'guid' => $guid,
                         'name' => trim((string) ($d['name'] ?? '')),
                         'code' => trim((string) ($d['materialCode'] ?? '')),
+                        'image' => ($imageGuid = trim((string) ($d['productImageGuid'] ?? $d['ProductImageGuid'] ?? ''))) !== ''
+                            ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1'
+                            : '',
                     ];
                 }
             } catch (\Throwable) {

@@ -52,7 +52,14 @@ try {
             $name = trim((string) ($row['name'] ?? $row['Name'] ?? ''));
             $code = trim((string) ($row['materialCode'] ?? $row['MaterialCode'] ?? ''));
             $label = $name !== '' ? $name . ($code !== '' ? ' (' . $code . ')' : '') : $guid;
-            $items[] = ['value' => $guid, 'label' => $label];
+            $imageGuid = trim((string) ($row['productImageGuid'] ?? $row['ProductImageGuid'] ?? ''));
+            $items[] = [
+                'value' => $guid,
+                'label' => $label,
+                'code' => $code,
+                'name' => $name,
+                'image' => $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '',
+            ];
         }
         $hasMore = ($page * $pageSize) < $total;
     }

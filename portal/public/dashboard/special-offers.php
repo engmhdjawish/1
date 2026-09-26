@@ -81,6 +81,21 @@ $flashType = 'success';
 $editId = trim((string) ($_GET['edit'] ?? ''));
 $isNew = ($_GET['new'] ?? '') === '1';
 $showForm = $editId !== '' || $isNew;
+$allowedOfferTabs = ['active', 'scheduled', 'paused', 'ended', 'all'];
+$offerTab = trim((string) ($_GET['tab'] ?? 'active'));
+if (!in_array($offerTab, $allowedOfferTabs, true)) {
+    $offerTab = 'active';
+}
+$offerTabQuery = static function (string $tab, bool $keepForm = true) use ($editId, $isNew): string {
+    $params = ['tab' => $tab];
+    if ($keepForm && $editId !== '') {
+        $params['edit'] = $editId;
+    } elseif ($keepForm && $isNew) {
+        $params['new'] = '1';
+    }
+
+    return '/dashboard/special-offers.php?' . http_build_query($params);
+};
 $user = WebSession::user();
 
 if (isset($_GET['saved']) && $_GET['saved'] === '1') {
@@ -133,10 +148,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (DashboardHttp::wantsJson()) {
                     DashboardHttp::json(true, $flash, [
                         'reload' => true,
-                        'redirect' => '/dashboard/special-offers.php?edit=' . urlencode((string) $result['id']) . '&saved=1',
+                        'redirect' => '/dashboard/special-offers.php?edit=' . urlencode((string) $result['id']) . '&saved=1&tab=' . urlencode($offerTab),
                     ]);
                 }
-                header('Location: /dashboard/special-offers.php?edit=' . urlencode((string) $result['id']) . '&saved=1');
+                header('Location: /dashboard/special-offers.php?edit=' . urlencode((string) $result['id']) . '&saved=1&tab=' . urlencode($offerTab));
                 exit;
             }
             $showForm = true;

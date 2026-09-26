@@ -93,26 +93,60 @@
       });
     };
 
-    const renderOverrideRow = (guid, label) => {
+    const renderOverrideRow = (guid, meta, index) => {
       const current = overridesState[guid] || {};
       const type = ['percent', 'fixed_amount', 'fixed_price'].includes(current.discount_type)
         ? current.discount_type
         : 'percent';
+      const name = meta.name || meta.label || guid;
+      const code = meta.code || '';
       const tr = document.createElement('tr');
-      tr.className = 'border-t border-border-subtle';
+      tr.className = 'so-invoice__row';
       tr.setAttribute('data-override-guid', guid);
 
+      const numCell = document.createElement('td');
+      numCell.className = 'so-invoice__num';
+      numCell.textContent = String(index + 1);
+      tr.appendChild(numCell);
+
       const materialCell = document.createElement('td');
-      materialCell.className = 'px-3 py-2 font-bold align-middle';
-      materialCell.textContent = label || guid;
+      materialCell.className = 'so-invoice__material';
+      const material = document.createElement('div');
+      material.className = 'so-invoice__material-inner';
+      const thumbWrap = document.createElement('span');
+      thumbWrap.className = 'so-invoice__thumb';
+      if (meta.image) {
+        const img = document.createElement('img');
+        img.src = meta.image;
+        img.alt = '';
+        img.loading = 'lazy';
+        thumbWrap.appendChild(img);
+      } else {
+        thumbWrap.classList.add('is-empty');
+        thumbWrap.textContent = 'صورة';
+      }
+      const textWrap = document.createElement('span');
+      textWrap.className = 'so-invoice__material-text';
+      const nameEl = document.createElement('span');
+      nameEl.className = 'so-invoice__name';
+      nameEl.textContent = name;
+      textWrap.appendChild(nameEl);
+      if (code) {
+        const codeEl = document.createElement('span');
+        codeEl.className = 'so-invoice__code';
+        codeEl.textContent = code;
+        textWrap.appendChild(codeEl);
+      }
+      material.append(thumbWrap, textWrap);
+      materialCell.appendChild(material);
       tr.appendChild(materialCell);
 
       const typeCell = document.createElement('td');
-      typeCell.className = 'px-3 py-2 align-middle';
+      typeCell.className = 'so-invoice__type';
       const typeSelect = document.createElement('select');
       typeSelect.name = `material_override[${guid}][discount_type]`;
       typeSelect.setAttribute('data-field', 'discount_type');
-      typeSelect.className = 'h-8 w-full rounded-lg border border-border-subtle px-2 text-xs bg-white';
+      typeSelect.className = 'so-invoice__select';
       [
         ['percent', 'نسبة %'],
         ['fixed_amount', 'مبلغ مقطوع'],
@@ -128,9 +162,9 @@
       tr.appendChild(typeCell);
 
       const valueCell = document.createElement('td');
-      valueCell.className = 'px-3 py-2 align-middle';
+      valueCell.className = 'so-invoice__value';
       const valueWrap = document.createElement('div');
-      valueWrap.className = 'flex flex-wrap gap-2';
+      valueWrap.className = 'so-invoice__values';
       const fields = [
         ['percent', 'discount_percent', '%', '100', current.discount_percent],
         ['fixed_amount', 'fixed_amount_syp', 'ل.س', '', current.fixed_amount_syp],
@@ -140,7 +174,7 @@
       ];
       fields.forEach(([showFor, field, caption, max, value]) => {
         const box = document.createElement('label');
-        box.className = 'inline-flex items-center gap-1 text-[11px]' + (showFor === type ? '' : ' hidden');
+        box.className = 'so-invoice__value-field' + (showFor === type ? '' : ' hidden');
         box.setAttribute('data-show-for', showFor);
         const captionEl = document.createElement('span');
         captionEl.className = 'text-text-muted whitespace-nowrap';
@@ -154,7 +188,7 @@
         input.name = `material_override[${guid}][${field}]`;
         input.setAttribute('data-field', field);
         input.value = value ?? '';
-        input.className = 'h-8 w-24 rounded-lg border border-border-subtle px-2 text-xs bg-white';
+        input.className = 'so-invoice__input';
         box.appendChild(captionEl);
         box.appendChild(input);
         valueWrap.appendChild(box);
@@ -163,10 +197,10 @@
       tr.appendChild(valueCell);
 
       const actionCell = document.createElement('td');
-      actionCell.className = 'px-3 py-2 align-middle text-left';
+      actionCell.className = 'so-invoice__action';
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
-      removeBtn.className = 'h-8 px-2 rounded-lg border border-red-200 text-red-700 text-xs font-bold';
+      removeBtn.className = 'so-invoice__remove';
       removeBtn.textContent = 'حذف';
       removeBtn.addEventListener('click', () => {
         tr.remove();
@@ -199,20 +233,24 @@
         ? window.portalTokenPickerGetSelected('so-manual-materials')
         : [];
       perMaterialRows.innerHTML = '';
+      const countEl = root.querySelector('#so-invoice-count');
+      const countLabel = selected.length === 0
+        ? 'لا مواد'
+        : (selected.length === 1 ? 'مادة واحدة' : selected.length + ' مواد');
+      if (countEl) countEl.textContent = countLabel;
       if (!selected.length) {
         const empty = document.createElement('tr');
         const cell = document.createElement('td');
-        cell.colSpan = 4;
-        cell.className = 'px-3 py-4 text-xs text-text-muted text-center';
+        cell.colSpan = 5;
+        cell.className = 'so-invoice__empty';
         cell.textContent = 'أضف مادة واحدة على الأقل من البحث أعلاه.';
         empty.appendChild(cell);
         perMaterialRows.appendChild(empty);
         return;
       }
-      selected.forEach((guid) => {
-        const meta = labelMap[guid] || {};
-        const label = [meta.code, meta.name].filter(Boolean).join(' — ') || guid;
-        perMaterialRows.appendChild(renderOverrideRow(guid, label));
+      selected.forEach((guid, index) => {
+        const meta = labelMap[guid] || { name: guid };
+        perMaterialRows.appendChild(renderOverrideRow(guid, meta, index));
       });
     };
 
@@ -323,8 +361,22 @@
       const li = document.createElement('li');
       li.setAttribute('role', 'option');
       li.setAttribute('data-result-index', String(index));
-      li.className = 'px-3 py-2.5 cursor-pointer hover:bg-surface-low text-right';
-      li.textContent = item.label || item.value || '';
+      li.className = 'so-search-option px-3 py-2 cursor-pointer hover:bg-surface-low text-right';
+      const thumb = document.createElement('span');
+      thumb.className = 'so-invoice__thumb so-invoice__thumb--sm';
+      if (item.image) {
+        const img = document.createElement('img');
+        img.src = item.image;
+        img.alt = '';
+        img.loading = 'lazy';
+        thumb.appendChild(img);
+      } else {
+        thumb.classList.add('is-empty');
+      }
+      const label = document.createElement('span');
+      label.className = 'so-search-option__label';
+      label.textContent = item.label || item.value || '';
+      li.append(thumb, label);
       li.addEventListener('mousedown', (event) => {
         event.preventDefault();
         addMaterialItem(item);
@@ -341,8 +393,9 @@
       if (item.value) {
         labelMap[item.value] = {
           guid: item.value,
-          name: item.label || item.value,
+          name: item.name || item.label || item.value,
           code: item.code || '',
+          image: item.image || '',
         };
       }
       if (pricingScope?.value === 'per_material') {
