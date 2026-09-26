@@ -36,6 +36,7 @@ final class DashboardNavigation
         '/dashboard/site-content.php',
         '/dashboard/home-sections.php',
         '/dashboard/special-offers.php',
+        '/dashboard/price-checker.php',
         '/dashboard/site-media.php',
     ];
 
@@ -330,6 +331,13 @@ final class DashboardNavigation
                     'icon' => 'sell',
                     'permission' => 'special_offers.manage',
                     'description' => 'إنشاء عروض مخفّضة وعرضها في الرئيسية والمتجر.',
+                ],
+                [
+                    'route' => '/dashboard/price-checker.php',
+                    'label' => 'فاحص الأسعار في المحل',
+                    'icon' => 'barcode_scanner',
+                    'permission' => 'price_checker.manage',
+                    'description' => 'شاشة مسح الباركود في المحل، IPs المسموحة، وإعلانات الانتظار.',
                 ],
             ],
             'الوسائط والهوية' => [

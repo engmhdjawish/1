@@ -25,6 +25,7 @@ final class StaffPermissions
             ['code' => 'images.upload', 'name_ar' => 'إدارة صور المواد', 'category_ar' => 'مواد', 'description_ar' => 'رفع، مزامنة، ربط، وحذف الصور'],
             ['code' => 'home_sections.manage', 'name_ar' => 'أقسام الرئيسية', 'category_ar' => 'محتوى', 'description_ar' => 'تنظيم أقسام الصفحة الرئيسية'],
             ['code' => 'special_offers.manage', 'name_ar' => 'العروض الخاصة', 'category_ar' => 'محتوى', 'description_ar' => 'إدارة العروض والحسومات'],
+            ['code' => 'price_checker.manage', 'name_ar' => 'فاحص الأسعار في المحل', 'category_ar' => 'محتوى', 'description_ar' => 'إعداد شاشة مسح الباركود في المحل'],
             ['code' => 'site_media.manage', 'name_ar' => 'مكتبة الوسائط', 'category_ar' => 'محتوى', 'description_ar' => 'بنرات وشعارات وصور الموقع'],
             ['code' => 'company_settings.manage', 'name_ar' => 'إعدادات الشركة', 'category_ar' => 'محتوى', 'description_ar' => 'بيانات الشركة وصفحة من نحن'],
             ['code' => 'notifications.manage', 'name_ar' => 'الإشعارات', 'category_ar' => 'إدارة', 'description_ar' => 'إشعارات الموقع والعملاء'],
@@ -82,7 +83,7 @@ final class StaffPermissions
                 'role_code' => 'content',
                 'name_ar' => 'محتوى الموقع',
                 'description_ar' => 'الرئيسية، العروض، الوسائط، ومن نحن.',
-                'permissions' => ['dashboard.view', 'home_sections.manage', 'special_offers.manage', 'company_settings.manage', 'site_media.manage'],
+                'permissions' => ['dashboard.view', 'home_sections.manage', 'special_offers.manage', 'price_checker.manage', 'company_settings.manage', 'site_media.manage'],
             ],
             [
                 'code' => 'communications',

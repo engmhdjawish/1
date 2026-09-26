@@ -87,6 +87,12 @@ final class ApiClient
         return self::request('GET', $path, null, $query, $timeoutSeconds);
     }
 
+    /** Preload API auth token so the first user-facing request is faster. */
+    public static function ensureToken(): void
+    {
+        self::accessToken();
+    }
+
     /**
      * @param list<array{key: string, path: string, query?: array<string, scalar|null>}> $requests
      * @return array<string, array{ok: bool, status: int, data: mixed, error?: string}>

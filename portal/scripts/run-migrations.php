@@ -48,6 +48,8 @@ $ordered = [
     '013-orders-visitor-session.sql',
     '014-offer-per-material-discount.sql',
     '016-drop-material-card-templates.sql',
+    '017-price-checker.sql',
+    '018-price-checker-slideshow-filters.sql',
 ];
 
 $files = [];
