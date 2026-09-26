@@ -176,12 +176,16 @@ final class SpecialOfferService
     /** @return list<array<string, mixed>> */
     public static function adminList(): array
     {
+        $pricingCols = self::hasExtendedOfferPricingColumns()
+            ? 'so.pricing_scope, so.discount_type::text AS discount_type,
+                    so.discount_percent, so.fixed_price_syp, so.fixed_price_usd,
+                    so.fixed_amount_syp, so.fixed_amount_usd,'
+            : 'so.discount_type::text AS discount_type,
+                    so.discount_percent, so.fixed_price_syp, so.fixed_price_usd,';
+
         return Database::pdo()->query(
             'SELECT so.id::text AS id, so.slug, so.title_ar, so.subtitle_ar, so.badge_text_ar,
-                    so.selection_mode::text AS selection_mode, so.pricing_scope,
-                    so.discount_type::text AS discount_type,
-                    so.discount_percent, so.fixed_price_syp, so.fixed_price_usd,
-                    so.fixed_amount_syp, so.fixed_amount_usd,
+                    so.selection_mode::text AS selection_mode, ' . $pricingCols . '
                     so.starts_at, so.ends_at,
                     CASE WHEN so.is_active THEN 1 ELSE 0 END AS is_active,
                     so.priority, so.min_packages, so.max_packages, so.max_products,
@@ -228,12 +232,18 @@ final class SpecialOfferService
 
     public static function getById(string $id): ?array
     {
-        $stmt = Database::pdo()->prepare(
-            'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
-                    selection_mode::text AS selection_mode, pricing_scope,
+        $pricingCols = self::hasExtendedOfferPricingColumns()
+            ? 'selection_mode::text AS selection_mode, pricing_scope,
                     discount_type::text AS discount_type,
                     discount_percent, fixed_price_syp, fixed_price_usd,
-                    fixed_amount_syp, fixed_amount_usd,
+                    fixed_amount_syp, fixed_amount_usd,'
+            : 'selection_mode::text AS selection_mode,
+                    discount_type::text AS discount_type,
+                    discount_percent, fixed_price_syp, fixed_price_usd,';
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
+                    ' . $pricingCols . '
                     starts_at::text AS starts_at, ends_at::text AS ends_at,
                     CASE WHEN is_active THEN 1 ELSE 0 END AS is_active,
                     priority, min_packages, max_packages, max_products,
@@ -383,12 +393,18 @@ final class SpecialOfferService
             return null;
         }
 
-        $stmt = Database::pdo()->prepare(
-            'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
-                    selection_mode::text AS selection_mode, pricing_scope,
+        $pricingCols = self::hasExtendedOfferPricingColumns()
+            ? 'selection_mode::text AS selection_mode, pricing_scope,
                     discount_type::text AS discount_type,
                     discount_percent, fixed_price_syp, fixed_price_usd,
-                    fixed_amount_syp, fixed_amount_usd,
+                    fixed_amount_syp, fixed_amount_usd,'
+            : 'selection_mode::text AS selection_mode,
+                    discount_type::text AS discount_type,
+                    discount_percent, fixed_price_syp, fixed_price_usd,';
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
+                    ' . $pricingCols . '
                     min_packages, max_packages, max_products, priority, starts_at
              FROM special_offers
              WHERE slug = :slug
@@ -826,10 +842,29 @@ final class SpecialOfferService
 
     // --- internals ---
 
+    /** Whether migration 014 columns exist (pricing_scope / fixed_amount_*). */
+    private static function hasExtendedOfferPricingColumns(): bool
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        try {
+            Database::pdo()->query('SELECT pricing_scope, fixed_amount_syp FROM special_offers LIMIT 0');
+            Database::pdo()->query('SELECT fixed_amount_syp FROM special_offer_products LIMIT 0');
+            $cached = true;
+        } catch (\Throwable) {
+            $cached = false;
+        }
+
+        return $cached;
+    }
+
     /** @return list<array<string, mixed>> */
     private static function activeOffers(): array
     {
-        try {
+        if (self::hasExtendedOfferPricingColumns()) {
             $rows = Database::pdo()->query(
                 'SELECT id::text AS id, slug, title_ar, badge_text_ar, selection_mode::text AS selection_mode,
                         pricing_scope, discount_type::text AS discount_type, discount_percent,
@@ -839,8 +874,7 @@ final class SpecialOfferService
                  WHERE is_active = TRUE AND starts_at <= NOW() AND (ends_at IS NULL OR ends_at > NOW())
                  ORDER BY priority DESC, starts_at DESC'
             )->fetchAll(PDO::FETCH_ASSOC) ?: [];
-        } catch (\Throwable) {
-            // Pre-014 schema: pricing_scope / fixed_amount_* columns may be missing.
+        } else {
             $rows = Database::pdo()->query(
                 'SELECT id::text AS id, slug, title_ar, badge_text_ar, selection_mode::text AS selection_mode,
                         discount_type::text AS discount_type, discount_percent,
@@ -1288,18 +1322,16 @@ final class SpecialOfferService
             $params[$key] = $offerId;
         }
 
-        $stmt = Database::pdo()->prepare(
-            'SELECT offer_id::text AS offer_id, material_guid::text AS material_guid,
-                    discount_type::text AS discount_type, discount_percent,
-                    fixed_price_syp, fixed_price_usd, fixed_amount_syp, fixed_amount_usd
-             FROM special_offer_products
-             WHERE offer_id IN (' . implode(', ', $placeholders) . ')
-             ORDER BY offer_id, sort_order ASC'
-        );
-        try {
-            $stmt->execute($params);
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-        } catch (\Throwable) {
+        if (self::hasExtendedOfferPricingColumns()) {
+            $stmt = Database::pdo()->prepare(
+                'SELECT offer_id::text AS offer_id, material_guid::text AS material_guid,
+                        discount_type::text AS discount_type, discount_percent,
+                        fixed_price_syp, fixed_price_usd, fixed_amount_syp, fixed_amount_usd
+                 FROM special_offer_products
+                 WHERE offer_id IN (' . implode(', ', $placeholders) . ')
+                 ORDER BY offer_id, sort_order ASC'
+            );
+        } else {
             $stmt = Database::pdo()->prepare(
                 'SELECT offer_id::text AS offer_id, material_guid::text AS material_guid,
                         discount_type::text AS discount_type, discount_percent,
@@ -1308,9 +1340,9 @@ final class SpecialOfferService
                  WHERE offer_id IN (' . implode(', ', $placeholders) . ')
                  ORDER BY offer_id, sort_order ASC'
             );
-            $stmt->execute($params);
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         }
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
         foreach ($rows as $row) {
             $offerId = (string) ($row['offer_id'] ?? '');

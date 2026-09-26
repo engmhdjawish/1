@@ -17,14 +17,37 @@ if (session_status() === PHP_SESSION_ACTIVE) {
 
 $companyContext = PortalSettingsService::companySettings();
 $companyLogoUrl = PortalSettingsService::companyLogoUrl($companyContext);
-$storeCatalogDisplay = StoreCatalogService::displayOptions();
-$deferHomeProducts = false;
-$sections = HomePageService::mergedSectionShells();
-$embeddedProductStrips = HomePageService::embeddedProductStrips();
-if ($embeddedProductStrips === []) {
-    $embeddedProductStrips = HomePageService::productStripHtmlBySectionKey();
+try {
+    $storeCatalogDisplay = StoreCatalogService::displayOptions();
+} catch (Throwable $e) {
+    error_log('index.php displayOptions: ' . $e->getMessage());
+    $storeCatalogDisplay = [
+        'show_price' => false,
+        'show_quantity' => false,
+        'allow_cart' => false,
+        'allow_order' => false,
+        'show_images' => true,
+        'price_mode' => 'none',
+    ];
 }
-$ads = SiteMediaService::listAdsForHome();
+$deferHomeProducts = false;
+try {
+    $sections = HomePageService::mergedSectionShells();
+    $embeddedProductStrips = HomePageService::embeddedProductStrips();
+    if ($embeddedProductStrips === []) {
+        $embeddedProductStrips = HomePageService::productStripHtmlBySectionKey();
+    }
+} catch (Throwable $e) {
+    error_log('index.php home sections: ' . $e->getMessage());
+    $sections = [];
+    $embeddedProductStrips = [];
+}
+try {
+    $ads = SiteMediaService::listAdsForHome();
+} catch (Throwable $e) {
+    error_log('index.php ads: ' . $e->getMessage());
+    $ads = [];
+}
 
 $lcpPreloadUrl = null;
 if (!empty($companyLogoUrl)) {
