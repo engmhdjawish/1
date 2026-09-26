@@ -125,7 +125,7 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
   </div>
   <div class="flex flex-wrap items-center gap-3">
     <?php if (!$showForm): ?>
-      <a href="/dashboard/special-offers.php?new=1" class="h-9 px-4 inline-flex items-center rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">عرض جديد</a>
+      <a href="/dashboard/special-offers.php?new=1&amp;tab=<?= urlencode((string) ($offerTab ?? 'active')) ?>" class="h-9 px-4 inline-flex items-center rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">عرض جديد</a>
       <a href="/dashboard/site-media.php" class="h-9 px-4 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">مكتبة الصور</a>
     <?php endif; ?>
     <article class="bg-white border border-border-subtle rounded-xl px-4 py-3 min-w-20 text-center">
@@ -164,7 +164,7 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
   <div class="dashboard-sticky-toolbar sticky z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
     <h2 class="font-bold text-base"><?= $editId !== '' ? 'تعديل العرض' : 'عرض جديد' ?></h2>
     <div class="flex flex-wrap items-center gap-2">
-      <a href="/dashboard/special-offers.php" class="h-9 px-4 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"><?= $editId !== '' ? 'إلغاء التعديل' : 'إلغاء' ?></a>
+      <a href="<?= h($offerTabQuery($offerTab, false)) ?>" class="h-9 px-4 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"><?= $editId !== '' ? 'إلغاء التعديل' : 'إلغاء' ?></a>
       <?php if ($editId !== ''): ?>
         <button type="submit" form="so-delete-form" class="h-9 px-4 rounded-lg border border-red-300 bg-white text-xs font-bold text-red-700 hover:bg-red-50">حذف</button>
       <?php endif; ?>
@@ -410,17 +410,24 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
 
     <?php $renderTokenPicker('المواد المشمولة بالعرض', 'manual_material_guids[]', $manualPickerOptions, $selectedMaterialGuids, 'so-manual-materials', false, true, true); ?>
 
-    <div id="per-material-pricing-panel" class="mt-3 <?= $pricingScope === 'per_material' ? '' : 'hidden' ?>">
-      <h4 class="font-bold text-sm mb-1">مواد العرض وأسعارها</h4>
-      <p class="text-[11px] text-text-muted mb-2">أضف مادة من البحث، ثم حدّد بجانبها نوع الحسم وقيمته.</p>
-      <div class="overflow-auto rounded-lg border border-border-subtle">
-        <table class="w-full min-w-[640px] text-sm">
-          <thead class="bg-surface-low text-text-muted">
+    <div id="per-material-pricing-panel" class="so-invoice mt-3 <?= $pricingScope === 'per_material' ? '' : 'hidden' ?>">
+      <div class="so-invoice__head">
+        <div>
+          <p class="so-invoice__kicker">فاتورة العرض</p>
+          <h4 class="so-invoice__title">مواد العرض وأسعارها</h4>
+          <p class="so-invoice__hint">أضف مادة من البحث. الصورة للاستئناس فقط، والحسم يُحدَّد بجانب كل سطر.</p>
+        </div>
+        <p class="so-invoice__count" id="so-invoice-count">لا مواد</p>
+      </div>
+      <div class="so-invoice__sheet">
+        <table class="so-invoice__table">
+          <thead>
             <tr>
-              <th class="px-3 py-2 text-right font-bold">المادة</th>
-              <th class="px-3 py-2 text-right font-bold w-40">نوع الحسم</th>
-              <th class="px-3 py-2 text-right font-bold">القيمة</th>
-              <th class="px-3 py-2 w-16"></th>
+              <th class="so-invoice__num">#</th>
+              <th>المادة</th>
+              <th class="so-invoice__type-col">نوع الحسم</th>
+              <th>القيمة</th>
+              <th class="so-invoice__action-col"></th>
             </tr>
           </thead>
           <tbody id="per-material-pricing-rows"></tbody>
@@ -458,9 +465,73 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
 <?php portal_render_token_picker_script(); ?>
 <?php endif; ?>
 
+<?php
+$offerTab = $offerTab ?? 'active';
+$offerTabQuery = $offerTabQuery ?? static function (string $tab, bool $keepForm = true): string {
+    return '/dashboard/special-offers.php?tab=' . rawurlencode($tab);
+};
+$offerLifecycle = static function (array $row): string {
+    $now = time();
+    $ends = trim((string) ($row['ends_at'] ?? ''));
+    $starts = trim((string) ($row['starts_at'] ?? ''));
+    $endsTs = $ends !== '' ? strtotime($ends) : false;
+    if ($endsTs !== false && $endsTs <= $now) {
+        return 'ended';
+    }
+    if (empty($row['is_active'])) {
+        return 'paused';
+    }
+    $startsTs = $starts !== '' ? strtotime($starts) : false;
+    if ($startsTs !== false && $startsTs > $now) {
+        return 'scheduled';
+    }
+
+    return 'active';
+};
+$offerTabLabels = [
+    'active' => 'فعالة',
+    'scheduled' => 'قادمة',
+    'paused' => 'موقوفة',
+    'ended' => 'منتهية',
+    'all' => 'الكل',
+];
+$offerStatusLabels = [
+    'active' => 'فعالة',
+    'scheduled' => 'قادمة',
+    'paused' => 'موقوفة',
+    'ended' => 'منتهية',
+];
+$offerTabCounts = ['active' => 0, 'scheduled' => 0, 'paused' => 0, 'ended' => 0, 'all' => count($offers)];
+$visibleOffers = [];
+foreach ($offers as $row) {
+    if (!is_array($row)) {
+        continue;
+    }
+    $lifecycle = $offerLifecycle($row);
+    $row['_lifecycle'] = $lifecycle;
+    $offerTabCounts[$lifecycle] = ($offerTabCounts[$lifecycle] ?? 0) + 1;
+    if ($offerTab === 'all' || $lifecycle === $offerTab) {
+        $visibleOffers[] = $row;
+    }
+}
+?>
 <section class="bg-white border border-border-subtle rounded-xl overflow-hidden">
+  <nav class="so-offer-tabs" aria-label="تصفية العروض">
+    <?php foreach ($offerTabLabels as $tabKey => $tabLabel): ?>
+      <a
+        href="<?= h($offerTabQuery($tabKey)) ?>"
+        class="so-offer-tabs__link<?= $offerTab === $tabKey ? ' is-active' : '' ?>"
+        <?= $offerTab === $tabKey ? 'aria-current="page"' : '' ?>
+      >
+        <span><?= h($tabLabel) ?></span>
+        <span class="so-offer-tabs__count"><?= (int) ($offerTabCounts[$tabKey] ?? 0) ?></span>
+      </a>
+    <?php endforeach; ?>
+  </nav>
   <?php if ($offers === []): ?>
     <p class="p-6 text-sm text-text-muted text-center">لا توجد عروض بعد.</p>
+  <?php elseif ($visibleOffers === []): ?>
+    <p class="p-6 text-sm text-text-muted text-center">لا توجد عروض في تبويب «<?= h($offerTabLabels[$offerTab] ?? '') ?>».</p>
   <?php else: ?>
     <div class="overflow-auto">
       <table class="w-full min-w-[960px] text-sm">
@@ -477,7 +548,8 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
           </tr>
         </thead>
         <tbody class="divide-y divide-border-subtle">
-          <?php foreach ($offers as $row): ?>
+          <?php foreach ($visibleOffers as $row): ?>
+            <?php $lifecycle = (string) ($row['_lifecycle'] ?? 'paused'); ?>
             <tr class="hover:bg-slate-50">
               <td class="px-4 py-3">
                 <div class="font-bold"><?= h((string) ($row['title_ar'] ?? '')) ?></div>
@@ -501,14 +573,14 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
                 <?= h(substr((string) ($row['starts_at'] ?? ''), 0, 10)) ?> — <?= !empty($row['ends_at']) ? h(substr((string) $row['ends_at'], 0, 10)) : '∞' ?>
               </td>
               <td class="px-4 py-3">
-                <?= !empty($row['is_active']) ? '<span class="text-emerald-700 font-bold text-xs">نشط</span>' : '<span class="text-xs text-slate-500">متوقف</span>' ?>
+                <span class="so-offer-status so-offer-status--<?= h($lifecycle) ?>"><?= h($offerStatusLabels[$lifecycle] ?? '') ?></span>
                 <?php if (!empty($row['show_on_home'])): ?>
                   <span class="block text-[10px] text-primary font-bold mt-0.5">رئيسية</span>
                 <?php endif; ?>
               </td>
               <td class="px-4 py-3">
                 <div class="flex justify-end gap-1.5 flex-wrap">
-                  <a href="/dashboard/special-offers.php?edit=<?= urlencode((string) $row['id']) ?>" class="h-8 px-3 inline-flex items-center rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">تعديل</a>
+                  <a href="/dashboard/special-offers.php?edit=<?= urlencode((string) $row['id']) ?>&amp;tab=<?= urlencode($offerTab) ?>" class="h-8 px-3 inline-flex items-center rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">تعديل</a>
                   <form method="post" data-dashboard-ajax data-dashboard-reload>
                     <input type="hidden" name="action" value="toggle_offer">
                     <input type="hidden" name="id" value="<?= h((string) $row['id']) ?>">
