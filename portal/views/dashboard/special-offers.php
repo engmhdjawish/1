@@ -213,7 +213,7 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
         <span class="text-text-muted block mb-0.5">نطاق الحسم</span>
         <select name="pricing_scope" id="pricing_scope" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
           <option value="offer" <?= $pricingScope === 'offer' ? 'selected' : '' ?>>موحّد لكل المواد</option>
-          <option value="per_material" <?= $pricingScope === 'per_material' ? 'selected' : '' ?>>تخصيص لكل مادة</option>
+          <option value="per_material" <?= $pricingScope === 'per_material' ? 'selected' : '' ?>>سعر لكل مادة</option>
         </select>
       </label>
       <label class="text-xs" id="offer-discount-type-wrap">
@@ -411,8 +411,8 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
     <?php $renderTokenPicker('المواد المشمولة بالعرض', 'manual_material_guids[]', $manualPickerOptions, $selectedMaterialGuids, 'so-manual-materials', false, true, true); ?>
 
     <div id="per-material-pricing-panel" class="mt-3 <?= $pricingScope === 'per_material' ? '' : 'hidden' ?>">
-      <h4 class="font-bold text-sm mb-1">حسم كل مادة</h4>
-      <p class="text-[11px] text-text-muted mb-2">اختر مواداً أعلاه ثم حدّد لكل واحدة: نسبة أو مبلغ مقطوع أو سعر طرد نهائي. إن تُرك فارغاً يُستخدم الحسم الموحّد أعلاه.</p>
+      <h4 class="font-bold text-sm mb-1">سعر كل مادة</h4>
+      <p class="text-[11px] text-text-muted mb-2">عند إضافة مادة تظهر خياراتها مباشرة: نسبة، أو مبلغ مقطوع، أو سعر طرد جديد.</p>
       <div id="per-material-pricing-rows" class="space-y-2"></div>
       <script type="application/json" id="so-product-overrides-json"><?= json_encode($productOverrides, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?></script>
       <script type="application/json" id="so-manual-product-labels-json"><?= json_encode($manualProductsByGuid, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?></script>

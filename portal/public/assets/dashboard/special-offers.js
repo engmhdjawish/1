@@ -35,11 +35,23 @@
     const labelMap = readJson('#so-manual-product-labels-json', {});
 
     const syncPanels = () => {
+      if (pricingScope?.value === 'per_material' && modeSelect && modeSelect.value !== 'manual') {
+        modeSelect.value = 'manual';
+      }
       const isManual = modeSelect?.value === 'manual';
+      if (!isManual && pricingScope?.value === 'per_material') {
+        pricingScope.value = 'offer';
+      }
       filterPanel?.classList.toggle('hidden', isManual);
       manualPanel?.classList.toggle('hidden', !isManual);
-      if (!isManual && pricingScope) {
-        pricingScope.value = 'offer';
+      const perMaterial = pricingScope?.value === 'per_material' && isManual;
+      root.querySelector('#offer-discount-type-wrap')?.classList.toggle('hidden', perMaterial);
+      if (perMaterial) {
+        ['#field-percent', '#field-amount-syp', '#field-amount-usd', '#field-syp', '#field-usd'].forEach((sel) => {
+          root.querySelector(sel)?.classList.add('hidden');
+        });
+      } else {
+        syncDiscount();
       }
       syncPricingScope();
     };
@@ -62,7 +74,7 @@
       perMaterialRows.querySelectorAll('[data-override-guid]').forEach((row) => {
         const guid = row.getAttribute('data-override-guid');
         if (!guid) return;
-        const type = row.querySelector('[data-field="discount_type"]')?.value || '';
+        const type = row.querySelector('[data-field="discount_type"]:checked')?.value || 'percent';
         overridesState[guid] = {
           discount_type: type,
           discount_percent: row.querySelector('[data-field="discount_percent"]')?.value || '',
@@ -76,56 +88,78 @@
 
     const renderOverrideRow = (guid, label) => {
       const current = overridesState[guid] || {};
-      const type = current.discount_type || '';
+      const type = ['percent', 'fixed_amount', 'fixed_price'].includes(current.discount_type)
+        ? current.discount_type
+        : 'percent';
       const wrap = document.createElement('div');
-      wrap.className = 'rounded-lg border border-border-subtle bg-surface-low p-2 space-y-2';
+      wrap.className = 'rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 space-y-2';
       wrap.setAttribute('data-override-guid', guid);
       const title = document.createElement('div');
       title.className = 'text-xs font-bold';
       title.textContent = label || guid;
       wrap.appendChild(title);
+
+      const choices = document.createElement('div');
+      choices.className = 'flex flex-wrap gap-2 text-[11px]';
+      [
+        ['percent', 'نسبة %'],
+        ['fixed_amount', 'مبلغ مقطوع'],
+        ['fixed_price', 'سعر طرد جديد'],
+      ].forEach(([value, text]) => {
+        const choice = document.createElement('label');
+        choice.className = 'inline-flex items-center gap-1 rounded-full border border-border-subtle bg-white px-2 py-1';
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = `material_override[${guid}][discount_type]`;
+        input.value = value;
+        input.checked = type === value;
+        input.setAttribute('data-field', 'discount_type');
+        choice.appendChild(input);
+        choice.appendChild(document.createTextNode(text));
+        choices.appendChild(choice);
+      });
+      wrap.appendChild(choices);
+
       const grid = document.createElement('div');
-      grid.className = 'grid grid-cols-1 md:grid-cols-3 gap-2';
-      grid.innerHTML = `
-          <label class="text-[11px]">
-            <span class="text-text-muted block mb-0.5">نوع الحسم</span>
-            <select name="material_override[${guid}][discount_type]" data-field="discount_type" class="h-8 w-full rounded-lg border border-border-subtle px-2 text-xs">
-              <option value="" ${type === '' ? 'selected' : ''}>استخدم الموحّد</option>
-              <option value="percent" ${type === 'percent' ? 'selected' : ''}>نسبة %</option>
-              <option value="fixed_amount" ${type === 'fixed_amount' ? 'selected' : ''}>مبلغ مقطوع</option>
-              <option value="fixed_price" ${type === 'fixed_price' ? 'selected' : ''}>سعر طرد جديد</option>
-            </select>
-          </label>
-          <label class="text-[11px] ${type === 'percent' ? '' : 'hidden'}" data-show-for="percent">
-            <span class="text-text-muted block mb-0.5">النسبة %</span>
-            <input type="number" step="0.01" min="0" max="100" name="material_override[${guid}][discount_percent]" data-field="discount_percent" value="${current.discount_percent ?? ''}" class="h-8 w-full rounded-lg border border-border-subtle px-2 text-xs">
-          </label>
-          <label class="text-[11px] ${type === 'fixed_amount' ? '' : 'hidden'}" data-show-for="fixed_amount">
-            <span class="text-text-muted block mb-0.5">مبلغ ل.س</span>
-            <input type="number" step="0.01" min="0" name="material_override[${guid}][fixed_amount_syp]" data-field="fixed_amount_syp" value="${current.fixed_amount_syp ?? ''}" class="h-8 w-full rounded-lg border border-border-subtle px-2 text-xs">
-          </label>
-          <label class="text-[11px] ${type === 'fixed_amount' ? '' : 'hidden'}" data-show-for="fixed_amount">
-            <span class="text-text-muted block mb-0.5">مبلغ $</span>
-            <input type="number" step="0.01" min="0" name="material_override[${guid}][fixed_amount_usd]" data-field="fixed_amount_usd" value="${current.fixed_amount_usd ?? ''}" class="h-8 w-full rounded-lg border border-border-subtle px-2 text-xs">
-          </label>
-          <label class="text-[11px] ${type === 'fixed_price' ? '' : 'hidden'}" data-show-for="fixed_price">
-            <span class="text-text-muted block mb-0.5">سعر طرد ل.س</span>
-            <input type="number" step="0.01" min="0" name="material_override[${guid}][fixed_price_syp]" data-field="fixed_price_syp" value="${current.fixed_price_syp ?? ''}" class="h-8 w-full rounded-lg border border-border-subtle px-2 text-xs">
-          </label>
-          <label class="text-[11px] ${type === 'fixed_price' ? '' : 'hidden'}" data-show-for="fixed_price">
-            <span class="text-text-muted block mb-0.5">سعر طرد $</span>
-            <input type="number" step="0.01" min="0" name="material_override[${guid}][fixed_price_usd]" data-field="fixed_price_usd" value="${current.fixed_price_usd ?? ''}" class="h-8 w-full rounded-lg border border-border-subtle px-2 text-xs">
-          </label>
-      `;
+      grid.className = 'grid grid-cols-1 md:grid-cols-2 gap-2';
+      const fields = [
+        ['percent', 'discount_percent', 'النسبة %', '0.01', '100', current.discount_percent],
+        ['fixed_amount', 'fixed_amount_syp', 'مبلغ ل.س', '0.01', '', current.fixed_amount_syp],
+        ['fixed_amount', 'fixed_amount_usd', 'مبلغ $', '0.01', '', current.fixed_amount_usd],
+        ['fixed_price', 'fixed_price_syp', 'سعر طرد ل.س', '0.01', '', current.fixed_price_syp],
+        ['fixed_price', 'fixed_price_usd', 'سعر طرد $', '0.01', '', current.fixed_price_usd],
+      ];
+      fields.forEach(([showFor, field, caption, step, max, value]) => {
+        const fieldLabel = document.createElement('label');
+        fieldLabel.className = 'text-[11px]' + (showFor === type ? '' : ' hidden');
+        fieldLabel.setAttribute('data-show-for', showFor);
+        const captionEl = document.createElement('span');
+        captionEl.className = 'text-text-muted block mb-0.5';
+        captionEl.textContent = caption;
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.step = step;
+        input.min = '0';
+        if (max !== '') input.max = max;
+        input.name = `material_override[${guid}][${field}]`;
+        input.setAttribute('data-field', field);
+        input.value = value ?? '';
+        input.className = 'h-8 w-full rounded-lg border border-border-subtle px-2 text-xs bg-white';
+        fieldLabel.appendChild(captionEl);
+        fieldLabel.appendChild(input);
+        grid.appendChild(fieldLabel);
+      });
       wrap.appendChild(grid);
-      const typeSelect = wrap.querySelector('[data-field="discount_type"]');
+
       const syncRowFields = () => {
-        const t = typeSelect?.value || '';
+        const selected = wrap.querySelector('[data-field="discount_type"]:checked')?.value || 'percent';
         wrap.querySelectorAll('[data-show-for]').forEach((el) => {
-          el.classList.toggle('hidden', el.getAttribute('data-show-for') !== t);
+          el.classList.toggle('hidden', el.getAttribute('data-show-for') !== selected);
         });
       };
-      typeSelect?.addEventListener('change', syncRowFields);
+      wrap.querySelectorAll('[data-field="discount_type"]').forEach((input) => {
+        input.addEventListener('change', syncRowFields);
+      });
       return wrap;
     };
 
@@ -145,6 +179,7 @@
         const label = [meta.code, meta.name].filter(Boolean).join(' — ') || guid;
         perMaterialRows.appendChild(renderOverrideRow(guid, label));
       });
+      perMaterialRows.lastElementChild?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     };
 
     const syncPricingScope = () => {
@@ -154,7 +189,12 @@
         syncPerMaterialRows();
       }
     };
-    pricingScope?.addEventListener('change', syncPricingScope);
+    pricingScope?.addEventListener('change', () => {
+      if (pricingScope.value === 'per_material' && modeSelect && modeSelect.value !== 'manual') {
+        modeSelect.value = 'manual';
+      }
+      syncPanels();
+    });
 
     // Keep per-material rows in sync when token chips change.
     const picker = root.querySelector('[data-picker-id="so-manual-materials"]');
