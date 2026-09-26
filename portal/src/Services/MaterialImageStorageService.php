@@ -2003,6 +2003,23 @@ final class MaterialImageStorageService
         ];
     }
 
+    /**
+     * Pull a page of materials that have an Amine image GUID but no local portal file.
+     * Legacy chunk path (dashboard / --legacy CLI). Prefer pullAllMissingLocals for bulk repair.
+     *
+     * @param null|callable(string):void $onProgress
+     * @return array{
+     *   ok: bool,
+     *   message: string,
+     *   page: int,
+     *   page_size: int,
+     *   has_more: bool,
+     *   scanned: int,
+     *   pulled: int,
+     *   failed: int,
+     *   items: list<array{material_guid: string, material_code: string, image_guid: string, ok: bool, message: string}>
+     * }
+     */
     public static function pullMissingLocalsChunk(int $page = 1, int $pageSize = 15, ?callable $onProgress = null): array
     {
         $page = max(1, $page);
