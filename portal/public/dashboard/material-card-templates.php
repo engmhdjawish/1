@@ -12,12 +12,14 @@ require_once dirname(__DIR__, 2) . '/views/helpers.php';
 
 $requirements = MaterialCardTemplateService::processingRequirements();
 $templates = [];
+$fonts = [];
 $loadError = null;
 $fieldLabels = MaterialCardTemplateService::FIELD_LABELS;
 try {
     $templates = MaterialCardTemplateService::listTemplates();
+    $fonts = MaterialCardTemplateService::listFonts();
 } catch (Throwable $e) {
-    $loadError = 'تعذر تحميل القوالب. تأكد من تشغيل ترحيل قاعدة البيانات 014: ' . $e->getMessage();
+    $loadError = 'تعذر تحميل القوالب. تأكد من تشغيل ترحيلات قاعدة البيانات 014 و015: ' . $e->getMessage();
 }
 
 $currentRoute = '/dashboard/material-card-templates.php';

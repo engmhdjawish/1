@@ -37,8 +37,11 @@
   const deleteBtn = document.getElementById('mctDeleteBtn');
   const reloadBtn = document.getElementById('mctReloadBtn');
   const uploadForm = document.getElementById('mctUploadForm');
+  const fontUploadForm = document.getElementById('mctFontUploadForm');
+  const fontListEl = document.getElementById('mctFontList');
 
   let items = Array.isArray(boot.items) ? boot.items : [];
+  let fonts = Array.isArray(boot.fonts) ? boot.fonts : [];
   let current = null;
   let selectedKind = 'photo';
   let dragState = null;
@@ -92,7 +95,8 @@
           font_size: kind === 'photo' ? null : 18,
           color_hex: kind === 'packaging' ? '#F5F5F7' : '#1C1C1E',
           align: kind === 'barcode' ? 'center' : 'right',
-          z_index: FIELD_ORDER.indexOf(kind),
+          z_index: kind === 'photo' ? 0 : (kind === 'product_name' ? 10 : (kind === 'packaging' ? 20 : 30)),
+          font_file: null,
           meta: {},
         };
       }
@@ -178,7 +182,8 @@
     const s = scale();
     const map = fieldMap();
     overlaysEl.innerHTML = '';
-    FIELD_ORDER.forEach((kind) => {
+    const sorted = [...FIELD_ORDER].sort((a, b) => (Number(map[a].z_index ?? 0) - Number(map[b].z_index ?? 0)));
+    sorted.forEach((kind) => {
       const f = map[kind];
       const box = document.createElement('div');
       box.className = `mct-box${selectedKind === kind ? ' is-active' : ''}`;
@@ -187,8 +192,9 @@
       box.style.top = `${f.y * s}px`;
       box.style.width = `${f.w * s}px`;
       box.style.height = `${f.h * s}px`;
+      box.style.zIndex = String(f.z_index ?? 0);
       box.style.borderColor = COLORS[kind] || '#fff';
-      box.innerHTML = `<span class="mct-box__label">${escapeHtml(FIELD_LABELS[kind] || kind)}</span><span class="mct-box__handle" data-resize="1"></span>`;
+      box.innerHTML = `<span class="mct-box__label">${escapeHtml(FIELD_LABELS[kind] || kind)} · z${f.z_index ?? 0}</span><span class="mct-box__handle" data-resize="1"></span>`;
       box.addEventListener('pointerdown', (event) => startDrag(event, kind, false));
       box.querySelector('[data-resize]')?.addEventListener('pointerdown', (event) => {
         event.stopPropagation();
@@ -241,6 +247,60 @@
     window.removeEventListener('pointermove', onDragMove);
   }
 
+  function fontOptionsHtml(selectedPath) {
+    const selected = selectedPath || '';
+    const opts = [];
+    let hasDefault = false;
+    fonts.forEach((font) => {
+      if (font.is_system_default) {
+        hasDefault = true;
+        opts.push(`<option value="" ${selected === '' ? 'selected' : ''}>${escapeHtml(font.name_ar || 'الخط الافتراضي')}</option>`);
+        return;
+      }
+      const path = font.storage_path || '';
+      opts.push(`<option value="${escapeHtml(path)}" ${selected === path ? 'selected' : ''}>${escapeHtml(font.name_ar || font.file_name || path)}</option>`);
+    });
+    if (!hasDefault) {
+      opts.unshift(`<option value="" ${selected === '' ? 'selected' : ''}>الخط الافتراضي</option>`);
+    }
+    return opts.join('');
+  }
+
+  function renderFontList() {
+    if (!fontListEl) return;
+    const custom = fonts.filter((f) => !f.builtin && !f.is_system_default);
+    if (!custom.length) {
+      fontListEl.innerHTML = '<p class="text-[10px] text-text-muted m-0">لا خطوط مرفوعة بعد.</p>';
+      return;
+    }
+    fontListEl.innerHTML = custom.map((font) => `
+      <div class="flex items-center justify-between gap-1 text-[10px] border border-border-subtle rounded px-1.5 py-1">
+        <span class="truncate font-bold">${escapeHtml(font.name_ar || font.file_name)}</span>
+        <button type="button" class="text-red-600 font-bold shrink-0" data-del-font="${escapeHtml(font.id)}">حذف</button>
+      </div>
+    `).join('');
+    fontListEl.querySelectorAll('[data-del-font]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!window.confirm('حذف هذا الخط؟')) return;
+        const form = new FormData();
+        form.append('action', 'delete-font');
+        form.append('id', btn.getAttribute('data-del-font'));
+        const payload = await fetchJson(API, { method: 'POST', body: form });
+        setStatus(payload.message || '', !payload.ok);
+        await reloadFonts();
+        renderFieldForm();
+      });
+    });
+  }
+
+  async function reloadFonts() {
+    const payload = await fetchJson(`${API}?action=fonts`);
+    if (payload.ok) {
+      fonts = payload.fonts || [];
+      renderFontList();
+    }
+  }
+
   function renderFieldForm() {
     if (!fieldFormEl || !current) return;
     const f = fieldMap()[selectedKind];
@@ -252,7 +312,18 @@
         <label>عرض<input type="number" data-prop="w" value="${f.w}" class="mt-0.5 h-8 w-full rounded border border-border-subtle px-2"></label>
         <label>ارتفاع<input type="number" data-prop="h" value="${f.h}" class="mt-0.5 h-8 w-full rounded border border-border-subtle px-2"></label>
       </div>
-      ${isPhoto ? '<p class="text-[11px] text-text-muted mt-2">منطقة الصورة فقط — بدون خط.</p>' : `
+      <label class="block text-[11px] mt-2">ترتيب الطبقة (z-index)
+        <input type="number" data-prop="z_index" value="${f.z_index ?? 0}" class="mt-0.5 h-8 w-full rounded border border-border-subtle px-2">
+      </label>
+      <p class="text-[10px] text-text-muted mt-1 mb-0">${isPhoto
+        ? 'اجعل z الصورة أصغر من بقية الحقول لتظهر خلف القالب.'
+        : 'رقم أعلى = أمام العناصر ذات الرقم الأصغر.'}</p>
+      ${isPhoto ? '' : `
+      <label class="block text-[11px] mt-2">الخط
+        <select data-prop="font_file" class="mt-0.5 h-8 w-full rounded border border-border-subtle px-2">
+          ${fontOptionsHtml(f.font_file || '')}
+        </select>
+      </label>
       <label class="block text-[11px] mt-2">حجم الخط
         <input type="number" data-prop="font_size" step="0.5" min="8" max="96" value="${f.font_size ?? 18}" class="mt-0.5 h-8 w-full rounded border border-border-subtle px-2">
       </label>
@@ -272,14 +343,16 @@
         const prop = input.getAttribute('data-prop');
         const map = fieldMap();
         const field = map[selectedKind];
-        if (['x', 'y', 'w', 'h'].includes(prop)) {
-          field[prop] = Math.max(prop === 'w' || prop === 'h' ? 1 : 0, Number(input.value || 0));
+        if (['x', 'y', 'w', 'h', 'z_index'].includes(prop)) {
+          field[prop] = Math.max(prop === 'w' || prop === 'h' ? 1 : (prop === 'z_index' ? -100 : 0), Number(input.value || 0));
         } else if (prop === 'font_size') {
           field.font_size = Number(input.value || 18);
         } else if (prop === 'color_hex') {
           field.color_hex = String(input.value || '#1C1C1E').toUpperCase();
         } else if (prop === 'align') {
           field.align = input.value;
+        } else if (prop === 'font_file') {
+          field.font_file = input.value || null;
         }
         current.fields = FIELD_ORDER.map((kind) => map[kind]);
         renderOverlays();
@@ -305,7 +378,9 @@
       return;
     }
     items = payload.items || [];
+    fonts = payload.fonts || fonts;
     renderList();
+    renderFontList();
     if (current?.id) {
       await selectTemplate(current.id);
     } else if (boot.selectedId) {
@@ -334,6 +409,24 @@
       }
     } catch (error) {
       setStatus(error.message || 'فشل الرفع', true);
+    }
+  });
+
+  fontUploadForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = new FormData(fontUploadForm);
+    form.append('action', 'upload-font');
+    setStatus('جاري رفع الخط...');
+    try {
+      const payload = await fetchJson(API, { method: 'POST', body: form });
+      setStatus(payload.message || '', !payload.ok);
+      if (payload.ok) {
+        fontUploadForm.reset();
+        await reloadFonts();
+        renderFieldForm();
+      }
+    } catch (error) {
+      setStatus(error.message || 'فشل رفع الخط', true);
     }
   });
 
@@ -409,9 +502,12 @@
   document.head.appendChild(style);
 
   renderList();
+  renderFontList();
   if (boot.selectedId) {
     selectTemplate(boot.selectedId).catch((error) => setStatus(error.message || 'فشل التحميل', true));
   } else if (items[0]?.id) {
     selectTemplate(items[0].id).catch((error) => setStatus(error.message || 'فشل التحميل', true));
+  } else if (!fonts.length) {
+    reloadFonts().catch(() => {});
   }
 })();

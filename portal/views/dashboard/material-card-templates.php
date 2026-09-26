@@ -3,10 +3,12 @@
 declare(strict_types=1);
 
 /** @var list<array<string, mixed>> $templates */
+/** @var list<array<string, mixed>> $fonts */
 /** @var array{ok: bool, message: string} $requirements */
 /** @var string|null $loadError */
 
 $templates = is_array($templates ?? null) ? $templates : [];
+$fonts = is_array($fonts ?? null) ? $fonts : [];
 $requirements = is_array($requirements ?? null) ? $requirements : ['ok' => false, 'message' => ''];
 $selectedId = trim((string) ($_GET['id'] ?? ''));
 if ($selectedId === '' && $templates !== []) {
@@ -26,8 +28,8 @@ if ($selectedId === '' && $templates !== []) {
     <div>
       <h1 class="text-2xl font-extrabold">قوالب بطاقة صور المواد</h1>
       <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
-        ارفع صورة القالب، ثم اضبط أماكن الحقول (الصورة، الاسم، التعبئة، الباركود) وحجم الخط واللون.
-        عند ربط الصور يمكن تفعيل القالب وتعديل تكبير/تحريك/قص صورة المنتج داخل المنطقة المحددة.
+        ارفع صورة القالب وحدد أبعادها إن رغبت (مثل 1080×900)، ثم اضبط الحقول والـ z-index (الصورة بقيمة أقل تظهر خلف القالب)،
+        واختر خط كل حقل أو ارفع خطوطاً جديدة.
       </p>
       <?php if (empty($requirements['ok'])): ?>
         <p class="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 max-w-3xl">
@@ -59,12 +61,34 @@ if ($selectedId === '' && $templates !== []) {
         <label class="block text-xs font-bold">الاسم
           <input type="text" name="name_ar" class="mt-1 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs" placeholder="قالب جاويش">
         </label>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block text-[11px] font-bold">العرض (px)
+            <input type="number" name="target_width" min="100" max="4000" placeholder="1080" class="mt-0.5 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs">
+          </label>
+          <label class="block text-[11px] font-bold">الارتفاع (px)
+            <input type="number" name="target_height" min="100" max="4000" placeholder="900" class="mt-0.5 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs">
+          </label>
+        </div>
+        <p class="text-[10px] text-text-muted leading-relaxed m-0">اترك الأبعاد فارغة للإبقاء على حجم الملف الأصلي. مثال: 1080×900</p>
         <label class="inline-flex items-center gap-2 text-[11px] font-bold">
           <input type="checkbox" name="make_default" value="1" checked>
           جعله الافتراضي
         </label>
         <button type="submit" class="h-8 w-full rounded-lg bg-primary text-white text-xs font-bold">رفع</button>
       </form>
+
+      <form id="mctFontUploadForm" class="space-y-2 rounded-lg border border-border-subtle p-2.5 bg-white">
+        <p class="text-xs font-bold m-0">خطوط مخصصة</p>
+        <label class="block text-[11px] font-bold">رفع خط (.ttf / .otf)
+          <input type="file" name="file" accept=".ttf,.otf,font/ttf,font/otf" required class="mt-1 block w-full text-xs">
+        </label>
+        <label class="block text-[11px] font-bold">اسم الخط
+          <input type="text" name="name_ar" class="mt-0.5 h-8 w-full rounded-lg border border-border-subtle px-2 text-xs" placeholder="Tahoma Bold">
+        </label>
+        <button type="submit" class="h-8 w-full rounded-lg border border-border-subtle bg-surface-low text-xs font-bold">رفع الخط</button>
+        <div id="mctFontList" class="space-y-1 max-h-40 overflow-auto"></div>
+      </form>
+
       <div id="mctList" class="space-y-2"></div>
     </div>
   </aside>
@@ -115,4 +139,5 @@ if ($selectedId === '' && $templates !== []) {
     'selectedId' => $selectedId,
     'fieldLabels' => is_array($fieldLabels ?? null) ? $fieldLabels : [],
     'items' => $templates,
+    'fonts' => $fonts,
 ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>

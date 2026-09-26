@@ -29,9 +29,17 @@ try {
         materialCardTemplatesApiJson([
             'ok' => true,
             'items' => MaterialCardTemplateService::listTemplates(),
+            'fonts' => MaterialCardTemplateService::listFonts(),
             'requirements' => MaterialCardTemplateService::processingRequirements(),
             'field_kinds' => MaterialCardTemplateService::FIELD_KINDS,
             'field_labels' => MaterialCardTemplateService::FIELD_LABELS,
+        ]);
+    }
+
+    if ($action === 'fonts') {
+        materialCardTemplatesApiJson([
+            'ok' => true,
+            'fonts' => MaterialCardTemplateService::listFonts(),
         ]);
     }
 
@@ -59,12 +67,30 @@ try {
     }
 
     if ($action === 'upload') {
+        $targetW = (int) ($_POST['target_width'] ?? 0);
+        $targetH = (int) ($_POST['target_height'] ?? 0);
         $result = MaterialCardTemplateService::upload(
             is_array($_FILES['file'] ?? null) ? $_FILES['file'] : [],
             trim((string) ($_POST['name_ar'] ?? '')),
             $userId,
-            (string) ($_POST['make_default'] ?? '') === '1'
+            (string) ($_POST['make_default'] ?? '') === '1',
+            $targetW > 0 ? $targetW : null,
+            $targetH > 0 ? $targetH : null
         );
+        materialCardTemplatesApiJson($result, !empty($result['ok']) ? 200 : 400);
+    }
+
+    if ($action === 'upload-font') {
+        $result = MaterialCardTemplateService::uploadFont(
+            is_array($_FILES['file'] ?? null) ? $_FILES['file'] : [],
+            trim((string) ($_POST['name_ar'] ?? '')),
+            $userId
+        );
+        materialCardTemplatesApiJson($result, !empty($result['ok']) ? 200 : 400);
+    }
+
+    if ($action === 'delete-font') {
+        $result = MaterialCardTemplateService::deleteFont(trim((string) ($_POST['id'] ?? '')));
         materialCardTemplatesApiJson($result, !empty($result['ok']) ? 200 : 400);
     }
 

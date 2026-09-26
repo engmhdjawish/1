@@ -474,139 +474,184 @@ final class MaterialImageStorageService
         }
         imagealphablending($canvas, true);
         imagesavealpha($canvas, false);
-        imagecopy($canvas, $templateImage, 0, 0, 0, 0, $canvasW, $canvasH);
+
+        $product = self::loadGdImage($sourcePath);
+        $orderedFields = array_values($fieldsByKind);
+        usort($orderedFields, static function (array $a, array $b): int {
+            return ((int) ($a['z_index'] ?? 0)) <=> ((int) ($b['z_index'] ?? 0));
+        });
 
         $photoField = $fieldsByKind['photo'] ?? null;
-        $product = self::loadGdImage($sourcePath);
-        if ($product !== false && is_array($photoField)) {
-            $photoRect = [
-                'x' => (int) ($photoField['x'] ?? 0),
-                'y' => (int) ($photoField['y'] ?? 0),
-                'w' => (int) ($photoField['w'] ?? 0),
-                'h' => (int) ($photoField['h'] ?? 0),
-            ];
-            self::coverFitImageIntoRectWithTransform(
-                $canvas,
-                $product,
-                $photoRect['x'],
-                $photoRect['y'],
-                $photoRect['w'],
-                $photoRect['h'],
-                $photoTransform
-            );
-            self::restoreTemplateNonWhiteOverRect($canvas, $templateImage, $photoRect);
+        $photoZ = is_array($photoField) ? (int) ($photoField['z_index'] ?? 0) : 0;
+        $minOtherZ = null;
+        foreach ($fieldsByKind as $kind => $field) {
+            if ($kind === 'photo' || !is_array($field)) {
+                continue;
+            }
+            $z = (int) ($field['z_index'] ?? 0);
+            $minOtherZ = $minOtherZ === null ? $z : min($minOtherZ, $z);
         }
+        // الصورة خلف القالب عندما z الخاص بها أقل من بقية الحقول (أو لا توجد حقول أخرى).
+        $photoBehindTemplate = is_array($photoField)
+            && ($minOtherZ === null || $photoZ < $minOtherZ);
 
-        $nameField = $fieldsByKind['product_name'] ?? null;
-        if (is_array($nameField)) {
-            [$nr, $ng, $nb] = self::hexToRgb((string) ($nameField['color_hex'] ?? '#1C1C1E'), 28, 28, 30);
-            self::fillRoundedSlot(
-                $canvas,
-                (int) $nameField['x'],
-                (int) $nameField['y'],
-                (int) $nameField['w'],
-                (int) $nameField['h'],
-                253,
-                251,
-                251,
-                18
-            );
-            if ($productName !== '') {
-                $fontSize = (float) ($nameField['font_size'] ?? 22);
-                self::drawClippedTextInSlot(
+        if ($photoBehindTemplate) {
+            $black = imagecolorallocate($canvas, 0, 0, 0);
+            imagefilledrectangle($canvas, 0, 0, $canvasW - 1, $canvasH - 1, $black);
+            if ($product !== false && is_array($photoField)) {
+                self::coverFitImageIntoRectWithTransform(
                     $canvas,
-                    $font,
-                    $productName,
-                    [
-                        'x' => (int) $nameField['x'],
-                        'y' => (int) $nameField['y'],
-                        'w' => (int) $nameField['w'],
-                        'h' => (int) $nameField['h'],
-                    ],
-                    max(10.0, $fontSize * 0.7),
-                    $fontSize,
-                    $nr,
-                    $ng,
-                    $nb,
-                    true,
-                    14,
-                    10,
-                    (string) ($nameField['align'] ?? 'right')
+                    $product,
+                    (int) ($photoField['x'] ?? 0),
+                    (int) ($photoField['y'] ?? 0),
+                    (int) ($photoField['w'] ?? 0),
+                    (int) ($photoField['h'] ?? 0),
+                    $photoTransform
                 );
             }
+            // وضع القالب فوق الصورة مع إبقاء المناطق البيضاء شفافة.
+            self::overlayTemplateKnockoutNearWhite($canvas, $templateImage);
+        } else {
+            imagecopy($canvas, $templateImage, 0, 0, 0, 0, $canvasW, $canvasH);
         }
 
-        $packField = $fieldsByKind['packaging'] ?? null;
-        if (is_array($packField)) {
-            [$pr, $pg, $pb] = self::hexToRgb((string) ($packField['color_hex'] ?? '#F5F5F7'), 245, 245, 247);
-            self::fillRoundedSlot(
-                $canvas,
-                (int) $packField['x'],
-                (int) $packField['y'],
-                (int) $packField['w'],
-                (int) $packField['h'],
-                99,
-                99,
-                99,
-                14
-            );
-            if ($line2 !== '') {
-                $packText = $line2;
-                if (preg_match('/^التعبئة\s*:\s*(.+)$/u', $line2, $m) === 1) {
-                    $packText = trim((string) $m[1]);
+        foreach ($orderedFields as $field) {
+            $kind = (string) ($field['field_kind'] ?? '');
+            if ($kind === 'photo') {
+                if ($photoBehindTemplate || $product === false) {
+                    continue;
                 }
-                $meta = is_array($packField['meta'] ?? null) ? $packField['meta'] : [];
-                $iconInset = max(0, (int) ($meta['icon_inset_right'] ?? 58));
-                $fontSize = (float) ($packField['font_size'] ?? 16);
-                $packTextSlot = [
-                    'x' => (int) $packField['x'] + 12,
-                    'y' => (int) $packField['y'] + 8,
-                    'w' => max(80, (int) $packField['w'] - 24 - $iconInset),
-                    'h' => max(20, (int) $packField['h'] - 16),
+                $photoRect = [
+                    'x' => (int) ($field['x'] ?? 0),
+                    'y' => (int) ($field['y'] ?? 0),
+                    'w' => (int) ($field['w'] ?? 0),
+                    'h' => (int) ($field['h'] ?? 0),
                 ];
-                self::drawClippedTextInSlot(
+                self::coverFitImageIntoRectWithTransform(
                     $canvas,
-                    $font,
-                    $packText,
-                    $packTextSlot,
-                    max(10.0, $fontSize * 0.75),
-                    $fontSize,
-                    $pr,
-                    $pg,
-                    $pb,
-                    false,
-                    0,
-                    0,
-                    (string) ($packField['align'] ?? 'right')
+                    $product,
+                    $photoRect['x'],
+                    $photoRect['y'],
+                    $photoRect['w'],
+                    $photoRect['h'],
+                    $photoTransform
                 );
+                self::restoreTemplateNonWhiteOverRect($canvas, $templateImage, $photoRect);
+                continue;
             }
-            $iconInset = max(0, (int) ((is_array($packField['meta'] ?? null) ? $packField['meta'] : [])['icon_inset_right'] ?? 58));
-            if ($iconInset > 0) {
-                self::restoreTemplateRegion(
-                    $canvas,
-                    $templateImage,
-                    (int) $packField['x'] + (int) $packField['w'] - $iconInset,
-                    (int) $packField['y'],
-                    $iconInset,
-                    (int) $packField['h']
-                );
-            }
-        }
 
-        $barcodeField = $fieldsByKind['barcode'] ?? null;
-        if ($materialCode !== '' && is_array($barcodeField)) {
-            self::drawMaterialBarcode(
-                $canvas,
-                $font,
-                $materialCode,
-                [
-                    'x' => (int) $barcodeField['x'],
-                    'y' => (int) $barcodeField['y'],
-                    'w' => (int) $barcodeField['w'],
-                    'h' => (int) $barcodeField['h'],
-                ],
-                (float) ($barcodeField['font_size'] ?? 14)
-            );
+            $fieldFont = MaterialCardTemplateService::resolveFieldFontPath($field) ?? $font;
+
+            if ($kind === 'product_name') {
+                [$nr, $ng, $nb] = self::hexToRgb((string) ($field['color_hex'] ?? '#1C1C1E'), 28, 28, 30);
+                self::fillRoundedSlot(
+                    $canvas,
+                    (int) $field['x'],
+                    (int) $field['y'],
+                    (int) $field['w'],
+                    (int) $field['h'],
+                    253,
+                    251,
+                    251,
+                    18
+                );
+                if ($productName !== '') {
+                    $fontSize = (float) ($field['font_size'] ?? 22);
+                    self::drawClippedTextInSlot(
+                        $canvas,
+                        $fieldFont,
+                        $productName,
+                        [
+                            'x' => (int) $field['x'],
+                            'y' => (int) $field['y'],
+                            'w' => (int) $field['w'],
+                            'h' => (int) $field['h'],
+                        ],
+                        max(10.0, $fontSize * 0.7),
+                        $fontSize,
+                        $nr,
+                        $ng,
+                        $nb,
+                        true,
+                        14,
+                        10,
+                        (string) ($field['align'] ?? 'right')
+                    );
+                }
+                continue;
+            }
+
+            if ($kind === 'packaging') {
+                [$pr, $pg, $pb] = self::hexToRgb((string) ($field['color_hex'] ?? '#F5F5F7'), 245, 245, 247);
+                self::fillRoundedSlot(
+                    $canvas,
+                    (int) $field['x'],
+                    (int) $field['y'],
+                    (int) $field['w'],
+                    (int) $field['h'],
+                    99,
+                    99,
+                    99,
+                    14
+                );
+                if ($line2 !== '') {
+                    $packText = $line2;
+                    if (preg_match('/^التعبئة\s*:\s*(.+)$/u', $line2, $m) === 1) {
+                        $packText = trim((string) $m[1]);
+                    }
+                    $meta = is_array($field['meta'] ?? null) ? $field['meta'] : [];
+                    $iconInset = max(0, (int) ($meta['icon_inset_right'] ?? 58));
+                    $fontSize = (float) ($field['font_size'] ?? 16);
+                    $packTextSlot = [
+                        'x' => (int) $field['x'] + 12,
+                        'y' => (int) $field['y'] + 8,
+                        'w' => max(80, (int) $field['w'] - 24 - $iconInset),
+                        'h' => max(20, (int) $field['h'] - 16),
+                    ];
+                    self::drawClippedTextInSlot(
+                        $canvas,
+                        $fieldFont,
+                        $packText,
+                        $packTextSlot,
+                        max(10.0, $fontSize * 0.75),
+                        $fontSize,
+                        $pr,
+                        $pg,
+                        $pb,
+                        false,
+                        0,
+                        0,
+                        (string) ($field['align'] ?? 'right')
+                    );
+                }
+                $iconInset = max(0, (int) ((is_array($field['meta'] ?? null) ? $field['meta'] : [])['icon_inset_right'] ?? 58));
+                if ($iconInset > 0) {
+                    self::restoreTemplateRegion(
+                        $canvas,
+                        $templateImage,
+                        (int) $field['x'] + (int) $field['w'] - $iconInset,
+                        (int) $field['y'],
+                        $iconInset,
+                        (int) $field['h']
+                    );
+                }
+                continue;
+            }
+
+            if ($kind === 'barcode' && $materialCode !== '') {
+                self::drawMaterialBarcode(
+                    $canvas,
+                    $fieldFont,
+                    $materialCode,
+                    [
+                        'x' => (int) $field['x'],
+                        'y' => (int) $field['y'],
+                        'w' => (int) $field['w'],
+                        'h' => (int) $field['h'],
+                    ],
+                    (float) ($field['font_size'] ?? 14)
+                );
+            }
         }
 
         $settings = self::settings();
@@ -731,6 +776,19 @@ final class MaterialImageStorageService
         int $destH
     ): void {
         self::coverFitImageIntoRectWithTransform($canvas, $source, $destX, $destY, $destW, $destH, null);
+    }
+
+    /**
+     * رسم القالب فوق الصورة مع إبقاء المناطق شبه البيضاء شفافة (نافذة الصورة).
+     */
+    private static function overlayTemplateKnockoutNearWhite(\GdImage $canvas, \GdImage $template): void
+    {
+        self::restoreTemplateNonWhiteOverRect($canvas, $template, [
+            'x' => 0,
+            'y' => 0,
+            'w' => imagesx($template),
+            'h' => imagesy($template),
+        ]);
     }
 
     /** @param array{x: int, y: int, w: int, h: int} $rect */

@@ -174,8 +174,14 @@ final class MaterialCardTemplateService
      * @param array<string, mixed> $file
      * @return array{ok: bool, message: string, template?: array<string, mixed>}
      */
-    public static function upload(array $file, string $nameAr, ?string $userId, bool $makeDefault = false): array
-    {
+    public static function upload(
+        array $file,
+        string $nameAr,
+        ?string $userId,
+        bool $makeDefault = false,
+        ?int $targetWidth = null,
+        ?int $targetHeight = null
+    ): array {
         $nameAr = trim($nameAr);
         if ($nameAr === '') {
             $nameAr = 'قالب بطاقة';
@@ -206,6 +212,17 @@ final class MaterialCardTemplateService
             return ['ok' => false, 'message' => 'تعذر قراءة أبعاد صورة القالب.'];
         }
 
+        $srcW = (int) $info[0];
+        $srcH = (int) $info[1];
+        $targetWidth = $targetWidth !== null && $targetWidth > 0 ? max(100, min(4000, $targetWidth)) : null;
+        $targetHeight = $targetHeight !== null && $targetHeight > 0 ? max(100, min(4000, $targetHeight)) : null;
+        // If only one dimension given, keep aspect ratio.
+        if ($targetWidth !== null && $targetHeight === null) {
+            $targetHeight = max(100, (int) round($srcH * ($targetWidth / $srcW)));
+        } elseif ($targetHeight !== null && $targetWidth === null) {
+            $targetWidth = max(100, (int) round($srcW * ($targetHeight / $srcH)));
+        }
+
         $dir = self::storageDir();
         if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
             return ['ok' => false, 'message' => 'تعذر إنشاء مجلد القوالب.'];
@@ -217,14 +234,30 @@ final class MaterialCardTemplateService
             'image/webp' => 'webp',
             default => 'png',
         };
+        // Always store resized templates as PNG for alpha-friendly overlay.
+        if ($targetWidth !== null && $targetHeight !== null) {
+            $ext = 'png';
+            $mime = 'image/png';
+        }
         $storedName = $id . '.' . $ext;
         $absolute = $dir . DIRECTORY_SEPARATOR . $storedName;
-        if (!move_uploaded_file($tmpPath, $absolute)) {
-            return ['ok' => false, 'message' => 'تعذر حفظ ملف القالب.'];
+
+        if ($targetWidth !== null && $targetHeight !== null) {
+            $resized = self::resizeImageFile($tmpPath, $absolute, $targetWidth, $targetHeight, $mime);
+            if (!$resized) {
+                return ['ok' => false, 'message' => 'تعذر تغيير أبعاد القالب إلى الحجم المطلوب.'];
+            }
+            $width = $targetWidth;
+            $height = $targetHeight;
+            $size = (int) (filesize($absolute) ?: $size);
+        } else {
+            if (!move_uploaded_file($tmpPath, $absolute)) {
+                return ['ok' => false, 'message' => 'تعذر حفظ ملف القالب.'];
+            }
+            $width = $srcW;
+            $height = $srcH;
         }
 
-        $width = (int) $info[0];
-        $height = (int) $info[1];
         $relative = 'material-card-templates/' . $storedName;
         $originalName = trim((string) ($file['name'] ?? $storedName));
         $userId = $userId !== null && trim($userId) !== '' ? trim($userId) : null;
@@ -273,12 +306,49 @@ final class MaterialCardTemplateService
         }
 
         $template = self::getById($id);
+        $dimNote = ($targetWidth !== null && $targetHeight !== null)
+            ? (" بأبعاد {$width}×{$height}")
+            : '';
 
         return [
             'ok' => true,
-            'message' => 'تم رفع القالب. اضبط أماكن الحقول ثم احفظ.',
+            'message' => 'تم رفع القالب' . $dimNote . '. اضبط أماكن الحقول ثم احفظ.',
             'template' => $template,
         ];
+    }
+
+    private static function resizeImageFile(
+        string $sourcePath,
+        string $destPath,
+        int $width,
+        int $height,
+        string $mime
+    ): bool {
+        if (!function_exists('imagecreatetruecolor')) {
+            return false;
+        }
+        $src = MaterialImageStorageService::loadGdImagePublic($sourcePath);
+        if ($src === false) {
+            return false;
+        }
+        $dst = imagecreatetruecolor($width, $height);
+        if ($dst === false) {
+            return false;
+        }
+        imagealphablending($dst, false);
+        imagesavealpha($dst, true);
+        $transparent = imagecolorallocatealpha($dst, 0, 0, 0, 127);
+        imagefilledrectangle($dst, 0, 0, $width, $height, $transparent);
+        imagealphablending($dst, true);
+        imagecopyresampled($dst, $src, 0, 0, 0, 0, $width, $height, imagesx($src), imagesy($src));
+
+        $ok = match (true) {
+            str_contains($mime, 'jpeg'), str_contains($mime, 'jpg') => imagejpeg($dst, $destPath, 92),
+            str_contains($mime, 'webp') && function_exists('imagewebp') => imagewebp($dst, $destPath, 92),
+            default => imagepng($dst, $destPath, 6),
+        };
+
+        return (bool) $ok;
     }
 
     /**
@@ -505,8 +575,20 @@ final class MaterialCardTemplateService
     /** @return list<array<string, mixed>> */
     private static function fieldsForTemplate(string $templateId): array
     {
-        $stmt = Database::pdo()->prepare(
-            "SELECT
+        $sqlWithFont = "SELECT
+                id::text AS id,
+                field_kind::text AS field_kind,
+                x, y, w, h,
+                font_size,
+                color_hex,
+                align::text AS align,
+                z_index,
+                font_file,
+                meta_json
+             FROM material_card_template_fields
+             WHERE template_id = :template_id
+             ORDER BY z_index ASC, field_kind ASC";
+        $sqlWithoutFont = "SELECT
                 id::text AS id,
                 field_kind::text AS field_kind,
                 x, y, w, h,
@@ -517,10 +599,17 @@ final class MaterialCardTemplateService
                 meta_json
              FROM material_card_template_fields
              WHERE template_id = :template_id
-             ORDER BY z_index ASC, field_kind ASC"
-        );
-        $stmt->execute(['template_id' => $templateId]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+             ORDER BY z_index ASC, field_kind ASC";
+
+        try {
+            $stmt = Database::pdo()->prepare($sqlWithFont);
+            $stmt->execute(['template_id' => $templateId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (Throwable) {
+            $stmt = Database::pdo()->prepare($sqlWithoutFont);
+            $stmt->execute(['template_id' => $templateId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        }
         $out = [];
         foreach ($rows as $row) {
             $meta = $row['meta_json'] ?? [];
@@ -540,6 +629,9 @@ final class MaterialCardTemplateService
                 'color_hex' => $row['color_hex'] !== null ? (string) $row['color_hex'] : null,
                 'align' => $row['align'] !== null ? (string) $row['align'] : null,
                 'z_index' => (int) ($row['z_index'] ?? 0),
+                'font_file' => isset($row['font_file']) && $row['font_file'] !== null && trim((string) $row['font_file']) !== ''
+                    ? trim((string) $row['font_file'])
+                    : null,
                 'meta' => is_array($meta) ? $meta : [],
             ];
         }
@@ -552,10 +644,11 @@ final class MaterialCardTemplateService
         $scaleX = $width / self::REF_W;
         $scaleY = $height / self::REF_H;
         $defs = [
+            // photo z=0 → خلف القالب؛ الحقول النصية فوقه
             ['photo', 736, 12, 744, 458, null, null, null, 0],
-            ['product_name', 732, 495, 330, 91, 22.0, '#1C1C1E', 'right', 1],
-            ['packaging', 732, 595, 330, 59, 16.0, '#F5F5F7', 'right', 2],
-            ['barcode', 1085, 500, 210, 150, 14.0, '#141414', 'center', 3],
+            ['product_name', 732, 495, 330, 91, 22.0, '#1C1C1E', 'right', 10],
+            ['packaging', 732, 595, 330, 59, 16.0, '#F5F5F7', 'right', 20],
+            ['barcode', 1085, 500, 210, 150, 14.0, '#141414', 'center', 30],
         ];
 
         $stmt = $pdo->prepare(
@@ -629,6 +722,12 @@ final class MaterialCardTemplateService
                 $align = null;
             }
 
+            $fontFile = null;
+            $rawFont = trim((string) ($field['font_file'] ?? ''));
+            if ($rawFont !== '' && $kind !== 'photo' && self::resolveFontAbsolutePath($rawFont) !== null) {
+                $fontFile = $rawFont;
+            }
+
             $meta = is_array($field['meta'] ?? null) ? $field['meta'] : [];
             $normalized[$kind] = [
                 'field_kind' => $kind,
@@ -640,6 +739,7 @@ final class MaterialCardTemplateService
                 'color_hex' => $color,
                 'align' => $align,
                 'z_index' => (int) ($field['z_index'] ?? 0),
+                'font_file' => $fontFile,
                 'meta_json' => json_encode($meta, JSON_UNESCAPED_UNICODE),
             ];
         }
@@ -650,9 +750,9 @@ final class MaterialCardTemplateService
 
         $stmt = $pdo->prepare(
             'INSERT INTO material_card_template_fields (
-                template_id, field_kind, x, y, w, h, font_size, color_hex, align, z_index, meta_json
+                template_id, field_kind, x, y, w, h, font_size, color_hex, align, z_index, font_file, meta_json
              ) VALUES (
-                :template_id, :field_kind, :x, :y, :w, :h, :font_size, :color_hex, :align, :z_index, :meta_json::jsonb
+                :template_id, :field_kind, :x, :y, :w, :h, :font_size, :color_hex, :align, :z_index, :font_file, :meta_json::jsonb
              )
              ON CONFLICT (template_id, field_kind) DO UPDATE SET
                 x = EXCLUDED.x,
@@ -663,6 +763,7 @@ final class MaterialCardTemplateService
                 color_hex = EXCLUDED.color_hex,
                 align = EXCLUDED.align,
                 z_index = EXCLUDED.z_index,
+                font_file = EXCLUDED.font_file,
                 meta_json = EXCLUDED.meta_json'
         );
 
@@ -678,6 +779,7 @@ final class MaterialCardTemplateService
                 'color_hex' => $row['color_hex'],
                 'align' => $row['align'],
                 'z_index' => $row['z_index'],
+                'font_file' => $row['font_file'],
                 'meta_json' => $row['meta_json'],
             ]);
         }
@@ -710,6 +812,235 @@ final class MaterialCardTemplateService
         $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
 
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    }
+
+    public static function fontsDir(): string
+    {
+        return rtrim(Config::storagePath(), '/\\') . DIRECTORY_SEPARATOR . 'fonts' . DIRECTORY_SEPARATOR . 'custom';
+    }
+
+    public static function resolveFontAbsolutePath(?string $relativeOrAbsolute): ?string
+    {
+        $value = trim((string) $relativeOrAbsolute);
+        if ($value === '' || str_contains($value, '..')) {
+            return null;
+        }
+        if (is_file($value) && is_readable($value)) {
+            return $value;
+        }
+        $path = rtrim(Config::storagePath(), '/\\') . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, ltrim($value, '/\\'));
+        if (is_file($path) && is_readable($path)) {
+            return $path;
+        }
+
+        return null;
+    }
+
+    /** @return list<array{id: string, name_ar: string, file_name: string, storage_path: string, url?: string}> */
+    public static function listFonts(): array
+    {
+        $out = [];
+        try {
+            $stmt = Database::pdo()->query(
+                "SELECT id::text AS id, name_ar, file_name, storage_path, file_size_bytes, created_at
+                 FROM material_card_fonts
+                 ORDER BY name_ar ASC, created_at DESC"
+            );
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            foreach ($rows as $row) {
+                $path = self::resolveFontAbsolutePath((string) ($row['storage_path'] ?? ''));
+                if ($path === null) {
+                    continue;
+                }
+                $out[] = [
+                    'id' => (string) ($row['id'] ?? ''),
+                    'name_ar' => (string) ($row['name_ar'] ?? ''),
+                    'file_name' => (string) ($row['file_name'] ?? ''),
+                    'storage_path' => (string) ($row['storage_path'] ?? ''),
+                    'file_size_bytes' => (int) ($row['file_size_bytes'] ?? 0),
+                    'created_at' => (string) ($row['created_at'] ?? ''),
+                ];
+            }
+        } catch (Throwable) {
+            // table may not exist until migration 015
+        }
+
+        // Also expose built-in fonts already in storage/fonts
+        $storageFonts = rtrim(Config::storagePath(), '/\\') . DIRECTORY_SEPARATOR . 'fonts';
+        if (is_dir($storageFonts)) {
+            foreach (['tahomabd.ttf', 'tahoma.ttf', 'arialbd.ttf', 'arial.ttf', 'trado.ttf', 'DejaVuSans-Bold.ttf', 'DejaVuSans.ttf'] as $name) {
+                $full = $storageFonts . DIRECTORY_SEPARATOR . $name;
+                if (!is_file($full)) {
+                    continue;
+                }
+                $rel = 'fonts/' . $name;
+                $exists = false;
+                foreach ($out as $item) {
+                    if (($item['storage_path'] ?? '') === $rel) {
+                        $exists = true;
+                        break;
+                    }
+                }
+                if ($exists) {
+                    continue;
+                }
+                $out[] = [
+                    'id' => 'builtin:' . $name,
+                    'name_ar' => pathinfo($name, PATHINFO_FILENAME),
+                    'file_name' => $name,
+                    'storage_path' => $rel,
+                    'file_size_bytes' => (int) filesize($full),
+                    'created_at' => '',
+                    'builtin' => true,
+                ];
+            }
+        }
+
+        $default = MaterialImageStorageService::resolveDetailsFontPath();
+        if ($default !== null) {
+            $out[] = [
+                'id' => 'default',
+                'name_ar' => 'الخط الافتراضي للنظام',
+                'file_name' => basename($default),
+                'storage_path' => '',
+                'file_size_bytes' => 0,
+                'created_at' => '',
+                'builtin' => true,
+                'is_system_default' => true,
+                'absolute_path' => $default,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $file
+     * @return array{ok: bool, message: string, font?: array<string, mixed>}
+     */
+    public static function uploadFont(array $file, string $nameAr, ?string $userId): array
+    {
+        $nameAr = trim($nameAr);
+        $error = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
+        if ($error !== UPLOAD_ERR_OK) {
+            return ['ok' => false, 'message' => self::uploadErrorMessage($error)];
+        }
+        $tmpPath = (string) ($file['tmp_name'] ?? '');
+        if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
+            return ['ok' => false, 'message' => 'ملف الخط غير صالح.'];
+        }
+        $size = (int) ($file['size'] ?? 0);
+        if ($size <= 0 || $size > 5_242_880) {
+            return ['ok' => false, 'message' => 'حجم ملف الخط يجب أن يكون أقل من 5 ميجابايت.'];
+        }
+        $originalName = trim((string) ($file['name'] ?? 'font.ttf'));
+        $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        if (!in_array($ext, ['ttf', 'otf'], true)) {
+            return ['ok' => false, 'message' => 'ارفع خط TrueType (.ttf) أو OpenType (.otf).'];
+        }
+        if ($nameAr === '') {
+            $nameAr = pathinfo($originalName, PATHINFO_FILENAME) ?: 'خط مخصص';
+        }
+
+        $dir = self::fontsDir();
+        if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+            return ['ok' => false, 'message' => 'تعذر إنشاء مجلد الخطوط.'];
+        }
+
+        $id = self::generateUuid();
+        $storedName = $id . '.' . $ext;
+        $absolute = $dir . DIRECTORY_SEPARATOR . $storedName;
+        if (!move_uploaded_file($tmpPath, $absolute)) {
+            return ['ok' => false, 'message' => 'تعذر حفظ ملف الخط.'];
+        }
+
+        // Validate GD can open it
+        if (function_exists('imagettfbbox')) {
+            $box = @imagettfbbox(20, 0, $absolute, 'Aa');
+            if ($box === false) {
+                @unlink($absolute);
+
+                return ['ok' => false, 'message' => 'الملف ليس خط TrueType صالحاً لـ GD.'];
+            }
+        }
+
+        $relative = 'fonts/custom/' . $storedName;
+        try {
+            $stmt = Database::pdo()->prepare(
+                'INSERT INTO material_card_fonts (
+                    id, name_ar, file_name, storage_path, file_size_bytes, uploaded_by_web_user_id
+                 ) VALUES (
+                    :id, :name_ar, :file_name, :storage_path, :file_size_bytes, :uploaded_by
+                 )'
+            );
+            $stmt->execute([
+                'id' => $id,
+                'name_ar' => $nameAr,
+                'file_name' => $originalName,
+                'storage_path' => $relative,
+                'file_size_bytes' => $size,
+                'uploaded_by' => $userId !== null && trim($userId) !== '' ? trim($userId) : null,
+            ]);
+        } catch (Throwable $e) {
+            @unlink($absolute);
+
+            return ['ok' => false, 'message' => 'تعذر تسجيل الخط (هل طُبّق ترحيل 015؟): ' . $e->getMessage()];
+        }
+
+        return [
+            'ok' => true,
+            'message' => 'تم رفع الخط.',
+            'font' => [
+                'id' => $id,
+                'name_ar' => $nameAr,
+                'file_name' => $originalName,
+                'storage_path' => $relative,
+            ],
+        ];
+    }
+
+    /** @return array{ok: bool, message: string} */
+    public static function deleteFont(string $id): array
+    {
+        $id = trim($id);
+        if ($id === '' || str_starts_with($id, 'builtin:') || $id === 'default') {
+            return ['ok' => false, 'message' => 'لا يمكن حذف الخطوط المضمّنة.'];
+        }
+        $stmt = Database::pdo()->prepare(
+            'SELECT storage_path FROM material_card_fonts WHERE id = :id LIMIT 1'
+        );
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($row)) {
+            return ['ok' => false, 'message' => 'الخط غير موجود.'];
+        }
+        $path = self::resolveFontAbsolutePath((string) ($row['storage_path'] ?? ''));
+        Database::pdo()->prepare('DELETE FROM material_card_fonts WHERE id = :id')->execute(['id' => $id]);
+        // Clear field references
+        try {
+            Database::pdo()->prepare(
+                'UPDATE material_card_template_fields SET font_file = NULL WHERE font_file = :path'
+            )->execute(['path' => (string) ($row['storage_path'] ?? '')]);
+        } catch (Throwable) {
+        }
+        if ($path !== null) {
+            @unlink($path);
+        }
+
+        return ['ok' => true, 'message' => 'تم حذف الخط.'];
+    }
+
+    public static function resolveFieldFontPath(?array $field): ?string
+    {
+        $fontFile = is_array($field) ? trim((string) ($field['font_file'] ?? '')) : '';
+        if ($fontFile !== '') {
+            $resolved = self::resolveFontAbsolutePath($fontFile);
+            if ($resolved !== null) {
+                return $resolved;
+            }
+        }
+
+        return MaterialImageStorageService::resolveDetailsFontPath();
     }
 
     private static function uploadErrorMessage(int $error): string
