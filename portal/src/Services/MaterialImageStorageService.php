@@ -1982,7 +1982,10 @@ final class MaterialImageStorageService
     }
 
     /**
-     * Fast missing-local count: one local GUID index + Amine pages (no per-row disk/DB resolve).
+     * Missing-local count.
+     *
+     * Default (estimate): one Amine totalCount call + local GUID index — seconds, not minutes.
+     * Exact: pages Amine materials and intersects GUIDs (use --count-exact).
      *
      * @param null|callable(string):void $onProgress
      * @return array{
@@ -1991,10 +1994,106 @@ final class MaterialImageStorageService
      *   amine_with_image: int,
      *   local_for_amine: int,
      *   missing: int,
-     *   local_guid_index_size: int
+     *   local_guid_index_size: int,
+     *   exact: bool
      * }
      */
-    public static function countMissingLocals(?callable $onProgress = null): array
+    public static function countMissingLocals(?callable $onProgress = null, bool $exact = false): array
+    {
+        if ($exact) {
+            return self::countMissingLocalsExact($onProgress);
+        }
+
+        return self::countMissingLocalsEstimate($onProgress);
+    }
+
+    /**
+     * Near-instant estimate: Amine materials-with-image totalCount minus local GUID files.
+     * Overlap is assumed (local files map 1:1 to Amine GUIDs); good enough for progress.
+     *
+     * @param null|callable(string):void $onProgress
+     * @return array{
+     *   ok: bool,
+     *   message: string,
+     *   amine_with_image: int,
+     *   local_for_amine: int,
+     *   missing: int,
+     *   local_guid_index_size: int,
+     *   exact: bool
+     * }
+     */
+    public static function countMissingLocalsEstimate(?callable $onProgress = null): array
+    {
+        if ($onProgress !== null) {
+            $onProgress('بناء فهرس الصور المحلية…');
+        }
+        $indexSize = count(self::localImageGuidIndex());
+        if ($onProgress !== null) {
+            $onProgress("فهرس محلي: {$indexSize} معرّف صورة.");
+            $onProgress('طلب إجمالي مواد الأمين ذات الصورة (طلب واحد)…');
+        }
+
+        try {
+            $response = ApiClient::get('/api/materials', [
+                'hasImage' => 'true',
+                'page' => 1,
+                'pageSize' => 1,
+            ], 30);
+        } catch (Throwable $exception) {
+            return [
+                'ok' => false,
+                'message' => 'تعذر الاتصال بـ API المواد: ' . $exception->getMessage(),
+                'amine_with_image' => 0,
+                'local_for_amine' => 0,
+                'missing' => 0,
+                'local_guid_index_size' => $indexSize,
+                'exact' => false,
+            ];
+        }
+
+        if (!($response['ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'message' => 'تعذر جلب المواد من API (رمز ' . (int) ($response['status'] ?? 0) . ').',
+                'amine_with_image' => 0,
+                'local_for_amine' => 0,
+                'missing' => 0,
+                'local_guid_index_size' => $indexSize,
+                'exact' => false,
+            ];
+        }
+
+        $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+        $amineWithImage = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+        $localForAmine = min($indexSize, $amineWithImage);
+        $missing = max(0, $amineWithImage - $indexSize);
+
+        return [
+            'ok' => true,
+            'message' => 'تقدير سريع (طلب أمين واحد + فهرس محلي). استخدم --count-exact للعد الدقيق.',
+            'amine_with_image' => $amineWithImage,
+            'local_for_amine' => $localForAmine,
+            'missing' => $missing,
+            'local_guid_index_size' => $indexSize,
+            'exact' => false,
+        ];
+    }
+
+    /**
+     * Exact missing-local count: local GUID index + Amine pages (no per-row disk/DB resolve).
+     *
+     * @param null|callable(string):void $onProgress
+     * @return array{
+     *   ok: bool,
+     *   message: string,
+     *   amine_with_image: int,
+     *   local_for_amine: int,
+     *   missing: int,
+     *   local_guid_index_size: int,
+     *   exact: bool
+     * }
+     */
+    public static function countMissingLocalsExact(?callable $onProgress = null): array
     {
         if ($onProgress !== null) {
             $onProgress('بناء فهرس الصور المحلية…');
@@ -2003,14 +2102,14 @@ final class MaterialImageStorageService
         $indexSize = count($localGuids);
         if ($onProgress !== null) {
             $onProgress("فهرس محلي: {$indexSize} معرّف صورة.");
-            $onProgress('مسح مواد الأمين ذات الصورة…');
+            $onProgress('مسح مواد الأمين ذات الصورة (عدّ دقيق)…');
         }
 
         $amineWithImage = 0;
         $localForAmine = 0;
         $missing = 0;
         $apiPage = 1;
-        $apiPageSize = 100;
+        $apiPageSize = 200;
         $hasMoreApi = true;
 
         while ($hasMoreApi && $apiPage <= 500) {
@@ -2028,6 +2127,7 @@ final class MaterialImageStorageService
                     'local_for_amine' => $localForAmine,
                     'missing' => $missing,
                     'local_guid_index_size' => $indexSize,
+                    'exact' => true,
                 ];
             }
 
@@ -2039,6 +2139,7 @@ final class MaterialImageStorageService
                     'local_for_amine' => $localForAmine,
                     'missing' => $missing,
                     'local_guid_index_size' => $indexSize,
+                    'exact' => true,
                 ];
             }
 
@@ -2075,16 +2176,18 @@ final class MaterialImageStorageService
 
         return [
             'ok' => true,
-            'message' => 'تم الإحصاء.',
+            'message' => 'تم الإحصاء الدقيق.',
             'amine_with_image' => $amineWithImage,
             'local_for_amine' => $localForAmine,
             'missing' => $missing,
             'local_guid_index_size' => $indexSize,
+            'exact' => true,
         ];
     }
 
     /**
-     * Lowercase image GUID keys present on portal disk (queue paths + GUID-named files).
+     * Lowercase image GUID keys present on portal disk (GUID-named files + queue paths).
+     * Directory scan first; queue rows only fill gaps (avoids per-row is_file when already indexed).
      *
      * @return array<string, true>
      */
@@ -2092,6 +2195,23 @@ final class MaterialImageStorageService
     {
         /** @var array<string, true> $index */
         $index = [];
+
+        $settings = self::settings();
+        $dir = $settings['images_dir'];
+        if (is_dir($dir)) {
+            foreach (scandir($dir) ?: [] as $entry) {
+                if ($entry === '.' || $entry === '..') {
+                    continue;
+                }
+                if (preg_match('/^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\./', $entry, $m) !== 1) {
+                    continue;
+                }
+                if (!is_file($dir . DIRECTORY_SEPARATOR . $entry)) {
+                    continue;
+                }
+                $index[strtolower($m[1])] = true;
+            }
+        }
 
         try {
             MaterialImageSyncService::ensureTable();
@@ -2105,7 +2225,7 @@ final class MaterialImageStorageService
             $rows = $stmt !== false ? ($stmt->fetchAll(\PDO::FETCH_ASSOC) ?: []) : [];
             foreach ($rows as $row) {
                 $guid = strtolower(trim((string) ($row['amine_image_guid'] ?? '')));
-                if ($guid === '') {
+                if ($guid === '' || isset($index[$guid])) {
                     continue;
                 }
                 $path = trim((string) ($row['local_file_path'] ?? ''));
@@ -2119,20 +2239,7 @@ final class MaterialImageStorageService
                 }
             }
         } catch (Throwable) {
-            // Queue table may be unavailable; still use directory scan.
-        }
-
-        $settings = self::settings();
-        $dir = $settings['images_dir'];
-        if (is_dir($dir)) {
-            foreach (scandir($dir) ?: [] as $entry) {
-                if ($entry === '.' || $entry === '..' || !is_file($dir . DIRECTORY_SEPARATOR . $entry)) {
-                    continue;
-                }
-                if (preg_match('/^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\./', $entry, $m) === 1) {
-                    $index[strtolower($m[1])] = true;
-                }
-            }
+            // Queue table may be unavailable; directory scan is enough for GUID-named files.
         }
 
         return $index;
