@@ -564,6 +564,17 @@ if ($method === 'POST') {
         exit;
     }
 
+    if ($action === 'pull-missing-locals') {
+        @set_time_limit(180);
+        $page = max(1, (int) ($_POST['page'] ?? $_GET['page'] ?? 1));
+        $pageSize = max(1, min(30, (int) ($_POST['page_size'] ?? $_GET['page_size'] ?? 15)));
+        $result = MaterialImageStorageService::pullMissingLocalsChunk($page, $pageSize);
+        echo json_encode(array_merge($result, [
+            'sync' => MaterialImageSyncService::stats(),
+        ]), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     if ($action === 'reindex-local-paths') {
         $reindex = MaterialImageSyncService::reindexLocalPaths();
         echo json_encode([

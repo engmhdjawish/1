@@ -25,6 +25,16 @@ if ($localPath === null && $thumb) {
     $localPath = MaterialImageStorageService::resolvePathForGuid($id, false, false);
 }
 
+if ($localPath === null) {
+    // Linked on Amine but missing on the portal disk — pull once and cache locally.
+    $pulled = MaterialImageStorageService::ensureLocalCopyFromAmine($id);
+    if ($pulled !== null) {
+        $localPath = $thumb
+            ? (MaterialImageStorageService::resolvePathForGuid($id, true, true) ?? $pulled)
+            : $pulled;
+    }
+}
+
 if ($localPath !== null && is_readable($localPath)) {
     $mime = match (strtolower(pathinfo($localPath, PATHINFO_EXTENSION))) {
         'jpg', 'jpeg' => 'image/jpeg',

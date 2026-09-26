@@ -1542,6 +1542,286 @@ final class MaterialImageStorageService
     }
 
     /**
+     * When Amine has the image linked but the portal disk copy is missing,
+     * download once from the Amine API and register it as synced locally.
+     *
+     * Storefront serving (/api/image.php) and bulk repair both use this.
+     */
+    public static function ensureLocalCopyFromAmine(string $imageGuid): ?string
+    {
+        $imageGuid = strtolower(trim($imageGuid));
+        if ($imageGuid === '' || preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $imageGuid) !== 1) {
+            return null;
+        }
+
+        $existing = self::resolvePathForGuid($imageGuid, false, true);
+        if ($existing === null) {
+            $existing = MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, false, false);
+        }
+        if ($existing !== null && is_readable($existing)) {
+            return $existing;
+        }
+
+        foreach (self::fileNamesFromAmineApi($imageGuid) as $fileName) {
+            $path = self::resolveLocalPath($fileName, false);
+            if ($path !== null && is_readable($path)) {
+                try {
+                    MaterialImageSyncService::recordAssignedCopy($fileName, $path, $imageGuid);
+                } catch (Throwable) {
+                    // Serving still works even if the queue row cannot be written.
+                }
+
+                return $path;
+            }
+        }
+
+        $lockDir = rtrim(Config::storagePath(), '/\\') . DIRECTORY_SEPARATOR . 'locks';
+        if (!self::ensureDirectory($lockDir)) {
+            return null;
+        }
+        $lockPath = $lockDir . DIRECTORY_SEPARATOR . ('amine-image-pull-' . $imageGuid . '.lock');
+        $lockHandle = @fopen($lockPath, 'c+');
+        if ($lockHandle === false) {
+            return null;
+        }
+
+        try {
+            if (!flock($lockHandle, LOCK_EX)) {
+                return null;
+            }
+
+            $existingAfterLock = self::resolvePathForGuid($imageGuid, false, true)
+                ?? MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, false, false);
+            if ($existingAfterLock !== null && is_readable($existingAfterLock)) {
+                return $existingAfterLock;
+            }
+
+            return self::downloadAmineImageToLocal($imageGuid);
+        } finally {
+            flock($lockHandle, LOCK_UN);
+            fclose($lockHandle);
+            @unlink($lockPath);
+        }
+    }
+
+    private static function downloadAmineImageToLocal(string $imageGuid): ?string
+    {
+        $settings = self::settings();
+        if (!self::ensureDirectory($settings['images_dir']) || !self::ensureDirectory($settings['thumbnails_dir'])) {
+            return null;
+        }
+
+        $meta = null;
+        try {
+            $response = ApiClient::get('/api/material-images/' . rawurlencode($imageGuid));
+            if (($response['ok'] ?? false) && is_array($response['data'] ?? null)) {
+                $meta = $response['data'];
+                $candidates = self::fileNameCandidates(
+                    (string) ($meta['storedFileName'] ?? ''),
+                    (string) ($meta['fileName'] ?? ''),
+                    (string) ($meta['imagePath'] ?? ''),
+                    (string) ($meta['thumbnailName'] ?? '')
+                );
+                if ($candidates !== []) {
+                    self::$fileNameByGuid[$imageGuid] = $candidates;
+                }
+            }
+        } catch (Throwable) {
+            $meta = null;
+        }
+
+        $fileName = '';
+        if (is_array($meta)) {
+            $fileName = self::sanitizeFileName((string) ($meta['storedFileName'] ?? $meta['fileName'] ?? ''));
+        }
+        if ($fileName === '' || !self::isAllowedFileName($fileName)) {
+            $fileName = self::sanitizeFileName($imageGuid . '.jpg');
+        }
+        if ($fileName === '' || !self::isAllowedFileName($fileName)) {
+            return null;
+        }
+
+        $targetPath = self::safeJoin($settings['images_dir'], $fileName);
+        $thumbPath = self::safeJoin($settings['thumbnails_dir'], $fileName);
+        if ($targetPath === null || $thumbPath === null) {
+            return null;
+        }
+
+        $tmpPath = $settings['images_dir'] . DIRECTORY_SEPARATOR . ('.pull-' . $imageGuid . '.tmp');
+        try {
+            $download = ApiClient::downloadToFile(
+                '/api/material-images/' . rawurlencode($imageGuid) . '/file',
+                [],
+                $tmpPath,
+                120
+            );
+        } catch (Throwable) {
+            @unlink($tmpPath);
+
+            return null;
+        }
+
+        if (!($download['ok'] ?? false) || !is_file($tmpPath) || filesize($tmpPath) === 0) {
+            @unlink($tmpPath);
+
+            return null;
+        }
+
+        $detectedExt = self::extensionFromMime((string) ($download['contentType'] ?? ''));
+        if ($detectedExt !== '') {
+            $currentExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+            if ($currentExt === '' || ($currentExt === 'jpg' && $detectedExt !== 'jpg' && $detectedExt !== 'jpeg')) {
+                $base = pathinfo($fileName, PATHINFO_FILENAME);
+                $renamed = self::sanitizeFileName($base . '.' . $detectedExt);
+                if ($renamed !== '' && self::isAllowedFileName($renamed)) {
+                    $fileName = $renamed;
+                    $targetPath = self::safeJoin($settings['images_dir'], $fileName);
+                    $thumbPath = self::safeJoin($settings['thumbnails_dir'], $fileName);
+                    if ($targetPath === null || $thumbPath === null) {
+                        @unlink($tmpPath);
+
+                        return null;
+                    }
+                }
+            }
+        }
+
+        if (is_file($targetPath)) {
+            @unlink($targetPath);
+        }
+        if (!@rename($tmpPath, $targetPath) && !@copy($tmpPath, $targetPath)) {
+            @unlink($tmpPath);
+
+            return null;
+        }
+        @unlink($tmpPath);
+
+        if (!self::generateThumbnail($targetPath, $thumbPath)) {
+            @copy($targetPath, $thumbPath);
+        }
+
+        try {
+            MaterialImageSyncService::recordAssignedCopy($fileName, $targetPath, $imageGuid);
+        } catch (Throwable) {
+            // Local file is enough for storefront serving.
+        }
+
+        self::$fileNameByGuid[$imageGuid] = array_values(array_unique(array_merge(
+            self::$fileNameByGuid[$imageGuid] ?? [],
+            [$fileName]
+        )));
+
+        return $targetPath;
+    }
+
+    /**
+     * Pull a page of materials that have an Amine image GUID but no local portal file.
+     *
+     * @return array{
+     *   ok: bool,
+     *   message: string,
+     *   page: int,
+     *   page_size: int,
+     *   has_more: bool,
+     *   scanned: int,
+     *   pulled: int,
+     *   failed: int,
+     *   items: list<array{material_guid: string, material_code: string, image_guid: string, ok: bool, message: string}>
+     * }
+     */
+    public static function pullMissingLocalsChunk(int $page = 1, int $pageSize = 15): array
+    {
+        $page = max(1, $page);
+        $pageSize = max(1, min(30, $pageSize));
+        $browse = self::browseMaterials([
+            'page' => $page,
+            'page_size' => $pageSize,
+            'has_image' => '1',
+            'local_status' => 'missing',
+        ]);
+
+        if (!($browse['ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'message' => (string) ($browse['message'] ?? 'تعذر جلب المواد الناقصة.'),
+                'page' => $page,
+                'page_size' => $pageSize,
+                'has_more' => false,
+                'scanned' => 0,
+                'pulled' => 0,
+                'failed' => 0,
+                'items' => [],
+            ];
+        }
+
+        $items = [];
+        $pulled = 0;
+        $failed = 0;
+        foreach (($browse['items'] ?? []) as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $imageGuid = trim((string) ($row['image_guid'] ?? ''));
+            $materialGuid = trim((string) ($row['material_guid'] ?? ''));
+            $code = trim((string) ($row['material_code'] ?? ''));
+            if ($imageGuid === '') {
+                continue;
+            }
+
+            $path = self::ensureLocalCopyFromAmine($imageGuid);
+            if ($path !== null) {
+                $pulled++;
+                $items[] = [
+                    'material_guid' => $materialGuid,
+                    'material_code' => $code,
+                    'image_guid' => $imageGuid,
+                    'ok' => true,
+                    'message' => 'تم سحب النسخة إلى الموقع.',
+                ];
+            } else {
+                $failed++;
+                $items[] = [
+                    'material_guid' => $materialGuid,
+                    'material_code' => $code,
+                    'image_guid' => $imageGuid,
+                    'ok' => false,
+                    'message' => 'تعذر سحب الملف من الأمين.',
+                ];
+            }
+        }
+
+        $scanned = count($items);
+        $hasMore = (bool) ($browse['has_more'] ?? false);
+
+        return [
+            'ok' => $failed === 0 || $pulled > 0,
+            'message' => $scanned === 0
+                ? 'لا توجد مواد بصورة أمين ناقصة على الموقع في هذه الصفحة.'
+                : ('سُحبت ' . $pulled . ' صورة.' . ($failed > 0 ? (' فشل ' . $failed . '.') : '')),
+            'page' => $page,
+            'page_size' => $pageSize,
+            'has_more' => $hasMore,
+            'scanned' => $scanned,
+            'pulled' => $pulled,
+            'failed' => $failed,
+            'items' => $items,
+        ];
+    }
+
+    private static function extensionFromMime(string $contentType): string
+    {
+        $contentType = strtolower(trim(explode(';', $contentType)[0] ?? ''));
+
+        return match ($contentType) {
+            'image/jpeg', 'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/gif' => 'gif',
+            'image/webp' => 'webp',
+            default => '',
+        };
+    }
+
+    /**
      * @param array<string, mixed> $filters
      * @return array{
      *   ok: bool,
