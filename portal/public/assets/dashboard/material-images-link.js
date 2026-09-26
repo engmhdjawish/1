@@ -61,6 +61,8 @@ const API_URL = '/dashboard/material-images-api.php';
   }
 
   const sourceCards = panel.querySelector('#sourceCards');
+  const assignInProgressZone = panel.querySelector('#assignInProgressZone');
+  const assignInProgressList = panel.querySelector('#assignInProgressList');
   const sourcePageLabel = panel.querySelector('#sourcePageLabel');
   const sourcePrevBtn = panel.querySelector('#sourcePrevBtn');
   const sourceNextBtn = panel.querySelector('#sourceNextBtn');
@@ -156,7 +158,101 @@ const API_URL = '/dashboard/material-images-api.php';
     card.remove();
     totalCount = Math.max(0, totalCount - 1);
     updatePageLabel();
+    syncAssignInProgressZone();
     ensureCardsPlaceholder();
+  }
+
+  function syncAssignInProgressZone() {
+    if (!assignInProgressZone || !assignInProgressList) return;
+    const busy = assignInProgressList.querySelectorAll('article.dash-mi-card').length > 0;
+    assignInProgressZone.hidden = !busy;
+  }
+
+  function materialLabelsForAssign(items) {
+    return (items || [])
+      .map((row) => String(row?.code || row?.name || '').trim())
+      .filter(Boolean)
+      .slice(0, 4);
+  }
+
+  function flyCardToAssignZone(card, items) {
+    if (!card || !assignInProgressList || !assignInProgressZone) {
+      setCardAssigning(card, true);
+      return;
+    }
+    const first = card.getBoundingClientRect();
+    assignInProgressZone.hidden = false;
+    card.classList.add('is-assigning-flight');
+    card.classList.remove('is-assign-done', 'is-assign-failed');
+    setCardAssigning(card, true);
+    const labels = materialLabelsForAssign(items);
+    const statusEl = card.querySelector('.card-status');
+    if (statusEl) {
+      statusEl.textContent = labels.length
+        ? `جاري الربط: ${labels.join('، ')}${items.length > labels.length ? '…' : ''}`
+        : 'جاري الربط وحفظ النسخ…';
+    }
+    assignInProgressList.appendChild(card);
+    const last = card.getBoundingClientRect();
+    const dx = first.left - last.left;
+    const dy = first.top - last.top;
+    if (typeof card.animate === 'function' && (Math.abs(dx) > 1 || Math.abs(dy) > 1)) {
+      card.animate(
+        [
+          { transform: `translate(${dx}px, ${dy}px)`, opacity: 0.92 },
+          { transform: 'translate(0, 0)', opacity: 1 },
+        ],
+        { duration: 420, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
+      );
+    }
+    syncAssignInProgressZone();
+  }
+
+  function returnCardFromAssignZone(card) {
+    if (!card) return;
+    card.classList.remove('is-assigning-flight', 'is-assign-done');
+    card.classList.add('is-assign-failed');
+    setCardAssigning(card, false);
+    if (sourceCards && card.parentElement === assignInProgressList) {
+      const first = card.getBoundingClientRect();
+      sourceCards.prepend(card);
+      const last = card.getBoundingClientRect();
+      const dx = first.left - last.left;
+      const dy = first.top - last.top;
+      if (typeof card.animate === 'function' && (Math.abs(dx) > 1 || Math.abs(dy) > 1)) {
+        card.animate(
+          [
+            { transform: `translate(${dx}px, ${dy}px)` },
+            { transform: 'translate(0, 0)' },
+          ],
+          { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
+        );
+      }
+    }
+    window.setTimeout(() => card.classList.remove('is-assign-failed'), 1800);
+    syncAssignInProgressZone();
+  }
+
+  async function finishAssignCardSuccess(card, item) {
+    if (!card) return;
+    card.classList.add('is-assign-done');
+    card.classList.remove('is-assign-failed');
+    const statusEl = card.querySelector('.card-status');
+    if (statusEl) statusEl.textContent = 'تم الربط وحفظ النسخ ✓';
+    try {
+      if (typeof card.animate === 'function') {
+        await card.animate(
+          [
+            { opacity: 1, transform: 'scale(1)' },
+            { opacity: 0, transform: 'scale(0.94) translateY(-10px)' },
+          ],
+          { duration: 380, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }
+        ).finished;
+      }
+    } catch {
+      // Animation may be interrupted if the panel reloads.
+    }
+    removeCard(card, item);
   }
 
   function updateCardToUnlinked(card, item) {
@@ -232,20 +328,23 @@ const API_URL = '/dashboard/material-images-api.php';
 
   function findCardForItem(item, card = null) {
     if (card?.isConnected) return card;
-    if (!sourceCards) return null;
+    const scopes = [assignInProgressList, sourceCards].filter(Boolean);
     const guid = itemImageGuid(item);
     const fileName = String(item?.file_name || '').trim();
-    if (guid) {
-      const byGuid = sourceCards.querySelector(`article[data-image-guid="${cssAttrEscape(guid)}"]`);
-      if (byGuid) return byGuid;
-    }
-    if (fileName) {
-      const byFile = sourceCards.querySelector(`article[data-file-name="${cssAttrEscape(fileName)}"]`);
-      if (byFile) return byFile;
-    }
-    const key = cardKey(item);
-    if (key) {
-      return sourceCards.querySelector(`article[data-key="${cssAttrEscape(key)}"]`);
+    for (const scope of scopes) {
+      if (guid) {
+        const byGuid = scope.querySelector(`article[data-image-guid="${cssAttrEscape(guid)}"]`);
+        if (byGuid) return byGuid;
+      }
+      if (fileName) {
+        const byFile = scope.querySelector(`article[data-file-name="${cssAttrEscape(fileName)}"]`);
+        if (byFile) return byFile;
+      }
+      const key = cardKey(item);
+      if (key) {
+        const byKey = scope.querySelector(`article[data-key="${cssAttrEscape(key)}"]`);
+        if (byKey) return byKey;
+      }
     }
     return null;
   }
@@ -276,9 +375,11 @@ const API_URL = '/dashboard/material-images-api.php';
   function setCardAssigning(card, assigning) {
     if (!card) return;
     card.dataset.assigning = assigning ? '1' : '0';
+    // Keep preview visible — the card flies into «جاري الربط» with its image.
     const previewBtn = card.querySelector('.preview-btn');
     if (previewBtn instanceof HTMLElement) {
-      previewBtn.style.visibility = assigning ? 'hidden' : '';
+      previewBtn.style.visibility = '';
+      previewBtn.style.pointerEvents = assigning ? 'none' : '';
     }
   }
 
@@ -480,7 +581,7 @@ const API_URL = '/dashboard/material-images-api.php';
         window.dashboardApp.showToast(successMessage, 'success');
       }
       rememberLinkedItem(item);
-      removeCardByItem(item, card);
+      await finishAssignCardSuccess(card, item);
       syncSelectAllUnlinked();
       updateDeleteUnlinkedControls();
       ensureCardsPlaceholder();
@@ -498,7 +599,7 @@ const API_URL = '/dashboard/material-images-api.php';
     }
     if (!assignSucceeded(payload)) return;
     rememberLinkedItem(item);
-    removeCardByItem(item, card);
+    finishAssignCardSuccess(card, item);
     syncSelectAllUnlinked();
     updateDeleteUnlinkedControls();
     ensureCardsPlaceholder();
@@ -512,7 +613,7 @@ const API_URL = '/dashboard/material-images-api.php';
       return;
     }
     button.disabled = true;
-    setCardAssigning(card, true);
+    flyCardToAssignZone(card, items);
     const progressStart = assignProgressMessage(items.length);
     linkStatus.textContent = progressStart;
     if (statusEl) statusEl.textContent = progressStart;
@@ -521,7 +622,8 @@ const API_URL = '/dashboard/material-images-api.php';
       elapsed += 1;
       const msg = assignProgressMessage(items.length, elapsed);
       linkStatus.textContent = msg;
-      if (statusEl) statusEl.textContent = msg;
+      const liveStatus = card?.querySelector('.card-status');
+      if (liveStatus) liveStatus.textContent = msg;
     }, 1000);
     try {
       const payload = await postAssignForm('assign-materials', item, items, card);
@@ -531,9 +633,11 @@ const API_URL = '/dashboard/material-images-api.php';
         return;
       }
       if (outcome === 'partial') {
+        returnCardFromAssignZone(card);
         return;
       }
       if (await recoverCardIfAssignSucceededOnServer(item, card)) return;
+      returnCardFromAssignZone(card);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر تنفيذ الربط.';
       linkStatus.textContent = message;
@@ -541,10 +645,11 @@ const API_URL = '/dashboard/material-images-api.php';
       if (window.dashboardApp?.showToast) {
         window.dashboardApp.showToast(message, 'error');
       }
+      returnCardFromAssignZone(card);
     } finally {
       window.clearInterval(progressTimer);
-      setCardAssigning(card, false);
       button.disabled = false;
+      syncAssignInProgressZone();
     }
   }
 
@@ -556,7 +661,7 @@ const API_URL = '/dashboard/material-images-api.php';
     }
     if (!confirm('سيتم فك الربط الحالي ثم ربط الصورة بالمواد المختارة. متابعة؟')) return;
     button.disabled = true;
-    setCardAssigning(card, true);
+    flyCardToAssignZone(card, items);
     const progressStart = assignProgressMessage(items.length);
     if (statusEl) statusEl.textContent = progressStart;
     linkStatus.textContent = progressStart;
@@ -565,13 +670,16 @@ const API_URL = '/dashboard/material-images-api.php';
       elapsed += 1;
       const msg = assignProgressMessage(items.length, elapsed);
       linkStatus.textContent = msg;
-      if (statusEl) statusEl.textContent = msg;
+      const liveStatus = card?.querySelector('.card-status');
+      if (liveStatus) liveStatus.textContent = msg;
     }, 1000);
     try {
       const payload = await postAssignForm('reassign-materials', item, items, card);
       const outcome = showAssignOutcome(payload, statusEl, 'تم الاستبدال مع حفظ النسخ على الموقع.');
       if (outcome === 'success') {
         handleCardAfterAssign(card, item, payload);
+      } else {
+        returnCardFromAssignZone(card);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر تنفيذ الاستبدال.';
@@ -580,10 +688,11 @@ const API_URL = '/dashboard/material-images-api.php';
       if (window.dashboardApp?.showToast) {
         window.dashboardApp.showToast(message, 'error');
       }
+      returnCardFromAssignZone(card);
     } finally {
       window.clearInterval(progressTimer);
-      setCardAssigning(card, false);
       button.disabled = false;
+      syncAssignInProgressZone();
     }
   }
 

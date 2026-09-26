@@ -1121,6 +1121,7 @@ final class MaterialImageLinkService
 
     /**
      * Copy/download the per-material Amine image onto the portal disk and register it.
+     * Always materializes a {guid}.{ext} copy so the missing-image index and image.php stay reliable.
      *
      * @return array{ok: bool, message: string, file_name?: string, local_path?: string}
      */
@@ -1132,124 +1133,112 @@ final class MaterialImageLinkService
         string $assignedFromFileName
     ): array {
         $storedFileName = basename(str_replace('\\', '/', trim($storedFileName)));
-        $imageGuid = trim($imageGuid);
+        $imageGuid = strtolower(trim($imageGuid));
         if ($storedFileName === '' || str_contains($storedFileName, '..') || $imageGuid === '') {
             return ['ok' => false, 'message' => 'اسم ملف أو معرف صورة غير صالح لحفظ النسخة المحلية.'];
         }
 
         $settings = MaterialImageStorageService::settings();
+        $localPath = null;
+        $fileName = $storedFileName;
+
         $existing = MaterialImageStorageService::resolveLocalPath($storedFileName, false);
         if ($existing !== null && is_file($existing)) {
-            try {
-                MaterialImageSyncService::recordAssignedCopy(
-                    $storedFileName,
-                    $existing,
-                    $imageGuid,
-                    $uploadedByUserId,
-                    $assignedFromFileName
-                );
-            } catch (Throwable) {
-                // Serving still works if queue write fails.
-            }
-
-            return [
-                'ok' => true,
-                'message' => '',
-                'file_name' => $storedFileName,
-                'local_path' => $existing,
-            ];
-        }
-
-        if ($sourcePath !== '' && is_file($sourcePath)) {
+            $localPath = $existing;
+        } elseif ($sourcePath !== '' && is_file($sourcePath)) {
             $copy = MaterialImageStorageService::copyLocalFromSource($sourcePath, $storedFileName);
             if ($copy['ok'] ?? false) {
                 $fileName = (string) ($copy['file_name'] ?? $storedFileName);
-                $localPath = $settings['images_dir'] . DIRECTORY_SEPARATOR . $fileName;
-                if (is_file($localPath)) {
-                    try {
-                        MaterialImageSyncService::recordAssignedCopy(
-                            $fileName,
-                            $localPath,
-                            $imageGuid,
-                            $uploadedByUserId,
-                            $assignedFromFileName
-                        );
-                    } catch (Throwable) {
-                    }
-
-                    return [
-                        'ok' => true,
-                        'message' => '',
-                        'file_name' => $fileName,
-                        'local_path' => $localPath,
-                    ];
+                $candidate = $settings['images_dir'] . DIRECTORY_SEPARATOR . $fileName;
+                if (is_file($candidate)) {
+                    $localPath = $candidate;
                 }
             }
         }
 
-        $targetPath = $settings['images_dir'] . DIRECTORY_SEPARATOR . $storedFileName;
-        $tmpPath = $settings['images_dir'] . DIRECTORY_SEPARATOR . ('.assign-' . $imageGuid . '.tmp');
-        if (!is_dir($settings['images_dir']) && !@mkdir($settings['images_dir'], 0775, true) && !is_dir($settings['images_dir'])) {
-            return ['ok' => false, 'message' => 'تعذر إنشاء مجلد صور الموقع لحفظ النسخة المحلية.'];
-        }
+        if ($localPath === null) {
+            $targetPath = $settings['images_dir'] . DIRECTORY_SEPARATOR . $storedFileName;
+            $tmpPath = $settings['images_dir'] . DIRECTORY_SEPARATOR . ('.assign-' . $imageGuid . '.tmp');
+            if (!is_dir($settings['images_dir']) && !@mkdir($settings['images_dir'], 0775, true) && !is_dir($settings['images_dir'])) {
+                return ['ok' => false, 'message' => 'تعذر إنشاء مجلد صور الموقع لحفظ النسخة المحلية.'];
+            }
 
-        try {
-            $download = ApiClient::downloadToFile(
-                '/api/material-images/' . rawurlencode($imageGuid) . '/file',
-                [],
-                $tmpPath,
-                120
-            );
-        } catch (Throwable $exception) {
+            try {
+                $download = ApiClient::downloadToFile(
+                    '/api/material-images/' . rawurlencode($imageGuid) . '/file',
+                    [],
+                    $tmpPath,
+                    120
+                );
+            } catch (Throwable $exception) {
+                @unlink($tmpPath);
+
+                return ['ok' => false, 'message' => 'تعذر تنزيل نسخة الأمين للموقع: ' . $exception->getMessage()];
+            }
+
+            if (!($download['ok'] ?? false) || !is_file($tmpPath) || (int) (filesize($tmpPath) ?: 0) <= 0) {
+                @unlink($tmpPath);
+                $detail = trim((string) ($download['error'] ?? ''));
+
+                return [
+                    'ok' => false,
+                    'message' => 'تم الربط على الأمين لكن تعذر حفظ النسخة على الموقع'
+                        . ($detail !== '' ? (': ' . $detail) : '.'),
+                ];
+            }
+
+            if (is_file($targetPath)) {
+                @unlink($targetPath);
+            }
+            if (!@rename($tmpPath, $targetPath) && !@copy($tmpPath, $targetPath)) {
+                @unlink($tmpPath);
+
+                return ['ok' => false, 'message' => 'تعذر كتابة ملف الصورة على مجلد الموقع.'];
+            }
             @unlink($tmpPath);
 
-            return ['ok' => false, 'message' => 'تعذر تنزيل نسخة الأمين للموقع: ' . $exception->getMessage()];
+            $thumbPath = $settings['thumbnails_dir'] . DIRECTORY_SEPARATOR . $storedFileName;
+            if (is_dir($settings['thumbnails_dir']) || @mkdir($settings['thumbnails_dir'], 0775, true) || is_dir($settings['thumbnails_dir'])) {
+                $copyThumb = MaterialImageStorageService::copyLocalFromSource($targetPath, $storedFileName);
+                unset($copyThumb);
+            }
+
+            $localPath = $targetPath;
+            $fileName = $storedFileName;
         }
 
-        if (!($download['ok'] ?? false) || !is_file($tmpPath) || (int) (filesize($tmpPath) ?: 0) <= 0) {
-            @unlink($tmpPath);
-            $detail = trim((string) ($download['error'] ?? ''));
-
+        $preferredExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+        if ($preferredExt === '') {
+            $preferredExt = 'jpg';
+        }
+        $guidPath = MaterialImageStorageService::ensureGuidNamedLocalCopy($imageGuid, $localPath, $preferredExt);
+        if ($guidPath === null || !is_readable($guidPath)) {
             return [
                 'ok' => false,
-                'message' => 'تم الربط على الأمين لكن تعذر حفظ النسخة على الموقع'
-                    . ($detail !== '' ? (': ' . $detail) : '.'),
+                'message' => 'تم حفظ الملف باسم الأمين لكن تعذر تثبيت نسخة GUID على الموقع — لم يُحذف الملف المرحلي.',
             ];
         }
 
-        if (is_file($targetPath)) {
-            @unlink($targetPath);
-        }
-        if (!@rename($tmpPath, $targetPath) && !@copy($tmpPath, $targetPath)) {
-            @unlink($tmpPath);
-
-            return ['ok' => false, 'message' => 'تعذر كتابة ملف الصورة على مجلد الموقع.'];
-        }
-        @unlink($tmpPath);
-
-        $thumbPath = $settings['thumbnails_dir'] . DIRECTORY_SEPARATOR . $storedFileName;
-        if (is_dir($settings['thumbnails_dir']) || @mkdir($settings['thumbnails_dir'], 0775, true) || is_dir($settings['thumbnails_dir'])) {
-            $copyThumb = MaterialImageStorageService::copyLocalFromSource($targetPath, $storedFileName);
-            unset($copyThumb);
-            // copyLocalFromSource regenerates thumb; if target already equals source it still refreshes thumb.
-        }
-
+        // Keep Amine stored-name mapping as well (dashboard lists / Amine sync).
         try {
             MaterialImageSyncService::recordAssignedCopy(
-                $storedFileName,
-                $targetPath,
+                $fileName,
+                $localPath,
                 $imageGuid,
                 $uploadedByUserId,
                 $assignedFromFileName
             );
         } catch (Throwable) {
+            // GUID copy + queue row from ensureGuidNamedLocalCopy is enough for serving.
         }
+
+        $guidFileName = basename($guidPath);
 
         return [
             'ok' => true,
             'message' => '',
-            'file_name' => $storedFileName,
-            'local_path' => $targetPath,
+            'file_name' => $guidFileName !== '' ? $guidFileName : $fileName,
+            'local_path' => $guidPath,
         ];
     }
 
@@ -1399,13 +1388,37 @@ final class MaterialImageLinkService
                 continue;
             }
 
-            MaterialImageSyncService::recordAssignedCopy(
-                $fileName,
-                $localPath,
-                $imageGuid,
-                $uploadedByUserId,
-                $sourceFileName
-            );
+            $preferredExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+            if ($preferredExt === '') {
+                $preferredExt = 'jpg';
+            }
+            $guidPath = MaterialImageStorageService::ensureGuidNamedLocalCopy($imageGuid, $localPath, $preferredExt);
+            if ($guidPath === null || !is_readable($guidPath)) {
+                $failed++;
+                $results[] = [
+                    'material_guid' => $materialGuid,
+                    'material_name' => (string) ($material['name'] ?? ''),
+                    'material_code' => (string) ($material['material_code'] ?? ''),
+                    'image_guid' => $imageGuid,
+                    'file_name' => $fileName,
+                    'ok' => false,
+                    'local_synced' => false,
+                    'amine_linked' => true,
+                    'message' => 'تم الربط على الأمين لكن تعذر تثبيت نسخة GUID على الموقع — الملف المرحلي باقٍ.',
+                ];
+                continue;
+            }
+
+            try {
+                MaterialImageSyncService::recordAssignedCopy(
+                    $fileName,
+                    $localPath,
+                    $imageGuid,
+                    $uploadedByUserId,
+                    $sourceFileName
+                );
+            } catch (Throwable) {
+            }
 
             self::purgeReplacedMaterialImage($previousPictureGuid, $imageGuid);
 
@@ -1415,7 +1428,7 @@ final class MaterialImageLinkService
                 'material_name' => (string) ($material['name'] ?? ''),
                 'material_code' => (string) ($material['material_code'] ?? ''),
                 'image_guid' => $imageGuid,
-                'file_name' => $fileName,
+                'file_name' => basename($guidPath),
                 'ok' => true,
                 'local_synced' => true,
                 'message' => 'تم الرفع والربط مع حفظ النسخة على الموقع.',

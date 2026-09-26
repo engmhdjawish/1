@@ -1636,6 +1636,84 @@ button.is-loading::after,
   background: var(--dash-surface);
 }
 
+.dash-mi-assign-zone {
+  margin-top: 1rem;
+  padding: 0.85rem;
+  border: 1px dashed #94a3b8;
+  border-radius: 0.9rem;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.dash-mi-assign-zone__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.dash-mi-assign-zone__title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.dash-mi-assign-zone__hint {
+  margin: 0;
+  font-size: 0.6875rem;
+  color: var(--dash-muted);
+}
+
+.dash-mi-assign-zone__list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+@media (min-width: 640px) {
+  .dash-mi-assign-zone__list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .dash-mi-assign-zone__list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.dash-mi-card.is-assigning-flight {
+  border-color: #64748b;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  will-change: transform, opacity;
+}
+
+.dash-mi-card.is-assigning-flight .dash-mi-card__actions,
+.dash-mi-card.is-assigning-flight .material-input,
+.dash-mi-card.is-assigning-flight .suggestions,
+.dash-mi-card.is-assigning-flight .unlinked-select-check {
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+.dash-mi-card.is-assigning-flight .assign-btn,
+.dash-mi-card.is-assigning-flight .reassign-btn,
+.dash-mi-card.is-assigning-flight .unlink-btn,
+.dash-mi-card.is-assigning-flight .delete-btn {
+  opacity: 0.5;
+}
+
+.dash-mi-card.is-assign-done {
+  border-color: #10b981;
+  background: #ecfdf5;
+}
+
+.dash-mi-card.is-assign-failed {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
 .dash-mi-card__zoom-hint {
   position: absolute;
   bottom: 0.35rem;

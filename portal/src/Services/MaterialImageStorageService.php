@@ -1801,6 +1801,21 @@ final class MaterialImageStorageService
     }
 
     /**
+     * Public wrapper: ensure a readable {guid}.{ext} copy exists from an on-disk source.
+     * Used after assign/pull so the missing-GUID index and local-only image.php stay reliable.
+     *
+     * @param null|callable(string):void $onProgress
+     */
+    public static function ensureGuidNamedLocalCopy(
+        string $imageGuid,
+        string $sourcePath,
+        string $preferredExt = 'jpg',
+        ?callable $onProgress = null
+    ): ?string {
+        return self::materializeGuidNamedLocalCopy($imageGuid, $sourcePath, $preferredExt, $onProgress);
+    }
+
+    /**
      * Ensure a readable copy exists as {guid}.{ext} (and queue row), from an existing local file.
      *
      * @param null|callable(string):void $onProgress

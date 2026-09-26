@@ -52,6 +52,13 @@
       </details>
     </div>
     <div id="sourceCards" class="dash-mi-cards"></div>
+    <div id="assignInProgressZone" class="dash-mi-assign-zone" hidden>
+      <div class="dash-mi-assign-zone__head">
+        <h3 class="dash-mi-assign-zone__title">جاري الربط</h3>
+        <p class="dash-mi-assign-zone__hint">الصورة تُحفظ على الموقع والأمين — لا تغلق الصفحة</p>
+      </div>
+      <div id="assignInProgressList" class="dash-mi-assign-zone__list"></div>
+    </div>
     <div class="mt-3 flex items-center justify-between">
       <button type="button" id="sourcePrevBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold disabled:opacity-40" disabled>السابق</button>
       <button type="button" id="sourceNextBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold disabled:opacity-40" disabled>التالي</button>
