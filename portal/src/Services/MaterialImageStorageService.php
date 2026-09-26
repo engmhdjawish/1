@@ -1982,6 +1982,163 @@ final class MaterialImageStorageService
     }
 
     /**
+     * Fast missing-local count: one local GUID index + Amine pages (no per-row disk/DB resolve).
+     *
+     * @param null|callable(string):void $onProgress
+     * @return array{
+     *   ok: bool,
+     *   message: string,
+     *   amine_with_image: int,
+     *   local_for_amine: int,
+     *   missing: int,
+     *   local_guid_index_size: int
+     * }
+     */
+    public static function countMissingLocals(?callable $onProgress = null): array
+    {
+        if ($onProgress !== null) {
+            $onProgress('بناء فهرس الصور المحلية…');
+        }
+        $localGuids = self::localImageGuidIndex();
+        $indexSize = count($localGuids);
+        if ($onProgress !== null) {
+            $onProgress("فهرس محلي: {$indexSize} معرّف صورة.");
+            $onProgress('مسح مواد الأمين ذات الصورة…');
+        }
+
+        $amineWithImage = 0;
+        $localForAmine = 0;
+        $missing = 0;
+        $apiPage = 1;
+        $apiPageSize = 100;
+        $hasMoreApi = true;
+
+        while ($hasMoreApi && $apiPage <= 500) {
+            try {
+                $response = ApiClient::get('/api/materials', [
+                    'hasImage' => 'true',
+                    'page' => $apiPage,
+                    'pageSize' => $apiPageSize,
+                ], 45);
+            } catch (Throwable $exception) {
+                return [
+                    'ok' => false,
+                    'message' => 'تعذر الاتصال بـ API المواد: ' . $exception->getMessage(),
+                    'amine_with_image' => $amineWithImage,
+                    'local_for_amine' => $localForAmine,
+                    'missing' => $missing,
+                    'local_guid_index_size' => $indexSize,
+                ];
+            }
+
+            if (!($response['ok'] ?? false)) {
+                return [
+                    'ok' => false,
+                    'message' => 'تعذر جلب المواد من API (رمز ' . (int) ($response['status'] ?? 0) . ').',
+                    'amine_with_image' => $amineWithImage,
+                    'local_for_amine' => $localForAmine,
+                    'missing' => $missing,
+                    'local_guid_index_size' => $indexSize,
+                ];
+            }
+
+            $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+            $rows = is_array($data['items'] ?? null) ? $data['items'] : [];
+            $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+            $hasMoreApi = ($apiPage * $apiPageSize) < $totalCount;
+
+            foreach ($rows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $imageGuid = strtolower(trim((string) ($row['productImageGuid'] ?? $row['ProductImageGuid'] ?? '')));
+                if ($imageGuid === '' || preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $imageGuid) !== 1) {
+                    continue;
+                }
+                $amineWithImage++;
+                if (isset($localGuids[$imageGuid])) {
+                    $localForAmine++;
+                } else {
+                    $missing++;
+                }
+            }
+
+            if ($onProgress !== null) {
+                $onProgress("صفحة أمين {$apiPage}: ناقص حتى الآن {$missing} / ب صورة {$amineWithImage}");
+            }
+
+            if ($rows === []) {
+                break;
+            }
+            $apiPage++;
+        }
+
+        return [
+            'ok' => true,
+            'message' => 'تم الإحصاء.',
+            'amine_with_image' => $amineWithImage,
+            'local_for_amine' => $localForAmine,
+            'missing' => $missing,
+            'local_guid_index_size' => $indexSize,
+        ];
+    }
+
+    /**
+     * Lowercase image GUID keys present on portal disk (queue paths + GUID-named files).
+     *
+     * @return array<string, true>
+     */
+    public static function localImageGuidIndex(): array
+    {
+        /** @var array<string, true> $index */
+        $index = [];
+
+        try {
+            MaterialImageSyncService::ensureTable();
+            $stmt = Database::pdo()->query(
+                "SELECT amine_image_guid::text AS amine_image_guid,
+                        local_file_path,
+                        file_name
+                 FROM material_image_sync_queue
+                 WHERE amine_image_guid IS NOT NULL"
+            );
+            $rows = $stmt !== false ? ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: []) : [];
+            foreach ($rows as $row) {
+                $guid = strtolower(trim((string) ($row['amine_image_guid'] ?? '')));
+                if ($guid === '') {
+                    continue;
+                }
+                $path = trim((string) ($row['local_file_path'] ?? ''));
+                if ($path !== '' && is_file($path)) {
+                    $index[$guid] = true;
+                    continue;
+                }
+                $fileName = trim((string) ($row['file_name'] ?? ''));
+                if ($fileName !== '' && self::resolveLocalPath($fileName, false) !== null) {
+                    $index[$guid] = true;
+                }
+            }
+        } catch (Throwable) {
+            // Queue table may be unavailable; still use directory scan.
+        }
+
+        $settings = self::settings();
+        $dir = $settings['images_dir'];
+        if (is_dir($dir)) {
+            foreach (scandir($dir) ?: [] as $entry) {
+                if ($entry === '.' || $entry === '..' || !is_file($dir . DIRECTORY_SEPARATOR . $entry)) {
+                    continue;
+                }
+                if (preg_match('/^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\./', $entry, $m) === 1) {
+                    $index[strtolower($m[1])] = true;
+                }
+            }
+        }
+
+        return $index;
+    }
+
+    /**
      * @param array<string, mixed> $file
      * @return array{ok: bool, message: string, file_name?: string, replaced?: bool}
      */
