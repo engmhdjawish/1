@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 /**
- * Serves material images for store browsing from local disk only (no API proxy).
+ * Serves material images for store browsing from local disk.
+ * If the Amine GUID is known but the local file is missing, downloads once from Amine and caches it.
  */
 
 require dirname(__DIR__, 2) . '/bootstrap.php';
@@ -23,6 +24,16 @@ if ($id === '' || preg_match('/^[0-9a-fA-F-]{36}$/', $id) !== 1) {
 $localPath = MaterialImageStorageService::resolvePathForGuid($id, $thumb, false);
 if ($localPath === null && $thumb) {
     $localPath = MaterialImageStorageService::resolvePathForGuid($id, false, false);
+}
+
+if ($localPath === null) {
+    // Linked on Amine but missing on the portal disk — pull once and cache locally.
+    $pulled = MaterialImageStorageService::ensureLocalCopyFromAmine($id);
+    if ($pulled !== null) {
+        $localPath = $thumb
+            ? (MaterialImageStorageService::resolvePathForGuid($id, true, true) ?? $pulled)
+            : $pulled;
+    }
 }
 
 if ($localPath !== null && is_readable($localPath)) {
