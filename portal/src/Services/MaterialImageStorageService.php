@@ -2102,7 +2102,7 @@ final class MaterialImageStorageService
                  FROM material_image_sync_queue
                  WHERE amine_image_guid IS NOT NULL"
             );
-            $rows = $stmt !== false ? ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: []) : [];
+            $rows = $stmt !== false ? ($stmt->fetchAll(\PDO::FETCH_ASSOC) ?: []) : [];
             foreach ($rows as $row) {
                 $guid = strtolower(trim((string) ($row['amine_image_guid'] ?? '')));
                 if ($guid === '') {
