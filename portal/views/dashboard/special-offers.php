@@ -216,7 +216,7 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
           <option value="per_material" <?= $pricingScope === 'per_material' ? 'selected' : '' ?>>سعر لكل مادة</option>
         </select>
       </label>
-      <label class="text-xs" id="offer-discount-type-wrap">
+      <label class="text-xs so-unified-discount" id="offer-discount-type-wrap">
         <span class="text-text-muted block mb-0.5">نوع الحسم</span>
         <select name="discount_type" id="discount_type" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
           <option value="percent" <?= $discountType === 'percent' ? 'selected' : '' ?>>نسبة مئوية</option>
@@ -224,23 +224,23 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
           <option value="fixed_price" <?= $discountType === 'fixed_price' ? 'selected' : '' ?>>سعر طرد جديد</option>
         </select>
       </label>
-      <label class="text-xs" id="field-percent">
+      <label class="text-xs so-unified-discount" id="field-percent">
         <span class="text-text-muted block mb-0.5">النسبة %</span>
         <input type="number" step="0.01" min="0" max="100" name="discount_percent" value="<?= h((string) ($editOffer['discount_percent'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
       </label>
-      <label class="text-xs hidden" id="field-amount-syp">
+      <label class="text-xs hidden so-unified-discount" id="field-amount-syp">
         <span class="text-text-muted block mb-0.5">خصم مبلغ ل.س من الطرد</span>
         <input type="number" step="0.01" min="0" name="fixed_amount_syp" value="<?= h((string) ($editOffer['fixed_amount_syp'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
       </label>
-      <label class="text-xs hidden" id="field-amount-usd">
+      <label class="text-xs hidden so-unified-discount" id="field-amount-usd">
         <span class="text-text-muted block mb-0.5">خصم مبلغ $ من الطرد</span>
         <input type="number" step="0.01" min="0" name="fixed_amount_usd" value="<?= h((string) ($editOffer['fixed_amount_usd'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
       </label>
-      <label class="text-xs hidden" id="field-syp">
+      <label class="text-xs hidden so-unified-discount" id="field-syp">
         <span class="text-text-muted block mb-0.5">سعر الطرد ل.س</span>
         <input type="number" step="0.01" min="0" name="fixed_price_syp" value="<?= h((string) ($editOffer['fixed_price_syp'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
       </label>
-      <label class="text-xs hidden" id="field-usd">
+      <label class="text-xs hidden so-unified-discount" id="field-usd">
         <span class="text-text-muted block mb-0.5">سعر الطرد $</span>
         <input type="number" step="0.01" min="0" name="fixed_price_usd" value="<?= h((string) ($editOffer['fixed_price_usd'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
       </label>
@@ -285,7 +285,7 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
     </div>
   </article>
 
-  <article class="bg-white border border-border-subtle rounded-xl p-3">
+  <article id="selection-mode-article" class="bg-white border border-border-subtle rounded-xl p-3">
     <label class="text-xs block mb-2">
       <span class="text-text-muted block mb-0.5">طريقة اختيار المواد</span>
       <select name="selection_mode" id="selection_mode" class="h-9 w-full max-w-xs rounded-lg border border-border-subtle px-2 text-sm">
@@ -382,7 +382,7 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
   </article>
 
   <article id="manual-mode-panel" class="bg-white border border-border-subtle rounded-xl p-3 <?= $selectionMode === 'filter' ? 'hidden' : '' ?>">
-    <h3 class="font-bold text-sm mb-2">اختيار المواد يدوياً</h3>
+    <h3 id="manual-mode-heading" class="font-bold text-sm mb-2">اختيار المواد يدوياً</h3>
     <p class="text-xs text-text-muted mb-2">ابحث بالاسم أو الكود — 24 نتيجة لكل دفعة.</p>
 
     <div class="mb-2 flex flex-wrap gap-2 items-start">
@@ -411,9 +411,21 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
     <?php $renderTokenPicker('المواد المشمولة بالعرض', 'manual_material_guids[]', $manualPickerOptions, $selectedMaterialGuids, 'so-manual-materials', false, true, true); ?>
 
     <div id="per-material-pricing-panel" class="mt-3 <?= $pricingScope === 'per_material' ? '' : 'hidden' ?>">
-      <h4 class="font-bold text-sm mb-1">سعر كل مادة</h4>
-      <p class="text-[11px] text-text-muted mb-2">عند إضافة مادة تظهر خياراتها مباشرة: نسبة، أو مبلغ مقطوع، أو سعر طرد جديد.</p>
-      <div id="per-material-pricing-rows" class="space-y-2"></div>
+      <h4 class="font-bold text-sm mb-1">مواد العرض وأسعارها</h4>
+      <p class="text-[11px] text-text-muted mb-2">أضف مادة من البحث، ثم حدّد بجانبها نوع الحسم وقيمته.</p>
+      <div class="overflow-auto rounded-lg border border-border-subtle">
+        <table class="w-full min-w-[640px] text-sm">
+          <thead class="bg-surface-low text-text-muted">
+            <tr>
+              <th class="px-3 py-2 text-right font-bold">المادة</th>
+              <th class="px-3 py-2 text-right font-bold w-40">نوع الحسم</th>
+              <th class="px-3 py-2 text-right font-bold">القيمة</th>
+              <th class="px-3 py-2 w-16"></th>
+            </tr>
+          </thead>
+          <tbody id="per-material-pricing-rows"></tbody>
+        </table>
+      </div>
       <script type="application/json" id="so-product-overrides-json"><?= json_encode($productOverrides, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?></script>
       <script type="application/json" id="so-manual-product-labels-json"><?= json_encode($manualProductsByGuid, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?></script>
     </div>

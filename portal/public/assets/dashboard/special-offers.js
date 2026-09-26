@@ -45,9 +45,16 @@
       filterPanel?.classList.toggle('hidden', isManual);
       manualPanel?.classList.toggle('hidden', !isManual);
       const perMaterial = pricingScope?.value === 'per_material' && isManual;
-      root.querySelector('#offer-discount-type-wrap')?.classList.toggle('hidden', perMaterial);
+      root.querySelector('#selection-mode-article')?.classList.toggle('hidden', perMaterial);
+      root.querySelector('#manual-mode-heading')?.classList.toggle('hidden', perMaterial);
+      root.querySelector('[data-picker-id="so-manual-materials"]')?.classList.toggle('hidden', perMaterial);
+      root.querySelectorAll('.so-unified-discount').forEach((el) => {
+        if (perMaterial) {
+          el.classList.add('hidden');
+        }
+      });
       if (perMaterial) {
-        ['#field-percent', '#field-amount-syp', '#field-amount-usd', '#field-syp', '#field-usd'].forEach((sel) => {
+        ['#field-percent', '#field-amount-syp', '#field-amount-usd', '#field-syp', '#field-usd', '#offer-discount-type-wrap'].forEach((sel) => {
           root.querySelector(sel)?.classList.add('hidden');
         });
       } else {
@@ -74,7 +81,7 @@
       perMaterialRows.querySelectorAll('[data-override-guid]').forEach((row) => {
         const guid = row.getAttribute('data-override-guid');
         if (!guid) return;
-        const type = row.querySelector('[data-field="discount_type"]:checked')?.value || 'percent';
+        const type = row.querySelector('[data-field="discount_type"]')?.value || 'percent';
         overridesState[guid] = {
           discount_type: type,
           discount_percent: row.querySelector('[data-field="discount_percent"]')?.value || '',
@@ -91,76 +98,98 @@
       const type = ['percent', 'fixed_amount', 'fixed_price'].includes(current.discount_type)
         ? current.discount_type
         : 'percent';
-      const wrap = document.createElement('div');
-      wrap.className = 'rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 space-y-2';
-      wrap.setAttribute('data-override-guid', guid);
-      const title = document.createElement('div');
-      title.className = 'text-xs font-bold';
-      title.textContent = label || guid;
-      wrap.appendChild(title);
+      const tr = document.createElement('tr');
+      tr.className = 'border-t border-border-subtle';
+      tr.setAttribute('data-override-guid', guid);
 
-      const choices = document.createElement('div');
-      choices.className = 'flex flex-wrap gap-2 text-[11px]';
+      const materialCell = document.createElement('td');
+      materialCell.className = 'px-3 py-2 font-bold align-middle';
+      materialCell.textContent = label || guid;
+      tr.appendChild(materialCell);
+
+      const typeCell = document.createElement('td');
+      typeCell.className = 'px-3 py-2 align-middle';
+      const typeSelect = document.createElement('select');
+      typeSelect.name = `material_override[${guid}][discount_type]`;
+      typeSelect.setAttribute('data-field', 'discount_type');
+      typeSelect.className = 'h-8 w-full rounded-lg border border-border-subtle px-2 text-xs bg-white';
       [
         ['percent', 'نسبة %'],
         ['fixed_amount', 'مبلغ مقطوع'],
         ['fixed_price', 'سعر طرد جديد'],
       ].forEach(([value, text]) => {
-        const choice = document.createElement('label');
-        choice.className = 'inline-flex items-center gap-1 rounded-full border border-border-subtle bg-white px-2 py-1';
-        const input = document.createElement('input');
-        input.type = 'radio';
-        input.name = `material_override[${guid}][discount_type]`;
-        input.value = value;
-        input.checked = type === value;
-        input.setAttribute('data-field', 'discount_type');
-        choice.appendChild(input);
-        choice.appendChild(document.createTextNode(text));
-        choices.appendChild(choice);
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        option.selected = type === value;
+        typeSelect.appendChild(option);
       });
-      wrap.appendChild(choices);
+      typeCell.appendChild(typeSelect);
+      tr.appendChild(typeCell);
 
-      const grid = document.createElement('div');
-      grid.className = 'grid grid-cols-1 md:grid-cols-2 gap-2';
+      const valueCell = document.createElement('td');
+      valueCell.className = 'px-3 py-2 align-middle';
+      const valueWrap = document.createElement('div');
+      valueWrap.className = 'flex flex-wrap gap-2';
       const fields = [
-        ['percent', 'discount_percent', 'النسبة %', '0.01', '100', current.discount_percent],
-        ['fixed_amount', 'fixed_amount_syp', 'مبلغ ل.س', '0.01', '', current.fixed_amount_syp],
-        ['fixed_amount', 'fixed_amount_usd', 'مبلغ $', '0.01', '', current.fixed_amount_usd],
-        ['fixed_price', 'fixed_price_syp', 'سعر طرد ل.س', '0.01', '', current.fixed_price_syp],
-        ['fixed_price', 'fixed_price_usd', 'سعر طرد $', '0.01', '', current.fixed_price_usd],
+        ['percent', 'discount_percent', '%', '100', current.discount_percent],
+        ['fixed_amount', 'fixed_amount_syp', 'ل.س', '', current.fixed_amount_syp],
+        ['fixed_amount', 'fixed_amount_usd', '$', '', current.fixed_amount_usd],
+        ['fixed_price', 'fixed_price_syp', 'سعر ل.س', '', current.fixed_price_syp],
+        ['fixed_price', 'fixed_price_usd', 'سعر $', '', current.fixed_price_usd],
       ];
-      fields.forEach(([showFor, field, caption, step, max, value]) => {
-        const fieldLabel = document.createElement('label');
-        fieldLabel.className = 'text-[11px]' + (showFor === type ? '' : ' hidden');
-        fieldLabel.setAttribute('data-show-for', showFor);
+      fields.forEach(([showFor, field, caption, max, value]) => {
+        const box = document.createElement('label');
+        box.className = 'inline-flex items-center gap-1 text-[11px]' + (showFor === type ? '' : ' hidden');
+        box.setAttribute('data-show-for', showFor);
         const captionEl = document.createElement('span');
-        captionEl.className = 'text-text-muted block mb-0.5';
+        captionEl.className = 'text-text-muted whitespace-nowrap';
         captionEl.textContent = caption;
         const input = document.createElement('input');
         input.type = 'number';
-        input.step = step;
+        input.step = '0.01';
         input.min = '0';
+        input.required = true;
         if (max !== '') input.max = max;
         input.name = `material_override[${guid}][${field}]`;
         input.setAttribute('data-field', field);
         input.value = value ?? '';
-        input.className = 'h-8 w-full rounded-lg border border-border-subtle px-2 text-xs bg-white';
-        fieldLabel.appendChild(captionEl);
-        fieldLabel.appendChild(input);
-        grid.appendChild(fieldLabel);
+        input.className = 'h-8 w-24 rounded-lg border border-border-subtle px-2 text-xs bg-white';
+        box.appendChild(captionEl);
+        box.appendChild(input);
+        valueWrap.appendChild(box);
       });
-      wrap.appendChild(grid);
+      valueCell.appendChild(valueWrap);
+      tr.appendChild(valueCell);
+
+      const actionCell = document.createElement('td');
+      actionCell.className = 'px-3 py-2 align-middle text-left';
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'h-8 px-2 rounded-lg border border-red-200 text-red-700 text-xs font-bold';
+      removeBtn.textContent = 'حذف';
+      removeBtn.addEventListener('click', () => {
+        tr.remove();
+        delete overridesState[guid];
+        if (typeof window.portalTokenPickerRemove === 'function') {
+          window.portalTokenPickerRemove('so-manual-materials', guid);
+        }
+        syncPerMaterialRows();
+      });
+      actionCell.appendChild(removeBtn);
+      tr.appendChild(actionCell);
 
       const syncRowFields = () => {
-        const selected = wrap.querySelector('[data-field="discount_type"]:checked')?.value || 'percent';
-        wrap.querySelectorAll('[data-show-for]').forEach((el) => {
-          el.classList.toggle('hidden', el.getAttribute('data-show-for') !== selected);
+        const selected = typeSelect.value || 'percent';
+        tr.querySelectorAll('[data-show-for]').forEach((el) => {
+          const visible = el.getAttribute('data-show-for') === selected;
+          el.classList.toggle('hidden', !visible);
+          el.querySelector('input')?.toggleAttribute('required', visible);
         });
       };
-      wrap.querySelectorAll('[data-field="discount_type"]').forEach((input) => {
-        input.addEventListener('change', syncRowFields);
-      });
-      return wrap;
+      typeSelect.addEventListener('change', syncRowFields);
+      syncRowFields();
+      return tr;
     };
 
     const syncPerMaterialRows = () => {
@@ -171,7 +200,13 @@
         : [];
       perMaterialRows.innerHTML = '';
       if (!selected.length) {
-        perMaterialRows.innerHTML = '<p class="text-xs text-text-muted">أضف مواداً لإظهار حقول الحسم الخاصة.</p>';
+        const empty = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 4;
+        cell.className = 'px-3 py-4 text-xs text-text-muted text-center';
+        cell.textContent = 'أضف مادة واحدة على الأقل من البحث أعلاه.';
+        empty.appendChild(cell);
+        perMaterialRows.appendChild(empty);
         return;
       }
       selected.forEach((guid) => {
@@ -209,6 +244,17 @@
 
     syncPanels();
     syncPricingScope();
+
+    form.addEventListener('submit', (event) => {
+      if (pricingScope?.value !== 'per_material') return;
+      const selected = typeof window.portalTokenPickerGetSelected === 'function'
+        ? window.portalTokenPickerGetSelected('so-manual-materials')
+        : [];
+      if (selected.length > 0) return;
+      event.preventDefault();
+      const status = root.querySelector('#so-material-search-status');
+      if (status) status.textContent = 'سعر لكل مادة يتطلب اختيار مادة واحدة على الأقل في الجدول.';
+    });
 
     const searchInput = root.querySelector('#so-material-search');
     const resultsEl = root.querySelector('#so-material-search-results');

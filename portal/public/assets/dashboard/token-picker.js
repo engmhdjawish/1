@@ -244,6 +244,17 @@
     return added;
   };
 
+  window.portalTokenPickerRemove = (pickerId, value) => {
+    const state = pickerRegistry.get(pickerId);
+    const normalized = normalize(value);
+    if (!state || normalized === '') return false;
+    const next = state.selectedValues.filter((item) => item !== normalized);
+    if (next.length === state.selectedValues.length) return false;
+    state.selectedValues = next;
+    state.renderSelected?.();
+    return true;
+  };
+
   window.portalTokenPickerAddOptions = (pickerId, items) => {
     window.portalTokenPickerAdd(pickerId, items);
   };
