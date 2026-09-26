@@ -87,7 +87,7 @@ function portal_price_lock_hint(?string $redirect = null): array
     $redirect = portal_price_lock_return(null, $redirect);
 
     return [
-        'message' => 'سجّل الدخول لإظهار السعر',
+        'message' => 'إظهار السعر',
         'href' => portal_login_url('customer', $redirect),
     ];
 }

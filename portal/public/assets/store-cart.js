@@ -715,7 +715,7 @@
       return `<div class="store-price-veil store-price-veil--${safeContext}" role="note">${ghost}<span class="store-price-veil__note">السعر غير متاح لهذا الحساب.</span></div>`;
     }
     const redirect = encodeURIComponent(priceLockReturn(guid));
-    return `<a class="store-price-veil store-price-veil--${safeContext}" href="/customer-login.php?redirect=${redirect}">${ghost}<span class="store-price-veil__cta"><span class="material-symbols-outlined" aria-hidden="true">lock_open</span><span>سجّل الدخول لإظهار السعر</span></span></a>`;
+    return `<a class="store-price-veil store-price-veil--${safeContext}" href="/customer-login.php?redirect=${redirect}">${ghost}<span class="store-price-veil__cta"><span class="material-symbols-outlined" aria-hidden="true">lock_open</span><span>إظهار السعر</span></span></a>`;
   };
 
   const renderCartLineCard = (line, max, data = {}) => {
