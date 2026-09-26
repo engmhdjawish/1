@@ -1323,7 +1323,6 @@ final class MaterialImageLinkService
      * @param list<string> $materialGuids
      * @param array<string, mixed> $line1ByMaterial
      * @param array<string, mixed> $line2ByMaterial
-     * @param array{scale?: float, offset_x?: float, offset_y?: float}|null $photoTransform
      * @return array<string, string>
      */
     public static function buildProcessedImagesFromDetails(
@@ -1331,9 +1330,7 @@ final class MaterialImageLinkService
         ?string $amineSourceGuid,
         array $materialGuids,
         array $line1ByMaterial,
-        array $line2ByMaterial,
-        ?string $templateId = null,
-        ?array $photoTransform = null
+        array $line2ByMaterial
     ): array {
         if (!MaterialImageStorageService::canProcessImageDetails()) {
             return [];
@@ -1356,16 +1353,11 @@ final class MaterialImageLinkService
             $line2Override = self::detailLineForMaterial($line2ByMaterial, $materialGuid);
             $line1 = self::buildProductBannerLine($material, $line1Override);
             $line2 = self::buildPackagingBannerLine($material, $line2Override);
-            $barcode = self::resolveMaterialBannerCode($material);
+            if ($line1 === '' && $line2 === '') {
+                continue;
+            }
 
-            $processed = MaterialImageStorageService::renderImageWithDetailsBanner(
-                $tempSource,
-                $line1,
-                $line2,
-                $barcode !== '' ? $barcode : null,
-                $templateId,
-                $photoTransform
-            );
+            $processed = MaterialImageStorageService::renderImageWithDetailsBanner($tempSource, $line1, $line2);
             if ($processed !== null) {
                 $map[strtolower($materialGuid)] = $processed;
             }
@@ -1483,7 +1475,7 @@ final class MaterialImageLinkService
             return self::assignError(MaterialImageStorageService::detailsBannerRequirements()['message']);
         }
 
-        return self::assignError('تعذر تجهيز الصورة على القالب. تحقق من القالب والصورة وبيانات المادة.');
+        return self::assignError('تعذر تجهيز الصورة مع البانر السفلي. تحقق من الصورة والنصوص.');
     }
 
     /** @param array<string, mixed>|null $material */

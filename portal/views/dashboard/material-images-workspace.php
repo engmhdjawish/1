@@ -87,8 +87,7 @@ $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'messag
 <?php if ($workspaceTab === 'link'): ?>
   <?php if (empty($detailsBanner['ok'])): ?>
     <p class="mb-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 max-w-3xl">
-      <?= h((string) ($detailsBanner['message'] ?? 'قالب صورة المادة غير متاح على هذا السيرفر.')) ?>
-      <a href="/dashboard/material-card-templates.php" class="font-bold underline ms-1">إدارة القوالب</a>
+      <?= h((string) ($detailsBanner['message'] ?? 'البانر السفلي غير متاح على هذا السيرفر.')) ?>
     </p>
   <?php endif; ?>
   <div id="workspace-panel-link">

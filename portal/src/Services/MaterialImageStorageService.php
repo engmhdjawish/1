@@ -377,23 +377,8 @@ final class MaterialImageStorageService
         return $dest;
     }
 
-    /**
-     * Composite a product photo onto a material card template.
-     *
-     * @param array{
-     *   scale?: float,
-     *   offset_x?: float,
-     *   offset_y?: float
-     * }|null $photoTransform  scale=1 means cover-fit; offset in slot pixels after scale
-     */
-    public static function renderImageWithDetailsBanner(
-        string $sourcePath,
-        string $line1,
-        string $line2,
-        ?string $barcodeValue = null,
-        ?string $templateId = null,
-        ?array $photoTransform = null
-    ): ?string {
+    public static function renderImageWithDetailsBanner(string $sourcePath, string $line1, string $line2): ?string
+    {
         if (!is_file($sourcePath) || !function_exists('imagecreatetruecolor') || !function_exists('imagettftext')) {
             return null;
         }
@@ -403,677 +388,219 @@ final class MaterialImageStorageService
             return null;
         }
 
-        $template = null;
-        try {
-            $template = $templateId !== null && trim($templateId) !== ''
-                ? MaterialCardTemplateService::getById(trim($templateId), true)
-                : MaterialCardTemplateService::getDefault(true);
-        } catch (\Throwable) {
-            $template = null;
-        }
-        if (!is_array($template)) {
-            return null;
-        }
-
-        $templatePath = MaterialCardTemplateService::absolutePath($template);
-        if ($templatePath === null) {
-            // Fallback to bundled PNG for fresh installs before storage seed.
-            $templatePath = self::resolveCardTemplatePath();
-        }
-        if ($templatePath === null || !is_file($templatePath)) {
-            return null;
-        }
-
-        $fieldsByKind = [];
-        foreach (($template['fields'] ?? []) as $field) {
-            if (!is_array($field)) {
-                continue;
-            }
-            $kind = (string) ($field['field_kind'] ?? '');
-            if ($kind !== '') {
-                $fieldsByKind[$kind] = $field;
-            }
-        }
-        if ($fieldsByKind === []) {
-            // Legacy hardcoded slots if DB fields missing.
-            foreach (['photo', 'product_name', 'packaging', 'barcode'] as $kind) {
-                $slot = self::cardTemplateSlot($kind === 'product_name' ? 'name' : ($kind === 'packaging' ? 'pack' : $kind));
-                $fieldsByKind[$kind] = $slot + [
-                    'field_kind' => $kind,
-                    'font_size' => $kind === 'product_name' ? 22.0 : ($kind === 'packaging' ? 16.0 : 14.0),
-                    'color_hex' => $kind === 'packaging' ? '#F5F5F7' : '#1C1C1E',
-                    'align' => $kind === 'barcode' ? 'center' : 'right',
-                    'meta' => $kind === 'packaging' ? ['icon_inset_right' => 58] : [],
-                ];
-            }
-        }
-
         $line1 = self::normalizeProductBannerLine($line1);
         $line2 = trim($line2);
+        if ($line1 === '' && $line2 === '') {
+            return null;
+        }
+
+        $image = self::loadGdImage($sourcePath);
+        if ($image === false) {
+            return null;
+        }
+
+        $width = imagesx($image);
+        $height = imagesy($image);
+        if ($width <= 0 || $height <= 0) {
+            imagedestroy($image);
+
+            return null;
+        }
+
+        $titleSize = (float) max(17, min(28, (int) floor($width / 26)));
+        $codeSize = (float) max(13, min(20, round($titleSize * 0.78)));
+        $subtitleSize = (float) max(13, min(18, (int) floor($width / 34)));
+        $paddingX = (int) max(18, min(30, (int) floor($width / 32)));
+        $paddingY = (int) max(16, min(22, (int) floor($width / 40)));
+        $lineGap = (int) max(6, min(10, (int) round($subtitleSize * 0.45)));
         $productParts = $line1 !== '' ? self::splitProductBannerLine($line1) : null;
-        $productName = $productParts['name'] ?? ($line1 !== '' ? $line1 : '');
-        $materialCode = trim((string) ($barcodeValue ?? ''));
-        if ($materialCode === '' && $productParts !== null) {
-            $materialCode = $productParts['code'];
+        $branding = self::detailsBannerBranding();
+        $brandNameSize = (float) max(13, min(22, $subtitleSize * 0.95));
+        $brandPhoneSize = (float) max(12, min(19, $subtitleSize * 0.86));
+        $brandBlockWidth = self::detailsBannerBrandColumnWidth($font, $brandNameSize, $brandPhoneSize, $branding, $width);
+        $brandColumnRight = $paddingX + $brandBlockWidth;
+        $contentLeft = $brandBlockWidth > 0 ? $brandColumnRight + 20 : $paddingX;
+        $contentRight = $width - $paddingX;
+        $contentWidth = max(120, $contentRight - $contentLeft);
+        $brandNameLines = self::detailsBannerBrandNameLines($font, $brandNameSize, $branding, $brandBlockWidth);
+        $titleLineStep = (int) round($titleSize * 1.22);
+        $subtitleLineStep = (int) round($subtitleSize * 1.2);
+        $codeFrameWidth = 0;
+        if ($productParts !== null && $productParts['code'] !== '') {
+            $codeFrameWidth = self::bannerFramedTextWidth($font, $codeSize, $productParts['code'], false);
         }
 
-        $templateImage = self::loadGdImage($templatePath);
-        if ($templateImage === false) {
+        $nameLines = [];
+        if ($productParts !== null) {
+            $nameWrapWidth = max(
+                80,
+                (int) round($contentWidth - $codeFrameWidth - ($codeFrameWidth > 0 ? 12 : 0))
+            );
+            $nameLines = self::wrapTtfTextLines(
+                $font,
+                $titleSize,
+                $productParts['name'],
+                $nameWrapWidth
+            );
+            if ($nameLines === []) {
+                $nameLines = [$productParts['name']];
+            }
+        }
+
+        $titleLineCount = $productParts !== null
+            ? max(1, count($nameLines))
+            : ($line1 !== '' ? count(self::wrapTtfTextLines($font, $titleSize, $line1, $contentWidth)) : 0);
+        $subtitleLines = $line2 !== '' ? [$line2] : [];
+
+        $brandBlockHeight = self::detailsBannerBrandBlockHeight($branding, $brandNameSize, $brandPhoneSize, $brandNameLines);
+        $contentBlockHeight = 0;
+        if ($titleLineCount > 0) {
+            $contentBlockHeight += $titleLineCount * $titleLineStep;
+        }
+        if ($subtitleLines !== []) {
+            if ($contentBlockHeight > 0) {
+                $contentBlockHeight += $lineGap;
+            }
+            $contentBlockHeight += count($subtitleLines) * $subtitleLineStep;
+        }
+        $innerBlockHeight = max($brandBlockHeight, $contentBlockHeight, (int) round($titleSize * 1.1));
+        $bannerHeight = $paddingY * 2 + $innerBlockHeight;
+        if ($bannerHeight <= 0) {
+            imagedestroy($image);
+
             return null;
         }
 
-        $canvasW = imagesx($templateImage);
-        $canvasH = imagesy($templateImage);
-        if ($canvasW <= 0 || $canvasH <= 0) {
-            return null;
-        }
-
-        $canvas = imagecreatetruecolor($canvasW, $canvasH);
+        $canvas = imagecreatetruecolor($width, $height + $bannerHeight);
         if ($canvas === false) {
+            imagedestroy($image);
+
             return null;
         }
-        imagealphablending($canvas, true);
-        imagesavealpha($canvas, false);
 
-        $product = self::loadGdImage($sourcePath);
-        $orderedFields = array_values($fieldsByKind);
-        usort($orderedFields, static function (array $a, array $b): int {
-            return ((int) ($a['z_index'] ?? 0)) <=> ((int) ($b['z_index'] ?? 0));
-        });
+        imagecopy($canvas, $image, 0, 0, 0, 0, $width, $height);
+        imagedestroy($image);
 
-        $photoField = $fieldsByKind['photo'] ?? null;
-        $photoZ = is_array($photoField) ? (int) ($photoField['z_index'] ?? 0) : 0;
-        $minOtherZ = null;
-        foreach ($fieldsByKind as $kind => $field) {
-            if ($kind === 'photo' || !is_array($field)) {
-                continue;
-            }
-            $z = (int) ($field['z_index'] ?? 0);
-            $minOtherZ = $minOtherZ === null ? $z : min($minOtherZ, $z);
-        }
-        // الصورة خلف القالب عندما z الخاص بها أقل من بقية الحقول (أو لا توجد حقول أخرى).
-        $photoBehindTemplate = is_array($photoField)
-            && ($minOtherZ === null || $photoZ < $minOtherZ);
+        self::fillDetailsBannerBackground($canvas, 0, $height, $width, $bannerHeight);
+        self::drawDetailsBannerHairline($canvas, 0, $height, $width);
 
-        if ($photoBehindTemplate) {
-            $black = imagecolorallocate($canvas, 0, 0, 0);
-            imagefilledrectangle($canvas, 0, 0, $canvasW - 1, $canvasH - 1, $black);
-            if ($product !== false && is_array($photoField)) {
-                self::coverFitImageIntoRectWithTransform(
-                    $canvas,
-                    $product,
-                    (int) ($photoField['x'] ?? 0),
-                    (int) ($photoField['y'] ?? 0),
-                    (int) ($photoField['w'] ?? 0),
-                    (int) ($photoField['h'] ?? 0),
-                    $photoTransform
-                );
-            }
-            // وضع القالب فوق الصورة مع إبقاء المناطق البيضاء شفافة.
-            self::overlayTemplateKnockoutNearWhite($canvas, $templateImage);
-        } else {
-            imagecopy($canvas, $templateImage, 0, 0, 0, 0, $canvasW, $canvasH);
+        $footerTop = $height;
+        $innerTop = $footerTop + $paddingY;
+        $brandStartY = $innerTop + (int) floor(max(0, $innerBlockHeight - $brandBlockHeight) / 2);
+        $contentStartY = $innerTop + (int) floor(max(0, $innerBlockHeight - $contentBlockHeight) / 2);
+
+        if ($brandBlockWidth > 0) {
+            self::drawDetailsBannerColumnDivider(
+                $canvas,
+                $brandColumnRight + 9,
+                $innerTop,
+                $innerTop + $innerBlockHeight
+            );
         }
 
-        foreach ($orderedFields as $field) {
-            $kind = (string) ($field['field_kind'] ?? '');
-            if ($kind === 'photo') {
-                if ($photoBehindTemplate || $product === false) {
-                    continue;
-                }
-                $photoRect = [
-                    'x' => (int) ($field['x'] ?? 0),
-                    'y' => (int) ($field['y'] ?? 0),
-                    'w' => (int) ($field['w'] ?? 0),
-                    'h' => (int) ($field['h'] ?? 0),
-                ];
-                self::coverFitImageIntoRectWithTransform(
-                    $canvas,
-                    $product,
-                    $photoRect['x'],
-                    $photoRect['y'],
-                    $photoRect['w'],
-                    $photoRect['h'],
-                    $photoTransform
-                );
-                self::restoreTemplateNonWhiteOverRect($canvas, $templateImage, $photoRect);
-                continue;
-            }
+        self::drawDetailsBannerBranding(
+            $canvas,
+            $font,
+            $branding,
+            $brandNameSize,
+            $brandPhoneSize,
+            $paddingX,
+            $brandStartY,
+            $brandBlockWidth,
+            $brandNameLines
+        );
 
-            $fieldFont = MaterialCardTemplateService::resolveFieldFontPath($field) ?? $font;
-
-            if ($kind === 'product_name') {
-                [$nr, $ng, $nb] = self::hexToRgb((string) ($field['color_hex'] ?? '#1C1C1E'), 28, 28, 30);
-                self::fillRoundedSlot(
+        $contentRowTop = $contentStartY;
+        $drewProduct = false;
+        if ($productParts !== null) {
+            foreach ($nameLines as $index => $nameLine) {
+                $productBaseline = $contentRowTop + (int) $titleSize;
+                $nameRight = $index === 0 && $codeFrameWidth > 0
+                    ? $contentRight - $codeFrameWidth - 10
+                    : $contentRight;
+                self::drawBannerColoredTextRight(
                     $canvas,
-                    (int) $field['x'],
-                    (int) $field['y'],
-                    (int) $field['w'],
-                    (int) $field['h'],
-                    253,
-                    251,
-                    251,
-                    18
+                    $font,
+                    $titleSize,
+                    $nameLine,
+                    $contentLeft,
+                    $nameRight,
+                    $productBaseline,
+                    245,
+                    245,
+                    247,
+                    true,
+                    true
                 );
-                if ($productName !== '') {
-                    $fontSize = (float) ($field['font_size'] ?? 22);
-                    self::drawClippedTextInSlot(
+                if ($index === 0 && $productParts['code'] !== '') {
+                    self::drawBannerSoftBadgeRight(
                         $canvas,
-                        $fieldFont,
-                        $productName,
-                        [
-                            'x' => (int) $field['x'],
-                            'y' => (int) $field['y'],
-                            'w' => (int) $field['w'],
-                            'h' => (int) $field['h'],
-                        ],
-                        max(10.0, $fontSize * 0.7),
-                        $fontSize,
-                        $nr,
-                        $ng,
-                        $nb,
-                        true,
-                        14,
-                        10,
-                        (string) ($field['align'] ?? 'right')
+                        $font,
+                        $codeSize,
+                        $productParts['code'],
+                        $contentLeft,
+                        $contentRight,
+                        $productBaseline
                     );
                 }
-                continue;
+                $contentRowTop += $titleLineStep;
+                $drewProduct = true;
             }
-
-            if ($kind === 'packaging') {
-                [$pr, $pg, $pb] = self::hexToRgb((string) ($field['color_hex'] ?? '#F5F5F7'), 245, 245, 247);
-                self::fillRoundedSlot(
+        } elseif ($line1 !== '') {
+            $titleLines = self::wrapTtfTextLines($font, $titleSize, $line1, $contentWidth);
+            foreach ($titleLines as $line) {
+                $productBaseline = $contentRowTop + (int) $titleSize;
+                self::drawBannerColoredTextRight(
                     $canvas,
-                    (int) $field['x'],
-                    (int) $field['y'],
-                    (int) $field['w'],
-                    (int) $field['h'],
-                    99,
-                    99,
-                    99,
-                    14
+                    $font,
+                    $titleSize,
+                    $line,
+                    $contentLeft,
+                    $contentRight,
+                    $productBaseline,
+                    245,
+                    245,
+                    247,
+                    true,
+                    true
                 );
-                if ($line2 !== '') {
-                    $packText = $line2;
-                    if (preg_match('/^التعبئة\s*:\s*(.+)$/u', $line2, $m) === 1) {
-                        $packText = trim((string) $m[1]);
-                    }
-                    $meta = is_array($field['meta'] ?? null) ? $field['meta'] : [];
-                    $iconInset = max(0, (int) ($meta['icon_inset_right'] ?? 58));
-                    $fontSize = (float) ($field['font_size'] ?? 16);
-                    $packTextSlot = [
-                        'x' => (int) $field['x'] + 12,
-                        'y' => (int) $field['y'] + 8,
-                        'w' => max(80, (int) $field['w'] - 24 - $iconInset),
-                        'h' => max(20, (int) $field['h'] - 16),
-                    ];
-                    self::drawClippedTextInSlot(
-                        $canvas,
-                        $fieldFont,
-                        $packText,
-                        $packTextSlot,
-                        max(10.0, $fontSize * 0.75),
-                        $fontSize,
-                        $pr,
-                        $pg,
-                        $pb,
-                        false,
-                        0,
-                        0,
-                        (string) ($field['align'] ?? 'right')
-                    );
-                }
-                $iconInset = max(0, (int) ((is_array($field['meta'] ?? null) ? $field['meta'] : [])['icon_inset_right'] ?? 58));
-                if ($iconInset > 0) {
-                    self::restoreTemplateRegion(
-                        $canvas,
-                        $templateImage,
-                        (int) $field['x'] + (int) $field['w'] - $iconInset,
-                        (int) $field['y'],
-                        $iconInset,
-                        (int) $field['h']
-                    );
-                }
-                continue;
+                $contentRowTop += $titleLineStep;
+                $drewProduct = true;
             }
+        }
 
-            if ($kind === 'barcode' && $materialCode !== '') {
-                self::drawMaterialBarcode(
+        if ($subtitleLines !== []) {
+            if ($drewProduct) {
+                $contentRowTop += $lineGap;
+            }
+            foreach ($subtitleLines as $line) {
+                $packBaseline = $contentRowTop + (int) $subtitleSize;
+                self::drawPackagingBannerLine(
                     $canvas,
-                    $fieldFont,
-                    $materialCode,
-                    [
-                        'x' => (int) $field['x'],
-                        'y' => (int) $field['y'],
-                        'w' => (int) $field['w'],
-                        'h' => (int) $field['h'],
-                    ],
-                    (float) ($field['font_size'] ?? 14)
+                    $font,
+                    $subtitleSize,
+                    $line,
+                    $contentLeft,
+                    $contentRight,
+                    $packBaseline
                 );
+                $contentRowTop += $subtitleLineStep;
             }
         }
 
         $settings = self::settings();
         $directory = $settings['images_dir'] . DIRECTORY_SEPARATOR . '_processed';
         if (!self::ensureDirectory($directory)) {
+            imagedestroy($canvas);
+
             return null;
         }
 
         $dest = $directory . DIRECTORY_SEPARATOR . ('detail_' . bin2hex(random_bytes(8)) . '.jpg');
         $saved = imagejpeg($canvas, $dest, 92);
+        imagedestroy($canvas);
 
         return $saved ? $dest : null;
-    }
-
-    /** @return array{0: int, 1: int, 2: int} */
-    private static function hexToRgb(string $hex, int $fallbackR, int $fallbackG, int $fallbackB): array
-    {
-        $hex = trim($hex);
-        if (preg_match('/^#([0-9A-Fa-f]{6})$/', $hex, $m) !== 1) {
-            return [$fallbackR, $fallbackG, $fallbackB];
-        }
-        $value = $m[1];
-
-        return [
-            hexdec(substr($value, 0, 2)),
-            hexdec(substr($value, 2, 2)),
-            hexdec(substr($value, 4, 2)),
-        ];
-    }
-
-    public static function resolveCardTemplatePath(): ?string
-    {
-        $configured = trim((string) (Config::get('PORTAL_MATERIAL_CARD_TEMPLATE') ?? ''));
-        if ($configured !== '' && is_file($configured) && is_readable($configured)) {
-            return $configured;
-        }
-
-        $default = dirname(__DIR__, 2) . '/resources/branding/material-card-template.png';
-        if (is_file($default) && is_readable($default)) {
-            return $default;
-        }
-
-        return null;
-    }
-
-    /** @return array{x: int, y: int, w: int, h: int} */
-    private static function cardTemplateSlot(string $name): array
-    {
-        return match ($name) {
-            'photo' => ['x' => 736, 'y' => 12, 'w' => 744, 'h' => 458],
-            'name' => ['x' => 732, 'y' => 495, 'w' => 330, 'h' => 91],
-            'pack' => ['x' => 732, 'y' => 595, 'w' => 330, 'h' => 59],
-            'barcode' => ['x' => 1085, 'y' => 500, 'w' => 210, 'h' => 150],
-            default => ['x' => 0, 'y' => 0, 'w' => 0, 'h' => 0],
-        };
-    }
-
-    /**
-     * @param array{scale?: float, offset_x?: float, offset_y?: float}|null $transform
-     */
-    private static function coverFitImageIntoRectWithTransform(
-        \GdImage $canvas,
-        \GdImage $source,
-        int $destX,
-        int $destY,
-        int $destW,
-        int $destH,
-        ?array $transform
-    ): void {
-        if ($destW <= 0 || $destH <= 0) {
-            return;
-        }
-
-        $srcW = imagesx($source);
-        $srcH = imagesy($source);
-        if ($srcW <= 0 || $srcH <= 0) {
-            return;
-        }
-
-        $userScale = max(0.25, min(8.0, (float) ($transform['scale'] ?? 1.0)));
-        $offsetX = (float) ($transform['offset_x'] ?? 0.0);
-        $offsetY = (float) ($transform['offset_y'] ?? 0.0);
-
-        $cover = max($destW / $srcW, $destH / $srcH);
-        $scale = $cover * $userScale;
-        $scaledW = max(1, (int) round($srcW * $scale));
-        $scaledH = max(1, (int) round($srcH * $scale));
-
-        // Center then apply user pan (slot pixels).
-        $srcOffsetX = (int) floor(($scaledW - $destW) / 2 - $offsetX);
-        $srcOffsetY = (int) floor(($scaledH - $destH) / 2 - $offsetY);
-
-        $scaled = imagecreatetruecolor($scaledW, $scaledH);
-        if ($scaled === false) {
-            return;
-        }
-        imagealphablending($scaled, false);
-        imagesavealpha($scaled, true);
-        $transparent = imagecolorallocatealpha($scaled, 0, 0, 0, 127);
-        imagefilledrectangle($scaled, 0, 0, $scaledW, $scaledH, $transparent);
-        imagealphablending($scaled, true);
-        imagecopyresampled($scaled, $source, 0, 0, 0, 0, $scaledW, $scaledH, $srcW, $srcH);
-
-        // Clip to destination rect.
-        $copyX = max(0, $srcOffsetX);
-        $copyY = max(0, $srcOffsetY);
-        $destPaintX = $destX + max(0, -$srcOffsetX);
-        $destPaintY = $destY + max(0, -$srcOffsetY);
-        $copyW = min($destW - max(0, -$srcOffsetX), $scaledW - $copyX);
-        $copyH = min($destH - max(0, -$srcOffsetY), $scaledH - $copyY);
-        if ($copyW > 0 && $copyH > 0) {
-            imagecopy($canvas, $scaled, $destPaintX, $destPaintY, $copyX, $copyY, $copyW, $copyH);
-        }
-    }
-
-    private static function coverFitImageIntoRect(
-        \GdImage $canvas,
-        \GdImage $source,
-        int $destX,
-        int $destY,
-        int $destW,
-        int $destH
-    ): void {
-        self::coverFitImageIntoRectWithTransform($canvas, $source, $destX, $destY, $destW, $destH, null);
-    }
-
-    /**
-     * رسم القالب فوق الصورة مع إبقاء المناطق شبه البيضاء شفافة (نافذة الصورة).
-     */
-    private static function overlayTemplateKnockoutNearWhite(\GdImage $canvas, \GdImage $template): void
-    {
-        self::restoreTemplateNonWhiteOverRect($canvas, $template, [
-            'x' => 0,
-            'y' => 0,
-            'w' => imagesx($template),
-            'h' => imagesy($template),
-        ]);
-    }
-
-    /** @param array{x: int, y: int, w: int, h: int} $rect */
-    private static function restoreTemplateNonWhiteOverRect(\GdImage $canvas, \GdImage $template, array $rect): void
-    {
-        $x0 = max(0, (int) $rect['x']);
-        $y0 = max(0, (int) $rect['y']);
-        $x1 = min(imagesx($template) - 1, $x0 + (int) $rect['w'] - 1);
-        $y1 = min(imagesy($template) - 1, $y0 + (int) $rect['h'] - 1);
-
-        for ($y = $y0; $y <= $y1; $y++) {
-            for ($x = $x0; $x <= $x1; $x++) {
-                $color = imagecolorat($template, $x, $y);
-                $r = ($color >> 16) & 0xFF;
-                $g = ($color >> 8) & 0xFF;
-                $b = $color & 0xFF;
-                if ($r > 245 && $g > 245 && $b > 245) {
-                    continue;
-                }
-                imagesetpixel($canvas, $x, $y, $color);
-            }
-        }
-    }
-
-    private static function restoreTemplateRegion(
-        \GdImage $canvas,
-        \GdImage $template,
-        int $x,
-        int $y,
-        int $w,
-        int $h
-    ): void {
-        if ($w <= 0 || $h <= 0) {
-            return;
-        }
-        imagecopy($canvas, $template, $x, $y, $x, $y, $w, $h);
-    }
-
-    private static function fillRoundedSlot(
-        \GdImage $canvas,
-        int $x,
-        int $y,
-        int $w,
-        int $h,
-        int $r,
-        int $g,
-        int $b,
-        int $radius
-    ): void {
-        if ($w <= 0 || $h <= 0) {
-            return;
-        }
-
-        $color = imagecolorallocate($canvas, $r, $g, $b);
-        $radius = max(0, min($radius, (int) floor(min($w, $h) / 2)));
-        imagefilledrectangle($canvas, $x + $radius, $y, $x + $w - $radius - 1, $y + $h - 1, $color);
-        imagefilledrectangle($canvas, $x, $y + $radius, $x + $w - 1, $y + $h - $radius - 1, $color);
-        if ($radius > 0 && function_exists('imagefilledellipse')) {
-            imagefilledellipse($canvas, $x + $radius, $y + $radius, $radius * 2, $radius * 2, $color);
-            imagefilledellipse($canvas, $x + $w - $radius - 1, $y + $radius, $radius * 2, $radius * 2, $color);
-            imagefilledellipse($canvas, $x + $radius, $y + $h - $radius - 1, $radius * 2, $radius * 2, $color);
-            imagefilledellipse($canvas, $x + $w - $radius - 1, $y + $h - $radius - 1, $radius * 2, $radius * 2, $color);
-        }
-    }
-
-    /**
-     * @param array{x: int, y: int, w: int, h: int} $slot
-     */
-    private static function drawClippedTextInSlot(
-        \GdImage $canvas,
-        string $font,
-        string $text,
-        array $slot,
-        float $minSize,
-        float $maxSize,
-        int $red,
-        int $green,
-        int $blue,
-        bool $bold,
-        int $padX,
-        int $padY,
-        string $align = 'right'
-    ): void {
-        $text = trim($text);
-        if ($text === '') {
-            return;
-        }
-
-        $innerX = (int) $slot['x'] + $padX;
-        $innerY = (int) $slot['y'] + $padY;
-        $innerW = max(20, (int) $slot['w'] - ($padX * 2));
-        $innerH = max(16, (int) $slot['h'] - ($padY * 2));
-
-        $fontSize = $maxSize;
-        $lines = [];
-        while ($fontSize >= $minSize) {
-            $lines = self::wrapTtfTextLines($font, $fontSize, $text, $innerW);
-            if ($lines === []) {
-                $lines = [$text];
-            }
-            if (count($lines) > 2) {
-                $lines = array_slice($lines, 0, 2);
-                $last = $lines[1];
-                while ($last !== '' && self::ttfLineWidth($font, $fontSize, ArabicGdText::shape($last . '…')) > $innerW) {
-                    $last = function_exists('mb_substr')
-                        ? mb_substr($last, 0, -1, 'UTF-8')
-                        : substr($last, 0, -1);
-                }
-                $lines[1] = $last === '' ? '…' : ($last . '…');
-            }
-            $lineStep = (int) round($fontSize * 1.2);
-            $blockH = max(1, count($lines)) * $lineStep;
-            $widest = 0;
-            foreach ($lines as $line) {
-                $widest = max($widest, self::ttfLineWidth($font, $fontSize, ArabicGdText::shape($line)));
-            }
-            if ($blockH <= $innerH && $widest <= $innerW) {
-                break;
-            }
-            $fontSize -= 1.0;
-        }
-
-        if ($lines === []) {
-            return;
-        }
-
-        $lineStep = (int) round($fontSize * 1.2);
-        $blockH = count($lines) * $lineStep;
-        $startY = $innerY + (int) floor(max(0, $innerH - $blockH) / 2);
-        $right = $innerX + $innerW;
-        $left = $innerX;
-
-        foreach ($lines as $index => $line) {
-            $baseline = $startY + (int) $fontSize + ($index * $lineStep);
-            if ($align === 'left') {
-                self::drawBannerColoredText(
-                    $canvas,
-                    $font,
-                    $fontSize,
-                    $line,
-                    $left,
-                    $baseline,
-                    $red,
-                    $green,
-                    $blue,
-                    $bold,
-                    true
-                );
-            } elseif ($align === 'center') {
-                $shaped = ArabicGdText::containsArabic($line) ? ArabicGdText::shape($line) : $line;
-                $tw = self::ttfLineWidth($font, $fontSize, $shaped);
-                $x = $left + (int) floor(max(0, $innerW - $tw) / 2);
-                self::drawBannerColoredText(
-                    $canvas,
-                    $font,
-                    $fontSize,
-                    $line,
-                    $x,
-                    $baseline,
-                    $red,
-                    $green,
-                    $blue,
-                    $bold,
-                    true
-                );
-            } else {
-                self::drawBannerColoredTextRight(
-                    $canvas,
-                    $font,
-                    $fontSize,
-                    $line,
-                    $left,
-                    $right,
-                    $baseline,
-                    $red,
-                    $green,
-                    $blue,
-                    $bold,
-                    true
-                );
-            }
-        }
-    }
-
-    /** @param array{x: int, y: int, w: int, h: int} $slot */
-    private static function drawMaterialBarcode(
-        \GdImage $canvas,
-        string $font,
-        string $code,
-        array $slot,
-        float $labelSize = 14.0
-    ): void {
-        $code = strtoupper(trim($code));
-        $code = preg_replace('/[^0-9A-Z\-. $\/+%]/', '', $code) ?? '';
-        if ($code === '') {
-            return;
-        }
-
-        $x = (int) $slot['x'];
-        $y = (int) $slot['y'];
-        $w = (int) $slot['w'];
-        $h = (int) $slot['h'];
-        if ($w < 40 || $h < 40) {
-            return;
-        }
-
-        self::fillRoundedSlot($canvas, $x, $y, $w, $h, 255, 255, 255, 10);
-
-        $pattern = self::code39Pattern('*' . $code . '*');
-        if ($pattern === '') {
-            return;
-        }
-
-        $barAreaX = $x + 10;
-        $barAreaY = $y + 10;
-        $barAreaW = $w - 20;
-        $barAreaH = max(24, $h - 42);
-        $moduleCount = strlen($pattern);
-        $moduleW = max(1.0, $barAreaW / max(1, $moduleCount));
-        $black = imagecolorallocate($canvas, 20, 20, 20);
-        $cursor = 0.0;
-        for ($i = 0; $i < $moduleCount; $i++) {
-            if ($pattern[$i] === '1') {
-                $drawX = (int) floor($barAreaX + $cursor);
-                $drawW = max(1, (int) ceil($moduleW));
-                imagefilledrectangle(
-                    $canvas,
-                    $drawX,
-                    $barAreaY,
-                    min($barAreaX + $barAreaW - 1, $drawX + $drawW - 1),
-                    $barAreaY + $barAreaH - 1,
-                    $black
-                );
-            }
-            $cursor += $moduleW;
-        }
-
-        $labelSize = (float) max(10, min(22, $labelSize));
-        $label = $code;
-        $shaped = $label;
-        $labelWidth = self::ttfLineWidth($font, $labelSize, $shaped);
-        while ($labelWidth > $w - 16 && strlen($label) > 3) {
-            $label = substr($label, 0, -1);
-            $shaped = $label . '…';
-            $labelWidth = self::ttfLineWidth($font, $labelSize, $shaped);
-        }
-        $labelX = $x + (int) floor(($w - $labelWidth) / 2);
-        $labelY = $y + $h - 12;
-        imagettftext($canvas, (int) $labelSize, 0, max($x + 4, $labelX), $labelY, $black, $font, $shaped);
-    }
-
-    private static function code39Pattern(string $text): string
-    {
-        $map = [
-            '0' => '000110100', '1' => '100100001', '2' => '001100001', '3' => '101100000',
-            '4' => '000110001', '5' => '100110000', '6' => '001110000', '7' => '000100101',
-            '8' => '100100100', '9' => '001100100', 'A' => '100001001', 'B' => '001001001',
-            'C' => '101001000', 'D' => '000011001', 'E' => '100011000', 'F' => '001011000',
-            'G' => '000001101', 'H' => '100001100', 'I' => '001001100', 'J' => '000011100',
-            'K' => '100000011', 'L' => '001000011', 'M' => '101000010', 'N' => '000010011',
-            'O' => '100010010', 'P' => '001010010', 'Q' => '000000111', 'R' => '100000110',
-            'S' => '001000110', 'T' => '000010110', 'U' => '110000001', 'V' => '011000001',
-            'W' => '111000000', 'X' => '010010001', 'Y' => '110010000', 'Z' => '011010000',
-            '-' => '010000101', '.' => '110000100', ' ' => '011000100', '$' => '010101000',
-            '/' => '010100010', '+' => '010001010', '%' => '000101010', '*' => '010010100',
-        ];
-
-        $parts = [];
-        $len = strlen($text);
-        for ($i = 0; $i < $len; $i++) {
-            $ch = $text[$i];
-            if (!isset($map[$ch])) {
-                continue;
-            }
-            $symbol = $map[$ch];
-            $encoded = '';
-            for ($b = 0; $b < 9; $b++) {
-                $isBar = ($b % 2) === 0;
-                $wide = $symbol[$b] === '1';
-                $encoded .= str_repeat($isBar ? '1' : '0', $wide ? 2 : 1);
-            }
-            $parts[] = $encoded;
-        }
-
-        return implode('0', $parts);
     }
 
     public static function normalizeProductBannerLine(string $line): string
@@ -1618,22 +1145,37 @@ final class MaterialImageStorageService
      *   freetype: bool,
      *   mbstring: bool,
      *   font_path: string|null,
-     *   template_path: string|null,
      *   message: string
      * }
      */
     public static function detailsBannerRequirements(): array
     {
-        $reqs = MaterialCardTemplateService::processingRequirements();
+        $gd = function_exists('imagecreatetruecolor');
+        $freetype = function_exists('imagettftext');
+        $fontPath = self::resolveDetailsFontPath();
+
+        $missing = [];
+        if (!$gd) {
+            $missing[] = 'امتداد GD (imagecreatetruecolor)';
+        }
+        if (!$freetype) {
+            $missing[] = 'GD مع دعم FreeType (imagettftext) — فعّل php_gd2 مع freetype في php.ini';
+        }
+        if ($fontPath === null) {
+            $missing[] = 'خط TrueType readable من PHP — انسخ tahoma.ttf إلى portal/storage/fonts/ أو عيّن PORTAL_DETAILS_FONT_PATH';
+        }
+
+        $message = $missing === []
+            ? 'جاهز'
+            : ('البانر السفلي يتطلب: ' . implode('، ', $missing) . '.');
 
         return [
-            'ok' => (bool) ($reqs['ok'] ?? false),
-            'gd' => (bool) ($reqs['gd'] ?? false),
-            'freetype' => (bool) ($reqs['freetype'] ?? false),
+            'ok' => $gd && $freetype && $fontPath !== null,
+            'gd' => $gd,
+            'freetype' => $freetype,
             'mbstring' => function_exists('mb_strlen'),
-            'font_path' => $reqs['font_path'] ?? null,
-            'template_path' => ($reqs['has_template'] ?? false) ? 'db' : self::resolveCardTemplatePath(),
-            'message' => (string) ($reqs['message'] ?? ''),
+            'font_path' => $fontPath,
+            'message' => $message,
         ];
     }
 
