@@ -1966,7 +1966,11 @@ final class MaterialImageStorageService
                     }
                     : null
             );
-            if ($path !== null) {
+            // Require GUID-resolvable local file — otherwise the next run lists the same set.
+            $verified = $path !== null && is_readable($path)
+                ? self::resolvePathForGuid($imageGuid, false, true)
+                : null;
+            if ($verified !== null && is_readable($verified)) {
                 $pulled++;
                 $items[] = [
                     'material_guid' => $materialGuid,
@@ -1977,12 +1981,17 @@ final class MaterialImageStorageService
                 ];
             } else {
                 $failed++;
+                if ($onProgress !== null) {
+                    $onProgress('    فشل التحقق: لا يوجد ملف محلي باسم GUID بعد السحب.');
+                }
                 $items[] = [
                     'material_guid' => $materialGuid,
                     'material_code' => $code,
                     'image_guid' => $imageGuid,
                     'ok' => false,
-                    'message' => 'تعذر سحب الملف من الأمين.',
+                    'message' => $path === null
+                        ? 'تعذر سحب الملف من الأمين.'
+                        : 'تعذر تثبيت نسخة محلية باسم GUID.',
                 ];
             }
         }
