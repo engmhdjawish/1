@@ -60,7 +60,6 @@ $settingsForm = [
     'material_images_dir' => (string) ($company['material_images_dir'] ?? ''),
     'material_thumbnails_dir' => (string) ($company['material_thumbnails_dir'] ?? ''),
 ];
-$detailsBanner = MaterialImageStorageService::detailsBannerRequirements();
 
 $materialFilterOptions = [
     'materialTypes' => [],

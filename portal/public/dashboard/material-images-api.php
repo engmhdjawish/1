@@ -113,7 +113,6 @@ if ($method === 'GET') {
         materialImagesApiJson([
             'ok' => true,
             'stats' => MaterialImageStorageService::stats(),
-            'banner' => MaterialImageStorageService::detailsBannerRequirements(),
         ]);
     }
 
@@ -322,7 +321,7 @@ if ($method === 'POST') {
         if (!is_array($materialGuids)) {
             $materialGuids = [$materialGuids];
         }
-        $addDetails = (string) ($_POST['add_details'] ?? '') === '1';
+        $addDetails = false;
         $processed = [];
         $result = MaterialImageLinkService::assignError('خطأ غير متوقع أثناء الربط.');
 
@@ -330,31 +329,6 @@ if ($method === 'POST') {
             $processed = MaterialImageLinkService::collectProcessedUploads(
                 is_array($_FILES['processed_image'] ?? null) ? $_FILES['processed_image'] : null
             );
-            if ($addDetails && $processed === []) {
-                $processed = MaterialImageLinkService::buildProcessedImagesFromDetails(
-                    $sourceFileName,
-                    $amineSourceGuid !== '' ? $amineSourceGuid : null,
-                    $materialGuids,
-                    is_array($_POST['detail_line1'] ?? null) ? $_POST['detail_line1'] : [],
-                    is_array($_POST['detail_line2'] ?? null) ? $_POST['detail_line2'] : [],
-                );
-            }
-            if ($addDetails && $processed === []) {
-                materialImagesApiJson(array_merge(
-                    MaterialImageLinkService::detailsProcessingError(),
-                    ['sync' => MaterialImageSyncService::stats()]
-                ));
-            }
-            $validMaterialCount = count(array_values(array_filter(array_map(
-                static fn (mixed $value): string => trim((string) $value),
-                $materialGuids
-            ))));
-            if ($addDetails && count($processed) < $validMaterialCount) {
-                materialImagesApiJson(array_merge(
-                    MaterialImageLinkService::detailsProcessingError(),
-                    ['sync' => MaterialImageSyncService::stats()]
-                ));
-            }
 
             $result = MaterialImageLinkService::assign(
                 $sourceFileName,
@@ -433,7 +407,7 @@ if ($method === 'POST') {
         if (!is_array($materialGuids)) {
             $materialGuids = [$materialGuids];
         }
-        $addDetails = (string) ($_POST['add_details'] ?? '') === '1';
+        $addDetails = false;
         $processed = [];
         $result = MaterialImageLinkService::assignError('خطأ غير متوقع أثناء الاستبدال.');
 
@@ -441,31 +415,6 @@ if ($method === 'POST') {
             $processed = MaterialImageLinkService::collectProcessedUploads(
                 is_array($_FILES['processed_image'] ?? null) ? $_FILES['processed_image'] : null
             );
-            if ($addDetails && $processed === []) {
-                $processed = MaterialImageLinkService::buildProcessedImagesFromDetails(
-                    $sourceFileName,
-                    $amineSourceGuid !== '' ? $amineSourceGuid : $imageGuid,
-                    $materialGuids,
-                    is_array($_POST['detail_line1'] ?? null) ? $_POST['detail_line1'] : [],
-                    is_array($_POST['detail_line2'] ?? null) ? $_POST['detail_line2'] : [],
-                );
-            }
-            if ($addDetails && $processed === []) {
-                materialImagesApiJson(array_merge(
-                    MaterialImageLinkService::detailsProcessingError(),
-                    ['sync' => MaterialImageSyncService::stats()]
-                ));
-            }
-            $validMaterialCount = count(array_values(array_filter(array_map(
-                static fn (mixed $value): string => trim((string) $value),
-                $materialGuids
-            ))));
-            if ($addDetails && count($processed) < $validMaterialCount) {
-                materialImagesApiJson(array_merge(
-                    MaterialImageLinkService::detailsProcessingError(),
-                    ['sync' => MaterialImageSyncService::stats()]
-                ));
-            }
 
             $result = MaterialImageLinkService::reassign(
                 $sourceFileName,
