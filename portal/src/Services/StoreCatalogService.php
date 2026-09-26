@@ -1851,7 +1851,7 @@ final class StoreCatalogService
             'groupGuids' => $isClientFilterVisible('groups') ? self::parseList($query['groupGuids'] ?? []) : [],
             'storeGuids' => $isClientFilterVisible('stores') ? self::parseList($query['storeGuids'] ?? []) : [],
             'isAvailable' => $isClientFilterVisible('availability') ? self::parseNullableBool($query['isAvailable'] ?? null) : null,
-            'hasImage' => null,
+            'hasImage' => self::parseNullableBool($query['hasImage'] ?? null),
             'minWarehouseQuantity' => $isClientFilterVisible('warehouseRange') ? self::parseNullableFloat($query['minWarehouseQuantity'] ?? null) : null,
             'maxWarehouseQuantity' => $isClientFilterVisible('warehouseRange') ? self::parseNullableFloat($query['maxWarehouseQuantity'] ?? null) : null,
             'minUnitSalePriceSyp' => $isClientFilterVisible('priceSaleSyp') ? self::parseNullableFloat($query['minUnitSalePriceSyp'] ?? null) : null,

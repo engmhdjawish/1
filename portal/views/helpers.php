@@ -1021,6 +1021,16 @@ function return_link_label(string $returnUrl): string
 /** @param array<string, mixed> $section */
 function home_section_store_url(array $section): string
 {
+    $isOffer = !empty($section['is_offer_section']);
+    $mode = $isOffer
+        ? (string) ($section['selection_mode'] ?? 'filter')
+        : (string) ($section['display_mode'] ?? $section['selection_mode'] ?? 'filter');
+    if (!$isOffer && $mode !== 'manual') {
+        $rules = is_array($section['filter_rules'] ?? null) ? $section['filter_rules'] : [];
+
+        return store_url(CatalogSectionResolver::storeQueryFromRules($rules));
+    }
+
     return store_url(CatalogSectionResolver::storeLinkParams($section));
 }
 

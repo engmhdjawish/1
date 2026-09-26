@@ -339,6 +339,13 @@ $facetChipMap = [
         ]]);
     }
 
+    if (($filters['hasImage'] ?? null) !== null) {
+        $pushChipGroup('hasImage', 'الصورة', 'image', [[
+            'text' => !empty($filters['hasImage']) ? 'مع صورة' : 'بدون صورة',
+            'url' => $buildFilterRemoveUrl(['hasImage']),
+        ]]);
+    }
+
     $minWarehouseQuantity = trim((string) ($filters['minWarehouseQuantity'] ?? ''));
     $maxWarehouseQuantity = trim((string) ($filters['maxWarehouseQuantity'] ?? ''));
     if ($isClientFilterVisible('warehouseRange') && ($minWarehouseQuantity !== '' || $maxWarehouseQuantity !== '')) {
@@ -556,6 +563,9 @@ $appliedClientFiltersJson = json_encode(
             <input type="hidden" name="token" value="<?= h($shareToken) ?>">
           <?php endif; ?>
           <?php if (!empty($filters['section'])): ?><input type="hidden" name="section" value="<?= h((string) $filters['section']) ?>"><?php endif; ?>
+          <?php if (($filters['hasImage'] ?? null) !== null): ?>
+            <input type="hidden" name="hasImage" value="<?= !empty($filters['hasImage']) ? '1' : '0' ?>">
+          <?php endif; ?>
           <?php if (!empty($filters['offer'])): ?><input type="hidden" name="offer" value="<?= h((string) $filters['offer']) ?>"><?php endif; ?>
 
           <div class="store-filters-sidebar-header">
