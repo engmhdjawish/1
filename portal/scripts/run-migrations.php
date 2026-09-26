@@ -47,6 +47,7 @@ $ordered = [
     '012-material-image-zip-jobs.sql',
     '013-orders-visitor-session.sql',
     '014-offer-per-material-discount.sql',
+    '016-drop-material-card-templates.sql',
 ];
 
 $files = [];

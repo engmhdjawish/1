@@ -9,7 +9,6 @@ declare(strict_types=1);
 /** @var array{base_url: string, ok: bool, status: int, message: string} $apiHealth */
 /** @var array<string, mixed> $materialFilterOptions */
 /** @var string|null $materialFilterOptionsError */
-/** @var array{ok: bool, message: string} $detailsBanner */
 /** @var string|null $flash */
 /** @var string $flashType */
 /** @var bool $canUploadImages */
@@ -85,11 +84,6 @@ $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'messag
 </section>
 
 <?php if ($workspaceTab === 'link'): ?>
-  <?php if (empty($detailsBanner['ok'])): ?>
-    <p class="mb-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 max-w-3xl">
-      <?= h((string) ($detailsBanner['message'] ?? 'البانر السفلي غير متاح على هذا السيرفر.')) ?>
-    </p>
-  <?php endif; ?>
   <div id="workspace-panel-link">
     <?php require __DIR__ . '/partials/material-image-link-panel.php'; ?>
   </div>
