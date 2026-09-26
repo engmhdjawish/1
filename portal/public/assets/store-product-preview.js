@@ -458,22 +458,34 @@
     bindPreviewOrderForms(wrap);
   };
 
+  const priceLockReturn = (guid) => {
+    const base = window.location.pathname + window.location.search;
+    const clean = String(guid || '').replace(/[^A-Za-z0-9]/g, '');
+    return clean ? `${base}#p-${clean}` : base;
+  };
+
+  const priceLockHtml = (context, guid) => {
+    const auth = document.body?.dataset?.priceLockAuth || 'guest';
+    const ghost = `<span class="store-price-veil__ghost" aria-hidden="true">
+        <span class="store-price-veil__row"><span class="store-price-veil__ink"></span><span class="store-price-veil__currency">ل.س</span></span>
+        <span class="store-price-veil__row store-price-veil__row--sub"><span class="store-price-veil__ink"></span><span class="store-price-veil__currency">ل.س</span></span>
+      </span>`;
+    if (auth === 'pending') {
+      return `<div class="store-price-veil store-price-veil--${context}" role="note">${ghost}<span class="store-price-veil__note">حسابك بانتظار التفعيل، ويظهر السعر بعد الموافقة.</span></div>`;
+    }
+    if (auth === 'active') {
+      return `<div class="store-price-veil store-price-veil--${context}" role="note">${ghost}<span class="store-price-veil__note">السعر غير متاح لهذا الحساب.</span></div>`;
+    }
+    const redirect = encodeURIComponent(priceLockReturn(guid));
+    return `<a class="store-price-veil store-price-veil--${context}" href="/customer-login.php?redirect=${redirect}">${ghost}<span class="store-price-veil__cta"><span class="material-symbols-outlined" aria-hidden="true">lock_open</span><span>سجّل الدخول لإظهار السعر</span></span></a>`;
+  };
+
   const renderPrices = (p) => {
     if (p.previewContext === 'order') {
       return '';
     }
     if (!p.showPrice) {
-      if (document.body?.dataset?.priceLockAuth === 'pending') {
-        return `<div class="store-price-hidden store-price-hidden--preview" role="note">
-        <span class="store-price-hidden__label" aria-hidden="true"><span class="material-symbols-outlined">lock</span><span>سعر مخفي</span></span>
-        <span class="store-price-hidden__note">حسابك بانتظار التفعيل — ستظهر الأسعار بعد موافقة الإدارة.</span>
-      </div>`;
-      }
-      const redirect = encodeURIComponent(window.location.pathname + window.location.search);
-      return `<div class="store-price-hidden store-price-hidden--preview" role="note">
-        <span class="store-price-hidden__label" aria-hidden="true"><span class="material-symbols-outlined">lock</span><span>سعر مخفي</span></span>
-        <a href="/customer-login.php?redirect=${redirect}" class="store-price-hidden__link">سجّل الدخول لعرض السعر</a>
-      </div>`;
+      return priceLockHtml('preview', p.guid);
     }
 
     const badge = p.offerBadge

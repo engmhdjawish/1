@@ -28,8 +28,10 @@ $previewPayload = cart_preview_payload($item, $cartPreviewDisplay ?? [
 ]);
 $previewJson = json_encode($previewPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
 ?>
+<?php $productAnchor = portal_product_anchor($materialGuid); ?>
 <article
   class="store-order-line-card store-cart-line-card<?= $hasOffer ? ' store-order-line-card--offer' : '' ?><?= $customerShowsPrices && !$lineShowsPrice ? ' store-cart-line-card--no-price' : '' ?>"
+  <?php if ($productAnchor !== ''): ?>id="<?= h($productAnchor) ?>"<?php endif; ?>
   data-cart-line="<?= h($materialGuid) ?>"
   data-store-preview-card
   data-store-cart-preview-line
@@ -69,7 +71,7 @@ $previewJson = json_encode($previewPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TA
       <?php if ($lineShowsPrice && ($showPriceSyp || $showPriceUsd)): ?>
         <?php $size = 'compact'; require __DIR__ . '/store-order-line-prices.php'; ?>
       <?php elseif ($pricePolicyHidden): ?>
-        <?php $context = 'cart'; require __DIR__ . '/store-price-lock.php'; ?>
+        <?php $context = 'cart'; $anchor = $productAnchor; require __DIR__ . '/store-price-lock.php'; ?>
       <?php elseif (!$lineShowsPrice): ?>
         <div class="store-cart-line-card__no-price">
           <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>

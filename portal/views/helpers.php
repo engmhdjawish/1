@@ -47,20 +47,47 @@ function portal_price_lock_auth(): string
     return 'guest';
 }
 
+function portal_product_anchor(string $guid): string
+{
+    $clean = preg_replace('/[^A-Za-z0-9]/', '', $guid) ?? '';
+
+    return $clean !== '' ? 'p-' . $clean : '';
+}
+
+function portal_price_lock_return(?string $anchor = null, ?string $path = null): string
+{
+    $path = $path !== null && trim($path) !== ''
+        ? trim($path)
+        : \Portal\Support\PortalUrl::currentPathWithQuery();
+    $anchor = trim((string) $anchor);
+    if ($anchor !== '' && preg_match('/^[A-Za-z0-9_-]+$/', $anchor) === 1 && !str_contains($path, '#')) {
+        $path .= '#' . $anchor;
+    }
+
+    return $path;
+}
+
 /** @return array{message: string, href: ?string} */
 function portal_price_lock_hint(?string $redirect = null): array
 {
     if (CustomerSession::isPending()) {
         return [
-            'message' => 'حسابك بانتظار التفعيل — ستظهر الأسعار بعد موافقة الإدارة.',
+            'message' => 'حسابك بانتظار التفعيل، ويظهر السعر بعد الموافقة.',
             'href' => null,
         ];
     }
 
-    $redirect ??= portal_request_path();
+    if (CustomerSession::isLoggedIn()) {
+        return [
+            'message' => 'السعر غير متاح لهذا الحساب.',
+            'href' => null,
+        ];
+    }
+
+    $redirect = portal_price_lock_return(null, $redirect);
 
     return [
-        'message' => 'سجّل الدخول لعرض السعر',
+        'message' => 'سجّل الدخول لإظهار السعر',
         'href' => portal_login_url('customer', $redirect),
     ];
 }

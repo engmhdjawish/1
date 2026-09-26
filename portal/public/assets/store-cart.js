@@ -695,22 +695,27 @@
     }
   };
 
-  const currentRedirect = () => window.location.pathname + window.location.search;
+  const priceLockReturn = (guid) => {
+    const base = window.location.pathname + window.location.search;
+    const clean = String(guid || '').replace(/[^A-Za-z0-9]/g, '');
+    return clean ? `${base}#p-${clean}` : base;
+  };
 
-  const priceLockAuth = () => document.body?.dataset?.priceLockAuth || 'guest';
-
-  const priceLockHtml = (context = 'cart') => {
-    if (priceLockAuth() === 'pending') {
-      return `<div class="store-price-hidden store-price-hidden--${escapeHtml(context)}" role="note">
-      <span class="store-price-hidden__label" aria-hidden="true"><span class="material-symbols-outlined">lock</span><span>سعر مخفي</span></span>
-      <span class="store-price-hidden__note">حسابك بانتظار التفعيل — ستظهر الأسعار بعد موافقة الإدارة.</span>
-    </div>`;
+  const priceLockHtml = (context = 'cart', guid = '') => {
+    const auth = document.body?.dataset?.priceLockAuth || 'guest';
+    const safeContext = escapeHtml(context);
+    const ghost = `<span class="store-price-veil__ghost" aria-hidden="true">
+      <span class="store-price-veil__row"><span class="store-price-veil__ink"></span><span class="store-price-veil__currency">ل.س</span></span>
+      <span class="store-price-veil__row store-price-veil__row--sub"><span class="store-price-veil__ink"></span><span class="store-price-veil__currency">ل.س</span></span>
+    </span>`;
+    if (auth === 'pending') {
+      return `<div class="store-price-veil store-price-veil--${safeContext}" role="note">${ghost}<span class="store-price-veil__note">حسابك بانتظار التفعيل، ويظهر السعر بعد الموافقة.</span></div>`;
     }
-    const redirect = encodeURIComponent(currentRedirect());
-    return `<div class="store-price-hidden store-price-hidden--${escapeHtml(context)}" role="note">
-      <span class="store-price-hidden__label" aria-hidden="true"><span class="material-symbols-outlined">lock</span><span>سعر مخفي</span></span>
-      <a href="/customer-login.php?redirect=${redirect}" class="store-price-hidden__link">سجّل الدخول لعرض السعر</a>
-    </div>`;
+    if (auth === 'active') {
+      return `<div class="store-price-veil store-price-veil--${safeContext}" role="note">${ghost}<span class="store-price-veil__note">السعر غير متاح لهذا الحساب.</span></div>`;
+    }
+    const redirect = encodeURIComponent(priceLockReturn(guid));
+    return `<a class="store-price-veil store-price-veil--${safeContext}" href="/customer-login.php?redirect=${redirect}">${ghost}<span class="store-price-veil__cta"><span class="material-symbols-outlined" aria-hidden="true">lock_open</span><span>سجّل الدخول لإظهار السعر</span></span></a>`;
   };
 
   const renderCartLineCard = (line, max, data = {}) => {
@@ -736,7 +741,7 @@
       : '';
     const noPriceHtml = !lineShowPrice
       ? (data.price_policy_allows === false
-        ? priceLockHtml('cart')
+        ? priceLockHtml('cart', guid)
         : `<div class="store-cart-line-card__no-price">
           <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
           <span>السعر عند التأكيد</span>
