@@ -1496,17 +1496,79 @@ final class MaterialImageStorageService
         $directory = $thumb ? $settings['thumbnails_dir'] : $settings['images_dir'];
 
         foreach (self::fileNameCandidates($fileName) as $candidate) {
-            $path = self::findFileInDirectory($directory, $candidate);
+            $path = self::findFileInDirectory($directory, $candidate, !$thumb);
             if ($path !== null) {
                 return $path;
             }
         }
 
-        if ($thumb) {
-            return self::resolveLocalPath($fileName, false);
+        return null;
+    }
+
+    /**
+     * Build a real thumbnail (max 300px) from the local original and return its path.
+     * Storefront cards call this when thumb=1 and no thumbnail file exists yet.
+     */
+    public static function ensureStoreThumbnail(string $imageGuid): ?string
+    {
+        $imageGuid = strtolower(trim($imageGuid));
+        $existing = self::resolvePathForGuid($imageGuid, true, true);
+        if ($existing !== null && is_readable($existing)) {
+            return $existing;
         }
 
-        return null;
+        $fullPath = self::resolvePathForGuid($imageGuid, false, true);
+        if ($fullPath === null || !is_readable($fullPath)) {
+            return null;
+        }
+
+        $settings = self::settings();
+        if (!self::ensureDirectory($settings['thumbnails_dir'])) {
+            return null;
+        }
+
+        $fileName = basename($fullPath);
+        $thumbPath = self::safeJoin($settings['thumbnails_dir'], $fileName);
+        if ($thumbPath === null) {
+            return null;
+        }
+
+        if (is_file($thumbPath) && is_readable($thumbPath) && (int) filesize($thumbPath) > 0) {
+            return $thumbPath;
+        }
+
+        $lockPath = $settings['thumbnails_dir'] . DIRECTORY_SEPARATOR . ('.thumb-' . $imageGuid . '.lock');
+        $lock = @fopen($lockPath, 'c+');
+        if ($lock === false) {
+            return self::writeStoreThumbnail($fullPath, $thumbPath) ? $thumbPath : $fullPath;
+        }
+
+        try {
+            if (!flock($lock, LOCK_EX)) {
+                return null;
+            }
+            if (is_file($thumbPath) && is_readable($thumbPath) && (int) filesize($thumbPath) > 0) {
+                return $thumbPath;
+            }
+            if (!self::writeStoreThumbnail($fullPath, $thumbPath)) {
+                return $fullPath;
+            }
+
+            return is_readable($thumbPath) ? $thumbPath : null;
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+            @unlink($lockPath);
+        }
+    }
+
+    private static function writeStoreThumbnail(string $fullPath, string $thumbPath): bool
+    {
+        if (self::generateThumbnail($fullPath, $thumbPath)) {
+            return is_file($thumbPath);
+        }
+
+        return false;
     }
 
     public static function resolvePathForGuid(string $imageGuid, bool $thumb = false, bool $localOnly = false): ?string
@@ -2879,7 +2941,7 @@ final class MaterialImageStorageService
         return $value;
     }
 
-    private static function findFileInDirectory(string $directory, string $fileName): ?string
+    private static function findFileInDirectory(string $directory, string $fileName, bool $allowDirectoryScan = true): ?string
     {
         $fileName = self::lookupFileName($fileName);
         if ($fileName === '' || !is_dir($directory)) {
@@ -2889,6 +2951,10 @@ final class MaterialImageStorageService
         $path = self::safeJoin($directory, $fileName);
         if ($path !== null && is_file($path)) {
             return $path;
+        }
+
+        if (!$allowDirectoryScan) {
+            return null;
         }
 
         foreach (scandir($directory) ?: [] as $entry) {
