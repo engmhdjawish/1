@@ -209,7 +209,7 @@ CREATE TABLE home_section_products (
 -- ---------------------------------------------------------------------------
 -- Special offers (website-only pricing overlay)
 -- ---------------------------------------------------------------------------
-CREATE TYPE special_offer_discount_type AS ENUM ('percent', 'fixed_price');
+CREATE TYPE special_offer_discount_type AS ENUM ('percent', 'fixed_price', 'fixed_amount');
 CREATE TYPE special_offer_selection_mode AS ENUM ('manual', 'filter');
 
 CREATE TABLE special_offers (
@@ -220,10 +220,14 @@ CREATE TABLE special_offers (
     badge_text_ar       VARCHAR(80),
     banner_image_url    VARCHAR(1000),
     selection_mode      special_offer_selection_mode NOT NULL DEFAULT 'filter',
+    pricing_scope       VARCHAR(20) NOT NULL DEFAULT 'offer'
+                        CHECK (pricing_scope IN ('offer', 'per_material')),
     discount_type       special_offer_discount_type NOT NULL DEFAULT 'percent',
     discount_percent    NUMERIC(6, 2),
     fixed_price_syp     NUMERIC(18, 4),
     fixed_price_usd     NUMERIC(18, 4),
+    fixed_amount_syp    NUMERIC(18, 4),
+    fixed_amount_usd    NUMERIC(18, 4),
     starts_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     ends_at             TIMESTAMPTZ,
     is_active           BOOLEAN NOT NULL DEFAULT TRUE,
@@ -254,6 +258,12 @@ CREATE TABLE special_offer_products (
     offer_id        UUID NOT NULL REFERENCES special_offers (id) ON DELETE CASCADE,
     material_guid   UUID NOT NULL,
     sort_order      INT NOT NULL DEFAULT 0,
+    discount_type   special_offer_discount_type,
+    discount_percent NUMERIC(6, 2),
+    fixed_price_syp NUMERIC(18, 4),
+    fixed_price_usd NUMERIC(18, 4),
+    fixed_amount_syp NUMERIC(18, 4),
+    fixed_amount_usd NUMERIC(18, 4),
     PRIMARY KEY (offer_id, material_guid)
 );
 

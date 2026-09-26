@@ -16,23 +16,160 @@
     const modeSelect = root.querySelector('#selection_mode');
     const filterPanel = root.querySelector('#filter-mode-panel');
     const manualPanel = root.querySelector('#manual-mode-panel');
+    const pricingScope = root.querySelector('#pricing_scope');
+    const perMaterialPanel = root.querySelector('#per-material-pricing-panel');
+    const perMaterialRows = root.querySelector('#per-material-pricing-rows');
+
+    const readJson = (id, fallback) => {
+      const node = root.querySelector(id);
+      if (!node) return fallback;
+      try {
+        return JSON.parse(node.textContent || '') ?? fallback;
+      } catch (_) {
+        return fallback;
+      }
+    };
+
+    let overridesState = readJson('#so-product-overrides-json', {});
+    if (!overridesState || typeof overridesState !== 'object') overridesState = {};
+    const labelMap = readJson('#so-manual-product-labels-json', {});
+
     const syncPanels = () => {
       const isManual = modeSelect?.value === 'manual';
       filterPanel?.classList.toggle('hidden', isManual);
       manualPanel?.classList.toggle('hidden', !isManual);
+      if (!isManual && pricingScope) {
+        pricingScope.value = 'offer';
+      }
+      syncPricingScope();
     };
     modeSelect?.addEventListener('change', syncPanels);
-    syncPanels();
 
     const discountType = root.querySelector('#discount_type');
     const syncDiscount = () => {
-      const fixed = discountType?.value === 'fixed_price';
-      root.querySelector('#field-percent')?.classList.toggle('hidden', fixed);
-      root.querySelector('#field-syp')?.classList.toggle('hidden', !fixed);
-      root.querySelector('#field-usd')?.classList.toggle('hidden', !fixed);
+      const type = discountType?.value || 'percent';
+      root.querySelector('#field-percent')?.classList.toggle('hidden', type !== 'percent');
+      root.querySelector('#field-amount-syp')?.classList.toggle('hidden', type !== 'fixed_amount');
+      root.querySelector('#field-amount-usd')?.classList.toggle('hidden', type !== 'fixed_amount');
+      root.querySelector('#field-syp')?.classList.toggle('hidden', type !== 'fixed_price');
+      root.querySelector('#field-usd')?.classList.toggle('hidden', type !== 'fixed_price');
     };
     discountType?.addEventListener('change', syncDiscount);
     syncDiscount();
+
+    const captureOverrideInputs = () => {
+      if (!perMaterialRows) return;
+      perMaterialRows.querySelectorAll('[data-override-guid]').forEach((row) => {
+        const guid = row.getAttribute('data-override-guid');
+        if (!guid) return;
+        const type = row.querySelector('[data-field="discount_type"]')?.value || '';
+        overridesState[guid] = {
+          discount_type: type,
+          discount_percent: row.querySelector('[data-field="discount_percent"]')?.value || '',
+          fixed_price_syp: row.querySelector('[data-field="fixed_price_syp"]')?.value || '',
+          fixed_price_usd: row.querySelector('[data-field="fixed_price_usd"]')?.value || '',
+          fixed_amount_syp: row.querySelector('[data-field="fixed_amount_syp"]')?.value || '',
+          fixed_amount_usd: row.querySelector('[data-field="fixed_amount_usd"]')?.value || '',
+        };
+      });
+    };
+
+    const renderOverrideRow = (guid, label) => {
+      const current = overridesState[guid] || {};
+      const type = current.discount_type || '';
+      const wrap = document.createElement('div');
+      wrap.className = 'rounded-lg border border-border-subtle bg-surface-low p-2 space-y-2';
+      wrap.setAttribute('data-override-guid', guid);
+      const title = document.createElement('div');
+      title.className = 'text-xs font-bold';
+      title.textContent = label || guid;
+      wrap.appendChild(title);
+      const grid = document.createElement('div');
+      grid.className = 'grid grid-cols-1 md:grid-cols-3 gap-2';
+      grid.innerHTML = `
+          <label class="text-[11px]">
+            <span class="text-text-muted block mb-0.5">نوع الحسم</span>
+            <select name="material_override[${guid}][discount_type]" data-field="discount_type" class="h-8 w-full rounded-lg border border-border-subtle px-2 text-xs">
+              <option value="" ${type === '' ? 'selected' : ''}>استخدم الموحّد</option>
+              <option value="percent" ${type === 'percent' ? 'selected' : ''}>نسبة %</option>
+              <option value="fixed_amount" ${type === 'fixed_amount' ? 'selected' : ''}>مبلغ مقطوع</option>
+              <option value="fixed_price" ${type === 'fixed_price' ? 'selected' : ''}>سعر طرد جديد</option>
+            </select>
+          </label>
+          <label class="text-[11px] ${type === 'percent' ? '' : 'hidden'}" data-show-for="percent">
+            <span class="text-text-muted block mb-0.5">النسبة %</span>
+            <input type="number" step="0.01" min="0" max="100" name="material_override[${guid}][discount_percent]" data-field="discount_percent" value="${current.discount_percent ?? ''}" class="h-8 w-full rounded-lg border border-border-subtle px-2 text-xs">
+          </label>
+          <label class="text-[11px] ${type === 'fixed_amount' ? '' : 'hidden'}" data-show-for="fixed_amount">
+            <span class="text-text-muted block mb-0.5">مبلغ ل.س</span>
+            <input type="number" step="0.01" min="0" name="material_override[${guid}][fixed_amount_syp]" data-field="fixed_amount_syp" value="${current.fixed_amount_syp ?? ''}" class="h-8 w-full rounded-lg border border-border-subtle px-2 text-xs">
+          </label>
+          <label class="text-[11px] ${type === 'fixed_amount' ? '' : 'hidden'}" data-show-for="fixed_amount">
+            <span class="text-text-muted block mb-0.5">مبلغ $</span>
+            <input type="number" step="0.01" min="0" name="material_override[${guid}][fixed_amount_usd]" data-field="fixed_amount_usd" value="${current.fixed_amount_usd ?? ''}" class="h-8 w-full rounded-lg border border-border-subtle px-2 text-xs">
+          </label>
+          <label class="text-[11px] ${type === 'fixed_price' ? '' : 'hidden'}" data-show-for="fixed_price">
+            <span class="text-text-muted block mb-0.5">سعر طرد ل.س</span>
+            <input type="number" step="0.01" min="0" name="material_override[${guid}][fixed_price_syp]" data-field="fixed_price_syp" value="${current.fixed_price_syp ?? ''}" class="h-8 w-full rounded-lg border border-border-subtle px-2 text-xs">
+          </label>
+          <label class="text-[11px] ${type === 'fixed_price' ? '' : 'hidden'}" data-show-for="fixed_price">
+            <span class="text-text-muted block mb-0.5">سعر طرد $</span>
+            <input type="number" step="0.01" min="0" name="material_override[${guid}][fixed_price_usd]" data-field="fixed_price_usd" value="${current.fixed_price_usd ?? ''}" class="h-8 w-full rounded-lg border border-border-subtle px-2 text-xs">
+          </label>
+      `;
+      wrap.appendChild(grid);
+      const typeSelect = wrap.querySelector('[data-field="discount_type"]');
+      const syncRowFields = () => {
+        const t = typeSelect?.value || '';
+        wrap.querySelectorAll('[data-show-for]').forEach((el) => {
+          el.classList.toggle('hidden', el.getAttribute('data-show-for') !== t);
+        });
+      };
+      typeSelect?.addEventListener('change', syncRowFields);
+      return wrap;
+    };
+
+    const syncPerMaterialRows = () => {
+      if (!perMaterialRows || !perMaterialPanel) return;
+      captureOverrideInputs();
+      const selected = typeof window.portalTokenPickerGetSelected === 'function'
+        ? window.portalTokenPickerGetSelected('so-manual-materials')
+        : [];
+      perMaterialRows.innerHTML = '';
+      if (!selected.length) {
+        perMaterialRows.innerHTML = '<p class="text-xs text-text-muted">أضف مواداً لإظهار حقول الحسم الخاصة.</p>';
+        return;
+      }
+      selected.forEach((guid) => {
+        const meta = labelMap[guid] || {};
+        const label = [meta.code, meta.name].filter(Boolean).join(' — ') || guid;
+        perMaterialRows.appendChild(renderOverrideRow(guid, label));
+      });
+    };
+
+    const syncPricingScope = () => {
+      const isPerMaterial = pricingScope?.value === 'per_material' && modeSelect?.value === 'manual';
+      perMaterialPanel?.classList.toggle('hidden', !isPerMaterial);
+      if (isPerMaterial) {
+        syncPerMaterialRows();
+      }
+    };
+    pricingScope?.addEventListener('change', syncPricingScope);
+
+    // Keep per-material rows in sync when token chips change.
+    const picker = root.querySelector('[data-picker-id="so-manual-materials"]');
+    const hiddenHost = picker?.querySelector('[data-role="hidden-inputs"]');
+    if (hiddenHost && typeof MutationObserver !== 'undefined') {
+      const observer = new MutationObserver(() => {
+        if (pricingScope?.value === 'per_material') {
+          syncPerMaterialRows();
+        }
+      });
+      observer.observe(hiddenHost, { childList: true });
+    }
+
+    syncPanels();
+    syncPricingScope();
 
     const searchInput = root.querySelector('#so-material-search');
     const resultsEl = root.querySelector('#so-material-search-results');
@@ -115,6 +252,16 @@
       const added = window.portalTokenPickerAdd(MANUAL_PICKER_ID, [item]);
       if (added > 0 && statusEl) {
         statusEl.textContent = 'تمت إضافة: ' + (item.label || item.value);
+      }
+      if (item.value) {
+        labelMap[item.value] = {
+          guid: item.value,
+          name: item.label || item.value,
+          code: item.code || '',
+        };
+      }
+      if (pricingScope?.value === 'per_material') {
+        syncPerMaterialRows();
       }
       searchInput.value = '';
       hideResults();

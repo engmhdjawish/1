@@ -722,6 +722,17 @@ final class ShareCartService
         }
 
         $apiLine = self::lineFromApiItem($product, true);
+        // Always re-apply from list price so discounted catalog unit prices are not discounted twice.
+        if (isset($overlay['original_unit_sale_price_sp']) && is_numeric((string) $overlay['original_unit_sale_price_sp'])) {
+            $apiLine['original_unit_sale_price_sp'] = (float) $overlay['original_unit_sale_price_sp'];
+            $apiLine['unit_sale_price_sp'] = (float) $overlay['original_unit_sale_price_sp'];
+        }
+        if (isset($overlay['original_unit_sale_price_usd']) && is_numeric((string) $overlay['original_unit_sale_price_usd'])) {
+            $apiLine['original_unit_sale_price_usd'] = (float) $overlay['original_unit_sale_price_usd'];
+            $apiLine['unit_sale_price_usd'] = (float) $overlay['original_unit_sale_price_usd'];
+        }
+        $apiLine = self::normalizeLine($apiLine);
+
         $enriched = SpecialOfferService::applyToCartLine($apiLine, $overlay['offer']);
         $enriched['quantity'] = (float) ($line['quantity'] ?? 1);
         if (!empty($line['image_url'])) {
@@ -747,10 +758,18 @@ final class ShareCartService
         $imageGuid = trim((string) ($apiItem['productImageGuid'] ?? $apiItem['ProductImageGuid'] ?? ''));
         $imageUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : null;
         $packaging = self::packaging($apiItem);
-        $unitSp = self::unitSalePriceSp($apiItem);
-        $unitUsd = self::unitSalePriceUsd($apiItem);
 
-        return self::normalizeLine([
+        $hasOriginalSp = isset($apiItem['original_unit_sale_price_sp']) && is_numeric((string) $apiItem['original_unit_sale_price_sp']);
+        $hasOriginalUsd = isset($apiItem['original_unit_sale_price_usd']) && is_numeric((string) $apiItem['original_unit_sale_price_usd']);
+        // Prefer list (original) price when catalog already applied an offer overlay.
+        $unitSp = $hasOriginalSp
+            ? (float) $apiItem['original_unit_sale_price_sp']
+            : self::unitSalePriceSp($apiItem);
+        $unitUsd = $hasOriginalUsd
+            ? (float) $apiItem['original_unit_sale_price_usd']
+            : self::unitSalePriceUsd($apiItem);
+
+        $line = self::normalizeLine([
             'material_guid' => $materialGuid,
             'material_code' => trim((string) ($apiItem['materialCode'] ?? $apiItem['MaterialCode'] ?? '')),
             'material_name_ar' => trim((string) ($apiItem['name'] ?? $apiItem['Name'] ?? 'مادة')),
@@ -761,6 +780,15 @@ final class ShareCartService
             'unit_sale_price_usd' => $capturePrices ? $unitUsd : 0.0,
             'image_url' => $imageUrl,
         ]);
+
+        if ($hasOriginalSp) {
+            $line['original_unit_sale_price_sp'] = (float) $apiItem['original_unit_sale_price_sp'];
+        }
+        if ($hasOriginalUsd) {
+            $line['original_unit_sale_price_usd'] = (float) $apiItem['original_unit_sale_price_usd'];
+        }
+
+        return $line;
     }
 
     /** @param array<string, mixed> $post */
