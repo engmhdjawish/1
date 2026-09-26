@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 /**
- * Serves material images for store browsing from local disk only (no API proxy).
+ * Serves material images for store browsing from local disk.
+ * If the Amine GUID is known but the local file is missing, downloads once from Amine and caches it.
  */
 
 require dirname(__DIR__, 2) . '/bootstrap.php';
