@@ -181,6 +181,13 @@ final class DashboardNavigation
                     ? 'رفع الصور، مزامنة الأمين، وربطها بالمواد من صفحة واحدة.'
                     : 'تصفّح الصور المحلية وتحميلها.',
             ],
+            [
+                'route' => '/dashboard/material-card-templates.php',
+                'label' => 'قوالب البطاقات',
+                'icon' => 'dashboard_customize',
+                'permission' => ['images.templates.manage', 'images.upload'],
+                'description' => 'رفع قالب البطاقة وضبط أماكن الاسم والتعبئة والباركود ومنطقة الصورة.',
+            ],
         ]);
     }
 
@@ -571,6 +578,7 @@ final class DashboardNavigation
         $candidates = [
             ['route' => '/dashboard/orders.php', 'label' => 'الطلبات', 'permission' => 'orders.view'],
             ['route' => '/dashboard/material-images.php', 'label' => 'صور المواد', 'permission' => ['images.upload', 'images.view']],
+            ['route' => '/dashboard/material-card-templates.php', 'label' => 'قوالب البطاقات', 'permission' => ['images.templates.manage', 'images.upload']],
             ['route' => '/dashboard/customers.php', 'label' => 'عملاء الموقع', 'permission' => 'web_customers.view'],
             ['route' => '/dashboard/accounting.php', 'label' => 'أمين', 'permission' => null, 'visible' => self::canAccessAccountingArea($user)],
         ];

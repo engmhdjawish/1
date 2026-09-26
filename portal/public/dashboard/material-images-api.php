@@ -7,6 +7,7 @@ ob_start();
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
+use Portal\Services\MaterialCardTemplateService;
 use Portal\Services\MaterialImageLinkService;
 use Portal\Services\MaterialImageStorageService;
 use Portal\Services\MaterialImageSyncService;
@@ -18,6 +19,20 @@ use Throwable;
 function materialImagesApiJson(array $payload, int $status = 200): never
 {
     DashboardHttp::emitJson($payload, $status);
+}
+
+/** @return array{scale: float, offset_x: float, offset_y: float}|null */
+function materialImagesParsePhotoTransform(array $post): ?array
+{
+    if (!isset($post['photo_scale']) && !isset($post['photo_offset_x']) && !isset($post['photo_offset_y'])) {
+        return null;
+    }
+
+    return [
+        'scale' => max(0.25, min(8.0, (float) ($post['photo_scale'] ?? 1))),
+        'offset_x' => (float) ($post['photo_offset_x'] ?? 0),
+        'offset_y' => (float) ($post['photo_offset_y'] ?? 0),
+    ];
 }
 
 /** @return array{pending: int, syncing: int, synced: int, failed: int, total: int} */
@@ -322,8 +337,11 @@ if ($method === 'POST') {
         if (!is_array($materialGuids)) {
             $materialGuids = [$materialGuids];
         }
-        // Always composite onto the Jawish card template when the server can process it.
-        $addDetails = MaterialImageStorageService::canProcessImageDetails();
+        // Optional template compositing when explicitly requested.
+        $addDetails = (string) ($_POST['add_details'] ?? $_POST['use_template'] ?? '') === '1'
+            && MaterialImageStorageService::canProcessImageDetails();
+        $templateId = trim((string) ($_POST['template_id'] ?? ''));
+        $photoTransform = materialImagesParsePhotoTransform($_POST);
         $processed = [];
         $result = MaterialImageLinkService::assignError('خطأ غير متوقع أثناء الربط.');
 
@@ -338,6 +356,8 @@ if ($method === 'POST') {
                     $materialGuids,
                     is_array($_POST['detail_line1'] ?? null) ? $_POST['detail_line1'] : [],
                     is_array($_POST['detail_line2'] ?? null) ? $_POST['detail_line2'] : [],
+                    $templateId !== '' ? $templateId : null,
+                    $photoTransform
                 );
             }
             if ($addDetails && $processed === []) {
@@ -434,7 +454,10 @@ if ($method === 'POST') {
         if (!is_array($materialGuids)) {
             $materialGuids = [$materialGuids];
         }
-        $addDetails = MaterialImageStorageService::canProcessImageDetails();
+        $addDetails = (string) ($_POST['add_details'] ?? $_POST['use_template'] ?? '') === '1'
+            && MaterialImageStorageService::canProcessImageDetails();
+        $templateId = trim((string) ($_POST['template_id'] ?? ''));
+        $photoTransform = materialImagesParsePhotoTransform($_POST);
         $processed = [];
         $result = MaterialImageLinkService::assignError('خطأ غير متوقع أثناء الاستبدال.');
 
@@ -449,6 +472,8 @@ if ($method === 'POST') {
                     $materialGuids,
                     is_array($_POST['detail_line1'] ?? null) ? $_POST['detail_line1'] : [],
                     is_array($_POST['detail_line2'] ?? null) ? $_POST['detail_line2'] : [],
+                    $templateId !== '' ? $templateId : null,
+                    $photoTransform
                 );
             }
             if ($addDetails && $processed === []) {

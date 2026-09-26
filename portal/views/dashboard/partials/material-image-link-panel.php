@@ -1,6 +1,7 @@
 <div
   data-material-images-link-panel
   data-can-add-details="<?= !empty($detailsBanner['ok']) ? '1' : '0' ?>"
+  data-templates-api="/dashboard/material-card-templates-api.php"
 >
 <?php if (!empty($materialFilterOptionsError)): ?>
   <p class="mb-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 px-4 py-3 text-sm"><?= h((string) $materialFilterOptionsError) ?></p>
@@ -10,6 +11,10 @@
   <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60 flex items-center justify-between gap-2">
     <h2 class="font-bold text-sm">صور الأمين</h2>
     <div class="flex items-center gap-2 shrink-0">
+      <a href="/dashboard/material-card-templates.php" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold inline-flex items-center gap-1">
+        <span class="material-symbols-outlined text-base" aria-hidden="true">dashboard_customize</span>
+        القوالب
+      </a>
       <button type="button" id="reloadSourcesBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold">تحديث</button>
       <span id="sourcePageLabel" class="text-xs text-text-muted whitespace-nowrap">صفحة 1</span>
     </div>
@@ -22,7 +27,17 @@
         <button type="button" class="link-filter-btn dash-mi-filter-tab is-active" data-filter="unlinked">غير المرتبطة</button>
       </div>
       <?php if (!empty($detailsBanner['ok'])): ?>
-        <p class="dash-mi-template-note">عند الربط تُدمج الصورة تلقائياً في <strong>قالب جاويش</strong> مع اسم المنتج والتعبئة وباركود رقم المادة في أماكن ثابتة.</p>
+        <label class="dash-mi-template-note inline-flex items-start gap-2 cursor-pointer">
+          <input type="checkbox" id="globalUseTemplate" class="mt-0.5 shrink-0">
+          <span>
+            <strong>تفعيل القالب عند الربط</strong>
+            — بعد اختيار المواد تُفتح نافذة لتكبير/تصغير وتحريك الصورة داخل منطقة القالب قبل التأكيد.
+          </span>
+        </label>
+      <?php else: ?>
+        <p class="dash-mi-template-note">قالب البطاقة غير جاهز حالياً. <?= h((string) ($detailsBanner['message'] ?? '')) ?>
+          <a href="/dashboard/material-card-templates.php" class="text-primary font-bold underline">إدارة القوالب</a>
+        </p>
       <?php endif; ?>
       <div class="flex flex-col sm:flex-row gap-2">
         <input type="search" id="sourceMaterialSearch" class="h-9 flex-1 min-w-0 rounded-lg border border-border-subtle px-3 text-sm" placeholder="بحث مادة بالاسم أو الرمز">
@@ -72,5 +87,32 @@
   </div>
   <p id="lightboxCaption" class="dash-mi-lightbox__caption"></p>
   <p class="dash-mi-lightbox__hint">انقر على الصورة للتكبير — انقر مجدداً للعودة</p>
+</div>
+
+<div id="templateFitModal" class="dash-mi-fit-modal" hidden>
+  <div class="dash-mi-fit-modal__panel" role="dialog" aria-modal="true" aria-labelledby="templateFitTitle">
+    <div class="dash-mi-fit-modal__head">
+      <h3 id="templateFitTitle">ضبط الصورة على القالب</h3>
+      <button type="button" id="templateFitCloseBtn" class="dash-mi-fit-modal__close" aria-label="إغلاق">×</button>
+    </div>
+    <p class="dash-mi-fit-modal__hint">اسحب للتحريك · عجلة الفأرة أو الأزرار للتكبير/التصغير · ثم أكّد الربط</p>
+    <div class="dash-mi-fit-modal__stage-wrap">
+      <div id="templateFitStage" class="dash-mi-fit-modal__stage">
+        <img id="templateFitBg" alt="" class="dash-mi-fit-modal__bg">
+        <div id="templateFitPhotoClip" class="dash-mi-fit-modal__photo-clip">
+          <img id="templateFitPhoto" alt="" draggable="false">
+        </div>
+      </div>
+    </div>
+    <div class="dash-mi-fit-modal__tools">
+      <button type="button" id="templateFitZoomOut" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold">تصغير</button>
+      <button type="button" id="templateFitZoomIn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold">تكبير</button>
+      <button type="button" id="templateFitReset" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold">إعادة</button>
+      <span id="templateFitZoomLabel" class="text-xs text-text-muted">100%</span>
+      <div class="flex-1"></div>
+      <button type="button" id="templateFitCancel" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold">إلغاء</button>
+      <button type="button" id="templateFitConfirm" class="h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold">تأكيد الربط</button>
+    </div>
+  </div>
 </div>
 </div>

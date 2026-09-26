@@ -26,9 +26,128 @@
     const signal = abort.signal;
 
     const CAN_ADD_DETAILS = panel.dataset.canAddDetails === '1';
+    const TEMPLATES_API = panel.dataset.templatesApi || '/dashboard/material-card-templates-api.php';
+    const globalUseTemplate = panel.querySelector('#globalUseTemplate');
+    const fitModal = panel.querySelector('#templateFitModal');
+    const fitStage = panel.querySelector('#templateFitStage');
+    const fitBg = panel.querySelector('#templateFitBg');
+    const fitClip = panel.querySelector('#templateFitPhotoClip');
+    const fitPhoto = panel.querySelector('#templateFitPhoto');
+    const fitZoomLabel = panel.querySelector('#templateFitZoomLabel');
+    let defaultTemplate = null;
+    let fitState = {
+      scale: 1,
+      offsetX: 0,
+      offsetY: 0,
+      dragging: false,
+      lastX: 0,
+      lastY: 0,
+      photoNaturalW: 0,
+      photoNaturalH: 0,
+      slot: null,
+      canvasW: 0,
+      canvasH: 0,
+      displayScale: 1,
+    };
+
+    function isTemplateEnabled() {
+      return CAN_ADD_DETAILS && globalUseTemplate instanceof HTMLInputElement && globalUseTemplate.checked;
+    }
 
     function shouldAddDetailsForCard(_card) {
-      return CAN_ADD_DETAILS;
+      return isTemplateEnabled();
+    }
+
+    async function ensureDefaultTemplate() {
+      if (defaultTemplate) return defaultTemplate;
+      try {
+        const payload = await fetchJson(`${TEMPLATES_API}?action=default`);
+        if (payload.ok && payload.template) {
+          defaultTemplate = payload.template;
+        }
+      } catch {
+        defaultTemplate = null;
+      }
+      return defaultTemplate;
+    }
+
+    function photoFieldFromTemplate(template) {
+      const fields = Array.isArray(template?.fields) ? template.fields : [];
+      return fields.find((f) => f.field_kind === 'photo') || null;
+    }
+
+    function applyFitTransform() {
+      if (!(fitPhoto instanceof HTMLImageElement) || !fitState.slot) return;
+      const slot = fitState.slot;
+      const displayScale = fitState.displayScale || 1;
+      const cover = Math.max(slot.w / Math.max(1, fitState.photoNaturalW), slot.h / Math.max(1, fitState.photoNaturalH));
+      const drawW = fitState.photoNaturalW * cover * fitState.scale * displayScale;
+      const drawH = fitState.photoNaturalH * cover * fitState.scale * displayScale;
+      const left = (slot.w * displayScale - drawW) / 2 + fitState.offsetX * displayScale;
+      const top = (slot.h * displayScale - drawH) / 2 + fitState.offsetY * displayScale;
+      fitPhoto.style.width = `${drawW}px`;
+      fitPhoto.style.height = `${drawH}px`;
+      fitPhoto.style.transform = `translate(${left}px, ${top}px)`;
+      if (fitZoomLabel) fitZoomLabel.textContent = `${Math.round(fitState.scale * 100)}%`;
+    }
+
+    function openFitModal(sourceUrl, template) {
+      return new Promise((resolve) => {
+        const slot = photoFieldFromTemplate(template);
+        if (!slot || !(fitModal instanceof HTMLElement)) {
+          resolve({ scale: 1, offset_x: 0, offset_y: 0, template_id: template?.id || '' });
+          return;
+        }
+        fitState = {
+          scale: 1,
+          offsetX: 0,
+          offsetY: 0,
+          dragging: false,
+          lastX: 0,
+          lastY: 0,
+          photoNaturalW: 0,
+          photoNaturalH: 0,
+          slot: { x: Number(slot.x) || 0, y: Number(slot.y) || 0, w: Number(slot.w) || 1, h: Number(slot.h) || 1 },
+          canvasW: Number(template.canvas_width) || 1,
+          canvasH: Number(template.canvas_height) || 1,
+          displayScale: 1,
+          resolve,
+          templateId: template.id,
+        };
+        fitModal.hidden = false;
+        const maxW = Math.min(860, window.innerWidth - 48);
+        fitState.displayScale = maxW / fitState.canvasW;
+        if (fitStage) {
+          fitStage.style.width = `${fitState.canvasW * fitState.displayScale}px`;
+          fitStage.style.height = `${fitState.canvasH * fitState.displayScale}px`;
+        }
+        if (fitBg) {
+          fitBg.src = template.url;
+          fitBg.style.width = '100%';
+          fitBg.style.height = '100%';
+        }
+        if (fitClip) {
+          fitClip.style.left = `${fitState.slot.x * fitState.displayScale}px`;
+          fitClip.style.top = `${fitState.slot.y * fitState.displayScale}px`;
+          fitClip.style.width = `${fitState.slot.w * fitState.displayScale}px`;
+          fitClip.style.height = `${fitState.slot.h * fitState.displayScale}px`;
+        }
+        if (fitPhoto) {
+          fitPhoto.onload = () => {
+            fitState.photoNaturalW = fitPhoto.naturalWidth || 1;
+            fitState.photoNaturalH = fitPhoto.naturalHeight || 1;
+            applyFitTransform();
+          };
+          fitPhoto.src = sourceUrl;
+        }
+      });
+    }
+
+    function closeFitModal(result) {
+      if (fitModal) fitModal.hidden = true;
+      const resolve = fitState.resolve;
+      fitState.resolve = null;
+      if (typeof resolve === 'function') resolve(result);
     }
 
 const API_URL = '/dashboard/material-images-api.php';
@@ -383,7 +502,7 @@ const API_URL = '/dashboard/material-images-api.php';
     return fetchJson(API_URL, { method: 'POST', body: form });
   }
 
-  async function postAssignForm(action, item, items, card) {
+  async function postAssignForm(action, item, items, card, transform = null) {
     const form = new FormData();
     form.append('action', action);
     form.append('source_file_name', item.file_name || '');
@@ -391,6 +510,13 @@ const API_URL = '/dashboard/material-images-api.php';
     items.forEach((row) => form.append('material_guids[]', row.guid));
     if (shouldAddDetailsForCard(card)) {
       form.append('add_details', '1');
+      form.append('use_template', '1');
+      if (transform?.template_id) form.append('template_id', transform.template_id);
+      if (transform) {
+        form.append('photo_scale', String(transform.scale ?? 1));
+        form.append('photo_offset_x', String(transform.offset_x ?? 0));
+        form.append('photo_offset_y', String(transform.offset_y ?? 0));
+      }
     }
 
     if (action === 'reassign-materials') {
@@ -399,6 +525,23 @@ const API_URL = '/dashboard/material-images-api.php';
     }
 
     return fetchJson(API_URL, { method: 'POST', body: form });
+  }
+
+  async function maybeOpenTemplateFit(item) {
+    if (!isTemplateEnabled()) return null;
+    const template = await ensureDefaultTemplate();
+    if (!template) {
+      throw new Error('لا يوجد قالب افتراضي. اضبط قالباً من صفحة القوالب أولاً.');
+    }
+    const sourceUrl = item.preview_url || item.full_url || '';
+    if (!sourceUrl) {
+      throw new Error('تعذر تحميل معاينة الصورة للضبط على القالب.');
+    }
+    const result = await openFitModal(sourceUrl, template);
+    if (!result) {
+      throw new Error('__cancelled__');
+    }
+    return result;
   }
 
   function itemStillInUnlinkedList(items, item) {
@@ -458,10 +601,20 @@ const API_URL = '/dashboard/material-images-api.php';
     }
     button.disabled = true;
     setCardAssigning(card, true);
-    linkStatus.textContent = 'جاري الربط...';
     if (statusEl) statusEl.textContent = 'جاري الربط...';
     try {
-      const payload = await postAssignForm('assign-materials', item, items, card);
+      let transform = null;
+      try {
+        transform = await maybeOpenTemplateFit(item);
+      } catch (error) {
+        if (error instanceof Error && error.message === '__cancelled__') {
+          if (statusEl) statusEl.textContent = '';
+          return;
+        }
+        throw error;
+      }
+      if (statusEl) statusEl.textContent = 'جاري الربط...';
+      const payload = await postAssignForm('assign-materials', item, items, card, transform);
       if (assignSucceeded(payload)) {
         linkStatus.textContent = payload.message || 'تم الربط.';
         if (statusEl) statusEl.textContent = '';
@@ -504,7 +657,18 @@ const API_URL = '/dashboard/material-images-api.php';
     setCardAssigning(card, true);
     if (statusEl) statusEl.textContent = 'جاري الاستبدال...';
     try {
-      const payload = await postAssignForm('reassign-materials', item, items, card);
+      let transform = null;
+      try {
+        transform = await maybeOpenTemplateFit(item);
+      } catch (error) {
+        if (error instanceof Error && error.message === '__cancelled__') {
+          if (statusEl) statusEl.textContent = '';
+          return;
+        }
+        throw error;
+      }
+      if (statusEl) statusEl.textContent = 'جاري الاستبدال...';
+      const payload = await postAssignForm('reassign-materials', item, items, card, transform);
       if (assignSucceeded(payload)) {
         linkStatus.textContent = payload.message || 'تم الاستبدال.';
         if (statusEl) statusEl.textContent = '';
@@ -982,7 +1146,7 @@ const API_URL = '/dashboard/material-images-api.php';
             <div class="suggestions hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow max-h-48 overflow-auto"></div>
           </div>
           <div class="chips flex flex-wrap gap-1">${chipsHtml(key)}</div>
-          ${CAN_ADD_DETAILS ? '<p class="dash-mi-card__template-hint">يُطبَّق قالب جاويش تلقائياً (اسم، تعبئة، باركود)</p>' : ''}
+          ${CAN_ADD_DETAILS ? '<p class="dash-mi-card__template-hint">فعّل «القالب» أعلاه لضبط الصورة على القالب قبل الربط</p>' : ''}
           <div class="dash-mi-card__actions">
             <button type="button" class="assign-btn h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold w-full">ربط المواد المضافة</button>
             ${reassignBlock}
@@ -1125,8 +1289,72 @@ const API_URL = '/dashboard/material-images-api.php';
   queueMicrotask(() => {
     if (!signal.aborted && panel.isConnected) {
       loadSources(1);
+      if (CAN_ADD_DETAILS) ensureDefaultTemplate().catch(() => {});
     }
   });
+
+  function bindFitModalControls() {
+    const zoomIn = panel.querySelector('#templateFitZoomIn');
+    const zoomOut = panel.querySelector('#templateFitZoomOut');
+    const resetBtn = panel.querySelector('#templateFitReset');
+    const cancelBtn = panel.querySelector('#templateFitCancel');
+    const closeBtn = panel.querySelector('#templateFitCloseBtn');
+    const confirmBtn = panel.querySelector('#templateFitConfirm');
+
+    zoomIn?.addEventListener('click', () => {
+      fitState.scale = Math.min(8, fitState.scale * 1.12);
+      applyFitTransform();
+    }, { signal });
+    zoomOut?.addEventListener('click', () => {
+      fitState.scale = Math.max(0.25, fitState.scale / 1.12);
+      applyFitTransform();
+    }, { signal });
+    resetBtn?.addEventListener('click', () => {
+      fitState.scale = 1;
+      fitState.offsetX = 0;
+      fitState.offsetY = 0;
+      applyFitTransform();
+    }, { signal });
+    const cancel = () => closeFitModal(null);
+    cancelBtn?.addEventListener('click', cancel, { signal });
+    closeBtn?.addEventListener('click', cancel, { signal });
+    confirmBtn?.addEventListener('click', () => {
+      closeFitModal({
+        scale: fitState.scale,
+        offset_x: fitState.offsetX,
+        offset_y: fitState.offsetY,
+        template_id: fitState.templateId || '',
+      });
+    }, { signal });
+
+    fitClip?.addEventListener('pointerdown', (event) => {
+      fitState.dragging = true;
+      fitState.lastX = event.clientX;
+      fitState.lastY = event.clientY;
+      fitClip.setPointerCapture?.(event.pointerId);
+    }, { signal });
+    fitClip?.addEventListener('pointermove', (event) => {
+      if (!fitState.dragging) return;
+      const dx = (event.clientX - fitState.lastX) / (fitState.displayScale || 1);
+      const dy = (event.clientY - fitState.lastY) / (fitState.displayScale || 1);
+      fitState.lastX = event.clientX;
+      fitState.lastY = event.clientY;
+      fitState.offsetX += dx;
+      fitState.offsetY += dy;
+      applyFitTransform();
+    }, { signal });
+    const endDrag = () => { fitState.dragging = false; };
+    fitClip?.addEventListener('pointerup', endDrag, { signal });
+    fitClip?.addEventListener('pointercancel', endDrag, { signal });
+    fitStage?.addEventListener('wheel', (event) => {
+      if (fitModal?.hidden) return;
+      event.preventDefault();
+      const factor = event.deltaY < 0 ? 1.08 : 1 / 1.08;
+      fitState.scale = Math.max(0.25, Math.min(8, fitState.scale * factor));
+      applyFitTransform();
+    }, { signal, passive: false });
+  }
+  bindFitModalControls();
 
   window.addEventListener('pageshow', (event) => {
     if (!event.persisted || signal.aborted) return;

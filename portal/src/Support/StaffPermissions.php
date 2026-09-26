@@ -23,6 +23,7 @@ final class StaffPermissions
             ['code' => 'web_customers.manage', 'name_ar' => 'إدارة عملاء الويب', 'category_ar' => 'عملاء', 'description_ar' => 'إنشاء وتعديل حسابات العملاء'],
             ['code' => 'images.view', 'name_ar' => 'عرض صور المواد', 'category_ar' => 'مواد', 'description_ar' => 'تصفح الصور والتحميل دون رفع أو حذف'],
             ['code' => 'images.upload', 'name_ar' => 'إدارة صور المواد', 'category_ar' => 'مواد', 'description_ar' => 'رفع، مزامنة، ربط، وحذف الصور'],
+            ['code' => 'images.templates.manage', 'name_ar' => 'قوالب بطاقة صور المواد', 'category_ar' => 'مواد', 'description_ar' => 'رفع وضبط قوالب بطاقة المنتج وحقولها'],
             ['code' => 'home_sections.manage', 'name_ar' => 'أقسام الرئيسية', 'category_ar' => 'محتوى', 'description_ar' => 'تنظيم أقسام الصفحة الرئيسية'],
             ['code' => 'special_offers.manage', 'name_ar' => 'العروض الخاصة', 'category_ar' => 'محتوى', 'description_ar' => 'إدارة العروض والحسومات'],
             ['code' => 'site_media.manage', 'name_ar' => 'مكتبة الوسائط', 'category_ar' => 'محتوى', 'description_ar' => 'بنرات وشعارات وصور الموقع'],
@@ -68,7 +69,7 @@ final class StaffPermissions
                 'role_code' => 'catalog_media',
                 'name_ar' => 'صور المواد',
                 'description_ar' => 'رفع ومزامنة وربط صور المواد.',
-                'permissions' => ['dashboard.view', 'images.view', 'images.upload'],
+                'permissions' => ['dashboard.view', 'images.view', 'images.upload', 'images.templates.manage'],
             ],
             [
                 'code' => 'customers_admin',
