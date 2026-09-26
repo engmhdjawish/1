@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 /**
  * Serves material images for store browsing from the portal disk only.
- * Never proxies or downloads from Amine on this hot path (keeps the storefront fast).
- * Missing locals are backfilled via dashboard / scripts/pull-missing-material-images.php.
+ * thumb=1 serves a real thumbnail (generated once from the original if missing).
+ * Never proxies or downloads from Amine on this hot path.
  */
 
 require dirname(__DIR__, 2) . '/bootstrap.php';
@@ -22,9 +22,9 @@ if ($id === '' || preg_match('/^[0-9a-fA-F-]{36}$/', $id) !== 1) {
     exit;
 }
 
-// localOnly=true: queue + GUID filename on disk — no Amine API round-trip.
-$localPath = MaterialImageStorageService::resolvePathForGuid($id, $thumb, true);
-if ($localPath === null && $thumb) {
+if ($thumb) {
+    $localPath = MaterialImageStorageService::ensureStoreThumbnail($id);
+} else {
     $localPath = MaterialImageStorageService::resolvePathForGuid($id, false, true);
 }
 

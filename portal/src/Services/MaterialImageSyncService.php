@@ -907,16 +907,13 @@ final class MaterialImageSyncService
             return $path;
         }
 
-        if ($thumb) {
-            $fullPath = (string) ($row['local_file_path'] ?? '');
-            if ($fullPath !== '' && is_file($fullPath)) {
-                return $fullPath;
-            }
+        $fileName = (string) ($row['file_name'] ?? '');
+        if ($fileName === '') {
+            return null;
         }
 
-        $fileName = (string) ($row['file_name'] ?? '');
-
-        return $fileName !== '' ? MaterialImageStorageService::resolveLocalPath($fileName, $thumb) : null;
+        // Thumbnail requests must not substitute the full original.
+        return MaterialImageStorageService::resolveLocalPath($fileName, $thumb);
     }
 
     /** @return array{updated: int, missing: int, message: string} */
@@ -1308,18 +1305,20 @@ final class MaterialImageSyncService
             $assignedFromFileName = null;
         }
 
+        $thumbPath = MaterialImageStorageService::resolveLocalPath($fileName, true);
         $stmt = Database::pdo()->prepare(
             'INSERT INTO material_image_sync_queue (
                 file_name, local_file_path, local_thumb_path, local_size_bytes, local_sha256,
                 amine_image_guid, uploaded_by_web_user_id, sync_status, synced_to_amine_at,
                 assigned_from_file_name
              ) VALUES (
-                :file_name, :local_file_path, NULL, :local_size_bytes, :local_sha256,
+                :file_name, :local_file_path, :local_thumb_path, :local_size_bytes, :local_sha256,
                 :amine_image_guid, :uploaded_by_web_user_id, \'synced\', NOW(),
                 :assigned_from_file_name
              )
              ON CONFLICT (file_name) DO UPDATE SET
                 local_file_path = EXCLUDED.local_file_path,
+                local_thumb_path = COALESCE(EXCLUDED.local_thumb_path, material_image_sync_queue.local_thumb_path),
                 local_size_bytes = EXCLUDED.local_size_bytes,
                 local_sha256 = EXCLUDED.local_sha256,
                 amine_image_guid = EXCLUDED.amine_image_guid,
@@ -1332,6 +1331,7 @@ final class MaterialImageSyncService
         $stmt->execute([
             'file_name' => $fileName,
             'local_file_path' => $localPath,
+            'local_thumb_path' => $thumbPath,
             'local_size_bytes' => $fingerprint['size_bytes'],
             'local_sha256' => $fingerprint['sha256'],
             'amine_image_guid' => $amineImageGuid,
