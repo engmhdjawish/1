@@ -75,8 +75,10 @@ $previewJson = $previewPayload !== null
     ? json_encode($previewPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)
     : '';
 ?>
+<?php $productAnchor = portal_product_anchor($guid); ?>
 <article
   class="store-product-card<?= $hasOffer ? ' store-product-card--offer' : '' ?>"
+  <?php if ($productAnchor !== ''): ?>id="<?= h($productAnchor) ?>"<?php endif; ?>
   <?php if ($useImagePreview && $guid !== ''): ?>
     data-store-preview-card
     data-preview-guid="<?= h($guid) ?>"
@@ -151,8 +153,6 @@ $previewJson = $previewPayload !== null
         <div class="store-product-card__price">
           <?php require __DIR__ . '/offer-price-block.php'; ?>
         </div>
-      <?php elseif ($pricePolicyHidden): ?>
-        <?php $context = 'card'; require __DIR__ . '/store-price-lock.php'; ?>
       <?php endif; ?>
       <?php if ($showQuantity && $packagesAvailable > 0): ?>
         <div class="store-product-card__stock">
@@ -162,6 +162,11 @@ $previewJson = $previewPayload !== null
       <?php endif; ?>
     </div>
   <?php if ($linkToDetail && $detailUrl !== ''): ?></a><?php endif; ?>
+  <?php if ($pricePolicyHidden): ?>
+    <div class="store-product-card__veil">
+      <?php $context = 'card'; $anchor = $productAnchor; require __DIR__ . '/store-price-lock.php'; ?>
+    </div>
+  <?php endif; ?>
   <?php if ($allowCart): ?>
     <div class="store-product-card__footer">
       <?php require __DIR__ . '/store-add-to-cart-form.php'; ?>

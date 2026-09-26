@@ -172,13 +172,7 @@ $specs = array_filter([
           </p>
         <?php endif; ?>
       <?php else: ?>
-        <?php if (CustomerSession::isPending()): ?>
-          <p class="text-sm text-gray-500">حسابك بانتظار التفعيل — ستظهر الأسعار بعد موافقة الإدارة.</p>
-        <?php elseif (!CustomerSession::isLoggedIn()): ?>
-          <p class="text-sm text-gray-500">الأسعار متاحة للعملاء المسجّلين. <a href="<?= h(portal_login_url('customer')) ?>" class="text-primary font-bold">سجّل الدخول</a> أو <a href="/register.php" class="text-primary font-bold">أنشئ حساباً</a>.</p>
-        <?php else: ?>
-          <p class="text-sm text-gray-500">الأسعار غير متاحة لحسابك الحالي. تواصل مع الإدارة.</p>
-        <?php endif; ?>
+        <?php $context = 'detail'; $anchor = portal_product_anchor($guid); require __DIR__ . '/partials/store-price-lock.php'; ?>
       <?php endif; ?>
 
       <?php if ($showQuantity): ?>

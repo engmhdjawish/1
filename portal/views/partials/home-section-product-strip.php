@@ -60,8 +60,10 @@ if ($products === []) {
           ? json_encode($previewPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)
           : '';
     ?>
+    <?php $productAnchor = portal_product_anchor($guid); ?>
     <article
       class="home-product-card"
+      <?php if ($productAnchor !== ''): ?>id="<?= h($productAnchor) ?>"<?php endif; ?>
       <?php if ($guid !== '' && $previewJson !== ''): ?>
         data-store-preview-card
         data-preview-guid="<?= h($guid) ?>"
@@ -84,7 +86,7 @@ if ($products === []) {
         <?php if ($showAnyPrice): ?>
           <?php require __DIR__ . '/offer-price-block.php'; ?>
         <?php elseif (!(bool) ($storeCatalogDisplay['show_price'] ?? false)): ?>
-          <?php $context = 'card'; require __DIR__ . '/store-price-lock.php'; ?>
+          <?php $context = 'card'; $anchor = $productAnchor; require __DIR__ . '/store-price-lock.php'; ?>
         <?php endif; ?>
       </div>
     </article>
