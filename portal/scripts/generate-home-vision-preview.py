@@ -7,9 +7,11 @@ import html
 import json
 import re
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 API = "https://www.jawishco.sy/api/home-products.php"
+HOME = "https://www.jawishco.sy/"
 LOGO = "https://www.jawishco.sy/media/site.php?id=5007abc6-259f-46ab-8409-383e3331646f"
 SITE = "https://www.jawishco.sy"
 
@@ -21,6 +23,51 @@ SECTIONS = [
     ("local-slippers", "شحاطات وطني", "", "🇸🇾 شحاطات"),
     ("local-shoes", "بوط وطني", "", "🇸🇾 بوط"),
 ]
+
+CATEGORIES = [
+    ("storefront", "صندل"),
+    ("steps", "شحاطة"),
+    ("hiking", "بوط"),
+    ("footprint", "خفافة"),
+    ("local_fire_department", "عروض", "#offers"),
+    ("man", "رجالي"),
+    ("woman", "نسائي"),
+    ("child_care", "أطفال"),
+]
+
+
+def fetch_home_html() -> str:
+    with urllib.request.urlopen(HOME, timeout=30) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
+def fetch_company(page_html: str) -> dict[str, str]:
+    about = "متجر إلكتروني لتصفح المواد والطلب بسهولة حسب سياسة حسابك."
+    match = re.search(
+        r'site-footer-brand[\s\S]*?<p class="text-sm leading-7 text-gray-300">\s*([^<]+)',
+        page_html,
+    )
+    if match:
+        about = re.sub(r"\s+", " ", match.group(1)).strip()
+
+    phones = re.findall(r'site-footer-contact-link[^>]*dir="ltr">([^<]+)', page_html)
+    phone = phones[0] if len(phones) > 0 else "00963-11-2213299"
+    mobile = phones[1] if len(phones) > 1 else "00963932997794"
+
+    address_match = re.search(r"location_on[\s\S]{0,400}?font-bold leading-6[^>]*>([^<]+)", page_html)
+    address = address_match.group(1).strip() if address_match else "دمشق - حريقة - شارع المأمون"
+
+    whatsapp_match = re.search(r"wa\.me/(\d+)", page_html)
+    whatsapp = whatsapp_match.group(1) if whatsapp_match else "963932997794"
+
+    return {
+        "name": "جاويش للتجارة",
+        "about": about,
+        "phone": phone,
+        "mobile": mobile,
+        "address": address,
+        "whatsapp": whatsapp,
+    }
 
 
 def fetch_sections() -> list[dict]:
@@ -61,19 +108,40 @@ def fetch_sections() -> list[dict]:
     return out
 
 
+def render_categories() -> str:
+    rows: list[str] = []
+    for icon, label, *anchor in CATEGORIES:
+        href = SITE + "/store.php" + (anchor[0] if anchor else "")
+        rows.append(
+            f'<a href="{href}" class="cat">'
+            f'<span class="cat__icon"><span class="material-symbols-outlined">{icon}</span></span>'
+            f'<span class="cat__label">{label}</span></a>'
+        )
+    return "\n      ".join(rows)
+
+
 def main() -> None:
+    page_html = fetch_home_html()
+    company = fetch_company(page_html)
     sections = fetch_sections()
-    sections_json = json.dumps(sections, ensure_ascii=False)
     hero_image = sections[0]["products"][0]["thumb"] if sections[0]["products"] else LOGO
 
     output = Path(__file__).resolve().parents[1] / "public" / "dev-test" / "home-vision-v1.html"
-    output.write_text(
-        TEMPLATE.replace("__SECTIONS_JSON__", sections_json)
+    content = (
+        TEMPLATE.replace("__SECTIONS_JSON__", json.dumps(sections, ensure_ascii=False))
         .replace("__LOGO__", LOGO)
         .replace("__HERO_IMAGE__", hero_image)
-        .replace("__SITE__", SITE),
-        encoding="utf-8",
+        .replace("__SITE__", SITE)
+        .replace("__COMPANY_NAME__", company["name"])
+        .replace("__COMPANY_ABOUT__", company["about"])
+        .replace("__COMPANY_PHONE__", company["phone"])
+        .replace("__COMPANY_MOBILE__", company["mobile"])
+        .replace("__COMPANY_ADDRESS__", company["address"])
+        .replace("__COMPANY_WHATSAPP__", company["whatsapp"])
+        .replace("__YEAR__", str(datetime.now().year))
+        .replace("__CATEGORIES__", render_categories())
     )
+    output.write_text(content, encoding="utf-8")
     print(f"Wrote {output} ({len(sections)} sections)")
 
 
@@ -82,7 +150,7 @@ TEMPLATE = r"""<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>معاينة — رؤية الصفحة الرئيسية | جاويش للتجارة</title>
+  <title>معاينة — رؤية الصفحة الرئيسية | __COMPANY_NAME__</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -96,15 +164,13 @@ TEMPLATE = r"""<!DOCTYPE html>
       --border: #e5e7eb;
       --surface: #f8fafc;
       --radius: 1rem;
-      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
     }
     * { box-sizing: border-box; }
     body {
-      margin: 0;
+      margin: 0; min-height: 100vh;
+      display: flex; flex-direction: column;
       font-family: "IBM Plex Sans Arabic", system-ui, sans-serif;
-      background: #fff;
-      color: var(--ink);
-      line-height: 1.5;
+      background: #fff; color: var(--ink); line-height: 1.5;
     }
     .preview-banner {
       position: sticky; top: 0; z-index: 100;
@@ -113,11 +179,11 @@ TEMPLATE = r"""<!DOCTYPE html>
       padding: 0.55rem 1rem; font-size: 0.8125rem; font-weight: 600;
     }
     .preview-banner strong { color: #fca5a5; }
-    .container { max-width: 72rem; margin: 0 auto; padding: 0 1rem 5rem; }
+    .page-main { flex: 1; }
+    .container { max-width: 72rem; margin: 0 auto; padding: 0 1rem 2rem; }
     .header {
       position: sticky; top: 2rem; z-index: 50;
-      background: rgba(255,255,255,0.94);
-      backdrop-filter: blur(10px);
+      background: rgba(255,255,255,0.94); backdrop-filter: blur(10px);
       border-bottom: 1px solid rgba(15,23,42,0.08);
       box-shadow: 0 4px 16px rgba(15,23,42,0.04);
     }
@@ -125,16 +191,12 @@ TEMPLATE = r"""<!DOCTYPE html>
       max-width: 72rem; margin: 0 auto; padding: 0.65rem 1rem;
       display: flex; align-items: center; gap: 0.75rem;
     }
-    .brand {
-      display: inline-flex; align-items: center; text-decoration: none;
-      flex-shrink: 0; min-width: 0;
-    }
+    .brand { display: inline-flex; align-items: center; text-decoration: none; flex-shrink: 0; }
     .brand__logo {
-      display: block; height: 3rem; width: auto;
-      max-width: 7.5rem; object-fit: contain;
-      filter: drop-shadow(0 1px 3px rgba(15,23,42,0.12));
+      display: block; height: 3.1rem; width: auto; max-width: 8rem;
+      object-fit: contain; filter: drop-shadow(0 1px 3px rgba(15,23,42,0.12));
     }
-    @media (min-width: 640px) { .brand__logo { height: 3.35rem; max-width: 8.5rem; } }
+    @media (min-width: 640px) { .brand__logo { height: 3.5rem; max-width: 9rem; } }
     .search {
       flex: 1; max-width: 28rem; display: flex; align-items: center; gap: 0.5rem;
       background: var(--surface); border: 1px solid var(--border);
@@ -143,17 +205,12 @@ TEMPLATE = r"""<!DOCTYPE html>
     .search input { flex: 1; border: none; background: transparent; font: inherit; outline: none; min-width: 0; }
     .search .material-symbols-outlined { color: var(--muted); font-size: 1.25rem; }
     .header__actions { display: flex; align-items: center; gap: 0.5rem; margin-inline-start: auto; }
-    .icon-btn {
-      width: 2.5rem; height: 2.5rem; border-radius: 0.75rem;
-      border: 1px solid var(--border); background: #fff;
-      display: grid; place-items: center; cursor: pointer;
-    }
     .btn {
       display: inline-flex; align-items: center; gap: 0.35rem;
       height: 2.5rem; padding: 0 1rem; border-radius: 0.75rem;
       font: inherit; font-weight: 700; font-size: 0.875rem;
       text-decoration: none; border: none; cursor: pointer;
-      transition: transform 0.15s, box-shadow 0.15s;
+      transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
     }
     .btn:hover { transform: translateY(-1px); }
     .btn--primary {
@@ -164,14 +221,13 @@ TEMPLATE = r"""<!DOCTYPE html>
     .btn--light { background: #fff; color: var(--accent); box-shadow: 0 8px 20px rgba(15,23,42,0.12); }
     .btn--ghost-light { border: 1px solid rgba(255,255,255,0.45); color: #fff; background: rgba(255,255,255,0.08); }
     .hero {
-      margin-top: 1.25rem; border-radius: 1.75rem; overflow: hidden;
-      color: #fff;
+      margin-top: 1.25rem; border-radius: 1.75rem; overflow: hidden; color: #fff;
       background:
         radial-gradient(circle at 88% 18%, rgba(255,255,255,0.14), transparent 38%),
         radial-gradient(circle at 12% 88%, rgba(0,0,0,0.16), transparent 42%),
         linear-gradient(135deg, #9f1218 0%, #D81921 42%, #ef4444 100%);
       box-shadow: 0 20px 50px rgba(216,25,33,0.22);
-      display: grid; grid-template-columns: 1fr; gap: 0;
+      display: grid; grid-template-columns: 1fr;
     }
     @media (min-width: 768px) { .hero { grid-template-columns: 1.15fr 0.85fr; min-height: 15rem; } }
     .hero__content { padding: 1.5rem 1.25rem; display: flex; flex-direction: column; justify-content: center; }
@@ -184,28 +240,25 @@ TEMPLATE = r"""<!DOCTYPE html>
       width: 0.5rem; height: 0.5rem; border-radius: 9999px; background: #fff;
       box-shadow: 0 0 0 4px rgba(255,255,255,0.2);
     }
-    .hero__title {
-      margin: 0; font-size: clamp(1.5rem, 4.5vw, 2.35rem);
-      font-weight: 800; line-height: 1.3;
-    }
-    .hero__lead {
-      margin: 0.75rem 0 0; max-width: 36rem;
-      font-size: 0.875rem; line-height: 1.65; opacity: 0.94;
-    }
+    .hero__title { margin: 0; font-size: clamp(1.5rem, 4.5vw, 2.35rem); font-weight: 800; line-height: 1.3; }
+    .hero__lead { margin: 0.75rem 0 0; max-width: 36rem; font-size: 0.875rem; line-height: 1.65; opacity: 0.94; }
     .hero__actions { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.15rem; }
     .hero__visual {
       display: flex; align-items: center; justify-content: center;
-      padding: 1.25rem; position: relative; min-height: 10rem;
+      padding: 1.25rem; position: relative; min-height: 11rem;
     }
-    .hero__logo-wrap {
-      display: flex; align-items: center; justify-content: center;
-      width: min(100%, 14rem); aspect-ratio: 1;
-      background: rgba(255,255,255,0.12);
-      border: 1px solid rgba(255,255,255,0.22);
-      border-radius: 1.25rem; padding: 1rem;
-      backdrop-filter: blur(6px);
+    .hero__showcase {
+      position: relative; width: min(100%, 15rem); aspect-ratio: 1;
+      background: rgba(255,255,255,0.95); border-radius: 1.25rem;
+      padding: 0.75rem; box-shadow: 0 16px 40px rgba(0,0,0,0.18);
     }
-    .hero__logo { width: 100%; height: auto; max-height: 7rem; object-fit: contain; filter: drop-shadow(0 8px 20px rgba(0,0,0,0.2)); }
+    .hero__showcase img { width: 100%; height: 100%; object-fit: contain; }
+    .hero__showcase-logo {
+      position: absolute; inset-inline-end: -0.35rem; top: -0.35rem;
+      width: 3.25rem; height: 3.25rem; background: #fff; border-radius: 0.85rem;
+      padding: 0.35rem; box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    }
+    .hero__showcase-logo img { width: 100%; height: 100%; object-fit: contain; }
     .section-head {
       display: flex; align-items: flex-start; justify-content: space-between;
       gap: 0.75rem; margin: 1.5rem 0 0.75rem;
@@ -216,9 +269,7 @@ TEMPLATE = r"""<!DOCTYPE html>
       color: var(--accent); font-size: 0.8125rem; font-weight: 700;
       text-decoration: none; display: inline-flex; align-items: center; gap: 0.2rem; flex-shrink: 0;
     }
-    .categories {
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.65rem;
-    }
+    .categories { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.65rem; }
     .cat {
       display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
       padding: 0.85rem 0.35rem; background: #fff; border: 1px solid var(--border);
@@ -228,8 +279,9 @@ TEMPLATE = r"""<!DOCTYPE html>
     .cat:hover { border-color: #fecaca; box-shadow: 0 6px 18px rgba(216,25,33,0.1); transform: translateY(-2px); }
     .cat__icon {
       width: 2.75rem; height: 2.75rem; border-radius: 0.75rem; background: #fef2f2;
-      display: grid; place-items: center; font-size: 1.35rem;
+      display: grid; place-items: center; color: var(--accent);
     }
+    .cat__icon .material-symbols-outlined { font-size: 1.35rem; }
     .cat__label { font-size: 0.75rem; font-weight: 700; text-align: center; }
     .tabs {
       display: flex; gap: 0.4rem; overflow-x: auto; padding: 0.35rem;
@@ -245,16 +297,33 @@ TEMPLATE = r"""<!DOCTYPE html>
     .tab.is-active { background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(216,25,33,0.25); }
     .tab-panel { display: none; }
     .tab-panel.is-active { display: block; }
-    .strip {
-      display: flex; gap: 0.75rem; overflow-x: auto; padding: 0.25rem 0 0.75rem;
-      scroll-snap-type: x mandatory; scrollbar-width: thin; scrollbar-color: var(--accent) #f3f4f6;
+    .tab-panel--offer.is-active .strip-wrap { border-color: #fecaca; background: linear-gradient(180deg, #fff5f5, #fff); }
+    .strip-wrap {
+      position: relative; border: 1px solid var(--border); border-radius: 1rem;
+      background: #fff; padding: 0.65rem 0.35rem;
     }
+    .strip-nav {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      width: 2rem; height: 2rem; border: none; border-radius: 9999px;
+      background: rgba(255,255,255,0.95); color: var(--ink);
+      box-shadow: 0 4px 14px rgba(15,23,42,0.12); cursor: pointer; z-index: 2;
+      display: grid; place-items: center;
+    }
+    .strip-nav--prev { right: 0.35rem; }
+    .strip-nav--next { left: 0.35rem; }
+    .strip {
+      display: flex; gap: 0.75rem; overflow-x: auto; padding: 0.15rem 2rem 0.35rem;
+      scroll-snap-type: x mandatory; scrollbar-width: none;
+    }
+    .strip::-webkit-scrollbar { display: none; }
     .card {
       flex: 0 0 9.5rem; scroll-snap-align: start;
-      background: #fff; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+      background: #fff; border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: hidden; transition: box-shadow 0.15s, transform 0.15s;
     }
     @media (min-width: 640px) { .card { flex-basis: 11rem; } }
-    .card__media { position: relative; aspect-ratio: 1; background: #f3f4f6; overflow: hidden; }
+    .card:hover { box-shadow: 0 10px 24px rgba(15,23,42,0.08); transform: translateY(-2px); }
+    .card__media { position: relative; height: 8rem; background: #f3f4f6; overflow: hidden; }
     .card__media img { width: 100%; height: 100%; object-fit: contain; padding: 0.35rem; }
     .card__badge {
       position: absolute; top: 0.4rem; right: 0.4rem;
@@ -275,29 +344,73 @@ TEMPLATE = r"""<!DOCTYPE html>
       width: 100%; margin-top: 0.5rem; height: 2rem; border: none; border-radius: 0.5rem;
       background: #fef2f2; color: var(--accent); font: inherit; font-size: 0.75rem; font-weight: 800; cursor: pointer;
     }
+    .card__add:hover { background: #fee2e2; }
     .cta {
       margin-top: 2rem; padding: 1.5rem; border-radius: 1.25rem;
       background: linear-gradient(135deg, var(--accent-dark), var(--accent)); color: #fff;
       display: flex; flex-direction: column; gap: 1rem; align-items: flex-start;
     }
-    @media (min-width: 640px) {
-      .cta { flex-direction: row; align-items: center; justify-content: space-between; }
-    }
+    @media (min-width: 640px) { .cta { flex-direction: row; align-items: center; justify-content: space-between; } }
     .cta h2 { margin: 0; font-size: 1.25rem; }
     .cta p { margin: 0.35rem 0 0; opacity: 0.9; font-size: 0.875rem; }
     .cta__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
     .btn--white { background: #fff; color: var(--accent); }
     .btn--outline-white { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: #fff; }
-    .contact {
-      margin-top: 1.25rem; display: grid; grid-template-columns: 1fr; gap: 0.65rem;
+
+    /* Footer — same structure as live site */
+    .site-footer {
+      margin-top: auto;
+      background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+      color: #e5e7eb;
     }
-    @media (min-width: 640px) { .contact { grid-template-columns: repeat(3, 1fr); } }
-    .contact__item {
-      display: flex; align-items: center; gap: 0.65rem; padding: 0.85rem 1rem;
-      border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
-      text-decoration: none; color: var(--ink); font-size: 0.8125rem; font-weight: 700;
+    .site-footer a { color: #d1d5db; text-decoration: none; transition: color 0.2s; }
+    .site-footer a:hover { color: #fff; }
+    .site-footer__inner {
+      max-width: 72rem; margin: 0 auto; padding: 2.5rem 1rem 2rem;
+      display: grid; grid-template-columns: 1fr; gap: 2rem;
     }
-    .contact__item .material-symbols-outlined { color: var(--accent); }
+    @media (min-width: 768px) { .site-footer__inner { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 1280px) { .site-footer__inner { grid-template-columns: 1.1fr 0.9fr 1fr 1fr; gap: 2rem; } }
+    .site-footer-brand { display: flex; flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+    .site-footer-brand__logo { height: 3.5rem; width: auto; max-width: 10rem; object-fit: contain; }
+    .site-footer-brand h2 { margin: 0; font-size: 1.125rem; font-weight: 800; color: #fff; }
+    .site-footer-brand p { margin: 0; font-size: 0.875rem; line-height: 1.75; color: #d1d5db; }
+    .site-footer h3 { margin: 0 0 1rem; font-size: 0.875rem; font-weight: 800; color: #fff; }
+    .site-footer-links { display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.875rem; }
+    .site-footer-contact-item {
+      display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.5rem 0;
+    }
+    .site-footer-contact-icon {
+      display: inline-flex; height: 2.25rem; width: 2.25rem;
+      align-items: center; justify-content: center; border-radius: 0.65rem;
+      background: rgba(255,255,255,0.08); color: #fca5a5; flex-shrink: 0;
+    }
+    .site-footer-contact-label { margin: 0 0 0.15rem; font-size: 0.75rem; color: #9ca3af; }
+    .site-footer-contact-value { margin: 0; font-weight: 800; color: #f9fafb; }
+    .site-footer-contact-value:hover { color: #fff; }
+    .site-footer-shop p { margin: 0 0 1rem; font-size: 0.875rem; line-height: 1.75; color: #d1d5db; }
+    .site-footer-store-btn {
+      display: inline-flex; height: 2.75rem; align-items: center; gap: 0.5rem;
+      border-radius: 0.85rem; background: var(--accent); color: #fff !important;
+      padding: 0 1rem; font-size: 0.875rem; font-weight: 800;
+    }
+    .site-footer-store-btn:hover { filter: brightness(1.08); color: #fff !important; }
+    .site-footer-whatsapp {
+      display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem;
+      padding: 0.65rem 1rem; border-radius: 0.85rem; background: #059669;
+      color: #fff !important; font-weight: 800; font-size: 0.875rem;
+    }
+    .site-footer-whatsapp:hover { background: #047857; color: #fff !important; }
+    .site-footer-bottom {
+      border-top: 1px solid rgba(255,255,255,0.08); color: #9ca3af;
+      padding: 1rem; font-size: 0.75rem;
+    }
+    .site-footer-bottom__inner {
+      max-width: 72rem; margin: 0 auto; padding: 0 1rem;
+      display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 0.5rem;
+    }
+    @media (min-width: 640px) { .site-footer-bottom__inner { flex-direction: row; } }
+
     .mobile-bar {
       display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 60;
       background: rgba(255,255,255,0.96); backdrop-filter: blur(10px);
@@ -308,6 +421,7 @@ TEMPLATE = r"""<!DOCTYPE html>
       .mobile-bar { display: grid; grid-template-columns: 1fr 1fr 1fr; }
       .search, .header__actions .btn--ghost { display: none; }
       .header { top: 2rem; }
+      body { padding-bottom: 4.5rem; }
     }
     .mobile-bar .btn { justify-content: center; height: 2.75rem; font-size: 0.75rem; width: 100%; }
   </style>
@@ -317,104 +431,152 @@ TEMPLATE = r"""<!DOCTYPE html>
     ⚡ <strong>معاينة تصميمية</strong> — بيانات وأسعار من jawishco.sy، التصميم مقترح
   </div>
 
-  <header class="header">
-    <div class="header__inner">
-      <a href="__SITE__/" class="brand">
-        <img class="brand__logo" src="__LOGO__" alt="جاويش للتجارة">
-      </a>
-      <div class="search">
-        <span class="material-symbols-outlined">search</span>
-        <input type="search" placeholder="ابحث بالكود أو اسم المنتج..." aria-label="بحث">
-      </div>
-      <div class="header__actions">
-        <a href="__SITE__/customer-login.php" class="btn btn--ghost">تسجيل الدخول</a>
-        <a href="__SITE__/store.php" class="btn btn--primary">
-          <span class="material-symbols-outlined" style="font-size:1.1rem">storefront</span>
-          المتجر
+  <div class="page-main">
+    <header class="header">
+      <div class="header__inner">
+        <a href="__SITE__/" class="brand">
+          <img class="brand__logo" src="__LOGO__" alt="__COMPANY_NAME__">
         </a>
-      </div>
-    </div>
-  </header>
-
-  <main class="container">
-    <section class="hero" aria-label="ترحيب">
-      <div class="hero__content">
-        <p class="hero__kicker">
-          <span class="hero__kicker-dot" aria-hidden="true"></span>
-          مرحباً بكم في جاويش للتجارة
-        </p>
-        <h1 class="hero__title">تجربة تسوّق جملة<br>احترافية وسلسة</h1>
-        <p class="hero__lead">تصفّح أحدث المواد بأسعار واضحة، أضف للسلة، وتابع طلبك خطوة بخطوة.</p>
-        <div class="hero__actions">
-          <a href="__SITE__/store.php" class="btn btn--light">
+        <div class="search">
+          <span class="material-symbols-outlined">search</span>
+          <input type="search" placeholder="ابحث بالكود أو اسم المنتج..." aria-label="بحث">
+        </div>
+        <div class="header__actions">
+          <a href="__SITE__/customer-login.php" class="btn btn--ghost">تسجيل الدخول</a>
+          <a href="__SITE__/store.php" class="btn btn--primary">
             <span class="material-symbols-outlined" style="font-size:1.1rem">storefront</span>
-            تصفّح المتجر
-          </a>
-          <a href="__SITE__/register.php" class="btn btn--ghost-light">
-            <span class="material-symbols-outlined" style="font-size:1.1rem">person_add</span>
-            حساب جديد
+            المتجر
           </a>
         </div>
       </div>
-      <div class="hero__visual" aria-hidden="true">
-        <div class="hero__logo-wrap">
-          <img class="hero__logo" src="__LOGO__" alt="">
+    </header>
+
+    <main class="container">
+      <section class="hero" aria-label="ترحيب">
+        <div class="hero__content">
+          <p class="hero__kicker">
+            <span class="hero__kicker-dot" aria-hidden="true"></span>
+            مرحباً بكم في __COMPANY_NAME__
+          </p>
+          <h1 class="hero__title">تجربة تسوّق جملة<br>احترافية وسلسة</h1>
+          <p class="hero__lead">تصفّح أحدث المواد بأسعار واضحة، أضف للسلة، وتابع طلبك خطوة بخطوة.</p>
+          <div class="hero__actions">
+            <a href="__SITE__/store.php" class="btn btn--light">
+              <span class="material-symbols-outlined" style="font-size:1.1rem">storefront</span>
+              تصفّح المتجر
+            </a>
+            <a href="__SITE__/register.php" class="btn btn--ghost-light">
+              <span class="material-symbols-outlined" style="font-size:1.1rem">person_add</span>
+              حساب جديد
+            </a>
+          </div>
         </div>
+        <div class="hero__visual" aria-hidden="true">
+          <div class="hero__showcase">
+            <img src="__HERO_IMAGE__" alt="">
+            <div class="hero__showcase-logo">
+              <img src="__LOGO__" alt="__COMPANY_NAME__">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="section-head"><div><h2>تصفّح حسب الفئة</h2></div></div>
+      <div class="categories">
+      __CATEGORIES__
       </div>
-    </section>
 
-    <div class="section-head">
-      <div><h2>تصفّح حسب الفئة</h2></div>
-    </div>
-    <div class="categories">
-      <a href="__SITE__/store.php" class="cat"><span class="cat__icon">👡</span><span class="cat__label">صندل</span></a>
-      <a href="__SITE__/store.php" class="cat"><span class="cat__icon">🥿</span><span class="cat__label">شحاطة</span></a>
-      <a href="__SITE__/store.php" class="cat"><span class="cat__icon">👢</span><span class="cat__label">بوط</span></a>
-      <a href="__SITE__/store.php" class="cat"><span class="cat__icon">🩴</span><span class="cat__label">خفافة</span></a>
-      <a href="__SITE__/store.php#offers" class="cat"><span class="cat__icon">🔥</span><span class="cat__label">عروض</span></a>
-      <a href="__SITE__/store.php" class="cat"><span class="cat__icon">👞</span><span class="cat__label">رجالي</span></a>
-      <a href="__SITE__/store.php" class="cat"><span class="cat__icon">👠</span><span class="cat__label">نسائي</span></a>
-      <a href="__SITE__/store.php" class="cat"><span class="cat__icon">🧒</span><span class="cat__label">أطفال</span></a>
-    </div>
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <div id="panels"></div>
 
-    <div class="tabs" id="tabs" role="tablist"></div>
-    <div id="panels"></div>
+      <section class="cta" aria-label="ابدأ التسوق">
+        <div>
+          <h2>جاهز لبدء طلبك؟</h2>
+          <p>استكشف المتجر كاملاً أو سجّل حسابك للحصول على أسعار وصلاحيات مخصصة.</p>
+        </div>
+        <div class="cta__actions">
+          <a href="__SITE__/store.php" class="btn btn--white">
+            <span class="material-symbols-outlined" style="font-size:1.1rem">storefront</span>
+            فتح المتجر
+          </a>
+          <a href="__SITE__/about.php" class="btn btn--outline-white">
+            <span class="material-symbols-outlined" style="font-size:1.1rem">groups</span>
+            من نحن
+          </a>
+        </div>
+      </section>
+    </main>
+  </div>
 
-    <section class="cta" aria-label="ابدأ التسوق">
+  <footer class="site-footer">
+    <div class="site-footer__inner">
       <div>
-        <h2>جاهز لبدء طلبك؟</h2>
-        <p>استكشف المتجر كاملاً أو سجّل حسابك للحصول على أسعار وصلاحيات مخصصة.</p>
+        <div class="site-footer-brand">
+          <img class="site-footer-brand__logo" src="__LOGO__" alt="__COMPANY_NAME__">
+          <h2>__COMPANY_NAME__</h2>
+        </div>
+        <p class="site-footer-brand" style="margin-top:0.75rem">__COMPANY_ABOUT__</p>
       </div>
-      <div class="cta__actions">
-        <a href="__SITE__/store.php" class="btn btn--white">
-          <span class="material-symbols-outlined" style="font-size:1.1rem">storefront</span>
-          فتح المتجر
-        </a>
-        <a href="__SITE__/about.php" class="btn btn--outline-white">
-          <span class="material-symbols-outlined" style="font-size:1.1rem">groups</span>
-          من نحن
-        </a>
-      </div>
-    </section>
 
-    <div class="contact">
-      <a href="tel:00963112213299" class="contact__item">
-        <span class="material-symbols-outlined">call</span>
-        <span dir="ltr">00963-11-2213299</span>
-      </a>
-      <a href="tel:00963932997794" class="contact__item">
-        <span class="material-symbols-outlined">smartphone</span>
-        <span dir="ltr">00963932997794</span>
-      </a>
-      <a href="__SITE__/about.php" class="contact__item">
-        <span class="material-symbols-outlined">location_on</span>
-        <span>العنوان — من نحن</span>
-      </a>
+      <div>
+        <h3>روابط سريعة</h3>
+        <div class="site-footer-links">
+          <a href="__SITE__/index.php">الرئيسية</a>
+          <a href="__SITE__/store.php">المتجر</a>
+          <a href="__SITE__/about.php">من نحن</a>
+          <a href="__SITE__/customer-login.php">دخول العملاء</a>
+          <a href="__SITE__/register.php">إنشاء حساب جديد</a>
+        </div>
+      </div>
+
+      <div>
+        <h3>تواصل معنا</h3>
+        <div class="site-footer-contact-item">
+          <span class="site-footer-contact-icon"><span class="material-symbols-outlined">call</span></span>
+          <div>
+            <p class="site-footer-contact-label">الهاتف</p>
+            <a href="tel:00963112213299" class="site-footer-contact-value" dir="ltr">__COMPANY_PHONE__</a>
+          </div>
+        </div>
+        <div class="site-footer-contact-item">
+          <span class="site-footer-contact-icon"><span class="material-symbols-outlined">smartphone</span></span>
+          <div>
+            <p class="site-footer-contact-label">الموبايل</p>
+            <a href="tel:00963932997794" class="site-footer-contact-value" dir="ltr">__COMPANY_MOBILE__</a>
+          </div>
+        </div>
+        <div class="site-footer-contact-item">
+          <span class="site-footer-contact-icon"><span class="material-symbols-outlined">location_on</span></span>
+          <div>
+            <p class="site-footer-contact-label">العنوان</p>
+            <a href="__SITE__/about.php" class="site-footer-contact-value">__COMPANY_ADDRESS__</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="site-footer-shop">
+        <h3>ابدأ التسوق</h3>
+        <p>تصفّح أحدث المواد واطلب مباشرة من المتجر أو عبر حسابك المفعّل.</p>
+        <a href="__SITE__/store.php" class="site-footer-store-btn">
+          <span class="material-symbols-outlined">storefront</span>
+          تصفّح المتجر
+        </a>
+        <a href="https://wa.me/__COMPANY_WHATSAPP__" class="site-footer-whatsapp" target="_blank" rel="noopener">
+          <span class="material-symbols-outlined">chat</span>
+          واتساب
+        </a>
+      </div>
     </div>
-  </main>
+    <div class="site-footer-bottom">
+      <div class="site-footer-bottom__inner">
+        <span>© __YEAR__ __COMPANY_NAME__. جميع الحقوق محفوظة.</span>
+        <a href="__SITE__/about.php">من نحن</a>
+      </div>
+    </div>
+  </footer>
 
   <nav class="mobile-bar" aria-label="إجراءات سريعة">
-    <a href="__SITE__/store.php" class="btn btn--ghost"><span class="material-symbols-outlined">search</span> المتجر</a>
+    <a href="__SITE__/store.php" class="btn btn--ghost"><span class="material-symbols-outlined">storefront</span> المتجر</a>
     <a href="__SITE__/store.php" class="btn btn--primary"><span class="material-symbols-outlined">shopping_cart</span> السلة</a>
     <a href="tel:00963112213299" class="btn btn--ghost"><span class="material-symbols-outlined">call</span> اتصل</a>
   </nav>
@@ -423,28 +585,27 @@ TEMPLATE = r"""<!DOCTYPE html>
     var SECTIONS = __SECTIONS_JSON__;
     var SITE = "__SITE__";
 
-    function fmt(n) {
-      return Number(n).toLocaleString("ar-SY");
-    }
+    function fmt(n) { return Number(n).toLocaleString("ar-SY"); }
 
     function renderCard(p) {
-      var badge = p.hasOffer && p.offerBadge
-        ? '<span class="card__badge">' + p.offerBadge + '</span>' : '';
+      var badge = p.hasOffer && p.offerBadge ? '<span class="card__badge">' + p.offerBadge + '</span>' : '';
       var oldPrice = p.hasOffer && p.originalUnitSp
         ? '<span class="card__price-old">' + fmt(p.originalUnitSp) + ' ل.س</span>' : '';
-      return '<article class="card">' +
-        '<div class="card__media">' + badge +
-          '<img src="' + p.thumb + '" alt="' + p.name.replace(/"/g, "&quot;") + '" loading="lazy" decoding="async">' +
-        '</div>' +
-        '<div class="card__body">' +
-          '<h3 class="card__name">' + p.name + '</h3>' +
-          '<p class="card__code">' + p.code + '</p>' +
-          '<div class="card__price">' +
-            '<div class="card__price-main">' + fmt(p.unitSaleSp) + ' ل.س / زوج' + oldPrice + '</div>' +
-            '<div class="card__price-sub">' + fmt(p.packageSaleSp) + ' ل.س / طرد</div>' +
-          '</div>' +
-          '<button class="card__add" type="button">+ أضف للسلة</button>' +
-        '</div></article>';
+      return '<article class="card"><div class="card__media">' + badge +
+        '<img src="' + p.thumb + '" alt="' + p.name.replace(/"/g, "&quot;") + '" loading="lazy" decoding="async"></div>' +
+        '<div class="card__body"><h3 class="card__name">' + p.name + '</h3><p class="card__code">' + p.code + '</p>' +
+        '<div class="card__price"><div class="card__price-main">' + fmt(p.unitSaleSp) + ' ل.س / زوج' + oldPrice + '</div>' +
+        '<div class="card__price-sub">' + fmt(p.packageSaleSp) + ' ل.س / طرد</div></div>' +
+        '<button class="card__add" type="button">+ أضف للسلة</button></div></article>';
+    }
+
+    function bindStripNav(wrap) {
+      var strip = wrap.querySelector(".strip");
+      var prev = wrap.querySelector(".strip-nav--prev");
+      var next = wrap.querySelector(".strip-nav--next");
+      if (!strip || !prev || !next) return;
+      prev.addEventListener("click", function () { strip.scrollBy({ left: 220, behavior: "smooth" }); });
+      next.addEventListener("click", function () { strip.scrollBy({ left: -220, behavior: "smooth" }); });
     }
 
     function render() {
@@ -454,7 +615,6 @@ TEMPLATE = r"""<!DOCTYPE html>
         var tab = document.createElement("button");
         tab.type = "button";
         tab.className = "tab" + (i === 0 ? " is-active" : "");
-        tab.setAttribute("data-tab", section.id);
         tab.setAttribute("role", "tab");
         tab.textContent = section.tab;
         tab.addEventListener("click", function () {
@@ -467,17 +627,18 @@ TEMPLATE = r"""<!DOCTYPE html>
 
         var panel = document.createElement("div");
         panel.id = "panel-" + section.id;
-        panel.className = "tab-panel" + (i === 0 ? " is-active" : "");
-        var subtitle = section.subtitle
-          ? '<p>' + section.subtitle + '</p>' : '';
+        panel.className = "tab-panel" + (i === 0 ? " is-active" : "") + (section.id === "offers" ? " tab-panel--offer" : "");
+        var subtitle = section.subtitle ? '<p>' + section.subtitle + '</p>' : '';
         var cards = section.products.map(renderCard).join("");
         panel.innerHTML =
-          '<div class="section-head">' +
-            '<div><h2>' + section.title + '</h2>' + subtitle + '</div>' +
-            '<a href="' + SITE + '/store.php#' + section.id + '">عرض المزيد <span class="material-symbols-outlined" style="font-size:1rem">arrow_back</span></a>' +
-          '</div>' +
-          '<div class="strip">' + cards + '</div>';
+          '<div class="section-head"><div><h2>' + section.title + '</h2>' + subtitle + '</div>' +
+          '<a href="' + SITE + '/store.php#' + section.id + '">عرض المزيد <span class="material-symbols-outlined" style="font-size:1rem">arrow_back</span></a></div>' +
+          '<div class="strip-wrap">' +
+          '<button type="button" class="strip-nav strip-nav--prev" aria-label="السابق"><span class="material-symbols-outlined">chevron_right</span></button>' +
+          '<button type="button" class="strip-nav strip-nav--next" aria-label="التالي"><span class="material-symbols-outlined">chevron_left</span></button>' +
+          '<div class="strip">' + cards + '</div></div>';
         panels.appendChild(panel);
+        bindStripNav(panel.querySelector(".strip-wrap"));
       });
     }
 
