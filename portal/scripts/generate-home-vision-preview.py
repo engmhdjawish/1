@@ -241,12 +241,18 @@ TEMPLATE = r"""<!DOCTYPE html>
       box-shadow: 0 0 0 4px rgba(255,255,255,0.2);
     }
     .hero__title { margin: 0; font-size: clamp(1.5rem, 4.5vw, 2.35rem); font-weight: 800; line-height: 1.3; }
+    .hero__title-line { display: block; }
+    @media (min-width: 640px) {
+      .hero__title-line { display: inline; }
+      .hero__title-line + .hero__title-line::before { content: " "; }
+    }
     .hero__lead { margin: 0.75rem 0 0; max-width: 36rem; font-size: 0.875rem; line-height: 1.65; opacity: 0.94; }
     .hero__actions { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.15rem; }
     .hero__visual {
-      display: flex; align-items: center; justify-content: center;
+      display: none; align-items: center; justify-content: center;
       padding: 1.25rem; position: relative; min-height: 11rem;
     }
+    @media (min-width: 768px) { .hero__visual { display: flex; } }
     .hero__showcase {
       position: relative; width: min(100%, 15rem); aspect-ratio: 1;
       background: rgba(255,255,255,0.95); border-radius: 1.25rem;
@@ -259,6 +265,53 @@ TEMPLATE = r"""<!DOCTYPE html>
       padding: 0.35rem; box-shadow: 0 8px 20px rgba(0,0,0,0.15);
     }
     .hero__showcase-logo img { width: 100%; height: 100%; object-fit: contain; }
+
+    /* Mobile: compact strip — logo already in header, skip heavy visual */
+    @media (max-width: 767px) {
+      .hero {
+        margin-top: 0.65rem;
+        border-radius: 1rem;
+        box-shadow: 0 8px 22px rgba(216,25,33,0.16);
+      }
+      .hero__content { padding: 0.85rem 0.9rem 0.95rem; }
+      .hero__kicker { display: none; }
+      .hero__title {
+        font-size: 1.05rem;
+        line-height: 1.45;
+      }
+      .hero__title-line { display: inline; }
+      .hero__title-line + .hero__title-line::before { content: " "; }
+      .hero__lead {
+        margin-top: 0.35rem;
+        font-size: 0.75rem;
+        line-height: 1.55;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        opacity: 0.92;
+      }
+      .hero__actions {
+        margin-top: 0.65rem;
+        gap: 0.45rem;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+      .hero__actions .btn {
+        justify-content: center;
+        height: 2.25rem;
+        padding: 0 0.55rem;
+        font-size: 0.75rem;
+        min-width: 0;
+      }
+      .hero__actions .btn .material-symbols-outlined { font-size: 1rem !important; }
+      .section-head { margin-top: 1rem; }
+      .categories { gap: 0.45rem; }
+      .cat { padding: 0.65rem 0.25rem; }
+      .cat__icon { width: 2.35rem; height: 2.35rem; }
+      .cat__icon .material-symbols-outlined { font-size: 1.15rem; }
+      .cat__label { font-size: 0.6875rem; }
+    }
     .section-head {
       display: flex; align-items: flex-start; justify-content: space-between;
       gap: 0.75rem; margin: 1.5rem 0 0.75rem;
@@ -422,6 +475,9 @@ TEMPLATE = r"""<!DOCTYPE html>
       .search, .header__actions .btn--ghost { display: none; }
       .header { top: 2rem; }
       body { padding-bottom: 4.5rem; }
+      .brand__logo { height: 2.45rem; max-width: 6.5rem; }
+      .header__inner { padding: 0.5rem 0.85rem; min-height: 3rem; }
+      .header__actions .btn--primary { height: 2.25rem; padding: 0 0.75rem; font-size: 0.8125rem; }
     }
     .mobile-bar .btn { justify-content: center; height: 2.75rem; font-size: 0.75rem; width: 100%; }
   </style>
@@ -458,7 +514,10 @@ TEMPLATE = r"""<!DOCTYPE html>
             <span class="hero__kicker-dot" aria-hidden="true"></span>
             مرحباً بكم في __COMPANY_NAME__
           </p>
-          <h1 class="hero__title">تجربة تسوّق جملة<br>احترافية وسلسة</h1>
+          <h1 class="hero__title">
+            <span class="hero__title-line">تجربة تسوّق جملة</span>
+            <span class="hero__title-line">احترافية وسلسة</span>
+          </h1>
           <p class="hero__lead">تصفّح أحدث المواد بأسعار واضحة، أضف للسلة، وتابع طلبك خطوة بخطوة.</p>
           <div class="hero__actions">
             <a href="__SITE__/store.php" class="btn btn--light">
