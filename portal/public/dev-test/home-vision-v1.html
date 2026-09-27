@@ -19,9 +19,7 @@
       --radius: 1rem;
       --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
     }
-
     * { box-sizing: border-box; }
-
     body {
       margin: 0;
       font-family: "IBM Plex Sans Arabic", system-ui, sans-serif;
@@ -29,585 +27,229 @@
       color: var(--ink);
       line-height: 1.5;
     }
-
     .preview-banner {
-      position: sticky;
-      top: 0;
-      z-index: 100;
+      position: sticky; top: 0; z-index: 100;
       background: linear-gradient(90deg, #1e293b, #334155);
-      color: #fff;
-      text-align: center;
-      padding: 0.55rem 1rem;
-      font-size: 0.8125rem;
-      font-weight: 600;
+      color: #fff; text-align: center;
+      padding: 0.55rem 1rem; font-size: 0.8125rem; font-weight: 600;
     }
-
     .preview-banner strong { color: #fca5a5; }
-
-    .container {
-      max-width: 72rem;
-      margin: 0 auto;
-      padding: 0 1rem 5rem;
-    }
-
-    /* Header */
+    .container { max-width: 72rem; margin: 0 auto; padding: 0 1rem 5rem; }
     .header {
-      position: sticky;
-      top: 2rem;
-      z-index: 50;
+      position: sticky; top: 2rem; z-index: 50;
       background: rgba(255,255,255,0.94);
       backdrop-filter: blur(10px);
       border-bottom: 1px solid rgba(15,23,42,0.08);
       box-shadow: 0 4px 16px rgba(15,23,42,0.04);
     }
-
     .header__inner {
-      max-width: 72rem;
-      margin: 0 auto;
-      padding: 0.65rem 1rem;
-      display: flex;
-      align-items: center;
-      gap: 1rem;
+      max-width: 72rem; margin: 0 auto; padding: 0.65rem 1rem;
+      display: flex; align-items: center; gap: 0.75rem;
     }
-
     .brand {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      text-decoration: none;
-      color: var(--ink);
-      flex-shrink: 0;
+      display: inline-flex; align-items: center; text-decoration: none;
+      flex-shrink: 0; min-width: 0;
     }
-
-    .brand__mark {
-      width: 2.5rem;
-      height: 2.5rem;
-      border-radius: 0.65rem;
-      background: linear-gradient(135deg, var(--accent-dark), var(--accent));
-      color: #fff;
-      display: grid;
-      place-items: center;
-      font-weight: 800;
-      font-size: 1.1rem;
+    .brand__logo {
+      display: block; height: 3rem; width: auto;
+      max-width: 7.5rem; object-fit: contain;
+      filter: drop-shadow(0 1px 3px rgba(15,23,42,0.12));
     }
-
-    .brand__name {
-      font-weight: 800;
-      font-size: 1rem;
-    }
-
+    @media (min-width: 640px) { .brand__logo { height: 3.35rem; max-width: 8.5rem; } }
     .search {
-      flex: 1;
-      max-width: 28rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 9999px;
-      padding: 0.45rem 1rem;
+      flex: 1; max-width: 28rem; display: flex; align-items: center; gap: 0.5rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 9999px; padding: 0.45rem 1rem;
     }
-
-    .search input {
-      flex: 1;
-      border: none;
-      background: transparent;
-      font: inherit;
-      outline: none;
-      min-width: 0;
-    }
-
+    .search input { flex: 1; border: none; background: transparent; font: inherit; outline: none; min-width: 0; }
     .search .material-symbols-outlined { color: var(--muted); font-size: 1.25rem; }
-
-    .header__actions {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
+    .header__actions { display: flex; align-items: center; gap: 0.5rem; margin-inline-start: auto; }
     .icon-btn {
-      width: 2.5rem;
-      height: 2.5rem;
-      border-radius: 0.75rem;
-      border: 1px solid var(--border);
-      background: #fff;
-      display: grid;
-      place-items: center;
-      cursor: pointer;
-      position: relative;
+      width: 2.5rem; height: 2.5rem; border-radius: 0.75rem;
+      border: 1px solid var(--border); background: #fff;
+      display: grid; place-items: center; cursor: pointer;
     }
-
-    .icon-btn .badge {
-      position: absolute;
-      top: -4px;
-      left: -4px;
-      background: var(--accent);
-      color: #fff;
-      font-size: 0.65rem;
-      font-weight: 800;
-      min-width: 1.1rem;
-      height: 1.1rem;
-      border-radius: 9999px;
-      display: grid;
-      place-items: center;
-    }
-
     .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      height: 2.5rem;
-      padding: 0 1rem;
-      border-radius: 0.75rem;
-      font: inherit;
-      font-weight: 700;
-      font-size: 0.875rem;
-      text-decoration: none;
-      border: none;
-      cursor: pointer;
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      height: 2.5rem; padding: 0 1rem; border-radius: 0.75rem;
+      font: inherit; font-weight: 700; font-size: 0.875rem;
+      text-decoration: none; border: none; cursor: pointer;
       transition: transform 0.15s, box-shadow 0.15s;
     }
-
     .btn:hover { transform: translateY(-1px); }
-
     .btn--primary {
       background: linear-gradient(135deg, var(--accent-dark), var(--accent));
-      color: #fff;
-      box-shadow: 0 6px 16px rgba(216,25,33,0.25);
+      color: #fff; box-shadow: 0 6px 16px rgba(216,25,33,0.25);
     }
-
-    .btn--ghost {
-      background: #fff;
-      border: 1px solid var(--border);
-      color: var(--ink);
-    }
-
-    /* Hero compact */
+    .btn--ghost { background: #fff; border: 1px solid var(--border); color: var(--ink); }
+    .btn--light { background: #fff; color: var(--accent); box-shadow: 0 8px 20px rgba(15,23,42,0.12); }
+    .btn--ghost-light { border: 1px solid rgba(255,255,255,0.45); color: #fff; background: rgba(255,255,255,0.08); }
     .hero {
-      margin-top: 1.25rem;
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 1rem;
-      border-radius: 1.25rem;
-      overflow: hidden;
-      background: linear-gradient(135deg, #fff 0%, #fef2f2 100%);
-      border: 1px solid #fecaca;
-      box-shadow: var(--shadow);
+      margin-top: 1.25rem; border-radius: 1.75rem; overflow: hidden;
+      color: #fff;
+      background:
+        radial-gradient(circle at 88% 18%, rgba(255,255,255,0.14), transparent 38%),
+        radial-gradient(circle at 12% 88%, rgba(0,0,0,0.16), transparent 42%),
+        linear-gradient(135deg, #9f1218 0%, #D81921 42%, #ef4444 100%);
+      box-shadow: 0 20px 50px rgba(216,25,33,0.22);
+      display: grid; grid-template-columns: 1fr; gap: 0;
     }
-
-    @media (min-width: 768px) {
-      .hero {
-        grid-template-columns: 1.1fr 0.9fr;
-        min-height: 16rem;
-      }
+    @media (min-width: 768px) { .hero { grid-template-columns: 1.15fr 0.85fr; min-height: 15rem; } }
+    .hero__content { padding: 1.5rem 1.25rem; display: flex; flex-direction: column; justify-content: center; }
+    @media (min-width: 768px) { .hero__content { padding: 2rem 1.75rem; } }
+    .hero__kicker {
+      display: inline-flex; align-items: center; gap: 0.45rem;
+      margin: 0 0 0.65rem; font-size: 0.8125rem; font-weight: 800; opacity: 0.95;
     }
-
-    .hero__content {
-      padding: 1.5rem;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
+    .hero__kicker-dot {
+      width: 0.5rem; height: 0.5rem; border-radius: 9999px; background: #fff;
+      box-shadow: 0 0 0 4px rgba(255,255,255,0.2);
     }
-
-    .hero__tag {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      background: rgba(216,25,33,0.1);
-      color: var(--accent);
-      font-size: 0.75rem;
-      font-weight: 800;
-      padding: 0.25rem 0.65rem;
-      border-radius: 9999px;
-      width: fit-content;
-      margin-bottom: 0.65rem;
-    }
-
     .hero__title {
-      margin: 0;
-      font-size: clamp(1.35rem, 3.5vw, 2rem);
-      font-weight: 800;
-      line-height: 1.35;
+      margin: 0; font-size: clamp(1.5rem, 4.5vw, 2.35rem);
+      font-weight: 800; line-height: 1.3;
     }
-
     .hero__lead {
-      margin: 0.65rem 0 0;
-      color: var(--muted);
-      font-size: 0.9rem;
-      max-width: 28rem;
+      margin: 0.75rem 0 0; max-width: 36rem;
+      font-size: 0.875rem; line-height: 1.65; opacity: 0.94;
     }
-
-    .hero__actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-top: 1rem;
-    }
-
+    .hero__actions { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.15rem; }
     .hero__visual {
-      position: relative;
-      min-height: 12rem;
-      background: linear-gradient(160deg, var(--accent-dark), var(--accent));
-      display: flex;
-      align-items: flex-end;
-      justify-content: center;
-      overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      padding: 1.25rem; position: relative; min-height: 10rem;
     }
-
-    .hero__visual img {
-      width: 85%;
-      max-height: 14rem;
-      object-fit: contain;
-      filter: drop-shadow(0 20px 30px rgba(0,0,0,0.25));
-      transform: translateY(1rem);
+    .hero__logo-wrap {
+      display: flex; align-items: center; justify-content: center;
+      width: min(100%, 14rem); aspect-ratio: 1;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.22);
+      border-radius: 1.25rem; padding: 1rem;
+      backdrop-filter: blur(6px);
     }
-
-    .hero__visual::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(circle at 70% 30%, rgba(255,255,255,0.15), transparent 50%);
-    }
-
-    /* Trust bar */
-    .trust {
-      margin-top: 1rem;
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 0.65rem;
-    }
-
-    @media (min-width: 640px) {
-      .trust { grid-template-columns: repeat(4, 1fr); }
-    }
-
-    .trust__item {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.75rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      font-size: 0.8125rem;
-      font-weight: 700;
-    }
-
-    .trust__item .material-symbols-outlined {
-      color: var(--accent);
-      font-size: 1.35rem;
-    }
-
-    /* Categories */
+    .hero__logo { width: 100%; height: auto; max-height: 7rem; object-fit: contain; filter: drop-shadow(0 8px 20px rgba(0,0,0,0.2)); }
     .section-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin: 1.75rem 0 0.85rem;
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 0.75rem; margin: 1.5rem 0 0.75rem;
     }
-
-    .section-head h2 {
-      margin: 0;
-      font-size: 1.125rem;
-      font-weight: 800;
-    }
-
+    .section-head h2 { margin: 0; font-size: 1.125rem; font-weight: 800; }
+    .section-head p { margin: 0.25rem 0 0; font-size: 0.8125rem; color: var(--muted); }
     .section-head a {
-      color: var(--accent);
-      font-size: 0.8125rem;
-      font-weight: 700;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.2rem;
+      color: var(--accent); font-size: 0.8125rem; font-weight: 700;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 0.2rem; flex-shrink: 0;
     }
-
     .categories {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 0.65rem;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.65rem;
     }
-
-    @media (max-width: 639px) {
-      .categories { grid-template-columns: repeat(4, 1fr); gap: 0.45rem; }
-    }
-
     .cat {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.35rem;
-      padding: 0.85rem 0.35rem;
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      text-decoration: none;
-      color: var(--ink);
+      display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
+      padding: 0.85rem 0.35rem; background: #fff; border: 1px solid var(--border);
+      border-radius: var(--radius); text-decoration: none; color: var(--ink);
       transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
     }
-
-    .cat:hover {
-      border-color: #fecaca;
-      box-shadow: 0 6px 18px rgba(216,25,33,0.1);
-      transform: translateY(-2px);
-    }
-
+    .cat:hover { border-color: #fecaca; box-shadow: 0 6px 18px rgba(216,25,33,0.1); transform: translateY(-2px); }
     .cat__icon {
-      width: 2.75rem;
-      height: 2.75rem;
-      border-radius: 0.75rem;
-      background: #fef2f2;
-      display: grid;
-      place-items: center;
-      font-size: 1.35rem;
+      width: 2.75rem; height: 2.75rem; border-radius: 0.75rem; background: #fef2f2;
+      display: grid; place-items: center; font-size: 1.35rem;
     }
-
-    .cat__label {
-      font-size: 0.75rem;
-      font-weight: 700;
-      text-align: center;
-    }
-
-    /* Tabs */
+    .cat__label { font-size: 0.75rem; font-weight: 700; text-align: center; }
     .tabs {
-      display: flex;
-      gap: 0.4rem;
-      overflow-x: auto;
-      padding: 0.35rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 9999px;
-      margin-top: 1.5rem;
-      scrollbar-width: none;
+      display: flex; gap: 0.4rem; overflow-x: auto; padding: 0.35rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 9999px; margin-top: 1.25rem; scrollbar-width: none;
     }
-
     .tabs::-webkit-scrollbar { display: none; }
-
     .tab {
-      flex-shrink: 0;
-      height: 2.25rem;
-      padding: 0 1rem;
-      border: none;
-      border-radius: 9999px;
-      background: transparent;
-      font: inherit;
-      font-size: 0.8125rem;
-      font-weight: 700;
-      color: var(--muted);
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s;
+      flex-shrink: 0; height: 2.25rem; padding: 0 0.9rem;
+      border: none; border-radius: 9999px; background: transparent;
+      font: inherit; font-size: 0.78rem; font-weight: 700; color: var(--muted); cursor: pointer;
     }
-
-    .tab.is-active {
-      background: var(--accent);
-      color: #fff;
-      box-shadow: 0 4px 12px rgba(216,25,33,0.25);
-    }
-
-    /* Product strip */
-    .strip {
-      display: flex;
-      gap: 0.75rem;
-      overflow-x: auto;
-      padding: 0.25rem 0 0.75rem;
-      scroll-snap-type: x mandatory;
-      scrollbar-width: thin;
-      scrollbar-color: var(--accent) #f3f4f6;
-    }
-
-    .card {
-      flex: 0 0 9.5rem;
-      scroll-snap-align: start;
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      transition: box-shadow 0.15s, transform 0.15s;
-    }
-
-    @media (min-width: 640px) {
-      .card { flex-basis: 11rem; }
-    }
-
-    .card:hover {
-      box-shadow: var(--shadow);
-      transform: translateY(-2px);
-    }
-
-    .card__media {
-      position: relative;
-      aspect-ratio: 1;
-      background: #f3f4f6;
-      overflow: hidden;
-    }
-
-    .card__media img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .card__badge {
-      position: absolute;
-      top: 0.4rem;
-      right: 0.4rem;
-      background: var(--accent);
-      color: #fff;
-      font-size: 0.6875rem;
-      font-weight: 800;
-      padding: 0.15rem 0.45rem;
-      border-radius: 9999px;
-    }
-
-    .card__body {
-      padding: 0.65rem;
-    }
-
-    .card__name {
-      margin: 0;
-      font-size: 0.75rem;
-      font-weight: 700;
-      line-height: 1.4;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      min-height: 2.1rem;
-    }
-
-    .card__code {
-      margin: 0.25rem 0 0;
-      font-size: 0.6875rem;
-      color: var(--muted);
-      font-weight: 600;
-    }
-
-    .card__price {
-      margin-top: 0.45rem;
-    }
-
-    .card__price-main {
-      font-size: 0.875rem;
-      font-weight: 800;
-      color: var(--accent);
-    }
-
-    .card__price-sub {
-      font-size: 0.6875rem;
-      color: var(--muted);
-      margin-top: 0.1rem;
-    }
-
-    .card__add {
-      width: 100%;
-      margin-top: 0.5rem;
-      height: 2rem;
-      border: none;
-      border-radius: 0.5rem;
-      background: #fef2f2;
-      color: var(--accent);
-      font: inherit;
-      font-size: 0.75rem;
-      font-weight: 800;
-      cursor: pointer;
-    }
-
-    .card__add:hover { background: #fee2e2; }
-
-    /* CTA */
-    .cta {
-      margin-top: 2rem;
-      padding: 1.5rem;
-      border-radius: 1.25rem;
-      background: linear-gradient(135deg, var(--accent-dark), var(--accent));
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-      align-items: flex-start;
-    }
-
-    @media (min-width: 640px) {
-      .cta {
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-      }
-    }
-
-    .cta h2 { margin: 0; font-size: 1.25rem; }
-    .cta p { margin: 0.35rem 0 0; opacity: 0.9; font-size: 0.875rem; }
-
-    .cta__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-
-    .btn--white {
-      background: #fff;
-      color: var(--accent);
-    }
-
-    .btn--outline-white {
-      background: transparent;
-      border: 1px solid rgba(255,255,255,0.4);
-      color: #fff;
-    }
-
-    /* Mobile sticky */
-    .mobile-bar {
-      display: none;
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      z-index: 60;
-      background: rgba(255,255,255,0.96);
-      backdrop-filter: blur(10px);
-      border-top: 1px solid var(--border);
-      padding: 0.5rem 1rem calc(0.5rem + env(safe-area-inset-bottom));
-      gap: 0.5rem;
-    }
-
-    @media (max-width: 767px) {
-      .mobile-bar { display: grid; grid-template-columns: 1fr 1fr 1fr; }
-      .search { display: none; }
-      .header__actions .btn--ghost { display: none; }
-    }
-
-    .mobile-bar .btn {
-      justify-content: center;
-      height: 2.75rem;
-      font-size: 0.75rem;
-    }
-
+    .tab.is-active { background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(216,25,33,0.25); }
     .tab-panel { display: none; }
     .tab-panel.is-active { display: block; }
-
+    .strip {
+      display: flex; gap: 0.75rem; overflow-x: auto; padding: 0.25rem 0 0.75rem;
+      scroll-snap-type: x mandatory; scrollbar-width: thin; scrollbar-color: var(--accent) #f3f4f6;
+    }
+    .card {
+      flex: 0 0 9.5rem; scroll-snap-align: start;
+      background: #fff; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+    }
+    @media (min-width: 640px) { .card { flex-basis: 11rem; } }
+    .card__media { position: relative; aspect-ratio: 1; background: #f3f4f6; overflow: hidden; }
+    .card__media img { width: 100%; height: 100%; object-fit: contain; padding: 0.35rem; }
+    .card__badge {
+      position: absolute; top: 0.4rem; right: 0.4rem;
+      background: var(--accent); color: #fff; font-size: 0.6875rem; font-weight: 800;
+      padding: 0.15rem 0.45rem; border-radius: 9999px;
+    }
+    .card__body { padding: 0.65rem; }
+    .card__name {
+      margin: 0; font-size: 0.75rem; font-weight: 700; line-height: 1.4;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.1rem;
+    }
+    .card__code { margin: 0.25rem 0 0; font-size: 0.6875rem; color: var(--muted); font-weight: 600; }
+    .card__price { margin-top: 0.45rem; }
+    .card__price-main { font-size: 0.875rem; font-weight: 800; color: var(--accent); }
+    .card__price-old { font-size: 0.6875rem; color: var(--muted); text-decoration: line-through; margin-inline-start: 0.35rem; }
+    .card__price-sub { font-size: 0.6875rem; color: var(--muted); margin-top: 0.1rem; }
+    .card__add {
+      width: 100%; margin-top: 0.5rem; height: 2rem; border: none; border-radius: 0.5rem;
+      background: #fef2f2; color: var(--accent); font: inherit; font-size: 0.75rem; font-weight: 800; cursor: pointer;
+    }
+    .cta {
+      margin-top: 2rem; padding: 1.5rem; border-radius: 1.25rem;
+      background: linear-gradient(135deg, var(--accent-dark), var(--accent)); color: #fff;
+      display: flex; flex-direction: column; gap: 1rem; align-items: flex-start;
+    }
+    @media (min-width: 640px) {
+      .cta { flex-direction: row; align-items: center; justify-content: space-between; }
+    }
+    .cta h2 { margin: 0; font-size: 1.25rem; }
+    .cta p { margin: 0.35rem 0 0; opacity: 0.9; font-size: 0.875rem; }
+    .cta__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .btn--white { background: #fff; color: var(--accent); }
+    .btn--outline-white { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: #fff; }
+    .contact {
+      margin-top: 1.25rem; display: grid; grid-template-columns: 1fr; gap: 0.65rem;
+    }
+    @media (min-width: 640px) { .contact { grid-template-columns: repeat(3, 1fr); } }
+    .contact__item {
+      display: flex; align-items: center; gap: 0.65rem; padding: 0.85rem 1rem;
+      border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+      text-decoration: none; color: var(--ink); font-size: 0.8125rem; font-weight: 700;
+    }
+    .contact__item .material-symbols-outlined { color: var(--accent); }
+    .mobile-bar {
+      display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 60;
+      background: rgba(255,255,255,0.96); backdrop-filter: blur(10px);
+      border-top: 1px solid var(--border);
+      padding: 0.5rem 1rem calc(0.5rem + env(safe-area-inset-bottom)); gap: 0.5rem;
+    }
     @media (max-width: 767px) {
+      .mobile-bar { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+      .search, .header__actions .btn--ghost { display: none; }
       .header { top: 2rem; }
     }
+    .mobile-bar .btn { justify-content: center; height: 2.75rem; font-size: 0.75rem; width: 100%; }
   </style>
 </head>
 <body>
   <div class="preview-banner">
-    ⚡ <strong>معاينة تصميمية</strong> — هذا نموذج مقترح للصفحة الرئيسية، وليس الموقع الحي
+    ⚡ <strong>معاينة تصميمية</strong> — بيانات وأسعار من jawishco.sy، التصميم مقترح
   </div>
 
   <header class="header">
     <div class="header__inner">
-      <a href="#" class="brand">
-        <span class="brand__mark">ج</span>
-        <span class="brand__name">جاويش للتجارة</span>
+      <a href="https://www.jawishco.sy/" class="brand">
+        <img class="brand__logo" src="https://www.jawishco.sy/media/site.php?id=5007abc6-259f-46ab-8409-383e3331646f" alt="جاويش للتجارة">
       </a>
       <div class="search">
         <span class="material-symbols-outlined">search</span>
-        <input type="search" placeholder="ابحث بالكود أو اسم المنتج...">
+        <input type="search" placeholder="ابحث بالكود أو اسم المنتج..." aria-label="بحث">
       </div>
       <div class="header__actions">
-        <button class="icon-btn" aria-label="السلة">
-          <span class="material-symbols-outlined">shopping_cart</span>
-          <span class="badge">3</span>
-        </button>
-        <a href="#" class="btn btn--ghost">تسجيل الدخول</a>
-        <a href="#" class="btn btn--primary">
+        <a href="https://www.jawishco.sy/customer-login.php" class="btn btn--ghost">تسجيل الدخول</a>
+        <a href="https://www.jawishco.sy/store.php" class="btn btn--primary">
           <span class="material-symbols-outlined" style="font-size:1.1rem">storefront</span>
           المتجر
         </a>
@@ -616,275 +258,151 @@
   </header>
 
   <main class="container">
-    <section class="hero">
+    <section class="hero" aria-label="ترحيب">
       <div class="hero__content">
-        <span class="hero__tag">
-          <span class="material-symbols-outlined" style="font-size:1rem">ac_unit</span>
-          تشكيلة شتوية 2026
-        </span>
-        <h1 class="hero__title">جملة أحذية بأسعار واضحة<br>وطلب سريع من الجوال</h1>
-        <p class="hero__lead">تصفّح بالفئة، شاهد سعر الزوج والطرد مباشرة، وأضف للسلة بدون تعقيد.</p>
+        <p class="hero__kicker">
+          <span class="hero__kicker-dot" aria-hidden="true"></span>
+          مرحباً بكم في جاويش للتجارة
+        </p>
+        <h1 class="hero__title">تجربة تسوّق جملة<br>احترافية وسلسة</h1>
+        <p class="hero__lead">تصفّح أحدث المواد بأسعار واضحة، أضف للسلة، وتابع طلبك خطوة بخطوة.</p>
         <div class="hero__actions">
-          <a href="#" class="btn btn--primary">
-            <span class="material-symbols-outlined" style="font-size:1.1rem">local_fire_department</span>
-            العروض الخاصة
+          <a href="https://www.jawishco.sy/store.php" class="btn btn--light">
+            <span class="material-symbols-outlined" style="font-size:1.1rem">storefront</span>
+            تصفّح المتجر
           </a>
-          <a href="#" class="btn btn--ghost">تصفّح الكatalog</a>
+          <a href="https://www.jawishco.sy/register.php" class="btn btn--ghost-light">
+            <span class="material-symbols-outlined" style="font-size:1.1rem">person_add</span>
+            حساب جديد
+          </a>
         </div>
       </div>
-      <div class="hero__visual">
-        <img src="https://images.unsplash.com/photo-1608256246200-53e635b5b65f?w=600&q=80" alt="بوط شتوي">
+      <div class="hero__visual" aria-hidden="true">
+        <div class="hero__logo-wrap">
+          <img class="hero__logo" src="https://www.jawishco.sy/media/site.php?id=5007abc6-259f-46ab-8409-383e3331646f" alt="">
+        </div>
       </div>
     </section>
-
-    <div class="trust">
-      <div class="trust__item">
-        <span class="material-symbols-outlined">verified</span>
-        +20 سنة خبرة
-      </div>
-      <div class="trust__item">
-        <span class="material-symbols-outlined">groups</span>
-        +500 تاجر
-      </div>
-      <div class="trust__item">
-        <span class="material-symbols-outlined">local_shipping</span>
-        توصيل سوريا
-      </div>
-      <div class="trust__item">
-        <span class="material-symbols-outlined">payments</span>
-        أسعار جملة
-      </div>
-    </div>
 
     <div class="section-head">
-      <h2>تصفّح حسب الفئة</h2>
+      <div><h2>تصفّح حسب الفئة</h2></div>
     </div>
     <div class="categories">
-      <a href="#" class="cat"><span class="cat__icon">👡</span><span class="cat__label">صندل</span></a>
-      <a href="#" class="cat"><span class="cat__icon">🥿</span><span class="cat__label">شحاطة</span></a>
-      <a href="#" class="cat"><span class="cat__icon">👢</span><span class="cat__label">بوط</span></a>
-      <a href="#" class="cat"><span class="cat__icon">🩴</span><span class="cat__label">خفافة</span></a>
-      <a href="#" class="cat"><span class="cat__icon">👞</span><span class="cat__label">رجالي</span></a>
-      <a href="#" class="cat"><span class="cat__icon">👠</span><span class="cat__label">نسائي</span></a>
-      <a href="#" class="cat"><span class="cat__icon">🧒</span><span class="cat__label">ولادي</span></a>
-      <a href="#" class="cat"><span class="cat__icon">🔥</span><span class="cat__label">عروض</span></a>
+      <a href="https://www.jawishco.sy/store.php" class="cat"><span class="cat__icon">👡</span><span class="cat__label">صندل</span></a>
+      <a href="https://www.jawishco.sy/store.php" class="cat"><span class="cat__icon">🥿</span><span class="cat__label">شحاطة</span></a>
+      <a href="https://www.jawishco.sy/store.php" class="cat"><span class="cat__icon">👢</span><span class="cat__label">بوط</span></a>
+      <a href="https://www.jawishco.sy/store.php" class="cat"><span class="cat__icon">🩴</span><span class="cat__label">خفافة</span></a>
+      <a href="https://www.jawishco.sy/store.php#offers" class="cat"><span class="cat__icon">🔥</span><span class="cat__label">عروض</span></a>
+      <a href="https://www.jawishco.sy/store.php" class="cat"><span class="cat__icon">👞</span><span class="cat__label">رجالي</span></a>
+      <a href="https://www.jawishco.sy/store.php" class="cat"><span class="cat__icon">👠</span><span class="cat__label">نسائي</span></a>
+      <a href="https://www.jawishco.sy/store.php" class="cat"><span class="cat__icon">🧒</span><span class="cat__label">أطفال</span></a>
     </div>
 
-    <div class="tabs" role="tablist">
-      <button class="tab is-active" data-tab="offers" role="tab">🔥 عروض</button>
-      <button class="tab" data-tab="winter" role="tab">❄️ شتوي</button>
-      <button class="tab" data-tab="china" role="tab">🇨🇳 صيني</button>
-      <button class="tab" data-tab="local" role="tab">🇸🇾 وطني</button>
-    </div>
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <div id="panels"></div>
 
-    <div id="panel-offers" class="tab-panel is-active">
-      <div class="section-head">
-        <h2>تخفيضات خاصة — حتى 20%</h2>
-        <a href="#">عرض الكل <span class="material-symbols-outlined" style="font-size:1rem">arrow_back</span></a>
-      </div>
-      <div class="strip">
-        <article class="card">
-          <div class="card__media">
-            <span class="card__badge">-20%</span>
-            <img src="https://images.unsplash.com/photo-1543163521-1bf539c55dd1?w=400&q=80" alt="">
-          </div>
-          <div class="card__body">
-            <h3 class="card__name">صندل بناتي MCQG58813</h3>
-            <p class="card__code">MCQG58813</p>
-            <div class="card__price">
-              <div class="card__price-main">636 ل.س / زوج</div>
-              <div class="card__price-sub">11,448 ل.س / طرد</div>
-            </div>
-            <button class="card__add">+ أضف للسلة</button>
-          </div>
-        </article>
-        <article class="card">
-          <div class="card__media">
-            <span class="card__badge">-20%</span>
-            <img src="https://images.unsplash.com/photo-1560769629-975ec14daa06?w=400&q=80" alt="">
-          </div>
-          <div class="card__body">
-            <h3 class="card__name">خفافة نسواني 002 خيش</h3>
-            <p class="card__code">002-OZON</p>
-            <div class="card__price">
-              <div class="card__price-main">472 ل.س / زوج</div>
-              <div class="card__price-sub">3,776 ل.س / طرد</div>
-            </div>
-            <button class="card__add">+ أضف للسلة</button>
-          </div>
-        </article>
-        <article class="card">
-          <div class="card__media">
-            <span class="card__badge">-20%</span>
-            <img src="https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=400&q=80" alt="">
-          </div>
-          <div class="card__body">
-            <h3 class="card__name">صندل رجالي RQSM91271</h3>
-            <p class="card__code">RQSM91271</p>
-            <div class="card__price">
-              <div class="card__price-main">1,092 ل.س / زوج</div>
-              <div class="card__price-sub">16,380 ل.س / طرد</div>
-            </div>
-            <button class="card__add">+ أضف للسلة</button>
-          </div>
-        </article>
-        <article class="card">
-          <div class="card__media">
-            <img src="https://images.unsplash.com/photo-1525966220539-4d0209025919?w=400&q=80" alt="">
-          </div>
-          <div class="card__body">
-            <h3 class="card__name">صندل بوتيك ACXK44909</h3>
-            <p class="card__code">ACXK44909</p>
-            <div class="card__price">
-              <div class="card__price-main">528 ل.س / زوج</div>
-              <div class="card__price-sub">9,504 ل.س / طرد</div>
-            </div>
-            <button class="card__add">+ أضف للسلة</button>
-          </div>
-        </article>
-        <article class="card">
-          <div class="card__media">
-            <img src="https://images.unsplash.com/photo-1605812860428-4022083a07aa?w=400&q=80" alt="">
-          </div>
-          <div class="card__body">
-            <h3 class="card__name">صندل نسواني HEXAW93631</h3>
-            <p class="card__code">HEXAW93631</p>
-            <div class="card__price">
-              <div class="card__price-main">308 ل.س / زوج</div>
-              <div class="card__price-sub">7,392 ل.س / طرد</div>
-            </div>
-            <button class="card__add">+ أضف للسلة</button>
-          </div>
-        </article>
-      </div>
-    </div>
-
-    <div id="panel-winter" class="tab-panel">
-      <div class="section-head">
-        <h2>شحاطة فرو — تشكيلة شتوية</h2>
-        <a href="#">عرض المزيد <span class="material-symbols-outlined" style="font-size:1rem">arrow_back</span></a>
-      </div>
-      <div class="strip">
-        <article class="card">
-          <div class="card__media"><img src="https://images.unsplash.com/photo-1608256246200-53e635b5b65f?w=400&q=80" alt=""></div>
-          <div class="card__body">
-            <h3 class="card__name">شحاطة مسكرة فرو نسواني</h3>
-            <p class="card__code">LWBL91341</p>
-            <div class="card__price"><div class="card__price-main">675 ل.س / زوج</div><div class="card__price-sub">16,200 ل.س / طرد</div></div>
-            <button class="card__add">+ أضف للسلة</button>
-          </div>
-        </article>
-        <article class="card">
-          <div class="card__media"><img src="https://images.unsplash.com/photo-1571781926291-c477eb30cd66?w=400&q=80" alt=""></div>
-          <div class="card__body">
-            <h3 class="card__name">مسكرة نسواني فرو MN151</h3>
-            <p class="card__code">MN151</p>
-            <div class="card__price"><div class="card__price-main">660 ل.س / زوج</div><div class="card__price-sub">7,920 ل.س / طرد</div></div>
-            <button class="card__add">+ أضف للسلة</button>
-          </div>
-        </article>
-        <article class="card">
-          <div class="card__media"><img src="https://images.unsplash.com/photo-1515347619252-60a6bf4fff41?w=400&q=80" alt=""></div>
-          <div class="card__body">
-            <h3 class="card__name">مسكرة بيبي فرو سنسال</h3>
-            <p class="card__code">BABY-FUR</p>
-            <div class="card__price"><div class="card__price-main">425 ل.س / زوج</div><div class="card__price-sub">5,100 ل.س / طرد</div></div>
-            <button class="card__add">+ أضف للسلة</button>
-          </div>
-        </article>
-      </div>
-    </div>
-
-    <div id="panel-china" class="tab-panel">
-      <div class="section-head">
-        <h2>شحاطات وبوط صيني</h2>
-        <a href="#">عرض المزيد <span class="material-symbols-outlined" style="font-size:1rem">arrow_back</span></a>
-      </div>
-      <div class="strip">
-        <article class="card">
-          <div class="card__media"><img src="https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400&q=80" alt=""></div>
-          <div class="card__body">
-            <h3 class="card__name">بوط شبابي DPHY62112</h3>
-            <p class="card__code">DPHY62112</p>
-            <div class="card__price"><div class="card__price-main">875 ل.س / زوج</div><div class="card__price-sub">15,750 ل.س / طرد</div></div>
-            <button class="card__add">+ أضف للسلة</button>
-          </div>
-        </article>
-        <article class="card">
-          <div class="card__media"><img src="https://images.unsplash.com/photo-1606107557195-0a29cbf1c12a?w=400&q=80" alt=""></div>
-          <div class="card__body">
-            <h3 class="card__name">شحاطة نسواني JYKL70540</h3>
-            <p class="card__code">JYKL70540</p>
-            <div class="card__price"><div class="card__price-main">645 ل.س / زوج</div><div class="card__price-sub">15,480 ل.س / طرد</div></div>
-            <button class="card__add">+ أضف للسلة</button>
-          </div>
-        </article>
-      </div>
-    </div>
-
-    <div id="panel-local" class="tab-panel">
-      <div class="section-head">
-        <h2>منتجات وطنية</h2>
-        <a href="#">عرض المزيد <span class="material-symbols-outlined" style="font-size:1rem">arrow_back</span></a>
-      </div>
-      <div class="strip">
-        <article class="card">
-          <div class="card__media"><img src="https://images.unsplash.com/photo-1614252238953-b2a7a7552ec7?w=400&q=80" alt=""></div>
-          <div class="card__body">
-            <h3 class="card__name">شحاطة رجالي اكورد معطرة</h3>
-            <p class="card__code">ACCORD</p>
-            <div class="card__price"><div class="card__price-main">205 ل.س / زوج</div><div class="card__price-sub">2,460 ل.س / طرد</div></div>
-            <button class="card__add">+ أضف للسلة</button>
-          </div>
-        </article>
-        <article class="card">
-          <div class="card__media"><img src="https://images.unsplash.com/photo-1533867617851-e1527664235a?w=400&q=80" alt=""></div>
-          <div class="card__body">
-            <h3 class="card__name">بوط ولادي حقن W90</h3>
-            <p class="card__code">W90</p>
-            <div class="card__price"><div class="card__price-main">690 ل.س / زوج</div><div class="card__price-sub">10,350 ل.س / طرد</div></div>
-            <button class="card__add">+ أضف للسلة</button>
-          </div>
-        </article>
-      </div>
-    </div>
-
-    <section class="cta">
+    <section class="cta" aria-label="ابدأ التسوق">
       <div>
         <h2>جاهز لبدء طلبك؟</h2>
-        <p>تواصل مباشرة أو تصفّح المتجر كاملاً</p>
+        <p>استكشف المتجر كاملاً أو سجّل حسابك للحصول على أسعار وصلاحيات مخصصة.</p>
       </div>
       <div class="cta__actions">
-        <a href="tel:00963112213299" class="btn btn--white">
-          <span class="material-symbols-outlined" style="font-size:1.1rem">call</span>
-          011-2213299
+        <a href="https://www.jawishco.sy/store.php" class="btn btn--white">
+          <span class="material-symbols-outlined" style="font-size:1.1rem">storefront</span>
+          فتح المتجر
         </a>
-        <a href="https://wa.me/963932997794" class="btn btn--outline-white" target="_blank" rel="noopener">
-          <span class="material-symbols-outlined" style="font-size:1.1rem">chat</span>
-          واتساب
+        <a href="https://www.jawishco.sy/about.php" class="btn btn--outline-white">
+          <span class="material-symbols-outlined" style="font-size:1.1rem">groups</span>
+          من نحن
         </a>
-        <a href="#" class="btn btn--outline-white">فتح المتجر</a>
       </div>
     </section>
+
+    <div class="contact">
+      <a href="tel:00963112213299" class="contact__item">
+        <span class="material-symbols-outlined">call</span>
+        <span dir="ltr">00963-11-2213299</span>
+      </a>
+      <a href="tel:00963932997794" class="contact__item">
+        <span class="material-symbols-outlined">smartphone</span>
+        <span dir="ltr">00963932997794</span>
+      </a>
+      <a href="https://www.jawishco.sy/about.php" class="contact__item">
+        <span class="material-symbols-outlined">location_on</span>
+        <span>العنوان — من نحن</span>
+      </a>
+    </div>
   </main>
 
   <nav class="mobile-bar" aria-label="إجراءات سريعة">
-    <a href="#" class="btn btn--ghost"><span class="material-symbols-outlined">search</span> بحث</a>
-    <a href="#" class="btn btn--primary"><span class="material-symbols-outlined">shopping_cart</span> السلة (3)</a>
+    <a href="https://www.jawishco.sy/store.php" class="btn btn--ghost"><span class="material-symbols-outlined">search</span> المتجر</a>
+    <a href="https://www.jawishco.sy/store.php" class="btn btn--primary"><span class="material-symbols-outlined">shopping_cart</span> السلة</a>
     <a href="tel:00963112213299" class="btn btn--ghost"><span class="material-symbols-outlined">call</span> اتصل</a>
   </nav>
 
   <script>
-    document.querySelectorAll('.tab').forEach(function (tab) {
-      tab.addEventListener('click', function () {
-        var id = tab.getAttribute('data-tab');
-        document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('is-active'); });
-        document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.remove('is-active'); });
-        tab.classList.add('is-active');
-        var panel = document.getElementById('panel-' + id);
-        if (panel) panel.classList.add('is-active');
+    var SECTIONS = [{"id": "offers", "title": "تخفيضات خاصة...", "subtitle": "عروض خاصة على بعض الأصناف حتى 20%", "tab": "🔥 عروض", "products": [{"name": "خفافة نسواني 005 خيش اسود اوزون", "code": "66014", "thumb": "https://www.jawishco.sy/api/image.php?id=7fa4765f-1fe1-4389-a3ca-f742e762ca66&thumb=1", "unitSaleSp": 472, "packageSaleSp": 3776, "hasOffer": true, "offerBadge": "-20%", "originalUnitSp": 590, "originalPackSp": 4720}, {"name": "خفافة نسواني 002 خيش ابيض اوزون", "code": "33009", "thumb": "https://www.jawishco.sy/api/image.php?id=8091e5d0-aaa1-4a5e-8f43-e5c3130a4801&thumb=1", "unitSaleSp": 472, "packageSaleSp": 3776, "hasOffer": true, "offerBadge": "-20%", "originalUnitSp": 590, "originalPackSp": 4720}, {"name": "صندل بناتي MCQG58813 توباكو", "code": "3570", "thumb": "https://www.jawishco.sy/api/image.php?id=d50cdc78-b2cb-41b7-9b73-a04427ed2c6e&thumb=1", "unitSaleSp": 636, "packageSaleSp": 11448, "hasOffer": true, "offerBadge": "-20%", "originalUnitSp": 795, "originalPackSp": 14310}, {"name": "خفافة نسواني 002 خيش اسود اوزون", "code": "33008", "thumb": "https://www.jawishco.sy/api/image.php?id=2118163d-80be-45c4-9922-f9f18774ce63&thumb=1", "unitSaleSp": 472, "packageSaleSp": 3776, "hasOffer": true, "offerBadge": "-20%", "originalUnitSp": 590, "originalPackSp": 4720}, {"name": "خفافة نسواني 005 خيش ابيض اوزون", "code": "33013", "thumb": "https://www.jawishco.sy/api/image.php?id=b2010ebf-5ab2-4ec3-add0-56c8bac4f94b&thumb=1", "unitSaleSp": 472, "packageSaleSp": 3776, "hasOffer": true, "offerBadge": "-20%", "originalUnitSp": 590, "originalPackSp": 4720}, {"name": "صندل نسواني HEXAW93631-1 توباكو", "code": "3067", "thumb": "https://www.jawishco.sy/api/image.php?id=6b1ade35-78ee-4502-87c0-ca1d606609a3&thumb=1", "unitSaleSp": 308, "packageSaleSp": 7392, "hasOffer": true, "offerBadge": "-20%", "originalUnitSp": 385, "originalPackSp": 9240}, {"name": "صندل بيبي JHQC48546 توباكو", "code": "41620", "thumb": "https://www.jawishco.sy/api/image.php?id=614fd432-f784-4305-aa8e-216b9f3a3171&thumb=1", "unitSaleSp": 112, "packageSaleSp": 2688, "hasOffer": true, "offerBadge": "-20%", "originalUnitSp": 140, "originalPackSp": 3360}, {"name": "خفافة نسواني 005 خيش موكا اوزون", "code": "33011", "thumb": "https://www.jawishco.sy/api/image.php?id=197b84f0-d8e5-41ab-9625-c8ad77555d24&thumb=1", "unitSaleSp": 472, "packageSaleSp": 3776, "hasOffer": true, "offerBadge": "-20%", "originalUnitSp": 590, "originalPackSp": 4720}, {"name": "خفافة نسواني 005 خيش بيج اوزون", "code": "33012", "thumb": "https://www.jawishco.sy/api/image.php?id=e18824df-022f-4b4e-b58c-11f2dcb41cea&thumb=1", "unitSaleSp": 472, "packageSaleSp": 3776, "hasOffer": true, "offerBadge": "-20%", "originalUnitSp": 590, "originalPackSp": 4720}, {"name": "صندل رجالي RQSM91271 توباكو", "code": "2829", "thumb": "https://www.jawishco.sy/api/image.php?id=a45d49a0-8a0d-4653-832b-e2d94eb3f5a0&thumb=1", "unitSaleSp": 1092, "packageSaleSp": 16380, "hasOffer": true, "offerBadge": "-20%", "originalUnitSp": 1365, "originalPackSp": 20475}, {"name": "صندل بوتيك ACXK44909-run توباكو", "code": "2755", "thumb": "https://www.jawishco.sy/api/image.php?id=1605b200-4a84-4f76-9276-21822536d16c&thumb=1", "unitSaleSp": 528, "packageSaleSp": 9504, "hasOffer": true, "offerBadge": "-20%", "originalUnitSp": 660, "originalPackSp": 11880}, {"name": "صندل نسواني QSYL17874 توباكو", "code": "3578", "thumb": "https://www.jawishco.sy/api/image.php?id=6965ad51-c6dc-4aa1-a62b-38fda25f74e4&thumb=1", "unitSaleSp": 788, "packageSaleSp": 14184, "hasOffer": true, "offerBadge": "-20%", "originalUnitSp": 985, "originalPackSp": 17730}]}, {"id": "winter-slippers", "title": "شحاطة فرو", "subtitle": "تشكيلة من الشحاط الشتوي المحلي و المستورد", "tab": "❄️ شتوي", "products": [{"name": "شحاطة مسكرة فرو بناتي BTLG42682 توباكو", "code": "955", "thumb": "https://www.jawishco.sy/api/image.php?id=84002c68-e886-4dd0-9f16-f77350f7bf86&thumb=1", "unitSaleSp": 550, "packageSaleSp": 13200, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "مسكرة نسواني لعبة 4477 فرو 12 زوج شربعي", "code": "530012", "thumb": "https://www.jawishco.sy/api/image.php?id=4865bee5-9e20-4e64-abd8-b0b8c66a8db2&thumb=1", "unitSaleSp": 540, "packageSaleSp": 6480, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "مسكرة بناتي لعبة فرو 12 زوج شربعي", "code": "54001", "thumb": "https://www.jawishco.sy/api/image.php?id=623e08b0-eb32-44ab-962e-7bd72328f82f&thumb=1", "unitSaleSp": 425, "packageSaleSp": 5100, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة مسكرة فرو نسواني ADEL31621 توباكو", "code": "501", "thumb": "https://www.jawishco.sy/api/image.php?id=4693cee9-cc02-4cd2-98c5-7a6c124bf7c4&thumb=1", "unitSaleSp": 590, "packageSaleSp": 14160, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة مسكرة فرو بناتي LWBG80463 توباكو", "code": "1020", "thumb": "https://www.jawishco.sy/api/image.php?id=f4810685-f539-49e8-927d-805d537d6915&thumb=1", "unitSaleSp": 595, "packageSaleSp": 14280, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "مسكرة نسواني فرو MN 151 كجون", "code": "81430", "thumb": "https://www.jawishco.sy/api/image.php?id=d0f90d47-e6ae-4aab-bf39-6d676815ec8a&thumb=1", "unitSaleSp": 660, "packageSaleSp": 7920, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "مسكرة نسواني لعبة 4466 فرو 12 زوج شربعي", "code": "54010", "thumb": "https://www.jawishco.sy/api/image.php?id=d9f224f5-e64d-4d45-ae8b-a10d81394c93&thumb=1", "unitSaleSp": 540, "packageSaleSp": 6480, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة مسكرة فرو بناتي BTLG42688 توباكو", "code": "989", "thumb": "https://www.jawishco.sy/api/image.php?id=19203562-c23c-4e3c-a8e5-f0abeed85583&thumb=1", "unitSaleSp": 495, "packageSaleSp": 11880, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة مسكرة فرو ولادي TZWB3784 توباكو", "code": "958", "thumb": "https://www.jawishco.sy/api/image.php?id=a59ab63e-62d8-4de9-a168-75cda9879007&thumb=1", "unitSaleSp": 325, "packageSaleSp": 7800, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة فرو بناتي DXKG43691 توباكو", "code": "995", "thumb": "https://www.jawishco.sy/api/image.php?id=eb6763cd-3be5-4d91-835b-6e62181eb444&thumb=1", "unitSaleSp": 260, "packageSaleSp": 6240, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "مسكرة بناتي فرعة 35 فرو كجون", "code": "900869", "thumb": "https://www.jawishco.sy/api/image.php?id=97781c95-8fce-468d-ad14-464dcea7a04c&thumb=1", "unitSaleSp": 480, "packageSaleSp": 5760, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة مسكرة فرو بناتي BTLG42685 توباكو", "code": "530", "thumb": "https://www.jawishco.sy/api/image.php?id=848983a8-f042-44d7-ab28-ce3c2170e6bf&thumb=1", "unitSaleSp": 600, "packageSaleSp": 14400, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}]}, {"id": "slippers", "title": "شحاطات صيني", "subtitle": "", "tab": "🇨🇳 شحاطات", "products": [{"name": "شحاطة ولادي JJQB27676-lit توباكو", "code": "2780", "thumb": "https://www.jawishco.sy/api/image.php?id=af35fee3-9f4f-4963-9ab2-9b606c78b7d1&thumb=1", "unitSaleSp": 415, "packageSaleSp": 9960, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة بوتيك JJQK55848 توباكو", "code": "2681", "thumb": "https://www.jawishco.sy/api/image.php?id=5e7c66a7-25ff-4287-92c2-1db1bbb2edee&thumb=1", "unitSaleSp": 325, "packageSaleSp": 7800, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة بناتي MHCG25391 توباكو", "code": "2815", "thumb": "https://www.jawishco.sy/api/image.php?id=ee55f5ae-a771-46d1-9f81-b1c501af2f84&thumb=1", "unitSaleSp": 295, "packageSaleSp": 7080, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة ولادي EDDB74543 توباكو", "code": "2663", "thumb": "https://www.jawishco.sy/api/image.php?id=37e10853-edea-4035-8d15-0517c429eebb&thumb=1", "unitSaleSp": 405, "packageSaleSp": 9720, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة بيبي JJQC77222 توباكو", "code": "2784", "thumb": "https://www.jawishco.sy/api/image.php?id=ec2b7b6c-9d21-4703-916e-4765bbb7b975&thumb=1", "unitSaleSp": 350, "packageSaleSp": 8400, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة بوتيك EDDK0231 توباكو", "code": "2669", "thumb": "https://www.jawishco.sy/api/image.php?id=22ff90f3-d6e6-42ea-9fe1-5235c482e465&thumb=1", "unitSaleSp": 280, "packageSaleSp": 6720, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة ولادي JWXB56379 توباكو", "code": "2686", "thumb": "https://www.jawishco.sy/api/image.php?id=500df0b0-df7c-4dfd-8a8e-ec541673e34e&thumb=1", "unitSaleSp": 395, "packageSaleSp": 9480, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة رجالي YLEM28868 توباكو", "code": "40179", "thumb": "https://www.jawishco.sy/api/image.php?id=f9da7dd4-9de1-45fa-8be9-639fe741b400&thumb=1", "unitSaleSp": 665, "packageSaleSp": 15960, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة ولادي YJDEB36271-8 توباكو", "code": "2741", "thumb": "https://www.jawishco.sy/api/image.php?id=07a660e1-0ec0-4306-a5e3-516d62576364&thumb=1", "unitSaleSp": 440, "packageSaleSp": 10560, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة نسواني SJRL60385 توباكو", "code": "2725", "thumb": "https://www.jawishco.sy/api/image.php?id=4e0e89bb-4a47-4c7b-8cdd-f0798c7632fc&thumb=1", "unitSaleSp": 500, "packageSaleSp": 12000, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة بناتي JWXG93611 توباكو", "code": "3435", "thumb": "https://www.jawishco.sy/api/image.php?id=bf93d058-0470-4243-8280-c71269310911&thumb=1", "unitSaleSp": 415, "packageSaleSp": 9960, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة بيبي JJQC77224 توباكو", "code": "2785", "thumb": "https://www.jawishco.sy/api/image.php?id=beeaf0ac-1c65-42d0-986c-8e82da14fa33&thumb=1", "unitSaleSp": 340, "packageSaleSp": 8160, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}]}, {"id": "sneakers", "title": "بوط صيني", "subtitle": "", "tab": "🇨🇳 بوط", "products": [{"name": "بوط نسواني جلدية RN 181 ابيض+اسود نورس كجون", "code": "1902", "thumb": "https://www.jawishco.sy/api/image.php?id=f8d8333e-031c-4f84-a7c8-2ffde7f6aefc&thumb=1", "unitSaleSp": 1415, "packageSaleSp": 21225, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "بوط شبابي BLLY48511 توباكو", "code": "2911", "thumb": "https://www.jawishco.sy/api/image.php?id=1dba7d7e-ef55-455e-9125-98f86ceef8d5&thumb=1", "unitSaleSp": 945, "packageSaleSp": 14175, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "بوط بوتيك B1CK57899 توباكو", "code": "3445", "thumb": "https://www.jawishco.sy/api/image.php?id=1789ed77-8939-46af-8f81-e1d08e9fc31d&thumb=1", "unitSaleSp": 165, "packageSaleSp": 5940, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "بوط بيبي WN459 نورس كجون", "code": "1782", "thumb": "https://www.jawishco.sy/api/image.php?id=1680c889-6f84-488b-ab14-a04a9f68b2bd&thumb=1", "unitSaleSp": 1095, "packageSaleSp": 19710, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "بوط رجالي F فيتنس اسود 813 اصلي", "code": "81773", "thumb": "https://www.jawishco.sy/api/image.php?id=7ba6405f-c7c7-4dae-ab0b-af3d06b1b974&thumb=1", "unitSaleSp": 1935, "packageSaleSp": 23220, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "سبورة نسواني 50 الماس نورس كجون", "code": "50530", "thumb": "https://www.jawishco.sy/api/image.php?id=9554213f-b1a6-4f30-abc2-af4eb0cf2223&thumb=1", "unitSaleSp": 1105, "packageSaleSp": 22100, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "بوط شبابي DPHY75449 توباكو", "code": "3064", "thumb": "https://www.jawishco.sy/api/image.php?id=f909e4d1-17c2-425b-8e34-6808e6d90f4c&thumb=1", "unitSaleSp": 980, "packageSaleSp": 17640, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "بوط ولادي WN458 نورس كجون", "code": "1787", "thumb": "https://www.jawishco.sy/api/image.php?id=85aabce1-0e24-460d-8ed5-2085bbf2db8f&thumb=1", "unitSaleSp": 1130, "packageSaleSp": 20340, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "بوط شبابي IDSY24190 توباكو", "code": "3201", "thumb": "https://www.jawishco.sy/api/image.php?id=98bb5be6-97de-4827-9163-c94f470c9b06&thumb=1", "unitSaleSp": 1015, "packageSaleSp": 15225, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "كندرة نسواني DSOL5376-01 توباكو", "code": "2860", "thumb": "https://www.jawishco.sy/api/image.php?id=b9a5222a-67e8-43ca-9aab-2ac0cfa752ed&thumb=1", "unitSaleSp": 1185, "packageSaleSp": 21330, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "بوط شبابي GYQY58129 توباكو", "code": "1508", "thumb": "https://www.jawishco.sy/api/image.php?id=1c97084c-efa5-44f6-927e-326d0823ffa3&thumb=1", "unitSaleSp": 1060, "packageSaleSp": 15900, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "بوط شبابي DPHY62112 توباكو", "code": "2767", "thumb": "https://www.jawishco.sy/api/image.php?id=4e067ff8-dde4-45d7-a923-6f3c71128dd4&thumb=1", "unitSaleSp": 875, "packageSaleSp": 15750, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}]}, {"id": "local-slippers", "title": "شحاطات وطني", "subtitle": "", "tab": "🇸🇾 شحاطات", "products": [{"name": "شحاطة نسواني منال ايفا عالية", "code": "36214", "thumb": "https://www.jawishco.sy/api/image.php?id=457ffefc-672e-4fa2-85ce-97ed783ea374&thumb=1", "unitSaleSp": 180, "packageSaleSp": 2160, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة رجالي نفايات رقيق 116 اسود حقن مجدو", "code": "32997", "thumb": "https://www.jawishco.sy/api/image.php?id=3c789df0-7480-40b9-a15f-65b8591b2073&thumb=1", "unitSaleSp": 285, "packageSaleSp": 3420, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة ولادي روفر شواطة اسود ايفا كجون", "code": "38344", "thumb": "https://www.jawishco.sy/api/image.php?id=54f208c2-9209-4f9e-83f5-470c9d8165c6&thumb=1", "unitSaleSp": 165, "packageSaleSp": 1980, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "اصبع رجالي بانوراما مساج ايفا كجون", "code": "33208", "thumb": "https://www.jawishco.sy/api/image.php?id=205a8198-b2d3-4388-875a-268fe705664f&thumb=1", "unitSaleSp": 345, "packageSaleSp": 4140, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة ولادي مورانو /باندا/رادو ايفا كجون", "code": "38345", "thumb": "https://www.jawishco.sy/api/image.php?id=8fe60b8e-b5a4-4ef8-87b0-8251fe8f7727&thumb=1", "unitSaleSp": 160, "packageSaleSp": 960, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة بيبي تيسلا ايفا كجون", "code": "63914", "thumb": "https://www.jawishco.sy/api/image.php?id=2686814f-44d9-4c0a-8122-8d685ca4005a&thumb=1", "unitSaleSp": 175, "packageSaleSp": 2100, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة رجالي 90/ريكس/رامبو لونين ايفا جاجة", "code": "77846", "thumb": "https://www.jawishco.sy/api/image.php?id=524ca89f-63e6-42db-9b15-cc8de6ef9139&thumb=1", "unitSaleSp": 225, "packageSaleSp": 2700, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "اصبع رجالي دلفين ضبان مساج ايفا جاجة", "code": "66369", "thumb": "https://www.jawishco.sy/api/image.php?id=06ebbe08-148f-40b4-8f0f-ecaf54c27cb9&thumb=1", "unitSaleSp": 340, "packageSaleSp": 4080, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة رجالي نفايات 24 عسلي حقن مجدو", "code": "71204", "thumb": "https://www.jawishco.sy/api/image.php?id=398c9470-c9a2-4a20-a042-35fb96e7059a&thumb=1", "unitSaleSp": 295, "packageSaleSp": 3540, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "شحاطة/اصبع بيبي بور/ نيمار / ريو / سيلفا / اوميغا / سواريز ايفا لونين كجون", "code": "4177", "thumb": "https://www.jawishco.sy/api/image.php?id=46738479-8b07-4057-bc97-4dfebe8f0867&thumb=1", "unitSaleSp": 185, "packageSaleSp": 2220, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "اصبع رجالي نيمار ايفا لونين كجون", "code": "88523", "thumb": "https://www.jawishco.sy/api/image.php?id=8d46f463-5427-4cd0-9e4a-80a85f6c7651&thumb=1", "unitSaleSp": 260, "packageSaleSp": 3120, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "اصبع نسواني اليسا معطرة كجون", "code": "35088", "thumb": "https://www.jawishco.sy/api/image.php?id=6f60bee3-78ef-47a6-8eaa-011c1c1a9971&thumb=1", "unitSaleSp": 250, "packageSaleSp": 3000, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}]}, {"id": "local-shoes", "title": "بوط وطني", "subtitle": "", "tab": "🇸🇾 بوط", "products": [{"name": "بوط رجالي فيتنس كوما ب ف س بلوة", "code": "69520", "thumb": "https://www.jawishco.sy/api/image.php?id=f4a1f5aa-5dd2-48ad-9805-2357fcc0dff6&thumb=1", "unitSaleSp": 565, "packageSaleSp": 6780, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "خفافة صالحة رجالي 47 فرط اسود اصلي", "code": "8968", "thumb": "https://www.jawishco.sy/api/image.php?id=e85a011d-00b7-48c9-9530-abcf114d18b0&thumb=1", "unitSaleSp": 865, "packageSaleSp": 10380, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "بوط ولادي حقن W90 كجون", "code": "3601023", "thumb": "https://www.jawishco.sy/api/image.php?id=0721a173-845f-4bb3-b9a2-c02e382a77f3&thumb=1", "unitSaleSp": 690, "packageSaleSp": 10350, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "خفافة صالحة رجالي سيري + 40/41 فرط بيج اصلي", "code": "81120", "thumb": "https://www.jawishco.sy/api/image.php?id=b8a98ca3-fd52-4aba-a6ff-f05700974a8b&thumb=1", "unitSaleSp": 820, "packageSaleSp": 9840, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "بوط رجالي حقن رانج R6/19 ساق قصير كجون", "code": "360012", "thumb": "https://www.jawishco.sy/api/image.php?id=e6384f1d-edeb-40d7-87a9-b3b862c0ff39&thumb=1", "unitSaleSp": 1150, "packageSaleSp": 17250, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "صندل بناتي 18 زوج شد عالية", "code": "33094", "thumb": "https://www.jawishco.sy/api/image.php?id=e8eb0406-fb61-4386-884a-a80ee1e2cc40&thumb=1", "unitSaleSp": 335, "packageSaleSp": 6030, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "بوط نسواني كامبوس campus ابيض سادة مدراتي", "code": "900100", "thumb": "https://www.jawishco.sy/api/image.php?id=0cbfb12f-7fb0-4b21-8c96-660cc6363ea3&thumb=1", "unitSaleSp": 950, "packageSaleSp": 7600, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "بوط رجالي R36/18 جلدية ساق قصير كجون", "code": "550023", "thumb": "https://www.jawishco.sy/api/image.php?id=da6e3a1b-90b3-421b-8642-0a82b06f16f1&thumb=1", "unitSaleSp": 1200, "packageSaleSp": 18000, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "سبورة رجالي موديل 5 نبوك بني سنتر بازكة", "code": "635", "thumb": "https://www.jawishco.sy/api/image.php?id=7531c37e-f6f8-48c8-a25e-75f9291f7be4&thumb=1", "unitSaleSp": 1035, "packageSaleSp": 8280, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "كندرة نسواني 2519 كعب مخفي جاجة", "code": "93083", "thumb": "https://www.jawishco.sy/api/image.php?id=eb1d8513-7364-4cbf-b404-64fb10ce1a19&thumb=1", "unitSaleSp": 940, "packageSaleSp": 22560, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "بوط ولادي 124 ساعة +ضوء هورو", "code": "21467", "thumb": "https://www.jawishco.sy/api/image.php?id=380eda18-b41b-46c8-8345-2ddb933d460a&thumb=1", "unitSaleSp": 830, "packageSaleSp": 6640, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}, {"name": "بوط كونفرس نسواني نايك بروتان بيج الوفاء", "code": "339968", "thumb": "https://www.jawishco.sy/api/image.php?id=581e1d91-07c7-42e2-93f9-98b05521c4ae&thumb=1", "unitSaleSp": 745, "packageSaleSp": 5960, "hasOffer": false, "offerBadge": "", "originalUnitSp": 0, "originalPackSp": 0}]}];
+    var SITE = "https://www.jawishco.sy";
+
+    function fmt(n) {
+      return Number(n).toLocaleString("ar-SY");
+    }
+
+    function renderCard(p) {
+      var badge = p.hasOffer && p.offerBadge
+        ? '<span class="card__badge">' + p.offerBadge + '</span>' : '';
+      var oldPrice = p.hasOffer && p.originalUnitSp
+        ? '<span class="card__price-old">' + fmt(p.originalUnitSp) + ' ل.س</span>' : '';
+      return '<article class="card">' +
+        '<div class="card__media">' + badge +
+          '<img src="' + p.thumb + '" alt="' + p.name.replace(/"/g, "&quot;") + '" loading="lazy" decoding="async">' +
+        '</div>' +
+        '<div class="card__body">' +
+          '<h3 class="card__name">' + p.name + '</h3>' +
+          '<p class="card__code">' + p.code + '</p>' +
+          '<div class="card__price">' +
+            '<div class="card__price-main">' + fmt(p.unitSaleSp) + ' ل.س / زوج' + oldPrice + '</div>' +
+            '<div class="card__price-sub">' + fmt(p.packageSaleSp) + ' ل.س / طرد</div>' +
+          '</div>' +
+          '<button class="card__add" type="button">+ أضف للسلة</button>' +
+        '</div></article>';
+    }
+
+    function render() {
+      var tabs = document.getElementById("tabs");
+      var panels = document.getElementById("panels");
+      SECTIONS.forEach(function (section, i) {
+        var tab = document.createElement("button");
+        tab.type = "button";
+        tab.className = "tab" + (i === 0 ? " is-active" : "");
+        tab.setAttribute("data-tab", section.id);
+        tab.setAttribute("role", "tab");
+        tab.textContent = section.tab;
+        tab.addEventListener("click", function () {
+          document.querySelectorAll(".tab").forEach(function (t) { t.classList.remove("is-active"); });
+          document.querySelectorAll(".tab-panel").forEach(function (p) { p.classList.remove("is-active"); });
+          tab.classList.add("is-active");
+          document.getElementById("panel-" + section.id).classList.add("is-active");
+        });
+        tabs.appendChild(tab);
+
+        var panel = document.createElement("div");
+        panel.id = "panel-" + section.id;
+        panel.className = "tab-panel" + (i === 0 ? " is-active" : "");
+        var subtitle = section.subtitle
+          ? '<p>' + section.subtitle + '</p>' : '';
+        var cards = section.products.map(renderCard).join("");
+        panel.innerHTML =
+          '<div class="section-head">' +
+            '<div><h2>' + section.title + '</h2>' + subtitle + '</div>' +
+            '<a href="' + SITE + '/store.php#' + section.id + '">عرض المزيد <span class="material-symbols-outlined" style="font-size:1rem">arrow_back</span></a>' +
+          '</div>' +
+          '<div class="strip">' + cards + '</div>';
+        panels.appendChild(panel);
       });
-    });
+    }
+
+    render();
   </script>
 </body>
 </html>
