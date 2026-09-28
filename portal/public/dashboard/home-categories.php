@@ -87,7 +87,7 @@ if ($editId !== '') {
     }
 }
 
-$suggestedIcons = HomeCategoryService::SUGGESTED_ICONS;
+$iconLibrary = HomeCategoryService::iconLibrary();
 $currentRoute = '/dashboard/home-categories.php';
 
 ob_start();

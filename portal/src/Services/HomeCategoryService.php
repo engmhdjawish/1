@@ -25,6 +25,79 @@ final class HomeCategoryService
         'shopping_bag',
     ];
 
+    /**
+     * Curated Material Symbols for homepage category shortcuts (searchable in dashboard).
+     *
+     * @return list<array{key: string, label_ar: string, group: string}>
+     */
+    public static function iconLibrary(): array
+    {
+        return [
+            ['key' => 'storefront', 'label_ar' => 'متجر', 'group' => 'shopping'],
+            ['key' => 'shopping_bag', 'label_ar' => 'حقيبة', 'group' => 'shopping'],
+            ['key' => 'shopping_cart', 'label_ar' => 'سلة', 'group' => 'shopping'],
+            ['key' => 'sell', 'label_ar' => 'بيع', 'group' => 'shopping'],
+            ['key' => 'local_offer', 'label_ar' => 'عرض', 'group' => 'shopping'],
+            ['key' => 'local_fire_department', 'label_ar' => 'عروض', 'group' => 'shopping'],
+            ['key' => 'percent', 'label_ar' => 'تخفيض', 'group' => 'shopping'],
+            ['key' => 'redeem', 'label_ar' => 'كوبون', 'group' => 'shopping'],
+            ['key' => 'new_releases', 'label_ar' => 'جديد', 'group' => 'shopping'],
+            ['key' => 'star', 'label_ar' => 'مميز', 'group' => 'shopping'],
+            ['key' => 'favorite', 'label_ar' => 'مفضل', 'group' => 'shopping'],
+            ['key' => 'steps', 'label_ar' => 'شحاطة / صندل', 'group' => 'footwear'],
+            ['key' => 'hiking', 'label_ar' => 'بوط / hiking', 'group' => 'footwear'],
+            ['key' => 'footprint', 'label_ar' => 'خفافة', 'group' => 'footwear'],
+            ['key' => 'ice_skating', 'label_ar' => 'حذاء رياضي', 'group' => 'footwear'],
+            ['key' => 'snowflake', 'label_ar' => 'شتوي', 'group' => 'footwear'],
+            ['key' => 'checkroom', 'label_ar' => 'ملابس', 'group' => 'footwear'],
+            ['key' => 'dry_cleaning', 'label_ar' => 'أقمشة', 'group' => 'footwear'],
+            ['key' => 'man', 'label_ar' => 'رجالي', 'group' => 'people'],
+            ['key' => 'woman', 'label_ar' => 'نسائي', 'group' => 'people'],
+            ['key' => 'boy', 'label_ar' => 'ولد', 'group' => 'people'],
+            ['key' => 'girl', 'label_ar' => 'بنت', 'group' => 'people'],
+            ['key' => 'child_care', 'label_ar' => 'أطفال', 'group' => 'people'],
+            ['key' => 'family_restroom', 'label_ar' => 'عائلة', 'group' => 'people'],
+            ['key' => 'elderly', 'label_ar' => 'كبار', 'group' => 'people'],
+            ['key' => 'face', 'label_ar' => 'وجه', 'group' => 'people'],
+            ['key' => 'category', 'label_ar' => 'فئة', 'group' => 'general'],
+            ['key' => 'inventory_2', 'label_ar' => 'مخزون', 'group' => 'general'],
+            ['key' => 'grid_view', 'label_ar' => 'شبكة', 'group' => 'general'],
+            ['key' => 'apps', 'label_ar' => 'كل الفئات', 'group' => 'general'],
+            ['key' => 'home', 'label_ar' => 'رئيسية', 'group' => 'general'],
+            ['key' => 'link', 'label_ar' => 'رابط', 'group' => 'general'],
+            ['key' => 'flag', 'label_ar' => 'وطني', 'group' => 'general'],
+            ['key' => 'public', 'label_ar' => 'عالمي', 'group' => 'general'],
+            ['key' => 'language', 'label_ar' => 'صيني / مستورد', 'group' => 'general'],
+            ['key' => 'factory', 'label_ar' => 'محلي', 'group' => 'general'],
+            ['key' => 'warehouse', 'label_ar' => 'مستودع', 'group' => 'general'],
+            ['key' => 'local_shipping', 'label_ar' => 'توصيل', 'group' => 'general'],
+            ['key' => 'payments', 'label_ar' => 'أسعار', 'group' => 'general'],
+            ['key' => 'price_check', 'label_ar' => 'فحص سعر', 'group' => 'general'],
+            ['key' => 'barcode_scanner', 'label_ar' => 'باركود', 'group' => 'general'],
+            ['key' => 'palette', 'label_ar' => 'ألوان', 'group' => 'general'],
+            ['key' => 'straighten', 'label_ar' => 'مقاسات', 'group' => 'general'],
+            ['key' => 'style', 'label_ar' => 'ستايل', 'group' => 'general'],
+            ['key' => 'watch', 'label_ar' => 'إكسسوار', 'group' => 'general'],
+            ['key' => 'backpack', 'label_ar' => 'حقيبة ظهر', 'group' => 'general'],
+            ['key' => 'sports_soccer', 'label_ar' => 'رياضي', 'group' => 'general'],
+            ['key' => 'fitness_center', 'label_ar' => 'لياقة', 'group' => 'general'],
+            ['key' => 'beach_access', 'label_ar' => 'صيفي', 'group' => 'general'],
+            ['key' => 'wb_sunny', 'label_ar' => 'صيف', 'group' => 'general'],
+            ['key' => 'ac_unit', 'label_ar' => 'بارد', 'group' => 'general'],
+        ];
+    }
+
+    /** @return array<string, string> */
+    public static function iconGroupLabels(): array
+    {
+        return [
+            'shopping' => 'تسوّق وعروض',
+            'footwear' => 'أحذية وملابس',
+            'people' => 'فئات العملاء',
+            'general' => 'عام',
+        ];
+    }
+
     /** @return list<array<string, mixed>> */
     public static function activeCategories(): array
     {

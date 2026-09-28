@@ -9,9 +9,12 @@ declare(strict_types=1);
 /** @var bool $isNew */
 /** @var string|null $flash */
 /** @var string $flashType */
-/** @var list<string> $suggestedIcons */
+/** @var list<array{key: string, label_ar: string, group: string}> $iconLibrary */
+
+require __DIR__ . '/partials/material-icon-picker.php';
 
 $showForm = $showForm ?? false;
+$iconLibrary = is_array($iconLibrary ?? null) ? $iconLibrary : HomeCategoryService::iconLibrary();
 $isNew = $isNew ?? false;
 $editId = trim((string) ($editId ?? ''));
 $iconValue = (string) ($editCategory['icon_key'] ?? 'category');
@@ -62,22 +65,9 @@ $iconValue = (string) ($editCategory['icon_key'] ?? 'category');
           <span class="text-text-muted block mb-0.5">اسم الفئة *</span>
           <input name="label_ar" required value="<?= h((string) ($editCategory['label_ar'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="مثال: شحاطة">
         </label>
-        <label class="text-xs">
-          <span class="text-text-muted block mb-0.5">أيقونة Material</span>
-          <input name="icon_key" list="home-category-icons" value="<?= h($iconValue) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="steps">
-          <datalist id="home-category-icons">
-            <?php foreach ($suggestedIcons as $icon): ?>
-              <option value="<?= h($icon) ?>"></option>
-            <?php endforeach; ?>
-          </datalist>
-          <span class="text-[11px] text-text-muted mt-1 block">من <a href="https://fonts.google.com/icons" target="_blank" rel="noopener" class="underline">Material Symbols</a> — مثال: storefront, steps, hiking</span>
-        </label>
-        <label class="text-xs flex items-end pb-1">
-          <span class="inline-flex items-center gap-2 rounded-lg border border-border-subtle px-3 py-2 bg-slate-50">
-            <span class="material-symbols-outlined text-primary" id="hc-icon-preview"><?= h($iconValue) ?></span>
-            <span class="text-xs text-text-muted">معاينة</span>
-          </span>
-        </label>
+        <div class="text-xs md:col-span-2">
+          <?php portal_render_material_icon_picker_field('hc-category-icon', 'icon_key', $iconValue, $iconLibrary); ?>
+        </div>
         <label class="text-xs md:col-span-2">
           <span class="text-text-muted block mb-0.5">الرابط</span>
           <input name="link_url" value="<?= h((string) ($editCategory['link_url'] ?? '/store.php')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" dir="ltr" placeholder="/store.php أو /store.php#offers">
@@ -93,16 +83,7 @@ $iconValue = (string) ($editCategory['icon_key'] ?? 'category');
       </div>
     </article>
   </form>
-  <script>
-    (function () {
-      var input = document.querySelector('input[name="icon_key"]');
-      var preview = document.getElementById('hc-icon-preview');
-      if (!input || !preview) return;
-      input.addEventListener('input', function () {
-        preview.textContent = (input.value || 'category').replace(/[^a-z0-9_]/gi, '') || 'category';
-      });
-    })();
-  </script>
+  <?php portal_render_material_icon_picker_modal($iconLibrary); ?>
 <?php endif; ?>
 
 <div class="bg-white border border-border-subtle rounded-xl overflow-hidden">
