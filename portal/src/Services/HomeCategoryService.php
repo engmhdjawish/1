@@ -33,6 +33,25 @@ final class HomeCategoryService
         return '/assets/material-icon-library.json';
     }
 
+    public static function iconLibraryCount(): int
+    {
+        $path = self::iconLibraryPath();
+        if (!is_file($path)) {
+            return count(self::SUGGESTED_ICONS);
+        }
+
+        $raw = file_get_contents($path);
+        if (!is_string($raw) || $raw === '') {
+            return count(self::SUGGESTED_ICONS);
+        }
+
+        if (preg_match('/"count"\s*:\s*(\d+)/', $raw, $matches) === 1) {
+            return max(0, (int) $matches[1]);
+        }
+
+        return count(self::SUGGESTED_ICONS);
+    }
+
     public static function iconLibraryPath(): string
     {
         return dirname(__DIR__, 2) . '/public/assets/material-icon-library.json';

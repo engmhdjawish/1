@@ -12,8 +12,7 @@ if (!function_exists('portal_render_material_icon_picker_field')) {
     ): void {
         $currentIcon = HomeCategoryService::normalizeIconKey($currentIcon !== '' ? $currentIcon : 'category');
         $currentLabel = HomeCategoryService::iconLabel($currentIcon);
-        $libraryMeta = HomeCategoryService::iconLibraryPayload();
-        $libraryCount = (int) ($libraryMeta['count'] ?? 0);
+        $libraryCount = HomeCategoryService::iconLibraryCount();
         ?>
         <div class="text-xs" id="<?= h($fieldId) ?>-wrap" data-material-icon-field="<?= h($fieldId) ?>">
           <span class="text-text-muted block mb-0.5">الأيقونة</span>
