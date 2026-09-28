@@ -115,6 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'slug' => trim((string) ($_POST['slug'] ?? '')),
                 'title_ar' => trim((string) ($_POST['title_ar'] ?? '')),
                 'subtitle_ar' => trim((string) ($_POST['subtitle_ar'] ?? '')),
+                'tab_label_ar' => trim((string) ($_POST['tab_label_ar'] ?? '')),
                 'badge_text_ar' => trim((string) ($_POST['badge_text_ar'] ?? '')),
                 'banner_image_url' => trim((string) ($_POST['banner_image_url'] ?? '')),
                 'selection_mode' => $selectionMode,

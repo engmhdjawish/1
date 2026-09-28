@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+use Portal\Services\HomeCategoryService;
 use Portal\Services\HomePageService;
 use Portal\Services\PortalSettingsService;
 use Portal\Services\SiteMediaService;
@@ -47,6 +48,12 @@ try {
 } catch (Throwable $e) {
     error_log('index.php ads: ' . $e->getMessage());
     $ads = [];
+}
+try {
+    $homeCategories = HomeCategoryService::activeCategories();
+} catch (Throwable $e) {
+    error_log('index.php home categories: ' . $e->getMessage());
+    $homeCategories = [];
 }
 
 $lcpPreloadUrl = null;

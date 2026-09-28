@@ -50,6 +50,7 @@ $ordered = [
     '016-drop-material-card-templates.sql',
     '017-price-checker.sql',
     '018-price-checker-slideshow-filters.sql',
+    '019-home-categories-tab-labels.sql',
 ];
 
 $files = [];

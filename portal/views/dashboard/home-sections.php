@@ -182,6 +182,10 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
         <span class="text-text-muted block mb-0.5">وصف مختصر</span>
         <input name="subtitle_ar" value="<?= h((string) ($editSection['subtitle_ar'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
       </label>
+      <label class="text-xs md:col-span-2">
+        <span class="text-text-muted block mb-0.5">عنوان التبويب في الرئيسية</span>
+        <input name="tab_label_ar" value="<?= h((string) ($editSection['tab_label_ar'] ?? '')) ?>" maxlength="80" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="مثال: 🔥 عروض — يُستخدم في شريط التبويبات (اختياري)">
+      </label>
       <div class="md:col-span-3">
         <?php $renderMediaPickerField('صورة البانر', 'banner_image_url', (string) ($editSection['banner_image_url'] ?? ''), 'hs-banner-image', 'banner'); ?>
       </div>

@@ -124,13 +124,10 @@ def main() -> None:
     page_html = fetch_home_html()
     company = fetch_company(page_html)
     sections = fetch_sections()
-    hero_image = sections[0]["products"][0]["thumb"] if sections[0]["products"] else LOGO
-
     output = Path(__file__).resolve().parents[1] / "public" / "dev-test" / "home-vision-v1.html"
     content = (
         TEMPLATE.replace("__SECTIONS_JSON__", json.dumps(sections, ensure_ascii=False))
         .replace("__LOGO__", LOGO)
-        .replace("__HERO_IMAGE__", hero_image)
         .replace("__SITE__", SITE)
         .replace("__COMPANY_NAME__", company["name"])
         .replace("__COMPANY_ABOUT__", company["about"])
@@ -253,18 +250,24 @@ TEMPLATE = r"""<!DOCTYPE html>
       padding: 1.25rem; position: relative; min-height: 11rem;
     }
     @media (min-width: 768px) { .hero__visual { display: flex; } }
-    .hero__showcase {
-      position: relative; width: min(100%, 15rem); aspect-ratio: 1;
-      background: rgba(255,255,255,0.95); border-radius: 1.25rem;
-      padding: 0.75rem; box-shadow: 0 16px 40px rgba(0,0,0,0.18);
+    .hero__orbits {
+      position: relative; width: min(100%, 12rem); aspect-ratio: 1;
+      display: grid; place-items: center; color: rgba(255,255,255,0.85);
     }
-    .hero__showcase img { width: 100%; height: 100%; object-fit: contain; }
-    .hero__showcase-logo {
-      position: absolute; inset-inline-end: -0.35rem; top: -0.35rem;
-      width: 3.25rem; height: 3.25rem; background: #fff; border-radius: 0.85rem;
-      padding: 0.35rem; box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    .hero__orbits-svg { width: 100%; height: 100%; }
+    .hero__orbits-layer--a { animation: hero-orbit-spin 28s linear infinite; transform-origin: center; }
+    .hero__orbits-layer--b { animation: hero-orbit-spin 20s linear infinite reverse; transform-origin: center; }
+    .hero__orbits-layer--c { animation: hero-orbit-spin 14s linear infinite; transform-origin: center; }
+    .hero__orbit-core {
+      position: absolute; width: 0.85rem; height: 0.85rem; border-radius: 9999px;
+      background: rgba(255,255,255,0.92); box-shadow: 0 0 18px rgba(255,255,255,0.45);
+      animation: hero-orbit-core 4.8s ease-in-out infinite;
     }
-    .hero__showcase-logo img { width: 100%; height: 100%; object-fit: contain; }
+    @keyframes hero-orbit-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes hero-orbit-core {
+      0%, 100% { transform: scale(1); opacity: 0.92; }
+      50% { transform: scale(1.12); opacity: 1; }
+    }
 
     /* Mobile: compact strip — logo already in header, skip heavy visual */
     @media (max-width: 767px) {
@@ -531,11 +534,22 @@ TEMPLATE = r"""<!DOCTYPE html>
           </div>
         </div>
         <div class="hero__visual" aria-hidden="true">
-          <div class="hero__showcase">
-            <img src="__HERO_IMAGE__" alt="">
-            <div class="hero__showcase-logo">
-              <img src="__LOGO__" alt="__COMPANY_NAME__">
-            </div>
+          <div class="hero__orbits">
+            <svg class="hero__orbits-svg" viewBox="0 0 200 200" focusable="false">
+              <g class="hero__orbits-layer hero__orbits-layer--a">
+                <circle cx="100" cy="100" r="88" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="175 378" stroke-linecap="round" opacity="0.18"></circle>
+                <circle cx="100" cy="12" r="3.6" fill="currentColor" opacity="0.42"></circle>
+              </g>
+              <g class="hero__orbits-layer hero__orbits-layer--b">
+                <circle cx="100" cy="100" r="62" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="120 270" stroke-linecap="round" opacity="0.14"></circle>
+                <circle cx="162" cy="100" r="3" fill="currentColor" opacity="0.36"></circle>
+              </g>
+              <g class="hero__orbits-layer hero__orbits-layer--c">
+                <circle cx="100" cy="100" r="38" fill="none" stroke="currentColor" stroke-width="0.9" stroke-dasharray="78 162" stroke-linecap="round" opacity="0.1"></circle>
+                <circle cx="100" cy="138" r="2.6" fill="currentColor" opacity="0.32"></circle>
+              </g>
+            </svg>
+            <span class="hero__orbit-core"></span>
           </div>
         </div>
       </section>

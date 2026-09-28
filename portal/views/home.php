@@ -13,7 +13,9 @@ use Portal\Services\StoreCatalogService;
 /** @var array{show_price: bool, show_quantity: bool, allow_cart: bool, allow_order: bool, show_images: bool, price_mode: string}|null $storeCatalogDisplay */
 /** @var bool|null $deferHomeProducts */
 /** @var array<string, string>|null $embeddedProductStrips */
+/** @var list<array<string, mixed>> $homeCategories */
 $ads ??= [];
+$homeCategories ??= [];
 $deferHomeProducts = (bool) ($deferHomeProducts ?? false);
 $embeddedProductStrips = is_array($embeddedProductStrips ?? null) ? $embeddedProductStrips : [];
 $homeHasEmbeddedStrips = (bool) ($homeHasEmbeddedStrips ?? false);
@@ -136,6 +138,40 @@ $homeShowGuestRegister = portal_show_guest_auth_links();
         </div>
       <?php endif; ?>
     </section>
+  <?php endif; ?>
+
+  <?php if ($homeCategories !== []): ?>
+    <section class="home-categories" aria-label="تصفّح حسب الفئة">
+      <header class="home-categories__head">
+        <h2 class="home-categories__title">تصفّح حسب الفئة</h2>
+      </header>
+      <div class="home-categories__grid">
+        <?php foreach ($homeCategories as $category): ?>
+          <a href="<?= h(home_category_href($category)) ?>" class="home-category">
+            <span class="home-category__icon" aria-hidden="true">
+              <span class="material-symbols-outlined"><?= h(home_category_icon_key($category)) ?></span>
+            </span>
+            <span class="home-category__label"><?= h((string) ($category['label_ar'] ?? '')) ?></span>
+          </a>
+        <?php endforeach; ?>
+      </div>
+    </section>
+  <?php endif; ?>
+
+  <?php if (count($sections) > 1): ?>
+    <nav class="home-section-nav home-section-nav--sticky" aria-label="أقسام الرئيسية">
+      <?php foreach ($sections as $section): ?>
+        <?php
+          $sectionId = (string) ($section['slug'] ?? $section['id'] ?? '');
+          if ($sectionId === '') {
+              continue;
+          }
+        ?>
+        <a href="#<?= h($sectionId) ?>" class="home-section-nav__link">
+          <?= h(home_section_tab_label($section)) ?>
+        </a>
+      <?php endforeach; ?>
+    </nav>
   <?php endif; ?>
 
   <div class="home-sections"<?= $deferHomeProducts ? ' data-home-deferred-products="1"' : '' ?><?= $homeHasEmbeddedStrips ? ' data-home-has-embedded-strips="1"' : '' ?>>

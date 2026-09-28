@@ -61,7 +61,7 @@ final class HomeSectionService
     private static function buildActiveSectionShells(): array
     {
         $sections = Database::pdo()->query(
-            'SELECT id::text AS id, slug, title_ar, subtitle_ar, banner_image_url, display_mode::text AS display_mode,
+            'SELECT id::text AS id, slug, title_ar, subtitle_ar, tab_label_ar, banner_image_url, display_mode::text AS display_mode,
                     max_products, sort_order
              FROM home_sections WHERE is_active = TRUE ORDER BY sort_order ASC'
         )->fetchAll(PDO::FETCH_ASSOC);
@@ -93,7 +93,7 @@ final class HomeSectionService
     {
         $pdo = Database::pdo();
         $sections = $pdo->query(
-            'SELECT id::text AS id, slug, title_ar, subtitle_ar, banner_image_url, display_mode::text AS display_mode, max_products, sort_order
+            'SELECT id::text AS id, slug, title_ar, subtitle_ar, tab_label_ar, banner_image_url, display_mode::text AS display_mode, max_products, sort_order
              FROM home_sections WHERE is_active = TRUE ORDER BY sort_order ASC'
         )->fetchAll(PDO::FETCH_ASSOC);
 
@@ -193,6 +193,7 @@ final class HomeSectionService
                 hs.slug,
                 hs.title_ar,
                 hs.subtitle_ar,
+                hs.tab_label_ar,
                 hs.banner_image_url,
                 hs.display_mode::text AS display_mode,
                 hs.max_products,
@@ -245,6 +246,7 @@ final class HomeSectionService
                 slug,
                 title_ar,
                 subtitle_ar,
+                tab_label_ar,
                 banner_image_url,
                 display_mode::text AS display_mode,
                 max_products,
@@ -277,6 +279,7 @@ final class HomeSectionService
         string $slug,
         string $titleAr,
         ?string $subtitleAr,
+        ?string $tabLabelAr,
         ?string $bannerImageUrl,
         string $displayMode,
         int $maxProducts,
@@ -298,6 +301,7 @@ final class HomeSectionService
         $maxProducts = max(1, min(48, $maxProducts));
         $sortOrder = max(0, $sortOrder);
         $subtitleAr = trim((string) $subtitleAr);
+        $tabLabelAr = trim((string) $tabLabelAr);
         $bannerImageUrl = trim((string) $bannerImageUrl);
         $updatedByUserId = $updatedByUserId !== null ? trim($updatedByUserId) : null;
         $updatedByUserId = $updatedByUserId !== '' ? $updatedByUserId : null;
@@ -322,10 +326,10 @@ final class HomeSectionService
         if ($id === null || trim($id) === '') {
             $insert = $pdo->prepare(
                 'INSERT INTO home_sections (
-                    slug, title_ar, subtitle_ar, banner_image_url, display_mode,
+                    slug, title_ar, subtitle_ar, tab_label_ar, banner_image_url, display_mode,
                     max_products, sort_order, is_active, updated_by_user_id
                  ) VALUES (
-                    :slug, :title_ar, :subtitle_ar, :banner_image_url, :display_mode,
+                    :slug, :title_ar, :subtitle_ar, :tab_label_ar, :banner_image_url, :display_mode,
                     :max_products, :sort_order, CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END, :updated_by_user_id
                  )
                  RETURNING id::text'
@@ -334,6 +338,7 @@ final class HomeSectionService
                 'slug' => $slug,
                 'title_ar' => $titleAr,
                 'subtitle_ar' => $subtitleAr !== '' ? $subtitleAr : null,
+                'tab_label_ar' => $tabLabelAr !== '' ? $tabLabelAr : null,
                 'banner_image_url' => $bannerImageUrl !== '' ? $bannerImageUrl : null,
                 'display_mode' => $displayMode,
                 'max_products' => $maxProducts,
@@ -351,7 +356,7 @@ final class HomeSectionService
 
         $update = $pdo->prepare(
             'UPDATE home_sections SET
-                slug = :slug, title_ar = :title_ar, subtitle_ar = :subtitle_ar,
+                slug = :slug, title_ar = :title_ar, subtitle_ar = :subtitle_ar, tab_label_ar = :tab_label_ar,
                 banner_image_url = :banner_image_url, display_mode = :display_mode,
                 max_products = :max_products, sort_order = :sort_order,
                 is_active = CASE WHEN :is_active = 1 THEN TRUE ELSE FALSE END,
@@ -363,6 +368,7 @@ final class HomeSectionService
             'slug' => $slug,
             'title_ar' => $titleAr,
             'subtitle_ar' => $subtitleAr !== '' ? $subtitleAr : null,
+            'tab_label_ar' => $tabLabelAr !== '' ? $tabLabelAr : null,
             'banner_image_url' => $bannerImageUrl !== '' ? $bannerImageUrl : null,
             'display_mode' => $displayMode,
             'max_products' => $maxProducts,

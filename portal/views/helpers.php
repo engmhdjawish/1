@@ -1042,6 +1042,41 @@ function home_section_return_url(array $section): string
     return $slug !== '' ? '/#' . $slug : '/';
 }
 
+/** @param array<string, mixed> $section */
+function home_section_tab_label(array $section): string
+{
+    $tabLabel = trim((string) ($section['tab_label_ar'] ?? ''));
+    if ($tabLabel !== '') {
+        return $tabLabel;
+    }
+
+    return trim((string) ($section['title_ar'] ?? ''));
+}
+
+/** @param array<string, mixed> $category */
+function home_category_href(array $category): string
+{
+    $url = trim((string) ($category['link_url'] ?? ''));
+    if ($url === '') {
+        return '/store.php';
+    }
+
+    if (preg_match('#^https?://#i', $url) === 1) {
+        return $url;
+    }
+
+    return str_starts_with($url, '/') ? $url : '/' . ltrim($url, '/');
+}
+
+/** @param array<string, mixed> $category */
+function home_category_icon_key(array $category): string
+{
+    $icon = strtolower(trim((string) ($category['icon_key'] ?? 'category')));
+    $icon = preg_replace('/[^a-z0-9_]/', '', $icon) ?? '';
+
+    return $icon !== '' ? $icon : 'category';
+}
+
 /**
  * @param array<string, mixed> $displayOptions
  * @param array<string, mixed>|null $storeCatalogDisplay

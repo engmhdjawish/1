@@ -326,6 +326,13 @@ final class DashboardNavigation
                     'description' => 'تنظيم أقسام الصفحة الرئيسية والمنتجات المعروضة فيها.',
                 ],
                 [
+                    'route' => '/dashboard/home-categories.php',
+                    'label' => 'فئات الرئيسية',
+                    'icon' => 'category',
+                    'permission' => 'home_sections.manage',
+                    'description' => 'اختصارات الفئات في الصفحة الرئيسية مع الأيقونة والرابط.',
+                ],
+                [
                     'route' => '/dashboard/special-offers.php',
                     'label' => 'العروض الخاصة',
                     'icon' => 'sell',

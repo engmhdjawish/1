@@ -197,6 +197,10 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
         <span class="text-text-muted block mb-0.5">وصف مختصر</span>
         <input name="subtitle_ar" value="<?= h((string) ($editOffer['subtitle_ar'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
       </label>
+      <label class="text-xs md:col-span-3">
+        <span class="text-text-muted block mb-0.5">عنوان التبويب في الرئيسية</span>
+        <input name="tab_label_ar" value="<?= h((string) ($editOffer['tab_label_ar'] ?? '')) ?>" maxlength="80" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="مثال: 🔥 عروض — يظهر عند «عرض كقسم في الرئيسية» (اختياري)">
+      </label>
       <label class="text-xs">
         <span class="text-text-muted block mb-0.5">يبدأ</span>
         <input type="datetime-local" name="starts_at" value="<?= h(substr((string) ($editOffer['starts_at'] ?? ''), 0, 16)) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">

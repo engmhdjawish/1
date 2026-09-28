@@ -63,7 +63,7 @@ final class SpecialOfferService
     private static function buildActiveHomeSectionShells(): array
     {
         $stmt = Database::pdo()->query(
-            'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
+            'SELECT id::text AS id, slug, title_ar, subtitle_ar, tab_label_ar, badge_text_ar, banner_image_url,
                     selection_mode::text AS selection_mode, discount_type::text AS discount_type,
                     discount_percent, fixed_price_syp, fixed_price_usd,
                     min_packages, max_packages, max_products, home_sort_order
@@ -101,7 +101,7 @@ final class SpecialOfferService
     private static function buildActiveHomeSections(): array
     {
         $stmt = Database::pdo()->query(
-            'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
+            'SELECT id::text AS id, slug, title_ar, subtitle_ar, tab_label_ar, badge_text_ar, banner_image_url,
                     selection_mode::text AS selection_mode, discount_type::text AS discount_type,
                     discount_percent, fixed_price_syp, fixed_price_usd,
                     min_packages, max_packages, max_products, home_sort_order
@@ -242,7 +242,7 @@ final class SpecialOfferService
                     discount_percent, fixed_price_syp, fixed_price_usd,';
 
         $stmt = Database::pdo()->prepare(
-            'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
+            'SELECT id::text AS id, slug, title_ar, subtitle_ar, tab_label_ar, badge_text_ar, banner_image_url,
                     ' . $pricingCols . '
                     starts_at::text AS starts_at, ends_at::text AS ends_at,
                     CASE WHEN is_active THEN 1 ELSE 0 END AS is_active,
@@ -311,6 +311,7 @@ final class SpecialOfferService
             'slug' => $slug,
             'title_ar' => $title,
             'subtitle_ar' => trim((string) ($payload['subtitle_ar'] ?? '')) ?: null,
+            'tab_label_ar' => trim((string) ($payload['tab_label_ar'] ?? '')) ?: null,
             'badge_text_ar' => trim((string) ($payload['badge_text_ar'] ?? '')) ?: null,
             'banner_image_url' => trim((string) ($payload['banner_image_url'] ?? '')) ?: null,
             'selection_mode' => $selectionMode,
@@ -336,13 +337,13 @@ final class SpecialOfferService
         if ($id === '') {
             $stmt = $pdo->prepare(
                 'INSERT INTO special_offers (
-                    slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
+                    slug, title_ar, subtitle_ar, tab_label_ar, badge_text_ar, banner_image_url,
                     selection_mode, pricing_scope, discount_type, discount_percent,
                     fixed_price_syp, fixed_price_usd, fixed_amount_syp, fixed_amount_usd,
                     starts_at, ends_at, is_active, priority, min_packages, max_packages,
                     max_products, show_on_home, home_sort_order, updated_by_web_user_id
                  ) VALUES (
-                    :slug, :title_ar, :subtitle_ar, :badge_text_ar, :banner_image_url,
+                    :slug, :title_ar, :subtitle_ar, :tab_label_ar, :badge_text_ar, :banner_image_url,
                     :selection_mode, :pricing_scope, :discount_type, :discount_percent,
                     :fixed_price_syp, :fixed_price_usd, :fixed_amount_syp, :fixed_amount_usd,
                     :starts_at, :ends_at, :is_active, :priority, :min_packages, :max_packages,
@@ -355,7 +356,7 @@ final class SpecialOfferService
             $params['id'] = $id;
             $stmt = $pdo->prepare(
                 'UPDATE special_offers SET
-                    slug = :slug, title_ar = :title_ar, subtitle_ar = :subtitle_ar,
+                    slug = :slug, title_ar = :title_ar, subtitle_ar = :subtitle_ar, tab_label_ar = :tab_label_ar,
                     badge_text_ar = :badge_text_ar, banner_image_url = :banner_image_url,
                     selection_mode = :selection_mode, pricing_scope = :pricing_scope,
                     discount_type = :discount_type, discount_percent = :discount_percent,
@@ -403,7 +404,7 @@ final class SpecialOfferService
                     discount_percent, fixed_price_syp, fixed_price_usd,';
 
         $stmt = Database::pdo()->prepare(
-            'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
+            'SELECT id::text AS id, slug, title_ar, subtitle_ar, tab_label_ar, badge_text_ar, banner_image_url,
                     ' . $pricingCols . '
                     min_packages, max_packages, max_products, priority, starts_at
              FROM special_offers

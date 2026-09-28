@@ -98,6 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             trim((string) ($_POST['slug'] ?? '')),
             trim((string) ($_POST['title_ar'] ?? '')),
             trim((string) ($_POST['subtitle_ar'] ?? '')),
+            trim((string) ($_POST['tab_label_ar'] ?? '')),
             trim((string) ($_POST['banner_image_url'] ?? '')),
             $displayMode,
             (int) ($_POST['max_products'] ?? 12),
