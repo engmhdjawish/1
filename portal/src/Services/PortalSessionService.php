@@ -53,7 +53,7 @@ final class PortalSessionService
         return self::$enabled;
     }
 
-    public static function bootstrap(): void
+    public static function bootstrap(?string $presentedSessionId = null): void
     {
         if (session_status() !== PHP_SESSION_ACTIVE) {
             return;
@@ -63,7 +63,9 @@ final class PortalSessionService
             return;
         }
 
-        self::tryRestoreCustomerSession();
+        $presentedSessionId = self::plausibleSessionId((string) $presentedSessionId);
+        self::tryRestoreCustomerSession($presentedSessionId);
+        self::tryRestoreStaffSession($presentedSessionId);
 
         if (WebSession::check()) {
             $userId = (string) (WebSession::user()['id'] ?? '');
@@ -502,18 +504,91 @@ final class PortalSessionService
         }
     }
 
-    private static function tryRestoreCustomerSession(): void
+    /**
+     * The system session cleaner can delete the PHP session file after a short
+     * idle period. The cookie and web_customer_sessions row still last for the
+     * configured lifetime, so rebuild the login from that row.
+     */
+    private static function tryRestoreCustomerSession(string $presentedSessionId): void
     {
         if (CustomerSession::isLoggedIn() || WebSession::check()) {
             return;
         }
 
-        $sessionId = session_id();
-        if ($sessionId === '') {
+        $matched = self::matchSessionRow('customer', $presentedSessionId);
+        if ($matched === null) {
             return;
         }
 
-        $hash = hash('sha256', $sessionId);
+        CustomerSession::restoreFromDatabaseRow($matched);
+        $_SESSION[self::META_KEY] = [
+            'id' => (string) $matched['session_row_id'],
+            'kind' => 'customer',
+        ];
+        self::touchCurrent();
+    }
+
+    /**
+     * Same as the customer restore. Staff previously stayed logged out once the
+     * session file was gone, even while web_sessions was still valid.
+     */
+    private static function tryRestoreStaffSession(string $presentedSessionId): void
+    {
+        if (WebSession::check() || CustomerSession::isLoggedIn()) {
+            return;
+        }
+
+        $matched = self::matchSessionRow('staff', $presentedSessionId);
+        if ($matched === null) {
+            return;
+        }
+
+        $userId = trim((string) ($matched['user_id'] ?? ''));
+        if (!WebSession::restoreActiveUser($userId)) {
+            return;
+        }
+
+        $_SESSION[self::META_KEY] = [
+            'id' => (string) $matched['session_row_id'],
+            'kind' => 'staff',
+        ];
+    }
+
+    /** @return array<string, mixed>|null */
+    private static function matchSessionRow(string $kind, string $presentedSessionId): ?array
+    {
+        $currentId = self::plausibleSessionId(session_id());
+        if ($currentId === '') {
+            return null;
+        }
+
+        $row = null;
+        $matchedId = '';
+        foreach (self::sessionIdCandidates($presentedSessionId) as $sessionId) {
+            $found = $kind === 'customer'
+                ? self::findCustomerSessionRow($sessionId)
+                : self::findStaffSessionRow($sessionId);
+            if ($found === null) {
+                continue;
+            }
+            $row = $found;
+            $matchedId = $sessionId;
+            break;
+        }
+        if ($row === null || $matchedId === '') {
+            return null;
+        }
+
+        if ($matchedId !== $currentId && !self::rebindToken($kind, (string) $row['session_row_id'], $currentId)) {
+            return null;
+        }
+
+        return $row;
+    }
+
+    /** @return array<string, mixed>|null */
+    private static function findCustomerSessionRow(string $sessionId): ?array
+    {
         $stmt = Database::pdo()->prepare(
             'SELECT
                 s.id::text AS session_row_id,
@@ -536,21 +611,102 @@ final class PortalSessionService
              LIMIT 1'
         );
         $stmt->execute([
-            'hash' => $hash,
+            'hash' => hash('sha256', $sessionId),
             'active_status' => 'active',
             'pending_status' => 'pending',
         ]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!is_array($row) || trim((string) ($row['session_row_id'] ?? '')) === '') {
-            return;
+            return null;
         }
 
-        CustomerSession::restoreFromDatabaseRow($row);
-        $_SESSION[self::META_KEY] = [
-            'id' => (string) $row['session_row_id'],
-            'kind' => 'customer',
-        ];
-        self::touchCurrent();
+        return $row;
+    }
+
+    /** @return array<string, mixed>|null */
+    private static function findStaffSessionRow(string $sessionId): ?array
+    {
+        $stmt = Database::pdo()->prepare(
+            'SELECT
+                s.id::text AS session_row_id,
+                u.id::text AS user_id
+             FROM web_sessions s
+             INNER JOIN web_users u ON u.id = s.user_id
+             WHERE s.token_hash = :hash
+               AND s.revoked_at IS NULL
+               AND s.expires_at > NOW()
+               AND u.is_active IS TRUE
+             ORDER BY s.last_seen_at DESC NULLS LAST, s.created_at DESC
+             LIMIT 1'
+        );
+        $stmt->execute(['hash' => hash('sha256', $sessionId)]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($row) || trim((string) ($row['session_row_id'] ?? '')) === '') {
+            return null;
+        }
+
+        return $row;
+    }
+
+    /** @return list<string> */
+    private static function sessionIdCandidates(string $presentedSessionId): array
+    {
+        $ids = [];
+        foreach ([session_id(), $presentedSessionId] as $id) {
+            $id = self::plausibleSessionId((string) $id);
+            if ($id === '' || in_array($id, $ids, true)) {
+                continue;
+            }
+            $ids[] = $id;
+        }
+
+        return $ids;
+    }
+
+    private static function plausibleSessionId(string $sessionId): string
+    {
+        $sessionId = trim($sessionId);
+        if ($sessionId === '' || preg_match('/^[A-Za-z0-9,-]{16,128}$/', $sessionId) !== 1) {
+            return '';
+        }
+
+        return $sessionId;
+    }
+
+    private static function rebindToken(string $kind, string $rowId, string $sessionId): bool
+    {
+        $rowId = trim($rowId);
+        $sessionId = self::plausibleSessionId($sessionId);
+        if ($rowId === '' || $sessionId === '') {
+            return false;
+        }
+
+        $table = $kind === 'customer' ? 'web_customer_sessions' : 'web_sessions';
+        $hash = hash('sha256', $sessionId);
+        $stmt = Database::pdo()->prepare(
+            "UPDATE {$table}
+             SET token_hash = :hash,
+                 last_seen_at = NOW()
+             WHERE id = :id
+               AND revoked_at IS NULL
+               AND expires_at > NOW()
+               AND NOT EXISTS (
+                   SELECT 1
+                   FROM {$table} other
+                   WHERE other.token_hash = :hash_exists
+                     AND other.id <> :id_exists
+               )
+             RETURNING id::text"
+        );
+        $stmt->execute([
+            'hash' => $hash,
+            'id' => $rowId,
+            'hash_exists' => $hash,
+            'id_exists' => $rowId,
+        ]);
+        $id = $stmt->fetchColumn();
+
+        return $id !== false && (string) $id !== '';
     }
 
     private static function clientIp(): string

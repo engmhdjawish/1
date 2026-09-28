@@ -154,6 +154,52 @@ final class WebSession
         return true;
     }
 
+    /**
+     * Rebuild $_SESSION after the PHP session file was removed.
+     * Does not rotate the id or revoke the database row.
+     */
+    public static function restoreActiveUser(string $userId): bool
+    {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            return false;
+        }
+
+        $userId = trim($userId);
+        if ($userId === '') {
+            return false;
+        }
+
+        $pdo = Database::pdo();
+        $stmt = $pdo->prepare(
+            'SELECT
+                u.id,
+                u.user_name,
+                u.display_name_ar,
+                CASE WHEN u.is_active THEN 1 ELSE 0 END AS is_active
+             FROM web_users u
+             WHERE u.id = :id
+             LIMIT 1'
+        );
+        $stmt->execute(['id' => $userId]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$user || (int) ($user['is_active'] ?? 0) !== 1) {
+            return false;
+        }
+
+        $permissions = self::loadPermissions((string) $user['id']);
+        $roles = self::loadRoleLabels((string) $user['id']);
+        $_SESSION[self::SESSION_KEY] = [
+            'id' => $user['id'],
+            'user_name' => $user['user_name'],
+            'display_name_ar' => $user['display_name_ar'],
+            'permissions' => $permissions,
+            'roles' => $roles,
+            'role_label' => $roles[0] ?? 'موظف',
+        ];
+
+        return true;
+    }
+
     public static function logout(): void
     {
         PortalSessionService::revokeCurrent();

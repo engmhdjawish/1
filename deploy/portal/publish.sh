@@ -57,6 +57,17 @@ if [[ -f "$templates/material-zip-worker.cron" ]]; then
     "$templates/material-zip-worker.cron" > "$DEPLOY_ROOT/output/material-zip-worker.cron"
 fi
 
+session_days="30"
+if [[ -f "$PORTAL_PUBLISH_DIR/.env" ]]; then
+  env_days="$(grep -E '^PORTAL_SESSION_LIFETIME_DAYS=' "$PORTAL_PUBLISH_DIR/.env" | tail -n 1 | cut -d= -f2- | tr -d " \"'" || true)"
+  if [[ "$env_days" =~ ^[0-9]+$ ]]; then
+    session_days="$env_days"
+  fi
+fi
+if [[ -f "$DEPLOY_ROOT/scripts/install-php-session-lifetime.sh" ]]; then
+  PORTAL_SESSION_LIFETIME_DAYS="$session_days" bash "$DEPLOY_ROOT/scripts/install-php-session-lifetime.sh"
+fi
+
 ok "تم تجهيز الموقع"
 echo "  nginx: deploy/output/nginx-jawish-portal.conf"
 echo "  جذر الويب: $PORTAL_PUBLISH_DIR/public"

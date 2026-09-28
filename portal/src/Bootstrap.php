@@ -38,10 +38,13 @@ final class Bootstrap
         date_default_timezone_set('Asia/Damascus');
 
         if (!self::shouldSkipWebRuntime() && session_status() !== PHP_SESSION_ACTIVE) {
-            self::configureSessionCookie();
-            session_name(Config::get('PORTAL_SESSION_NAME', 'portal_session'));
+            $lifetimeSeconds = self::configureSessionCookie();
+            $sessionName = Config::get('PORTAL_SESSION_NAME', 'portal_session');
+            $presentedSessionId = (string) ($_COOKIE[$sessionName] ?? '');
+            session_name($sessionName);
             session_start();
-            \Portal\Services\PortalSessionService::bootstrap();
+            self::refreshSessionCookie($lifetimeSeconds);
+            \Portal\Services\PortalSessionService::bootstrap($presentedSessionId);
             if (\Portal\Auth\CustomerSession::isLoggedIn()) {
                 \Portal\Auth\CustomerSession::refresh();
             }
@@ -50,16 +53,43 @@ final class Bootstrap
         self::$booted = true;
     }
 
-    private static function configureSessionCookie(): void
+    private static function configureSessionCookie(): int
     {
         $lifetimeDays = (int) Config::get('PORTAL_SESSION_LIFETIME_DAYS', '30');
         $lifetimeDays = max(7, min(365, $lifetimeDays));
         $lifetimeSeconds = $lifetimeDays * 86400;
 
         ini_set('session.gc_maxlifetime', (string) $lifetimeSeconds);
+        ini_set('session.cookie_lifetime', (string) $lifetimeSeconds);
+        // System session GC can delete the file while the cookie is still valid.
+        // Keep that id so the database row can restore the login. Login rotates the id.
+        ini_set('session.use_strict_mode', '0');
 
         session_set_cookie_params([
             'lifetime' => $lifetimeSeconds,
+            'path' => '/',
+            'secure' => \Portal\Support\HttpsGate::isHttpsRequest(),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+
+        return $lifetimeSeconds;
+    }
+
+    private static function refreshSessionCookie(int $lifetimeSeconds): void
+    {
+        if ($lifetimeSeconds < 1 || headers_sent()) {
+            return;
+        }
+
+        $name = session_name();
+        $id = session_id();
+        if ($name === '' || $id === '') {
+            return;
+        }
+
+        setcookie($name, $id, [
+            'expires' => time() + $lifetimeSeconds,
             'path' => '/',
             'secure' => \Portal\Support\HttpsGate::isHttpsRequest(),
             'httponly' => true,
