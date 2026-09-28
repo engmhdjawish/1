@@ -13,9 +13,9 @@ declare(strict_types=1);
 
 $showForm = $showForm ?? false;
 $isNew = $isNew ?? false;
+$editId = trim((string) ($editId ?? ''));
 $iconValue = (string) ($editCategory['icon_key'] ?? 'category');
 ?>
-<?php require __DIR__ . '/layout-top.php'; ?>
 
 <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
   <div>
@@ -150,5 +150,3 @@ $iconValue = (string) ($editCategory['icon_key'] ?? 'category');
     </tbody>
   </table>
 </div>
-
-<?php require __DIR__ . '/layout-bottom.php'; ?>

@@ -9,6 +9,7 @@ use Portal\Services\HomeCategoryService;
 use Portal\Support\DashboardHttp;
 
 WebSession::requirePermission('home_sections.manage');
+require dirname(__DIR__, 2) . '/views/helpers.php';
 
 $user = WebSession::user();
 $flash = null;
@@ -88,5 +89,9 @@ if ($editId !== '') {
 
 $suggestedIcons = HomeCategoryService::SUGGESTED_ICONS;
 $currentRoute = '/dashboard/home-categories.php';
-$pageTitle = 'فئات الرئيسية';
+
+ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/home-categories.php';
+$content = ob_get_clean();
+$title = 'فئات الرئيسية';
+require dirname(__DIR__, 2) . '/views/dashboard/layout.php';
