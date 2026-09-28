@@ -30,7 +30,7 @@ final class HomeCategoryService
 
     public static function iconLibraryAssetUrl(): string
     {
-        return '/assets/material-icon-library.json';
+        return '/assets/home-category-icons.json';
     }
 
     public static function iconLibraryCount(): int
@@ -54,7 +54,7 @@ final class HomeCategoryService
 
     public static function iconLibraryPath(): string
     {
-        return dirname(__DIR__, 2) . '/public/assets/material-icon-library.json';
+        return dirname(__DIR__, 2) . '/public/assets/home-category-icons.json';
     }
 
     /** @return array{version: int, count: int, groups: array<string, string>, icons: list<array{key: string, label_ar: string, group: string, tags?: list<string>}>} */
@@ -142,7 +142,7 @@ final class HomeCategoryService
             }
         }
 
-        return str_replace('_', ' ', $iconKey);
+        return 'أيقونة';
     }
 
     /** @return list<array{key: string, label_ar: string, group: string}> */
@@ -163,12 +163,19 @@ final class HomeCategoryService
     /** @return array<string, string> */
     private static function fallbackIconGroupLabels(): array
     {
-        return ['general' => 'عام'];
+        return [
+            'footwear' => 'أنواع الأحذية',
+            'age' => 'الفئات العمرية',
+            'season' => 'الفصول',
+            'promo' => 'عروض وتسوّق',
+            'origin' => 'منشأ وتصنيف',
+            'general' => 'أخرى مفيدة',
+        ];
     }
 
     private static function iconLabelFromKey(string $key): string
     {
-        return str_replace('_', ' ', $key);
+        return 'أيقونة';
     }
 
     /** @return list<array<string, mixed>> */
