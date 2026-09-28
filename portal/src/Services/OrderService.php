@@ -484,11 +484,29 @@ final class OrderService
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function updateStatus(string $orderId, string $nextStatus): bool
-    {
+    public static function updateStatus(
+        string $orderId,
+        string $nextStatus,
+        ?string $handlerUserId = null,
+        ?string $handlerName = null
+    ): bool {
         if (!in_array($nextStatus, self::ALLOWED_STATUSES, true)) {
             return false;
         }
+
+        $currentStmt = Database::pdo()->prepare(
+            'SELECT status::text AS status, order_number
+             FROM orders
+             WHERE id = :id'
+        );
+        $currentStmt->execute(['id' => $orderId]);
+        $current = $currentStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        if ($current === null) {
+            return false;
+        }
+
+        $previousStatus = (string) ($current['status'] ?? '');
+        $orderNumber = (string) ($current['order_number'] ?? '');
 
         $stmt = Database::pdo()->prepare(
             'UPDATE orders
@@ -502,6 +520,16 @@ final class OrderService
 
         if ($stmt->rowCount() > 0) {
             try {
+                if ($previousStatus === 'pending' && $nextStatus !== 'pending') {
+                    NotificationService::resolveStaffOrderAlert($orderId);
+                    NotificationService::notifyStaffOrderHandled(
+                        $orderId,
+                        $orderNumber,
+                        self::staffOrderStatusLabel($nextStatus),
+                        $handlerUserId,
+                        $handlerName
+                    );
+                }
                 NotificationService::notifyOrderStatusChanged($orderId, $nextStatus);
             } catch (\Throwable) {
                 // Notification failure must not block order updates.
@@ -509,6 +537,16 @@ final class OrderService
         }
 
         return $stmt->rowCount() > 0;
+    }
+
+    private static function staffOrderStatusLabel(string $status): string
+    {
+        return match ($status) {
+            'confirmed' => 'تم التأكيد',
+            'completed' => 'اكتمل',
+            'cancelled' => 'تم الإلغاء',
+            default => 'تمت المعالجة',
+        };
     }
 
     public static function statusCounts(): array
@@ -949,6 +987,18 @@ final class OrderService
             }
 
             return ['ok' => false, 'message' => 'تعذر إلغاء الطلب. حاول مجدداً أو تواصل معنا.'];
+        }
+
+        try {
+            NotificationService::resolveStaffOrderAlert($orderId);
+            NotificationService::notifyStaffOrderHandled(
+                $orderId,
+                (string) ($order['order_number'] ?? ''),
+                'تم الإلغاء من العميل'
+            );
+            NotificationService::notifyOrderStatusChanged($orderId, 'cancelled');
+        } catch (\Throwable) {
+            // Notification failure must not block customer cancellation.
         }
 
         return ['ok' => true, 'message' => 'تم إلغاء الطلب بالكامل.'];

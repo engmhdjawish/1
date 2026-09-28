@@ -23,7 +23,14 @@ final class NotificationService
     public const READER_CUSTOMER = 'customer';
     public const READER_STAFF = 'staff';
 
+    public const REF_TYPE_ORDER = 'order';
+    public const REF_TYPE_CUSTOMER_REGISTRATION = 'customer_registration';
+
     private const SESSION_GUEST_READER_KEY = 'portal_notification_guest_id';
+    private const STAFF_ALERT_TTL_DAYS = 7;
+
+    /** @var string|null */
+    private static ?string $staffSinceCache = null;
 
     public static function ensureTable(): void
     {
@@ -40,6 +47,8 @@ final class NotificationService
                 recipient_web_user_id UUID REFERENCES web_users (id) ON DELETE CASCADE,
                 source VARCHAR(50) NOT NULL DEFAULT 'manual',
                 created_by_web_user_id UUID REFERENCES web_users (id) ON DELETE SET NULL,
+                reference_type VARCHAR(32),
+                reference_id VARCHAR(64),
                 expires_at TIMESTAMPTZ,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )"
@@ -64,6 +73,25 @@ final class NotificationService
         self::ensurePermission();
         self::ensureAudienceGuestsSupport();
         self::ensureDismissedColumn();
+        self::ensureReferenceColumns();
+    }
+
+    private static function ensureReferenceColumns(): void
+    {
+        try {
+            Database::pdo()->exec(
+                'ALTER TABLE portal_notifications
+                 ADD COLUMN IF NOT EXISTS reference_type VARCHAR(32),
+                 ADD COLUMN IF NOT EXISTS reference_id VARCHAR(64)'
+            );
+            Database::pdo()->exec(
+                'CREATE INDEX IF NOT EXISTS ix_portal_notifications_reference
+                 ON portal_notifications (source, reference_type, reference_id)
+                 WHERE reference_id IS NOT NULL'
+            );
+        } catch (\Throwable) {
+            // Best-effort for older PostgreSQL installs.
+        }
     }
 
     private static function ensureDismissedColumn(): void
@@ -186,7 +214,7 @@ final class NotificationService
                  AND r.reader_id = :reader_id
                 WHERE (' . implode(' OR ', $conditions['parts']) . ')
                   AND (n.expires_at IS NULL OR n.expires_at > NOW())
-                  AND (r.dismissed_at IS NULL)
+                  AND (r.dismissed_at IS NULL)' . self::staffSinceSql($reader) . '
                 ORDER BY n.created_at DESC
                 LIMIT :limit';
 
@@ -197,6 +225,7 @@ final class NotificationService
         $stmt->bindValue(':reader_type', $reader['reader_type']);
         $stmt->bindValue(':reader_id', $reader['reader_id']);
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        self::bindStaffSince($stmt, $reader);
         $stmt->execute();
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -216,7 +245,7 @@ final class NotificationService
                 WHERE (' . implode(' OR ', $conditions['parts']) . ')
                   AND (n.expires_at IS NULL OR n.expires_at > NOW())
                   AND (r.dismissed_at IS NULL)
-                  AND r.read_at IS NULL';
+                  AND r.read_at IS NULL' . self::staffSinceSql($reader);
 
         $stmt = Database::pdo()->prepare($sql);
         foreach ($conditions['params'] as $key => $value) {
@@ -224,9 +253,39 @@ final class NotificationService
         }
         $stmt->bindValue(':reader_type', $reader['reader_type']);
         $stmt->bindValue(':reader_id', $reader['reader_id']);
+        self::bindStaffSince($stmt, $reader);
         $stmt->execute();
 
         return (int) $stmt->fetchColumn();
+    }
+
+    /** Latest visible notification timestamp for efficient polling. */
+    public static function latestActivityAt(): ?string
+    {
+        self::ensureTable();
+        $reader = self::currentReader();
+        $conditions = self::visibilitySql($reader);
+        $sql = 'SELECT MAX(n.created_at)::text
+                FROM portal_notifications n
+                LEFT JOIN portal_notification_reads r
+                  ON r.notification_id = n.id
+                 AND r.reader_type = :reader_type
+                 AND r.reader_id = :reader_id
+                WHERE (' . implode(' OR ', $conditions['parts']) . ')
+                  AND (n.expires_at IS NULL OR n.expires_at > NOW())
+                  AND (r.dismissed_at IS NULL)' . self::staffSinceSql($reader);
+
+        $stmt = Database::pdo()->prepare($sql);
+        foreach ($conditions['params'] as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->bindValue(':reader_type', $reader['reader_type']);
+        $stmt->bindValue(':reader_id', $reader['reader_id']);
+        self::bindStaffSince($stmt, $reader);
+        $stmt->execute();
+        $value = $stmt->fetchColumn();
+
+        return is_string($value) && $value !== '' ? $value : null;
     }
 
     public static function markRead(string $notificationId): bool
@@ -324,18 +383,31 @@ final class NotificationService
         string $icon = 'campaign',
         ?string $expiresAt = null,
         ?string $createdByUserId = null,
-        string $source = 'manual'
+        string $source = 'manual',
+        ?string $referenceType = null,
+        ?string $referenceId = null
     ): string {
         self::ensureTable();
         if (!in_array($audience, [self::AUDIENCE_ALL, self::AUDIENCE_GUESTS, self::AUDIENCE_CUSTOMERS, self::AUDIENCE_STAFF], true)) {
             $audience = self::AUDIENCE_ALL;
         }
 
+        $referenceType = trim((string) $referenceType);
+        $referenceId = trim((string) $referenceId);
+        if ($referenceType === '') {
+            $referenceType = null;
+        }
+        if ($referenceId === '') {
+            $referenceId = null;
+        }
+
         $stmt = Database::pdo()->prepare(
             'INSERT INTO portal_notifications (
-                scope, audience, title_ar, body_ar, link_url, icon, source, created_by_web_user_id, expires_at
+                scope, audience, title_ar, body_ar, link_url, icon, source,
+                created_by_web_user_id, expires_at, reference_type, reference_id
              ) VALUES (
-                :scope, :audience, :title, :body, :link_url, :icon, :source, :created_by, :expires_at
+                :scope, :audience, :title, :body, :link_url, :icon, :source,
+                :created_by, :expires_at, :reference_type, :reference_id
              )
              RETURNING id::text'
         );
@@ -349,6 +421,8 @@ final class NotificationService
             'source' => $source,
             'created_by' => $createdByUserId,
             'expires_at' => $expiresAt,
+            'reference_type' => $referenceType,
+            'reference_id' => $referenceId,
         ]);
 
         $id = (string) $stmt->fetchColumn();
@@ -594,9 +668,11 @@ final class NotificationService
                 self::AUDIENCE_STAFF,
                 '/dashboard/orders.php?details=' . rawurlencode($orderId),
                 'shopping_cart',
+                self::defaultStaffAlertExpiresAt(),
                 null,
-                null,
-                'new_order'
+                'new_order',
+                self::REF_TYPE_ORDER,
+                $orderId
             );
         } catch (\Throwable) {
             // Never block order creation.
@@ -624,12 +700,107 @@ final class NotificationService
                 self::AUDIENCE_STAFF,
                 '/dashboard/customers.php?status=pending&details=' . rawurlencode($customerId),
                 'person_add',
+                self::defaultStaffAlertExpiresAt(),
                 null,
-                null,
-                'new_registration'
+                'new_registration',
+                self::REF_TYPE_CUSTOMER_REGISTRATION,
+                $customerId
             );
         } catch (\Throwable) {
             // Never block registration.
+        }
+    }
+
+    public static function resolveStaffOrderAlert(string $orderId): void
+    {
+        self::resolveStaffReferenceAlert('new_order', self::REF_TYPE_ORDER, $orderId, '/dashboard/orders.php?details=' . rawurlencode($orderId));
+    }
+
+    public static function resolveStaffRegistrationAlert(string $customerId): void
+    {
+        self::resolveStaffReferenceAlert(
+            'new_registration',
+            self::REF_TYPE_CUSTOMER_REGISTRATION,
+            $customerId,
+            '/dashboard/customers.php?status=pending&details=' . rawurlencode($customerId)
+        );
+    }
+
+    public static function notifyStaffOrderHandled(
+        string $orderId,
+        string $orderNumber,
+        string $statusLabel,
+        ?string $handlerUserId = null,
+        ?string $handlerName = null
+    ): void {
+        try {
+            $orderId = trim($orderId);
+            $orderNumber = trim($orderNumber);
+            if ($orderId === '' || $orderNumber === '') {
+                return;
+            }
+
+            $handlerName = trim((string) $handlerName);
+            $body = 'طلب رقم ' . $orderNumber . ' — ' . trim($statusLabel);
+            if ($handlerName !== '') {
+                $body .= ' · بواسطة ' . $handlerName;
+            }
+
+            $notificationId = self::createPublic(
+                'تمت متابعة الطلب',
+                $body,
+                self::AUDIENCE_STAFF,
+                '/dashboard/orders.php?details=' . rawurlencode($orderId),
+                'task_alt',
+                self::defaultStaffAlertExpiresAt(),
+                $handlerUserId,
+                'order_handled',
+                self::REF_TYPE_ORDER,
+                $orderId
+            );
+
+            self::markReadForStaff($notificationId, $handlerUserId);
+        } catch (\Throwable) {
+            // Never block order updates.
+        }
+    }
+
+    public static function notifyStaffRegistrationHandled(
+        string $customerId,
+        string $customerName,
+        string $actionLabel,
+        ?string $handlerUserId = null,
+        ?string $handlerName = null
+    ): void {
+        try {
+            $customerId = trim($customerId);
+            $customerName = trim($customerName);
+            if ($customerId === '' || $customerName === '') {
+                return;
+            }
+
+            $handlerName = trim((string) $handlerName);
+            $body = $customerName . ' — ' . trim($actionLabel);
+            if ($handlerName !== '') {
+                $body .= ' · بواسطة ' . $handlerName;
+            }
+
+            $notificationId = self::createPublic(
+                'تمت متابعة طلب التسجيل',
+                $body,
+                self::AUDIENCE_STAFF,
+                '/dashboard/customers.php?details=' . rawurlencode($customerId),
+                'how_to_reg',
+                self::defaultStaffAlertExpiresAt(),
+                $handlerUserId,
+                'registration_handled',
+                self::REF_TYPE_CUSTOMER_REGISTRATION,
+                $customerId
+            );
+
+            self::markReadForStaff($notificationId, $handlerUserId);
+        } catch (\Throwable) {
+            // Never block customer updates.
         }
     }
 
@@ -684,5 +855,107 @@ final class NotificationService
         }
 
         return str_starts_with($linkUrl, '/') ? $linkUrl : '/' . $linkUrl;
+    }
+
+    private static function defaultStaffAlertExpiresAt(): string
+    {
+        return (new \DateTimeImmutable('+' . self::STAFF_ALERT_TTL_DAYS . ' days'))->format('Y-m-d H:i:sP');
+    }
+
+    private static function resolveStaffReferenceAlert(
+        string $source,
+        string $referenceType,
+        string $referenceId,
+        string $linkUrl
+    ): void {
+        self::ensureTable();
+        $source = trim($source);
+        $referenceType = trim($referenceType);
+        $referenceId = trim($referenceId);
+        if ($source === '' || $referenceId === '') {
+            return;
+        }
+
+        $linkUrl = self::normalizeLink($linkUrl) ?? '';
+        $stmt = Database::pdo()->prepare(
+            'UPDATE portal_notifications
+             SET expires_at = NOW()
+             WHERE audience = :audience
+               AND (expires_at IS NULL OR expires_at > NOW())
+               AND (
+                    (source = :source AND reference_type = :reference_type AND reference_id = :reference_id)
+                    OR (source = :source2 AND link_url = :link_url)
+               )'
+        );
+        $stmt->execute([
+            'audience' => self::AUDIENCE_STAFF,
+            'source' => $source,
+            'reference_type' => $referenceType,
+            'reference_id' => $referenceId,
+            'source2' => $source,
+            'link_url' => $linkUrl,
+        ]);
+    }
+
+    private static function markReadForStaff(string $notificationId, ?string $staffUserId): void
+    {
+        $notificationId = trim($notificationId);
+        $staffUserId = trim((string) $staffUserId);
+        if ($notificationId === '' || $staffUserId === '') {
+            return;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'INSERT INTO portal_notification_reads (notification_id, reader_type, reader_id)
+             VALUES (:notification_id, :reader_type, :reader_id)
+             ON CONFLICT (notification_id, reader_type, reader_id) DO NOTHING'
+        );
+        $stmt->execute([
+            'notification_id' => $notificationId,
+            'reader_type' => self::READER_STAFF,
+            'reader_id' => $staffUserId,
+        ]);
+    }
+
+    /**
+     * @param array{reader_type: string, reader_id: string, is_customer: bool, is_staff: bool} $reader
+     */
+    private static function staffSinceSql(array $reader): string
+    {
+        return $reader['is_staff'] ? ' AND n.created_at >= :staff_since' : '';
+    }
+
+    /**
+     * @param array{reader_type: string, reader_id: string, is_customer: bool, is_staff: bool} $reader
+     */
+    private static function bindStaffSince(\PDOStatement $stmt, array $reader): void
+    {
+        if (!$reader['is_staff']) {
+            return;
+        }
+
+        $since = self::staffSinceForCurrentReader($reader['reader_id']);
+        $stmt->bindValue(':staff_since', $since ?? '1970-01-01 00:00:00+00');
+    }
+
+    private static function staffSinceForCurrentReader(string $staffUserId): ?string
+    {
+        if (self::$staffSinceCache !== null) {
+            return self::$staffSinceCache;
+        }
+
+        $staffUserId = trim($staffUserId);
+        if ($staffUserId === '') {
+            return null;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT created_at::text FROM web_users WHERE id = :id LIMIT 1'
+        );
+        $stmt->execute(['id' => $staffUserId]);
+        $createdAt = $stmt->fetchColumn();
+        self::$staffSinceCache = is_string($createdAt) && $createdAt !== '' ? $createdAt : null;
+
+        return self::$staffSinceCache;
     }
 }

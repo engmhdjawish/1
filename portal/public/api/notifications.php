@@ -35,6 +35,21 @@ try {
             exit;
         }
 
+        if ($action === 'poll') {
+            $since = trim((string) ($_GET['since'] ?? ''));
+            $latest = NotificationService::latestActivityAt();
+            $count = NotificationService::unreadCount();
+            $changed = $since === '' || ($latest !== null && $latest !== $since);
+
+            echo json_encode([
+                'ok' => true,
+                'changed' => $changed,
+                'latest' => $latest,
+                'count' => $count,
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
         echo json_encode([
             'ok' => true,
             'items' => NotificationService::listForReader(40),

@@ -346,6 +346,17 @@ final class WebCustomerService
 
         if ($stmt->rowCount() > 0) {
             try {
+                $customer = self::getById($customerId);
+                $customerName = trim((string) ($customer['name_ar'] ?? ''));
+                $handlerName = self::staffDisplayName($adminUserId);
+                NotificationService::resolveStaffRegistrationAlert($customerId);
+                NotificationService::notifyStaffRegistrationHandled(
+                    $customerId,
+                    $customerName !== '' ? $customerName : 'عميل',
+                    'تمت الموافقة',
+                    $adminUserId,
+                    $handlerName
+                );
                 NotificationService::notifyCustomerApproved($customerId);
             } catch (\Throwable) {
             }
@@ -375,6 +386,17 @@ final class WebCustomerService
         if ($stmt->rowCount() > 0) {
             PortalSessionService::revokeAllForCustomer($customerId);
             try {
+                $customer = self::getById($customerId);
+                $customerName = trim((string) ($customer['name_ar'] ?? ''));
+                $handlerName = self::staffDisplayName($adminUserId);
+                NotificationService::resolveStaffRegistrationAlert($customerId);
+                NotificationService::notifyStaffRegistrationHandled(
+                    $customerId,
+                    $customerName !== '' ? $customerName : 'عميل',
+                    'تم الرفض',
+                    $adminUserId,
+                    $handlerName
+                );
                 NotificationService::notifyCustomerRejected($customerId, $reason);
             } catch (\Throwable) {
             }
@@ -630,5 +652,21 @@ final class WebCustomerService
         $update->execute(['hash' => $newHash, 'id' => $customerId]);
 
         return ['ok' => true, 'message' => 'تم تحديث كلمة المرور بنجاح.'];
+    }
+
+    private static function staffDisplayName(string $adminUserId): string
+    {
+        $adminUserId = trim($adminUserId);
+        if ($adminUserId === '') {
+            return '';
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT display_name_ar FROM web_users WHERE id = :id LIMIT 1'
+        );
+        $stmt->execute(['id' => $adminUserId]);
+        $name = trim((string) ($stmt->fetchColumn() ?: ''));
+
+        return $name;
     }
 }

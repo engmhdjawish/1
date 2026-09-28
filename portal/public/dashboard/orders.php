@@ -60,7 +60,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } else {
             $nextStatus = trim((string) ($_POST['next_status'] ?? ''));
-            $ok = $orderId !== '' && $nextStatus !== '' && OrderService::updateStatus($orderId, $nextStatus);
+            $staffUser = WebSession::user();
+            $ok = $orderId !== '' && $nextStatus !== '' && OrderService::updateStatus(
+                $orderId,
+                $nextStatus,
+                (string) ($staffUser['id'] ?? ''),
+                (string) ($staffUser['display_name_ar'] ?? '')
+            );
             $flash = $ok ? 'تم تحديث حالة الطلب.' : 'تعذر تحديث حالة الطلب.';
             $flashType = $ok ? 'success' : 'error';
             if (DashboardHttp::wantsJson()) {

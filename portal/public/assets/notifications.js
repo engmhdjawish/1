@@ -7,7 +7,7 @@
   const API = '/api/notifications.php';
   const PUSH_API = '/api/push-subscribe.php';
   const PUSH_CONFIG_API = '/api/push-config.php';
-  const POLL_MS = 45_000;
+  const POLL_MS = document.body?.classList.contains('dashboard-app') ? 12_000 : 20_000;
   const ICON_URL = '/icons/brand-icon.php?size=192';
 
   function defaultOpenUrl() {
@@ -192,6 +192,7 @@
 
     let open = false;
     let lastUnread = -1;
+    let lastActivityAt = '';
 
     const setPanelOpen = (isOpen) => {
       open = isOpen;
@@ -226,8 +227,8 @@
       enablePush.disabled = subscribed;
     };
 
-    const notifyNewItems = async (count) => {
-      if (count <= lastUnread || lastUnread < 0) {
+    const notifyNewItems = async (count, force = false) => {
+      if (!force && (count <= lastUnread || lastUnread < 0)) {
         return;
       }
       document.querySelectorAll('[data-notif-bell]').forEach((bellRoot) => {
@@ -251,9 +252,18 @@
 
     const pollUnread = async () => {
       try {
-        const data = await fetchJson(API + '?action=count');
+        const pollUrl = API + '?action=poll' + (lastActivityAt ? '&since=' + encodeURIComponent(lastActivityAt) : '');
+        const data = await fetchJson(pollUrl);
         const count = Math.max(0, Number(data.count) || 0);
-        await notifyNewItems(count);
+        if (data.latest) {
+          lastActivityAt = String(data.latest);
+        }
+        if (data.changed) {
+          await notifyNewItems(count, true);
+          if (open) {
+            await load();
+          }
+        }
         lastUnread = count;
         setBadge(count);
       } catch {
@@ -374,9 +384,12 @@
       setPanelOpen(false);
     });
 
-    fetchJson(API + '?action=count')
+    fetchJson(API + '?action=poll')
       .then((data) => {
         const count = Math.max(0, Number(data.count) || 0);
+        if (data.latest) {
+          lastActivityAt = String(data.latest);
+        }
         lastUnread = count;
         setBadge(count);
       })
