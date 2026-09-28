@@ -9,12 +9,9 @@ declare(strict_types=1);
 /** @var bool $isNew */
 /** @var string|null $flash */
 /** @var string $flashType */
-/** @var list<array{key: string, label_ar: string, group: string}> $iconLibrary */
-
 require __DIR__ . '/partials/material-icon-picker.php';
 
 $showForm = $showForm ?? false;
-$iconLibrary = is_array($iconLibrary ?? null) ? $iconLibrary : HomeCategoryService::iconLibrary();
 $isNew = $isNew ?? false;
 $editId = trim((string) ($editId ?? ''));
 $iconValue = (string) ($editCategory['icon_key'] ?? 'category');
@@ -66,7 +63,7 @@ $iconValue = (string) ($editCategory['icon_key'] ?? 'category');
           <input name="label_ar" required value="<?= h((string) ($editCategory['label_ar'] ?? '')) ?>" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="مثال: شحاطة">
         </label>
         <div class="text-xs md:col-span-2">
-          <?php portal_render_material_icon_picker_field('hc-category-icon', 'icon_key', $iconValue, $iconLibrary); ?>
+          <?php portal_render_material_icon_picker_field('hc-category-icon', 'icon_key', $iconValue); ?>
         </div>
         <label class="text-xs md:col-span-2">
           <span class="text-text-muted block mb-0.5">الرابط</span>
@@ -83,7 +80,7 @@ $iconValue = (string) ($editCategory['icon_key'] ?? 'category');
       </div>
     </article>
   </form>
-  <?php portal_render_material_icon_picker_modal($iconLibrary); ?>
+  <?php portal_render_material_icon_picker_modal(); ?>
 <?php endif; ?>
 
 <div class="bg-white border border-border-subtle rounded-xl overflow-hidden">

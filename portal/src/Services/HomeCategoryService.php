@@ -25,77 +25,131 @@ final class HomeCategoryService
         'shopping_bag',
     ];
 
+    /** @var array{version: int, count: int, groups: array<string, string>, icons: list<array{key: string, label_ar: string, group: string, tags?: list<string>}>}|null */
+    private static ?array $iconLibraryPayload = null;
+
+    public static function iconLibraryAssetUrl(): string
+    {
+        return '/assets/material-icon-library.json';
+    }
+
+    public static function iconLibraryPath(): string
+    {
+        return dirname(__DIR__, 2) . '/public/assets/material-icon-library.json';
+    }
+
+    /** @return array{version: int, count: int, groups: array<string, string>, icons: list<array{key: string, label_ar: string, group: string, tags?: list<string>}>} */
+    public static function iconLibraryPayload(): array
+    {
+        if (self::$iconLibraryPayload !== null) {
+            return self::$iconLibraryPayload;
+        }
+
+        $path = self::iconLibraryPath();
+        if (!is_file($path)) {
+            self::$iconLibraryPayload = [
+                'version' => 1,
+                'count' => count(self::fallbackIconLibrary()),
+                'groups' => self::fallbackIconGroupLabels(),
+                'icons' => self::fallbackIconLibrary(),
+            ];
+
+            return self::$iconLibraryPayload;
+        }
+
+        try {
+            $raw = file_get_contents($path);
+            $decoded = is_string($raw) ? json_decode($raw, true, 512, JSON_THROW_ON_ERROR) : null;
+            if (!is_array($decoded) || !is_array($decoded['icons'] ?? null)) {
+                throw new \JsonException('Invalid icon library payload.');
+            }
+
+            $icons = [];
+            foreach ($decoded['icons'] as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $rawKey = trim((string) ($item['key'] ?? ''));
+                if ($rawKey === '') {
+                    continue;
+                }
+                $key = self::normalizeIconKey($rawKey);
+                $icons[] = [
+                    'key' => $key,
+                    'label_ar' => trim((string) ($item['label_ar'] ?? '')) ?: $key,
+                    'group' => trim((string) ($item['group'] ?? 'general')) ?: 'general',
+                    'tags' => is_array($item['tags'] ?? null) ? array_values($item['tags']) : [],
+                ];
+            }
+
+            self::$iconLibraryPayload = [
+                'version' => (int) ($decoded['version'] ?? 1),
+                'count' => count($icons),
+                'groups' => is_array($decoded['groups'] ?? null) ? $decoded['groups'] : self::fallbackIconGroupLabels(),
+                'icons' => $icons,
+            ];
+        } catch (\Throwable) {
+            self::$iconLibraryPayload = [
+                'version' => 1,
+                'count' => count(self::fallbackIconLibrary()),
+                'groups' => self::fallbackIconGroupLabels(),
+                'icons' => self::fallbackIconLibrary(),
+            ];
+        }
+
+        return self::$iconLibraryPayload;
+    }
+
     /**
-     * Curated Material Symbols for homepage category shortcuts (searchable in dashboard).
-     *
-     * @return list<array{key: string, label_ar: string, group: string}>
+     * @return list<array{key: string, label_ar: string, group: string, tags?: list<string>}>
      */
     public static function iconLibrary(): array
     {
-        return [
-            ['key' => 'storefront', 'label_ar' => 'متجر', 'group' => 'shopping'],
-            ['key' => 'shopping_bag', 'label_ar' => 'حقيبة', 'group' => 'shopping'],
-            ['key' => 'shopping_cart', 'label_ar' => 'سلة', 'group' => 'shopping'],
-            ['key' => 'sell', 'label_ar' => 'بيع', 'group' => 'shopping'],
-            ['key' => 'local_offer', 'label_ar' => 'عرض', 'group' => 'shopping'],
-            ['key' => 'local_fire_department', 'label_ar' => 'عروض', 'group' => 'shopping'],
-            ['key' => 'percent', 'label_ar' => 'تخفيض', 'group' => 'shopping'],
-            ['key' => 'redeem', 'label_ar' => 'كوبون', 'group' => 'shopping'],
-            ['key' => 'new_releases', 'label_ar' => 'جديد', 'group' => 'shopping'],
-            ['key' => 'star', 'label_ar' => 'مميز', 'group' => 'shopping'],
-            ['key' => 'favorite', 'label_ar' => 'مفضل', 'group' => 'shopping'],
-            ['key' => 'steps', 'label_ar' => 'شحاطة / صندل', 'group' => 'footwear'],
-            ['key' => 'hiking', 'label_ar' => 'بوط / hiking', 'group' => 'footwear'],
-            ['key' => 'footprint', 'label_ar' => 'خفافة', 'group' => 'footwear'],
-            ['key' => 'ice_skating', 'label_ar' => 'حذاء رياضي', 'group' => 'footwear'],
-            ['key' => 'snowflake', 'label_ar' => 'شتوي', 'group' => 'footwear'],
-            ['key' => 'checkroom', 'label_ar' => 'ملابس', 'group' => 'footwear'],
-            ['key' => 'dry_cleaning', 'label_ar' => 'أقمشة', 'group' => 'footwear'],
-            ['key' => 'man', 'label_ar' => 'رجالي', 'group' => 'people'],
-            ['key' => 'woman', 'label_ar' => 'نسائي', 'group' => 'people'],
-            ['key' => 'boy', 'label_ar' => 'ولد', 'group' => 'people'],
-            ['key' => 'girl', 'label_ar' => 'بنت', 'group' => 'people'],
-            ['key' => 'child_care', 'label_ar' => 'أطفال', 'group' => 'people'],
-            ['key' => 'family_restroom', 'label_ar' => 'عائلة', 'group' => 'people'],
-            ['key' => 'elderly', 'label_ar' => 'كبار', 'group' => 'people'],
-            ['key' => 'face', 'label_ar' => 'وجه', 'group' => 'people'],
-            ['key' => 'category', 'label_ar' => 'فئة', 'group' => 'general'],
-            ['key' => 'inventory_2', 'label_ar' => 'مخزون', 'group' => 'general'],
-            ['key' => 'grid_view', 'label_ar' => 'شبكة', 'group' => 'general'],
-            ['key' => 'apps', 'label_ar' => 'كل الفئات', 'group' => 'general'],
-            ['key' => 'home', 'label_ar' => 'رئيسية', 'group' => 'general'],
-            ['key' => 'link', 'label_ar' => 'رابط', 'group' => 'general'],
-            ['key' => 'flag', 'label_ar' => 'وطني', 'group' => 'general'],
-            ['key' => 'public', 'label_ar' => 'عالمي', 'group' => 'general'],
-            ['key' => 'language', 'label_ar' => 'صيني / مستورد', 'group' => 'general'],
-            ['key' => 'factory', 'label_ar' => 'محلي', 'group' => 'general'],
-            ['key' => 'warehouse', 'label_ar' => 'مستودع', 'group' => 'general'],
-            ['key' => 'local_shipping', 'label_ar' => 'توصيل', 'group' => 'general'],
-            ['key' => 'payments', 'label_ar' => 'أسعار', 'group' => 'general'],
-            ['key' => 'price_check', 'label_ar' => 'فحص سعر', 'group' => 'general'],
-            ['key' => 'barcode_scanner', 'label_ar' => 'باركود', 'group' => 'general'],
-            ['key' => 'palette', 'label_ar' => 'ألوان', 'group' => 'general'],
-            ['key' => 'straighten', 'label_ar' => 'مقاسات', 'group' => 'general'],
-            ['key' => 'style', 'label_ar' => 'ستايل', 'group' => 'general'],
-            ['key' => 'watch', 'label_ar' => 'إكسسوار', 'group' => 'general'],
-            ['key' => 'backpack', 'label_ar' => 'حقيبة ظهر', 'group' => 'general'],
-            ['key' => 'sports_soccer', 'label_ar' => 'رياضي', 'group' => 'general'],
-            ['key' => 'fitness_center', 'label_ar' => 'لياقة', 'group' => 'general'],
-            ['key' => 'beach_access', 'label_ar' => 'صيفي', 'group' => 'general'],
-            ['key' => 'wb_sunny', 'label_ar' => 'صيف', 'group' => 'general'],
-            ['key' => 'ac_unit', 'label_ar' => 'بارد', 'group' => 'general'],
-        ];
+        return self::iconLibraryPayload()['icons'];
     }
 
     /** @return array<string, string> */
     public static function iconGroupLabels(): array
     {
-        return [
-            'shopping' => 'تسوّق وعروض',
-            'footwear' => 'أحذية وملابس',
-            'people' => 'فئات العملاء',
-            'general' => 'عام',
-        ];
+        return self::iconLibraryPayload()['groups'];
+    }
+
+    public static function iconLabel(string $iconKey): string
+    {
+        $iconKey = self::normalizeIconKey($iconKey);
+        foreach (self::iconLibrary() as $item) {
+            if (($item['key'] ?? '') === $iconKey) {
+                return (string) ($item['label_ar'] ?? $iconKey);
+            }
+        }
+
+        return str_replace('_', ' ', $iconKey);
+    }
+
+    /** @return list<array{key: string, label_ar: string, group: string}> */
+    private static function fallbackIconLibrary(): array
+    {
+        $icons = [];
+        foreach (self::SUGGESTED_ICONS as $key) {
+            $icons[] = [
+                'key' => $key,
+                'label_ar' => self::iconLabelFromKey($key),
+                'group' => 'general',
+            ];
+        }
+
+        return $icons;
+    }
+
+    /** @return array<string, string> */
+    private static function fallbackIconGroupLabels(): array
+    {
+        return ['general' => 'عام'];
+    }
+
+    private static function iconLabelFromKey(string $key): string
+    {
+        return str_replace('_', ' ', $key);
     }
 
     /** @return list<array<string, mixed>> */
