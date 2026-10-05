@@ -56,6 +56,10 @@ if [[ -f "$templates/material-zip-worker.cron" ]]; then
   sed "s|__PORTAL_DIR__|$PORTAL_PUBLISH_DIR|g; s|__PHP_BIN__|${PORTAL_PHP_CLI_BIN:-/usr/bin/php8.5}|g" \
     "$templates/material-zip-worker.cron" > "$DEPLOY_ROOT/output/material-zip-worker.cron"
 fi
+if [[ -f "$templates/material-image-sync-worker.cron" ]]; then
+  sed "s|__PORTAL_DIR__|$PORTAL_PUBLISH_DIR|g; s|__PHP_BIN__|${PORTAL_PHP_CLI_BIN:-/usr/bin/php8.5}|g" \
+    "$templates/material-image-sync-worker.cron" > "$DEPLOY_ROOT/output/material-image-sync-worker.cron"
+fi
 
 session_days="30"
 if [[ -f "$PORTAL_PUBLISH_DIR/.env" ]]; then
@@ -72,3 +76,4 @@ ok "تم تجهيز الموقع"
 echo "  nginx: deploy/output/nginx-jawish-portal.conf"
 echo "  جذر الويب: $PORTAL_PUBLISH_DIR/public"
 echo "  ZIP worker cron: deploy/output/material-zip-worker.cron"
+echo "  Image sync worker cron: deploy/output/material-image-sync-worker.cron"

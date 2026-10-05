@@ -7,6 +7,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Auth\WebSession;
 use Portal\Services\AccountingApiService;
 use Portal\Services\ApiClient;
+use Portal\Services\MaterialImageBackgroundWorkerService;
 use Portal\Services\MaterialImageStorageService;
 use Portal\Services\MaterialImageSyncService;
 use Portal\Services\PortalSettingsService;
@@ -53,6 +54,11 @@ $paths = MaterialImageStorageService::settings();
 $stats = MaterialImageStorageService::stats();
 $syncStats = MaterialImageSyncService::stats();
 $apiHealth = PortalSettingsService::apiHealth();
+$imageWorkerSnapshot = MaterialImageBackgroundWorkerService::dashboardSnapshot();
+$initialQueueStatusFilter = trim((string) ($_GET['queue_status'] ?? ''));
+if (!in_array($initialQueueStatusFilter, ['pending', 'syncing', 'synced', 'failed'], true)) {
+    $initialQueueStatusFilter = '';
+}
 $queuePage = MaterialImageSyncService::listQueuePage(1, 20);
 $queue = $queuePage['items'];
 $pendingDeletable = MaterialImageSyncService::countDeletablePending();

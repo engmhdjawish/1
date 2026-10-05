@@ -158,7 +158,7 @@
     let syncQueuePageSize = Number(bootstrap.queuePage?.page_size || 20);
     let syncQueueHasMore = !!bootstrap.queuePage?.has_more;
     let syncQueueTotalCount = Number(bootstrap.queuePage?.total_count || 0);
-    let syncQueueStatusFilter = '';
+    let syncQueueStatusFilter = String(bootstrap.initialQueueStatusFilter || '').trim();
     let pendingDeletableTotal = Number(bootstrap.pendingDeletable || 0);
     let deletePendingRunning = false;
     let deletePendingPaused = false;
@@ -1404,6 +1404,10 @@
         setQueueFilter(tab.getAttribute('data-queue-filter') || '');
       }, { signal });
     });
+
+    if (syncQueueStatusFilter) {
+      setQueueFilter(syncQueueStatusFilter);
+    }
 
     updateSyncQueuePagination(normalizeQueuePayload({
       items: bootstrap.queue || [],

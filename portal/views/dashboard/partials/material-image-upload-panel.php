@@ -25,6 +25,7 @@ $uploadBootstrap = [
     'pendingDeletable' => (int) ($pendingDeletable ?? 0),
     'apiOk' => !empty($apiHealth['ok']),
     'apiMessage' => (string) ($apiHealth['message'] ?? ''),
+    'initialQueueStatusFilter' => (string) ($initialQueueStatusFilter ?? ''),
 ];
 ?>
 <?php if (!empty($flash)): ?>
