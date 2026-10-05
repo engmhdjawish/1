@@ -3,9 +3,10 @@
 declare(strict_types=1);
 
 /**
- * Serves material images for store browsing from the portal disk only.
+ * Serves material images for store browsing from the portal disk.
  * thumb=1 serves a real thumbnail (generated once from the original if missing).
- * Never proxies or downloads from Amine on this hot path.
+ * When a GUID is linked in Amine but no local file exists yet, pulls once and caches
+ * (local disk lookup only on the hot path — no Amine metadata round-trip per request).
  */
 
 require dirname(__DIR__, 2) . '/bootstrap.php';
@@ -26,6 +27,19 @@ if ($thumb) {
     $localPath = MaterialImageStorageService::ensureStoreThumbnail($id);
 } else {
     $localPath = MaterialImageStorageService::resolvePathForGuid($id, false, true);
+}
+
+if (($localPath === null || !is_readable($localPath))
+    && MaterialImageStorageService::shouldAttemptStorefrontPull($id)) {
+    @set_time_limit(90);
+    $pulled = MaterialImageStorageService::ensureLocalCopyFromAmine($id);
+    if ($pulled !== null && is_readable($pulled)) {
+        $localPath = $thumb
+            ? MaterialImageStorageService::ensureStoreThumbnail($id)
+            : $pulled;
+    } else {
+        MaterialImageStorageService::recordStorefrontPullFailure($id);
+    }
 }
 
 if ($localPath !== null && is_readable($localPath)) {

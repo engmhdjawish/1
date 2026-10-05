@@ -125,7 +125,7 @@ php -S 127.0.0.1:8080
 | `/dashboard/accounting-documents.php` | الفواتير والسندات |
 | `/dashboard/material-images.php` | مخزون صور الموقع + رفع متسلسل مع استئناف (IndexedDB) |
 | `/dashboard/material-images-api.php` | API رفع صورة واحدة + قائمة الملفات المحلية |
-| `/api/image.php?id=...` | عرض صورة مادة من مجلد الموقع فقط (GUID → ملف محلي، بدون بروكسي API) |
+| `/api/image.php?id=...` | عرض صورة مادة من القرص المحلي؛ إن وُجد GUID في الأمين ولا نسخة محلية تُسحَب مرة واحدة (قابل للتعطيل عبر `PORTAL_IMAGE_ON_DEMAND_PULL=0`) |
 | `/media/material.php?file=...` | عرض ملف صورة مادة محلي بالاسم |
 | `/api/proxy.php` | بروكسي JSON للـ API |
 
@@ -154,6 +154,18 @@ UPDATE home_sections SET is_active = TRUE WHERE slug IN ('offers','women','men',
 | `super_admin` | كل الصلاحيات |
 
 **فصل مهم:** صلاحية `orders.view` لا تفتح لوحة المحاسبة. كل صفحة محاسبة تتطلب صلاحيتها (`accounting.*`). صلاحية `images.view` للتصفح والتحميل فقط؛ `images.upload` للرفع والربط والمزامنة.
+
+### صور موجودة في الأمين ولا تظهر في المتجر
+
+المتجر يقرأ الملفات من سيرفر الموقع. لسحب كل الصور الناقصة دفعة واحدة (بعد ربط API):
+
+```bash
+cd portal
+php scripts/pull-missing-material-images.php --count-only   # إحصاء
+php scripts/pull-missing-material-images.php --limit=500    # سحب
+```
+
+بدون السكربت، أول طلب لـ `/api/image.php` لكل GUID يحاول السحب تلقائياً ما لم تُعطّل `PORTAL_IMAGE_ON_DEMAND_PULL`.
 
 ## هيكل المجلدات
 
