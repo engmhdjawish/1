@@ -1608,11 +1608,76 @@ final class MaterialImageStorageService
         return null;
     }
 
+    private const STOREFRONT_PULL_FAILURE_TTL_SECONDS = 900;
+
+    public static function storefrontOnDemandPullEnabled(): bool
+    {
+        $raw = Config::get('PORTAL_IMAGE_ON_DEMAND_PULL', '1');
+        $value = strtolower(trim((string) $raw));
+
+        return !in_array($value, ['0', 'false', 'no', 'off'], true);
+    }
+
+    public static function shouldAttemptStorefrontPull(string $imageGuid): bool
+    {
+        if (!self::storefrontOnDemandPullEnabled()) {
+            return false;
+        }
+
+        $imageGuid = strtolower(trim($imageGuid));
+        if ($imageGuid === '' || preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $imageGuid) !== 1) {
+            return false;
+        }
+
+        $marker = self::storefrontPullFailureMarkerPath($imageGuid);
+        if ($marker === null || !is_file($marker)) {
+            return true;
+        }
+
+        $age = time() - (int) (@filemtime($marker) ?: 0);
+
+        return $age >= self::STOREFRONT_PULL_FAILURE_TTL_SECONDS;
+    }
+
+    public static function recordStorefrontPullFailure(string $imageGuid): void
+    {
+        $marker = self::storefrontPullFailureMarkerPath($imageGuid);
+        if ($marker === null) {
+            return;
+        }
+
+        $dir = dirname($marker);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+        @touch($marker);
+    }
+
+    public static function clearStorefrontPullFailure(string $imageGuid): void
+    {
+        $marker = self::storefrontPullFailureMarkerPath($imageGuid);
+        if ($marker !== null && is_file($marker)) {
+            @unlink($marker);
+        }
+    }
+
+    private static function storefrontPullFailureMarkerPath(string $imageGuid): ?string
+    {
+        $imageGuid = strtolower(trim($imageGuid));
+        if ($imageGuid === '' || preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $imageGuid) !== 1) {
+            return null;
+        }
+
+        $dir = rtrim(Config::storagePath(), '/\\') . DIRECTORY_SEPARATOR . 'storefront-pull-failures';
+
+        return $dir . DIRECTORY_SEPARATOR . $imageGuid;
+    }
+
     /**
      * When Amine has the image linked but the portal disk copy is missing,
      * download once from the Amine API and register it as synced locally.
      *
-     * Used by bulk repair (CLI / dashboard). Storefront /api/image.php stays local-only.
+     * Used by bulk repair (CLI / dashboard) and optional storefront on-demand pull.
      *
      * @param null|callable(string):void $onProgress
      */
@@ -1628,6 +1693,8 @@ final class MaterialImageStorageService
             $existing = MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, false, false);
         }
         if ($existing !== null && is_readable($existing)) {
+            self::clearStorefrontPullFailure($imageGuid);
+
             return $existing;
         }
 
@@ -1639,6 +1706,7 @@ final class MaterialImageStorageService
                     MaterialImageSyncService::recordAssignedCopy($guess, $path, $imageGuid);
                 } catch (Throwable) {
                 }
+                self::clearStorefrontPullFailure($imageGuid);
 
                 return $path;
             }
@@ -1677,10 +1745,17 @@ final class MaterialImageStorageService
             $existingAfterLock = self::resolvePathForGuid($imageGuid, false, true)
                 ?? MaterialImageSyncService::resolveLocalPathByAmineGuid($imageGuid, false, false);
             if ($existingAfterLock !== null && is_readable($existingAfterLock)) {
+                self::clearStorefrontPullFailure($imageGuid);
+
                 return $existingAfterLock;
             }
 
-            return self::downloadAmineImageToLocal($imageGuid, $onProgress);
+            $path = self::downloadAmineImageToLocal($imageGuid, $onProgress);
+            if ($path !== null) {
+                self::clearStorefrontPullFailure($imageGuid);
+            }
+
+            return $path;
         } finally {
             flock($lockHandle, LOCK_UN);
             fclose($lockHandle);

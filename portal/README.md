@@ -125,7 +125,7 @@ php -S 127.0.0.1:8080
 | `/dashboard/accounting-documents.php` | الفواتير والسندات |
 | `/dashboard/material-images.php` | مخزون صور الموقع + رفع متسلسل مع استئناف (IndexedDB) |
 | `/dashboard/material-images-api.php` | API رفع صورة واحدة + قائمة الملفات المحلية |
-| `/api/image.php?id=...` | عرض صورة مادة من مجلد الموقع فقط (GUID → ملف محلي، بدون بروكسي API) |
+| `/api/image.php?id=...` | عرض صورة مادة من القرص المحلي؛ إن وُجد GUID في الأمين ولا نسخة محلية تُسحَب مرة واحدة (قابل للتعطيل عبر `PORTAL_IMAGE_ON_DEMAND_PULL=0`) |
 | `/media/material.php?file=...` | عرض ملف صورة مادة محلي بالاسم |
 | `/api/proxy.php` | بروكسي JSON للـ API |
 
@@ -155,9 +155,19 @@ UPDATE home_sections SET is_active = TRUE WHERE slug IN ('offers','women','men',
 
 **فصل مهم:** صلاحية `orders.view` لا تفتح لوحة المحاسبة. كل صفحة محاسبة تتطلب صلاحيتها (`accounting.*`). صلاحية `images.view` للتصفح والتحميل فقط؛ `images.upload` للرفع والربط والمزامنة.
 
-### صور المواد — مزامنة خلفية وقائمة الفشل
+### صور المواد — عرض، سحب، ومزامنة خلفية
 
-عند الرفع والربط من الموقع فقط، ثبّت عامل cron على Linux (كل دقيقة):
+المتجر يقرأ الملفات من سيرفر الموقع. لسحb دفعة واحدة (بعد ربط API):
+
+```bash
+cd portal
+php scripts/pull-missing-material-images.php --count-only   # إحصاء
+php scripts/pull-missing-material-images.php --limit=500    # سحب
+```
+
+أول طلب لـ `/api/image.php` لكل GUID يحاول السحب تلقائياً ما لم تُعطّل `PORTAL_IMAGE_ON_DEMAND_PULL`.
+
+عند الرفع والربط من الموقع، ثبّت عامل cron على Linux (كل دقيقة):
 
 ```bash
 sudo PORTAL_DIR=/var/www/jawish-portal PHP_BIN=/usr/bin/php8.5 \
@@ -167,8 +177,6 @@ sudo PORTAL_DIR=/var/www/jawish-portal PHP_BIN=/usr/bin/php8.5 \
 - يُكمل طابور رفع الأمين، يُعيد محاولة الفاشل، ويُصلح نسخاً محلية ناقصة (حدود في `.env`: `PORTAL_MATERIAL_IMAGE_WORKER_*`).
 - لوحة **صور المواد** → شريط «المزامنة في الخلفية» + **قائمة الفشل** (`?tab=upload&queue_status=failed`).
 - سجل: `storage/material-image-worker/worker.log` · حالة: `status.json`.
-
-إحصاء/سحب يدوي: `php scripts/pull-missing-material-images.php --count-only`
 
 ## هيكل المجلدات
 
