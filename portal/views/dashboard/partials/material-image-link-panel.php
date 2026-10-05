@@ -27,7 +27,7 @@
       <details class="dash-mi-danger-zone">
         <summary class="dash-mi-danger-zone__toggle">حذف جماعي (خطير)</summary>
         <div class="dash-mi-danger-zone__body">
-          <p class="dash-mi-danger-zone__hint">يحذف من bm000 والموقع نهائياً. لا يمكن التراجع.</p>
+          <p class="dash-mi-danger-zone__hint">يحذف الصورة من المحاسبة والموقع نهائياً. لا يمكن التراجع.</p>
           <div class="dash-mi-toolbar__actions">
             <button type="button" id="deleteAllUnlinkedBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hidden">حذف كل غير المرتبطة</button>
             <button type="button" id="deleteSelectedUnlinkedBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hidden">حذف المحدد</button>

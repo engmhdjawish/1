@@ -767,8 +767,8 @@
       const apiPill = root.getElementById('apiStatusPill') || document.getElementById('apiStatusPill');
       if (apiPill) {
         apiPill.innerHTML = data.api?.ok
-          ? 'API الأمين: <strong class="text-status-active">متصل</strong>'
-          : 'API الأمين: <strong class="text-status-rejected">غير متصل</strong>';
+          ? 'المحاسبة: <strong class="text-status-active">متصل</strong>'
+          : 'المحاسبة: <strong class="text-status-rejected">غير متصل</strong>';
       }
 
       if (data.sync) {
@@ -830,9 +830,8 @@
       return `<tr data-queue-id="${escapeHtml(row.id || '')}">
         <td class="p-3 text-center">${checkCell}</td>
         ${buildSyncPreviewCell(row)}
-        <td class="p-3 font-mono text-xs" dir="ltr">${escapeHtml(row.file_name || '')}</td>
+        <td class="p-3 text-xs" dir="ltr">${escapeHtml(row.file_name || '')}</td>
         <td class="p-3"><span class="text-xs px-2 py-0.5 rounded-full ${escapeHtml(meta.class || '')}">${escapeHtml(meta.label || status)}</span></td>
-        <td class="p-3 font-mono text-xs" dir="ltr">${escapeHtml(row.amine_image_guid || '—')}</td>
         <td class="p-3 text-xs text-text-muted">${escapeHtml(row.amine_sync_error_ar || '')}</td>
         <td class="p-3 text-xs">${actionCell}</td>
       </tr>`;
@@ -852,7 +851,6 @@
           <span class="text-xs px-2 py-0.5 rounded-full ${escapeHtml(meta.class || '')}">${escapeHtml(meta.label || status)}</span>
         </div>
         <div class="dash-mi-sync-card__meta">
-          <div dir="ltr">${escapeHtml(row.amine_image_guid || '—')}</div>
           <div>${escapeHtml(row.amine_sync_error_ar || '')}</div>
         </div>
       </article>`;
@@ -866,7 +864,7 @@
       syncQueueSummary.textContent = `${syncQueueTotalCount} عنصر`;
 
       if (!items.length) {
-        syncQueueBody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-text-muted">الطابور فارغ.</td></tr>';
+        syncQueueBody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-text-muted">الطابور فارغ.</td></tr>';
         if (syncQueueCards) syncQueueCards.innerHTML = '';
         if (syncQueueSelectAll) syncQueueSelectAll.checked = false;
         return;
@@ -961,7 +959,7 @@
 
     async function deleteAllPending() {
       if (deletePendingRunning) return;
-      if (!window.confirm('حذف كل الصور غير المزامنة من مجلد الموقع والطابور؟ (لن يُمس bm000)')) return;
+      if (!window.confirm('حذف كل الصور غير المزامنة من الموقع؟ (لا يحذف السجل في المحاسبة)')) return;
       deletePendingRunning = true;
       deletePendingPaused = false;
       deletePendingProcessed = 0;
@@ -1024,7 +1022,7 @@
 
     async function deletePendingQueueItem(queueId, fileName) {
       const label = fileName || 'هذه الصورة';
-      if (!window.confirm(`حذف «${label}» من مجلد الموقع وطابور المزامنة؟\n(لن يُمس سجل الأمين bm000 إن وُجد — استخدم تبويب الربط للحذف الكامل.)`)) {
+      if (!window.confirm(`حذف «${label}» من الموقع؟\n(لا يحذف من المحاسبة — للحذف الكامل استخدم تبويب الربط.)`)) {
         return;
       }
       const form = new FormData();

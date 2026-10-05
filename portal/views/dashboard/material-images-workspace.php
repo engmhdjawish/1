@@ -22,12 +22,21 @@ $syncStats = is_array($syncStats ?? null) ? $syncStats : ['pending' => 0, 'synci
 $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'message' => ''];
 $imageWorkerSnapshot = is_array($imageWorkerSnapshot ?? null) ? $imageWorkerSnapshot : [];
 $worker = is_array($imageWorkerSnapshot['worker'] ?? null) ? $imageWorkerSnapshot['worker'] : [];
-$workerEnabled = (bool) ($imageWorkerSnapshot['worker_enabled'] ?? true);
-$workerLastRun = trim((string) ($worker['last_run_at'] ?? ''));
-$workerMessage = trim((string) ($worker['last_message'] ?? ''));
-$missingLocal = $worker['missing_local_count'] ?? null;
+$missingLocal = isset($worker['missing_local_count']) ? (int) $worker['missing_local_count'] : null;
 $failedCount = (int) ($syncStats['failed'] ?? 0);
 $pendingCount = (int) ($syncStats['pending'] ?? 0);
+$workerUserSummary = \Portal\Services\MaterialImageBackgroundWorkerService::userFacingSummary(
+    $worker,
+    $syncStats,
+    !empty($apiHealth['ok']),
+    (bool) ($imageWorkerSnapshot['worker_enabled'] ?? true),
+    $missingLocal
+);
+$showWorkerBanner = \Portal\Services\MaterialImageBackgroundWorkerService::dashboardNeedsAttention(
+    $syncStats,
+    !empty($apiHealth['ok']),
+    $missingLocal
+) || !(bool) ($imageWorkerSnapshot['worker_enabled'] ?? true);
 ?>
 <section class="mb-6" data-material-images-workspace>
   <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -46,7 +55,7 @@ $pendingCount = (int) ($syncStats['pending'] ?? 0);
         على الموقع: <strong id="statLocalCount"><?= (int) ($stats['local_count'] ?? 0) ?></strong>
       </span>
       <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">
-        بانتظار الأمين: <strong id="statPendingCount"><?= (int) ($syncStats['pending'] ?? 0) ?></strong>
+        بانتظار الإرسال: <strong id="statPendingCount"><?= (int) ($syncStats['pending'] ?? 0) ?></strong>
       </span>
       <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white">
         تمت المزامنة: <strong id="statSyncedCount" class="text-status-active"><?= (int) ($syncStats['synced'] ?? 0) ?></strong>
@@ -55,7 +64,7 @@ $pendingCount = (int) ($syncStats['pending'] ?? 0);
         فاشلة: <strong id="statFailedCount" class="text-status-rejected"><?= (int) ($syncStats['failed'] ?? 0) ?></strong>
       </span>
       <span class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 border border-border-subtle bg-white" id="apiStatusPill">
-        API الأمين:
+        المحاسبة:
         <?php if (!empty($apiHealth['ok'])): ?>
           <strong class="text-status-active">متصل</strong>
         <?php else: ?>
@@ -65,7 +74,7 @@ $pendingCount = (int) ($syncStats['pending'] ?? 0);
     </div>
   </div>
 
-  <?php if ($canUploadImages): ?>
+  <?php if ($canUploadImages && $showWorkerBanner): ?>
   <div
     id="materialImageWorkerBanner"
     class="mt-4 rounded-xl border border-border-subtle bg-white p-4 text-sm"
@@ -73,20 +82,11 @@ $pendingCount = (int) ($syncStats['pending'] ?? 0);
   >
     <div class="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
       <div>
-        <p class="font-bold">المزامنة في الخلفية</p>
-        <p class="text-text-muted text-xs mt-1 leading-relaxed" id="materialImageWorkerSummary">
-          <?php if (!$workerEnabled): ?>
-            العامل معطّل — فعّل <code class="text-[11px]" dir="ltr">PORTAL_MATERIAL_IMAGE_WORKER=1</code> وثبّت cron على السيرفر.
-          <?php elseif ($workerLastRun === ''): ?>
-            لم يُشغَّل العامل بعد. على Linux: <code class="text-[11px]" dir="ltr">bash deploy/scripts/setup-material-image-sync-worker.sh</code>
-          <?php else: ?>
-            آخر تشغيل: <span dir="ltr"><?= h($workerLastRun) ?></span>
-            <?php if ($workerMessage !== ''): ?> — <?= h($workerMessage) ?><?php endif; ?>
-          <?php endif; ?>
-        </p>
-        <?php if ($missingLocal !== null): ?>
-          <p class="text-xs mt-1">
-            نسخ محلية ناقصة (أمين ↔ موقع): <strong id="materialImageWorkerMissing"><?= (int) $missingLocal ?></strong>
+        <p class="font-bold">حالة المزامنة</p>
+        <p class="text-text-muted text-xs mt-1 leading-relaxed" id="materialImageWorkerSummary"><?= h($workerUserSummary) ?></p>
+        <?php if ($missingLocal !== null && $missingLocal > 0): ?>
+          <p class="text-xs mt-1 hidden" aria-hidden="true">
+            <strong id="materialImageWorkerMissing"><?= (int) $missingLocal ?></strong>
           </p>
         <?php endif; ?>
       </div>
@@ -102,7 +102,7 @@ $pendingCount = (int) ($syncStats['pending'] ?? 0);
             href="/dashboard/material-images.php?tab=upload&amp;queue_status=pending"
             class="inline-flex items-center gap-1 h-9 px-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs font-bold"
           >
-            بانتظار الأمين (<?= $pendingCount ?>)
+            بانتظار الإرسال (<?= $pendingCount ?>)
           </a>
         <?php else: ?>
           <span class="inline-flex items-center h-9 px-3 rounded-lg border border-green-200 bg-green-50 text-green-800 text-xs font-bold">
