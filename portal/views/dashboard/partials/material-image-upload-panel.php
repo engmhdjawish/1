@@ -12,7 +12,7 @@ declare(strict_types=1);
 /** @var int $pendingDeletable */
 
 $statusLabels = [
-    'pending' => ['label' => 'بانتظار الأمين', 'class' => 'bg-amber-100 text-amber-800'],
+    'pending' => ['label' => 'بانتظار الإرسال', 'class' => 'bg-amber-100 text-amber-800'],
     'syncing' => ['label' => 'جاري المزامنة', 'class' => 'bg-blue-100 text-blue-800'],
     'synced' => ['label' => 'تمت على الأمين', 'class' => 'bg-green-100 text-green-800'],
     'failed' => ['label' => 'فشل', 'class' => 'bg-red-100 text-red-800'],
@@ -97,7 +97,7 @@ $uploadBootstrap = [
 
       <article class="dash-mi-step-card">
         <h3 class="dash-mi-step-card__title">② مزامنة الأمين</h3>
-        <p class="dash-mi-step-card__desc">يرسل الطابور صورة واحدة في كل طلب — ابدأ المزامنة بعد الرفع أو بعد «فحص الملفات المحلية».</p>
+        <p class="dash-mi-step-card__desc">تُرسل الصور إلى المحاسبة تلقائياً في الخلفية. استخدم «بدء المزامنة» إذا بقي شيء بانتظار الإرسال.</p>
 
         <div class="dash-mi-sync-primary mb-3">
           <button type="button" id="startSyncBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold">بدء / استئناف المزامنة</button>
@@ -113,8 +113,8 @@ $uploadBootstrap = [
           <summary class="dash-mi-sync-more__toggle">إجراءات إضافية</summary>
           <div class="dash-mi-sync-more__body dash-mi-toolbar__actions">
             <button type="button" id="retryFailedBtn" class="h-9 px-4 rounded-lg border border-amber-200 bg-amber-50 text-xs font-bold text-amber-900">إعادة المحاولة للفاشلة</button>
-            <button type="button" id="scanLocalBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">فحص الملفات المحلية</button>
-            <button type="button" id="purgeOrphanQueueBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">تنظيف الطابور</button>
+            <button type="button" id="scanLocalBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">مطابقة مع المحاسبة</button>
+            <button type="button" id="purgeOrphanQueueBtn" class="h-9 px-4 rounded-lg border border-border-subtle bg-white text-xs font-bold">تنظيف السجل</button>
           </div>
         </details>
 
@@ -141,7 +141,7 @@ $uploadBootstrap = [
 
   <article class="rounded-xl border border-border-subtle bg-white overflow-hidden mb-6">
     <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60 flex flex-wrap items-center justify-between gap-2">
-      <h2 class="font-bold text-sm">طابور المزامنة مع الأمين</h2>
+      <h2 class="font-bold text-sm">سجل المزامنة</h2>
       <div class="flex flex-wrap items-center gap-2">
         <button type="button" id="deleteSelectedPendingBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold">حذف المحدد</button>
         <span class="text-xs text-text-muted" id="syncQueueSummary"><?= (int) ($queuePage['total_count'] ?? 0) ?> عنصر</span>
@@ -159,7 +159,7 @@ $uploadBootstrap = [
     <details class="dash-mi-danger-zone dash-mi-danger-zone--inline">
       <summary class="dash-mi-danger-zone__toggle">حذف جماعي من الموقع (خطير)</summary>
       <div class="dash-mi-danger-zone__body">
-        <p class="dash-mi-danger-zone__hint">يحذف من مجلد الموقع والطابور فقط — لا يمس bm000.</p>
+        <p class="dash-mi-danger-zone__hint">يحذف نسخة الموقع فقط — لا يحذف السجل في المحاسبة.</p>
         <div class="dash-mi-toolbar__actions">
           <button type="button" id="deleteAllPendingBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold">حذف كل غير المزامنة</button>
           <button type="button" id="pauseDeletePendingBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold hidden">إيقاف</button>
@@ -186,14 +186,13 @@ $uploadBootstrap = [
             <th class="text-right p-3 w-14">معاينة</th>
             <th class="text-right p-3">الملف</th>
             <th class="text-right p-3">الحالة</th>
-            <th class="text-right p-3">معرف الأمين</th>
             <th class="text-right p-3">ملاحظة</th>
             <th class="text-right p-3">إجراء</th>
           </tr>
         </thead>
         <tbody id="syncQueueBody" class="divide-y divide-border-subtle">
           <?php if ($queue === []): ?>
-            <tr><td colspan="7" class="p-6 text-center text-text-muted">لا توجد عناصر في الطابور بعد. ارفع صوراً أو اضغط «فحص الملفات المحلية».</td></tr>
+            <tr><td colspan="6" class="p-6 text-center text-text-muted">لا توجد عناصر في الطابور. ارفع صوراً من الأعلى.</td></tr>
           <?php endif; ?>
           <?php foreach ($queue as $row): ?>
             <?php
@@ -214,9 +213,8 @@ $uploadBootstrap = [
                   <img src="<?= h($previewUrl) ?>" alt="" class="dash-mi-sync-thumb" loading="lazy" decoding="async">
                 <?php endif; ?>
               </td>
-              <td class="p-3 font-mono text-xs" dir="ltr"><?= h($fileName) ?></td>
+              <td class="p-3 text-xs" dir="ltr"><?= h($fileName) ?></td>
               <td class="p-3"><span class="text-xs px-2 py-0.5 rounded-full <?= h($meta['class']) ?>"><?= h($meta['label']) ?></span></td>
-              <td class="p-3 font-mono text-xs" dir="ltr"><?= h((string) ($row['amine_image_guid'] ?? '—')) ?></td>
               <td class="p-3 text-xs text-text-muted"><?= h((string) ($row['amine_sync_error_ar'] ?? '')) ?></td>
               <td class="p-3 text-xs">
                 <?php if ($canDeletePending): ?>
@@ -238,7 +236,7 @@ $uploadBootstrap = [
   </article>
 
   <details class="rounded-xl border border-border-subtle bg-white p-4 mb-6">
-    <summary class="font-bold cursor-pointer">مسارات التخزين (متقدم)</summary>
+    <summary class="font-bold cursor-pointer">مسارات التخزين (للمسؤول)</summary>
     <form method="post" class="grid gap-3 mt-4 lg:grid-cols-2">
       <input type="hidden" name="action" value="save_settings">
       <label class="text-xs block">
@@ -249,9 +247,6 @@ $uploadBootstrap = [
         <span class="text-text-muted">مجلد الثامبنيل</span>
         <input name="material_thumbnails_dir" value="<?= h((string) ($settingsForm['material_thumbnails_dir'] ?? '')) ?>" class="mt-1 h-9 w-full rounded-lg border border-border-subtle px-3 text-sm font-mono" dir="ltr">
       </label>
-      <div class="lg:col-span-2 text-[11px] text-text-muted font-mono" dir="ltr">
-        images: <?= h((string) ($paths['images_dir'] ?? '')) ?> · thumbs: <?= h((string) ($paths['thumbnails_dir'] ?? '')) ?>
-      </div>
       <button class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold lg:col-span-2 lg:justify-self-start">حفظ المسارات</button>
     </form>
   </details>

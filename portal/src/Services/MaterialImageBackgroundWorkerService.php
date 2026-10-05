@@ -335,22 +335,86 @@ final class MaterialImageBackgroundWorkerService
         }
     }
 
+    /**
+     * Short status for dashboard (no server/cron/technical worker logs).
+     *
+     * @param array<string, mixed> $workerStatus
+     * @param array{pending: int, syncing: int, synced: int, failed: int, total: int} $sync
+     */
+    public static function userFacingSummary(
+        array $workerStatus,
+        array $sync,
+        bool $apiOk,
+        bool $workerEnabled,
+        ?int $missingLocal = null
+    ): string {
+        if (!$apiOk) {
+            return 'لا يوجد اتصال مع نظام المحاسبة — قد تتأخر مزامنة الصور.';
+        }
+        if (!$workerEnabled) {
+            return 'المزامنة التلقائية غير مفعّلة — راجع مسؤول الموقع.';
+        }
+
+        $failed = (int) ($sync['failed'] ?? 0);
+        $pending = (int) ($sync['pending'] ?? 0);
+        if ($failed > 0) {
+            return $failed === 1
+                ? 'صورة واحدة فشلت في المزامنة — راجع قائمة الفشل.'
+                : ('هناك ' . $failed . ' صور فشلت في المزامنة — راجع قائمة الفشل.');
+        }
+        if ($pending > 0) {
+            return $pending === 1
+                ? 'صورة واحدة بانتظار الإرسال للمحاسبة.'
+                : ('هناك ' . $pending . ' صور بانتظار الإرسال للمحاسبة.');
+        }
+        if ($missingLocal !== null && $missingLocal > 0) {
+            return $missingLocal === 1
+                ? 'صورة واحدة غير جاهزة للعرض في المتجر — جاري المعالجة تلقائياً.'
+                : ('هناك ' . $missingLocal . ' صور غير جاهزة للعرض — جاري المعالجة تلقائياً.');
+        }
+
+        $lastRun = trim((string) ($workerStatus['last_run_at'] ?? ''));
+
+        return $lastRun === ''
+            ? 'المزامنة التلقائية جاهزة.'
+            : 'المزامنة التلقائية تعمل.';
+    }
+
+    /** @param array{pending: int, syncing: int, synced: int, failed: int, total: int} $sync */
+    public static function dashboardNeedsAttention(array $sync, bool $apiOk, ?int $missingLocal = null): bool
+    {
+        if (!$apiOk) {
+            return true;
+        }
+        if ((int) ($sync['failed'] ?? 0) > 0) {
+            return true;
+        }
+        if ((int) ($sync['pending'] ?? 0) > 0) {
+            return true;
+        }
+
+        return $missingLocal !== null && $missingLocal > 0;
+    }
+
     /** @return array<string, mixed> */
     public static function dashboardSnapshot(): array
     {
         $status = self::readStatus();
         $sync = MaterialImageSyncService::stats();
         $health = PortalSettingsService::apiHealth();
+        $apiOk = (bool) ($health['ok'] ?? false);
+        $missingLocal = isset($status['missing_local_count']) ? (int) $status['missing_local_count'] : null;
 
         return [
             'worker_enabled' => self::isEnabled(),
             'worker' => $status,
             'sync' => $sync,
             'api' => [
-                'ok' => (bool) ($health['ok'] ?? false),
+                'ok' => $apiOk,
                 'message' => (string) ($health['message'] ?? ''),
             ],
-            'log_tail' => self::readLogTail(12),
+            'user_summary' => self::userFacingSummary($status, $sync, $apiOk, self::isEnabled(), $missingLocal),
+            'needs_attention' => self::dashboardNeedsAttention($sync, $apiOk, $missingLocal),
         ];
     }
 

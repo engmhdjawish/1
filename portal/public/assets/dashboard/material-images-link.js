@@ -720,7 +720,7 @@ const API_URL = '/dashboard/material-images-api.php';
     const linkedNote = item.is_linked_to_material
       ? ' سيتم أيضاً فك ربطها بالمادة وحذف سجلها من قواعد البيانات.'
       : ' سيتم أيضاً حذف سجلها من قواعد البيانات.';
-    if (!confirm(`حذف الصورة من bm000 والموقع نهائياً؟${linkedNote}`)) return;
+    if (!confirm(`حذف الصورة من المحاسبة والموقع نهائياً؟${linkedNote}`)) return;
     button.disabled = true;
     if (statusEl) statusEl.textContent = 'جاري الحذف...';
     try {
@@ -923,7 +923,7 @@ const API_URL = '/dashboard/material-images-api.php';
   async function processDeleteAllUnlinked() {
     await startDeleteUnlinked(
       null,
-      'حذف جميع الصور غير المرتبطة من bm000 والموقع؟ لا يمكن التراجع.',
+      'حذف جميع الصور غير المرتبطة من المحاسبة والموقع؟ لا يمكن التراجع.',
       { requireTypedConfirm: true }
     );
   }
@@ -936,7 +936,7 @@ const API_URL = '/dashboard/material-images-api.php';
     }
     await startDeleteUnlinked(
       [...selected],
-      `حذف ${selected.length} صورة محددة من bm000 والموقع؟ لا يمكن التراجع.`,
+      `حذف ${selected.length} صورة محددة من المحاسبة والموقع؟ لا يمكن التراجع.`,
       { requireTypedConfirm: selected.length >= 5 }
     );
   }
