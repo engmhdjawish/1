@@ -1,0 +1,8 @@
+# Material image sync + repair worker (every minute).
+# Install:
+#   sudo cp deploy/output/material-image-sync-worker.cron /etc/cron.d/jawish-material-image-sync-worker
+#   sudo chmod 644 /etc/cron.d/jawish-material-image-sync-worker
+#
+# Or: bash deploy/scripts/setup-material-image-sync-worker.sh
+
+* * * * * www-data cd __PORTAL_DIR__ && __PHP_BIN__ scripts/run-material-image-sync-worker.php >> storage/material-image-worker/worker.log 2>&1

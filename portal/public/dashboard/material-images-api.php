@@ -7,6 +7,7 @@ ob_start();
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
+use Portal\Services\MaterialImageBackgroundWorkerService;
 use Portal\Services\MaterialImageLinkService;
 use Portal\Services\MaterialImageStorageService;
 use Portal\Services\MaterialImageSyncService;
@@ -178,6 +179,13 @@ if ($method === 'GET') {
             max(10, min(60, (int) ($_GET['page_size'] ?? 40)))
         ), JSON_UNESCAPED_UNICODE);
         exit;
+    }
+
+    if ($action === 'worker-status') {
+        materialImagesApiJson(array_merge(
+            ['ok' => true],
+            MaterialImageBackgroundWorkerService::dashboardSnapshot()
+        ));
     }
 
     if ($action === 'browse') {

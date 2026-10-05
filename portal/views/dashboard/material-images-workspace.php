@@ -7,6 +7,7 @@ declare(strict_types=1);
 /** @var array{local_count: int, thumbnail_count: int} $stats */
 /** @var array{pending: int, syncing: int, synced: int, failed: int, total: int} $syncStats */
 /** @var array{base_url: string, ok: bool, status: int, message: string} $apiHealth */
+/** @var array<string, mixed> $imageWorkerSnapshot */
 /** @var array<string, mixed> $materialFilterOptions */
 /** @var string|null $materialFilterOptionsError */
 /** @var string|null $flash */
@@ -19,6 +20,14 @@ $paths = is_array($paths ?? null) ? $paths : ['images_dir' => '', 'thumbnails_di
 $stats = is_array($stats ?? null) ? $stats : ['local_count' => 0, 'thumbnail_count' => 0];
 $syncStats = is_array($syncStats ?? null) ? $syncStats : ['pending' => 0, 'syncing' => 0, 'synced' => 0, 'failed' => 0, 'total' => 0];
 $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'message' => ''];
+$imageWorkerSnapshot = is_array($imageWorkerSnapshot ?? null) ? $imageWorkerSnapshot : [];
+$worker = is_array($imageWorkerSnapshot['worker'] ?? null) ? $imageWorkerSnapshot['worker'] : [];
+$workerEnabled = (bool) ($imageWorkerSnapshot['worker_enabled'] ?? true);
+$workerLastRun = trim((string) ($worker['last_run_at'] ?? ''));
+$workerMessage = trim((string) ($worker['last_message'] ?? ''));
+$missingLocal = $worker['missing_local_count'] ?? null;
+$failedCount = (int) ($syncStats['failed'] ?? 0);
+$pendingCount = (int) ($syncStats['pending'] ?? 0);
 ?>
 <section class="mb-6" data-material-images-workspace>
   <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -55,6 +64,68 @@ $apiHealth = is_array($apiHealth ?? null) ? $apiHealth : ['ok' => false, 'messag
       </span>
     </div>
   </div>
+
+  <?php if ($canUploadImages): ?>
+  <div
+    id="materialImageWorkerBanner"
+    class="mt-4 rounded-xl border border-border-subtle bg-white p-4 text-sm"
+    data-worker-api="/dashboard/material-images-api.php?action=worker-status"
+  >
+    <div class="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+      <div>
+        <p class="font-bold">المزامنة في الخلفية</p>
+        <p class="text-text-muted text-xs mt-1 leading-relaxed" id="materialImageWorkerSummary">
+          <?php if (!$workerEnabled): ?>
+            العامل معطّل — فعّل <code class="text-[11px]" dir="ltr">PORTAL_MATERIAL_IMAGE_WORKER=1</code> وثبّت cron على السيرفر.
+          <?php elseif ($workerLastRun === ''): ?>
+            لم يُشغَّل العامل بعد. على Linux: <code class="text-[11px]" dir="ltr">bash deploy/scripts/setup-material-image-sync-worker.sh</code>
+          <?php else: ?>
+            آخر تشغيل: <span dir="ltr"><?= h($workerLastRun) ?></span>
+            <?php if ($workerMessage !== ''): ?> — <?= h($workerMessage) ?><?php endif; ?>
+          <?php endif; ?>
+        </p>
+        <?php if ($missingLocal !== null): ?>
+          <p class="text-xs mt-1">
+            نسخ محلية ناقصة (أمين ↔ موقع): <strong id="materialImageWorkerMissing"><?= (int) $missingLocal ?></strong>
+          </p>
+        <?php endif; ?>
+      </div>
+      <div class="flex flex-wrap gap-2 shrink-0">
+        <?php if ($failedCount > 0 || $pendingCount > 0): ?>
+          <a
+            href="/dashboard/material-images.php?tab=upload&amp;queue_status=failed"
+            class="inline-flex items-center gap-1 h-9 px-3 rounded-lg border border-red-200 bg-red-50 text-red-800 text-xs font-bold"
+          >
+            قائمة الفشل (<?= $failedCount ?>)
+          </a>
+          <a
+            href="/dashboard/material-images.php?tab=upload&amp;queue_status=pending"
+            class="inline-flex items-center gap-1 h-9 px-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs font-bold"
+          >
+            بانتظار الأمين (<?= $pendingCount ?>)
+          </a>
+        <?php else: ?>
+          <span class="inline-flex items-center h-9 px-3 rounded-lg border border-green-200 bg-green-50 text-green-800 text-xs font-bold">
+            الطابور نظيف
+          </span>
+        <?php endif; ?>
+      </div>
+    </div>
+    <ul id="materialImageWorkerFailures" class="mt-3 space-y-1 text-xs text-red-800<?= ($failedCount === 0 ? ' hidden' : '') ?>">
+      <?php foreach (is_array($worker['recent_failures'] ?? null) ? $worker['recent_failures'] : [] as $fail): ?>
+        <?php if (!is_array($fail)) {
+            continue;
+        } ?>
+        <li class="font-mono" dir="ltr">
+          <?= h((string) ($fail['file_name'] ?? '')) ?>
+          <?php if (!empty($fail['amine_sync_error_ar'])): ?>
+            <span class="font-sans text-red-700" dir="rtl"> — <?= h((string) $fail['amine_sync_error_ar']) ?></span>
+          <?php endif; ?>
+        </li>
+      <?php endforeach; ?>
+    </ul>
+  </div>
+  <?php endif; ?>
 
   <nav class="dash-mi-tabs mt-4" aria-label="أقسام صور المواد">
     <?php if ($canUploadImages): ?>

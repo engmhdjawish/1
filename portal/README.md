@@ -155,6 +155,21 @@ UPDATE home_sections SET is_active = TRUE WHERE slug IN ('offers','women','men',
 
 **فصل مهم:** صلاحية `orders.view` لا تفتح لوحة المحاسبة. كل صفحة محاسبة تتطلب صلاحيتها (`accounting.*`). صلاحية `images.view` للتصفح والتحميل فقط؛ `images.upload` للرفع والربط والمزامنة.
 
+### صور المواد — مزامنة خلفية وقائمة الفشل
+
+عند الرفع والربط من الموقع فقط، ثبّت عامل cron على Linux (كل دقيقة):
+
+```bash
+sudo PORTAL_DIR=/var/www/jawish-portal PHP_BIN=/usr/bin/php8.5 \
+  bash /opt/jawish/deploy/scripts/setup-material-image-sync-worker.sh
+```
+
+- يُكمل طابور رفع الأمين، يُعيد محاولة الفاشل، ويُصلح نسخاً محلية ناقصة (حدود في `.env`: `PORTAL_MATERIAL_IMAGE_WORKER_*`).
+- لوحة **صور المواد** → شريط «المزامنة في الخلفية» + **قائمة الفشل** (`?tab=upload&queue_status=failed`).
+- سجل: `storage/material-image-worker/worker.log` · حالة: `status.json`.
+
+إحصاء/سحب يدوي: `php scripts/pull-missing-material-images.php --count-only`
+
 ## هيكل المجلدات
 
 ```text
