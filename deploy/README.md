@@ -1,5 +1,8 @@
 # دليل نشر جاويش — API + الموقع
 
+> **نشر الإنتاج المعتاد (Windows/IIS، حزمة + robocopy):** راجع  
+> **[JAWISH-PRODUCTION-WORKFLOW.md](./JAWISH-PRODUCTION-WORKFLOW.md)** — للوكلاء والفريق (لا `git pull` على السيرفر افتراضياً).
+
 هذا المجلد يحتوي معالج نشر تفاعلي وسكريبتات لتجهيز **ExistingDb.Api** (.NET 9) و**البوابة** (PHP + PostgreSQL) للإنتاج.
 
 ## البنية
