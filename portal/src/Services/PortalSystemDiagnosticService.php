@@ -501,7 +501,7 @@ final class PortalSystemDiagnosticService
             return 'النظام يعمل لكن توجد إشارات ضغط — راجع التوصيات أدناه.';
         }
 
-        return 'الفحوص الأساسية ضمن المعدل الطبيعي — إن استمر البطء، راجع IIS وشبكة الزوار.';
+        return 'الفحوص الأساسية ضمن المعدل الطبيعي — إن استمر البطء، أعد الفحص وقت البطء وراجع PHP-FPM/nginx وشبكة API الأمين.';
     }
 
     private static function formatBytes(int $bytes): string
