@@ -106,6 +106,9 @@ copy_portal_tree() {
     --exclude 'storage/amine-api-token.json' \
     --exclude 'storage/material-images/' \
     --exclude 'storage/site-media/' \
+    --exclude 'storage/cache/' \
+    --exclude 'storage/zip-jobs/' \
+    --exclude 'storage/material-image-worker/' \
     --exclude 'vendor/' \
     --exclude '.git/' \
     "$src/" "$dest/"
