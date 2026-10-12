@@ -44,6 +44,7 @@ final class DashboardNavigation
     private const CONFIGURATION_ROUTES = [
         '/dashboard/configuration.php',
         '/dashboard/amine-api.php',
+        '/dashboard/system-diagnostic.php',
         '/dashboard/users.php',
         '/dashboard/settings.php',
     ];
