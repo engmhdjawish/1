@@ -54,6 +54,41 @@ php scripts/run-system-diagnostic.php
 
 لوحة: `/dashboard/system-diagnostic.php`
 
+### الموقع لا يستجيب — التشخيص بدون لوحة
+
+لوحة `/dashboard/system-diagnostic.php` تحتاج **nginx + PHP-FPM + تسجيل دخول** — إن الموقع «معلّق» للزوار غالباً **اللوحة أيضاً لا تفتح**.
+
+من **SSH** (يعمل حتى لو الويب caído، ما دام PHP CLI وPostgreSQL شغّالين):
+
+```bash
+cd /var/www/jawish-portal
+php scripts/run-system-diagnostic.php
+# أو حفظ آخر نتيجة:
+php scripts/run-system-diagnostic.php | tee /tmp/jawish-diagnostic.json
+php scripts/diagnose-portal.php
+```
+
+فحص سريع أن الويب حي من **داخل السيرفر**:
+
+```bash
+curl -sS -o /dev/null -w "HTTP %{http_code} in %{time_total}s\n" http://127.0.0.1/
+sudo systemctl status nginx php8.5-fpm --no-pager
+sudo tail -n 30 /var/log/nginx/error.log
+```
+
+| العرض | ماذا تفعل |
+|--------|-----------|
+| `curl` localhost بطيء/timeout | PHP-FPM مشبع أو طلبات عالقة — `systemctl restart php8.5-fpm` |
+| `curl` سريع لكن الزوار لا يرون الموقع | DNS، firewall، SSL، أو شبكة خارجية |
+| CLI diagnostic `critical` على API | سيرفر الأمين `82.137.204.70:9090` — ليس إصلاح Portal وحده |
+
+(اختياري) cron كل 5 دقائق يحفظ آخر JSON للمراجعة بعد انقطاع:
+
+```bash
+# /etc/cron.d/jawish-diagnostic-snapshot
+*/5 * * * * root /usr/bin/php8.5 /var/www/jawish-portal/scripts/run-system-diagnostic.php > /var/www/jawish-portal/storage/diagnostic-last.json 2>&1
+```
+
 ---
 
 ## B) متى يُعاد نشر API؟
