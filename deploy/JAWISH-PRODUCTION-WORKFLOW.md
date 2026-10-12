@@ -1,89 +1,73 @@
-# طريقة نشر جاوиш (Mohammad) — المرجع للوكلاء والفريق
+# طريقة نشر جاوиш (Mohammad) — المرجع للوكلاء
 
-> **مهم للـ Cloud Agent:** لا تستخدم `git pull` على السيرفر إلا إذا طلب المستخدم ذلك صراحة.  
-> الطريقة المعتادة: **حزمة من PC التطوير → `C:\JawishDeploy` → `robocopy` → `D:\JawishPortal`**.
+> **لـ Cloud Agent:** هذا هو **الروتين الفعلي** على سيرفر Linux. لا تقترح Windows/package-for-server إلا إذا طلب المستخدم سيرفر Windows صراحة.
 
-## البنية المتوقعة
+## الإنتاج (Linux — nginx + PHP 8.5-FPM)
 
-| المكوّن | المسار / المنفذ |
-|---------|------------------|
-| Portal (IIS) | `D:\JawishPortal` — جذر الويب: `D:\JawishPortal\public` |
-| PHP | `C:\php\php.exe` / `php-cgi.exe` |
-| PostgreSQL | `C:\pgsql` — superuser: `admin` |
-| IIS | موقع **JawishPortal** — غالباً منفذ **90** / HTTPS `jawish.ddns.net` |
-| API الأمين | `http://127.0.0.1:5000` — **لا تعيد نشر API** إلا إذا تغيّر فرع API أو طلب المستخدم |
-| حزمة على السيرفر | `C:\JawishDeploy\` (من USB / RDP) |
+| المكوّن | المعتاد |
+|---------|---------|
+| مستودع Git على السيرفر | `/opt/jawish` |
+| نشر Portal | `deploy/portal/publish.sh` + `deploy/deploy.env` |
+| PHP | `php8.5-fpm` |
+| الويب | nginx |
 
 ---
 
-## A) نشر تحديث Portal (الروتين — بعد كل فرع / قبل الدمج)
+## A) نشر تحديث Portal (بعد `main` أو فرع قبل الدمج)
 
-### 1) على PC التطوير (`C:\Users\HP\1` أو مسار الـ repo)
+### على `main` (بعد الدمج)
 
-```powershell
-cd C:\Users\HP\1
+```bash
+cd /opt/jawish
+git checkout main
+git pull origin main
+PORTAL_DB_SETUP=migrate bash deploy/portal/publish.sh
+sudo systemctl reload php8.5-fpm
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### فرع قبل الدمج (مثال: تشخيص الأداء)
+
+```bash
+cd /opt/jawish
 git fetch origin
-git checkout cursor/system-performance-diagnostic-f529   # أو الفرع المطلوب
+git checkout cursor/system-performance-diagnostic-f529
 git pull origin cursor/system-performance-diagnostic-f529
-
-# تأكد deploy\deploy.env مضبوط لقيم السيرفر
-.\deploy\scripts\package-for-server.ps1
+PORTAL_DB_SETUP=migrate bash deploy/portal/publish.sh
+sudo systemctl reload php8.5-fpm
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
-الناتج: `deploy\output\server-package\`
+- **`PORTAL_DB_SETUP=migrate`**: ترحيلات DB فقط؛ **`.env` في مجلد النشر يُحفظ** (لا يُستبدل من `deploy.env` عند migrate).
+- **`publish.sh`**: ينسخ `portal/` إلى `PORTAL_PUBLISH_DIR` (من `deploy.env`)، `composer install --no-dev`، `run-migrations.php`، `check-environment.php`، ويبني CSS إن وُجد `npm`.
 
-### 2) انسخ الحزمة إلى السيرفر
+### تحقق سريع (اختياري)
 
-انسخ محتوى `server-package` إلى **`C:\JawishDeploy\`** على السيرفر (USB / مشاركة / RDP).
-
-### 3) على السيرفر (PowerShell)
-
-```powershell
-robocopy C:\JawishDeploy\JawishPortal D:\JawishPortal /E /XF .env
-robocopy C:\JawishDeploy\docs D:\JawishPortal\docs /E
-
-cd D:\JawishPortal
-C:\php\php.exe scripts\run-migrations.php
-
-iisreset
+```bash
+cd "${PORTAL_PUBLISH_DIR:-/var/www/jawish-portal}"
+php scripts/diagnose-portal.php
+php scripts/run-system-diagnostic.php
 ```
 
-- **`/XF .env`**: يحافظ على `.env` الحقيقي على السيرفر — لا تستبدله من الحزمة.
-- **`storage\`**: لا تُمسح؛ الـ robocopy `/E` يحدّث الملفات ويترك التخزين المحلي.
-
-### 4) تحقق
-
-```powershell
-C:\php\php.exe scripts\diagnose-portal.php
-C:\php\php.exe scripts\run-system-diagnostic.php
-```
-
-- API: `http://127.0.0.1:5000/api/health`
-- الموقع: `https://jawish.ddns.net`
-- لوحة: `/dashboard/system-diagnostic.php` (بعد دمج ميزة التشخيص)
+لوحة: `/dashboard/system-diagnostic.php`
 
 ---
 
-## B) إعداد كامل من صفر (مرة واحدة)
+## B) متى يُعاد نشر API؟
 
-اتبع **`deploy\output\server-package\SERVER-STEPS.txt`** (يُولَّد من `package-for-server.ps1`)  
-أو القالب: `deploy\templates\SERVER-STEPS.template.txt`  
-والدليل: `deploy\WINDOWS-IIS-LOCAL.md`
+**فقط** عند تغيير **ExistingDb.Api** — ليس جزءاً من أوامر Portal أعلاه.
 
 ---
 
-## C) ما لا يُستخدم في الروتين
+## C) بديل Windows/IIS (حزمة USB — ليس الروتين على Linux)
 
-| أمر | متى |
-|-----|-----|
-| `.\deploy\portal\publish.ps1` | نشر مباشر على نفس الجهاز إن `PORTAL_PUBLISH_DIR` محلي — **ليس** مسار السيرفر المعتاد |
-| `git pull` على `D:\JawishPortal` | فقط إذا كان السيرفر clone git (غير المعتاد حسب هذا الملف) |
-| `deploy\api\publish.ps1` | عند تغيير **ExistingDb.Api** فقط |
+إذا نشر على Windows: `deploy/scripts/package-for-server.ps1` → `C:\JawishDeploy` → `robocopy` → `D:\JawishPortal`.  
+راجع `deploy/templates/SERVER-STEPS.template.txt` و `deploy/WINDOWS-IIS-LOCAL.md`.
 
 ---
 
-## D) ملاحظات للوكلاء
+## D) للوكلاء
 
-1. بعد أي تغيير Portal: **package-for-server → robocopy → migrations → iisreset**.
-2. فرع **Portal-only** (مثل تشخيص الأداء): لا حاجة لنشر API.
-3. إن شكا المستخدم من بطء/timeout: بعد النشر افتح **`/dashboard/system-diagnostic.php`**.
+1. **افترض** أوامر `/opt/jawish` + `publish.sh` + `php8.5-fpm` + nginx.
+2. Portal-only: **لا** `deploy/api/publish`.
+3. بطء/timeout: بعد النشر → **`/dashboard/system-diagnostic.php`**.
