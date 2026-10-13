@@ -31,8 +31,8 @@ try {
 }
 
 $displayOptions = StoreCatalogService::displayOptions();
-$extraHead = portal_stylesheet_tag('/css/store-ui.css')
-    . portal_stylesheet_tag('/css/store-availability-demo.css');
+$extraHead = portal_stylesheet('/css/store-ui.css')
+    . portal_stylesheet('/css/store-availability-demo.css');
 
 ob_start();
 require dirname(__DIR__) . '/views/store-availability-demo.php';
