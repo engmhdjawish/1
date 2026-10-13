@@ -35,6 +35,7 @@ $showAnyPrice = (bool) ($displayOptions['show_price'] ?? false);
 $showPriceSyp = $showAnyPrice;
 $showPriceUsd = $showAnyPrice;
 $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
+$availabilityPreview = (bool) ($availabilityPreview ?? false);
 $allowCart = (bool) ($displayOptions['allow_cart'] ?? false);
 $shareTokenActive = trim((string) ($shareToken ?? '')) !== '';
 
@@ -53,7 +54,9 @@ if ($guid !== '' && empty($item['has_offer'])) {
 $packaging = ShareCartService::packaging($item);
 $primaryUnit = ShareCartService::primaryUnitLabel($item);
 $packageUnit = ShareCartService::packageUnitLabel($item);
-$packagesAvailable = $showQuantity ? packages_available_display($item) : 0.0;
+$packagesAvailable = ($showQuantity || $availabilityPreview) ? packages_available_display($item) : 0.0;
+$previewOutOfStock = $availabilityPreview && $packagesAvailable <= 0;
+$previewLowStock = $availabilityPreview && $packagesAvailable > 0 && $packagesAvailable <= 2;
 $guid = material_guid($item);
 $detailUrl = $guid !== '' ? product_url($guid, $productReturnUrl, $productOfferSlug, $shareTokenActive ? (string) $shareToken : null) : '';
 $quickViewGuidsJson = $quickViewGuids !== [] ? json_encode($quickViewGuids, JSON_UNESCAPED_UNICODE) : '';
@@ -77,7 +80,7 @@ $previewJson = $previewPayload !== null
 ?>
 <?php $productAnchor = portal_product_anchor($guid); ?>
 <article
-  class="store-product-card<?= $hasOffer ? ' store-product-card--offer' : '' ?>"
+  class="store-product-card<?= $hasOffer ? ' store-product-card--offer' : '' ?><?= $previewOutOfStock ? ' store-product-card--unavailable' : '' ?><?= $previewLowStock ? ' store-product-card--low-stock' : '' ?>"
   <?php if ($productAnchor !== ''): ?>id="<?= h($productAnchor) ?>"<?php endif; ?>
   <?php if ($useImagePreview && $guid !== ''): ?>
     data-store-preview-card
@@ -87,6 +90,11 @@ $previewJson = $previewPayload !== null
 >
   <?php if ($useImagePreview && $showImages): ?>
     <button type="button" class="store-product-card__media store-product-card__media--preview" data-store-product-preview title="معاينة الصورة والأسعار">
+      <?php if ($previewOutOfStock): ?>
+        <span class="store-product-card__availability-badge store-product-card__availability-badge--out">غير متوفر</span>
+      <?php elseif ($previewLowStock): ?>
+        <span class="store-product-card__availability-badge store-product-card__availability-badge--low">آخر كمية</span>
+      <?php endif; ?>
       <?php if ($hasOffer): ?>
         <span class="store-product-card__offer-ribbon">
           <span class="material-symbols-outlined text-sm" aria-hidden="true">local_offer</span>
@@ -122,6 +130,11 @@ $previewJson = $previewPayload !== null
   <?php endif; ?>
     <?php if ($showImages && !$useImagePreview): ?>
       <div class="store-product-card__media">
+        <?php if ($previewOutOfStock): ?>
+          <span class="store-product-card__availability-badge store-product-card__availability-badge--out">غير متوفر</span>
+        <?php elseif ($previewLowStock): ?>
+          <span class="store-product-card__availability-badge store-product-card__availability-badge--low">آخر كمية</span>
+        <?php endif; ?>
         <?php if ($hasOffer): ?>
           <span class="store-product-card__offer-ribbon">
             <span class="material-symbols-outlined text-sm" aria-hidden="true">local_offer</span>
@@ -159,6 +172,16 @@ $previewJson = $previewPayload !== null
           <span class="material-symbols-outlined text-sm" aria-hidden="true">inventory</span>
           <span class="store-num" dir="ltr"><?= h(format_packages_display($packagesAvailable)) ?></span> <?= h($packageUnit) ?>
         </div>
+      <?php elseif ($availabilityPreview && $packagesAvailable > 0): ?>
+        <div class="store-product-card__stock<?= $previewLowStock ? ' store-product-card__stock--low' : '' ?>">
+          <span class="material-symbols-outlined text-sm" aria-hidden="true">inventory</span>
+          <span class="store-num" dir="ltr"><?= h(format_packages_display($packagesAvailable)) ?></span> <?= h($packageUnit) ?>
+        </div>
+      <?php elseif ($previewOutOfStock): ?>
+        <div class="store-product-card__stock store-product-card__stock--out">
+          <span class="material-symbols-outlined text-sm" aria-hidden="true">block</span>
+          نفدت الكمية — للاطلاع فقط
+        </div>
       <?php endif; ?>
     </div>
   <?php if ($linkToDetail && $detailUrl !== ''): ?></a><?php endif; ?>
@@ -167,7 +190,14 @@ $previewJson = $previewPayload !== null
       <?php $context = 'card'; $anchor = $productAnchor; require __DIR__ . '/store-price-lock.php'; ?>
     </div>
   <?php endif; ?>
-  <?php if ($allowCart): ?>
+  <?php if ($availabilityPreview && $previewOutOfStock && $detailUrl !== ''): ?>
+    <div class="store-product-card__footer store-product-card__footer--preview">
+      <a href="<?= h($detailUrl) ?>" class="store-product-card__details-btn">
+        <span class="material-symbols-outlined text-[18px]" aria-hidden="true">visibility</span>
+        عرض التفاصيل
+      </a>
+    </div>
+  <?php elseif ($allowCart && !$previewOutOfStock): ?>
     <div class="store-product-card__footer">
       <?php require __DIR__ . '/store-add-to-cart-form.php'; ?>
     </div>

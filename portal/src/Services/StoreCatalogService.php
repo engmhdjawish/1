@@ -530,7 +530,7 @@ final class StoreCatalogService
         }
 
         $beforeScopeCount = count($products);
-        $products = self::scopeCatalogProductsForPolicy($products, $policyRules, $isAvailable, $sectionContext, $storeGuids);
+        $products = self::scopeCatalogProductsForPolicy($products, $policyRules, $isAvailable, $sectionContext, $storeGuids, null);
         if ($apiError === null && $beforeScopeCount > count($products)) {
             $removed = $beforeScopeCount - count($products);
             $totalCount = max(0, $totalCount - $removed);
@@ -706,7 +706,7 @@ final class StoreCatalogService
         $products = self::applySellableStockFilter($products);
         $policy = self::activePolicy();
         $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
-        $products = self::scopeCatalogProductsForPolicy($products, $policyRules, true, $sectionContext, []);
+        $products = self::scopeCatalogProductsForPolicy($products, $policyRules, true, $sectionContext, [], null);
         $products = self::sortProducts($products, $sort);
         $totalCount = count($products);
         $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
@@ -858,7 +858,8 @@ final class StoreCatalogService
             $policyRules,
             $isAvailable,
             $sectionContext,
-            self::parseList($merged['storeGuids'] ?? [])
+            self::parseList($merged['storeGuids'] ?? []),
+            null
         );
         if ($apiError === null && $beforeScopeCount > count($products)) {
             $removed = $beforeScopeCount - count($products);
@@ -1125,8 +1126,13 @@ final class StoreCatalogService
         array $policyRules,
         ?bool $isAvailable,
         ?array $sectionContext,
-        array $mergedStoreGuids
+        array $mergedStoreGuids,
+        ?string $stockVisibility = null
     ): array {
+        if ($stockVisibility === 'all') {
+            return $products;
+        }
+
         $storeGuids = self::resolvedPolicyStoreGuids($sectionContext);
         if ($storeGuids === []) {
             $storeGuids = self::parseList($policyRules['store_guids'] ?? []);
@@ -1147,7 +1153,7 @@ final class StoreCatalogService
         $storeGuids = self::parseList($filters['storeGuids'] ?? []);
         $products = is_array($catalog['products'] ?? null) ? $catalog['products'] : [];
         $beforeCount = count($products);
-        $scoped = self::scopeCatalogProductsForPolicy($products, $policyRules, $isAvailable, $sectionContext, $storeGuids);
+        $scoped = self::scopeCatalogProductsForPolicy($products, $policyRules, $isAvailable, $sectionContext, $storeGuids, null);
         $catalog['products'] = $scoped;
         if ($beforeCount > count($scoped)) {
             $removed = $beforeCount - count($scoped);
@@ -3263,5 +3269,238 @@ final class StoreCatalogService
     public static function lockedClientFiltersForRules(array $rules): array
     {
         return self::lockedPolicyClientFilters($rules);
+    }
+
+    /**
+     * Catalog fetch for the availability UX demo: no sellable-only filter, optional mixed stock, availability-first sort.
+     *
+     * @param array<string, mixed> $query  keys: page, q, sort, view (all|available|unavailable)
+     * @return array<string, mixed>
+     */
+    public static function catalogForAvailabilityDemo(array $query): array
+    {
+        $page = max(1, (int) ($query['page'] ?? 1));
+        $pageSize = 24;
+        $view = trim((string) ($query['view'] ?? 'all'));
+        if (!in_array($view, ['all', 'available', 'unavailable'], true)) {
+            $view = 'all';
+        }
+        $isAvailable = match ($view) {
+            'available' => true,
+            'unavailable' => false,
+            default => null,
+        };
+        $search = trim((string) ($query['q'] ?? $query['search'] ?? ''));
+        $sort = self::normalizeSort((string) ($query['sort'] ?? 'number:asc'));
+        $stockVisibility = $view === 'all' ? 'all' : null;
+
+        $policy = self::activePolicy();
+        if ($policy === null) {
+            return self::emptyCatalogResult($page, $pageSize, 'لم تُضبط سياسة عرض المتجر بعد.');
+        }
+
+        $storeOptions = is_array($policy['store_options'] ?? null)
+            ? $policy['store_options']
+            : AccessPolicyService::defaultStoreOptions();
+        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
+        $requestFilters = [
+            'search' => $search,
+            'sort' => $sort,
+            'materialTypes' => [],
+            'manufacturers' => [],
+            'ageCategories' => [],
+            'sizeRanges' => [],
+            'countryOfOrigins' => [],
+            'groupGuids' => [],
+            'storeGuids' => [],
+            'isAvailable' => $isAvailable,
+            'hasImage' => null,
+            'minWarehouseQuantity' => null,
+            'maxWarehouseQuantity' => null,
+            'minUnitSalePriceSyp' => null,
+            'maxUnitSalePriceSyp' => null,
+            'minUnitSalePriceUsd' => null,
+            'maxUnitSalePriceUsd' => null,
+            'minUnitPurchasePriceUsd' => null,
+            'maxUnitPurchasePriceUsd' => null,
+            'groupBy' => 'none',
+        ];
+
+        $mergedFilters = self::mergeCatalogFilters($policyRules, $requestFilters);
+        if ($mergedFilters['has_conflict']) {
+            return self::emptyCatalogResult(
+                $page,
+                $pageSize,
+                'لا توجد مواد مطابقة لسياسة الوصول.',
+                $storeOptions,
+                $requestFilters,
+                null,
+                self::lockedClientFilters($policyRules)
+            );
+        }
+
+        $forcedPolicyStoreGuids = self::parseList($policyRules['store_guids'] ?? []);
+        if ($forcedPolicyStoreGuids !== [] && $view !== 'all') {
+            $mergedFilters['storeGuids'] = $forcedPolicyStoreGuids;
+            if (($mergedFilters['isAvailable'] ?? null) !== false) {
+                $mergedFilters['isAvailable'] = true;
+            }
+        }
+
+        $search = $mergedFilters['search'];
+        $materialTypes = $mergedFilters['materialTypes'];
+        $manufacturers = $mergedFilters['manufacturers'];
+        $ageCategories = $mergedFilters['ageCategories'];
+        $sizeRanges = $mergedFilters['sizeRanges'];
+        $countryOfOrigins = $mergedFilters['countryOfOrigins'];
+        $groupGuids = $mergedFilters['groupGuids'];
+        $storeGuids = $mergedFilters['storeGuids'];
+        $isAvailable = $mergedFilters['isAvailable'];
+        $hasImage = $mergedFilters['hasImage'];
+
+        $products = [];
+        $totalCount = 0;
+        $apiError = null;
+
+        try {
+            $materials = self::fetchMaterialsExtended(
+                $page,
+                $pageSize,
+                $search,
+                $sort,
+                $materialTypes,
+                $manufacturers,
+                $ageCategories,
+                $sizeRanges,
+                $countryOfOrigins,
+                $groupGuids,
+                $storeGuids,
+                $isAvailable,
+                $hasImage,
+                false,
+                false,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+            );
+            if ($materials['ok']) {
+                $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
+                $rawItems = $data['items'] ?? $data['Items'] ?? [];
+                $products = self::withOfferPricing(is_array($rawItems) ? $rawItems : [], null);
+                $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+                $page = max(1, (int) ($data['page'] ?? $page));
+                $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
+            } else {
+                $apiError = self::extractApiError($materials);
+            }
+        } catch (\Throwable $exception) {
+            $apiError = $exception->getMessage();
+        }
+
+        $beforeScopeCount = count($products);
+        $products = self::scopeCatalogProductsForPolicy(
+            $products,
+            $policyRules,
+            $isAvailable,
+            null,
+            $storeGuids,
+            $stockVisibility
+        );
+        if ($apiError === null && $beforeScopeCount > count($products)) {
+            $removed = $beforeScopeCount - count($products);
+            $totalCount = max(0, $totalCount - $removed);
+            if ($products === []) {
+                $totalCount = 0;
+            }
+        }
+
+        if ($view === 'all' && $products !== []) {
+            $products = self::sortProductsByAvailabilityPriority($products, $sort);
+        } elseif ($products !== []) {
+            $products = self::sortProducts($products, $sort);
+        }
+
+        $availableOnPage = 0;
+        $unavailableOnPage = 0;
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            if (StockReservationService::displayPackagesAvailable($product) > 0) {
+                $availableOnPage++;
+            } else {
+                $unavailableOnPage++;
+            }
+        }
+
+        $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
+        if ($page > $totalPages) {
+            $page = $totalPages;
+        }
+
+        $displayFilters = self::buildFiltersState(
+            $search,
+            $sort,
+            $materialTypes,
+            $manufacturers,
+            $ageCategories,
+            $sizeRanges,
+            $countryOfOrigins,
+            $groupGuids,
+            $storeGuids,
+            $isAvailable,
+            $hasImage,
+            null,
+            $requestFilters
+        );
+
+        return [
+            'products' => $products,
+            'totalCount' => $totalCount,
+            'page' => $page,
+            'pageSize' => $pageSize,
+            'totalPages' => $totalPages,
+            'rangeStart' => $totalCount === 0 ? 0 : (($page - 1) * $pageSize + 1),
+            'rangeEnd' => min($totalCount, $page * $pageSize),
+            'apiError' => $apiError,
+            'filters' => $displayFilters,
+            'demo_view' => $view,
+            'demo_stats' => [
+                'available_on_page' => $availableOnPage,
+                'unavailable_on_page' => $unavailableOnPage,
+            ],
+        ];
+    }
+
+    /** @param list<array<string, mixed>> $products @return list<array<string, mixed>> */
+    private static function sortProductsByAvailabilityPriority(array $products, string $sort): array
+    {
+        $tier = static function (array $item): int {
+            $packages = StockReservationService::displayPackagesAvailable($item);
+            if ($packages <= 0) {
+                return 2;
+            }
+            if ($packages <= 2) {
+                return 1;
+            }
+
+            return 0;
+        };
+
+        $byTier = [0 => [], 1 => [], 2 => []];
+        foreach ($products as $product) {
+            $byTier[$tier($product)][] = $product;
+        }
+        $merged = [];
+        foreach ([0, 1, 2] as $t) {
+            $merged = array_merge($merged, self::sortProducts($byTier[$t], $sort));
+        }
+
+        return $merged;
     }
 }

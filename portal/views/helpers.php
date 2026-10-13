@@ -1158,6 +1158,24 @@ function store_url(array $params = []): string
 }
 
 /** @param array<string, mixed> $params */
+function store_availability_demo_url(array $params = []): string
+{
+    $filtered = [];
+    foreach ($params as $key => $value) {
+        if ($value === null) {
+            continue;
+        }
+        $text = trim((string) $value);
+        if ($text !== '') {
+            $filtered[$key] = $text;
+        }
+    }
+    $query = http_build_query($filtered);
+
+    return '/store-availability-demo.php' . ($query !== '' ? '?' . $query : '');
+}
+
+/** @param array<string, mixed> $params */
 function share_url(array $params = []): string
 {
     $filtered = [];
