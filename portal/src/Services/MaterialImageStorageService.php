@@ -2067,6 +2067,7 @@ final class MaterialImageStorageService
                 'failed' => 0,
                 'skipped_already_local' => 0,
                 'items' => [],
+                'scan_complete' => false,
             ];
         }
 
@@ -2163,6 +2164,7 @@ final class MaterialImageStorageService
             'failed' => $failed,
             'skipped_already_local' => $skipped,
             'items' => $items,
+            'scan_complete' => (bool) ($listed['scan_complete'] ?? false),
         ];
     }
 
@@ -2176,7 +2178,8 @@ final class MaterialImageStorageService
      *   message: string,
      *   items: list<array{image_guid: string, material_guid: string, material_code: string}>,
      *   amine_with_image: int,
-     *   local_guid_index_size: int
+     *   local_guid_index_size: int,
+     *   scan_complete: bool
      * }
      */
     public static function listMissingLocalImageTargets(int $limit = 500, ?callable $onProgress = null): array
@@ -2197,6 +2200,7 @@ final class MaterialImageStorageService
         $apiPage = 1;
         $apiPageSize = 200;
         $hasMoreApi = true;
+        $scanComplete = false;
 
         while ($hasMoreApi && count($missingByGuid) < $limit && $apiPage <= 500) {
             try {
@@ -2212,6 +2216,7 @@ final class MaterialImageStorageService
                     'items' => [],
                     'amine_with_image' => $amineWithImage,
                     'local_guid_index_size' => $indexSize,
+                    'scan_complete' => false,
                 ];
             }
 
@@ -2222,6 +2227,7 @@ final class MaterialImageStorageService
                     'items' => [],
                     'amine_with_image' => $amineWithImage,
                     'local_guid_index_size' => $indexSize,
+                    'scan_complete' => false,
                 ];
             }
 
@@ -2230,6 +2236,7 @@ final class MaterialImageStorageService
             $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
             $hasMoreApi = ($apiPage * $apiPageSize) < $totalCount;
 
+            $reachedLimit = false;
             foreach ($rows as $row) {
                 if (!is_array($row)) {
                     continue;
@@ -2248,6 +2255,7 @@ final class MaterialImageStorageService
                     'material_code' => trim((string) ($row['materialCode'] ?? $row['MaterialCode'] ?? '')),
                 ];
                 if (count($missingByGuid) >= $limit) {
+                    $reachedLimit = true;
                     break;
                 }
             }
@@ -2256,10 +2264,17 @@ final class MaterialImageStorageService
                 $onProgress('صفحة أمين ' . $apiPage . ': ناقص مجمّع ' . count($missingByGuid) . ' / ب صورة ' . $amineWithImage);
             }
 
-            if ($rows === []) {
+            if ($rows === [] || !$hasMoreApi) {
+                $scanComplete = true;
+                break;
+            }
+            if ($reachedLimit) {
                 break;
             }
             $apiPage++;
+        }
+        if (!$hasMoreApi) {
+            $scanComplete = true;
         }
 
         return [
@@ -2268,6 +2283,7 @@ final class MaterialImageStorageService
             'items' => array_values($missingByGuid),
             'amine_with_image' => $amineWithImage,
             'local_guid_index_size' => $indexSize,
+            'scan_complete' => $scanComplete,
         ];
     }
 

@@ -25,6 +25,7 @@ $worker = is_array($imageWorkerSnapshot['worker'] ?? null) ? $imageWorkerSnapsho
 $missingLocal = isset($worker['missing_local_count']) ? (int) $worker['missing_local_count'] : null;
 $failedCount = (int) ($syncStats['failed'] ?? 0);
 $pendingCount = (int) ($syncStats['pending'] ?? 0);
+$repairFailures = is_array($worker['recent_repair_failures'] ?? null) ? $worker['recent_repair_failures'] : [];
 $workerUserSummary = \Portal\Services\MaterialImageBackgroundWorkerService::userFacingSummary(
     $worker,
     $syncStats,
@@ -90,7 +91,7 @@ $showWorkerBanner = \Portal\Services\MaterialImageBackgroundWorkerService::dashb
           </p>
         <?php endif; ?>
       </div>
-      <div class="flex flex-wrap gap-2 shrink-0">
+      <div class="flex flex-wrap gap-2 shrink-0" id="queueHealthActions">
         <?php if ($failedCount > 0 || $pendingCount > 0): ?>
           <a
             href="/dashboard/material-images.php?tab=upload&amp;queue_status=failed"
@@ -104,14 +105,22 @@ $showWorkerBanner = \Portal\Services\MaterialImageBackgroundWorkerService::dashb
           >
             بانتظار الإرسال (<?= $pendingCount ?>)
           </a>
-        <?php else: ?>
-          <span class="inline-flex items-center h-9 px-3 rounded-lg border border-green-200 bg-green-50 text-green-800 text-xs font-bold">
-            الطابور نظيف
-          </span>
         <?php endif; ?>
+        <?php
+          $queuePillMissing = $missingLocal !== null && $missingLocal > 0;
+          $queuePillHidden = !$queuePillMissing && ($failedCount > 0 || $pendingCount > 0);
+        ?>
+        <span
+          id="queueHealthPill"
+          class="inline-flex items-center h-9 px-3 rounded-lg text-xs font-bold <?= $queuePillHidden ? 'hidden ' : '' ?><?= $queuePillMissing
+              ? 'border border-amber-200 bg-amber-50 text-amber-900'
+              : 'border border-green-200 bg-green-50 text-green-800' ?>"
+        >
+          <?= $queuePillMissing ? ('غير جاهزة للعرض (' . (int) $missingLocal . ')') : 'الطابور نظيف' ?>
+        </span>
       </div>
     </div>
-    <ul id="materialImageWorkerFailures" class="mt-3 space-y-1 text-xs text-red-800<?= ($failedCount === 0 ? ' hidden' : '') ?>">
+    <ul id="materialImageWorkerFailures" class="mt-3 space-y-1 text-xs text-red-800<?= ($failedCount === 0 && $repairFailures === [] ? ' hidden' : '') ?>">
       <?php foreach (is_array($worker['recent_failures'] ?? null) ? $worker['recent_failures'] : [] as $fail): ?>
         <?php if (!is_array($fail)) {
             continue;
@@ -120,6 +129,18 @@ $showWorkerBanner = \Portal\Services\MaterialImageBackgroundWorkerService::dashb
           <?= h((string) ($fail['file_name'] ?? '')) ?>
           <?php if (!empty($fail['amine_sync_error_ar'])): ?>
             <span class="font-sans text-red-700" dir="rtl"> — <?= h((string) $fail['amine_sync_error_ar']) ?></span>
+          <?php endif; ?>
+        </li>
+      <?php endforeach; ?>
+      <?php foreach ($repairFailures as $fail): ?>
+        <?php if (!is_array($fail)) {
+            continue;
+        } ?>
+        <li dir="rtl">
+          <?php $repairLabel = trim((string) ($fail['material_code'] ?? '')); ?>
+          <?= h($repairLabel !== '' ? $repairLabel : 'صورة') ?>
+          <?php if (!empty($fail['message'])): ?>
+            <span class="text-red-700"> — <?= h((string) $fail['message']) ?></span>
           <?php endif; ?>
         </li>
       <?php endforeach; ?>
