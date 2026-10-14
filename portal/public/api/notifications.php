@@ -39,13 +39,22 @@ try {
             $since = trim((string) ($_GET['since'] ?? ''));
             $latest = NotificationService::latestActivityAt();
             $count = NotificationService::unreadCount();
-            $changed = $since === '' || ($latest !== null && $latest !== $since);
+            $changed = NotificationService::activityIsNewer($latest, $since);
+            $item = null;
+            if ($changed) {
+                $candidate = NotificationService::latestUnread();
+                $candidateAt = is_array($candidate) ? (string) ($candidate['created_at'] ?? '') : '';
+                if ($candidate !== null && NotificationService::activityIsNewer($candidateAt, $since)) {
+                    $item = $candidate;
+                }
+            }
 
             echo json_encode([
                 'ok' => true,
                 'changed' => $changed,
                 'latest' => $latest,
                 'count' => $count,
+                'item' => $item,
             ], JSON_UNESCAPED_UNICODE);
             exit;
         }
@@ -64,6 +73,13 @@ try {
         exit;
     }
 
+    $fetchSite = strtolower(trim((string) ($_SERVER['HTTP_SEC_FETCH_SITE'] ?? '')));
+    if ($fetchSite === 'cross-site') {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'message' => 'طلب غير مسموح.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     $payload = json_decode((string) file_get_contents('php://input'), true);
     if (!is_array($payload)) {
         $payload = $_POST;
@@ -72,20 +88,40 @@ try {
 
     if ($action === 'read') {
         $id = trim((string) ($payload['id'] ?? ''));
-        NotificationService::markRead($id);
+        if (!NotificationService::markRead($id)) {
+            http_response_code(404);
+            echo json_encode([
+                'ok' => false,
+                'message' => 'الإشعار غير متاح.',
+                'unread' => NotificationService::unreadCount(),
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
         echo json_encode(['ok' => true, 'unread' => NotificationService::unreadCount()], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
     if ($action === 'read_all') {
         $marked = NotificationService::markAllRead();
-        echo json_encode(['ok' => true, 'marked' => $marked, 'unread' => 0], JSON_UNESCAPED_UNICODE);
+        echo json_encode([
+            'ok' => true,
+            'marked' => $marked,
+            'unread' => NotificationService::unreadCount(),
+        ], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
     if ($action === 'dismiss') {
         $id = trim((string) ($payload['id'] ?? ''));
-        NotificationService::dismissForReader($id);
+        if (!NotificationService::dismissForReader($id)) {
+            http_response_code(404);
+            echo json_encode([
+                'ok' => false,
+                'message' => 'الإشعار غير متاح.',
+                'unread' => NotificationService::unreadCount(),
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
         echo json_encode([
             'ok' => true,
             'unread' => NotificationService::unreadCount(),
@@ -123,10 +159,13 @@ try {
     if ($scope === 'private') {
         $customerId = trim((string) ($payload['customer_id'] ?? ''));
         $staffId = trim((string) ($payload['staff_id'] ?? ''));
+        if ($customerId !== '' && $staffId !== '') {
+            throw new \RuntimeException('اختر عميلاً أو موظفاً واحداً فقط.');
+        }
         if ($customerId !== '') {
-            $id = NotificationService::createPrivateForCustomer($customerId, $title, $body, $linkUrl ?: null, $icon);
+            $id = NotificationService::createPrivateForCustomer($customerId, $title, $body, $linkUrl ?: null, $icon, 'manual', null, null, $createdBy);
         } elseif ($staffId !== '') {
-            $id = NotificationService::createPrivateForStaff($staffId, $title, $body, $linkUrl ?: null, $icon);
+            $id = NotificationService::createPrivateForStaff($staffId, $title, $body, $linkUrl ?: null, $icon, 'manual', null, null, $createdBy);
         } else {
             throw new \RuntimeException('حدّد عميلاً أو موظفاً للإشعار الخاص.');
         }

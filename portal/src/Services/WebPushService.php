@@ -40,7 +40,8 @@ final class WebPushService
         return 'mailto:admin@jawish.local';
     }
 
-    public static function sendForNotificationId(string $notificationId): void
+    /** @param array{0: string, 1: string}|null $excludeReader */
+    public static function sendForNotificationId(string $notificationId, ?array $excludeReader = null): void
     {
         if (!self::isConfigured()) {
             return;
@@ -51,7 +52,7 @@ final class WebPushService
             return;
         }
 
-        $subscriptions = PushSubscriptionService::subscriptionsForNotification($notification);
+        $subscriptions = PushSubscriptionService::subscriptionsForNotification($notification, $excludeReader);
         if ($subscriptions === []) {
             return;
         }

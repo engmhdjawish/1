@@ -381,6 +381,7 @@ final class SpecialOfferService
         $materialGuids = is_array($payload['material_guids'] ?? null) ? $payload['material_guids'] : [];
         $productOverrides = is_array($payload['product_overrides'] ?? null) ? $payload['product_overrides'] : [];
         self::syncManualProducts($id, $materialGuids, $pricingScope === 'per_material' ? $productOverrides : []);
+        self::syncOfferNotification($id);
 
         return ['ok' => true, 'message' => 'تم حفظ العرض.', 'id' => $id];
     }
@@ -474,16 +475,56 @@ final class SpecialOfferService
     {
         $stmt = Database::pdo()->prepare('DELETE FROM special_offers WHERE id = :id');
         $stmt->execute(['id' => $id]);
+        $deleted = $stmt->rowCount() > 0;
+        if ($deleted) {
+            NotificationService::syncSpecialOfferNotification([
+                'id' => $id,
+                'is_active' => false,
+            ]);
+        }
 
-        return $stmt->rowCount() > 0;
+        return $deleted;
     }
 
     public static function toggleActive(string $id, bool $active): bool
     {
         $stmt = Database::pdo()->prepare('UPDATE special_offers SET is_active = :active WHERE id = :id');
         $stmt->execute(['id' => $id, 'active' => $active ? 'true' : 'false']);
+        $updated = $stmt->rowCount() > 0;
+        if ($updated) {
+            self::syncOfferNotification($id);
+        }
 
-        return $stmt->rowCount() > 0;
+        return $updated;
+    }
+
+    private static function syncOfferNotification(string $id): void
+    {
+        $id = trim($id);
+        if ($id === '') {
+            return;
+        }
+
+        try {
+            $stmt = Database::pdo()->prepare(
+                'SELECT id::text AS id, slug, title_ar, subtitle_ar, ends_at::text AS ends_at, is_active
+                 FROM special_offers
+                 WHERE id = :id
+                 LIMIT 1'
+            );
+            $stmt->execute(['id' => $id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row === false) {
+                NotificationService::syncSpecialOfferNotification([
+                    'id' => $id,
+                    'is_active' => false,
+                ]);
+
+                return;
+            }
+            NotificationService::syncSpecialOfferNotification($row);
+        } catch (\Throwable) {
+        }
     }
 
     /** Best active offer for a material on the public store. */

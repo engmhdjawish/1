@@ -347,6 +347,7 @@ final class OrderService
             $guestPhone,
             count($normalizedItems)
         );
+        NotificationService::notifyCustomerOrderPlaced($orderId);
 
         if ($visitorSessionId !== '') {
             $customerPayload = null;
@@ -385,6 +386,13 @@ final class OrderService
     private static function generateOrderNumber(): string
     {
         return 'ORD-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(4)), 0, 8));
+    }
+
+    private static function formatNoticeQuantity(float $quantity): string
+    {
+        $formatted = rtrim(rtrim(number_format($quantity, 2, '.', ''), '0'), '.');
+
+        return $formatted !== '' ? $formatted : '0';
     }
 
     /** @param array{status?: string, q?: string, sync?: string, fromDate?: string, toDate?: string, limit?: int} $filters */
@@ -507,6 +515,9 @@ final class OrderService
 
         $previousStatus = (string) ($current['status'] ?? '');
         $orderNumber = (string) ($current['order_number'] ?? '');
+        if ($previousStatus === $nextStatus) {
+            return true;
+        }
 
         $stmt = Database::pdo()->prepare(
             'UPDATE orders
@@ -996,7 +1007,6 @@ final class OrderService
                 (string) ($order['order_number'] ?? ''),
                 'تم الإلغاء من العميل'
             );
-            NotificationService::notifyOrderStatusChanged($orderId, 'cancelled');
         } catch (\Throwable) {
             // Notification failure must not block customer cancellation.
         }
@@ -1078,6 +1088,12 @@ final class OrderService
 
             return ['ok' => false, 'message' => 'تعذر إلغاء الصنف.'];
         }
+
+        NotificationService::notifyStaffCustomerCancelledItem(
+            $orderId,
+            (string) ($item['material_name_ar'] ?? ''),
+            trim((string) ($order['customer_name_ar'] ?? $order['guest_name_ar'] ?? ''))
+        );
 
         return ['ok' => true, 'message' => 'تم إلغاء الصنف من الطلب.'];
     }
@@ -1290,6 +1306,11 @@ final class OrderService
             return ['ok' => false, 'message' => 'تعذر حفظ تعديل الكمية.'];
         }
 
+        NotificationService::notifyCustomerOrderAdjusted(
+            $orderId,
+            'تم تعديل كمية «' . (string) ($item['material_name_ar'] ?? 'الصنف') . '» إلى ' . self::formatNoticeQuantity($quantity)
+        );
+
         return ['ok' => true, 'message' => 'تم تحديث كمية الصنف.'];
     }
 
@@ -1364,6 +1385,11 @@ final class OrderService
             return ['ok' => false, 'message' => 'تعذر حفظ تعديل السعر.'];
         }
 
+        NotificationService::notifyCustomerOrderAdjusted(
+            $orderId,
+            'تم تعديل سعر «' . (string) ($item['material_name_ar'] ?? 'الصنف') . '»'
+        );
+
         return ['ok' => true, 'message' => 'تم تحديث سعر الصنف.'];
     }
 
@@ -1436,6 +1462,11 @@ final class OrderService
 
             return ['ok' => false, 'message' => 'تعذر إلغاء الصنف.'];
         }
+
+        NotificationService::notifyCustomerOrderAdjusted(
+            $orderId,
+            'تم إلغاء الصنف «' . (string) ($item['material_name_ar'] ?? '') . '» من الطلب'
+        );
 
         return ['ok' => true, 'message' => 'تم إلغاء الصنف من الطلب.'];
     }

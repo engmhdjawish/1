@@ -25,12 +25,16 @@ final class NotificationService
 
     public const REF_TYPE_ORDER = 'order';
     public const REF_TYPE_CUSTOMER_REGISTRATION = 'customer_registration';
+    public const REF_TYPE_SPECIAL_OFFER = 'special_offer';
 
     private const SESSION_GUEST_READER_KEY = 'portal_notification_guest_id';
     private const STAFF_ALERT_TTL_DAYS = 7;
 
     /** @var string|null */
     private static ?string $staffSinceCache = null;
+
+    /** @var array<string, array{0: string, 1: string}> */
+    private static array $pushExclusions = [];
 
     public static function ensureTable(): void
     {
@@ -206,7 +210,7 @@ final class NotificationService
                        n.icon,
                        n.source,
                        n.created_at,
-                       (r.read_at IS NOT NULL) AS is_read
+                       (r.read_at IS NOT NULL)::int AS is_read
                 FROM portal_notifications n
                 LEFT JOIN portal_notification_reads r
                   ON r.notification_id = n.id
@@ -227,8 +231,14 @@ final class NotificationService
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         self::bindStaffSince($stmt, $reader);
         $stmt->execute();
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        foreach ($rows as &$row) {
+            $row['icon'] = self::sanitizeIcon((string) ($row['icon'] ?? ''), 'notifications');
+            $row['is_read'] = (int) ($row['is_read'] ?? 0);
+        }
+        unset($row);
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        return $rows;
     }
 
     public static function unreadCount(): int
@@ -292,11 +302,15 @@ final class NotificationService
     {
         self::ensureTable();
         $notificationId = trim($notificationId);
-        if ($notificationId === '') {
+        if (!self::isUuid($notificationId)) {
             return false;
         }
 
         $reader = self::currentReader();
+        if (!self::readerCanSee($notificationId, $reader)) {
+            return false;
+        }
+
         $stmt = Database::pdo()->prepare(
             'INSERT INTO portal_notification_reads (notification_id, reader_type, reader_id)
              VALUES (:notification_id, :reader_type, :reader_id)
@@ -315,11 +329,15 @@ final class NotificationService
     {
         self::ensureTable();
         $notificationId = trim($notificationId);
-        if ($notificationId === '') {
+        if (!self::isUuid($notificationId)) {
             return false;
         }
 
         $reader = self::currentReader();
+        if (!self::readerCanSee($notificationId, $reader)) {
+            return false;
+        }
+
         $stmt = Database::pdo()->prepare(
             'INSERT INTO portal_notification_reads (notification_id, reader_type, reader_id, read_at, dismissed_at)
              VALUES (:notification_id, :reader_type, :reader_id, NOW(), NOW())
@@ -339,7 +357,7 @@ final class NotificationService
     {
         self::ensureTable();
         $notificationId = trim($notificationId);
-        if ($notificationId === '') {
+        if (!self::isUuid($notificationId)) {
             return false;
         }
 
@@ -351,16 +369,34 @@ final class NotificationService
 
     public static function markAllRead(): int
     {
-        $items = self::listForReader(100);
-        $marked = 0;
-        foreach ($items as $item) {
-            if (empty($item['is_read'])) {
-                self::markRead((string) ($item['id'] ?? ''));
-                $marked++;
-            }
-        }
+        self::ensureTable();
+        $reader = self::currentReader();
+        $conditions = self::visibilitySql($reader);
+        $sql = 'INSERT INTO portal_notification_reads (notification_id, reader_type, reader_id)
+                SELECT n.id, :insert_reader_type, :insert_reader_id
+                FROM portal_notifications n
+                LEFT JOIN portal_notification_reads r
+                  ON r.notification_id = n.id
+                 AND r.reader_type = :reader_type
+                 AND r.reader_id = :reader_id
+                WHERE (' . implode(' OR ', $conditions['parts']) . ')
+                  AND (n.expires_at IS NULL OR n.expires_at > NOW())
+                  AND (r.dismissed_at IS NULL)
+                  AND r.read_at IS NULL' . self::staffSinceSql($reader) . '
+                ON CONFLICT (notification_id, reader_type, reader_id) DO NOTHING';
 
-        return $marked;
+        $stmt = Database::pdo()->prepare($sql);
+        foreach ($conditions['params'] as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->bindValue(':insert_reader_type', $reader['reader_type']);
+        $stmt->bindValue(':insert_reader_id', $reader['reader_id']);
+        $stmt->bindValue(':reader_type', $reader['reader_type']);
+        $stmt->bindValue(':reader_id', $reader['reader_id']);
+        self::bindStaffSince($stmt, $reader);
+        $stmt->execute();
+
+        return $stmt->rowCount();
     }
 
     public static function latestUnread(): ?array
@@ -392,14 +428,9 @@ final class NotificationService
             $audience = self::AUDIENCE_ALL;
         }
 
-        $referenceType = trim((string) $referenceType);
-        $referenceId = trim((string) $referenceId);
-        if ($referenceType === '') {
-            $referenceType = null;
-        }
-        if ($referenceId === '') {
-            $referenceId = null;
-        }
+        [$title, $body] = self::requireCopy($title, $body);
+        $referenceType = self::blankToNull($referenceType);
+        $referenceId = self::blankToNull($referenceId);
 
         $stmt = Database::pdo()->prepare(
             'INSERT INTO portal_notifications (
@@ -414,13 +445,13 @@ final class NotificationService
         $stmt->execute([
             'scope' => self::SCOPE_PUBLIC,
             'audience' => $audience,
-            'title' => trim($title),
-            'body' => trim($body),
-            'link_url' => self::normalizeLink($linkUrl),
-            'icon' => $icon !== '' ? $icon : 'campaign',
-            'source' => $source,
-            'created_by' => $createdByUserId,
-            'expires_at' => $expiresAt,
+            'title' => $title,
+            'body' => $body,
+            'link_url' => self::normalizeLinkUrl($linkUrl),
+            'icon' => self::sanitizeIcon($icon, 'campaign'),
+            'source' => self::clipText($source !== '' ? $source : 'manual', 50),
+            'created_by' => self::blankToNull($createdByUserId),
+            'expires_at' => self::normalizeExpiresAt($expiresAt),
             'reference_type' => $referenceType,
             'reference_id' => $referenceId,
         ]);
@@ -440,11 +471,22 @@ final class NotificationService
 
         register_shutdown_function(static function () use ($notificationId): void {
             try {
-                WebPushService::sendForNotificationId($notificationId);
+                $exclude = self::$pushExclusions[$notificationId] ?? null;
+                WebPushService::sendForNotificationId($notificationId, $exclude);
             } catch (\Throwable) {
                 // Never block notification persistence or the HTTP response.
             }
         });
+    }
+
+    public static function excludePushRecipient(string $notificationId, string $readerType, string $readerId): void
+    {
+        $notificationId = trim($notificationId);
+        $readerId = trim($readerId);
+        if ($notificationId === '' || $readerId === '') {
+            return;
+        }
+        self::$pushExclusions[$notificationId] = [$readerType, $readerId];
     }
 
     public static function createPrivateForCustomer(
@@ -453,32 +495,40 @@ final class NotificationService
         string $body,
         ?string $linkUrl = null,
         string $icon = 'notifications',
-        string $source = 'system'
+        string $source = 'system',
+        ?string $referenceType = null,
+        ?string $referenceId = null,
+        ?string $createdByUserId = null
     ): string {
         self::ensureTable();
         $customerId = trim($customerId);
-        if ($customerId === '') {
-            throw new \InvalidArgumentException('معرّف العميل مطلوب.');
+        if (!self::isUuid($customerId)) {
+            throw new \InvalidArgumentException('معرّف العميل غير صالح.');
         }
+        [$title, $body] = self::requireCopy($title, $body);
 
         $stmt = Database::pdo()->prepare(
             'INSERT INTO portal_notifications (
                 scope, audience, title_ar, body_ar, link_url, icon, source,
-                recipient_web_customer_id
+                recipient_web_customer_id, created_by_web_user_id, reference_type, reference_id
              ) VALUES (
-                :scope, :audience, :title, :body, :link_url, :icon, :source, :customer_id
+                :scope, :audience, :title, :body, :link_url, :icon, :source,
+                :customer_id, :created_by, :reference_type, :reference_id
              )
              RETURNING id::text'
         );
         $stmt->execute([
             'scope' => self::SCOPE_PRIVATE,
             'audience' => self::AUDIENCE_CUSTOMERS,
-            'title' => trim($title),
-            'body' => trim($body),
-            'link_url' => self::normalizeLink($linkUrl),
-            'icon' => $icon !== '' ? $icon : 'notifications',
-            'source' => $source,
+            'title' => $title,
+            'body' => $body,
+            'link_url' => self::normalizeLinkUrl($linkUrl),
+            'icon' => self::sanitizeIcon($icon, 'notifications'),
+            'source' => self::clipText($source !== '' ? $source : 'system', 50),
             'customer_id' => $customerId,
+            'created_by' => self::blankToNull($createdByUserId),
+            'reference_type' => self::blankToNull($referenceType),
+            'reference_id' => self::blankToNull($referenceId),
         ]);
 
         $id = (string) $stmt->fetchColumn();
@@ -493,32 +543,40 @@ final class NotificationService
         string $body,
         ?string $linkUrl = null,
         string $icon = 'notifications',
-        string $source = 'system'
+        string $source = 'system',
+        ?string $referenceType = null,
+        ?string $referenceId = null,
+        ?string $createdByUserId = null
     ): string {
         self::ensureTable();
         $userId = trim($userId);
-        if ($userId === '') {
-            throw new \InvalidArgumentException('معرّف الموظف مطلوب.');
+        if (!self::isUuid($userId)) {
+            throw new \InvalidArgumentException('معرّف الموظف غير صالح.');
         }
+        [$title, $body] = self::requireCopy($title, $body);
 
         $stmt = Database::pdo()->prepare(
             'INSERT INTO portal_notifications (
                 scope, audience, title_ar, body_ar, link_url, icon, source,
-                recipient_web_user_id
+                recipient_web_user_id, created_by_web_user_id, reference_type, reference_id
              ) VALUES (
-                :scope, :audience, :title, :body, :link_url, :icon, :source, :user_id
+                :scope, :audience, :title, :body, :link_url, :icon, :source,
+                :user_id, :created_by, :reference_type, :reference_id
              )
              RETURNING id::text'
         );
         $stmt->execute([
             'scope' => self::SCOPE_PRIVATE,
             'audience' => self::AUDIENCE_STAFF,
-            'title' => trim($title),
-            'body' => trim($body),
-            'link_url' => self::normalizeLink($linkUrl),
-            'icon' => $icon !== '' ? $icon : 'notifications',
-            'source' => $source,
+            'title' => $title,
+            'body' => $body,
+            'link_url' => self::normalizeLinkUrl($linkUrl),
+            'icon' => self::sanitizeIcon($icon, 'notifications'),
+            'source' => self::clipText($source !== '' ? $source : 'system', 50),
             'user_id' => $userId,
+            'created_by' => self::blankToNull($createdByUserId),
+            'reference_type' => self::blankToNull($referenceType),
+            'reference_id' => self::blankToNull($referenceId),
         ]);
 
         $id = (string) $stmt->fetchColumn();
@@ -543,11 +601,19 @@ final class NotificationService
                     n.source,
                     n.created_at,
                     n.expires_at,
+                    n.reference_type,
+                    n.reference_id,
                     wc.name_ar AS customer_name_ar,
-                    wu.display_name_ar AS staff_name_ar
+                    wu.display_name_ar AS staff_name_ar,
+                    COALESCE(reads.read_count, 0)::int AS read_count
              FROM portal_notifications n
              LEFT JOIN web_customers wc ON wc.id = n.recipient_web_customer_id
              LEFT JOIN web_users wu ON wu.id = n.recipient_web_user_id
+             LEFT JOIN (
+                SELECT notification_id, COUNT(*)::int AS read_count
+                FROM portal_notification_reads
+                GROUP BY notification_id
+             ) reads ON reads.notification_id = n.id
              ORDER BY n.created_at DESC
              LIMIT :limit'
         );
@@ -557,8 +623,37 @@ final class NotificationService
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
-    public static function notifyOrderStatusChanged(string $orderId, string $nextStatus): void
+    /** @return array{total: int, public_count: int, private_count: int, manual_count: int, expired_count: int, active_count: int} */
+    public static function sentStats(): array
     {
+        self::ensureTable();
+        $row = Database::pdo()->query(
+            "SELECT
+                COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE scope = 'public')::int AS public_count,
+                COUNT(*) FILTER (WHERE scope = 'private')::int AS private_count,
+                COUNT(*) FILTER (WHERE source = 'manual')::int AS manual_count,
+                COUNT(*) FILTER (WHERE expires_at IS NOT NULL AND expires_at <= NOW())::int AS expired_count,
+                COUNT(*) FILTER (WHERE expires_at IS NULL OR expires_at > NOW())::int AS active_count
+             FROM portal_notifications"
+        )->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'total' => (int) ($row['total'] ?? 0),
+            'public_count' => (int) ($row['public_count'] ?? 0),
+            'private_count' => (int) ($row['private_count'] ?? 0),
+            'manual_count' => (int) ($row['manual_count'] ?? 0),
+            'expired_count' => (int) ($row['expired_count'] ?? 0),
+            'active_count' => (int) ($row['active_count'] ?? 0),
+        ];
+    }
+
+    public static function notifyOrderStatusChanged(string $orderId, string $nextStatus, bool $notifyCustomer = true): void
+    {
+        if (!$notifyCustomer) {
+            return;
+        }
+
         $orderId = trim($orderId);
         if ($orderId === '') {
             return;
@@ -580,18 +675,118 @@ final class NotificationService
         $title = 'تحديث حالة الطلب';
         $body = 'طلبك رقم ' . $orderNumber . ' أصبح الآن: ' . $label . '.';
 
-        $link = '/my-orders.php';
-        $token = trim((string) ($order['quote_access_token'] ?? ''));
-        if ($token !== '') {
-            $link = '/track-order.php?token=' . rawurlencode($token);
-        }
+        $link = self::customerOrderLink($order);
 
         $customerId = trim((string) ($order['web_customer_id'] ?? ''));
         if ($customerId === '') {
             return;
         }
 
-        self::createPrivateForCustomer($customerId, $title, $body, $link, 'shopping_bag', 'order_status');
+        self::createPrivateForCustomer(
+            $customerId,
+            $title,
+            $body,
+            $link,
+            'shopping_bag',
+            'order_status',
+            self::REF_TYPE_ORDER,
+            $orderId
+        );
+    }
+
+    public static function notifyCustomerOrderPlaced(string $orderId): void
+    {
+        try {
+            $order = self::loadOrderForNotice($orderId);
+            if ($order === null) {
+                return;
+            }
+            $customerId = trim((string) ($order['web_customer_id'] ?? ''));
+            if ($customerId === '') {
+                return;
+            }
+            $orderNumber = trim((string) ($order['order_number'] ?? ''));
+            self::createPrivateForCustomer(
+                $customerId,
+                'تم استلام طلبك',
+                'طلبك رقم ' . $orderNumber . ' وصل إلينا وهو الآن قيد المراجعة.',
+                self::customerOrderLink($order),
+                'receipt_long',
+                'order_received',
+                self::REF_TYPE_ORDER,
+                $orderId
+            );
+        } catch (\Throwable) {
+        }
+    }
+
+    public static function notifyCustomerOrderAdjusted(string $orderId, string $summary): void
+    {
+        try {
+            $summary = trim($summary);
+            if ($summary === '') {
+                return;
+            }
+            $order = self::loadOrderForNotice($orderId);
+            if ($order === null) {
+                return;
+            }
+            $customerId = trim((string) ($order['web_customer_id'] ?? ''));
+            if ($customerId === '') {
+                return;
+            }
+            $orderNumber = trim((string) ($order['order_number'] ?? ''));
+            self::createPrivateForCustomer(
+                $customerId,
+                'تم تعديل طلبك',
+                'طلب رقم ' . $orderNumber . ': ' . $summary,
+                self::customerOrderLink($order),
+                'edit_note',
+                'order_adjusted',
+                self::REF_TYPE_ORDER,
+                $orderId
+            );
+        } catch (\Throwable) {
+        }
+    }
+
+    public static function notifyStaffCustomerCancelledItem(string $orderId, string $itemName, string $customerName = ''): void
+    {
+        try {
+            $orderId = trim($orderId);
+            $itemName = trim($itemName);
+            if ($orderId === '' || $itemName === '') {
+                return;
+            }
+
+            $order = self::loadOrderForNotice($orderId);
+            $orderNumber = trim((string) ($order['order_number'] ?? ''));
+            $body = 'أُلغي الصنف «' . $itemName . '»';
+            if ($orderNumber !== '') {
+                $body .= ' من الطلب ' . $orderNumber;
+            }
+            $customerName = trim($customerName);
+            if ($customerName === '' && is_array($order)) {
+                $customerName = trim((string) ($order['customer_name_ar'] ?? $order['guest_name_ar'] ?? ''));
+            }
+            if ($customerName !== '') {
+                $body .= ' · ' . $customerName;
+            }
+
+            self::createPublic(
+                'إلغاء صنف من العميل',
+                $body,
+                self::AUDIENCE_STAFF,
+                '/dashboard/orders.php?details=' . rawurlencode($orderId),
+                'remove_shopping_cart',
+                self::defaultStaffAlertExpiresAt(),
+                null,
+                'order_item_cancelled',
+                self::REF_TYPE_ORDER,
+                $orderId
+            );
+        } catch (\Throwable) {
+        }
     }
 
     public static function notifyCustomerApproved(string $customerId): void
@@ -631,8 +826,139 @@ final class NotificationService
             $body,
             '/register.php',
             'person_off',
-            'customer_rejected'
+            'customer_rejected',
+            self::REF_TYPE_CUSTOMER_REGISTRATION,
+            $customerId
         );
+    }
+
+    public static function notifyCustomerSuspended(string $customerId, string $reason = ''): void
+    {
+        try {
+            $body = 'تم إيقاف حسابك مؤقتاً. لن تتمكن من تسجيل الدخول حتى يعيد الفريق تفعيله.';
+            if (trim($reason) !== '') {
+                $body .= ' السبب: ' . trim($reason);
+            }
+            self::createPrivateForCustomer(
+                $customerId,
+                'تم إيقاف الحساب',
+                $body,
+                '/customer-login.php',
+                'block',
+                'customer_suspended'
+            );
+        } catch (\Throwable) {
+        }
+    }
+
+    public static function notifyCustomerReactivated(string $customerId): void
+    {
+        try {
+            self::createPrivateForCustomer(
+                $customerId,
+                'تم إعادة تفعيل حسابك',
+                'يمكنك الآن تسجيل الدخول وتصفح المتجر وإتمام الطلبات.',
+                '/store.php',
+                'verified',
+                'customer_reactivated'
+            );
+        } catch (\Throwable) {
+        }
+    }
+
+    public static function notifyCustomerAccountCreated(string $customerId, bool $active): void
+    {
+        try {
+            if ($active) {
+                self::createPrivateForCustomer(
+                    $customerId,
+                    'تم إنشاء حسابك',
+                    'أنشأ فريق المتجر حسابك وقام بتفعيله. يمكنك تسجيل الدخول برقم هاتفك.',
+                    '/customer-login.php',
+                    'person_add',
+                    'customer_created'
+                );
+
+                return;
+            }
+
+            self::notifyCustomerRegistrationPending($customerId);
+        } catch (\Throwable) {
+        }
+    }
+
+    public static function notifyCustomerPasswordChanged(string $customerId): void
+    {
+        try {
+            self::createPrivateForCustomer(
+                $customerId,
+                'تم تغيير كلمة المرور',
+                'تم تحديث كلمة مرور حسابك. إذا لم تقم بهذا التغيير فتواصل مع المتجر فوراً.',
+                '/my-profile.php',
+                'key',
+                'password_changed'
+            );
+        } catch (\Throwable) {
+        }
+    }
+
+    /** @param array<string, mixed> $offer */
+    public static function syncSpecialOfferNotification(array $offer): void
+    {
+        try {
+            self::ensureTable();
+            $offerId = trim((string) ($offer['id'] ?? ''));
+            if ($offerId === '') {
+                return;
+            }
+
+            $active = self::isTruthy($offer['is_active'] ?? false);
+            if (!$active) {
+                self::resolveReferenceAlert('special_offer', self::REF_TYPE_SPECIAL_OFFER, $offerId);
+
+                return;
+            }
+
+            $endsAt = trim((string) ($offer['ends_at'] ?? ''));
+            if ($endsAt !== '') {
+                try {
+                    if (new \DateTimeImmutable($endsAt) <= new \DateTimeImmutable('now')) {
+                        self::resolveReferenceAlert('special_offer', self::REF_TYPE_SPECIAL_OFFER, $offerId);
+
+                        return;
+                    }
+                } catch (\Throwable) {
+                }
+            }
+
+            if (self::hasOpenReference('special_offer', self::REF_TYPE_SPECIAL_OFFER, $offerId)) {
+                return;
+            }
+
+            $title = trim((string) ($offer['title_ar'] ?? ''));
+            if ($title === '') {
+                return;
+            }
+            $subtitle = trim((string) ($offer['subtitle_ar'] ?? ''));
+            $body = $subtitle !== '' ? $subtitle : 'يتوفر الآن عرض جديد في المتجر. تصفحه قبل انتهائه.';
+            $slug = trim((string) ($offer['slug'] ?? ''));
+            $link = $slug !== '' ? '/store.php?offer=' . rawurlencode($slug) : '/store.php';
+            $expires = $endsAt !== '' ? $endsAt : (new \DateTimeImmutable('+30 days'))->format('Y-m-d H:i:sP');
+
+            self::createPublic(
+                'عرض خاص: ' . $title,
+                $body,
+                self::AUDIENCE_ALL,
+                $link,
+                'local_offer',
+                $expires,
+                null,
+                'special_offer',
+                self::REF_TYPE_SPECIAL_OFFER,
+                $offerId
+            );
+        } catch (\Throwable) {
+        }
     }
 
     public static function notifyStaffNewOrder(
@@ -760,6 +1086,7 @@ final class NotificationService
             );
 
             self::markReadForStaff($notificationId, $handlerUserId);
+            self::excludePushRecipient($notificationId, self::READER_STAFF, (string) $handlerUserId);
         } catch (\Throwable) {
             // Never block order updates.
         }
@@ -799,6 +1126,7 @@ final class NotificationService
             );
 
             self::markReadForStaff($notificationId, $handlerUserId);
+            self::excludePushRecipient($notificationId, self::READER_STAFF, (string) $handlerUserId);
         } catch (\Throwable) {
             // Never block customer updates.
         }
@@ -844,17 +1172,103 @@ final class NotificationService
         return ['parts' => $parts, 'params' => $params];
     }
 
-    private static function normalizeLink(?string $linkUrl): ?string
+    public static function normalizeLinkUrl(?string $linkUrl): ?string
     {
         $linkUrl = trim((string) $linkUrl);
         if ($linkUrl === '') {
             return null;
         }
-        if (str_starts_with($linkUrl, 'http://') || str_starts_with($linkUrl, 'https://')) {
+        if (preg_match('/[\x00-\x1F\x7F]/', $linkUrl) === 1) {
+            throw new \InvalidArgumentException('الرابط غير صالح.');
+        }
+        if (preg_match('#^(?:javascript|data|vbscript):#i', $linkUrl) === 1 || str_starts_with($linkUrl, '//')) {
+            throw new \InvalidArgumentException('الرابط غير مسموح.');
+        }
+        if (preg_match('#^https?://#i', $linkUrl) === 1) {
+            $parts = parse_url($linkUrl);
+            if (!is_array($parts) || empty($parts['host'])) {
+                throw new \InvalidArgumentException('الرابط غير صالح.');
+            }
+
             return $linkUrl;
         }
+        if (!str_starts_with($linkUrl, '/')) {
+            $linkUrl = '/' . $linkUrl;
+        }
+        if (str_contains($linkUrl, '://') || str_starts_with($linkUrl, '//')) {
+            throw new \InvalidArgumentException('الرابط غير مسموح.');
+        }
 
-        return str_starts_with($linkUrl, '/') ? $linkUrl : '/' . $linkUrl;
+        return $linkUrl;
+    }
+
+    public static function sanitizeIcon(string $icon, string $fallback = 'notifications'): string
+    {
+        $icon = strtolower(trim($icon));
+        $fallback = strtolower(trim($fallback));
+        if (preg_match('/^[a-z0-9_]{1,50}$/', $fallback) !== 1) {
+            $fallback = 'notifications';
+        }
+        if (preg_match('/^[a-z0-9_]{1,50}$/', $icon) !== 1) {
+            return $fallback;
+        }
+
+        return $icon;
+    }
+
+    public static function normalizeExpiresAt(?string $value): ?string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+        $value = str_replace('T', ' ', $value);
+        try {
+            $dt = new \DateTimeImmutable($value);
+        } catch (\Throwable) {
+            throw new \InvalidArgumentException('تاريخ الانتهاء غير صالح.');
+        }
+
+        return $dt->format('Y-m-d H:i:sP');
+    }
+
+    public static function activityIsNewer(?string $latest, ?string $since): bool
+    {
+        $latest = trim((string) $latest);
+        $since = trim((string) $since);
+        if ($latest === '' || $since === '') {
+            return false;
+        }
+        try {
+            return new \DateTimeImmutable($latest) > new \DateTimeImmutable($since);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    public static function sourceLabel(string $source): string
+    {
+        return match (trim($source)) {
+            'manual' => 'يدوي',
+            'order_status' => 'حالة طلب',
+            'order_received' => 'استلام طلب',
+            'order_adjusted' => 'تعديل طلب',
+            'new_order' => 'طلب جديد',
+            'order_handled' => 'متابعة طلب',
+            'order_item_cancelled' => 'إلغاء صنف',
+            'customer_approved' => 'تفعيل حساب',
+            'customer_pending' => 'تسجيل قيد المراجعة',
+            'customer_rejected' => 'رفض تسجيل',
+            'customer_suspended' => 'إيقاف حساب',
+            'customer_reactivated' => 'إعادة تفعيل',
+            'customer_created' => 'إنشاء حساب',
+            'password_changed' => 'كلمة المرور',
+            'new_registration' => 'تسجيل عميل',
+            'registration_handled' => 'متابعة تسجيل',
+            'special_offer' => 'عرض خاص',
+            'system' => 'النظام',
+            default => trim($source) !== '' ? trim($source) : 'النظام',
+        };
     }
 
     private static function defaultStaffAlertExpiresAt(): string
@@ -876,7 +1290,7 @@ final class NotificationService
             return;
         }
 
-        $linkUrl = self::normalizeLink($linkUrl) ?? '';
+        $linkUrl = self::normalizeLinkUrl($linkUrl) ?? '';
         $stmt = Database::pdo()->prepare(
             'UPDATE portal_notifications
              SET expires_at = NOW()
@@ -957,5 +1371,155 @@ final class NotificationService
         self::$staffSinceCache = is_string($createdAt) && $createdAt !== '' ? $createdAt : null;
 
         return self::$staffSinceCache;
+    }
+
+    /**
+     * @param array{reader_type: string, reader_id: string, is_customer: bool, is_staff: bool} $reader
+     */
+    private static function readerCanSee(string $notificationId, array $reader): bool
+    {
+        $notificationId = trim($notificationId);
+        if ($notificationId === '' || $reader['reader_id'] === '') {
+            return false;
+        }
+
+        $conditions = self::visibilitySql($reader);
+        $sql = 'SELECT 1
+                FROM portal_notifications n
+                LEFT JOIN portal_notification_reads r
+                  ON r.notification_id = n.id
+                 AND r.reader_type = :reader_type
+                 AND r.reader_id = :reader_id
+                WHERE n.id = :id
+                  AND (' . implode(' OR ', $conditions['parts']) . ')
+                  AND (n.expires_at IS NULL OR n.expires_at > NOW())
+                  AND (r.dismissed_at IS NULL)' . self::staffSinceSql($reader) . '
+                LIMIT 1';
+
+        $stmt = Database::pdo()->prepare($sql);
+        foreach ($conditions['params'] as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->bindValue(':reader_type', $reader['reader_type']);
+        $stmt->bindValue(':reader_id', $reader['reader_id']);
+        $stmt->bindValue(':id', $notificationId);
+        self::bindStaffSince($stmt, $reader);
+        $stmt->execute();
+
+        return (bool) $stmt->fetchColumn();
+    }
+
+    /** @return array{0: string, 1: string} */
+    private static function requireCopy(string $title, string $body): array
+    {
+        $title = self::clipText(trim($title), 200);
+        $body = self::clipText(trim($body), 4000);
+        if ($title === '' || $body === '') {
+            throw new \InvalidArgumentException('العنوان والنص مطلوبان.');
+        }
+
+        return [$title, $body];
+    }
+
+    private static function isUuid(string $value): bool
+    {
+        return preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', trim($value)) === 1;
+    }
+
+    private static function blankToNull(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
+    }
+
+    private static function clipText(string $value, int $max): string
+    {
+        if ($max < 1) {
+            return '';
+        }
+        if (function_exists('mb_substr')) {
+            return mb_substr($value, 0, $max);
+        }
+
+        return substr($value, 0, $max);
+    }
+
+    /** @param array<string, mixed> $order */
+    private static function customerOrderLink(array $order): string
+    {
+        $token = trim((string) ($order['quote_access_token'] ?? ''));
+        if ($token !== '') {
+            return '/track-order.php?token=' . rawurlencode($token);
+        }
+
+        return '/my-orders.php';
+    }
+
+    /** @return array<string, mixed>|null */
+    private static function loadOrderForNotice(string $orderId): ?array
+    {
+        $orderId = trim($orderId);
+        if ($orderId === '') {
+            return null;
+        }
+
+        return OrderService::getOrderDetails($orderId);
+    }
+
+    private static function isTruthy(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        if (is_int($value) || is_float($value)) {
+            return (int) $value === 1;
+        }
+
+        return in_array(strtolower(trim((string) $value)), ['1', 't', 'true', 'yes', 'on'], true);
+    }
+
+    private static function hasOpenReference(string $source, string $referenceType, string $referenceId): bool
+    {
+        $stmt = Database::pdo()->prepare(
+            'SELECT 1
+             FROM portal_notifications
+             WHERE source = :source
+               AND reference_type = :reference_type
+               AND reference_id = :reference_id
+               AND (expires_at IS NULL OR expires_at > NOW())
+             LIMIT 1'
+        );
+        $stmt->execute([
+            'source' => $source,
+            'reference_type' => $referenceType,
+            'reference_id' => $referenceId,
+        ]);
+
+        return (bool) $stmt->fetchColumn();
+    }
+
+    private static function resolveReferenceAlert(string $source, string $referenceType, string $referenceId): void
+    {
+        $source = trim($source);
+        $referenceType = trim($referenceType);
+        $referenceId = trim($referenceId);
+        if ($source === '' || $referenceId === '') {
+            return;
+        }
+
+        $stmt = Database::pdo()->prepare(
+            'UPDATE portal_notifications
+             SET expires_at = NOW()
+             WHERE source = :source
+               AND reference_type = :reference_type
+               AND reference_id = :reference_id
+               AND (expires_at IS NULL OR expires_at > NOW())'
+        );
+        $stmt->execute([
+            'source' => $source,
+            'reference_type' => $referenceType,
+            'reference_id' => $referenceId,
+        ]);
     }
 }

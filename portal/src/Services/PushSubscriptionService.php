@@ -116,9 +116,10 @@ final class PushSubscriptionService
 
     /**
      * @param array<string, mixed> $notification
+     * @param array{0: string, 1: string}|null $excludeReader
      * @return list<array<string, mixed>>
      */
-    public static function subscriptionsForNotification(array $notification): array
+    public static function subscriptionsForNotification(array $notification, ?array $excludeReader = null): array
     {
         self::ensureTable();
         $scope = (string) ($notification['scope'] ?? '');
@@ -128,28 +129,30 @@ final class PushSubscriptionService
 
         if ($scope === NotificationService::SCOPE_PRIVATE) {
             if ($customerId !== '') {
-                return self::listByReader(NotificationService::READER_CUSTOMER, $customerId);
+                return self::withoutReader(self::listByReader(NotificationService::READER_CUSTOMER, $customerId), $excludeReader);
             }
             if ($staffId !== '') {
-                return self::listByReader(NotificationService::READER_STAFF, $staffId);
+                return self::withoutReader(self::listByReader(NotificationService::READER_STAFF, $staffId), $excludeReader);
             }
 
             return [];
         }
 
-        return match ($audience) {
+        $rows = match ($audience) {
             NotificationService::AUDIENCE_GUESTS => self::listByReaderType(NotificationService::READER_GUEST),
             NotificationService::AUDIENCE_CUSTOMERS => self::listByReaderType(NotificationService::READER_CUSTOMER),
             NotificationService::AUDIENCE_STAFF => self::listByReaderType(NotificationService::READER_STAFF),
             default => self::listAll(),
         };
+
+        return self::withoutReader($rows, $excludeReader);
     }
 
     /** @return list<array<string, mixed>> */
     private static function listAll(): array
     {
         $stmt = Database::pdo()->query(
-            'SELECT endpoint, p256dh, auth
+            'SELECT endpoint, p256dh, auth, reader_type, reader_id
              FROM portal_push_subscriptions
              ORDER BY updated_at DESC'
         );
@@ -161,7 +164,7 @@ final class PushSubscriptionService
     private static function listByReaderType(string $readerType): array
     {
         $stmt = Database::pdo()->prepare(
-            'SELECT endpoint, p256dh, auth
+            'SELECT endpoint, p256dh, auth, reader_type, reader_id
              FROM portal_push_subscriptions
              WHERE reader_type = :reader_type
              ORDER BY updated_at DESC'
@@ -175,7 +178,7 @@ final class PushSubscriptionService
     private static function listByReader(string $readerType, string $readerId): array
     {
         $stmt = Database::pdo()->prepare(
-            'SELECT endpoint, p256dh, auth
+            'SELECT endpoint, p256dh, auth, reader_type, reader_id
              FROM portal_push_subscriptions
              WHERE reader_type = :reader_type
                AND reader_id = :reader_id
@@ -187,6 +190,29 @@ final class PushSubscriptionService
         ]);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows
+     * @param array{0: string, 1: string}|null $excludeReader
+     * @return list<array<string, mixed>>
+     */
+    private static function withoutReader(array $rows, ?array $excludeReader): array
+    {
+        if ($excludeReader === null) {
+            return $rows;
+        }
+        $type = trim((string) ($excludeReader[0] ?? ''));
+        $id = trim((string) ($excludeReader[1] ?? ''));
+        if ($type === '' || $id === '') {
+            return $rows;
+        }
+
+        return array_values(array_filter(
+            $rows,
+            static fn (array $row): bool => (string) ($row['reader_type'] ?? '') !== $type
+                || (string) ($row['reader_id'] ?? '') !== $id
+        ));
     }
 
     public static function deleteByEndpoint(string $endpoint): void

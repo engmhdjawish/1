@@ -39,6 +39,7 @@ $ordered = [
     '004-ensure-accounting-permissions.sql',
     '005-visitor-logs.sql',
     '006-notifications.sql',
+    '007-notification-guests-audience.sql',
     '008-push-subscriptions.sql',
     '009-web-sessions-tracking.sql',
     '010-sessions-permission.sql',
@@ -51,6 +52,7 @@ $ordered = [
     '017-price-checker.sql',
     '018-price-checker-slideshow-filters.sql',
     '019-notification-reference.sql',
+    '020-notification-dismissed.sql',
 ];
 
 $files = [];
