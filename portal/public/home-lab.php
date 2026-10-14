@@ -49,16 +49,9 @@ try {
     $ads = [];
 }
 
-$lcpPreloadUrl = null;
-if ($ads !== []) {
-    $firstAdUrl = trim((string) ($ads[0]['url'] ?? ''));
-    if ($firstAdUrl !== '') {
-        $lcpPreloadUrl = portal_site_media_display_url($firstAdUrl, 1280);
-    }
-}
-if ($lcpPreloadUrl === null && !empty($companyLogoUrl)) {
-    $lcpPreloadUrl = portal_site_logo_url((string) $companyLogoUrl, 'header');
-}
+$lcpPreloadUrl = !empty($companyLogoUrl)
+    ? portal_site_logo_url((string) $companyLogoUrl, 'header')
+    : null;
 
 ob_start();
 require dirname(__DIR__) . '/views/home-lab.php';
