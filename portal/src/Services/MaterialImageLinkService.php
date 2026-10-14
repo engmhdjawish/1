@@ -917,6 +917,7 @@ final class MaterialImageLinkService
 
         if ($canCleanupStaging) {
             self::cleanupStagingSourceAfterAssign($sourceFileName, $amineSourceGuid);
+            self::keepOnlyDisplayCopies($result);
             $result['staging_kept'] = false;
 
             return $result;
@@ -946,6 +947,31 @@ final class MaterialImageLinkService
         MaterialImageSyncService::purgeImageRecords($amineSourceGuid, $sourceFileName);
         if ($sourceFileName !== '') {
             MaterialImageStorageService::deleteLocalFile($sourceFileName);
+        }
+    }
+
+    /**
+     * After a successful link the store reads the GUID-named file.
+     * Drop the upload name and the material-code duplicate so only that display copy remains.
+     *
+     * @param array{items?: list<array<string, mixed>>} $result
+     */
+    private static function keepOnlyDisplayCopies(array $result): void
+    {
+        foreach ($result['items'] ?? [] as $item) {
+            if (!is_array($item) || !($item['ok'] ?? false) || empty($item['local_synced'])) {
+                continue;
+            }
+
+            $displayName = basename(str_replace('\\', '/', trim((string) ($item['display_file_name'] ?? $item['file_name'] ?? ''))));
+            $extraName = basename(str_replace('\\', '/', trim((string) ($item['extra_file_name'] ?? ''))));
+            if ($displayName === '' || !is_file((string) (MaterialImageStorageService::resolveLocalPath($displayName, false) ?? ''))) {
+                continue;
+            }
+
+            if ($extraName !== '' && strcasecmp($extraName, $displayName) !== 0) {
+                MaterialImageSyncService::forgetFileName($extraName);
+            }
         }
     }
 
@@ -1094,6 +1120,8 @@ final class MaterialImageLinkService
                 'material_code' => $materialCode,
                 'image_guid' => $imageGuid,
                 'file_name' => (string) ($localCopy['file_name'] ?? $storedFileName),
+                'display_file_name' => (string) ($localCopy['file_name'] ?? $storedFileName),
+                'extra_file_name' => (string) ($localCopy['extra_file_name'] ?? ''),
                 'ok' => true,
                 'local_synced' => true,
                 'message' => 'تم الربط وحفظ النسخة على الموقع.',
@@ -1233,11 +1261,13 @@ final class MaterialImageLinkService
         }
 
         $guidFileName = basename($guidPath);
+        $displayName = $guidFileName !== '' ? $guidFileName : $fileName;
 
         return [
             'ok' => true,
             'message' => '',
-            'file_name' => $guidFileName !== '' ? $guidFileName : $fileName,
+            'file_name' => $displayName,
+            'extra_file_name' => strcasecmp($fileName, $displayName) === 0 ? '' : $fileName,
             'local_path' => $guidPath,
         ];
     }
@@ -1429,6 +1459,8 @@ final class MaterialImageLinkService
                 'material_code' => (string) ($material['material_code'] ?? ''),
                 'image_guid' => $imageGuid,
                 'file_name' => basename($guidPath),
+                'display_file_name' => basename($guidPath),
+                'extra_file_name' => strcasecmp($fileName, basename($guidPath)) === 0 ? '' : $fileName,
                 'ok' => true,
                 'local_synced' => true,
                 'message' => 'تم الرفع والربط مع حفظ النسخة على الموقع.',
@@ -2044,6 +2076,8 @@ final class MaterialImageLinkService
                     'material_code' => (string) ($material['material_code'] ?? ''),
                     'image_guid' => $currentPictureGuid,
                     'file_name' => (string) ($localCopy['file_name'] ?? $storedFileName),
+                    'display_file_name' => (string) ($localCopy['file_name'] ?? $storedFileName),
+                    'extra_file_name' => (string) ($localCopy['extra_file_name'] ?? ''),
                     'ok' => true,
                     'local_synced' => true,
                     'message' => 'تم التأكد من الربط وحفظ النسخة على الموقع.',

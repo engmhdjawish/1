@@ -87,6 +87,19 @@ const API_URL = '/dashboard/material-images-api.php';
   const lightboxImg = panel.querySelector('#lightboxImg');
   const lightboxCaption = panel.querySelector('#lightboxCaption');
   const lightboxCloseBtn = panel.querySelector('#lightboxCloseBtn');
+  const lightboxLinkCard = panel.querySelector('#lightboxLinkCard');
+  const lightboxMaterialInput = panel.querySelector('#lightboxMaterialInput');
+  const lightboxSuggestions = panel.querySelector('#lightboxSuggestions');
+  const lightboxChips = panel.querySelector('#lightboxChips');
+  const lightboxAssignBtn = panel.querySelector('#lightboxAssignBtn');
+  const lightboxSkipBtn = panel.querySelector('#lightboxSkipBtn');
+  const lightboxStatus = panel.querySelector('#lightboxStatus');
+  let sourceItems = [];
+  let lightboxItem = null;
+  let lightboxSelected = [];
+  let lightboxSearchTimer = null;
+  let lightboxSearchRequest = 0;
+  let openNextUnlinkedAfterLoad = false;
   let page = 1;
   let hasMore = false;
   let totalCount = 0;
@@ -482,8 +495,24 @@ const API_URL = '/dashboard/material-images-api.php';
     sug.innerHTML = '';
   }
 
+  function renderLightboxChips() {
+    if (!lightboxChips) return;
+    if (!lightboxSelected.length) {
+      lightboxChips.innerHTML = '<span class="text-[11px] text-text-muted">لم تُختر مادة بعد.</span>';
+      return;
+    }
+    lightboxChips.innerHTML = lightboxSelected.map((row, index) => (
+      `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-surface-low text-[11px]">`
+      + `${escapeHtml(row.label)}`
+      + `<button type="button" data-lightbox-remove="${index}" class="text-red-600" title="إزالة">×</button>`
+      + `</span>`
+    )).join('');
+  }
+
   function openLightbox(url, caption) {
     if (!url || !imageLightbox || !lightboxImg) return;
+    lightboxItem = null;
+    lightboxLinkCard?.setAttribute('hidden', '');
     lightboxImg.src = url;
     lightboxImg.alt = caption || '';
     lightboxImg.style.transform = '';
@@ -494,6 +523,85 @@ const API_URL = '/dashboard/material-images-api.php';
     imageLightbox.hidden = false;
     imageLightbox.classList.add('is-open');
     document.body.style.overflow = 'hidden';
+  }
+
+  function openLinkDesk(item) {
+    const url = item?.preview_full_url || item?.preview_url || '';
+    if (!url || !imageLightbox || !lightboxImg) return;
+    lightboxItem = item;
+    lightboxSelected = [];
+    renderLightboxChips();
+    if (lightboxSuggestions) {
+      lightboxSuggestions.classList.add('hidden');
+      lightboxSuggestions.innerHTML = '';
+    }
+    if (lightboxMaterialInput) lightboxMaterialInput.value = '';
+    if (lightboxStatus) lightboxStatus.textContent = '';
+    lightboxLinkCard?.removeAttribute('hidden');
+    lightboxImg.src = url;
+    lightboxImg.alt = item?.file_name || '';
+    lightboxImg.style.transform = '';
+    lightboxImg.style.transformOrigin = 'center center';
+    lightboxImg.style.cursor = 'zoom-in';
+    lightboxImg.dataset.zoomed = '0';
+    if (lightboxCaption) lightboxCaption.textContent = item?.file_name || '';
+    imageLightbox.hidden = false;
+    imageLightbox.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+    window.setTimeout(() => lightboxMaterialInput?.focus(), 30);
+  }
+
+  async function openNextUnlinked(current) {
+    const currentKey = cardKey(current);
+    let passed = currentKey === '';
+    for (const candidate of sourceItems) {
+      if (!passed) {
+        if (cardKey(candidate) === currentKey) passed = true;
+        continue;
+      }
+      if (candidate.is_linked_to_material || isRecentlyLinkedItem(candidate)) continue;
+      openLinkDesk(candidate);
+      return;
+    }
+    if (hasMore) {
+      openNextUnlinkedAfterLoad = true;
+      await loadSources(page + 1);
+      return;
+    }
+    closeLightbox();
+    if (linkStatus) linkStatus.textContent = 'تم. لا توجد صور أخرى غير مرتبطة في هذه القائمة.';
+  }
+
+  async function assignFromLightbox() {
+    if (!lightboxItem) return;
+    if (!lightboxSelected.length) {
+      if (lightboxStatus) lightboxStatus.textContent = 'اختر المادة المطابقة لرقم الموديل في الصورة.';
+      return;
+    }
+    const item = lightboxItem;
+    const card = findCardForItem(item);
+    if (lightboxAssignBtn) lightboxAssignBtn.disabled = true;
+    if (lightboxStatus) lightboxStatus.textContent = 'جاري الربط…';
+    try {
+      const payload = await postAssignForm('assign-materials', item, lightboxSelected, card);
+      const outcome = showAssignOutcome(payload, null, 'تم الربط.');
+      if (outcome === 'success') {
+        if (card) handleCardAfterAssign(card, item, payload);
+        else rememberLinkedItem(item);
+        lightboxSelected = [];
+        await openNextUnlinked(item);
+        return;
+      }
+      if (lightboxStatus) {
+        lightboxStatus.textContent = formatAssignFailureDetail(payload) || 'تعذر الربط.';
+      }
+    } catch (error) {
+      if (lightboxStatus) {
+        lightboxStatus.textContent = error instanceof Error ? error.message : 'تعذر الربط.';
+      }
+    } finally {
+      if (lightboxAssignBtn) lightboxAssignBtn.disabled = false;
+    }
   }
 
   function closeLightbox() {
@@ -1012,7 +1120,11 @@ const API_URL = '/dashboard/material-images-api.php';
     };
 
     previewBtn?.addEventListener('click', () => {
-      openLightbox(item.preview_full_url || item.preview_url, item.linked_material_name || '');
+      if (item.is_linked_to_material) {
+        openLightbox(item.preview_full_url || item.preview_url, item.linked_material_name || '');
+        return;
+      }
+      openLinkDesk(item);
     });
 
     input.addEventListener('input', scheduleMaterialLookup);
@@ -1118,12 +1230,14 @@ const API_URL = '/dashboard/material-images-api.php';
         const linkBadge = isLinked
           ? '<span class="link-badge text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">مرتبطة</span>'
           : '<span class="link-badge text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">غير مرتبطة</span>';
-        const previewSrc = item.preview_url || item.preview_full_url;
         const previewFullSrc = item.preview_full_url || item.preview_url;
+        const previewSrc = previewFullSrc;
+        const previewTitle = isLinked ? 'تكبير الصورة' : 'افتح الصورة واقرأ رقم الموديل ثم اربطها';
+        const previewHint = isLinked ? 'تكبير' : 'افتح للربط';
         const preview = previewSrc
-          ? `<button type="button" class="preview-btn dash-mi-card__preview" title="تكبير الصورة">
+          ? `<button type="button" class="preview-btn dash-mi-card__preview" title="${previewTitle}">
               <img src="${escapeHtml(previewSrc)}" data-full-src="${escapeHtml(previewFullSrc)}" alt="" decoding="async">
-              <span class="dash-mi-card__zoom-hint">تكبير</span>
+              <span class="dash-mi-card__zoom-hint">${previewHint}</span>
             </button>`
           : '<div class="dash-mi-card__preview bg-surface-low"></div>';
         const reassignBlock = isLinked
@@ -1175,9 +1289,22 @@ const API_URL = '/dashboard/material-images-api.php';
       updateDeleteUnlinkedControls();
     }
 
+    sourceItems = items;
     page = Number(payload.page || 1);
     hasMore = !!payload.has_more;
     totalCount = Number(payload.total_count || 0);
+    if (openNextUnlinkedAfterLoad) {
+      openNextUnlinkedAfterLoad = false;
+      const next = items.find((row) => !row.is_linked_to_material && !isRecentlyLinkedItem(row));
+      if (next) {
+        openLinkDesk(next);
+      } else if (hasMore) {
+        openNextUnlinkedAfterLoad = true;
+        window.setTimeout(() => loadSources(page + 1), 0);
+      } else {
+        closeLightbox();
+      }
+    }
     updatePageLabel();
     sourcePrevBtn.disabled = page <= 1;
     sourceNextBtn.disabled = !hasMore;
@@ -1224,6 +1351,80 @@ const API_URL = '/dashboard/material-images-api.php';
   }, { signal });
 
   lightboxCloseBtn?.addEventListener('click', closeLightbox, { signal });
+  lightboxAssignBtn?.addEventListener('click', () => {
+    assignFromLightbox();
+  }, { signal });
+  lightboxSkipBtn?.addEventListener('click', () => {
+    if (lightboxItem) openNextUnlinked(lightboxItem);
+  }, { signal });
+  lightboxMaterialInput?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const first = lightboxSuggestions?.querySelector('button[data-guid]');
+    if (first instanceof HTMLButtonElement && !lightboxSuggestions.classList.contains('hidden')) {
+      first.click();
+      return;
+    }
+    if (lightboxSelected.length) assignFromLightbox();
+  }, { signal });
+  lightboxMaterialInput?.addEventListener('input', () => {
+    if (lightboxSearchTimer) clearTimeout(lightboxSearchTimer);
+    const query = lightboxMaterialInput.value.trim();
+    if (query.length < MIN_MATERIAL_SEARCH_LEN) {
+      lightboxSearchRequest += 1;
+      lightboxSuggestions?.classList.add('hidden');
+      return;
+    }
+    lightboxSearchTimer = window.setTimeout(async () => {
+      const requestId = ++lightboxSearchRequest;
+      if (lightboxSuggestions) {
+        lightboxSuggestions.innerHTML = '<div class="p-2 text-xs text-text-muted">جاري البحث...</div>';
+        lightboxSuggestions.classList.remove('hidden');
+      }
+      try {
+        const rows = await searchMaterials(query);
+        if (requestId !== lightboxSearchRequest || !lightboxSuggestions) return;
+        if (!rows.length) {
+          lightboxSuggestions.innerHTML = '<div class="p-2 text-xs text-text-muted">لا نتائج</div>';
+          return;
+        }
+        lightboxSuggestions.innerHTML = rows.map((row) => {
+          const guid = row.material_guid || '';
+          const code = row.material_code || '';
+          const name = row.name || '';
+          const label = `${code} ${name}`.trim();
+          return `<button type="button" class="block w-full text-right px-3 py-2 text-xs hover:bg-surface-low" data-guid="${escapeHtml(guid)}" data-label="${escapeHtml(label)}" data-code="${escapeHtml(code)}">${escapeHtml(label)}</button>`;
+        }).join('');
+        lightboxSuggestions.classList.remove('hidden');
+      } catch (error) {
+        if (requestId !== lightboxSearchRequest || !lightboxSuggestions) return;
+        const message = error instanceof Error ? error.message : 'تعذر البحث.';
+        lightboxSuggestions.innerHTML = `<div class="p-2 text-xs text-red-600">${escapeHtml(message)}</div>`;
+      }
+    }, MATERIAL_SEARCH_DEBOUNCE_MS);
+  }, { signal });
+  lightboxSuggestions?.addEventListener('click', (event) => {
+    const target = event.target;
+    const button = target instanceof HTMLElement ? target.closest('button[data-guid]') : null;
+    if (!(button instanceof HTMLButtonElement)) return;
+    const guid = button.getAttribute('data-guid') || '';
+    if (!guid) return;
+    const label = button.getAttribute('data-label') || '';
+    const code = button.getAttribute('data-code') || '';
+    if (!lightboxSelected.some((row) => row.guid === guid)) {
+      lightboxSelected = [{ guid, label, code, name: label }];
+    }
+    renderLightboxChips();
+    lightboxSuggestions.classList.add('hidden');
+    if (lightboxMaterialInput) lightboxMaterialInput.value = '';
+  }, { signal });
+  lightboxChips?.addEventListener('click', (event) => {
+    const target = event.target;
+    const button = target instanceof HTMLElement ? target.closest('button[data-lightbox-remove]') : null;
+    if (!(button instanceof HTMLButtonElement)) return;
+    lightboxSelected = [];
+    renderLightboxChips();
+  }, { signal });
   lightboxImg?.addEventListener('click', (event) => {
     event.stopPropagation();
     toggleLightboxZoom(event);

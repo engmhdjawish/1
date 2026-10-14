@@ -70,8 +70,22 @@
 
 <div id="imageLightbox" class="dash-mi-lightbox" role="dialog" aria-modal="true" hidden>
   <button type="button" id="lightboxCloseBtn" class="dash-mi-lightbox__close" aria-label="إغلاق">×</button>
-  <div class="dash-mi-lightbox__stage">
-    <img id="lightboxImg" src="" alt="">
+  <div class="dash-mi-lightbox__layout">
+    <div class="dash-mi-lightbox__stage">
+      <img id="lightboxImg" src="" alt="">
+    </div>
+    <aside id="lightboxLinkCard" class="dash-mi-lightbox__card" hidden>
+      <p class="dash-mi-lightbox__card-title">ربط هذه الصورة</p>
+      <p class="dash-mi-lightbox__card-hint">الصورة كبيرة لتقرأ رقم الموديل، ثم ابحث عن المادة واربطها. بعد الربط تفتح الصورة التالية.</p>
+      <div class="relative">
+        <input type="search" id="lightboxMaterialInput" class="h-10 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="رقم الموديل أو اسم المادة" autocomplete="off">
+        <div id="lightboxSuggestions" class="hidden absolute z-20 mt-1 w-full bg-white border border-border-subtle rounded-lg shadow max-h-48 overflow-auto"></div>
+      </div>
+      <div id="lightboxChips" class="dash-mi-lightbox__chips"></div>
+      <button type="button" id="lightboxAssignBtn" class="h-10 rounded-lg bg-emerald-600 text-white text-sm font-bold">ربط والانتقال للتالية</button>
+      <button type="button" id="lightboxSkipBtn" class="h-9 rounded-lg border border-border-subtle bg-white text-xs font-bold">تخطي هذه الصورة</button>
+      <p id="lightboxStatus" class="dash-mi-lightbox__status"></p>
+    </aside>
   </div>
   <p id="lightboxCaption" class="dash-mi-lightbox__caption"></p>
   <p class="dash-mi-lightbox__hint">انقر على الصورة للتكبير — انقر مجدداً للعودة</p>

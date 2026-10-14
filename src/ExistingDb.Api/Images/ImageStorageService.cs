@@ -14,14 +14,18 @@ public sealed class ImageStorageService(IImageSettingsService settingsService) :
     public async Task<StoredImageFile> SaveAsync(
         IFormFile file,
         bool replaceExisting = false,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? preferredFileName = null)
     {
         if (file.Length == 0)
         {
             throw new InvalidOperationException("Image file is empty.");
         }
 
-        var originalFileName = Path.GetFileName(file.FileName);
+        var requestedName = string.IsNullOrWhiteSpace(preferredFileName)
+            ? file.FileName
+            : preferredFileName;
+        var originalFileName = Path.GetFileName(requestedName);
         var extension = Path.GetExtension(originalFileName);
         if (!AllowedExtensions.Contains(extension))
         {
@@ -36,21 +40,34 @@ public sealed class ImageStorageService(IImageSettingsService settingsService) :
             ? sanitizedFileName
             : GetAvailableFileName(settings.ImagesDirectory, sanitizedFileName);
         var imagePath = Path.GetFullPath(Path.Combine(settings.ImagesDirectory, storedFileName));
-        if (replaceExisting && File.Exists(imagePath))
+        var tempPath = imagePath + ".writing";
+        try
         {
-            TryDelete(imagePath);
+            await using (var stream = File.Create(tempPath))
+            {
+                await file.CopyToAsync(stream, cancellationToken);
+            }
+
+            var written = new FileInfo(tempPath);
+            if (!written.Exists || written.Length <= 0)
+            {
+                throw new InvalidOperationException("Copied image file is empty.");
+            }
+
+            File.Move(tempPath, imagePath, overwrite: true);
+        }
+        catch
+        {
+            TryDelete(tempPath);
+            throw;
         }
 
-        await using (var stream = File.Create(imagePath))
-        {
-            await file.CopyToAsync(stream, cancellationToken);
-        }
-
+        var stored = new FileInfo(imagePath);
         return new StoredImageFile(
             imagePath,
             storedFileName,
             string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
-            file.Length);
+            stored.Length);
     }
 
     public async Task<StoredImageFile> CopyFromPathAsync(
@@ -78,19 +95,48 @@ public sealed class ImageStorageService(IImageSettingsService settingsService) :
         Directory.CreateDirectory(settings.ImagesDirectory);
 
         var baseName = SanitizeFileName(Path.GetFileNameWithoutExtension(preferredFileName) + extension);
+        var sourceFull = Path.GetFullPath(sourcePath);
+        var preferredPath = Path.GetFullPath(Path.Combine(settings.ImagesDirectory, baseName));
+        if (string.Equals(sourceFull, preferredPath, StringComparison.OrdinalIgnoreCase))
+        {
+            var sameFile = new FileInfo(preferredPath);
+            if (sameFile.Length <= 0)
+            {
+                throw new InvalidOperationException("Source image file is empty.");
+            }
+
+            return new StoredImageFile(
+                preferredPath,
+                baseName,
+                GetContentType(preferredPath),
+                sameFile.Length);
+        }
+
         var storedFileName = replaceExisting
             ? baseName
             : GetAvailableFileName(settings.ImagesDirectory, baseName);
         var imagePath = Path.GetFullPath(Path.Combine(settings.ImagesDirectory, storedFileName));
-        if (replaceExisting && File.Exists(imagePath))
+        var tempPath = imagePath + ".writing";
+        try
         {
-            TryDelete(imagePath);
-        }
+            await using (var sourceStream = File.OpenRead(sourcePath))
+            await using (var targetStream = File.Create(tempPath))
+            {
+                await sourceStream.CopyToAsync(targetStream, cancellationToken);
+            }
 
-        await using (var sourceStream = File.OpenRead(sourcePath))
-        await using (var targetStream = File.Create(imagePath))
+            var written = new FileInfo(tempPath);
+            if (!written.Exists || written.Length <= 0)
+            {
+                throw new InvalidOperationException("Copied image file is empty.");
+            }
+
+            File.Move(tempPath, imagePath, overwrite: true);
+        }
+        catch
         {
-            await sourceStream.CopyToAsync(targetStream, cancellationToken);
+            TryDelete(tempPath);
+            throw;
         }
 
         var fileInfo = new FileInfo(imagePath);

@@ -1615,7 +1615,7 @@ button.is-loading::after,
 .dash-mi-card__preview {
   position: relative;
   width: 100%;
-  height: 7.5rem;
+  height: 14rem;
   border: 1px solid var(--dash-border);
   border-radius: 0.65rem;
   overflow: hidden;
@@ -1625,7 +1625,7 @@ button.is-loading::after,
 
 @media (min-width: 640px) {
   .dash-mi-card__preview {
-    height: 9.5rem;
+    height: 18rem;
   }
 }
 
@@ -1780,7 +1780,7 @@ button.is-loading::after,
     max(0.5rem, env(safe-area-inset-right, 0px))
     max(0.5rem, env(safe-area-inset-bottom, 0px))
     max(0.5rem, env(safe-area-inset-left, 0px));
-  overflow: hidden;
+  overflow: auto;
 }
 
 .dash-mi-lightbox.is-open {
@@ -1803,13 +1803,36 @@ button.is-loading::after,
   cursor: pointer;
 }
 
-.dash-mi-lightbox__stage {
+.dash-mi-lightbox__layout {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 2.75rem;
+}
+
+@media (min-width: 900px) {
+  .dash-mi-lightbox__layout {
+    flex-direction: row;
+    align-items: stretch;
+  }
+}
+
+.dash-mi-lightbox__stage {
+  flex: 1 1 46vh;
+  min-height: 46vh;
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2.75rem 0.5rem 0.5rem;
+  padding: 0.25rem;
+}
+
+@media (min-width: 900px) {
+  .dash-mi-lightbox__stage {
+    flex-basis: auto;
+    min-height: 0;
+  }
 }
 
 .dash-mi-lightbox__stage img {
@@ -1821,6 +1844,40 @@ button.is-loading::after,
   border-radius: 0.65rem;
   background: #fff;
   transition: transform 0.15s ease;
+}
+
+.dash-mi-lightbox__card {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  width: min(100%, 22rem);
+  margin-inline: auto;
+  padding: 0.9rem;
+  border-radius: 0.9rem;
+  background: #fff;
+  color: #0f172a;
+}
+
+.dash-mi-lightbox__card-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.dash-mi-lightbox__card-hint,
+.dash-mi-lightbox__status {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #475569;
+}
+
+.dash-mi-lightbox__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-height: 1.25rem;
 }
 
 .dash-mi-lightbox__caption {
