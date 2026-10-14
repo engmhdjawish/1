@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Trial store view: no hero, live filter box, hidden warehouses, one grid.
+ * Trial store view: no hero, live filter box, hidden warehouses, coming-soon section.
  * Usage: php scripts/test-store-lab-view.php
  */
 
@@ -64,8 +64,8 @@ $render = static function (bool $showPrice, bool $labMode = true): string {
         'original_unit_sale_price_sp' => 0,
     ];
     $catalog = [
-        'products' => array_merge($stock, [$soonItem]),
-        'totalCount' => 3,
+        'products' => $stock,
+        'totalCount' => 2,
         'page' => 1,
         'pageSize' => 24,
         'totalPages' => 1,
@@ -137,6 +137,14 @@ $render = static function (bool $showPrice, bool $labMode = true): string {
     ];
     $isCustomer = false;
     $storeLabMode = $labMode;
+    $comingSoon = [
+        'products' => [$soonItem],
+        'totalCount' => 1,
+        'page' => 1,
+        'pageSize' => 12,
+        'totalPages' => 1,
+        'apiError' => null,
+    ];
     $storeCatalogImagePreview = false;
 
     ob_start();
@@ -155,9 +163,11 @@ $assert('filter form stays on the trial route', str_contains($html, 'action="/st
 $assert('original filter group markup is used', str_contains($html, 'store-filter-accordion') && str_contains($html, 'name="materialTypes[]"'));
 $assert('warehouse names are not visible', !str_contains($html, 'مستودع الستوك') && !str_contains($html, 'المستودع الرئيسي') && !str_contains($html, 'المخازن') && !str_contains($html, 'المستودعات'));
 $assert('warehouse controls are not rendered', !str_contains($html, 'data-filter-group="stores"') && !str_contains($html, 'data-filter-group="warehouse"') && !str_contains($html, 'name="storeGuids') && !str_contains($html, 'name="minWarehouseQuantity"') && !str_contains($html, 'wh-1'));
-$assert('one continuous product grid', substr_count($html, 'store-product-grid') === 1 && !str_contains($html, 'id="coming-soon"') && !str_contains($html, 'sl-soon') && !str_contains($html, 'id="available"'));
-$assert('catalog order is stock then zero price then coming soon', strpos($html, 'حذاء متوفر') < strpos($html, 'حذاء بلا سعر') && strpos($html, 'حذاء بلا سعر') < strpos($html, 'حذاء شتوي'));
-$assert('no hint copy', !str_contains($html, 'يشمل البحث') && !str_contains($html, 'في كل المواد') && !str_contains($html, 'جرّب') && !str_contains($html, 'تُباع لدينا') && !str_contains($html, 'اكتب جزءاً') && !str_contains($html, 'ضيّق النتائج'));
+$soonAt = strpos($html, 'id="coming-soon"');
+$assert('coming-soon section sits under the in-stock grid', $soonAt !== false && strpos($html, 'حذاء متوفر') < $soonAt && strpos($html, 'حذاء بلا سعر') < $soonAt && strpos($html, 'حذاء شتوي') > $soonAt);
+$assert('coming-soon products are grouped', str_contains($html, 'sl-soon__group') && str_contains($html, 'شتوي'));
+$assert('search hint names coming soon', str_contains($html, 'يشمل البحث المتوفر وما يتوفر قريبا'));
+$assert('no coaching copy', !str_contains($html, 'اكتب جزءاً') && !str_contains($html, 'جرّب') && !str_contains($html, 'تُباع لدينا') && !str_contains($html, 'ضيّق النتائج') && !str_contains($html, 'id="available"'));
 $assert('live store still renders the warehouse filter', str_contains($live, 'المخازن') && str_contains($live, 'data-filter-group="stores"') && str_contains($live, 'مستودع الستوك') && !str_contains($live, 'id="coming-soon"') && !str_contains($live, 'action="/store-lab.php"'));
 $cardSlice = static function (string $page, string $name): string {
     $start = strpos($page, $name);

@@ -18,6 +18,13 @@ use Portal\Support\StorePricePreference;
 $catalog = is_array($catalog ?? null) ? $catalog : [];
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
 $storeLabMode = (bool) ($storeLabMode ?? false);
+$comingSoon = $storeLabMode && is_array($comingSoon ?? null) ? $comingSoon : [
+    'products' => [],
+    'totalCount' => 0,
+    'page' => 1,
+    'totalPages' => 1,
+    'apiError' => null,
+];
 $shareContext = is_array($shareContext ?? null) ? $shareContext : null;
 $shareToken = trim((string) ($shareToken ?? ($shareContext['token'] ?? '')));
 $shareLinkId = trim((string) ($shareLinkId ?? ($shareContext['share_link_id'] ?? '')));
@@ -595,7 +602,10 @@ $appliedClientFiltersJson = json_encode(
           <?php if ($isClientFilterVisible('search')): ?>
             <div class="store-inline-field store-filters-search-desktop">
               <label for="store-search-q">بحث</label>
-              <input id="store-search-q" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" placeholder="اسم المادة أو الكود">
+              <input id="store-search-q" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" placeholder="اسم المادة أو الكود"<?= $storeLabMode ? ' aria-describedby="sl-search-hint"' : '' ?>>
+              <?php if ($storeLabMode): ?>
+                <p class="sl-search-hint" id="sl-search-hint">يشمل البحث المتوفر وما يتوفر قريبا</p>
+              <?php endif; ?>
             </div>
           <?php endif; ?>
 
@@ -875,6 +885,10 @@ $appliedClientFiltersJson = json_encode(
       require __DIR__ . '/partials/store-active-filter-chips.php';
     ?>
 
+    <?php if ($storeLabMode): ?>
+      <p class="sl-search-hint<?= $isClientFilterVisible('search') ? ' sl-search-hint--mobile' : '' ?>">يشمل البحث المتوفر وما يتوفر قريبا</p>
+    <?php endif; ?>
+
     <div class="store-results-toolbar">
       <?php if ((int) ($catalog['totalCount'] ?? 0) > 0 && $products !== []): ?>
         <p class="store-results-meta">
@@ -917,7 +931,16 @@ $appliedClientFiltersJson = json_encode(
       <?php endif; ?>
     </div>
 
-    <?php $baseDisplayOptions = $displayOptions; ?>
+    <?php
+      $baseDisplayOptions = $displayOptions;
+      $gridProducts = $products;
+      if ($storeLabMode) {
+          $gridProducts = array_values(array_filter(
+              $products,
+              static fn ($item): bool => is_array($item) && !StoreCatalogService::materialIsUnavailable($item)
+          ));
+      }
+    ?>
     <?php if ($products === [] && !empty($catalog['apiError'])): ?>
       <div class="store-empty-state store-empty-state--maintenance" role="status">
         <span class="material-symbols-outlined store-empty-state__icon" aria-hidden="true">cloud_off</span>
@@ -927,22 +950,22 @@ $appliedClientFiltersJson = json_encode(
           <p class="store-empty-state__hint">يمكنك العودة لاحقاً أو تصفّح الصفحة الرئيسية — سنعيد الخدمة خلال دقائق.</p>
         <?php endif; ?>
       </div>
-    <?php elseif ($products === []): ?>
+    <?php elseif ($gridProducts === []): ?>
       <div class="store-empty-state">
-        لا توجد نتائج مطابقة لبحثك أو الفلاتر المحددة.
+        <?php if ($storeLabMode && (int) ($comingSoon['totalCount'] ?? 0) > 0): ?>
+          لا توجد مواد متوفرة الآن ضمن هذه التصفية.
+        <?php else: ?>
+          لا توجد نتائج مطابقة لبحثك أو الفلاتر المحددة.
+        <?php endif; ?>
       </div>
     <?php else: ?>
       <div class="store-product-grid">
-        <?php foreach ($products as $item): ?>
+        <?php foreach ($gridProducts as $item): ?>
           <?php if (!is_array($item)) continue; ?>
           <?php
             $displayOptions = $baseDisplayOptions;
-            $comingSoonCard = $storeLabMode && StoreCatalogService::materialIsUnavailable($item);
+            $comingSoonCard = false;
             $omitBlankSalePrice = $storeLabMode;
-            if ($comingSoonCard) {
-                $displayOptions['allow_cart'] = false;
-                $displayOptions['show_quantity'] = false;
-            }
             $useImagePreview = (bool) ($storeCatalogImagePreview ?? true);
             $useQuickView = false;
             $linkToDetail = $shareContext === null;
@@ -959,6 +982,63 @@ $appliedClientFiltersJson = json_encode(
     $totalPages = (int) ($catalog['totalPages'] ?? 1);
     $buildUrl = static fn (int $targetPage): string => $buildStoreUrl($targetPage);
     require __DIR__ . '/partials/catalog-pagination.php';
+
+    if ($storeLabMode) {
+        $soonProducts = is_array($comingSoon['products'] ?? null) ? $comingSoon['products'] : [];
+        $soonGroupBy = $selectedGroupBy !== 'none' ? $selectedGroupBy : 'materialType';
+        $soonGroups = store_lab_group_products($soonProducts, $soonGroupBy);
+        $stockPage = $page;
+        $stockTotalPages = $totalPages;
+        $stockBuildUrl = $buildUrl;
+        $page = max(1, (int) ($comingSoon['page'] ?? 1));
+        $totalPages = max(1, (int) ($comingSoon['totalPages'] ?? 1));
+        $buildUrl = static function (int $targetPage) use ($catalogUrl): string {
+            $params = $_GET;
+            $params['soon'] = max(1, $targetPage);
+            unset($params['section'], $params['offer']);
+
+            return $catalogUrl($params) . '#coming-soon';
+        };
+        ?>
+        <section class="sl-soon" id="coming-soon" aria-labelledby="sl-soon-title">
+          <h2 class="sl-soon__title" id="sl-soon-title">يتوفر قريباً</h2>
+          <?php if (!empty($comingSoon['apiError'])): ?>
+            <p class="sl-alert"><?= h((string) $comingSoon['apiError']) ?></p>
+          <?php endif; ?>
+          <?php if ($soonProducts === []): ?>
+            <div class="store-empty-state">لا توجد مواد غير متوفرة ضمن هذا البحث.</div>
+          <?php else: ?>
+            <?php foreach ($soonGroups as $soonLabel => $soonItems): ?>
+              <?php if (count($soonGroups) > 1 || (string) $soonLabel !== 'غير مصنّف'): ?>
+                <h3 class="sl-soon__group"><?= h((string) $soonLabel) ?></h3>
+              <?php endif; ?>
+              <div class="store-product-grid">
+                <?php foreach ($soonItems as $item): ?>
+                  <?php if (!is_array($item)) continue; ?>
+                  <?php
+                    $displayOptions = $baseDisplayOptions;
+                    $displayOptions['allow_cart'] = false;
+                    $displayOptions['show_quantity'] = false;
+                    $comingSoonCard = true;
+                    $omitBlankSalePrice = true;
+                    $useImagePreview = (bool) ($storeCatalogImagePreview ?? true);
+                    $useQuickView = false;
+                    $linkToDetail = $shareContext === null;
+                    $capturePrices = (bool) ($displayOptions['show_price'] ?? false);
+                    require __DIR__ . '/partials/product-card.php';
+                  ?>
+                <?php endforeach; ?>
+              </div>
+            <?php endforeach; ?>
+            <?php $displayOptions = $baseDisplayOptions; ?>
+          <?php endif; ?>
+          <?php require __DIR__ . '/partials/catalog-pagination.php'; ?>
+        </section>
+        <?php
+        $page = $stockPage;
+        $totalPages = $stockTotalPages;
+        $buildUrl = $stockBuildUrl;
+    }
 
     $buildPreviewPageUrl = static function (int $targetPage, string $previewEdge) use ($buildStoreUrl): string {
         $url = $buildStoreUrl($targetPage);

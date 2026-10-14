@@ -35,10 +35,13 @@ $emptyCatalog = [
 ];
 
 $labQuery = $_GET;
-unset($labQuery['soon'], $labQuery['storeGuids'], $labQuery['minWarehouseQuantity'], $labQuery['maxWarehouseQuantity']);
+unset($labQuery['storeGuids'], $labQuery['minWarehouseQuantity'], $labQuery['maxWarehouseQuantity']);
+$stockQuery = $labQuery;
+unset($stockQuery['soon']);
 
+$strippedSoon = [];
 try {
-    $catalog = StoreCatalogService::labCatalogFromRequest($labQuery);
+    $catalog = StoreCatalogService::catalogFromRequest($stockQuery);
 } catch (Throwable $exception) {
     error_log('store-lab.php catalog: ' . $exception->getMessage());
     $catalog = $emptyCatalog;
@@ -46,9 +49,50 @@ try {
 }
 if (!is_array($catalog)) {
     $catalog = $emptyCatalog;
+} else {
+    $separated = StoreCatalogService::separateUnavailableProducts($catalog);
+    $catalog = $separated['catalog'];
+    $strippedSoon = $separated['stripped'];
 }
 
-unset($_GET['soon'], $_GET['storeGuids'], $_GET['minWarehouseQuantity'], $_GET['maxWarehouseQuantity']);
+$soonPage = max(1, (int) ($labQuery['soon'] ?? 1));
+try {
+    $comingSoon = StoreCatalogService::comingSoonFromRequest($labQuery);
+} catch (Throwable $exception) {
+    error_log('store-lab.php coming soon: ' . $exception->getMessage());
+    $comingSoon = [
+        'products' => [],
+        'totalCount' => 0,
+        'page' => $soonPage,
+        'pageSize' => 12,
+        'totalPages' => 1,
+        'apiError' => AmineAvailabilityService::userMessage(),
+    ];
+}
+if (!is_array($comingSoon)) {
+    $comingSoon = [
+        'products' => [],
+        'totalCount' => 0,
+        'page' => $soonPage,
+        'pageSize' => 12,
+        'totalPages' => 1,
+        'apiError' => null,
+    ];
+}
+if (
+    $strippedSoon !== []
+    && $soonPage === 1
+    && ($comingSoon['products'] ?? []) === []
+    && ($comingSoon['apiError'] ?? null) !== null
+) {
+    $comingSoon['products'] = $strippedSoon;
+    $comingSoon['totalCount'] = count($strippedSoon);
+    $comingSoon['page'] = 1;
+    $comingSoon['totalPages'] = 1;
+    $comingSoon['apiError'] = null;
+}
+
+unset($_GET['storeGuids'], $_GET['minWarehouseQuantity'], $_GET['maxWarehouseQuantity']);
 
 $sectionContext = is_array($catalog['section_context'] ?? null) ? $catalog['section_context'] : null;
 try {
