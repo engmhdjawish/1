@@ -126,7 +126,7 @@ final class HomeSearchService
             return $cached;
         }
 
-        $ranked = self::rank($query, self::candidates($query));
+        $ranked = self::rank($query, self::candidates($query, $surface));
         $payload = [
             'ok' => true,
             'query' => $query,
@@ -148,7 +148,10 @@ final class HomeSearchService
     public static function applySurface(array $suggestions, string $surface): array
     {
         if ($surface !== 'lab') {
-            return $suggestions;
+            return array_values(array_filter(
+                $suggestions,
+                static fn (mixed $suggestion): bool => !is_array($suggestion) || (string) ($suggestion['kind'] ?? '') !== 'soon'
+            ));
         }
 
         $rewritten = [];
@@ -193,7 +196,7 @@ final class HomeSearchService
     }
 
     /** @return list<array{label: string, hint: string, href: string, kind: string}> */
-    private static function candidates(string $query): array
+    private static function candidates(string $query, string $surface = ''): array
     {
         $candidates = [];
         foreach (self::sectionCandidates() as $candidate) {
@@ -203,7 +206,7 @@ final class HomeSearchService
             $candidates[] = $candidate;
         }
         if (self::normalize($query) !== '' && self::charLength($query) >= 2) {
-            foreach (self::productCandidates($query) as $candidate) {
+            foreach (self::productCandidates($query, $surface === 'lab') as $candidate) {
                 $candidates[] = $candidate;
             }
         }
@@ -295,7 +298,7 @@ final class HomeSearchService
     }
 
     /** @return list<array{label: string, hint: string, href: string, kind: string}> */
-    private static function productCandidates(string $query): array
+    private static function productCandidates(string $query, bool $includeComingSoon = false): array
     {
         try {
             $catalog = StoreCatalogService::catalogFromRequest(['q' => $query, 'page' => 1]);
@@ -326,8 +329,10 @@ final class HomeSearchService
                 'trusted' => true,
             ];
         }
-        foreach (self::comingSoonProductCandidates($query) as $candidate) {
-            $candidates[] = $candidate;
+        if ($includeComingSoon) {
+            foreach (self::comingSoonProductCandidates($query) as $candidate) {
+                $candidates[] = $candidate;
+            }
         }
 
         return $candidates;

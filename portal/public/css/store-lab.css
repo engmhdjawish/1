@@ -1,7 +1,16 @@
 .store-product-card__chip--soon {
-  color: #9a3412;
-  background: #fff7ed;
-  border-color: #fdba74;
+  color: #475569;
+  background: rgba(255, 255, 255, 0.92);
+  border-color: #e2e8f0;
   letter-spacing: 0;
   text-transform: none;
+}
+
+.store-lab [data-filter-group="stores"],
+.store-lab [data-filter-group="warehouse"],
+.store-lab .store-active-filter-group--stores,
+.store-lab .store-active-filter-group--warehouse,
+.store-lab .store-filter-pending-chip--stores,
+.store-lab .store-filter-pending-chip--warehouse {
+  display: none !important;
 }

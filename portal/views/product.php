@@ -62,10 +62,16 @@ $offerMax = $offer !== null && is_numeric((string) ($offer['max_packages'] ?? ''
     ? (float) $offer['max_packages'] : null;
 $warehouseQty = (float) ($product['warehouseQuantity'] ?? 0);
 $packagesAvailable = ($allowCart || $showQuantity) ? packages_available_display($product) : 0.0;
-$comingSoonProduct = StoreCatalogService::materialIsUnavailable($product);
-$outOfStock = $comingSoonProduct || ($allowCart && $packagesAvailable <= 0);
-$hasListedPrice = ($showPriceSyp && ($packageSaleSp > 0 || $unitSaleSp > 0))
-    || ($showPriceUsd && ($packageSaleUsd > 0 || $unitSaleUsd > 0));
+$outOfStock = $allowCart && $packagesAvailable <= 0;
+$trialStoreProduct = str_contains((string) ($_GET['return'] ?? ''), 'store-lab.php');
+$comingSoonProduct = $trialStoreProduct && StoreCatalogService::materialIsUnavailable($product);
+$omitTrialBlankPrice = $trialStoreProduct
+    && $policyAllowsPrice
+    && !catalog_material_has_sale_price($product, $priceMode);
+if ($comingSoonProduct) {
+    $allowCart = false;
+    $showQuantity = false;
+}
 $materialCode = trim((string) ($product['materialCode'] ?? $product['code'] ?? ''));
 $productName = trim((string) ($product['name'] ?? 'مادة'));
 $manufacturer = trim((string) ($product['manufacturer'] ?? ''));
@@ -129,8 +135,7 @@ $specs = array_filter([
     </div>
 
     <div class="store-buybox">
-      <?php if ($policyAllowsPrice && !$hasListedPrice): ?>
-        <?php /* السعر غير موجود: لا نعرض صفراً ولا حجاب تسجيل الدخول */ ?>
+      <?php if ($omitTrialBlankPrice): ?>
       <?php elseif ($showPriceSyp || $showPriceUsd): ?>
         <?php if ($offerBadge !== ''): ?>
           <span class="inline-flex mb-2 px-2.5 py-1 rounded-full bg-red-600 text-white text-xs font-extrabold"><?= h($offerBadge) ?></span>
@@ -189,7 +194,8 @@ $specs = array_filter([
 
       <?php if ($comingSoonProduct): ?>
         <div class="store-buybox__stock store-buybox__stock--out">
-          <span class="inline-flex px-2.5 py-1 rounded-full bg-orange-50 text-orange-800 text-xs font-extrabold border border-orange-200">يتوفر قريبا</span>
+          <span class="material-symbols-outlined text-base" aria-hidden="true">schedule</span>
+          يتوفر قريبا
         </div>
       <?php elseif ($showQuantity): ?>
         <?php if ($packagesAvailable <= 0 && $allowCart): ?>
@@ -204,7 +210,7 @@ $specs = array_filter([
             <span class="text-gray-400 font-normal">(<?= number_format($warehouseQty, 0, '.', ',') ?> <?= h($primaryUnit) ?>)</span>
           </div>
         <?php endif; ?>
-      <?php elseif ($allowCart && $outOfStock && !$comingSoonProduct): ?>
+      <?php elseif ($allowCart && $outOfStock): ?>
         <div class="store-buybox__stock store-buybox__stock--out">
           <span class="material-symbols-outlined text-base" aria-hidden="true">inventory_2</span>
           نفدت الكمية المتاحة للطلب حالياً

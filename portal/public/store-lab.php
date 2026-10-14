@@ -73,6 +73,7 @@ try {
 }
 
 $storeLabMode = true;
+$enableOnboarding = false;
 $extraHead = '<link href="' . h(portal_asset_url('/css/store-filters.css')) . '" rel="stylesheet">'
     . portal_stylesheet('/css/store-lab.css');
 $enableQuickView = true;

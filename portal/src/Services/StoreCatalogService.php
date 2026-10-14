@@ -390,8 +390,71 @@ final class StoreCatalogService
     }
 
     /**
-     * Trial catalog: same request, sort, and paging as the live store, including
-     * unavailable materials in that order. Live catalogFromRequest is unchanged.
+     * Stable split for one trial-store list that is already in the live sort.
+     * Available rows stay in that order. Unavailable rows follow, in that same order.
+     *
+     * @param list<array<string, mixed>> $products
+     * @return list<array<string, mixed>>
+     */
+    public static function orderUnavailableLast(array $products): array
+    {
+        $available = [];
+        $unavailable = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            if (self::materialIsUnavailable($product)) {
+                $unavailable[] = $product;
+                continue;
+            }
+            $available[] = $product;
+        }
+
+        return array_merge($available, $unavailable);
+    }
+
+    /**
+     * Window inside a result set whose available rows occupy the front.
+     *
+     * @return array{availableOffset: int, availableLimit: int, unavailableOffset: int, unavailableLimit: int, total: int}
+     */
+    public static function labAvailabilityWindow(int $offset, int $limit, int $availableTotal, int $unavailableTotal): array
+    {
+        $offset = max(0, $offset);
+        $limit = max(0, $limit);
+        $availableTotal = max(0, $availableTotal);
+        $unavailableTotal = max(0, $unavailableTotal);
+        $total = $availableTotal + $unavailableTotal;
+        $end = min($total, $offset + $limit);
+        if ($offset >= $end) {
+            return [
+                'availableOffset' => 0,
+                'availableLimit' => 0,
+                'unavailableOffset' => 0,
+                'unavailableLimit' => 0,
+                'total' => $total,
+            ];
+        }
+
+        $availableOffset = min($offset, $availableTotal);
+        $availableEnd = min($end, $availableTotal);
+        $unavailableOffset = max(0, $offset - $availableTotal);
+        $unavailableEnd = max(0, $end - $availableTotal);
+
+        return [
+            'availableOffset' => $availableOffset,
+            'availableLimit' => max(0, $availableEnd - $availableOffset),
+            'unavailableOffset' => $unavailableOffset,
+            'unavailableLimit' => max(0, $unavailableEnd - $unavailableOffset),
+            'total' => $total,
+        ];
+    }
+
+    /**
+     * Trial catalog for /store-lab.php, including search.
+     * Available materials keep the live store order. Coming-soon materials follow in that same sort.
+     * Live catalogFromRequest is unchanged.
      *
      * @param array<string, mixed> $query
      * @return array<string, mixed>
@@ -552,6 +615,10 @@ final class StoreCatalogService
         if (!$labOpenStock && ($sellableMode || $sellableFilter) && $mergedFilters['minWarehouseQuantity'] === null) {
             $mergedFilters['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
         }
+        $liveMinWarehouseQuantity = $mergedFilters['minWarehouseQuantity'];
+        if ($labOpenStock && $liveMinWarehouseQuantity === null && ($sellableMode || $sellableFilter)) {
+            $liveMinWarehouseQuantity = self::sellableMinWarehouseQuantity();
+        }
         $mergedFilters = self::applyLabStockWindow($mergedFilters, $requestFilters['isAvailable'] ?? null);
         $isAvailable = $mergedFilters['isAvailable'];
 
@@ -611,6 +678,57 @@ final class StoreCatalogService
                 $totalCount = $paged['totalCount'];
                 $resultFilters = $paged['resultFilters'];
                 $apiError = $paged['apiError'];
+            } elseif (self::labOrdersUnavailableLast($requestFilters['isAvailable'] ?? null)) {
+                $stitched = self::fetchLabUnavailableLastPage(
+                    $page,
+                    $pageSize,
+                    static function (int $apiPage, int $apiPageSize, bool $available) use (
+                        $search,
+                        $sort,
+                        $materialTypes,
+                        $manufacturers,
+                        $ageCategories,
+                        $sizeRanges,
+                        $countryOfOrigins,
+                        $groupGuids,
+                        $storeGuids,
+                        $hasImage,
+                        $mergedFilters,
+                        $includeResultFilters,
+                        $liveMinWarehouseQuantity
+                    ): array {
+                        return self::fetchMaterialsExtended(
+                            $apiPage,
+                            $apiPageSize,
+                            $search,
+                            $sort,
+                            $materialTypes,
+                            $manufacturers,
+                            $ageCategories,
+                            $sizeRanges,
+                            $countryOfOrigins,
+                            $groupGuids,
+                            $storeGuids,
+                            $available,
+                            $hasImage,
+                            false,
+                            $includeResultFilters && $available && $apiPage === 1,
+                            $available ? $liveMinWarehouseQuantity : null,
+                            $mergedFilters['maxWarehouseQuantity'],
+                            $mergedFilters['minUnitSalePriceSyp'],
+                            $mergedFilters['maxUnitSalePriceSyp'],
+                            $mergedFilters['minUnitSalePriceUsd'],
+                            $mergedFilters['maxUnitSalePriceUsd'],
+                            $mergedFilters['minUnitPurchasePriceUsd'],
+                            $mergedFilters['maxUnitPurchasePriceUsd']
+                        );
+                    },
+                    $contextOfferSlug
+                );
+                $products = $stitched['products'];
+                $totalCount = $stitched['totalCount'];
+                $resultFilters = self::scopeResultFiltersForPolicy($stitched['resultFilters'], $policyRules);
+                $apiError = $stitched['apiError'];
             } else {
                 $materials = self::fetchMaterialsExtended(
                     $page,
@@ -871,6 +989,9 @@ final class StoreCatalogService
             ));
         }
         $products = self::sortProducts($products, $sort);
+        if (self::$labMixedCatalog) {
+            $products = self::orderUnavailableLast($products);
+        }
         $totalCount = count($products);
         $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
         $page = min(max(1, $page), $totalPages);
@@ -951,6 +1072,10 @@ final class StoreCatalogService
                 $merged['isAvailable'] = true;
             }
         }
+        $liveMinWarehouseQuantity = $merged['minWarehouseQuantity'] ?? null;
+        if ($liveMinWarehouseQuantity === null && (self::shouldApplySellableStockFilter() || self::shouldFilterSellableStock())) {
+            $liveMinWarehouseQuantity = self::sellableMinWarehouseQuantity();
+        }
         $merged = self::applyLabStockWindow($merged, $requestFilters['isAvailable'] ?? null);
 
         $rules = self::catalogFiltersToPolicyRules($merged);
@@ -993,6 +1118,34 @@ final class StoreCatalogService
                 $totalCount = $paged['totalCount'];
                 $resultFilters = $paged['resultFilters'];
                 $apiError = $paged['apiError'];
+            } elseif (self::labOrdersUnavailableLast($requestFilters['isAvailable'] ?? null)) {
+                $stitched = self::fetchLabUnavailableLastPage(
+                    $page,
+                    $pageSize,
+                    static function (int $apiPage, int $apiPageSize, bool $available) use ($apiQuery, $liveMinWarehouseQuantity): array {
+                        $query = $apiQuery;
+                        $query['page'] = $apiPage;
+                        $query['pageSize'] = $apiPageSize;
+                        $query['isAvailable'] = $available ? 'true' : 'false';
+                        if ($available) {
+                            if (!array_key_exists('minWarehouseQuantity', $query) && $liveMinWarehouseQuantity !== null) {
+                                $query['minWarehouseQuantity'] = $liveMinWarehouseQuantity;
+                            }
+                        } else {
+                            unset($query['minWarehouseQuantity']);
+                        }
+                        if ($apiPage !== 1) {
+                            $query['includeResultFilters'] = 'false';
+                        }
+
+                        return self::requestMaterialsQuery($query);
+                    },
+                    $contextOfferSlug
+                );
+                $products = $stitched['products'];
+                $totalCount = $stitched['totalCount'];
+                $resultFilters = $stitched['resultFilters'];
+                $apiError = $stitched['apiError'];
             } else {
                 $materials = self::requestMaterialsQuery($apiQuery);
                 if ($materials['ok']) {
@@ -2815,6 +2968,189 @@ final class StoreCatalogService
         return self::$labMixedCatalog && $requestedAvailability !== true;
     }
 
+    /** Mixed trial pages put coming-soon rows after the live available order. Explicit availability filters stay single-sided. */
+    private static function labOrdersUnavailableLast(?bool $requestedAvailability): bool
+    {
+        return self::$labMixedCatalog && $requestedAvailability === null;
+    }
+
+    /**
+     * @param callable(int, int, bool): array<string, mixed> $fetchPage
+     * @return array{products: list<array<string, mixed>>, totalCount: int, resultFilters: array<string, mixed>, apiError: string|null}
+     */
+    private static function fetchLabUnavailableLastPage(
+        int $page,
+        int $pageSize,
+        callable $fetchPage,
+        ?string $offerSlug
+    ): array {
+        $page = max(1, $page);
+        $pageSize = max(1, $pageSize);
+        $offset = ($page - 1) * $pageSize;
+        $empty = static fn (?string $error): array => [
+            'products' => [],
+            'totalCount' => 0,
+            'resultFilters' => [],
+            'apiError' => $error,
+        ];
+
+        $available = self::readAvailabilitySlice($fetchPage, true, 0, $offset === 0 ? $pageSize : 0, $pageSize, $offerSlug);
+        if ($available['apiError'] !== null) {
+            return $empty($available['apiError']);
+        }
+
+        $availableTotal = $available['totalCount'];
+        $window = self::labAvailabilityWindow($offset, $pageSize, $availableTotal, $offset + $pageSize);
+        $availableProducts = $offset === 0
+            ? array_slice($available['products'], 0, $window['availableLimit'])
+            : [];
+        if ($offset > 0 && $window['availableLimit'] > 0) {
+            $availablePage = self::readAvailabilitySlice(
+                $fetchPage,
+                true,
+                $window['availableOffset'],
+                $window['availableLimit'],
+                $pageSize,
+                $offerSlug
+            );
+            if ($availablePage['apiError'] !== null) {
+                return $empty($availablePage['apiError']);
+            }
+            $availableProducts = $availablePage['products'];
+            if ($available['resultFilters'] === [] && $availablePage['resultFilters'] !== []) {
+                $available['resultFilters'] = $availablePage['resultFilters'];
+            }
+        }
+
+        $unavailable = self::readAvailabilitySlice(
+            $fetchPage,
+            false,
+            $window['unavailableOffset'],
+            $window['unavailableLimit'],
+            $pageSize,
+            $offerSlug
+        );
+        if ($unavailable['apiError'] !== null) {
+            return $empty($unavailable['apiError']);
+        }
+
+        $products = self::dedupeLabMaterials(array_merge($availableProducts, $unavailable['products']));
+        if ($availableProducts !== [] && ($offset + $pageSize) >= $availableTotal) {
+            $products = self::orderUnavailableLast($products);
+        }
+
+        $resultFilters = $available['resultFilters'] !== [] ? $available['resultFilters'] : $unavailable['resultFilters'];
+
+        return [
+            'products' => $products,
+            'totalCount' => $availableTotal + $unavailable['totalCount'],
+            'resultFilters' => $resultFilters,
+            'apiError' => null,
+        ];
+    }
+
+    /**
+     * @param callable(int, int, bool): array<string, mixed> $fetchPage
+     * @return array{products: list<array<string, mixed>>, totalCount: int, resultFilters: array<string, mixed>, apiError: string|null}
+     */
+    private static function readAvailabilitySlice(
+        callable $fetchPage,
+        bool $available,
+        int $offset,
+        int $limit,
+        int $pageSize,
+        ?string $offerSlug
+    ): array {
+        $pageSize = max(1, $pageSize);
+        $offset = max(0, $offset);
+        $limit = max(0, $limit);
+        $failed = static fn (array $response): array => [
+            'products' => [],
+            'totalCount' => 0,
+            'resultFilters' => [],
+            'apiError' => self::extractApiError($response),
+        ];
+
+        if ($limit === 0) {
+            $response = $fetchPage(1, 1, $available);
+            if (!($response['ok'] ?? false)) {
+                return $failed($response);
+            }
+            $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+
+            return [
+                'products' => [],
+                'totalCount' => max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0)),
+                'resultFilters' => self::extractResultFiltersFromApiData($data),
+                'apiError' => null,
+            ];
+        }
+
+        $startPage = intdiv($offset, $pageSize) + 1;
+        $endPage = intdiv($offset + $limit - 1, $pageSize) + 1;
+        $combined = [];
+        $totalCount = 0;
+        $resultFilters = [];
+        for ($apiPage = $startPage; $apiPage <= $endPage; $apiPage++) {
+            $response = $fetchPage($apiPage, $pageSize, $available);
+            if (!($response['ok'] ?? false)) {
+                return $failed($response);
+            }
+            $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+            if ($apiPage === $startPage) {
+                $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+                $resultFilters = self::extractResultFiltersFromApiData($data);
+            }
+            $rawItems = $data['items'] ?? $data['Items'] ?? [];
+            $rawCount = is_array($rawItems) ? count($rawItems) : 0;
+            foreach (self::withOfferPricing(is_array($rawItems) ? $rawItems : [], $offerSlug) as $item) {
+                if (is_array($item)) {
+                    $combined[] = $item;
+                }
+            }
+            if ($totalCount > 0 && ($apiPage * $pageSize) >= $totalCount) {
+                break;
+            }
+            if ($rawCount < $pageSize) {
+                break;
+            }
+        }
+
+        $skip = $offset - (($startPage - 1) * $pageSize);
+
+        return [
+            'products' => array_slice($combined, max(0, $skip), $limit),
+            'totalCount' => $totalCount,
+            'resultFilters' => $resultFilters,
+            'apiError' => null,
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $products
+     * @return list<array<string, mixed>>
+     */
+    private static function dedupeLabMaterials(array $products): array
+    {
+        $seen = [];
+        $kept = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $guid = strtolower(trim((string) ($product['materialGuid'] ?? $product['MaterialGuid'] ?? $product['guid'] ?? $product['Guid'] ?? '')));
+            if ($guid !== '' && isset($seen[$guid])) {
+                continue;
+            }
+            if ($guid !== '') {
+                $seen[$guid] = true;
+            }
+            $kept[] = $product;
+        }
+
+        return $kept;
+    }
+
     /**
      * @param array<string, mixed> $merged
      * @return array<string, mixed>
@@ -3050,6 +3386,7 @@ final class StoreCatalogService
         $params['_policyStoreGuids'] = self::parseList($policyRules['store_guids'] ?? []);
         if (self::$labMixedCatalog) {
             $params['_labMixed'] = '1';
+            $params['_labUnavailableLast'] = '1';
         }
         ksort($params);
 

@@ -25,9 +25,8 @@ $assert = static function (string $label, bool $condition) use (&$failures): voi
     echo "OK: {$label}\n";
 };
 
-$render = static function (bool $showPrice): string {
-    $catalog = [
-        'products' => [[
+$render = static function (bool $showPrice, bool $labMode = true): string {
+    $stock = [[
             'materialGuid' => 'stock-1',
             'name' => 'حذاء متوفر',
             'materialCode' => 'ST-1',
@@ -51,18 +50,21 @@ $render = static function (bool $showPrice): string {
             'has_offer' => true,
             'effective_unit_sale_price_sp' => 0,
             'original_unit_sale_price_sp' => 0,
-        ], [
-            'materialGuid' => 'soon-1',
-            'name' => 'حذاء شتوي',
-            'materialCode' => 'SO-1',
-            'materialType' => 'شتوي',
-            'warehouseQuantity' => 0,
-            'unitSalePriceSyp' => '',
-            'unitSalePriceUsd' => null,
-            'has_offer' => true,
-            'effective_unit_sale_price_sp' => 0,
-            'original_unit_sale_price_sp' => 0,
-        ]],
+        ]];
+    $soonItem = [
+        'materialGuid' => 'soon-1',
+        'name' => 'حذاء شتوي',
+        'materialCode' => 'SO-1',
+        'materialType' => 'شتوي',
+        'warehouseQuantity' => 0,
+        'unitSalePriceSyp' => '',
+        'unitSalePriceUsd' => null,
+        'has_offer' => true,
+        'effective_unit_sale_price_sp' => 0,
+        'original_unit_sale_price_sp' => 0,
+    ];
+    $catalog = [
+        'products' => array_merge($stock, [$soonItem]),
         'totalCount' => 3,
         'page' => 1,
         'pageSize' => 24,
@@ -134,7 +136,7 @@ $render = static function (bool $showPrice): string {
         'price_mode' => 'both',
     ];
     $isCustomer = false;
-    $storeLabMode = true;
+    $storeLabMode = $labMode;
     $storeCatalogImagePreview = false;
 
     ob_start();
@@ -145,6 +147,7 @@ $render = static function (bool $showPrice): string {
 
 $html = $render(true);
 $locked = $render(false);
+$live = $render(true, false);
 
 $assert('no marketing hero', !str_contains($html, 'home-hero') && !str_contains($html, 'sl-hero'));
 $assert('live filter sidebar is present', str_contains($html, 'store-filters-sidebar') && str_contains($html, 'تصفية النتائج'));
@@ -152,9 +155,10 @@ $assert('filter form stays on the trial route', str_contains($html, 'action="/st
 $assert('original filter group markup is used', str_contains($html, 'store-filter-accordion') && str_contains($html, 'name="materialTypes[]"'));
 $assert('warehouse names are not visible', !str_contains($html, 'مستودع الستوك') && !str_contains($html, 'المستودع الرئيسي') && !str_contains($html, 'المخازن') && !str_contains($html, 'المستودعات'));
 $assert('warehouse controls are not rendered', !str_contains($html, 'data-filter-group="stores"') && !str_contains($html, 'data-filter-group="warehouse"') && !str_contains($html, 'name="storeGuids') && !str_contains($html, 'name="minWarehouseQuantity"') && !str_contains($html, 'wh-1'));
-$assert('one continuous product grid', substr_count($html, 'store-product-grid') === 1 && !str_contains($html, 'id="coming-soon"') && !str_contains($html, 'id="available"'));
+$assert('one continuous product grid', substr_count($html, 'store-product-grid') === 1 && !str_contains($html, 'id="coming-soon"') && !str_contains($html, 'sl-soon') && !str_contains($html, 'id="available"'));
 $assert('catalog order is stock then zero price then coming soon', strpos($html, 'حذاء متوفر') < strpos($html, 'حذاء بلا سعر') && strpos($html, 'حذاء بلا سعر') < strpos($html, 'حذاء شتوي'));
-$assert('no hint copy', !str_contains($html, 'يشمل البحث') && !str_contains($html, 'في كل المواد') && !str_contains($html, 'جرّب') && !str_contains($html, 'تُباع لدينا') && !str_contains($html, 'قسم «'));
+$assert('no hint copy', !str_contains($html, 'يشمل البحث') && !str_contains($html, 'في كل المواد') && !str_contains($html, 'جرّب') && !str_contains($html, 'تُباع لدينا') && !str_contains($html, 'اكتب جزءاً') && !str_contains($html, 'ضيّق النتائج'));
+$assert('live store still renders the warehouse filter', str_contains($live, 'المخازن') && str_contains($live, 'data-filter-group="stores"') && str_contains($live, 'مستودع الستوك') && !str_contains($live, 'id="coming-soon"') && !str_contains($live, 'action="/store-lab.php"'));
 $cardSlice = static function (string $page, string $name): string {
     $start = strpos($page, $name);
     if ($start === false) {
@@ -189,6 +193,7 @@ if ($out !== '') {
         . '<style>body{font-family:Manrope,system-ui,sans-serif;background:#f6f6f8;color:#111827;margin:0}main{max-width:80rem;margin:0 auto;padding:1.5rem 1rem}</style>'
         . '</head><body><main>' . $html . '</main>'
         . '<script src="/assets/store-filters.js" defer></script>'
+        . '<script>if (location.hash === "#open-filters") { document.getElementById("store-filters-backdrop")?.classList.add("is-open"); }</script>'
         . '</body></html>';
     if (file_put_contents($out, $document) === false) {
         fwrite(STDERR, "could not write {$out}\n");

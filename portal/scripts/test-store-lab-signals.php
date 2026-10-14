@@ -101,6 +101,53 @@ $assert(
     count($onlyStock) === 1 && ($onlyStock[0]['name'] ?? '') === 'أول'
 );
 
+$ordered = StoreCatalogService::orderUnavailableLast([
+    ['name' => 'قريبا-2', 'materialCode' => '2', 'warehouseQuantity' => 0],
+    ['name' => 'متوفر-1', 'materialCode' => '1', 'warehouseQuantity' => 3],
+    ['name' => 'متوفر-4', 'materialCode' => '4', 'warehouseQuantity' => 1],
+    ['name' => 'قريبا-3', 'materialCode' => '3', 'isAvailable' => false, 'warehouseQuantity' => 8],
+    ['name' => 'متوفر-5', 'materialCode' => '5', 'warehouseQuantity' => 2],
+]);
+$assert(
+    'coming soon sorts after available and each block keeps its order',
+    array_map(static fn (array $row): string => (string) $row['name'], $ordered) === [
+        'متوفر-1',
+        'متوفر-4',
+        'متوفر-5',
+        'قريبا-2',
+        'قريبا-3',
+    ]
+);
+
+$window = StoreCatalogService::labAvailabilityWindow(0, 24, 100, 40);
+$assert(
+    'first page stays inside the available block',
+    $window['availableOffset'] === 0 && $window['availableLimit'] === 24
+        && $window['unavailableLimit'] === 0 && $window['total'] === 140
+);
+$boundary = StoreCatalogService::labAvailabilityWindow(24, 24, 30, 40);
+$assert(
+    'boundary page finishes available rows then takes coming soon',
+    $boundary['availableOffset'] === 24 && $boundary['availableLimit'] === 6
+        && $boundary['unavailableOffset'] === 0 && $boundary['unavailableLimit'] === 18
+);
+$tail = StoreCatalogService::labAvailabilityWindow(48, 24, 30, 80);
+$assert(
+    'later pages are coming soon in the same sort window',
+    $tail['availableLimit'] === 0 && $tail['unavailableOffset'] === 18 && $tail['unavailableLimit'] === 24
+);
+$onlySoonWindow = StoreCatalogService::labAvailabilityWindow(0, 24, 0, 10);
+$assert(
+    'a catalog with no stock starts at coming soon',
+    $onlySoonWindow['availableLimit'] === 0 && $onlySoonWindow['unavailableOffset'] === 0
+        && $onlySoonWindow['unavailableLimit'] === 10 && $onlySoonWindow['total'] === 10
+);
+$searchWindow = StoreCatalogService::labAvailabilityWindow(0, 24, 2, 5);
+$assert(
+    'search window keeps stock matches ahead of coming soon matches',
+    $searchWindow['availableLimit'] === 2 && $searchWindow['unavailableLimit'] === 5 && $searchWindow['total'] === 7
+);
+
 $assert(
     'trial url keeps catalog filters',
     store_lab_url(['q' => 'حذاء', 'materialTypes' => ['رجالي']]) === '/store-lab.php?q=' . rawurlencode('حذاء') . '&materialTypes%5B0%5D=' . rawurlencode('رجالي')

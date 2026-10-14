@@ -917,6 +917,7 @@ $appliedClientFiltersJson = json_encode(
       <?php endif; ?>
     </div>
 
+    <?php $baseDisplayOptions = $displayOptions; ?>
     <?php if ($products === [] && !empty($catalog['apiError'])): ?>
       <div class="store-empty-state store-empty-state--maintenance" role="status">
         <span class="material-symbols-outlined store-empty-state__icon" aria-hidden="true">cloud_off</span>
@@ -932,7 +933,6 @@ $appliedClientFiltersJson = json_encode(
       </div>
     <?php else: ?>
       <div class="store-product-grid">
-        <?php $baseDisplayOptions = $displayOptions; ?>
         <?php foreach ($products as $item): ?>
           <?php if (!is_array($item)) continue; ?>
           <?php
