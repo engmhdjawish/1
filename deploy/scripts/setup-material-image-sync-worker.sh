@@ -21,7 +21,7 @@ fi
 
 echo "Installing cron..."
 tee /etc/cron.d/jawish-material-image-sync-worker >/dev/null <<EOF
-* * * * * www-data cd $PORTAL_DIR && $PHP_BIN scripts/run-material-image-sync-worker.php >> storage/material-image-worker/worker.log 2>&1
+* * * * * www-data cd $PORTAL_DIR && $PHP_BIN scripts/run-material-image-sync-worker.php >/dev/null 2>&1
 
 EOF
 chmod 644 /etc/cron.d/jawish-material-image-sync-worker

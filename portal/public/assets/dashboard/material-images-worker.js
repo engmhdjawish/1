@@ -18,11 +18,13 @@
       .replace(/>/g, '&gt;');
   }
 
-  function renderFailures(items, repairItems) {
+  function renderFailures(items, repairItems, unavailableItems) {
     if (!failuresEl) return;
     const list = Array.isArray(items) ? items : [];
     const repairs = Array.isArray(repairItems) ? repairItems : [];
-    if (list.length === 0 && repairs.length === 0) {
+    const unavailable = Array.isArray(unavailableItems) ? unavailableItems : [];
+    const detailRows = repairs.concat(unavailable);
+    if (list.length === 0 && detailRows.length === 0) {
       failuresEl.classList.add('hidden');
       failuresEl.innerHTML = '';
       return;
@@ -37,7 +39,7 @@
         return `<li class="text-xs">${name}${err}</li>`;
       })
       .join('');
-    const repairHtml = repairs
+    const repairHtml = detailRows
       .map((row) => {
         const code = escapeHtml(row.material_code || 'صورة');
         const err = row.message ? ` — ${escapeHtml(row.message)}` : '';
@@ -53,10 +55,17 @@
     const failed = Number(data.sync?.failed ?? 0);
     const pending = Number(data.sync?.pending ?? 0);
     const missing = Number(data.worker?.missing_local_count ?? 0);
+    const unavailable = Array.isArray(data.worker?.unavailable_images) ? data.worker.unavailable_images.length : 0;
     if (missing > 0) {
       pill.classList.remove('hidden', 'border-green-200', 'bg-green-50', 'text-green-800');
       pill.classList.add('border-amber-200', 'bg-amber-50', 'text-amber-900');
       pill.textContent = 'غير جاهزة للعرض (' + missing + ')';
+      return;
+    }
+    if (unavailable > 0) {
+      pill.classList.remove('hidden', 'border-green-200', 'bg-green-50', 'text-green-800');
+      pill.classList.add('border-amber-200', 'bg-amber-50', 'text-amber-900');
+      pill.textContent = 'الملف غير موجود (' + unavailable + ')';
       return;
     }
     if (failed > 0 || pending > 0) {
@@ -78,7 +87,11 @@
       summaryEl.textContent = data.user_summary;
     }
 
-    renderFailures(data.worker?.recent_failures || [], data.worker?.recent_repair_failures || []);
+    renderFailures(
+      data.worker?.recent_failures || [],
+      data.worker?.recent_repair_failures || [],
+      data.worker?.unavailable_images || []
+    );
     applyQueuePill(data);
 
     const failedEl = document.getElementById('statFailedCount');

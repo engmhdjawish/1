@@ -190,6 +190,7 @@ final class MaterialImageBackgroundWorkerService
             'last_repair_pulled' => 0,
             'last_repair_failed' => 0,
             'recent_repair_failures' => [],
+            'unavailable_images' => [],
             'last_reindex_at' => null,
             'missing_local_count' => null,
             'last_sync_attempts' => 0,
@@ -329,6 +330,7 @@ final class MaterialImageBackgroundWorkerService
             $recentRepairFailures = is_array($statusBefore['recent_repair_failures'] ?? null)
                 ? $statusBefore['recent_repair_failures']
                 : [];
+            $unavailableImages = self::normalizeUnavailableImages($statusBefore);
             $repairLimit = self::repairMissingBatchSize();
             if ($apiOk && $repairLimit > 0 && self::shouldRepairNow($statusBefore)) {
                 $repairRan = true;
@@ -340,31 +342,53 @@ final class MaterialImageBackgroundWorkerService
                     }
                 );
                 $repairPulled = (int) ($pull['pulled'] ?? 0);
-                $repairFailed = (int) ($pull['failed'] ?? 0);
                 $missingFound = (int) ($pull['missing_found'] ?? 0);
                 $scanComplete = (bool) ($pull['scan_complete'] ?? false);
                 $messages[] = (string) ($pull['message'] ?? 'إصلاح نسخ محلية.');
                 $recentRepairFailures = [];
+                $seenUnavailable = [];
+                $catalogComplete = $scanComplete || $missingFound < $repairLimit;
                 foreach (is_array($pull['items'] ?? null) ? $pull['items'] : [] as $item) {
-                    if (!is_array($item) || ($item['ok'] ?? false)) {
+                    if (!is_array($item)) {
                         continue;
                     }
-                    $recentRepairFailures[] = [
-                        'material_code' => (string) ($item['material_code'] ?? ''),
-                        'message' => (string) ($item['message'] ?? 'تعذر الجلب من المحاسبة.'),
-                    ];
-                    if (count($recentRepairFailures) >= 8) {
-                        break;
+                    $guid = strtolower(trim((string) ($item['image_guid'] ?? '')));
+                    if (($item['ok'] ?? false) && $guid !== '') {
+                        unset($unavailableImages[$guid]);
+                        continue;
+                    }
+                    if (!empty($item['unavailable']) && $guid !== '') {
+                        $seenUnavailable[$guid] = [
+                            'image_guid' => $guid,
+                            'material_code' => trim((string) ($item['material_code'] ?? '')),
+                            'message' => (string) ($item['message'] ?? 'ملف الصورة غير موجود في المحاسبة. أعد رفع الصورة لهذه المادة.'),
+                        ];
+                        continue;
+                    }
+                    $repairFailed++;
+                    if (count($recentRepairFailures) < 8) {
+                        $recentRepairFailures[] = [
+                            'material_code' => (string) ($item['material_code'] ?? ''),
+                            'message' => (string) ($item['message'] ?? 'تعذر الجلب من المحاسبة.'),
+                        ];
                     }
                 }
-                if (($pull['ok'] ?? false) && $repairFailed === 0 && ($scanComplete || $missingFound < $repairLimit)) {
-                    $inferMissingZero = true;
+                if ($catalogComplete) {
+                    $unavailableImages = $seenUnavailable;
+                    if ($repairFailed === 0) {
+                        $inferMissingZero = true;
+                    }
+                } else {
+                    foreach ($seenUnavailable as $guid => $row) {
+                        $unavailableImages[$guid] = $row;
+                    }
                 }
                 self::writeStatus([
                     'last_repair_at' => date('c'),
                     'last_repair_pulled' => $repairPulled,
                     'last_repair_failed' => $repairFailed,
                     'recent_repair_failures' => $recentRepairFailures,
+                    'unavailable_images' => array_values($unavailableImages),
                 ]);
             } elseif ($knownMissing !== null && $knownMissing > 0) {
                 $messages[] = 'الصور غير الجاهزة بانتظار الدورة التالية من المعالجة.';
@@ -413,6 +437,10 @@ final class MaterialImageBackgroundWorkerService
                 } catch (Throwable) {
                     // Keep the previous count so the dashboard does not forget images that are still missing.
                 }
+            }
+            if ($repairFailed === 0 && $unavailableImages !== [] && $missingCount !== null && $missingCount <= count($unavailableImages)) {
+                $missingCount = 0;
+                $recentRepairFailures = [];
             }
 
             $summary = $messages !== []
@@ -500,6 +528,10 @@ final class MaterialImageBackgroundWorkerService
                 ? 'صورة واحدة بانتظار الإرسال للمحاسبة.'
                 : ('هناك ' . $pending . ' صور بانتظار الإرسال للمحاسبة.');
         }
+        $unavailable = self::normalizeUnavailableImages($workerStatus);
+        if ($unavailable !== [] && ($missingLocal === null || $missingLocal === 0)) {
+            return self::unavailableSummary($unavailable);
+        }
         if ($missingLocal !== null && $missingLocal > 0) {
             return self::missingLocalSummary($missingLocal, $workerStatus);
         }
@@ -536,8 +568,12 @@ final class MaterialImageBackgroundWorkerService
     }
 
     /** @param array{pending: int, syncing: int, synced: int, failed: int, total: int} $sync */
-    public static function dashboardNeedsAttention(array $sync, bool $apiOk, ?int $missingLocal = null): bool
-    {
+    public static function dashboardNeedsAttention(
+        array $sync,
+        bool $apiOk,
+        ?int $missingLocal = null,
+        int $unavailableCount = 0
+    ): bool {
         if (!$apiOk) {
             return true;
         }
@@ -547,8 +583,62 @@ final class MaterialImageBackgroundWorkerService
         if ((int) ($sync['pending'] ?? 0) > 0) {
             return true;
         }
+        if ($unavailableCount > 0) {
+            return true;
+        }
 
         return $missingLocal !== null && $missingLocal > 0;
+    }
+
+    /**
+     * @param array<string, mixed> $status
+     * @return array<string, array{image_guid: string, material_code: string, message: string}>
+     */
+    private static function normalizeUnavailableImages(array $status): array
+    {
+        $rows = $status['unavailable_images'] ?? [];
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $guid = strtolower(trim((string) ($row['image_guid'] ?? '')));
+            if ($guid === '') {
+                continue;
+            }
+            $normalized[$guid] = [
+                'image_guid' => $guid,
+                'material_code' => trim((string) ($row['material_code'] ?? '')),
+                'message' => (string) ($row['message'] ?? 'ملف الصورة غير موجود في المحاسبة. أعد رفع الصورة لهذه المادة.'),
+            ];
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @param array<string, array{image_guid: string, material_code: string, message: string}> $images
+     */
+    private static function unavailableSummary(array $images): string
+    {
+        $codes = [];
+        foreach ($images as $image) {
+            $code = trim((string) ($image['material_code'] ?? ''));
+            if ($code !== '') {
+                $codes[] = $code;
+            }
+        }
+        $listed = $codes !== [] ? (' (' . implode('، ', array_slice($codes, 0, 8)) . ')') : '';
+        $count = count($images);
+        if ($count === 1) {
+            return 'مادة واحدة صورتها مسجّلة في المحاسبة والملف غير موجود' . $listed . '. أعد رفع الصورة لهذه المادة.';
+        }
+
+        return 'هناك ' . $count . ' مواد صورتها مسجّلة في المحاسبة والملف غير موجود' . $listed . '. أعد رفع الصورة لهذه المواد.';
     }
 
     /** @return array<string, mixed> */
@@ -559,6 +649,7 @@ final class MaterialImageBackgroundWorkerService
         $health = PortalSettingsService::apiHealth();
         $apiOk = (bool) ($health['ok'] ?? false);
         $missingLocal = isset($status['missing_local_count']) ? (int) $status['missing_local_count'] : null;
+        $unavailableCount = count(self::normalizeUnavailableImages($status));
 
         return [
             'worker_enabled' => self::isEnabled(),
@@ -569,7 +660,7 @@ final class MaterialImageBackgroundWorkerService
                 'message' => (string) ($health['message'] ?? ''),
             ],
             'user_summary' => self::userFacingSummary($status, $sync, $apiOk, self::isEnabled(), $missingLocal),
-            'needs_attention' => self::dashboardNeedsAttention($sync, $apiOk, $missingLocal),
+            'needs_attention' => self::dashboardNeedsAttention($sync, $apiOk, $missingLocal, $unavailableCount),
         ];
     }
 

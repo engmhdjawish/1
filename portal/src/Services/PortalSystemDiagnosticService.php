@@ -564,7 +564,7 @@ final class PortalSystemDiagnosticService
         curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        curl_close($ch);
+        unset($ch);
         $ms = (int) round((microtime(true) - $t0) * 1000);
 
         return [

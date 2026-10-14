@@ -346,7 +346,7 @@ final class ApiClient
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
         fclose($handle);
-        curl_close($ch);
+        unset($ch);
 
         if ($ok === false) {
             return ['ok' => false, 'status' => 0, 'error' => $error ?: 'فشل الاتصال بالـ API'];

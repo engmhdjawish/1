@@ -123,7 +123,8 @@ if (!$legacy) {
         $mark = ($item['ok'] ?? false) ? 'OK' : 'FAIL';
         $code = (string) ($item['material_code'] ?? '');
         $guid = (string) ($item['image_guid'] ?? '');
-        $log("  [{$mark}] {$code} {$guid}");
+        $message = trim((string) ($item['message'] ?? ''));
+        $log("  [{$mark}] {$code} {$guid}" . ($message !== '' && !($item['ok'] ?? false) ? (' — ' . $message) : ''));
     }
 
     $totalPulled = (int) ($result['pulled'] ?? 0);
@@ -171,7 +172,8 @@ for ($i = 0; $i < $maxPages; $i++) {
         $mark = ($item['ok'] ?? false) ? 'OK' : 'FAIL';
         $code = (string) ($item['material_code'] ?? '');
         $guid = (string) ($item['image_guid'] ?? '');
-        $log("  [{$mark}] {$code} {$guid}");
+        $message = trim((string) ($item['message'] ?? ''));
+        $log("  [{$mark}] {$code} {$guid}" . ($message !== '' && !($item['ok'] ?? false) ? (' — ' . $message) : ''));
     }
 
     if (!($result['ok'] ?? false) && $scanned === 0 && $i === 0) {

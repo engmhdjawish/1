@@ -26,6 +26,7 @@ $missingLocal = isset($worker['missing_local_count']) ? (int) $worker['missing_l
 $failedCount = (int) ($syncStats['failed'] ?? 0);
 $pendingCount = (int) ($syncStats['pending'] ?? 0);
 $repairFailures = is_array($worker['recent_repair_failures'] ?? null) ? $worker['recent_repair_failures'] : [];
+$unavailableImages = is_array($worker['unavailable_images'] ?? null) ? $worker['unavailable_images'] : [];
 $workerUserSummary = \Portal\Services\MaterialImageBackgroundWorkerService::userFacingSummary(
     $worker,
     $syncStats,
@@ -36,7 +37,8 @@ $workerUserSummary = \Portal\Services\MaterialImageBackgroundWorkerService::user
 $showWorkerBanner = \Portal\Services\MaterialImageBackgroundWorkerService::dashboardNeedsAttention(
     $syncStats,
     !empty($apiHealth['ok']),
-    $missingLocal
+    $missingLocal,
+    count($unavailableImages)
 ) || !(bool) ($imageWorkerSnapshot['worker_enabled'] ?? true);
 ?>
 <section class="mb-6" data-material-images-workspace>
@@ -108,19 +110,26 @@ $showWorkerBanner = \Portal\Services\MaterialImageBackgroundWorkerService::dashb
         <?php endif; ?>
         <?php
           $queuePillMissing = $missingLocal !== null && $missingLocal > 0;
-          $queuePillHidden = !$queuePillMissing && ($failedCount > 0 || $pendingCount > 0);
+          $queuePillUnavailable = !$queuePillMissing && $unavailableImages !== [];
+          $queuePillHidden = !$queuePillMissing && !$queuePillUnavailable && ($failedCount > 0 || $pendingCount > 0);
+          $queuePillAmber = $queuePillMissing || $queuePillUnavailable;
+          $queuePillText = $queuePillMissing
+              ? ('غير جاهزة للعرض (' . (int) $missingLocal . ')')
+              : ($queuePillUnavailable
+                  ? ('الملف غير موجود (' . count($unavailableImages) . ')')
+                  : 'الطابور نظيف');
         ?>
         <span
           id="queueHealthPill"
-          class="inline-flex items-center h-9 px-3 rounded-lg text-xs font-bold <?= $queuePillHidden ? 'hidden ' : '' ?><?= $queuePillMissing
+          class="inline-flex items-center h-9 px-3 rounded-lg text-xs font-bold <?= $queuePillHidden ? 'hidden ' : '' ?><?= $queuePillAmber
               ? 'border border-amber-200 bg-amber-50 text-amber-900'
               : 'border border-green-200 bg-green-50 text-green-800' ?>"
         >
-          <?= $queuePillMissing ? ('غير جاهزة للعرض (' . (int) $missingLocal . ')') : 'الطابور نظيف' ?>
+          <?= h($queuePillText) ?>
         </span>
       </div>
     </div>
-    <ul id="materialImageWorkerFailures" class="mt-3 space-y-1 text-xs text-red-800<?= ($failedCount === 0 && $repairFailures === [] ? ' hidden' : '') ?>">
+    <ul id="materialImageWorkerFailures" class="mt-3 space-y-1 text-xs text-red-800<?= ($failedCount === 0 && $repairFailures === [] && $unavailableImages === [] ? ' hidden' : '') ?>">
       <?php foreach (is_array($worker['recent_failures'] ?? null) ? $worker['recent_failures'] : [] as $fail): ?>
         <?php if (!is_array($fail)) {
             continue;
@@ -132,7 +141,7 @@ $showWorkerBanner = \Portal\Services\MaterialImageBackgroundWorkerService::dashb
           <?php endif; ?>
         </li>
       <?php endforeach; ?>
-      <?php foreach ($repairFailures as $fail): ?>
+      <?php foreach (array_merge($repairFailures, $unavailableImages) as $fail): ?>
         <?php if (!is_array($fail)) {
             continue;
         } ?>

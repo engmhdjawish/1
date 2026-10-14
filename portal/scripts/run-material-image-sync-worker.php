@@ -24,7 +24,6 @@ require $base . '/bootstrap.php';
 use Portal\Services\MaterialImageBackgroundWorkerService;
 
 $log = static function (string $message): void {
-    MaterialImageBackgroundWorkerService::appendLog($message);
     echo $message . PHP_EOL;
 };
 
