@@ -6,8 +6,161 @@
   max-width: 100%;
 }
 
+.hl {
+  gap: 1.6rem;
+}
+
 .hl .home-hero--premium {
   overflow: visible;
+}
+
+.hl .home-hero__inner {
+  padding: 1.6rem 1.2rem 1.35rem;
+}
+
+.hl .home-hero__title {
+  font-size: clamp(2.15rem, 4.8vw, 3.55rem);
+  line-height: 1.12;
+}
+
+.hl .home-hero__title-line {
+  display: block;
+}
+
+.hl .home-hero__title-line + .home-hero__title-line::before {
+  content: none;
+}
+
+.hl .home-hero__lead {
+  max-width: 38rem;
+  font-size: 1rem;
+}
+
+.hl-hero-layout {
+  display: grid;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.hl-hero-mark {
+  display: none;
+}
+
+.hl-hero-count {
+  display: inline-flex;
+  align-items: center;
+  height: 1.55rem;
+  margin-inline-start: 0.35rem;
+  padding: 0 0.55rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 0.72rem;
+}
+
+.hl-hero-tools {
+  margin-top: 1.35rem;
+}
+
+@media (min-width: 960px) {
+  .hl .home-hero__inner {
+    padding: 2.4rem 2.1rem 1.7rem;
+  }
+
+  .hl-hero-layout {
+    grid-template-columns: minmax(0, 1fr) 16.5rem;
+    gap: 1rem;
+  }
+
+  .hl-hero-mark {
+    display: grid;
+    place-items: center;
+    height: 16.5rem;
+  }
+
+  .hl-hero-mark .home-hero__orbits {
+    width: 16rem;
+    height: 16rem;
+    opacity: 0.95;
+  }
+}
+
+.hl .home-ad-frame {
+  width: 100%;
+  max-height: 22rem;
+  aspect-ratio: 2.35 / 1;
+}
+
+.hl .home-section {
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.07);
+}
+
+.hl .home-section__title {
+  font-size: 1.45rem;
+}
+
+.hl .home-section-nav--sticky {
+  padding: 0.5rem;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+}
+
+.hl .home-section-nav__link {
+  height: 2.4rem;
+  font-size: 0.8rem;
+}
+
+.hl .home-section-nav__link.is-active {
+  background: var(--hl-accent);
+  color: #fff;
+}
+
+.hl-section--feature .home-section__body {
+  padding: 0 0 1.15rem;
+}
+
+.hl-section--feature .home-section__header {
+  margin: 0 0 1rem;
+  padding: 1.25rem 1.25rem 1.1rem;
+  background: linear-gradient(135deg, #9f1218 0%, #d81921 52%, #ef4444 100%);
+  color: #fff;
+}
+
+.hl-section--feature .home-section__title,
+.hl-section--feature .hl-section-note {
+  color: #fff;
+}
+
+.hl-section--feature .home-section__subtitle {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.hl-section--feature .home-section__badge {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.hl-section--feature .home-section__more {
+  border-color: transparent;
+  background: #fff;
+  color: var(--hl-accent);
+}
+
+.hl-section--feature .home-section__body > :not(.home-section__header) {
+  margin-inline: 1.15rem;
+}
+
+.hl .home-cta {
+  background: linear-gradient(135deg, #9f1218 0%, #d81921 46%, #ef4444 100%);
+  box-shadow: 0 18px 44px rgba(216, 25, 33, 0.2);
+}
+
+.hl .home-cta p {
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.hl .home-cta .home-btn--primary {
+  background: #fff;
+  color: var(--hl-accent);
+  box-shadow: none;
 }
 
 .hl-hero-clip {
@@ -46,12 +199,6 @@
   text-decoration: none;
 }
 
-.hl-hero-search {
-  position: relative;
-  z-index: 3;
-  margin-top: 1.15rem;
-}
-
 .hl-search-hint {
   max-width: 40rem;
   margin: 0;
@@ -70,11 +217,6 @@
 .hl button.home-section__more {
   background: #fff;
   color: var(--home-accent, #d81921);
-}
-
-.hl .home-section-nav__link.is-active {
-  background: rgba(216, 25, 33, 0.1);
-  color: var(--home-accent);
 }
 
 .hl-section-actions {
@@ -102,19 +244,19 @@
 .hl-search {
   position: relative;
   z-index: 5;
-  margin-top: 1rem;
+  margin-top: 0.75rem;
 }
 
 .hl-search__box {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  min-height: 3.6rem;
-  padding: 0.35rem;
-  border-radius: 0.95rem;
+  gap: 0.4rem;
+  min-height: 4.15rem;
+  padding: 0.4rem;
+  border-radius: 1.15rem;
   background: #fff;
   color: var(--hl-ink);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 18px 40px rgba(80, 8, 12, 0.18);
 }
 
 .hl-search.is-open .hl-search__box {
@@ -132,7 +274,7 @@
   position: relative;
   flex: 1;
   min-width: 0;
-  height: 2.7rem;
+  height: 3.2rem;
 }
 
 .hl-search__ghost,
@@ -148,9 +290,9 @@
   background: transparent;
   color: var(--hl-ink);
   font: inherit;
-  font-size: 1.05rem;
+  font-size: 1.12rem;
   font-weight: 800;
-  line-height: 2.7rem;
+  line-height: 3.2rem;
   letter-spacing: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -186,7 +328,7 @@
   position: relative;
   z-index: 1;
   flex-shrink: 0;
-  height: 2.7rem;
+  height: 3.2rem;
   border: 0;
   border-radius: 0.8rem;
   font: inherit;

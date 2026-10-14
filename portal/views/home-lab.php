@@ -59,11 +59,14 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
       <div class="home-hero__glow home-hero__glow--right"></div>
     </div>
     <div class="home-hero__inner">
-      <div class="home-hero__grid">
-        <div class="home-hero__content">
+      <div class="hl-hero-layout">
+        <div class="hl-hero-copy">
           <p class="home-hero__kicker">
             <span class="home-hero__kicker-dot" aria-hidden="true"></span>
             مرحباً بكم في <?= h($siteName) ?>
+            <?php if ($sections !== []): ?>
+              <span class="hl-hero-count"><?= count($sections) ?> أقسام</span>
+            <?php endif; ?>
           </p>
           <h1 id="hl-search-title" class="home-hero__title">
             <span class="home-hero__title-line">اعثر على المادة</span>
@@ -73,21 +76,20 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
             <?= $aboutSnippet !== '' ? h($aboutSnippet) : 'تصفّح أحدث المواد بأسعار واضحة، أضف للسلة، وتابع طلبك خطوة بخطوة.' ?>
           </p>
         </div>
-
-        <div class="home-hero__visual" aria-hidden="true">
+        <div class="hl-hero-mark" aria-hidden="true">
           <div class="home-hero__orbits">
             <svg class="home-hero__orbits-svg" viewBox="0 0 200 200" focusable="false">
               <g class="home-hero__orbits-layer home-hero__orbits-layer--a">
-                <circle cx="100" cy="100" r="88" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="175 378" stroke-linecap="round" opacity="0.18"></circle>
-                <circle cx="100" cy="12" r="3.6" fill="currentColor" opacity="0.42"></circle>
+                <circle cx="100" cy="100" r="88" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="175 378" stroke-linecap="round" opacity="0.22"></circle>
+                <circle cx="100" cy="12" r="3.6" fill="currentColor" opacity="0.5"></circle>
               </g>
               <g class="home-hero__orbits-layer home-hero__orbits-layer--b">
-                <circle cx="100" cy="100" r="62" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="120 270" stroke-linecap="round" opacity="0.14"></circle>
-                <circle cx="162" cy="100" r="3" fill="currentColor" opacity="0.36"></circle>
+                <circle cx="100" cy="100" r="62" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="120 270" stroke-linecap="round" opacity="0.18"></circle>
+                <circle cx="162" cy="100" r="3" fill="currentColor" opacity="0.42"></circle>
               </g>
               <g class="home-hero__orbits-layer home-hero__orbits-layer--c">
-                <circle cx="100" cy="100" r="38" fill="none" stroke="currentColor" stroke-width="0.9" stroke-dasharray="78 162" stroke-linecap="round" opacity="0.1"></circle>
-                <circle cx="100" cy="138" r="2.6" fill="currentColor" opacity="0.32"></circle>
+                <circle cx="100" cy="100" r="38" fill="none" stroke="currentColor" stroke-width="0.9" stroke-dasharray="78 162" stroke-linecap="round" opacity="0.14"></circle>
+                <circle cx="100" cy="138" r="2.6" fill="currentColor" opacity="0.36"></circle>
               </g>
             </svg>
             <span class="home-hero__orbit-core"></span>
@@ -95,7 +97,7 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
         </div>
       </div>
 
-      <div class="hl-hero-search">
+      <div class="hl-hero-tools">
           <p class="hl-search-hint">ابحث باسم المادة أو القسم أو القياس. الحقل يخمن الباقي قبل أن تكمل.</p>
 
           <form class="hl-search" action="/store.php" method="get" role="search" data-hl-search>
