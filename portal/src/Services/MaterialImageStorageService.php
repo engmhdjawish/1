@@ -25,6 +25,9 @@ final class MaterialImageStorageService
     /** @var array<string, list<string>> */
     private static array $fileNameByGuid = [];
 
+    /** @var array{unavailable: bool, message: string}|null */
+    private static ?array $lastEnsureFailure = null;
+
     public static function ensureSettings(): void
     {
         if (self::$settingsReady) {
@@ -1683,6 +1686,7 @@ final class MaterialImageStorageService
      */
     public static function ensureLocalCopyFromAmine(string $imageGuid, ?callable $onProgress = null): ?string
     {
+        self::$lastEnsureFailure = null;
         $imageGuid = strtolower(trim($imageGuid));
         if ($imageGuid === '' || preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $imageGuid) !== 1) {
             return null;
@@ -1813,6 +1817,28 @@ final class MaterialImageStorageService
                         }
                     }
                 }
+                $sizeRaw = $meta['sizeBytes'] ?? $meta['SizeBytes'] ?? null;
+                if ($sizeRaw !== null && (int) $sizeRaw <= 0) {
+                    self::rememberEnsureFailure(
+                        true,
+                        'ملف الصورة غير موجود في المحاسبة. أعد رفع الصورة لهذه المادة.'
+                    );
+                    if ($onProgress !== null) {
+                        $onProgress('ملف الصورة غير موجود في المحاسبة.');
+                    }
+
+                    return null;
+                }
+            } elseif ((int) ($response['status'] ?? 0) === 404) {
+                self::rememberEnsureFailure(
+                    true,
+                    'ملف الصورة غير موجود في المحاسبة. أعد رفع الصورة لهذه المادة.'
+                );
+                if ($onProgress !== null) {
+                    $onProgress('سجل الصورة غير موجود في المحاسبة.');
+                }
+
+                return null;
             } elseif ($onProgress !== null) {
                 $status = (int) ($response['status'] ?? 0);
                 $onProgress('بيانات الصورة من الأمين فشلت (HTTP ' . $status . ') — المتابعة باسم افتراضي.');
@@ -1874,10 +1900,21 @@ final class MaterialImageStorageService
 
         if (!($download['ok'] ?? false) || !is_file($tmpPath) || filesize($tmpPath) === 0) {
             @unlink($tmpPath);
+            $status = (int) ($download['status'] ?? 0);
+            $missingInAccounting = $status === 404;
+            self::rememberEnsureFailure(
+                $missingInAccounting,
+                $missingInAccounting
+                    ? 'ملف الصورة غير موجود في المحاسبة. أعد رفع الصورة لهذه المادة.'
+                    : 'تعذر سحب الملف من الأمين.'
+            );
             if ($onProgress !== null) {
                 $detail = trim((string) ($download['error'] ?? ''));
-                $status = (int) ($download['status'] ?? 0);
-                $onProgress('التنزيل فشل' . ($status > 0 ? (' HTTP ' . $status) : '') . ($detail !== '' ? (': ' . $detail) : '.'));
+                $onProgress(
+                    $missingInAccounting
+                        ? 'ملف الصورة غير موجود في المحاسبة.'
+                        : ('التنزيل فشل' . ($status > 0 ? (' HTTP ' . $status) : '') . ($detail !== '' ? (': ' . $detail) : '.'))
+                );
             }
 
             return null;
@@ -2037,6 +2074,14 @@ final class MaterialImageStorageService
         return is_readable($targetPath) ? $targetPath : null;
     }
 
+    private static function rememberEnsureFailure(bool $unavailable, string $message): void
+    {
+        self::$lastEnsureFailure = [
+            'unavailable' => $unavailable,
+            'message' => $message,
+        ];
+    }
+
     /**
      * Fast pull: build local GUID index once, page Amine for missing GUIDs, then download
      * each missing image once — no per-row disk resolve and no restart-from-page-1 loop.
@@ -2067,6 +2112,7 @@ final class MaterialImageStorageService
                 'failed' => 0,
                 'skipped_already_local' => 0,
                 'items' => [],
+                'scan_complete' => false,
             ];
         }
 
@@ -2080,6 +2126,7 @@ final class MaterialImageStorageService
         $items = [];
         $pulled = 0;
         $failed = 0;
+        $unavailableCount = 0;
         $skipped = 0;
         $index = 0;
         foreach ($targets as $target) {
@@ -2122,6 +2169,11 @@ final class MaterialImageStorageService
             $verified = $path !== null && is_readable($path)
                 ? self::resolvePathForGuid($imageGuid, false, true)
                 : null;
+            $ensureFailure = self::$lastEnsureFailure;
+            $unavailable = is_array($ensureFailure) && !empty($ensureFailure['unavailable']);
+            $failureMessage = is_array($ensureFailure)
+                ? (string) ($ensureFailure['message'] ?? '')
+                : '';
             if ($verified !== null && is_readable($verified)) {
                 $pulled++;
                 $items[] = [
@@ -2129,7 +2181,23 @@ final class MaterialImageStorageService
                     'material_code' => $code,
                     'image_guid' => $imageGuid,
                     'ok' => true,
+                    'unavailable' => false,
                     'message' => 'تم سحب النسخة إلى الموقع.',
+                ];
+            } elseif ($unavailable) {
+                $unavailableCount++;
+                if ($onProgress !== null) {
+                    $onProgress('    ' . ($failureMessage !== '' ? $failureMessage : 'ملف الصورة غير موجود في المحاسبة.'));
+                }
+                $items[] = [
+                    'material_guid' => $materialGuid,
+                    'material_code' => $code,
+                    'image_guid' => $imageGuid,
+                    'ok' => false,
+                    'unavailable' => true,
+                    'message' => $failureMessage !== ''
+                        ? $failureMessage
+                        : 'ملف الصورة غير موجود في المحاسبة. أعد رفع الصورة لهذه المادة.',
                 ];
             } else {
                 $failed++;
@@ -2141,9 +2209,12 @@ final class MaterialImageStorageService
                     'material_code' => $code,
                     'image_guid' => $imageGuid,
                     'ok' => false,
-                    'message' => $path === null
-                        ? 'تعذر سحب الملف من الأمين.'
-                        : 'تعذر تثبيت نسخة محلية باسم GUID.',
+                    'unavailable' => false,
+                    'message' => $failureMessage !== ''
+                        ? $failureMessage
+                        : ($path === null
+                            ? 'تعذر سحب الملف من الأمين.'
+                            : 'تعذر تثبيت نسخة محلية باسم GUID.'),
                 ];
             }
         }
@@ -2156,13 +2227,16 @@ final class MaterialImageStorageService
                 ? 'لا توجد مواد بصورة أمين ناقصة على الموقع.'
                 : ('سُحبت ' . $pulled . ' صورة.'
                     . ($skipped > 0 ? (' تخطّي ' . $skipped . ' موجودة.') : '')
+                    . ($unavailableCount > 0 ? (' ملف غير موجود في المحاسبة: ' . $unavailableCount . '.') : '')
                     . ($failed > 0 ? (' فشل ' . $failed . '.') : '')),
             'missing_found' => $missingFound,
             'scanned' => $scanned,
             'pulled' => $pulled,
             'failed' => $failed,
+            'unavailable' => $unavailableCount,
             'skipped_already_local' => $skipped,
             'items' => $items,
+            'scan_complete' => (bool) ($listed['scan_complete'] ?? false),
         ];
     }
 
@@ -2176,7 +2250,8 @@ final class MaterialImageStorageService
      *   message: string,
      *   items: list<array{image_guid: string, material_guid: string, material_code: string}>,
      *   amine_with_image: int,
-     *   local_guid_index_size: int
+     *   local_guid_index_size: int,
+     *   scan_complete: bool
      * }
      */
     public static function listMissingLocalImageTargets(int $limit = 500, ?callable $onProgress = null): array
@@ -2197,6 +2272,7 @@ final class MaterialImageStorageService
         $apiPage = 1;
         $apiPageSize = 200;
         $hasMoreApi = true;
+        $scanComplete = false;
 
         while ($hasMoreApi && count($missingByGuid) < $limit && $apiPage <= 500) {
             try {
@@ -2212,6 +2288,7 @@ final class MaterialImageStorageService
                     'items' => [],
                     'amine_with_image' => $amineWithImage,
                     'local_guid_index_size' => $indexSize,
+                    'scan_complete' => false,
                 ];
             }
 
@@ -2222,6 +2299,7 @@ final class MaterialImageStorageService
                     'items' => [],
                     'amine_with_image' => $amineWithImage,
                     'local_guid_index_size' => $indexSize,
+                    'scan_complete' => false,
                 ];
             }
 
@@ -2230,6 +2308,7 @@ final class MaterialImageStorageService
             $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
             $hasMoreApi = ($apiPage * $apiPageSize) < $totalCount;
 
+            $reachedLimit = false;
             foreach ($rows as $row) {
                 if (!is_array($row)) {
                     continue;
@@ -2248,6 +2327,7 @@ final class MaterialImageStorageService
                     'material_code' => trim((string) ($row['materialCode'] ?? $row['MaterialCode'] ?? '')),
                 ];
                 if (count($missingByGuid) >= $limit) {
+                    $reachedLimit = true;
                     break;
                 }
             }
@@ -2256,10 +2336,17 @@ final class MaterialImageStorageService
                 $onProgress('صفحة أمين ' . $apiPage . ': ناقص مجمّع ' . count($missingByGuid) . ' / ب صورة ' . $amineWithImage);
             }
 
-            if ($rows === []) {
+            if ($rows === [] || !$hasMoreApi) {
+                $scanComplete = true;
+                break;
+            }
+            if ($reachedLimit) {
                 break;
             }
             $apiPage++;
+        }
+        if (!$hasMoreApi) {
+            $scanComplete = true;
         }
 
         return [
@@ -2268,6 +2355,7 @@ final class MaterialImageStorageService
             'items' => array_values($missingByGuid),
             'amine_with_image' => $amineWithImage,
             'local_guid_index_size' => $indexSize,
+            'scan_complete' => $scanComplete,
         ];
     }
 

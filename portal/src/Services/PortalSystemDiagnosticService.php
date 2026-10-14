@@ -386,8 +386,13 @@ final class PortalSystemDiagnosticService
                 $detail .= ' (فشل)';
             }
             $ts = strtotime($lastRun) ?: 0;
-            if ($enabled && $ts > 0 && time() - $ts > 900) {
-                $recommendations[] = 'worker الصور لم يُشغَّل منذ أكثر من 15 دقيقة — تأكد من cron/Task Scheduler على السيرفر.';
+            if ($enabled && $ts > 0 && time() - $ts > 900 && !MaterialImageBackgroundWorkerService::isTickRunning()) {
+                $recommendations[] = 'معالجة الصور التلقائية لم تعمل منذ أكثر من 15 دقيقة.';
+            }
+            $missingLocal = isset($status['missing_local_count']) ? (int) $status['missing_local_count'] : 0;
+            if ($missingLocal > 0) {
+                $detail .= ' · غير جاهزة للعرض: ' . $missingLocal;
+                $recommendations[] = 'هناك صور مواد غير جاهزة للعرض. إذا بقيت الرسالة، شغّل سحب الصور الناقصة من السيرفر.';
             }
         } else {
             $recommendations[] = 'لم يُسجَّل تشغيل للـ worker — تأكد من جدولة scripts/run-material-image-sync-worker.php.';
@@ -559,7 +564,7 @@ final class PortalSystemDiagnosticService
         curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        curl_close($ch);
+        unset($ch);
         $ms = (int) round((microtime(true) - $t0) * 1000);
 
         return [

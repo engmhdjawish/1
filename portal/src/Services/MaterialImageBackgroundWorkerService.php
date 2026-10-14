@@ -53,12 +53,78 @@ final class MaterialImageBackgroundWorkerService
         return max(60, min(86400, $n > 0 ? $n : 900));
     }
 
-    /** Minimum seconds between missing-local repair passes. */
+    /** Minimum seconds between missing-local repair passes when none are known missing. */
     public static function repairCooldownSeconds(): int
     {
         $n = (int) (Config::get('PORTAL_MATERIAL_IMAGE_WORKER_REPAIR_COOLDOWN', '1800') ?? '1800');
 
         return max(300, min(86400, $n > 0 ? $n : 1800));
+    }
+
+    /**
+     * Retry delay while the dashboard still shows images that are not ready.
+     * Much shorter than the idle discovery cooldown so a failed pull is not silent for half an hour.
+     */
+    public static function repairRetrySeconds(): int
+    {
+        $n = (int) (Config::get('PORTAL_MATERIAL_IMAGE_WORKER_REPAIR_RETRY', '90') ?? '90');
+
+        return max(60, min(900, $n > 0 ? $n : 90));
+    }
+
+    /** Full-queue path reindex is expensive; once the paths are stable it does not need to run every minute. */
+    public static function reindexCooldownSeconds(): int
+    {
+        $n = (int) (Config::get('PORTAL_MATERIAL_IMAGE_WORKER_REINDEX_COOLDOWN', '21600') ?? '21600');
+
+        return max(300, min(604800, $n > 0 ? $n : 21600));
+    }
+
+    public static function workerStaleAfterSeconds(): int
+    {
+        return 180;
+    }
+
+    /** True while a worker tick holds the run lock (including a long repair). */
+    public static function isTickRunning(): bool
+    {
+        $path = self::workerDir() . DIRECTORY_SEPARATOR . 'worker.lock';
+        $handle = @fopen($path, 'c+');
+        if ($handle === false) {
+            return false;
+        }
+        $running = !flock($handle, LOCK_EX | LOCK_NB);
+        if (!$running) {
+            flock($handle, LOCK_UN);
+        }
+        fclose($handle);
+
+        return $running;
+    }
+
+    /**
+     * @param array<string, mixed> $status
+     */
+    public static function shouldRepairNow(array $status, ?int $now = null): bool
+    {
+        $now = $now ?? time();
+        $knownMissing = self::knownMissingCount($status);
+        $lastRepair = strtotime((string) ($status['last_repair_at'] ?? '')) ?: 0;
+        $cooldown = ($knownMissing === null || $knownMissing > 0)
+            ? self::repairRetrySeconds()
+            : self::repairCooldownSeconds();
+
+        return ($now - $lastRepair) >= $cooldown;
+    }
+
+    /** @param array<string, mixed> $status */
+    private static function knownMissingCount(array $status): ?int
+    {
+        if (!array_key_exists('missing_local_count', $status) || $status['missing_local_count'] === null) {
+            return null;
+        }
+
+        return max(0, (int) $status['missing_local_count']);
     }
 
     public static function workerDir(): string
@@ -123,6 +189,10 @@ final class MaterialImageBackgroundWorkerService
             'last_repair_at' => null,
             'last_repair_pulled' => 0,
             'last_repair_failed' => 0,
+            'recent_repair_failures' => [],
+            'unavailable_images' => [],
+            'last_reindex_at' => null,
+            'missing_local_count' => null,
             'last_sync_attempts' => 0,
             'last_sync_successes' => 0,
             'last_offline' => false,
@@ -138,6 +208,34 @@ final class MaterialImageBackgroundWorkerService
      * @return array<string, mixed>
      */
     public static function runTick(?callable $onLog = null): array
+    {
+        $lockPath = self::workerDir() . DIRECTORY_SEPARATOR . 'worker.lock';
+        $lockHandle = @fopen($lockPath, 'c+');
+        if ($lockHandle !== false && !flock($lockHandle, LOCK_EX | LOCK_NB)) {
+            fclose($lockHandle);
+
+            return [
+                'ok' => true,
+                'skipped' => true,
+                'message' => 'دورة سابقة ما زالت تعمل.',
+            ];
+        }
+
+        try {
+            return self::executeTick($onLog);
+        } finally {
+            if (is_resource($lockHandle)) {
+                flock($lockHandle, LOCK_UN);
+                fclose($lockHandle);
+            }
+        }
+    }
+
+    /**
+     * @param null|callable(string):void $onLog
+     * @return array<string, mixed>
+     */
+    private static function executeTick(?callable $onLog = null): array
     {
         $log = static function (string $message) use ($onLog): void {
             self::appendLog($message);
@@ -222,38 +320,90 @@ final class MaterialImageBackgroundWorkerService
                 }
             }
 
-            try {
-                $reindex = MaterialImageSyncService::reindexLocalPaths();
-                if (($reindex['updated'] ?? 0) > 0) {
-                    $log('reindex: ' . (string) ($reindex['message'] ?? ''));
-                }
-            } catch (Throwable $exception) {
-                $log('reindex error: ' . $exception->getMessage());
-            }
+            $statusBefore = self::readStatus();
+            $knownMissing = self::knownMissingCount($statusBefore);
 
             $repairPulled = 0;
             $repairFailed = 0;
+            $repairRan = false;
+            $inferMissingZero = false;
+            $recentRepairFailures = is_array($statusBefore['recent_repair_failures'] ?? null)
+                ? $statusBefore['recent_repair_failures']
+                : [];
+            $unavailableImages = self::normalizeUnavailableImages($statusBefore);
             $repairLimit = self::repairMissingBatchSize();
-            if ($apiOk && $repairLimit > 0) {
-                $status = self::readStatus();
-                $lastRepair = strtotime((string) ($status['last_repair_at'] ?? '')) ?: 0;
-                if (time() - $lastRepair >= self::repairCooldownSeconds()) {
-                    $pull = MaterialImageStorageService::pullAllMissingLocals(
-                        $repairLimit,
-                        static function (string $message) use ($log): void {
-                            $log('repair: ' . $message);
-                        }
-                    );
-                    $repairPulled = (int) ($pull['pulled'] ?? 0);
-                    $repairFailed = (int) ($pull['failed'] ?? 0);
-                    if ($repairPulled > 0 || $repairFailed > 0) {
-                        $messages[] = (string) ($pull['message'] ?? 'إصلاح نسخ محلية.');
+            if ($apiOk && $repairLimit > 0 && self::shouldRepairNow($statusBefore)) {
+                $repairRan = true;
+                $log('بدء جلب الصور غير الجاهزة للعرض…');
+                $pull = MaterialImageStorageService::pullAllMissingLocals(
+                    $repairLimit,
+                    static function (string $message) use ($log): void {
+                        $log('repair: ' . $message);
                     }
-                    self::writeStatus([
-                        'last_repair_at' => date('c'),
-                        'last_repair_pulled' => $repairPulled,
-                        'last_repair_failed' => $repairFailed,
-                    ]);
+                );
+                $repairPulled = (int) ($pull['pulled'] ?? 0);
+                $missingFound = (int) ($pull['missing_found'] ?? 0);
+                $scanComplete = (bool) ($pull['scan_complete'] ?? false);
+                $messages[] = (string) ($pull['message'] ?? 'إصلاح نسخ محلية.');
+                $recentRepairFailures = [];
+                $seenUnavailable = [];
+                $catalogComplete = $scanComplete || $missingFound < $repairLimit;
+                foreach (is_array($pull['items'] ?? null) ? $pull['items'] : [] as $item) {
+                    if (!is_array($item)) {
+                        continue;
+                    }
+                    $guid = strtolower(trim((string) ($item['image_guid'] ?? '')));
+                    if (($item['ok'] ?? false) && $guid !== '') {
+                        unset($unavailableImages[$guid]);
+                        continue;
+                    }
+                    if (!empty($item['unavailable']) && $guid !== '') {
+                        $seenUnavailable[$guid] = [
+                            'image_guid' => $guid,
+                            'material_code' => trim((string) ($item['material_code'] ?? '')),
+                            'message' => (string) ($item['message'] ?? 'ملف الصورة غير موجود في المحاسبة. أعد رفع الصورة لهذه المادة.'),
+                        ];
+                        continue;
+                    }
+                    $repairFailed++;
+                    if (count($recentRepairFailures) < 8) {
+                        $recentRepairFailures[] = [
+                            'material_code' => (string) ($item['material_code'] ?? ''),
+                            'message' => (string) ($item['message'] ?? 'تعذر الجلب من المحاسبة.'),
+                        ];
+                    }
+                }
+                if ($catalogComplete) {
+                    $unavailableImages = $seenUnavailable;
+                    if ($repairFailed === 0) {
+                        $inferMissingZero = true;
+                    }
+                } else {
+                    foreach ($seenUnavailable as $guid => $row) {
+                        $unavailableImages[$guid] = $row;
+                    }
+                }
+                self::writeStatus([
+                    'last_repair_at' => date('c'),
+                    'last_repair_pulled' => $repairPulled,
+                    'last_repair_failed' => $repairFailed,
+                    'recent_repair_failures' => $recentRepairFailures,
+                    'unavailable_images' => array_values($unavailableImages),
+                ]);
+            } elseif ($knownMissing !== null && $knownMissing > 0) {
+                $messages[] = 'الصور غير الجاهزة بانتظار الدورة التالية من المعالجة.';
+            }
+
+            $lastReindex = strtotime((string) ($statusBefore['last_reindex_at'] ?? '')) ?: 0;
+            if (time() - $lastReindex >= self::reindexCooldownSeconds()) {
+                try {
+                    $reindex = MaterialImageSyncService::reindexLocalPaths();
+                    if (($reindex['updated'] ?? 0) > 0) {
+                        $log('reindex: ' . (string) ($reindex['message'] ?? ''));
+                    }
+                    self::writeStatus(['last_reindex_at' => date('c')]);
+                } catch (Throwable $exception) {
+                    $log('reindex error: ' . $exception->getMessage());
                 }
             }
 
@@ -271,16 +421,26 @@ final class MaterialImageBackgroundWorkerService
             }
 
             $finalStats = MaterialImageSyncService::stats();
-            $missingCount = null;
-            if ($apiOk) {
+            $missingCount = $knownMissing;
+            if ($inferMissingZero) {
+                $missingCount = 0;
+                $recentRepairFailures = [];
+            } elseif ($apiOk && ($repairRan || $knownMissing === null)) {
                 try {
                     $count = MaterialImageStorageService::countMissingLocals();
                     if ($count['ok'] ?? false) {
                         $missingCount = (int) ($count['missing'] ?? 0);
+                        if ($missingCount === 0) {
+                            $recentRepairFailures = [];
+                        }
                     }
                 } catch (Throwable) {
-                    $missingCount = null;
+                    // Keep the previous count so the dashboard does not forget images that are still missing.
                 }
+            }
+            if ($repairFailed === 0 && $unavailableImages !== [] && $missingCount !== null && $missingCount <= count($unavailableImages)) {
+                $missingCount = 0;
+                $recentRepairFailures = [];
             }
 
             $summary = $messages !== []
@@ -312,6 +472,7 @@ final class MaterialImageBackgroundWorkerService
                 'last_sync_successes' => $syncSuccesses,
                 'last_offline' => $offline,
                 'recent_failures' => $recentFailures,
+                'recent_repair_failures' => $recentRepairFailures,
                 'missing_local_count' => $missingCount,
             ]);
 
@@ -367,10 +528,12 @@ final class MaterialImageBackgroundWorkerService
                 ? 'صورة واحدة بانتظار الإرسال للمحاسبة.'
                 : ('هناك ' . $pending . ' صور بانتظار الإرسال للمحاسبة.');
         }
+        $unavailable = self::normalizeUnavailableImages($workerStatus);
+        if ($unavailable !== [] && ($missingLocal === null || $missingLocal === 0)) {
+            return self::unavailableSummary($unavailable);
+        }
         if ($missingLocal !== null && $missingLocal > 0) {
-            return $missingLocal === 1
-                ? 'صورة واحدة غير جاهزة للعرض في المتجر — جاري المعالجة تلقائياً.'
-                : ('هناك ' . $missingLocal . ' صور غير جاهزة للعرض — جاري المعالجة تلقائياً.');
+            return self::missingLocalSummary($missingLocal, $workerStatus);
         }
 
         $lastRun = trim((string) ($workerStatus['last_run_at'] ?? ''));
@@ -380,9 +543,37 @@ final class MaterialImageBackgroundWorkerService
             : 'المزامنة التلقائية تعمل.';
     }
 
-    /** @param array{pending: int, syncing: int, synced: int, failed: int, total: int} $sync */
-    public static function dashboardNeedsAttention(array $sync, bool $apiOk, ?int $missingLocal = null): bool
+    /** @param array<string, mixed> $workerStatus */
+    private static function missingLocalSummary(int $missingLocal, array $workerStatus): string
     {
+        $lastRun = strtotime((string) ($workerStatus['last_run_at'] ?? '')) ?: 0;
+        if ($lastRun > 0 && (time() - $lastRun) > self::workerStaleAfterSeconds() && !self::isTickRunning()) {
+            return $missingLocal === 1
+                ? 'صورة واحدة غير جاهزة للعرض، والمعالجة التلقائية متوقفة حالياً.'
+                : ('هناك ' . $missingLocal . ' صور غير جاهزة للعرض، والمعالجة التلقائية متوقفة حالياً.');
+        }
+
+        $repairFailed = (int) ($workerStatus['last_repair_failed'] ?? 0);
+        $repairPulled = (int) ($workerStatus['last_repair_pulled'] ?? 0);
+        $lastRepair = trim((string) ($workerStatus['last_repair_at'] ?? ''));
+        if ($lastRepair !== '' && $repairFailed > 0 && $repairPulled === 0) {
+            return $missingLocal === 1
+                ? 'تعذر جلب صورة واحدة من المحاسبة — ستُعاد المحاولة تلقائياً.'
+                : ('تعذر جلب ' . $missingLocal . ' صور من المحاسبة — ستُعاد المحاولة تلقائياً.');
+        }
+
+        return $missingLocal === 1
+            ? 'صورة واحدة غير جاهزة للعرض في المتجر — جاري المعالجة تلقائياً.'
+            : ('هناك ' . $missingLocal . ' صور غير جاهزة للعرض — جاري المعالجة تلقائياً.');
+    }
+
+    /** @param array{pending: int, syncing: int, synced: int, failed: int, total: int} $sync */
+    public static function dashboardNeedsAttention(
+        array $sync,
+        bool $apiOk,
+        ?int $missingLocal = null,
+        int $unavailableCount = 0
+    ): bool {
         if (!$apiOk) {
             return true;
         }
@@ -392,8 +583,62 @@ final class MaterialImageBackgroundWorkerService
         if ((int) ($sync['pending'] ?? 0) > 0) {
             return true;
         }
+        if ($unavailableCount > 0) {
+            return true;
+        }
 
         return $missingLocal !== null && $missingLocal > 0;
+    }
+
+    /**
+     * @param array<string, mixed> $status
+     * @return array<string, array{image_guid: string, material_code: string, message: string}>
+     */
+    private static function normalizeUnavailableImages(array $status): array
+    {
+        $rows = $status['unavailable_images'] ?? [];
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $guid = strtolower(trim((string) ($row['image_guid'] ?? '')));
+            if ($guid === '') {
+                continue;
+            }
+            $normalized[$guid] = [
+                'image_guid' => $guid,
+                'material_code' => trim((string) ($row['material_code'] ?? '')),
+                'message' => (string) ($row['message'] ?? 'ملف الصورة غير موجود في المحاسبة. أعد رفع الصورة لهذه المادة.'),
+            ];
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @param array<string, array{image_guid: string, material_code: string, message: string}> $images
+     */
+    private static function unavailableSummary(array $images): string
+    {
+        $codes = [];
+        foreach ($images as $image) {
+            $code = trim((string) ($image['material_code'] ?? ''));
+            if ($code !== '') {
+                $codes[] = $code;
+            }
+        }
+        $listed = $codes !== [] ? (' (' . implode('، ', array_slice($codes, 0, 8)) . ')') : '';
+        $count = count($images);
+        if ($count === 1) {
+            return 'مادة واحدة صورتها مسجّلة في المحاسبة والملف غير موجود' . $listed . '. أعد رفع الصورة لهذه المادة.';
+        }
+
+        return 'هناك ' . $count . ' مواد صورتها مسجّلة في المحاسبة والملف غير موجود' . $listed . '. أعد رفع الصورة لهذه المواد.';
     }
 
     /** @return array<string, mixed> */
@@ -404,6 +649,7 @@ final class MaterialImageBackgroundWorkerService
         $health = PortalSettingsService::apiHealth();
         $apiOk = (bool) ($health['ok'] ?? false);
         $missingLocal = isset($status['missing_local_count']) ? (int) $status['missing_local_count'] : null;
+        $unavailableCount = count(self::normalizeUnavailableImages($status));
 
         return [
             'worker_enabled' => self::isEnabled(),
@@ -414,7 +660,7 @@ final class MaterialImageBackgroundWorkerService
                 'message' => (string) ($health['message'] ?? ''),
             ],
             'user_summary' => self::userFacingSummary($status, $sync, $apiOk, self::isEnabled(), $missingLocal),
-            'needs_attention' => self::dashboardNeedsAttention($sync, $apiOk, $missingLocal),
+            'needs_attention' => self::dashboardNeedsAttention($sync, $apiOk, $missingLocal, $unavailableCount),
         ];
     }
 

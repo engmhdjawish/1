@@ -17,12 +17,13 @@ if (function_exists('proc_nice')) {
     @proc_nice(10);
 }
 
+@set_time_limit(0);
+
 require $base . '/bootstrap.php';
 
 use Portal\Services\MaterialImageBackgroundWorkerService;
 
 $log = static function (string $message): void {
-    MaterialImageBackgroundWorkerService::appendLog($message);
     echo $message . PHP_EOL;
 };
 

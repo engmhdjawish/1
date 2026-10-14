@@ -18,16 +18,19 @@
       .replace(/>/g, '&gt;');
   }
 
-  function renderFailures(items) {
+  function renderFailures(items, repairItems, unavailableItems) {
     if (!failuresEl) return;
     const list = Array.isArray(items) ? items : [];
-    if (list.length === 0) {
+    const repairs = Array.isArray(repairItems) ? repairItems : [];
+    const unavailable = Array.isArray(unavailableItems) ? unavailableItems : [];
+    const detailRows = repairs.concat(unavailable);
+    if (list.length === 0 && detailRows.length === 0) {
       failuresEl.classList.add('hidden');
       failuresEl.innerHTML = '';
       return;
     }
     failuresEl.classList.remove('hidden');
-    failuresEl.innerHTML = list
+    const syncHtml = list
       .map((row) => {
         const name = escapeHtml(row.file_name || 'صورة');
         const err = row.amine_sync_error_ar
@@ -36,6 +39,42 @@
         return `<li class="text-xs">${name}${err}</li>`;
       })
       .join('');
+    const repairHtml = detailRows
+      .map((row) => {
+        const code = escapeHtml(row.material_code || 'صورة');
+        const err = row.message ? ` — ${escapeHtml(row.message)}` : '';
+        return `<li class="text-xs" dir="rtl">${code}${err}</li>`;
+      })
+      .join('');
+    failuresEl.innerHTML = syncHtml + repairHtml;
+  }
+
+  function applyQueuePill(data) {
+    const pill = document.getElementById('queueHealthPill');
+    if (!pill) return;
+    const failed = Number(data.sync?.failed ?? 0);
+    const pending = Number(data.sync?.pending ?? 0);
+    const missing = Number(data.worker?.missing_local_count ?? 0);
+    const unavailable = Array.isArray(data.worker?.unavailable_images) ? data.worker.unavailable_images.length : 0;
+    if (missing > 0) {
+      pill.classList.remove('hidden', 'border-green-200', 'bg-green-50', 'text-green-800');
+      pill.classList.add('border-amber-200', 'bg-amber-50', 'text-amber-900');
+      pill.textContent = 'غير جاهزة للعرض (' + missing + ')';
+      return;
+    }
+    if (unavailable > 0) {
+      pill.classList.remove('hidden', 'border-green-200', 'bg-green-50', 'text-green-800');
+      pill.classList.add('border-amber-200', 'bg-amber-50', 'text-amber-900');
+      pill.textContent = 'الملف غير موجود (' + unavailable + ')';
+      return;
+    }
+    if (failed > 0 || pending > 0) {
+      pill.classList.add('hidden');
+      return;
+    }
+    pill.classList.remove('hidden', 'border-amber-200', 'bg-amber-50', 'text-amber-900');
+    pill.classList.add('border-green-200', 'bg-green-50', 'text-green-800');
+    pill.textContent = 'الطابور نظيف';
   }
 
   function applyPayload(data) {
@@ -48,7 +87,12 @@
       summaryEl.textContent = data.user_summary;
     }
 
-    renderFailures(data.worker?.recent_failures || []);
+    renderFailures(
+      data.worker?.recent_failures || [],
+      data.worker?.recent_repair_failures || [],
+      data.worker?.unavailable_images || []
+    );
+    applyQueuePill(data);
 
     const failedEl = document.getElementById('statFailedCount');
     const pendingEl = document.getElementById('statPendingCount');
