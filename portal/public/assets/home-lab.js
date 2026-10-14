@@ -79,8 +79,24 @@
   };
 
   const initJumpState = () => {
-    const links = Array.from(document.querySelectorAll('.hl-jump .home-section-nav__link[href^="#"]'));
+    const links = Array.from(document.querySelectorAll('.hl-index a[href^="#"]'));
     if (links.length === 0) return;
+
+    links.forEach((link) => {
+      link.addEventListener('click', (event) => {
+        const target = document.querySelector(link.getAttribute('href') || '');
+        if (!(target instanceof HTMLElement)) return;
+        event.preventDefault();
+        const header = document.querySelector('.site-header');
+        const index = document.querySelector('.hl-index');
+        const offset = (header instanceof HTMLElement ? header.offsetHeight : 0)
+          + (index instanceof HTMLElement ? index.offsetHeight : 0)
+          + 12;
+        const top = target.getBoundingClientRect().top + window.scrollY - offset;
+        window.scrollTo({ top: Math.max(0, top), behavior: reducedMotion ? 'auto' : 'smooth' });
+        history.replaceState(null, '', link.getAttribute('href'));
+      });
+    });
 
     const setCurrent = (id) => {
       links.forEach((link) => {
