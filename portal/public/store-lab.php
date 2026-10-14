@@ -6,7 +6,6 @@ require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Auth\CustomerSession;
 use Portal\Services\AmineAvailabilityService;
-use Portal\Services\HomePageService;
 use Portal\Services\StoreCatalogService;
 
 require dirname(__DIR__) . '/views/helpers.php';
@@ -35,11 +34,11 @@ $emptyCatalog = [
     'client_filters_payload' => null,
 ];
 
-$stockQuery = $_GET;
-unset($stockQuery['isAvailable'], $stockQuery['soon']);
+$labQuery = $_GET;
+unset($labQuery['soon'], $labQuery['storeGuids'], $labQuery['minWarehouseQuantity'], $labQuery['maxWarehouseQuantity']);
 
 try {
-    $catalog = StoreCatalogService::catalogFromRequest($stockQuery);
+    $catalog = StoreCatalogService::labCatalogFromRequest($labQuery);
 } catch (Throwable $exception) {
     error_log('store-lab.php catalog: ' . $exception->getMessage());
     $catalog = $emptyCatalog;
@@ -48,30 +47,8 @@ try {
 if (!is_array($catalog)) {
     $catalog = $emptyCatalog;
 }
-$separated = StoreCatalogService::separateUnavailableProducts($catalog);
-$catalog = $separated['catalog'];
-$strippedUnavailable = $separated['stripped'];
 
-try {
-    $comingSoon = StoreCatalogService::comingSoonFromRequest($_GET);
-} catch (Throwable $exception) {
-    error_log('store-lab.php coming soon: ' . $exception->getMessage());
-    $comingSoon = [
-        'products' => [],
-        'totalCount' => 0,
-        'page' => 1,
-        'pageSize' => 12,
-        'totalPages' => 1,
-        'apiError' => AmineAvailabilityService::userMessage(),
-    ];
-}
-if (($comingSoon['apiError'] ?? null) && $strippedUnavailable !== [] && ($comingSoon['products'] ?? []) === []) {
-    $comingSoon['products'] = $strippedUnavailable;
-    $comingSoon['totalCount'] = count($strippedUnavailable);
-    $comingSoon['page'] = 1;
-    $comingSoon['totalPages'] = 1;
-    $comingSoon['apiError'] = null;
-}
+unset($_GET['soon'], $_GET['storeGuids'], $_GET['minWarehouseQuantity'], $_GET['maxWarehouseQuantity']);
 
 $sectionContext = is_array($catalog['section_context'] ?? null) ? $catalog['section_context'] : null;
 try {
@@ -88,13 +65,6 @@ try {
     ];
 }
 
-try {
-    $discoverSections = HomePageService::mergedSectionShells();
-} catch (Throwable $exception) {
-    error_log('store-lab.php sections: ' . $exception->getMessage());
-    $discoverSections = [];
-}
-
 $isCustomer = false;
 try {
     $isCustomer = CustomerSession::check();
@@ -102,19 +72,17 @@ try {
     $isCustomer = false;
 }
 
-ob_start();
-require dirname(__DIR__) . '/views/store-lab.php';
-$content = ob_get_clean();
-$title = 'تجربة المتجر';
+$storeLabMode = true;
+$extraHead = '<link href="' . h(portal_asset_url('/css/store-filters.css')) . '" rel="stylesheet">'
+    . portal_stylesheet('/css/store-lab.css');
+$enableQuickView = true;
+$enableStoreCartJs = true;
 $metaRobots = 'noindex, nofollow';
 $canonicalUrl = portal_canonical_url('/store.php');
-$metaDescription = 'نسخة تجريبية للمتجر. المتجر المعتمد لم يتغيّر، والمواد غير المتوفرة تظهر هنا في قسم يتوفر قريباً.';
-$enableOnboarding = false;
-$extraHead = portal_stylesheet('/css/home-page.css')
-    . portal_stylesheet('/css/home-lab.css')
-    . portal_stylesheet('/css/store-lab.css');
-$extraFooter = portal_defer_script('/assets/home-lab.js');
-$enableQuickView = false;
-$enableStoreCartJs = false;
-$deferStoreCartJs = (bool) ($displayOptions['allow_cart'] ?? false);
+$metaDescription = 'تجربة المتجر';
+
+ob_start();
+require dirname(__DIR__) . '/views/store-catalog.php';
+$content = ob_get_clean();
+$title = 'تجربة المتجر';
 require dirname(__DIR__) . '/views/layout.php';

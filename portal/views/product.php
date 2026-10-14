@@ -189,8 +189,7 @@ $specs = array_filter([
 
       <?php if ($comingSoonProduct): ?>
         <div class="store-buybox__stock store-buybox__stock--out">
-          <span class="material-symbols-outlined text-base" aria-hidden="true">schedule</span>
-          يتوفر قريبا — هذه المادة تُباع لدينا وستعود عند توفر الكمية.
+          <span class="inline-flex px-2.5 py-1 rounded-full bg-orange-50 text-orange-800 text-xs font-extrabold border border-orange-200">يتوفر قريبا</span>
         </div>
       <?php elseif ($showQuantity): ?>
         <?php if ($packagesAvailable <= 0 && $allowCart): ?>

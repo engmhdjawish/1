@@ -49,8 +49,11 @@ $surface = HomeSearchService::applySurface([
     ['kind' => 'search', 'label' => 'ابحث', 'hint' => 'في كل المواد', 'href' => '/store.php?q=x'],
 ], 'lab');
 $surfaceOk = ($surface[0]['href'] ?? '') === '/store-lab.php?section=men'
+    && ($surface[0]['hint'] ?? null) === ''
     && ($surface[1]['href'] ?? '') === '/product.php?guid=1'
-    && ($surface[2]['href'] ?? '') === '/store-lab.php?q=x';
+    && ($surface[1]['hint'] ?? null) === ''
+    && ($surface[2]['href'] ?? '') === '/store-lab.php?q=x'
+    && ($surface[2]['hint'] ?? null) === '';
 $liveSurface = HomeSearchService::applySurface($surface, '');
 $liveSurfaceOk = ($liveSurface[1]['href'] ?? '') === '/product.php?guid=1';
 

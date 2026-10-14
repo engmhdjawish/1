@@ -363,6 +363,51 @@ final class StoreCatalogService
     }
 
     /**
+     * Keep a mixed trial-store page in its existing order.
+     * Null availability keeps every row. True drops coming-soon rows. False keeps only those.
+     *
+     * @param list<array<string, mixed>> $products
+     * @return list<array<string, mixed>>
+     */
+    public static function scopeLabGridProducts(array $products, ?bool $isAvailable): array
+    {
+        $kept = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $unavailable = self::materialIsUnavailable($product);
+            if ($isAvailable === true && $unavailable) {
+                continue;
+            }
+            if ($isAvailable === false && !$unavailable) {
+                continue;
+            }
+            $kept[] = $product;
+        }
+
+        return $kept;
+    }
+
+    /**
+     * Trial catalog: same request, sort, and paging as the live store, including
+     * unavailable materials in that order. Live catalogFromRequest is unchanged.
+     *
+     * @param array<string, mixed> $query
+     * @return array<string, mixed>
+     */
+    public static function labCatalogFromRequest(array $query): array
+    {
+        unset($query['soon'], $query['storeGuids'], $query['minWarehouseQuantity'], $query['maxWarehouseQuantity']);
+        self::$labMixedCatalog = true;
+        try {
+            return self::catalogFromRequest($query);
+        } finally {
+            self::$labMixedCatalog = false;
+        }
+    }
+
+    /**
      * Unavailable materials for /store-lab.php.
      * Same policy, section, and request filters as the live store, with availability inverted
      * and without the sellable minimum quantity that hides zero-stock rows.
@@ -485,7 +530,7 @@ final class StoreCatalogService
         $forcedPolicyStoreGuids = self::parseList($policyRules['store_guids'] ?? []);
         if ($forcedPolicyStoreGuids !== []) {
             $mergedFilters['storeGuids'] = $forcedPolicyStoreGuids;
-            if (($mergedFilters['isAvailable'] ?? null) !== false) {
+            if (!self::labSkipsSellableStock($requestFilters['isAvailable'] ?? null) && ($mergedFilters['isAvailable'] ?? null) !== false) {
                 $mergedFilters['isAvailable'] = true;
             }
         }
@@ -503,16 +548,19 @@ final class StoreCatalogService
         $lockedClientFilters = self::lockedClientFilters($policyRules);
         $sellableMode = self::shouldApplySellableStockFilter();
         $sellableFilter = self::shouldFilterSellableStock();
-        if (($sellableMode || $sellableFilter) && $mergedFilters['minWarehouseQuantity'] === null) {
+        $labOpenStock = self::labSkipsSellableStock($requestFilters['isAvailable'] ?? null);
+        if (!$labOpenStock && ($sellableMode || $sellableFilter) && $mergedFilters['minWarehouseQuantity'] === null) {
             $mergedFilters['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
         }
+        $mergedFilters = self::applyLabStockWindow($mergedFilters, $requestFilters['isAvailable'] ?? null);
+        $isAvailable = $mergedFilters['isAvailable'];
 
         $debugInlineFilters = trim((string) ($query['facetFilters'] ?? '')) === '1';
         $deferClientFilters = $allowClientFilters && !$debugInlineFilters;
         $includeResultFilters = $allowClientFilters && $debugInlineFilters;
 
         try {
-            if ($sellableMode) {
+            if ($sellableMode && !$labOpenStock) {
                 $paged = self::fetchMaterialsWithSellablePaging(
                     $page,
                     $pageSize,
@@ -596,7 +644,7 @@ final class StoreCatalogService
                         is_array($rawItems) ? $rawItems : [],
                         $contextOfferSlug
                     );
-                    if ($sellableFilter) {
+                    if ($sellableFilter && !$labOpenStock) {
                         $products = StockReservationService::filterSellableProducts($products);
                     }
                     $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
@@ -789,10 +837,39 @@ final class StoreCatalogService
             $products[] = $material;
         }
 
-        $products = self::applySellableStockFilter($products);
+        $requestedAvailability = array_key_exists('isAvailable', $requestFilters) ? $requestFilters['isAvailable'] : null;
         $policy = self::activePolicy();
         $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
-        $products = self::scopeCatalogProductsForPolicy($products, $policyRules, true, $sectionContext, []);
+        if (self::labSkipsSellableStock(is_bool($requestedAvailability) ? $requestedAvailability : null)) {
+            $products = self::mergeLabUnavailableProducts(
+                $products,
+                $guids,
+                self::resolvedPolicyStoreGuids($sectionContext)
+            );
+        } else {
+            $products = self::applySellableStockFilter($products);
+        }
+        $products = self::scopeCatalogProductsForPolicy(
+            $products,
+            $policyRules,
+            self::$labMixedCatalog ? (is_bool($requestedAvailability) ? $requestedAvailability : null) : true,
+            $sectionContext,
+            []
+        );
+        if ($search !== '') {
+            $needle = strtolower($search);
+            $products = array_values(array_filter(
+                $products,
+                static function (array $product) use ($needle): bool {
+                    $hay = strtolower(
+                        trim((string) ($product['name'] ?? '')) . ' '
+                        . trim((string) ($product['materialCode'] ?? $product['code'] ?? ''))
+                    );
+
+                    return str_contains($hay, $needle);
+                }
+            ));
+        }
         $products = self::sortProducts($products, $sort);
         $totalCount = count($products);
         $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
@@ -870,10 +947,11 @@ final class StoreCatalogService
         $forcedStoreGuids = self::parseList($baseRules['store_guids'] ?? []);
         if ($forcedStoreGuids !== []) {
             $merged['storeGuids'] = $forcedStoreGuids;
-            if (($merged['isAvailable'] ?? null) !== false) {
+            if (!self::labSkipsSellableStock($requestFilters['isAvailable'] ?? null) && ($merged['isAvailable'] ?? null) !== false) {
                 $merged['isAvailable'] = true;
             }
         }
+        $merged = self::applyLabStockWindow($merged, $requestFilters['isAvailable'] ?? null);
 
         $rules = self::catalogFiltersToPolicyRules($merged);
         $sort = self::normalizeSort((string) ($requestFilters['sort'] ?? 'number:asc'));
@@ -888,12 +966,13 @@ final class StoreCatalogService
         $isAvailable = $merged['isAvailable'] ?? null;
         $sellableMode = self::shouldApplySellableStockFilter();
         $sellableFilter = self::shouldFilterSellableStock();
+        $labOpenStock = self::labSkipsSellableStock($requestFilters['isAvailable'] ?? null);
 
         try {
-            if ($sellableFilter && !isset($apiQuery['minWarehouseQuantity'])) {
+            if ($sellableFilter && !$labOpenStock && !isset($apiQuery['minWarehouseQuantity'])) {
                 $apiQuery['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
             }
-            if ($sellableMode) {
+            if ($sellableMode && !$labOpenStock) {
                 if (!isset($apiQuery['minWarehouseQuantity']) || $apiQuery['minWarehouseQuantity'] === null) {
                     $apiQuery['minWarehouseQuantity'] = self::sellableMinWarehouseQuantity();
                 }
@@ -923,7 +1002,7 @@ final class StoreCatalogService
                         is_array($rawItems) ? $rawItems : [],
                         $contextOfferSlug
                     );
-                    if ($sellableFilter) {
+                    if ($sellableFilter && !$labOpenStock) {
                         $products = StockReservationService::filterSellableProducts($products);
                     }
                     $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
@@ -1208,6 +1287,10 @@ final class StoreCatalogService
     {
         if ($storeGuids === [] || $products === []) {
             return $products;
+        }
+
+        if (self::$labMixedCatalog) {
+            return self::scopeLabGridProducts($products, $isAvailable);
         }
 
         $requireAvailable = $isAvailable !== false;
@@ -2722,6 +2805,64 @@ final class StoreCatalogService
         return array_values(array_unique($locked));
     }
 
+    private static bool $labMixedCatalog = false;
+
+    /**
+     * Trial pages include zero-stock rows unless the customer chose "متوفر".
+     */
+    private static function labSkipsSellableStock(?bool $requestedAvailability): bool
+    {
+        return self::$labMixedCatalog && $requestedAvailability !== true;
+    }
+
+    /**
+     * @param array<string, mixed> $merged
+     * @return array<string, mixed>
+     */
+    private static function applyLabStockWindow(array $merged, ?bool $requestedAvailability): array
+    {
+        if (!self::labSkipsSellableStock($requestedAvailability)) {
+            return $merged;
+        }
+        $merged['isAvailable'] = $requestedAvailability;
+        $merged['minWarehouseQuantity'] = null;
+
+        return $merged;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $products
+     * @param list<string> $guids
+     * @param list<string> $storeGuids
+     * @return list<array<string, mixed>>
+     */
+    private static function mergeLabUnavailableProducts(array $products, array $guids, array $storeGuids): array
+    {
+        $extra = self::fetchUnavailableMaterialsByGuids($guids, $storeGuids);
+        if ($extra === []) {
+            return $products;
+        }
+        $seen = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $guid = strtolower(trim((string) ($product['materialGuid'] ?? $product['MaterialGuid'] ?? $product['guid'] ?? $product['Guid'] ?? '')));
+            if ($guid !== '') {
+                $seen[$guid] = true;
+            }
+        }
+        foreach ($extra as $product) {
+            $guid = strtolower(trim((string) ($product['materialGuid'] ?? $product['MaterialGuid'] ?? $product['guid'] ?? $product['Guid'] ?? '')));
+            if ($guid !== '' && isset($seen[$guid])) {
+                continue;
+            }
+            $products[] = $product;
+        }
+
+        return $products;
+    }
+
     private static function shouldApplySellableStockFilter(): bool
     {
         return false;
@@ -2907,6 +3048,9 @@ final class StoreCatalogService
         unset($params['facetFilters'], $params['loadFilterOptions']);
         $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
         $params['_policyStoreGuids'] = self::parseList($policyRules['store_guids'] ?? []);
+        if (self::$labMixedCatalog) {
+            $params['_labMixed'] = '1';
+        }
         ksort($params);
 
         return 'store_catalog_v11:' . $readerKey . ':' . hash('sha256', json_encode($params, JSON_UNESCAPED_UNICODE));

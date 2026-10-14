@@ -79,6 +79,28 @@ $assert(
     catalog_material_has_sale_price(['unitSalePriceSyp' => 1500], 'none') === false
 );
 
+$mixed = StoreCatalogService::scopeLabGridProducts([
+    ['name' => 'أول', 'warehouseQuantity' => 3],
+    ['name' => 'ثان', 'warehouseQuantity' => 0],
+    ['name' => 'ثالث', 'warehouseQuantity' => 1, 'isAvailable' => false],
+], null);
+$assert(
+    'mixed grid keeps catalog order',
+    array_map(static fn (array $row): string => (string) $row['name'], $mixed) === ['أول', 'ثان', 'ثالث']
+);
+$onlySoon = StoreCatalogService::scopeLabGridProducts($mixed, false);
+$assert(
+    'availability filter can keep only coming soon rows',
+    count($onlySoon) === 2
+        && ($onlySoon[0]['name'] ?? '') === 'ثان'
+        && ($onlySoon[1]['name'] ?? '') === 'ثالث'
+);
+$onlyStock = StoreCatalogService::scopeLabGridProducts($mixed, true);
+$assert(
+    'availability filter can keep only stocked rows',
+    count($onlyStock) === 1 && ($onlyStock[0]['name'] ?? '') === 'أول'
+);
+
 $assert(
     'trial url keeps catalog filters',
     store_lab_url(['q' => 'حذاء', 'materialTypes' => ['رجالي']]) === '/store-lab.php?q=' . rawurlencode('حذاء') . '&materialTypes%5B0%5D=' . rawurlencode('رجالي')

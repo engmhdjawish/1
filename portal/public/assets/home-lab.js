@@ -142,7 +142,14 @@
       activeIndex = -1;
     };
 
+    const labSurface = form.getAttribute('data-hl-surface') === 'lab';
+
     const paintGuess = () => {
+      if (labSurface) {
+        if (ghost instanceof HTMLElement) ghost.hidden = true;
+        if (accept instanceof HTMLButtonElement) accept.hidden = true;
+        return;
+      }
       const value = input.value;
       const suffix = currentGuess && caretAtEnd() ? suffixFor(value, currentGuess) : '';
       if (ghost instanceof HTMLElement) {
@@ -181,10 +188,12 @@
         return;
       }
       panel.replaceChildren();
-      const head = document.createElement('div');
-      head.className = 'hl-suggest__head';
-      head.textContent = input.value.trim() ? 'توقعات من المتجر' : 'اكتشف الأقسام';
-      panel.append(head);
+      if (!labSurface) {
+        const head = document.createElement('div');
+        head.className = 'hl-suggest__head';
+        head.textContent = input.value.trim() ? 'توقعات من المتجر' : 'اكتشف الأقسام';
+        panel.append(head);
+      }
       suggestions.forEach((item, index) => {
         const link = document.createElement('a');
         link.className = `hl-suggest__item${item.kind === 'soon' ? ' hl-suggest__item--soon' : ''}${index === activeIndex ? ' is-active' : ''}`;
@@ -211,17 +220,20 @@
         } else {
           label.textContent = item.label || '';
         }
-        const hint = document.createElement('span');
-        hint.className = 'hl-suggest__hint';
-        hint.textContent = item.hint || '';
-        copy.append(label, hint);
+        copy.append(label);
+        if (!labSurface && item.hint) {
+          const hint = document.createElement('span');
+          hint.className = 'hl-suggest__hint';
+          hint.textContent = item.hint;
+          copy.append(hint);
+        }
         link.append(mark, copy);
-        if (item.kind === 'soon') {
+        if (item.kind === 'soon' || item.badge) {
           const soonBadge = document.createElement('span');
           soonBadge.className = 'hl-suggest__badge hl-suggest__badge--soon';
-          soonBadge.textContent = 'يتوفر قريبا';
+          soonBadge.textContent = item.badge || 'يتوفر قريبا';
           link.append(soonBadge);
-        } else if (currentGuess && normalize(item.label || '') === normalize(currentGuess)) {
+        } else if (!labSurface && currentGuess && normalize(item.label || '') === normalize(currentGuess)) {
           const badge = document.createElement('span');
           badge.className = 'hl-suggest__badge';
           badge.textContent = 'متوقع';

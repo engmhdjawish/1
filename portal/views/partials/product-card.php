@@ -16,6 +16,8 @@ use Portal\Services\StoreCartService;
 /** @var list<string>|null $quickViewGuids */
 
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
+$comingSoonCard = (bool) ($comingSoonCard ?? false);
+$omitBlankSalePrice = (bool) ($omitBlankSalePrice ?? false);
 $linkToDetail = (bool) ($linkToDetail ?? true);
 $useQuickView = (bool) ($useQuickView ?? true);
 $useImagePreview = (bool) ($useImagePreview ?? false);
@@ -61,6 +63,9 @@ $materialCode = trim((string) ($item['materialCode'] ?? $item['code'] ?? ''));
 $materialType = trim((string) ($item['materialType'] ?? ''));
 $manufacturer = trim((string) ($item['manufacturer'] ?? ''));
 $showAnyPrice = ($showPriceSyp || $showPriceUsd) && (bool) ($displayOptions['show_price'] ?? false);
+if ($omitBlankSalePrice && $showAnyPrice && !catalog_material_has_sale_price($item, (string) ($displayOptions['price_mode'] ?? 'both'))) {
+    $showAnyPrice = false;
+}
 $pricePolicyHidden = !(bool) ($displayOptions['show_price'] ?? false);
 $hasOffer = !empty($item['has_offer']);
 $offerBadge = trim((string) ($item['offer_badge'] ?? ''));
@@ -77,7 +82,7 @@ $previewJson = $previewPayload !== null
 ?>
 <?php $productAnchor = portal_product_anchor($guid); ?>
 <article
-  class="store-product-card<?= $hasOffer ? ' store-product-card--offer' : '' ?>"
+  class="store-product-card<?= $hasOffer ? ' store-product-card--offer' : '' ?><?= $comingSoonCard ? ' store-product-card--soon' : '' ?>"
   <?php if ($productAnchor !== ''): ?>id="<?= h($productAnchor) ?>"<?php endif; ?>
   <?php if ($useImagePreview && $guid !== ''): ?>
     data-store-preview-card
@@ -93,7 +98,9 @@ $previewJson = $previewPayload !== null
           <?= h($offerBadge !== '' ? $offerBadge : 'عرض') ?>
         </span>
       <?php endif; ?>
-      <?php if ($materialType !== ''): ?>
+      <?php if ($comingSoonCard): ?>
+        <span class="store-product-card__chip store-product-card__chip--soon">يتوفر قريبا</span>
+      <?php elseif ($materialType !== ''): ?>
         <span class="store-product-card__chip"><?= h($materialType) ?></span>
       <?php endif; ?>
       <?php if ($materialCode !== ''): ?>
@@ -128,7 +135,9 @@ $previewJson = $previewPayload !== null
             <?= h($offerBadge !== '' ? $offerBadge : 'عرض') ?>
           </span>
         <?php endif; ?>
-        <?php if ($materialType !== ''): ?>
+        <?php if ($comingSoonCard): ?>
+          <span class="store-product-card__chip store-product-card__chip--soon">يتوفر قريبا</span>
+        <?php elseif ($materialType !== ''): ?>
           <span class="store-product-card__chip"><?= h($materialType) ?></span>
         <?php endif; ?>
         <?php if ($materialCode !== ''): ?>

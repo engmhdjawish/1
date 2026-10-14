@@ -120,7 +120,7 @@ final class HomeSearchService
         }
         $surface = $surface === 'lab' ? 'lab' : '';
 
-        $cacheKey = 'home_search_v2_' . sha1($surface . '|' . self::normalize($query));
+        $cacheKey = 'home_search_v3_' . sha1($surface . '|' . self::normalize($query));
         $cached = ResponseCache::get($cacheKey);
         if (is_array($cached) && isset($cached['suggestions']) && is_array($cached['suggestions'])) {
             return $cached;
@@ -160,6 +160,7 @@ final class HomeSearchService
             if (str_starts_with($href, '/store.php')) {
                 $suggestion['href'] = '/store-lab.php' . substr($href, strlen('/store.php'));
             }
+            $suggestion['hint'] = '';
             $rewritten[] = $suggestion;
         }
 
@@ -361,6 +362,7 @@ final class HomeSearchService
                 'hint' => $code !== '' ? 'يتوفر قريبا · ' . $code : 'يتوفر قريبا',
                 'href' => $href,
                 'kind' => 'soon',
+                'badge' => 'يتوفر قريبا',
                 'trusted' => true,
             ];
         }
@@ -371,12 +373,18 @@ final class HomeSearchService
     /** @param array<string, mixed> $candidate */
     private static function publicCandidate(array $candidate, ?string $kind = null): array
     {
-        return [
+        $public = [
             'kind' => $kind ?? (string) ($candidate['kind'] ?? 'search'),
             'label' => trim((string) ($candidate['label'] ?? '')),
             'hint' => trim((string) ($candidate['hint'] ?? '')),
             'href' => trim((string) ($candidate['href'] ?? '/store.php')),
         ];
+        $badge = trim((string) ($candidate['badge'] ?? ''));
+        if ($badge !== '') {
+            $public['badge'] = $badge;
+        }
+
+        return $public;
     }
 
     private static function score(string $query, string $label): int
