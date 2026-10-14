@@ -47,6 +47,10 @@ mustContain('portal/src/Services/VisitorLogService.php', 'order_placed', 'order_
 mustContain('portal/src/Services/OrderService.php', 'visitor_session_id', 'order session linkage');
 mustContain('portal/public/assets/store-cart.js', 'jawish_vid', 'cart sends jawish_vid');
 mustContain('portal/views/dashboard/visitor-analytics.php', 'عرض على الخريطة', 'map button in UI');
+mustContain('portal/src/Support/StaffDevice.php', 'jawish_staff', 'staff device cookie');
+mustContain('portal/src/Services/PortalSessionService.php', 'noteStaffActor', 'customer login attributed to staff');
+mustContain('portal/views/dashboard/visitor-analytics.php', 'داخل حساب', 'staff row names the customer account once');
+mustContain('portal/src/Services/VisitorLogService.php', 'staffIdentity', 'visitor identity prefers staff');
 
 console.log('\n== Test scripts ==');
 mustExist('portal/scripts/test-visitor-log.php');

@@ -150,6 +150,7 @@ final class WebSession
             ->execute(['id' => $user['id']]);
 
         PortalSessionService::registerStaff((string) $user['id']);
+        \Portal\Support\StaffDevice::remember((string) $user['id']);
 
         return true;
     }

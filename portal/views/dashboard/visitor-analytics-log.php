@@ -31,6 +31,9 @@ $identityPill = static function (array $row): string {
     if ($kind === 'customer') {
         return 'is-customer';
     }
+    if ($kind === 'staff') {
+        return 'is-staff';
+    }
     if ($kind === 'guest_order') {
         return 'is-known-guest';
     }
@@ -41,6 +44,7 @@ $identityPill = static function (array $row): string {
 $kindLabel = static function (array $row): string {
     return match ((string) ($row['identity_kind'] ?? '')) {
         'customer' => 'عميل',
+        'staff' => 'موظف',
         'guest_order' => 'معروف',
         default => 'زائر',
     };
@@ -250,6 +254,9 @@ $visitorsTotalPages = max(1, (int) ceil($visitorsTotal / $visitorsPerPage));
             <h2><?= h((string) ($accountProfile['display_name'] ?? 'زائر')) ?></h2>
             <p class="visitor-log__profile-sub">
               <span class="visitor-log__pill <?= h($identityPill($accountProfile)) ?>"><?= h($kindLabel($accountProfile)) ?></span>
+              <?php if (trim((string) ($accountProfile['identity_subtitle'] ?? '')) !== ''): ?>
+                <span><?= h((string) $accountProfile['identity_subtitle']) ?></span>
+              <?php endif; ?>
               <?php if (trim((string) ($accountProfile['identity_phone'] ?? '')) !== ''): ?>
                 <span dir="ltr"><?= h((string) $accountProfile['identity_phone']) ?></span>
               <?php endif; ?>

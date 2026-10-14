@@ -32,6 +32,7 @@ if (is_string($raw) && $raw !== '') {
 try {
     PortalSessionService::touchCurrent();
     PortalPresenceService::touchFromRequest($visitorId);
+    PortalSessionService::noteStaffActor($visitorId);
     if (random_int(1, 50) === 1) {
         PortalPresenceService::pruneStale();
     }

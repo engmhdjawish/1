@@ -7,6 +7,7 @@ namespace Portal\Services;
 use Portal\Auth\CustomerSession;
 use Portal\Auth\WebSession;
 use Portal\Database;
+use Portal\Support\StaffDevice;
 use PDO;
 
 final class PortalPresenceService
@@ -46,6 +47,8 @@ final class PortalPresenceService
             if ($userId !== '') {
                 $label = trim((string) ($user['display_name_ar'] ?? $user['user_name'] ?? 'موظف'));
                 self::upsert('staff:' . $userId, 'staff', $userId, $label);
+                self::rememberDevice($visitorId, $userId, $label);
+                self::forgetGuest($visitorId);
 
                 return;
             }
@@ -55,6 +58,10 @@ final class PortalPresenceService
             $customer = CustomerSession::customer();
             $customerId = trim((string) ($customer['id'] ?? ''));
             if ($customerId !== '') {
+                self::forgetGuest($visitorId);
+                if (StaffDevice::current($visitorId) !== null) {
+                    return;
+                }
                 $label = trim((string) ($customer['name_ar'] ?? 'عميل'));
                 self::upsert('customer:' . $customerId, 'customer', $customerId, $label);
 
@@ -117,8 +124,144 @@ final class PortalPresenceService
 
         $days = max(1, min(90, $days));
         Database::pdo()->prepare(
-            'DELETE FROM portal_presence WHERE last_seen_at < NOW() - (:days || \' days\')::interval'
+            "DELETE FROM portal_presence
+             WHERE kind <> 'staff_device'
+               AND last_seen_at < NOW() - (:days || ' days')::interval"
         )->execute(['days' => (string) $days]);
+        Database::pdo()->prepare(
+            "DELETE FROM portal_presence
+             WHERE kind = 'staff_device'
+               AND last_seen_at < NOW() - INTERVAL '180 days'"
+        )->execute();
+    }
+
+    public static function rememberDevice(?string $visitorId, string $staffId, string $staffName): void
+    {
+        $visitorId = trim((string) $visitorId);
+        $staffId = trim($staffId);
+        if ($visitorId === '' || $staffId === '' || !self::isEnabled()) {
+            return;
+        }
+
+        self::upsert(self::deviceKey($visitorId), 'staff_device', $staffId, $staffName !== '' ? $staffName : 'موظف');
+    }
+
+    public static function staffIdForVisitor(string $visitorId): ?string
+    {
+        $visitorId = trim($visitorId);
+        if ($visitorId === '' || !self::isEnabled()) {
+            return null;
+        }
+
+        try {
+            $stmt = Database::pdo()->prepare(
+                "SELECT subject_id::text
+                 FROM portal_presence
+                 WHERE presence_key = :presence_key
+                   AND kind = 'staff_device'
+                   AND subject_id IS NOT NULL
+                   AND last_seen_at >= NOW() - INTERVAL '180 days'
+                 LIMIT 1"
+            );
+            $stmt->execute(['presence_key' => self::key(self::deviceKey($visitorId))]);
+            $id = trim((string) $stmt->fetchColumn());
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $id !== '' ? $id : null;
+    }
+
+    public static function rememberCustomerActor(
+        string $customerSessionId,
+        string $staffId,
+        string $customerName
+    ): void {
+        $customerSessionId = trim($customerSessionId);
+        $staffId = trim($staffId);
+        if ($customerSessionId === '' || $staffId === '' || !self::isEnabled()) {
+            return;
+        }
+
+        $customerName = trim($customerName);
+        self::upsert(
+            'cactor:' . $customerSessionId,
+            'staff_actor',
+            $staffId,
+            $customerName !== '' ? $customerName : 'عميل'
+        );
+    }
+
+    /**
+     * Customer sessions that are really a staff member training that account.
+     *
+     * @return array<string, array{staff_id: string, customer_name: string}>
+     */
+    public static function customerSessionActors(int $minutes = self::ONLINE_MINUTES): array
+    {
+        if (!self::isEnabled()) {
+            return [];
+        }
+
+        $minutes = max(1, min(60, $minutes));
+        try {
+            $stmt = Database::pdo()->prepare(
+                "SELECT presence_key, subject_id::text AS staff_id, label_ar
+                 FROM portal_presence
+                 WHERE kind = 'staff_actor'
+                   AND subject_id IS NOT NULL
+                   AND last_seen_at >= NOW() - (:minutes || ' minutes')::interval"
+            );
+            $stmt->execute(['minutes' => (string) $minutes]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable) {
+            return [];
+        }
+
+        $actors = [];
+        foreach ($rows as $row) {
+            $key = (string) ($row['presence_key'] ?? '');
+            if (!str_starts_with($key, 'cactor:')) {
+                continue;
+            }
+            $sessionId = substr($key, strlen('cactor:'));
+            $staffId = trim((string) ($row['staff_id'] ?? ''));
+            if ($sessionId === '' || $staffId === '') {
+                continue;
+            }
+            $actors[$sessionId] = [
+                'staff_id' => $staffId,
+                'customer_name' => trim((string) ($row['label_ar'] ?? '')),
+            ];
+        }
+
+        return $actors;
+    }
+
+    public static function forgetGuest(?string $visitorId): void
+    {
+        $visitorId = trim((string) $visitorId);
+        if ($visitorId === '' || !self::isEnabled()) {
+            return;
+        }
+
+        try {
+            Database::pdo()->prepare(
+                'DELETE FROM portal_presence WHERE presence_key = :presence_key'
+            )->execute(['presence_key' => self::key('guest:' . $visitorId)]);
+        } catch (\Throwable) {
+            // presence table may be unavailable
+        }
+    }
+
+    private static function deviceKey(string $visitorId): string
+    {
+        return 'device:' . hash('sha256', $visitorId);
+    }
+
+    private static function key(string $presenceKey): string
+    {
+        return substr($presenceKey, 0, 128);
     }
 
     private static function upsert(
@@ -150,7 +293,7 @@ final class PortalPresenceService
                 last_seen_at = NOW()'
         );
         $stmt->execute([
-            'presence_key' => substr($presenceKey, 0, 128),
+            'presence_key' => self::key($presenceKey),
             'kind' => substr($kind, 0, 20),
             'subject_id' => $subjectId !== null && $subjectId !== '' ? $subjectId : null,
             'label_ar' => substr($label, 0, 250),

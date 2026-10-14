@@ -244,16 +244,8 @@ if ($tab === 'now' && $onlineGuests !== []) {
         if ($sessionKey !== '') {
             $row = VisitorLogService::applyIdentity(['session_id' => $sessionKey, 'visitor_ip' => $row['visitor_ip'] ?? ''], $guestIdentities);
         } else {
-            $ipIdentity = VisitorLogService::resolveIdentityForIp((string) ($row['visitor_ip'] ?? ''));
-            if ($ipIdentity !== null) {
-                $row['display_name'] = (string) ($ipIdentity['display_name'] ?? 'زائر');
-                $row['identity_kind'] = (string) ($ipIdentity['identity_kind'] ?? 'guest');
-                $row['identity_subtitle'] = (string) ($ipIdentity['identity_subtitle'] ?? '');
-                $row['web_customer_id'] = $ipIdentity['web_customer_id'] ?? null;
-            } else {
-                $row['display_name'] = 'زائر';
-                $row['identity_kind'] = 'guest';
-            }
+            $row['display_name'] = 'زائر';
+            $row['identity_kind'] = 'guest';
         }
         $lat = isset($row['latitude']) ? (float) $row['latitude'] : null;
         $lng = isset($row['longitude']) ? (float) $row['longitude'] : null;
@@ -261,10 +253,32 @@ if ($tab === 'now' && $onlineGuests !== []) {
 
         return $row;
     }, $onlineGuests);
+    $onlineCustomerIds = [];
+    foreach ($onlineCustomers as $customerRow) {
+        $onlineCustomerId = trim((string) ($customerRow['subject_id'] ?? ''));
+        if ($onlineCustomerId !== '') {
+            $onlineCustomerIds[$onlineCustomerId] = true;
+        }
+    }
+    $onlineGuests = array_values(array_filter(
+        $onlineGuests,
+        static function (array $row) use ($onlineCustomerIds): bool {
+            $kind = (string) ($row['identity_kind'] ?? '');
+            if ($kind === 'staff') {
+                return false;
+            }
+            $customerId = trim((string) ($row['web_customer_id'] ?? ''));
+
+            return !($kind === 'customer' && $customerId !== '' && isset($onlineCustomerIds[$customerId]));
+        }
+    ));
 }
-$onlineCounts = ($tab === 'now' && ($sessionsReady || $presenceReady))
-    ? PortalSessionService::onlineCounts()
-    : ['staff' => 0, 'customers' => 0, 'guests' => 0, 'total' => 0];
+$onlineCounts = [
+    'staff' => count($onlineStaff),
+    'customers' => count($onlineCustomers),
+    'guests' => count($onlineGuests),
+    'total' => count($onlineStaff) + count($onlineCustomers) + count($onlineGuests),
+];
 
 $queryBase = static function (array $params = []) use (
     $days,

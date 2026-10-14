@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Database;
+use Portal\Support\StaffDevice;
 use PDO;
 
 final class VisitorLogService
@@ -100,6 +101,19 @@ final class VisitorLogService
 
         if (!isset($payload['label_ar']) || trim((string) $payload['label_ar']) === '') {
             $payload['label_ar'] = self::buildLabelAr($action, $payload);
+        }
+
+        unset($payload['staff_user_id'], $payload['staff_name'], $payload['customer_account']);
+        $actor = StaffDevice::current($sessionId);
+        if ($actor !== null) {
+            $payload['staff_user_id'] = $actor['id'];
+            $payload['staff_name'] = $actor['name'];
+            if ($customer !== null) {
+                $accountName = trim((string) ($customer['name_ar'] ?? ''));
+                if ($accountName !== '') {
+                    $payload['customer_account'] = $accountName;
+                }
+            }
         }
 
         $ip = self::clientIp();
@@ -267,16 +281,52 @@ final class VisitorLogService
                     vl.session_id,
                     vl.web_customer_id::text AS web_customer_id,
                     wc.name_ar,
-                    wc.phone
+                    wc.phone,
+                    CASE
+                        WHEN COALESCE(vl.details_ar, '') LIKE '%\"staff_user_id\"%'
+                        THEN vl.details_ar::jsonb->>'staff_user_id'
+                        ELSE NULL
+                    END AS staff_user_id,
+                    CASE
+                        WHEN COALESCE(vl.details_ar, '') LIKE '%\"staff_name\"%'
+                        THEN vl.details_ar::jsonb->>'staff_name'
+                        ELSE NULL
+                    END AS staff_name,
+                    CASE
+                        WHEN COALESCE(vl.details_ar, '') LIKE '%\"customer_account\"%'
+                        THEN vl.details_ar::jsonb->>'customer_account'
+                        ELSE NULL
+                    END AS customer_account
                  FROM visitor_logs vl
-                 INNER JOIN web_customers wc ON wc.id = vl.web_customer_id
+                 LEFT JOIN web_customers wc ON wc.id = vl.web_customer_id
                  WHERE vl.session_id IN ($placeholders)
+                   AND (
+                        vl.web_customer_id IS NOT NULL
+                        OR COALESCE(vl.details_ar, '') LIKE '%\"staff_user_id\"%'
+                   )
                  ORDER BY vl.session_id, vl.created_at DESC"
             );
             $stmt->execute($sessionIds);
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
                 $sid = (string) ($row['session_id'] ?? '');
                 if ($sid === '') {
+                    continue;
+                }
+                $staffId = trim((string) ($row['staff_user_id'] ?? ''));
+                if ($staffId !== '') {
+                    $accountName = trim((string) ($row['customer_account'] ?? ''));
+                    if ($accountName === '') {
+                        $accountName = trim((string) ($row['name_ar'] ?? ''));
+                    }
+                    $identities[$sid] = self::staffIdentity(
+                        $staffId,
+                        (string) ($row['staff_name'] ?? ''),
+                        $accountName,
+                        trim((string) ($row['web_customer_id'] ?? ''))
+                    );
+                    continue;
+                }
+                if (trim((string) ($row['name_ar'] ?? '')) === '') {
                     continue;
                 }
                 $identities[$sid] = self::identityFromParts(
@@ -478,11 +528,6 @@ final class VisitorLogService
                         null
                     );
                 }
-            } else {
-                $ip = trim((string) ($row['visitor_ip'] ?? ''));
-                if ($ip !== '') {
-                    $identity = self::resolveIdentityForIp($ip);
-                }
             }
         }
 
@@ -502,6 +547,9 @@ final class VisitorLogService
         $row['identity_phone'] = (string) ($identity['phone'] ?? '');
         if (!empty($identity['web_customer_id'])) {
             $row['web_customer_id'] = (string) $identity['web_customer_id'];
+        }
+        if (!empty($identity['staff_user_id'])) {
+            $row['staff_user_id'] = (string) $identity['staff_user_id'];
         }
         if (!empty($identity['order_id'])) {
             $row['last_order_id'] = (string) $identity['order_id'];
@@ -544,9 +592,34 @@ final class VisitorLogService
             'identity_source' => $source,
             'phone' => $phone,
             'web_customer_id' => $webCustomerId,
+            'staff_user_id' => null,
             'order_id' => $orderId,
             'order_number' => $orderNumber,
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private static function staffIdentity(
+        string $staffId,
+        string $staffName,
+        string $customerAccount,
+        string $webCustomerId
+    ): array {
+        $staffName = trim($staffName) !== '' ? trim($staffName) : 'موظف';
+        $customerAccount = trim($customerAccount);
+        $identity = self::identityFromParts(
+            'staff',
+            'staff_device',
+            $staffName,
+            '',
+            $webCustomerId !== '' ? $webCustomerId : null,
+            null,
+            null
+        );
+        $identity['staff_user_id'] = trim($staffId);
+        $identity['identity_subtitle'] = $customerAccount !== '' ? ('حساب ' . $customerAccount) : '';
+
+        return $identity;
     }
 
     /** @param array<string, mixed> $filters */
@@ -900,9 +973,11 @@ final class VisitorLogService
             $lng = isset($row['longitude']) ? (float) $row['longitude'] : null;
             $row['map_url'] = self::mapExternalUrl($lat, $lng);
 
+            $sid = (string) ($row['session_id'] ?? '');
+            $existingKind = (string) ($identities[$sid]['identity_kind'] ?? '');
             $cid = trim((string) ($row['web_customer_id'] ?? ''));
-            if ($cid !== '' && isset($customerNames[$cid])) {
-                $identities[(string) $row['session_id']] = self::identityFromParts(
+            if ($existingKind !== 'staff' && $cid !== '' && isset($customerNames[$cid])) {
+                $identities[$sid] = self::identityFromParts(
                     'customer',
                     'registered',
                     (string) ($customerNames[$cid]['name_ar'] ?? ''),
@@ -1728,6 +1803,13 @@ final class VisitorLogService
     /** @param array<string, mixed> $session */
     private static function accountKeyForSessionPrivate(array $session): string
     {
+        if ((string) ($session['identity_kind'] ?? '') === 'staff') {
+            $staffId = trim((string) ($session['staff_user_id'] ?? ''));
+            if ($staffId !== '') {
+                return 'staff:' . $staffId;
+            }
+        }
+
         $customerId = trim((string) ($session['web_customer_id'] ?? ''));
         if ($customerId !== '') {
             return 'customer:' . $customerId;

@@ -56,6 +56,9 @@ $identityPill = static function (array $row): string {
     if ($kind === 'customer') {
         return 'is-customer';
     }
+    if ($kind === 'staff') {
+        return 'is-staff';
+    }
     if ($kind === 'guest_order') {
         return 'is-known-guest';
     }
@@ -221,6 +224,9 @@ if ($tab === 'log' && trim((string) ($accountKey ?? '')) !== '') {
                   <li>
                     <div class="visitor-log__live-main">
                       <strong><?= h((string) ($row['display_name'] ?? '—')) ?></strong>
+                      <?php if (trim((string) ($row['account_label'] ?? '')) !== ''): ?>
+                        <span>داخل حساب <?= h((string) $row['account_label']) ?></span>
+                      <?php endif; ?>
                       <span><?= h($formatSeen((string) ($row['last_seen_at'] ?? ''))) ?></span>
                     </div>
                     <div class="visitor-log__live-meta" dir="ltr"><?= h((string) ($row['created_ip'] ?? '—')) ?></div>
@@ -229,10 +235,10 @@ if ($tab === 'log' && trim((string) ($accountKey ?? '')) !== '') {
                         <a href="<?= h($buildUrl(['tab' => 'log', 'customer_id' => (string) $row['subject_id'], 'account' => 'customer:' . (string) $row['subject_id'], 'session' => null])) ?>" class="visitor-log__action">عرض النشاط</a>
                         <a href="/dashboard/customers.php?details=<?= h((string) $row['subject_id']) ?>" class="visitor-log__action">الملف</a>
                       <?php endif; ?>
-                    <?php if ($canManageSessions): ?>
+                    <?php if ($canManageSessions && trim((string) ($row['session_id'] ?? '')) !== ''): ?>
                         <form method="post" onsubmit="return confirm('إنهاء هذه الجلسة؟');">
                           <input type="hidden" name="action" value="revoke_one">
-                          <input type="hidden" name="kind" value="<?= h($section['kind']) ?>">
+                          <input type="hidden" name="kind" value="<?= h((string) ($row['revoke_kind'] ?? $section['kind'])) ?>">
                           <input type="hidden" name="session_id" value="<?= h((string) ($row['session_id'] ?? '')) ?>">
                           <button type="submit" class="visitor-log__action visitor-log__action--danger">إنهاء</button>
                         </form>
