@@ -31,6 +31,9 @@ $identityPill = static function (array $row): string {
     if ($kind === 'customer') {
         return 'is-customer';
     }
+    if ($kind === 'staff') {
+        return 'is-staff';
+    }
     if ($kind === 'guest_order') {
         return 'is-known-guest';
     }
@@ -41,6 +44,7 @@ $identityPill = static function (array $row): string {
 $kindLabel = static function (array $row): string {
     return match ((string) ($row['identity_kind'] ?? '')) {
         'customer' => 'عميل',
+        'staff' => 'موظف',
         'guest_order' => 'معروف',
         default => 'زائر',
     };
@@ -250,6 +254,9 @@ $visitorsTotalPages = max(1, (int) ceil($visitorsTotal / $visitorsPerPage));
             <h2><?= h((string) ($accountProfile['display_name'] ?? 'زائر')) ?></h2>
             <p class="visitor-log__profile-sub">
               <span class="visitor-log__pill <?= h($identityPill($accountProfile)) ?>"><?= h($kindLabel($accountProfile)) ?></span>
+              <?php if (trim((string) ($accountProfile['identity_subtitle'] ?? '')) !== ''): ?>
+                <span><?= h((string) $accountProfile['identity_subtitle']) ?></span>
+              <?php endif; ?>
               <?php if (trim((string) ($accountProfile['identity_phone'] ?? '')) !== ''): ?>
                 <span dir="ltr"><?= h((string) $accountProfile['identity_phone']) ?></span>
               <?php endif; ?>
@@ -322,6 +329,30 @@ $visitorsTotalPages = max(1, (int) ceil($visitorsTotal / $visitorsPerPage));
         </section>
       <?php endif; ?>
 
+      <?php
+      $visitedPages = is_array($digestStats['top_pages'] ?? null) ? $digestStats['top_pages'] : [];
+      if ($sessionId === '' && $visitedPages !== []):
+      ?>
+        <section class="visitor-log__digest-block visitor-log__visited">
+          <h3>الصفحات التي زارها</h3>
+          <ul class="visitor-log__visited-pages">
+            <?php foreach (array_slice($visitedPages, 0, 8) as $page): ?>
+              <li>
+                <span>
+                  <?= h((string) ($page['title'] ?? $page['label'] ?? 'صفحة')) ?>
+                  <?php if (trim((string) ($page['detail'] ?? '')) !== ''): ?>
+                    <small><?= h((string) $page['detail']) ?></small>
+                  <?php endif; ?>
+                </span>
+                <?php if ((int) ($page['count'] ?? 0) > 1): ?>
+                  <em>×<?= (int) $page['count'] ?></em>
+                <?php endif; ?>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+        </section>
+      <?php endif; ?>
+
       <div class="visitor-log__profile-stats">
         <div><span>جلسات</span><strong><?= number_format((int) ($stats['session_count'] ?? 0)) ?></strong></div>
         <div><span>أحداث</span><strong><?= number_format((int) ($stats['events'] ?? 0)) ?></strong></div>
@@ -354,8 +385,25 @@ $visitorsTotalPages = max(1, (int) ceil($visitorsTotal / $visitorsPerPage));
               <?php endif; ?>
             </div>
           <?php endif; ?>
+          <?php $sessionPages = is_array($sessStats['top_pages'] ?? null) ? $sessStats['top_pages'] : []; ?>
+          <?php if ($sessionPages !== []): ?>
+            <ul class="visitor-log__visited-pages">
+              <?php foreach (array_slice($sessionPages, 0, 6) as $page): ?>
+                <li>
+                  <span>
+                    <?= h((string) ($page['title'] ?? $page['label'] ?? 'صفحة')) ?>
+                    <?php if (trim((string) ($page['detail'] ?? '')) !== ''): ?>
+                      <small><?= h((string) $page['detail']) ?></small>
+                    <?php endif; ?>
+                  </span>
+                  <?php if ((int) ($page['count'] ?? 0) > 1): ?>
+                    <em>×<?= (int) $page['count'] ?></em>
+                  <?php endif; ?>
+                </li>
+              <?php endforeach; ?>
+            </ul>
+          <?php endif; ?>
           <div class="visitor-log__digest-stats visitor-log__digest-stats--inline">
-            <div class="visitor-log__digest-stat"><span>صفحات</span><strong><?= (int) ($sessStats['page_views'] ?? 0) ?></strong></div>
             <div class="visitor-log__digest-stat"><span>منتجات</span><strong><?= (int) ($sessStats['product_views'] ?? 0) ?></strong></div>
             <div class="visitor-log__digest-stat"><span>+سلة</span><strong><?= (int) ($sessStats['cart_adds'] ?? 0) ?></strong></div>
             <div class="visitor-log__digest-stat"><span>طلبات</span><strong><?= (int) ($sessStats['orders'] ?? 0) ?></strong></div>
@@ -416,14 +464,19 @@ $visitorsTotalPages = max(1, (int) ceil($visitorsTotal / $visitorsPerPage));
               <h4><?= h((string) ($dayGroup['day_label'] ?? '')) ?></h4>
               <ol>
                 <?php foreach ($dayGroup['items'] ?? [] as $item): ?>
+                  <?php
+                  $itemTitle = trim((string) ($item['action_label_ar'] ?? ''));
+                  $itemDetail = trim((string) ($item['label_ar'] ?? ''));
+                  if ($itemDetail === $itemTitle) {
+                      $itemDetail = '';
+                  }
+                  ?>
                   <li class="visitor-log__timeline-item visitor-log__timeline-item--<?= h((string) ($item['kind'] ?? 'moment')) ?>">
                     <span class="material-symbols-outlined" aria-hidden="true"><?= h((string) ($item['icon'] ?? 'trip_origin')) ?></span>
                     <div>
-                      <strong><?= h((string) ($item['action_label_ar'] ?? '')) ?></strong>
-                      <?php if (trim((string) ($item['label_ar'] ?? '')) !== '' && trim((string) ($item['action_label_ar'] ?? '')) !== trim((string) ($item['label_ar'] ?? ''))): ?>
-                        <p><?= h((string) $item['label_ar']) ?></p>
-                      <?php elseif (trim((string) ($item['label_ar'] ?? '')) !== ''): ?>
-                        <p><?= h((string) $item['label_ar']) ?></p>
+                      <strong><?= h($itemTitle) ?></strong>
+                      <?php if ($itemDetail !== ''): ?>
+                        <p><?= h($itemDetail) ?></p>
                       <?php endif; ?>
                     </div>
                     <time><?= h((string) ($item['created_at_relative'] ?? $item['created_at_fmt'] ?? '')) ?></time>

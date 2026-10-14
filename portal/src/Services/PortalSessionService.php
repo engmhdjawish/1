@@ -7,6 +7,7 @@ namespace Portal\Services;
 use Portal\Auth\CustomerSession;
 use Portal\Auth\WebSession;
 use Portal\Database;
+use Portal\Support\StaffDevice;
 use PDO;
 
 final class PortalSessionService
@@ -251,13 +252,130 @@ final class PortalSessionService
     /** @return list<array<string, mixed>> */
     public static function onlineStaff(int $minutes = self::ONLINE_MINUTES): array
     {
-        return self::onlineRows('staff', $minutes);
+        $rows = self::onlineRows('staff', $minutes);
+        $actors = PortalPresenceService::customerSessionActors($minutes);
+        $customerRows = $actors === [] ? [] : self::onlineRows('customer', $minutes);
+        $customerBySession = [];
+        foreach ($customerRows as $customerRow) {
+            $customerBySession[(string) ($customerRow['session_id'] ?? '')] = $customerRow;
+        }
+        if ($actors === []) {
+            return $rows;
+        }
+
+        $namesByStaff = [];
+        $sessionByStaff = [];
+        foreach ($actors as $sessionId => $actor) {
+            $staffId = (string) ($actor['staff_id'] ?? '');
+            $customerName = trim((string) ($actor['customer_name'] ?? ''));
+            if ($staffId === '' || $customerName === '') {
+                continue;
+            }
+            $namesByStaff[$staffId][$customerName] = $customerName;
+            $sessionByStaff[$staffId] = (string) $sessionId;
+        }
+
+        foreach ($rows as &$row) {
+            $staffId = (string) ($row['subject_id'] ?? '');
+            if ($staffId === '' || !isset($namesByStaff[$staffId])) {
+                continue;
+            }
+            $row['account_label'] = implode('، ', $namesByStaff[$staffId]);
+            unset($namesByStaff[$staffId]);
+        }
+        unset($row);
+
+        if ($namesByStaff === []) {
+            return $rows;
+        }
+
+        $profiles = self::staffProfiles(array_keys($namesByStaff));
+        foreach ($namesByStaff as $staffId => $names) {
+            $profile = $profiles[$staffId] ?? null;
+            if ($profile === null) {
+                continue;
+            }
+            $customerSessionId = (string) ($sessionByStaff[$staffId] ?? '');
+            $customerRow = $customerBySession[$customerSessionId] ?? [];
+            $rows[] = [
+                'session_id' => $customerSessionId,
+                'kind' => 'staff',
+                'revoke_kind' => 'customer',
+                'subject_id' => $staffId,
+                'display_name' => $profile['display_name'],
+                'account_label' => implode('، ', $names),
+                'login_name' => $profile['login_name'],
+                'created_ip' => (string) ($customerRow['created_ip'] ?? ''),
+                'user_agent' => (string) ($customerRow['user_agent'] ?? ''),
+                'created_at' => $customerRow['created_at'] ?? null,
+                'last_seen_at' => $customerRow['last_seen_at'] ?? null,
+            ];
+        }
+
+        return $rows;
     }
 
     /** @return list<array<string, mixed>> */
     public static function onlineCustomers(int $minutes = self::ONLINE_MINUTES): array
     {
-        return self::onlineRows('customer', $minutes);
+        $rows = self::onlineRows('customer', $minutes);
+        $actors = PortalPresenceService::customerSessionActors($minutes);
+        if ($actors === []) {
+            return $rows;
+        }
+
+        return array_values(array_filter(
+            $rows,
+            static fn (array $row): bool => !isset($actors[(string) ($row['session_id'] ?? '')])
+        ));
+    }
+
+    /**
+     * One browser keeps a single login. Switching accounts revokes the previous
+     * session from this device so it does not stay online under the old name.
+     */
+    public static function noteDeviceLogin(?string $visitorId): void
+    {
+        $visitorId = trim((string) $visitorId);
+        if ($visitorId === '' || !self::isEnabled()) {
+            return;
+        }
+
+        $meta = self::meta();
+        if ($meta === null) {
+            return;
+        }
+
+        $previous = PortalPresenceService::deviceLogin($visitorId);
+        if (
+            $previous !== null
+            && ($previous['session_id'] !== $meta['id'] || $previous['kind'] !== $meta['kind'])
+        ) {
+            self::revokeById($previous['kind'], $previous['session_id']);
+        }
+
+        PortalPresenceService::rememberDeviceLogin($visitorId, $meta['kind'], $meta['id']);
+    }
+
+    public static function noteStaffActor(?string $visitorId = null): void
+    {
+        if (!CustomerSession::isLoggedIn()) {
+            return;
+        }
+
+        $meta = self::meta();
+        if ($meta === null || ($meta['kind'] ?? '') !== 'customer') {
+            return;
+        }
+
+        $actor = StaffDevice::current($visitorId);
+        if ($actor === null) {
+            return;
+        }
+
+        $customer = CustomerSession::customer();
+        $customerName = trim((string) ($customer['name_ar'] ?? 'عميل'));
+        PortalPresenceService::rememberCustomerActor((string) $meta['id'], $actor['id'], $customerName);
     }
 
     public static function onlineCounts(int $minutes = self::ONLINE_MINUTES): array
@@ -424,6 +542,44 @@ final class PortalSessionService
         $stmt->execute(['subject_id' => $subjectId]);
 
         return $stmt->rowCount();
+    }
+
+    /**
+     * @param list<string> $staffIds
+     * @return array<string, array{display_name: string, login_name: string}>
+     */
+    private static function staffProfiles(array $staffIds): array
+    {
+        $staffIds = array_values(array_unique(array_filter(array_map(
+            static fn ($id): string => trim((string) $id),
+            $staffIds
+        ))));
+        if ($staffIds === []) {
+            return [];
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($staffIds), '?'));
+        $stmt = Database::pdo()->prepare(
+            "SELECT id::text AS id,
+                    COALESCE(NULLIF(TRIM(display_name_ar), ''), NULLIF(TRIM(user_name), ''), 'موظف') AS display_name,
+                    user_name
+             FROM web_users
+             WHERE id::text IN ($placeholders)"
+        );
+        $stmt->execute($staffIds);
+        $profiles = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+            $id = (string) ($row['id'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+            $profiles[$id] = [
+                'display_name' => (string) ($row['display_name'] ?? 'موظف'),
+                'login_name' => (string) ($row['user_name'] ?? ''),
+            ];
+        }
+
+        return $profiles;
     }
 
     /** @return list<array<string, mixed>> */

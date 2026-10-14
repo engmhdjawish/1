@@ -47,6 +47,17 @@ mustContain('portal/src/Services/VisitorLogService.php', 'order_placed', 'order_
 mustContain('portal/src/Services/OrderService.php', 'visitor_session_id', 'order session linkage');
 mustContain('portal/public/assets/store-cart.js', 'jawish_vid', 'cart sends jawish_vid');
 mustContain('portal/views/dashboard/visitor-analytics.php', 'عرض على الخريطة', 'map button in UI');
+mustContain('portal/src/Support/StaffDevice.php', 'jawish_staff', 'staff device cookie');
+mustContain('portal/src/Services/PortalSessionService.php', 'noteStaffActor', 'customer login attributed to staff');
+mustContain('portal/views/dashboard/visitor-analytics.php', 'داخل حساب', 'staff row names the customer account once');
+mustContain('portal/src/Services/VisitorLogService.php', 'staffIdentity', 'visitor identity prefers staff');
+mustContain('portal/src/Services/VisitorLogService.php', 'function describePath', 'readable page labels');
+mustContain('portal/views/dashboard/visitor-analytics.php', 'page_title_ar', 'insights show Arabic page names');
+mustContain('portal/views/dashboard/visitor-analytics-log.php', 'الصفحات التي زارها', 'profile lists visited pages');
+mustContain('portal/src/Services/PortalSessionService.php', 'noteDeviceLogin', 'one login per device');
+mustContain('portal/src/Services/PortalPresenceService.php', 'forgetSameDeviceGuests', 'same-device guest rows are cleared');
+mustContain('portal/public/dashboard/visitor-analytics.php', "$row['display_name'] = 'زائر'", 'live guests display as زائر');
+mustContain('portal/public/api/session-heartbeat.php', 'noteDeviceLogin', 'heartbeat notes the device login');
 
 console.log('\n== Test scripts ==');
 mustExist('portal/scripts/test-visitor-log.php');

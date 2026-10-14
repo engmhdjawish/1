@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Database;
+use Portal\Support\StaffDevice;
 use PDO;
 
 final class VisitorLogService
@@ -13,7 +14,70 @@ final class VisitorLogService
 
     private static ?bool $ordersHaveVisitorSession = null;
 
-  /** @var array<string, string> */
+    /** @var array<string, string> */
+    private const PAGE_NAMES = [
+        '' => 'الرئيسية',
+        '/' => 'الرئيسية',
+        'index.php' => 'الرئيسية',
+        'store.php' => 'المتجر',
+        'product.php' => 'صفحة صنف',
+        'cart.php' => 'السلة',
+        'store-cart.php' => 'السلة',
+        'customer-login.php' => 'دخول العملاء',
+        'staff-login.php' => 'دخول الموظفين',
+        'login.php' => 'تسجيل الدخول',
+        'logout.php' => 'تسجيل الخروج',
+        'register.php' => 'إنشاء حساب',
+        'my-orders.php' => 'طلباتي',
+        'my-profile.php' => 'ملفي',
+        'account.php' => 'الحساب',
+        'about.php' => 'من نحن',
+        'track-order.php' => 'تتبع الطلب',
+        'price-checker.php' => 'فاحص الأسعار',
+        'pc1.php' => 'فاحص الأسعار',
+        'share.php' => 'رابط مشاركة',
+        'order-confirmation.php' => 'تأكيد الطلب',
+        'store-order-confirmation.php' => 'تأكيد الطلب',
+    ];
+
+    /** @var array<string, string> */
+    private const DASHBOARD_PAGE_NAMES = [
+        'index.php' => 'لوحة التحكم',
+        'visitor-analytics.php' => 'سجل الزوار',
+        'orders.php' => 'الطلبات',
+        'customers.php' => 'العملاء',
+        'sessions.php' => 'الجلسات',
+        'users.php' => 'المستخدمون',
+        'notifications.php' => 'التنبيهات',
+        'settings.php' => 'الإعدادات',
+        'share-links.php' => 'روابط المشاركة',
+        'material-images.php' => 'صور المواد',
+        'special-offers.php' => 'العروض',
+        'home-sections.php' => 'أقسام الرئيسية',
+        'price-checker.php' => 'فاحص الأسعار',
+        'profile.php' => 'الملف الشخصي',
+        'about.php' => 'من نحن',
+        'accounting-statement.php' => 'كشف الحساب',
+        'accounting-customers.php' => 'عملاء المحاسبة',
+        'accounting-documents.php' => 'المستندات',
+    ];
+
+    /** @var array<string, string> */
+    private const QUERY_LABELS = [
+        'q' => 'بحث',
+        'keyword' => 'بحث',
+        'search' => 'بحث',
+        'materialtypes' => 'نوع المادة',
+        'agecategories' => 'الفئة',
+        'manufacturers' => 'الشركة',
+        'sizeranges' => 'القياس',
+        'countryoforigins' => 'المنشأ',
+        'section' => 'قسم',
+        'offer' => 'عرض',
+        'isavailable' => 'التوفر',
+    ];
+
+    /** @var array<string, string> */
     private const ACTION_LABELS = [
         'page_view' => 'زيارة صفحة',
         'product_view' => 'عرض صنف',
@@ -100,6 +164,20 @@ final class VisitorLogService
 
         if (!isset($payload['label_ar']) || trim((string) $payload['label_ar']) === '') {
             $payload['label_ar'] = self::buildLabelAr($action, $payload);
+        }
+
+        unset($payload['staff_user_id'], $payload['staff_name'], $payload['customer_account']);
+        $actor = StaffDevice::current($sessionId);
+        if ($actor !== null) {
+            self::claimSessionForStaff($sessionId, $actor['id'], $actor['name']);
+            $payload['staff_user_id'] = $actor['id'];
+            $payload['staff_name'] = $actor['name'];
+            if ($customer !== null) {
+                $accountName = trim((string) ($customer['name_ar'] ?? ''));
+                if ($accountName !== '') {
+                    $payload['customer_account'] = $accountName;
+                }
+            }
         }
 
         $ip = self::clientIp();
@@ -267,16 +345,50 @@ final class VisitorLogService
                     vl.session_id,
                     vl.web_customer_id::text AS web_customer_id,
                     wc.name_ar,
-                    wc.phone
+                    wc.phone,
+                    CASE
+                        WHEN COALESCE(vl.details_ar, '') LIKE '%\"staff_user_id\"%'
+                        THEN vl.details_ar::jsonb->>'staff_user_id'
+                        ELSE NULL
+                    END AS staff_user_id,
+                    CASE
+                        WHEN COALESCE(vl.details_ar, '') LIKE '%\"staff_name\"%'
+                        THEN vl.details_ar::jsonb->>'staff_name'
+                        ELSE NULL
+                    END AS staff_name,
+                    CASE
+                        WHEN COALESCE(vl.details_ar, '') LIKE '%\"customer_account\"%'
+                        THEN vl.details_ar::jsonb->>'customer_account'
+                        ELSE NULL
+                    END AS customer_account
                  FROM visitor_logs vl
-                 INNER JOIN web_customers wc ON wc.id = vl.web_customer_id
+                 LEFT JOIN web_customers wc ON wc.id = vl.web_customer_id
                  WHERE vl.session_id IN ($placeholders)
                  ORDER BY vl.session_id, vl.created_at DESC"
             );
             $stmt->execute($sessionIds);
+            $closedSessions = [];
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
                 $sid = (string) ($row['session_id'] ?? '');
                 if ($sid === '') {
+                    continue;
+                }
+                $staffId = trim((string) ($row['staff_user_id'] ?? ''));
+                if ($staffId !== '') {
+                    $accountName = trim((string) ($row['customer_account'] ?? ''));
+                    if ($accountName === '') {
+                        $accountName = trim((string) ($row['name_ar'] ?? ''));
+                    }
+                    $identities[$sid] = self::staffIdentity(
+                        $staffId,
+                        (string) ($row['staff_name'] ?? ''),
+                        $accountName,
+                        trim((string) ($row['web_customer_id'] ?? ''))
+                    );
+                    continue;
+                }
+                if (trim((string) ($row['web_customer_id'] ?? '')) === '' || trim((string) ($row['name_ar'] ?? '')) === '') {
+                    $closedSessions[$sid] = true;
                     continue;
                 }
                 $identities[$sid] = self::identityFromParts(
@@ -306,7 +418,7 @@ final class VisitorLogService
             $stmt->execute($sessionIds);
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
                 $sid = (string) ($row['session_id'] ?? '');
-                if ($sid === '' || isset($identities[$sid])) {
+                if ($sid === '' || isset($identities[$sid]) || isset($closedSessions[$sid])) {
                     continue;
                 }
                 $customerId = trim((string) ($row['web_customer_id'] ?? ''));
@@ -346,7 +458,7 @@ final class VisitorLogService
                 $stmt->execute($sessionIds);
                 foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
                     $sid = (string) ($row['session_id'] ?? '');
-                    if ($sid === '' || isset($identities[$sid])) {
+                    if ($sid === '' || isset($identities[$sid]) || isset($closedSessions[$sid])) {
                         continue;
                     }
                     $customerId = trim((string) ($row['web_customer_id'] ?? ''));
@@ -478,11 +590,6 @@ final class VisitorLogService
                         null
                     );
                 }
-            } else {
-                $ip = trim((string) ($row['visitor_ip'] ?? ''));
-                if ($ip !== '') {
-                    $identity = self::resolveIdentityForIp($ip);
-                }
             }
         }
 
@@ -502,6 +609,9 @@ final class VisitorLogService
         $row['identity_phone'] = (string) ($identity['phone'] ?? '');
         if (!empty($identity['web_customer_id'])) {
             $row['web_customer_id'] = (string) $identity['web_customer_id'];
+        }
+        if (!empty($identity['staff_user_id'])) {
+            $row['staff_user_id'] = (string) $identity['staff_user_id'];
         }
         if (!empty($identity['order_id'])) {
             $row['last_order_id'] = (string) $identity['order_id'];
@@ -544,9 +654,79 @@ final class VisitorLogService
             'identity_source' => $source,
             'phone' => $phone,
             'web_customer_id' => $webCustomerId,
+            'staff_user_id' => null,
             'order_id' => $orderId,
             'order_number' => $orderNumber,
         ];
+    }
+
+    public static function claimSessionForStaff(string $sessionId, string $staffId, string $staffName): void
+    {
+        if (!self::hasSchema()) {
+            return;
+        }
+
+        $sessionId = substr(trim($sessionId), 0, 120);
+        $staffId = trim($staffId);
+        $staffName = trim($staffName) !== '' ? trim($staffName) : 'موظف';
+        if ($sessionId === '' || $staffId === '') {
+            return;
+        }
+
+        static $claimed = [];
+        if (isset($claimed[$sessionId])) {
+            return;
+        }
+        $claimed[$sessionId] = true;
+
+        try {
+            Database::pdo()->prepare(
+                "UPDATE visitor_logs
+                 SET details_ar = CASE
+                     WHEN details_ar IS NULL OR btrim(details_ar) = '' THEN
+                         jsonb_build_object('staff_user_id', :staff_id_empty, 'staff_name', :staff_name_empty)::text
+                     WHEN details_ar ~ '^\\s*\\{' THEN
+                         (details_ar::jsonb || jsonb_build_object('staff_user_id', :staff_id_json, 'staff_name', :staff_name_json))::text
+                     ELSE details_ar
+                 END
+                 WHERE session_id = :session_id
+                   AND created_at >= NOW() - INTERVAL '90 days'
+                   AND COALESCE(details_ar, '') NOT LIKE '%\"staff_user_id\"%'
+                   AND (details_ar IS NULL OR btrim(details_ar) = '' OR length(details_ar) < 1700)"
+            )->execute([
+                'staff_id_empty' => $staffId,
+                'staff_name_empty' => $staffName,
+                'staff_id_json' => $staffId,
+                'staff_name_json' => $staffName,
+                'session_id' => $sessionId,
+            ]);
+        } catch (\Throwable) {
+            // Historical rows stay unchanged when details are not valid JSON.
+        }
+    }
+
+    /** @return array<string, mixed> */
+    private static function staffIdentity(
+        string $staffId,
+        string $staffName,
+        string $customerAccount,
+        string $webCustomerId
+    ): array {
+        $staffName = trim($staffName) !== '' ? trim($staffName) : 'موظف';
+        $customerAccount = trim($customerAccount);
+        $identity = self::identityFromParts(
+            'staff',
+            'staff_device',
+            $staffName,
+            '',
+            $webCustomerId !== '' ? $webCustomerId : null,
+            null,
+            null
+        );
+        $identity['staff_user_id'] = trim($staffId);
+        $identity['identity_subtitle'] = $customerAccount !== '' ? ('حساب ' . $customerAccount) : '';
+
+        return $identity;
     }
 
     /** @param array<string, mixed> $filters */
@@ -569,6 +749,258 @@ final class VisitorLogService
         return str_contains($haystack, $search);
     }
 
+    /**
+     * Turn a stored path such as `/store.php?q=%D8%B3...` into an Arabic page name.
+     *
+     * @return array{title: string, detail: string, label: string}
+     */
+    public static function describePath(string $path, string $pageTitle = ''): array
+    {
+        $path = trim($path);
+        if ($path === '' || $path === '—') {
+            return self::pathLabel('صفحة', '');
+        }
+
+        if (preg_match('#^[a-z][a-z0-9+.-]*://#i', $path) === 1) {
+            $parsed = parse_url($path);
+            if (is_array($parsed)) {
+                $path = (string) ($parsed['path'] ?? '/');
+                if (isset($parsed['query']) && $parsed['query'] !== '') {
+                    $path .= '?' . $parsed['query'];
+                }
+            }
+        }
+
+        $query = '';
+        $route = $path;
+        $split = strpos($path, '?');
+        if ($split !== false) {
+            $route = substr($path, 0, $split);
+            $query = substr($path, $split + 1);
+        }
+        $route = self::decodeUrlText($route);
+        $routePath = (string) (parse_url($route, PHP_URL_PATH) ?: $route);
+        $base = strtolower(basename($routePath));
+        $isDashboard = str_contains($routePath, '/dashboard/');
+        $title = $isDashboard
+            ? (self::DASHBOARD_PAGE_NAMES[$base] ?? 'لوحة التحكم')
+            : (self::PAGE_NAMES[$base] ?? self::PAGE_NAMES[$routePath] ?? '');
+        if ($title === '') {
+            $stem = trim(str_replace(['-', '_'], ' ', (string) preg_replace('/\.php$/', '', $base)));
+            $title = $stem !== '' ? $stem : 'صفحة';
+        }
+
+        $cleanedTitle = self::cleanPageTitle($pageTitle);
+        if ($cleanedTitle !== '' && ($base === 'product.php' || $title === 'صفحة')) {
+            $title = $cleanedTitle;
+        }
+
+        $detail = self::describeQuery($query);
+        if ($detail === '' && $cleanedTitle !== '' && $cleanedTitle !== $title && $base === 'store.php') {
+            $detail = $cleanedTitle;
+        }
+
+        return self::pathLabel($title, $detail);
+    }
+
+    /** @return array{title: string, detail: string, label: string} */
+    private static function pathLabel(string $title, string $detail): array
+    {
+        $title = trim($title) !== '' ? trim($title) : 'صفحة';
+        $detail = trim($detail);
+        $label = $detail !== '' ? ($title . ' — ' . $detail) : $title;
+
+        return ['title' => $title, 'detail' => $detail, 'label' => $label];
+    }
+
+    private static function describeQuery(string $query): string
+    {
+        $query = trim($query);
+        if ($query === '') {
+            return '';
+        }
+
+        /** @var array<string, list<string>> $grouped */
+        $grouped = [];
+        $page = '';
+        foreach (explode('&', $query) as $part) {
+            if ($part === '') {
+                continue;
+            }
+            $eq = strpos($part, '=');
+            $rawKey = $eq === false ? $part : substr($part, 0, $eq);
+            $rawValue = $eq === false ? '' : substr($part, $eq + 1);
+            $key = strtolower((string) preg_replace('/\[\]$/', '', rawurldecode(str_replace('+', ' ', $rawKey))));
+            $value = self::decodeUrlText(rawurldecode(str_replace('+', ' ', $rawValue)));
+            if ($key === '' || self::isSkippedQueryKey($key)) {
+                continue;
+            }
+            if ($key === 'page') {
+                if (ctype_digit($value) && (int) $value > 1) {
+                    $page = 'صفحة ' . $value;
+                }
+                continue;
+            }
+            if ($key === 'isavailable') {
+                $value = in_array(strtolower($value), ['1', 'true', 'yes'], true) ? 'متوفر' : 'غير متوفر';
+            }
+            if ($value === '' || self::isOpaqueId($value)) {
+                continue;
+            }
+            $grouped[$key][] = $value;
+        }
+
+        $parts = [];
+        $order = ['q', 'keyword', 'search', 'materialtypes', 'agecategories', 'manufacturers', 'sizeranges', 'countryoforigins', 'section', 'offer'];
+        $used = [];
+        foreach ($order as $key) {
+            if (!isset($grouped[$key])) {
+                continue;
+            }
+            $used[$key] = true;
+            $parts[] = self::formatQueryPart($key, $grouped[$key]);
+        }
+        foreach ($grouped as $key => $values) {
+            if (isset($used[$key]) || self::isPriceQueryKey($key)) {
+                continue;
+            }
+            $parts[] = self::formatQueryPart($key, $values);
+        }
+        $price = self::formatPriceQuery($grouped);
+        if ($price !== '') {
+            $parts[] = $price;
+        }
+        if ($page !== '') {
+            $parts[] = $page;
+        }
+
+        $parts = array_values(array_filter($parts, static fn (string $part): bool => $part !== ''));
+        if (count($parts) > 4) {
+            $parts = array_slice($parts, 0, 4);
+        }
+
+        return implode(' · ', $parts);
+    }
+
+    /** @param list<string> $values */
+    private static function formatQueryPart(string $key, array $values): string
+    {
+        $values = array_values(array_unique(array_filter(array_map(
+            static fn (string $value): string => trim($value),
+            $values
+        ), static fn (string $value): bool => $value !== '')));
+        if ($values === []) {
+            return '';
+        }
+        $text = implode('، ', array_slice($values, 0, 3));
+        $name = self::QUERY_LABELS[$key] ?? '';
+        if ($name === '') {
+            return $text;
+        }
+        if (in_array($key, ['q', 'keyword', 'search'], true)) {
+            return $name . ': ' . $text;
+        }
+
+        return $name . ': ' . $text;
+    }
+
+    /** @param array<string, list<string>> $grouped */
+    private static function formatPriceQuery(array $grouped): string
+    {
+        $ranges = [
+            ['minunitsalepricesyp', 'maxunitsalepricesyp', 'بيع ل.س'],
+            ['minunitsalepriceusd', 'maxunitsalepriceusd', 'بيع $'],
+        ];
+        foreach ($ranges as [$minKey, $maxKey, $label]) {
+            $min = trim((string) ($grouped[$minKey][0] ?? ''));
+            $max = trim((string) ($grouped[$maxKey][0] ?? ''));
+            if ($min === '' && $max === '') {
+                continue;
+            }
+            if ($min !== '' && $max !== '') {
+                return $label . ': ' . $min . '–' . $max;
+            }
+
+            return $label . ': ' . ($min !== '' ? $min : $max);
+        }
+
+        return '';
+    }
+
+    private static function isSkippedQueryKey(string $key): bool
+    {
+        if (str_starts_with($key, 'utm_')) {
+            return true;
+        }
+
+        return in_array($key, [
+            'preview', 'guid', 'id', 'product', 'token', 'return', 'redirect',
+            'fbclid', 'gclid', '_ga', 'ref', 'open_cart', 'groupby', 'sort',
+            'storeguids', 'groupguids',
+        ], true);
+    }
+
+    private static function isPriceQueryKey(string $key): bool
+    {
+        return str_starts_with($key, 'min') || str_starts_with($key, 'max');
+    }
+
+    private static function isOpaqueId(string $value): bool
+    {
+        if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $value) === 1) {
+            return true;
+        }
+
+        return strlen($value) > 48 && preg_match('/\p{Arabic}/u', $value) !== 1;
+    }
+
+    private static function decodeUrlText(string $value): string
+    {
+        $value = html_entity_decode(trim($value), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        for ($i = 0; $i < 2; $i++) {
+            if (preg_match('/%[0-9A-Fa-f]{2}/', $value) !== 1) {
+                break;
+            }
+            $decoded = rawurldecode($value);
+            if ($decoded === $value) {
+                break;
+            }
+            $value = $decoded;
+        }
+
+        return trim($value);
+    }
+
+    private static function cleanPageTitle(string $title): string
+    {
+        $title = self::decodeUrlText($title);
+        $title = (string) preg_replace('/\s+—\s+[^—]+$/u', '', $title);
+        $title = (string) preg_replace('/^(جَويش|جويش|جاويش|jawish)\s*[—–\-|:]\s*/iu', '', $title);
+        $title = trim($title);
+        $generic = ['المتجر', 'الرئيسية', 'السلة', 'جَويش', 'جويش', 'جاويش', 'jawish', 'store', 'home', 'لوحة التحكم'];
+        if ($title === '' || in_array(mb_strtolower($title), $generic, true)) {
+            return '';
+        }
+
+        return $title;
+    }
+
+    private static function humanizeVisitorText(string $text): string
+    {
+        $text = self::decodeUrlText($text);
+        if ($text === '') {
+            return '';
+        }
+        if (preg_match('#(?:^|\s)(/|https?://)|\.php\?#i', $text) === 1) {
+            $path = trim((string) preg_replace('/^(زيارة|تصفّح)\s*:\s*/u', '', $text));
+            if (str_contains($path, '/') || str_contains($path, '.php')) {
+                return self::describePath($path)['label'];
+            }
+        }
+
+        return $text;
+    }
+
     /** @param array<string, mixed> $payload */
     private static function buildLabelAr(string $action, array $payload): string
     {
@@ -584,11 +1016,13 @@ final class VisitorLogService
             'add_to_cart', 'remove_from_cart' => $productName !== ''
                 ? (self::actionLabel($action) . ': ' . $productName)
                 : self::actionLabel($action),
-            'store_search' => $searchQ !== '' ? 'بحث: ' . $searchQ : self::actionLabel($action),
+            'store_search' => $searchQ !== '' ? 'بحث: ' . self::decodeUrlText($searchQ) : self::actionLabel($action),
             'store_filter' => trim((string) ($payload['filter_summary'] ?? '')) !== ''
-                ? 'تصفية: ' . (string) $payload['filter_summary']
+                ? 'تصفية: ' . self::decodeUrlText((string) $payload['filter_summary'])
                 : self::actionLabel($action),
-            'page_view' => $path !== '' ? 'زيارة: ' . $path : self::actionLabel($action),
+            'page_view' => $path !== ''
+                ? self::describePath($path, trim((string) ($payload['title'] ?? '')))['label']
+                : self::actionLabel($action),
             'order_placed' => trim((string) ($payload['order_number'] ?? '')) !== ''
                 ? ('طلب: ' . (string) $payload['order_number'])
                 : (trim((string) ($payload['guest_name'] ?? '')) !== ''
@@ -725,10 +1159,33 @@ final class VisitorLogService
              LIMIT :limit"
         );
         $stmt->bindValue(':days', (string) $days);
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':limit', min(50, $limit * 4), PDO::PARAM_INT);
         $stmt->execute();
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $grouped = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+            $described = self::describePath(
+                (string) ($row['page_path'] ?? ''),
+                (string) ($row['page_title'] ?? '')
+            );
+            $key = $described['label'] !== '' ? $described['label'] : 'صفحة';
+            if (!isset($grouped[$key])) {
+                $grouped[$key] = [
+                    'page_path' => $key,
+                    'page_title' => $described['title'],
+                    'page_label' => $described['label'],
+                    'page_title_ar' => $described['title'],
+                    'page_detail_ar' => $described['detail'],
+                    'hits' => 0,
+                ];
+            }
+            $grouped[$key]['hits'] += (int) ($row['hits'] ?? 0);
+        }
+
+        $rows = array_values($grouped);
+        usort($rows, static fn (array $a, array $b): int => ((int) $b['hits']) <=> ((int) $a['hits']));
+
+        return array_slice($rows, 0, $limit);
     }
 
     /** @return list<array<string, mixed>> */
@@ -842,7 +1299,13 @@ final class VisitorLogService
                 COUNT(*) FILTER (WHERE action = 'add_to_cart')::int AS cart_adds,
                 COUNT(*) FILTER (WHERE action = 'remove_from_cart')::int AS cart_removals,
                 COUNT(*) FILTER (WHERE action = 'order_placed')::int AS orders,
-                MAX(web_customer_id::text) AS web_customer_id,
+                (
+                    SELECT vl_latest.web_customer_id::text
+                    FROM visitor_logs vl_latest
+                    WHERE vl_latest.session_id = visitor_logs.session_id
+                    ORDER BY vl_latest.created_at DESC
+                    LIMIT 1
+                ) AS web_customer_id,
                 MAX(visitor_ip) AS visitor_ip,
                 MAX(country_ar) AS country_ar,
                 MAX(city_ar) AS city_ar,
@@ -900,9 +1363,11 @@ final class VisitorLogService
             $lng = isset($row['longitude']) ? (float) $row['longitude'] : null;
             $row['map_url'] = self::mapExternalUrl($lat, $lng);
 
+            $sid = (string) ($row['session_id'] ?? '');
+            $existingKind = (string) ($identities[$sid]['identity_kind'] ?? '');
             $cid = trim((string) ($row['web_customer_id'] ?? ''));
-            if ($cid !== '' && isset($customerNames[$cid])) {
-                $identities[(string) $row['session_id']] = self::identityFromParts(
+            if ($existingKind !== 'staff' && $cid !== '' && isset($customerNames[$cid])) {
+                $identities[$sid] = self::identityFromParts(
                     'customer',
                     'registered',
                     (string) ($customerNames[$cid]['name_ar'] ?? ''),
@@ -1273,12 +1738,18 @@ final class VisitorLogService
             $day = date('Y-m-d', $ts);
 
             if ($action === 'page_view') {
-                $path = trim((string) ($row['page_path'] ?? '')) ?: '—';
-                $bucketKey = $day . '|' . $path;
+                $described = self::describePath(
+                    (string) ($row['page_path'] ?? ''),
+                    (string) ($row['page_title'] ?? '')
+                );
+                $pathLabel = $described['label'] !== '' ? $described['label'] : 'صفحة';
+                $bucketKey = $day . '|' . $pathLabel;
                 if (!isset($pageCounts[$bucketKey])) {
                     $pageCounts[$bucketKey] = [
                         'day' => $day,
-                        'path' => $path,
+                        'path' => $pathLabel,
+                        'title' => $described['title'],
+                        'detail' => $described['detail'],
                         'count' => 0,
                         'last_at' => (string) ($row['created_at'] ?? ''),
                         'last_fmt' => (string) ($row['created_at_fmt'] ?? ''),
@@ -1349,16 +1820,18 @@ final class VisitorLogService
                     'items' => [],
                 ];
             }
-            $label = 'تصفّح ' . $bucket['path'];
-            if ($bucket['count'] > 1) {
-                $label .= ' (' . $bucket['count'] . '×)';
+            $browseTitle = trim((string) ($bucket['title'] ?? '')) !== ''
+                ? (string) $bucket['title']
+                : 'تصفّح';
+            if ((int) $bucket['count'] > 1) {
+                $browseTitle .= ' ×' . (int) $bucket['count'];
             }
             $byDay[$day]['items'][] = [
                 'kind' => 'browse',
                 'category' => 'browse',
                 'action' => 'page_view',
-                'action_label_ar' => 'تصفّح',
-                'label_ar' => $label,
+                'action_label_ar' => $browseTitle,
+                'label_ar' => (string) ($bucket['detail'] ?? ''),
                 'created_at' => $bucket['last_at'],
                 'created_at_fmt' => $bucket['last_fmt'],
                 'created_at_relative' => $bucket['last_relative'],
@@ -1624,14 +2097,17 @@ final class VisitorLogService
 
             if ($action === 'page_view') {
                 $stats['page_views']++;
-                $path = trim((string) ($row['page_path'] ?? ''));
-                if ($path === '') {
-                    $path = '—';
-                }
-                if (!isset($pageBuckets[$path])) {
-                    $pageBuckets[$path] = [
-                        'path' => $path,
-                        'title' => trim((string) ($row['page_title'] ?? '')),
+                $described = self::describePath(
+                    (string) ($row['page_path'] ?? ''),
+                    (string) ($row['page_title'] ?? '')
+                );
+                $pathLabel = $described['label'] !== '' ? $described['label'] : 'صفحة';
+                if (!isset($pageBuckets[$pathLabel])) {
+                    $pageBuckets[$pathLabel] = [
+                        'path' => $pathLabel,
+                        'title' => $described['title'],
+                        'detail' => $described['detail'],
+                        'label' => $pathLabel,
                         'count' => 0,
                         'first_at' => (string) ($row['created_at'] ?? ''),
                         'last_at' => (string) ($row['created_at'] ?? ''),
@@ -1639,9 +2115,9 @@ final class VisitorLogService
                         'last_fmt' => (string) ($row['created_at_fmt'] ?? ''),
                     ];
                 }
-                $pageBuckets[$path]['count']++;
-                $pageBuckets[$path]['last_at'] = (string) ($row['created_at'] ?? '');
-                $pageBuckets[$path]['last_fmt'] = (string) ($row['created_at_fmt'] ?? '');
+                $pageBuckets[$pathLabel]['count']++;
+                $pageBuckets[$pathLabel]['last_at'] = (string) ($row['created_at'] ?? '');
+                $pageBuckets[$pathLabel]['last_fmt'] = (string) ($row['created_at_fmt'] ?? '');
 
                 continue;
             }
@@ -1728,6 +2204,13 @@ final class VisitorLogService
     /** @param array<string, mixed> $session */
     private static function accountKeyForSessionPrivate(array $session): string
     {
+        if ((string) ($session['identity_kind'] ?? '') === 'staff') {
+            $staffId = trim((string) ($session['staff_user_id'] ?? ''));
+            if ($staffId !== '') {
+                return 'staff:' . $staffId;
+            }
+        }
+
         $customerId = trim((string) ($session['web_customer_id'] ?? ''));
         if ($customerId !== '') {
             return 'customer:' . $customerId;
@@ -1854,11 +2337,22 @@ final class VisitorLogService
         $meta = self::parseDetails((string) ($row['details_ar'] ?? ''));
         $action = (string) ($row['action'] ?? '');
         $row['meta'] = $meta;
-        $row['label_ar'] = trim((string) ($meta['label_ar'] ?? '')) !== ''
-            ? (string) $meta['label_ar']
-            : self::buildLabelAr($action, $meta);
-        $row['page_path'] = (string) ($meta['path'] ?? '');
-        $row['page_title'] = (string) ($meta['title'] ?? '');
+        $path = (string) ($meta['path'] ?? '');
+        $pageTitle = (string) ($meta['title'] ?? '');
+        $described = self::describePath($path, $pageTitle);
+        $row['page_path'] = $path;
+        $row['page_title'] = $pageTitle;
+        $row['page_label'] = $described['label'];
+        $row['page_title_ar'] = $described['title'];
+        $row['page_detail_ar'] = $described['detail'];
+        $storedLabel = trim((string) ($meta['label_ar'] ?? ''));
+        if ($action === 'page_view') {
+            $row['label_ar'] = $described['label'];
+        } elseif ($storedLabel !== '') {
+            $row['label_ar'] = self::humanizeVisitorText($storedLabel);
+        } else {
+            $row['label_ar'] = self::buildLabelAr($action, $meta);
+        }
         $row['product_name'] = (string) ($meta['product_name'] ?? '');
         $row['product_code'] = (string) ($meta['product_code'] ?? '');
         $row['product_guid'] = (string) ($meta['product_guid'] ?? '');

@@ -45,8 +45,15 @@ final class Bootstrap
             session_start();
             self::refreshSessionCookie($lifetimeSeconds);
             \Portal\Services\PortalSessionService::bootstrap($presentedSessionId);
+            if (\Portal\Auth\WebSession::check()) {
+                $staffId = trim((string) (\Portal\Auth\WebSession::user()['id'] ?? ''));
+                if ($staffId !== '') {
+                    \Portal\Support\StaffDevice::remember($staffId);
+                }
+            }
             if (\Portal\Auth\CustomerSession::isLoggedIn()) {
                 \Portal\Auth\CustomerSession::refresh();
+                \Portal\Services\PortalSessionService::noteStaffActor(null);
             }
         }
 
