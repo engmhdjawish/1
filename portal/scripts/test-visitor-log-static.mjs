@@ -51,6 +51,10 @@ mustContain('portal/src/Support/StaffDevice.php', 'jawish_staff', 'staff device 
 mustContain('portal/src/Services/PortalSessionService.php', 'noteStaffActor', 'customer login attributed to staff');
 mustContain('portal/views/dashboard/visitor-analytics.php', 'داخل حساب', 'staff row names the customer account once');
 mustContain('portal/src/Services/VisitorLogService.php', 'staffIdentity', 'visitor identity prefers staff');
+mustContain('portal/src/Services/PortalSessionService.php', 'noteDeviceLogin', 'device keeps the current login only');
+mustContain('portal/src/Services/PortalPresenceService.php', 'forgetSameDeviceGuests', 'previous same-device guests are forgotten');
+mustContain('portal/public/dashboard/visitor-analytics.php', "$row['display_name'] = 'زائر'", 'live guests display as زائر');
+mustContain('portal/public/api/session-heartbeat.php', 'noteDeviceLogin', 'heartbeat notes the device login');
 
 console.log('\n== Test scripts ==');
 mustExist('portal/scripts/test-visitor-log.php');

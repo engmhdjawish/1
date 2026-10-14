@@ -34,6 +34,7 @@ if (is_string($raw) && $raw !== '') {
 try {
     PortalSessionService::touchCurrent();
     PortalPresenceService::touchFromRequest($visitorId);
+    PortalSessionService::noteDeviceLogin($visitorId);
     PortalSessionService::noteStaffActor($visitorId);
     $actor = StaffDevice::current($visitorId);
     if ($actor !== null && $visitorId !== '') {

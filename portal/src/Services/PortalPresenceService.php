@@ -48,7 +48,7 @@ final class PortalPresenceService
                 $label = trim((string) ($user['display_name_ar'] ?? $user['user_name'] ?? 'موظف'));
                 self::upsert('staff:' . $userId, 'staff', $userId, $label);
                 self::rememberDevice($visitorId, $userId, $label);
-                self::forgetGuest($visitorId);
+                self::forgetSameDeviceGuests($visitorId);
 
                 return;
             }
@@ -58,7 +58,7 @@ final class PortalPresenceService
             $customer = CustomerSession::customer();
             $customerId = trim((string) ($customer['id'] ?? ''));
             if ($customerId !== '') {
-                self::forgetGuest($visitorId);
+                self::forgetSameDeviceGuests($visitorId);
                 if (StaffDevice::current($visitorId) !== null) {
                     return;
                 }
@@ -252,6 +252,90 @@ final class PortalPresenceService
         } catch (\Throwable) {
             // presence table may be unavailable
         }
+    }
+
+    /**
+     * Drop anonymous presence for this browser. A previous login must not
+     * remain visible as a named unregistered visitor.
+     */
+    public static function forgetSameDeviceGuests(?string $visitorId): void
+    {
+        self::forgetGuest($visitorId);
+        if (!self::isEnabled()) {
+            return;
+        }
+
+        $ip = self::clientIp();
+        $ua = self::userAgent();
+        if ($ip === '' || $ua === '') {
+            return;
+        }
+
+        try {
+            Database::pdo()->prepare(
+                "DELETE FROM portal_presence
+                 WHERE kind = 'guest'
+                   AND visitor_ip = :ip
+                   AND user_agent = :ua"
+            )->execute([
+                'ip' => substr($ip, 0, 45),
+                'ua' => substr($ua, 0, 500),
+            ]);
+        } catch (\Throwable) {
+            // presence table may be unavailable
+        }
+    }
+
+    public static function rememberDeviceLogin(string $visitorId, string $kind, string $sessionId): void
+    {
+        $visitorId = trim($visitorId);
+        $sessionId = trim($sessionId);
+        if ($visitorId === '' || $sessionId === '' || !in_array($kind, ['staff', 'customer'], true) || !self::isEnabled()) {
+            return;
+        }
+
+        self::upsert(self::deviceLoginKey($visitorId), 'device_login', $sessionId, $kind);
+    }
+
+    /** @return array{kind: string, session_id: string}|null */
+    public static function deviceLogin(string $visitorId): ?array
+    {
+        $visitorId = trim($visitorId);
+        if ($visitorId === '' || !self::isEnabled()) {
+            return null;
+        }
+
+        try {
+            $stmt = Database::pdo()->prepare(
+                "SELECT subject_id::text AS session_id, label_ar
+                 FROM portal_presence
+                 WHERE presence_key = :presence_key
+                   AND kind = 'device_login'
+                   AND subject_id IS NOT NULL
+                 LIMIT 1"
+            );
+            $stmt->execute(['presence_key' => self::key(self::deviceLoginKey($visitorId))]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (!is_array($row)) {
+            return null;
+        }
+
+        $kind = trim((string) ($row['label_ar'] ?? ''));
+        $sessionId = trim((string) ($row['session_id'] ?? ''));
+        if ($sessionId === '' || !in_array($kind, ['staff', 'customer'], true)) {
+            return null;
+        }
+
+        return ['kind' => $kind, 'session_id' => $sessionId];
+    }
+
+    private static function deviceLoginKey(string $visitorId): string
+    {
+        return 'dlogin:' . hash('sha256', $visitorId);
     }
 
     private static function deviceKey(string $visitorId): string

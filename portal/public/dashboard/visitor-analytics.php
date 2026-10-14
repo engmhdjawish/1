@@ -233,49 +233,44 @@ $onlineStaff = ($tab === 'now' && $sessionsReady) ? PortalSessionService::online
 $onlineCustomers = ($tab === 'now' && $sessionsReady) ? PortalSessionService::onlineCustomers() : [];
 $onlineGuests = ($tab === 'now' && $presenceReady) ? PortalPresenceService::onlineGuests() : [];
 if ($tab === 'now' && $onlineGuests !== []) {
-    $guestSessionIds = [];
-    foreach ($onlineGuests as $guestRow) {
-        $key = (string) ($guestRow['presence_key'] ?? '');
-        if (str_starts_with($key, 'guest:')) {
-            $guestSessionIds[] = substr($key, 6);
-        }
-    }
-    $guestIdentities = VisitorLogService::resolveIdentitiesForSessions($guestSessionIds);
-    $onlineGuests = array_map(static function (array $row) use ($guestIdentities): array {
+    $onlineGuests = array_map(static function (array $row): array {
         $key = (string) ($row['presence_key'] ?? '');
-        $sessionKey = str_starts_with($key, 'guest:') ? substr($key, 6) : '';
-        $row['visitor_session_id'] = $sessionKey;
-        if ($sessionKey !== '') {
-            $row = VisitorLogService::applyIdentity(['session_id' => $sessionKey, 'visitor_ip' => $row['visitor_ip'] ?? ''], $guestIdentities);
-        } else {
-            $row['display_name'] = 'زائر';
-            $row['identity_kind'] = 'guest';
-        }
-        $lat = isset($row['latitude']) ? (float) $row['latitude'] : null;
-        $lng = isset($row['longitude']) ? (float) $row['longitude'] : null;
-        $row['map_url'] = VisitorLogService::mapExternalUrl($lat, $lng);
+        $row['visitor_session_id'] = str_starts_with($key, 'guest:') ? substr($key, 6) : '';
+        $row['display_name'] = 'زائر';
+        $row['identity_kind'] = 'guest';
+        $row['identity_subtitle'] = '';
+        $row['identity_phone'] = '';
+        $row['web_customer_id'] = null;
+        $row['map_url'] = null;
 
         return $row;
     }, $onlineGuests);
-    $onlineCustomerIds = [];
-    foreach ($onlineCustomers as $customerRow) {
-        $onlineCustomerId = trim((string) ($customerRow['subject_id'] ?? ''));
-        if ($onlineCustomerId !== '') {
-            $onlineCustomerIds[$onlineCustomerId] = true;
-        }
-    }
-    $onlineGuests = array_values(array_filter(
-        $onlineGuests,
-        static function (array $row) use ($onlineCustomerIds): bool {
-            $kind = (string) ($row['identity_kind'] ?? '');
-            if ($kind === 'staff') {
-                return false;
-            }
-            $customerId = trim((string) ($row['web_customer_id'] ?? ''));
 
-            return !($kind === 'customer' && $customerId !== '' && isset($onlineCustomerIds[$customerId]));
+    // Same browser (IP + user agent) as a live staff or customer session is that
+    // login, not a second unregistered visitor. IP alone is not enough.
+    $loggedInDevices = [];
+    foreach (array_merge($onlineStaff, $onlineCustomers) as $account) {
+        $ip = trim((string) ($account['created_ip'] ?? ''));
+        $ua = trim((string) ($account['user_agent'] ?? ''));
+        if ($ip === '' || $ua === '') {
+            continue;
         }
-    ));
+        $loggedInDevices[$ip . "\0" . $ua] = true;
+    }
+    if ($loggedInDevices !== []) {
+        $onlineGuests = array_values(array_filter(
+            $onlineGuests,
+            static function (array $row) use ($loggedInDevices): bool {
+                $ip = trim((string) ($row['visitor_ip'] ?? ''));
+                $ua = trim((string) ($row['user_agent'] ?? ''));
+                if ($ip === '' || $ua === '') {
+                    return true;
+                }
+
+                return !isset($loggedInDevices[$ip . "\0" . $ua]);
+            }
+        ));
+    }
 }
 $onlineCounts = [
     'staff' => count($onlineStaff),

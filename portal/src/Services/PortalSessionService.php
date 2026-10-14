@@ -330,6 +330,33 @@ final class PortalSessionService
         ));
     }
 
+    /**
+     * One browser keeps a single login. Switching accounts revokes the previous
+     * session from this device so it does not stay online under the old name.
+     */
+    public static function noteDeviceLogin(?string $visitorId): void
+    {
+        $visitorId = trim((string) $visitorId);
+        if ($visitorId === '' || !self::isEnabled()) {
+            return;
+        }
+
+        $meta = self::meta();
+        if ($meta === null) {
+            return;
+        }
+
+        $previous = PortalPresenceService::deviceLogin($visitorId);
+        if (
+            $previous !== null
+            && ($previous['session_id'] !== $meta['id'] || $previous['kind'] !== $meta['kind'])
+        ) {
+            self::revokeById($previous['kind'], $previous['session_id']);
+        }
+
+        PortalPresenceService::rememberDeviceLogin($visitorId, $meta['kind'], $meta['id']);
+    }
+
     public static function noteStaffActor(?string $visitorId = null): void
     {
         if (!CustomerSession::isLoggedIn()) {
