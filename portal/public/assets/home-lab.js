@@ -55,71 +55,6 @@
     return { guess, suggestions };
   };
 
-  const cardVisible = (card, box) => {
-    const rect = card.getBoundingClientRect();
-    const visibleWidth = Math.min(rect.right, box.right) - Math.max(rect.left, box.left);
-    return visibleWidth > Math.min(rect.width, box.width) * 0.55;
-  };
-
-  const updateRail = (rail) => {
-    const strip = rail.querySelector('.home-strip');
-    const prev = rail.querySelector('[data-hl-prev]');
-    const next = rail.querySelector('[data-hl-next]');
-    if (!(strip instanceof HTMLElement) || !(prev instanceof HTMLButtonElement) || !(next instanceof HTMLButtonElement)) {
-      rail.classList.add('is-static');
-      return;
-    }
-    const cards = Array.from(strip.querySelectorAll('.home-product-card'));
-    const overflow = strip.scrollWidth - strip.clientWidth > 12;
-    rail.classList.toggle('is-static', !overflow || cards.length === 0);
-    if (!overflow || cards.length === 0) {
-      prev.disabled = true;
-      next.disabled = true;
-      return;
-    }
-    const box = strip.getBoundingClientRect();
-    let first = -1;
-    let last = -1;
-    cards.forEach((card, index) => {
-      if (!cardVisible(card, box)) return;
-      if (first === -1) first = index;
-      last = index;
-    });
-    prev.disabled = first <= 0;
-    next.disabled = last === -1 || last >= cards.length - 1;
-  };
-
-  const pageRail = (rail, direction) => {
-    const strip = rail.querySelector('.home-strip');
-    if (!(strip instanceof HTMLElement)) return;
-    const cards = Array.from(strip.querySelectorAll('.home-product-card'));
-    if (cards.length === 0) return;
-    const box = strip.getBoundingClientRect();
-    const visible = cards.filter((card) => cardVisible(card, box));
-    const step = Math.max(1, visible.length || 1);
-    const first = Math.max(0, cards.findIndex((card) => cardVisible(card, box)));
-    const targetIndex = direction === 'next'
-      ? Math.min(cards.length - 1, first + step)
-      : Math.max(0, first - step);
-    cards[targetIndex]?.scrollIntoView({
-      behavior: reducedMotion ? 'auto' : 'smooth',
-      inline: 'start',
-      block: 'nearest',
-    });
-  };
-
-  const initRails = () => {
-    const rails = Array.from(document.querySelectorAll('[data-hl-rail]'));
-    rails.forEach((rail) => {
-      const strip = rail.querySelector('.home-strip');
-      rail.querySelector('[data-hl-prev]')?.addEventListener('click', () => pageRail(rail, 'prev'));
-      rail.querySelector('[data-hl-next]')?.addEventListener('click', () => pageRail(rail, 'next'));
-      strip?.addEventListener('scroll', () => updateRail(rail), { passive: true });
-      updateRail(rail);
-    });
-    window.addEventListener('resize', () => rails.forEach(updateRail));
-  };
-
   const initSearch = () => {
     const form = document.querySelector('[data-hl-search]');
     const input = document.querySelector('[data-hl-search-input]');
@@ -400,7 +335,6 @@
   };
 
   const init = () => {
-    initRails();
     initSearch();
   };
 
