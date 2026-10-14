@@ -49,14 +49,13 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
 ?>
 <div class="home-page hl">
   <aside class="hl-lab-note" aria-label="ملاحظة النسخة التجريبية">
-    <p><strong>نسخة تجريبية.</strong> الصفحة الحالية لم تتغيّر، وهذه التجربة تستخدم هويتها مع بحث يتوقع الأقسام والمواد.</p>
+    <p><strong>نسخة تجريبية.</strong></p>
     <a href="/index.php">الصفحة الحالية</a>
   </aside>
 
   <section class="hl-search-panel" aria-labelledby="hl-search-title">
     <div class="hl-search-panel__copy">
       <h2 id="hl-search-title" class="hl-search-panel__title">ابحث في المواد</h2>
-      <p class="hl-search-hint">ابحث باسم المادة أو القسم أو القياس. الحقل يخمن الباقي قبل أن تكمل.</p>
     </div>
 
     <form class="hl-search" action="/store.php" method="get" role="search" data-hl-search>
@@ -68,7 +67,7 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
             id="hl-search-input"
             type="search"
             name="q"
-            placeholder="اسم مادة، قسم، أو قياس"
+            placeholder="اسم المادة"
             autocomplete="off"
             autocorrect="off"
             autocapitalize="off"
@@ -91,8 +90,7 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
     </form>
 
     <?php if ($discover !== []): ?>
-      <div class="hl-prompts" aria-label="اقتراحات للبدء">
-        <span>جرّب</span>
+      <div class="hl-prompts" aria-label="أقسام">
         <?php foreach (array_slice($discover, 0, 6) as $item): ?>
           <button type="button" data-hl-prompt="<?= h($item['label']) ?>"><?= h($item['label']) ?></button>
         <?php endforeach; ?>
@@ -245,9 +243,6 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
                 <?php if (!empty($section['subtitle_ar'])): ?>
                   <p class="home-section__subtitle"><?= h((string) $section['subtitle_ar']) ?></p>
                 <?php endif; ?>
-                <?php if ($isOfferSection): ?>
-                  <p class="hl-section-note">هذا القسم في المقدمة لأن فيه عرضاً. ابحث داخله أو افتحه في المتجر للمقاسات والشركات.</p>
-                <?php endif; ?>
               </div>
               <div class="hl-section-actions">
                 <button type="button" class="home-section__more" data-hl-prompt="<?= h($sectionLabel($section)) ?>">
@@ -282,7 +277,6 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
   <section class="home-cta" aria-label="متابعة التسوّق">
     <div class="home-cta__content">
       <h2>لم تظهر المادة التي تريدها؟</h2>
-      <p>ارجع للبحث واكتب جزءاً من الاسم، أو افتح المتجر لتصفية القياس والشركة والمنشأ.</p>
     </div>
     <div class="home-cta__actions">
       <button type="button" class="home-btn home-btn--primary" data-hl-focus-search>

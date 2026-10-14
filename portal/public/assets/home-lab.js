@@ -336,7 +336,7 @@
       hidePanel();
     });
 
-    if (!reducedMotion && dictionary.length > 1) {
+    if (form.getAttribute('data-hl-surface') === 'lab' && !reducedMotion && dictionary.length > 1) {
       let promptIndex = 0;
       window.setInterval(() => {
         if (document.activeElement === input || input.value.trim() !== '') return;
