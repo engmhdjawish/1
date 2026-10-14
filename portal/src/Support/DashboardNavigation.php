@@ -44,6 +44,7 @@ final class DashboardNavigation
     private const CONFIGURATION_ROUTES = [
         '/dashboard/configuration.php',
         '/dashboard/amine-api.php',
+        '/dashboard/system-diagnostic.php',
         '/dashboard/users.php',
         '/dashboard/settings.php',
     ];
@@ -401,6 +402,13 @@ final class DashboardNavigation
                     'icon' => 'dns',
                     'permission' => 'company_settings.manage',
                     'description' => 'حالة الخدمة، مسار صور الأمين، حسابات API، والصلاحيات.',
+                ],
+                [
+                    'route' => '/dashboard/system-diagnostic.php',
+                    'label' => 'تشخيص الأداء',
+                    'icon' => 'monitor_heart',
+                    'permission' => null,
+                    'description' => 'فحص سرعة API الأمين، طابور الصور، والضغط — لمعرفة سبب البطء أو timeout.',
                 ],
             ],
         ];
