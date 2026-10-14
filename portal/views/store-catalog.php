@@ -563,6 +563,10 @@ $appliedClientFiltersJson = json_encode(
   <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $cartNoticeOk ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700' ?>"><?= h($cartNoticeMessage) ?></p>
 <?php endif; ?>
 
+<?php if ($storeLabMode): ?>
+  <?php require __DIR__ . '/partials/store-lab-search.php'; ?>
+<?php endif; ?>
+
 <!-- store-catalog-fragment:start -->
 <div class="store-layout <?= $allowClientFilters ? 'has-sidebar' : '' ?><?= $storeLabMode ? ' store-lab' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?><?= $allowClientFilters ? ' data-applied-filters="' . h((string) $appliedClientFiltersJson) . '"' : '' ?>>
   <?php if ($allowClientFilters): ?>

@@ -194,8 +194,8 @@ $specs = array_filter([
 
       <?php if ($comingSoonProduct): ?>
         <div class="store-buybox__stock store-buybox__stock--out">
-          <span class="material-symbols-outlined text-base" aria-hidden="true">schedule</span>
-          يتوفر قريبا
+          <span class="material-symbols-outlined text-base" aria-hidden="true">block</span>
+          <?= h(\Portal\Services\HomeSearchService::UNAVAILABLE_BADGE) ?>
         </div>
       <?php elseif ($showQuantity): ?>
         <?php if ($packagesAvailable <= 0 && $allowCart): ?>

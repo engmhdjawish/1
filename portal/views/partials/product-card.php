@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Portal\Services\HomeSearchService;
 use Portal\Services\ShareCartService;
 use Portal\Services\SpecialOfferService;
 use Portal\Services\StoreCartService;
@@ -90,6 +91,12 @@ $previewJson = $previewPayload !== null
     data-preview="<?= h((string) $previewJson) ?>"
   <?php endif; ?>
 >
+  <?php if ($comingSoonCard): ?>
+    <p class="store-soon-band">
+      <span class="material-symbols-outlined" aria-hidden="true">block</span>
+      <?= h(HomeSearchService::UNAVAILABLE_BADGE) ?>
+    </p>
+  <?php endif; ?>
   <?php if ($useImagePreview && $showImages): ?>
     <button type="button" class="store-product-card__media store-product-card__media--preview" data-store-product-preview title="معاينة الصورة والأسعار">
       <?php if ($hasOffer): ?>
@@ -98,9 +105,7 @@ $previewJson = $previewPayload !== null
           <?= h($offerBadge !== '' ? $offerBadge : 'عرض') ?>
         </span>
       <?php endif; ?>
-      <?php if ($comingSoonCard): ?>
-        <span class="store-product-card__chip store-product-card__chip--soon">يتوفر قريبا</span>
-      <?php elseif ($materialType !== ''): ?>
+      <?php if (!$comingSoonCard && $materialType !== ''): ?>
         <span class="store-product-card__chip"><?= h($materialType) ?></span>
       <?php endif; ?>
       <?php if ($materialCode !== ''): ?>
@@ -135,9 +140,7 @@ $previewJson = $previewPayload !== null
             <?= h($offerBadge !== '' ? $offerBadge : 'عرض') ?>
           </span>
         <?php endif; ?>
-        <?php if ($comingSoonCard): ?>
-          <span class="store-product-card__chip store-product-card__chip--soon">يتوفر قريبا</span>
-        <?php elseif ($materialType !== ''): ?>
+        <?php if (!$comingSoonCard && $materialType !== ''): ?>
           <span class="store-product-card__chip"><?= h($materialType) ?></span>
         <?php endif; ?>
         <?php if ($materialCode !== ''): ?>

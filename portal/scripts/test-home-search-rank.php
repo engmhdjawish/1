@@ -30,7 +30,7 @@ $correctionOk = ($correction['guess'] ?? '') === 'رجالي';
 
 $soonRank = HomeSearchService::rank('حذاء', [
     ['label' => 'حذاء رياضي', 'hint' => 'مادة', 'href' => '/product.php?guid=1', 'kind' => 'product', 'trusted' => true],
-    ['label' => 'حذاء شتوي', 'hint' => 'يتوفر قريبا', 'href' => '/store-lab.php?q=%D8%AD%D8%B0%D8%A7%D8%A1', 'kind' => 'soon', 'trusted' => true],
+    ['label' => 'حذاء شتوي', 'hint' => 'يتوفر قريبا', 'badge' => 'غير متوفر حالياً', 'href' => '/store-lab.php?q=%D8%AD%D8%B0%D8%A7%D8%A1', 'kind' => 'soon', 'trusted' => true],
 ]);
 $soonHit = null;
 foreach ($soonRank['suggestions'] as $suggestion) {
@@ -40,6 +40,7 @@ foreach ($soonRank['suggestions'] as $suggestion) {
     }
 }
 $soonOk = ($soonHit['hint'] ?? '') === 'يتوفر قريبا'
+    && ($soonHit['badge'] ?? '') === 'غير متوفر حالياً'
     && ($soonHit['label'] ?? '') === 'حذاء شتوي'
     && ($soonRank['suggestions'][0]['kind'] ?? '') === 'product';
 
@@ -47,15 +48,23 @@ $surface = HomeSearchService::applySurface([
     ['kind' => 'section', 'label' => 'رجالي', 'hint' => 'قسم', 'href' => '/store.php?section=men'],
     ['kind' => 'product', 'label' => 'حذاء', 'hint' => 'مادة', 'href' => '/product.php?guid=1'],
     ['kind' => 'search', 'label' => 'ابحث', 'hint' => 'في كل المواد', 'href' => '/store.php?q=x'],
+    ['kind' => 'soon', 'label' => 'حذاء شتوي', 'hint' => 'يتوفر قريبا', 'badge' => 'غير متوفر حالياً', 'href' => '/store.php?q=soon'],
 ], 'lab');
 $surfaceOk = ($surface[0]['href'] ?? '') === '/store-lab.php?section=men'
     && ($surface[0]['hint'] ?? null) === ''
     && ($surface[1]['href'] ?? '') === '/product.php?guid=1'
     && ($surface[1]['hint'] ?? null) === ''
     && ($surface[2]['href'] ?? '') === '/store-lab.php?q=x'
-    && ($surface[2]['hint'] ?? null) === '';
+    && ($surface[2]['hint'] ?? null) === ''
+    && ($surface[3]['href'] ?? '') === '/store-lab.php?q=soon'
+    && ($surface[3]['hint'] ?? null) === ''
+    && ($surface[3]['badge'] ?? '') === 'غير متوفر حالياً';
 $liveSurface = HomeSearchService::applySurface($surface, '');
-$liveSurfaceOk = ($liveSurface[1]['href'] ?? '') === '/product.php?guid=1';
+$liveSoon = array_values(array_filter(
+    $liveSurface,
+    static fn (array $suggestion): bool => ($suggestion['kind'] ?? '') === 'soon'
+));
+$liveSurfaceOk = ($liveSurface[1]['href'] ?? '') === '/product.php?guid=1' && $liveSoon === [];
 
 if (!$guessOk || !$firstOk || !$typoOk || !$normalizeOk || !$emptyOk || !$correctionOk || !$soonOk || !$surfaceOk || !$liveSurfaceOk) {
     fwrite(STDERR, json_encode([

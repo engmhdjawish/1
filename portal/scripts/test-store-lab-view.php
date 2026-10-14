@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Trial store view: no hero, live filter box, hidden warehouses, one grid.
+ * Trial store view: no hero, smart search, live filter box, hidden warehouses, one grid.
  * Usage: php scripts/test-store-lab-view.php
  */
 
@@ -150,6 +150,9 @@ $locked = $render(false);
 $live = $render(true, false);
 
 $assert('no marketing hero', !str_contains($html, 'home-hero') && !str_contains($html, 'sl-hero'));
+$assert('smart search sits above the results', str_contains($html, 'hl-search-panel') && str_contains($html, 'data-hl-search') && str_contains($html, 'data-hl-surface="lab"') && str_contains($html, 'data-hl-ghost') && strpos($html, 'hl-search-panel') < strpos($html, 'store-product-grid'));
+$assert('smart search stays on the trial store', str_contains($html, 'action="/store-lab.php"') && !str_contains($html, 'action="/store.php"') && str_contains($html, '/assets/home-lab.js'));
+$assert('live store does not get the trial search', !str_contains($live, 'data-hl-search') && !str_contains($live, 'store-soon-band') && !str_contains($live, 'hl-search-panel'));
 $assert('live filter sidebar is present', str_contains($html, 'store-filters-sidebar') && str_contains($html, 'تصفية النتائج'));
 $assert('filter form stays on the trial route', str_contains($html, 'action="/store-lab.php"'));
 $assert('original filter group markup is used', str_contains($html, 'store-filter-accordion') && str_contains($html, 'name="materialTypes[]"'));
@@ -178,7 +181,7 @@ $soonCard = $cardSlice($html, 'حذاء شتوي');
 $assert('listed price is shown', str_contains($pricedCard, 'offer-price-block'));
 $assert('zero price is omitted', $zeroCard !== '' && !str_contains($zeroCard, 'offer-price-block') && !str_contains($zeroCard, 'store-price-veil'));
 $assert('guest price lock remains available', str_contains($locked, 'store-price-veil'));
-$assert('coming soon card has a badge and no cart form', str_contains($soonCard, 'يتوفر قريبا') && !str_contains($soonCard, 'data-store-add-cart') && !str_contains($html, 'data-store-add-cart') && !str_contains($html, 'store-add-cart'));
+$assert('coming soon card has a clear unavailable band and no cart form', str_contains($soonCard, 'غير متوفر حالياً') && str_contains($soonCard, 'store-soon-band') && str_contains($soonCard, 'store-product-card--soon') && !str_contains($soonCard, 'يتوفر قريبا') && !str_contains($soonCard, 'store-product-card__chip--soon') && !str_contains($soonCard, 'data-store-add-cart') && !str_contains($html, 'data-store-add-cart') && !str_contains($html, 'store-add-cart'));
 
 $out = $argv[1] ?? '';
 if ($out !== '') {

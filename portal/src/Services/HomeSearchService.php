@@ -8,6 +8,8 @@ use Portal\Support\ResponseCache;
 
 final class HomeSearchService
 {
+    public const UNAVAILABLE_BADGE = 'غير متوفر حالياً';
+
     /**
      * @param list<array{label: string, hint: string, href: string, kind: string}> $candidates
      * @return array{guess: ?string, suggestions: list<array{label: string, hint: string, href: string, kind: string}>}
@@ -364,10 +366,10 @@ final class HomeSearchService
                 : '/store-lab.php?q=' . rawurlencode($label);
             $candidates[] = [
                 'label' => $label,
-                'hint' => $code !== '' ? 'يتوفر قريبا · ' . $code : 'يتوفر قريبا',
+                'hint' => '',
                 'href' => $href,
                 'kind' => 'soon',
-                'badge' => 'يتوفر قريبا',
+                'badge' => self::UNAVAILABLE_BADGE,
                 'trusted' => true,
             ];
         }

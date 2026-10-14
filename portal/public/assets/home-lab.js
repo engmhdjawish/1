@@ -48,14 +48,21 @@
       })
       .filter((row) => row.score >= 45)
       .sort((a, b) => b.score - a.score || a.label.localeCompare(b.label, 'ar'));
-    const suggestions = scored.slice(0, 7).map((row) => row.item);
+    const regular = scored.filter((row) => row.item.kind !== 'soon');
+    const soon = scored.filter((row) => row.item.kind === 'soon');
+    const picked = soon.length === 0
+      ? regular.slice(0, 7)
+      : regular.slice(0, 5).concat(soon.slice(0, 2));
+    const suggestions = picked.slice(0, 7).map((row) => row.item);
     suggestions.push({
       kind: 'search',
       label: `ابحث عن «${query.trim()}»`,
       hint: 'في كل المواد',
       href: `${searchPath}?q=${encodeURIComponent(query.trim())}`,
     });
-    const guess = scored.find((row) => row.score >= 60 && row.label !== normalizedQuery)?.item.label || '';
+    const guess = picked.find((row) => row.score >= 60 && row.item.kind !== 'soon' && row.label !== normalizedQuery)?.item.label
+      || picked.find((row) => row.score >= 60 && row.label !== normalizedQuery)?.item.label
+      || '';
     return { guess, suggestions };
   };
 
@@ -145,11 +152,6 @@
     const labSurface = form.getAttribute('data-hl-surface') === 'lab';
 
     const paintGuess = () => {
-      if (labSurface) {
-        if (ghost instanceof HTMLElement) ghost.hidden = true;
-        if (accept instanceof HTMLButtonElement) accept.hidden = true;
-        return;
-      }
       const value = input.value;
       const suffix = currentGuess && caretAtEnd() ? suffixFor(value, currentGuess) : '';
       if (ghost instanceof HTMLElement) {
@@ -188,12 +190,10 @@
         return;
       }
       panel.replaceChildren();
-      if (!labSurface) {
-        const head = document.createElement('div');
-        head.className = 'hl-suggest__head';
-        head.textContent = input.value.trim() ? 'توقعات من المتجر' : 'اكتشف الأقسام';
-        panel.append(head);
-      }
+      const head = document.createElement('div');
+      head.className = 'hl-suggest__head';
+      head.textContent = input.value.trim() ? 'توقعات من المتجر' : 'اكتشف الأقسام';
+      panel.append(head);
       suggestions.forEach((item, index) => {
         const link = document.createElement('a');
         link.className = `hl-suggest__item${item.kind === 'soon' ? ' hl-suggest__item--soon' : ''}${index === activeIndex ? ' is-active' : ''}`;
@@ -231,9 +231,9 @@
         if (item.kind === 'soon' || item.badge) {
           const soonBadge = document.createElement('span');
           soonBadge.className = 'hl-suggest__badge hl-suggest__badge--soon';
-          soonBadge.textContent = item.badge || 'يتوفر قريبا';
+          soonBadge.textContent = item.badge || 'غير متوفر حالياً';
           link.append(soonBadge);
-        } else if (!labSurface && currentGuess && normalize(item.label || '') === normalize(currentGuess)) {
+        } else if (currentGuess && normalize(item.label || '') === normalize(currentGuess)) {
           const badge = document.createElement('span');
           badge.className = 'hl-suggest__badge';
           badge.textContent = 'متوقع';
@@ -368,15 +368,6 @@
       if (!(event.target instanceof Node) || form.contains(event.target)) return;
       hidePanel();
     });
-
-    if (form.getAttribute('data-hl-surface') === 'lab' && !reducedMotion && dictionary.length > 1) {
-      let promptIndex = 0;
-      window.setInterval(() => {
-        if (document.activeElement === input || input.value.trim() !== '') return;
-        promptIndex = (promptIndex + 1) % Math.min(dictionary.length, 6);
-        input.placeholder = `جرّب: ${dictionary[promptIndex].label}`;
-      }, 2800);
-    }
   };
 
   const initStickyNav = () => {
