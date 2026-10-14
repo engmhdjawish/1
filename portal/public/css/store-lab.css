@@ -80,3 +80,29 @@
 .store-lab .store-filter-pending-chip--warehouse {
   display: none !important;
 }
+
+/* Phone catalog: one wide card so the contained photo can fill the screen. */
+@media (max-width: 639px) {
+  .store-lab .store-product-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .store-lab .store-product-card__media {
+    padding: 0.45rem;
+  }
+
+  .store-lab .store-product-card__media .material-image-frame__photo,
+  .store-lab .material-image-frame--card .material-image-frame__photo {
+    height: auto;
+    aspect-ratio: 1 / 1;
+    min-height: 18rem;
+    max-height: none;
+  }
+
+  .store-lab .store-product-card__media .material-image-frame__photo img,
+  .store-lab .store-product-card__media .material-image-frame__img,
+  .store-lab .material-image-frame--card .material-image-frame__photo img,
+  .store-lab .material-image-frame--card .material-image-frame__img {
+    object-fit: contain;
+  }
+}
