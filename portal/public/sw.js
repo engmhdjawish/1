@@ -1,7 +1,7 @@
 /**
  * Jawish store PWA — cache static assets, network-first for pages.
  */
-const CACHE_VERSION = 'jawish-v13';
+const CACHE_VERSION = 'jawish-v14';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 
 const PRECACHE_URLS = [
@@ -83,8 +83,17 @@ function parsePushPayload(event) {
 
 self.addEventListener('push', (event) => {
   const payload = parsePushPayload(event);
-  event.waitUntil(
-    self.registration.showNotification(payload.title, {
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const visibleClient = clients.find((client) => client.visibilityState === 'visible');
+    if (visibleClient) {
+      clients.forEach((client) => {
+        client.postMessage({ type: 'portal-notification', payload });
+      });
+      return;
+    }
+
+    await self.registration.showNotification(payload.title, {
       body: payload.body,
       icon: payload.icon,
       badge: '/icons/brand-icon.php?size=96',
@@ -93,8 +102,8 @@ self.addEventListener('push', (event) => {
         url: payload.url,
         id: payload.id,
       },
-    })
-  );
+    });
+  })());
 });
 
 function resolveNotificationTargetUrl(rawUrl) {
@@ -102,11 +111,30 @@ function resolveNotificationTargetUrl(rawUrl) {
   if (!value || value === 'null' || value === 'undefined') {
     return new URL('/', self.location.origin).href;
   }
-  return new URL(value, self.location.origin).href;
+  try {
+    const url = new URL(value, self.location.origin);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return new URL('/', self.location.origin).href;
+    }
+    return url.href;
+  } catch (_) {
+    return new URL('/', self.location.origin).href;
+  }
 }
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const notificationId = String(event.notification?.data?.id || '');
+  if (notificationId && notificationId !== 'jawish-notification') {
+    event.waitUntil(
+      fetch('/api/notifications.php', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ action: 'read', id: notificationId }),
+      }).catch(() => undefined)
+    );
+  }
   const absoluteUrl = resolveNotificationTargetUrl(event.notification?.data?.url);
 
   event.waitUntil(

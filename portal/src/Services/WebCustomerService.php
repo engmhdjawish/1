@@ -101,7 +101,13 @@ final class WebCustomerService
             'approved_at' => $activateImmediately ? date('c') : null,
         ]);
 
-        return ['ok' => true, 'id' => $stmt->fetchColumn()];
+        $customerId = (string) $stmt->fetchColumn();
+        try {
+            NotificationService::notifyCustomerAccountCreated($customerId, $activateImmediately);
+        } catch (\Throwable) {
+        }
+
+        return ['ok' => true, 'id' => $customerId];
     }
 
     /** @return array<string, mixed>|null */
@@ -429,6 +435,7 @@ final class WebCustomerService
 
         if ($stmt->rowCount() > 0) {
             PortalSessionService::revokeAllForCustomer($customerId);
+            NotificationService::notifyCustomerSuspended($customerId, (string) $reason);
         }
 
         return $stmt->rowCount() > 0;
@@ -460,6 +467,10 @@ final class WebCustomerService
             'policy' => $accessPolicyId,
             'admin' => $adminUserId,
         ]);
+
+        if ($stmt->rowCount() > 0) {
+            NotificationService::notifyCustomerReactivated($customerId);
+        }
 
         return $stmt->rowCount() > 0;
     }
@@ -650,6 +661,7 @@ final class WebCustomerService
             'UPDATE web_customers SET password_hash = :hash, updated_at = NOW() WHERE id = :id'
         );
         $update->execute(['hash' => $newHash, 'id' => $customerId]);
+        NotificationService::notifyCustomerPasswordChanged($customerId);
 
         return ['ok' => true, 'message' => 'تم تحديث كلمة المرور بنجاح.'];
     }

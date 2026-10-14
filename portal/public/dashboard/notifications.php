@@ -8,7 +8,6 @@ use Portal\Auth\WebSession;
 use Portal\Services\NotificationService;
 use Portal\Services\WebCustomerService;
 use Portal\Database;
-use PDO;
 
 WebSession::requirePermission('notifications.manage');
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -44,10 +43,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($scope === 'private') {
                 $customerId = trim((string) ($_POST['customer_id'] ?? ''));
                 $staffId = trim((string) ($_POST['staff_id'] ?? ''));
+                if ($customerId !== '' && $staffId !== '') {
+                    throw new \RuntimeException('اختر عميلاً أو موظفاً واحداً فقط.');
+                }
                 if ($customerId !== '') {
-                    NotificationService::createPrivateForCustomer($customerId, $title, $body, $linkUrl ?: null, $icon);
+                    NotificationService::createPrivateForCustomer(
+                        $customerId,
+                        $title,
+                        $body,
+                        $linkUrl ?: null,
+                        $icon,
+                        'manual',
+                        null,
+                        null,
+                        $createdBy
+                    );
                 } elseif ($staffId !== '') {
-                    NotificationService::createPrivateForStaff($staffId, $title, $body, $linkUrl ?: null, $icon);
+                    NotificationService::createPrivateForStaff(
+                        $staffId,
+                        $title,
+                        $body,
+                        $linkUrl ?: null,
+                        $icon,
+                        'manual',
+                        null,
+                        null,
+                        $createdBy
+                    );
                 } else {
                     throw new \RuntimeException('حدّد عميلاً أو موظفاً للإشعار الخاص.');
                 }
@@ -103,9 +125,32 @@ try {
 }
 
 try {
-    $customers = WebCustomerService::listByStatus('active', '', '', 100);
+    $customers = Database::pdo()->query(
+        "SELECT id::text AS id, name_ar, phone, status::text AS status
+         FROM web_customers
+         WHERE status IN ('active', 'pending', 'suspended')
+         ORDER BY name_ar ASC
+         LIMIT 300"
+    )->fetchAll(PDO::FETCH_ASSOC) ?: [];
 } catch (\Throwable) {
-    $customers = [];
+    try {
+        $customers = WebCustomerService::listByStatus('active', '', '', 100);
+    } catch (\Throwable) {
+        $customers = [];
+    }
+}
+
+try {
+    $notificationStats = NotificationService::sentStats();
+} catch (\Throwable) {
+    $notificationStats = [
+        'total' => count($sentNotifications),
+        'public_count' => 0,
+        'private_count' => 0,
+        'manual_count' => 0,
+        'expired_count' => 0,
+        'active_count' => 0,
+    ];
 }
 
 try {

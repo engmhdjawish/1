@@ -12,6 +12,10 @@ declare(strict_types=1);
       <h2>الإشعارات</h2>
       <button type="button" class="notif-bell__mark-all" data-notif-bell-mark-all>تعليم الكل كمقروء</button>
     </div>
+    <div class="notif-bell__filters" role="tablist" aria-label="تصفية الإشعارات">
+      <button type="button" class="is-active" data-notif-filter="all">الكل</button>
+      <button type="button" data-notif-filter="unread">غير المقروء</button>
+    </div>
     <button type="button" class="notif-bell__enable-push" data-notif-enable-push hidden>تفعيل إشعارات الجهاز</button>
     <div class="notif-bell__list" data-notif-bell-list></div>
   </div>
