@@ -98,6 +98,8 @@ builder.Services.AddScoped<IServiceSettingsService, ServiceSettingsService>();
 builder.Services.AddScoped<IImageStorageService, ImageStorageService>();
 builder.Services.AddScoped<MaterialQueryBuilder>();
 builder.Services.AddScoped<MaterialResultFiltersService>();
+builder.Services.AddScoped<MaterialCatalogService>();
+builder.Services.AddScoped<MaterialFilterOptionsService>();
 builder.Services.AddHostedService<ApiManagementDbInitializer>();
 
 builder.Services.AddControllers();

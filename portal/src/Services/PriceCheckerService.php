@@ -280,33 +280,36 @@ final class PriceCheckerService
     /** @return array<string, mixed>|null */
     private static function fetchMaterialByBarcode(string $barcode): ?array
     {
-        foreach ([3, 12] as $pageSize) {
-            $response = ApiClient::get('/api/materials', [
-                'keyword' => $barcode,
-                'page' => 1,
-                'pageSize' => $pageSize,
-                'includeTotalCount' => 'false',
-            ], 12);
-
-            if (!($response['ok'] ?? false)) {
-                $message = is_array($response['data'] ?? null)
-                    ? (string) (($response['data']['message'] ?? $response['data']['title'] ?? $response['error'] ?? '') ?: 'فشل جلب المواد')
-                    : (string) ($response['error'] ?? 'فشل جلب المواد');
-                throw new RuntimeException($message);
+        $lookup = ApiClient::get('/api/materials/lookup', [
+            'barcode' => $barcode,
+        ], 12);
+        if (($lookup['ok'] ?? false) && is_array($lookup['data'] ?? null)) {
+            $item = $lookup['data']['item'] ?? $lookup['data']['Item'] ?? null;
+            if (is_array($item)) {
+                return $item;
             }
-
-            $items = is_array($response['data']['items'] ?? null) ? $response['data']['items'] : [];
-            $material = self::pickMaterial($items, $barcode);
-            if ($material !== null) {
-                return $material;
-            }
-
-            if ($items === []) {
+            if (array_key_exists('item', $lookup['data']) || array_key_exists('Item', $lookup['data'])) {
                 return null;
             }
         }
 
-        return null;
+        $response = ApiClient::get('/api/materials', [
+            'keyword' => $barcode,
+            'page' => 1,
+            'pageSize' => 12,
+            'includeTotalCount' => 'false',
+        ], 12);
+
+        if (!($response['ok'] ?? false)) {
+            $message = is_array($response['data'] ?? null)
+                ? (string) (($response['data']['message'] ?? $response['data']['title'] ?? $response['error'] ?? '') ?: 'فشل جلب المواد')
+                : (string) ($response['error'] ?? 'فشل جلب المواد');
+            throw new RuntimeException($message);
+        }
+
+        $items = is_array($response['data']['items'] ?? null) ? $response['data']['items'] : [];
+
+        return self::pickMaterial($items, $barcode);
     }
 
     public static function warmConnection(): void

@@ -169,6 +169,9 @@ GET  /api/bills/invoice-types
 GET  /api/bills/voucher-types
 
 GET  /api/materials
+POST /api/materials/batch
+GET  /api/materials/lookup?barcode=
+GET  /api/materials/suggest?q=
 GET  /api/materials/{guid}
 GET  /api/materials/filter-options
 GET  /api/materials/stores
@@ -728,7 +731,20 @@ GET /api/materials/filter-options
 
 قوائم `groups` و `stores` تعاد مرتبة أبجديًا.
 
-حاليًا لا يتم إرجاع `priceRanges` ضمن `GET /api/materials/filter-options`.
+`priceRanges` يُعاد ضمن `GET /api/materials/filter-options`، ويُخفى كل مدى إذا كانت صلاحية الحقل المقابل مرفوضة.
+
+مسارات أخف لواجهة المتجر، حتى لا تُعاد نفس استعلامات القائمة لكل قسم أو لكل مسح باركود:
+
+```text
+POST /api/materials/batch
+GET  /api/materials/lookup?barcode=CODE
+GET  /api/materials/suggest?q=TEXT&limit=8
+```
+
+- `batch` يقبل حتى 8 شرائح (`queries[]` بنفس فلاتر القائمة و`key` فريد). الافتراضي لكل شريحة يمكن أن يوقف `includeTotalCount` لتفادي مسح العدّ.
+- `lookup` يطابق الكود أو أي باركود مطابقة تامة ويعيد `{ "item": null }` عند عدم الوجود، بدون بحث `LIKE` على الكتالوج.
+- `suggest` يعيد حتى 20 مادة للاقتراح: مطابقة تامة أولاً، ثم احتواء على الاسم/الكود، بدون عدّ إجمالي وبدون أوجه الفلاتر. نفس فلاتر المستودع والتوفر تُمرَّر كـ query.
+- `GET /api/materials/filter-options` تُخزَّن في ذاكرة الـ API لمدة 15 دقيقة. صلاحيات إخفاء الأسعار تُطبَّق بعد القراءة من الذاكرة.
 
 يمكن ضبط المطابقة التامة للكود عبر `code`، بينما `keyword` مخصص للبحث المرن متعدد الكلمات.
 

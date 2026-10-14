@@ -187,10 +187,7 @@ final class HomePageService
 
         $materialsByGuid = MaterialBatchService::fetchByGuids(array_keys($manualGuids), 25, $policyStoreGuids);
 
-        $filterResponses = [];
-        if ($filterJobs !== []) {
-            $filterResponses = ApiClient::getMany($filterJobs, 25);
-        }
+        $filterResponses = self::fetchFilterSections($filterJobs);
 
         foreach ($sections as $index => &$section) {
             $maxProducts = (int) ($section['_batch_max_products'] ?? max(1, (int) ($section['max_products'] ?? 12)));
@@ -243,6 +240,97 @@ final class HomePageService
         unset($section);
 
         return $sections;
+    }
+
+    /**
+     * One batch request per eight sections. Falls back to parallel GETs if the
+     * API does not accept the batch yet.
+     *
+     * @param list<array{key: string, path: string, query: array<string, mixed>}> $filterJobs
+     * @return array<string, array<string, mixed>>
+     */
+    private static function fetchFilterSections(array $filterJobs): array
+    {
+        if ($filterJobs === []) {
+            return [];
+        }
+
+        $responses = [];
+        foreach (array_chunk($filterJobs, 8) as $chunk) {
+            $batched = self::fetchFilterChunk($chunk);
+            foreach ($batched as $key => $response) {
+                $responses[$key] = $response;
+            }
+        }
+
+        return $responses;
+    }
+
+    /**
+     * @param list<array{key: string, path: string, query: array<string, mixed>}> $chunk
+     * @return array<string, array<string, mixed>>
+     */
+    private static function fetchFilterChunk(array $chunk): array
+    {
+        try {
+            $response = ApiClient::postJson('/api/materials/batch', [
+                'queries' => array_map(
+                    static fn (array $job): array => self::batchQueryPayload($job['query'], (string) $job['key']),
+                    $chunk
+                ),
+            ], 25);
+            $results = is_array($response['data']['results'] ?? null) ? $response['data']['results'] : null;
+            if (($response['ok'] ?? false) && is_array($results)) {
+                $mapped = [];
+                foreach ($chunk as $job) {
+                    $key = (string) $job['key'];
+                    $data = $results[$key] ?? null;
+                    $mapped[$key] = [
+                        'ok' => is_array($data),
+                        'status' => is_array($data) ? 200 : 502,
+                        'data' => is_array($data) ? $data : null,
+                        'error' => is_array($data) ? '' : 'missing batch result',
+                    ];
+                }
+
+                return $mapped;
+            }
+        } catch (\Throwable) {
+            // Fall through to the previous per-section requests.
+        }
+
+        return ApiClient::getMany($chunk, 25);
+    }
+
+    /** @param array<string, mixed> $query @return array<string, mixed> */
+    private static function batchQueryPayload(array $query, string $key): array
+    {
+        $payload = [
+            'key' => $key,
+            'includeTotalCount' => false,
+            'page' => (int) ($query['page'] ?? 1),
+            'pageSize' => (int) ($query['pageSize'] ?? 24),
+        ];
+        foreach ($query as $name => $value) {
+            if ($name === 'includeTotalCount' || $value === null || $value === '') {
+                continue;
+            }
+            if (in_array($name, ['isAvailable', 'hasImage'], true)) {
+                $payload[$name] = $value === true || $value === 'true' || $value === '1' || $value === 1;
+                continue;
+            }
+            if (in_array($name, ['page', 'pageSize'], true)) {
+                $payload[$name] = (int) $value;
+                continue;
+            }
+            if (is_string($name) && (str_starts_with($name, 'min') || str_starts_with($name, 'max'))) {
+                $payload[$name] = (float) $value;
+                continue;
+            }
+            $payload[$name] = $value;
+        }
+
+        return $payload;
     }
 
     private static function productStripsCacheKey(): string

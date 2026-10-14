@@ -582,9 +582,9 @@ $appliedClientFiltersJson = json_encode(
           <?php endif; ?>
 
           <?php if ($isClientFilterVisible('search')): ?>
-            <div class="store-inline-field store-filters-search-desktop">
+            <div class="store-inline-field store-filters-search-desktop store-search-field">
               <label for="store-search-q">بحث</label>
-              <input id="store-search-q" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" placeholder="اسم المادة أو الكود">
+              <input id="store-search-q" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" placeholder="اسم المادة أو الكود" autocomplete="off" enterkeyhint="search">
             </div>
           <?php endif; ?>
 
@@ -835,7 +835,7 @@ $appliedClientFiltersJson = json_encode(
         <div class="store-mobile-filter-bar" data-store-mobile-filter-bar>
           <div class="store-mobile-filter-bar-inner">
             <?php if ($isClientFilterVisible('search')): ?>
-              <label class="store-mobile-search" for="store-mobile-search-q">
+              <label class="store-mobile-search store-search-field" for="store-mobile-search-q">
                 <span class="material-symbols-outlined store-mobile-search-icon" aria-hidden="true">search</span>
                 <input
                   type="search"

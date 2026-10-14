@@ -846,6 +846,7 @@ final class HomeSectionService
             'page' => 1,
             'pageSize' => $pageSize,
             'sort' => 'number:asc',
+            'includeTotalCount' => 'false',
         ];
 
         $keyword = trim((string) ($rules['keyword'] ?? ''));
