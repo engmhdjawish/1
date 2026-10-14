@@ -66,12 +66,36 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
             مرحباً بكم في <?= h($siteName) ?>
           </p>
           <h1 id="hl-search-title" class="home-hero__title">
-            <span class="home-hero__title-line">تجربة تسوّق جملة</span>
-            <span class="home-hero__title-line">احترافية وسلسة</span>
+            <span class="home-hero__title-line">اعثر على المادة</span>
+            <span class="home-hero__title-line">ثم أكمل طلب الجملة</span>
           </h1>
           <p class="home-hero__lead">
             <?= $aboutSnippet !== '' ? h($aboutSnippet) : 'تصفّح أحدث المواد بأسعار واضحة، أضف للسلة، وتابع طلبك خطوة بخطوة.' ?>
           </p>
+        </div>
+
+        <div class="home-hero__visual" aria-hidden="true">
+          <div class="home-hero__orbits">
+            <svg class="home-hero__orbits-svg" viewBox="0 0 200 200" focusable="false">
+              <g class="home-hero__orbits-layer home-hero__orbits-layer--a">
+                <circle cx="100" cy="100" r="88" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="175 378" stroke-linecap="round" opacity="0.18"></circle>
+                <circle cx="100" cy="12" r="3.6" fill="currentColor" opacity="0.42"></circle>
+              </g>
+              <g class="home-hero__orbits-layer home-hero__orbits-layer--b">
+                <circle cx="100" cy="100" r="62" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="120 270" stroke-linecap="round" opacity="0.14"></circle>
+                <circle cx="162" cy="100" r="3" fill="currentColor" opacity="0.36"></circle>
+              </g>
+              <g class="home-hero__orbits-layer home-hero__orbits-layer--c">
+                <circle cx="100" cy="100" r="38" fill="none" stroke="currentColor" stroke-width="0.9" stroke-dasharray="78 162" stroke-linecap="round" opacity="0.1"></circle>
+                <circle cx="100" cy="138" r="2.6" fill="currentColor" opacity="0.32"></circle>
+              </g>
+            </svg>
+            <span class="home-hero__orbit-core"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="hl-hero-search">
           <p class="hl-search-hint">ابحث باسم المادة أو القسم أو القياس. الحقل يخمن الباقي قبل أن تكمل.</p>
 
           <form class="hl-search" action="/store.php" method="get" role="search" data-hl-search>
@@ -126,27 +150,6 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
               </a>
             <?php endif; ?>
           </div>
-        </div>
-
-        <div class="home-hero__visual" aria-hidden="true">
-          <div class="home-hero__orbits">
-            <svg class="home-hero__orbits-svg" viewBox="0 0 200 200" focusable="false">
-              <g class="home-hero__orbits-layer home-hero__orbits-layer--a">
-                <circle cx="100" cy="100" r="88" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="175 378" stroke-linecap="round" opacity="0.18"></circle>
-                <circle cx="100" cy="12" r="3.6" fill="currentColor" opacity="0.42"></circle>
-              </g>
-              <g class="home-hero__orbits-layer home-hero__orbits-layer--b">
-                <circle cx="100" cy="100" r="62" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="120 270" stroke-linecap="round" opacity="0.14"></circle>
-                <circle cx="162" cy="100" r="3" fill="currentColor" opacity="0.36"></circle>
-              </g>
-              <g class="home-hero__orbits-layer home-hero__orbits-layer--c">
-                <circle cx="100" cy="100" r="38" fill="none" stroke="currentColor" stroke-width="0.9" stroke-dasharray="78 162" stroke-linecap="round" opacity="0.1"></circle>
-                <circle cx="100" cy="138" r="2.6" fill="currentColor" opacity="0.32"></circle>
-              </g>
-            </svg>
-            <span class="home-hero__orbit-core"></span>
-          </div>
-        </div>
       </div>
     </div>
   </section>
@@ -214,7 +217,7 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
           $embeddedStripHtml = trim((string) ($embeddedProductStrips[$sectionId] ?? ''));
           $isOfferSection = !empty($section['is_offer_section']);
         ?>
-        <section class="home-section<?= $isOfferSection ? ' home-section--offer' : '' ?>" id="<?= h($sectionId) ?>">
+        <section class="home-section<?= $isOfferSection ? ' home-section--offer hl-section--feature' : '' ?>" id="<?= h($sectionId) ?>">
           <?php if (!empty($section['banner_image_url'])): ?>
             <div class="home-section__banner">
               <img
@@ -236,11 +239,20 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
                 <?php if (!empty($section['subtitle_ar'])): ?>
                   <p class="home-section__subtitle"><?= h((string) $section['subtitle_ar']) ?></p>
                 <?php endif; ?>
+                <?php if ($isOfferSection): ?>
+                  <p class="hl-section-note">هذا القسم في المقدمة لأن فيه عرضاً. ابحث داخله أو افتحه في المتجر للمقاسات والشركات.</p>
+                <?php endif; ?>
               </div>
-              <a href="<?= h(home_section_store_url($section)) ?>" class="home-section__more">
-                عرض المزيد
-                <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
-              </a>
+              <div class="hl-section-actions">
+                <button type="button" class="home-section__more" data-hl-prompt="<?= h($sectionLabel($section)) ?>">
+                  ابحث هنا
+                  <span class="material-symbols-outlined" aria-hidden="true">search</span>
+                </button>
+                <a href="<?= h(home_section_store_url($section)) ?>" class="home-section__more">
+                  عرض المزيد
+                  <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+                </a>
+              </div>
             </header>
             <?php if ($embeddedStripHtml !== ''): ?>
               <?= $embeddedStripHtml ?>
@@ -261,13 +273,17 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
     </section>
   <?php endif; ?>
 
-  <section class="home-cta" aria-label="ابدأ التسوق">
+  <section class="home-cta" aria-label="متابعة التسوّق">
     <div class="home-cta__content">
-      <h2>جاهز لبدء طلبك؟</h2>
-      <p>استكشف المتجر كاملاً أو سجّل حسابك للحصول على أسعار وصلاحيات مخصصة.</p>
+      <h2>لم تظهر المادة التي تريدها؟</h2>
+      <p>ارجع للبحث واكتب جزءاً من الاسم، أو افتح المتجر لتصفية القياس والشركة والمنشأ.</p>
     </div>
     <div class="home-cta__actions">
-      <a href="/store.php" class="home-btn home-btn--primary">
+      <button type="button" class="home-btn home-btn--primary" data-hl-focus-search>
+        <span class="material-symbols-outlined" aria-hidden="true">search</span>
+        ارجع للبحث
+      </button>
+      <a href="/store.php" class="home-btn home-btn--ghost-dark">
         <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
         فتح المتجر
       </a>

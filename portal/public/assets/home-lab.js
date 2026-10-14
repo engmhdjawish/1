@@ -285,12 +285,24 @@
       scheduleRemote(input.value.trim());
     };
     accept?.addEventListener('click', applyGuess);
+    const revealSearch = () => {
+      input.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' });
+    };
     document.querySelectorAll('[data-hl-prompt]').forEach((button) => {
       button.addEventListener('click', () => {
         input.value = button.getAttribute('data-hl-prompt') || '';
         input.focus();
         showForQuery(input.value.trim());
         scheduleRemote(input.value.trim());
+        revealSearch();
+      });
+    });
+    document.querySelectorAll('[data-hl-focus-search]').forEach((button) => {
+      button.addEventListener('click', () => {
+        input.focus();
+        showForQuery(input.value.trim());
+        scheduleRemote(input.value.trim());
+        revealSearch();
       });
     });
     input.addEventListener('keydown', (event) => {
@@ -334,8 +346,26 @@
     }
   };
 
+  const initSectionWatch = () => {
+    const links = Array.from(document.querySelectorAll('.home-section-nav__link'));
+    if (links.length === 0 || !('IntersectionObserver' in window)) return;
+    const byId = new Map(links.map((link) => [link.getAttribute('href'), link]));
+    const mark = (id) => {
+      const link = byId.get(`#${id}`);
+      if (!link) return;
+      links.forEach((item) => item.classList.toggle('is-active', item === link));
+    };
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) mark(entry.target.id);
+      });
+    }, { rootMargin: '-35% 0px -50% 0px', threshold: 0.15 });
+    document.querySelectorAll('.home-sections .home-section[id]').forEach((section) => observer.observe(section));
+  };
+
   const init = () => {
     initSearch();
+    initSectionWatch();
   };
 
   if (document.readyState === 'loading') {
