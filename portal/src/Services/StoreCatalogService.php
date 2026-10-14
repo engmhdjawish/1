@@ -793,7 +793,6 @@ final class StoreCatalogService
         $sort = self::normalizeSort((string) ($requestFilters['sort'] ?? 'number:asc'));
         $contextOfferSlug = self::contextOfferSlug($sectionContext);
         $apiQuery = CatalogSectionResolver::apiQueryFromRules($rules, $page, $pageSize, $sort);
-        $apiQuery['includeResultFilters'] = 'true';
 
         $products = [];
         $totalCount = 0;
@@ -818,7 +817,6 @@ final class StoreCatalogService
                         $query = $apiQuery;
                         $query['page'] = $apiPage;
                         $query['pageSize'] = $apiPageSize;
-                        $query['includeResultFilters'] = $apiPage === 1 ? 'true' : 'false';
 
                         return self::requestMaterialsQuery($query);
                     },

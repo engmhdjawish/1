@@ -132,6 +132,57 @@
   font-weight: 500;
 }
 
+.store-search-field {
+  position: relative;
+}
+
+.store-search-suggest {
+  position: absolute;
+  z-index: 40;
+  inset-inline: 0;
+  top: calc(100% + 4px);
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  max-height: 16rem;
+  overflow: auto;
+}
+
+.store-search-suggest[hidden] {
+  display: none;
+}
+
+.store-search-suggest button {
+  display: flex;
+  width: 100%;
+  gap: 0.5rem;
+  align-items: baseline;
+  justify-content: space-between;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font: inherit;
+  color: #0f172a;
+}
+
+.store-search-suggest button.is-active,
+.store-search-suggest button:hover {
+  background: #f1f5f9;
+}
+
+.store-search-suggest-code {
+  color: #64748b;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
 @media (min-width: 1024px) {
   .store-filters-search-desktop {
     display: block;

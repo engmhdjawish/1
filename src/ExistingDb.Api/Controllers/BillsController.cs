@@ -3,6 +3,7 @@ using ExistingDb.Api.Contracts.Bills;
 using ExistingDb.Api.Contracts.Common;
 using ExistingDb.Api.Data;
 using ExistingDb.Api.Data.MainDb;
+using ExistingDb.Api.Services.Search;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
@@ -125,7 +126,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             query = query.Where(bill => bill.Date < toExclusive.Value);
         }
 
-        var keywordTerms = ParseKeywordTerms(!string.IsNullOrWhiteSpace(keyword) ? keyword : legacySearch);
+        var keywordTerms = KeywordSearchTerms.Parse(keyword, legacySearch);
         foreach (var term in keywordTerms)
         {
             var relatedGuids = await ResolveSearchRelationGuidsAsync(term, DocumentKind.Invoice, cancellationToken);
@@ -283,7 +284,7 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
             query = query.Where(payment => payment.Date < toExclusive.Value);
         }
 
-        var keywordTerms = ParseKeywordTerms(!string.IsNullOrWhiteSpace(keyword) ? keyword : legacySearch);
+        var keywordTerms = KeywordSearchTerms.Parse(keyword, legacySearch);
         foreach (var term in keywordTerms)
         {
             var relatedGuids = await ResolveSearchRelationGuidsAsync(term, DocumentKind.Voucher, cancellationToken);
@@ -1573,20 +1574,6 @@ public sealed class BillsController(MainDbContext mainDbContext) : ControllerBas
         }
 
         return true;
-    }
-
-    private static IReadOnlyCollection<string> ParseKeywordTerms(string? keyword)
-    {
-        if (string.IsNullOrWhiteSpace(keyword))
-        {
-            return [];
-        }
-
-        return keyword
-            .Split((char[]?)null, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .Where(term => !string.IsNullOrWhiteSpace(term))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
     }
 
     private async Task<Guid[]> ResolveTypeGuidsByTextAsync(

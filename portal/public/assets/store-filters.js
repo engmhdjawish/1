@@ -1114,12 +1114,149 @@ window.portalStoreFiltersInit = (root = document) => {
       refreshPendingFilterChips();
     });
     mobileSearchInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
+      if (event.key === 'Enter' && !event.defaultPrevented) {
         event.preventDefault();
         submitFilterForm();
       }
     });
   }
+
+  const bindMaterialSuggest = (input) => {
+    if (!input || input.dataset.suggestBound === '1') {
+      return;
+    }
+    const field = input.closest('.store-search-field');
+    if (!field) {
+      return;
+    }
+    input.dataset.suggestBound = '1';
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('role', 'combobox');
+    input.setAttribute('aria-autocomplete', 'list');
+    input.setAttribute('aria-expanded', 'false');
+
+    const panel = document.createElement('ul');
+    panel.className = 'store-search-suggest';
+    panel.hidden = true;
+    panel.setAttribute('role', 'listbox');
+    field.appendChild(panel);
+
+    let timer = 0;
+    let request = null;
+    let activeIndex = -1;
+    let items = [];
+
+    const closePanel = () => {
+      panel.hidden = true;
+      panel.innerHTML = '';
+      input.setAttribute('aria-expanded', 'false');
+      activeIndex = -1;
+      items = [];
+    };
+
+    const paint = () => {
+      panel.innerHTML = '';
+      items.forEach((item, index) => {
+        const option = document.createElement('li');
+        option.setAttribute('role', 'presentation');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.setAttribute('role', 'option');
+        button.dataset.index = String(index);
+        if (index === activeIndex) {
+          button.classList.add('is-active');
+          button.setAttribute('aria-selected', 'true');
+        }
+        const name = document.createElement('span');
+        name.textContent = item.name || '';
+        button.appendChild(name);
+        if (item.code) {
+          const code = document.createElement('span');
+          code.className = 'store-search-suggest-code';
+          code.textContent = item.code;
+          button.appendChild(code);
+        }
+        button.addEventListener('mousedown', (event) => {
+          event.preventDefault();
+          if (item.url) {
+            window.location.href = item.url;
+          }
+        });
+        option.appendChild(button);
+        panel.appendChild(option);
+      });
+      panel.hidden = items.length === 0;
+      input.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
+    };
+
+    const load = () => {
+      const term = input.value.trim();
+      if (term.length < 2) {
+        if (request) {
+          request.abort();
+          request = null;
+        }
+        closePanel();
+        return;
+      }
+      if (request) {
+        request.abort();
+      }
+      const params = new URLSearchParams(window.location.search);
+      params.set('q', term);
+      request = new AbortController();
+      const current = request;
+      fetch(`/api/material-suggest.php?${params.toString()}`, {
+        headers: { Accept: 'application/json' },
+        signal: current.signal,
+      })
+        .then((response) => response.json())
+        .then((payload) => {
+          if (request !== current || document.activeElement !== input) {
+            return;
+          }
+          items = Array.isArray(payload?.items) ? payload.items : [];
+          activeIndex = -1;
+          paint();
+        })
+        .catch((error) => {
+          if (error?.name === 'AbortError') {
+            return;
+          }
+          closePanel();
+        });
+    };
+
+    input.addEventListener('input', () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(load, 250);
+    });
+    input.addEventListener('keydown', (event) => {
+      if (panel.hidden || items.length === 0) {
+        return;
+      }
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        activeIndex = activeIndex < 0 ? 0 : (activeIndex + 1) % items.length;
+        paint();
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        activeIndex = activeIndex < 0 ? items.length - 1 : (activeIndex - 1 + items.length) % items.length;
+        paint();
+      } else if (event.key === 'Escape') {
+        closePanel();
+      } else if (event.key === 'Enter' && activeIndex >= 0 && items[activeIndex]?.url) {
+        event.preventDefault();
+        window.location.href = items[activeIndex].url;
+      }
+    }, true);
+    input.addEventListener('blur', () => {
+      window.setTimeout(closePanel, 150);
+    });
+  };
+
+  bindMaterialSuggest(sidebarSearchInput);
+  bindMaterialSuggest(mobileSearchInput);
 
   openButtons.forEach((openBtn) => {
     if (openBtn.dataset.filtersBound === '1') {
