@@ -333,7 +333,12 @@ if ($tab === 'log' && trim((string) ($accountKey ?? '')) !== '') {
           <ul class="visitor-log__rank-list">
             <?php foreach ($topPages as $row): ?>
               <li>
-                <strong class="visitor-log__mono"><?= h((string) ($row['page_path'] ?? '')) ?></strong>
+                <strong class="visitor-log__page-name">
+                  <?= h((string) ($row['page_title_ar'] ?? $row['page_label'] ?? 'صفحة')) ?>
+                  <?php if (trim((string) ($row['page_detail_ar'] ?? '')) !== ''): ?>
+                    <small><?= h((string) $row['page_detail_ar']) ?></small>
+                  <?php endif; ?>
+                </strong>
                 <span><?= number_format((int) ($row['hits'] ?? 0)) ?></span>
               </li>
             <?php endforeach; ?>

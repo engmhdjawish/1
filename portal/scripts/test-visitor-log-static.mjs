@@ -51,8 +51,11 @@ mustContain('portal/src/Support/StaffDevice.php', 'jawish_staff', 'staff device 
 mustContain('portal/src/Services/PortalSessionService.php', 'noteStaffActor', 'customer login attributed to staff');
 mustContain('portal/views/dashboard/visitor-analytics.php', 'داخل حساب', 'staff row names the customer account once');
 mustContain('portal/src/Services/VisitorLogService.php', 'staffIdentity', 'visitor identity prefers staff');
-mustContain('portal/src/Services/PortalSessionService.php', 'noteDeviceLogin', 'device keeps the current login only');
-mustContain('portal/src/Services/PortalPresenceService.php', 'forgetSameDeviceGuests', 'previous same-device guests are forgotten');
+mustContain('portal/src/Services/VisitorLogService.php', 'function describePath', 'readable page labels');
+mustContain('portal/views/dashboard/visitor-analytics.php', 'page_title_ar', 'insights show Arabic page names');
+mustContain('portal/views/dashboard/visitor-analytics-log.php', 'الصفحات التي زارها', 'profile lists visited pages');
+mustContain('portal/src/Services/PortalSessionService.php', 'noteDeviceLogin', 'one login per device');
+mustContain('portal/src/Services/PortalPresenceService.php', 'forgetSameDeviceGuests', 'same-device guest rows are cleared');
 mustContain('portal/public/dashboard/visitor-analytics.php', "$row['display_name'] = 'زائر'", 'live guests display as زائر');
 mustContain('portal/public/api/session-heartbeat.php', 'noteDeviceLogin', 'heartbeat notes the device login');
 
