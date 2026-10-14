@@ -36,14 +36,9 @@
   font-size: 1rem;
 }
 
-.hl-hero-layout {
-  display: grid;
-  gap: 0.25rem;
-  align-items: center;
-}
-
-.hl-hero-mark {
-  display: none;
+.hl .home-hero__visual,
+.hl .home-hero__orbits {
+  overflow: hidden;
 }
 
 .hl-hero-count {
@@ -57,30 +52,32 @@
   font-size: 0.72rem;
 }
 
-.hl-hero-tools {
-  margin-top: 1.35rem;
-}
-
 @media (min-width: 960px) {
   .hl .home-hero__inner {
     padding: 2.4rem 2.1rem 1.7rem;
   }
+}
 
-  .hl-hero-layout {
-    grid-template-columns: minmax(0, 1fr) 16.5rem;
-    gap: 1rem;
+@media (min-width: 1024px) {
+  .hl .home-hero__content {
+    max-width: min(62%, 38rem);
   }
 
-  .hl-hero-mark {
-    display: grid;
-    place-items: center;
-    height: 16.5rem;
+  .hl .home-hero__visual {
+    width: min(28%, 15rem);
+    height: 15rem;
+    inset-block-end: auto;
+    align-items: flex-start;
+    overflow: hidden;
   }
 
-  .hl-hero-mark .home-hero__orbits {
-    width: 16rem;
-    height: 16rem;
-    opacity: 0.95;
+  .hl .home-hero__orbits {
+    width: min(100%, 15rem);
+    overflow: hidden;
+  }
+
+  .hl .home-hero__orbits-svg {
+    overflow: hidden;
   }
 }
 
