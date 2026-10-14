@@ -1287,6 +1287,22 @@ final class MaterialImageSyncService
         return $fileNames;
     }
 
+    /** Drop one queue row and its site file without touching other copies of the same image. */
+    public static function forgetFileName(string $fileName): void
+    {
+        self::ensureTable();
+        $fileName = basename(str_replace('\\', '/', trim($fileName)));
+        if ($fileName === '' || str_contains($fileName, '..')) {
+            return;
+        }
+
+        MaterialImageStorageService::deleteLocalFile($fileName);
+        $delete = Database::pdo()->prepare(
+            'DELETE FROM material_image_sync_queue WHERE file_name = :file_name'
+        );
+        $delete->execute(['file_name' => $fileName]);
+    }
+
     public static function recordAssignedCopy(
         string $fileName,
         string $localPath,

@@ -5,7 +5,8 @@ public interface IImageStorageService
     Task<StoredImageFile> SaveAsync(
         IFormFile file,
         bool replaceExisting = false,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        string? preferredFileName = null);
 
     Task<StoredImageFile> CopyFromPathAsync(
         string sourcePath,
