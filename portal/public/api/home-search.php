@@ -15,9 +15,10 @@ if (session_status() === PHP_SESSION_ACTIVE) {
 }
 
 $query = trim((string) ($_GET['q'] ?? ''));
+$surface = (string) ($_GET['surface'] ?? '') === 'lab' ? 'lab' : '';
 
 try {
-    echo json_encode(HomeSearchService::suggest($query), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    echo json_encode(HomeSearchService::suggest($query, $surface), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 } catch (Throwable $exception) {
     error_log('home-search.php: ' . $exception->getMessage());
     http_response_code(500);

@@ -297,6 +297,92 @@ final class StoreCatalogService
         return self::mergeFilterRuleSets($policyRules, $overlayRules);
     }
 
+    /**
+     * Trial-store signal for materials the live catalog hides.
+     * Explicit isAvailable=false, or a present warehouse quantity that is not positive.
+     * Missing quantity alone is not treated as unavailable.
+     *
+     * @param array<string, mixed> $product
+     */
+    public static function materialIsUnavailable(array $product): bool
+    {
+        $flag = $product['isAvailable'] ?? $product['IsAvailable'] ?? null;
+        if (is_string($flag)) {
+            $normalized = strtolower(trim($flag));
+            if (in_array($normalized, ['0', 'false', 'no', 'off'], true)) {
+                return true;
+            }
+            if (in_array($normalized, ['1', 'true', 'yes', 'on'], true)) {
+                $flag = true;
+            }
+        }
+        if ($flag === false || $flag === 0) {
+            return true;
+        }
+
+        $hasQty = array_key_exists('warehouseQuantity', $product) || array_key_exists('WarehouseQuantity', $product);
+        if (!$hasQty) {
+            return false;
+        }
+        $qty = $product['warehouseQuantity'] ?? $product['WarehouseQuantity'] ?? null;
+        if ($qty === null || $qty === '' || (is_string($qty) && !is_numeric($qty))) {
+            return false;
+        }
+
+        return (float) $qty <= 0;
+    }
+
+    /**
+     * Remove unavailable materials from one catalog page.
+     * Called by the trial store only; catalogFromRequest is unchanged.
+     *
+     * @param array<string, mixed> $catalog
+     * @return array{catalog: array<string, mixed>, stripped: list<array<string, mixed>>}
+     */
+    public static function separateUnavailableProducts(array $catalog): array
+    {
+        $products = is_array($catalog['products'] ?? null) ? $catalog['products'] : [];
+        $kept = [];
+        $stripped = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            if (self::materialIsUnavailable($product)) {
+                $stripped[] = $product;
+                continue;
+            }
+            $kept[] = $product;
+        }
+        $catalog['products'] = $kept;
+        if ($stripped !== []) {
+            $catalog['totalCount'] = max(0, (int) ($catalog['totalCount'] ?? 0) - count($stripped));
+        }
+
+        return ['catalog' => $catalog, 'stripped' => $stripped];
+    }
+
+    /**
+     * Unavailable materials for /store-lab.php.
+     * Same policy, section, and request filters as the live store, with availability inverted
+     * and without the sellable minimum quantity that hides zero-stock rows.
+     *
+     * @param array<string, mixed> $query
+     * @return array{products: list<array<string, mixed>>, totalCount: int, page: int, pageSize: int, totalPages: int, apiError: string|null}
+     */
+    public static function comingSoonFromRequest(array $query, int $pageSize = 12): array
+    {
+        $pageSize = max(1, min(24, $pageSize));
+        $page = max(1, (int) ($query['soon'] ?? 1));
+        try {
+            return self::comingSoonFromRequestUnsafe($query, $page, $pageSize);
+        } catch (\Throwable $exception) {
+            error_log('comingSoonFromRequest: ' . $exception->getMessage());
+
+            return self::emptyComingSoonResult($page, $pageSize, AmineAvailabilityService::userMessage());
+        }
+    }
+
     /** @param array<string, mixed> $query */
     public static function catalogFromRequest(array $query): array
     {
@@ -1046,6 +1132,23 @@ final class StoreCatalogService
                 $items = is_array($response['data']['items'] ?? null) ? $response['data']['items'] : [];
                 $data = is_array($items[0] ?? null) ? $items[0] : null;
                 if ($data === null) {
+                    $fallback = ApiClient::get('/api/materials', [
+                        'materialGuids' => $guid,
+                        'storeGuids' => implode(',', $policyStoreGuids),
+                        'isAvailable' => 'false',
+                        'page' => 1,
+                        'pageSize' => 1,
+                        'includeTotalCount' => 'false',
+                    ]);
+                    $fallbackItems = ($fallback['ok'] ?? false) && is_array($fallback['data']['items'] ?? null)
+                        ? $fallback['data']['items']
+                        : [];
+                    $candidate = is_array($fallbackItems[0] ?? null) ? $fallbackItems[0] : null;
+                    if ($candidate !== null && self::materialIsUnavailable($candidate)) {
+                        $data = $candidate;
+                    }
+                }
+                if ($data === null) {
                     return null;
                 }
 
@@ -1176,6 +1279,330 @@ final class StoreCatalogService
         $catalog['allow_client_filters'] = $visibleClientFilters !== [];
 
         return $catalog;
+    }
+
+    /**
+     * @param array<string, mixed> $query
+     * @return array{products: list<array<string, mixed>>, totalCount: int, page: int, pageSize: int, totalPages: int, apiError: string|null}
+     */
+    private static function comingSoonFromRequestUnsafe(array $query, int $page, int $pageSize): array
+    {
+        $browseQuery = $query;
+        unset($browseQuery['page'], $browseQuery['isAvailable']);
+        $resolved = self::resolveLabBrowse($browseQuery);
+        if (!($resolved['ok'] ?? false)) {
+            return self::emptyComingSoonResult($page, $pageSize, (string) ($resolved['error'] ?? ''));
+        }
+
+        $cacheKey = self::comingSoonCacheKey($browseQuery, $pageSize);
+        if ($cacheKey !== null) {
+            $cached = ResponseCache::get($cacheKey);
+            if (is_array($cached) && isset($cached['products']) && is_array($cached['products'])) {
+                return $cached;
+            }
+        }
+
+        /** @var array<string, mixed> $merged */
+        $merged = $resolved['merged'];
+        // The live catalog forces available stock. The trial section asks for the complement.
+        $merged['isAvailable'] = false;
+        $merged['minWarehouseQuantity'] = null;
+
+        /** @var array<string, mixed> $policyRules */
+        $policyRules = $resolved['policyRules'];
+        /** @var array<string, mixed>|null $section */
+        $section = $resolved['section'];
+        $sort = (string) ($resolved['sort'] ?? 'number:asc');
+        $storeGuids = self::parseList($merged['storeGuids'] ?? []);
+        $offerSlug = self::contextOfferSlug($section);
+
+        if ($section !== null && (string) ($section['selection_mode'] ?? '') === 'manual') {
+            $result = self::comingSoonFromManualSection($section, $merged, $page, $pageSize, $sort, $storeGuids, $offerSlug);
+        } else {
+            $result = self::comingSoonFromApi($merged, $page, $pageSize, $sort, $storeGuids, $offerSlug);
+        }
+
+        if ($cacheKey !== null && ($result['apiError'] ?? null) === null) {
+            ResponseCache::set($cacheKey, $result, 120);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $query
+     * @return array{ok: bool, error: string|null, section: array<string, mixed>|null, policyRules: array<string, mixed>, merged: array<string, mixed>, sort: string}
+     */
+    private static function resolveLabBrowse(array $query): array
+    {
+        $failed = static function (string $error): array {
+            return [
+                'ok' => false,
+                'error' => $error,
+                'section' => null,
+                'policyRules' => [],
+                'merged' => [],
+                'sort' => 'number:asc',
+            ];
+        };
+
+        $section = CatalogSectionResolver::resolve(
+            trim((string) ($query['section'] ?? '')),
+            trim((string) ($query['offer'] ?? ''))
+        );
+        $policy = self::activePolicy();
+        if ($policy === null) {
+            return $failed('لم تُضبط سياسة عرض المتجر بعد.');
+        }
+
+        $storeOptions = is_array($policy['store_options'] ?? null)
+            ? $policy['store_options']
+            : AccessPolicyService::defaultStoreOptions();
+        $visibleClientFilters = AccessPolicyService::resolvedVisibleClientFilters($storeOptions);
+        $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
+        $lockedClientFilters = self::lockedClientFilters($policyRules);
+        if ($section !== null) {
+            $sectionRules = is_array($section['filter_rules'] ?? null) ? $section['filter_rules'] : [];
+            $lockedClientFilters = array_values(array_unique(array_merge(
+                $lockedClientFilters,
+                self::lockedSectionClientFilters($sectionRules)
+            )));
+        }
+        $isClientFilterVisible = static function (string $code) use ($visibleClientFilters, $lockedClientFilters): bool {
+            if (in_array($code, $lockedClientFilters, true)) {
+                return false;
+            }
+
+            return in_array($code, $visibleClientFilters, true);
+        };
+        $requestFilters = self::parseRequestFilters($query, $storeOptions, $isClientFilterVisible);
+        $baseRules = $policyRules;
+        if ($section !== null && (string) ($section['selection_mode'] ?? '') !== 'manual') {
+            $sectionRules = is_array($section['filter_rules'] ?? null) ? $section['filter_rules'] : [];
+            $baseRules = self::mergeFilterRuleSets($policyRules, $sectionRules);
+            if (trim((string) ($baseRules['keyword'] ?? '')) === '__conflict__') {
+                return $failed('لا توجد مواد مطابقة لسياسة الوصول وفلاتر القسم.');
+            }
+        }
+
+        $merged = self::mergeCatalogFilters($baseRules, $requestFilters);
+        if (!empty($merged['has_conflict'])) {
+            return $failed('لا توجد مواد مطابقة لسياسة الوصول والفلاتر المحددة.');
+        }
+
+        $forcedStoreGuids = self::parseList($baseRules['store_guids'] ?? []);
+        if ($forcedStoreGuids !== []) {
+            $merged['storeGuids'] = $forcedStoreGuids;
+        }
+
+        return [
+            'ok' => true,
+            'error' => null,
+            'section' => $section,
+            'policyRules' => $policyRules,
+            'merged' => $merged,
+            'sort' => self::normalizeSort((string) ($requestFilters['sort'] ?? 'number:asc')),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $merged
+     * @param list<string> $storeGuids
+     * @return array{products: list<array<string, mixed>>, totalCount: int, page: int, pageSize: int, totalPages: int, apiError: string|null}
+     */
+    private static function comingSoonFromApi(
+        array $merged,
+        int $page,
+        int $pageSize,
+        string $sort,
+        array $storeGuids,
+        ?string $offerSlug
+    ): array {
+        $materials = self::fetchMaterialsExtended(
+            $page,
+            $pageSize,
+            (string) ($merged['search'] ?? ''),
+            $sort,
+            self::parseList($merged['materialTypes'] ?? []),
+            self::parseList($merged['manufacturers'] ?? []),
+            self::parseList($merged['ageCategories'] ?? []),
+            self::parseList($merged['sizeRanges'] ?? []),
+            self::parseList($merged['countryOfOrigins'] ?? []),
+            self::parseList($merged['groupGuids'] ?? []),
+            $storeGuids,
+            false,
+            $merged['hasImage'] ?? null,
+            false,
+            false,
+            null,
+            self::nullableFloat($merged['maxWarehouseQuantity'] ?? null),
+            self::nullableFloat($merged['minUnitSalePriceSyp'] ?? null),
+            self::nullableFloat($merged['maxUnitSalePriceSyp'] ?? null),
+            self::nullableFloat($merged['minUnitSalePriceUsd'] ?? null),
+            self::nullableFloat($merged['maxUnitSalePriceUsd'] ?? null),
+            self::nullableFloat($merged['minUnitPurchasePriceUsd'] ?? null),
+            self::nullableFloat($merged['maxUnitPurchasePriceUsd'] ?? null)
+        );
+        if (!($materials['ok'] ?? false)) {
+            error_log('store-lab coming soon: ' . self::extractApiError($materials));
+
+            return self::emptyComingSoonResult($page, $pageSize, AmineAvailabilityService::userMessage());
+        }
+
+        $data = is_array($materials['data'] ?? null) ? $materials['data'] : [];
+        $rawItems = $data['items'] ?? $data['Items'] ?? [];
+        $products = self::withOfferPricing(is_array($rawItems) ? $rawItems : [], $offerSlug);
+        $before = count($products);
+        $products = array_values(array_filter(
+            $products,
+            static fn ($product): bool => is_array($product) && self::materialIsUnavailable($product)
+        ));
+        $totalCount = max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
+        $removed = $before - count($products);
+        if ($removed > 0) {
+            $totalCount = max(count($products), $totalCount - $removed);
+        }
+        $page = max(1, (int) ($data['page'] ?? $page));
+        $pageSize = max(1, (int) ($data['pageSize'] ?? $pageSize));
+        $totalPages = max(1, (int) ceil($totalCount / $pageSize));
+
+        return [
+            'products' => $products,
+            'totalCount' => $totalCount,
+            'page' => min($page, $totalPages),
+            'pageSize' => $pageSize,
+            'totalPages' => $totalPages,
+            'apiError' => null,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $section
+     * @param array<string, mixed> $merged
+     * @param list<string> $storeGuids
+     * @return array{products: list<array<string, mixed>>, totalCount: int, page: int, pageSize: int, totalPages: int, apiError: string|null}
+     */
+    private static function comingSoonFromManualSection(
+        array $section,
+        array $merged,
+        int $page,
+        int $pageSize,
+        string $sort,
+        array $storeGuids,
+        ?string $offerSlug
+    ): array {
+        $guids = is_array($section['material_guids'] ?? null) ? $section['material_guids'] : [];
+        $guids = array_values(array_unique(array_filter(
+            array_map(static fn ($guid): string => trim((string) $guid), $guids),
+            static fn (string $guid): bool => $guid !== ''
+        )));
+        $products = self::fetchUnavailableMaterialsByGuids($guids, $storeGuids);
+        $search = trim((string) ($merged['search'] ?? ''));
+        if ($search !== '') {
+            $needle = HomeSearchService::normalize($search);
+            $products = array_values(array_filter($products, static function (array $product) use ($needle): bool {
+                $hay = HomeSearchService::normalize(
+                    trim((string) ($product['name'] ?? '')) . ' ' . trim((string) ($product['materialCode'] ?? $product['code'] ?? ''))
+                );
+
+                return $needle === '' || str_contains($hay, $needle);
+            }));
+        }
+        $products = self::sortProducts($products, $sort);
+        $products = self::withOfferPricing($products, $offerSlug);
+        $totalCount = count($products);
+        $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
+        $page = min(max(1, $page), $totalPages);
+        $offset = ($page - 1) * $pageSize;
+
+        return [
+            'products' => array_slice($products, $offset, $pageSize),
+            'totalCount' => $totalCount,
+            'page' => $page,
+            'pageSize' => $pageSize,
+            'totalPages' => $totalPages,
+            'apiError' => null,
+        ];
+    }
+
+    /**
+     * @param list<string> $guids
+     * @param list<string> $storeGuids
+     * @return list<array<string, mixed>>
+     */
+    private static function fetchUnavailableMaterialsByGuids(array $guids, array $storeGuids): array
+    {
+        $found = [];
+        foreach (array_chunk($guids, 40) as $chunk) {
+            if ($chunk === []) {
+                continue;
+            }
+            $apiQuery = [
+                'materialGuids' => implode(',', $chunk),
+                'page' => 1,
+                'pageSize' => count($chunk),
+                'includeTotalCount' => 'false',
+                'isAvailable' => 'false',
+            ];
+            if ($storeGuids !== []) {
+                $apiQuery['storeGuids'] = implode(',', $storeGuids);
+            }
+            $response = ApiClient::get('/api/materials', $apiQuery, 15);
+            if (!($response['ok'] ?? false)) {
+                continue;
+            }
+            $items = $response['data']['items'] ?? $response['data']['Items'] ?? [];
+            if (!is_array($items)) {
+                continue;
+            }
+            foreach ($items as $item) {
+                if (!is_array($item) || !self::materialIsUnavailable($item)) {
+                    continue;
+                }
+                $found[] = $item;
+            }
+        }
+
+        return $found;
+    }
+
+    /** @param array<string, mixed> $query */
+    private static function comingSoonCacheKey(array $query, int $pageSize): ?string
+    {
+        if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'GET') {
+            return null;
+        }
+        $policy = self::activePolicy();
+        if ($policy === null) {
+            return null;
+        }
+        $reader = CustomerSession::check()
+            ? 'customer:' . trim((string) (CustomerSession::customer()['id'] ?? ''))
+            : 'guest:' . trim((string) ($policy['id'] ?? 'none'));
+        $payload = json_encode([
+            'reader' => $reader,
+            'rules' => $policy['filter_rules'] ?? [],
+            'query' => $query,
+            'pageSize' => $pageSize,
+        ], JSON_UNESCAPED_UNICODE);
+        if (!is_string($payload) || $payload === '') {
+            return null;
+        }
+
+        return 'store_lab_soon_v1:' . hash('sha256', $payload);
+    }
+
+    /** @return array{products: list<array<string, mixed>>, totalCount: int, page: int, pageSize: int, totalPages: int, apiError: string|null} */
+    private static function emptyComingSoonResult(int $page, int $pageSize, string $error): array
+    {
+        return [
+            'products' => [],
+            'totalCount' => 0,
+            'page' => max(1, $page),
+            'pageSize' => max(1, $pageSize),
+            'totalPages' => 1,
+            'apiError' => $error !== '' ? $error : null,
+        ];
     }
 
     /** @return array{products: list<array<string, mixed>>, totalCount: int, page: int, pageSize: int, totalPages: int, rangeStart: int, rangeEnd: int, resultFilters: array<string, mixed>, apiError: string|null, filters: array<string, mixed>, store_options?: array<string, mixed>, allow_client_filters?: bool} */

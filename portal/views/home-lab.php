@@ -50,7 +50,10 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
 <div class="home-page hl">
   <aside class="hl-lab-note" aria-label="ملاحظة النسخة التجريبية">
     <p><strong>نسخة تجريبية.</strong></p>
-    <a href="/index.php">الصفحة الحالية</a>
+    <div class="hl-lab-note__links">
+      <a href="/store-lab.php">تجربة المتجر</a>
+      <a href="/index.php">الصفحة الحالية</a>
+    </div>
   </aside>
 
   <section class="hl-search-panel" aria-labelledby="hl-search-title">
@@ -125,6 +128,10 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
             <a href="/store.php" class="home-btn home-btn--light">
               <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
               تصفّح المتجر
+            </a>
+            <a href="/store-lab.php" class="home-btn home-btn--ghost">
+              <span class="material-symbols-outlined" aria-hidden="true">science</span>
+              تجربة المتجر
             </a>
             <?php if ($homeShowGuestRegister): ?>
               <a href="/register.php" class="home-btn home-btn--ghost">
@@ -286,6 +293,10 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
       <a href="/store.php" class="home-btn home-btn--ghost-dark">
         <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
         فتح المتجر
+      </a>
+      <a href="/store-lab.php" class="home-btn home-btn--ghost-dark">
+        <span class="material-symbols-outlined" aria-hidden="true">science</span>
+        تجربة المتجر
       </a>
       <a href="/about.php" class="home-btn home-btn--ghost-dark">
         <span class="material-symbols-outlined" aria-hidden="true">groups</span>

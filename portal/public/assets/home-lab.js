@@ -9,6 +9,7 @@
     size: 'straighten',
     origin: 'public',
     product: 'inventory_2',
+    soon: 'schedule',
     search: 'search',
   };
 
@@ -25,7 +26,10 @@
     .replace(/\s+/g, ' ')
     .trim();
 
-  const rankLocal = (query, candidates) => {
+  const rankLocal = (query, candidates, basePath = '/store.php') => {
+    const searchPath = typeof basePath === 'string' && basePath.startsWith('/') && !basePath.startsWith('//')
+      ? basePath.split('?')[0]
+      : '/store.php';
     const normalizedQuery = normalize(query);
     if (!normalizedQuery) {
       return {
@@ -49,7 +53,7 @@
       kind: 'search',
       label: `ابحث عن «${query.trim()}»`,
       hint: 'في كل المواد',
-      href: `/store.php?q=${encodeURIComponent(query.trim())}`,
+      href: `${searchPath}?q=${encodeURIComponent(query.trim())}`,
     });
     const guess = scored.find((row) => row.score >= 60 && row.label !== normalizedQuery)?.item.label || '';
     return { guess, suggestions };
@@ -183,7 +187,7 @@
       panel.append(head);
       suggestions.forEach((item, index) => {
         const link = document.createElement('a');
-        link.className = `hl-suggest__item${index === activeIndex ? ' is-active' : ''}`;
+        link.className = `hl-suggest__item${item.kind === 'soon' ? ' hl-suggest__item--soon' : ''}${index === activeIndex ? ' is-active' : ''}`;
         link.setAttribute('role', 'option');
         link.href = safeHref(item.href);
         if (index === activeIndex) link.setAttribute('aria-selected', 'true');
@@ -212,7 +216,12 @@
         hint.textContent = item.hint || '';
         copy.append(label, hint);
         link.append(mark, copy);
-        if (currentGuess && normalize(item.label || '') === normalize(currentGuess)) {
+        if (item.kind === 'soon') {
+          const soonBadge = document.createElement('span');
+          soonBadge.className = 'hl-suggest__badge hl-suggest__badge--soon';
+          soonBadge.textContent = 'يتوفر قريبا';
+          link.append(soonBadge);
+        } else if (currentGuess && normalize(item.label || '') === normalize(currentGuess)) {
           const badge = document.createElement('span');
           badge.className = 'hl-suggest__badge';
           badge.textContent = 'متوقع';
@@ -239,21 +248,33 @@
       });
     };
 
+    const searchPath = () => {
+      const action = form.getAttribute('action') || '/store.php';
+      return action.startsWith('/') && !action.startsWith('//') ? action.split('?')[0] : '/store.php';
+    };
+
     const showForQuery = (query) => {
-      const local = rankLocal(query, dictionary);
+      const local = rankLocal(query, dictionary, searchPath());
       render(local.suggestions, local.guess);
     };
 
     const fetchRemote = (query) => {
       const current = ++requestId;
-      const url = `/api/home-search.php?q=${encodeURIComponent(query)}`;
+      const surface = form.getAttribute('data-hl-surface') === 'lab' ? '&surface=lab' : '';
+      const url = `/api/home-search.php?q=${encodeURIComponent(query)}${surface}`;
       const timeout = window.AbortSignal?.timeout ? AbortSignal.timeout(8000) : undefined;
       fetch(url, { headers: { Accept: 'application/json' }, signal: timeout })
         .then((response) => response.json())
         .then((data) => {
           if (current !== requestId || input.value.trim() !== query) return;
           if (!data?.ok || !Array.isArray(data.suggestions)) return;
-          render(data.suggestions, data.guess || '');
+          const path = searchPath();
+          const next = data.suggestions.map((item) => (
+            item && item.kind === 'search'
+              ? { ...item, href: `${path}?q=${encodeURIComponent(query)}` }
+              : item
+          ));
+          render(next, data.guess || '');
         })
         .catch(() => {});
     };

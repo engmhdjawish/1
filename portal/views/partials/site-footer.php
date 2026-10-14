@@ -57,6 +57,7 @@ $address = trim((string) ($companyContext['company_address'] ?? ''));
           <a href="/about.php" class="block">من نحن</a>
           <?php if (!empty($staffLoggedIn)): ?>
             <a href="/home-lab.php" class="block">تجربة الرئيسية الجديدة</a>
+            <a href="/store-lab.php" class="block">تجربة المتجر الجديدة</a>
           <?php endif; ?>
           <?php if ($showGuestAuthLinks): ?>
             <a href="<?= h(portal_login_url('customer')) ?>" class="block">دخول العملاء</a>

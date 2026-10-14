@@ -53,20 +53,50 @@ final class HomeSearchService
 
         $suggestions = [];
         $seen = [];
-        $guess = null;
+        $regular = [];
+        $soon = [];
         foreach ($scored as $row) {
             $key = self::normalize($row['label']) . '|' . (string) ($row['candidate']['kind'] ?? '');
             if (isset($seen[$key])) {
                 continue;
             }
             $seen[$key] = true;
-            if ($guess === null && $row['score'] >= 60 && self::normalize($row['label']) !== $normalizedQuery) {
-                $guess = $row['label'];
+            if ((string) ($row['candidate']['kind'] ?? '') === 'soon') {
+                $soon[] = $row;
+                continue;
             }
-            $suggestions[] = self::publicCandidate($row['candidate']);
-            if (count($suggestions) >= 7) {
+            $regular[] = $row;
+        }
+
+        $picked = array_slice($regular, 0, $soon === [] ? 7 : 5);
+        if ($soon !== []) {
+            $picked = array_merge($picked, array_slice($soon, 0, 2));
+            if (count($picked) < 7) {
+                $picked = array_merge($picked, array_slice($regular, 5, 7 - count($picked)));
+            }
+            $picked = array_slice($picked, 0, 7);
+        }
+
+        $guess = null;
+        foreach ($picked as $row) {
+            if ((string) ($row['candidate']['kind'] ?? '') === 'soon') {
+                continue;
+            }
+            if ($row['score'] >= 60 && self::normalize($row['label']) !== $normalizedQuery) {
+                $guess = $row['label'];
                 break;
             }
+        }
+        if ($guess === null) {
+            foreach ($picked as $row) {
+                if ($row['score'] >= 60 && self::normalize($row['label']) !== $normalizedQuery) {
+                    $guess = $row['label'];
+                    break;
+                }
+            }
+        }
+        foreach ($picked as $row) {
+            $suggestions[] = self::publicCandidate($row['candidate']);
         }
 
         $suggestions[] = [
@@ -80,7 +110,7 @@ final class HomeSearchService
     }
 
     /** @return array{ok: bool, query: string, guess: ?string, suggestions: list<array{label: string, hint: string, href: string, kind: string}>} */
-    public static function suggest(string $query): array
+    public static function suggest(string $query, string $surface = ''): array
     {
         $query = trim($query);
         if (function_exists('mb_substr')) {
@@ -88,8 +118,9 @@ final class HomeSearchService
         } else {
             $query = substr($query, 0, 80);
         }
+        $surface = $surface === 'lab' ? 'lab' : '';
 
-        $cacheKey = 'home_search_v1_' . sha1(self::normalize($query));
+        $cacheKey = 'home_search_v2_' . sha1($surface . '|' . self::normalize($query));
         $cached = ResponseCache::get($cacheKey);
         if (is_array($cached) && isset($cached['suggestions']) && is_array($cached['suggestions'])) {
             return $cached;
@@ -100,11 +131,39 @@ final class HomeSearchService
             'ok' => true,
             'query' => $query,
             'guess' => $ranked['guess'],
-            'suggestions' => $ranked['suggestions'],
+            'suggestions' => self::applySurface($ranked['suggestions'], $surface),
         ];
         ResponseCache::set($cacheKey, $payload, $query === '' ? 60 : 120);
 
         return $payload;
+    }
+
+    /**
+     * Trial-store search keeps section and catalog links on /store-lab.php.
+     * Product pages stay on /product.php. The live homepage surface is unchanged.
+     *
+     * @param list<array<string, mixed>> $suggestions
+     * @return list<array<string, mixed>>
+     */
+    public static function applySurface(array $suggestions, string $surface): array
+    {
+        if ($surface !== 'lab') {
+            return $suggestions;
+        }
+
+        $rewritten = [];
+        foreach ($suggestions as $suggestion) {
+            if (!is_array($suggestion)) {
+                continue;
+            }
+            $href = (string) ($suggestion['href'] ?? '');
+            if (str_starts_with($href, '/store.php')) {
+                $suggestion['href'] = '/store-lab.php' . substr($href, strlen('/store.php'));
+            }
+            $rewritten[] = $suggestion;
+        }
+
+        return $rewritten;
     }
 
     public static function normalize(string $value): string
@@ -263,6 +322,45 @@ final class HomeSearchService
                 'hint' => $code !== '' ? $code : 'مادة',
                 'href' => $href,
                 'kind' => 'product',
+                'trusted' => true,
+            ];
+        }
+        foreach (self::comingSoonProductCandidates($query) as $candidate) {
+            $candidates[] = $candidate;
+        }
+
+        return $candidates;
+    }
+
+    /** @return list<array{label: string, hint: string, href: string, kind: string, trusted: bool}> */
+    private static function comingSoonProductCandidates(string $query): array
+    {
+        try {
+            $catalog = StoreCatalogService::comingSoonFromRequest(['q' => $query, 'soon' => 1], 8);
+        } catch (\Throwable) {
+            return [];
+        }
+
+        $products = is_array($catalog['products'] ?? null) ? $catalog['products'] : [];
+        $candidates = [];
+        foreach (array_slice($products, 0, 4) as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $label = trim((string) ($item['name'] ?? ''));
+            if ($label === '') {
+                continue;
+            }
+            $code = trim((string) ($item['materialCode'] ?? $item['code'] ?? ''));
+            $guid = function_exists('material_guid') ? material_guid($item) : trim((string) ($item['guid'] ?? $item['materialGuid'] ?? ''));
+            $href = $guid !== '' && function_exists('product_url')
+                ? product_url($guid, '/store-lab.php?q=' . rawurlencode($label))
+                : '/store-lab.php?q=' . rawurlencode($label);
+            $candidates[] = [
+                'label' => $label,
+                'hint' => $code !== '' ? 'يتوفر قريبا · ' . $code : 'يتوفر قريبا',
+                'href' => $href,
+                'kind' => 'soon',
                 'trusted' => true,
             ];
         }

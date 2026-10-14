@@ -28,13 +28,41 @@ $emptyOk = ($empty['suggestions'][0]['kind'] ?? '') === 'discover';
 $correction = HomeSearchService::rank('رجاليي', $candidates);
 $correctionOk = ($correction['guess'] ?? '') === 'رجالي';
 
-if (!$guessOk || !$firstOk || !$typoOk || !$normalizeOk || !$emptyOk || !$correctionOk) {
+$soonRank = HomeSearchService::rank('حذاء', [
+    ['label' => 'حذاء رياضي', 'hint' => 'مادة', 'href' => '/product.php?guid=1', 'kind' => 'product', 'trusted' => true],
+    ['label' => 'حذاء شتوي', 'hint' => 'يتوفر قريبا', 'href' => '/store-lab.php?q=%D8%AD%D8%B0%D8%A7%D8%A1', 'kind' => 'soon', 'trusted' => true],
+]);
+$soonHit = null;
+foreach ($soonRank['suggestions'] as $suggestion) {
+    if (($suggestion['kind'] ?? '') === 'soon') {
+        $soonHit = $suggestion;
+        break;
+    }
+}
+$soonOk = ($soonHit['hint'] ?? '') === 'يتوفر قريبا'
+    && ($soonHit['label'] ?? '') === 'حذاء شتوي'
+    && ($soonRank['suggestions'][0]['kind'] ?? '') === 'product';
+
+$surface = HomeSearchService::applySurface([
+    ['kind' => 'section', 'label' => 'رجالي', 'hint' => 'قسم', 'href' => '/store.php?section=men'],
+    ['kind' => 'product', 'label' => 'حذاء', 'hint' => 'مادة', 'href' => '/product.php?guid=1'],
+    ['kind' => 'search', 'label' => 'ابحث', 'hint' => 'في كل المواد', 'href' => '/store.php?q=x'],
+], 'lab');
+$surfaceOk = ($surface[0]['href'] ?? '') === '/store-lab.php?section=men'
+    && ($surface[1]['href'] ?? '') === '/product.php?guid=1'
+    && ($surface[2]['href'] ?? '') === '/store-lab.php?q=x';
+$liveSurface = HomeSearchService::applySurface($surface, '');
+$liveSurfaceOk = ($liveSurface[1]['href'] ?? '') === '/product.php?guid=1';
+
+if (!$guessOk || !$firstOk || !$typoOk || !$normalizeOk || !$emptyOk || !$correctionOk || !$soonOk || !$surfaceOk || !$liveSurfaceOk) {
     fwrite(STDERR, json_encode([
         'prefix' => $prefix,
         'typo' => $typo,
         'normalized' => $normalized,
         'empty' => $empty,
         'correction' => $correction,
+        'soon' => $soonRank,
+        'surface' => $surface,
     ], JSON_UNESCAPED_UNICODE) . "\n");
     exit(1);
 }
