@@ -346,6 +346,20 @@
     }
   };
 
+  const initStickyNav = () => {
+    const header = document.querySelector('.site-header');
+    const sync = () => {
+      const height = header instanceof HTMLElement ? header.offsetHeight : 0;
+      document.documentElement.style.setProperty('--hl-nav-top', `${height + 8}px`);
+    };
+    sync();
+    window.addEventListener('resize', sync);
+    if (header instanceof HTMLElement && 'ResizeObserver' in window) {
+      const observer = new ResizeObserver(sync);
+      observer.observe(header);
+    }
+  };
+
   const initSectionWatch = () => {
     const links = Array.from(document.querySelectorAll('.home-section-nav__link'));
     if (links.length === 0 || !('IntersectionObserver' in window)) return;
@@ -364,6 +378,7 @@
   };
 
   const init = () => {
+    initStickyNav();
     initSearch();
     initSectionWatch();
   };

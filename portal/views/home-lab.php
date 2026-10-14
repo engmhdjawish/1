@@ -53,7 +53,54 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
     <a href="/index.php">الصفحة الحالية</a>
   </aside>
 
-  <section class="home-hero home-hero--premium" aria-labelledby="hl-search-title">
+  <section class="hl-search-panel" aria-labelledby="hl-search-title">
+    <div class="hl-search-panel__copy">
+      <h2 id="hl-search-title" class="hl-search-panel__title">ابحث في المواد</h2>
+      <p class="hl-search-hint">ابحث باسم المادة أو القسم أو القياس. الحقل يخمن الباقي قبل أن تكمل.</p>
+    </div>
+
+    <form class="hl-search" action="/store.php" method="get" role="search" data-hl-search>
+      <div class="hl-search__box">
+        <span class="material-symbols-outlined hl-search__icon" aria-hidden="true">search</span>
+        <div class="hl-search__field">
+          <span class="hl-search__ghost" data-hl-ghost hidden></span>
+          <input
+            id="hl-search-input"
+            type="search"
+            name="q"
+            placeholder="اسم مادة، قسم، أو قياس"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+            enterkeyhint="search"
+            aria-autocomplete="list"
+            aria-controls="hl-suggest"
+            aria-expanded="false"
+            data-hl-search-input
+          >
+        </div>
+        <button type="button" class="hl-search__accept" data-hl-accept hidden>
+          <kbd>Tab</kbd>
+          <span>إكمال</span>
+        </button>
+        <button type="submit" class="hl-search__submit">بحث</button>
+      </div>
+      <div id="hl-suggest" class="hl-suggest" role="listbox" hidden data-hl-suggest></div>
+      <script type="application/json" id="hl-search-dictionary"><?= $discoverJson !== false ? $discoverJson : '[]' ?></script>
+    </form>
+
+    <?php if ($discover !== []): ?>
+      <div class="hl-prompts" aria-label="اقتراحات للبدء">
+        <span>جرّب</span>
+        <?php foreach (array_slice($discover, 0, 6) as $item): ?>
+          <button type="button" data-hl-prompt="<?= h($item['label']) ?>"><?= h($item['label']) ?></button>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+  </section>
+
+  <section class="home-hero home-hero--premium" aria-labelledby="hl-hero-title">
     <div class="hl-hero-clip" aria-hidden="true">
       <div class="home-hero__glow home-hero__glow--left"></div>
       <div class="home-hero__glow home-hero__glow--right"></div>
@@ -68,54 +115,13 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
               <span class="hl-hero-count"><?= count($sections) ?> أقسام</span>
             <?php endif; ?>
           </p>
-          <h1 id="hl-search-title" class="home-hero__title">
+          <h1 id="hl-hero-title" class="home-hero__title">
             <span class="home-hero__title-line">اعثر على المادة</span>
             <span class="home-hero__title-line">ثم أكمل طلب الجملة</span>
           </h1>
           <p class="home-hero__lead">
             <?= $aboutSnippet !== '' ? h($aboutSnippet) : 'تصفّح أحدث المواد بأسعار واضحة، أضف للسلة، وتابع طلبك خطوة بخطوة.' ?>
           </p>
-          <p class="hl-search-hint">ابحث باسم المادة أو القسم أو القياس. الحقل يخمن الباقي قبل أن تكمل.</p>
-
-          <form class="hl-search" action="/store.php" method="get" role="search" data-hl-search>
-            <div class="hl-search__box">
-              <span class="material-symbols-outlined hl-search__icon" aria-hidden="true">search</span>
-              <div class="hl-search__field">
-                <span class="hl-search__ghost" data-hl-ghost hidden></span>
-                <input
-                  id="hl-search-input"
-                  type="search"
-                  name="q"
-                  placeholder="اسم مادة، قسم، أو قياس"
-                  autocomplete="off"
-                  autocorrect="off"
-                  autocapitalize="off"
-                  spellcheck="false"
-                  enterkeyhint="search"
-                  aria-autocomplete="list"
-                  aria-controls="hl-suggest"
-                  aria-expanded="false"
-                  data-hl-search-input
-                >
-              </div>
-              <button type="button" class="hl-search__accept" data-hl-accept hidden>
-                <kbd>Tab</kbd>
-                <span>إكمال</span>
-              </button>
-              <button type="submit" class="hl-search__submit">بحث</button>
-            </div>
-            <div id="hl-suggest" class="hl-suggest" role="listbox" hidden data-hl-suggest></div>
-            <script type="application/json" id="hl-search-dictionary"><?= $discoverJson !== false ? $discoverJson : '[]' ?></script>
-          </form>
-
-          <?php if ($discover !== []): ?>
-            <div class="hl-prompts" aria-label="اقتراحات للبدء">
-              <span>جرّب</span>
-              <?php foreach (array_slice($discover, 0, 6) as $item): ?>
-                <button type="button" data-hl-prompt="<?= h($item['label']) ?>"><?= h($item['label']) ?></button>
-              <?php endforeach; ?>
-            </div>
-          <?php endif; ?>
 
           <div class="home-hero__actions">
             <a href="/store.php" class="home-btn home-btn--light">
