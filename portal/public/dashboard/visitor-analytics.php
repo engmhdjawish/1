@@ -112,6 +112,10 @@ $topProducts = ($schemaReady && $tab === 'insights') ? VisitorLogService::topPro
 $topPages = ($schemaReady && $tab === 'insights') ? VisitorLogService::topPages($days, 10) : [];
 $sessions = ($schemaReady && $tab === 'log') ? VisitorLogService::sessionSummaries($days, 80, $logFilters) : [];
 $allAccountGroups = ($schemaReady && $tab === 'log') ? VisitorLogService::groupSessionsByAccount($sessions) : [];
+$allAccountGroups = array_values(array_filter(
+    $allAccountGroups,
+    static fn (array $group): bool => (string) ($group['identity_kind'] ?? '') !== 'staff'
+));
 $accountGroups = ($schemaReady && $tab === 'log')
     ? VisitorLogService::filterAccountGroups($allAccountGroups, $visitorFilter)
     : [];

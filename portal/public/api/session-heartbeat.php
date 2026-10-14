@@ -10,7 +10,9 @@ use Portal\Auth\CustomerSession;
 use Portal\Auth\WebSession;
 use Portal\Services\PortalPresenceService;
 use Portal\Services\PortalSessionService;
+use Portal\Services\VisitorLogService;
 use Portal\Support\DashboardHttp;
+use Portal\Support\StaffDevice;
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     DashboardHttp::emitJson(['ok' => false, 'message' => 'Method not allowed.'], 405);
@@ -33,6 +35,10 @@ try {
     PortalSessionService::touchCurrent();
     PortalPresenceService::touchFromRequest($visitorId);
     PortalSessionService::noteStaffActor($visitorId);
+    $actor = StaffDevice::current($visitorId);
+    if ($actor !== null && $visitorId !== '') {
+        VisitorLogService::claimSessionForStaff($visitorId, $actor['id'], $actor['name']);
+    }
     if (random_int(1, 50) === 1) {
         PortalPresenceService::pruneStale();
     }

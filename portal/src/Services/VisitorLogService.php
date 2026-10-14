@@ -106,6 +106,7 @@ final class VisitorLogService
         unset($payload['staff_user_id'], $payload['staff_name'], $payload['customer_account']);
         $actor = StaffDevice::current($sessionId);
         if ($actor !== null) {
+            self::claimSessionForStaff($sessionId, $actor['id'], $actor['name']);
             $payload['staff_user_id'] = $actor['id'];
             $payload['staff_name'] = $actor['name'];
             if ($customer !== null) {
@@ -300,13 +301,10 @@ final class VisitorLogService
                  FROM visitor_logs vl
                  LEFT JOIN web_customers wc ON wc.id = vl.web_customer_id
                  WHERE vl.session_id IN ($placeholders)
-                   AND (
-                        vl.web_customer_id IS NOT NULL
-                        OR COALESCE(vl.details_ar, '') LIKE '%\"staff_user_id\"%'
-                   )
                  ORDER BY vl.session_id, vl.created_at DESC"
             );
             $stmt->execute($sessionIds);
+            $closedSessions = [];
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
                 $sid = (string) ($row['session_id'] ?? '');
                 if ($sid === '') {
@@ -326,7 +324,8 @@ final class VisitorLogService
                     );
                     continue;
                 }
-                if (trim((string) ($row['name_ar'] ?? '')) === '') {
+                if (trim((string) ($row['web_customer_id'] ?? '')) === '' || trim((string) ($row['name_ar'] ?? '')) === '') {
+                    $closedSessions[$sid] = true;
                     continue;
                 }
                 $identities[$sid] = self::identityFromParts(
@@ -356,7 +355,7 @@ final class VisitorLogService
             $stmt->execute($sessionIds);
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
                 $sid = (string) ($row['session_id'] ?? '');
-                if ($sid === '' || isset($identities[$sid])) {
+                if ($sid === '' || isset($identities[$sid]) || isset($closedSessions[$sid])) {
                     continue;
                 }
                 $customerId = trim((string) ($row['web_customer_id'] ?? ''));
@@ -396,7 +395,7 @@ final class VisitorLogService
                 $stmt->execute($sessionIds);
                 foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
                     $sid = (string) ($row['session_id'] ?? '');
-                    if ($sid === '' || isset($identities[$sid])) {
+                    if ($sid === '' || isset($identities[$sid]) || isset($closedSessions[$sid])) {
                         continue;
                     }
                     $customerId = trim((string) ($row['web_customer_id'] ?? ''));
@@ -596,6 +595,51 @@ final class VisitorLogService
             'order_id' => $orderId,
             'order_number' => $orderNumber,
         ];
+    }
+
+    public static function claimSessionForStaff(string $sessionId, string $staffId, string $staffName): void
+    {
+        if (!self::hasSchema()) {
+            return;
+        }
+
+        $sessionId = substr(trim($sessionId), 0, 120);
+        $staffId = trim($staffId);
+        $staffName = trim($staffName) !== '' ? trim($staffName) : 'موظف';
+        if ($sessionId === '' || $staffId === '') {
+            return;
+        }
+
+        static $claimed = [];
+        if (isset($claimed[$sessionId])) {
+            return;
+        }
+        $claimed[$sessionId] = true;
+
+        try {
+            Database::pdo()->prepare(
+                "UPDATE visitor_logs
+                 SET details_ar = CASE
+                     WHEN details_ar IS NULL OR btrim(details_ar) = '' THEN
+                         jsonb_build_object('staff_user_id', :staff_id_empty, 'staff_name', :staff_name_empty)::text
+                     WHEN details_ar ~ '^\\s*\\{' THEN
+                         (details_ar::jsonb || jsonb_build_object('staff_user_id', :staff_id_json, 'staff_name', :staff_name_json))::text
+                     ELSE details_ar
+                 END
+                 WHERE session_id = :session_id
+                   AND created_at >= NOW() - INTERVAL '90 days'
+                   AND COALESCE(details_ar, '') NOT LIKE '%\"staff_user_id\"%'
+                   AND (details_ar IS NULL OR btrim(details_ar) = '' OR length(details_ar) < 1700)"
+            )->execute([
+                'staff_id_empty' => $staffId,
+                'staff_name_empty' => $staffName,
+                'staff_id_json' => $staffId,
+                'staff_name_json' => $staffName,
+                'session_id' => $sessionId,
+            ]);
+        } catch (\Throwable) {
+            // Historical rows stay unchanged when details are not valid JSON.
+        }
     }
 
     /** @return array<string, mixed> */
@@ -915,7 +959,13 @@ final class VisitorLogService
                 COUNT(*) FILTER (WHERE action = 'add_to_cart')::int AS cart_adds,
                 COUNT(*) FILTER (WHERE action = 'remove_from_cart')::int AS cart_removals,
                 COUNT(*) FILTER (WHERE action = 'order_placed')::int AS orders,
-                MAX(web_customer_id::text) AS web_customer_id,
+                (
+                    SELECT vl_latest.web_customer_id::text
+                    FROM visitor_logs vl_latest
+                    WHERE vl_latest.session_id = visitor_logs.session_id
+                    ORDER BY vl_latest.created_at DESC
+                    LIMIT 1
+                ) AS web_customer_id,
                 MAX(visitor_ip) AS visitor_ip,
                 MAX(country_ar) AS country_ar,
                 MAX(city_ar) AS city_ar,
