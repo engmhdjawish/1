@@ -22,6 +22,7 @@ final class PortalSystemDiagnosticService
         $recommendations = [];
 
         $checks[] = self::checkPhpRuntime();
+        $checks[] = self::checkPhpFpmWebLimits();
         $checks[] = self::checkDatabase();
         $checks[] = self::checkApiHealthTimed();
         $checks[] = self::checkApiMaterialsTimed();
@@ -47,6 +48,7 @@ final class PortalSystemDiagnosticService
         return [
             'generated_at' => date('c'),
             'duration_ms' => (int) round((microtime(true) - $started) * 1000),
+            'execution_sapi' => PHP_SAPI,
             'severity' => $severity,
             'headline_ar' => $headline,
             'checks' => $checks,
@@ -59,10 +61,14 @@ final class PortalSystemDiagnosticService
     {
         $memoryLimit = ini_get('memory_limit');
         $maxExec = ini_get('max_execution_time');
+        $recommendations = [];
+        if (PHP_SAPI === 'cli') {
+            $recommendations[] = 'هذا الفحص من CLI — مهلة الزوار تُحدَّد من PHP-FPM (انظر فحص «حدود PHP للزوار»).';
+        }
 
         return self::makeCheck(
             'php_runtime',
-            'بيئة PHP (Portal)',
+            'بيئة PHP (الجلسة الحالية)',
             true,
             sprintf(
                 'PHP %s · %s · memory_limit=%s · max_execution_time=%s · استخدام الذاكرة الآن=%s',
@@ -74,8 +80,108 @@ final class PortalSystemDiagnosticService
             ),
             null,
             'info',
-            []
+            $recommendations
         );
+    }
+
+    /** @return array<string, mixed> */
+    private static function checkPhpFpmWebLimits(): array
+    {
+        $maxExec = self::fpmIniDirective('max_execution_time');
+        $memory = self::fpmIniDirective('memory_limit');
+
+        if ($maxExec === null && $memory === null) {
+            return self::makeCheck(
+                'php_fpm_web',
+                'حدود PHP للزوار (FPM)',
+                true,
+                'تعذر قراءة /etc/php/*/fpm — افتح لوحة التشخيص من المتصفح أو راجع php.ini على السيرفر.',
+                null,
+                'info',
+                []
+            );
+        }
+
+        $detail = sprintf(
+            'max_execution_time=%s · memory_limit=%s (من ملفات FPM على السيرفر)',
+            $maxExec ?? '?',
+            $memory ?? '?'
+        );
+
+        $recommendations = [];
+        $severity = 'ok';
+        $maxExecInt = $maxExec !== null && is_numeric($maxExec) ? (int) $maxExec : null;
+        if ($maxExecInt !== null && $maxExecInt > 0 && $maxExecInt <= 30) {
+            $recommendations[] = 'مهلة تنفيذ FPM ≤30 ث — مع طلب مواد 15 ث×2 قد يصل الزائر لـ timeout قبل رسالة «عطل مؤقت».';
+            if ($maxExecInt <= 30) {
+                $severity = 'info';
+            }
+        }
+
+        return self::makeCheck(
+            'php_fpm_web',
+            'حدود PHP للزوار (FPM)',
+            true,
+            $detail,
+            null,
+            $severity,
+            $recommendations
+        );
+    }
+
+    private static function fpmIniDirective(string $directive): ?string
+    {
+        $version = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
+        $paths = ["/etc/php/{$version}/fpm/php.ini"];
+        $confDir = "/etc/php/{$version}/fpm/conf.d";
+        if (is_dir($confDir)) {
+            $extra = glob($confDir . '/*.ini') ?: [];
+            sort($extra);
+            $paths = array_merge($paths, $extra);
+        }
+
+        $value = null;
+        foreach ($paths as $path) {
+            $parsed = self::parseIniDirectiveFromFile($path, $directive);
+            if ($parsed !== null) {
+                $value = $parsed;
+            }
+        }
+
+        return $value;
+    }
+
+    private static function parseIniDirectiveFromFile(string $path, string $directive): ?string
+    {
+        if (!is_readable($path)) {
+            return null;
+        }
+
+        $lines = file($path, FILE_IGNORE_NEW_LINES);
+        if ($lines === false) {
+            return null;
+        }
+
+        $pattern = '/^\s*' . preg_quote($directive, '/') . '\s*=\s*(.+?)\s*$/';
+
+        foreach ($lines as $line) {
+            $line = trim((string) $line);
+            if ($line === '' || str_starts_with($line, ';') || str_starts_with($line, '#')) {
+                continue;
+            }
+            if (preg_match($pattern, $line, $matches) !== 1) {
+                continue;
+            }
+
+            $raw = trim($matches[1]);
+            if ($raw === '') {
+                continue;
+            }
+
+            return trim($raw, " \t\"'");
+        }
+
+        return null;
     }
 
     /** @return array<string, mixed> */
@@ -188,13 +294,13 @@ final class PortalSystemDiagnosticService
 
             $detail = 'طلب تجريبي للمواد نجح (' . $ms . ' ms).';
             $severity = 'ok';
-            if ($ms > 15000) {
+            if ($ms > 3000) {
                 $severity = 'critical';
-                $detail .= ' بطيء جداً — المتجر غالباً يعطي timeout.';
+                $detail .= ' بطيء جداً — المتجر معرض لـ timeout أو تجمّد.';
                 $recommendations[] = 'قلل ضغط SQL/API (طابور الصور، تقارير ثقيلة) أو حسّن استعلامات الأمين.';
-            } elseif ($ms > 5000) {
+            } elseif ($ms > 800) {
                 $severity = 'warning';
-                $detail .= ' أبطأ من المعتاد للمتجر.';
+                $detail .= ' أبطأ من المعتاد — راقب عند الذروة.';
                 $recommendations[] = 'راقب طابور مزامنة الصور — كثرة الرفع تبطئ API الأمين.';
             }
 
