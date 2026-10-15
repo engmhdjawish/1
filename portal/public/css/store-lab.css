@@ -106,3 +106,25 @@
     object-fit: contain;
   }
 }
+
+/* Below the desktop sidebar, the filter button stays in the page under the one search field. */
+@media (max-width: 1023px) {
+  .store-lab .store-mobile-filter-bar-anchor {
+    height: auto;
+  }
+
+  .store-lab .store-mobile-filter-bar {
+    position: static !important;
+    top: auto;
+    right: auto;
+    left: auto;
+    z-index: auto;
+    margin: 0 0 0.85rem !important;
+    padding: 0 !important;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

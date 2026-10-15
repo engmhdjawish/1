@@ -582,6 +582,9 @@ $appliedClientFiltersJson = json_encode(
             <input type="hidden" name="hasImage" value="<?= !empty($filters['hasImage']) ? '1' : '0' ?>">
           <?php endif; ?>
           <?php if (!empty($filters['offer'])): ?><input type="hidden" name="offer" value="<?= h((string) $filters['offer']) ?>"><?php endif; ?>
+          <?php if ($storeLabMode): ?>
+            <input type="hidden" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" data-hl-query-mirror>
+          <?php endif; ?>
 
           <div class="store-filters-sidebar-header">
             <div class="store-filters-sheet-handle lg:hidden" aria-hidden="true"></div>
@@ -596,7 +599,7 @@ $appliedClientFiltersJson = json_encode(
             <p class="text-xs text-text-muted mb-3">تصفح ضمن قسم محدد — بعض الفلاتر مقيّدة بهذا القسم.</p>
           <?php endif; ?>
 
-          <?php if ($isClientFilterVisible('search')): ?>
+          <?php if (!$storeLabMode && $isClientFilterVisible('search')): ?>
             <div class="store-inline-field store-filters-search-desktop">
               <label for="store-search-q">بحث</label>
               <input id="store-search-q" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" placeholder="اسم المادة أو الكود">
@@ -847,9 +850,9 @@ $appliedClientFiltersJson = json_encode(
   <div class="store-results">
     <?php if ($allowClientFilters): ?>
       <div class="store-mobile-filter-bar-anchor lg:hidden">
-        <div class="store-mobile-filter-bar" data-store-mobile-filter-bar>
+        <div class="store-mobile-filter-bar" data-store-mobile-filter-bar<?= $storeLabMode ? ' data-store-lab-bar' : '' ?>>
           <div class="store-mobile-filter-bar-inner">
-            <?php if ($isClientFilterVisible('search')): ?>
+            <?php if (!$storeLabMode && $isClientFilterVisible('search')): ?>
               <label class="store-mobile-search" for="store-mobile-search-q">
                 <span class="material-symbols-outlined store-mobile-search-icon" aria-hidden="true">search</span>
                 <input

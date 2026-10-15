@@ -150,9 +150,42 @@ $locked = $render(false);
 $live = $render(true, false);
 
 $assert('no marketing hero', !str_contains($html, 'home-hero') && !str_contains($html, 'sl-hero'));
+$catalogSearchControls = static function (string $page): int {
+    preg_match_all('/<input\b[^>]*>/s', $page, $tags);
+    $count = 0;
+    foreach ($tags[0] as $tag) {
+        if (str_contains($tag, 'data-filter-search') || str_contains($tag, 'data-hl-query-mirror')) {
+            continue;
+        }
+        if (
+            str_contains($tag, 'id="store-search-q"')
+            || str_contains($tag, 'id="store-mobile-search-q"')
+            || str_contains($tag, 'data-hl-search-input')
+        ) {
+            $count++;
+        }
+    }
+
+    return $count;
+};
+$smartField = '';
+if (preg_match('/<input\b[^>]*data-hl-search-input[^>]*>/s', $html, $smartMatch) === 1) {
+    $smartField = $smartMatch[0];
+}
+$queryMirror = '';
+if (preg_match('/<input\b[^>]*data-hl-query-mirror[^>]*>/s', $html, $mirrorMatch) === 1) {
+    $queryMirror = $mirrorMatch[0];
+}
+
 $assert('smart search sits above the results', str_contains($html, 'hl-search-panel') && str_contains($html, 'data-hl-search') && str_contains($html, 'data-hl-surface="lab"') && str_contains($html, 'data-hl-ghost') && strpos($html, 'hl-search-panel') < strpos($html, 'store-product-grid'));
 $assert('smart search stays on the trial store', str_contains($html, 'action="/store-lab.php"') && !str_contains($html, 'action="/store.php"') && str_contains($html, '/assets/home-lab.js'));
-$assert('live store does not get the trial search', !str_contains($live, 'data-hl-search') && !str_contains($live, 'store-soon-band') && !str_contains($live, 'hl-search-panel'));
+$assert('trial store has one search control', $catalogSearchControls($html) === 1 && $smartField !== '');
+$assert('trial store drops the sidebar and mobile search fields', !str_contains($html, 'id="store-search-q"') && !str_contains($html, 'id="store-mobile-search-q"') && !str_contains($html, 'store-mobile-search'));
+$assert('smart field shows the open query and submits q', str_contains($smartField, 'name="q"') && str_contains($smartField, 'value="حذاء"') && str_contains($smartField, 'type="search"'));
+$assert('filter form keeps the same query', str_contains($queryMirror, 'type="hidden"') && str_contains($queryMirror, 'name="q"') && str_contains($queryMirror, 'value="حذاء"'));
+$assert('mobile filter opener remains', str_contains($html, 'data-store-filters-open') && str_contains($html, 'data-store-lab-bar'));
+$assert('live store does not get the trial search', !str_contains($live, 'data-hl-search') && !str_contains($live, 'store-soon-band') && !str_contains($live, 'hl-search-panel') && !str_contains($live, 'data-hl-query-mirror') && !str_contains($live, 'data-store-lab-bar'));
+$assert('live store keeps its own search fields', $catalogSearchControls($live) === 2 && str_contains($live, 'id="store-search-q"') && str_contains($live, 'id="store-mobile-search-q"') && str_contains($live, 'store-mobile-search'));
 $assert('live filter sidebar is present', str_contains($html, 'store-filters-sidebar') && str_contains($html, 'تصفية النتائج'));
 $assert('filter form stays on the trial route', str_contains($html, 'action="/store-lab.php"'));
 $assert('original filter group markup is used', str_contains($html, 'store-filter-accordion') && str_contains($html, 'name="materialTypes[]"'));

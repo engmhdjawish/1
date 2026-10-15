@@ -1158,7 +1158,7 @@ window.portalStoreFiltersInit = (root = document) => {
   // Move the fixed bar to <body> so it is not trapped by transformed/filtered
   // ancestors inside the catalog grid (otherwise it scrolls away with content).
   const mobileBar = filtersRoot.querySelector('[data-store-mobile-filter-bar]');
-  if (mobileBar) {
+  if (mobileBar && !mobileBar.hasAttribute('data-store-lab-bar')) {
     document.querySelectorAll('body > [data-store-mobile-filter-bar]').forEach((el) => {
       if (el !== mobileBar) {
         el.remove();

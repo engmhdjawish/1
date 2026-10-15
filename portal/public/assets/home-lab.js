@@ -368,6 +368,17 @@
       if (!(event.target instanceof Node) || form.contains(event.target)) return;
       hidePanel();
     });
+
+    const mirror = document.querySelector('[data-hl-query-mirror]');
+    const filterForm = document.getElementById('store-filters-form');
+    if (mirror instanceof HTMLInputElement && filterForm instanceof HTMLFormElement) {
+      const syncQuery = () => {
+        mirror.value = input.value;
+      };
+      syncQuery();
+      input.addEventListener('input', syncQuery);
+      filterForm.addEventListener('submit', syncQuery, true);
+    }
   };
 
   const initStickyNav = () => {
