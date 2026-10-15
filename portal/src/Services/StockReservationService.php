@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Database;
+use Portal\Support\SessionGate;
 use PDO;
 
 /**
@@ -14,6 +15,9 @@ use PDO;
 final class StockReservationService
 {
     private static ?bool $hasActiveItemStatus = null;
+
+    /** @var array<string, float> */
+    private static array $reservedPrimaryCache = [];
 
     private static function activeOrderItemsFilter(): string
     {
@@ -46,16 +50,18 @@ final class StockReservationService
             return null;
         }
 
-        try {
-            $response = ApiClient::get('/api/materials/' . rawurlencode($materialGuid));
-            if (!$response['ok'] || !is_array($response['data'] ?? null)) {
+        return SessionGate::withoutLock(static function () use ($materialGuid): ?float {
+            try {
+                $response = ApiClient::get('/api/materials/' . rawurlencode($materialGuid));
+                if (!$response['ok'] || !is_array($response['data'] ?? null)) {
+                    return null;
+                }
+
+                return self::warehousePrimaryUnits($response['data']);
+            } catch (\Throwable) {
                 return null;
             }
-
-            return self::warehousePrimaryUnits($response['data']);
-        } catch (\Throwable) {
-            return null;
-        }
+        });
     }
 
     /** @param list<string> $materialGuids @return array<string, float> */
@@ -103,7 +109,14 @@ final class StockReservationService
             return 0.0;
         }
 
-        return self::reservedPrimaryByMaterial([$materialGuid])[$materialGuid] ?? 0.0;
+        if (array_key_exists($materialGuid, self::$reservedPrimaryCache)) {
+            return self::$reservedPrimaryCache[$materialGuid];
+        }
+
+        $value = self::reservedPrimaryByMaterial([$materialGuid])[$materialGuid] ?? 0.0;
+        self::$reservedPrimaryCache[$materialGuid] = $value;
+
+        return $value;
     }
 
     public static function availablePrimaryUnits(

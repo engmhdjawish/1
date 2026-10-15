@@ -5,9 +5,14 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Services\StoreCatalogService;
+use Portal\Support\SessionGate;
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: private, max-age=600');
+
+// Filter options recompute the catalog and call the materials API.
+// Release the session first so add, delete, and currency are not queued behind it.
+SessionGate::release();
 
 try {
     $payload = StoreCatalogService::getClientFiltersPayload($_GET);

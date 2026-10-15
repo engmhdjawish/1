@@ -6,6 +6,7 @@ namespace Portal\Services;
 
 use Portal\Auth\CustomerSession;
 use Portal\Support\ResponseCache;
+use Portal\Support\SessionGate;
 use Portal\Support\StorePricePreference;
 
 final class StoreCatalogService
@@ -15,6 +16,9 @@ final class StoreCatalogService
 
     /** @var array<string, mixed>|null */
     private static ?array $activePolicyCache = null;
+
+    /** @var array<string, array<string, mixed>|null> */
+    private static array $materialLookupCache = [];
 
     private static bool $activePolicyResolved = false;
 
@@ -1336,6 +1340,28 @@ final class StoreCatalogService
     }
 
     public static function findMaterial(string $guid, ?string $offerSlug = null): ?array
+    {
+        $guid = trim($guid);
+        if ($guid === '') {
+            return null;
+        }
+
+        $cacheKey = strtolower($guid) . '|' . strtolower(trim((string) $offerSlug));
+        if (array_key_exists($cacheKey, self::$materialLookupCache)) {
+            return self::$materialLookupCache[$cacheKey];
+        }
+
+        // The materials API is the slow part of add-to-cart. Drop the session
+        // lock so currency and delete are not stuck behind this lookup.
+        $material = SessionGate::withoutLock(
+            static fn (): ?array => self::findMaterialWhileUnlocked($guid, $offerSlug)
+        );
+        self::$materialLookupCache[$cacheKey] = $material;
+
+        return $material;
+    }
+
+    private static function findMaterialWhileUnlocked(string $guid, ?string $offerSlug = null): ?array
     {
         $guid = trim($guid);
         if ($guid === '') {
