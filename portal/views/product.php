@@ -6,6 +6,7 @@ use Portal\Auth\CustomerSession;
 use Portal\Services\ShareCartService;
 use Portal\Services\SpecialOfferService;
 use Portal\Services\StoreCartService;
+use Portal\Services\StoreCatalogService;
 
 /** @var array<string, mixed> $product */
 /** @var array<string, mixed> $displayOptions */
@@ -62,6 +63,15 @@ $offerMax = $offer !== null && is_numeric((string) ($offer['max_packages'] ?? ''
 $warehouseQty = (float) ($product['warehouseQuantity'] ?? 0);
 $packagesAvailable = ($allowCart || $showQuantity) ? packages_available_display($product) : 0.0;
 $outOfStock = $allowCart && $packagesAvailable <= 0;
+$trialStoreProduct = str_contains((string) ($_GET['return'] ?? ''), 'store-lab.php');
+$comingSoonProduct = $trialStoreProduct && StoreCatalogService::materialIsUnavailable($product);
+$omitTrialBlankPrice = $trialStoreProduct
+    && $policyAllowsPrice
+    && !catalog_material_has_sale_price($product, $priceMode);
+if ($comingSoonProduct) {
+    $allowCart = false;
+    $showQuantity = false;
+}
 $materialCode = trim((string) ($product['materialCode'] ?? $product['code'] ?? ''));
 $productName = trim((string) ($product['name'] ?? 'مادة'));
 $manufacturer = trim((string) ($product['manufacturer'] ?? ''));
@@ -125,19 +135,23 @@ $specs = array_filter([
     </div>
 
     <div class="store-buybox">
-      <?php if ($showPriceSyp || $showPriceUsd): ?>
+      <?php if ($omitTrialBlankPrice): ?>
+      <?php elseif ($showPriceSyp || $showPriceUsd): ?>
         <?php if ($offerBadge !== ''): ?>
           <span class="inline-flex mb-2 px-2.5 py-1 rounded-full bg-red-600 text-white text-xs font-extrabold"><?= h($offerBadge) ?></span>
         <?php endif; ?>
 
         <?php if ($showPriceSyp && ($packageSaleSp > 0 || $unitSaleSp > 0)): ?>
-          <?php if ($hasOffer && $origUnitSp > $unitSaleSp): ?>
+          <?php if ($unitSaleSp > 0 && $hasOffer && $origUnitSp > $unitSaleSp): ?>
             <div class="store-buybox__price-old"><?= format_money($origUnitSp, true) ?> ل.س</div>
           <?php endif; ?>
+          <?php if ($unitSaleSp > 0): ?>
           <div class="store-buybox__price-main">
             <?= format_money($unitSaleSp, true) ?>
             <span class="currency">ل.س / <?= h($primaryUnit) ?></span>
           </div>
+          <?php endif; ?>
+          <?php if ($packageSaleSp > 0): ?>
           <div class="text-xs text-gray-500 mt-1">
             سعر <?= h($packageUnit) ?>:
             <?php if ($hasOffer && $origPackSp > $packageSaleSp): ?>
@@ -145,13 +159,16 @@ $specs = array_filter([
             <?php endif; ?>
             <?= format_money($packageSaleSp, true) ?> ل.س
           </div>
+          <?php endif; ?>
         <?php endif; ?>
 
         <?php if ($showPriceUsd && ($packageSaleUsd > 0 || $unitSaleUsd > 0)): ?>
-          <?php if ($hasOffer && $origUnitUsd > $unitSaleUsd): ?>
+          <?php if ($unitSaleUsd > 0 && $hasOffer && $origUnitUsd > $unitSaleUsd): ?>
             <div class="store-buybox__price-old">$<?= number_format($origUnitUsd, 2, '.', ',') ?></div>
           <?php endif; ?>
+          <?php if ($unitSaleUsd > 0): ?>
           <div class="store-buybox__price-usd">$<?= number_format($unitSaleUsd, 2, '.', ',') ?> / <?= h($primaryUnit) ?></div>
+          <?php endif; ?>
           <?php if ($packageSaleUsd > 0): ?>
             <div class="text-xs text-gray-500 mt-1">
               سعر <?= h($packageUnit) ?>:
@@ -175,7 +192,12 @@ $specs = array_filter([
         <?php $context = 'detail'; $anchor = portal_product_anchor($guid); require __DIR__ . '/partials/store-price-lock.php'; ?>
       <?php endif; ?>
 
-      <?php if ($showQuantity): ?>
+      <?php if ($comingSoonProduct): ?>
+        <div class="store-buybox__stock store-buybox__stock--out">
+          <span class="material-symbols-outlined text-base" aria-hidden="true">block</span>
+          <?= h(\Portal\Services\HomeSearchService::UNAVAILABLE_BADGE) ?>
+        </div>
+      <?php elseif ($showQuantity): ?>
         <?php if ($packagesAvailable <= 0 && $allowCart): ?>
           <div class="store-buybox__stock store-buybox__stock--out">
             <span class="material-symbols-outlined text-base" aria-hidden="true">inventory_2</span>

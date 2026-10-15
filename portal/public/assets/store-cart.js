@@ -836,6 +836,25 @@
     });
   };
 
+  const readPackageCount = () => {
+    if (lastCartData && Number.isFinite(Number(lastCartData.cart_package_count))) {
+      return Math.max(0, Number(lastCartData.cart_package_count) || 0);
+    }
+    const text = document.querySelector('[data-store-cart-badge-packages]')?.textContent || '0';
+    const parsed = Number(String(text).replace(/[^\d.]/g, ''));
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const shiftPackageBadge = (delta) => {
+    const previous = readPackageCount();
+    const next = Math.max(0, previous + delta);
+    if (lastCartData && typeof lastCartData === 'object') {
+      lastCartData.cart_package_count = next;
+    }
+    updateBadge({ cart_package_count: next });
+    return previous;
+  };
+
   const flyToCart = (fromEl) => {
     const cartBtn = document.querySelector('[data-store-cart-open]');
     if (!fromEl || !cartBtn) return;
@@ -1008,6 +1027,11 @@
     const step = getQtyStep(form);
     if (plus) plus.disabled = !canAdjust || (remaining !== null && remaining <= 0);
     if (minus) minus.disabled = !canAdjust || inCartQty <= 0;
+    if (form.dataset.ajaxSubmitting === '1') {
+      form.querySelectorAll('[data-cart-bump], [type="submit"]').forEach((control) => {
+        control.disabled = true;
+      });
+    }
 
     const guid = form.dataset.materialGuid || form.querySelector('[name="material_guid"]')?.value || '';
     if (guid) {
@@ -1059,12 +1083,19 @@
     const guid = form.dataset.materialGuid || form.querySelector('[name="material_guid"]')?.value || '';
     if (!guid || form.dataset.ajaxSubmitting === '1') return;
     form.dataset.ajaxSubmitting = '1';
-    const buttons = form.querySelectorAll('[data-cart-bump]');
-    buttons.forEach((btn) => { btn.disabled = true; });
+    const prevQty = getCurrentInCart(form);
+    const nextQty = Math.max(0, prevQty + delta);
+    const prevPackages = shiftPackageBadge(delta);
+    setFormCartMode(form, nextQty);
     try {
       const data = await apiRequest({ action: 'bump', material_guid: guid, delta });
       applyCartResponse(data);
     } catch {
+      setFormCartMode(form, prevQty);
+      if (lastCartData && typeof lastCartData === 'object') {
+        lastCartData.cart_package_count = prevPackages;
+      }
+      updateBadge({ cart_package_count: prevPackages });
       showCartFeedback('تعذر تحديث الكمية.', 'error');
     } finally {
       delete form.dataset.ajaxSubmitting;
@@ -1174,11 +1205,10 @@
       delete form.dataset.ajaxSubmitting;
       return;
     }
-    const prevCartData = lastCartData ? { ...lastCartData } : null;
-    const optimisticPackages = (Number(prevCartData?.cart_package_count) || 0) + addQty;
-    if (prevCartData) {
-      updateBadge({ cart_package_count: optimisticPackages });
-    }
+    const prevQty = currentQty;
+    const nextQty = prevQty + addQty;
+    const prevPackages = shiftPackageBadge(addQty);
+    setFormCartMode(form, nextQty);
     btn?.classList.add('is-loading');
     const formData = new FormData(form);
     const payload = { action: 'add' };
@@ -1190,7 +1220,7 @@
       const data = await apiRequest(payload);
       applyCartResponse(data);
       if (!data.ok) {
-        if (prevCartData) updateBadge(prevCartData);
+        setFormCartMode(form, prevQty);
         return;
       }
       const flySource = btn || form.querySelector('.store-add-cart__submit') || form;
@@ -1209,11 +1239,16 @@
         form.querySelector('[name="quantity"]').value = String(step);
       }
     } catch {
-      if (prevCartData) updateBadge(prevCartData);
+      setFormCartMode(form, prevQty);
+      if (lastCartData && typeof lastCartData === 'object') {
+        lastCartData.cart_package_count = prevPackages;
+      }
+      updateBadge({ cart_package_count: prevPackages });
       showCartFeedback('تعذر الاتصال بالخادم.', 'error');
     } finally {
       btn?.classList.remove('is-loading');
       delete form.dataset.ajaxSubmitting;
+      setFormCartMode(form, getCurrentInCart(form));
     }
   };
 
@@ -1513,12 +1548,22 @@
             return;
           }
         }
+        const nextQty = Math.max(0, current + delta);
+        shiftPackageBadge(delta);
+        if (delta < 0 && nextQty <= 0) {
+          btn.closest('[data-cart-line]')?.remove();
+        } else if (input) {
+          input.value = formatQty(nextQty);
+        }
         btn.disabled = true;
         const bumpButtons = wrap?.querySelectorAll('[data-bump]') || [];
         bumpButtons.forEach((control) => { control.disabled = true; });
         try {
           const data = await apiRequest({ action: 'bump', material_guid: guid, delta });
           applyCartResponse(data);
+        } catch {
+          showCartFeedback('تعذر تحديث الكمية.', 'error');
+          refreshCartFromServer({ silent: true, reconcile: false });
         } finally {
           bumpButtons.forEach((control) => { control.disabled = false; });
         }
@@ -1545,12 +1590,26 @@
       btn.dataset.removeBound = '1';
       btn.addEventListener('click', async () => {
         const guid = btn.dataset.removeItem || '';
-        if (!guid) return;
-        const data = await apiRequest({ action: 'remove', material_guid: guid });
-        if (data?.ok) {
-          trackCartLineAnalytics('remove_from_cart', guid, btn);
+        if (!guid || btn.dataset.removing === '1') return;
+        btn.dataset.removing = '1';
+        const card = btn.closest('[data-cart-line]');
+        const lineQty = parseFloat(card?.querySelector('[data-qty-input]')?.value || '0') || 0;
+        shiftPackageBadge(-lineQty);
+        document.querySelectorAll('[data-store-add-cart]').forEach((form) => {
+          const formGuid = form.dataset.materialGuid || form.querySelector('[name="material_guid"]')?.value || '';
+          if (formGuid === guid) setFormCartMode(form, 0);
+        });
+        card?.remove();
+        try {
+          const data = await apiRequest({ action: 'remove', material_guid: guid });
+          if (data?.ok) {
+            trackCartLineAnalytics('remove_from_cart', guid, btn);
+          }
+          applyCartResponse(data);
+        } catch {
+          showCartFeedback('تعذر حذف الصنف.', 'error');
+          refreshCartFromServer({ silent: true, reconcile: false });
         }
-        applyCartResponse(data);
       });
     });
   };
@@ -2001,6 +2060,12 @@
     initCartPage();
     const bootstrap = readCartBootstrap();
     if (bootstrap?.cart_qty_by_guid) {
+      lastCartData = {
+        ...(lastCartData && typeof lastCartData === 'object' ? lastCartData : {}),
+        cart_count: bootstrap.cart_count,
+        cart_package_count: bootstrap.cart_package_count,
+        cart_qty_by_guid: bootstrap.cart_qty_by_guid,
+      };
       refreshCartForms(bootstrap);
       updateBadge(bootstrap);
     }

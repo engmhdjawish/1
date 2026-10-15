@@ -454,6 +454,59 @@ function format_money(?float $amount, bool $show): string
     return number_format($amount, 0, '.', ',');
 }
 
+function catalog_price_amount_present(mixed $value): bool
+{
+    if ($value === null || $value === '' || is_array($value) || is_bool($value)) {
+        return false;
+    }
+    if (is_string($value) && !is_numeric($value)) {
+        return false;
+    }
+
+    return (float) $value > 0;
+}
+
+/** True when the active price mode has a real amount. Zero, null, and empty do not count. */
+function catalog_material_has_sale_price(array $item, string $priceMode = 'both'): bool
+{
+    $has = static function (array $item, array $keys): bool {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $item) && catalog_price_amount_present($item[$key])) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+    $hasSp = $has($item, [
+        'unitSalePriceSyp',
+        'UnitSalePriceSyp',
+        'effective_unit_sale_price_sp',
+        'original_unit_sale_price_sp',
+        'effective_package_sale_price_sp',
+        'original_package_sale_price_sp',
+    ]);
+    $hasUsd = $has($item, [
+        'unitSalePriceUsd',
+        'UnitSalePriceUsd',
+        'effective_unit_sale_price_usd',
+        'original_unit_sale_price_usd',
+        'effective_package_sale_price_usd',
+        'original_package_sale_price_usd',
+    ]);
+    if ($priceMode === 'syp') {
+        return $hasSp;
+    }
+    if ($priceMode === 'usd') {
+        return $hasUsd;
+    }
+    if ($priceMode === 'none') {
+        return false;
+    }
+
+    return $hasSp || $hasUsd;
+}
+
 /** Character count without requiring ext-mbstring (common on Windows PHP builds). */
 function text_length(string $value): int
 {
@@ -1007,6 +1060,9 @@ function return_link_label(string $returnUrl): string
     if (str_contains($returnUrl, 'share.php')) {
         return 'العودة لرابط المشاركة';
     }
+    if (str_contains($returnUrl, 'store-lab.php')) {
+        return str_contains($returnUrl, '?') ? 'العودة لنتائج التجربة' : 'العودة لتجربة المتجر';
+    }
     if (str_contains($returnUrl, 'store.php') || str_contains($returnUrl, '/store')) {
         if (str_contains($returnUrl, '?')) {
             return 'العودة للنتائج';
@@ -1032,6 +1088,61 @@ function home_section_store_url(array $section): string
     }
 
     return store_url(CatalogSectionResolver::storeLinkParams($section));
+}
+
+/** @param array<string, mixed> $params */
+function store_lab_url(array $params = []): string
+{
+    $live = store_url($params);
+    if ($live === '/store.php') {
+        return '/store-lab.php';
+    }
+    if (str_starts_with($live, '/store.php?')) {
+        return '/store-lab.php?' . substr($live, strlen('/store.php?'));
+    }
+
+    return '/store-lab.php';
+}
+
+/** @param array<string, mixed> $section */
+function store_lab_section_url(array $section): string
+{
+    $live = home_section_store_url($section);
+    if (str_starts_with($live, '/store.php?')) {
+        return '/store-lab.php?' . substr($live, strlen('/store.php?'));
+    }
+
+    return '/store-lab.php';
+}
+
+/**
+ * @param list<array<string, mixed>> $products
+ * @return array<string, list<array<string, mixed>>>
+ */
+function store_lab_group_products(array $products, string $groupBy = 'materialType'): array
+{
+    $fields = [
+        'ageCategory' => 'ageCategory',
+        'sizeRange' => 'sizeRange',
+        'materialType' => 'materialType',
+        'manufacturer' => 'manufacturer',
+        'countryOfOrigin' => 'countryOfOrigin',
+        'group' => 'groupName',
+    ];
+    $field = $fields[$groupBy] ?? 'materialType';
+    $groups = [];
+    foreach ($products as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        $label = trim((string) ($item[$field] ?? ''));
+        if ($label === '') {
+            $label = 'غير مصنّف';
+        }
+        $groups[$label][] = $item;
+    }
+
+    return $groups;
 }
 
 /** @param array<string, mixed> $section */

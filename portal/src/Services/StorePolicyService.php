@@ -13,6 +13,10 @@ final class StorePolicyService
 
     private static bool $guestPolicyResolved = false;
 
+    private static bool $maxPackagesResolved = false;
+
+    private static ?float $maxPackagesCache = null;
+
     /** @return array<string, mixed>|null */
     public static function guestPolicy(): ?array
     {
@@ -47,15 +51,23 @@ final class StorePolicyService
 
     public static function maxPackagesPerMaterial(): ?float
     {
+        if (self::$maxPackagesResolved) {
+            return self::$maxPackagesCache;
+        }
+
         $value = Database::pdo()->query(
             'SELECT max_packages_per_material FROM store_guest_settings WHERE id = 1 LIMIT 1'
         )->fetchColumn();
+        self::$maxPackagesResolved = true;
         if ($value === false || $value === null || !is_numeric((string) $value)) {
+            self::$maxPackagesCache = null;
+
             return null;
         }
         $float = (float) $value;
+        self::$maxPackagesCache = $float > 0 ? $float : null;
 
-        return $float > 0 ? $float : null;
+        return self::$maxPackagesCache;
     }
 
     public static function setMaxPackagesPerMaterial(?float $max, ?string $updatedByUserId): void
@@ -77,5 +89,7 @@ final class StorePolicyService
             'max_packages' => $max !== null && $max > 0 ? $max : null,
             'user_id' => $updatedByUserId ?: null,
         ]);
+        self::$maxPackagesResolved = true;
+        self::$maxPackagesCache = $max !== null && $max > 0 ? $max : null;
     }
 }

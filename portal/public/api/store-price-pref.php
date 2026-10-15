@@ -27,6 +27,19 @@ if ($currency !== StorePricePreference::SYP && $currency !== StorePricePreferenc
     exit;
 }
 
+$seq = (int) ($input['seq'] ?? 0);
+if (!StorePricePreference::claimWrite($seq)) {
+    $current = StorePricePreference::current();
+    echo json_encode([
+        'ok' => true,
+        'stale' => true,
+        'currency' => $current,
+        'price_mode' => $current,
+        'label' => StorePricePreference::label($current),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 StorePricePreference::set($currency);
 
 echo json_encode([

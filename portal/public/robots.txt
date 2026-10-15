@@ -3,5 +3,7 @@ Allow: /
 
 Disallow: /dashboard/
 Disallow: /api/
+Disallow: /home-lab.php
+Disallow: /store-lab.php
 
 Sitemap: /sitemap.xml.php

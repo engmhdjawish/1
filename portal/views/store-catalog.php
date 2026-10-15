@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Portal\Services\CatalogSectionResolver;
 use Portal\Services\AccessPolicyService;
 use Portal\Services\SpecialOfferService;
+use Portal\Services\StoreCatalogService;
 use Portal\Services\StorePolicyService;
 use Portal\Support\StorePricePreference;
 
@@ -16,16 +17,17 @@ use Portal\Support\StorePricePreference;
 
 $catalog = is_array($catalog ?? null) ? $catalog : [];
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
+$storeLabMode = (bool) ($storeLabMode ?? false);
 $shareContext = is_array($shareContext ?? null) ? $shareContext : null;
 $shareToken = trim((string) ($shareToken ?? ($shareContext['token'] ?? '')));
 $shareLinkId = trim((string) ($shareLinkId ?? ($shareContext['share_link_id'] ?? '')));
-$catalogUrl = static function (array $params = []) use ($shareContext): string {
+$catalogUrl = static function (array $params = []) use ($shareContext, $storeLabMode): string {
     if ($shareContext !== null) {
         $params['token'] = (string) ($shareContext['token'] ?? '');
         return share_url($params);
     }
 
-    return store_url($params);
+    return $storeLabMode ? store_lab_url($params) : store_url($params);
 };
 $cartNoticeMessage = '';
 $cartNoticeOk = true;
@@ -302,7 +304,7 @@ $facetChipMap = [
         $pushChipGroup($code, (string) $config['label'], (string) $config['tone'], $chips);
     }
 
-    if ($isClientFilterVisible('stores') && $selectedStoreGuids !== []) {
+    if (!$storeLabMode && $isClientFilterVisible('stores') && $selectedStoreGuids !== []) {
         $chips = [];
         foreach ($selectedStoreGuids as $guid) {
             $guid = trim((string) $guid);
@@ -348,7 +350,7 @@ $facetChipMap = [
 
     $minWarehouseQuantity = trim((string) ($filters['minWarehouseQuantity'] ?? ''));
     $maxWarehouseQuantity = trim((string) ($filters['maxWarehouseQuantity'] ?? ''));
-    if ($isClientFilterVisible('warehouseRange') && ($minWarehouseQuantity !== '' || $maxWarehouseQuantity !== '')) {
+    if (!$storeLabMode && $isClientFilterVisible('warehouseRange') && ($minWarehouseQuantity !== '' || $maxWarehouseQuantity !== '')) {
         $rangeText = 'من ' . ($minWarehouseQuantity !== '' ? $minWarehouseQuantity : '…')
             . ' إلى ' . ($maxWarehouseQuantity !== '' ? $maxWarehouseQuantity : '…');
         $pushChipGroup('warehouseRange', 'مدى الكمية', 'warehouse', [[
@@ -442,13 +444,16 @@ require __DIR__ . '/partials/store-filter-group.php';
 
 $renderEmptyFilterGroups = $filtersDeferred || $shareContext !== null;
 $clientFiltersPayload = is_array($catalog['client_filters_payload'] ?? null) ? $catalog['client_filters_payload'] : null;
+if ($storeLabMode && is_array($clientFiltersPayload) && is_array($clientFiltersPayload['filterOptions'] ?? null)) {
+    $clientFiltersPayload['filterOptions']['stores'] = [];
+}
 $appliedClientFilters = [
     'materialTypes' => array_values($selectedMaterialTypes),
     'ageCategories' => array_values($selectedAgeCategories),
     'manufacturers' => array_values($selectedManufacturers),
     'sizeRanges' => array_values($selectedSizeRanges),
     'countryOfOrigins' => array_values($selectedCountryOrigins),
-    'storeGuids' => array_values($selectedStoreGuids),
+    'storeGuids' => $storeLabMode ? [] : array_values($selectedStoreGuids),
     'groupGuids' => array_values($selectedGroupGuids),
 ];
 $appliedClientFiltersJson = json_encode(
@@ -473,7 +478,11 @@ $appliedClientFiltersJson = json_encode(
 <?php endif; ?>
 
 <?php
-  $storeMaxPackages = StorePolicyService::maxPackagesPerMaterial();
+  try {
+      $storeMaxPackages = StorePolicyService::maxPackagesPerMaterial();
+  } catch (Throwable) {
+      $storeMaxPackages = null;
+  }
   $storeAllowCart = (bool) ($displayOptions['allow_cart'] ?? false);
   $storeShowPrice = (bool) ($displayOptions['show_price'] ?? false);
   $shareCartCount = ($shareContext !== null && $shareToken !== '' && $storeAllowCart)
@@ -493,12 +502,14 @@ $appliedClientFiltersJson = json_encode(
   </div>
 </section>
 <?php else: ?>
-<section class="store-page-head" aria-label="صفحة المتجر">
+<section class="store-page-head" aria-label="<?= $storeLabMode ? 'تجربة المتجر' : 'صفحة المتجر' ?>">
   <h1 class="store-page-head__title">
     <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
-    المتجر
+    <?= $storeLabMode ? 'تجربة المتجر' : 'المتجر' ?>
   </h1>
-  <?php if ($storeAllowCart && $storeMaxPackages !== null): ?>
+  <?php if ($storeLabMode): ?>
+    <p class="store-page-head__meta"><a href="/store.php">المتجر الحالي</a></p>
+  <?php elseif ($storeAllowCart && $storeMaxPackages !== null): ?>
     <p class="store-page-head__meta">الحد الأقصى للطلب: <strong><?= h(SpecialOfferService::formatQuantityLabel($storeMaxPackages)) ?></strong> طرد لكل مادة</p>
   <?php endif; ?>
 </section>
@@ -552,12 +563,16 @@ $appliedClientFiltersJson = json_encode(
   <p class="mb-4 rounded-xl border px-4 py-3 text-sm <?= $cartNoticeOk ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700' ?>"><?= h($cartNoticeMessage) ?></p>
 <?php endif; ?>
 
+<?php if ($storeLabMode): ?>
+  <?php require __DIR__ . '/partials/store-lab-search.php'; ?>
+<?php endif; ?>
+
 <!-- store-catalog-fragment:start -->
-<div class="store-layout <?= $allowClientFilters ? 'has-sidebar' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?><?= $allowClientFilters ? ' data-applied-filters="' . h((string) $appliedClientFiltersJson) . '"' : '' ?>>
+<div class="store-layout <?= $allowClientFilters ? 'has-sidebar' : '' ?><?= $storeLabMode ? ' store-lab' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?><?= $allowClientFilters ? ' data-applied-filters="' . h((string) $appliedClientFiltersJson) . '"' : '' ?>>
   <?php if ($allowClientFilters): ?>
     <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
       <aside class="store-filters-sidebar">
-        <form method="get" id="store-filters-form" class="store-filters-sidebar-inner">
+        <form method="get" id="store-filters-form" class="store-filters-sidebar-inner"<?= $storeLabMode ? ' action="/store-lab.php"' : '' ?>>
           <input type="hidden" name="page" value="1">
           <?php if ($shareContext !== null && $shareToken !== ''): ?>
             <input type="hidden" name="token" value="<?= h($shareToken) ?>">
@@ -567,6 +582,9 @@ $appliedClientFiltersJson = json_encode(
             <input type="hidden" name="hasImage" value="<?= !empty($filters['hasImage']) ? '1' : '0' ?>">
           <?php endif; ?>
           <?php if (!empty($filters['offer'])): ?><input type="hidden" name="offer" value="<?= h((string) $filters['offer']) ?>"><?php endif; ?>
+          <?php if ($storeLabMode): ?>
+            <input type="hidden" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" data-hl-query-mirror>
+          <?php endif; ?>
 
           <div class="store-filters-sidebar-header">
             <div class="store-filters-sheet-handle lg:hidden" aria-hidden="true"></div>
@@ -577,11 +595,11 @@ $appliedClientFiltersJson = json_encode(
           </div>
 
           <div class="store-filters-sidebar-scroll">
-          <?php if ($isSectionBrowse && $sectionFilterSummary !== []): ?>
+          <?php if (!$storeLabMode && $isSectionBrowse && $sectionFilterSummary !== []): ?>
             <p class="text-xs text-text-muted mb-3">تصفح ضمن قسم محدد — بعض الفلاتر مقيّدة بهذا القسم.</p>
           <?php endif; ?>
 
-          <?php if ($isClientFilterVisible('search')): ?>
+          <?php if (!$storeLabMode && $isClientFilterVisible('search')): ?>
             <div class="store-inline-field store-filters-search-desktop">
               <label for="store-search-q">بحث</label>
               <input id="store-search-q" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" placeholder="اسم المادة أو الكود">
@@ -663,7 +681,7 @@ $appliedClientFiltersJson = json_encode(
               ?>
             <?php endforeach; ?>
 
-            <?php if ($isClientFilterVisible('stores')): ?>
+            <?php if (!$storeLabMode && $isClientFilterVisible('stores')): ?>
               <?php
                 $storeGroupOptions = [];
                 foreach ($filterOptions['stores'] ?? [] as $store) {
@@ -742,7 +760,7 @@ $appliedClientFiltersJson = json_encode(
               </details>
             <?php endif; ?>
 
-            <?php if ($isClientFilterVisible('warehouseRange')): ?>
+            <?php if (!$storeLabMode && $isClientFilterVisible('warehouseRange')): ?>
               <details class="store-filter-accordion" data-filter-group="warehouse">
                 <summary class="store-filter-accordion-summary">
                   <span class="store-filter-accordion-heading">
@@ -832,9 +850,9 @@ $appliedClientFiltersJson = json_encode(
   <div class="store-results">
     <?php if ($allowClientFilters): ?>
       <div class="store-mobile-filter-bar-anchor lg:hidden">
-        <div class="store-mobile-filter-bar" data-store-mobile-filter-bar>
+        <div class="store-mobile-filter-bar" data-store-mobile-filter-bar<?= $storeLabMode ? ' data-store-lab-bar' : '' ?>>
           <div class="store-mobile-filter-bar-inner">
-            <?php if ($isClientFilterVisible('search')): ?>
+            <?php if (!$storeLabMode && $isClientFilterVisible('search')): ?>
               <label class="store-mobile-search" for="store-mobile-search-q">
                 <span class="material-symbols-outlined store-mobile-search-icon" aria-hidden="true">search</span>
                 <input
@@ -877,7 +895,7 @@ $appliedClientFiltersJson = json_encode(
       <?php endif; ?>
 
       <?php if ($allowSorting && $isClientFilterVisible('sort') && $clientSortFields !== []): ?>
-        <form method="get" class="store-sort-bar">
+        <form method="get" class="store-sort-bar"<?= $storeLabMode ? ' action="/store-lab.php"' : '' ?>>
           <?php foreach ($_GET as $key => $value): ?>
             <?php if ($key === 'sort' || $key === 'page') continue; ?>
             <?php if (is_array($value)): ?>
@@ -906,12 +924,15 @@ $appliedClientFiltersJson = json_encode(
       <?php endif; ?>
     </div>
 
+    <?php $baseDisplayOptions = $displayOptions; ?>
     <?php if ($products === [] && !empty($catalog['apiError'])): ?>
       <div class="store-empty-state store-empty-state--maintenance" role="status">
         <span class="material-symbols-outlined store-empty-state__icon" aria-hidden="true">cloud_off</span>
         <strong class="store-empty-state__title">عطل مؤقت — جاري المعالجة</strong>
         <p class="store-empty-state__text"><?= h((string) $catalog['apiError']) ?></p>
-        <p class="store-empty-state__hint">يمكنك العودة لاحقاً أو تصفّح الصفحة الرئيسية — سنعيد الخدمة خلال دقائق.</p>
+        <?php if (!$storeLabMode): ?>
+          <p class="store-empty-state__hint">يمكنك العودة لاحقاً أو تصفّح الصفحة الرئيسية — سنعيد الخدمة خلال دقائق.</p>
+        <?php endif; ?>
       </div>
     <?php elseif ($products === []): ?>
       <div class="store-empty-state">
@@ -922,13 +943,21 @@ $appliedClientFiltersJson = json_encode(
         <?php foreach ($products as $item): ?>
           <?php if (!is_array($item)) continue; ?>
           <?php
-            $useImagePreview = true;
+            $displayOptions = $baseDisplayOptions;
+            $comingSoonCard = $storeLabMode && StoreCatalogService::materialIsUnavailable($item);
+            $omitBlankSalePrice = $storeLabMode;
+            if ($comingSoonCard) {
+                $displayOptions['allow_cart'] = false;
+                $displayOptions['show_quantity'] = false;
+            }
+            $useImagePreview = (bool) ($storeCatalogImagePreview ?? true);
             $useQuickView = false;
             $linkToDetail = $shareContext === null;
             $capturePrices = (bool) ($displayOptions['show_price'] ?? false);
             require __DIR__ . '/partials/product-card.php';
           ?>
         <?php endforeach; ?>
+        <?php $displayOptions = $baseDisplayOptions; ?>
       </div>
     <?php endif; ?>
 
