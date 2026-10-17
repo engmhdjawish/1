@@ -88,7 +88,7 @@ public static class ReservationBillSql
             {ConnectionsUpsert}
             {ScopeTable}
             {InsertScopeFromParameters(lineCount)}
-            {Snapshot("#MsBefore")}
+            {Snapshot("#JawishMsBefore")}
             {HeaderInsert()}
             {LineCalls(lineCount)}
             {UpdateNoteAndTotal}
@@ -121,19 +121,19 @@ public static class ReservationBillSql
             {CopyCurrencyVal("@BillGuid")}
             {ConnectionsUpsert}
             {ScopeTable}
-            INSERT INTO #Scope (MatGUID)
+            INSERT INTO #JawishMats (MatGUID)
             SELECT MatGUID
             FROM dbo.bi000
             WHERE ParentGUID = @BillGuid
               AND MatGUID IS NOT NULL
             UNION
             {ScopeParameterSelect(lineCount)};
-            {Snapshot("#MsAtStart")}
+            {Snapshot("#JawishMsAtStart")}
             UPDATE dbo.bu000 SET IsPosted = 0 WHERE GUID = @BillGuid;
             DELETE FROM dbo.bi000 WHERE ParentGUID = @BillGuid;
             {LineCalls(lineCount)}
             {UpdateNoteAndTotal}
-            {Snapshot("#MsUnposted")}
+            {Snapshot("#JawishMsUnposted")}
             {PostBill};
             """;
         ReservationBillSqlSafety.EnsureSafe(sql);
@@ -149,28 +149,28 @@ public static class ReservationBillSql
             SET @SourceGuid = @BillGuid;
             {ConnectionsUpsert}
             {ScopeTable}
-            INSERT INTO #Scope (MatGUID)
+            INSERT INTO #JawishMats (MatGUID)
             SELECT MatGUID
             FROM dbo.bi000
             WHERE ParentGUID = @BillGuid
               AND MatGUID IS NOT NULL;
-            {Snapshot("#MsBefore")}
+            {Snapshot("#JawishMsBefore")}
             {DeleteBill};
             """;
         ReservationBillSqlSafety.EnsureSafe(sql);
         return sql;
     }
 
-    public static string BuildCreateObservationScript() => ObservationScript("#MsBefore");
+    public static string BuildCreateObservationScript() => ObservationScript("#JawishMsBefore");
 
     public static string BuildUpdateObservationScript() =>
         $"""
         {BillStateSelect}
-        {PhaseSelect("unpost", "#MsUnposted", "#MsAtStart")}
-        {PhaseSelect("post", "ms000-live", "#MsUnposted")}
+        {PhaseSelect("unpost", "#JawishMsUnposted", "#JawishMsAtStart")}
+        {PhaseSelect("post", "ms000-live", "#JawishMsUnposted")}
         """;
 
-    public static string BuildDeleteObservationScript() => ObservationScript("#MsBefore");
+    public static string BuildDeleteObservationScript() => ObservationScript("#JawishMsBefore");
 
     public static string BuildResetIgnoreWarnings() => """
         UPDATE dbo.connections
@@ -207,7 +207,7 @@ public static class ReservationBillSql
               (
                   SELECT m.MatGUID, m.StoreGUID, SUM(CAST(m.Qty AS float)) AS Qty
                   FROM dbo.ms000 AS m
-                  WHERE m.MatGUID IN (SELECT s.MatGUID FROM #Scope AS s)
+                  WHERE m.MatGUID IN (SELECT s.MatGUID FROM #JawishMats AS s)
                   GROUP BY m.MatGUID, m.StoreGUID
               )
               """
@@ -326,12 +326,12 @@ public static class ReservationBillSql
         """;
 
     private const string ScopeTable = """
-        CREATE TABLE #Scope (MatGUID uniqueidentifier NOT NULL PRIMARY KEY);
+        CREATE TABLE #JawishMats (MatGUID uniqueidentifier NOT NULL PRIMARY KEY);
         """;
 
     private static string InsertScopeFromParameters(int lineCount) =>
         $"""
-        INSERT INTO #Scope (MatGUID)
+        INSERT INTO #JawishMats (MatGUID)
         {ScopeParameterSelect(lineCount)};
         """;
 
@@ -357,7 +357,7 @@ public static class ReservationBillSql
         INSERT INTO {tableName} (MatGUID, StoreGUID, Qty)
         SELECT m.MatGUID, m.StoreGUID, SUM(CAST(m.Qty AS float))
         FROM dbo.ms000 AS m WITH (UPDLOCK, HOLDLOCK)
-        WHERE m.MatGUID IN (SELECT s.MatGUID FROM #Scope AS s)
+        WHERE m.MatGUID IN (SELECT s.MatGUID FROM #JawishMats AS s)
         GROUP BY m.MatGUID, m.StoreGUID;
         """;
 

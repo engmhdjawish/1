@@ -434,8 +434,9 @@ public sealed class ReservationBillSafetyTests
         var header = script.IndexOf("INSERT INTO dbo.bu000", StringComparison.Ordinal);
         var lines = script.IndexOf("EXEC dbo.prcBillItem_Add", StringComparison.Ordinal);
         var post = script.LastIndexOf("EXEC dbo.prcBill_Post1", StringComparison.Ordinal);
-        var snapshot = script.IndexOf("#MsBefore", StringComparison.Ordinal);
+        var snapshot = script.IndexOf("#JawishMsBefore", StringComparison.Ordinal);
         Assert.True(snapshot >= 0 && snapshot < lines && lines < post);
+        Assert.DoesNotContain("#Scope", script, StringComparison.Ordinal);
 
         foreach (var parameter in ProcedureParameters)
         {
@@ -447,10 +448,10 @@ public sealed class ReservationBillSafetyTests
     public void Update_script_unposts_replaces_lines_then_posts()
     {
         var script = ReservationBillSql.BuildUpdateScript(1);
-        var start = script.IndexOf("#MsAtStart", StringComparison.Ordinal);
+        var start = script.IndexOf("#JawishMsAtStart", StringComparison.Ordinal);
         var unpost = script.IndexOf("SET IsPosted = 0", StringComparison.Ordinal);
         var lines = script.IndexOf("EXEC dbo.prcBillItem_Add", StringComparison.Ordinal);
-        var mid = script.IndexOf("#MsUnposted", StringComparison.Ordinal);
+        var mid = script.IndexOf("#JawishMsUnposted", StringComparison.Ordinal);
         var post = script.LastIndexOf("EXEC dbo.prcBill_Post1", StringComparison.Ordinal);
 
         Assert.True(start < unpost && unpost < lines && lines < mid && mid < post);
@@ -461,7 +462,7 @@ public sealed class ReservationBillSafetyTests
     public void Delete_script_uses_the_single_guid_procedure_or_direct_deletes()
     {
         var script = ReservationBillSql.BuildDeleteScript();
-        var snapshot = script.IndexOf("#MsBefore", StringComparison.Ordinal);
+        var snapshot = script.IndexOf("#JawishMsBefore", StringComparison.Ordinal);
         var procedure = script.IndexOf("prcBill_delete", StringComparison.Ordinal);
 
         Assert.True(snapshot < procedure);
