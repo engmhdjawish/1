@@ -89,7 +89,7 @@ public static class ReservationBillSql
             {ScopeTable}
             {InsertScopeFromParameters(lineCount)}
             {Snapshot("#MsBefore")}
-            {HeaderInsert}
+            {HeaderInsert()}
             {LineCalls(lineCount)}
             {UpdateNoteAndTotal}
             UPDATE dbo.bu000 SET IsPosted = 1 WHERE GUID = @BillGuid;
@@ -361,14 +361,25 @@ public static class ReservationBillSql
         GROUP BY m.MatGUID, m.StoreGUID;
         """;
 
-    private const string HeaderInsert = """
+    /// <summary>
+    /// Numeric header columns copied from the template and forced to zero.
+    /// Al-Ameen compares this primary key with a case-insensitive collation, so
+    /// VatValue and VATValue are the same key and must be inserted once.
+    /// </summary>
+    private static readonly string[] AmountColumnCandidates =
+    [
+        "TotalDisc", "Discount", "Disc", "TotalExtra", "Extra", "Profits",
+        "VAT", "VATValue", "VatValue", "Paid", "Remain", "Cash",
+        "Credit", "Debit", "Bonus", "BonusQnt", "NetProfit", "SalesTax",
+        "TotalVAT", "DiscValue", "ExtraValue", "Additions", "TotalAdd",
+        "Payed", "PaidValue", "FirstPayment", "TotalBonus"
+    ];
+
+    private static string HeaderInsert() =>
+        $"""
         DECLARE @AmountColumns TABLE (Name sysname NOT NULL PRIMARY KEY);
         INSERT INTO @AmountColumns (Name) VALUES
-            (N'TotalDisc'), (N'Discount'), (N'Disc'), (N'TotalExtra'), (N'Extra'), (N'Profits'),
-            (N'VAT'), (N'VatValue'), (N'VATValue'), (N'Paid'), (N'Remain'), (N'Cash'),
-            (N'Credit'), (N'Debit'), (N'Bonus'), (N'BonusQnt'), (N'NetProfit'), (N'SalesTax'),
-            (N'TotalVAT'), (N'DiscValue'), (N'ExtraValue'), (N'Additions'), (N'TotalAdd'),
-            (N'Payed'), (N'PaidValue'), (N'FirstPayment'), (N'TotalBonus');
+            {AmountColumnValueList()};
 
         DECLARE @insertCols nvarchar(max);
         DECLARE @selectVals nvarchar(max);
@@ -504,6 +515,56 @@ public static class ReservationBillSql
             DELETE FROM dbo.bu000 WHERE GUID = @BillGuid;
         END
         """;
+
+    private static IReadOnlyList<string> DistinctAmountColumnNames()
+    {
+        var names = new List<string>(AmountColumnCandidates.Length);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in AmountColumnCandidates)
+        {
+            if (!IsSqlIdentifier(name))
+            {
+                throw new InvalidOperationException($"Amount column '{name}' is not a single SQL identifier.");
+            }
+
+            if (seen.Add(name))
+            {
+                names.Add(name);
+            }
+        }
+
+        return names;
+    }
+
+    private static string AmountColumnValueList()
+    {
+        var literals = DistinctAmountColumnNames().Select(name => $"(N'{name}')").ToArray();
+        var lines = new List<string>();
+        for (var index = 0; index < literals.Length; index += 6)
+        {
+            lines.Add(string.Join(", ", literals.Skip(index).Take(6)));
+        }
+
+        return string.Join(",\n            ", lines);
+    }
+
+    private static bool IsSqlIdentifier(string name)
+    {
+        if (name.Length == 0 || !(char.IsAsciiLetter(name[0]) || name[0] == '_'))
+        {
+            return false;
+        }
+
+        for (var index = 1; index < name.Length; index++)
+        {
+            if (!(char.IsAsciiLetterOrDigit(name[index]) || name[index] == '_'))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static string LineCalls(int lineCount)
     {

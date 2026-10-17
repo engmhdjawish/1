@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 using ExistingDb.Api.Contracts.Bills;
 using ExistingDb.Api.Services.Bills;
 using Xunit;
@@ -376,6 +377,44 @@ public sealed class ReservationBillSafetyTests
     }
 
     [Fact]
+    public void Amount_column_names_are_inserted_once_including_VATValue()
+    {
+        var scripts = new[]
+        {
+            ReservationBillSql.BuildCreateScript(1),
+            ReservationBillSql.BuildCreateScript(3),
+            ReservationBillSql.BuildUpdateScript(2),
+            ReservationBillSql.BuildDeleteScript(),
+            ReservationBillSql.BuildOwnershipScript(),
+            ReservationBillSql.BuildCreateObservationScript(),
+            ReservationBillSql.BuildUpdateObservationScript(),
+            ReservationBillSql.BuildDeleteObservationScript()
+        };
+
+        var sawAmountColumns = false;
+        foreach (var script in scripts)
+        {
+            foreach (var insert in ColumnNameInserts(script))
+            {
+                var distinct = insert.Names.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                Assert.Equal(insert.Names.Length, distinct.Length);
+                if (!insert.Target.Equals("@AmountColumns", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                sawAmountColumns = true;
+                Assert.Contains("DECLARE @AmountColumns TABLE (Name sysname NOT NULL PRIMARY KEY);", script);
+                Assert.Equal(1, insert.Names.Count(name => name.Equals("VATValue", StringComparison.OrdinalIgnoreCase)));
+                Assert.Contains(insert.Names, name => name == "VATValue");
+                Assert.DoesNotContain(insert.Names, name => name == "VatValue");
+            }
+        }
+
+        Assert.True(sawAmountColumns);
+    }
+
+    [Fact]
     public void Create_script_posts_only_after_an_unposted_header_and_named_line_procedure()
     {
         var script = ReservationBillSql.BuildCreateScript(1);
@@ -456,6 +495,21 @@ public sealed class ReservationBillSafetyTests
         Assert.Contains("IgnoreWarnings = 0", script);
         Assert.Contains("Exclusive = 0", script);
         ReservationBillSqlSafety.EnsureSafe(script);
+    }
+
+    private static IEnumerable<(string Target, string[] Names)> ColumnNameInserts(string script)
+    {
+        foreach (Match insert in Regex.Matches(
+                     script,
+                     @"INSERT INTO (?<target>@\w+) \(Name\) VALUES(?<values>.*?);",
+                     RegexOptions.Singleline | RegexOptions.CultureInvariant))
+        {
+            var names = Regex.Matches(insert.Groups["values"].Value, @"\(N'([^']*)'\)")
+                .Select(match => match.Groups[1].Value)
+                .ToArray();
+            Assert.NotEmpty(names);
+            yield return (insert.Groups["target"].Value, names);
+        }
     }
 
     private static string RepoRoot()
