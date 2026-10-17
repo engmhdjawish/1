@@ -429,10 +429,11 @@ public sealed class ReservationBillSafetyTests
         Assert.Contains("IgnoreWarnings = 1", script);
         Assert.Contains("Exclusive = 0", script);
         Assert.Contains("PayType", script);
-        Assert.Contains("CustGUID", script);
+        Assert.Contains("00000000-0000-0000-0000-000000000000", script);
+        Assert.DoesNotContain("CustGUID = NULL", script, StringComparison.OrdinalIgnoreCase);
         var header = script.IndexOf("INSERT INTO dbo.bu000", StringComparison.Ordinal);
         var lines = script.IndexOf("EXEC dbo.prcBillItem_Add", StringComparison.Ordinal);
-        var post = script.LastIndexOf("SET IsPosted = 1", StringComparison.Ordinal);
+        var post = script.LastIndexOf("EXEC dbo.prcBill_Post1", StringComparison.Ordinal);
         var snapshot = script.IndexOf("#MsBefore", StringComparison.Ordinal);
         Assert.True(snapshot >= 0 && snapshot < lines && lines < post);
 
@@ -450,7 +451,7 @@ public sealed class ReservationBillSafetyTests
         var unpost = script.IndexOf("SET IsPosted = 0", StringComparison.Ordinal);
         var lines = script.IndexOf("EXEC dbo.prcBillItem_Add", StringComparison.Ordinal);
         var mid = script.IndexOf("#MsUnposted", StringComparison.Ordinal);
-        var post = script.LastIndexOf("SET IsPosted = 1", StringComparison.Ordinal);
+        var post = script.LastIndexOf("EXEC dbo.prcBill_Post1", StringComparison.Ordinal);
 
         Assert.True(start < unpost && unpost < lines && lines < mid && mid < post);
         Assert.Contains("@Order = @OrderSentinel", script);

@@ -92,7 +92,7 @@ public static class ReservationBillSql
             {HeaderInsert()}
             {LineCalls(lineCount)}
             {UpdateNoteAndTotal}
-            UPDATE dbo.bu000 SET IsPosted = 1 WHERE GUID = @BillGuid;
+            {PostBill};
             """;
         ReservationBillSqlSafety.EnsureSafe(sql);
         return sql;
@@ -134,7 +134,7 @@ public static class ReservationBillSql
             {LineCalls(lineCount)}
             {UpdateNoteAndTotal}
             {Snapshot("#MsUnposted")}
-            UPDATE dbo.bu000 SET IsPosted = 1 WHERE GUID = @BillGuid;
+            {PostBill};
             """;
         ReservationBillSqlSafety.EnsureSafe(sql);
         return sql;
@@ -410,7 +410,7 @@ public static class ReservationBillSql
                     WHEN c.name = N'TypeGUID' THEN N'@TypeGuid'
                     WHEN c.name = N'CurrencyGUID' THEN N'@BillCurrencyGuid'
                     WHEN c.name = N'PayType' THEN N'0'
-                    WHEN c.name IN (N'CustGUID', N'CustomerGUID') THEN N'CAST(NULL AS uniqueidentifier)'
+                    WHEN c.name IN (N'CustGUID', N'CustomerGUID') THEN N'CAST(''00000000-0000-0000-0000-000000000000'' AS uniqueidentifier)'
                     WHEN EXISTS (SELECT 1 FROM @AmountColumns AS a WHERE a.Name = c.name)
                          AND c.system_type_id IN (48, 52, 56, 59, 60, 62, 106, 108, 122, 127)
                         THEN N'0'
@@ -457,7 +457,7 @@ public static class ReservationBillSql
 
         IF COL_LENGTH(N'dbo.bu000', N'CustGUID') IS NOT NULL
             EXEC sp_executesql
-                N'UPDATE dbo.bu000 SET CustGUID = NULL WHERE GUID = @BillGuid',
+                N'UPDATE dbo.bu000 SET CustGUID = ''00000000-0000-0000-0000-000000000000'' WHERE GUID = @BillGuid',
                 N'@BillGuid uniqueidentifier',
                 @BillGuid = @BillGuid;
 
@@ -476,6 +476,13 @@ public static class ReservationBillSql
                 @BillCurrencyGuid = @BillCurrencyGuid;
 
         EXEC dbo.prcupdatebuNote @Guid = @BillGuid, @Note = @OwnerName;
+        """;
+
+    // Al-Ameen posts with prcBill_Post1 after the header is saved unposted.
+    // A direct IsPosted update still runs trg_bu000_UpdateCustomerPrice, and a NULL
+    // CustGUID collides with cp000. The program stores the empty customer guid.
+    private const string PostBill = """
+        EXEC dbo.prcBill_Post1 @BillGuid, 1;
         """;
 
     private const string DeleteBill = """
