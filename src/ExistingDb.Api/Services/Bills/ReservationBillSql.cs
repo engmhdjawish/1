@@ -156,6 +156,42 @@ public static class ReservationBillSql
 
     public static string LineParameterPrefix(int index) => $"@p{index}_";
 
+    public static string StoreQuantityParameter(int index)
+    {
+        if (index < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+
+        return $"@m{index}";
+    }
+
+    /// <summary>
+    /// Reads live <c>ms000</c> balances for the materials touched by this bill.
+    /// A normal parameterized select stays valid after <c>prcBill_Post1</c> rolls
+    /// the transaction back. Temp tables created in that transaction would not.
+    /// </summary>
+    public static string BuildStoreQuantityScript(int materialCount)
+    {
+        if (materialCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(materialCount));
+        }
+
+        var parameters = string.Join(", ", Enumerable.Range(0, materialCount).Select(StoreQuantityParameter));
+        var sql = $"""
+            SELECT
+                MatGUID,
+                StoreGUID,
+                SUM(CAST(Qty AS float)) AS Qty
+            FROM dbo.ms000 WITH (UPDLOCK, HOLDLOCK)
+            WHERE MatGUID IN ({parameters})
+            GROUP BY MatGUID, StoreGUID;
+            """;
+        ReservationBillSqlSafety.EnsureSafe(sql);
+        return sql;
+    }
+
     private const string BillStateSelect = """
         SELECT
             CASE WHEN b.GUID IS NULL THEN 0 ELSE 1 END AS BillExists,

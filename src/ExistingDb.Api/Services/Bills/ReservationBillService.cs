@@ -1,6 +1,5 @@
 using System.Data;
 using System.Globalization;
-using System.Text;
 using ExistingDb.Api.Contracts.Bills;
 using Microsoft.Data.SqlClient;
 
@@ -189,7 +188,11 @@ public sealed class ReservationBillService(
                 {
                     Phases = new Dictionary<string, IReadOnlyList<MaterialStoreQuantityChange>>(StringComparer.OrdinalIgnoreCase)
                     {
-                        ["change"] = DiffStoreQuantities(quantityBefore, quantityAfter)
+                        ["change"] = DiffStoreQuantities(
+                            quantityBefore,
+                            quantityAfter,
+                            scopedMaterials,
+                            runtime.StoreGuid)
                     }
                 };
                 var decision = Decide(operation, draft, previousLines ?? [], observation, runtime);
@@ -266,7 +269,7 @@ public sealed class ReservationBillService(
         var expected = operation switch
         {
             ReservationOperation.Delete => ReservationBillGuard.RestoreDeltas(previousLines),
-            ReservationOperation.Update => NetDeltas(previousLines, nextLines),
+            ReservationOperation.Update => ReservationBillGuard.NetDeltas(previousLines, nextLines),
             _ => ReservationBillGuard.ReserveDeltas(nextLines)
         };
         var inventoryDecision = ReservationBillGuard.EvaluateInventory(
@@ -298,12 +301,7 @@ public sealed class ReservationBillService(
             throw new InvalidOperationException("Reservation bill number was missing after the guard passed.");
         }
 
-        var finalPhase = operation switch
-        {
-            ReservationOperation.Update => "post",
-            _ => "change"
-        };
-        var changes = observation.Phases.GetValueOrDefault(finalPhase) ?? [];
+        var changes = observation.Phases.GetValueOrDefault("change") ?? [];
         var materials = (draft?.Lines ?? previousLines)
             .Select(line => line.MaterialGuid)
             .Concat(previousLines.Select(line => line.MaterialGuid))
@@ -422,85 +420,63 @@ public sealed class ReservationBillService(
         return ownership with { Lines = lines };
     }
 
-    private static Dictionary<Guid, double> NetDeltas(
-        IReadOnlyList<ReservationBillLine> previousLines,
-        IReadOnlyList<ReservationBillLine> nextLines)
-    {
-        var net = new Dictionary<Guid, double>(ReservationBillGuard.RestoreDeltas(previousLines));
-        foreach (var (materialGuid, delta) in ReservationBillGuard.ReserveDeltas(nextLines))
-        {
-            net.TryGetValue(materialGuid, out var current);
-            net[materialGuid] = current + delta;
-        }
-
-        return net;
-    }
-
-    private static async Task<Dictionary<(Guid Material, Guid Store), double>> ReadStoreQuantitiesAsync(
+    private static async Task<Dictionary<(Guid Material, Guid? Store), double>> ReadStoreQuantitiesAsync(
         SqlConnection connection,
         SqlTransaction transaction,
         IReadOnlyList<Guid> materialGuids,
         CancellationToken cancellationToken)
     {
-        var quantities = new Dictionary<(Guid Material, Guid Store), double>();
+        var quantities = new Dictionary<(Guid Material, Guid? Store), double>();
         if (materialGuids.Count == 0)
         {
             return quantities;
         }
 
-        var names = new string[materialGuids.Count];
-        var sql = new StringBuilder("SELECT MatGUID, StoreGUID, SUM(CAST(Qty AS float)) AS Qty FROM dbo.ms000 WITH (UPDLOCK, HOLDLOCK) WHERE MatGUID IN (");
-        for (var index = 0; index < materialGuids.Count; index++)
-        {
-            names[index] = "@mat" + index;
-            if (index > 0)
-            {
-                sql.Append(',');
-            }
-
-            sql.Append(names[index]);
-        }
-
-        sql.Append(") GROUP BY MatGUID, StoreGUID;");
-        var text = sql.ToString();
+        var text = ReservationBillSql.BuildStoreQuantityScript(materialGuids.Count);
         ReservationBillSqlSafety.EnsureSafe(text);
         await using var command = CreateCommand(connection, transaction, text);
         for (var index = 0; index < materialGuids.Count; index++)
         {
-            AddGuid(command, names[index], materialGuids[index]);
+            AddGuid(command, ReservationBillSql.StoreQuantityParameter(index), materialGuids[index]);
         }
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
             var materialGuid = ReadGuid(reader, "MatGUID");
-            var storeGuid = ReadGuid(reader, "StoreGUID");
-            if (!materialGuid.HasValue || !storeGuid.HasValue)
+            if (!materialGuid.HasValue)
             {
                 continue;
             }
 
-            quantities[(materialGuid.Value, storeGuid.Value)] = ReadDouble(reader, "Qty") ?? 0d;
+            quantities[(materialGuid.Value, ReadGuid(reader, "StoreGUID"))] = ReadDouble(reader, "Qty") ?? 0d;
         }
 
         return quantities;
     }
 
     private static IReadOnlyList<MaterialStoreQuantityChange> DiffStoreQuantities(
-        Dictionary<(Guid Material, Guid Store), double> before,
-        Dictionary<(Guid Material, Guid Store), double> after)
+        Dictionary<(Guid Material, Guid? Store), double> before,
+        Dictionary<(Guid Material, Guid? Store), double> after,
+        IReadOnlyList<Guid> materialGuids,
+        Guid reservationStoreGuid)
     {
-        var keys = new HashSet<(Guid Material, Guid Store)>(before.Keys);
+        var keys = new HashSet<(Guid Material, Guid? Store)>(before.Keys);
         keys.UnionWith(after.Keys);
+        foreach (var materialGuid in materialGuids)
+        {
+            keys.Add((materialGuid, reservationStoreGuid));
+        }
+
         var changes = new List<MaterialStoreQuantityChange>(keys.Count);
         foreach (var key in keys)
         {
-            before.TryGetValue(key, out var quantityBefore);
+            var existsBefore = before.TryGetValue(key, out var quantityBefore);
             var existsAfter = after.TryGetValue(key, out var quantityAfter);
             changes.Add(new MaterialStoreQuantityChange(
                 key.Material,
                 key.Store,
-                quantityBefore,
+                existsBefore ? quantityBefore : 0d,
                 existsAfter ? quantityAfter : 0d,
                 existsAfter));
         }

@@ -348,6 +348,7 @@ public sealed class ReservationBillSafetyTests
             ReservationBillSql.BuildCreateObservationScript(),
             ReservationBillSql.BuildUpdateObservationScript(),
             ReservationBillSql.BuildDeleteObservationScript(),
+            ReservationBillSql.BuildStoreQuantityScript(3),
             ReservationBillSql.BuildResetIgnoreWarnings(),
             ReservationBillSql.EnableAbortOnError
         };
@@ -355,6 +356,7 @@ public sealed class ReservationBillSafetyTests
         foreach (var script in scripts)
         {
             ReservationBillSqlSafety.EnsureSafe(script);
+            Assert.DoesNotContain("#", script);
             Assert.DoesNotContain("prcBill_genEntry", script, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("prcBill_reGenEntry", script, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("prc_InsertOrModifyMaturity", script, StringComparison.OrdinalIgnoreCase);
@@ -484,7 +486,52 @@ public sealed class ReservationBillSafetyTests
             Assert.Contains("vwER_EntriesBills", script);
             Assert.Contains("pt000", script);
             Assert.Contains("RefGUID", script);
+            Assert.DoesNotContain("#", script);
         }
+    }
+
+    [Fact]
+    public void Store_quantity_script_selects_ms000_by_material_parameters()
+    {
+        var script = ReservationBillSql.BuildStoreQuantityScript(2);
+
+        Assert.Contains("SELECT", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("FROM dbo.ms000", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("WHERE MatGUID IN (@m0, @m1)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("#", script);
+        Assert.Equal("@m0", ReservationBillSql.StoreQuantityParameter(0));
+        Assert.Equal("@m1", ReservationBillSql.StoreQuantityParameter(1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ReservationBillSql.BuildStoreQuantityScript(0));
+    }
+
+    [Fact]
+    public void Update_net_delta_restores_the_old_quantity_and_reserves_the_new_one()
+    {
+        var removed = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var added = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var unchanged = Guid.Parse("66666666-6666-6666-6666-666666666666");
+        var previous = new[] { Line(Material, 5), Line(removed, 2), Line(unchanged, 1) };
+        var next = new[] { Line(Material, 2), Line(added, 4), Line(unchanged, 1) };
+
+        var expected = ReservationBillGuard.NetDeltas(previous, next);
+
+        Assert.Equal(3d, expected[Material]);
+        Assert.Equal(2d, expected[removed]);
+        Assert.Equal(-4d, expected[added]);
+        Assert.Equal(0d, expected[unchanged]);
+
+        var decision = ReservationBillGuard.EvaluateInventory(
+            ReservationStore,
+            expected,
+            [
+                Change(Material, ReservationStore, before: -10, after: -7),
+                Change(removed, ReservationStore, before: -2, after: 0),
+                Change(added, ReservationStore, before: 0, after: -4),
+                new MaterialStoreQuantityChange(unchanged, ReservationStore, 0, 0, ExistsAfter: false),
+                Change(Material, OtherStore, before: 6, after: 6)
+            ]);
+
+        Assert.True(decision.Succeeded);
     }
 
     [Fact]

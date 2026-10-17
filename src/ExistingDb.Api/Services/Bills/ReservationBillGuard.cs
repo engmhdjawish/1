@@ -333,6 +333,24 @@ public static class ReservationBillGuard
     public static IReadOnlyDictionary<Guid, double> RestoreDeltas(IReadOnlyList<ReservationBillLine> lines) =>
         SignedDeltas(lines, 1d);
 
+    /// <summary>
+    /// One update movement: restore the previous reservation (+old) and reserve the replacement (-new).
+    /// Net is old quantity minus new quantity for each material.
+    /// </summary>
+    public static IReadOnlyDictionary<Guid, double> NetDeltas(
+        IReadOnlyList<ReservationBillLine> previousLines,
+        IReadOnlyList<ReservationBillLine> nextLines)
+    {
+        var net = new Dictionary<Guid, double>(RestoreDeltas(previousLines));
+        foreach (var (materialGuid, delta) in ReserveDeltas(nextLines))
+        {
+            net.TryGetValue(materialGuid, out var current);
+            net[materialGuid] = current + delta;
+        }
+
+        return net;
+    }
+
     public static IReadOnlyDictionary<Guid, double> WithZeroFill(
         IReadOnlyDictionary<Guid, double> deltas,
         IEnumerable<Guid> materialGuids)
