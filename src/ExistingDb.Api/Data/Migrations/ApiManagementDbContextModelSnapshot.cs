@@ -268,6 +268,13 @@ namespace ExistingDb.Api.Data.Migrations
                             Category = "inventory",
                             Code = "inventory.read",
                             Name = "Read inventory balances"
+                        },
+                        new
+                        {
+                            Id = 16,
+                            Category = "bills",
+                            Code = "bills.reserve",
+                            Name = "Create and maintain reservation bills"
                         });
                 });
 
@@ -857,6 +864,11 @@ namespace ExistingDb.Api.Data.Migrations
                         {
                             RoleId = 1,
                             PermissionId = 15
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 16
                         },
                         new
                         {

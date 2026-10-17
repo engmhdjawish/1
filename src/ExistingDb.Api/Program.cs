@@ -5,6 +5,7 @@ using ExistingDb.Api.Data;
 using ExistingDb.Api.Images;
 using ExistingDb.Api.Middleware;
 using ExistingDb.Api.Options;
+using ExistingDb.Api.Services.Bills;
 using ExistingDb.Api.Services.Materials;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -17,6 +18,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.Configure<SeedAdminOptions>(builder.Configuration.GetSection(SeedAdminOptions.SectionName));
 builder.Services.Configure<DevelopmentAuthOptions>(builder.Configuration.GetSection(DevelopmentAuthOptions.SectionName));
+builder.Services.Configure<ReservationBillOptions>(builder.Configuration.GetSection(ReservationBillOptions.SectionName));
 
 var developmentAuthOptions = builder.Configuration.GetSection(DevelopmentAuthOptions.SectionName).Get<DevelopmentAuthOptions>()
     ?? new DevelopmentAuthOptions();
@@ -97,6 +99,7 @@ builder.Services.AddScoped<IImageSettingsService, ImageSettingsService>();
 builder.Services.AddScoped<IServiceSettingsService, ServiceSettingsService>();
 builder.Services.AddScoped<IImageStorageService, ImageStorageService>();
 builder.Services.AddScoped<MaterialQueryBuilder>();
+builder.Services.AddScoped<IReservationBillService, ReservationBillService>();
 builder.Services.AddScoped<MaterialResultFiltersService>();
 builder.Services.AddHostedService<ApiManagementDbInitializer>();
 
