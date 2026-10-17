@@ -434,9 +434,8 @@ public sealed class ReservationBillSafetyTests
         var header = script.IndexOf("INSERT INTO dbo.bu000", StringComparison.Ordinal);
         var lines = script.IndexOf("EXEC dbo.prcBillItem_Add", StringComparison.Ordinal);
         var post = script.LastIndexOf("EXEC dbo.prcBill_Post1", StringComparison.Ordinal);
-        var snapshot = script.IndexOf("#JawishMsBefore", StringComparison.Ordinal);
-        Assert.True(snapshot >= 0 && snapshot < lines && lines < post);
-        Assert.DoesNotContain("#Scope", script, StringComparison.Ordinal);
+        Assert.True(header >= 0 && header < lines && lines < post);
+        Assert.DoesNotContain("#", script);
 
         foreach (var parameter in ProcedureParameters)
         {
@@ -448,13 +447,12 @@ public sealed class ReservationBillSafetyTests
     public void Update_script_unposts_replaces_lines_then_posts()
     {
         var script = ReservationBillSql.BuildUpdateScript(1);
-        var start = script.IndexOf("#JawishMsAtStart", StringComparison.Ordinal);
         var unpost = script.IndexOf("SET IsPosted = 0", StringComparison.Ordinal);
         var lines = script.IndexOf("EXEC dbo.prcBillItem_Add", StringComparison.Ordinal);
-        var mid = script.IndexOf("#JawishMsUnposted", StringComparison.Ordinal);
         var post = script.LastIndexOf("EXEC dbo.prcBill_Post1", StringComparison.Ordinal);
 
-        Assert.True(start < unpost && unpost < lines && lines < mid && mid < post);
+        Assert.True(unpost >= 0 && unpost < lines && lines < post);
+        Assert.DoesNotContain("#", script);
         Assert.Contains("@Order = @OrderSentinel", script);
     }
 
@@ -462,10 +460,10 @@ public sealed class ReservationBillSafetyTests
     public void Delete_script_uses_the_single_guid_procedure_or_direct_deletes()
     {
         var script = ReservationBillSql.BuildDeleteScript();
-        var snapshot = script.IndexOf("#JawishMsBefore", StringComparison.Ordinal);
         var procedure = script.IndexOf("prcBill_delete", StringComparison.Ordinal);
 
-        Assert.True(snapshot < procedure);
+        Assert.True(procedure >= 0);
+        Assert.DoesNotContain("#", script);
         Assert.Contains("@paramCount = 1", script);
         Assert.Contains("DELETE FROM dbo.bi000", script);
         Assert.Contains("DELETE FROM dbo.bu000", script);

@@ -86,9 +86,6 @@ public static class ReservationBillSql
             SET @SourceGuid = @TemplateGuid;
             {CopyCurrencyVal("@TemplateGuid")}
             {ConnectionsUpsert}
-            {ScopeTable}
-            {InsertScopeFromParameters(lineCount)}
-            {Snapshot("#JawishMsBefore")}
             {HeaderInsert()}
             {LineCalls(lineCount)}
             {UpdateNoteAndTotal}
@@ -120,20 +117,10 @@ public static class ReservationBillSql
 
             {CopyCurrencyVal("@BillGuid")}
             {ConnectionsUpsert}
-            {ScopeTable}
-            INSERT INTO #JawishMats (MatGUID)
-            SELECT MatGUID
-            FROM dbo.bi000
-            WHERE ParentGUID = @BillGuid
-              AND MatGUID IS NOT NULL
-            UNION
-            {ScopeParameterSelect(lineCount)};
-            {Snapshot("#JawishMsAtStart")}
             UPDATE dbo.bu000 SET IsPosted = 0 WHERE GUID = @BillGuid;
             DELETE FROM dbo.bi000 WHERE ParentGUID = @BillGuid;
             {LineCalls(lineCount)}
             {UpdateNoteAndTotal}
-            {Snapshot("#JawishMsUnposted")}
             {PostBill};
             """;
         ReservationBillSqlSafety.EnsureSafe(sql);
@@ -148,29 +135,17 @@ public static class ReservationBillSql
             DECLARE @SourceGuid uniqueidentifier;
             SET @SourceGuid = @BillGuid;
             {ConnectionsUpsert}
-            {ScopeTable}
-            INSERT INTO #JawishMats (MatGUID)
-            SELECT MatGUID
-            FROM dbo.bi000
-            WHERE ParentGUID = @BillGuid
-              AND MatGUID IS NOT NULL;
-            {Snapshot("#JawishMsBefore")}
             {DeleteBill};
             """;
         ReservationBillSqlSafety.EnsureSafe(sql);
         return sql;
     }
 
-    public static string BuildCreateObservationScript() => ObservationScript("#JawishMsBefore");
+    public static string BuildCreateObservationScript() => BillStateSelect;
 
-    public static string BuildUpdateObservationScript() =>
-        $"""
-        {BillStateSelect}
-        {PhaseSelect("unpost", "#JawishMsUnposted", "#JawishMsAtStart")}
-        {PhaseSelect("post", "ms000-live", "#JawishMsUnposted")}
-        """;
+    public static string BuildUpdateObservationScript() => BillStateSelect;
 
-    public static string BuildDeleteObservationScript() => ObservationScript("#JawishMsBefore");
+    public static string BuildDeleteObservationScript() => BillStateSelect;
 
     public static string BuildResetIgnoreWarnings() => """
         UPDATE dbo.connections
@@ -180,12 +155,6 @@ public static class ReservationBillSql
         """;
 
     public static string LineParameterPrefix(int index) => $"@p{index}_";
-
-    private static string ObservationScript(string beforeTable) =>
-        $"""
-        {BillStateSelect}
-        {PhaseSelect("change", "ms000-live", beforeTable)}
-        """;
 
     private const string BillStateSelect = """
         SELECT
@@ -199,37 +168,6 @@ public static class ReservationBillSql
         FROM (SELECT @BillGuid AS BillGuid) AS requested
         LEFT JOIN dbo.bu000 AS b ON b.GUID = requested.BillGuid;
         """;
-
-    private static string PhaseSelect(string phase, string afterSource, string beforeTable)
-    {
-        var after = afterSource == "ms000-live"
-            ? """
-              (
-                  SELECT m.MatGUID, m.StoreGUID, SUM(CAST(m.Qty AS float)) AS Qty
-                  FROM dbo.ms000 AS m
-                  WHERE m.MatGUID IN (SELECT s.MatGUID FROM #JawishMats AS s)
-                  GROUP BY m.MatGUID, m.StoreGUID
-              )
-              """
-            : afterSource;
-
-        return $"""
-            SELECT
-                N'{phase}' AS Phase,
-                COALESCE(a.MatGUID, b.MatGUID) AS MatGUID,
-                COALESCE(a.StoreGUID, b.StoreGUID) AS StoreGUID,
-                CAST(ISNULL(b.Qty, 0) AS float) AS QtyBefore,
-                CAST(ISNULL(a.Qty, 0) AS float) AS QtyAfter,
-                CASE WHEN a.MatGUID IS NULL THEN 0 ELSE 1 END AS ExistsAfter
-            FROM {after} AS a
-            FULL OUTER JOIN {beforeTable} AS b
-                ON a.MatGUID = b.MatGUID
-               AND (
-                    a.StoreGUID = b.StoreGUID
-                    OR (a.StoreGUID IS NULL AND b.StoreGUID IS NULL)
-               );
-            """;
-    }
 
     private const string SessionSetup = """
         DECLARE @loginTime datetime;
@@ -323,42 +261,6 @@ public static class ReservationBillSql
             IF @copiedCurrencyVal IS NOT NULL AND @copiedCurrencyVal > 0
                 SET @CurrencyVal = @copiedCurrencyVal;
         END
-        """;
-
-    private const string ScopeTable = """
-        CREATE TABLE #JawishMats (MatGUID uniqueidentifier NOT NULL PRIMARY KEY);
-        """;
-
-    private static string InsertScopeFromParameters(int lineCount) =>
-        $"""
-        INSERT INTO #JawishMats (MatGUID)
-        {ScopeParameterSelect(lineCount)};
-        """;
-
-    private static string ScopeParameterSelect(int lineCount)
-    {
-        if (lineCount <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(lineCount));
-        }
-
-        var selects = Enumerable.Range(0, lineCount)
-            .Select(index => $"SELECT {LineParameterPrefix(index)}Mat AS MatGUID");
-        return string.Join("\nUNION\n", selects);
-    }
-
-    private static string Snapshot(string tableName) =>
-        $"""
-        CREATE TABLE {tableName} (
-            MatGUID uniqueidentifier NOT NULL,
-            StoreGUID uniqueidentifier NULL,
-            Qty float NULL
-        );
-        INSERT INTO {tableName} (MatGUID, StoreGUID, Qty)
-        SELECT m.MatGUID, m.StoreGUID, SUM(CAST(m.Qty AS float))
-        FROM dbo.ms000 AS m WITH (UPDLOCK, HOLDLOCK)
-        WHERE m.MatGUID IN (SELECT s.MatGUID FROM #JawishMats AS s)
-        GROUP BY m.MatGUID, m.StoreGUID;
         """;
 
     /// <summary>

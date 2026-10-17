@@ -1,5 +1,6 @@
 using System.Data;
 using System.Globalization;
+using System.Text;
 using ExistingDb.Api.Contracts.Bills;
 using Microsoft.Data.SqlClient;
 
@@ -158,6 +159,18 @@ public sealed class ReservationBillService(
                     knownNumber = ownership.Number;
                 }
 
+                var scopedMaterials = (previousLines ?? [])
+                    .Select(line => line.MaterialGuid)
+                    .Concat(draft?.Lines.Select(line => line.MaterialGuid) ?? [])
+                    .Where(materialGuid => materialGuid != Guid.Empty)
+                    .Distinct()
+                    .ToArray();
+                var quantityBefore = await ReadStoreQuantitiesAsync(
+                    connection,
+                    transaction,
+                    scopedMaterials,
+                    cancellationToken);
+
                 await ExecuteNonQueryAsync(
                     connection,
                     transaction,
@@ -166,7 +179,19 @@ public sealed class ReservationBillService(
                     cancellationToken);
                 ignoreWarningsArmed = true;
 
+                var quantityAfter = await ReadStoreQuantitiesAsync(
+                    connection,
+                    transaction,
+                    scopedMaterials,
+                    cancellationToken);
                 var observation = await ReadObservationAsync(connection, transaction, observationSql, billGuid, cancellationToken);
+                observation = observation with
+                {
+                    Phases = new Dictionary<string, IReadOnlyList<MaterialStoreQuantityChange>>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["change"] = DiffStoreQuantities(quantityBefore, quantityAfter)
+                    }
+                };
                 var decision = Decide(operation, draft, previousLines ?? [], observation, runtime);
                 if (!decision.Succeeded)
                 {
@@ -238,35 +263,16 @@ public sealed class ReservationBillService(
             .Distinct()
             .ToArray();
 
-        ReservationBillDecision inventoryDecision;
-        if (operation == ReservationOperation.Update)
+        var expected = operation switch
         {
-            var unpostExpected = ReservationBillGuard.WithZeroFill(
-                ReservationBillGuard.RestoreDeltas(previousLines),
-                scopedMaterials);
-            var postExpected = ReservationBillGuard.WithZeroFill(
-                ReservationBillGuard.ReserveDeltas(nextLines),
-                scopedMaterials);
-            inventoryDecision = FirstFailure(
-                ReservationBillGuard.EvaluateInventory(
-                    runtime.StoreGuid,
-                    unpostExpected,
-                    observation.Phases.GetValueOrDefault("unpost") ?? []),
-                ReservationBillGuard.EvaluateInventory(
-                    runtime.StoreGuid,
-                    postExpected,
-                    observation.Phases.GetValueOrDefault("post") ?? []));
-        }
-        else
-        {
-            var expected = operation == ReservationOperation.Delete
-                ? ReservationBillGuard.RestoreDeltas(previousLines)
-                : ReservationBillGuard.ReserveDeltas(nextLines);
-            inventoryDecision = ReservationBillGuard.EvaluateInventory(
-                runtime.StoreGuid,
-                expected,
-                observation.Phases.GetValueOrDefault("change") ?? []);
-        }
+            ReservationOperation.Delete => ReservationBillGuard.RestoreDeltas(previousLines),
+            ReservationOperation.Update => NetDeltas(previousLines, nextLines),
+            _ => ReservationBillGuard.ReserveDeltas(nextLines)
+        };
+        var inventoryDecision = ReservationBillGuard.EvaluateInventory(
+            runtime.StoreGuid,
+            ReservationBillGuard.WithZeroFill(expected, scopedMaterials),
+            observation.Phases.GetValueOrDefault("change") ?? []);
 
         var billDecision = operation == ReservationOperation.Delete
             ? ReservationBillGuard.EvaluateDeletedBill(observation.State)
@@ -414,6 +420,92 @@ public sealed class ReservationBillService(
         }
 
         return ownership with { Lines = lines };
+    }
+
+    private static Dictionary<Guid, double> NetDeltas(
+        IReadOnlyList<ReservationBillLine> previousLines,
+        IReadOnlyList<ReservationBillLine> nextLines)
+    {
+        var net = new Dictionary<Guid, double>(ReservationBillGuard.RestoreDeltas(previousLines));
+        foreach (var (materialGuid, delta) in ReservationBillGuard.ReserveDeltas(nextLines))
+        {
+            net.TryGetValue(materialGuid, out var current);
+            net[materialGuid] = current + delta;
+        }
+
+        return net;
+    }
+
+    private static async Task<Dictionary<(Guid Material, Guid Store), double>> ReadStoreQuantitiesAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        IReadOnlyList<Guid> materialGuids,
+        CancellationToken cancellationToken)
+    {
+        var quantities = new Dictionary<(Guid Material, Guid Store), double>();
+        if (materialGuids.Count == 0)
+        {
+            return quantities;
+        }
+
+        var names = new string[materialGuids.Count];
+        var sql = new StringBuilder("SELECT MatGUID, StoreGUID, SUM(CAST(Qty AS float)) AS Qty FROM dbo.ms000 WITH (UPDLOCK, HOLDLOCK) WHERE MatGUID IN (");
+        for (var index = 0; index < materialGuids.Count; index++)
+        {
+            names[index] = "@mat" + index;
+            if (index > 0)
+            {
+                sql.Append(',');
+            }
+
+            sql.Append(names[index]);
+        }
+
+        sql.Append(") GROUP BY MatGUID, StoreGUID;");
+        var text = sql.ToString();
+        ReservationBillSqlSafety.EnsureSafe(text);
+        await using var command = CreateCommand(connection, transaction, text);
+        for (var index = 0; index < materialGuids.Count; index++)
+        {
+            AddGuid(command, names[index], materialGuids[index]);
+        }
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var materialGuid = ReadGuid(reader, "MatGUID");
+            var storeGuid = ReadGuid(reader, "StoreGUID");
+            if (!materialGuid.HasValue || !storeGuid.HasValue)
+            {
+                continue;
+            }
+
+            quantities[(materialGuid.Value, storeGuid.Value)] = ReadDouble(reader, "Qty") ?? 0d;
+        }
+
+        return quantities;
+    }
+
+    private static IReadOnlyList<MaterialStoreQuantityChange> DiffStoreQuantities(
+        Dictionary<(Guid Material, Guid Store), double> before,
+        Dictionary<(Guid Material, Guid Store), double> after)
+    {
+        var keys = new HashSet<(Guid Material, Guid Store)>(before.Keys);
+        keys.UnionWith(after.Keys);
+        var changes = new List<MaterialStoreQuantityChange>(keys.Count);
+        foreach (var key in keys)
+        {
+            before.TryGetValue(key, out var quantityBefore);
+            var existsAfter = after.TryGetValue(key, out var quantityAfter);
+            changes.Add(new MaterialStoreQuantityChange(
+                key.Material,
+                key.Store,
+                quantityBefore,
+                existsAfter ? quantityAfter : 0d,
+                existsAfter));
+        }
+
+        return changes;
     }
 
     private static async Task<ReservationObservation> ReadObservationAsync(
