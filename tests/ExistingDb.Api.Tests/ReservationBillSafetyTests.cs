@@ -70,7 +70,7 @@ public sealed class ReservationBillSafetyTests
     }
 
     [Fact]
-    public void Pattern_refuses_sync_unless_entries_are_off_and_store_and_currency_are_fixed()
+    public void Pattern_refuses_sync_unless_entries_are_off_store_is_fixed_and_currency_guid_is_present()
     {
         var missing = ReservationBillPatternInterpreter.Interpret(ReservationType, new Dictionary<string, object?>());
         Assert.Null(missing.StoreGuid);
@@ -88,9 +88,33 @@ public sealed class ReservationBillSafetyTests
 
         Assert.False(ReservationBillGuard.EvaluatePatternForSync(ReadyPattern(bFixStore: 0)).Succeeded);
         Assert.False(ReservationBillGuard.EvaluatePatternForSync(ReadyPattern(storeGuid: Guid.Empty)).Succeeded);
-        Assert.False(ReservationBillGuard.EvaluatePatternForSync(ReadyPattern(bFixCurrency: 0)).Succeeded);
-        Assert.False(ReservationBillGuard.EvaluatePatternForSync(ReadyPattern(currencyGuid: Guid.Empty)).Succeeded);
+        var missingCurrency = ReservationBillGuard.EvaluatePatternForSync(ReadyPattern(currencyGuid: Guid.Empty));
+        Assert.False(missingCurrency.Succeeded);
+        Assert.Contains("has no DefCurrencyGUID", missingCurrency.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("lock", missingCurrency.Message, StringComparison.OrdinalIgnoreCase);
         Assert.True(ReservationBillGuard.EvaluatePatternForSync(ReadyPattern(bAutoEntry: 1)).Succeeded);
+    }
+
+    [Fact]
+    public void Unlocked_currency_still_uses_DefCurrencyGUID()
+    {
+        var pattern = ReadyPattern(bFixCurrency: 0);
+        var decision = ReservationBillGuard.EvaluatePatternForSync(pattern);
+        var presented = ReservationBillPatternPresenter.Present(pattern, ReservationOwnerNameSources.OrderCustomerName);
+
+        Assert.True(decision.Succeeded);
+        Assert.True(pattern.SyncAllowed);
+        Assert.False(pattern.FixCurrency);
+        Assert.Equal(BillCurrency, pattern.BillCurrencyGuid);
+        Assert.True(presented.SyncAllowed);
+        Assert.Contains(
+            presented.Locked,
+            property => property.Key == "bFixCurrency" && property.Locked && property.Value == "false");
+        Assert.Contains(
+            presented.Locked,
+            property => property.Key == "DefCurrencyGUID"
+                && property.Locked
+                && property.Value == BillCurrency.ToString("D"));
     }
 
     [Fact]

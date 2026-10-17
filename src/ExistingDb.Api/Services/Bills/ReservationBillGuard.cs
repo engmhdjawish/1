@@ -153,12 +153,11 @@ public static class ReservationBillGuard
                 "The selected bill pattern does not lock the warehouse to DefStoreGUID.");
         }
 
-        if (!pattern.FixCurrencyColumnFound || pattern.FixCurrency != true
-            || !pattern.BillCurrencyColumnFound || pattern.BillCurrencyGuid is null || pattern.BillCurrencyGuid == Guid.Empty)
+        if (!pattern.BillCurrencyColumnFound || pattern.BillCurrencyGuid is null || pattern.BillCurrencyGuid == Guid.Empty)
         {
             return ReservationBillDecision.Fail(
                 ReservationBillFailure.Validation,
-                "The selected bill pattern does not lock the bill currency to DefCurrencyGUID.");
+                "The selected bill pattern has no DefCurrencyGUID.");
         }
 
         return ReservationBillDecision.Success;

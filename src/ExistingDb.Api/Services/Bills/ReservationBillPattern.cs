@@ -3,7 +3,9 @@ namespace ExistingDb.Api.Services.Bills;
 /// <summary>
 /// Locked bt000 columns from AmnDb2026. These names are exact; there is no fallback list.
 /// bNoEntry = 1 means the pattern does not generate accounting entries.
-/// bFixStore locks the warehouse to DefStoreGUID. bFixCurrency locks the bill currency to DefCurrencyGUID.
+/// bFixStore locks the warehouse to DefStoreGUID and must stay on for sync.
+/// bFixCurrency only records whether Ameen forbids changing the bill currency on the invoice.
+/// A non-empty DefCurrencyGUID is still the bill and line currency when bFixCurrency is 0.
 /// DefPrice and MaterialPriceListGUID are the price source. bt000 has no item-currency guid.
 /// </summary>
 public sealed record ReservationBillPattern(
@@ -39,7 +41,6 @@ public sealed record ReservationBillPattern(
         NoEntry == true
         && FixStore == true
         && StoreGuid is { } store && store != Guid.Empty
-        && FixCurrency == true
         && BillCurrencyGuid is { } currency && currency != Guid.Empty;
 }
 

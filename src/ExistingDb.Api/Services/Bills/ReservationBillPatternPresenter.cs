@@ -15,6 +15,7 @@ public static class ReservationBillPatternPresenter
             BoolProperty("bAutoEntryPost", "ترحيل القيد الآلي", pattern.AutoEntryPostColumnFound, pattern.AutoEntryPost),
             BoolProperty("bFixStore", "تثبيت المستودع", pattern.FixStoreColumnFound, pattern.FixStore),
             GuidProperty("DefStoreGUID", "المستودع", pattern.StoreColumnFound, pattern.StoreGuid, pattern.StoreName),
+            // Read-only fact: whether Ameen forbids changing the currency on the invoice. Sync does not require it to be on.
             BoolProperty("bFixCurrency", "تثبيت عملة الفاتورة", pattern.FixCurrencyColumnFound, pattern.FixCurrency),
             GuidProperty("DefCurrencyGUID", "عملة الفاتورة", pattern.BillCurrencyColumnFound, pattern.BillCurrencyGuid, pattern.BillCurrencyName),
             Property("DefPrice", "مصدر السعر", pattern.DefPriceColumnFound, ReservationBillPatternInterpreter.DefPriceColumn, pattern.DefPrice?.ToString(CultureInfo.InvariantCulture), pattern.DefPriceColumnFound ? pattern.DefPrice?.ToString(CultureInfo.InvariantCulture) : null),

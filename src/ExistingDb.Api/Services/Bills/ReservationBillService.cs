@@ -335,6 +335,7 @@ public sealed class ReservationBillService(
             return (null, decision);
         }
 
+        // DefCurrencyGUID is the bill and line currency even when bFixCurrency is off.
         return (new ReservationBillRuntime(
             pattern.BillTypeGuid,
             pattern.StoreGuid!.Value,
