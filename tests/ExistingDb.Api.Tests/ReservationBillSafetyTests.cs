@@ -1,5 +1,5 @@
+using System.Reflection;
 using ExistingDb.Api.Contracts.Bills;
-using ExistingDb.Api.Options;
 using ExistingDb.Api.Services.Bills;
 using Xunit;
 
@@ -7,9 +7,10 @@ namespace ExistingDb.Api.Tests;
 
 public sealed class ReservationBillSafetyTests
 {
-    private static readonly Guid ReservationType = Guid.Parse("09A285A8-21AD-480E-914F-C53E0FEE5251");
-    private static readonly Guid ReservationStore = Guid.Parse("2543E24D-3213-46D6-8B9C-4A2F641A65E9");
-    private static readonly Guid Currency = Guid.Parse("98B47880-98D0-4B96-80B3-36C52BC8C709");
+    private static readonly Guid ReservationType = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    private static readonly Guid ReservationStore = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    private static readonly Guid BillCurrency = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+    private static readonly Guid PriceCurrency = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
     private static readonly Guid OtherStore = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid Material = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid OtherType = Guid.Parse("33333333-3333-3333-3333-333333333333");
@@ -29,20 +30,82 @@ public sealed class ReservationBillSafetyTests
     ];
 
     [Fact]
-    public void Options_use_the_proven_reservation_identities()
+    public void Pattern_reader_uses_only_columns_present_on_the_type()
     {
-        var options = new ReservationBillOptions();
+        var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Name"] = "فاتورة حجز",
+            ["StoreGUID"] = ReservationStore,
+            ["CurrencyGUID"] = BillCurrency,
+            ["MatCurrencyGUID"] = PriceCurrency,
+            ["bGenEntry"] = 0,
+            ["bLockStore"] = 1,
+            ["CurrencyVal"] = 1d
+        };
 
-        Assert.Equal(ReservationType, options.BillTypeGuid);
-        Assert.Equal(ReservationStore, options.StoreGuid);
-        Assert.Equal(Currency, options.CurrencyGuid);
-        Assert.Equal(1d, options.CurrencyVal);
+        var pattern = ReservationBillPatternInterpreter.Interpret(ReservationType, row);
+
+        Assert.Equal(ReservationStore, pattern.StoreGuid);
+        Assert.Equal(BillCurrency, pattern.BillCurrencyGuid);
+        Assert.Equal(PriceCurrency, pattern.PriceCurrencyGuid);
+        Assert.False(pattern.GeneratesEntries);
+        Assert.True(pattern.StoreLocked);
+        Assert.True(ReservationBillGuard.EvaluatePatternForSync(pattern).Succeeded);
+        Assert.DoesNotContain("generate-entries flag", pattern.Unresolved);
+    }
+
+    [Fact]
+    public void Pattern_without_known_columns_does_not_invent_guids_and_blocks_entry_generating_types()
+    {
+        var missing = ReservationBillPatternInterpreter.Interpret(ReservationType, new Dictionary<string, object?>());
+        Assert.Null(missing.StoreGuid);
+        Assert.Null(missing.BillCurrencyGuid);
+        Assert.Null(missing.PriceCurrencyGuid);
+        Assert.Contains("store guid", missing.Unresolved);
+        Assert.Contains("bill currency", missing.Unresolved);
+        Assert.Contains("price currency", missing.Unresolved);
+        Assert.Contains("generate-entries flag", missing.Unresolved);
+        Assert.Contains("store-locked flag", missing.Unresolved);
+        Assert.False(ReservationBillGuard.EvaluatePatternForSync(missing).Succeeded);
+
+        var generating = missing with { GeneratesEntries = true, GeneratesEntriesColumnFound = true };
+        var decision = ReservationBillGuard.EvaluatePatternForSync(generating);
+        Assert.Equal(ReservationBillFailure.NotReservation, decision.Failure);
+        Assert.Contains("accounting entries", decision.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Saved_settings_request_only_accepts_the_type_and_owner_name_source()
+    {
+        var properties = typeof(SaveReservationBillSettingsRequest).GetProperties().Select(property => property.Name).ToArray();
+        Assert.Equal(["BillTypeGuid", "OwnerNameSource"], properties);
+        Assert.True(ReservationOwnerNameSources.IsAllowed("orderCustomerName"));
+        Assert.False(ReservationOwnerNameSources.IsAllowed("storeGuid"));
+    }
+
+    [Fact]
+    public void Repo_does_not_pin_the_live_reservation_guids()
+    {
+        var root = RepoRoot();
+        var files = new[]
+        {
+            "src/ExistingDb.Api/appsettings.json",
+            "src/ExistingDb.Api/appsettings.Development.json",
+            "portal/views/dashboard/settings.php",
+            "portal/public/dashboard/settings.php"
+        };
+        foreach (var relative in files)
+        {
+            var text = File.ReadAllText(Path.Combine(root, relative));
+            Assert.DoesNotContain("09A285A8-21AD-480E-914F-C53E0FEE5251", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("2543E24D-3213-46D6-8B9C-4A2F641A65E9", text, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     [Fact]
     public void Ownership_rejects_a_bill_that_is_not_the_reservation_type()
     {
-        var decision = ReservationBillGuard.EvaluateOwnership(PostedBill(typeGuid: OtherType), Options());
+        var decision = ReservationBillGuard.EvaluateOwnership(PostedBill(typeGuid: OtherType), ReservationType, ReservationStore);
 
         Assert.False(decision.Succeeded);
         Assert.Equal(ReservationBillFailure.NotReservation, decision.Failure);
@@ -51,7 +114,7 @@ public sealed class ReservationBillSafetyTests
     [Fact]
     public void Ownership_rejects_a_bill_outside_the_reservation_store()
     {
-        var decision = ReservationBillGuard.EvaluateOwnership(PostedBill(storeGuid: OtherStore), Options());
+        var decision = ReservationBillGuard.EvaluateOwnership(PostedBill(storeGuid: OtherStore), ReservationType, ReservationStore);
 
         Assert.False(decision.Succeeded);
         Assert.Equal(ReservationBillFailure.NotReservation, decision.Failure);
@@ -60,8 +123,8 @@ public sealed class ReservationBillSafetyTests
     [Fact]
     public void Ownership_rejects_accounting_entries_and_payments()
     {
-        var entries = ReservationBillGuard.EvaluateOwnership(PostedBill(entryCount: 1), Options());
-        var payments = ReservationBillGuard.EvaluateOwnership(PostedBill(paymentCount: 2), Options());
+        var entries = ReservationBillGuard.EvaluateOwnership(PostedBill(entryCount: 1), ReservationType, ReservationStore);
+        var payments = ReservationBillGuard.EvaluateOwnership(PostedBill(paymentCount: 2), ReservationType, ReservationStore);
 
         Assert.Equal(ReservationBillFailure.HasLedgerRows, entries.Failure);
         Assert.Equal(ReservationBillFailure.HasLedgerRows, payments.Failure);
@@ -70,10 +133,11 @@ public sealed class ReservationBillSafetyTests
     [Fact]
     public void Ownership_rejects_an_unposted_or_missing_bill()
     {
-        var unposted = ReservationBillGuard.EvaluateOwnership(PostedBill(isPosted: false), Options());
+        var unposted = ReservationBillGuard.EvaluateOwnership(PostedBill(isPosted: false), ReservationType, ReservationStore);
         var missing = ReservationBillGuard.EvaluateOwnership(
             new ReservationBillOwnership(false, null, null, false, null, 0, 0, 0, []),
-            Options());
+            ReservationType,
+            ReservationStore);
 
         Assert.Equal(ReservationBillFailure.NotReservation, unposted.Failure);
         Assert.Equal(ReservationBillFailure.NotFound, missing.Failure);
@@ -82,7 +146,7 @@ public sealed class ReservationBillSafetyTests
     [Fact]
     public void Ownership_accepts_a_posted_reservation_bill_without_ledger_rows()
     {
-        var decision = ReservationBillGuard.EvaluateOwnership(PostedBill(), Options());
+        var decision = ReservationBillGuard.EvaluateOwnership(PostedBill(), ReservationType, ReservationStore);
 
         Assert.True(decision.Succeeded);
     }
@@ -92,19 +156,19 @@ public sealed class ReservationBillSafetyTests
     {
         Assert.Equal(
             ReservationBillFailure.AssertFailed,
-            ReservationBillGuard.EvaluatePostedBill(State(entryCount: 1), Options()).Failure);
+            ReservationBillGuard.EvaluatePostedBill(State(entryCount: 1), ReservationType, ReservationStore).Failure);
         Assert.Equal(
             ReservationBillFailure.AssertFailed,
-            ReservationBillGuard.EvaluatePostedBill(State(paymentCount: 1), Options()).Failure);
+            ReservationBillGuard.EvaluatePostedBill(State(paymentCount: 1), ReservationType, ReservationStore).Failure);
         Assert.Equal(
             ReservationBillFailure.AssertFailed,
-            ReservationBillGuard.EvaluatePostedBill(State(typeGuid: OtherType), Options()).Failure);
+            ReservationBillGuard.EvaluatePostedBill(State(typeGuid: OtherType), ReservationType, ReservationStore).Failure);
         Assert.Equal(
             ReservationBillFailure.AssertFailed,
-            ReservationBillGuard.EvaluatePostedBill(State(storeGuid: OtherStore), Options()).Failure);
+            ReservationBillGuard.EvaluatePostedBill(State(storeGuid: OtherStore), ReservationType, ReservationStore).Failure);
         Assert.Equal(
             ReservationBillFailure.AssertFailed,
-            ReservationBillGuard.EvaluatePostedBill(State(isPosted: false), Options()).Failure);
+            ReservationBillGuard.EvaluatePostedBill(State(isPosted: false), ReservationType, ReservationStore).Failure);
     }
 
     [Fact]
@@ -341,7 +405,21 @@ public sealed class ReservationBillSafetyTests
         ReservationBillSqlSafety.EnsureSafe(script);
     }
 
-    private static ReservationBillOptions Options() => new();
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "ExistingDbWebApi.sln")))
+            {
+                return dir.FullName;
+            }
+
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("Repository root was not found.");
+    }
 
     private static ReservationBillLine Line(Guid materialGuid, double quantity) =>
         new(materialGuid, quantity, 10d);

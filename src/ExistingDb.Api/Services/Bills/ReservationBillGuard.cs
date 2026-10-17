@@ -1,5 +1,4 @@
 using ExistingDb.Api.Contracts.Bills;
-using ExistingDb.Api.Options;
 
 namespace ExistingDb.Api.Services.Bills;
 
@@ -130,20 +129,48 @@ public static class ReservationBillGuard
         return ReservationBillDecision.Success;
     }
 
+    public static ReservationBillDecision EvaluatePatternForSync(ReservationBillPattern pattern)
+    {
+        if (pattern.GeneratesEntries == true)
+        {
+            return ReservationBillDecision.Fail(
+                ReservationBillFailure.NotReservation,
+                "The selected bill pattern generates accounting entries, so the order was not synced.");
+        }
+
+        if (pattern.StoreGuid is null || pattern.StoreGuid == Guid.Empty)
+        {
+            return ReservationBillDecision.Fail(
+                ReservationBillFailure.Validation,
+                "The selected bill pattern does not expose a locked store.");
+        }
+
+        if (pattern.BillCurrencyGuid is null || pattern.BillCurrencyGuid == Guid.Empty
+            || pattern.PriceCurrencyGuid is null || pattern.PriceCurrencyGuid == Guid.Empty)
+        {
+            return ReservationBillDecision.Fail(
+                ReservationBillFailure.Validation,
+                "The selected bill pattern does not expose the bill currency and the material price currency.");
+        }
+
+        return ReservationBillDecision.Success;
+    }
+
     public static ReservationBillDecision EvaluateOwnership(
         ReservationBillOwnership bill,
-        ReservationBillOptions options)
+        Guid billTypeGuid,
+        Guid storeGuid)
     {
         if (!bill.Exists)
         {
             return ReservationBillDecision.Fail(ReservationBillFailure.NotFound, "Reservation bill was not found.");
         }
 
-        if (bill.TypeGuid != options.BillTypeGuid || bill.StoreGuid != options.StoreGuid)
+        if (bill.TypeGuid != billTypeGuid || bill.StoreGuid != storeGuid)
         {
             return ReservationBillDecision.Fail(
                 ReservationBillFailure.NotReservation,
-                "Only posted فاتورة حجز documents in the reservation store can be changed.");
+                "Only a posted bill of the selected type in that pattern's store can be changed.");
         }
 
         if (bill.EntryCount > 0 || bill.PaymentCount > 0)
@@ -179,7 +206,7 @@ public static class ReservationBillGuard
         return ReservationBillDecision.Success;
     }
 
-    public static ReservationBillDecision EvaluatePostedBill(ReservationBillState state, ReservationBillOptions options)
+    public static ReservationBillDecision EvaluatePostedBill(ReservationBillState state, Guid billTypeGuid, Guid storeGuid)
     {
         if (!state.Exists || !state.IsPosted)
         {
@@ -188,7 +215,7 @@ public static class ReservationBillGuard
                 "Reservation bill was not left posted.");
         }
 
-        if (state.TypeGuid != options.BillTypeGuid || state.StoreGuid != options.StoreGuid)
+        if (state.TypeGuid != billTypeGuid || state.StoreGuid != storeGuid)
         {
             return ReservationBillDecision.Fail(
                 ReservationBillFailure.AssertFailed,

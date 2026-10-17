@@ -1,9 +1,7 @@
 using System.Data;
 using System.Globalization;
 using ExistingDb.Api.Contracts.Bills;
-using ExistingDb.Api.Options;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Options;
 
 namespace ExistingDb.Api.Services.Bills;
 
@@ -25,12 +23,20 @@ public sealed record ReservationBillExecution(ReservationBillDecision Decision, 
 /// the guard accepts the measured inventory and ledger state.
 /// Level-1 errors (severity 11 and above, including AmnE0001) abort because XACT_ABORT is on.
 /// </summary>
+public sealed record ReservationBillRuntime(
+    Guid BillTypeGuid,
+    Guid StoreGuid,
+    Guid BillCurrencyGuid,
+    Guid PriceCurrencyGuid,
+    double CurrencyVal,
+    double PriceCurrencyVal);
+
 public sealed class ReservationBillService(
-    IOptions<ReservationBillOptions> options,
+    IReservationBillSettingsService settingsService,
+    IReservationBillPatternReader patternReader,
     IConfiguration configuration,
     ILogger<ReservationBillService> logger) : IReservationBillService
 {
-    private readonly ReservationBillOptions _options = options.Value;
     private readonly string _connectionString = configuration.GetConnectionString("MainDb")
         ?? throw new InvalidOperationException("ConnectionStrings:MainDb is required.");
 
@@ -115,7 +121,15 @@ public sealed class ReservationBillService(
         ReservationOperation operation,
         CancellationToken cancellationToken)
     {
-        _options.EnsureConfigured();
+        var runtimeResult = await ResolveRuntimeAsync(cancellationToken);
+        if (runtimeResult.Decision is not null || runtimeResult.Runtime is null)
+        {
+            return new ReservationBillExecution(
+                runtimeResult.Decision ?? ReservationBillDecision.Fail(ReservationBillFailure.Validation, "Reservation bill pattern is not configured."),
+                null);
+        }
+
+        var runtime = runtimeResult.Runtime;
         ReservationBillSqlSafety.EnsureSafe(mutateSql);
         ReservationBillSqlSafety.EnsureSafe(observationSql);
         ReservationBillSqlSafety.EnsureSafe(ReservationBillSql.EnableAbortOnError);
@@ -136,7 +150,7 @@ public sealed class ReservationBillService(
                 if (operation != ReservationOperation.Create)
                 {
                     var ownership = await ReadOwnershipAsync(connection, transaction, billGuid, cancellationToken);
-                    var ownershipDecision = ReservationBillGuard.EvaluateOwnership(ownership, _options);
+                    var ownershipDecision = ReservationBillGuard.EvaluateOwnership(ownership, runtime.BillTypeGuid, runtime.StoreGuid);
                     if (!ownershipDecision.Succeeded)
                     {
                         await RollbackAsync(transaction, cancellationToken);
@@ -151,12 +165,12 @@ public sealed class ReservationBillService(
                     connection,
                     transaction,
                     mutateSql,
-                    command => BindMutation(command, billGuid, draft),
+                    command => BindMutation(command, billGuid, draft, runtime),
                     cancellationToken);
                 ignoreWarningsArmed = true;
 
                 var observation = await ReadObservationAsync(connection, transaction, observationSql, billGuid, cancellationToken);
-                var decision = Decide(operation, draft, previousLines ?? [], observation);
+                var decision = Decide(operation, draft, previousLines ?? [], observation, runtime);
                 if (!decision.Succeeded)
                 {
                     await RollbackAsync(transaction, cancellationToken);
@@ -167,7 +181,7 @@ public sealed class ReservationBillService(
                     return new ReservationBillExecution(decision, null);
                 }
 
-                var response = BuildResponse(operation, billGuid, knownNumber, draft, previousLines ?? [], observation);
+                var response = BuildResponse(operation, billGuid, knownNumber, draft, previousLines ?? [], observation, runtime);
                 await transaction.CommitAsync(cancellationToken);
                 return new ReservationBillExecution(ReservationBillDecision.Success, response);
             }
@@ -218,7 +232,8 @@ public sealed class ReservationBillService(
         ReservationOperation operation,
         ReservationBillDraft? draft,
         IReadOnlyList<ReservationBillLine> previousLines,
-        ReservationObservation observation)
+        ReservationObservation observation,
+        ReservationBillRuntime runtime)
     {
         var nextLines = draft?.Lines ?? [];
         var scopedMaterials = previousLines.Select(line => line.MaterialGuid)
@@ -237,11 +252,11 @@ public sealed class ReservationBillService(
                 scopedMaterials);
             inventoryDecision = FirstFailure(
                 ReservationBillGuard.EvaluateInventory(
-                    _options.StoreGuid,
+                    runtime.StoreGuid,
                     unpostExpected,
                     observation.Phases.GetValueOrDefault("unpost") ?? []),
                 ReservationBillGuard.EvaluateInventory(
-                    _options.StoreGuid,
+                    runtime.StoreGuid,
                     postExpected,
                     observation.Phases.GetValueOrDefault("post") ?? []));
         }
@@ -251,14 +266,14 @@ public sealed class ReservationBillService(
                 ? ReservationBillGuard.RestoreDeltas(previousLines)
                 : ReservationBillGuard.ReserveDeltas(nextLines);
             inventoryDecision = ReservationBillGuard.EvaluateInventory(
-                _options.StoreGuid,
+                runtime.StoreGuid,
                 expected,
                 observation.Phases.GetValueOrDefault("change") ?? []);
         }
 
         var billDecision = operation == ReservationOperation.Delete
             ? ReservationBillGuard.EvaluateDeletedBill(observation.State)
-            : ReservationBillGuard.EvaluatePostedBill(observation.State, _options);
+            : ReservationBillGuard.EvaluatePostedBill(observation.State, runtime.BillTypeGuid, runtime.StoreGuid);
 
         return FirstFailure(billDecision, inventoryDecision);
     }
@@ -269,7 +284,8 @@ public sealed class ReservationBillService(
         int? knownNumber,
         ReservationBillDraft? draft,
         IReadOnlyList<ReservationBillLine> previousLines,
-        ReservationObservation observation)
+        ReservationObservation observation,
+        ReservationBillRuntime runtime)
     {
         var number = operation == ReservationOperation.Delete
             ? knownNumber
@@ -292,18 +308,58 @@ public sealed class ReservationBillService(
         var quantities = materials
             .Select(materialGuid => new ReservationStoreQuantityResponse(
                 materialGuid,
-                QuantityAfter(changes, materialGuid, _options.StoreGuid)))
+                QuantityAfter(changes, materialGuid, runtime.StoreGuid)))
             .ToArray();
         return new ReservationBillResponse(billGuid, number.Value, quantities);
     }
 
-    private void BindMutation(SqlCommand command, Guid billGuid, ReservationBillDraft? draft)
+    private async Task<(ReservationBillRuntime? Runtime, ReservationBillDecision? Decision)> ResolveRuntimeAsync(
+        CancellationToken cancellationToken)
+    {
+        var settings = await settingsService.GetAsync(cancellationToken);
+        if (settings.BillTypeGuid is null || settings.BillTypeGuid == Guid.Empty)
+        {
+            return (null, ReservationBillDecision.Fail(
+                ReservationBillFailure.Validation,
+                "Select a reservation bill type in the portal settings before syncing orders."));
+        }
+
+        var pattern = await patternReader.ReadAsync(settings.BillTypeGuid.Value, cancellationToken);
+        if (pattern is null)
+        {
+            return (null, ReservationBillDecision.Fail(
+                ReservationBillFailure.Validation,
+                "The selected bill type was not found."));
+        }
+
+        var decision = ReservationBillGuard.EvaluatePatternForSync(pattern);
+        if (!decision.Succeeded)
+        {
+            return (null, decision);
+        }
+
+        return (new ReservationBillRuntime(
+            pattern.BillTypeGuid,
+            pattern.StoreGuid!.Value,
+            pattern.BillCurrencyGuid!.Value,
+            pattern.PriceCurrencyGuid!.Value,
+            pattern.CurrencyVal,
+            pattern.PriceCurrencyVal), null);
+    }
+
+    private static void BindMutation(
+        SqlCommand command,
+        Guid billGuid,
+        ReservationBillDraft? draft,
+        ReservationBillRuntime runtime)
     {
         AddGuid(command, "@BillGuid", billGuid);
-        AddGuid(command, "@TypeGuid", _options.BillTypeGuid);
-        AddGuid(command, "@StoreGuid", _options.StoreGuid);
-        AddGuid(command, "@CurrencyGuid", _options.CurrencyGuid);
-        AddFloat(command, "@CurrencyVal", _options.CurrencyVal);
+        AddGuid(command, "@TypeGuid", runtime.BillTypeGuid);
+        AddGuid(command, "@StoreGuid", runtime.StoreGuid);
+        AddGuid(command, "@BillCurrencyGuid", runtime.BillCurrencyGuid);
+        AddGuid(command, "@PriceCurrencyGuid", runtime.PriceCurrencyGuid);
+        AddFloat(command, "@CurrencyVal", runtime.CurrencyVal);
+        AddFloat(command, "@PriceCurrencyVal", runtime.PriceCurrencyVal);
         if (draft is null)
         {
             return;

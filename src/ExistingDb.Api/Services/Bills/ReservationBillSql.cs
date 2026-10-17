@@ -379,7 +379,7 @@ public static class ReservationBillSql
                     WHEN c.name = N'ActivityState' THEN N'0'
                     WHEN c.name = N'StoreGUID' THEN N'@StoreGuid'
                     WHEN c.name = N'TypeGUID' THEN N'@TypeGuid'
-                    WHEN c.name = N'CurrencyGUID' THEN N'@CurrencyGuid'
+                    WHEN c.name = N'CurrencyGUID' THEN N'@BillCurrencyGuid'
                     WHEN c.name = N'CurrencyVal' THEN N'@CurrencyVal'
                     WHEN c.name = N'PayType' THEN N'0'
                     WHEN c.name IN (N'CustGUID', N'CustomerGUID') THEN N'CAST(NULL AS uniqueidentifier)'
@@ -403,7 +403,7 @@ public static class ReservationBillSql
         DECLARE @insertSql nvarchar(max) = N'INSERT INTO dbo.bu000 (' + @insertCols
             + N') SELECT ' + @selectVals + N' FROM dbo.bu000 AS t WHERE t.GUID = @TemplateGuid';
         EXEC sp_executesql @insertSql,
-            N'@BillGuid uniqueidentifier, @NextNumber float, @OwnerName nvarchar(1000), @LineTotal float, @TotalQty float, @StoreGuid uniqueidentifier, @TypeGuid uniqueidentifier, @CurrencyGuid uniqueidentifier, @CurrencyVal float, @TemplateGuid uniqueidentifier',
+            N'@BillGuid uniqueidentifier, @NextNumber float, @OwnerName nvarchar(1000), @LineTotal float, @TotalQty float, @StoreGuid uniqueidentifier, @TypeGuid uniqueidentifier, @BillCurrencyGuid uniqueidentifier, @CurrencyVal float, @TemplateGuid uniqueidentifier',
             @BillGuid = @BillGuid,
             @NextNumber = @NextNumber,
             @OwnerName = @OwnerName,
@@ -411,7 +411,7 @@ public static class ReservationBillSql
             @TotalQty = @TotalQty,
             @StoreGuid = @StoreGuid,
             @TypeGuid = @TypeGuid,
-            @CurrencyGuid = @CurrencyGuid,
+            @BillCurrencyGuid = @BillCurrencyGuid,
             @CurrencyVal = @CurrencyVal,
             @TemplateGuid = @TemplateGuid;
         """;
@@ -493,7 +493,7 @@ public static class ReservationBillSql
                     @Discount = 0,
                     @BonusDisc = 0,
                     @Extra = 0,
-                    @CurrencyVal = @CurrencyVal,
+                    @CurrencyVal = @PriceCurrencyVal,
                     @Notes = NULL,
                     @Profits = 0,
                     @Num1 = 0,
@@ -511,7 +511,7 @@ public static class ReservationBillSql
                     @VATRatio = 0,
                     @ParentGUID = @BillGuid,
                     @MatGUID = {prefix}Mat,
-                    @CurrencyGUID = @CurrencyGuid,
+                    @CurrencyGUID = @PriceCurrencyGuid,
                     @StoreGUID = @StoreGuid,
                     @CostGUID = NULL,
                     @SOType = 0,
