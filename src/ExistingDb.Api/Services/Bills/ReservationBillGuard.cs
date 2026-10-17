@@ -21,7 +21,12 @@ public sealed record ReservationBillDecision(bool Succeeded, ReservationBillFail
         new(false, failure, message);
 }
 
-public sealed record ReservationBillLine(Guid MaterialGuid, double Quantity, double UnitPrice);
+public sealed record ReservationBillLine(
+    Guid MaterialGuid,
+    double Quantity,
+    double UnitPrice,
+    double PackageQuantity = 0d,
+    string? Notes = null);
 
 public sealed record ReservationBillOwnership(
     bool Exists,
@@ -63,6 +68,8 @@ public static class ReservationBillGuard
 {
     public const double QuantityTolerance = 0.0001d;
     public const int MaxOwnerNameLength = 1000;
+    public const int MaxLineNoteLength = 250;
+    public const string WebsiteSyncMark = "مزامنة من الموقع";
     public const int MaxLines = 100;
 
     public static ReservationBillDecision ValidateWrite(
@@ -75,6 +82,11 @@ public static class ReservationBillGuard
         if (name.Length == 0)
         {
             return ReservationBillDecision.Fail(ReservationBillFailure.Validation, "Owner name is required.");
+        }
+
+        if (!name.Contains(WebsiteSyncMark, StringComparison.Ordinal))
+        {
+            name = string.IsNullOrEmpty(name) ? WebsiteSyncMark : name + " — " + WebsiteSyncMark;
         }
 
         if (name.Length > MaxOwnerNameLength)
@@ -122,7 +134,26 @@ public static class ReservationBillGuard
                 return ReservationBillDecision.Fail(ReservationBillFailure.Validation, "Line unit price must be zero or a positive finite number.");
             }
 
-            normalized.Add(new ReservationBillLine(line.MaterialGuid, line.Quantity, line.UnitPrice));
+            var packages = line.PackageQuantity;
+            if (!double.IsFinite(packages) || packages < 0d)
+            {
+                return ReservationBillDecision.Fail(ReservationBillFailure.Validation, "Package quantity must be zero or a positive finite number.");
+            }
+
+            if (packages == 0d)
+            {
+                packages = line.Quantity;
+            }
+
+            var note = string.IsNullOrWhiteSpace(line.Notes) ? null : line.Notes.Trim();
+            if (note is not null && note.Length > MaxLineNoteLength)
+            {
+                return ReservationBillDecision.Fail(
+                    ReservationBillFailure.Validation,
+                    $"Line note must be at most {MaxLineNoteLength} characters.");
+            }
+
+            normalized.Add(new ReservationBillLine(line.MaterialGuid, line.Quantity, line.UnitPrice, packages, note));
         }
 
         draft = new ReservationBillDraft(name, normalized, SumAmount(normalized));

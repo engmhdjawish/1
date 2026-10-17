@@ -368,9 +368,14 @@ public sealed class ReservationBillService(
         {
             var line = draft.Lines[index];
             var prefix = ReservationBillSql.LineParameterPrefix(index);
+            var packages = line.PackageQuantity > 0d ? line.PackageQuantity : line.Quantity;
+            var unity = packages > 0d ? line.Quantity / packages : 1d;
             AddFloat(command, prefix + "Number", index);
             AddFloat(command, prefix + "Qty", line.Quantity);
+            AddFloat(command, prefix + "Qty2", packages);
+            AddFloat(command, prefix + "Unity", unity);
             AddFloat(command, prefix + "Price", line.UnitPrice);
+            AddString(command, prefix + "Notes", line.Notes ?? string.Empty);
             AddGuid(command, prefix + "Guid", Guid.NewGuid());
             AddGuid(command, prefix + "Mat", line.MaterialGuid);
         }

@@ -332,7 +332,7 @@ public sealed class ReservationBillSafetyTests
 
         var accepted = ReservationBillGuard.ValidateWrite("  Owner  ", [RequestLine(quantity: 2, price: 3.5)], out var draft);
         Assert.True(accepted.Succeeded);
-        Assert.Equal("Owner", draft!.OwnerName);
+        Assert.Equal("Owner — " + ReservationBillGuard.WebsiteSyncMark, draft!.OwnerName);
         Assert.Equal(7d, draft.Total);
     }
 

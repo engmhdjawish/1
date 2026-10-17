@@ -184,7 +184,7 @@ final class AmineReservationSyncService
 
     /**
      * @param array<string, mixed> $item
-     * @return array{materialGuid: string, quantity: float, unitPrice: float, invalid?: bool}|null
+     * @return array{materialGuid: string, quantity: float, packageQuantity: float, unitPrice: float, notes: string, invalid?: bool}|null
      */
     public static function apiLine(array $item): ?array
     {
@@ -193,31 +193,48 @@ final class AmineReservationSyncService
             return null;
         }
 
-        $payload = OrderService::amineSyncLinePayload($item);
-        $guid = trim((string) ($payload['material_guid'] ?? ''));
-        $quantity = (float) ($payload['quantity'] ?? 0);
-        if ($guid === '' || $quantity <= 0) {
+        $guid = trim((string) ($item['material_guid'] ?? ''));
+        $packages = (float) ($item['quantity'] ?? 0);
+        $pairsPerPackage = max(1, (int) ($item['pcs_per_box'] ?? $item['packaging'] ?? 1));
+        if ($guid === '' || $packages <= 0) {
             return null;
         }
+
+        $pairs = $packages * $pairsPerPackage;
+        $packageUsd = max(0.0, (float) ($item['sale_price_usd'] ?? 0));
+        $pairPrice = $pairsPerPackage > 0 ? $packageUsd / $pairsPerPackage : 0.0;
+        $originalPackage = max(0.0, (float) ($item['original_sale_price_usd'] ?? 0));
+        $notes = '';
+        if ($originalPackage > $packageUsd + 0.009) {
+            $originalPair = $originalPackage / $pairsPerPackage;
+            $notes = 'خصم: سعر الزوج من ' . self::money($originalPair) . ' إلى ' . self::money($pairPrice);
+        } elseif (!empty($item['special_offer_id'])) {
+            $notes = 'خصم عرض خاص';
+        }
+
         if (!self::isGuid($guid)) {
             return [
                 'materialGuid' => $guid,
-                'quantity' => $quantity,
-                'unitPrice' => 0.0,
+                'quantity' => $pairs,
+                'packageQuantity' => $packages,
+                'unitPrice' => $pairPrice,
+                'notes' => $notes,
                 'invalid' => true,
             ];
         }
 
         return [
             'materialGuid' => strtolower($guid),
-            'quantity' => $quantity,
-            'unitPrice' => max(0.0, (float) ($payload['sale_price_usd'] ?? 0)),
+            'quantity' => $pairs,
+            'packageQuantity' => $packages,
+            'unitPrice' => $pairPrice,
+            'notes' => $notes,
         ];
     }
 
     /**
      * @param list<array<string, mixed>> $items
-     * @return array{ok: bool, lines: list<array{materialGuid: string, quantity: float, unitPrice: float}>, message?: string}
+     * @return array{ok: bool, lines: list<array{materialGuid: string, quantity: float, packageQuantity: float, unitPrice: float, notes: string}>, message?: string}
      */
     public static function linesForApi(array $items): array
     {
@@ -242,11 +259,17 @@ final class AmineReservationSyncService
                 $merged[$guid] = [
                     'materialGuid' => $guid,
                     'quantity' => $line['quantity'],
+                    'packageQuantity' => $line['packageQuantity'],
                     'unitPrice' => $line['unitPrice'],
+                    'notes' => $line['notes'],
                 ];
                 continue;
             }
             $merged[$guid]['quantity'] += $line['quantity'];
+            $merged[$guid]['packageQuantity'] += $line['packageQuantity'];
+            if ($line['notes'] !== '' && !str_contains((string) $merged[$guid]['notes'], $line['notes'])) {
+                $merged[$guid]['notes'] = trim($merged[$guid]['notes'] . '؛ ' . $line['notes'], '؛ ');
+            }
         }
 
         $lines = array_values($merged);
@@ -274,6 +297,11 @@ final class AmineReservationSyncService
         $name = $registered !== '' ? $registered : ($guest !== '' ? $guest : $display);
         if ($name === '—') {
             $name = '';
+        }
+        if ($name === '') {
+            $name = 'مزامنة من الموقع';
+        } elseif (!str_contains($name, 'مزامنة من الموقع')) {
+            $name .= ' — مزامنة من الموقع';
         }
 
         return self::clip($name);
@@ -621,6 +649,11 @@ final class AmineReservationSyncService
     private static function containsArabic(string $value): bool
     {
         return preg_match('/[\x{0600}-\x{06FF}]/u', $value) === 1;
+    }
+
+    private static function money(float $amount): string
+    {
+        return rtrim(rtrim(number_format($amount, 2, '.', ''), '0'), '.');
     }
 
     private static function clip(string $value, int $max = 1000): string

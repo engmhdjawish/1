@@ -13,7 +13,11 @@ public sealed class ReservationBillLineRequest
 
     public double Quantity { get; set; }
 
+    public double PackageQuantity { get; set; }
+
     public double UnitPrice { get; set; }
+
+    public string? Notes { get; set; }
 }
 
 public sealed record ReservationBillResponse(

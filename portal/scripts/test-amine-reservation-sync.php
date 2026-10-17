@@ -167,8 +167,28 @@ $assert(
         && count($lines['lines']) === 1
         && $lines['lines'][0]['materialGuid'] === $material
         && abs($lines['lines'][0]['quantity'] - 3.0) < 0.0001
+        && abs($lines['lines'][0]['packageQuantity'] - 3.0) < 0.0001
         && abs($lines['lines'][0]['unitPrice'] - 12.5) < 0.0001
         && OrderService::amineSyncPackagePriceUsd(['sale_price_usd' => 12.5]) === 12.5
+);
+
+$pairs = AmineReservationSyncService::linesForApi([
+    [
+        'material_guid' => $material,
+        'quantity' => 2,
+        'pcs_per_box' => 12,
+        'sale_price_usd' => 24,
+        'original_sale_price_usd' => 30,
+        'status' => 'active',
+    ],
+]);
+$assert(
+    'a line sends cartons, pairs, and the pair price',
+    ($pairs['ok'] ?? false) === true
+        && abs($pairs['lines'][0]['packageQuantity'] - 2.0) < 0.0001
+        && abs($pairs['lines'][0]['quantity'] - 24.0) < 0.0001
+        && abs($pairs['lines'][0]['unitPrice'] - 2.0) < 0.0001
+        && str_contains((string) $pairs['lines'][0]['notes'], 'خصم')
 );
 
 $assert(
@@ -176,8 +196,8 @@ $assert(
     AmineReservationSyncService::ownerName([
         'customer_name_ar' => 'أحمد',
         'guest_name_ar' => 'ضيف',
-    ], 'orderCustomerName') === 'أحمد'
-        && AmineReservationSyncService::ownerName(['guest_name_ar' => 'ضيف'], 'orderCustomerName') === 'ضيف'
+    ], 'orderCustomerName') === 'أحمد — مزامنة من الموقع'
+        && AmineReservationSyncService::ownerName(['guest_name_ar' => 'ضيف'], 'orderCustomerName') === 'ضيف — مزامنة من الموقع'
 );
 
 $arabic = AmineReservationSyncService::arabicFailureMessage(0, 'connection timed out');
