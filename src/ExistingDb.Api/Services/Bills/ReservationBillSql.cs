@@ -518,6 +518,7 @@ public static class ReservationBillSql
         {
             var prefix = LineParameterPrefix(index);
             calls[index] = $"""
+                DECLARE {prefix}LineNote nvarchar(250) = NULLIF({prefix}Notes, N'');
                 EXEC dbo.prcBillItem_Add
                     @Number = {prefix}Number,
                     @Qty = {prefix}Qty,
@@ -530,7 +531,7 @@ public static class ReservationBillSql
                     @BonusDisc = 0,
                     @Extra = 0,
                     @CurrencyVal = @CurrencyVal,
-                    @Notes = NULLIF({prefix}Notes, N''),
+                    @Notes = {prefix}LineNote,
                     @Profits = 0,
                     @Num1 = 0,
                     @Num2 = 0,
