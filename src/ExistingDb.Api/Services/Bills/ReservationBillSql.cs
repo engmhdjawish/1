@@ -84,6 +84,7 @@ public static class ReservationBillSql
                 THROW 50030, N'No reservation line order value exists to copy.', 1;
 
             SET @SourceGuid = @TemplateGuid;
+            {CopyCurrencyVal("@TemplateGuid")}
             {ConnectionsUpsert}
             {ScopeTable}
             {InsertScopeFromParameters(lineCount)}
@@ -117,6 +118,7 @@ public static class ReservationBillSql
             IF @OrderSentinel IS NULL
                 THROW 50030, N'No reservation line order value exists to copy.', 1;
 
+            {CopyCurrencyVal("@BillGuid")}
             {ConnectionsUpsert}
             {ScopeTable}
             INSERT INTO #Scope (MatGUID)
@@ -307,6 +309,22 @@ public static class ReservationBillSql
         END
         """;
 
+    private static string CopyCurrencyVal(string sourceGuidVariable) =>
+        $"""
+        DECLARE @CurrencyVal float = 1;
+        IF COL_LENGTH(N'dbo.bu000', N'CurrencyVal') IS NOT NULL
+        BEGIN
+            DECLARE @copiedCurrencyVal float;
+            EXEC sp_executesql
+                N'SELECT @v = CONVERT(float, CurrencyVal) FROM dbo.bu000 WHERE GUID = @g',
+                N'@g uniqueidentifier, @v float OUTPUT',
+                @g = {sourceGuidVariable},
+                @v = @copiedCurrencyVal OUTPUT;
+            IF @copiedCurrencyVal IS NOT NULL AND @copiedCurrencyVal > 0
+                SET @CurrencyVal = @copiedCurrencyVal;
+        END
+        """;
+
     private const string ScopeTable = """
         CREATE TABLE #Scope (MatGUID uniqueidentifier NOT NULL PRIMARY KEY);
         """;
@@ -380,7 +398,6 @@ public static class ReservationBillSql
                     WHEN c.name = N'StoreGUID' THEN N'@StoreGuid'
                     WHEN c.name = N'TypeGUID' THEN N'@TypeGuid'
                     WHEN c.name = N'CurrencyGUID' THEN N'@BillCurrencyGuid'
-                    WHEN c.name = N'CurrencyVal' THEN N'@CurrencyVal'
                     WHEN c.name = N'PayType' THEN N'0'
                     WHEN c.name IN (N'CustGUID', N'CustomerGUID') THEN N'CAST(NULL AS uniqueidentifier)'
                     WHEN EXISTS (SELECT 1 FROM @AmountColumns AS a WHERE a.Name = c.name)
@@ -403,7 +420,7 @@ public static class ReservationBillSql
         DECLARE @insertSql nvarchar(max) = N'INSERT INTO dbo.bu000 (' + @insertCols
             + N') SELECT ' + @selectVals + N' FROM dbo.bu000 AS t WHERE t.GUID = @TemplateGuid';
         EXEC sp_executesql @insertSql,
-            N'@BillGuid uniqueidentifier, @NextNumber float, @OwnerName nvarchar(1000), @LineTotal float, @TotalQty float, @StoreGuid uniqueidentifier, @TypeGuid uniqueidentifier, @BillCurrencyGuid uniqueidentifier, @CurrencyVal float, @TemplateGuid uniqueidentifier',
+            N'@BillGuid uniqueidentifier, @NextNumber float, @OwnerName nvarchar(1000), @LineTotal float, @TotalQty float, @StoreGuid uniqueidentifier, @TypeGuid uniqueidentifier, @BillCurrencyGuid uniqueidentifier, @TemplateGuid uniqueidentifier',
             @BillGuid = @BillGuid,
             @NextNumber = @NextNumber,
             @OwnerName = @OwnerName,
@@ -412,7 +429,6 @@ public static class ReservationBillSql
             @StoreGuid = @StoreGuid,
             @TypeGuid = @TypeGuid,
             @BillCurrencyGuid = @BillCurrencyGuid,
-            @CurrencyVal = @CurrencyVal,
             @TemplateGuid = @TemplateGuid;
         """;
 
@@ -433,6 +449,20 @@ public static class ReservationBillSql
                 N'UPDATE dbo.bu000 SET CustGUID = NULL WHERE GUID = @BillGuid',
                 N'@BillGuid uniqueidentifier',
                 @BillGuid = @BillGuid;
+
+        IF COL_LENGTH(N'dbo.bu000', N'StoreGUID') IS NOT NULL
+            EXEC sp_executesql
+                N'UPDATE dbo.bu000 SET StoreGUID = @StoreGuid WHERE GUID = @BillGuid',
+                N'@BillGuid uniqueidentifier, @StoreGuid uniqueidentifier',
+                @BillGuid = @BillGuid,
+                @StoreGuid = @StoreGuid;
+
+        IF COL_LENGTH(N'dbo.bu000', N'CurrencyGUID') IS NOT NULL
+            EXEC sp_executesql
+                N'UPDATE dbo.bu000 SET CurrencyGUID = @BillCurrencyGuid WHERE GUID = @BillGuid',
+                N'@BillGuid uniqueidentifier, @BillCurrencyGuid uniqueidentifier',
+                @BillGuid = @BillGuid,
+                @BillCurrencyGuid = @BillCurrencyGuid;
 
         EXEC dbo.prcupdatebuNote @Guid = @BillGuid, @Note = @OwnerName;
         """;
@@ -493,7 +523,7 @@ public static class ReservationBillSql
                     @Discount = 0,
                     @BonusDisc = 0,
                     @Extra = 0,
-                    @CurrencyVal = @PriceCurrencyVal,
+                    @CurrencyVal = @CurrencyVal,
                     @Notes = NULL,
                     @Profits = 0,
                     @Num1 = 0,
@@ -511,7 +541,7 @@ public static class ReservationBillSql
                     @VATRatio = 0,
                     @ParentGUID = @BillGuid,
                     @MatGUID = {prefix}Mat,
-                    @CurrencyGUID = @PriceCurrencyGuid,
+                    @CurrencyGUID = @BillCurrencyGuid,
                     @StoreGUID = @StoreGuid,
                     @CostGUID = NULL,
                     @SOType = 0,

@@ -131,26 +131,34 @@ public static class ReservationBillGuard
 
     public static ReservationBillDecision EvaluatePatternForSync(ReservationBillPattern pattern)
     {
-        if (pattern.GeneratesEntries == true)
+        if (!pattern.NoEntryColumnFound)
+        {
+            return ReservationBillDecision.Fail(
+                ReservationBillFailure.Validation,
+                "bt000.bNoEntry was not found, so the order was not synced.");
+        }
+
+        if (pattern.NoEntry != true)
         {
             return ReservationBillDecision.Fail(
                 ReservationBillFailure.NotReservation,
-                "The selected bill pattern generates accounting entries, so the order was not synced.");
+                "The selected bill pattern generates accounting entries (bNoEntry = 0), so the order was not synced.");
         }
 
-        if (pattern.StoreGuid is null || pattern.StoreGuid == Guid.Empty)
+        if (!pattern.FixStoreColumnFound || pattern.FixStore != true
+            || !pattern.StoreColumnFound || pattern.StoreGuid is null || pattern.StoreGuid == Guid.Empty)
         {
             return ReservationBillDecision.Fail(
                 ReservationBillFailure.Validation,
-                "The selected bill pattern does not expose a locked store.");
+                "The selected bill pattern does not lock the warehouse to DefStoreGUID.");
         }
 
-        if (pattern.BillCurrencyGuid is null || pattern.BillCurrencyGuid == Guid.Empty
-            || pattern.PriceCurrencyGuid is null || pattern.PriceCurrencyGuid == Guid.Empty)
+        if (!pattern.FixCurrencyColumnFound || pattern.FixCurrency != true
+            || !pattern.BillCurrencyColumnFound || pattern.BillCurrencyGuid is null || pattern.BillCurrencyGuid == Guid.Empty)
         {
             return ReservationBillDecision.Fail(
                 ReservationBillFailure.Validation,
-                "The selected bill pattern does not expose the bill currency and the material price currency.");
+                "The selected bill pattern does not lock the bill currency to DefCurrencyGUID.");
         }
 
         return ReservationBillDecision.Success;

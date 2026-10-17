@@ -10,7 +10,8 @@ public sealed class ReservationBillSafetyTests
     private static readonly Guid ReservationType = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static readonly Guid ReservationStore = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
     private static readonly Guid BillCurrency = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
-    private static readonly Guid PriceCurrency = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+    private static readonly Guid PriceList = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+    private static readonly Guid Branch = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
     private static readonly Guid OtherStore = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid Material = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid OtherType = Guid.Parse("33333333-3333-3333-3333-333333333333");
@@ -30,48 +31,66 @@ public sealed class ReservationBillSafetyTests
     ];
 
     [Fact]
-    public void Pattern_reader_uses_only_columns_present_on_the_type()
+    public void Pattern_reads_the_exact_bt000_columns()
     {
         var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
             ["Name"] = "فاتورة حجز",
-            ["StoreGUID"] = ReservationStore,
-            ["CurrencyGUID"] = BillCurrency,
-            ["MatCurrencyGUID"] = PriceCurrency,
-            ["bGenEntry"] = 0,
-            ["bLockStore"] = 1,
-            ["CurrencyVal"] = 1d
+            ["StoreGUID"] = OtherStore,
+            ["CurrencyGUID"] = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+            ["bGenEntry"] = 1,
+            ["bNoEntry"] = 1,
+            ["bAutoEntry"] = 1,
+            ["bAutoEntryPost"] = 0,
+            ["bFixStore"] = 1,
+            ["DefStoreGUID"] = ReservationStore,
+            ["bFixCurrency"] = 1,
+            ["DefCurrencyGUID"] = BillCurrency,
+            ["DefPrice"] = 3,
+            ["MaterialPriceListGUID"] = PriceList,
+            ["bFixBranch"] = 1,
+            ["DefBranchGUID"] = Branch
         };
 
         var pattern = ReservationBillPatternInterpreter.Interpret(ReservationType, row);
+        var presented = ReservationBillPatternPresenter.Present(pattern, ReservationOwnerNameSources.OrderCustomerName);
 
         Assert.Equal(ReservationStore, pattern.StoreGuid);
         Assert.Equal(BillCurrency, pattern.BillCurrencyGuid);
-        Assert.Equal(PriceCurrency, pattern.PriceCurrencyGuid);
-        Assert.False(pattern.GeneratesEntries);
-        Assert.True(pattern.StoreLocked);
+        Assert.True(pattern.NoEntry);
+        Assert.True(pattern.AutoEntry);
+        Assert.Equal(3, pattern.DefPrice);
+        Assert.Equal(PriceList, pattern.MaterialPriceListGuid);
+        Assert.Equal(Branch, pattern.BranchGuid);
         Assert.True(ReservationBillGuard.EvaluatePatternForSync(pattern).Succeeded);
-        Assert.DoesNotContain("generate-entries flag", pattern.Unresolved);
+        Assert.Contains(presented.Locked, property => property.Key == "DefPrice" && property.Locked);
+        Assert.Contains(presented.Locked, property => property.Key == "MaterialPriceListGUID" && property.Locked);
+        Assert.Contains(presented.Locked, property => property.Key == "bFixBranch" && property.Locked);
+        Assert.DoesNotContain(presented.Locked, property => property.Key is "priceCurrency" or "MatCurrencyGUID");
     }
 
     [Fact]
-    public void Pattern_without_known_columns_does_not_invent_guids_and_blocks_entry_generating_types()
+    public void Pattern_refuses_sync_unless_entries_are_off_and_store_and_currency_are_fixed()
     {
         var missing = ReservationBillPatternInterpreter.Interpret(ReservationType, new Dictionary<string, object?>());
         Assert.Null(missing.StoreGuid);
         Assert.Null(missing.BillCurrencyGuid);
-        Assert.Null(missing.PriceCurrencyGuid);
-        Assert.Contains("store guid", missing.Unresolved);
-        Assert.Contains("bill currency", missing.Unresolved);
-        Assert.Contains("price currency", missing.Unresolved);
-        Assert.Contains("generate-entries flag", missing.Unresolved);
-        Assert.Contains("store-locked flag", missing.Unresolved);
+        Assert.Contains("bNoEntry", missing.MissingColumns);
+        Assert.Contains("DefStoreGUID", missing.MissingColumns);
+        Assert.Contains("DefCurrencyGUID", missing.MissingColumns);
+        Assert.DoesNotContain("bFixBranch", missing.MissingColumns);
         Assert.False(ReservationBillGuard.EvaluatePatternForSync(missing).Succeeded);
 
-        var generating = missing with { GeneratesEntries = true, GeneratesEntriesColumnFound = true };
-        var decision = ReservationBillGuard.EvaluatePatternForSync(generating);
-        Assert.Equal(ReservationBillFailure.NotReservation, decision.Failure);
-        Assert.Contains("accounting entries", decision.Message, StringComparison.OrdinalIgnoreCase);
+        var generates = ReadyPattern(bNoEntry: 0);
+        var generatesDecision = ReservationBillGuard.EvaluatePatternForSync(generates);
+        Assert.Equal(ReservationBillFailure.NotReservation, generatesDecision.Failure);
+        Assert.Contains("bNoEntry", generatesDecision.Message, StringComparison.OrdinalIgnoreCase);
+
+        Assert.False(ReservationBillGuard.EvaluatePatternForSync(ReadyPattern(bFixStore: 0)).Succeeded);
+        Assert.False(ReservationBillGuard.EvaluatePatternForSync(ReadyPattern(storeGuid: Guid.Empty)).Succeeded);
+        Assert.False(ReservationBillGuard.EvaluatePatternForSync(ReadyPattern(bFixCurrency: 0)).Succeeded);
+        Assert.False(ReservationBillGuard.EvaluatePatternForSync(ReadyPattern(currencyGuid: Guid.Empty)).Succeeded);
+        Assert.True(ReservationBillGuard.EvaluatePatternForSync(ReadyPattern(bAutoEntry: 1)).Succeeded);
     }
 
     [Fact]
@@ -332,6 +351,9 @@ public sealed class ReservationBillSafetyTests
 
         Assert.Contains("WHEN c.name = N'IsPosted' THEN N'0'", script);
         Assert.Contains("@Order = @OrderSentinel", script);
+        Assert.Contains("@CurrencyGUID = @BillCurrencyGuid", script);
+        Assert.DoesNotContain("PriceCurrency", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("bGenEntry", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("2.125", script);
         Assert.Contains("prcupdatebuNote", script);
         Assert.Contains("IgnoreWarnings = 1", script);
@@ -419,6 +441,29 @@ public sealed class ReservationBillSafetyTests
         }
 
         throw new InvalidOperationException("Repository root was not found.");
+    }
+
+    private static ReservationBillPattern ReadyPattern(
+        int bNoEntry = 1,
+        int bFixStore = 1,
+        int bFixCurrency = 1,
+        int bAutoEntry = 0,
+        Guid? storeGuid = null,
+        Guid? currencyGuid = null)
+    {
+        var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["bNoEntry"] = bNoEntry,
+            ["bAutoEntry"] = bAutoEntry,
+            ["bAutoEntryPost"] = 0,
+            ["bFixStore"] = bFixStore,
+            ["DefStoreGUID"] = storeGuid ?? ReservationStore,
+            ["bFixCurrency"] = bFixCurrency,
+            ["DefCurrencyGUID"] = currencyGuid ?? BillCurrency,
+            ["DefPrice"] = 1,
+            ["MaterialPriceListGUID"] = PriceList
+        };
+        return ReservationBillPatternInterpreter.Interpret(ReservationType, row);
     }
 
     private static ReservationBillLine Line(Guid materialGuid, double quantity) =>

@@ -231,7 +231,7 @@ if (is_array($reservationPattern)) {
         <?php endforeach; ?>
       </select>
     </label>
-    <p class="text-xs text-text-muted">المستودع وعملتا الفاتورة والسعر وإعداد توليد القيود تُقرأ من النمط المختار في الأمين ولا تُحفظ من هنا.</p>
+    <p class="text-xs text-text-muted">المستودع، عملة الفاتورة، مصدر السعر، وقفل القيود تُقرأ من أعمدة النمط في الأمين ولا تُحفظ من هنا.</p>
   </article>
 
   <?php if ($reservationPattern): ?>

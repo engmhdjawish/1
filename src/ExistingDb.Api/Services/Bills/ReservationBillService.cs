@@ -26,10 +26,7 @@ public sealed record ReservationBillExecution(ReservationBillDecision Decision, 
 public sealed record ReservationBillRuntime(
     Guid BillTypeGuid,
     Guid StoreGuid,
-    Guid BillCurrencyGuid,
-    Guid PriceCurrencyGuid,
-    double CurrencyVal,
-    double PriceCurrencyVal);
+    Guid BillCurrencyGuid);
 
 public sealed class ReservationBillService(
     IReservationBillSettingsService settingsService,
@@ -341,10 +338,7 @@ public sealed class ReservationBillService(
         return (new ReservationBillRuntime(
             pattern.BillTypeGuid,
             pattern.StoreGuid!.Value,
-            pattern.BillCurrencyGuid!.Value,
-            pattern.PriceCurrencyGuid!.Value,
-            pattern.CurrencyVal,
-            pattern.PriceCurrencyVal), null);
+            pattern.BillCurrencyGuid!.Value), null);
     }
 
     private static void BindMutation(
@@ -357,9 +351,6 @@ public sealed class ReservationBillService(
         AddGuid(command, "@TypeGuid", runtime.BillTypeGuid);
         AddGuid(command, "@StoreGuid", runtime.StoreGuid);
         AddGuid(command, "@BillCurrencyGuid", runtime.BillCurrencyGuid);
-        AddGuid(command, "@PriceCurrencyGuid", runtime.PriceCurrencyGuid);
-        AddFloat(command, "@CurrencyVal", runtime.CurrencyVal);
-        AddFloat(command, "@PriceCurrencyVal", runtime.PriceCurrencyVal);
         if (draft is null)
         {
             return;

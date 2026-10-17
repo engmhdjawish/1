@@ -27,12 +27,10 @@ public sealed class ReservationBillPatternReader(IConfiguration configuration) :
         var pattern = ReservationBillPatternInterpreter.Interpret(billTypeGuid, row);
         var storeName = await LookupNameAsync(connection, "st000", pattern.StoreGuid, ["Name", "LatinName"], cancellationToken);
         var billCurrencyName = await LookupNameAsync(connection, "my000", pattern.BillCurrencyGuid, ["Name", "AName", "ArabicName", "LatinName"], cancellationToken);
-        var priceCurrencyName = await LookupNameAsync(connection, "my000", pattern.PriceCurrencyGuid, ["Name", "AName", "ArabicName", "LatinName"], cancellationToken);
         return pattern with
         {
             StoreName = storeName,
-            BillCurrencyName = billCurrencyName,
-            PriceCurrencyName = priceCurrencyName
+            BillCurrencyName = billCurrencyName
         };
     }
 
