@@ -188,6 +188,10 @@ if ($selectedReservationType === '') {
     $selectedReservationType = trim((string) ($reservationSettings['billTypeGuid'] ?? $reservationSettings['BillTypeGuid'] ?? ''));
 }
 $ownerNameSource = trim((string) ($reservationSettings['ownerNameSource'] ?? $reservationSettings['OwnerNameSource'] ?? 'orderCustomerName'));
+$reservationSyncMode = trim((string) ($reservationSettings['syncMode'] ?? $reservationSettings['SyncMode'] ?? 'manual'));
+if (!in_array($reservationSyncMode, ['automatic', 'manual'], true)) {
+    $reservationSyncMode = 'manual';
+}
 $lockedProperties = [];
 $changeableProperties = [];
 $unresolvedPattern = [];
@@ -232,6 +236,14 @@ if (is_array($reservationPattern)) {
       </select>
     </label>
     <p class="text-xs text-text-muted">المستودع، عملة الفاتورة، مصدر السعر، وقفل القيود تُقرأ من أعمدة النمط في الأمين ولا تُحفظ من هنا.</p>
+    <label class="text-xs block max-w-xl">
+      <span class="text-text-muted block mb-0.5">طريقة مزامنة الطلبات مع فاتورة الحجز</span>
+      <select name="sync_mode" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
+        <option value="manual" <?= $reservationSyncMode === 'manual' ? 'selected' : '' ?>>يدوي — لا يُرسل الطلب تلقائياً، والموظف يزامن من صفحة الطلبات</option>
+        <option value="automatic" <?= $reservationSyncMode === 'automatic' ? 'selected' : '' ?>>تلقائي — بعد إنشاء الطلب أو تعديل الكمية أو السعر أو الإلغاء</option>
+      </select>
+    </label>
+    <p class="text-xs text-text-muted">الوضع الافتراضي يدوي حتى لا تُنشأ فواتير حجز في الأمين قبل أن يختار المسؤول المزامنة التلقائية. كمية المتجر تبقى محجوزة إلى أن تنجح المزامنة، ثم تنتقل الكمية إلى فاتورة الأمين دون خصم مزدوج.</p>
   </article>
 
   <?php if ($reservationPattern): ?>

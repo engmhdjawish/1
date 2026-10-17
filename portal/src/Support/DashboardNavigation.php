@@ -387,7 +387,7 @@ final class DashboardNavigation
                     'label' => 'فاتورة الحجز',
                     'icon' => 'receipt_long',
                     'permission' => 'company_settings.manage',
-                    'description' => 'اختيار نمط فاتورة الحجز. خصائص الأمين المقفلة تُعرض للقراءة فقط.',
+                    'description' => 'اختيار نمط فاتورة الحجز وطريقة المزامنة التلقائية أو اليدوية. خصائص الأمين المقفلة تُعرض للقراءة فقط.',
                 ],
                 [
                     'route' => '/dashboard/settings.php?tab=integration',

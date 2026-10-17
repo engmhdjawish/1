@@ -94,12 +94,19 @@ public sealed class ReservationBillSafetyTests
     }
 
     [Fact]
-    public void Saved_settings_request_only_accepts_the_type_and_owner_name_source()
+    public void Saved_settings_request_accepts_the_type_owner_name_source_and_sync_mode()
     {
         var properties = typeof(SaveReservationBillSettingsRequest).GetProperties().Select(property => property.Name).ToArray();
-        Assert.Equal(["BillTypeGuid", "OwnerNameSource"], properties);
+        Assert.Equal(["BillTypeGuid", "OwnerNameSource", "SyncMode"], properties);
         Assert.True(ReservationOwnerNameSources.IsAllowed("orderCustomerName"));
         Assert.False(ReservationOwnerNameSources.IsAllowed("storeGuid"));
+        Assert.True(ReservationSyncModes.IsAllowed("automatic"));
+        Assert.True(ReservationSyncModes.IsAllowed("manual"));
+        Assert.False(ReservationSyncModes.IsAllowed("live"));
+        Assert.Equal(ReservationSyncModes.Manual, ReservationSyncModes.Normalize(null));
+        Assert.Equal(ReservationSyncModes.Manual, ReservationSyncModes.Normalize(" "));
+        Assert.Equal(ReservationSyncModes.Manual, ReservationSyncModes.Normalize("unexpected"));
+        Assert.Equal(ReservationSyncModes.Automatic, ReservationSyncModes.Normalize("automatic"));
     }
 
     [Fact]

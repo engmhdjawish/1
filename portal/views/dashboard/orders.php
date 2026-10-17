@@ -56,6 +56,18 @@ $originClass = static function (array $row): string {
         : 'bg-slate-100 text-slate-700';
 };
 
+$showSyncAction = static function (string $sync, string $status): bool {
+    if (in_array($sync, ['pending', 'failed'], true)) {
+        return true;
+    }
+
+    return $sync === 'none' && in_array($status, ['pending', 'confirmed'], true);
+};
+
+$syncActionLabel = static function (string $sync): string {
+    return $sync === 'failed' ? 'إعادة المحاولة' : 'مزامنة الآن';
+};
+
 $truncate = static function (string $text, int $max = 48): string {
     if (text_length($text) <= $max) {
         return $text;
@@ -326,6 +338,9 @@ $advancedFiltersOpen = ($filters['origin'] ?? '') !== ''
                 <?php endforeach; ?>
               </select>
               <button type="submit" class="dashboard-btn h-9 px-3 rounded-lg bg-primary text-white text-xs font-bold shrink-0">حفظ</button>
+              <?php if ($showSyncAction($sync, $rowStatus)): ?>
+                <button type="submit" name="item_action" value="sync_now" class="dashboard-btn h-9 px-3 rounded-lg border border-primary text-primary text-xs font-bold shrink-0"><?= h($syncActionLabel($sync)) ?></button>
+              <?php endif; ?>
             </form>
           <?php endif; ?>
         </article>
@@ -405,6 +420,9 @@ $advancedFiltersOpen = ($filters['origin'] ?? '') !== ''
                     <?php endforeach; ?>
                   </select>
                   <button type="submit" class="dashboard-btn h-8 px-2.5 rounded-lg bg-primary text-white text-[11px] font-bold">حفظ</button>
+                  <?php if ($showSyncAction($sync, $rowStatus)): ?>
+                    <button type="submit" name="item_action" value="sync_now" class="dashboard-btn h-8 px-2.5 rounded-lg border border-primary text-primary text-[11px] font-bold"><?= h($syncActionLabel($sync)) ?></button>
+                  <?php endif; ?>
                 </form>
               </td>
               <?php endif; ?>
@@ -445,6 +463,9 @@ $advancedFiltersOpen = ($filters['origin'] ?? '') !== ''
         <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $statusClass($detailStatus) ?>"><?= h($statusLabels[$detailStatus] ?? $detailStatus) ?></span>
         <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $originClass($orderDetails) ?>"><?= h($detailOrigin) ?></span>
         <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $syncClass($detailSync) ?>"><?= h($syncLabels[$detailSync] ?? $detailSync) ?></span>
+        <?php if (trim((string) ($orderDetails['amine_bill_number'] ?? '')) !== ''): ?>
+          <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">فاتورة حجز <?= h((string) $orderDetails['amine_bill_number']) ?></span>
+        <?php endif; ?>
         <a
           href="/api/order-images-zip.php?order_id=<?= h(rawurlencode((string) ($orderDetails['id'] ?? ''))) ?>"
           target="_blank"
@@ -539,6 +560,18 @@ $advancedFiltersOpen = ($filters['origin'] ?? '') !== ''
     </div>
 
     <footer class="shrink-0 border-t border-border-subtle bg-white px-4 py-3 space-y-2">
+      <?php if ($canManageOrders && $showSyncAction($detailSync, $detailStatus)): ?>
+        <form method="post" data-dashboard-ajax data-dashboard-reload class="rounded-xl border border-border-subtle bg-surface-low/60 px-3 py-2.5">
+          <input type="hidden" name="order_id" value="<?= h((string) ($orderDetails['id'] ?? '')) ?>">
+          <input type="hidden" name="item_action" value="sync_now">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <p class="text-xs text-text-muted">مزامنة فاتورة الحجز مع الأمين لهذا الطلب.</p>
+            <button type="submit" class="dashboard-btn h-9 px-4 rounded-lg border border-primary text-primary text-xs font-bold hover:bg-white transition">
+              <?= h($syncActionLabel($detailSync)) ?>
+            </button>
+          </div>
+        </form>
+      <?php endif; ?>
       <?php if ($canManageOrders): ?>
         <form method="post" data-dashboard-ajax data-dashboard-reload class="rounded-xl border border-border-subtle bg-surface-low/60 px-3 py-2.5">
           <input type="hidden" name="order_id" value="<?= h((string) ($orderDetails['id'] ?? '')) ?>">

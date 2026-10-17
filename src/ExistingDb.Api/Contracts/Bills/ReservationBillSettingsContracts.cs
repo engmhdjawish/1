@@ -5,6 +5,9 @@ public sealed class SaveReservationBillSettingsRequest
     public Guid BillTypeGuid { get; set; }
 
     public string? OwnerNameSource { get; set; }
+
+    /// <summary>automatic or manual. Omitted values keep the stored mode.</summary>
+    public string? SyncMode { get; set; }
 }
 
 public sealed record ReservationBillTypeListItemResponse(
@@ -41,4 +44,5 @@ public sealed record ReservationBillPatternResponse(
 public sealed record ReservationBillSettingsResponse(
     Guid? BillTypeGuid,
     string OwnerNameSource,
+    string SyncMode,
     ReservationBillPatternResponse? Pattern);

@@ -61,7 +61,11 @@ public sealed class ReservationBillSettingsController(
             }
         }
 
-        return Ok(new ReservationBillSettingsResponse(settings.BillTypeGuid, settings.OwnerNameSource, pattern));
+        return Ok(new ReservationBillSettingsResponse(
+            settings.BillTypeGuid,
+            settings.OwnerNameSource,
+            settings.SyncMode,
+            pattern));
     }
 
     [HttpPut("reservation-settings")]
@@ -80,6 +84,11 @@ public sealed class ReservationBillSettingsController(
             return BadRequest(new { message = "Owner name source is not one of the changeable options." });
         }
 
+        if (!string.IsNullOrWhiteSpace(request.SyncMode) && !ReservationSyncModes.IsAllowed(request.SyncMode))
+        {
+            return BadRequest(new { message = "Sync mode must be automatic or manual." });
+        }
+
         var pattern = await patternReader.ReadAsync(request.BillTypeGuid, cancellationToken);
         if (pattern is null)
         {
@@ -87,10 +96,14 @@ public sealed class ReservationBillSettingsController(
         }
 
         var ownerNameSource = request.OwnerNameSource!.Trim();
-        await settingsService.SaveAsync(request.BillTypeGuid, ownerNameSource, cancellationToken);
+        var syncMode = string.IsNullOrWhiteSpace(request.SyncMode)
+            ? (await settingsService.GetAsync(cancellationToken)).SyncMode
+            : request.SyncMode.Trim();
+        await settingsService.SaveAsync(request.BillTypeGuid, ownerNameSource, syncMode, cancellationToken);
         return Ok(new ReservationBillSettingsResponse(
             request.BillTypeGuid,
             ownerNameSource,
+            syncMode,
             ReservationBillPatternPresenter.Present(pattern, ownerNameSource)));
     }
 }

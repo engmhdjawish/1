@@ -242,8 +242,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $billTypeGuid = trim((string) ($_POST['bill_type_guid'] ?? ''));
             $ownerNameSource = trim((string) ($_POST['owner_name_source'] ?? ''));
+            $syncMode = trim((string) ($_POST['sync_mode'] ?? ''));
             if ($billTypeGuid === '' || $ownerNameSource === '') {
                 $flash = 'اختر نمط الفاتورة ومصدر اسم صاحب الحجز.';
+                $flashType = 'error';
+                $tab = 'reservations';
+            } elseif (!in_array($syncMode, ['automatic', 'manual'], true)) {
+                $flash = 'طريقة المزامنة يجب أن تكون تلقائية أو يدوية.';
                 $flashType = 'error';
                 $tab = 'reservations';
             } else {
@@ -251,6 +256,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $saved = ApiClient::putJson('/api/bills/reservation-settings', [
                         'billTypeGuid' => $billTypeGuid,
                         'ownerNameSource' => $ownerNameSource,
+                        'syncMode' => $syncMode,
                     ]);
                     if (!($saved['ok'] ?? false)) {
                         $message = trim((string) ($saved['error'] ?? ''));
@@ -446,7 +452,7 @@ foreach ($policies as $policy) {
 }
 
 $reservationTypes = [];
-$reservationSettings = ['billTypeGuid' => '', 'ownerNameSource' => 'orderCustomerName'];
+$reservationSettings = ['billTypeGuid' => '', 'ownerNameSource' => 'orderCustomerName', 'syncMode' => 'manual'];
 $reservationPattern = null;
 $reservationError = null;
 if ($tab === 'reservations' && $canManageCompany) {
