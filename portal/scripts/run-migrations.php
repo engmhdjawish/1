@@ -53,6 +53,7 @@ $ordered = [
     '018-price-checker-slideshow-filters.sql',
     '019-notification-reference.sql',
     '020-notification-dismissed.sql',
+    '021-home-shop-blocks.sql',
 ];
 
 $files = [];

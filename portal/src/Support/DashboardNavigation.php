@@ -35,6 +35,7 @@ final class DashboardNavigation
     private const SITE_CONTENT_ROUTES = [
         '/dashboard/site-content.php',
         '/dashboard/home-sections.php',
+        '/dashboard/home-shop-blocks.php',
         '/dashboard/special-offers.php',
         '/dashboard/price-checker.php',
         '/dashboard/site-media.php',
@@ -325,6 +326,13 @@ final class DashboardNavigation
                     'icon' => 'home_storage',
                     'permission' => 'home_sections.manage',
                     'description' => 'تنظيم أقسام الصفحة الرئيسية والمنتجات المعروضة فيها.',
+                ],
+                [
+                    'route' => '/dashboard/home-shop-blocks.php',
+                    'label' => 'تسوّق حسب',
+                    'icon' => 'category',
+                    'permission' => 'home_sections.manage',
+                    'description' => 'مجموعات الوصول السريع في الرئيسية: الفئة، النوع، الشركة، ودمجها معاً.',
                 ],
                 [
                     'route' => '/dashboard/special-offers.php',
