@@ -1185,6 +1185,156 @@ function lab_quick_access_items(array $sections, bool $allowCart, bool $isCustom
     return $items;
 }
 
+function lab_shop_facet_icon(string $param, string $value): string
+{
+    if ($param === 'ageCategories') {
+        return store_easy_tile_icon($value);
+    }
+
+    return match ($param) {
+        'materialTypes' => store_easy_tile_icon($value) !== 'category' ? store_easy_tile_icon($value) : 'checkroom',
+        'manufacturers' => 'verified',
+        'sizeRanges' => 'straighten',
+        'countryOfOrigins' => 'public',
+        default => 'category',
+    };
+}
+
+function lab_shop_initial(string $label): string
+{
+    $label = trim($label);
+
+    return $label !== '' ? mb_strtoupper(mb_substr($label, 0, 1)) : '?';
+}
+
+/**
+ * Turns "shop by" blocks into tiles linking to the trial store. Blocks that rely on a facet the
+ * active policy hides are dropped, because the store would ignore that filter.
+ *
+ * @param list<array<string, mixed>> $blocks
+ * @param callable(array<string, mixed>): string $urlFor
+ * @return list<array<string, mixed>>
+ */
+function lab_shop_blocks_resolve(array $blocks, callable $urlFor, ?callable $valuesFor = null): array
+{
+    $valuesFor ??= static fn (string $param): ?array => store_easy_facet_values($param);
+    $pick = static function (array $configured, array $available): array {
+        if ($configured === []) {
+            return $available;
+        }
+        if ($available === []) {
+            return $configured;
+        }
+
+        return array_values(array_filter($configured, static fn (string $value): bool => in_array($value, $available, true)));
+    };
+    $tile = static fn (string $label, string $href, string $icon, string $image = ''): array => [
+        'label' => $label,
+        'href' => $href,
+        'icon' => $icon,
+        'image' => $image,
+        'initial' => lab_shop_initial($label),
+    ];
+
+    $resolved = [];
+    foreach ($blocks as $block) {
+        $type = (string) ($block['block_type'] ?? 'facet');
+        $primary = (string) ($block['primary_param'] ?? '');
+        $entry = [
+            'key' => 'shop-' . preg_replace('/[^a-z0-9-]+/i', '', (string) ($block['id'] ?? count($resolved))),
+            'title' => (string) ($block['title_ar'] ?? ''),
+            'type' => $type,
+            'style' => (string) ($block['style'] ?? 'icons'),
+            'placement' => (string) ($block['placement'] ?? 'tabs'),
+            'max' => (int) ($block['max_items'] ?? 12),
+            'tiles' => [],
+            'groups' => [],
+        ];
+        if ($entry['title'] === '') {
+            continue;
+        }
+
+        if ($type === 'custom') {
+            foreach ((array) ($block['tiles'] ?? []) as $custom) {
+                $params = [];
+                $hidden = false;
+                $icon = 'category';
+                foreach ((array) ($custom['filters'] ?? []) as $param => $value) {
+                    if ($valuesFor((string) $param) === null) {
+                        $hidden = true;
+                        break;
+                    }
+                    $params[$param] = [(string) $value];
+                    if ($icon === 'category') {
+                        $icon = lab_shop_facet_icon((string) $param, (string) $value);
+                    }
+                }
+                if (!empty($custom['available'])) {
+                    if (!store_easy_client_filter_visible('availability')) {
+                        $hidden = true;
+                    }
+                    $params['isAvailable'] = '1';
+                }
+                if ($hidden || $params === []) {
+                    continue;
+                }
+                $image = trim((string) ($custom['image'] ?? ''));
+                if ($image !== '') {
+                    $image = portal_site_media_display_url($image, 480);
+                }
+                $entry['tiles'][] = $tile((string) $custom['label'], $urlFor($params), $icon, $image);
+            }
+            if ($entry['tiles'] !== []) {
+                $resolved[] = $entry;
+            }
+            continue;
+        }
+
+        $primaryValues = $primary !== '' ? $valuesFor($primary) : null;
+        if ($primaryValues === null) {
+            continue;
+        }
+        $primaryValues = $pick((array) ($block['primary_values'] ?? []), $primaryValues);
+
+        if ($type === 'combo') {
+            $secondary = (string) ($block['secondary_param'] ?? '');
+            $secondaryValues = $secondary !== '' ? $valuesFor($secondary) : null;
+            if ($secondaryValues === null) {
+                continue;
+            }
+            $secondaryValues = $pick((array) ($block['secondary_values'] ?? []), $secondaryValues);
+            if ($secondaryValues === []) {
+                continue;
+            }
+            foreach (array_slice($primaryValues, 0, 24) as $value) {
+                $group = [
+                    'label' => $value,
+                    'initial' => lab_shop_initial($value),
+                    'all' => $tile('كل ' . $value, $urlFor([$primary => [$value]]), 'apps'),
+                    'tiles' => [],
+                ];
+                foreach ($secondaryValues as $second) {
+                    $group['tiles'][] = $tile($second, $urlFor([$primary => [$value], $secondary => [$second]]), lab_shop_facet_icon($secondary, $second));
+                }
+                $entry['groups'][] = $group;
+            }
+            if ($entry['groups'] !== []) {
+                $resolved[] = $entry;
+            }
+            continue;
+        }
+
+        foreach ($primaryValues as $value) {
+            $entry['tiles'][] = $tile($value, $urlFor([$primary => [$value]]), lab_shop_facet_icon($primary, $value));
+        }
+        if (count($entry['tiles']) >= 2) {
+            $resolved[] = $entry;
+        }
+    }
+
+    return $resolved;
+}
+
 /**
  * Values of one client facet for the trial pages, or null when the policy hides it.
  *

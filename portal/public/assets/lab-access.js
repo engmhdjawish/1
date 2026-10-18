@@ -163,6 +163,72 @@
     }
   }, true);
 
+  const selectShopTab = (tab, focus) => {
+    const shop = tab.closest('[data-lab-shop]');
+    if (!shop) return;
+    shop.querySelectorAll('[data-lab-shop-tab]').forEach((item) => {
+      const active = item === tab;
+      item.classList.toggle('is-active', active);
+      item.setAttribute('aria-selected', active ? 'true' : 'false');
+      item.tabIndex = active ? 0 : -1;
+      const panel = document.getElementById(item.getAttribute('aria-controls') || '');
+      if (panel) panel.hidden = !active;
+    });
+    tab.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    if (focus) tab.focus();
+  };
+
+  document.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const tab = target.closest('[data-lab-shop-tab]');
+    if (tab) {
+      selectShopTab(tab, false);
+      return;
+    }
+
+    const pick = target.closest('[data-lab-shop-pick]');
+    if (pick) {
+      const combo = pick.closest('[data-lab-shop-combo]');
+      const index = pick.getAttribute('data-lab-shop-pick');
+      combo?.querySelectorAll('[data-lab-shop-pick]').forEach((item) => {
+        const active = item === pick;
+        item.classList.toggle('is-active', active);
+        item.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+      combo?.querySelectorAll('[data-lab-shop-group]').forEach((group) => {
+        group.hidden = group.getAttribute('data-lab-shop-group') !== index;
+      });
+      pick.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      return;
+    }
+
+    const more = target.closest('[data-lab-shop-more]');
+    if (more) {
+      const list = more.previousElementSibling;
+      const expanded = more.getAttribute('aria-expanded') !== 'true';
+      list?.classList.toggle('is-expanded', expanded);
+      more.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      more.textContent = more.getAttribute(expanded ? 'data-label-less' : 'data-label-more') || '';
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    const tab = event.target instanceof Element ? event.target.closest('[data-lab-shop-tab]') : null;
+    if (!tab || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const tabs = Array.from(tab.parentElement?.querySelectorAll('[data-lab-shop-tab]') || []);
+    const index = tabs.indexOf(tab);
+    // RTL: ArrowLeft moves to the next tab.
+    let next = index;
+    if (event.key === 'ArrowLeft') next = (index + 1) % tabs.length;
+    if (event.key === 'ArrowRight') next = (index - 1 + tabs.length) % tabs.length;
+    if (event.key === 'Home') next = 0;
+    if (event.key === 'End') next = tabs.length - 1;
+    event.preventDefault();
+    selectShopTab(tabs[next], true);
+  });
+
   const init = () => {
     if (window.location.pathname === '/store-lab.php') {
       rememberSearch(new URLSearchParams(window.location.search).get('q') || '');

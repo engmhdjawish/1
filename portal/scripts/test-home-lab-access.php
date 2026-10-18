@@ -15,6 +15,7 @@ $_GET = [];
 require dirname(__DIR__) . '/bootstrap.php';
 require dirname(__DIR__) . '/views/helpers.php';
 
+use Portal\Services\HomeShopBlockService;
 use Portal\Services\StoreCatalogService;
 use Portal\Support\ResponseCache;
 
@@ -60,11 +61,39 @@ $embeddedProductStrips = [];
 $storeCatalogDisplay = ['show_price' => true, 'show_quantity' => false, 'allow_cart' => true, 'allow_order' => true, 'show_images' => true, 'price_mode' => 'both'];
 $companyContext = ['company_name' => 'جاويش', 'company_whatsapp' => '+963 999 000 000', 'about_us_ar' => ''];
 
+$shopCacheKey = 'home_shop_blocks_v1';
+$previousShop = ResponseCache::get($shopCacheKey);
+ResponseCache::set($shopCacheKey, HomeShopBlockService::defaultBlocks(), 600);
+
 try {
     ob_start();
     require dirname(__DIR__) . '/views/home-lab.php';
     $html = (string) ob_get_clean();
+
+    $customBlocks = [
+        HomeShopBlockService::normalize([
+            'id' => 'c1', 'title_ar' => 'مختارات', 'block_type' => 'custom', 'style' => 'cards', 'placement' => 'band',
+            'tiles' => [
+                ['label' => 'بناتي شتوي', 'filters' => ['ageCategories' => 'بناتي', 'materialTypes' => 'شتوي'], 'available' => true],
+                ['label' => 'صيني', 'filters' => ['countryOfOrigins' => 'الصين']],
+                ['label' => 'بلا فلتر', 'filters' => []],
+            ],
+        ]),
+        HomeShopBlockService::normalize([
+            'id' => 'c2', 'title_ar' => 'الشركة والفئة', 'block_type' => 'combo',
+            'primary_param' => 'manufacturers', 'secondary_param' => 'ageCategories',
+            'primary_values' => ['النجم', 'غير موجودة'], 'secondary_values' => [],
+        ]),
+        HomeShopBlockService::normalize([
+            'id' => 'c3', 'title_ar' => 'البلد', 'block_type' => 'facet', 'primary_param' => 'countryOfOrigins',
+        ]),
+    ];
+    $resolvedCustom = lab_shop_blocks_resolve($customBlocks, static fn (array $params): string => store_lab_url($params));
 } finally {
+    ResponseCache::forget($shopCacheKey);
+    if ($previousShop !== null) {
+        ResponseCache::set($shopCacheKey, $previousShop, 600);
+    }
     ResponseCache::forget($cacheKey);
     if ($previous !== null) {
         ResponseCache::set($cacheKey, $previous, 600);
@@ -80,7 +109,24 @@ $assert('search goes to the trial store with lab suggestions', str_contains($htm
 $assert('recent searches slot', str_contains($html, 'data-lab-recent-q') && str_contains($html, '/assets/lab-access.js'));
 $assert('quick access shortcuts', str_contains($html, 'class="lab-quick"') && str_contains($html, '>العروض<') && str_contains($html, '>كل المواد<') && str_contains($html, 'isAvailable=1') && str_contains($html, 'href="/store-cart.php"') && str_contains($html, 'https://wa.me/963999000000'));
 $assert('guest gets order tracking', str_contains($html, 'href="/track-order.php"') && !str_contains($html, 'href="/my-orders.php"'));
-$assert('category tiles link to the trial store', str_contains($html, 'تسوّق حسب الفئة') && str_contains($html, '/store-lab.php?ageCategories'));
+$assert('shop-by hub with a tab per default block', str_contains($html, 'id="lab-shop-title" class="lab-shop__title">تسوّق حسب<') && substr_count($html, 'data-lab-shop-tab') === 5 && str_contains($html, '>الشركة والفئة<') && str_contains($html, '>النوع والفئة<'));
+$assert('only the first shop panel is open', substr_count($html, 'class="lab-shop__panel"') === 5 && preg_match_all('/class="lab-shop__panel"[^>]*hidden/u', $html) === 4);
+$assert('category tiles link to the trial store', str_contains($html, '/store-lab.php?ageCategories%5B0%5D=' . rawurlencode('نسائي')));
+$assert('brand cards show an initial', str_contains($html, 'lab-shop-card__initial'));
+$comboHref = '/store-lab.php?' . http_build_query(['manufacturers' => ['جاويش'], 'ageCategories' => ['رجالي']]);
+$assert('combo links carry both filters', str_contains($html, h($comboHref)) && str_contains($html, '<span>عرض كل جاويش</span>') && str_contains($html, 'data-lab-shop-pick="1"'));
+$assert('shop-by sits before the finder', $pos('data-lab-shop') < $pos('lab-finder'));
+
+$custom = $resolvedCustom[0] ?? null;
+$assert('custom cards drop hidden facets and empty tiles', $custom !== null && $custom['placement'] === 'band' && count($custom['tiles']) === 1);
+$assert('custom card merges several filters', $custom !== null && $custom['tiles'][0]['href'] === '/store-lab.php?' . http_build_query(['ageCategories' => ['بناتي'], 'materialTypes' => ['شتوي'], 'isAvailable' => '1']));
+$combo = $resolvedCustom[1] ?? null;
+$assert('combo keeps only existing configured values', $combo !== null && count($combo['groups']) === 1 && $combo['groups'][0]['label'] === 'النجم' && count($combo['groups'][0]['tiles']) === 3);
+$assert('block on a hidden facet is skipped', count($resolvedCustom) === 2);
+
+$bad = HomeShopBlockService::normalize(['block_type' => 'combo', 'primary_param' => 'manufacturers', 'secondary_param' => 'manufacturers', 'style' => 'x', 'max_items' => 500]);
+$assert('normalize rejects same-facet combos and bad options', $bad['secondary_param'] === '' && $bad['style'] === 'icons' && $bad['max_items'] === 60);
+$assert('save validates before touching the database', HomeShopBlockService::save(null, ['title_ar' => ''], null)['ok'] === false && HomeShopBlockService::save(null, ['title_ar' => 'x', 'block_type' => 'custom'], null)['ok'] === false);
 $assert('recently viewed slot is hidden until filled', (bool) preg_match('/class="lab-viewed"[^>]*data-lab-recent-viewed hidden/u', $html));
 $assert('finder with visible facets only', str_contains($html, 'اعثر بسرعة') && str_contains($html, 'name="ageCategories[]"') && str_contains($html, 'name="sizeRanges[]"') && str_contains($html, 'name="manufacturers[]"') && str_contains($html, 'name="isAvailable"'));
 $assert('availability is not preselected', !(bool) preg_match('/name="isAvailable" value="1" checked/u', $html));

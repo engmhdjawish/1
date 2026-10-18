@@ -117,13 +117,12 @@ $quickAccessItems = lab_quick_access_items(
   <?php require __DIR__ . '/partials/lab-quick-access.php'; ?>
 
   <?php
-    $homeTileFacet = store_easy_tile_facet();
-    if ($homeTileFacet !== null) {
-        $shopTilesTitle = $homeTileFacet['title'];
-        $shopTiles = store_easy_tiles($homeTileFacet, [], static fn (array $params): string => store_lab_url($params));
-        $shopTiles[0]['active'] = false;
-        require __DIR__ . '/partials/shop-by-tiles.php';
-    }
+    $labShopBlocks = lab_shop_blocks_resolve(
+        \Portal\Services\HomeShopBlockService::activeBlocks(),
+        static fn (array $params): string => store_lab_url($params)
+    );
+    $labShopPlacement = 'tabs';
+    require __DIR__ . '/partials/lab-shop.php';
   ?>
 
   <section class="lab-viewed" aria-labelledby="lab-viewed-title" data-lab-recent-viewed hidden>
@@ -181,6 +180,11 @@ $quickAccessItems = lab_quick_access_items(
       <?php endif; ?>
     </section>
   <?php endif; ?>
+
+  <?php
+    $labShopPlacement = 'band';
+    require __DIR__ . '/partials/lab-shop.php';
+  ?>
 
   <?php require __DIR__ . '/partials/lab-finder.php'; ?>
 
