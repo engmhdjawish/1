@@ -1185,6 +1185,50 @@ function lab_quick_access_items(array $sections, bool $allowCart, bool $isCustom
     return $items;
 }
 
+function hn_days_label(int $days): string
+{
+    return match (true) {
+        $days <= 1 => 'يوم واحد',
+        $days === 2 => 'يومين',
+        $days <= 10 => $days . ' أيام',
+        default => $days . ' يوماً',
+    };
+}
+
+/** Countdown text for an offer that ends at $endsAt, or '' when it has no end. */
+function hn_offer_countdown(?string $endsAt, ?int $now = null): string
+{
+    $endsAt = trim((string) $endsAt);
+    $end = $endsAt !== '' ? strtotime($endsAt) : false;
+    if ($end === false) {
+        return '';
+    }
+    $left = $end - ($now ?? time());
+    if ($left <= 0) {
+        return '';
+    }
+    if ($left >= 86400) {
+        return 'ينتهي خلال ' . hn_days_label((int) floor($left / 86400));
+    }
+
+    return sprintf('ينتهي خلال %02d:%02d', intdiv($left, 3600), intdiv($left % 3600, 60));
+}
+
+/** @param array<string, mixed> $section */
+function hn_offer_badge(array $section): string
+{
+    $badge = trim((string) ($section['badge_text_ar'] ?? ''));
+    if ($badge !== '') {
+        return $badge;
+    }
+    $percent = (float) ($section['discount_percent'] ?? 0);
+    if (($section['discount_type'] ?? '') === 'percent' && $percent > 0) {
+        return 'خصم ' . rtrim(rtrim(number_format($percent, 1, '.', ''), '0'), '.') . '%';
+    }
+
+    return 'عرض خاص';
+}
+
 function lab_shop_facet_icon(string $param, string $value): string
 {
     if ($param === 'ageCategories') {
