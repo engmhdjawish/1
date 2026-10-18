@@ -158,6 +158,11 @@ public sealed class ReservationBillService(
                     knownNumber = ownership.Number;
                 }
 
+                if (draft is not null)
+                {
+                    draft = await ApplyMaterialPackingAsync(connection, transaction, draft, cancellationToken);
+                }
+
                 var scopedMaterials = (previousLines ?? [])
                     .Select(line => line.MaterialGuid)
                     .Concat(draft?.Lines.Select(line => line.MaterialGuid) ?? [])
@@ -369,16 +374,70 @@ public sealed class ReservationBillService(
             var line = draft.Lines[index];
             var prefix = ReservationBillSql.LineParameterPrefix(index);
             var packages = line.PackageQuantity > 0d ? line.PackageQuantity : line.Quantity;
-            var unity = packages > 0d ? line.Quantity / packages : 1d;
             AddFloat(command, prefix + "Number", index);
             AddFloat(command, prefix + "Qty", line.Quantity);
             AddFloat(command, prefix + "Qty2", packages);
-            AddFloat(command, prefix + "Unity", unity);
             AddFloat(command, prefix + "Price", line.UnitPrice);
             AddString(command, prefix + "Notes", line.Notes ?? string.Empty);
             AddGuid(command, prefix + "Guid", Guid.NewGuid());
             AddGuid(command, prefix + "Mat", line.MaterialGuid);
         }
+    }
+
+    private static async Task<ReservationBillDraft> ApplyMaterialPackingAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        ReservationBillDraft draft,
+        CancellationToken cancellationToken)
+    {
+        var materialGuids = draft.Lines
+            .Select(line => line.MaterialGuid)
+            .Where(materialGuid => materialGuid != Guid.Empty)
+            .Distinct()
+            .ToArray();
+        var factors = await ReadPackingFactorsAsync(connection, transaction, materialGuids, cancellationToken);
+        var lines = draft.Lines
+            .Select(line =>
+            {
+                factors.TryGetValue(line.MaterialGuid, out var factor);
+                return ReservationBillPacking.Apply(line, factor);
+            })
+            .ToArray();
+        return draft with { Lines = lines, Total = ReservationBillGuard.SumAmount(lines) };
+    }
+
+    private static async Task<Dictionary<Guid, double>> ReadPackingFactorsAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        IReadOnlyList<Guid> materialGuids,
+        CancellationToken cancellationToken)
+    {
+        var factors = new Dictionary<Guid, double>();
+        if (materialGuids.Count == 0)
+        {
+            return factors;
+        }
+
+        var text = ReservationBillSql.BuildPackingScript(materialGuids.Count);
+        ReservationBillSqlSafety.EnsureSafe(text);
+        await using var command = CreateCommand(connection, transaction, text);
+        for (var index = 0; index < materialGuids.Count; index++)
+        {
+            AddGuid(command, ReservationBillSql.StoreQuantityParameter(index), materialGuids[index]);
+        }
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var materialGuid = ReadGuid(reader, "MatGUID");
+            var factor = ReadDouble(reader, "Unit2Fact");
+            if (materialGuid.HasValue && factor.HasValue)
+            {
+                factors[materialGuid.Value] = factor.Value;
+            }
+        }
+
+        return factors;
     }
 
     private static async Task<ReservationBillOwnership> ReadOwnershipAsync(

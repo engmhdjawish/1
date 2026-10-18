@@ -192,6 +192,28 @@ public static class ReservationBillSql
         return sql;
     }
 
+    /// <summary>
+    /// mt000.Unit2Fact is the carton packing (التعبئة): pairs of the primary unit in one carton.
+    /// </summary>
+    public static string BuildPackingScript(int materialCount)
+    {
+        if (materialCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(materialCount));
+        }
+
+        var parameters = string.Join(", ", Enumerable.Range(0, materialCount).Select(StoreQuantityParameter));
+        var sql = $"""
+            SELECT
+                GUID AS MatGUID,
+                CAST(Unit2Fact AS float) AS Unit2Fact
+            FROM dbo.mt000
+            WHERE GUID IN ({parameters});
+            """;
+        ReservationBillSqlSafety.EnsureSafe(sql);
+        return sql;
+    }
+
     private const string BillStateSelect = """
         SELECT
             CASE WHEN b.GUID IS NULL THEN 0 ELSE 1 END AS BillExists,
@@ -524,7 +546,7 @@ public static class ReservationBillSql
                     @Qty = {prefix}Qty,
                     @Order = @OrderSentinel,
                     @OrderQnt = 0,
-                    @Unity = {prefix}Unity,
+                    @Unity = 1,
                     @Price = {prefix}Price,
                     @BonusQnt = 0,
                     @Discount = 0,

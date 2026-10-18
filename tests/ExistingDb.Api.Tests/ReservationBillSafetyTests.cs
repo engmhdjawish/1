@@ -432,6 +432,11 @@ public sealed class ReservationBillSafetyTests
         Assert.Contains("Exclusive = 0", script);
         Assert.Contains("PayType", script);
         Assert.Contains("00000000-0000-0000-0000-000000000000", script);
+        Assert.Contains("@Unity = 1", script);
+        Assert.Contains("@Qty = @p0_Qty", script);
+        Assert.Contains("@Qty2 = @p0_Qty2", script);
+        Assert.Contains("@Price = @p0_Price", script);
+        Assert.DoesNotContain("@Unity = @p0_Unity", script);
         Assert.DoesNotContain("CustGUID = NULL", script, StringComparison.OrdinalIgnoreCase);
         var header = script.IndexOf("INSERT INTO dbo.bu000", StringComparison.Ordinal);
         var lines = script.IndexOf("EXEC dbo.prcBillItem_Add", StringComparison.Ordinal);
@@ -596,6 +601,65 @@ public sealed class ReservationBillSafetyTests
             ["MaterialPriceListGUID"] = PriceList
         };
         return ReservationBillPatternInterpreter.Interpret(ReservationType, row);
+    }
+
+    [Fact]
+    public void Packing_script_reads_unit2fact_without_temp_tables()
+    {
+        var script = ReservationBillSql.BuildPackingScript(2);
+
+        Assert.Contains("FROM dbo.mt000", script);
+        Assert.Contains("Unit2Fact", script);
+        Assert.Contains("@m0", script);
+        Assert.Contains("@m1", script);
+        Assert.DoesNotContain("#", script);
+        ReservationBillSqlSafety.EnsureSafe(script);
+    }
+
+    [Fact]
+    public void Packing_turns_one_carton_into_pairs_and_a_pair_price()
+    {
+        var line = new ReservationBillLine(
+            Material,
+            1d,
+            24d,
+            1d,
+            "خصم: سعر الزوج من 30 إلى 24");
+
+        var applied = ReservationBillPacking.Apply(line, 12d);
+
+        Assert.Equal(1d, applied.PackageQuantity);
+        Assert.Equal(12d, applied.Quantity);
+        Assert.Equal(2d, applied.UnitPrice);
+        Assert.Equal(24d, applied.Quantity * applied.UnitPrice);
+        Assert.Equal("خصم: سعر الزوج من 2.5 إلى 2", applied.Notes);
+    }
+
+    [Fact]
+    public void Packing_keeps_pairs_that_already_match_the_material_factor()
+    {
+        var line = new ReservationBillLine(Material, 24d, 2d, 2d, "خصم: سعر الزوج من 2.5 إلى 2");
+
+        var applied = ReservationBillPacking.Apply(line, 12d);
+
+        Assert.Equal(2d, applied.PackageQuantity);
+        Assert.Equal(24d, applied.Quantity);
+        Assert.Equal(2d, applied.UnitPrice);
+        Assert.Equal(48d, ReservationBillGuard.SumAmount([applied]));
+        Assert.Equal("خصم: سعر الزوج من 2.5 إلى 2", applied.Notes);
+    }
+
+    [Fact]
+    public void Packing_keeps_the_order_factor_when_the_material_factor_is_missing()
+    {
+        var line = new ReservationBillLine(Material, 10d, 3d, 2d);
+
+        var applied = ReservationBillPacking.Apply(line, 0d);
+
+        Assert.Equal(2d, applied.PackageQuantity);
+        Assert.Equal(10d, applied.Quantity);
+        Assert.Equal(3d, applied.UnitPrice);
+        Assert.Equal(30d, applied.Quantity * applied.UnitPrice);
     }
 
     private static ReservationBillLine Line(Guid materialGuid, double quantity) =>
