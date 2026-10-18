@@ -1115,6 +1115,122 @@ function store_lab_section_url(array $section): string
     return '/store-lab.php';
 }
 
+/** @return array<string, mixed>|null */
+function store_easy_policy_store_options(): ?array
+{
+    static $resolved = false;
+    static $options = null;
+    if ($resolved) {
+        return $options;
+    }
+    $resolved = true;
+    try {
+        $policy = \Portal\Services\StoreCatalogService::activePolicy();
+    } catch (Throwable) {
+        $policy = null;
+    }
+    if ($policy !== null) {
+        $options = is_array($policy['store_options'] ?? null)
+            ? $policy['store_options']
+            : \Portal\Services\AccessPolicyService::defaultStoreOptions();
+    }
+
+    return $options;
+}
+
+/** @param array<string, mixed>|null $catalog */
+function store_easy_client_filter_visible(string $code, ?array $catalog = null): bool
+{
+    $storeOptions = is_array($catalog['store_options'] ?? null) ? $catalog['store_options'] : store_easy_policy_store_options();
+    if ($storeOptions === null) {
+        return false;
+    }
+    $visible = \Portal\Services\AccessPolicyService::resolvedVisibleClientFilters($storeOptions);
+    $locked = array_map('strval', is_array($catalog['locked_client_filters'] ?? null) ? $catalog['locked_client_filters'] : []);
+
+    return in_array($code, $visible, true) && !in_array($code, $locked, true);
+}
+
+/**
+ * Shortcuts shown on the trial homepage.
+ *
+ * @param list<array<string, mixed>> $sections
+ * @param array<string, mixed> $company
+ * @return list<array{label: string, icon: string, href: string, tone: string, cart?: bool, external?: bool}>
+ */
+function lab_quick_access_items(array $sections, bool $allowCart, bool $isCustomer, array $company): array
+{
+    $items = [];
+    foreach ($sections as $section) {
+        if (is_array($section) && !empty($section['is_offer_section'])) {
+            $items[] = ['label' => 'العروض', 'icon' => 'local_offer', 'href' => store_lab_section_url($section), 'tone' => 'red'];
+            break;
+        }
+    }
+    $items[] = ['label' => 'كل المواد', 'icon' => 'storefront', 'href' => '/store-lab.php', 'tone' => 'ink'];
+    if (store_easy_client_filter_visible('availability')) {
+        $items[] = ['label' => 'المتوفر فقط', 'icon' => 'inventory_2', 'href' => '/store-lab.php?isAvailable=1', 'tone' => 'ink'];
+    }
+    if ($allowCart) {
+        $items[] = ['label' => 'السلة', 'icon' => 'shopping_cart', 'href' => '/store-cart.php', 'tone' => 'ink', 'cart' => true];
+    }
+    $items[] = $isCustomer
+        ? ['label' => 'طلباتي', 'icon' => 'receipt_long', 'href' => '/my-orders.php', 'tone' => 'ink']
+        : ['label' => 'تتبّع طلب', 'icon' => 'local_shipping', 'href' => '/track-order.php', 'tone' => 'ink'];
+    $whatsapp = preg_replace('/\D+/', '', (string) ($company['company_whatsapp'] ?? '')) ?? '';
+    if ($whatsapp !== '') {
+        $items[] = ['label' => 'واتساب', 'icon' => 'chat', 'href' => 'https://wa.me/' . $whatsapp, 'tone' => 'green', 'external' => true];
+    }
+
+    return $items;
+}
+
+/**
+ * Values of one client facet for the trial pages, or null when the policy hides it.
+ *
+ * @param array<string, mixed>|null $catalog
+ * @return list<string>|null
+ */
+function store_easy_facet_values(string $param, ?array $catalog = null): ?array
+{
+    static $globalOptions = null;
+
+    if (!store_easy_client_filter_visible($param, $catalog)) {
+        return null;
+    }
+
+    if ($globalOptions === null) {
+        try {
+            $globalOptions = \Portal\Services\StoreCatalogService::getCachedFilterOptions();
+        } catch (Throwable) {
+            $globalOptions = [];
+        }
+    }
+    $catalogOptions = is_array($catalog['filterOptions'] ?? null) ? $catalog['filterOptions'] : [];
+
+    $values = [];
+    foreach ([$globalOptions[$param] ?? [], $catalogOptions[$param] ?? []] as $source) {
+        if (!is_array($source)) {
+            continue;
+        }
+        foreach ($source as $value) {
+            $value = trim((string) (is_array($value) ? ($value['value'] ?? '') : $value));
+            if ($value !== '' && !in_array($value, $values, true)) {
+                $values[] = $value;
+            }
+        }
+        if ($values !== []) {
+            break;
+        }
+    }
+    if ($param === 'sizeRanges') {
+        natcasesort($values);
+        $values = array_values($values);
+    }
+
+    return $values;
+}
+
 /**
  * Facet the trial store shows as large tiles: age category first, material type otherwise.
  *
@@ -1123,53 +1239,12 @@ function store_lab_section_url(array $section): string
  */
 function store_easy_tile_facet(?array $catalog = null): ?array
 {
-    $storeOptions = is_array($catalog['store_options'] ?? null) ? $catalog['store_options'] : null;
-    if ($storeOptions === null) {
-        try {
-            $policy = \Portal\Services\StoreCatalogService::activePolicy();
-        } catch (Throwable) {
-            $policy = null;
-        }
-        if ($policy === null) {
-            return null;
-        }
-        $storeOptions = is_array($policy['store_options'] ?? null)
-            ? $policy['store_options']
-            : \Portal\Services\AccessPolicyService::defaultStoreOptions();
-    }
-    $visible = \Portal\Services\AccessPolicyService::resolvedVisibleClientFilters($storeOptions);
-    $locked = array_map('strval', is_array($catalog['locked_client_filters'] ?? null) ? $catalog['locked_client_filters'] : []);
-
-    try {
-        $globalOptions = \Portal\Services\StoreCatalogService::getCachedFilterOptions();
-    } catch (Throwable) {
-        $globalOptions = [];
-    }
-    $catalogOptions = is_array($catalog['filterOptions'] ?? null) ? $catalog['filterOptions'] : [];
-
     $candidates = [
         'ageCategories' => 'تسوّق حسب الفئة',
         'materialTypes' => 'تسوّق حسب النوع',
     ];
     foreach ($candidates as $param => $title) {
-        if (!in_array($param, $visible, true) || in_array($param, $locked, true)) {
-            continue;
-        }
-        $values = [];
-        foreach ([$globalOptions[$param] ?? [], $catalogOptions[$param] ?? []] as $source) {
-            if (!is_array($source)) {
-                continue;
-            }
-            foreach ($source as $value) {
-                $value = trim((string) (is_array($value) ? ($value['value'] ?? '') : $value));
-                if ($value !== '' && !in_array($value, $values, true)) {
-                    $values[] = $value;
-                }
-            }
-            if ($values !== []) {
-                break;
-            }
-        }
+        $values = store_easy_facet_values($param, $catalog) ?? [];
         if (count($values) >= 2) {
             return ['param' => $param, 'title' => $title, 'values' => array_slice($values, 0, 16)];
         }

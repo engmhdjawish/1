@@ -42,10 +42,22 @@ foreach ($sections as $section) {
         'kind' => 'section',
         'label' => $label,
         'hint' => !empty($section['is_offer_section']) ? 'عرض' : 'قسم',
-        'href' => home_section_store_url($section),
+        'href' => store_lab_section_url($section),
     ];
 }
 $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+
+try {
+    $homeIsCustomer = \Portal\Auth\CustomerSession::check();
+} catch (Throwable) {
+    $homeIsCustomer = false;
+}
+$quickAccessItems = lab_quick_access_items(
+    $sections,
+    (bool) ($storeCatalogDisplay['allow_cart'] ?? false),
+    $homeIsCustomer,
+    $company
+);
 ?>
 <div class="home-page hl">
   <aside class="hl-lab-note" aria-label="ملاحظة النسخة التجريبية">
@@ -61,7 +73,7 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
       <h2 id="hl-search-title" class="hl-search-panel__title">ابحث في المواد</h2>
     </div>
 
-    <form class="hl-search" action="/store.php" method="get" role="search" data-hl-search>
+    <form class="hl-search" action="/store-lab.php" method="get" role="search" data-hl-search data-hl-surface="lab">
       <div class="hl-search__box">
         <span class="material-symbols-outlined hl-search__icon" aria-hidden="true">search</span>
         <div class="hl-search__field">
@@ -99,7 +111,10 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
         <?php endforeach; ?>
       </div>
     <?php endif; ?>
+    <?php require __DIR__ . '/partials/lab-recent-searches.php'; ?>
   </section>
+
+  <?php require __DIR__ . '/partials/lab-quick-access.php'; ?>
 
   <?php
     $homeTileFacet = store_easy_tile_facet();
@@ -110,6 +125,134 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
         require __DIR__ . '/partials/shop-by-tiles.php';
     }
   ?>
+
+  <section class="lab-viewed" aria-labelledby="lab-viewed-title" data-lab-recent-viewed hidden>
+    <div class="lab-viewed__head">
+      <h2 id="lab-viewed-title" class="lab-viewed__title">شاهدتها مؤخراً</h2>
+      <button type="button" class="lab-viewed__clear" data-lab-clear="viewed">مسح</button>
+    </div>
+    <div class="lab-viewed__row" data-lab-recent-viewed-row></div>
+  </section>
+
+  <?php if ($ads !== []): ?>
+    <section class="home-ad-strip" aria-label="إعلانات" data-home-ad-carousel>
+      <div class="home-ad-frame">
+        <?php foreach ($ads as $i => $ad): ?>
+          <?php
+            $adAlt = trim((string) ($ad['title_ar'] ?? ''));
+            if ($adAlt === '') {
+                $adAlt = trim((string) ($ad['file_name'] ?? 'إعلان'));
+            }
+            $adSrc = portal_site_media_display_url((string) ($ad['url'] ?? ''), 1280);
+          ?>
+          <img
+            src="<?= h($adSrc) ?>"
+            alt="<?= h($adAlt) ?>"
+            class="home-ad-slide<?= $i === 0 ? ' is-active' : '' ?>"
+            loading="<?= $i === 0 ? 'eager' : 'lazy' ?>"
+            decoding="async"
+            <?= $i === 0 ? 'fetchpriority="high"' : '' ?>
+            sizes="(max-width: 768px) 100vw, 1280px"
+            aria-hidden="<?= $i === 0 ? 'false' : 'true' ?>"
+            data-ad-index="<?= (int) $i ?>"
+          >
+        <?php endforeach; ?>
+        <?php if (count($ads) > 1): ?>
+          <button type="button" class="home-ad-nav home-ad-nav--prev" data-ad-prev aria-label="الإعلان السابق">
+            <span class="material-symbols-outlined">chevron_right</span>
+          </button>
+          <button type="button" class="home-ad-nav home-ad-nav--next" data-ad-next aria-label="الإعلان التالي">
+            <span class="material-symbols-outlined">chevron_left</span>
+          </button>
+        <?php endif; ?>
+      </div>
+      <?php if (count($ads) > 1): ?>
+        <div class="home-ad-dots" role="tablist" aria-label="اختيار إعلان">
+          <?php foreach ($ads as $i => $ad): ?>
+            <button
+              type="button"
+              class="home-ad-dot<?= $i === 0 ? ' is-active' : '' ?>"
+              aria-label="إعلان <?= (int) $i + 1 ?>"
+              aria-selected="<?= $i === 0 ? 'true' : 'false' ?>"
+              data-ad-dot="<?= (int) $i ?>"
+            ></button>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+    </section>
+  <?php endif; ?>
+
+  <?php require __DIR__ . '/partials/lab-finder.php'; ?>
+
+  <?php require __DIR__ . '/partials/lab-sections-directory.php'; ?>
+
+  <?php if ($sections !== []): ?>
+    <nav class="home-section-nav--sticky" aria-label="أقسام الصفحة">
+      <?php foreach ($sections as $section): ?>
+        <a class="home-section-nav__link" href="#<?= h($sectionKey($section)) ?>"><?= h($sectionLabel($section)) ?></a>
+      <?php endforeach; ?>
+    </nav>
+
+    <div class="home-sections">
+      <?php foreach ($sections as $section): ?>
+        <?php
+          $products = is_array($section['products'] ?? null) ? $section['products'] : [];
+          $sectionId = $sectionKey($section);
+          $embeddedStripHtml = trim((string) ($embeddedProductStrips[$sectionId] ?? ''));
+          $isOfferSection = !empty($section['is_offer_section']);
+        ?>
+        <section class="home-section<?= $isOfferSection ? ' home-section--offer hl-section--feature' : '' ?>" id="<?= h($sectionId) ?>">
+          <?php if (!empty($section['banner_image_url'])): ?>
+            <div class="home-section__banner">
+              <img
+                src="<?= h(portal_site_media_display_url((string) $section['banner_image_url'], 1280)) ?>"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                sizes="(max-width: 768px) 100vw, 1280px"
+              >
+            </div>
+          <?php endif; ?>
+          <div class="home-section__body">
+            <header class="home-section__header">
+              <div class="home-section__title-wrap">
+                <?php if ($isOfferSection): ?>
+                  <span class="home-section__badge">عرض خاص</span>
+                <?php endif; ?>
+                <h2 class="home-section__title"><?= h($sectionLabel($section)) ?></h2>
+                <?php if (!empty($section['subtitle_ar'])): ?>
+                  <p class="home-section__subtitle"><?= h((string) $section['subtitle_ar']) ?></p>
+                <?php endif; ?>
+              </div>
+              <div class="hl-section-actions">
+                <button type="button" class="home-section__more" data-hl-prompt="<?= h($sectionLabel($section)) ?>">
+                  ابحث هنا
+                  <span class="material-symbols-outlined" aria-hidden="true">search</span>
+                </button>
+                <a href="<?= h(store_lab_section_url($section)) ?>" class="home-section__more">
+                  عرض المزيد
+                  <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+                </a>
+              </div>
+            </header>
+            <?php if ($embeddedStripHtml !== ''): ?>
+              <?= $embeddedStripHtml ?>
+            <?php elseif ($products === []): ?>
+              <div class="home-section__empty">لا توجد منتجات في هذا القسم حالياً.</div>
+            <?php else: ?>
+              <?php require __DIR__ . '/partials/home-section-product-strip.php'; ?>
+            <?php endif; ?>
+          </div>
+        </section>
+      <?php endforeach; ?>
+    </div>
+  <?php else: ?>
+    <section class="home-section home-section--empty">
+      <span class="material-symbols-outlined text-4xl text-gray-300" aria-hidden="true">storefront</span>
+      <p>لا توجد أقسام نشطة حالياً.</p>
+      <a href="/store.php" class="home-btn home-btn--primary">الذهاب للمتجر</a>
+    </section>
+  <?php endif; ?>
 
   <section class="home-hero home-hero--premium" aria-labelledby="hl-hero-title">
     <div class="hl-hero-clip" aria-hidden="true">
@@ -175,122 +318,6 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
     </div>
   </section>
 
-  <?php if ($ads !== []): ?>
-    <section class="home-ad-strip" aria-label="إعلانات" data-home-ad-carousel>
-      <div class="home-ad-frame">
-        <?php foreach ($ads as $i => $ad): ?>
-          <?php
-            $adAlt = trim((string) ($ad['title_ar'] ?? ''));
-            if ($adAlt === '') {
-                $adAlt = trim((string) ($ad['file_name'] ?? 'إعلان'));
-            }
-            $adSrc = portal_site_media_display_url((string) ($ad['url'] ?? ''), 1280);
-          ?>
-          <img
-            src="<?= h($adSrc) ?>"
-            alt="<?= h($adAlt) ?>"
-            class="home-ad-slide<?= $i === 0 ? ' is-active' : '' ?>"
-            loading="<?= $i === 0 ? 'eager' : 'lazy' ?>"
-            decoding="async"
-            <?= $i === 0 ? 'fetchpriority="high"' : '' ?>
-            sizes="(max-width: 768px) 100vw, 1280px"
-            aria-hidden="<?= $i === 0 ? 'false' : 'true' ?>"
-            data-ad-index="<?= (int) $i ?>"
-          >
-        <?php endforeach; ?>
-        <?php if (count($ads) > 1): ?>
-          <button type="button" class="home-ad-nav home-ad-nav--prev" data-ad-prev aria-label="الإعلان السابق">
-            <span class="material-symbols-outlined">chevron_right</span>
-          </button>
-          <button type="button" class="home-ad-nav home-ad-nav--next" data-ad-next aria-label="الإعلان التالي">
-            <span class="material-symbols-outlined">chevron_left</span>
-          </button>
-        <?php endif; ?>
-      </div>
-      <?php if (count($ads) > 1): ?>
-        <div class="home-ad-dots" role="tablist" aria-label="اختيار إعلان">
-          <?php foreach ($ads as $i => $ad): ?>
-            <button
-              type="button"
-              class="home-ad-dot<?= $i === 0 ? ' is-active' : '' ?>"
-              aria-label="إعلان <?= (int) $i + 1 ?>"
-              aria-selected="<?= $i === 0 ? 'true' : 'false' ?>"
-              data-ad-dot="<?= (int) $i ?>"
-            ></button>
-          <?php endforeach; ?>
-        </div>
-      <?php endif; ?>
-    </section>
-  <?php endif; ?>
-
-  <?php if ($sections !== []): ?>
-    <nav class="home-section-nav--sticky" aria-label="أقسام الصفحة">
-      <?php foreach ($sections as $section): ?>
-        <a class="home-section-nav__link" href="#<?= h($sectionKey($section)) ?>"><?= h($sectionLabel($section)) ?></a>
-      <?php endforeach; ?>
-    </nav>
-
-    <div class="home-sections">
-      <?php foreach ($sections as $section): ?>
-        <?php
-          $products = is_array($section['products'] ?? null) ? $section['products'] : [];
-          $sectionId = $sectionKey($section);
-          $embeddedStripHtml = trim((string) ($embeddedProductStrips[$sectionId] ?? ''));
-          $isOfferSection = !empty($section['is_offer_section']);
-        ?>
-        <section class="home-section<?= $isOfferSection ? ' home-section--offer hl-section--feature' : '' ?>" id="<?= h($sectionId) ?>">
-          <?php if (!empty($section['banner_image_url'])): ?>
-            <div class="home-section__banner">
-              <img
-                src="<?= h(portal_site_media_display_url((string) $section['banner_image_url'], 1280)) ?>"
-                alt=""
-                loading="lazy"
-                decoding="async"
-                sizes="(max-width: 768px) 100vw, 1280px"
-              >
-            </div>
-          <?php endif; ?>
-          <div class="home-section__body">
-            <header class="home-section__header">
-              <div class="home-section__title-wrap">
-                <?php if ($isOfferSection): ?>
-                  <span class="home-section__badge">عرض خاص</span>
-                <?php endif; ?>
-                <h2 class="home-section__title"><?= h($sectionLabel($section)) ?></h2>
-                <?php if (!empty($section['subtitle_ar'])): ?>
-                  <p class="home-section__subtitle"><?= h((string) $section['subtitle_ar']) ?></p>
-                <?php endif; ?>
-              </div>
-              <div class="hl-section-actions">
-                <button type="button" class="home-section__more" data-hl-prompt="<?= h($sectionLabel($section)) ?>">
-                  ابحث هنا
-                  <span class="material-symbols-outlined" aria-hidden="true">search</span>
-                </button>
-                <a href="<?= h(home_section_store_url($section)) ?>" class="home-section__more">
-                  عرض المزيد
-                  <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
-                </a>
-              </div>
-            </header>
-            <?php if ($embeddedStripHtml !== ''): ?>
-              <?= $embeddedStripHtml ?>
-            <?php elseif ($products === []): ?>
-              <div class="home-section__empty">لا توجد منتجات في هذا القسم حالياً.</div>
-            <?php else: ?>
-              <?php require __DIR__ . '/partials/home-section-product-strip.php'; ?>
-            <?php endif; ?>
-          </div>
-        </section>
-      <?php endforeach; ?>
-    </div>
-  <?php else: ?>
-    <section class="home-section home-section--empty">
-      <span class="material-symbols-outlined text-4xl text-gray-300" aria-hidden="true">storefront</span>
-      <p>لا توجد أقسام نشطة حالياً.</p>
-      <a href="/store.php" class="home-btn home-btn--primary">الذهاب للمتجر</a>
-    </section>
-  <?php endif; ?>
-
   <section class="home-cta" aria-label="متابعة التسوّق">
     <div class="home-cta__content">
       <h2>لم تظهر المادة التي تريدها؟</h2>
@@ -315,3 +342,8 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
     </div>
   </section>
 </div>
+<?php
+  $labDockActive = 'home';
+  $labDockAllowCart = (bool) ($storeCatalogDisplay['allow_cart'] ?? false);
+  require __DIR__ . '/partials/lab-dock.php';
+?>
