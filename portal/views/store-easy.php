@@ -70,10 +70,12 @@ foreach (array_keys($facetLabels) as $param) {
         : [];
 }
 
+$labSeason = ($filters['season'] ?? '') === '1' ? \Portal\Services\StoreSeasonService::current() : null;
 $baseParams = array_filter([
     'q' => $searchQuery,
     'section' => $sectionParam,
     'offer' => $offerParam,
+    'season' => $labSeason !== null ? '1' : '',
 ], static fn (string $v): bool => $v !== '');
 $stateParams = $baseParams;
 foreach ($selectedFacets as $param => $values) {
@@ -235,6 +237,9 @@ if (count($sortOptions) < 2) {
 $showAvailabilityToggle = $isClientFilterVisible('availability');
 
 $chips = [];
+if ($labSeason !== null) {
+    $chips[] = ['text' => $labSeason['title_ar'], 'icon' => $labSeason['icon'], 'url' => $urlWithout('season')];
+}
 if ($searchQuery !== '') {
     $chips[] = ['text' => $searchQuery, 'icon' => 'search', 'url' => $urlWithout('q')];
 }

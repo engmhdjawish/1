@@ -467,10 +467,12 @@ final class StoreCatalogService
     {
         unset($query['soon'], $query['storeGuids'], $query['minWarehouseQuantity'], $query['maxWarehouseQuantity']);
         self::$labMixedCatalog = true;
+        self::$labSeasonOnly = trim((string) ($query['season'] ?? '')) === '1';
         try {
             return self::catalogFromRequest($query);
         } finally {
             self::$labMixedCatalog = false;
+            self::$labSeasonOnly = false;
         }
     }
 
@@ -554,6 +556,12 @@ final class StoreCatalogService
         $isClientFilterVisible = static fn (string $code): bool => in_array($code, $visibleClientFilters, true);
         $requestFilters = self::parseRequestFilters($query, $storeOptions, $isClientFilterVisible);
         $policyRules = is_array($policy['filter_rules'] ?? null) ? $policy['filter_rules'] : [];
+        $seasonGuids = self::$labMixedCatalog ? StoreSeasonService::priorityGroupGuids() : [];
+        $seasonOnly = self::$labSeasonOnly && $seasonGuids !== [];
+        if ($seasonOnly) {
+            $picked = array_values(array_intersect($requestFilters['groupGuids'], $seasonGuids));
+            $requestFilters['groupGuids'] = $picked !== [] ? $picked : $seasonGuids;
+        }
 
         $cachedCatalog = self::readCatalogCache($query, $policy);
         if ($cachedCatalog !== null) {
@@ -629,9 +637,56 @@ final class StoreCatalogService
         $debugInlineFilters = trim((string) ($query['facetFilters'] ?? '')) === '1';
         $deferClientFilters = $allowClientFilters && !$debugInlineFilters;
         $includeResultFilters = $allowClientFilters && $debugInlineFilters;
+        $seasonSplit = self::$labMixedCatalog && !$seasonOnly && !array_key_exists('sort', $query)
+            ? self::labSeasonSplit($groupGuids, $seasonGuids)
+            : null;
 
         try {
-            if ($sellableMode && !$labOpenStock) {
+            if ($seasonSplit !== null) {
+                $bothSides = self::labOrdersUnavailableLast($requestFilters['isAvailable'] ?? null);
+                $segments = [];
+                foreach ($bothSides ? [true, false] : [$isAvailable] as $available) {
+                    foreach ([$seasonSplit['in'], $seasonSplit['out']] as $segmentGroups) {
+                        $withFilters = $includeResultFilters && $segments === [];
+                        $minQuantity = $bothSides
+                            ? ($available ? $liveMinWarehouseQuantity : null)
+                            : $mergedFilters['minWarehouseQuantity'];
+                        $segments[] = static fn (int $apiPage, int $apiPageSize): array => self::fetchMaterialsExtended(
+                            $apiPage,
+                            $apiPageSize,
+                            $search,
+                            $sort,
+                            $materialTypes,
+                            $manufacturers,
+                            $ageCategories,
+                            $sizeRanges,
+                            $countryOfOrigins,
+                            $segmentGroups,
+                            $storeGuids,
+                            $available,
+                            $hasImage,
+                            false,
+                            $withFilters && $apiPage === 1,
+                            $minQuantity,
+                            $mergedFilters['maxWarehouseQuantity'],
+                            $mergedFilters['minUnitSalePriceSyp'],
+                            $mergedFilters['maxUnitSalePriceSyp'],
+                            $mergedFilters['minUnitSalePriceUsd'],
+                            $mergedFilters['maxUnitSalePriceUsd'],
+                            $mergedFilters['minUnitPurchasePriceUsd'],
+                            $mergedFilters['maxUnitPurchasePriceUsd']
+                        );
+                    }
+                }
+                $stitched = self::fetchLabSegmentedPage($page, $pageSize, $segments, $contextOfferSlug);
+                $products = $stitched['products'];
+                if ($sellableFilter && !$labOpenStock) {
+                    $products = StockReservationService::filterSellableProducts($products);
+                }
+                $totalCount = $stitched['totalCount'];
+                $resultFilters = self::scopeResultFiltersForPolicy($stitched['resultFilters'], $policyRules);
+                $apiError = $stitched['apiError'];
+            } elseif ($sellableMode && !$labOpenStock) {
                 $paged = self::fetchMaterialsWithSellablePaging(
                     $page,
                     $pageSize,
@@ -860,6 +915,9 @@ final class StoreCatalogService
             $sectionContext,
             $requestFilters
         );
+        if ($seasonOnly) {
+            $displayFilters['season'] = '1';
+        }
 
         $catalogResult = [
             'products' => $products,
@@ -2986,6 +3044,8 @@ final class StoreCatalogService
 
     private static bool $labMixedCatalog = false;
 
+    private static bool $labSeasonOnly = false;
+
     /**
      * Trial pages include zero-stock rows unless the customer chose "متوفر".
      */
@@ -2998,6 +3058,105 @@ final class StoreCatalogService
     private static function labOrdersUnavailableLast(?bool $requestedAvailability): bool
     {
         return self::$labMixedCatalog && $requestedAvailability === null;
+    }
+
+    /**
+     * Splits the requested groups into in-season and other groups. Without a group filter, "other" is every known group outside the season.
+     *
+     * @param list<string> $groupGuids
+     * @param list<string> $seasonGuids
+     * @return array{in: list<string>, out: list<string>}|null
+     */
+    public static function labSeasonSplit(array $groupGuids, array $seasonGuids, ?array $knownGroups = null): ?array
+    {
+        if ($seasonGuids === []) {
+            return null;
+        }
+        $seasonMap = array_flip(array_map('strtolower', $seasonGuids));
+        if ($groupGuids === []) {
+            $known = $knownGroups ?? (self::getCachedFilterOptions()['groups'] ?? []);
+            foreach (is_array($known) ? $known : [] as $group) {
+                $guid = trim((string) (is_array($group) ? ($group['guid'] ?? '') : $group));
+                if ($guid !== '') {
+                    $groupGuids[] = $guid;
+                }
+            }
+            if ($groupGuids === []) {
+                return null;
+            }
+            $in = $seasonGuids;
+        } else {
+            $in = array_values(array_filter($groupGuids, static fn (string $g): bool => isset($seasonMap[strtolower($g)])));
+        }
+        $out = array_values(array_unique(array_filter($groupGuids, static fn (string $g): bool => !isset($seasonMap[strtolower($g)]))));
+        if ($in === [] || $out === []) {
+            return null;
+        }
+
+        return ['in' => array_values(array_unique($in)), 'out' => $out];
+    }
+
+    /**
+     * One page across several API queries read back to back, each in its own order.
+     *
+     * @param list<callable(int, int): array<string, mixed>> $segments
+     * @return array{products: list<array<string, mixed>>, totalCount: int, resultFilters: array<string, mixed>, apiError: string|null}
+     */
+    public static function fetchLabSegmentedPage(int $page, int $pageSize, array $segments, ?string $offerSlug): array
+    {
+        $pageSize = max(1, $pageSize);
+        $offset = (max(1, $page) - 1) * $pageSize;
+        $cursor = 0;
+        $products = [];
+        $resultFilters = [];
+        foreach ($segments as $fetch) {
+            $slice = self::readAvailabilitySlice(
+                static fn (int $apiPage, int $apiPageSize, bool $available): array => $fetch($apiPage, $apiPageSize),
+                true,
+                max(0, $offset - $cursor),
+                $pageSize - count($products),
+                $pageSize,
+                $offerSlug
+            );
+            if ($slice['apiError'] !== null) {
+                return ['products' => [], 'totalCount' => 0, 'resultFilters' => [], 'apiError' => $slice['apiError']];
+            }
+            $products = array_merge($products, $slice['products']);
+            $cursor += $slice['totalCount'];
+            if ($resultFilters === []) {
+                $resultFilters = $slice['resultFilters'];
+            }
+        }
+
+        return [
+            'products' => self::dedupeLabMaterials($products),
+            'totalCount' => $cursor,
+            'resultFilters' => $resultFilters,
+            'apiError' => null,
+        ];
+    }
+
+    /**
+     * Number of materials in the given groups, for the dashboard. Null when the API is unreachable.
+     *
+     * @param list<string> $groupGuids
+     */
+    public static function countMaterialsInGroups(array $groupGuids, ?bool $isAvailable = true): ?int
+    {
+        if ($groupGuids === []) {
+            return 0;
+        }
+        try {
+            $response = self::fetchMaterialsExtended(1, 1, '', 'number:asc', [], [], [], [], [], $groupGuids, [], $isAvailable, null, false, false, null, null, null, null, null, null, null, null);
+        } catch (\Throwable) {
+            return null;
+        }
+        if (!($response['ok'] ?? false)) {
+            return null;
+        }
+        $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+
+        return max(0, (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0));
     }
 
     /**
@@ -3413,6 +3572,7 @@ final class StoreCatalogService
         if (self::$labMixedCatalog) {
             $params['_labMixed'] = '1';
             $params['_labUnavailableLast'] = '1';
+            $params['_season'] = implode(',', StoreSeasonService::priorityGroupGuids());
         }
         ksort($params);
 
