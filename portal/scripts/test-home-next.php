@@ -46,7 +46,7 @@ $previous = ResponseCache::get($cacheKey);
 ResponseCache::set($cacheKey, [
     'stores' => [['guid' => 'wh-1', 'name' => 'مستودع الستوك']],
     'groups' => [],
-    'ageCategories' => ['رجالي', 'نسائي', 'ولادي'],
+    'ageCategories' => ['رجالي', 'نسائي', 'ولادي', 'بناتي', 'شبابي', 'صبايا', 'بيبي ولادي', 'بيبي بناتي'],
     'materialTypes' => ['رياضي', 'كلاسيك'],
     'sizeRanges' => ['40-45', '18-23', '36-39'],
     'manufacturers' => ['جاويش', 'النجم'],
@@ -67,6 +67,13 @@ $ads = [];
 $embeddedProductStrips = [];
 $storeCatalogDisplay = ['show_price' => true, 'show_quantity' => false, 'allow_cart' => true, 'allow_order' => true, 'show_images' => true, 'price_mode' => 'both'];
 $companyContext = ['company_name' => 'جاويش', 'company_whatsapp' => '+963 999 000 000', 'company_phone' => '011 222 3333', 'about_us_ar' => ''];
+
+$seasonRef = new ReflectionClass(\Portal\Services\StoreSeasonService::class);
+$seasonRef->setStaticPropertyValue('memo', [
+    'id' => 'season-1', 'name_ar' => 'شتوي', 'title_ar' => 'تشكيلة الشتاء', 'icon' => 'ac_unit',
+    'group_guids' => ['g-win', 'g-gen'], 'show_to_customers' => true, 'mode' => 'auto',
+]);
+$seasonRef->setStaticPropertyValue('memoReady', true);
 
 try {
     ob_start();
@@ -97,11 +104,18 @@ $assert('offer badge', hn_offer_badge(['badge_text_ar' => 'جديد']) === 'جد
 
 $assert('single search to the trial store', substr_count($html, 'name="q"') === 1 && str_contains($html, 'action="/store-lab.php"') && str_contains($html, 'data-hn-search-input'));
 $assert('voice button hidden until supported', (bool) preg_match('/data-hn-voice[^>]*hidden/u', $html));
-$assert('stories: all sections first, offer ring, categories', $pos('hn-story--all') < $pos('data-hn-story=') && str_contains($html, 'hn-story hn-story--hot') && substr_count($html, 'data-hn-story=') === 5);
+$assert('stories: all sections, season, offer ring, categories', $pos('hn-story--all') < $pos('hn-story--season') && $pos('hn-story--season') < $pos('hn-story hn-story--hot') && substr_count($html, 'data-hn-story=') === 11);
 $assert('offer spotlight with badge and countdown', str_contains($html, '>خصم 15%<') && str_contains($html, 'data-hn-countdown="') && str_contains($html, 'ينتهي خلال يوم واحد') && str_contains($html, 'تسوّق العرض'));
-$assert('step picker with three steps', substr_count($html, 'data-hn-guide-step=') === 3 && str_contains($html, '>لمن؟<') && str_contains($html, 'data-hn-guide-show'));
-$assert('picker options work without script', str_contains($html, h(store_lab_url(['ageCategories' => ['نسائي']]))));
+$assert('step picker with three steps', substr_count($html, 'data-hn-guide-step=') === 3 && str_contains($html, '>لمن؟<') && str_contains($html, 'data-hn-guide-show') && str_contains($html, 'data-count-url="/api/store-count.php"'));
+$assert('picker options are toggle buttons, not links', substr_count($html, '<button type="button" class="hn-guide__option" aria-pressed="false"') === 8 + 2 + 3 && !preg_match('/<a[^>]+data-hn-guide-value/u', $html));
+$assert('long lists are split into pages of six', str_contains($html, 'aria-label="صفحة 2 من 2"') && substr_count($html, 'data-hn-guide-goto=') === 2 && str_contains($html, 'data-hn-guide-next-page'));
+$assert('short lists have no pager controls', substr_count($html, 'data-hn-guide-prev') === 1);
+$assert('result can limit to the season', str_contains($html, 'data-hn-guide-season') && str_contains($html, 'تشكيلة الشتاء فقط'));
 $assert('sizes sort naturally in the picker', $pos('>18-23<') < $pos('>36-39<') && $pos('>36-39<') < $pos('>40-45<'));
+$seasonHref = h(store_lab_url(['season' => '1']));
+$assert('season card with category shortcuts', str_contains($html, 'class="hn-season hn-season--cool"') && str_contains($html, 'تسوّق التشكيلة') && str_contains($html, h(store_lab_url(['season' => '1', 'ageCategories' => ['نسائي']]))));
+$assert('season story, sheet pill and feed badge', str_contains($html, 'href="' . $seasonHref . '" data-hn-story="season-season-1"') && str_contains($html, 'hn-sheet__pill--season') && str_contains($html, 'تشكيلة الشتاء أولاً'));
+$assert('season card sits between offers and the picker', $pos('class="hn-offer"') < $pos('class="hn-season') && $pos('class="hn-season') < $pos('data-hn-guide '));
 $assert('shop-by hub from dashboard blocks', substr_count($html, 'data-lab-shop-tab') === 5);
 $assert('section rail links stay on the trial store', str_contains($html, 'class="hn-rail"') && !str_contains($html, 'href="/store.php?'));
 $assert('endless feed from the trial store', str_contains($html, 'data-hn-feed') && str_contains($html, 'data-src="/store-lab.php"') && str_contains($html, 'store-product-grid se-grid'));

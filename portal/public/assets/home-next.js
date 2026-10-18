@@ -212,42 +212,143 @@
     const result = guide.querySelector('[data-hn-guide-result]');
     const chosenBox = guide.querySelector('[data-hn-guide-chosen]');
     const back = guide.querySelector('[data-hn-guide-back]');
+    const next = guide.querySelector('[data-hn-guide-next]');
+    const nextLabel = guide.querySelector('[data-hn-guide-next-label]');
     const show = guide.querySelector('[data-hn-guide-show]');
+    const showLabel = guide.querySelector('[data-hn-guide-show-label]');
     const available = guide.querySelector('[data-hn-guide-available]');
+    const seasonOnly = guide.querySelector('[data-hn-guide-season]');
     const action = guide.getAttribute('data-action') || '/store-lab.php';
-    const choices = new Map();
+    const countUrl = guide.getAttribute('data-count-url') || '';
+    const choices = new Map(steps.map((step) => [step.getAttribute('data-param'), new Set()]));
     let current = 0;
+    let countTimer = 0;
+    let countAbort = null;
 
-    const buildUrl = () => {
+    const query = () => {
       const params = new URLSearchParams();
-      choices.forEach((value, param) => {
-        if (value) params.append(`${param}[]`, value);
+      choices.forEach((values, param) => {
+        values.forEach((value) => params.append(`${param}[]`, value));
       });
       if (available instanceof HTMLInputElement && available.checked) params.set('isAvailable', '1');
-      const query = params.toString();
-      return query ? `${action}?${query}` : action;
+      if (seasonOnly instanceof HTMLInputElement && seasonOnly.checked) params.set('season', '1');
+      return params.toString();
     };
 
+    const setShowLabel = (text, empty) => {
+      if (showLabel) showLabel.textContent = text;
+      show?.classList.toggle('is-empty', empty);
+      show?.setAttribute('aria-disabled', empty ? 'true' : 'false');
+    };
+
+    const refreshCount = () => {
+      window.clearTimeout(countTimer);
+      countAbort?.abort();
+      setShowLabel('اعرض المواد', false);
+      if (!countUrl || current < steps.length) return;
+      const qs = query();
+      countTimer = window.setTimeout(async () => {
+        countAbort = new AbortController();
+        try {
+          const response = await fetch(qs ? `${countUrl}?${qs}` : countUrl, { signal: countAbort.signal, headers: { Accept: 'application/json' } });
+          const data = await response.json();
+          if (!data || !data.ok || typeof data.total !== 'number') return;
+          if (data.total === 0) {
+            setShowLabel('لا توجد مواد', true);
+          } else {
+            setShowLabel(`اعرض ${data.total} مادة`, false);
+          }
+        } catch {
+          // Count is optional; the button still works.
+        }
+      }, 300);
+    };
+
+    const syncPager = (step) => {
+      const pager = step.querySelector('[data-hn-guide-pager]');
+      const pages = pager ? Array.from(pager.children) : [];
+      if (!pager || pages.length < 2) return;
+      const width = Math.abs(pages[1].offsetLeft - pages[0].offsetLeft) || pager.clientWidth;
+      const visible = Math.max(1, Math.round(pager.clientWidth / width));
+      const maxIndex = Math.max(0, pages.length - visible);
+      const index = Math.min(maxIndex, Math.round(Math.abs(pager.scrollLeft) / width));
+      step.querySelectorAll('[data-hn-guide-goto]').forEach((dot, i) => {
+        const on = i >= index && i < index + visible;
+        dot.classList.toggle('is-active', on);
+        if (i === index) dot.setAttribute('aria-current', 'true');
+        else dot.removeAttribute('aria-current');
+      });
+      const prev = step.querySelector('[data-hn-guide-prev]');
+      const nextPage = step.querySelector('[data-hn-guide-next-page]');
+      if (prev) prev.disabled = index <= 0;
+      if (nextPage) nextPage.disabled = index >= maxIndex;
+    };
+
+    const goToPage = (step, index) => {
+      const pager = step.querySelector('[data-hn-guide-pager]');
+      const pages = pager ? Array.from(pager.children) : [];
+      if (!pager || pages.length < 2) return;
+      const width = Math.abs(pages[1].offsetLeft - pages[0].offsetLeft) || pager.clientWidth;
+      const rtl = getComputedStyle(pager).direction === 'rtl';
+      pager.scrollTo({ left: (rtl ? -1 : 1) * index * width, behavior: 'smooth' });
+    };
+
+    const pageIndex = (step) => {
+      const active = step.querySelector('[data-hn-guide-goto][aria-current]');
+      return active ? Number(active.getAttribute('data-hn-guide-goto')) || 0 : 0;
+    };
+
+    steps.forEach((step) => {
+      const pager = step.querySelector('[data-hn-guide-pager]');
+      let raf = 0;
+      pager?.addEventListener('scroll', () => {
+        window.cancelAnimationFrame(raf);
+        raf = window.requestAnimationFrame(() => syncPager(step));
+      }, { passive: true });
+    });
+    window.addEventListener('resize', () => steps.forEach(syncPager));
+
     const render = () => {
-      steps.forEach((step, index) => { step.hidden = index !== current; });
+      steps.forEach((step, index) => {
+        step.hidden = index !== current;
+        const picked = choices.get(step.getAttribute('data-param')) || new Set();
+        step.querySelectorAll('[data-hn-guide-value]').forEach((option) => {
+          const on = picked.has(option.getAttribute('data-hn-guide-value') || '');
+          option.classList.toggle('is-picked', on);
+          option.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        const badge = step.querySelector('[data-hn-guide-picked]');
+        if (badge) {
+          badge.hidden = picked.size === 0;
+          badge.textContent = picked.size === 1 ? 'اخترت 1' : `اخترت ${picked.size}`;
+        }
+      });
       dots.forEach((dot, index) => {
         dot.classList.toggle('is-current', index === current);
         dot.classList.toggle('is-done', index < current || current >= steps.length);
       });
-      if (result) result.hidden = current < steps.length;
+      const atResult = current >= steps.length;
+      if (result) result.hidden = !atResult;
       if (back) back.hidden = current === 0;
-      if (show) {
-        show.hidden = choices.size === 0;
-        show.href = buildUrl();
+      if (next) next.hidden = atResult;
+      if (nextLabel && !atResult) {
+        const picked = choices.get(steps[current].getAttribute('data-param'));
+        nextLabel.textContent = picked && picked.size > 0 ? 'التالي' : 'الكل';
       }
-      if (chosenBox && current >= steps.length) {
+      if (show) {
+        show.hidden = !atResult;
+        const qs = query();
+        show.href = qs ? `${action}?${qs}` : action;
+      }
+      if (chosenBox && atResult) {
         chosenBox.innerHTML = '';
         steps.forEach((step, index) => {
+          const picked = Array.from(choices.get(step.getAttribute('data-param')) || []);
           const chip = document.createElement('button');
           chip.type = 'button';
           chip.className = 'hn-guide__chip';
           const question = step.querySelector('.hn-guide__question')?.textContent || '';
-          chip.textContent = `${question} ${choices.get(step.getAttribute('data-param')) || 'الكل'}`;
+          chip.textContent = `${question} ${picked.length ? picked.join('، ') : 'الكل'}`;
           chip.addEventListener('click', () => {
             current = index;
             render();
@@ -255,30 +356,60 @@
           chosenBox.appendChild(chip);
         });
       }
-      const target = current < steps.length ? steps[current] : result;
-      target?.querySelectorAll('.hn-guide__option').forEach((option) => {
-        const param = steps[current]?.getAttribute('data-param');
-        option.classList.toggle('is-picked', param !== undefined && choices.has(param) && choices.get(param) === option.getAttribute('data-hn-guide-value'));
-      });
+      if (!atResult) window.requestAnimationFrame(() => syncPager(steps[current]));
+      refreshCount();
+    };
+
+    const move = (to) => {
+      current = Math.max(0, Math.min(steps.length, to));
+      render();
+      const top = guide.getBoundingClientRect().top;
+      if (top < 0 || top > window.innerHeight * 0.4) {
+        guide.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
     };
 
     guide.addEventListener('click', (event) => {
-      const option = event.target instanceof Element ? event.target.closest('[data-hn-guide-value]') : null;
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      const option = target.closest('[data-hn-guide-value]');
       if (option) {
-        event.preventDefault();
         const step = option.closest('[data-hn-guide-step]');
-        choices.set(step.getAttribute('data-param'), option.getAttribute('data-hn-guide-value') || '');
-        current = Math.min(steps.length, steps.indexOf(step) + 1);
+        const picked = choices.get(step?.getAttribute('data-param'));
+        const value = option.getAttribute('data-hn-guide-value') || '';
+        if (picked) {
+          if (picked.has(value)) picked.delete(value);
+          else picked.add(value);
+        }
         render();
-        guide.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         return;
       }
-      if (event.target instanceof Element && event.target.closest('[data-hn-guide-back]')) {
-        current = Math.max(0, current - 1);
-        render();
+      const goto = target.closest('[data-hn-guide-goto]');
+      if (goto) {
+        goToPage(goto.closest('[data-hn-guide-step]'), Number(goto.getAttribute('data-hn-guide-goto')) || 0);
+        return;
+      }
+      const prev = target.closest('[data-hn-guide-prev]');
+      const nextPage = target.closest('[data-hn-guide-next-page]');
+      if (prev || nextPage) {
+        const step = (prev || nextPage).closest('[data-hn-guide-step]');
+        goToPage(step, pageIndex(step) + (nextPage ? 1 : -1));
+        return;
+      }
+      if (target.closest('[data-hn-guide-next]')) {
+        move(current + 1);
+        return;
+      }
+      if (target.closest('[data-hn-guide-back]')) {
+        move(current - 1);
+        return;
+      }
+      if (show && target.closest('[data-hn-guide-show]') && show.classList.contains('is-empty')) {
+        event.preventDefault();
       }
     });
     available?.addEventListener('change', render);
+    seasonOnly?.addEventListener('change', render);
     render();
   }
 

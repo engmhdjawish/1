@@ -58,7 +58,18 @@ foreach ($facetLabels as $param => $label) {
 }
 $canFilterAvailable = store_easy_client_filter_visible('availability');
 
+try {
+    $season = \Portal\Services\StoreSeasonService::customerSeason();
+} catch (Throwable) {
+    $season = null;
+}
+$seasonUrl = static fn (array $extra = []): string => store_lab_url(['season' => '1'] + $extra);
+$seasonTheme = in_array($season['icon'] ?? '', ['ac_unit', 'umbrella'], true) ? 'cool' : 'warm';
+
 $stories = [];
+if ($season !== null) {
+    $stories[] = ['key' => 'season-' . $season['id'], 'label' => $season['title_ar'], 'href' => $seasonUrl(), 'image' => '', 'icon' => $season['icon'], 'hot' => false, 'season' => true];
+}
 foreach ($offers as $offer) {
     $stories[] = ['key' => 'o-' . $sectionKey($offer), 'label' => $sectionTitle($offer), 'href' => store_lab_section_url($offer), 'image' => (string) ($offer['banner_image_url'] ?? ''), 'icon' => 'local_offer', 'hot' => true];
 }
@@ -74,10 +85,14 @@ $guideTitles = ['ageCategories' => 'لمن؟', 'materialTypes' => 'النوع', 
 $guideSteps = [];
 foreach ($guideTitles as $param => $title) {
     $values = $facets[$param]['values'] ?? [];
-    if ($values === [] || ($param === 'sizeRanges' && count($values) > 30)) {
+    if ($values === []) {
         continue;
     }
-    $guideSteps[] = ['param' => $param, 'title' => $title, 'values' => array_slice($values, 0, 24)];
+    if ($param === 'sizeRanges') {
+        usort($values, static fn ($a, $b): int => strnatcasecmp((string) $a, (string) $b));
+    }
+    $perPage = $param === 'sizeRanges' ? 9 : 6;
+    $guideSteps[] = ['param' => $param, 'title' => $title, 'pages' => array_chunk(array_slice($values, 0, 60), $perPage)];
 }
 
 $labShopBlocks = lab_shop_blocks_resolve(
@@ -137,7 +152,7 @@ foreach ($facets as $param => $facet) {
         <span class="hn-story__label">كل الأقسام</span>
       </button>
       <?php foreach ($stories as $story): ?>
-        <a class="hn-story<?= $story['hot'] ? ' hn-story--hot' : '' ?>" href="<?= h($story['href']) ?>" data-hn-story="<?= h($story['key']) ?>">
+        <a class="hn-story<?= $story['hot'] ? ' hn-story--hot' : '' ?><?= !empty($story['season']) ? ' hn-story--season' : '' ?>" href="<?= h($story['href']) ?>" data-hn-story="<?= h($story['key']) ?>">
           <span class="hn-story__ring">
             <span class="hn-story__img">
               <?php if ($story['image'] !== ''): ?>
@@ -218,8 +233,31 @@ foreach ($facets as $param => $facet) {
     </section>
   <?php endforeach; ?>
 
+  <?php if ($season !== null): ?>
+    <section class="hn-season hn-season--<?= h($seasonTheme) ?>" aria-labelledby="hn-season-title">
+      <div class="hn-season__head">
+        <span class="hn-season__icon"><span class="material-symbols-outlined" aria-hidden="true"><?= h($season['icon']) ?></span></span>
+        <h2 id="hn-season-title" class="hn-season__title"><?= h($season['title_ar']) ?></h2>
+        <a class="hn-season__cta" href="<?= h($seasonUrl()) ?>">
+          تسوّق التشكيلة
+          <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+        </a>
+      </div>
+      <?php if (($facets['ageCategories']['values'] ?? []) !== []): ?>
+        <div class="hn-season__chips">
+          <?php foreach (array_slice($facets['ageCategories']['values'], 0, 8) as $value): ?>
+            <a class="hn-season__chip" href="<?= h($seasonUrl(['ageCategories' => [$value]])) ?>">
+              <span class="material-symbols-outlined" aria-hidden="true"><?= h(store_easy_tile_icon($value)) ?></span>
+              <?= h($value) ?>
+            </a>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+    </section>
+  <?php endif; ?>
+
   <?php if ($guideSteps !== []): ?>
-    <section class="hn-guide" aria-labelledby="hn-guide-title" data-hn-guide data-action="/store-lab.php">
+    <section class="hn-guide" aria-labelledby="hn-guide-title" data-hn-guide data-action="/store-lab.php" data-count-url="/api/store-count.php">
       <div class="hn-guide__head">
         <h2 id="hn-guide-title" class="hn-guide__title">
           <span class="material-symbols-outlined" aria-hidden="true">touch_app</span>
@@ -232,40 +270,73 @@ foreach ($facets as $param => $facet) {
         </ol>
       </div>
       <?php foreach ($guideSteps as $i => $step): ?>
+        <?php $pageCount = count($step['pages']); $isSizes = $step['param'] === 'sizeRanges'; ?>
         <div class="hn-guide__step" data-hn-guide-step="<?= (int) $i ?>" data-param="<?= h($step['param']) ?>" <?= $i === 0 ? '' : 'hidden' ?>>
-          <p class="hn-guide__question"><?= h($step['title']) ?></p>
-          <div class="hn-guide__options<?= $step['param'] === 'sizeRanges' ? ' hn-guide__options--sizes' : '' ?>">
-            <?php foreach ($step['values'] as $value): ?>
-              <a class="hn-guide__option" href="<?= h(store_lab_url([$step['param'] => [$value]])) ?>" data-hn-guide-value="<?= h($value) ?>"<?= $step['param'] === 'sizeRanges' ? ' dir="ltr"' : '' ?>>
-                <?php if ($step['param'] !== 'sizeRanges'): ?>
-                  <span class="material-symbols-outlined" aria-hidden="true"><?= h(lab_shop_facet_icon($step['param'], $value)) ?></span>
-                <?php endif; ?>
-                <span><?= h($value) ?></span>
-              </a>
-            <?php endforeach; ?>
-            <button type="button" class="hn-guide__option hn-guide__option--any" data-hn-guide-value="">
-              <span class="material-symbols-outlined" aria-hidden="true">done_all</span>
-              <span>الكل</span>
-            </button>
+          <div class="hn-guide__ask">
+            <p class="hn-guide__question"><?= h($step['title']) ?></p>
+            <span class="hn-guide__picked" data-hn-guide-picked hidden></span>
           </div>
+          <div class="hn-guide__pager" data-hn-guide-pager>
+            <?php foreach ($step['pages'] as $p => $chunk): ?>
+              <div class="hn-guide__page<?= $isSizes ? ' hn-guide__page--sizes' : '' ?>" role="group" aria-label="صفحة <?= (int) $p + 1 ?> من <?= (int) $pageCount ?>">
+                <?php foreach ($chunk as $value): ?>
+                  <button type="button" class="hn-guide__option" aria-pressed="false" data-hn-guide-value="<?= h((string) $value) ?>"<?= $isSizes ? ' dir="ltr"' : '' ?>>
+                    <?php if (!$isSizes): ?>
+                      <span class="material-symbols-outlined" aria-hidden="true"><?= h(lab_shop_facet_icon($step['param'], (string) $value)) ?></span>
+                    <?php endif; ?>
+                    <span class="hn-guide__label"><?= h((string) $value) ?></span>
+                    <span class="hn-guide__tick material-symbols-outlined" aria-hidden="true">check</span>
+                  </button>
+                <?php endforeach; ?>
+              </div>
+            <?php endforeach; ?>
+          </div>
+          <?php if ($pageCount > 1): ?>
+            <div class="hn-guide__nav">
+              <button type="button" class="hn-guide__arrow" data-hn-guide-prev aria-label="الصفحة السابقة" disabled>
+                <span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
+              </button>
+              <div class="hn-guide__pages" data-hn-guide-dots>
+                <?php for ($p = 0; $p < $pageCount; $p++): ?>
+                  <button type="button" class="hn-guide__page-dot<?= $p === 0 ? ' is-active' : '' ?>" data-hn-guide-goto="<?= (int) $p ?>" aria-label="صفحة <?= (int) $p + 1 ?>"<?= $p === 0 ? ' aria-current="true"' : '' ?>></button>
+                <?php endfor; ?>
+              </div>
+              <button type="button" class="hn-guide__arrow" data-hn-guide-next-page aria-label="الصفحة التالية">
+                <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+              </button>
+            </div>
+          <?php endif; ?>
         </div>
       <?php endforeach; ?>
       <div class="hn-guide__result" data-hn-guide-result hidden>
         <div class="hn-guide__chosen" data-hn-guide-chosen></div>
-        <?php if ($canFilterAvailable): ?>
-          <label class="hn-guide__check">
-            <input type="checkbox" data-hn-guide-available>
-            <span>المتوفر فقط</span>
-          </label>
-        <?php endif; ?>
+        <div class="hn-guide__checks">
+          <?php if ($canFilterAvailable): ?>
+            <label class="hn-guide__check">
+              <input type="checkbox" data-hn-guide-available>
+              <span>المتوفر فقط</span>
+            </label>
+          <?php endif; ?>
+          <?php if ($season !== null): ?>
+            <label class="hn-guide__check">
+              <input type="checkbox" data-hn-guide-season>
+              <span class="material-symbols-outlined" aria-hidden="true"><?= h($season['icon']) ?></span>
+              <span><?= h($season['title_ar']) ?> فقط</span>
+            </label>
+          <?php endif; ?>
+        </div>
       </div>
       <div class="hn-guide__actions">
         <button type="button" class="hn-guide__back" data-hn-guide-back hidden>
           <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
           رجوع
         </button>
-        <a class="hn-guide__show" href="/store-lab.php" data-hn-guide-show hidden>
-          اعرض المواد
+        <button type="button" class="hn-guide__show" data-hn-guide-next>
+          <span data-hn-guide-next-label>الكل</span>
+          <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+        </button>
+        <a class="hn-guide__show" href="/store-lab.php" data-hn-guide-show data-no-page-loading="1" hidden>
+          <span data-hn-guide-show-label>اعرض المواد</span>
           <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
         </a>
       </div>
@@ -312,7 +383,15 @@ foreach ($facets as $param => $facet) {
 
   <section class="hn-feed" aria-labelledby="hn-feed-title" data-hn-feed data-src="/store-lab.php">
     <div class="hn-rail__head">
-      <h2 id="hn-feed-title" class="hn-rail__title">كل المواد</h2>
+      <h2 id="hn-feed-title" class="hn-rail__title">
+        كل المواد
+        <?php if ($season !== null): ?>
+          <span class="hn-feed__badge">
+            <span class="material-symbols-outlined" aria-hidden="true"><?= h($season['icon']) ?></span>
+            <?= h($season['title_ar']) ?> أولاً
+          </span>
+        <?php endif; ?>
+      </h2>
       <a class="hn-rail__all" href="/store-lab.php">
         فتح المتجر
         <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
@@ -364,6 +443,12 @@ foreach ($facets as $param => $facet) {
     </button>
   </div>
   <div class="hn-sheet__quick">
+    <?php if ($season !== null): ?>
+      <a href="<?= h($seasonUrl()) ?>" class="hn-sheet__pill hn-sheet__pill--season">
+        <span class="material-symbols-outlined" aria-hidden="true"><?= h($season['icon']) ?></span>
+        <?= h($season['title_ar']) ?>
+      </a>
+    <?php endif; ?>
     <a href="/store-lab.php" class="hn-sheet__pill">كل المواد</a>
     <?php if ($canFilterAvailable): ?>
       <a href="/store-lab.php?isAvailable=1" class="hn-sheet__pill">المتوفر فقط</a>
