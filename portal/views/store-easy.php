@@ -288,7 +288,7 @@ try {
 $storeShowPrice = (bool) ($displayOptions['show_price'] ?? false);
 $baseDisplayOptions = $displayOptions;
 ?>
-<div class="se store-lab">
+<div class="se store-lab" data-product-share-scope>
   <?php require __DIR__ . '/partials/store-lab-search.php'; ?>
 
   <div

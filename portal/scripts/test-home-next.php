@@ -56,12 +56,24 @@ $shopCacheKey = 'home_shop_blocks_v1';
 $previousShop = ResponseCache::get($shopCacheKey);
 ResponseCache::set($shopCacheKey, HomeShopBlockService::defaultBlocks(), 600);
 
+$sampleProducts = [];
+for ($i = 1; $i <= 4; $i++) {
+    $sampleProducts[] = [
+        'materialGuid' => 'g-' . $i,
+        'name' => 'حذاء رقم ' . $i,
+        'materialCode' => 'C-' . $i,
+        'manufacturer' => 'جاويش',
+        'effective_unit_sale_price_sp' => 1000 + $i * 50,
+        'warehouseQuantity' => 5,
+    ];
+}
 $sections = [
     [
-        'slug' => 'offers', 'title_ar' => 'عروض الأسبوع', 'is_offer_section' => true, 'products' => [],
+        'slug' => 'offers', 'title_ar' => 'عروض الأسبوع', 'is_offer_section' => true, 'products' => $sampleProducts,
         'discount_type' => 'percent', 'discount_percent' => '15.00', 'ends_at' => date('Y-m-d H:i:sP', time() + 30 * 3600),
     ],
-    ['slug' => 'men', 'title_ar' => 'أحذية رجالية', 'products' => []],
+    ['slug' => 'men', 'title_ar' => 'أحذية رجالية', 'subtitle_ar' => 'جلد طبيعي', 'products' => $sampleProducts],
+    ['slug' => 'kids', 'title_ar' => 'أحذية أطفال', 'products' => $sampleProducts],
 ];
 $ads = [];
 $embeddedProductStrips = [];
@@ -104,21 +116,25 @@ $assert('offer badge', hn_offer_badge(['badge_text_ar' => 'جديد']) === 'جد
 
 $assert('single search to the trial store', substr_count($html, 'name="q"') === 1 && str_contains($html, 'action="/store-lab.php"') && str_contains($html, 'data-hn-search-input'));
 $assert('voice button hidden until supported', (bool) preg_match('/data-hn-voice[^>]*hidden/u', $html));
-$assert('stories: all sections, season, offer ring, categories', $pos('hn-story--all') < $pos('hn-story--season') && $pos('hn-story--season') < $pos('hn-story hn-story--hot') && substr_count($html, 'data-hn-story=') === 11);
+$assert('stories: all sections, season, offer ring, categories', $pos('hn-story--all') < $pos('hn-story--season') && $pos('hn-story--season') < $pos('hn-story hn-story--hot') && substr_count($html, 'data-hn-story=') === 12);
+$assert('stories hint that more can be scrolled', str_contains($html, 'data-hn-scroller') && str_contains($html, 'data-hn-scroller-next'));
+$assert('company name and currency switcher are visible', str_contains($html, '<p class="hn-brand__name">جاويش</p>') && str_contains($html, 'hn-brand__currency') && substr_count($html, 'data-store-currency=') === 2);
 $assert('offer spotlight with badge and countdown', str_contains($html, '>خصم 15%<') && str_contains($html, 'data-hn-countdown="') && str_contains($html, 'ينتهي خلال يوم واحد') && str_contains($html, 'تسوّق العرض'));
-$assert('step picker with three steps', substr_count($html, 'data-hn-guide-step=') === 3 && str_contains($html, '>لمن؟<') && str_contains($html, 'data-hn-guide-show') && str_contains($html, 'data-count-url="/api/store-count.php"'));
+$assert('step picker with three steps and no server count', substr_count($html, 'data-hn-guide-step=') === 3 && str_contains($html, '>لمن؟<') && str_contains($html, 'data-hn-guide-show') && !str_contains($html, 'store-count') && !str_contains($html, 'data-count-url'));
 $assert('picker options are toggle buttons, not links', substr_count($html, '<button type="button" class="hn-guide__option" aria-pressed="false"') === 8 + 2 + 3 && !preg_match('/<a[^>]+data-hn-guide-value/u', $html));
-$assert('long lists are split into pages of six', str_contains($html, 'aria-label="صفحة 2 من 2"') && substr_count($html, 'data-hn-guide-goto=') === 2 && str_contains($html, 'data-hn-guide-next-page'));
-$assert('short lists have no pager controls', substr_count($html, 'data-hn-guide-prev') === 1);
+$assert('long lists are split into pages of six, swiped like pages', str_contains($html, 'aria-label="صفحة 2 من 2"') && str_contains($html, 'data-hn-pager-next') && str_contains($html, 'data-hn-pager-goto'));
+$assert('short lists have no pager controls', substr_count($html, 'data-hn-pager-prev') === 1);
 $assert('result can limit to the season', str_contains($html, 'data-hn-guide-season') && str_contains($html, 'تشكيلة الشتاء فقط'));
 $assert('sizes sort naturally in the picker', $pos('>18-23<') < $pos('>36-39<') && $pos('>36-39<') < $pos('>40-45<'));
 $seasonHref = h(store_lab_url(['season' => '1']));
 $assert('season card with category shortcuts', str_contains($html, 'class="hn-season hn-season--cool"') && str_contains($html, 'تسوّق التشكيلة') && str_contains($html, h(store_lab_url(['season' => '1', 'ageCategories' => ['نسائي']]))));
 $assert('season story, sheet pill and feed badge', str_contains($html, 'href="' . $seasonHref . '" data-hn-story="season-season-1"') && str_contains($html, 'hn-sheet__pill--season') && str_contains($html, 'تشكيلة الشتاء أولاً'));
 $assert('season card sits between offers and the picker', $pos('class="hn-offer"') < $pos('class="hn-season') && $pos('class="hn-season') < $pos('data-hn-guide '));
-$assert('shop-by hub from dashboard blocks', substr_count($html, 'data-lab-shop-tab') === 5);
+$assert('shop-by paged tabs, no combo facet', substr_count($html, 'data-hn-shop-tab') === 3 && !str_contains($html, 'الشركة والفئة') && !str_contains($html, 'data-lab-shop-combo') && str_contains($html, 'hn-shop__page'));
+$assert('main sections showcase', str_contains($html, 'class="hn-showcase') && str_contains($html, '>تسوّق الأقسام<') && str_contains($html, 'hn-showcase__tile'));
 $assert('section rail links stay on the trial store', str_contains($html, 'class="hn-rail"') && !str_contains($html, 'href="/store.php?'));
-$assert('endless feed from the trial store', str_contains($html, 'data-hn-feed') && str_contains($html, 'data-src="/store-lab.php"') && str_contains($html, 'store-product-grid se-grid'));
+$assert('feed shows one batch with a clean store CTA', str_contains($html, 'data-hn-feed') && str_contains($html, 'data-src="/store-lab.php"') && str_contains($html, 'store-product-grid se-grid') && str_contains($html, 'hn-feed__cta') && !str_contains($html, 'data-hn-feed-more') && !str_contains($html, 'data-hn-feed-sentinel'));
+$assert('products can be shared from the cards', str_contains($html, 'data-product-share-scope') && str_contains($html, 'data-product-share-company="جاويش"'));
 $assert('help: whatsapp, call, tracking, text size', str_contains($html, 'https://wa.me/963999000000') && str_contains($html, 'href="tel:0112223333"') && str_contains($html, 'href="/track-order.php"') && str_contains($html, 'data-hn-text-size'));
 $assert('category sheet with panes per facet', (bool) preg_match('/class="hn-sheet"[^>]*data-hn-sheet[^>]*hidden/u', $html) && substr_count($html, 'data-hn-pane-tab') === 5);
 $assert('phone dock with cart badge', str_contains($html, 'class="hn-dock"') && str_contains($html, 'href="/home-next.php" class="hn-dock__item is-active"') && str_contains($html, 'data-store-cart-badge'));

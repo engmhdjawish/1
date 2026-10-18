@@ -31,7 +31,7 @@
     new ResizeObserver(syncTop).observe(header);
   }
 
-  /* Search suggestions */
+  /* Search: grouped results */
   const form = root.querySelector('[data-hn-search]');
   const input = root.querySelector('[data-hn-search-input]');
   const suggest = root.querySelector('[data-hn-suggest]');
@@ -39,72 +39,174 @@
   let suggestController = null;
   let activeIndex = -1;
 
+  const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  const icon = (name) => {
+    const node = el('span', 'material-symbols-outlined', name);
+    node.setAttribute('aria-hidden', 'true');
+    return node;
+  };
+  const fold = (value) => value.toLowerCase()
+    .replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي');
+  const highlight = (text, query) => {
+    const span = el('span', 'hn-suggest__label');
+    const at = query ? fold(text).indexOf(fold(query)) : -1;
+    if (at < 0) {
+      span.textContent = text;
+      return span;
+    }
+    span.append(text.slice(0, at), el('mark', '', text.slice(at, at + query.length)), text.slice(at + query.length));
+    return span;
+  };
+
+  const openPanel = () => {
+    if (!suggest || !input) return;
+    suggest.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+  };
   const closeSuggest = () => {
     if (!suggest) return;
     suggest.hidden = true;
     suggest.innerHTML = '';
     activeIndex = -1;
+    form?.classList.remove('is-searching');
     input?.setAttribute('aria-expanded', 'false');
+    input?.removeAttribute('aria-activedescendant');
   };
 
-  const renderSuggest = (items) => {
+  const allLink = (href, total) => {
+    const link = el('a', 'hn-suggest__all');
+    link.href = href;
+    link.setAttribute('role', 'option');
+    link.append(icon('search'), el('span', '', typeof total === 'number' && total > 0 ? `عرض كل النتائج (${total})` : 'عرض كل النتائج'), icon('arrow_back'));
+    return link;
+  };
+
+  const renderLoading = (query) => {
+    if (!suggest) return;
+    suggest.innerHTML = '';
+    const head = el('p', 'hn-suggest__status');
+    head.append(el('span', 'hn-suggest__spinner'), el('span', '', `جارٍ البحث عن «${query}»`));
+    suggest.appendChild(head);
+    const skeleton = el('div', 'hn-suggest__skeleton');
+    for (let i = 0; i < 3; i += 1) skeleton.appendChild(el('span'));
+    suggest.appendChild(skeleton);
+    openPanel();
+  };
+
+  const renderGroups = (data, query) => {
     if (!suggest || !input) return;
     suggest.innerHTML = '';
-    items.slice(0, 7).forEach((item, index) => {
-      const link = document.createElement('a');
-      link.className = 'hn-suggest__item';
-      link.href = item.href;
-      link.id = `hn-suggest-${index}`;
-      link.setAttribute('role', 'option');
-      const label = document.createElement('span');
-      label.className = 'hn-suggest__label';
-      label.textContent = item.label;
-      link.appendChild(label);
-      if (item.hint) {
-        const hint = document.createElement('span');
-        hint.className = 'hn-suggest__hint';
-        hint.textContent = item.hint;
-        link.appendChild(hint);
-      }
-      suggest.appendChild(link);
+    activeIndex = -1;
+    const groups = Array.isArray(data.groups) ? data.groups : [];
+    if (!groups.length) {
+      const empty = el('div', 'hn-suggest__empty');
+      empty.append(icon('search_off'), el('p', '', `لا توجد نتائج لـ «${query}»`));
+      suggest.appendChild(empty);
+      openPanel();
+      return;
+    }
+    groups.forEach((group) => {
+      const items = Array.isArray(group.items) ? group.items.filter((item) => item && item.href && item.label) : [];
+      if (!items.length) return;
+      const box = el('section', `hn-suggest__group hn-suggest__group--${group.key === 'products' ? 'products' : 'chips'}`);
+      const title = el('h3', 'hn-suggest__title');
+      title.append(icon(group.icon || 'category'), el('span', '', group.title || ''));
+      box.appendChild(title);
+      const list = el('div', 'hn-suggest__items');
+      items.forEach((item) => {
+        const link = el('a', group.key === 'products' ? 'hn-suggest__product' : 'hn-suggest__chip');
+        link.href = item.href;
+        link.setAttribute('role', 'option');
+        if (group.key === 'products') {
+          const thumb = el('span', 'hn-suggest__thumb');
+          if (item.image) {
+            const img = el('img');
+            img.src = item.image;
+            img.alt = '';
+            img.loading = 'lazy';
+            img.addEventListener('error', () => img.replaceWith(icon('checkroom')));
+            thumb.appendChild(img);
+          } else {
+            thumb.appendChild(icon('checkroom'));
+          }
+          const text = el('span', 'hn-suggest__text');
+          text.appendChild(highlight(item.label, query));
+          const meta = [item.code, item.brand].filter(Boolean).join(' · ');
+          if (meta) text.appendChild(el('span', 'hn-suggest__meta', meta));
+          if (item.badge) text.appendChild(el('span', 'hn-suggest__badge', item.badge));
+          link.append(thumb, text);
+        } else {
+          link.appendChild(highlight(item.label, query));
+        }
+        list.appendChild(link);
+      });
+      box.appendChild(list);
+      suggest.appendChild(box);
     });
-    suggest.hidden = items.length === 0;
-    input.setAttribute('aria-expanded', items.length ? 'true' : 'false');
+    suggest.appendChild(allLink(data.all || `/store-lab.php?q=${encodeURIComponent(query)}`, data.total));
+    suggest.querySelectorAll('a').forEach((link, index) => {
+      link.id = `hn-suggest-${index}`;
+    });
+    openPanel();
   };
 
   const fetchSuggest = (query) => {
     suggestController?.abort();
     suggestController = new AbortController();
-    fetch(`/api/home-search.php?q=${encodeURIComponent(query)}&surface=lab`, {
+    form?.classList.add('is-searching');
+    fetch(`/api/home-search.php?view=groups&q=${encodeURIComponent(query)}`, {
       headers: { Accept: 'application/json' },
       signal: suggestController.signal,
     })
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
-        if (!data || input?.value.trim() !== query) return;
-        renderSuggest(Array.isArray(data.suggestions) ? data.suggestions.filter((item) => item && item.href && item.label) : []);
+        if (input?.value.trim() !== query) return;
+        form?.classList.remove('is-searching');
+        if (!data || !data.ok) {
+          suggest.innerHTML = '';
+          suggest.appendChild(allLink(`/store-lab.php?q=${encodeURIComponent(query)}`));
+          openPanel();
+          return;
+        }
+        renderGroups(data, query);
       })
-      .catch(() => {});
+      .catch((error) => {
+        if (error?.name !== 'AbortError') form?.classList.remove('is-searching');
+      });
   };
 
-  input?.addEventListener('input', () => {
+  const onQuery = () => {
+    if (!input) return;
     window.clearTimeout(suggestTimer);
     const query = input.value.trim();
     if (query.length < 2) {
+      suggestController?.abort();
       closeSuggest();
       return;
     }
-    suggestTimer = window.setTimeout(() => fetchSuggest(query), 160);
+    renderLoading(query);
+    form?.classList.add('is-searching');
+    suggestTimer = window.setTimeout(() => fetchSuggest(query), 220);
+  };
+  input?.addEventListener('input', onQuery);
+  input?.addEventListener('focus', () => {
+    if (suggest && suggest.hidden && input.value.trim().length >= 2) onQuery();
   });
 
   input?.addEventListener('keydown', (event) => {
     if (!suggest || suggest.hidden) return;
-    const items = Array.from(suggest.querySelectorAll('.hn-suggest__item'));
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    const items = Array.from(suggest.querySelectorAll('a'));
+    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && items.length) {
       event.preventDefault();
       activeIndex = (activeIndex + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
       items.forEach((item, index) => item.classList.toggle('is-active', index === activeIndex));
-      input.setAttribute('aria-activedescendant', items[activeIndex]?.id || '');
+      items[activeIndex].scrollIntoView({ block: 'nearest' });
+      input.setAttribute('aria-activedescendant', items[activeIndex].id || '');
     } else if (event.key === 'Enter' && activeIndex >= 0 && items[activeIndex]) {
       event.preventDefault();
       window.location.href = items[activeIndex].href;
@@ -117,12 +219,13 @@
     if (form && !form.contains(event.target)) closeSuggest();
   });
 
-  /* Voice search */
+  /* Voice search: fills the box and shows results; the customer picks or presses search. */
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const voice = root.querySelector('[data-hn-voice]');
   if (Recognition && voice && input && form) {
     voice.hidden = false;
     let listening = null;
+    const placeholder = input.placeholder;
     voice.addEventListener('click', () => {
       if (listening) {
         listening.stop();
@@ -133,19 +236,23 @@
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
       listening = recognition;
-      voice.classList.add('is-listening');
+      form.classList.add('is-listening');
       voice.setAttribute('aria-pressed', 'true');
+      input.placeholder = 'أستمع…';
       recognition.onresult = (event) => {
         const result = event.results[event.results.length - 1];
         input.value = result[0].transcript.trim();
-        if (result.isFinal && input.value) {
-          form.requestSubmit ? form.requestSubmit() : form.submit();
-        }
+        if (result.isFinal) recognition.stop();
       };
       recognition.onend = () => {
         listening = null;
-        voice.classList.remove('is-listening');
+        form.classList.remove('is-listening');
         voice.setAttribute('aria-pressed', 'false');
+        input.placeholder = placeholder;
+        if (input.value.trim()) {
+          input.focus({ preventScroll: true });
+          onQuery();
+        }
       };
       recognition.onerror = recognition.onend;
       recognition.start();
@@ -204,6 +311,131 @@
     window.setInterval(tick, 1000);
   }
 
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const isRtl = (node) => getComputedStyle(node).direction === 'rtl';
+
+  /* Horizontal strips: edge fades and arrows show that more items sit off screen. */
+  root.querySelectorAll('[data-hn-scroller]').forEach((scroller) => {
+    const track = scroller.querySelector('[data-hn-scroller-track]');
+    if (!(track instanceof HTMLElement)) return;
+    const prev = scroller.querySelector('[data-hn-scroller-prev]');
+    const next = scroller.querySelector('[data-hn-scroller-next]');
+    const sync = () => {
+      const max = track.scrollWidth - track.clientWidth;
+      const at = Math.abs(track.scrollLeft);
+      scroller.classList.toggle('has-prev', max > 4 && at > 4);
+      scroller.classList.toggle('has-next', max > 4 && at < max - 4);
+    };
+    const step = (dir) => {
+      const amount = Math.max(160, track.clientWidth * 0.8) * dir * (isRtl(track) ? -1 : 1);
+      track.scrollBy({ left: amount, behavior: reduceMotion ? 'auto' : 'smooth' });
+    };
+    prev?.addEventListener('click', () => step(-1));
+    next?.addEventListener('click', () => step(1));
+    let raf = 0;
+    track.addEventListener('scroll', () => {
+      window.cancelAnimationFrame(raf);
+      raf = window.requestAnimationFrame(sync);
+    }, { passive: true });
+    window.addEventListener('resize', sync);
+    sync();
+    const NUDGE_KEY = 'hn-strip-nudged';
+    if (!reduceMotion && scroller.classList.contains('has-next') && !store.get(NUDGE_KEY, false) && 'IntersectionObserver' in window) {
+      const observer = new IntersectionObserver((entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        store.set(NUDGE_KEY, true);
+        const dir = isRtl(track) ? -1 : 1;
+        window.setTimeout(() => {
+          track.scrollBy({ left: 56 * dir, behavior: 'smooth' });
+          window.setTimeout(() => track.scrollBy({ left: -56 * dir, behavior: 'smooth' }), 650);
+        }, 500);
+      }, { threshold: 0.8 });
+      observer.observe(track);
+    }
+  });
+
+  /* Pages that swipe left and right (step picker, shop-by). */
+  const pagerOf = (wrap) => wrap?.querySelector('[data-hn-pager]');
+  const pageWidth = (pager) => {
+    const pages = Array.from(pager.children);
+    return pages.length > 1 ? Math.abs(pages[1].offsetLeft - pages[0].offsetLeft) || pager.clientWidth : pager.clientWidth;
+  };
+  const syncPager = (wrap) => {
+    const pager = pagerOf(wrap);
+    if (!pager || pager.children.length < 2 || !pager.clientWidth) return;
+    const width = pageWidth(pager);
+    const visible = Math.max(1, Math.round(pager.clientWidth / width));
+    const maxIndex = Math.max(0, pager.children.length - visible);
+    const index = Math.min(maxIndex, Math.round(Math.abs(pager.scrollLeft) / width));
+    wrap.querySelectorAll('[data-hn-pager-goto]').forEach((dot, i) => {
+      dot.classList.toggle('is-active', i >= index && i < index + visible);
+      if (i === index) dot.setAttribute('aria-current', 'true');
+      else dot.removeAttribute('aria-current');
+    });
+    const prev = wrap.querySelector('[data-hn-pager-prev]');
+    const nextPage = wrap.querySelector('[data-hn-pager-next]');
+    if (prev) prev.disabled = index <= 0;
+    if (nextPage) nextPage.disabled = index >= maxIndex;
+    wrap.dataset.page = String(index);
+  };
+  const goToPage = (wrap, index) => {
+    const pager = pagerOf(wrap);
+    if (!pager || pager.children.length < 2) return;
+    pager.scrollTo({ left: (isRtl(pager) ? -1 : 1) * index * pageWidth(pager), behavior: reduceMotion ? 'auto' : 'smooth' });
+  };
+  const pageWraps = Array.from(root.querySelectorAll('[data-hn-pages]'));
+  pageWraps.forEach((wrap) => {
+    const pager = pagerOf(wrap);
+    let raf = 0;
+    pager?.addEventListener('scroll', () => {
+      window.cancelAnimationFrame(raf);
+      raf = window.requestAnimationFrame(() => syncPager(wrap));
+    }, { passive: true });
+    syncPager(wrap);
+  });
+  window.addEventListener('resize', () => pageWraps.forEach(syncPager));
+  root.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const wrap = target?.closest('[data-hn-pages]');
+    if (!wrap) return;
+    const goto = target.closest('[data-hn-pager-goto]');
+    if (goto) {
+      goToPage(wrap, Number(goto.getAttribute('data-hn-pager-goto')) || 0);
+      return;
+    }
+    const prev = target.closest('[data-hn-pager-prev]');
+    const nextPage = target.closest('[data-hn-pager-next]');
+    if (prev || nextPage) goToPage(wrap, (Number(wrap.dataset.page) || 0) + (nextPage ? 1 : -1));
+  });
+
+  /* Shop-by tabs */
+  root.querySelectorAll('[data-hn-shop]').forEach((shop) => {
+    const tabs = Array.from(shop.querySelectorAll('[data-hn-shop-tab]'));
+    const select = (tab, focus) => {
+      tabs.forEach((other) => {
+        const on = other === tab;
+        other.classList.toggle('is-active', on);
+        other.setAttribute('aria-selected', on ? 'true' : 'false');
+        other.tabIndex = on ? 0 : -1;
+        const panel = document.getElementById(other.getAttribute('aria-controls') || '');
+        if (panel) panel.hidden = !on;
+        if (on && panel) panel.querySelectorAll('[data-hn-pages]').forEach(syncPager);
+      });
+      if (focus) tab.focus();
+      tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    };
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => select(tab, false));
+      tab.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        const forward = (event.key === 'ArrowLeft') === isRtl(tab);
+        select(tabs[(index + (forward ? 1 : -1) + tabs.length) % tabs.length], true);
+      });
+    });
+  });
+
   /* Step-by-step picker */
   const guide = root.querySelector('[data-hn-guide]');
   if (guide) {
@@ -215,15 +447,11 @@
     const next = guide.querySelector('[data-hn-guide-next]');
     const nextLabel = guide.querySelector('[data-hn-guide-next-label]');
     const show = guide.querySelector('[data-hn-guide-show]');
-    const showLabel = guide.querySelector('[data-hn-guide-show-label]');
     const available = guide.querySelector('[data-hn-guide-available]');
     const seasonOnly = guide.querySelector('[data-hn-guide-season]');
     const action = guide.getAttribute('data-action') || '/store-lab.php';
-    const countUrl = guide.getAttribute('data-count-url') || '';
     const choices = new Map(steps.map((step) => [step.getAttribute('data-param'), new Set()]));
     let current = 0;
-    let countTimer = 0;
-    let countAbort = null;
 
     const query = () => {
       const params = new URLSearchParams();
@@ -234,79 +462,6 @@
       if (seasonOnly instanceof HTMLInputElement && seasonOnly.checked) params.set('season', '1');
       return params.toString();
     };
-
-    const setShowLabel = (text, empty) => {
-      if (showLabel) showLabel.textContent = text;
-      show?.classList.toggle('is-empty', empty);
-      show?.setAttribute('aria-disabled', empty ? 'true' : 'false');
-    };
-
-    const refreshCount = () => {
-      window.clearTimeout(countTimer);
-      countAbort?.abort();
-      setShowLabel('اعرض المواد', false);
-      if (!countUrl || current < steps.length) return;
-      const qs = query();
-      countTimer = window.setTimeout(async () => {
-        countAbort = new AbortController();
-        try {
-          const response = await fetch(qs ? `${countUrl}?${qs}` : countUrl, { signal: countAbort.signal, headers: { Accept: 'application/json' } });
-          const data = await response.json();
-          if (!data || !data.ok || typeof data.total !== 'number') return;
-          if (data.total === 0) {
-            setShowLabel('لا توجد مواد', true);
-          } else {
-            setShowLabel(`اعرض ${data.total} مادة`, false);
-          }
-        } catch {
-          // Count is optional; the button still works.
-        }
-      }, 300);
-    };
-
-    const syncPager = (step) => {
-      const pager = step.querySelector('[data-hn-guide-pager]');
-      const pages = pager ? Array.from(pager.children) : [];
-      if (!pager || pages.length < 2) return;
-      const width = Math.abs(pages[1].offsetLeft - pages[0].offsetLeft) || pager.clientWidth;
-      const visible = Math.max(1, Math.round(pager.clientWidth / width));
-      const maxIndex = Math.max(0, pages.length - visible);
-      const index = Math.min(maxIndex, Math.round(Math.abs(pager.scrollLeft) / width));
-      step.querySelectorAll('[data-hn-guide-goto]').forEach((dot, i) => {
-        const on = i >= index && i < index + visible;
-        dot.classList.toggle('is-active', on);
-        if (i === index) dot.setAttribute('aria-current', 'true');
-        else dot.removeAttribute('aria-current');
-      });
-      const prev = step.querySelector('[data-hn-guide-prev]');
-      const nextPage = step.querySelector('[data-hn-guide-next-page]');
-      if (prev) prev.disabled = index <= 0;
-      if (nextPage) nextPage.disabled = index >= maxIndex;
-    };
-
-    const goToPage = (step, index) => {
-      const pager = step.querySelector('[data-hn-guide-pager]');
-      const pages = pager ? Array.from(pager.children) : [];
-      if (!pager || pages.length < 2) return;
-      const width = Math.abs(pages[1].offsetLeft - pages[0].offsetLeft) || pager.clientWidth;
-      const rtl = getComputedStyle(pager).direction === 'rtl';
-      pager.scrollTo({ left: (rtl ? -1 : 1) * index * width, behavior: 'smooth' });
-    };
-
-    const pageIndex = (step) => {
-      const active = step.querySelector('[data-hn-guide-goto][aria-current]');
-      return active ? Number(active.getAttribute('data-hn-guide-goto')) || 0 : 0;
-    };
-
-    steps.forEach((step) => {
-      const pager = step.querySelector('[data-hn-guide-pager]');
-      let raf = 0;
-      pager?.addEventListener('scroll', () => {
-        window.cancelAnimationFrame(raf);
-        raf = window.requestAnimationFrame(() => syncPager(step));
-      }, { passive: true });
-    });
-    window.addEventListener('resize', () => steps.forEach(syncPager));
 
     const render = () => {
       steps.forEach((step, index) => {
@@ -320,7 +475,7 @@
         const badge = step.querySelector('[data-hn-guide-picked]');
         if (badge) {
           badge.hidden = picked.size === 0;
-          badge.textContent = picked.size === 1 ? 'اخترت 1' : `اخترت ${picked.size}`;
+          badge.textContent = `اخترت ${picked.size}`;
         }
       });
       dots.forEach((dot, index) => {
@@ -357,7 +512,6 @@
         });
       }
       if (!atResult) window.requestAnimationFrame(() => syncPager(steps[current]));
-      refreshCount();
     };
 
     const move = (to) => {
@@ -365,7 +519,7 @@
       render();
       const top = guide.getBoundingClientRect().top;
       if (top < 0 || top > window.innerHeight * 0.4) {
-        guide.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        guide.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
       }
     };
 
@@ -384,28 +538,12 @@
         render();
         return;
       }
-      const goto = target.closest('[data-hn-guide-goto]');
-      if (goto) {
-        goToPage(goto.closest('[data-hn-guide-step]'), Number(goto.getAttribute('data-hn-guide-goto')) || 0);
-        return;
-      }
-      const prev = target.closest('[data-hn-guide-prev]');
-      const nextPage = target.closest('[data-hn-guide-next-page]');
-      if (prev || nextPage) {
-        const step = (prev || nextPage).closest('[data-hn-guide-step]');
-        goToPage(step, pageIndex(step) + (nextPage ? 1 : -1));
-        return;
-      }
       if (target.closest('[data-hn-guide-next]')) {
         move(current + 1);
         return;
       }
       if (target.closest('[data-hn-guide-back]')) {
         move(current - 1);
-        return;
-      }
-      if (show && target.closest('[data-hn-guide-show]') && show.classList.contains('is-empty')) {
-        event.preventDefault();
       }
     });
     available?.addEventListener('change', render);
@@ -413,67 +551,46 @@
     render();
   }
 
-  /* Endless feed of all products */
+  /* All products: one batch from the trial store, loaded when the section comes near. */
   const feed = root.querySelector('[data-hn-feed]');
   if (feed) {
     const grid = feed.querySelector('[data-hn-feed-grid]');
     const skeleton = feed.querySelector('[data-hn-feed-skeleton]');
-    const moreBtn = feed.querySelector('[data-hn-feed-more]');
-    const storeLink = feed.querySelector('[data-hn-feed-store]');
-    const sentinel = feed.querySelector('[data-hn-feed-sentinel]');
-    const AUTO_PAGES = 3;
-    let nextUrl = feed.getAttribute('data-src') || '/store-lab.php';
-    let pages = 0;
-    let busy = false;
-
-    const finish = () => {
-      if (skeleton) skeleton.hidden = true;
-      if (moreBtn) moreBtn.hidden = !nextUrl || pages < AUTO_PAGES;
-      if (storeLink) storeLink.hidden = Boolean(nextUrl) && pages < AUTO_PAGES;
-    };
+    const limit = Math.max(1, Number(feed.getAttribute('data-limit')) || 12);
+    let started = false;
 
     const load = async () => {
-      if (busy || !nextUrl || !grid) return;
-      busy = true;
+      if (started || !grid) return;
+      started = true;
       feed.classList.add('is-loading');
       try {
-        const response = await fetch(nextUrl, { credentials: 'same-origin', headers: { Accept: 'text/html' } });
+        const response = await fetch(feed.getAttribute('data-src') || '/store-lab.php', { credentials: 'same-origin', headers: { Accept: 'text/html' } });
         if (!response.ok) throw new Error(String(response.status));
         const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
         const live = doc.querySelector('[data-se-live]');
-        const cards = live ? Array.from(live.querySelectorAll('.se-grid > *')) : [];
+        const cards = live ? Array.from(live.querySelectorAll('.se-grid > *')).slice(0, limit) : [];
         const fragment = document.createDocumentFragment();
         cards.forEach((card) => fragment.appendChild(document.importNode(card, true)));
         grid.appendChild(fragment);
-        nextUrl = live?.getAttribute('data-se-next') || '';
-        pages += 1;
         window.StoreCart?.bindAddForms?.();
         window.StoreCart?.bindQtySteppers?.(grid);
         window.StoreImageZoom?.seedLoadedImages?.(grid);
-        if (cards.length === 0 && pages === 1) feed.hidden = true;
+        if (cards.length === 0) feed.hidden = true;
       } catch {
-        nextUrl = '';
+        feed.hidden = true;
       } finally {
-        busy = false;
         feed.classList.remove('is-loading');
-        finish();
-      }
-      if (nextUrl && pages < AUTO_PAGES && sentinel && sentinel.getBoundingClientRect().top < window.innerHeight + 700) {
-        window.setTimeout(load, 50);
+        if (skeleton) skeleton.hidden = true;
       }
     };
 
-    moreBtn?.addEventListener('click', () => {
-      pages = 0;
-      if (moreBtn) moreBtn.hidden = true;
-      load();
-    });
-
-    if ('IntersectionObserver' in window && sentinel) {
+    if ('IntersectionObserver' in window) {
       const observer = new IntersectionObserver((entries) => {
-        if (entries.some((entry) => entry.isIntersecting) && pages < AUTO_PAGES) load();
-      }, { rootMargin: '700px 0px' });
-      observer.observe(sentinel);
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        load();
+      }, { rootMargin: '600px 0px' });
+      observer.observe(feed);
     } else {
       load();
     }

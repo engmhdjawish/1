@@ -140,6 +140,135 @@ final class HomeSearchService
         return $payload;
     }
 
+    public const GROUP_TITLES = [
+        'sections' => ['title' => 'أقسام وعروض', 'icon' => 'grid_view'],
+        'manufacturers' => ['title' => 'شركات', 'icon' => 'verified'],
+        'ageCategories' => ['title' => 'الفئات', 'icon' => 'groups'],
+        'materialTypes' => ['title' => 'الأنواع', 'icon' => 'category'],
+        'sizeRanges' => ['title' => 'القياسات', 'icon' => 'straighten'],
+        'countryOfOrigins' => ['title' => 'بلد المنشأ', 'icon' => 'public'],
+        'products' => ['title' => 'مواد', 'icon' => 'checkroom'],
+    ];
+
+    /**
+     * Search results for the trial homepage, grouped by kind (sections and facet values as short
+     * chip rows, then materials), with the total number of matching materials. Links stay on the trial store.
+     *
+     * @return array{ok: bool, query: string, total: ?int, all: string, groups: list<array{key: string, title: string, icon: string, items: list<array<string, mixed>>}>}
+     */
+    public static function grouped(string $query): array
+    {
+        $query = mb_substr(trim($query), 0, 80);
+        $normalized = self::normalize($query);
+        $all = '/store-lab.php' . ($query !== '' ? '?q=' . rawurlencode($query) : '');
+        if ($normalized === '' || self::charLength($normalized) < 2) {
+            return ['ok' => true, 'query' => $query, 'total' => null, 'all' => $all, 'groups' => []];
+        }
+
+        return ResponseCache::remember('home_search_grouped_v1_' . sha1($normalized), 120, static function () use ($query, $normalized, $all): array {
+            $groups = [];
+            [$products, $total] = self::groupedProducts($query);
+            if ($products !== []) {
+                $groups['products'] = $products;
+            }
+
+            $sections = [];
+            foreach (self::sectionCandidates() as $candidate) {
+                $score = self::score($normalized, self::normalize($candidate['label']));
+                if ($score >= 45) {
+                    $href = (string) $candidate['href'];
+                    if (str_starts_with($href, '/store.php')) {
+                        $href = '/store-lab.php' . substr($href, strlen('/store.php'));
+                    }
+                    $sections[] = ['score' => $score, 'label' => $candidate['label'], 'href' => $href, 'hint' => $candidate['hint']];
+                }
+            }
+            if ($sections !== []) {
+                $groups['sections'] = $sections;
+            }
+
+            foreach (array_keys(self::GROUP_TITLES) as $param) {
+                if ($param === 'products' || $param === 'sections') {
+                    continue;
+                }
+                $values = function_exists('store_easy_facet_values') ? store_easy_facet_values($param) : null;
+                foreach ($values ?? [] as $value) {
+                    $label = trim((string) $value);
+                    $score = self::score($normalized, self::normalize($label));
+                    if ($score < 45) {
+                        continue;
+                    }
+                    $groups[$param][] = [
+                        'score' => $score,
+                        'label' => $label,
+                        'href' => function_exists('store_lab_url') ? store_lab_url([$param => [$label]]) : '/store-lab.php',
+                    ];
+                }
+            }
+
+            $out = [];
+            foreach (self::GROUP_TITLES as $key => $meta) {
+                $items = $groups[$key] ?? [];
+                if ($items === []) {
+                    continue;
+                }
+                if ($key !== 'products') {
+                    usort($items, static fn (array $a, array $b): int => $b['score'] <=> $a['score'] ?: strcmp($a['label'], $b['label']));
+                    $items = array_map(static function (array $item): array {
+                        unset($item['score']);
+
+                        return $item;
+                    }, array_slice($items, 0, 4));
+                }
+                $out[] = ['key' => $key, 'title' => $meta['title'], 'icon' => $meta['icon'], 'items' => $items];
+            }
+
+            return [
+                'ok' => true,
+                'query' => $query,
+                'total' => $total,
+                'all' => $all,
+                'groups' => $out,
+            ];
+        });
+    }
+
+    /** @return array{0: list<array<string, mixed>>, 1: ?int} */
+    private static function groupedProducts(string $query): array
+    {
+        try {
+            $catalog = StoreCatalogService::catalogFromRequest(['q' => $query, 'page' => 1]);
+        } catch (\Throwable) {
+            return [[], null];
+        }
+        $items = [];
+        foreach (array_slice(is_array($catalog['products'] ?? null) ? $catalog['products'] : [], 0, 6) as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $label = trim((string) ($item['name'] ?? ''));
+            $guid = function_exists('material_guid') ? material_guid($item) : trim((string) ($item['guid'] ?? ''));
+            if ($label === '' || $guid === '') {
+                continue;
+            }
+            $imageGuid = function_exists('material_image_guid') ? material_image_guid($item) : '';
+            $row = [
+                'label' => $label,
+                'href' => function_exists('product_url') ? product_url($guid, '/home-next.php') : '/product.php?guid=' . rawurlencode($guid),
+                'code' => trim((string) ($item['materialCode'] ?? $item['code'] ?? '')),
+                'brand' => trim((string) ($item['manufacturer'] ?? '')),
+                'image' => $imageGuid !== '' && function_exists('material_image_api_url') ? material_image_api_url($imageGuid, true) : '',
+            ];
+            if (StoreCatalogService::materialIsUnavailable($item)) {
+                $row['badge'] = self::UNAVAILABLE_BADGE;
+            }
+            $items[] = $row;
+        }
+        $total = isset($catalog['totalCount']) ? max(0, (int) $catalog['totalCount']) : null;
+
+        return [$items, $items === [] ? ($total ?: 0) : $total];
+    }
+
     /**
      * Trial-store search keeps section and catalog links on /store-lab.php.
      * Product pages stay on /product.php. The live homepage surface is unchanged.

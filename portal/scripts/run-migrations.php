@@ -55,6 +55,7 @@ $ordered = [
     '020-notification-dismissed.sql',
     '021-home-shop-blocks.sql',
     '022-store-seasons.sql',
+    '023-home-layout.sql',
 ];
 
 $files = [];

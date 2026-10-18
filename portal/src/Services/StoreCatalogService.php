@@ -156,7 +156,7 @@ final class StoreCatalogService
             return false;
         }
 
-        if (!in_array($pagePath, ['/index.php', '/', '/share.php'], true)) {
+        if (!in_array($pagePath, ['/index.php', '/', '/share.php', '/home-next.php', '/home-lab.php'], true)) {
             return false;
         }
 

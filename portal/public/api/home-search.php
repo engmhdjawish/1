@@ -18,7 +18,10 @@ $query = trim((string) ($_GET['q'] ?? ''));
 $surface = (string) ($_GET['surface'] ?? '') === 'lab' ? 'lab' : '';
 
 try {
-    echo json_encode(HomeSearchService::suggest($query, $surface), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    $payload = (string) ($_GET['view'] ?? '') === 'groups'
+        ? HomeSearchService::grouped($query)
+        : HomeSearchService::suggest($query, $surface);
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 } catch (Throwable $exception) {
     error_log('home-search.php: ' . $exception->getMessage());
     http_response_code(500);

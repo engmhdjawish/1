@@ -61,12 +61,14 @@ $canonicalUrl = portal_canonical_url('/index.php');
 $metaDescription = 'نسخة تجريبية لتصميم جديد للصفحة الرئيسية. الصفحة المعتمدة لم تتغيّر.';
 $enableOnboarding = false;
 $extraHead = portal_stylesheet('/css/home-page.css')
+    . portal_stylesheet('/css/store-lab.css')
     . portal_stylesheet('/css/store-easy.css')
     . portal_stylesheet('/css/lab-access.css')
     . portal_stylesheet('/css/home-next.css');
 $extraFooter = portal_defer_script('/assets/home-page.js')
     . portal_defer_script('/assets/lab-access.js')
-    . portal_defer_script('/assets/home-next.js');
+    . portal_defer_script('/assets/home-next.js')
+    . portal_defer_script('/assets/product-share.js');
 $enableQuickView = false;
 $enableStoreCartJs = false;
 $deferStoreCartJs = $storeCatalogDisplay['allow_cart'] ?? false;
