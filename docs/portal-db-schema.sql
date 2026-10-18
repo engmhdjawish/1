@@ -316,6 +316,7 @@ CREATE TABLE orders (
     notes_ar                VARCHAR(1000),
     quote_access_token      VARCHAR(128) NOT NULL UNIQUE,
     amine_bill_guid         UUID,
+    amine_bill_number       INTEGER,
     amine_sync_status       amine_sync_status NOT NULL DEFAULT 'none',
     amine_synced_at         TIMESTAMPTZ,
     amine_sync_error_ar     VARCHAR(1000),

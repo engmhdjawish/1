@@ -196,7 +196,8 @@ public sealed class ApiManagementDbContext(DbContextOptions<ApiManagementDbConte
             Permission(12, "bills.post", "Post bills", "bills"),
             Permission(13, "accounts.read", "Read accounts", "accounts"),
             Permission(14, "entries.read", "Read entries", "accounts"),
-            Permission(15, "inventory.read", "Read inventory balances", "inventory")
+            Permission(15, "inventory.read", "Read inventory balances", "inventory"),
+            Permission(16, "bills.reserve", "Create and maintain reservation bills", "bills")
         };
 
         modelBuilder.Entity<ApiPermission>().HasData(permissions);

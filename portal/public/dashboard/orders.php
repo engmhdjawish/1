@@ -51,12 +51,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $staffUserId
                 ),
                 'cancel_item' => OrderService::cancelOrderItem($orderId, $itemId, $reason, $staffUserId),
+                'sync_now' => OrderService::syncReservationNow($orderId),
                 default => ['ok' => false, 'message' => 'إجراء غير معروف.'],
             };
             $flash = $result['message'];
-            $flashType = $result['ok'] ? 'success' : 'error';
+            $actionOk = (bool) ($result['ok'] ?? false);
+            $syncFailed = !empty($result['sync_failed']);
+            $flashType = ($actionOk && !$syncFailed) ? 'success' : 'error';
             if (DashboardHttp::wantsJson()) {
-                DashboardHttp::json($result['ok'], $flash, ['reload' => $result['ok']]);
+                DashboardHttp::json($actionOk && !$syncFailed, $flash, ['reload' => $actionOk]);
             }
         } else {
             $nextStatus = trim((string) ($_POST['next_status'] ?? ''));

@@ -8,8 +8,13 @@ use Portal\Database;
 use PDO;
 
 /**
- * Portal-side stock holds: pending/confirmed orders reduce sellable quantity
- * until the order is completed (synced to Amine) or cancelled.
+ * Portal-side stock holds for orders Ameen is not already holding.
+ *
+ * Pending and confirmed orders reduce sellable quantity while amine_sync_status
+ * is not synced and amine_bill_guid is empty. A successful reservation sync
+ * stores the bill guid, so this hold is released and Ameen qty is the only
+ * deduction. A failed update keeps the previous bill guid and therefore does
+ * not put the whole order back into the portal hold.
  */
 final class StockReservationService
 {
@@ -31,6 +36,15 @@ final class StockReservationService
         }
 
         return self::$hasActiveItemStatus ? " AND oi.status = 'active'" : '';
+    }
+
+    /**
+     * Orders whose quantity is still held only in the portal.
+     * Synced bills, and any order that already has an Ameen bill guid, are excluded.
+     */
+    public static function portalHoldFilter(string $orderAlias = 'o'): string
+    {
+        return AmineReservationSyncService::portalHoldFilter($orderAlias);
     }
 
     /** @param array<string, mixed> $material */
@@ -67,7 +81,7 @@ final class StockReservationService
                        COALESCE(SUM(oi.quantity * oi.pcs_per_box), 0)::float8 AS reserved_primary
                 FROM order_items oi
                 INNER JOIN orders o ON o.id = oi.order_id
-                WHERE o.status IN ('pending', 'confirmed')" . self::activeOrderItemsFilter();
+                WHERE " . self::portalHoldFilter('o') . self::activeOrderItemsFilter();
         $params = [];
         if ($materialGuids !== []) {
             $placeholders = [];

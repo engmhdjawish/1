@@ -33,7 +33,7 @@ ob_start();
 ?>
 <section class="bg-white border rounded-xl p-5 mb-4">
   <h1 class="text-xl font-bold mb-2">طابور مزامنة الأمين</h1>
-  <p class="text-sm text-gray-600">قائمة الطلبات غير المرحّلة أو التي فشلت مزامنتها.</p>
+  <p class="text-sm text-gray-600">قائمة الطلبات غير المرحّلة أو التي فشلت مزامنتها. هذه الصفحة تعرض الطابور فقط ولا ترسل الفواتير بنفسها. المزامنة التلقائية تُضبط من الإعدادات ← فاتورة الحجز، والمزامنة اليدوية تتم من صفحة الطلبات عبر «مزامنة الآن».</p>
 </section>
 
 <section class="bg-white border rounded-xl p-4 mb-4">
@@ -63,6 +63,7 @@ ob_start();
             <th class="text-right p-3">الحالة</th>
             <th class="text-right p-3">حالة المزامنة</th>
             <th class="text-right p-3">آخر تحديث</th>
+            <th class="text-left p-3">الطلب</th>
           </tr>
         </thead>
         <tbody>
@@ -73,6 +74,9 @@ ob_start();
               <td class="p-3"><?= h((string) ($row['status'] ?? '')) ?></td>
               <td class="p-3"><?= h($syncLabels[(string) ($row['amine_sync_status'] ?? '')] ?? (string) ($row['amine_sync_status'] ?? '')) ?></td>
               <td class="p-3 text-xs text-gray-500"><?= h((string) ($row['updated_at'] ?? '')) ?></td>
+              <td class="p-3 text-left">
+                <a class="text-primary font-bold" href="/dashboard/orders.php?details=<?= h(rawurlencode((string) ($row['id'] ?? ''))) ?>&amp;sync=<?= h(rawurlencode((string) ($row['amine_sync_status'] ?? 'pending'))) ?>">فتح الطلب</a>
+              </td>
             </tr>
           <?php endforeach; ?>
         </tbody>
