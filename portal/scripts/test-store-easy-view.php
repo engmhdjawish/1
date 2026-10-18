@@ -67,13 +67,13 @@ $fixtureProducts = [[
     'original_unit_sale_price_sp' => 0,
 ]];
 
-$render = static function (array $products, bool $showPrice = true) use ($fixtureProducts): string {
+$render = static function (array $products, bool $showPrice = true, int $totalPages = 1) use ($fixtureProducts): string {
     $catalog = [
         'products' => $products,
-        'totalCount' => count($products),
+        'totalCount' => $totalPages > 1 ? 60 : count($products),
         'page' => 1,
         'pageSize' => 24,
-        'totalPages' => 1,
+        'totalPages' => $totalPages,
         'rangeStart' => $products === [] ? 0 : 1,
         'rangeEnd' => count($products),
         'resultFilters' => [
@@ -135,6 +135,7 @@ $render = static function (array $products, bool $showPrice = true) use ($fixtur
 $html = $render($fixtureProducts);
 $empty = $render([]);
 $locked = $render($fixtureProducts, false);
+$paged = $render($fixtureProducts, true, 3);
 
 $assert('smart search sits first', str_contains($html, 'data-hl-surface="lab"') && strpos($html, 'hl-search-panel') < strpos($html, 'se-shelf'));
 $assert('one search field', substr_count($html, 'data-hl-search-input') === 1 && !str_contains($html, 'id="store-search-q"') && !str_contains($html, 'store-mobile-search'));
@@ -142,8 +143,12 @@ $assert('category tiles with all tile', str_contains($html, 'تسوّق حسب �
 $assert('active category tile is marked', (bool) preg_match('/class="se-tile is-active"[^>]*aria-current="true"[^>]*>\s*<span[^>]*>man<\/span>\s*<span class="se-tile__label">رجالي/u', $html));
 $assert('tile links stay on the trial store', str_contains($html, 'href="/store-lab.php?q=') && !str_contains($html, 'href="/store.php?'));
 $assert('tile facet is not repeated as a pill', !str_contains($html, 'name="ageCategories[]" value="نسائي"') && str_contains($html, 'type="hidden" name="ageCategories[]" value="رجالي"'));
-$assert('filter pills render', str_contains($html, 'data-se-pill') && str_contains($html, '>النوع<') && str_contains($html, '>القياس<') && str_contains($html, '>الشركة<'));
-$assert('selected size is checked and counted', (bool) preg_match('/name="sizeRanges\[\]" value="40-45" checked/u', $html) && str_contains($html, 'se-pill__count'));
+$assert('filter pills render', str_contains($html, 'data-se-pill') && str_contains($html, 'data-se-param="materialTypes"') && str_contains($html, '>النوع<') && str_contains($html, '>الشركة<') && str_contains($html, 'data-se-apply'));
+$assert('sizes are one-tap chips, not a pill', str_contains($html, 'class="se-sizes"') && !str_contains($html, 'data-se-param="sizeRanges"') && !str_contains($html, 'type="checkbox" name="sizeRanges[]"'));
+$assert('sizes sort naturally and mark the active one', strpos($html, '>36-39<') < strpos($html, '>40-45<') && (bool) preg_match('/class="se-size is-active"\s+aria-pressed="true"\s*>40-45</u', $html));
+$assert('tapping an active size removes it', (bool) preg_match('/href="([^"]+)"\s+class="se-size is-active"/u', $html, $activeSize) && !str_contains(html_entity_decode($activeSize[1]), '40-45'));
+$assert('tapping another size adds it', (bool) preg_match('/href="([^"]+)"\s+class="se-size"\s/u', $html, $otherSize) && str_contains(html_entity_decode(urldecode($otherSize[1])), '36-39') && str_contains(html_entity_decode(urldecode($otherSize[1])), '40-45'));
+$assert('form keeps the chosen size', str_contains($html, 'type="hidden" name="sizeRanges[]" value="40-45"'));
 $assert('availability toggle and sort select', str_contains($html, 'name="isAvailable" value="1"') && str_contains($html, '<select name="sort"') && str_contains($html, 'السعر من الأعلى ل.س'));
 $assert('chips remove filters', str_contains($html, 'class="se-chip"') && str_contains($html, 'مسح الكل') && str_contains($html, 'إزالة 40-45'));
 $assert('no old sidebar or mobile filter drawer', !str_contains($html, 'store-filters-sidebar') && !str_contains($html, 'store-filters-open-btn') && !str_contains($html, 'تصفية النتائج'));
@@ -155,6 +160,10 @@ $assert('result count line', str_contains($html, '<strong>3</strong> مادة'))
 $assert('guest price lock remains', str_contains($locked, 'store-price-veil'));
 $assert('no hint copy', !str_contains($html, 'جرّب') && !str_contains($html, 'اكتب') && !str_contains($html, 'اختر ') && !str_contains($html, 'ضيّق'));
 $assert('empty state is short with clear all', str_contains($empty, 'لا توجد مواد مطابقة') && str_contains($empty, 'se-empty') && !str_contains($empty, 'store-product-grid'));
+$assert('results sit in one live region', substr_count($html, 'data-se-live') === 1 && str_contains($html, 'data-se-total="3"') && strpos($html, 'data-hl-search-input') < strpos($html, 'data-se-live'));
+$assert('view switch and back to top', str_contains($html, 'data-se-density-set="2"') && str_contains($html, 'data-se-top'));
+$assert('no load more on a single page', !str_contains($html, 'data-se-more') && str_contains($html, 'data-se-next=""'));
+$assert('load more on paged results', str_contains($paged, 'data-se-more-btn') && str_contains($paged, 'عرض المزيد') && str_contains($paged, 'data-se-next="/store-lab.php?') && str_contains($paged, 'page=2') && str_contains($paged, 'store-pagination'));
 $assert('assets wired', str_contains($html, '/assets/store-easy.js') && str_contains($html, '/assets/home-lab.js'));
 
 $icons = [

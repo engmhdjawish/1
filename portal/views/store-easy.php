@@ -167,6 +167,7 @@ $facetOptions = static function (string $param, array $selected) use ($resultFil
 };
 
 $pillFacets = [];
+$quickSizes = [];
 foreach ($facetLabels as $param => $label) {
     if ($param === $tileParam || !$isClientFilterVisible($param)) {
         continue;
@@ -174,6 +175,26 @@ foreach ($facetLabels as $param => $label) {
     $options = $facetOptions($param, $selectedFacets[$param]);
     if ($options === []) {
         continue;
+    }
+    if ($param === 'sizeRanges') {
+        uksort($options, static fn ($a, $b): int => strnatcasecmp((string) $a, (string) $b));
+        if (count($options) <= 30) {
+            foreach ($options as $value => $count) {
+                $value = (string) $value;
+                $isOn = in_array($value, $selectedFacets[$param], true);
+                $next = $stateParams;
+                $nextValues = $isOn
+                    ? array_values(array_diff($selectedFacets[$param], [$value]))
+                    : array_merge($selectedFacets[$param], [$value]);
+                if ($nextValues === []) {
+                    unset($next[$param]);
+                } else {
+                    $next[$param] = $nextValues;
+                }
+                $quickSizes[] = ['value' => $value, 'count' => $count, 'active' => $isOn, 'href' => store_lab_url($next)];
+            }
+            continue;
+        }
     }
     $pillFacets[$param] = ['label' => $label, 'icon' => $facetIcons[$param], 'options' => $options];
 }
@@ -233,6 +254,9 @@ if ($tileParam !== null && ($selectedFacets[$tileParam] ?? []) !== []) {
 if ($hasImageValue !== '') {
     $hiddenFormParams['hasImage'] = $hasImageValue;
 }
+if ($quickSizes !== [] && $selectedFacets['sizeRanges'] !== []) {
+    $hiddenFormParams['sizeRanges'] = $selectedFacets['sizeRanges'];
+}
 
 $page = max(1, (int) ($catalog['page'] ?? 1));
 $totalPages = max(1, (int) ($catalog['totalPages'] ?? 1));
@@ -262,6 +286,14 @@ $baseDisplayOptions = $displayOptions;
 <div class="se store-lab">
   <?php require __DIR__ . '/partials/store-lab-search.php'; ?>
 
+  <div
+    class="se-live"
+    data-se-live
+    data-se-total="<?= $totalCount ?>"
+    data-se-shown="<?= (int) ($catalog['rangeEnd'] ?? count($products)) ?>"
+    data-se-next="<?= $page < $totalPages ? h($buildStoreUrl($page + 1)) : '' ?>"
+  >
+
   <?php if ($sectionContext !== null): ?>
     <section class="se-section-banner">
       <div>
@@ -277,7 +309,7 @@ $baseDisplayOptions = $displayOptions;
 
   <?php require __DIR__ . '/partials/shop-by-tiles.php'; ?>
 
-  <?php if ($pillFacets !== [] || $showAvailabilityToggle || $sortOptions !== []): ?>
+  <?php if ($pillFacets !== [] || $quickSizes !== [] || $showAvailabilityToggle || $sortOptions !== []): ?>
     <form class="se-bar" action="/store-lab.php" method="get" data-se-bar>
       <?php foreach ($hiddenFormParams as $key => $value): ?>
         <?php if (is_array($value)): ?>
@@ -296,7 +328,7 @@ $baseDisplayOptions = $displayOptions;
             $selectedCount = count($selected);
             $popId = 'se-pop-' . $param;
           ?>
-          <details class="se-pill<?= $selectedCount > 0 ? ' is-active' : '' ?>" data-se-pill>
+          <details class="se-pill<?= $selectedCount > 0 ? ' is-active' : '' ?>" data-se-pill data-se-param="<?= h($param) ?>">
             <summary class="se-pill__summary">
               <span class="material-symbols-outlined se-pill__icon" aria-hidden="true"><?= h($pill['icon']) ?></span>
               <span class="se-pill__label"><?= h($pill['label']) ?></span>
@@ -329,7 +361,7 @@ $baseDisplayOptions = $displayOptions;
                 <?php endforeach; ?>
               </div>
               <div class="se-pop__foot">
-                <button type="submit" class="se-btn se-btn--primary">عرض النتائج</button>
+                <button type="submit" class="se-btn se-btn--primary" data-se-apply>عرض النتائج</button>
                 <?php if ($selectedCount > 0): ?>
                   <a href="<?= h($urlWithout($param)) ?>" class="se-btn se-btn--ghost">مسح</a>
                 <?php endif; ?>
@@ -358,6 +390,23 @@ $baseDisplayOptions = $displayOptions;
           </label>
         <?php endif; ?>
       </div>
+      <?php if ($quickSizes !== []): ?>
+        <div class="se-sizes" aria-label="القياس">
+          <span class="se-sizes__label">
+            <span class="material-symbols-outlined" aria-hidden="true">straighten</span>
+            القياس
+          </span>
+          <div class="se-sizes__row">
+            <?php foreach ($quickSizes as $size): ?>
+              <a
+                href="<?= h($size['href']) ?>"
+                class="se-size<?= $size['active'] ? ' is-active' : '' ?>"
+                aria-pressed="<?= $size['active'] ? 'true' : 'false' ?>"
+              ><?= h($size['value']) ?></a>
+            <?php endforeach; ?>
+          </div>
+        </div>
+      <?php endif; ?>
       <noscript><button type="submit" class="se-btn se-btn--primary">عرض النتائج</button></noscript>
     </form>
   <?php endif; ?>
@@ -397,6 +446,16 @@ $baseDisplayOptions = $displayOptions;
         <?php if (count($chips) > 1): ?>
           <a href="<?= h($clearAllUrl) ?>" class="se-chip se-chip--clear">مسح الكل</a>
         <?php endif; ?>
+      </div>
+    <?php endif; ?>
+    <?php if ($products !== []): ?>
+      <div class="se-density" role="group" aria-label="طريقة العرض" data-se-density hidden>
+        <button type="button" data-se-density-set="1" aria-label="صورة كبيرة">
+          <span class="material-symbols-outlined" aria-hidden="true">view_agenda</span>
+        </button>
+        <button type="button" data-se-density-set="2" aria-label="صورتان">
+          <span class="material-symbols-outlined" aria-hidden="true">grid_view</span>
+        </button>
       </div>
     <?php endif; ?>
   </div>
@@ -441,6 +500,7 @@ $baseDisplayOptions = $displayOptions;
   <?php
     $buildUrl = static fn (int $targetPage): string => $buildStoreUrl($targetPage);
     require __DIR__ . '/partials/catalog-pagination.php';
+    $rangeEnd = (int) ($catalog['rangeEnd'] ?? count($products));
     $buildPreviewPageUrl = static function (int $targetPage, string $previewEdge) use ($buildStoreUrl): string {
         $url = $buildStoreUrl($targetPage);
 
@@ -453,6 +513,21 @@ $baseDisplayOptions = $displayOptions;
       'prevPageUrl' => $page > 1 ? $buildPreviewPageUrl($page - 1, 'last') : null,
       'nextPageUrl' => $page < $totalPages ? $buildPreviewPageUrl($page + 1, 'first') : null,
   ], JSON_UNESCAPED_UNICODE) ?></script>
+  <?php if ($page < $totalPages): ?>
+    <div class="se-more" data-se-more hidden>
+      <p class="se-more__meta"><span data-se-more-shown><?= $rangeEnd ?></span> من <?= $totalCount ?></p>
+      <div class="se-more__bar" aria-hidden="true"><span style="width: <?= $totalCount > 0 ? (int) round(min(100, $rangeEnd * 100 / $totalCount)) : 0 ?>%" data-se-more-fill></span></div>
+      <button type="button" class="se-btn se-btn--outline" data-se-more-btn>
+        عرض المزيد
+        <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
+      </button>
+    </div>
+  <?php endif; ?>
+  </div>
+
+  <button type="button" class="se-top" data-se-top aria-label="إلى الأعلى" hidden>
+    <span class="material-symbols-outlined" aria-hidden="true">arrow_upward</span>
+  </button>
 </div>
 
 <?php if (empty($GLOBALS['storeCatalogPreviewRendered'])): ?>
