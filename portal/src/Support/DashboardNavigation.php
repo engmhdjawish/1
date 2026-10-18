@@ -36,6 +36,7 @@ final class DashboardNavigation
         '/dashboard/site-content.php',
         '/dashboard/home-sections.php',
         '/dashboard/home-shop-blocks.php',
+        '/dashboard/store-seasons.php',
         '/dashboard/special-offers.php',
         '/dashboard/price-checker.php',
         '/dashboard/site-media.php',
@@ -333,6 +334,13 @@ final class DashboardNavigation
                     'icon' => 'category',
                     'permission' => 'home_sections.manage',
                     'description' => 'مجموعات الوصول السريع في الرئيسية: الفئة، النوع، الشركة، ودمجها معاً.',
+                ],
+                [
+                    'route' => '/dashboard/store-seasons.php',
+                    'label' => 'مواسم العرض',
+                    'icon' => 'partly_cloudy_day',
+                    'permission' => 'home_sections.manage',
+                    'description' => 'مجموعات الموسم الحالي (صيفي، شتوي، عام) تظهر أولاً في المتجر، مع تبديل تلقائي حسب التاريخ.',
                 ],
                 [
                     'route' => '/dashboard/special-offers.php',
