@@ -101,6 +101,16 @@ $discoverJson = json_encode($discover, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | J
     <?php endif; ?>
   </section>
 
+  <?php
+    $homeTileFacet = store_easy_tile_facet();
+    if ($homeTileFacet !== null) {
+        $shopTilesTitle = $homeTileFacet['title'];
+        $shopTiles = store_easy_tiles($homeTileFacet, [], static fn (array $params): string => store_lab_url($params));
+        $shopTiles[0]['active'] = false;
+        require __DIR__ . '/partials/shop-by-tiles.php';
+    }
+  ?>
+
   <section class="home-hero home-hero--premium" aria-labelledby="hl-hero-title">
     <div class="hl-hero-clip" aria-hidden="true">
       <div class="home-hero__glow home-hero__glow--left"></div>
