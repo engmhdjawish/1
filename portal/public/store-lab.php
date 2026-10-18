@@ -74,9 +74,9 @@ try {
 
 $storeLabMode = true;
 $enableOnboarding = false;
-$extraHead = '<link href="' . h(portal_asset_url('/css/store-filters.css')) . '" rel="stylesheet">'
-    . portal_stylesheet('/css/home-lab.css')
-    . portal_stylesheet('/css/store-lab.css');
+$extraHead = portal_stylesheet('/css/home-lab.css')
+    . portal_stylesheet('/css/store-lab.css')
+    . portal_stylesheet('/css/store-easy.css');
 $enableQuickView = true;
 $enableStoreCartJs = true;
 $metaRobots = 'noindex, nofollow';
@@ -84,7 +84,7 @@ $canonicalUrl = portal_canonical_url('/store.php');
 $metaDescription = 'تجربة المتجر';
 
 ob_start();
-require dirname(__DIR__) . '/views/store-catalog.php';
+require dirname(__DIR__) . '/views/store-easy.php';
 $content = ob_get_clean();
 $title = 'تجربة المتجر';
 require dirname(__DIR__) . '/views/layout.php';

@@ -1116,6 +1116,126 @@ function store_lab_section_url(array $section): string
 }
 
 /**
+ * Facet the trial store shows as large tiles: age category first, material type otherwise.
+ *
+ * @param array<string, mixed>|null $catalog
+ * @return array{param: string, title: string, values: list<string>}|null
+ */
+function store_easy_tile_facet(?array $catalog = null): ?array
+{
+    $storeOptions = is_array($catalog['store_options'] ?? null) ? $catalog['store_options'] : null;
+    if ($storeOptions === null) {
+        try {
+            $policy = \Portal\Services\StoreCatalogService::activePolicy();
+        } catch (Throwable) {
+            $policy = null;
+        }
+        if ($policy === null) {
+            return null;
+        }
+        $storeOptions = is_array($policy['store_options'] ?? null)
+            ? $policy['store_options']
+            : \Portal\Services\AccessPolicyService::defaultStoreOptions();
+    }
+    $visible = \Portal\Services\AccessPolicyService::resolvedVisibleClientFilters($storeOptions);
+    $locked = array_map('strval', is_array($catalog['locked_client_filters'] ?? null) ? $catalog['locked_client_filters'] : []);
+
+    try {
+        $globalOptions = \Portal\Services\StoreCatalogService::getCachedFilterOptions();
+    } catch (Throwable) {
+        $globalOptions = [];
+    }
+    $catalogOptions = is_array($catalog['filterOptions'] ?? null) ? $catalog['filterOptions'] : [];
+
+    $candidates = [
+        'ageCategories' => 'تسوّق حسب الفئة',
+        'materialTypes' => 'تسوّق حسب النوع',
+    ];
+    foreach ($candidates as $param => $title) {
+        if (!in_array($param, $visible, true) || in_array($param, $locked, true)) {
+            continue;
+        }
+        $values = [];
+        foreach ([$globalOptions[$param] ?? [], $catalogOptions[$param] ?? []] as $source) {
+            if (!is_array($source)) {
+                continue;
+            }
+            foreach ($source as $value) {
+                $value = trim((string) (is_array($value) ? ($value['value'] ?? '') : $value));
+                if ($value !== '' && !in_array($value, $values, true)) {
+                    $values[] = $value;
+                }
+            }
+            if ($values !== []) {
+                break;
+            }
+        }
+        if (count($values) >= 2) {
+            return ['param' => $param, 'title' => $title, 'values' => array_slice($values, 0, 16)];
+        }
+    }
+
+    return null;
+}
+
+function store_easy_tile_icon(string $label): string
+{
+    $map = [
+        'بنات' => 'girl',
+        'ولاد' => 'boy',
+        'أولاد' => 'boy',
+        'صبيان' => 'boy',
+        'أطفال' => 'child_care',
+        'اطفال' => 'child_care',
+        'بيبي' => 'child_care',
+        'رضع' => 'child_care',
+        'رجال' => 'man',
+        'نسائ' => 'woman',
+        'نساء' => 'woman',
+        'نسوان' => 'woman',
+        'ستات' => 'woman',
+        'شباب' => 'person',
+        'شتوي' => 'ac_unit',
+        'صيفي' => 'sunny',
+        'رياض' => 'sprint',
+        'مدرس' => 'school',
+    ];
+    foreach ($map as $needle => $icon) {
+        if (str_contains($label, $needle)) {
+            return $icon;
+        }
+    }
+
+    return 'category';
+}
+
+/**
+ * @param array{param: string, title: string, values: list<string>} $facet
+ * @param list<string> $selected
+ * @param callable(array<string, mixed>): string $urlFor
+ * @return list<array{label: string, href: string, icon: string, active: bool}>
+ */
+function store_easy_tiles(array $facet, array $selected, callable $urlFor): array
+{
+    $tiles = [[
+        'label' => 'الكل',
+        'href' => $urlFor([]),
+        'icon' => 'apps',
+        'active' => $selected === [],
+    ]];
+    foreach ($facet['values'] as $value) {
+        $tiles[] = [
+            'label' => $value,
+            'href' => $urlFor([$facet['param'] => [$value]]),
+            'icon' => store_easy_tile_icon($value),
+            'active' => count($selected) === 1 && $selected[0] === $value,
+        ];
+    }
+
+    return $tiles;
+}
+
+/**
  * @param list<array<string, mixed>> $products
  * @return array<string, list<array<string, mixed>>>
  */
