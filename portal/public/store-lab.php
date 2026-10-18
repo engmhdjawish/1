@@ -76,7 +76,8 @@ $storeLabMode = true;
 $enableOnboarding = false;
 $extraHead = portal_stylesheet('/css/home-lab.css')
     . portal_stylesheet('/css/store-lab.css')
-    . portal_stylesheet('/css/store-easy.css');
+    . portal_stylesheet('/css/store-easy.css')
+    . portal_stylesheet('/css/lab-access.css');
 $enableQuickView = true;
 $enableStoreCartJs = true;
 $metaRobots = 'noindex, nofollow';

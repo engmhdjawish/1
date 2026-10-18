@@ -524,11 +524,12 @@ $baseDisplayOptions = $displayOptions;
     </div>
   <?php endif; ?>
   </div>
-
-  <button type="button" class="se-top" data-se-top aria-label="إلى الأعلى" hidden>
-    <span class="material-symbols-outlined" aria-hidden="true">arrow_upward</span>
-  </button>
 </div>
+<?php
+  $labDockActive = 'store';
+  $labDockAllowCart = (bool) ($baseDisplayOptions['allow_cart'] ?? false);
+  require __DIR__ . '/partials/lab-dock.php';
+?>
 
 <?php if (empty($GLOBALS['storeCatalogPreviewRendered'])): ?>
   <?php $GLOBALS['storeCatalogPreviewRendered'] = true; ?>

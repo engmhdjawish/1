@@ -90,5 +90,6 @@ foreach (['q', 'page', 'soon', 'storeGuids', 'minWarehouseQuantity', 'maxWarehou
       <?php endforeach; ?>
     </div>
   <?php endif; ?>
+  <?php require __DIR__ . '/lab-recent-searches.php'; ?>
 </section>
 <?= portal_defer_script('/assets/home-lab.js') ?>

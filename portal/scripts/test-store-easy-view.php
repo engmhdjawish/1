@@ -161,7 +161,7 @@ $assert('guest price lock remains', str_contains($locked, 'store-price-veil'));
 $assert('no hint copy', !str_contains($html, 'جرّب') && !str_contains($html, 'اكتب') && !str_contains($html, 'اختر ') && !str_contains($html, 'ضيّق'));
 $assert('empty state is short with clear all', str_contains($empty, 'لا توجد مواد مطابقة') && str_contains($empty, 'se-empty') && !str_contains($empty, 'store-product-grid'));
 $assert('results sit in one live region', substr_count($html, 'data-se-live') === 1 && str_contains($html, 'data-se-total="3"') && strpos($html, 'data-hl-search-input') < strpos($html, 'data-se-live'));
-$assert('view switch and back to top', str_contains($html, 'data-se-density-set="2"') && str_contains($html, 'data-se-top'));
+$assert('view switch', str_contains($html, 'data-se-density-set="2"') && !str_contains($html, 'data-se-top'));
 $assert('no load more on a single page', !str_contains($html, 'data-se-more') && str_contains($html, 'data-se-next=""'));
 $assert('load more on paged results', str_contains($paged, 'data-se-more-btn') && str_contains($paged, 'عرض المزيد') && str_contains($paged, 'data-se-next="/store-lab.php?') && str_contains($paged, 'page=2') && str_contains($paged, 'store-pagination'));
 $assert('assets wired', str_contains($html, '/assets/store-easy.js') && str_contains($html, '/assets/home-lab.js'));

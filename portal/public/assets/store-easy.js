@@ -228,11 +228,6 @@
       return;
     }
 
-    if (target.closest('[data-se-top]')) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-
     pills().forEach((pill) => {
       if (pill.open && !pill.contains(target)) pill.open = false;
     });
@@ -308,27 +303,10 @@
     if (live() && isLabUrl(window.location.href)) navigate(window.location.href, { push: false });
   });
 
-  const initTopButton = () => {
-    const button = document.querySelector('[data-se-top]');
-    if (!(button instanceof HTMLElement)) return;
-    let ticking = false;
-    const sync = () => {
-      ticking = false;
-      button.hidden = window.scrollY < 900;
-    };
-    window.addEventListener('scroll', () => {
-      if (ticking) return;
-      ticking = true;
-      window.requestAnimationFrame(sync);
-    }, { passive: true });
-    sync();
-  };
-
   const init = () => {
     if (!live()) return;
     history.replaceState({ seUrl: window.location.href }, '', window.location.href);
     prepareLive(live());
-    initTopButton();
   };
 
   if (document.readyState === 'loading') {

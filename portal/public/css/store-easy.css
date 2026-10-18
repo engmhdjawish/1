@@ -139,7 +139,8 @@
   box-shadow: 0 8px 22px -18px rgba(15, 23, 42, 0.5);
 }
 
-.se-bar.has-open {
+.se-bar:has(.se-pill[open]),
+html.se-sheet-open .se-bar {
   z-index: 60;
 }
 
@@ -752,28 +753,6 @@
 .se-btn.is-loading {
   opacity: 0.6;
   cursor: progress;
-}
-
-.se-top {
-  position: fixed;
-  bottom: max(1rem, env(safe-area-inset-bottom, 0px));
-  left: 1rem;
-  z-index: 35;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.9rem;
-  height: 2.9rem;
-  border: 0;
-  border-radius: 999px;
-  background: var(--se-ink);
-  color: #fff;
-  box-shadow: 0 10px 24px -10px rgba(15, 23, 42, 0.6);
-  cursor: pointer;
-}
-
-.se-top[hidden] {
-  display: none;
 }
 
 /* Phones: tiles and filters scroll sideways, lists open as a bottom sheet. */
