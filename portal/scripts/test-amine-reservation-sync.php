@@ -188,7 +188,28 @@ $assert(
         && abs($pairs['lines'][0]['packageQuantity'] - 2.0) < 0.0001
         && abs($pairs['lines'][0]['quantity'] - 24.0) < 0.0001
         && abs($pairs['lines'][0]['unitPrice'] - 2.0) < 0.0001
-        && str_contains((string) $pairs['lines'][0]['notes'], 'خصم')
+        && str_contains((string) $pairs['lines'][0]['notes'], 'من 2.5 إلى 2')
+);
+
+$storedAsOne = AmineReservationSyncService::linesForApi([
+    [
+        'material_guid' => $material,
+        'quantity' => 1,
+        'pcs_per_box' => 1,
+        'sale_price_usd' => 24,
+        'original_sale_price_usd' => 30,
+        'status' => 'active',
+    ],
+]);
+$syncSource = (string) file_get_contents(dirname(__DIR__) . '/src/Services/AmineReservationSyncService.php');
+$assert(
+    'packing stored as 1 is sent once and is not multiplied by Unit2Fact in the portal',
+    ($storedAsOne['ok'] ?? false) === true
+        && abs($storedAsOne['lines'][0]['packageQuantity'] - 1.0) < 0.0001
+        && abs($storedAsOne['lines'][0]['quantity'] - 1.0) < 0.0001
+        && abs($storedAsOne['lines'][0]['unitPrice'] - 24.0) < 0.0001
+        && str_contains((string) $storedAsOne['lines'][0]['notes'], 'من 30 إلى 24')
+        && preg_match('/\$pairs\s*=\s*\$packages\s*\*\s*\$pairsPerPackage\s*;/', $syncSource) === 1
 );
 
 $assert(
@@ -215,6 +236,7 @@ $assert(
         && str_contains($holdSql, 'amine_bill_guid IS NULL')
         && str_contains($holdSql, "status IN ('pending', 'confirmed')")
         && str_contains($stockSource, 'self::portalHoldFilter(')
+        && str_contains($stockSource, 'oi.quantity * oi.pcs_per_box')
 );
 
 $orderSource = (string) file_get_contents(dirname(__DIR__) . '/src/Services/OrderService.php');

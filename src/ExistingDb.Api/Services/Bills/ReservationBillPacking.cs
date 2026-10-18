@@ -4,9 +4,15 @@ using System.Text.RegularExpressions;
 namespace ExistingDb.Api.Services.Bills;
 
 /// <summary>
-/// Ameen shows أزواج in Qty, طرود in Qty2, and السعر الإفرادي in Price.
-/// Unity stays 1 so the line is the primary unit (زوج) and the grid does not
-/// divide the pair count back into cartons. The line amount is Qty * Price.
+/// Ameen grid: طرود = Qty2, أزواج = Qty. Unity stays 1.
+/// A manual line that totaled as Qty * Price used Unity = 1, and stock (ms000)
+/// moves by Qty. Sending Unity = التعبئة made أزواج show Qty / Unity, which is
+/// the carton count, so both columns showed 1.
+/// Pairs = cartons × تعبئة. تعبئة is the order packing (quantity / cartons)
+/// when that factor is above 1. When the order packing is missing or 1 and
+/// mt000.Unit2Fact is above 1, Unit2Fact is the carton size. The two factors
+/// are never multiplied together. Pair price is the carton price / تعبئة,
+/// so the line amount stays carton price × cartons.
 /// </summary>
 public static partial class ReservationBillPacking
 {
@@ -19,9 +25,12 @@ public static partial class ReservationBillPacking
             sentPacking = 1d;
         }
 
-        // Unit2Fact is التعبئة. A stored 1 on the order is not a real carton size.
-        // A missing or 1 factor on the material keeps the pairs the order already sent.
-        var packing = double.IsFinite(materialPacking) && materialPacking > 1d
+        // A stored order packing above 1 is pcs_per_box. Keep it, including when
+        // it differs from Unit2Fact. Only a missing or 1 factor is replaced.
+        var orderPackingMissing = sentPacking <= 1d + ReservationBillGuard.QuantityTolerance;
+        var packing = orderPackingMissing
+            && double.IsFinite(materialPacking)
+            && materialPacking > 1d
             ? materialPacking
             : sentPacking;
         var pairs = cartons * packing;

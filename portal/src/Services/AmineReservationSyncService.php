@@ -195,6 +195,8 @@ final class AmineReservationSyncService
 
         $guid = trim((string) ($item['material_guid'] ?? ''));
         $packages = (float) ($item['quantity'] ?? 0);
+        // Cartons × the order's pcs_per_box only. When that factor is 1, the API
+        // substitutes mt000.Unit2Fact. Do not multiply by Unit2Fact here as well.
         $pairsPerPackage = max(1, (int) ($item['pcs_per_box'] ?? $item['packaging'] ?? 1));
         if ($guid === '' || $packages <= 0) {
             return null;

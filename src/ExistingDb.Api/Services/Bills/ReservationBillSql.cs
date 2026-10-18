@@ -533,6 +533,10 @@ public static class ReservationBillSql
         return true;
     }
 
+    /// <summary>
+    /// @Qty is pairs and is what prcBill_Post1 posts to ms000. @Qty2 is cartons.
+    /// @Unity stays 1 so the أزواج column is Qty, not Qty divided by التعبئة.
+    /// </summary>
     private static string LineCalls(int lineCount)
     {
         var calls = new string[lineCount];

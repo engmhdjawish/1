@@ -374,6 +374,7 @@ public sealed class ReservationBillService(
             var line = draft.Lines[index];
             var prefix = ReservationBillSql.LineParameterPrefix(index);
             var packages = line.PackageQuantity > 0d ? line.PackageQuantity : line.Quantity;
+            // Qty = pairs (stock and أزواج). Qty2 = cartons (طرود). Unity is 1 in the SQL.
             AddFloat(command, prefix + "Number", index);
             AddFloat(command, prefix + "Qty", line.Quantity);
             AddFloat(command, prefix + "Qty2", packages);

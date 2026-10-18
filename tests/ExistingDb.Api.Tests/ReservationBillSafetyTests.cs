@@ -461,6 +461,9 @@ public sealed class ReservationBillSafetyTests
         Assert.True(unpost >= 0 && unpost < lines && lines < post);
         Assert.DoesNotContain("#", script);
         Assert.Contains("@Order = @OrderSentinel", script);
+        Assert.Contains("@Unity = 1", script);
+        Assert.Contains("@Qty = @p0_Qty", script);
+        Assert.Contains("@Qty2 = @p0_Qty2", script);
     }
 
     [Fact]
@@ -636,6 +639,19 @@ public sealed class ReservationBillSafetyTests
     }
 
     [Fact]
+    public void Packing_scales_every_carton_by_unit2fact_once()
+    {
+        var line = new ReservationBillLine(Material, 3d, 24d, 3d);
+
+        var applied = ReservationBillPacking.Apply(line, 12d);
+
+        Assert.Equal(3d, applied.PackageQuantity);
+        Assert.Equal(36d, applied.Quantity);
+        Assert.Equal(2d, applied.UnitPrice);
+        Assert.Equal(72d, applied.Quantity * applied.UnitPrice);
+    }
+
+    [Fact]
     public void Packing_keeps_pairs_that_already_match_the_material_factor()
     {
         var line = new ReservationBillLine(Material, 24d, 2d, 2d, "خصم: سعر الزوج من 2.5 إلى 2");
@@ -660,6 +676,21 @@ public sealed class ReservationBillSafetyTests
         Assert.Equal(10d, applied.Quantity);
         Assert.Equal(3d, applied.UnitPrice);
         Assert.Equal(30d, applied.Quantity * applied.UnitPrice);
+    }
+
+    [Fact]
+    public void Packing_keeps_a_stored_order_factor_and_does_not_multiply_by_unit2fact()
+    {
+        var line = new ReservationBillLine(Material, 20d, 2.4d, 2d, "خصم: سعر الزوج من 3 إلى 2.4");
+
+        var applied = ReservationBillPacking.Apply(line, 12d);
+
+        Assert.Equal(2d, applied.PackageQuantity);
+        Assert.Equal(20d, applied.Quantity);
+        Assert.Equal(2.4d, applied.UnitPrice);
+        Assert.Equal(48d, applied.Quantity * applied.UnitPrice);
+        Assert.Equal("خصم: سعر الزوج من 3 إلى 2.4", applied.Notes);
+        Assert.NotEqual(240d, applied.Quantity);
     }
 
     private static ReservationBillLine Line(Guid materialGuid, double quantity) =>
