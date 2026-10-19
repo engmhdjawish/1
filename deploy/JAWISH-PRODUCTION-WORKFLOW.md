@@ -86,7 +86,9 @@ sudo tail -n 30 /var/log/nginx/error.log
 |--------|-----------|
 | `curl` localhost بطيء/timeout | PHP-FPM مشبع أو طلبات عالقة — `systemctl restart php8.5-fpm` |
 | **502 Bad Gateway** (nginx) | غالباً **مسار socket خاطئ** (`php8.2-fpm.sock` بينما السيرفر `php8.5-fpm`) أو FPM متوقف — `bash deploy/scripts/diagnose-502-gateway.sh` |
-| **HTTP 301** + **HTTPS 502** | certbot فصل **`listen 80`** (إعادة توجيه فقط) عن **`listen 443`** بدون `location ~ \.php$` — انظر أدناه |
+| **HTTP 301** + **HTTPS 502** | certbot فصل **`listen 80`** (إعادة توجيه فقط) عن **`listen 443`** بدون `location ~ \.php$` — [502 على HTTPS فقط](#502-على-https-فقط-http-يعيد-301) |
+| `curl` سريع لكن الزوار لا يرون الموقع | DNS، firewall، SSL، أو شبكة خارجية |
+| CLI diagnostic `critical` على API | سيرفر الأمين `82.137.204.70:9090` — ليس إصلاح Portal وحده |
 
 ### 502 على HTTPS فقط (HTTP يعيد 301)
 
@@ -123,8 +125,6 @@ sudo bash /opt/jawish/deploy/scripts/audit-nginx-https-php.sh
 sudo nginx -t && sudo systemctl reload nginx
 curl -sSk -o /dev/null -w '%{http_code}\n' -H "Host: jawishco.sy" https://127.0.0.1/index.php
 ```
-| `curl` سريع لكن الزوار لا يرون الموقع | DNS، firewall، SSL، أو شبكة خارجية |
-| CLI diagnostic `critical` على API | سيرفر الأمين `82.137.204.70:9090` — ليس إصلاح Portal وحده |
 
 (اختياري) cron كل 5 دقائق يحفظ آخر JSON للمراجعة بعد انقطاع:
 
