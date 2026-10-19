@@ -71,7 +71,12 @@ php scripts/diagnose-portal.php
 فحص سريع أن الويب حي من **داخل السيرفر**:
 
 ```bash
-curl -sS -o /dev/null -w "HTTP %{http_code} in %{time_total}s\n" http://127.0.0.1/
+# 127.0.0.1/ بدون Host غالباً 404 — هذا ليس موقع البوابة (server_name = النطاق)
+WEB_DOMAIN="$(grep -Rh 'server_name' /etc/nginx/sites-enabled/ | grep -v _ | head -1 | awk '{print $2}' | tr -d ';')"
+curl -sS -o /dev/null -w "HTTP %{http_code}\n" -H "Host: $WEB_DOMAIN" http://127.0.0.1/index.php
+curl -sSk -o /dev/null -w "HTTPS %{http_code}\n" -H "Host: $WEB_DOMAIN" https://127.0.0.1/index.php
+grep -Rn fastcgi_pass /etc/nginx/sites-enabled/
+bash /opt/jawish/deploy/scripts/diagnose-502-gateway.sh
 sudo systemctl status nginx php8.5-fpm --no-pager
 sudo tail -n 30 /var/log/nginx/error.log
 ```
