@@ -267,6 +267,7 @@ ls /var/www/jawish-portal/storage/material-images 2>/dev/null | wc -l
 | `openssl` / `gd` مفقود | فعّل الامتدادات في `php.ini` |
 | API لا يبدأ | راجع سلاسل الاتصال و`Jwt:SigningKey` (32+ حرف) |
 | 403 على storage | صلاحيات مجلد `storage` للمستخدم الذي يشغّل PHP |
+| **502 Bad Gateway** (nginx) | تحقق من `php8.5-fpm` و`fastcgi_pass` — `bash deploy/scripts/diagnose-502-gateway.sh` على السيرفر؛ قالب nginx يستخدم `PHP_FPM_SOCK` (افتراضي `/run/php/php8.5-fpm.sock`) |
 
 ---
 

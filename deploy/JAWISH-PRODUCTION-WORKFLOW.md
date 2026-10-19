@@ -79,6 +79,7 @@ sudo tail -n 30 /var/log/nginx/error.log
 | العرض | ماذا تفعل |
 |--------|-----------|
 | `curl` localhost بطيء/timeout | PHP-FPM مشبع أو طلبات عالقة — `systemctl restart php8.5-fpm` |
+| **502 Bad Gateway** (nginx) | غالباً **مسار socket خاطئ** (`php8.2-fpm.sock` بينما السيرفر `php8.5-fpm`) أو FPM متوقف — `bash deploy/scripts/diagnose-502-gateway.sh` |
 | `curl` سريع لكن الزوار لا يرون الموقع | DNS، firewall، SSL، أو شبكة خارجية |
 | CLI diagnostic `critical` على API | سيرفر الأمين `82.137.204.70:9090` — ليس إصلاح Portal وحده |
 
