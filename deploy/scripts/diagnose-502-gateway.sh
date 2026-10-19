@@ -122,6 +122,12 @@ fi
 echo ""
 step "Recent nginx upstream errors"
 if [[ -r "$NGINX_ERROR_LOG" ]]; then
+  if grep -q 'failed (11: Resource temporarily unavailable)' "$NGINX_ERROR_LOG" 2>/dev/null; then
+    fail "PHP-FPM pool saturated (errno 11) — not a wrong socket path"
+    warn "Run: sudo systemctl restart $PHP_FPM_UNIT"
+    warn "Then: sudo bash deploy/scripts/tune-php-fpm-jawish.sh"
+    warn "Audit: bash deploy/scripts/diagnose-fpm-saturation.sh"
+  fi
   grep -E 'connect\(\) to unix:|upstream prematurely closed|recv\(\) failed|Primary script unknown' "$NGINX_ERROR_LOG" 2>/dev/null | tail -n 12 || ok "No matching lines in error log"
 else
   warn "Run: sudo tail -n 40 $NGINX_ERROR_LOG"

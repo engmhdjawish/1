@@ -85,7 +85,8 @@ sudo tail -n 30 /var/log/nginx/error.log
 | العرض | ماذا تفعل |
 |--------|-----------|
 | `curl` localhost بطيء/timeout | PHP-FPM مشبع أو طلبات عالقة — `systemctl restart php8.5-fpm` |
-| **502 Bad Gateway** (nginx) | غالباً **مسار socket خاطئ** (`php8.2-fpm.sock` بينما السيرفر `php8.5-fpm`) أو FPM متوقف — `bash deploy/scripts/diagnose-502-gateway.sh` |
+| **502 Bad Gateway** (nginx) | راجع **`error.log`**: `(11: Resource temporarily unavailable)` = **PHP-FPM مشبع** (كل الـ workers مشغولون) — `bash deploy/scripts/diagnose-fpm-saturation.sh` ثم `sudo bash deploy/scripts/tune-php-fpm-jawish.sh`؛ وإلا socket/FPM متوقف — `diagnose-502-gateway.sh` |
+| **conflicting server name** في `nginx -t` | ملف `.bak` أو vhost مكرر في `sites-enabled/` — انقله إلى `/etc/nginx/disabled/` |
 | **HTTP 301** + **HTTPS 502** | certbot فصل **`listen 80`** (إعادة توجيه فقط) عن **`listen 443`** بدون `location ~ \.php$` — [502 على HTTPS فقط](#502-على-https-فقط-http-يعيد-301) |
 | `curl` سريع لكن الزوار لا يرون الموقع | DNS، firewall، SSL، أو شبكة خارجية |
 | CLI diagnostic `critical` على API | سيرفر الأمين `82.137.204.70:9090` — ليس إصلاح Portal وحده |
