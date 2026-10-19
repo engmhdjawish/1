@@ -86,6 +86,43 @@ sudo tail -n 30 /var/log/nginx/error.log
 |--------|-----------|
 | `curl` localhost بطيء/timeout | PHP-FPM مشبع أو طلبات عالقة — `systemctl restart php8.5-fpm` |
 | **502 Bad Gateway** (nginx) | غالباً **مسار socket خاطئ** (`php8.2-fpm.sock` بينما السيرفر `php8.5-fpm`) أو FPM متوقف — `bash deploy/scripts/diagnose-502-gateway.sh` |
+| **HTTP 301** + **HTTPS 502** | certbot فصل **`listen 80`** (إعادة توجيه فقط) عن **`listen 443`** بدون `location ~ \.php$` — انظر أدناه |
+
+### 502 على HTTPS فقط (HTTP يعيد 301)
+
+الاختبار:
+
+```bash
+HOST=jawishco.sy
+curl -sS -o /dev/null -w 'HTTP %{http_code}\n' -H "Host: $HOST" http://127.0.0.1/index.php   # غالباً 301
+curl -sSk -o /dev/null -w 'HTTPS %{http_code}\n' -H "Host: $HOST" https://127.0.0.1/index.php  # 502 = كتلة SSL ناقصة
+sudo bash /opt/jawish/deploy/scripts/audit-nginx-https-php.sh
+```
+
+**الإصلاح:** افتح `/etc/nginx/sites-enabled/jawish-portal` — في **`server { listen 443 ssl; ... }`** أضف نفس إعدادات البوابة (أو انسخها من كتلة 80):
+
+```nginx
+    root /var/www/jawish-portal/public;
+    index index.php index.html;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/run/php/php8.5-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+```
+
+(مع `ssl_certificate` / `ssl_certificate_key` كما هي.) ثم:
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+curl -sSk -o /dev/null -w '%{http_code}\n' -H "Host: jawishco.sy" https://127.0.0.1/index.php
+```
 | `curl` سريع لكن الزوار لا يرون الموقع | DNS، firewall، SSL، أو شبكة خارجية |
 | CLI diagnostic `critical` على API | سيرفر الأمين `82.137.204.70:9090` — ليس إصلاح Portal وحده |
 
