@@ -20,11 +20,23 @@ WEB_DOMAIN="${WEB_DOMAIN:-}"
 step "502 triage — Portal at $PORTAL_PUBLISH_DIR"
 
 if [[ -z "$WEB_DOMAIN" && -d /etc/nginx/sites-enabled ]]; then
+  # Do NOT grep -v '_' on the whole line — that drops every server_name _; and yields empty Host.
   WEB_DOMAIN="$(grep -Rh '^\s*server_name\s' /etc/nginx/sites-enabled/ 2>/dev/null \
-    | grep -v '_' \
+    | grep -vE 'server_name\s+_;' \
+    | grep -vE 'server_name\s+localhost\s*;' \
     | head -n 1 \
     | sed -E 's/.*server_name\s+([^;]+);.*/\1/' \
     | awk '{print $1}' || true)"
+fi
+
+if [[ -d /etc/nginx/sites-enabled ]]; then
+  shopt -s nullglob
+  bak_files=(/etc/nginx/sites-enabled/*.bak* /etc/nginx/sites-enabled/*~)
+  if [[ ${#bak_files[@]} -gt 0 ]]; then
+    warn "Backup configs in sites-enabled load twice and break vhosts — move them out:"
+    printf '  %s\n' "${bak_files[@]}"
+    warn "Example: sudo mkdir -p /etc/nginx/disabled && sudo mv /etc/nginx/sites-enabled/*.bak* /etc/nginx/disabled/"
+  fi
 fi
 if [[ -n "$WEB_DOMAIN" ]]; then
   ok "Testing vhost Host: $WEB_DOMAIN (curl to 127.0.0.1 without Host often returns 404 — that is normal)"

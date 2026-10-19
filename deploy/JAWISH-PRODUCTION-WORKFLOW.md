@@ -72,7 +72,8 @@ php scripts/diagnose-portal.php
 
 ```bash
 # 127.0.0.1/ بدون Host غالباً 404 — هذا ليس موقع البوابة (server_name = النطاق)
-WEB_DOMAIN="$(grep -Rh 'server_name' /etc/nginx/sites-enabled/ | grep -v _ | head -1 | awk '{print $2}' | tr -d ';')"
+WEB_DOMAIN="$(grep server_name /etc/nginx/sites-enabled/jawish-portal 2>/dev/null | grep -vE 'server_name\s+_;' | head -1 | awk '{print $2}' | tr -d ';')"
+# لا تستخدم grep -v '_' على السطر كاملاً — يُفرّغ WEB_DOMAIN ويصبح curl Host فارغ → HTTP 400
 curl -sS -o /dev/null -w "HTTP %{http_code}\n" -H "Host: $WEB_DOMAIN" http://127.0.0.1/index.php
 curl -sSk -o /dev/null -w "HTTPS %{http_code}\n" -H "Host: $WEB_DOMAIN" https://127.0.0.1/index.php
 grep -Rn fastcgi_pass /etc/nginx/sites-enabled/
