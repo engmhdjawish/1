@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#D81921">
+  <title>لا يوجد اتصال</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+      background: #f6f6f8; color: #111827; padding: 1.5rem;
+    }
+    .card {
+      width: 100%; max-width: 22rem; text-align: center; background: #fff;
+      border: 1px solid #e5e7eb; border-radius: 1.25rem; padding: 2rem 1.5rem;
+    }
+    .card img { width: 64px; height: 64px; border-radius: 16px; }
+    h1 { font-size: 1.2rem; margin: 1rem 0 0.4rem; }
+    p { margin: 0 0 1.25rem; color: #4b5563; font-size: 0.95rem; line-height: 1.6; }
+    button {
+      width: 100%; min-height: 3rem; border: 0; border-radius: 0.85rem;
+      background: #D81921; color: #fff; font: inherit; font-weight: 700; font-size: 1rem; cursor: pointer;
+    }
+    button:active { transform: translateY(1px); }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <img src="/icons/icon-192.png" alt="" width="64" height="64">
+    <h1>لا يوجد اتصال بالإنترنت</h1>
+    <p>تحقق من الشبكة ثم أعد المحاولة. سلتك محفوظة.</p>
+    <button type="button" id="retry">إعادة المحاولة</button>
+  </main>
+  <script>
+    (function () {
+      var retry = function () { window.location.reload(); };
+      document.getElementById('retry').addEventListener('click', retry);
+      window.addEventListener('online', retry);
+    })();
+  </script>
+</body>
+</html>

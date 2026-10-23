@@ -100,8 +100,9 @@ $isNavActive = static function (string $href) use ($requestPath): bool {
           <span class="site-header__divider" aria-hidden="true"></span>
           <button
             type="button"
-            class="site-header__icon-btn"
+            class="site-header__icon-btn hidden"
             data-pwa-open
+            hidden
             title="تثبيت التطبيق"
             aria-label="تثبيت التطبيق"
           >

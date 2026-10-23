@@ -10,7 +10,16 @@
   const POLL_MS = document.body?.classList.contains('dashboard-app') ? 12_000 : 20_000;
   const ICON_URL = '/icons/brand-icon.php?size=192';
   const CONSENT_DISMISS_KEY = 'jawish_site_consent_dismissed_at';
-  const CONSENT_DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
+  const CONSENT_DISMISS_MS = 30 * 24 * 60 * 60 * 1000;
+  const CONSENT_VISITS_KEY = 'jawish_site_consent_visits';
+  const CONSENT_MIN_VISITS = 3;
+  const CONSENT_DELAY_MS = 10_000;
+  // Never interrupt someone who is placing an order or signing in.
+  const CONSENT_QUIET_PATHS = [
+    '/store-cart.php', '/cart.php', '/checkout.php', '/order-confirmation.php',
+    '/login.php', '/customer-login.php', '/staff-login.php', '/register.php',
+    '/track-order.php', '/install.php', '/pwa-check.php', '/guide.php',
+  ];
   const announcedAt = new Map();
   let pushSubscribed = false;
 
@@ -554,8 +563,24 @@
     });
   }
 
+  function countConsentVisit() {
+    try {
+      const next = (Number(window.localStorage.getItem(CONSENT_VISITS_KEY)) || 0) + 1;
+      window.localStorage.setItem(CONSENT_VISITS_KEY, String(next));
+      return next;
+    } catch {
+      return 0;
+    }
+  }
+
   function isConsentAudience() {
     if (!document.body || document.body.classList.contains('dashboard-app')) {
+      return false;
+    }
+    if (CONSENT_QUIET_PATHS.includes(window.location.pathname)) {
+      return false;
+    }
+    if (window.PortalPwa?.isInAppBrowser?.()) {
       return false;
     }
     const reader = String(document.body.dataset.notifReader || 'guest').trim();
@@ -731,6 +756,13 @@
     if (!isConsentAudience() || consentDismissedRecently()) {
       return;
     }
+    if (countConsentVisit() < CONSENT_MIN_VISITS) {
+      return;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, CONSENT_DELAY_MS));
+    if (document.hidden || document.body.classList.contains('pwa-modal-open')) {
+      return;
+    }
 
     const pushNeeded = !(await isPushFullyEnabled()) && (await isPushServerSupported());
     const pwaNeeded = shouldPromptPwaInstall();
@@ -738,7 +770,7 @@
       return;
     }
 
-    window.setTimeout(renderSiteConsentBanner, 1500);
+    renderSiteConsentBanner();
   }
 
   if ('serviceWorker' in navigator) {

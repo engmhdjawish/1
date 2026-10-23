@@ -1,18 +1,17 @@
 /**
- * Jawish store PWA — cache static assets, network-first for pages.
+ * Jawish store PWA.
+ * Pages: network-first with navigation preload, offline page when the network is gone.
+ * Versioned static assets (?v=mtime): cache-first. Unversioned: stale-while-revalidate.
+ * Prices and stock are never served from cache.
  */
-const CACHE_VERSION = 'jawish-v14';
+const CACHE_VERSION = 'jawish-v15';
 const STATIC_CACHE = CACHE_VERSION + '-static';
+const FONT_CACHE = 'jawish-fonts-v1';
+const OFFLINE_URL = '/offline.html';
+const STATIC_MAX_ENTRIES = 120;
 
 const PRECACHE_URLS = [
-  '/favicon.ico',
-  '/icons/app-icon.svg',
-  '/css/site-app.min.css',
-  '/css/home-page.css',
-  '/assets/public-nav.js',
-  '/assets/store-pref.js',
-  '/assets/site-analytics.js',
-  '/assets/pwa.js',
+  OFFLINE_URL,
   '/icons/icon-192.png',
   '/icons/icon-512.png',
 ];
@@ -27,28 +26,37 @@ const NO_CACHE_PREFIXES = [
   '/register.php',
   '/cart.php',
   '/manifest.php',
+  '/media/',
+  '/share-image.php',
 ];
+
+const STATIC_EXT = /\.(?:css|js|mjs|png|jpe?g|webp|gif|svg|ico|woff2?|ttf)$/i;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(STATIC_CACHE).then((cache) =>
       Promise.all(
-        PRECACHE_URLS.map((url) => cache.add(url).catch(() => undefined))
+        PRECACHE_URLS.map((url) => cache.add(new Request(url, { cache: 'reload' })).catch(() => undefined))
       )
     ).then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key.startsWith('jawish-') && key !== STATIC_CACHE)
-          .map((key) => caches.delete(key))
-      )
-    ).then(() => self.clients.claim())
-  );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter((key) => key.startsWith('jawish-') && key !== STATIC_CACHE && key !== FONT_CACHE)
+        .map((key) => caches.delete(key))
+    );
+    if (self.registration.navigationPreload) {
+      try {
+        await self.registration.navigationPreload.enable();
+      } catch (_) {}
+    }
+    await self.clients.claim();
+  })());
 });
 
 function parsePushPayload(event) {
@@ -156,18 +164,64 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-function shouldBypassCache(url) {
-  if (url.origin !== self.location.origin) {
-    return true;
+async function trimCache(cacheName, maxEntries) {
+  const cache = await caches.open(cacheName);
+  const keys = await cache.keys();
+  if (keys.length <= maxEntries) {
+    return;
   }
-  const path = url.pathname;
-  if (NO_CACHE_PREFIXES.some((prefix) => path.startsWith(prefix))) {
-    return true;
+  await Promise.all(keys.slice(0, keys.length - maxEntries).map((key) => cache.delete(key)));
+}
+
+function isCacheable(response) {
+  return response && response.status === 200 && (response.type === 'basic' || response.type === 'cors');
+}
+
+async function putInCache(cacheName, request, response) {
+  if (!isCacheable(response)) {
+    return;
   }
-  if (path.includes('image.php') || path.includes('/media/')) {
-    return true;
+  const cache = await caches.open(cacheName);
+  await cache.put(request, response);
+  if (cacheName === STATIC_CACHE) {
+    trimCache(STATIC_CACHE, STATIC_MAX_ENTRIES);
   }
-  return false;
+}
+
+async function handleNavigation(event) {
+  try {
+    const preloaded = await event.preloadResponse;
+    if (preloaded) {
+      return preloaded;
+    }
+    return await fetch(event.request);
+  } catch (_) {
+    const offline = await caches.match(OFFLINE_URL);
+    return offline || Response.error();
+  }
+}
+
+async function cacheFirst(event, cacheName) {
+  const cached = await caches.match(event.request);
+  if (cached) {
+    return cached;
+  }
+  const response = await fetch(event.request);
+  event.waitUntil(putInCache(cacheName, event.request, response.clone()));
+  return response;
+}
+
+async function staleWhileRevalidate(event, cacheName) {
+  const cached = await caches.match(event.request);
+  const network = fetch(event.request).then((response) => {
+    event.waitUntil(putInCache(cacheName, event.request, response.clone()));
+    return response;
+  });
+  if (cached) {
+    event.waitUntil(network.catch(() => undefined));
+    return cached;
+  }
+  return network;
 }
 
 self.addEventListener('fetch', (event) => {
@@ -175,34 +229,35 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') {
     return;
   }
-
   const url = new URL(request.url);
-  if (shouldBypassCache(url)) {
+
+  if (url.hostname === 'fonts.gstatic.com') {
+    event.respondWith(cacheFirst(event, FONT_CACHE));
+    return;
+  }
+  if (url.hostname === 'fonts.googleapis.com') {
+    event.respondWith(staleWhileRevalidate(event, FONT_CACHE));
+    return;
+  }
+  if (url.origin !== self.location.origin) {
     return;
   }
 
-  if (request.mode === 'navigate' || url.pathname.endsWith('.php')) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => response)
-        .catch(() => caches.match('/index.php').then((cached) => cached || Response.error()))
-    );
+  if (request.mode === 'navigate') {
+    event.respondWith(handleNavigation(event));
+    return;
+  }
+
+  if (NO_CACHE_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) {
+    return;
+  }
+  if (url.pathname.endsWith('.php') || !STATIC_EXT.test(url.pathname)) {
     return;
   }
 
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
-      return fetch(request).then((response) => {
-        if (!response || response.status !== 200 || response.type === 'opaque') {
-          return response;
-        }
-        const copy = response.clone();
-        caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
-        return response;
-      });
-    })
+    url.searchParams.has('v')
+      ? cacheFirst(event, STATIC_CACHE)
+      : staleWhileRevalidate(event, STATIC_CACHE)
   );
 });
