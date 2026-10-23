@@ -20,8 +20,15 @@ $dockCartPackages = (float) ($dockCartPackages ?? 0);
 $dockOfferHref = (string) ($dockOfferHref ?? '');
 try {
     $dockCustomer = \Portal\Auth\CustomerSession::check();
+    $dockSignedIn = \Portal\Auth\CustomerSession::isLoggedIn();
 } catch (Throwable) {
     $dockCustomer = false;
+    $dockSignedIn = false;
+}
+try {
+    $dockStaff = !$dockSignedIn && \Portal\Auth\WebSession::check();
+} catch (Throwable) {
+    $dockStaff = false;
 }
 $dockWhatsapp = preg_replace('/\D+/', '', (string) (PortalSettingsService::companySettings()['company_whatsapp'] ?? '')) ?? '';
 
@@ -74,12 +81,26 @@ foreach ($dockItems as $dockKey) {
             $entry['attr'] = 'target="_blank" rel="noopener"';
             break;
         case 'orders':
+            if ($dockStaff) {
+                if (!\Portal\Auth\WebSession::hasPermission('orders.view')) {
+                    continue 2;
+                }
+                $entry['href'] = '/dashboard/orders.php';
+                $entry['label'] = 'الطلبات';
+                break;
+            }
             $entry['href'] = $dockCustomer ? '/my-orders.php' : '/track-order.php';
             $entry['label'] = $dockCustomer ? 'طلباتي' : 'تتبّع طلب';
             break;
         case 'account':
-            $entry['href'] = $dockCustomer ? '/account.php' : portal_login_url('customer');
-            $entry['label'] = $dockCustomer ? 'حسابي' : 'دخول';
+            if ($dockSignedIn || $dockStaff) {
+                $entry['label'] = 'حسابي';
+                $entry['icon'] = $dockStaff ? 'badge' : 'storefront';
+                $entry['attr'] = 'data-site-account-open aria-haspopup="menu" aria-controls="siteAccountMenu" aria-expanded="false"';
+                break;
+            }
+            $entry['href'] = portal_login_url('customer');
+            $entry['label'] = 'دخول';
             break;
     }
     $dockEntries[] = $entry;

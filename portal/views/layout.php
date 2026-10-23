@@ -56,7 +56,20 @@ if (isset($storeCartBootstrap) && is_array($storeCartBootstrap)) {
 $enableQuickView = (bool) ($enableQuickView ?? $isCatalogPage);
 $deferStoreCartJs = (bool) ($deferStoreCartJs ?? false);
 $enableStoreCartJs = (bool) ($enableStoreCartJs ?? ($storeAllowCart && !$isLightPage && !$deferStoreCartJs));
-$enableOnboarding = (bool) ($enableOnboarding ?? !$isLightPage);
+$siteTour = (string) ($siteTour ?? '');
+$enableOnboarding = $siteTour !== '' || (bool) ($enableOnboarding ?? !$isLightPage);
+if ($enableOnboarding && $siteTour === '') {
+    $siteTour = 'site';
+}
+if (!isset($siteTagline)) {
+    try {
+        $siteLayoutGeneral = \Portal\Services\HomeLayoutService::config()['general'] ?? [];
+        $siteTagline = !empty($siteLayoutGeneral['brand']) ? (string) ($siteLayoutGeneral['tagline'] ?? '') : '';
+    } catch (Throwable) {
+        $siteTagline = '';
+    }
+}
+$headerShowCurrency = $storeShowPrice && empty($hideHeaderCurrency);
 $enableSiteAnalytics = (bool) ($enableSiteAnalytics ?? true);
 
 $metaDescription = portal_seo_description($pagePath, $siteName, $metaDescription ?? null, $companyContext);
