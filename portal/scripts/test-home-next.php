@@ -118,7 +118,7 @@ $assert('single search to the trial store', substr_count($html, 'name="q"') === 
 $assert('voice button hidden until supported', (bool) preg_match('/data-hn-voice[^>]*hidden/u', $html));
 $assert('stories: all sections, season, offer ring, categories', $pos('hn-story--all') < $pos('hn-story--season') && $pos('hn-story--season') < $pos('hn-story hn-story--hot') && substr_count($html, 'data-hn-story=') === 12);
 $assert('stories hint that more can be scrolled', str_contains($html, 'data-hn-scroller') && str_contains($html, 'data-hn-scroller-next'));
-$assert('company name and currency switcher are visible', str_contains($html, '<p class="hn-brand__name">جاويش</p>') && str_contains($html, 'hn-brand__currency') && substr_count($html, 'data-store-currency=') === 2);
+$assert('no duplicate brand row: name, tagline and currency live in the site header', !str_contains($html, 'hn-brand') && !str_contains($html, 'data-store-currency='));
 $assert('offer spotlight with badge and countdown', str_contains($html, '>خصم 15%<') && str_contains($html, 'data-hn-countdown="') && str_contains($html, 'ينتهي خلال يوم واحد') && str_contains($html, 'تسوّق العرض'));
 $assert('step picker with three steps and no server count', substr_count($html, 'data-hn-guide-step=') === 3 && str_contains($html, '>لمن؟<') && str_contains($html, 'data-hn-guide-show') && !str_contains($html, 'store-count') && !str_contains($html, 'data-count-url'));
 $assert('picker options are toggle buttons, not links', substr_count($html, '<button type="button" class="hn-guide__option" aria-pressed="false"') === 8 + 2 + 3 && !preg_match('/<a[^>]+data-hn-guide-value/u', $html));

@@ -137,7 +137,7 @@ $empty = $render([]);
 $locked = $render($fixtureProducts, false);
 $paged = $render($fixtureProducts, true, 3);
 
-$assert('smart search sits first', str_contains($html, 'data-hl-surface="lab"') && strpos($html, 'hl-search-panel') < strpos($html, 'se-shelf'));
+$assert('home search box sits first', str_contains($html, 'data-hn-search') && str_contains($html, 'data-store-search') && str_contains($html, 'hn-search__go') && strpos($html, 'se-search') < strpos($html, 'se-shelf'));
 $assert('one search field', substr_count($html, 'data-hl-search-input') === 1 && !str_contains($html, 'id="store-search-q"') && !str_contains($html, 'store-mobile-search'));
 $assert('category tiles with all tile', str_contains($html, 'تسوّق حسب الفئة') && str_contains($html, '>الكل<') && str_contains($html, 'نسائي') && str_contains($html, 'بناتي'));
 $assert('active category tile is marked', (bool) preg_match('/class="se-tile is-active"[^>]*aria-current="true"[^>]*>\s*<span[^>]*>man<\/span>\s*<span class="se-tile__label">رجالي/u', $html));
@@ -164,7 +164,7 @@ $assert('results sit in one live region', substr_count($html, 'data-se-live') ==
 $assert('view switch', str_contains($html, 'data-se-density-set="2"') && !str_contains($html, 'data-se-top'));
 $assert('no load more on a single page', !str_contains($html, 'data-se-more') && str_contains($html, 'data-se-next=""'));
 $assert('load more on paged results', str_contains($paged, 'data-se-more-btn') && str_contains($paged, 'عرض المزيد') && str_contains($paged, 'data-se-next="/store-lab.php?') && str_contains($paged, 'page=2') && str_contains($paged, 'store-pagination'));
-$assert('assets wired', str_contains($html, '/assets/store-easy.js') && str_contains($html, '/assets/home-lab.js'));
+$assert('assets wired', str_contains($html, '/assets/store-easy.js') && str_contains($html, '/assets/hn-search.js') && !str_contains($html, '/assets/home-lab.js'));
 
 $icons = [
     'رجالي' => 'man', 'نسائي' => 'woman', 'ولادي' => 'boy', 'بناتي' => 'girl', 'أطفال' => 'child_care', 'أخرى' => 'category',
