@@ -17,9 +17,9 @@ $companyLogoUrl = PortalSettingsService::companyLogoUrl($companyContext);
 $siteName = trim((string) ($companyContext['company_name'] ?? '')) ?: 'جاويش للتجارة';
 $whatsapp = preg_replace('/\D+/', '', (string) ($companyContext['company_whatsapp'] ?? '')) ?? '';
 
-$guideHomeUrl = '/home-next.php';
-$guideStoreUrl = '/store-lab.php';
-$guideCartUrl = '/store-cart.php';
+$guideHomeUrl = '/home-next.php?tour=1';
+$guideStoreUrl = '/store-lab.php?tour=1';
+$guideCartUrl = '/store-cart.php?tour=1';
 
 /**
  * @var list<array{id: string, icon: string, title: string, lead: string, link: array{0: string, 1: string}|null,
@@ -31,7 +31,7 @@ $chapters = [
         'icon' => 'home',
         'title' => 'الصفحة الرئيسية',
         'lead' => 'نقطة البداية: ابحث مباشرة، أو ادخل من قسم، أو اختر خطوة بخطوة.',
-        'link' => [$guideHomeUrl, 'افتح الرئيسية'],
+        'link' => [$guideHomeUrl, 'ابدأ الجولة التفاعلية'],
         'steps' => [
             ['icon' => 'search', 'title' => 'البحث', 'text' => 'اكتب اسم المادة أو الشركة أو الرمز في مربع البحث أعلى الصفحة. تظهر النتائج أثناء الكتابة مقسومة إلى مواد وأقسام وشركات، واضغط أي نتيجة لفتحها. زر الميكروفون للبحث بالصوت إن كان جهازك يدعمه.'],
             ['icon' => 'radio_button_checked', 'title' => 'الدوائر السريعة', 'text' => 'الشريط الدائري تحت البحث يفتح الموسم الحالي والعروض والأقسام والفئات (رجالي، نسائي، ولادي…) بلمسة واحدة. اسحب يميناً ويساراً لرؤية المزيد.'],
@@ -46,7 +46,7 @@ $chapters = [
         'icon' => 'storefront',
         'title' => 'المتجر',
         'lead' => 'كل المواد في مكان واحد، مع فلاتر وترتيب وصور كبيرة.',
-        'link' => [$guideStoreUrl, 'افتح المتجر'],
+        'link' => [$guideStoreUrl, 'ابدأ الجولة التفاعلية'],
         'steps' => [
             ['icon' => 'search', 'title' => 'مربع بحث واحد', 'text' => 'ابحث بالاسم أو الرمز أو اسم الشركة. البحث يعمل مع الفلاتر المختارة.'],
             ['icon' => 'filter_alt', 'title' => 'الفلاتر', 'text' => 'اختر النوع والشركة والقياس والفئة من الشريط أعلى القائمة. لإلغاء فلتر اضغط عليه مرة ثانية.'],
@@ -61,7 +61,7 @@ $chapters = [
         'icon' => 'shopping_cart',
         'title' => 'السلة وإرسال الطلب',
         'lead' => 'راجع الطرود والمجموع ثم أرسل الطلب مرة واحدة.',
-        'link' => [$guideCartUrl, 'افتح السلة'],
+        'link' => [$guideCartUrl, 'ابدأ الجولة التفاعلية'],
         'steps' => [
             ['icon' => 'add_shopping_cart', 'title' => 'الإضافة', 'text' => 'أضف المواد من بطاقاتها أو من صفحة المادة. الرقم على أيقونة السلة يعرض مجموع الطرود.'],
             ['icon' => 'edit', 'title' => 'تعديل الكميات', 'text' => 'في السلة غيّر عدد الطرود بزر + و − أو احذف الصنف. المجموع يتحدّث فوراً.'],
@@ -100,7 +100,7 @@ ob_start();
   <header class="guide__hero">
     <span class="guide__hero-icon material-symbols-outlined" aria-hidden="true">menu_book</span>
     <h1>دليل استخدام <?= h($siteName) ?></h1>
-    <p>كيف تبحث، تتصفح، وترسل طلب الجملة.</p>
+    <p>اختر صفحة وابدأ جولة تفاعلية: نضيء كل زر على الصفحة نفسها ونشرح وظيفته. تبدأ الجولة تلقائياً في أول زيارة، ويمكنك إعادتها من زر «؟» أعلى الصفحة.</p>
   </header>
 
   <nav class="guide__toc" aria-label="أقسام الدليل">
@@ -125,6 +125,16 @@ ob_start();
           <p><?= h($chapter['lead']) ?></p>
         </div>
       </div>
+      <?php if ($chapter['link'] !== null): ?>
+      <ul class="guide__tour-stops" aria-label="محطات الجولة">
+        <?php foreach ($chapter['steps'] as $step): ?>
+          <li>
+            <span class="material-symbols-outlined" aria-hidden="true"><?= h($step['icon']) ?></span>
+            <?= h($step['title']) ?>
+          </li>
+        <?php endforeach; ?>
+      </ul>
+      <?php else: ?>
       <ol class="guide__steps">
         <?php foreach ($chapter['steps'] as $step): ?>
           <li class="guide__step">
@@ -136,8 +146,10 @@ ob_start();
           </li>
         <?php endforeach; ?>
       </ol>
+      <?php endif; ?>
       <?php if ($chapter['link'] !== null): ?>
         <a class="guide__cta" href="<?= h($chapter['link'][0]) ?>">
+          <span class="material-symbols-outlined" aria-hidden="true">tour</span>
           <?= h($chapter['link'][1]) ?>
           <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
         </a>

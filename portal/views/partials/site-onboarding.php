@@ -14,6 +14,7 @@ $storeShowPrice = (bool) ($storeShowPrice ?? false);
 $customer = $customer ?? null;
 $staffLoggedIn = (bool) ($staffLoggedIn ?? false);
 $onboardingAuth = $customer !== null ? 'customer' : ($staffLoggedIn ? 'staff' : 'guest');
+$onboardingDisplay = is_array($storeDisplay ?? null) ? $storeDisplay : [];
 ?>
 <div
   id="siteOnboarding"
@@ -24,6 +25,9 @@ $onboardingAuth = $customer !== null ? 'customer' : ($staffLoggedIn ? 'staff' : 
   data-auth="<?= h($onboardingAuth) ?>"
   data-cart="<?= $storeAllowCart ? '1' : '0' ?>"
   data-currency="<?= $storeShowPrice ? '1' : '0' ?>"
+  data-tour="<?= h((string) ($siteTour ?? 'site')) ?>"
+  data-price="<?= !empty($onboardingDisplay['show_price']) ? '1' : '0' ?>"
+  data-order="<?= !empty($onboardingDisplay['allow_order']) ? '1' : '0' ?>"
 >
   <div class="site-guide__spotlight" id="siteGuideSpotlight" aria-hidden="true">
     <span class="site-guide__pulse" aria-hidden="true"></span>
@@ -47,7 +51,7 @@ $onboardingAuth = $customer !== null ? 'customer' : ($staffLoggedIn ? 'staff' : 
       <p class="site-guide__text" id="siteGuideStepText"></p>
     </div>
     <div class="site-guide__tooltip-foot">
-      <button type="button" class="site-guide__skip" id="siteGuideSkip">تخطّي الدليل</button>
+      <button type="button" class="site-guide__skip" id="siteGuideSkip">إنهاء الجولة</button>
       <div class="site-guide__actions">
         <button type="button" class="site-guide__btn site-guide__btn--ghost" id="siteGuidePrev">السابق</button>
         <button type="button" class="site-guide__btn site-guide__btn--primary" id="siteGuideNext">التالي</button>

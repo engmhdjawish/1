@@ -55,5 +55,6 @@ ob_start();
 require dirname(__DIR__) . '/views/store-cart.php';
 $content = ob_get_clean();
 $title = 'سلة المتجر';
+$siteTour = 'cart';
 $extraHead = '';
 require dirname(__DIR__) . '/views/layout.php';

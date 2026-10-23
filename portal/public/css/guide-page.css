@@ -216,3 +216,30 @@
   color: var(--guide-muted);
   line-height: 1.65;
 }
+
+.guide__tour-stops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0.25rem 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.guide__tour-stops li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.guide__tour-stops .material-symbols-outlined {
+  font-size: 1rem;
+  color: #d81921;
+}
