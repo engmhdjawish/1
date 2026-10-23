@@ -173,8 +173,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'company_logo' => $savedLogoUrl,
                     'about_us_title_ar' => trim((string) ($_POST['about_us_title_ar'] ?? '')),
                     'about_us_ar' => trim((string) ($_POST['about_us_ar'] ?? '')),
-                    'material_images_dir' => (string) ($currentCompany['material_images_dir'] ?? ''),
-                    'material_thumbnails_dir' => (string) ($currentCompany['material_thumbnails_dir'] ?? ''),
+                    'share_description_ar' => mb_substr(trim((string) preg_replace('/\s+/u', ' ', (string) ($_POST['share_description_ar'] ?? ''))), 0, 240),
+                    'share_image' => SiteMediaService::logoUrlIsUsable(trim((string) ($_POST['share_image'] ?? '')))
+                        ? trim((string) ($_POST['share_image'] ?? ''))
+                        : '',
                 ], isset($user['id']) ? (string) $user['id'] : null);
 
                 if ($iconWarning === null && $savedLogoUrl !== '') {
@@ -189,6 +191,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     ob_end_clean();
                 }
+
+                \Portal\Services\ShareCardService::clearCache();
 
                 if ($iconWarning !== null && $iconWarning !== '') {
                     $_SESSION['portal_settings_icon_warning'] = $iconWarning;

@@ -58,7 +58,7 @@ $content = ob_get_clean();
 $title = 'الرئيسية الجديدة';
 $metaRobots = 'noindex, nofollow';
 $canonicalUrl = portal_canonical_url('/index.php');
-$metaDescription = 'نسخة تجريبية لتصميم جديد للصفحة الرئيسية. الصفحة المعتمدة لم تتغيّر.';
+$metaDescription = null;
 $enableOnboarding = false;
 $extraHead = portal_stylesheet('/css/home-page.css')
     . portal_stylesheet('/css/store-lab.css')

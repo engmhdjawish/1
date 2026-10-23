@@ -59,14 +59,17 @@ $enableStoreCartJs = (bool) ($enableStoreCartJs ?? ($storeAllowCart && !$isLight
 $enableOnboarding = (bool) ($enableOnboarding ?? !$isLightPage);
 $enableSiteAnalytics = (bool) ($enableSiteAnalytics ?? true);
 
-$metaDescription = portal_seo_description($pagePath, $siteName, $metaDescription ?? null);
+$metaDescription = portal_seo_description($pagePath, $siteName, $metaDescription ?? null, $companyContext);
 $canonicalUrl = portal_canonical_url($canonicalUrl ?? null);
 $ogTitle = trim((string) ($ogTitle ?? $title . ' — ' . $siteName));
 $ogImage = trim((string) ($ogImage ?? ''));
-if ($ogImage === '' && !empty($companyLogoUrl)) {
-    $ogImage = str_starts_with((string) $companyLogoUrl, 'http')
-        ? (string) $companyLogoUrl
-        : portal_absolute_url((string) $companyLogoUrl);
+$ogImageAlt = trim((string) ($ogImageAlt ?? $siteName));
+$ogImageIsCard = $ogImage === '' || str_contains($ogImage, '/share-image.php');
+if ($ogImage === '') {
+    $ogImage = \Portal\Services\ShareCardService::siteCardUrl($companyContext);
+}
+if (!str_starts_with($ogImage, 'http')) {
+    $ogImage = portal_absolute_url($ogImage);
 }
 $jsonLdBlocks = [
     portal_json_ld_organization($siteName, $companyLogoUrl ?? null),
@@ -104,21 +107,26 @@ $navLinks = [
     <meta name="description" content="<?= h($metaDescription) ?>">
     <meta name="robots" content="<?= h((string) ($metaRobots ?? 'index, follow')) ?>">
     <link rel="canonical" href="<?= h($canonicalUrl) ?>">
-    <meta property="og:type" content="website">
+    <meta property="og:type" content="<?= h((string) ($ogType ?? 'website')) ?>">
     <meta property="og:locale" content="ar_SY">
     <meta property="og:site_name" content="<?= h($siteName) ?>">
     <meta property="og:title" content="<?= h($ogTitle) ?>">
     <meta property="og:description" content="<?= h($metaDescription) ?>">
     <meta property="og:url" content="<?= h($canonicalUrl) ?>">
-    <?php if ($ogImage !== ''): ?>
-      <meta property="og:image" content="<?= h($ogImage) ?>">
+    <meta property="og:image" content="<?= h($ogImage) ?>">
+    <?php if (str_starts_with($ogImage, 'https://')): ?>
+      <meta property="og:image:secure_url" content="<?= h($ogImage) ?>">
     <?php endif; ?>
-    <meta name="twitter:card" content="<?= h($ogImage !== '' ? 'summary_large_image' : 'summary') ?>">
+    <?php if ($ogImageIsCard): ?>
+      <meta property="og:image:type" content="image/jpeg">
+      <meta property="og:image:width" content="1200">
+      <meta property="og:image:height" content="630">
+    <?php endif; ?>
+    <meta property="og:image:alt" content="<?= h($ogImageAlt) ?>">
+    <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="<?= h($ogTitle) ?>">
     <meta name="twitter:description" content="<?= h($metaDescription) ?>">
-    <?php if ($ogImage !== ''): ?>
-      <meta name="twitter:image" content="<?= h($ogImage) ?>">
-    <?php endif; ?>
+    <meta name="twitter:image" content="<?= h($ogImage) ?>">
     <script type="application/ld+json"><?= json_encode($jsonLdPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

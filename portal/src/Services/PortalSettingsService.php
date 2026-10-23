@@ -38,6 +38,8 @@ final class PortalSettingsService
             'about_us_ar' => '',
             'material_images_dir' => '',
             'material_thumbnails_dir' => '',
+            'share_description_ar' => '',
+            'share_image' => '',
         ];
 
         foreach ($rows as $row) {
@@ -68,6 +70,8 @@ final class PortalSettingsService
             'about_us_ar',
             'material_images_dir',
             'material_thumbnails_dir',
+            'share_description_ar',
+            'share_image',
         ];
 
         $stmt = Database::pdo()->prepare(
@@ -81,6 +85,9 @@ final class PortalSettingsService
         );
 
         foreach ($allowedKeys as $key) {
+            if (!array_key_exists($key, $values)) {
+                continue;
+            }
             $stmt->execute([
                 'key' => $key,
                 'value_ar' => trim((string) ($values[$key] ?? '')),

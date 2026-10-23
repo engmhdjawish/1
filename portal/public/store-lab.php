@@ -83,7 +83,7 @@ $enableQuickView = true;
 $enableStoreCartJs = true;
 $metaRobots = 'noindex, nofollow';
 $canonicalUrl = portal_canonical_url('/store.php');
-$metaDescription = 'تجربة المتجر';
+$metaDescription = null;
 
 ob_start();
 require dirname(__DIR__) . '/views/store-easy.php';

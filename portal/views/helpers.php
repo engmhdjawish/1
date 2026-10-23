@@ -298,7 +298,7 @@ function portal_manifest_icon(int $size, string $purpose = 'any'): array
     $logoUrl = trim((string) (\Portal\Services\PortalSettingsService::companyLogoUrl() ?? ''));
     if ($logoUrl !== '' || \Portal\Services\CompanyBrandIconService::hasBrandIcons()) {
         return [
-            'src' => \Portal\Services\CompanyBrandIconService::iconPublicUrl($size),
+            'src' => \Portal\Services\CompanyBrandIconService::iconPublicUrl($size, $purpose === 'maskable'),
             'sizes' => $size . 'x' . $size,
             'type' => 'image/png',
             'purpose' => $purpose,
@@ -381,7 +381,50 @@ function portal_canonical_url(?string $override = null): string
     return portal_absolute_url($canonicalPath);
 }
 
-function portal_seo_description(string $pagePath, string $siteName, ?string $override = null): string
+function portal_share_description(array $company, string $siteName): string
+{
+    $custom = trim((string) preg_replace('/\s+/u', ' ', (string) ($company['share_description_ar'] ?? '')));
+    if ($custom !== '') {
+        return $custom;
+    }
+    $siteName = trim($siteName) !== '' ? trim($siteName) : 'جاويش للتجارة';
+
+    return $siteName . ' — بيع بالجملة للتجار والمحلات: تشكيلة واسعة بأسعار الجملة، تصفّح واطلب مباشرة.';
+}
+
+/** Product link preview text: what the trader needs to recognise the item. Never includes prices. */
+function portal_product_share_description(array $product, string $siteName): string
+{
+    $parts = [];
+    foreach (['materialType', 'ageCategory'] as $key) {
+        $value = trim((string) ($product[$key] ?? ''));
+        if ($value !== '' && !in_array($value, $parts, true)) {
+            $parts[] = $value;
+        }
+    }
+    $sizes = trim((string) ($product['sizeRange'] ?? ''));
+    if ($sizes !== '') {
+        $parts[] = 'قياسات ' . $sizes;
+    }
+    $factor = (float) ($product['packageConversionFactor'] ?? 0);
+    $unit = trim((string) ($product['primaryUnit'] ?? ''));
+    $packUnit = trim((string) ($product['packageUnit'] ?? '')) ?: 'الطرد';
+    if ($factor > 1) {
+        $parts[] = $packUnit . ' ' . rtrim(rtrim(number_format($factor, 2, '.', ''), '0'), '.') . ($unit !== '' ? ' ' . $unit : '');
+    }
+    foreach (['manufacturer', 'countryOfOrigin'] as $key) {
+        $value = trim((string) ($product[$key] ?? ''));
+        if ($value !== '') {
+            $parts[] = $value;
+        }
+    }
+    $siteName = trim($siteName) !== '' ? trim($siteName) : 'جاويش للتجارة';
+    $lead = $parts !== [] ? implode(' · ', $parts) . ' — ' : '';
+
+    return $lead . 'بالجملة من ' . $siteName . '. اطلب بالطرد مباشرة من الموقع.';
+}
+
+function portal_seo_description(string $pagePath, string $siteName, ?string $override = null, ?array $company = null): string
 {
     $override = trim((string) $override);
     if ($override !== '') {
@@ -391,18 +434,19 @@ function portal_seo_description(string $pagePath, string $siteName, ?string $ove
     $siteName = trim($siteName) !== '' ? trim($siteName) : 'جاويش للتجارة';
 
     return match ($pagePath) {
-        '/index.php', '/' => 'تسوّق أحذية محلية ومستوردة من ' . $siteName . '. تصفّح التشكيلة، العروض الخاصة، واطلب بسهولة عبر الموقع.',
-        '/store.php' => 'متجر ' . $siteName . ' — تصفّح تشكيلة الأحذية، فلترة حسب النوع والماركة، واطّلع على الأسعار والعروض.',
-        '/store-cart.php', '/cart.php' => 'سلة التسوق في ' . $siteName . '. راجع أصنافك وأكمل طلبك بسهولة.',
-        '/about.php' => 'تعرّف على ' . $siteName . ': من نحن، أعمالنا، والتزامنا بجودة الأحذية وخدمة العملاء.',
+        '/index.php', '/', '/home-next.php' => portal_share_description($company ?? [], $siteName),
+        '/store.php', '/store-lab.php' => 'متجر ' . $siteName . ' للجملة — تصفّح التشكيلة حسب النوع والموسم والماركة واطلب بالطرد مباشرة.',
+        '/store-cart.php', '/cart.php' => 'سلة طلبات الجملة في ' . $siteName . '. راجع أصنافك وأرسل طلبك.',
+        '/about.php' => 'تعرّف على ' . $siteName . ': تجارة الجملة، أعمالنا، وخدمة التجار والمحلات.',
         '/login.php' => 'تسجيل الدخول إلى حسابك في ' . $siteName . ' لمتابعة الطلبات وإدارة ملفك الشخصي.',
         '/customer-login.php' => 'تسجيل دخول العملاء في ' . $siteName . ' لمتابعة الطلبات وإدارة ملفك الشخصي.',
         '/staff-login.php' => 'تسجيل دخول موظفي ' . $siteName . ' إلى لوحة التحكم.',
-        '/register.php' => 'إنشاء حساب جديد في ' . $siteName . ' للتسوق ومتابعة الطلبات بسهولة.',
+        '/register.php' => 'إنشاء حساب تاجر في ' . $siteName . ' لطلب الجملة ومتابعة الطلبات.',
         '/my-orders.php' => 'متابعة طلباتك في ' . $siteName . ' — حالة الطلب، التفاصيل، والتتبع.',
         '/my-profile.php' => 'ملفك الشخصي في ' . $siteName . ' — بيانات الحساب وإعدادات الأمان.',
         '/track-order.php' => 'تتبع طلبك من ' . $siteName . ' باستخدام رمز التتبع.',
-        default => $siteName . ' — بوابة تجارة الأحذية الإلكترونية.',
+        '/guide.php' => 'دليل استخدام ' . $siteName . ': الصفحة الرئيسية، المتجر، والسلة خطوة بخطوة.',
+        default => portal_share_description($company ?? [], $siteName),
     };
 }
 

@@ -218,6 +218,55 @@ $tabUrl = static function (string $key) use ($tab): string {
     </div>
   </article>
 
+  <?php
+    $sharePreviewName = trim((string) ($company['company_name'] ?? '')) ?: 'اسم الشركة';
+    $sharePreviewText = portal_share_description($company, $sharePreviewName);
+    $sharePreviewHost = (string) (parse_url(portal_absolute_url('/'), PHP_URL_HOST) ?: '');
+  ?>
+  <style>
+    .share-preview-card { align-self: start; max-width: 26rem; border-radius: 0.75rem; overflow: hidden; background: #f0f2f5; border: 1px solid #e5e7eb; direction: rtl; }
+    .share-preview-card__image { aspect-ratio: 1200 / 630; background: #fff; }
+    .share-preview-card__image img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .share-preview-card__body { display: grid; gap: 0.2rem; padding: 0.6rem 0.75rem 0.7rem; }
+    .share-preview-card__title { font-size: 0.9rem; color: #111827; }
+    .share-preview-card__text { font-size: 0.78rem; color: #4b5563; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .share-preview-card__host { font-size: 0.72rem; color: #6b7280; direction: ltr; text-align: right; }
+  </style>
+  <article class="bg-white border border-border-subtle rounded-xl p-3" data-share-preview-editor>
+    <h3 class="font-bold text-sm mb-1">معاينة الرابط عند المشاركة (واتساب، تيليغرام، فيسبوك)</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div class="space-y-2">
+        <label class="text-xs block">
+          <span class="text-text-muted block mb-0.5">وصف الموقع في المعاينة</span>
+          <textarea name="share_description_ar" rows="3" maxlength="240" class="w-full rounded-lg border border-border-subtle px-3 py-2 text-sm" placeholder="<?= h(portal_share_description([], $sharePreviewName)) ?>" data-share-preview-input><?= h($company['share_description_ar'] ?? '') ?></textarea>
+        </label>
+        <?php $renderMediaPickerField('صورة المعاينة (يفضّل عرضية 1200×630)', 'share_image', (string) ($company['share_image'] ?? ''), 'settings-share-image', 'banner'); ?>
+        <p class="text-xs text-text-muted">بدون صورة تُعرض بطاقة عرضية فيها الشعار على خلفية بيضاء. روابط المواد تعرض صورة المادة واسمها.</p>
+      </div>
+      <div class="share-preview-card" aria-hidden="true">
+        <div class="share-preview-card__image">
+          <img src="<?= h(\Portal\Services\ShareCardService::siteCardUrl($company)) ?>" alt="" loading="lazy" width="1200" height="630">
+        </div>
+        <div class="share-preview-card__body">
+          <strong class="share-preview-card__title"><?= h($sharePreviewName) ?></strong>
+          <span class="share-preview-card__text" data-share-preview-text data-default="<?= h(portal_share_description([], $sharePreviewName)) ?>"><?= h($sharePreviewText) ?></span>
+          <span class="share-preview-card__host"><?= h($sharePreviewHost) ?></span>
+        </div>
+      </div>
+    </div>
+  </article>
+  <script>
+    (() => {
+      const editor = document.querySelector('[data-share-preview-editor]');
+      const input = editor?.querySelector('[data-share-preview-input]');
+      const text = editor?.querySelector('[data-share-preview-text]');
+      if (!input || !text) return;
+      input.addEventListener('input', () => {
+        text.textContent = input.value.trim() || text.dataset.default || '';
+      });
+    })();
+  </script>
+
   <article class="bg-white border border-border-subtle rounded-xl p-3">
     <h3 class="font-bold text-sm mb-2">محتوى صفحة «من نحن»</h3>
     <div class="grid grid-cols-1 gap-2">

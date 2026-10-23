@@ -20,11 +20,13 @@ $icons = portal_site_icons($logoUrl ?? '');
 header('Content-Type: application/manifest+json; charset=utf-8');
 header('Cache-Control: public, max-age=3600');
 
+$shortcutIcon = [['src' => $icons['manifest_icons'][0]['src'] ?? '/icons/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png']];
+
 echo json_encode([
     'id' => '/?source=pwa',
     'name' => $siteName,
     'short_name' => $shortName,
-    'description' => 'متجر جاويش للتجارة — تصفح المنتجات واطلب بسهولة',
+    'description' => portal_share_description($company, $siteName),
     'start_url' => '/?source=pwa',
     'scope' => '/',
     'display' => 'standalone',
@@ -36,5 +38,11 @@ echo json_encode([
     'background_color' => '#f6f6f8',
     'categories' => ['shopping', 'business'],
     'prefer_related_applications' => false,
+    'launch_handler' => ['client_mode' => ['navigate-existing', 'auto']],
     'icons' => $icons['manifest_icons'],
+    'shortcuts' => [
+        ['name' => 'المتجر', 'url' => '/store.php?source=pwa', 'icons' => $shortcutIcon],
+        ['name' => 'السلة', 'url' => '/store-cart.php?source=pwa', 'icons' => $shortcutIcon],
+        ['name' => 'طلباتي', 'url' => '/my-orders.php?source=pwa', 'icons' => $shortcutIcon],
+    ],
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
