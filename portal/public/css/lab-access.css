@@ -828,6 +828,40 @@
     font-size: 1.45rem;
   }
 
+  button.lab-dock__item {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .lab-dock__icon {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .lab-dock__badge {
+    position: absolute;
+    top: -0.35rem;
+    inset-inline-end: -0.7rem;
+    min-width: 1.2rem;
+    height: 1.2rem;
+    padding: 0 0.3rem;
+    border-radius: 999px;
+    background: var(--lab-red);
+    color: #fff;
+    font-size: 0.68rem;
+    line-height: 1.2rem;
+    text-align: center;
+  }
+
+  .lab-dock__badge.hidden {
+    display: none;
+  }
+
   .lab-dock__item.is-active {
     color: var(--lab-red);
   }

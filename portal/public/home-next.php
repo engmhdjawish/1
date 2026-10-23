@@ -69,6 +69,8 @@ $extraFooter = portal_defer_script('/assets/home-page.js')
     . portal_defer_script('/assets/lab-access.js')
     . portal_defer_script('/assets/home-next.js')
     . portal_defer_script('/assets/product-share.js');
+$appDock = !empty($general['dock']);
+$pageOwnsCurrency = !empty($showCurrency);
 $enableQuickView = false;
 $enableStoreCartJs = false;
 $deferStoreCartJs = $storeCatalogDisplay['allow_cart'] ?? false;

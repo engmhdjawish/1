@@ -646,6 +646,11 @@
     if (event.key === 'Escape') closeSheet();
   });
 
+  if (window.location.hash === '#hn-sections') {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+    openSheet(null);
+  }
+
   /* Larger text */
   const sizeBtn = root.querySelector('[data-hn-text-size]');
   const sizeLabel = root.querySelector('[data-hn-text-size-label]');

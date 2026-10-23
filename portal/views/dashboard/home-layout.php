@@ -53,6 +53,10 @@ $generalLabels = [
     <h2 class="font-bold text-base">ترتيب الصفحة</h2>
     <div class="flex flex-wrap items-center gap-2">
       <button type="submit" form="home-layout-reset" class="<?= $btnLight ?>" <?= $tableReady ? '' : 'disabled' ?>>الافتراضي</button>
+      <button type="submit" name="preview" value="1" formaction="/dashboard/home-layout.php" formtarget="_blank" class="<?= $btnLight ?>">
+        <span class="material-symbols-outlined text-base" aria-hidden="true">visibility</span>
+        معاينة قبل الحفظ
+      </button>
       <button type="submit" data-dashboard-save-btn class="dashboard-btn h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110" <?= $tableReady ? '' : 'disabled' ?>>حفظ</button>
     </div>
   </div>
@@ -77,6 +81,19 @@ $generalLabels = [
         </label>
       <?php endforeach; ?>
     </div>
+    <fieldset class="space-y-1">
+      <legend class="text-xs text-text-muted mb-1">أزرار الشريط السفلي (حتى <?= (int) \Portal\Services\HomeLayoutService::DOCK_MAX ?>)</legend>
+      <div class="flex flex-wrap gap-x-4 gap-y-2" data-home-layout-dock>
+        <?php foreach (\Portal\Services\HomeLayoutService::DOCK_ITEMS as $dockKey => $dockMeta): ?>
+          <label class="flex items-center gap-1.5 text-sm">
+            <input type="checkbox" name="general[dock_items][]" value="<?= h($dockKey) ?>" class="<?= $checkClass ?>" <?= in_array($dockKey, (array) $general['dock_items'], true) ? 'checked' : '' ?>>
+            <span class="material-symbols-outlined text-base text-slate-500" aria-hidden="true"><?= h($dockMeta['icon']) ?></span>
+            <span><?= h($dockMeta['label']) ?></span>
+          </label>
+        <?php endforeach; ?>
+      </div>
+      <p class="text-xs text-text-muted">السلة تظهر فقط عند تفعيل السلة، وواتساب عند وجود رقم، والعروض عند وجود عرض فعّال.</p>
+    </fieldset>
   </article>
 
   <ol class="space-y-2" data-home-layout-list>
@@ -107,6 +124,32 @@ $generalLabels = [
               <span class="material-symbols-outlined text-base" aria-hidden="true">arrow_downward</span>
             </button>
           </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-border-subtle px-3 py-3">
+          <label class="text-xs">
+            <span class="text-text-muted block mb-0.5">الجهاز</span>
+            <select name="device[<?= h($key) ?>]" class="<?= $selectClass ?>">
+              <?php foreach (\Portal\Services\HomeLayoutService::DEVICES as $choice => $choiceLabel): ?>
+                <option value="<?= h($choice) ?>" <?= ($block['device'] ?? 'all') === $choice ? 'selected' : '' ?>><?= h($choiceLabel) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <label class="text-xs">
+            <span class="text-text-muted block mb-0.5">لمن يظهر</span>
+            <select name="audience[<?= h($key) ?>]" class="<?= $selectClass ?>">
+              <?php foreach (\Portal\Services\HomeLayoutService::AUDIENCES as $choice => $choiceLabel): ?>
+                <option value="<?= h($choice) ?>" <?= ($block['audience'] ?? 'all') === $choice ? 'selected' : '' ?>><?= h($choiceLabel) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <label class="text-xs">
+            <span class="text-text-muted block mb-0.5">يظهر من تاريخ</span>
+            <input type="date" name="from[<?= h($key) ?>]" value="<?= h((string) ($block['from'] ?? '')) ?>" class="<?= $inputClass ?>">
+          </label>
+          <label class="text-xs">
+            <span class="text-text-muted block mb-0.5">حتى تاريخ</span>
+            <input type="date" name="to[<?= h($key) ?>]" value="<?= h((string) ($block['to'] ?? '')) ?>" class="<?= $inputClass ?>">
+          </label>
         </div>
         <?php if ($definition['title'] !== '' || $definition['options'] !== []): ?>
           <div class="grid grid-cols-1 md:grid-cols-4 gap-3 border-t border-border-subtle px-3 py-3 bg-slate-50 rounded-b-2xl">

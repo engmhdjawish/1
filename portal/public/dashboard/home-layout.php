@@ -15,6 +15,12 @@ $userId = isset($user['id']) ? (string) $user['id'] : null;
 $flash = null;
 $flashType = 'success';
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['preview'] ?? '') === '1') {
+    HomeLayoutService::storeDraft(HomeLayoutService::fromForm($_POST));
+    header('Location: /home-next.php?layout_preview=1');
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string) ($_POST['action'] ?? ''));
     $result = $action === 'reset'

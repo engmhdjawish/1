@@ -16,6 +16,35 @@ final class HomeLayoutService
 {
     private const CACHE_KEY = 'home_layout_v1';
 
+    public const DEVICES = [
+        'all' => 'كل الأجهزة',
+        'mobile' => 'الموبايل فقط',
+        'desktop' => 'الكمبيوتر فقط',
+    ];
+
+    public const AUDIENCES = [
+        'all' => 'الجميع',
+        'guests' => 'الزوار فقط',
+        'customers' => 'العملاء المسجلون فقط',
+    ];
+
+    /** Bottom bar entries on phones. The bar holds at most DOCK_MAX of them, in this order. */
+    public const DOCK_ITEMS = [
+        'home' => ['label' => 'الرئيسية', 'icon' => 'home'],
+        'sections' => ['label' => 'الأقسام', 'icon' => 'grid_view'],
+        'store' => ['label' => 'المتجر', 'icon' => 'storefront'],
+        'search' => ['label' => 'بحث', 'icon' => 'search'],
+        'offers' => ['label' => 'العروض', 'icon' => 'local_offer'],
+        'cart' => ['label' => 'السلة', 'icon' => 'shopping_cart'],
+        'whatsapp' => ['label' => 'واتساب', 'icon' => 'chat'],
+        'orders' => ['label' => 'طلباتي', 'icon' => 'receipt_long'],
+        'account' => ['label' => 'حسابي', 'icon' => 'person'],
+    ];
+
+    public const DOCK_DEFAULT = ['home', 'sections', 'search', 'cart', 'account'];
+
+    public const DOCK_MAX = 5;
+
     public const SHOWCASE_STYLES = [
         'mosaic' => 'فسيفساء (بطاقة كبيرة وبطاقات أصغر)',
         'cards' => 'بطاقات متساوية',
@@ -125,7 +154,7 @@ final class HomeLayoutService
         ];
     }
 
-    /** @return array{brand: bool, tagline: string, currency: bool, search_placeholder: string, dock: bool} */
+    /** @return array{brand: bool, tagline: string, currency: bool, search_placeholder: string, dock: bool, dock_items: list<string>} */
     public static function generalDefaults(): array
     {
         return [
@@ -134,7 +163,44 @@ final class HomeLayoutService
             'currency' => true,
             'search_placeholder' => 'ابحث عن مادة أو شركة',
             'dock' => true,
+            'dock_items' => self::DOCK_DEFAULT,
         ];
+    }
+
+    /**
+     * @param mixed $raw
+     * @return list<string>
+     */
+    public static function normalizeDockItems(mixed $raw): array
+    {
+        $wanted = is_array($raw) ? array_map('strval', $raw) : self::DOCK_DEFAULT;
+        $items = array_values(array_filter(array_keys(self::DOCK_ITEMS), static fn (string $key): bool => in_array($key, $wanted, true)));
+        $items = array_slice($items, 0, self::DOCK_MAX);
+
+        return count($items) >= 2 ? $items : self::DOCK_DEFAULT;
+    }
+
+    /**
+     * Blocks a visitor should get right now: switched on, for their audience, inside the schedule.
+     * Device targeting is left to CSS so cached HTML works on both phone and desktop.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function visibleBlocks(array $config, bool $isCustomer, ?\DateTimeImmutable $today = null): array
+    {
+        $today ??= new \DateTimeImmutable('today');
+        $day = $today->format('Y-m-d');
+
+        return array_values(array_filter(self::enabledBlocks($config), static function (array $block) use ($isCustomer, $day): bool {
+            $audience = (string) ($block['audience'] ?? 'all');
+            if (($audience === 'guests' && $isCustomer) || ($audience === 'customers' && !$isCustomer)) {
+                return false;
+            }
+            $from = (string) ($block['from'] ?? '');
+            $to = (string) ($block['to'] ?? '');
+
+            return ($from === '' || $day >= $from) && ($to === '' || $day <= $to);
+        }));
     }
 
     /** @return array{general: array<string, mixed>, blocks: list<array<string, mixed>>} */
@@ -198,6 +264,10 @@ final class HomeLayoutService
         $general = [];
         foreach (self::generalDefaults() as $name => $default) {
             $value = $generalRaw[$name] ?? $default;
+            if ($name === 'dock_items') {
+                $general[$name] = self::normalizeDockItems($value);
+                continue;
+            }
             $general[$name] = is_bool($default) ? self::bool($value) : self::text((string) $value, $name === 'tagline' ? 120 : 80);
         }
         if ($general['search_placeholder'] === '') {
@@ -244,11 +314,23 @@ final class HomeLayoutService
             };
         }
 
+        $device = (string) ($raw['device'] ?? 'all');
+        $audience = (string) ($raw['audience'] ?? 'all');
+        $from = self::date($raw['from'] ?? '');
+        $to = self::date($raw['to'] ?? '');
+        if ($from !== '' && $to !== '' && $to < $from) {
+            [$from, $to] = [$to, $from];
+        }
+
         return [
             'key' => $key,
             'on' => array_key_exists('on', $raw) ? self::bool($raw['on']) : true,
             'title' => $title !== '' ? $title : $definition['title'],
             'options' => $options,
+            'device' => isset(self::DEVICES[$device]) ? $device : 'all',
+            'audience' => isset(self::AUDIENCES[$audience]) ? $audience : 'all',
+            'from' => $from,
+            'to' => $to,
         ];
     }
 
@@ -264,6 +346,10 @@ final class HomeLayoutService
         $generalPost = is_array($post['general'] ?? null) ? $post['general'] : [];
         $general = [];
         foreach (self::generalDefaults() as $name => $default) {
+            if ($name === 'dock_items') {
+                $general[$name] = is_array($generalPost[$name] ?? null) ? array_values($generalPost[$name]) : [];
+                continue;
+            }
             $general[$name] = is_bool($default) ? isset($generalPost[$name]) : (string) ($generalPost[$name] ?? '');
         }
         $order = array_values(array_map('strval', (array) ($post['order'] ?? [])));
@@ -282,6 +368,10 @@ final class HomeLayoutService
                 'on' => isset($post['on'][$key]),
                 'title' => (string) ($post['title'][$key] ?? ''),
                 'options' => $options,
+                'device' => (string) ($post['device'][$key] ?? 'all'),
+                'audience' => (string) ($post['audience'][$key] ?? 'all'),
+                'from' => (string) ($post['from'][$key] ?? ''),
+                'to' => (string) ($post['to'][$key] ?? ''),
             ];
         }
 
@@ -348,6 +438,37 @@ final class HomeLayoutService
         return is_array($decoded) ? $decoded : [];
     }
 
+    public const DRAFT_SESSION_KEY = 'home_layout_draft';
+
+    private const DRAFT_TTL_SECONDS = 3600;
+
+    /** Unsaved dashboard edits, kept in the editor's session so only they see the preview. */
+    public static function storeDraft(array $config): void
+    {
+        $_SESSION[self::DRAFT_SESSION_KEY] = ['at' => time(), 'config' => self::normalize($config)];
+    }
+
+    /** @return array{general: array<string, mixed>, blocks: list<array<string, mixed>>}|null */
+    public static function draftForPreview(): ?array
+    {
+        if (($_GET['layout_preview'] ?? '') !== '1') {
+            return null;
+        }
+        try {
+            if (!\Portal\Auth\WebSession::check()) {
+                return null;
+            }
+        } catch (Throwable) {
+            return null;
+        }
+        $draft = $_SESSION[self::DRAFT_SESSION_KEY] ?? null;
+        if (!is_array($draft) || !is_array($draft['config'] ?? null) || time() - (int) ($draft['at'] ?? 0) > self::DRAFT_TTL_SECONDS) {
+            return null;
+        }
+
+        return self::normalize($draft['config']);
+    }
+
     public static function forgetCache(): void
     {
         ResponseCache::forget(self::CACHE_KEY);
@@ -361,6 +482,17 @@ final class HomeLayoutService
         }
 
         return in_array(strtolower(trim((string) $value)), ['1', 'true', 't', 'on', 'yes'], true);
+    }
+
+    private static function date(mixed $value): string
+    {
+        $value = trim((string) $value);
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) !== 1) {
+            return '';
+        }
+        $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+
+        return $parsed !== false && $parsed->format('Y-m-d') === $value ? $value : '';
     }
 
     private static function text(string $value, int $max): string

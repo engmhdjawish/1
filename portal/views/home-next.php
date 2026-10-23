@@ -25,17 +25,21 @@ try {
 } catch (Throwable) {
     $layout = HomeLayoutService::defaults();
 }
-$general = $layout['general'];
-$layoutBlocks = HomeLayoutService::enabledBlocks($layout);
-$blockOn = static fn (string $key): bool => in_array($key, array_column($layoutBlocks, 'key'), true);
-$blockOf = static fn (string $key): array => HomeLayoutService::block($key, $layout) ?? ['key' => $key, 'on' => false, 'title' => '', 'options' => []];
-
-$allowCart = (bool) ($storeCatalogDisplay['allow_cart'] ?? false);
+$layoutPreview = HomeLayoutService::draftForPreview();
+if ($layoutPreview !== null) {
+    $layout = $layoutPreview;
+}
 try {
     $isCustomer = \Portal\Auth\CustomerSession::check();
 } catch (Throwable) {
     $isCustomer = false;
 }
+$general = $layout['general'];
+$layoutBlocks = HomeLayoutService::visibleBlocks($layout, $isCustomer);
+$blockOn = static fn (string $key): bool => in_array($key, array_column($layoutBlocks, 'key'), true);
+$blockOf = static fn (string $key): array => HomeLayoutService::block($key, $layout) ?? ['key' => $key, 'on' => false, 'title' => '', 'options' => []];
+
+$allowCart = (bool) ($storeCatalogDisplay['allow_cart'] ?? false);
 try {
     $cartPackages = $allowCart ? \Portal\Services\StoreCartService::packageCount() : 0.0;
 } catch (Throwable) {
@@ -287,7 +291,8 @@ $shopPages = static function (array $block) use ($pagerNav): void {
   </div>
 
   <?php foreach ($layoutBlocks as $block): ?>
-    <?php $blockKey = $block['key']; $blockTitle = $block['title']; $blockOptions = $block['options']; ?>
+    <?php $blockKey = $block['key']; $blockTitle = $block['title']; $blockOptions = $block['options']; $blockDevice = (string) ($block['device'] ?? 'all'); ?>
+    <?php if ($blockDevice !== 'all'): ?><div class="hn-vis hn-vis--<?= h($blockDevice) ?>"><?php endif; ?>
 
     <?php if ($blockKey === 'stories' && $stories !== []): ?>
       <div class="hn-scroller hn-stories-wrap" data-hn-scroller>
@@ -658,9 +663,14 @@ $shopPages = static function (array $block) use ($pagerNav): void {
             <span class="material-symbols-outlined" aria-hidden="true">text_increase</span>
             <span data-hn-text-size-label>تكبير الخط</span>
           </button>
+          <a class="hn-help__item" href="/guide.php">
+            <span class="material-symbols-outlined" aria-hidden="true">menu_book</span>
+            <span>دليل الاستخدام</span>
+          </a>
         </div>
       </section>
     <?php endif; ?>
+    <?php if ($blockDevice !== 'all'): ?></div><?php endif; ?>
   <?php endforeach; ?>
 </div>
 
@@ -743,31 +753,15 @@ $shopPages = static function (array $block) use ($pagerNav): void {
 </div>
 
 <?php if ($general['dock']): ?>
-  <nav class="hn-dock" aria-label="تنقّل سريع">
-    <a href="/home-next.php" class="hn-dock__item is-active" aria-current="page">
-      <span class="material-symbols-outlined" aria-hidden="true">home</span>
-      <span>الرئيسية</span>
-    </a>
-    <button type="button" class="hn-dock__item" data-hn-sheet-open>
-      <span class="material-symbols-outlined" aria-hidden="true">grid_view</span>
-      <span>الأقسام</span>
-    </button>
-    <button type="button" class="hn-dock__item" data-hn-focus-search>
-      <span class="material-symbols-outlined" aria-hidden="true">search</span>
-      <span>بحث</span>
-    </button>
-    <?php if ($allowCart): ?>
-      <a href="/store-cart.php" class="hn-dock__item">
-        <span class="hn-dock__icon">
-          <span class="material-symbols-outlined" aria-hidden="true">shopping_cart</span>
-          <span class="hn-dock__badge<?= $cartPackages > 0 ? '' : ' hidden' ?>" data-store-cart-badge><?= h(format_packages_display($cartPackages)) ?></span>
-        </span>
-        <span>السلة</span>
-      </a>
-    <?php endif; ?>
-    <a href="<?= h($accountHref) ?>" class="hn-dock__item">
-      <span class="material-symbols-outlined" aria-hidden="true">person</span>
-      <span><?= $isCustomer ? 'حسابي' : 'دخول' ?></span>
-    </a>
-  </nav>
+  <?php
+    $dockContext = 'home';
+    $dockItems = $general['dock_items'];
+    $dockAllowCart = $allowCart;
+    $dockCartPackages = $cartPackages;
+    $dockOfferHref = $offers !== [] ? store_lab_section_url($offers[0]) : '';
+    require __DIR__ . '/partials/app-dock.php';
+  ?>
+<?php endif; ?>
+<?php if ($layoutPreview !== null): ?>
+  <div class="hn-preview-flag" role="status">معاينة التخطيط — لم يُحفظ بعد</div>
 <?php endif; ?>

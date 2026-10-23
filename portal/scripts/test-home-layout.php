@@ -67,6 +67,39 @@ $enabled = HomeLayoutService::enabledBlocks(HomeLayoutService::normalize([
 ]));
 $assert('enabledBlocks skips disabled blocks', in_array('feed', array_column($enabled, 'key'), true) && !in_array('help', array_column($enabled, 'key'), true));
 
+$targeted = HomeLayoutService::normalize(['blocks' => [
+    ['key' => 'offers', 'audience' => 'customers', 'device' => 'mobile'],
+    ['key' => 'guide', 'audience' => 'guests'],
+    ['key' => 'season', 'from' => '2026-12-01', 'to' => '2026-11-01'],
+    ['key' => 'ads', 'device' => 'tv', 'audience' => 'robots', 'from' => '2026-02-30'],
+]]);
+$offersBlock = HomeLayoutService::block('offers', $targeted);
+$adsBlock = HomeLayoutService::block('ads', $targeted);
+$seasonBlock = HomeLayoutService::block('season', $targeted);
+$assert('device and audience are kept when valid', $offersBlock['device'] === 'mobile' && $offersBlock['audience'] === 'customers');
+$assert('invalid device/audience/date fall back', $adsBlock['device'] === 'all' && $adsBlock['audience'] === 'all' && $adsBlock['from'] === '');
+$assert('reversed schedule is swapped', $seasonBlock['from'] === '2026-11-01' && $seasonBlock['to'] === '2026-12-01');
+
+$keysFor = static fn (bool $customer, string $day): array => array_column(
+    HomeLayoutService::visibleBlocks($targeted, $customer, new DateTimeImmutable($day)),
+    'key'
+);
+$assert('customers-only block hidden from guests', !in_array('offers', $keysFor(false, '2026-11-15'), true) && in_array('offers', $keysFor(true, '2026-11-15'), true));
+$assert('guests-only block hidden from customers', in_array('guide', $keysFor(false, '2026-11-15'), true) && !in_array('guide', $keysFor(true, '2026-11-15'), true));
+$assert('scheduled block only inside its dates', in_array('season', $keysFor(false, '2026-11-15'), true) && !in_array('season', $keysFor(false, '2026-10-31'), true) && in_array('season', $keysFor(false, '2026-12-01'), true));
+
+$assert('dock defaults', HomeLayoutService::defaults()['general']['dock_items'] === HomeLayoutService::DOCK_DEFAULT);
+$assert('dock keeps canonical order, drops unknown, caps at max', HomeLayoutService::normalizeDockItems(['account', 'nope', 'home', 'store', 'cart', 'search', 'whatsapp']) === ['home', 'store', 'search', 'cart', 'whatsapp']);
+$assert('dock with fewer than two items falls back', HomeLayoutService::normalizeDockItems(['home']) === HomeLayoutService::DOCK_DEFAULT);
+$dockForm = HomeLayoutService::fromForm(['general' => ['dock' => 'on', 'dock_items' => ['store', 'home', 'orders']], 'order' => ['feed'], 'on' => ['feed' => 'on'], 'device' => ['feed' => 'desktop']]);
+$assert('form dock items and device are read', $dockForm['general']['dock_items'] === ['home', 'store', 'orders'] && HomeLayoutService::block('feed', $dockForm)['device'] === 'desktop');
+
+$_GET['layout_preview'] = '1';
+$_SESSION = [];
+HomeLayoutService::storeDraft($dockForm);
+$assert('draft preview needs a staff session', HomeLayoutService::draftForPreview() === null);
+unset($_GET['layout_preview']);
+
 echo "\n";
 if ($failures !== []) {
     echo count($failures) . " failure(s)\n";

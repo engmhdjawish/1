@@ -840,3 +840,23 @@
 body.site-staff-mode .site-header {
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04), inset 0 3px 0 0 #4338ca;
 }
+
+/* Pages with a bottom dock on phones: the dock carries navigation, so drop the duplicate link row. */
+@media (max-width: 767px) {
+  body.has-app-dock .site-header__mobile-nav {
+    display: none;
+  }
+
+  body.has-app-dock .site-header__row--mobile-nav {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: end;
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+
+  body.has-app-dock.has-page-currency .site-header__row--mobile-nav,
+  body.has-app-dock .site-header__row--mobile-nav:not(:has(.site-header__mobile-currency)) {
+    display: none;
+  }
+}

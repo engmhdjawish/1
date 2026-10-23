@@ -531,9 +531,23 @@ $baseDisplayOptions = $displayOptions;
   </div>
 </div>
 <?php
-  $labDockActive = 'store';
-  $labDockAllowCart = (bool) ($baseDisplayOptions['allow_cart'] ?? false);
-  require __DIR__ . '/partials/lab-dock.php';
+  try {
+      $storeDockLayout = \Portal\Services\HomeLayoutService::config();
+  } catch (Throwable) {
+      $storeDockLayout = \Portal\Services\HomeLayoutService::defaults();
+  }
+  $dockContext = 'store';
+  $dockClass = 'lab-dock';
+  $dockItems = $storeDockLayout['general']['dock_items'];
+  $dockAllowCart = (bool) ($baseDisplayOptions['allow_cart'] ?? false);
+  try {
+      $dockCartPackages = $dockAllowCart ? \Portal\Services\StoreCartService::packageCount() : 0.0;
+  } catch (Throwable) {
+      $dockCartPackages = 0.0;
+  }
+  $dockOfferHref = '';
+  require __DIR__ . '/partials/app-dock.php';
+  $appDock = true;
 ?>
 
 <?php if (empty($GLOBALS['storeCatalogPreviewRendered'])): ?>
