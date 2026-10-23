@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 define('PORTAL_NO_SESSION', true);
 $_SESSION = [];
-$_SERVER['REQUEST_URI'] = '/store-lab.php';
+$_SERVER['REQUEST_URI'] = '/store.php';
 $_GET = ['q' => 'حذاء'];
 
 require dirname(__DIR__) . '/bootstrap.php';
@@ -178,7 +178,7 @@ if (preg_match('/<input\b[^>]*data-hl-query-mirror[^>]*>/s', $html, $mirrorMatch
 }
 
 $assert('smart search sits above the results', str_contains($html, 'hl-search-panel') && str_contains($html, 'data-hl-search') && str_contains($html, 'data-hl-surface="lab"') && str_contains($html, 'data-hl-ghost') && strpos($html, 'hl-search-panel') < strpos($html, 'store-product-grid'));
-$assert('smart search stays on the trial store', str_contains($html, 'action="/store-lab.php"') && !str_contains($html, 'action="/store.php"') && str_contains($html, '/assets/home-lab.js'));
+$assert('smart search stays on the trial store', str_contains($html, 'action="/store.php"') && !str_contains($html, '/store-lab.php') && str_contains($html, '/assets/home-lab.js'));
 $assert('trial store has one search control', $catalogSearchControls($html) === 1 && $smartField !== '');
 $assert('trial store drops the sidebar and mobile search fields', !str_contains($html, 'id="store-search-q"') && !str_contains($html, 'id="store-mobile-search-q"') && !str_contains($html, 'store-mobile-search'));
 $assert('smart field shows the open query and submits q', str_contains($smartField, 'name="q"') && str_contains($smartField, 'value="حذاء"') && str_contains($smartField, 'type="search"'));
@@ -187,14 +187,14 @@ $assert('mobile filter opener remains', str_contains($html, 'data-store-filters-
 $assert('live store does not get the trial search', !str_contains($live, 'data-hl-search') && !str_contains($live, 'store-soon-band') && !str_contains($live, 'hl-search-panel') && !str_contains($live, 'data-hl-query-mirror') && !str_contains($live, 'data-store-lab-bar'));
 $assert('live store keeps its own search fields', $catalogSearchControls($live) === 2 && str_contains($live, 'id="store-search-q"') && str_contains($live, 'id="store-mobile-search-q"') && str_contains($live, 'store-mobile-search'));
 $assert('live filter sidebar is present', str_contains($html, 'store-filters-sidebar') && str_contains($html, 'تصفية النتائج'));
-$assert('filter form stays on the trial route', str_contains($html, 'action="/store-lab.php"'));
+$assert('filter form stays on the trial route', str_contains($html, 'action="/store.php"'));
 $assert('original filter group markup is used', str_contains($html, 'store-filter-accordion') && str_contains($html, 'name="materialTypes[]"'));
 $assert('warehouse names are not visible', !str_contains($html, 'مستودع الستوك') && !str_contains($html, 'المستودع الرئيسي') && !str_contains($html, 'المخازن') && !str_contains($html, 'المستودعات'));
 $assert('warehouse controls are not rendered', !str_contains($html, 'data-filter-group="stores"') && !str_contains($html, 'data-filter-group="warehouse"') && !str_contains($html, 'name="storeGuids') && !str_contains($html, 'name="minWarehouseQuantity"') && !str_contains($html, 'wh-1'));
 $assert('one continuous product grid', substr_count($html, 'store-product-grid') === 1 && !str_contains($html, 'id="coming-soon"') && !str_contains($html, 'sl-soon') && !str_contains($html, 'id="available"'));
 $assert('catalog order is stock then zero price then coming soon', strpos($html, 'حذاء متوفر') < strpos($html, 'حذاء بلا سعر') && strpos($html, 'حذاء بلا سعر') < strpos($html, 'حذاء شتوي'));
 $assert('no hint copy', !str_contains($html, 'يشمل البحث') && !str_contains($html, 'في كل المواد') && !str_contains($html, 'جرّب') && !str_contains($html, 'تُباع لدينا') && !str_contains($html, 'اكتب جزءاً') && !str_contains($html, 'ضيّق النتائج'));
-$assert('live store still renders the warehouse filter', str_contains($live, 'المخازن') && str_contains($live, 'data-filter-group="stores"') && str_contains($live, 'مستودع الستوك') && !str_contains($live, 'id="coming-soon"') && !str_contains($live, 'action="/store-lab.php"'));
+$assert('live store still renders the warehouse filter', str_contains($live, 'المخازن') && str_contains($live, 'data-filter-group="stores"') && str_contains($live, 'مستودع الستوك') && !str_contains($live, 'id="coming-soon"') && !str_contains($live, 'action="/store.php"'));
 $cardSlice = static function (string $page, string $name): string {
     $start = strpos($page, $name);
     if ($start === false) {

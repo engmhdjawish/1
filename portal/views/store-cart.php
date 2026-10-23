@@ -37,13 +37,6 @@ foreach ($cartItems as $cartLine) {
     $cartPackageTotal += (float) ($cartLine['quantity'] ?? 0);
 }
 $continueHref = '/store.php';
-$referrer = (string) ($_SERVER['HTTP_REFERER'] ?? '');
-$referrerPath = (string) (parse_url($referrer, PHP_URL_PATH) ?: '');
-$referrerHost = (string) (parse_url($referrer, PHP_URL_HOST) ?: '');
-$selfHost = explode(':', (string) ($_SERVER['HTTP_HOST'] ?? ''))[0];
-if (in_array($referrerPath, ['/store-lab.php', '/home-next.php'], true) && strcasecmp($referrerHost, $selfHost) === 0) {
-    $continueHref = '/store-lab.php';
-}
 $stickySp = (float) ($displayTotals['total_sp'] ?? 0);
 $stickyUsd = (float) ($displayTotals['total_usd'] ?? 0);
 ?>

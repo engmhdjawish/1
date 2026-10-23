@@ -434,8 +434,8 @@ function portal_seo_description(string $pagePath, string $siteName, ?string $ove
     $siteName = trim($siteName) !== '' ? trim($siteName) : 'جاويش للتجارة';
 
     return match ($pagePath) {
-        '/index.php', '/', '/home-next.php' => portal_share_description($company ?? [], $siteName),
-        '/store.php', '/store-lab.php' => 'متجر ' . $siteName . ' للجملة — تصفّح التشكيلة حسب النوع والموسم والماركة واطلب بالطرد مباشرة.',
+        '/index.php', '/' => portal_share_description($company ?? [], $siteName),
+        '/store.php' => 'متجر ' . $siteName . ' للجملة — تصفّح التشكيلة حسب النوع والموسم والماركة واطلب بالطرد مباشرة.',
         '/store-cart.php', '/cart.php' => 'سلة طلبات الجملة في ' . $siteName . '. راجع أصنافك وأرسل طلبك.',
         '/about.php' => 'تعرّف على ' . $siteName . ': تجارة الجملة، أعمالنا، وخدمة التجار والمحلات.',
         '/login.php' => 'تسجيل الدخول إلى حسابك في ' . $siteName . ' لمتابعة الطلبات وإدارة ملفك الشخصي.',
@@ -1104,9 +1104,6 @@ function return_link_label(string $returnUrl): string
     if (str_contains($returnUrl, 'share.php')) {
         return 'العودة لرابط المشاركة';
     }
-    if (str_contains($returnUrl, 'store-lab.php')) {
-        return str_contains($returnUrl, '?') ? 'العودة لنتائج التجربة' : 'العودة لتجربة المتجر';
-    }
     if (str_contains($returnUrl, 'store.php') || str_contains($returnUrl, '/store')) {
         if (str_contains($returnUrl, '?')) {
             return 'العودة للنتائج';
@@ -1137,26 +1134,13 @@ function home_section_store_url(array $section): string
 /** @param array<string, mixed> $params */
 function store_lab_url(array $params = []): string
 {
-    $live = store_url($params);
-    if ($live === '/store.php') {
-        return '/store-lab.php';
-    }
-    if (str_starts_with($live, '/store.php?')) {
-        return '/store-lab.php?' . substr($live, strlen('/store.php?'));
-    }
-
-    return '/store-lab.php';
+    return store_url($params);
 }
 
 /** @param array<string, mixed> $section */
 function store_lab_section_url(array $section): string
 {
-    $live = home_section_store_url($section);
-    if (str_starts_with($live, '/store.php?')) {
-        return '/store-lab.php?' . substr($live, strlen('/store.php?'));
-    }
-
-    return '/store-lab.php';
+    return home_section_store_url($section);
 }
 
 /** @return array<string, mixed>|null */
@@ -1211,9 +1195,9 @@ function lab_quick_access_items(array $sections, bool $allowCart, bool $isCustom
             break;
         }
     }
-    $items[] = ['label' => 'كل المواد', 'icon' => 'storefront', 'href' => '/store-lab.php', 'tone' => 'ink'];
+    $items[] = ['label' => 'كل المواد', 'icon' => 'storefront', 'href' => '/store.php', 'tone' => 'ink'];
     if (store_easy_client_filter_visible('availability')) {
-        $items[] = ['label' => 'المتوفر فقط', 'icon' => 'inventory_2', 'href' => '/store-lab.php?isAvailable=1', 'tone' => 'ink'];
+        $items[] = ['label' => 'المتوفر فقط', 'icon' => 'inventory_2', 'href' => '/store.php?isAvailable=1', 'tone' => 'ink'];
     }
     if ($allowCart) {
         $items[] = ['label' => 'السلة', 'icon' => 'shopping_cart', 'href' => '/store-cart.php', 'tone' => 'ink', 'cart' => true];

@@ -32,7 +32,7 @@
     const input = form.querySelector('[data-hn-search-input]');
     const suggest = form.querySelector('[data-hn-suggest]');
     if (!(input instanceof HTMLInputElement) || !suggest) return;
-    const allBase = form.getAttribute('action') || '/store-lab.php';
+    const allBase = form.getAttribute('action') || '/store.php';
     let suggestTimer = 0;
     let suggestController = null;
     let activeIndex = -1;

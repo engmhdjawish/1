@@ -456,9 +456,9 @@ final class StoreCatalogService
     }
 
     /**
-     * Trial catalog for /store-lab.php, including search.
-     * Available materials keep the live store order. Coming-soon materials follow in that same sort.
-     * Live catalogFromRequest is unchanged.
+     * Catalog for /store.php, including search.
+     * Available materials keep the base catalog order; coming-soon materials follow in that same sort.
+     * Share-link visitors still use catalogFromRequest directly.
      *
      * @param array<string, mixed> $query
      * @return array<string, mixed>
@@ -477,7 +477,7 @@ final class StoreCatalogService
     }
 
     /**
-     * Unavailable materials for /store-lab.php.
+     * Unavailable materials for /store.php.
      * Same policy, section, and request filters as the live store, with availability inverted
      * and without the sellable minimum quantity that hides zero-stock rows.
      *

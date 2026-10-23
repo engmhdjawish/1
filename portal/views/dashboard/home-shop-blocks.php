@@ -67,7 +67,7 @@ $tileRows = min(HomeShopBlockService::MAX_CUSTOM_TILES, count($tiles) + 6);
   </div>
   <div class="flex flex-wrap items-center gap-2">
     <?php if (!$showForm): ?>
-      <a href="/home-lab.php" target="_blank" class="<?= $btnLight ?>">معاينة الصفحة التجريبية</a>
+      <a href="/index.php" target="_blank" class="<?= $btnLight ?>">معاينة الرئيسية</a>
       <a href="/dashboard/home-sections.php" class="<?= $btnLight ?>">أقسام الرئيسية</a>
       <?php if ($tableReady): ?>
         <a href="/dashboard/home-shop-blocks.php?new=1" class="h-9 px-4 inline-flex items-center rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">مجموعة جديدة</a>

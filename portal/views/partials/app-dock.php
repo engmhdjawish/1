@@ -38,25 +38,25 @@ foreach ($dockItems as $dockKey) {
     $entry = ['key' => $dockKey, 'label' => $meta['label'], 'icon' => $meta['icon'], 'href' => '', 'attr' => '', 'active' => false, 'badge' => false];
     switch ($dockKey) {
         case 'home':
-            $entry['href'] = '/home-next.php';
+            $entry['href'] = '/index.php';
             $entry['active'] = $dockContext === 'home';
             break;
         case 'sections':
             if ($dockContext === 'home') {
                 $entry['attr'] = 'data-hn-sheet-open';
             } else {
-                $entry['href'] = '/home-next.php#hn-sections';
+                $entry['href'] = '/index.php#hn-sections';
             }
             break;
         case 'store':
-            $entry['href'] = '/store-lab.php';
+            $entry['href'] = '/store.php';
             $entry['active'] = $dockContext === 'store';
             break;
         case 'search':
             if ($dockContext === 'home') {
                 $entry['attr'] = 'data-hn-focus-search';
             } else {
-                $entry['href'] = '/store-lab.php#sl-search-input';
+                $entry['href'] = '/store.php#sl-search-input';
                 $entry['attr'] = 'data-lab-dock-search';
             }
             break;

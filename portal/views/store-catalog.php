@@ -572,7 +572,7 @@ $appliedClientFiltersJson = json_encode(
   <?php if ($allowClientFilters): ?>
     <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
       <aside class="store-filters-sidebar">
-        <form method="get" id="store-filters-form" class="store-filters-sidebar-inner"<?= $storeLabMode ? ' action="/store-lab.php"' : '' ?>>
+        <form method="get" id="store-filters-form" class="store-filters-sidebar-inner"<?= $storeLabMode ? ' action="/store.php"' : '' ?>>
           <input type="hidden" name="page" value="1">
           <?php if ($shareContext !== null && $shareToken !== ''): ?>
             <input type="hidden" name="token" value="<?= h($shareToken) ?>">
@@ -895,7 +895,7 @@ $appliedClientFiltersJson = json_encode(
       <?php endif; ?>
 
       <?php if ($allowSorting && $isClientFilterVisible('sort') && $clientSortFields !== []): ?>
-        <form method="get" class="store-sort-bar"<?= $storeLabMode ? ' action="/store-lab.php"' : '' ?>>
+        <form method="get" class="store-sort-bar"<?= $storeLabMode ? ' action="/store.php"' : '' ?>>
           <?php foreach ($_GET as $key => $value): ?>
             <?php if ($key === 'sort' || $key === 'page') continue; ?>
             <?php if (is_array($value)): ?>

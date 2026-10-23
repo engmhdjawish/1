@@ -17,8 +17,8 @@ $companyLogoUrl = PortalSettingsService::companyLogoUrl($companyContext);
 $siteName = trim((string) ($companyContext['company_name'] ?? '')) ?: 'جاويش للتجارة';
 $whatsapp = preg_replace('/\D+/', '', (string) ($companyContext['company_whatsapp'] ?? '')) ?? '';
 
-$guideHomeUrl = '/home-next.php?tour=1';
-$guideStoreUrl = '/store-lab.php?tour=1';
+$guideHomeUrl = '/index.php?tour=1';
+$guideStoreUrl = '/store.php?tour=1';
 $guideCartUrl = '/store-cart.php?tour=1';
 
 /**

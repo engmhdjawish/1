@@ -30,7 +30,7 @@ if ($finderFields === [] && $finderShortcuts === []) {
 ?>
 <section class="lab-finder" aria-labelledby="lab-finder-title">
   <?php if ($finderFields !== []): ?>
-    <form class="lab-finder__form" action="/store-lab.php" method="get">
+    <form class="lab-finder__form" action="/store.php" method="get">
       <h2 id="lab-finder-title" class="lab-finder__title">
         <span class="material-symbols-outlined" aria-hidden="true">tune</span>
         اعثر بسرعة

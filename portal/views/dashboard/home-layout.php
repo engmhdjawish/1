@@ -25,7 +25,7 @@ $generalLabels = [
     <p class="text-sm text-text-muted mt-1">رتّب أقسام الصفحة، أظهرها أو أخفها، وعدّل عناوينها وخياراتها.</p>
   </div>
   <div class="flex flex-wrap items-center gap-2">
-    <a href="/home-next.php" target="_blank" class="<?= $btnLight ?>">
+    <a href="/index.php" target="_blank" class="<?= $btnLight ?>">
       <span class="material-symbols-outlined text-base" aria-hidden="true">open_in_new</span>
       معاينة
     </a>

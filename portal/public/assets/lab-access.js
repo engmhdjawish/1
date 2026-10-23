@@ -74,7 +74,7 @@
         return;
       }
       const form = box.closest('section')?.querySelector('form[data-hl-search]');
-      const action = form?.getAttribute('action') || '/store-lab.php';
+      const action = form?.getAttribute('action') || '/store.php';
       list.forEach((q) => {
         const link = document.createElement('a');
         link.className = 'lab-recent-q__chip';
@@ -230,7 +230,7 @@
   });
 
   const init = () => {
-    if (window.location.pathname === '/store-lab.php') {
+    if (window.location.pathname === '/store.php') {
       rememberSearch(new URLSearchParams(window.location.search).get('q') || '');
     }
     renderSearches();

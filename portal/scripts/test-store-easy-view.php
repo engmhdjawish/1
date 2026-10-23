@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 define('PORTAL_NO_SESSION', true);
 $_SESSION = [];
-$_SERVER['REQUEST_URI'] = '/store-lab.php';
+$_SERVER['REQUEST_URI'] = '/store.php';
 $_GET = ['q' => 'حذاء', 'ageCategories' => ['رجالي'], 'sizeRanges' => ['40-45']];
 
 require dirname(__DIR__) . '/bootstrap.php';
@@ -141,7 +141,7 @@ $assert('home search box sits first', str_contains($html, 'data-hn-search') && s
 $assert('one search field', substr_count($html, 'data-hl-search-input') === 1 && !str_contains($html, 'id="store-search-q"') && !str_contains($html, 'store-mobile-search'));
 $assert('category tiles with all tile', str_contains($html, 'تسوّق حسب الفئة') && str_contains($html, '>الكل<') && str_contains($html, 'نسائي') && str_contains($html, 'بناتي'));
 $assert('active category tile is marked', (bool) preg_match('/class="se-tile is-active"[^>]*aria-current="true"[^>]*>\s*<span[^>]*>man<\/span>\s*<span class="se-tile__label">رجالي/u', $html));
-$assert('tile links stay on the trial store', str_contains($html, 'href="/store-lab.php?q=') && !str_contains($html, 'href="/store.php?'));
+$assert('tile links go to the store', str_contains($html, 'href="/store.php?') && !str_contains($html, '/store-lab.php'));
 $assert('tile facet is not repeated as a pill', !str_contains($html, 'name="ageCategories[]" value="نسائي"') && str_contains($html, 'type="hidden" name="ageCategories[]" value="رجالي"'));
 $assert('filter pills render', str_contains($html, 'data-se-pill') && str_contains($html, 'data-se-param="materialTypes"') && str_contains($html, '>النوع<') && str_contains($html, '>الشركة<') && str_contains($html, 'data-se-apply'));
 $assert('sizes are one-tap chips, not a pill', str_contains($html, 'class="se-sizes"') && !str_contains($html, 'data-se-param="sizeRanges"') && !str_contains($html, 'type="checkbox" name="sizeRanges[]"'));
@@ -163,7 +163,7 @@ $assert('empty state is short with clear all', str_contains($empty, 'لا توج
 $assert('results sit in one live region', substr_count($html, 'data-se-live') === 1 && str_contains($html, 'data-se-total="3"') && strpos($html, 'data-hl-search-input') < strpos($html, 'data-se-live'));
 $assert('view switch', str_contains($html, 'data-se-density-set="2"') && !str_contains($html, 'data-se-top'));
 $assert('no load more on a single page', !str_contains($html, 'data-se-more') && str_contains($html, 'data-se-next=""'));
-$assert('load more on paged results', str_contains($paged, 'data-se-more-btn') && str_contains($paged, 'عرض المزيد') && str_contains($paged, 'data-se-next="/store-lab.php?') && str_contains($paged, 'page=2') && str_contains($paged, 'store-pagination'));
+$assert('load more on paged results', str_contains($paged, 'data-se-more-btn') && str_contains($paged, 'عرض المزيد') && str_contains($paged, 'data-se-next="/store.php?') && str_contains($paged, 'page=2') && str_contains($paged, 'store-pagination'));
 $assert('assets wired', str_contains($html, '/assets/store-easy.js') && str_contains($html, '/assets/hn-search.js') && !str_contains($html, '/assets/home-lab.js'));
 
 $icons = [

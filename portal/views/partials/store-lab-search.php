@@ -41,7 +41,7 @@ foreach (['q', 'page', 'soon', 'storeGuids', 'minWarehouseQuantity', 'maxWarehou
   <div class="hl-search-panel__copy">
     <h2 id="sl-search-title" class="hl-search-panel__title">ابحث في المواد</h2>
   </div>
-  <form class="hl-search" action="/store-lab.php" method="get" role="search" data-hl-search data-hl-surface="lab">
+  <form class="hl-search" action="/store.php" method="get" role="search" data-hl-search data-hl-surface="lab">
     <?php foreach ($carriedQuery as $key => $value): ?>
       <?php if (!is_string($key) || $key === '') continue; ?>
       <?php if (is_array($value)): ?>

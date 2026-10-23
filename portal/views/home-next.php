@@ -222,7 +222,7 @@ $shopPages = static function (array $block) use ($pagerNav): void {
 <script>try{if(localStorage.getItem('hn-text')==='lg')document.documentElement.classList.add('hn-text-lg')}catch(e){}</script>
 <div class="hn" data-hn data-product-share-scope data-product-share-company="<?= h($companyName) ?>">
   <section class="hn-top" aria-label="البحث">
-    <form class="hn-search" action="/store-lab.php" method="get" role="search" data-hl-search data-hn-search>
+    <form class="hn-search" action="/store.php" method="get" role="search" data-hl-search data-hn-search>
       <label class="hn-search__box">
         <span class="material-symbols-outlined hn-search__icon" aria-hidden="true">search</span>
         <span class="hn-search__spinner" aria-hidden="true"></span>
@@ -432,7 +432,7 @@ $shopPages = static function (array $block) use ($pagerNav): void {
       </section>
 
     <?php elseif ($blockKey === 'guide' && $guideSteps !== []): ?>
-      <section class="hn-guide" aria-labelledby="hn-guide-title" data-hn-guide data-action="/store-lab.php">
+      <section class="hn-guide" aria-labelledby="hn-guide-title" data-hn-guide data-action="/store.php">
         <div class="hn-guide__head">
           <h2 id="hn-guide-title" class="hn-guide__title">
             <span class="material-symbols-outlined" aria-hidden="true">touch_app</span>
@@ -496,7 +496,7 @@ $shopPages = static function (array $block) use ($pagerNav): void {
             <span data-hn-guide-next-label>الكل</span>
             <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
           </button>
-          <a class="hn-guide__show" href="/store-lab.php" data-hn-guide-show hidden>
+          <a class="hn-guide__show" href="/store.php" data-hn-guide-show hidden>
             <span>اعرض المواد</span>
             <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
           </a>
@@ -584,7 +584,7 @@ $shopPages = static function (array $block) use ($pagerNav): void {
       </section>
 
     <?php elseif ($blockKey === 'feed'): ?>
-      <section class="hn-feed" aria-labelledby="hn-feed-title" data-hn-feed data-src="/store-lab.php" data-limit="<?= (int) ($blockOptions['limit'] ?? 12) ?>">
+      <section class="hn-feed" aria-labelledby="hn-feed-title" data-hn-feed data-src="/store.php" data-limit="<?= (int) ($blockOptions['limit'] ?? 12) ?>">
         <div class="hn-rail__head">
           <h2 id="hn-feed-title" class="hn-rail__title">
             <?= h($blockTitle) ?>
@@ -600,7 +600,7 @@ $shopPages = static function (array $block) use ($pagerNav): void {
         <div class="hn-feed__skeleton" data-hn-feed-skeleton aria-hidden="true">
           <span></span><span></span><span></span><span></span>
         </div>
-        <a class="hn-feed__cta" href="/store-lab.php">
+        <a class="hn-feed__cta" href="/store.php">
           <span class="hn-feed__cta-icon material-symbols-outlined" aria-hidden="true">storefront</span>
           <span class="hn-feed__cta-text">تصفّح كل المواد في المتجر</span>
           <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
@@ -657,9 +657,9 @@ $shopPages = static function (array $block) use ($pagerNav): void {
         <?= h($season['title_ar']) ?>
       </a>
     <?php endif; ?>
-    <a href="/store-lab.php" class="hn-sheet__pill">كل المواد</a>
+    <a href="/store.php" class="hn-sheet__pill">كل المواد</a>
     <?php if ($canFilterAvailable): ?>
-      <a href="/store-lab.php?isAvailable=1" class="hn-sheet__pill">المتوفر فقط</a>
+      <a href="/store.php?isAvailable=1" class="hn-sheet__pill">المتوفر فقط</a>
     <?php endif; ?>
     <?php if ($offers !== []): ?>
       <a href="<?= h(store_lab_section_url($offers[0])) ?>" class="hn-sheet__pill hn-sheet__pill--red">العروض</a>

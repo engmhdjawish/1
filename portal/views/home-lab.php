@@ -63,7 +63,7 @@ $quickAccessItems = lab_quick_access_items(
   <aside class="hl-lab-note" aria-label="ملاحظة النسخة التجريبية">
     <p><strong>نسخة تجريبية.</strong></p>
     <div class="hl-lab-note__links">
-      <a href="/store-lab.php">تجربة المتجر</a>
+      <a href="/store.php">تجربة المتجر</a>
       <a href="/index.php">الصفحة الحالية</a>
     </div>
   </aside>
@@ -73,7 +73,7 @@ $quickAccessItems = lab_quick_access_items(
       <h2 id="hl-search-title" class="hl-search-panel__title">ابحث في المواد</h2>
     </div>
 
-    <form class="hl-search" action="/store-lab.php" method="get" role="search" data-hl-search data-hl-surface="lab">
+    <form class="hl-search" action="/store.php" method="get" role="search" data-hl-search data-hl-surface="lab">
       <div class="hl-search__box">
         <span class="material-symbols-outlined hl-search__icon" aria-hidden="true">search</span>
         <div class="hl-search__field">
@@ -286,7 +286,7 @@ $quickAccessItems = lab_quick_access_items(
               <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
               تصفّح المتجر
             </a>
-            <a href="/store-lab.php" class="home-btn home-btn--ghost">
+            <a href="/store.php" class="home-btn home-btn--ghost">
               <span class="material-symbols-outlined" aria-hidden="true">science</span>
               تجربة المتجر
             </a>
@@ -335,7 +335,7 @@ $quickAccessItems = lab_quick_access_items(
         <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
         فتح المتجر
       </a>
-      <a href="/store-lab.php" class="home-btn home-btn--ghost-dark">
+      <a href="/store.php" class="home-btn home-btn--ghost-dark">
         <span class="material-symbols-outlined" aria-hidden="true">science</span>
         تجربة المتجر
       </a>

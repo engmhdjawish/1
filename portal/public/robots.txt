@@ -5,5 +5,6 @@ Disallow: /dashboard/
 Disallow: /api/
 Disallow: /home-lab.php
 Disallow: /store-lab.php
+Disallow: /home-next.php
 
 Sitemap: /sitemap.xml.php

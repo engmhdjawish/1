@@ -223,7 +223,7 @@
     const show = guide.querySelector('[data-hn-guide-show]');
     const available = guide.querySelector('[data-hn-guide-available]');
     const seasonOnly = guide.querySelector('[data-hn-guide-season]');
-    const action = guide.getAttribute('data-action') || '/store-lab.php';
+    const action = guide.getAttribute('data-action') || '/store.php';
     const choices = new Map(steps.map((step) => [step.getAttribute('data-param'), new Set()]));
     let current = 0;
 
@@ -338,7 +338,7 @@
       started = true;
       feed.classList.add('is-loading');
       try {
-        const response = await fetch(feed.getAttribute('data-src') || '/store-lab.php', { credentials: 'same-origin', headers: { Accept: 'text/html' } });
+        const response = await fetch(feed.getAttribute('data-src') || '/store.php', { credentials: 'same-origin', headers: { Accept: 'text/html' } });
         if (!response.ok) throw new Error(String(response.status));
         const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
         const live = doc.querySelector('[data-se-live]');

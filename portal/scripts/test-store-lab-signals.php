@@ -150,8 +150,8 @@ $assert(
 
 $assert(
     'trial url keeps catalog filters',
-    store_lab_url(['q' => 'حذاء', 'materialTypes' => ['رجالي']]) === '/store-lab.php?q=' . rawurlencode('حذاء') . '&materialTypes%5B0%5D=' . rawurlencode('رجالي')
-        || str_starts_with(store_lab_url(['q' => 'حذاء']), '/store-lab.php?q=')
+    store_lab_url(['q' => 'حذاء', 'materialTypes' => ['رجالي']]) === '/store.php?q=' . rawurlencode('حذاء') . '&materialTypes%5B0%5D=' . rawurlencode('رجالي')
+        || str_starts_with(store_lab_url(['q' => 'حذاء']), '/store.php?q=')
 );
 
 echo "\n";

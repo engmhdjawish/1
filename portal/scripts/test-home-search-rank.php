@@ -30,7 +30,7 @@ $correctionOk = ($correction['guess'] ?? '') === 'رجالي';
 
 $soonRank = HomeSearchService::rank('حذاء', [
     ['label' => 'حذاء رياضي', 'hint' => 'مادة', 'href' => '/product.php?guid=1', 'kind' => 'product', 'trusted' => true],
-    ['label' => 'حذاء شتوي', 'hint' => 'يتوفر قريبا', 'badge' => 'غير متوفر حالياً', 'href' => '/store-lab.php?q=%D8%AD%D8%B0%D8%A7%D8%A1', 'kind' => 'soon', 'trusted' => true],
+    ['label' => 'حذاء شتوي', 'hint' => 'يتوفر قريبا', 'badge' => 'غير متوفر حالياً', 'href' => '/store.php?q=%D8%AD%D8%B0%D8%A7%D8%A1', 'kind' => 'soon', 'trusted' => true],
 ]);
 $soonHit = null;
 foreach ($soonRank['suggestions'] as $suggestion) {
@@ -50,13 +50,13 @@ $surface = HomeSearchService::applySurface([
     ['kind' => 'search', 'label' => 'ابحث', 'hint' => 'في كل المواد', 'href' => '/store.php?q=x'],
     ['kind' => 'soon', 'label' => 'حذاء شتوي', 'hint' => 'يتوفر قريبا', 'badge' => 'غير متوفر حالياً', 'href' => '/store.php?q=soon'],
 ], 'lab');
-$surfaceOk = ($surface[0]['href'] ?? '') === '/store-lab.php?section=men'
+$surfaceOk = ($surface[0]['href'] ?? '') === '/store.php?section=men'
     && ($surface[0]['hint'] ?? null) === ''
     && ($surface[1]['href'] ?? '') === '/product.php?guid=1'
     && ($surface[1]['hint'] ?? null) === ''
-    && ($surface[2]['href'] ?? '') === '/store-lab.php?q=x'
+    && ($surface[2]['href'] ?? '') === '/store.php?q=x'
     && ($surface[2]['hint'] ?? null) === ''
-    && ($surface[3]['href'] ?? '') === '/store-lab.php?q=soon'
+    && ($surface[3]['href'] ?? '') === '/store.php?q=soon'
     && ($surface[3]['hint'] ?? null) === ''
     && ($surface[3]['badge'] ?? '') === 'غير متوفر حالياً';
 $liveSurface = HomeSearchService::applySurface($surface, '');

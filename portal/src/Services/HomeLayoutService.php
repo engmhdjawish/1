@@ -9,7 +9,7 @@ use Portal\Support\ResponseCache;
 use Throwable;
 
 /**
- * Layout of the trial homepage (/home-next.php): which blocks show, in what order, with what
+ * Layout of the homepage (/index.php): which blocks show, in what order, with what
  * titles and options. Stored as one JSON document; unknown keys are dropped on read.
  */
 final class HomeLayoutService

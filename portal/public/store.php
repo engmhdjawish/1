@@ -23,55 +23,87 @@ if ($shareBrowse !== null) {
             'share_token' => $shareBrowse['token'],
         ]);
     }
-} else {
-    ShareCartService::clearActiveToken();
+    require dirname(__DIR__) . '/views/partials/store-share-catalog.php';
+    exit;
 }
+
+ShareCartService::clearActiveToken();
 
 if (session_status() === PHP_SESSION_ACTIVE) {
     session_write_close();
 }
+
+$emptyCatalog = [
+    'products' => [],
+    'totalCount' => 0,
+    'page' => 1,
+    'pageSize' => 24,
+    'totalPages' => 1,
+    'rangeStart' => 0,
+    'rangeEnd' => 0,
+    'resultFilters' => [],
+    'filterOptions' => ['stores' => [], 'groups' => []],
+    'apiError' => null,
+    'allow_client_filters' => false,
+    'filters' => ['q' => trim((string) ($_GET['q'] ?? '')), 'sort' => 'number:asc'],
+    'store_options' => [],
+    'section_context' => null,
+    'locked_client_filters' => [],
+    'filters_deferred' => false,
+    'client_filters_payload' => null,
+];
+
+$labQuery = $_GET;
+unset($labQuery['soon'], $labQuery['storeGuids'], $labQuery['minWarehouseQuantity'], $labQuery['maxWarehouseQuantity']);
+
 try {
-    $catalog = StoreCatalogService::catalogFromRequest($_GET);
-} catch (\Throwable $exception) {
-    error_log('store.php catalog error: ' . $exception->getMessage());
-    $catalog = [
-        'products' => [],
-        'totalCount' => 0,
-        'page' => 1,
-        'pageSize' => 24,
-        'totalPages' => 1,
-        'rangeStart' => 0,
-        'rangeEnd' => 0,
-        'resultFilters' => [],
-        'filterOptions' => ['stores' => [], 'groups' => []],
-        'apiError' => \Portal\Services\AmineAvailabilityService::userMessage(),
-        'allow_client_filters' => false,
-        'filters' => ['q' => '', 'sort' => 'number:asc'],
-        'store_options' => [],
+    $catalog = StoreCatalogService::labCatalogFromRequest($labQuery);
+} catch (Throwable $exception) {
+    error_log('store.php catalog: ' . $exception->getMessage());
+    $catalog = $emptyCatalog;
+    $catalog['apiError'] = AmineAvailabilityService::userMessage();
+}
+if (!is_array($catalog)) {
+    $catalog = $emptyCatalog;
+}
+
+unset($_GET['soon'], $_GET['storeGuids'], $_GET['minWarehouseQuantity'], $_GET['maxWarehouseQuantity']);
+
+$sectionContext = is_array($catalog['section_context'] ?? null) ? $catalog['section_context'] : null;
+try {
+    $displayOptions = StoreCatalogService::storePageDisplayOptions($sectionContext);
+} catch (Throwable $exception) {
+    error_log('store.php display: ' . $exception->getMessage());
+    $displayOptions = [
+        'show_price' => false,
+        'show_quantity' => false,
+        'allow_cart' => false,
+        'allow_order' => false,
+        'show_images' => true,
+        'price_mode' => 'none',
     ];
 }
-$sectionContext = is_array($catalog['section_context'] ?? null) ? $catalog['section_context'] : null;
-$displayOptions = StoreCatalogService::storePageDisplayOptions($sectionContext);
-$isCustomer = CustomerSession::check();
 
-$isStoreAjaxNav = strtolower(trim((string) ($_SERVER['HTTP_X_STORE_NAV'] ?? ''))) === '1';
-if ($isStoreAjaxNav) {
-    header('Content-Type: text/html; charset=utf-8');
-    ob_start();
-    require dirname(__DIR__) . '/views/store-catalog.php';
-    $html = ob_get_clean();
-    if (preg_match('/<!-- store-catalog-fragment:start -->(.*)<!-- store-catalog-fragment:end -->/s', $html, $matches)) {
-        echo $matches[1];
-    }
-    exit;
+$isCustomer = false;
+try {
+    $isCustomer = CustomerSession::check();
+} catch (Throwable) {
+    $isCustomer = false;
 }
 
-$extraHead = '<link href="' . h(portal_asset_url('/css/store-filters.css')) . '" rel="stylesheet">';
+$storeLabMode = true;
+$siteTour = 'store';
+$extraHead = portal_stylesheet('/css/home-lab.css')
+    . portal_stylesheet('/css/store-lab.css')
+    . portal_stylesheet('/css/store-easy.css')
+    . portal_stylesheet('/css/lab-access.css')
+    . portal_stylesheet('/css/hn-search.css');
+$extraFooter = portal_defer_script('/assets/product-share.js');
 $enableQuickView = true;
 $enableStoreCartJs = true;
 
 ob_start();
-require dirname(__DIR__) . '/views/store-catalog.php';
+require dirname(__DIR__) . '/views/store-easy.php';
 $content = ob_get_clean();
 $title = 'المتجر';
 require dirname(__DIR__) . '/views/layout.php';

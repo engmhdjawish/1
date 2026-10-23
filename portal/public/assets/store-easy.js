@@ -13,7 +13,7 @@
   const isLabUrl = (href) => {
     try {
       const url = new URL(href, window.location.origin);
-      return url.origin === window.location.origin && url.pathname === '/store-lab.php';
+      return url.origin === window.location.origin && url.pathname === '/store.php';
     } catch {
       return false;
     }
@@ -26,7 +26,7 @@
       if (text !== '') params.append(key, text);
     });
     const query = params.toString();
-    return '/store-lab.php' + (query ? `?${query}` : '');
+    return '/store.php' + (query ? `?${query}` : '');
   };
 
   const syncSheetLock = () => {

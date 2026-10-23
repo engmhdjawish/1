@@ -17,7 +17,7 @@ $flashType = 'success';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['preview'] ?? '') === '1') {
     HomeLayoutService::storeDraft(HomeLayoutService::fromForm($_POST));
-    header('Location: /home-next.php?layout_preview=1');
+    header('Location: /index.php?layout_preview=1');
     exit;
 }
 

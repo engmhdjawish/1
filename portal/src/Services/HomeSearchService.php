@@ -160,7 +160,7 @@ final class HomeSearchService
     {
         $query = mb_substr(trim($query), 0, 80);
         $normalized = self::normalize($query);
-        $all = '/store-lab.php' . ($query !== '' ? '?q=' . rawurlencode($query) : '');
+        $all = '/store.php' . ($query !== '' ? '?q=' . rawurlencode($query) : '');
         if ($normalized === '' || self::charLength($normalized) < 2) {
             return ['ok' => true, 'query' => $query, 'total' => null, 'all' => $all, 'groups' => []];
         }
@@ -178,7 +178,7 @@ final class HomeSearchService
                 if ($score >= 45) {
                     $href = (string) $candidate['href'];
                     if (str_starts_with($href, '/store.php')) {
-                        $href = '/store-lab.php' . substr($href, strlen('/store.php'));
+                        $href = '/store.php' . substr($href, strlen('/store.php'));
                     }
                     $sections[] = ['score' => $score, 'label' => $candidate['label'], 'href' => $href, 'hint' => $candidate['hint']];
                 }
@@ -201,7 +201,7 @@ final class HomeSearchService
                     $groups[$param][] = [
                         'score' => $score,
                         'label' => $label,
-                        'href' => function_exists('store_lab_url') ? store_lab_url([$param => [$label]]) : '/store-lab.php',
+                        'href' => function_exists('store_lab_url') ? store_lab_url([$param => [$label]]) : '/store.php',
                     ];
                 }
             }
@@ -254,7 +254,7 @@ final class HomeSearchService
             $imageGuid = function_exists('material_image_guid') ? material_image_guid($item) : '';
             $row = [
                 'label' => $label,
-                'href' => function_exists('product_url') ? product_url($guid, '/home-next.php') : '/product.php?guid=' . rawurlencode($guid),
+                'href' => function_exists('product_url') ? product_url($guid, '/index.php') : '/product.php?guid=' . rawurlencode($guid),
                 'code' => trim((string) ($item['materialCode'] ?? $item['code'] ?? '')),
                 'brand' => trim((string) ($item['manufacturer'] ?? '')),
                 'image' => $imageGuid !== '' && function_exists('material_image_api_url') ? material_image_api_url($imageGuid, true) : '',
@@ -270,7 +270,7 @@ final class HomeSearchService
     }
 
     /**
-     * Trial-store search keeps section and catalog links on /store-lab.php.
+     * Trial-store search keeps section and catalog links on /store.php.
      * Product pages stay on /product.php. The live homepage surface is unchanged.
      *
      * @param list<array<string, mixed>> $suggestions
@@ -292,7 +292,7 @@ final class HomeSearchService
             }
             $href = (string) ($suggestion['href'] ?? '');
             if (str_starts_with($href, '/store.php')) {
-                $suggestion['href'] = '/store-lab.php' . substr($href, strlen('/store.php'));
+                $suggestion['href'] = '/store.php' . substr($href, strlen('/store.php'));
             }
             $suggestion['hint'] = '';
             $rewritten[] = $suggestion;
@@ -450,7 +450,7 @@ final class HomeSearchService
             }
             $code = trim((string) ($item['materialCode'] ?? $item['code'] ?? ''));
             $href = function_exists('product_url')
-                ? product_url($guid, '/home-lab.php')
+                ? product_url($guid, '/index.php')
                 : '/product.php?guid=' . rawurlencode($guid);
             $candidates[] = [
                 'label' => $label,
@@ -491,8 +491,8 @@ final class HomeSearchService
             $code = trim((string) ($item['materialCode'] ?? $item['code'] ?? ''));
             $guid = function_exists('material_guid') ? material_guid($item) : trim((string) ($item['guid'] ?? $item['materialGuid'] ?? ''));
             $href = $guid !== '' && function_exists('product_url')
-                ? product_url($guid, '/store-lab.php?q=' . rawurlencode($label))
-                : '/store-lab.php?q=' . rawurlencode($label);
+                ? product_url($guid, '/store.php?q=' . rawurlencode($label))
+                : '/store.php?q=' . rawurlencode($label);
             $candidates[] = [
                 'label' => $label,
                 'hint' => '',

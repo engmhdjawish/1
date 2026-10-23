@@ -105,21 +105,21 @@ try {
 
 $pos = static fn (string $needle): int => ($p = strpos($html, $needle)) === false ? PHP_INT_MAX : $p;
 
-$assert('search goes to the trial store with lab suggestions', str_contains($html, 'action="/store-lab.php" method="get" role="search" data-hl-search data-hl-surface="lab"'));
+$assert('search goes to the trial store with lab suggestions', str_contains($html, 'action="/store.php" method="get" role="search" data-hl-search data-hl-surface="lab"'));
 $assert('recent searches slot', str_contains($html, 'data-lab-recent-q') && str_contains($html, '/assets/lab-access.js'));
 $assert('quick access shortcuts', str_contains($html, 'class="lab-quick"') && str_contains($html, '>العروض<') && str_contains($html, '>كل المواد<') && str_contains($html, 'isAvailable=1') && str_contains($html, 'href="/store-cart.php"') && str_contains($html, 'https://wa.me/963999000000'));
 $assert('guest gets order tracking', str_contains($html, 'href="/track-order.php"') && !str_contains($html, 'href="/my-orders.php"'));
 $assert('shop-by hub with a tab per default block', str_contains($html, 'id="lab-shop-title" class="lab-shop__title">تسوّق حسب<') && substr_count($html, 'data-lab-shop-tab') === 5 && str_contains($html, '>الشركة والفئة<') && str_contains($html, '>النوع والفئة<'));
 $assert('only the first shop panel is open', substr_count($html, 'class="lab-shop__panel"') === 5 && preg_match_all('/class="lab-shop__panel"[^>]*hidden/u', $html) === 4);
-$assert('category tiles link to the trial store', str_contains($html, '/store-lab.php?ageCategories%5B0%5D=' . rawurlencode('نسائي')));
+$assert('category tiles link to the trial store', str_contains($html, '/store.php?ageCategories%5B0%5D=' . rawurlencode('نسائي')));
 $assert('brand cards show an initial', str_contains($html, 'lab-shop-card__initial'));
-$comboHref = '/store-lab.php?' . http_build_query(['manufacturers' => ['جاويش'], 'ageCategories' => ['رجالي']]);
+$comboHref = '/store.php?' . http_build_query(['manufacturers' => ['جاويش'], 'ageCategories' => ['رجالي']]);
 $assert('combo links carry both filters', str_contains($html, h($comboHref)) && str_contains($html, '<span>عرض كل جاويش</span>') && str_contains($html, 'data-lab-shop-pick="1"'));
 $assert('shop-by sits before the finder', $pos('data-lab-shop') < $pos('lab-finder'));
 
 $custom = $resolvedCustom[0] ?? null;
 $assert('custom cards drop hidden facets and empty tiles', $custom !== null && $custom['placement'] === 'band' && count($custom['tiles']) === 1);
-$assert('custom card merges several filters', $custom !== null && $custom['tiles'][0]['href'] === '/store-lab.php?' . http_build_query(['ageCategories' => ['بناتي'], 'materialTypes' => ['شتوي'], 'isAvailable' => '1']));
+$assert('custom card merges several filters', $custom !== null && $custom['tiles'][0]['href'] === '/store.php?' . http_build_query(['ageCategories' => ['بناتي'], 'materialTypes' => ['شتوي'], 'isAvailable' => '1']));
 $combo = $resolvedCustom[1] ?? null;
 $assert('combo keeps only existing configured values', $combo !== null && count($combo['groups']) === 1 && $combo['groups'][0]['label'] === 'النجم' && count($combo['groups'][0]['tiles']) === 3);
 $assert('block on a hidden facet is skipped', count($resolvedCustom) === 2);
@@ -131,10 +131,10 @@ $assert('recently viewed slot is hidden until filled', (bool) preg_match('/class
 $assert('finder with visible facets only', str_contains($html, 'اعثر بسرعة') && str_contains($html, 'name="ageCategories[]"') && str_contains($html, 'name="sizeRanges[]"') && str_contains($html, 'name="manufacturers[]"') && str_contains($html, 'name="isAvailable"'));
 $assert('availability is not preselected', !(bool) preg_match('/name="isAvailable" value="1" checked/u', $html));
 $assert('size shortcuts sort naturally', $pos('>18-23<') < $pos('>36-39<') && $pos('>36-39<') < $pos('>40-45<'));
-$assert('sections directory', str_contains($html, 'class="lab-dir"') && str_contains($html, 'عرض خاص') && str_contains($html, '/store-lab.php?'));
-$assert('section more links stay on the trial store', !str_contains($html, 'href="/store.php?section') && !str_contains($html, 'href="/store.php?offer'));
+$assert('sections directory', str_contains($html, 'class="lab-dir"') && str_contains($html, 'عرض خاص') && str_contains($html, '/store.php?'));
+$assert('section more links go to the store', !str_contains($html, '/store-lab.php'));
 $assert('access layers come before the hero', $pos('lab-quick') < $pos('home-hero home-hero--premium') && $pos('lab-finder') < $pos('home-hero home-hero--premium') && $pos('lab-dir') < $pos('home-section-nav--sticky'));
-$assert('phone dock', str_contains($html, 'class="lab-dock"') && str_contains($html, 'href="/home-lab.php" class="lab-dock__item is-active"') && str_contains($html, 'data-lab-dock-search'));
+$assert('phone dock', str_contains($html, 'class="lab-dock"') && str_contains($html, 'href="/index.php" class="lab-dock__item is-active"') && str_contains($html, 'data-lab-dock-search'));
 $assert('no warehouses', !str_contains($html, 'مستودع'));
 $assert('no hint copy', !str_contains($html, 'جرّب') && !str_contains($html, 'اكتب') && !str_contains($html, 'يخمن'));
 

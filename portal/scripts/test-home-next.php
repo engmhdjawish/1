@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 define('PORTAL_NO_SESSION', true);
 $_SESSION = [];
-$_SERVER['REQUEST_URI'] = '/home-next.php';
+$_SERVER['REQUEST_URI'] = '/index.php';
 $_GET = [];
 
 require dirname(__DIR__) . '/bootstrap.php';
@@ -114,7 +114,7 @@ $assert('no countdown when ended or open-ended', hn_offer_countdown(date('c', $n
 $assert('day labels', hn_days_label(1) === 'يوم واحد' && hn_days_label(2) === 'يومين' && hn_days_label(11) === '11 يوماً');
 $assert('offer badge', hn_offer_badge(['badge_text_ar' => 'جديد']) === 'جديد' && hn_offer_badge(['discount_type' => 'percent', 'discount_percent' => '12.50']) === 'خصم 12.5%' && hn_offer_badge([]) === 'عرض خاص');
 
-$assert('single search to the trial store', substr_count($html, 'name="q"') === 1 && str_contains($html, 'action="/store-lab.php"') && str_contains($html, 'data-hn-search-input'));
+$assert('single search to the trial store', substr_count($html, 'name="q"') === 1 && str_contains($html, 'action="/store.php"') && str_contains($html, 'data-hn-search-input'));
 $assert('voice button hidden until supported', (bool) preg_match('/data-hn-voice[^>]*hidden/u', $html));
 $assert('stories: all sections, season, offer ring, categories', $pos('hn-story--all') < $pos('hn-story--season') && $pos('hn-story--season') < $pos('hn-story hn-story--hot') && substr_count($html, 'data-hn-story=') === 12);
 $assert('stories hint that more can be scrolled', str_contains($html, 'data-hn-scroller') && str_contains($html, 'data-hn-scroller-next'));
@@ -132,12 +132,12 @@ $assert('season story, sheet pill and feed badge', str_contains($html, 'href="' 
 $assert('season card sits between offers and the picker', $pos('class="hn-offer"') < $pos('class="hn-season') && $pos('class="hn-season') < $pos('data-hn-guide '));
 $assert('shop-by paged tabs, no combo facet', substr_count($html, 'data-hn-shop-tab') === 3 && !str_contains($html, 'الشركة والفئة') && !str_contains($html, 'data-lab-shop-combo') && str_contains($html, 'hn-shop__page'));
 $assert('main sections showcase', str_contains($html, 'class="hn-showcase') && str_contains($html, '>تسوّق الأقسام<') && str_contains($html, 'hn-showcase__tile'));
-$assert('section rail links stay on the trial store', str_contains($html, 'class="hn-rail"') && !str_contains($html, 'href="/store.php?'));
-$assert('feed shows one batch with a clean store CTA', str_contains($html, 'data-hn-feed') && str_contains($html, 'data-src="/store-lab.php"') && str_contains($html, 'store-product-grid se-grid') && str_contains($html, 'hn-feed__cta') && !str_contains($html, 'data-hn-feed-more') && !str_contains($html, 'data-hn-feed-sentinel'));
+$assert('section rail links go to the store', str_contains($html, 'class="hn-rail"') && !str_contains($html, '/store-lab.php'));
+$assert('feed shows one batch with a clean store CTA', str_contains($html, 'data-hn-feed') && str_contains($html, 'data-src="/store.php"') && str_contains($html, 'store-product-grid se-grid') && str_contains($html, 'hn-feed__cta') && !str_contains($html, 'data-hn-feed-more') && !str_contains($html, 'data-hn-feed-sentinel'));
 $assert('products can be shared from the cards', str_contains($html, 'data-product-share-scope') && str_contains($html, 'data-product-share-company="جاويش"'));
 $assert('help: whatsapp, call, tracking, text size', str_contains($html, 'https://wa.me/963999000000') && str_contains($html, 'href="tel:0112223333"') && str_contains($html, 'href="/track-order.php"') && str_contains($html, 'data-hn-text-size'));
 $assert('category sheet with panes per facet', (bool) preg_match('/class="hn-sheet"[^>]*data-hn-sheet[^>]*hidden/u', $html) && substr_count($html, 'data-hn-pane-tab') === 5);
-$assert('phone dock with cart badge', str_contains($html, 'class="hn-dock"') && str_contains($html, 'href="/home-next.php" class="hn-dock__item is-active"') && str_contains($html, 'data-store-cart-badge'));
+$assert('phone dock with cart badge', str_contains($html, 'class="hn-dock"') && str_contains($html, 'href="/index.php" class="hn-dock__item is-active"') && str_contains($html, 'data-store-cart-badge'));
 $assert('page order', $pos('hn-top') < $pos('hn-stories') && $pos('hn-stories') < $pos('class="hn-offer"') && $pos('class="hn-offer"') < $pos('data-hn-guide ') && $pos('data-hn-feed') < $pos('class="hn-help"'));
 $assert('no warehouses', !str_contains($html, 'مستودع'));
 $assert('no hint copy', !str_contains($html, 'جرّب') && !str_contains($html, 'اكتب') && !str_contains($html, 'يخمن'));

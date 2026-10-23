@@ -55,8 +55,8 @@ $daysUntil = $nextSwitch !== null ? (int) ceil(($nextSwitch['at'] - $now) / 8640
   </div>
   <div class="flex flex-wrap items-center gap-2">
     <?php if (!$showForm): ?>
-      <a href="/store-lab.php" target="_blank" class="<?= $btnLight ?>">معاينة المتجر</a>
-      <a href="/home-next.php" target="_blank" class="<?= $btnLight ?>">الرئيسية الجديدة</a>
+      <a href="/store.php" target="_blank" class="<?= $btnLight ?>">معاينة المتجر</a>
+      <a href="/index.php" target="_blank" class="<?= $btnLight ?>">الرئيسية</a>
       <?php if ($tableReady): ?>
         <a href="/dashboard/store-seasons.php?new=1" class="<?= $btnPrimary ?>">موسم جديد</a>
       <?php endif; ?>

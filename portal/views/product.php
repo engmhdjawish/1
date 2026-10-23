@@ -63,7 +63,7 @@ $offerMax = $offer !== null && is_numeric((string) ($offer['max_packages'] ?? ''
 $warehouseQty = (float) ($product['warehouseQuantity'] ?? 0);
 $packagesAvailable = ($allowCart || $showQuantity) ? packages_available_display($product) : 0.0;
 $outOfStock = $allowCart && $packagesAvailable <= 0;
-$trialStoreProduct = str_contains((string) ($_GET['return'] ?? ''), 'store-lab.php');
+$trialStoreProduct = !str_contains((string) ($_GET['return'] ?? ''), 'share.php');
 $comingSoonProduct = $trialStoreProduct && StoreCatalogService::materialIsUnavailable($product);
 $omitTrialBlankPrice = $trialStoreProduct
     && $policyAllowsPrice

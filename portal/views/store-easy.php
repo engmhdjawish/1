@@ -305,7 +305,7 @@ $baseDisplayOptions = $displayOptions;
         <p class="se-section-banner__kicker"><?= !empty($sectionContext['is_offer_section']) ? 'عرض خاص' : 'قسم' ?></p>
         <h2 class="se-section-banner__title"><?= h((string) ($sectionContext['title_ar'] ?? '')) ?></h2>
       </div>
-      <a href="/store-lab.php" class="se-section-banner__exit">
+      <a href="/store.php" class="se-section-banner__exit">
         كل المواد
         <span class="material-symbols-outlined" aria-hidden="true">close</span>
       </a>
@@ -315,7 +315,7 @@ $baseDisplayOptions = $displayOptions;
   <?php require __DIR__ . '/partials/shop-by-tiles.php'; ?>
 
   <?php if ($pillFacets !== [] || $quickSizes !== [] || $showAvailabilityToggle || $sortOptions !== []): ?>
-    <form class="se-bar" action="/store-lab.php" method="get" data-se-bar>
+    <form class="se-bar" action="/store.php" method="get" data-se-bar>
       <?php foreach ($hiddenFormParams as $key => $value): ?>
         <?php if (is_array($value)): ?>
           <?php foreach ($value as $item): ?>
