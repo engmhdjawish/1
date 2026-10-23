@@ -108,6 +108,11 @@ final class OrderService
 
         $shareLinkId = trim($shareLinkId);
 
+        $duplicate = self::findRecentDuplicateOrder(Database::pdo(), $guestPhone, $shareLinkId, $items);
+        if ($duplicate !== null) {
+            return $duplicate;
+        }
+
         $split = StockReservationService::splitCartByAvailability($items, true);
         $availableItems = $split['available'];
         $unavailableItems = $split['unavailable'];
@@ -170,6 +175,15 @@ final class OrderService
 
         try {
             $pdo->beginTransaction();
+
+            $pdo->prepare('SELECT pg_advisory_xact_lock(hashtext(:key))')
+                ->execute(['key' => 'order-submit:' . self::duplicateKeyPhone($guestPhone)]);
+            $duplicate = self::findRecentDuplicateOrder($pdo, $guestPhone, $shareLinkId, $normalizedItems);
+            if ($duplicate !== null) {
+                $pdo->rollBack();
+
+                return $duplicate;
+            }
 
             StockReservationService::lockMaterialsForOrder(
                 $pdo,
@@ -381,6 +395,96 @@ final class OrderService
             'unavailable_items' => $unavailableItems,
             'notices' => $notices,
         ];
+    }
+
+    /** Seconds during which an identical order from the same phone is treated as a repeated tap. */
+    public const DUPLICATE_WINDOW_SECONDS = 180;
+
+    /**
+     * @param list<array<string, mixed>> $items
+     * @return array<string, float>
+     */
+    public static function orderFingerprint(array $items): array
+    {
+        $map = [];
+        foreach ($items as $item) {
+            $guid = strtolower(trim((string) ($item['material_guid'] ?? '')));
+            $quantity = (float) ($item['quantity'] ?? 0);
+            if ($guid === '' || $quantity <= 0) {
+                continue;
+            }
+            $map[$guid] = round(($map[$guid] ?? 0.0) + $quantity, 4);
+        }
+        ksort($map);
+
+        return $map;
+    }
+
+    /**
+     * A repeated submit (double tap, retry after a slow response) returns the order that was already saved.
+     *
+     * @param list<array<string, mixed>> $items
+     * @return array<string, mixed>|null
+     */
+    private static function findRecentDuplicateOrder(\PDO $pdo, string $guestPhone, string $shareLinkId, array $items): ?array
+    {
+        $fingerprint = self::orderFingerprint($items);
+        if ($fingerprint === [] || trim($guestPhone) === '') {
+            return null;
+        }
+        try {
+            $stmt = $pdo->prepare(
+                "SELECT id::text AS id, order_number, quote_access_token, total_sp, total_usd
+                 FROM orders
+                 WHERE guest_phone = :phone
+                   AND COALESCE(share_link_id::text, '') = :share
+                   AND status <> 'cancelled'
+                   AND created_at >= NOW() - make_interval(secs => :window)
+                 ORDER BY created_at DESC
+                 LIMIT 5"
+            );
+            $stmt->execute(['phone' => trim($guestPhone), 'share' => $shareLinkId, 'window' => self::DUPLICATE_WINDOW_SECONDS]);
+            $recent = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            if ($recent === []) {
+                return null;
+            }
+            $itemsStmt = $pdo->prepare('SELECT material_guid::text AS material_guid, quantity FROM order_items WHERE order_id = CAST(:id AS uuid)');
+            foreach ($recent as $order) {
+                $itemsStmt->execute(['id' => (string) $order['id']]);
+                if (self::orderFingerprint($itemsStmt->fetchAll(\PDO::FETCH_ASSOC)) !== $fingerprint) {
+                    continue;
+                }
+
+                return [
+                    'ok' => true,
+                    'duplicate' => true,
+                    'order' => [
+                        'id' => (string) $order['id'],
+                        'order_number' => (string) $order['order_number'],
+                        'quote_access_token' => (string) $order['quote_access_token'],
+                        'total_sp' => (float) $order['total_sp'],
+                        'total_usd' => (float) $order['total_usd'],
+                    ],
+                    'submitted_material_guids' => array_values(array_unique(array_filter(array_map(
+                        static fn (array $item): string => trim((string) ($item['material_guid'] ?? '')),
+                        $items
+                    )))),
+                    'unavailable_items' => [],
+                    'notices' => [],
+                ];
+            }
+        } catch (\Throwable $exception) {
+            error_log('OrderService::findRecentDuplicateOrder: ' . $exception->getMessage());
+        }
+
+        return null;
+    }
+
+    private static function duplicateKeyPhone(string $phone): string
+    {
+        $digits = preg_replace('/\D+/', '', $phone) ?? '';
+
+        return $digits !== '' ? $digits : trim($phone);
     }
 
     private static function generateOrderNumber(): string

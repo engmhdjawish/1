@@ -1694,8 +1694,17 @@
     };
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      if (form.dataset.submitting === '1') return;
+      form.dataset.submitting = '1';
       const btn = form.querySelector('[type="submit"]');
-      btn?.classList.add('is-loading');
+      const btnLabel = btn?.textContent || '';
+      let leaving = false;
+      if (btn) {
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        btn.classList.add('is-loading');
+        btn.textContent = 'جارٍ إرسال الطلب…';
+      }
       const payload = { action: 'submit_order' };
       new FormData(form).forEach((v, k) => { payload[k] = v; });
       const visitorSessionId = getVisitorSessionId();
@@ -1717,7 +1726,9 @@
         }
         if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
         if (data.ok && data.redirect) {
-          trackOrderPlaced(data);
+          leaving = true;
+          if (btn) btn.textContent = 'تم إرسال الطلب ✓';
+          if (!data.duplicate) trackOrderPlaced(data);
           window.location.href = data.redirect;
           return;
         }
@@ -1725,7 +1736,15 @@
       } catch {
         showToast('تعذر إرسال الطلب.', 'error');
       } finally {
-        btn?.classList.remove('is-loading');
+        if (!leaving) {
+          delete form.dataset.submitting;
+          if (btn) {
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+            btn.classList.remove('is-loading');
+            btn.textContent = btnLabel;
+          }
+        }
       }
     });
   };

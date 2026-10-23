@@ -135,6 +135,12 @@ if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] =
         } elseif ($guestPhone === '' || preg_match('/\d{8,}/', preg_replace('/\D+/', '', $guestPhone)) !== 1) {
             $error = 'يرجى إدخال رقم هاتف صحيح (8 أرقام على الأقل).';
         } elseif ($cartItems === []) {
+            $recentOrder = $_SESSION['share_last_order'][$token] ?? null;
+            if (is_array($recentOrder) && time() - (int) ($recentOrder['submitted_at'] ?? 0) <= OrderService::DUPLICATE_WINDOW_SECONDS) {
+                $_SESSION['share_order_success'][$token] = $recentOrder;
+                header('Location: /order-confirmation.php?token=' . rawurlencode($token), true, 303);
+                exit;
+            }
             $error = 'السلة فارغة.';
         } else {
             $shareLinkId = (string) ($shareLink['id'] ?? ShareCartService::shareLinkId($token) ?? '');
@@ -165,7 +171,9 @@ if ($shareLink !== null && $hasAccess && !$error && $_SERVER['REQUEST_METHOD'] =
                     }
                     $order['partial_notices'] = is_array($result['notices'] ?? null) ? $result['notices'] : [];
                     $order['had_unavailable_items'] = is_array($result['unavailable_items'] ?? null) && $result['unavailable_items'] !== [];
+                    $order['submitted_at'] = time();
                     $_SESSION['share_order_success'][$token] = $order;
+                    $_SESSION['share_last_order'][$token] = $order;
                     header('Location: /order-confirmation.php?token=' . rawurlencode($token), true, 303);
                     exit;
                 }
@@ -456,7 +464,7 @@ ob_start();
             <?php endif; ?>
 
             <?php if ($allowOrder): ?>
-              <form method="post" class="space-y-3 border-t border-gray-100 pt-4">
+              <form method="post" class="space-y-3 border-t border-gray-100 pt-4" data-once-submit>
                 <input type="hidden" name="token" value="<?= h($token) ?>">
                 <input type="hidden" name="action" value="submit_order">
                 <input type="hidden" name="visitor_session_id" value="" data-visitor-session-id>
@@ -499,6 +507,19 @@ ob_start();
       if (id) el.value = id;
     });
   } catch { /* ignore */ }
+  document.querySelectorAll('form[data-once-submit]').forEach((form) => {
+    form.addEventListener('submit', (event) => {
+      if (form.dataset.submitting === '1') {
+        event.preventDefault();
+        return;
+      }
+      form.dataset.submitting = '1';
+      form.querySelectorAll('button').forEach((btn) => {
+        btn.setAttribute('aria-busy', 'true');
+        btn.classList.add('opacity-60', 'pointer-events-none');
+      });
+    });
+  });
 })();
 </script>
 <?php

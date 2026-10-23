@@ -681,6 +681,9 @@ final class StoreCartApi
         if (!empty($result['order_number'])) {
             $payload['order_number'] = (string) $result['order_number'];
         }
+        if (!empty($result['duplicate'])) {
+            $payload['duplicate'] = true;
+        }
 
         return $payload;
     }
