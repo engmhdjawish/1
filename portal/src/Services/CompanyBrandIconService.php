@@ -25,20 +25,23 @@ final class CompanyBrandIconService
         return $dir;
     }
 
-    public static function iconFileName(int $size): string
+    public static function iconFileName(int $size, bool $maskable = false): string
     {
         // v2: edge-to-edge transparent logo (no padded light frame).
-        return 'brand-v2-' . $size . '.png';
+        return 'brand-v2-' . ($maskable ? 'maskable-' : '') . $size . '.png';
     }
 
-    public static function iconAbsolutePath(int $size): string
+    public static function iconAbsolutePath(int $size, bool $maskable = false): string
     {
-        return self::brandingDir() . DIRECTORY_SEPARATOR . self::iconFileName($size);
+        return self::brandingDir() . DIRECTORY_SEPARATOR . self::iconFileName($size, $maskable);
     }
 
-    public static function iconPublicUrl(int $size): string
+    public static function iconPublicUrl(int $size, bool $maskable = false): string
     {
-        return '/icons/brand-icon.php?size=' . $size . '&v=2';
+        $path = self::iconAbsolutePath($size, $maskable);
+        $stamp = is_file($path) ? (string) filemtime($path) : '0';
+
+        return '/icons/brand-icon.php?size=' . $size . ($maskable ? '&maskable=1' : '') . '&v=2-' . $stamp;
     }
 
     public static function hasBrandIcons(): bool
@@ -105,6 +108,10 @@ final class CompanyBrandIconService
             if (!self::generateSquarePng($iconSourcePath, self::iconAbsolutePath($size), $size)) {
                 $ok = false;
             }
+        }
+        $maskable = self::renderSquarePngBinary($iconSourcePath, 512, true);
+        if ($maskable === null || file_put_contents(self::iconAbsolutePath(512, true), $maskable) === false) {
+            $ok = false;
         }
 
         if (!$ok) {
@@ -315,8 +322,11 @@ final class CompanyBrandIconService
     /**
      * Square PNG of the logo only: transparent canvas, no padded frame.
      * Scales the artwork to fill the square as much as possible (contain, 0 padding).
+     *
+     * Maskable icons are cropped by Android to a circle or squircle, so the logo must sit inside the
+     * central safe zone (about 80%) on an opaque background.
      */
-    public static function renderSquarePngBinary(string $sourcePath, int $size): ?string
+    public static function renderSquarePngBinary(string $sourcePath, int $size, bool $maskable = false): ?string
     {
         $source = self::loadImage($sourcePath);
         if ($source === false) {
@@ -340,12 +350,14 @@ final class CompanyBrandIconService
 
         imagealphablending($canvas, false);
         imagesavealpha($canvas, true);
-        $transparent = imagecolorallocatealpha($canvas, 0, 0, 0, 127);
-        imagefilledrectangle($canvas, 0, 0, $size, $size, $transparent);
+        $background = $maskable
+            ? imagecolorallocate($canvas, 255, 255, 255)
+            : imagecolorallocatealpha($canvas, 0, 0, 0, 127);
+        imagefilledrectangle($canvas, 0, 0, $size, $size, $background);
         imagealphablending($canvas, true);
 
-        // Fill the square with the logo (no margin / white frame).
-        $scale = min($size / $srcW, $size / $srcH);
+        $box = $maskable ? $size * 0.68 : $size;
+        $scale = min($box / $srcW, $box / $srcH);
         $dstW = max(1, (int) round($srcW * $scale));
         $dstH = max(1, (int) round($srcH * $scale));
         $dstX = (int) round(($size - $dstW) / 2);
@@ -373,11 +385,18 @@ final class CompanyBrandIconService
      * Serve (and optionally cache) a brand icon for the configured company logo.
      * Works even when storage/branding is not writable by streaming a generated PNG.
      */
-    public static function resolveIconBinary(int $size, ?string $logoUrl = null): ?string
+    public static function cachedIconPath(int $size, bool $maskable = false): ?string
+    {
+        $cached = self::iconAbsolutePath(max(16, min(1024, $size)), $maskable);
+
+        return is_file($cached) && is_readable($cached) && filesize($cached) > 64 ? $cached : null;
+    }
+
+    public static function resolveIconBinary(int $size, ?string $logoUrl = null, bool $maskable = false): ?string
     {
         $size = max(16, min(1024, $size));
-        $cached = self::iconAbsolutePath($size);
-        if (is_file($cached) && is_readable($cached) && filesize($cached) > 64) {
+        $cached = self::iconAbsolutePath($size, $maskable);
+        if (self::cachedIconPath($size, $maskable) !== null) {
             $data = @file_get_contents($cached);
 
             return is_string($data) && $data !== '' ? $data : null;
@@ -404,7 +423,7 @@ final class CompanyBrandIconService
             return null;
         }
 
-        $binary = self::renderSquarePngBinary($iconSourcePath, $size);
+        $binary = self::renderSquarePngBinary($iconSourcePath, $size, $maskable);
         if ($binary === null) {
             return null;
         }
