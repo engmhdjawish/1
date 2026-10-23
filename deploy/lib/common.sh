@@ -107,12 +107,14 @@ copy_portal_tree() {
     --exclude 'storage/material-images/' \
     --exclude 'storage/site-media/' \
     --exclude 'storage/cache/' \
+    --exclude 'storage/branding/' \
+    --exclude 'storage/share-cards/' \
     --exclude 'storage/zip-jobs/' \
     --exclude 'storage/material-image-worker/' \
     --exclude 'vendor/' \
     --exclude '.git/' \
     "$src/" "$dest/"
-  mkdir -p "$dest/storage/material-images/thumbnails" "$dest/storage/site-media" "$dest/storage/fonts" "$dest/storage/zip-jobs"
+  mkdir -p "$dest/storage/material-images/thumbnails" "$dest/storage/site-media" "$dest/storage/fonts" "$dest/storage/zip-jobs" "$dest/storage/branding" "$dest/storage/share-cards"
   chmod -R u+rwX,g+rwX "$dest/storage" 2>/dev/null || true
   chown -R www-data:www-data "$dest/storage" 2>/dev/null || true
   if [[ -d "$dest/images" ]]; then
