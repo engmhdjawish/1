@@ -270,6 +270,7 @@ window.portalMaterialImageFrameEmpty=function(img){if(!(img instanceof HTMLImage
     .then((data) => {
       if (!data || !data.login_required) return;
       const path = window.location.pathname + window.location.search;
+      if (document.body.dataset.notifReader === 'guest' && !path.startsWith('/dashboard')) return;
       if (path.startsWith('/dashboard')) {
         window.location.href = '/staff-login.php?redirect=' + encodeURIComponent(path);
         return;

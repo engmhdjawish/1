@@ -31,6 +31,21 @@ use Portal\Services\SpecialOfferService;
 $maxPackagesLabel = $maxPackagesPerMaterial !== null
     ? SpecialOfferService::formatQuantityLabel($maxPackagesPerMaterial)
     : null;
+$cartLineCount = count($cartItems);
+$cartPackageTotal = 0.0;
+foreach ($cartItems as $cartLine) {
+    $cartPackageTotal += (float) ($cartLine['quantity'] ?? 0);
+}
+$continueHref = '/store.php';
+$referrer = (string) ($_SERVER['HTTP_REFERER'] ?? '');
+$referrerPath = (string) (parse_url($referrer, PHP_URL_PATH) ?: '');
+$referrerHost = (string) (parse_url($referrer, PHP_URL_HOST) ?: '');
+$selfHost = explode(':', (string) ($_SERVER['HTTP_HOST'] ?? ''))[0];
+if (in_array($referrerPath, ['/store-lab.php', '/home-next.php'], true) && strcasecmp($referrerHost, $selfHost) === 0) {
+    $continueHref = '/store-lab.php';
+}
+$stickySp = (float) ($displayTotals['total_sp'] ?? 0);
+$stickyUsd = (float) ($displayTotals['total_usd'] ?? 0);
 ?>
 <div
   class="store-cart-page max-w-6xl mx-auto"
@@ -43,12 +58,16 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
   <header class="store-cart-header flex flex-wrap items-center justify-between gap-3 mb-6">
     <div>
       <h1 class="text-2xl md:text-3xl font-extrabold">سلة المتجر</h1>
-      <p class="text-sm text-gray-600 mt-1">راجع الأصناف ثم أرسل طلبك — التحديثات فورية بدون إعادة تحميل الصفحة.</p>
+      <p class="store-cart-header__count text-sm text-gray-600 mt-1" data-cart-count-line<?= $cartLineCount > 0 ? '' : ' hidden' ?>>
+        <span data-cart-count-lines><?= (int) $cartLineCount ?></span> <?= $cartLineCount === 1 ? 'صنف' : 'أصناف' ?>
+        ·
+        <span data-cart-count-packages><?= h(format_packages_display($cartPackageTotal)) ?></span> طرد
+      </p>
       <?php if ($maxPackagesLabel !== null): ?>
         <p class="store-limit-banner mt-3 mb-0">الحد الأقصى للطلب: <strong><?= h($maxPackagesLabel) ?></strong> طرد لكل مادة.</p>
       <?php endif; ?>
     </div>
-    <a href="/store.php" class="store-btn store-btn--secondary">
+    <a href="<?= h($continueHref) ?>" class="store-btn store-btn--secondary">
       <span class="material-symbols-outlined text-[20px]" aria-hidden="true">storefront</span>
       متابعة التسوق
     </a>
@@ -230,6 +249,21 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
         </div>
       </aside>
     </div>
+    <?php if ($allowOrder): ?>
+      <div class="store-cart-sticky" data-cart-sticky<?= $cartItems !== [] ? '' : ' hidden' ?>>
+        <div class="store-cart-sticky__total" data-cart-sticky-total>
+          <?php if ($showPriceSyp && $stickySp > 0): ?>
+            <?= format_money($stickySp, true) ?> ل.س
+          <?php elseif ($showPriceUsd && $stickyUsd > 0): ?>
+            $<?= number_format($stickyUsd, 2, '.', ',') ?>
+          <?php endif; ?>
+        </div>
+        <button type="button" class="store-btn store-btn--primary store-cart-sticky__go" data-cart-sticky-go>
+          <span class="material-symbols-outlined" aria-hidden="true">send</span>
+          إرسال الطلب
+        </button>
+      </div>
+    <?php endif; ?>
   <?php endif; ?>
 </div>
 

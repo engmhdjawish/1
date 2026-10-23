@@ -1511,9 +1511,85 @@
     }
   };
 
+  const syncCartPageExtras = (root, data) => {
+    if (!root) return;
+    const items = Array.isArray(data.items) ? data.items : [];
+    const packages = items.reduce((sum, line) => sum + (Number(line?.quantity) || 0), 0);
+    const countLine = root.querySelector('[data-cart-count-line]');
+    if (countLine) {
+      countLine.hidden = items.length === 0;
+      countLine.innerHTML = `${items.length} ${items.length === 1 ? 'صنف' : 'أصناف'} · ${formatQty(packages)} طرد`;
+    }
+    const sticky = root.querySelector('[data-cart-sticky]');
+    if (!sticky) return;
+    sticky.hidden = items.length === 0 || !data.allow_order;
+    const totals = data.display_totals || data.totals || {};
+    const totalEl = sticky.querySelector('[data-cart-sticky-total]');
+    if (totalEl) {
+      const sp = Number(totals.total_sp) || 0;
+      const usd = Number(totals.total_usd) || 0;
+      totalEl.innerHTML = data.show_price
+        ? `${sp > 0 ? `<span class="store-price-currency store-price-currency--syp">${formatMoney(sp)} ل.س</span>` : ''}${usd > 0 ? `<span class="store-price-currency store-price-currency--usd">$${formatUsd(usd)}</span>` : ''}`
+        : '';
+    }
+  };
+
+  const bindCartSticky = (root) => {
+    const sticky = root?.querySelector('[data-cart-sticky]');
+    if (!sticky || sticky.dataset.bound === '1') return;
+    sticky.dataset.bound = '1';
+    sticky.querySelector('[data-cart-sticky-go]')?.addEventListener('click', () => {
+      const form = root.querySelector('[data-checkout-form]');
+      if (!form) return;
+      form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const field = form.querySelector('input:not([type="hidden"]):placeholder-shown, input:not([type="hidden"]), textarea');
+      window.setTimeout(() => field?.focus({ preventScroll: true }), 350);
+    });
+    if (!('IntersectionObserver' in window)) return;
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.some((entry) => entry.isIntersecting);
+      sticky.classList.toggle('is-tucked', visible);
+    }, { threshold: 0.15 });
+    const watch = () => {
+      observer.disconnect();
+      const summary = root.querySelector('[data-cart-summary]');
+      if (summary) observer.observe(summary);
+    };
+    watch();
+    root.addEventListener('store-cart:rendered', watch);
+  };
+
   const renderCartPage = (data) => {
     const root = document.querySelector('[data-store-cart-page="1"]');
     renderCartRoot(root, data);
+    syncCartPageExtras(root, data);
+    bindCartSticky(root);
+    root?.dispatchEvent(new CustomEvent('store-cart:rendered'));
+  };
+
+  const CONTACT_KEY = 'jawish_checkout_contact';
+  const rememberedContact = () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(CONTACT_KEY) || 'null');
+      return saved && typeof saved === 'object' ? saved : {};
+    } catch {
+      return {};
+    }
+  };
+  const fillRememberedContact = (form) => {
+    const saved = rememberedContact();
+    const name = form.querySelector('[name="guest_name_ar"]');
+    const phone = form.querySelector('[name="guest_phone"]');
+    if (name && !name.value && saved.name) name.value = saved.name;
+    if (phone && !phone.value && saved.phone) phone.value = saved.phone;
+  };
+  const saveContact = (form) => {
+    const name = form.querySelector('[name="guest_name_ar"]')?.value?.trim() || '';
+    const phone = form.querySelector('[name="guest_phone"]')?.value?.trim() || '';
+    if (!name && !phone) return;
+    try {
+      localStorage.setItem(CONTACT_KEY, JSON.stringify({ name, phone }));
+    } catch { /* storage unavailable */ }
   };
 
   const bindClearCart = (root) => {
@@ -1685,6 +1761,7 @@
     const form = root.querySelector('[data-checkout-form]');
     if (!form || form.dataset.bound === '1') return;
     form.dataset.bound = '1';
+    fillRememberedContact(form);
     const getVisitorSessionId = () => {
       try {
         return localStorage.getItem('jawish_vid') || '';
@@ -1727,6 +1804,7 @@
         if (data.message) showToast(data.message, data.level || (data.ok ? 'success' : 'error'));
         if (data.ok && data.redirect) {
           leaving = true;
+          saveContact(form);
           if (btn) btn.textContent = 'تم إرسال الطلب ✓';
           if (!data.duplicate) trackOrderPlaced(data);
           window.location.href = data.redirect;
@@ -1839,6 +1917,10 @@
       }
       showToast(data.message, level);
     };
+
+    if (Array.isArray(data.items)) {
+      syncCartPageExtras(document.querySelector('[data-store-cart-page="1"]'), data);
+    }
 
     if (canPatchCartResponse() && patchCartFromResponse()) {
       notifyCartMessage(data, silent);
@@ -2075,6 +2157,7 @@
       bindClearCart(page);
       bindCheckout(page);
       bindImageZoom(page);
+      bindCartSticky(page);
     }
     initCartPage();
     const bootstrap = readCartBootstrap();
