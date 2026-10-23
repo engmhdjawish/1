@@ -341,12 +341,31 @@
       badge.classList.toggle('hidden', n === 0);
     };
 
+    const syncCategoryTabs = () => {
+      const present = new Set(items.map((item) => String(item.category || 'news')));
+      const showTabs = present.size > 1;
+      root.querySelectorAll('[data-notif-filter^="cat:"]').forEach((tab) => {
+        const category = (tab.getAttribute('data-notif-filter') || '').slice(4);
+        tab.hidden = !(showTabs && present.has(category));
+      });
+      if (filter.startsWith('cat:') && !present.has(filter.slice(4))) {
+        filter = 'all';
+        root.querySelectorAll('[data-notif-filter]').forEach((tab) => {
+          tab.classList.toggle('is-active', tab.getAttribute('data-notif-filter') === 'all');
+        });
+      }
+    };
+
     const renderList = () => {
-      const visible = filter === 'unread' ? items.filter((item) => !isRead(item)) : items;
+      const visible = filter === 'unread'
+        ? items.filter((item) => !isRead(item))
+        : filter.startsWith('cat:')
+          ? items.filter((item) => String(item.category || 'news') === filter.slice(4))
+          : items;
       list.innerHTML = '';
       if (visible.length === 0) {
         list.innerHTML = '<p class="notif-bell__empty">' +
-          (items.length === 0 ? 'لا توجد إشعارات حالياً.' : 'لا توجد إشعارات غير مقروءة.') +
+          (items.length === 0 ? 'لا توجد إشعارات حالياً.' : (filter === 'unread' ? 'لا توجد إشعارات غير مقروءة.' : 'لا توجد إشعارات هنا.')) +
           '</p>';
         return;
       }
@@ -396,6 +415,7 @@
       try {
         const data = await fetchJson(API);
         items = Array.isArray(data.items) ? data.items : [];
+        syncCategoryTabs();
         renderList();
         setBadge(data.unread ?? 0);
         lastUnread = Math.max(0, Number(data.unread) || 0);
@@ -555,7 +575,9 @@
       subscribeToPush().catch(() => {});
     }
 
-    window.setInterval(() => pollUnread(false), POLL_MS);
+    window.setInterval(() => {
+      if (document.visibilityState === 'visible') pollUnread(false);
+    }, POLL_MS);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         pollUnread(false);
