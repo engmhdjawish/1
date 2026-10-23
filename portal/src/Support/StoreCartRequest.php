@@ -73,6 +73,10 @@ final class StoreCartRequest
         StoreCartPricingService::repriceCart(StoreCartService::TOKEN);
         $cartItems = array_values(StoreCartService::items());
         if ($cartItems === []) {
+            $replay = self::recentSubmitReplay();
+            if ($replay !== null) {
+                return $replay;
+            }
             $notices = is_array($reconcile['notices'] ?? null) ? $reconcile['notices'] : [];
             $message = $notices !== []
                 ? implode(' ', $notices)

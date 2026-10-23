@@ -181,6 +181,7 @@ final class StoreCartPricingService
 
         $changes = [];
         $items = ShareCartService::items($token);
+        StoreCatalogService::prefetchMaterials(array_map('strval', array_keys($items)));
         foreach ($items as $guid => $line) {
             $current = self::authoritativeLineForGuid((string) $guid);
             if ($current === null) {

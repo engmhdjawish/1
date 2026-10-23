@@ -43,14 +43,26 @@ final class StockReservationService
         return max(0.0, (float) ($material['warehouseQuantity'] ?? $material['WarehouseQuantity'] ?? 0));
     }
 
+    /**
+     * Warehouse quantity per material for the current request. Portal reservations are always
+     * re-read from the database, so reusing the Amine figure within one request is safe.
+     *
+     * @var array<string, float>
+     */
+    private static array $warehouseMemo = [];
+
     public static function fetchWarehousePrimary(string $materialGuid): ?float
     {
         $materialGuid = trim($materialGuid);
         if ($materialGuid === '') {
             return null;
         }
+        $memoKey = strtolower($materialGuid);
+        if (array_key_exists($memoKey, self::$warehouseMemo)) {
+            return self::$warehouseMemo[$memoKey];
+        }
 
-        return SessionGate::withoutLock(static function () use ($materialGuid): ?float {
+        $value = SessionGate::withoutLock(static function () use ($materialGuid): ?float {
             try {
                 $response = ApiClient::get('/api/materials/' . rawurlencode($materialGuid));
                 if (!$response['ok'] || !is_array($response['data'] ?? null)) {
@@ -62,6 +74,58 @@ final class StockReservationService
                 return null;
             }
         });
+        if ($value !== null) {
+            self::$warehouseMemo[$memoKey] = $value;
+        }
+
+        return $value;
+    }
+
+    /**
+     * Loads warehouse quantities for many materials in parallel instead of one call per line.
+     *
+     * @param list<string> $materialGuids
+     */
+    public static function prefetchWarehousePrimary(array $materialGuids): void
+    {
+        $missing = [];
+        foreach ($materialGuids as $guid) {
+            $guid = trim((string) $guid);
+            if ($guid !== '' && !array_key_exists(strtolower($guid), self::$warehouseMemo)) {
+                $missing[strtolower($guid)] = $guid;
+            }
+        }
+        if (count($missing) < 2) {
+            return;
+        }
+        $requests = [];
+        foreach ($missing as $key => $guid) {
+            $requests[] = ['key' => $key, 'path' => '/api/materials/' . rawurlencode($guid)];
+        }
+        $results = SessionGate::withoutLock(static function () use ($requests): array {
+            try {
+                return ApiClient::getMany($requests, 20);
+            } catch (\Throwable) {
+                return [];
+            }
+        });
+        foreach ($results as $key => $response) {
+            if (($response['ok'] ?? false) && is_array($response['data'] ?? null)) {
+                self::$warehouseMemo[(string) $key] = self::warehousePrimaryUnits($response['data']);
+            }
+        }
+    }
+
+    public static function forgetWarehouseMemo(): void
+    {
+        self::$warehouseMemo = [];
+        self::$reservedPrimaryCache = [];
+    }
+
+    /** @internal test seam */
+    public static function seedWarehousePrimary(string $materialGuid, float $warehousePrimary): void
+    {
+        self::$warehouseMemo[strtolower(trim($materialGuid))] = max(0.0, $warehousePrimary);
     }
 
     /** @param list<string> $materialGuids @return array<string, float> */
@@ -80,7 +144,7 @@ final class StockReservationService
             foreach ($materialGuids as $index => $guid) {
                 $key = 'g' . $index;
                 $placeholders[] = ':' . $key;
-                $params[$key] = $guid;
+                $params[$key] = strtolower(trim($guid));
             }
             $sql .= ' AND oi.material_guid::text IN (' . implode(', ', $placeholders) . ')';
         }
@@ -97,6 +161,12 @@ final class StockReservationService
                 continue;
             }
             $result[$guid] = max(0.0, (float) ($row['reserved_primary'] ?? 0));
+        }
+        foreach ($materialGuids as $guid) {
+            $lower = strtolower(trim($guid));
+            if ($guid !== $lower && isset($result[$lower])) {
+                $result[$guid] = $result[$lower];
+            }
         }
 
         return $result;
@@ -358,8 +428,12 @@ final class StockReservationService
             }
         }
         $reservedMap = self::reservedPrimaryByMaterial($guids);
+        foreach (array_unique($guids) as $guid) {
+            self::$reservedPrimaryCache[$guid] = $reservedMap[$guid] ?? 0.0;
+        }
         $warehouseMap = [];
         if ($fetchFreshWarehouse) {
+            self::prefetchWarehousePrimary($guids);
             foreach (array_unique($guids) as $guid) {
                 $warehouseMap[$guid] = self::fetchWarehousePrimary($guid);
             }

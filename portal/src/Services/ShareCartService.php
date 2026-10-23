@@ -378,6 +378,11 @@ final class ShareCartService
         $restored = [];
         $notices = [];
 
+        StockReservationService::prefetchWarehousePrimary(array_map('strval', array_merge(
+            array_keys(self::items($token)),
+            array_keys(self::unavailableItems($token))
+        )));
+
         foreach (array_keys(self::unavailableItems($token)) as $guid) {
             $unavailable = $_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY][$guid] ?? null;
             if (!is_array($unavailable)) {

@@ -1419,6 +1419,101 @@ final class StoreCatalogService
         return $material;
     }
 
+    /**
+     * Fills the findMaterial() cache for many cart lines with one batched lookup.
+     * Anything the batch cannot resolve is left for findMaterial() to fetch on its own.
+     *
+     * @param list<string> $guids
+     */
+    public static function prefetchMaterials(array $guids): void
+    {
+        $missing = [];
+        foreach ($guids as $guid) {
+            $guid = trim((string) $guid);
+            if ($guid !== '' && !array_key_exists(strtolower($guid) . '|', self::$materialLookupCache)) {
+                $missing[strtolower($guid)] = $guid;
+            }
+        }
+        if (count($missing) < 2) {
+            return;
+        }
+
+        $found = SessionGate::withoutLock(static function () use ($missing): array {
+            try {
+                return self::lookupMaterialsWhileUnlocked(array_values($missing));
+            } catch (\Throwable) {
+                return [];
+            }
+        });
+        if ($found === []) {
+            return;
+        }
+        $priced = self::withOfferPricing(array_values($found));
+        foreach ($priced as $product) {
+            $key = strtolower(StockReservationService::materialGuid($product));
+            if ($key !== '' && isset($missing[$key])) {
+                self::$materialLookupCache[$key . '|'] = $product;
+            }
+        }
+    }
+
+    /**
+     * @param list<string> $guids
+     * @return array<string, array<string, mixed>> keyed by lowercase GUID
+     */
+    private static function lookupMaterialsWhileUnlocked(array $guids): array
+    {
+        $policyStoreGuids = self::resolvedPolicyStoreGuids(null);
+        $found = [];
+        $collect = static function (array $items, bool $onlyUnavailable) use (&$found): void {
+            foreach ($items as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $key = strtolower(StockReservationService::materialGuid($item));
+                if ($key === '' || isset($found[$key]) || ($onlyUnavailable && !self::materialIsUnavailable($item))) {
+                    continue;
+                }
+                $found[$key] = $item;
+            }
+        };
+
+        if ($policyStoreGuids === []) {
+            $requests = [];
+            foreach ($guids as $guid) {
+                $requests[] = ['key' => strtolower($guid), 'path' => '/api/materials/' . rawurlencode($guid)];
+            }
+            foreach (ApiClient::getMany($requests, 20) as $key => $response) {
+                if (($response['ok'] ?? false) && is_array($response['data'] ?? null)) {
+                    $found[(string) $key] = $response['data'];
+                }
+            }
+
+            return $found;
+        }
+
+        foreach (['true', 'false'] as $availability) {
+            $pending = array_values(array_filter($guids, static fn (string $g): bool => !isset($found[strtolower($g)])));
+            if ($pending === []) {
+                break;
+            }
+            $response = ApiClient::get('/api/materials', [
+                'materialGuids' => implode(',', $pending),
+                'storeGuids' => implode(',', $policyStoreGuids),
+                'isAvailable' => $availability,
+                'page' => 1,
+                'pageSize' => count($pending),
+                'includeTotalCount' => 'false',
+            ]);
+            if (!($response['ok'] ?? false)) {
+                break;
+            }
+            $collect(is_array($response['data']['items'] ?? null) ? $response['data']['items'] : [], $availability === 'false');
+        }
+
+        return $found;
+    }
+
     private static function findMaterialWhileUnlocked(string $guid, ?string $offerSlug = null): ?array
     {
         $guid = trim($guid);
