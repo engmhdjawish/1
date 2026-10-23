@@ -55,6 +55,7 @@ $address = trim((string) ($companyContext['company_address'] ?? ''));
           <a href="/index.php" class="block">الرئيسية</a>
           <a href="/store.php" class="block">المتجر</a>
           <a href="/about.php" class="block">من نحن</a>
+          <a href="/guide.php" class="block">دليل الاستخدام</a>
           <?php if (!empty($staffLoggedIn)): ?>
             <a href="/home-lab.php" class="block">تجربة الرئيسية الجديدة</a>
             <a href="/home-next.php" class="block">الرئيسية الجديدة كلياً</a>

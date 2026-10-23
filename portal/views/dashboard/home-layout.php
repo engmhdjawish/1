@@ -31,6 +31,7 @@ $generalLabels = [
     </a>
     <a href="/dashboard/home-sections.php" class="<?= $btnLight ?>">أقسام الرئيسية</a>
     <a href="/dashboard/home-shop-blocks.php" class="<?= $btnLight ?>">تسوّق حسب</a>
+    <a href="/guide.php" target="_blank" class="<?= $btnLight ?>">دليل الاستخدام</a>
   </div>
 </section>
 
