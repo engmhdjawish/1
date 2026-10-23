@@ -15,9 +15,22 @@ final class WebCustomerService
     private const ALLOWED_STATUSES = ['pending', 'active', 'rejected', 'suspended'];
     private const ALLOWED_SOURCES = ['self_register', 'admin_created'];
 
-    public static function registerSelf(string $name, string $phone, string $password, ?string $email = null): array
+    public const SHOP_ADDRESS_MAX = 300;
+
+    public static function registerSelf(string $name, string $phone, string $password, ?string $shopAddress = null): array
     {
+        $name = trim($name);
         $phone = DigitNormalizer::normalizePhone($phone);
+        $shopAddress = self::cleanShopAddress($shopAddress);
+        if ($name === '' || $phone === '') {
+            return ['ok' => false, 'message' => 'اسم المحل ورقم الهاتف مطلوبان.'];
+        }
+        if ($shopAddress === null) {
+            return ['ok' => false, 'message' => 'اكتب عنوان المحل (المدينة والمنطقة والشارع).'];
+        }
+        if (mb_strlen($password) < 6) {
+            return ['ok' => false, 'message' => 'كلمة المرور 6 أحرف على الأقل.'];
+        }
         $pdo = Database::pdo();
         $exists = $pdo->prepare('SELECT 1 FROM web_customers WHERE phone = :phone');
         $exists->execute(['phone' => $phone]);
@@ -27,15 +40,15 @@ final class WebCustomerService
 
         $stmt = $pdo->prepare(
             'INSERT INTO web_customers (
-                name_ar, phone, email, password_hash, status, registration_source, is_active
+                name_ar, phone, shop_address_ar, password_hash, status, registration_source, is_active
              ) VALUES (
-                :name, :phone, :email, :hash, \'pending\', \'self_register\', FALSE
+                :name, :phone, :shop_address, :hash, \'pending\', \'self_register\', FALSE
              ) RETURNING id'
         );
         $stmt->execute([
             'name' => $name,
             'phone' => $phone,
-            'email' => $email,
+            'shop_address' => $shopAddress,
             'hash' => Password::hash($password),
         ]);
 
@@ -124,6 +137,7 @@ final class WebCustomerService
                 wc.name_ar,
                 wc.phone,
                 wc.email,
+                wc.shop_address_ar,
                 wc.status::text AS status,
                 wc.registration_source::text AS registration_source,
                 wc.access_policy_id::text AS access_policy_id,
@@ -156,7 +170,8 @@ final class WebCustomerService
         ?string $plainPassword,
         ?string $notes,
         ?string $rejectionReason,
-        string $adminUserId
+        string $adminUserId,
+        ?string $shopAddress = null
     ): array {
         $customerId = trim((string) $customerId);
         $name = trim($name);
@@ -255,7 +270,12 @@ final class WebCustomerService
                 'created_by' => $adminUserId,
             ]);
 
-            return ['ok' => true, 'message' => 'تم إنشاء العميل بنجاح.', 'id' => (string) $stmt->fetchColumn()];
+            $newId = (string) $stmt->fetchColumn();
+            if ($shopAddress !== null) {
+                self::saveShopAddress($newId, $shopAddress);
+            }
+
+            return ['ok' => true, 'message' => 'تم إنشاء العميل بنجاح.', 'id' => $newId];
         }
 
         if ($plainPassword !== '') {
@@ -324,11 +344,32 @@ final class WebCustomerService
             return ['ok' => false, 'message' => 'لم يتم العثور على العميل المطلوب تحديثه.'];
         }
 
+        if ($shopAddress !== null) {
+            self::saveShopAddress($customerId, $shopAddress);
+        }
+
         if (in_array($status, ['suspended', 'rejected', 'pending'], true)) {
             PortalSessionService::revokeAllForCustomer($customerId);
         }
 
         return ['ok' => true, 'message' => 'تم تحديث بيانات العميل بنجاح.', 'id' => $customerId];
+    }
+
+    public static function cleanShopAddress(?string $value): ?string
+    {
+        $value = trim(preg_replace('/\s+/u', ' ', (string) $value) ?? '');
+        if ($value === '') {
+            return null;
+        }
+
+        return mb_substr($value, 0, self::SHOP_ADDRESS_MAX);
+    }
+
+    private static function saveShopAddress(string $customerId, string $shopAddress): void
+    {
+        Database::pdo()
+            ->prepare('UPDATE web_customers SET shop_address_ar = :address WHERE id = :id')
+            ->execute(['address' => self::cleanShopAddress($shopAddress), 'id' => $customerId]);
     }
 
     public static function approve(string $customerId, string $accessPolicyId, string $adminUserId): bool
@@ -524,6 +565,7 @@ final class WebCustomerService
                     wc.name_ar,
                     wc.phone,
                     wc.email,
+                    wc.shop_address_ar,
                     wc.status::text AS status,
                     wc.registration_source::text AS registration_source,
                     wc.created_at,
@@ -544,6 +586,7 @@ final class WebCustomerService
                 wc.name_ar ILIKE :search
                 OR wc.phone ILIKE :search
                 OR wc.email ILIKE :search
+                OR wc.shop_address_ar ILIKE :search
             )';
             $params['search'] = '%' . $search . '%';
         }

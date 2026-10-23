@@ -35,9 +35,15 @@ $pageTitle = 'الملف الشخصي';
           <dd dir="ltr"><?= h((string) ($customer['phone'] ?? '')) ?></dd>
         </div>
         <div>
-          <dt>البريد الإلكتروني</dt>
-          <dd dir="ltr"><?= h((string) (($profile['email'] ?? '') !== '' ? $profile['email'] : '—')) ?></dd>
+          <dt>عنوان المحل</dt>
+          <dd><?= h((string) (($profile['shop_address_ar'] ?? '') !== '' ? $profile['shop_address_ar'] : '—')) ?></dd>
         </div>
+        <?php if (($profile['email'] ?? '') !== ''): ?>
+          <div>
+            <dt>البريد الإلكتروني</dt>
+            <dd dir="ltr"><?= h((string) $profile['email']) ?></dd>
+          </div>
+        <?php endif; ?>
       </dl>
     </article>
 
