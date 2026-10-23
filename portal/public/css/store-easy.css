@@ -890,3 +890,17 @@ html.se-sheet-open .se-bar {
     min-height: 0;
   }
 }
+
+/* Search box shared with the home page (hn-search.css). */
+.se-search {
+  position: relative;
+  z-index: 36;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.se-search .lab-recent-q {
+  margin: 0;
+}

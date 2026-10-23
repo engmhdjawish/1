@@ -41,7 +41,7 @@
   };
 
   const syncSearchCarry = (href) => {
-    const form = document.querySelector('form[data-hl-search][data-hl-surface="lab"]');
+    const form = document.querySelector('form[data-store-search]');
     if (!(form instanceof HTMLFormElement)) return;
     form.querySelectorAll('input[type="hidden"]').forEach((input) => input.remove());
     const params = new URL(href, window.location.origin).searchParams;

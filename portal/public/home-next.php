@@ -59,18 +59,21 @@ $title = 'الرئيسية الجديدة';
 $metaRobots = 'noindex, nofollow';
 $canonicalUrl = portal_canonical_url('/index.php');
 $metaDescription = null;
-$enableOnboarding = false;
+$siteTour = 'home';
+$siteTagline = !empty($general['brand']) ? (string) ($general['tagline'] ?? '') : '';
+$hideHeaderCurrency = empty($general['currency']);
 $extraHead = portal_stylesheet('/css/home-page.css')
     . portal_stylesheet('/css/store-lab.css')
     . portal_stylesheet('/css/store-easy.css')
     . portal_stylesheet('/css/lab-access.css')
+    . portal_stylesheet('/css/hn-search.css')
     . portal_stylesheet('/css/home-next.css');
 $extraFooter = portal_defer_script('/assets/home-page.js')
     . portal_defer_script('/assets/lab-access.js')
+    . portal_defer_script('/assets/hn-search.js')
     . portal_defer_script('/assets/home-next.js')
     . portal_defer_script('/assets/product-share.js');
 $appDock = !empty($general['dock']);
-$pageOwnsCurrency = !empty($showCurrency);
 $enableQuickView = false;
 $enableStoreCartJs = false;
 $deferStoreCartJs = $storeCatalogDisplay['allow_cart'] ?? false;

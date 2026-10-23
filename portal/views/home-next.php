@@ -5,8 +5,6 @@ declare(strict_types=1);
 use Portal\Services\HomeLayoutService;
 use Portal\Services\HomeShopBlockService;
 use Portal\Services\PortalSettingsService;
-use Portal\Services\StoreCatalogService;
-use Portal\Support\StorePricePreference;
 
 /** @var list<array<string, mixed>> $sections */
 /** @var list<array<string, mixed>> $ads */
@@ -31,8 +29,10 @@ if ($layoutPreview !== null) {
 }
 try {
     $isCustomer = \Portal\Auth\CustomerSession::check();
+    $isStaffViewer = !\Portal\Auth\CustomerSession::isLoggedIn() && \Portal\Auth\WebSession::check() && \Portal\Auth\WebSession::hasPermission('orders.view');
 } catch (Throwable) {
     $isCustomer = false;
+    $isStaffViewer = false;
 }
 $general = $layout['general'];
 $layoutBlocks = HomeLayoutService::visibleBlocks($layout, $isCustomer);
@@ -47,18 +47,8 @@ try {
 }
 $whatsapp = preg_replace('/\D+/', '', (string) ($company['company_whatsapp'] ?? '')) ?? '';
 $phone = preg_replace('/[^\d+]+/', '', (string) ($company['company_phone'] ?? '')) ?? '';
-$accountHref = $isCustomer ? '/account.php' : portal_login_url('customer');
 $companyName = trim((string) ($company['company_name'] ?? ''));
 
-$showCurrency = false;
-if ($general['brand'] && $general['currency']) {
-    try {
-        $showCurrency = (bool) ($storeCatalogDisplay['show_price'] ?? false) || StoreCatalogService::headerShowsPriceCurrency('/home-next.php');
-    } catch (Throwable) {
-        $showCurrency = false;
-    }
-}
-$currency = $showCurrency ? StorePricePreference::current() : '';
 
 $sectionKey = static fn (array $section): string => (string) ($section['slug'] ?? $section['id'] ?? '');
 $sectionTitle = static fn (array $section): string => trim((string) ($section['title_ar'] ?? '')) ?: 'قسم';
@@ -231,28 +221,6 @@ $shopPages = static function (array $block) use ($pagerNav): void {
 ?>
 <script>try{if(localStorage.getItem('hn-text')==='lg')document.documentElement.classList.add('hn-text-lg')}catch(e){}</script>
 <div class="hn" data-hn data-product-share-scope data-product-share-company="<?= h($companyName) ?>">
-  <?php if ($general['brand'] && ($companyName !== '' || $showCurrency)): ?>
-    <header class="hn-brand">
-      <div class="hn-brand__id">
-        <span class="hn-brand__mark" aria-hidden="true"><?= h(lab_shop_initial($companyName !== '' ? $companyName : 'م')) ?></span>
-        <div class="hn-brand__text">
-          <?php if ($companyName !== ''): ?>
-            <p class="hn-brand__name"><?= h($companyName) ?></p>
-          <?php endif; ?>
-          <?php if ($general['tagline'] !== ''): ?>
-            <p class="hn-brand__tagline"><?= h($general['tagline']) ?></p>
-          <?php endif; ?>
-        </div>
-      </div>
-      <?php if ($showCurrency): ?>
-        <div class="hn-brand__currency store-currency-toggle" role="group" aria-label="عملة عرض الأسعار">
-          <button type="button" class="store-currency-toggle__btn<?= $currency === StorePricePreference::SYP ? ' is-active' : '' ?>" data-store-currency="<?= h(StorePricePreference::SYP) ?>" title="عرض الأسعار بالليرة السورية">ل.س</button>
-          <button type="button" class="store-currency-toggle__btn<?= $currency === StorePricePreference::USD ? ' is-active' : '' ?>" data-store-currency="<?= h(StorePricePreference::USD) ?>" title="عرض الأسعار بالدولار">$</button>
-        </div>
-      <?php endif; ?>
-    </header>
-  <?php endif; ?>
-
   <section class="hn-top" aria-label="البحث">
     <form class="hn-search" action="/store-lab.php" method="get" role="search" data-hl-search data-hn-search>
       <label class="hn-search__box">
@@ -655,18 +623,19 @@ $shopPages = static function (array $block) use ($pagerNav): void {
               <span>اتصال</span>
             </a>
           <?php endif; ?>
-          <a class="hn-help__item" href="<?= $isCustomer ? '/my-orders.php' : '/track-order.php' ?>">
+          <?php [$helpOrdersHref, $helpOrdersLabel] = $isCustomer ? ['/my-orders.php', 'طلباتي'] : ($isStaffViewer ? ['/dashboard/orders.php', 'الطلبات'] : ['/track-order.php', 'تتبّع طلب']); ?>
+          <a class="hn-help__item" href="<?= h($helpOrdersHref) ?>">
             <span class="material-symbols-outlined" aria-hidden="true">local_shipping</span>
-            <span><?= $isCustomer ? 'طلباتي' : 'تتبّع طلب' ?></span>
+            <span><?= h($helpOrdersLabel) ?></span>
           </a>
           <button type="button" class="hn-help__item" data-hn-text-size aria-pressed="false">
             <span class="material-symbols-outlined" aria-hidden="true">text_increase</span>
             <span data-hn-text-size-label>تكبير الخط</span>
           </button>
-          <a class="hn-help__item" href="/guide.php">
-            <span class="material-symbols-outlined" aria-hidden="true">menu_book</span>
-            <span>دليل الاستخدام</span>
-          </a>
+          <button type="button" class="hn-help__item" data-site-guide-replay>
+            <span class="material-symbols-outlined" aria-hidden="true">tour</span>
+            <span>جولة تعريفية</span>
+          </button>
         </div>
       </section>
     <?php endif; ?>

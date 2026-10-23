@@ -73,11 +73,12 @@ try {
 }
 
 $storeLabMode = true;
-$enableOnboarding = false;
+$siteTour = 'store';
 $extraHead = portal_stylesheet('/css/home-lab.css')
     . portal_stylesheet('/css/store-lab.css')
     . portal_stylesheet('/css/store-easy.css')
-    . portal_stylesheet('/css/lab-access.css');
+    . portal_stylesheet('/css/lab-access.css')
+    . portal_stylesheet('/css/hn-search.css');
 $extraFooter = portal_defer_script('/assets/product-share.js');
 $enableQuickView = true;
 $enableStoreCartJs = true;

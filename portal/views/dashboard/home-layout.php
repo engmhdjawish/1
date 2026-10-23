@@ -14,8 +14,8 @@ $checkClass = 'rounded border-border-subtle text-primary focus:ring-primary';
 $btnLight = 'h-9 px-4 inline-flex items-center gap-1 rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50';
 $general = $layout['general'];
 $generalLabels = [
-    'brand' => 'شريط اسم الشركة أعلى الصفحة',
-    'currency' => 'مبدّل العملة في شريط الشركة',
+    'brand' => 'إظهار السطر التعريفي تحت اسم الشركة في الهيدر',
+    'currency' => 'مبدّل العملة في الهيدر',
     'dock' => 'شريط التنقل السفلي في الموبايل',
 ];
 ?>
