@@ -190,7 +190,7 @@ $hitListLimit = $shownCount >= $listLimit && $activeTabCount > $shownCount;
             <div class="min-w-0">
               <p class="font-bold text-slate-900 truncate"><?= h((string) ($row['name_ar'] ?? '—')) ?></p>
               <p class="text-xs text-text-muted mt-0.5" dir="ltr"><?= h((string) ($row['phone'] ?? '—')) ?></p>
-              <p class="text-xs text-text-muted truncate"><?= h((string) (($row['email'] ?? '') !== '' ? $row['email'] : 'بدون بريد')) ?></p>
+              <p class="text-xs text-text-muted truncate"><?= h((string) (($row['shop_address_ar'] ?? '') !== '' ? $row['shop_address_ar'] : (($row['email'] ?? '') !== '' ? $row['email'] : 'بدون عنوان'))) ?></p>
             </div>
             <span class="px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0 <?= $statusBadgeClass($status) ?>">
               <?= h($statusLabels[$status] ?? $status) ?>
@@ -240,7 +240,7 @@ $hitListLimit = $shownCount >= $listLimit && $activeTabCount > $shownCount;
             <tr class="hover:bg-slate-50/80 transition">
               <td class="px-4 py-3">
                 <div class="font-bold text-slate-900"><?= h((string) ($row['name_ar'] ?? '—')) ?></div>
-                <div class="text-xs text-text-muted mt-0.5 truncate max-w-[14rem]"><?= h((string) (($row['email'] ?? '') !== '' ? $row['email'] : 'بدون بريد')) ?></div>
+                <div class="text-xs text-text-muted mt-0.5 truncate max-w-[14rem]"><?= h((string) (($row['shop_address_ar'] ?? '') !== '' ? $row['shop_address_ar'] : (($row['email'] ?? '') !== '' ? $row['email'] : 'بدون عنوان'))) ?></div>
               </td>
               <td class="px-4 py-3 text-text-muted" dir="ltr"><?= h((string) ($row['phone'] ?? '—')) ?></td>
               <td class="px-4 py-3">
@@ -316,6 +316,10 @@ $hitListLimit = $shownCount >= $listLimit && $activeTabCount > $shownCount;
 
     <div class="flex-1 overflow-y-auto p-4 space-y-3 text-sm">
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="rounded-xl border border-border-subtle p-3 sm:col-span-2">
+          <p class="text-text-muted text-xs mb-1">عنوان المحل</p>
+          <p class="font-bold"><?= h((string) (($detailsCustomer['shop_address_ar'] ?? '') !== '' ? $detailsCustomer['shop_address_ar'] : 'غير متوفر')) ?></p>
+        </div>
         <div class="rounded-xl border border-border-subtle p-3">
           <p class="text-text-muted text-xs mb-1">البريد</p>
           <p class="font-bold break-all"><?= h((string) (($detailsCustomer['email'] ?? '') !== '' ? $detailsCustomer['email'] : 'غير متوفر')) ?></p>
@@ -485,7 +489,12 @@ $hitListLimit = $shownCount >= $listLimit && $activeTabCount > $shownCount;
         </label>
 
         <label class="block text-sm">
-          <span class="text-text-muted block mb-1 text-xs">البريد الإلكتروني</span>
+          <span class="text-text-muted block mb-1 text-xs">عنوان المحل</span>
+          <input name="shop_address_ar" maxlength="300" value="<?= h((string) ($editCustomer['shop_address_ar'] ?? '')) ?>" class="h-10 w-full rounded-xl border border-border-subtle px-4 text-sm focus:border-primary focus:ring-primary" placeholder="المدينة — المنطقة — الشارع">
+        </label>
+
+        <label class="block text-sm">
+          <span class="text-text-muted block mb-1 text-xs">البريد الإلكتروني (اختياري)</span>
           <input type="text" name="email" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false" value="<?= h((string) ($editCustomer['email'] ?? '')) ?>" class="h-10 w-full rounded-xl border border-border-subtle px-4 text-sm focus:border-primary focus:ring-primary" dir="ltr">
         </label>
 

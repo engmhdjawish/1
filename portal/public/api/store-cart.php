@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
+use Portal\Support\SessionGate;
 use Portal\Support\StoreCartApi;
 
 require dirname(__DIR__, 2) . '/views/helpers.php';
@@ -15,6 +16,9 @@ $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 if ($method === 'GET') {
     $shareToken = trim((string) ($_GET['token'] ?? ''));
     $reconcile = ($_GET['reconcile'] ?? '1') !== '0';
+    if (!$reconcile) {
+        SessionGate::release();
+    }
     if ($shareToken !== '') {
         echo json_encode(StoreCartApi::shareState($shareToken, $reconcile), JSON_UNESCAPED_UNICODE);
         exit;

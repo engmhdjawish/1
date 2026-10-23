@@ -318,7 +318,7 @@ final class StoreCartApi
     }
 
     /** @param array<string, mixed> $input */
-    private static function update(array $input, ?float $warehousePrimary = null): array
+    private static function update(array $input, ?float $warehousePrimary = null, bool $enforceStock = true): array
     {
         $shareToken = self::shareTokenFromInput($input);
         if (self::isShareCartToken($shareToken)) {
@@ -331,7 +331,7 @@ final class StoreCartApi
             return self::payload('تعذر تحديد المادة.', false);
         }
 
-        $result = StoreCartService::updateQuantity($materialGuid, (float) $quantity, $warehousePrimary);
+        $result = StoreCartService::updateQuantity($materialGuid, (float) $quantity, $warehousePrimary, $enforceStock);
         if ($result['ok']) {
             $message = $quantity > 0 ? 'تم تحديث الكمية.' : 'تم حذف الصنف من السلة.';
             if ($result['message'] !== '') {
@@ -385,6 +385,15 @@ final class StoreCartApi
         );
     }
 
+    public static function actionNeedsMaterialLookup(string $action, float $delta = 0.0): bool
+    {
+        if ($action === 'add' || $action === 'add_to_cart') {
+            return true;
+        }
+
+        return $action === 'bump' && $delta > 0.0001;
+    }
+
     /** @param array<string, mixed> $input */
     private static function bump(array $input): array
     {
@@ -399,20 +408,29 @@ final class StoreCartApi
             return self::payload('تعذر تحديث الكمية.', false);
         }
 
-        $items = StoreCartService::items();
-        $current = max(0.0, round((float) ($items[$materialGuid]['quantity'] ?? 0), 4));
-        $next = max(0.0, round($current + $delta, 4));
+        if (!self::actionNeedsMaterialLookup('bump', $delta)) {
+            $items = StoreCartService::items();
+            $current = max(0.0, round((float) ($items[$materialGuid]['quantity'] ?? 0), 4));
+            $next = max(0.0, round($current + $delta, 4));
+
+            return self::update([
+                'material_guid' => $materialGuid,
+                'quantity' => $next,
+                'token' => $input['token'] ?? null,
+            ], null, false);
+        }
 
         $product = StoreCatalogService::findMaterial($materialGuid);
         $warehousePrimary = $product !== null
             ? StockReservationService::warehousePrimaryUnits($product)
             : null;
 
-        if ($delta > 0) {
-            $clientCheck = self::clientQuantityCheck($materialGuid, $delta, $current, $product, $warehousePrimary);
-            if (!$clientCheck['ok']) {
-                return self::payload($clientCheck['message'], false);
-            }
+        $items = StoreCartService::items();
+        $current = max(0.0, round((float) ($items[$materialGuid]['quantity'] ?? 0), 4));
+        $next = max(0.0, round($current + $delta, 4));
+        $clientCheck = self::clientQuantityCheck($materialGuid, $delta, $current, $product, $warehousePrimary);
+        if (!$clientCheck['ok']) {
+            return self::payload($clientCheck['message'], false);
         }
 
         return self::update([
@@ -663,6 +681,9 @@ final class StoreCartApi
         if (!empty($result['order_number'])) {
             $payload['order_number'] = (string) $result['order_number'];
         }
+        if (!empty($result['duplicate'])) {
+            $payload['duplicate'] = true;
+        }
 
         return $payload;
     }
@@ -734,16 +755,30 @@ final class StoreCartApi
             }
         ));
         $cartQtyByGuid = [];
+        $packageCount = 0.0;
         foreach (StoreCartService::items() as $guid => $line) {
-            $cartQtyByGuid[$guid] = max(0.0, round((float) ($line['quantity'] ?? 0), 4));
+            $rawQty = max(0.0, (float) ($line['quantity'] ?? 0));
+            $cartQtyByGuid[$guid] = round($rawQty, 4);
+            $packageCount += $rawQty;
         }
+        $packageCount = round($packageCount, 4);
+
+        // Health probe can take seconds on a cold cache. Do it off the session lock
+        // after cart state is already copied into this response.
+        $amine = SessionGate::withoutLock(static fn (): array => AmineAvailabilityService::snapshot());
+        $amineOnline = ($amine['online'] ?? false) === true;
+        $amineNotice = $amineOnline
+            ? ''
+            : (trim((string) ($amine['user_message'] ?? '')) !== ''
+                ? trim((string) $amine['user_message'])
+                : AmineAvailabilityService::defaultUserMessage());
 
         $payload = [
             'ok' => $ok,
             'level' => $ok ? ($level === 'warning' ? 'warning' : 'success') : 'error',
             'message' => $message ?? '',
-            'cart_count' => StoreCartService::itemCount(),
-            'cart_package_count' => StoreCartService::packageCount(),
+            'cart_count' => count($cartQtyByGuid),
+            'cart_package_count' => $packageCount,
             'items' => $items,
             'unavailable' => $unavailable,
             'totals' => $totals,
@@ -764,8 +799,8 @@ final class StoreCartApi
             'stock_notices' => $notices,
             'price_changes' => $pendingChanges,
             'logged_in' => CustomerSession::check(),
-            'amine_online' => AmineAvailabilityService::isAvailable(),
-            'amine_notice' => AmineAvailabilityService::isAvailable() ? '' : AmineAvailabilityService::userMessage(),
+            'amine_online' => $amineOnline,
+            'amine_notice' => $amineNotice,
         ];
 
         return $payload;

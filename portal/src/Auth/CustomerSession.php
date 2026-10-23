@@ -48,7 +48,8 @@ final class CustomerSession
     public static function requireLogin(): void
     {
         if (!self::check()) {
-            header('Location: ' . PortalUrl::loginUrl('customer'));
+            // The login page sends signed-in pending accounts straight back here.
+            header('Location: ' . (self::isPending() ? '/index.php' : PortalUrl::loginUrl('customer')));
             exit;
         }
     }

@@ -102,6 +102,7 @@ CREATE TABLE web_customers (
     name_ar                 VARCHAR(250) NOT NULL,
     phone                   VARCHAR(30) NOT NULL,
     email                   VARCHAR(255),
+    shop_address_ar         VARCHAR(300),
     password_hash           VARCHAR(500),
     status                  web_customer_status NOT NULL DEFAULT 'pending',
     registration_source     web_customer_registration_source NOT NULL,

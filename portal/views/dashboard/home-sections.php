@@ -119,6 +119,8 @@ $previewProducts = is_array($editSection['preview_products'] ?? null) ? $editSec
   </div>
   <div class="flex flex-wrap items-center gap-3">
     <?php if (!$showForm): ?>
+      <a href="/index.php" target="_blank" class="h-9 px-4 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">معاينة الرئيسية</a>
+      <a href="/dashboard/home-shop-blocks.php" class="h-9 px-4 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">تسوّق حسب</a>
       <a href="/dashboard/home-sections.php?new=1" class="h-9 px-4 inline-flex items-center rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">قسم جديد</a>
       <a href="/dashboard/site-media.php" class="h-9 px-4 inline-flex items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">مكتبة الصور</a>
     <?php endif; ?>

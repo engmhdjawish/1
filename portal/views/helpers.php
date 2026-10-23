@@ -298,7 +298,7 @@ function portal_manifest_icon(int $size, string $purpose = 'any'): array
     $logoUrl = trim((string) (\Portal\Services\PortalSettingsService::companyLogoUrl() ?? ''));
     if ($logoUrl !== '' || \Portal\Services\CompanyBrandIconService::hasBrandIcons()) {
         return [
-            'src' => \Portal\Services\CompanyBrandIconService::iconPublicUrl($size),
+            'src' => \Portal\Services\CompanyBrandIconService::iconPublicUrl($size, $purpose === 'maskable'),
             'sizes' => $size . 'x' . $size,
             'type' => 'image/png',
             'purpose' => $purpose,
@@ -381,7 +381,50 @@ function portal_canonical_url(?string $override = null): string
     return portal_absolute_url($canonicalPath);
 }
 
-function portal_seo_description(string $pagePath, string $siteName, ?string $override = null): string
+function portal_share_description(array $company, string $siteName): string
+{
+    $custom = trim((string) preg_replace('/\s+/u', ' ', (string) ($company['share_description_ar'] ?? '')));
+    if ($custom !== '') {
+        return $custom;
+    }
+    $siteName = trim($siteName) !== '' ? trim($siteName) : 'جاويش للتجارة';
+
+    return $siteName . ' — بيع بالجملة للتجار والمحلات: تشكيلة واسعة بأسعار الجملة، تصفّح واطلب مباشرة.';
+}
+
+/** Product link preview text: what the trader needs to recognise the item. Never includes prices. */
+function portal_product_share_description(array $product, string $siteName): string
+{
+    $parts = [];
+    foreach (['materialType', 'ageCategory'] as $key) {
+        $value = trim((string) ($product[$key] ?? ''));
+        if ($value !== '' && !in_array($value, $parts, true)) {
+            $parts[] = $value;
+        }
+    }
+    $sizes = trim((string) ($product['sizeRange'] ?? ''));
+    if ($sizes !== '') {
+        $parts[] = 'قياسات ' . $sizes;
+    }
+    $factor = (float) ($product['packageConversionFactor'] ?? 0);
+    $unit = trim((string) ($product['primaryUnit'] ?? ''));
+    $packUnit = trim((string) ($product['packageUnit'] ?? '')) ?: 'الطرد';
+    if ($factor > 1) {
+        $parts[] = $packUnit . ' ' . rtrim(rtrim(number_format($factor, 2, '.', ''), '0'), '.') . ($unit !== '' ? ' ' . $unit : '');
+    }
+    foreach (['manufacturer', 'countryOfOrigin'] as $key) {
+        $value = trim((string) ($product[$key] ?? ''));
+        if ($value !== '') {
+            $parts[] = $value;
+        }
+    }
+    $siteName = trim($siteName) !== '' ? trim($siteName) : 'جاويش للتجارة';
+    $lead = $parts !== [] ? implode(' · ', $parts) . ' — ' : '';
+
+    return $lead . 'بالجملة من ' . $siteName . '. اطلب بالطرد مباشرة من الموقع.';
+}
+
+function portal_seo_description(string $pagePath, string $siteName, ?string $override = null, ?array $company = null): string
 {
     $override = trim((string) $override);
     if ($override !== '') {
@@ -391,18 +434,19 @@ function portal_seo_description(string $pagePath, string $siteName, ?string $ove
     $siteName = trim($siteName) !== '' ? trim($siteName) : 'جاويش للتجارة';
 
     return match ($pagePath) {
-        '/index.php', '/' => 'تسوّق أحذية محلية ومستوردة من ' . $siteName . '. تصفّح التشكيلة، العروض الخاصة، واطلب بسهولة عبر الموقع.',
-        '/store.php' => 'متجر ' . $siteName . ' — تصفّح تشكيلة الأحذية، فلترة حسب النوع والماركة، واطّلع على الأسعار والعروض.',
-        '/store-cart.php', '/cart.php' => 'سلة التسوق في ' . $siteName . '. راجع أصنافك وأكمل طلبك بسهولة.',
-        '/about.php' => 'تعرّف على ' . $siteName . ': من نحن، أعمالنا، والتزامنا بجودة الأحذية وخدمة العملاء.',
+        '/index.php', '/' => portal_share_description($company ?? [], $siteName),
+        '/store.php' => 'متجر ' . $siteName . ' للجملة — تصفّح التشكيلة حسب النوع والموسم والماركة واطلب بالطرد مباشرة.',
+        '/store-cart.php', '/cart.php' => 'سلة طلبات الجملة في ' . $siteName . '. راجع أصنافك وأرسل طلبك.',
+        '/about.php' => 'تعرّف على ' . $siteName . ': تجارة الجملة، أعمالنا، وخدمة التجار والمحلات.',
         '/login.php' => 'تسجيل الدخول إلى حسابك في ' . $siteName . ' لمتابعة الطلبات وإدارة ملفك الشخصي.',
         '/customer-login.php' => 'تسجيل دخول العملاء في ' . $siteName . ' لمتابعة الطلبات وإدارة ملفك الشخصي.',
         '/staff-login.php' => 'تسجيل دخول موظفي ' . $siteName . ' إلى لوحة التحكم.',
-        '/register.php' => 'إنشاء حساب جديد في ' . $siteName . ' للتسوق ومتابعة الطلبات بسهولة.',
+        '/register.php' => 'إنشاء حساب تاجر في ' . $siteName . ' لطلب الجملة ومتابعة الطلبات.',
         '/my-orders.php' => 'متابعة طلباتك في ' . $siteName . ' — حالة الطلب، التفاصيل، والتتبع.',
         '/my-profile.php' => 'ملفك الشخصي في ' . $siteName . ' — بيانات الحساب وإعدادات الأمان.',
         '/track-order.php' => 'تتبع طلبك من ' . $siteName . ' باستخدام رمز التتبع.',
-        default => $siteName . ' — بوابة تجارة الأحذية الإلكترونية.',
+        '/guide.php' => 'دليل استخدام ' . $siteName . ': الصفحة الرئيسية، المتجر، والسلة خطوة بخطوة.',
+        default => portal_share_description($company ?? [], $siteName),
     };
 }
 
@@ -452,6 +496,59 @@ function format_money(?float $amount, bool $show): string
     }
 
     return number_format($amount, 0, '.', ',');
+}
+
+function catalog_price_amount_present(mixed $value): bool
+{
+    if ($value === null || $value === '' || is_array($value) || is_bool($value)) {
+        return false;
+    }
+    if (is_string($value) && !is_numeric($value)) {
+        return false;
+    }
+
+    return (float) $value > 0;
+}
+
+/** True when the active price mode has a real amount. Zero, null, and empty do not count. */
+function catalog_material_has_sale_price(array $item, string $priceMode = 'both'): bool
+{
+    $has = static function (array $item, array $keys): bool {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $item) && catalog_price_amount_present($item[$key])) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+    $hasSp = $has($item, [
+        'unitSalePriceSyp',
+        'UnitSalePriceSyp',
+        'effective_unit_sale_price_sp',
+        'original_unit_sale_price_sp',
+        'effective_package_sale_price_sp',
+        'original_package_sale_price_sp',
+    ]);
+    $hasUsd = $has($item, [
+        'unitSalePriceUsd',
+        'UnitSalePriceUsd',
+        'effective_unit_sale_price_usd',
+        'original_unit_sale_price_usd',
+        'effective_package_sale_price_usd',
+        'original_package_sale_price_usd',
+    ]);
+    if ($priceMode === 'syp') {
+        return $hasSp;
+    }
+    if ($priceMode === 'usd') {
+        return $hasUsd;
+    }
+    if ($priceMode === 'none') {
+        return false;
+    }
+
+    return $hasSp || $hasUsd;
 }
 
 /** Character count without requiring ext-mbstring (common on Windows PHP builds). */
@@ -1032,6 +1129,437 @@ function home_section_store_url(array $section): string
     }
 
     return store_url(CatalogSectionResolver::storeLinkParams($section));
+}
+
+/** @param array<string, mixed> $params */
+function store_lab_url(array $params = []): string
+{
+    return store_url($params);
+}
+
+/** @param array<string, mixed> $section */
+function store_lab_section_url(array $section): string
+{
+    return home_section_store_url($section);
+}
+
+/** @return array<string, mixed>|null */
+function store_easy_policy_store_options(): ?array
+{
+    static $resolved = false;
+    static $options = null;
+    if ($resolved) {
+        return $options;
+    }
+    $resolved = true;
+    try {
+        $policy = \Portal\Services\StoreCatalogService::activePolicy();
+    } catch (Throwable) {
+        $policy = null;
+    }
+    if ($policy !== null) {
+        $options = is_array($policy['store_options'] ?? null)
+            ? $policy['store_options']
+            : \Portal\Services\AccessPolicyService::defaultStoreOptions();
+    }
+
+    return $options;
+}
+
+/** @param array<string, mixed>|null $catalog */
+function store_easy_client_filter_visible(string $code, ?array $catalog = null): bool
+{
+    $storeOptions = is_array($catalog['store_options'] ?? null) ? $catalog['store_options'] : store_easy_policy_store_options();
+    if ($storeOptions === null) {
+        return false;
+    }
+    $visible = \Portal\Services\AccessPolicyService::resolvedVisibleClientFilters($storeOptions);
+    $locked = array_map('strval', is_array($catalog['locked_client_filters'] ?? null) ? $catalog['locked_client_filters'] : []);
+
+    return in_array($code, $visible, true) && !in_array($code, $locked, true);
+}
+
+/**
+ * Shortcuts shown on the trial homepage.
+ *
+ * @param list<array<string, mixed>> $sections
+ * @param array<string, mixed> $company
+ * @return list<array{label: string, icon: string, href: string, tone: string, cart?: bool, external?: bool}>
+ */
+function lab_quick_access_items(array $sections, bool $allowCart, bool $isCustomer, array $company): array
+{
+    $items = [];
+    foreach ($sections as $section) {
+        if (is_array($section) && !empty($section['is_offer_section'])) {
+            $items[] = ['label' => 'العروض', 'icon' => 'local_offer', 'href' => store_lab_section_url($section), 'tone' => 'red'];
+            break;
+        }
+    }
+    $items[] = ['label' => 'كل المواد', 'icon' => 'storefront', 'href' => '/store.php', 'tone' => 'ink'];
+    if (store_easy_client_filter_visible('availability')) {
+        $items[] = ['label' => 'المتوفر فقط', 'icon' => 'inventory_2', 'href' => '/store.php?isAvailable=1', 'tone' => 'ink'];
+    }
+    if ($allowCart) {
+        $items[] = ['label' => 'السلة', 'icon' => 'shopping_cart', 'href' => '/store-cart.php', 'tone' => 'ink', 'cart' => true];
+    }
+    $items[] = $isCustomer
+        ? ['label' => 'طلباتي', 'icon' => 'receipt_long', 'href' => '/my-orders.php', 'tone' => 'ink']
+        : ['label' => 'تتبّع طلب', 'icon' => 'local_shipping', 'href' => '/track-order.php', 'tone' => 'ink'];
+    $whatsapp = preg_replace('/\D+/', '', (string) ($company['company_whatsapp'] ?? '')) ?? '';
+    if ($whatsapp !== '') {
+        $items[] = ['label' => 'واتساب', 'icon' => 'chat', 'href' => 'https://wa.me/' . $whatsapp, 'tone' => 'green', 'external' => true];
+    }
+
+    return $items;
+}
+
+function hn_days_label(int $days): string
+{
+    return match (true) {
+        $days <= 1 => 'يوم واحد',
+        $days === 2 => 'يومين',
+        $days <= 10 => $days . ' أيام',
+        default => $days . ' يوماً',
+    };
+}
+
+/** Countdown text for an offer that ends at $endsAt, or '' when it has no end. */
+function hn_offer_countdown(?string $endsAt, ?int $now = null): string
+{
+    $endsAt = trim((string) $endsAt);
+    $end = $endsAt !== '' ? strtotime($endsAt) : false;
+    if ($end === false) {
+        return '';
+    }
+    $left = $end - ($now ?? time());
+    if ($left <= 0) {
+        return '';
+    }
+    if ($left >= 86400) {
+        return 'ينتهي خلال ' . hn_days_label((int) floor($left / 86400));
+    }
+
+    return sprintf('ينتهي خلال %02d:%02d', intdiv($left, 3600), intdiv($left % 3600, 60));
+}
+
+/** @param array<string, mixed> $section */
+function hn_offer_badge(array $section): string
+{
+    $badge = trim((string) ($section['badge_text_ar'] ?? ''));
+    if ($badge !== '') {
+        return $badge;
+    }
+    $percent = (float) ($section['discount_percent'] ?? 0);
+    if (($section['discount_type'] ?? '') === 'percent' && $percent > 0) {
+        return 'خصم ' . rtrim(rtrim(number_format($percent, 1, '.', ''), '0'), '.') . '%';
+    }
+
+    return 'عرض خاص';
+}
+
+function lab_shop_facet_icon(string $param, string $value): string
+{
+    if ($param === 'ageCategories') {
+        return store_easy_tile_icon($value);
+    }
+
+    return match ($param) {
+        'materialTypes' => store_easy_tile_icon($value) !== 'category' ? store_easy_tile_icon($value) : 'checkroom',
+        'manufacturers' => 'verified',
+        'sizeRanges' => 'straighten',
+        'countryOfOrigins' => 'public',
+        default => 'category',
+    };
+}
+
+function lab_shop_initial(string $label): string
+{
+    $label = trim($label);
+
+    return $label !== '' ? mb_strtoupper(mb_substr($label, 0, 1)) : '?';
+}
+
+/**
+ * Turns "shop by" blocks into tiles linking to the trial store. Blocks that rely on a facet the
+ * active policy hides are dropped, because the store would ignore that filter.
+ *
+ * @param list<array<string, mixed>> $blocks
+ * @param callable(array<string, mixed>): string $urlFor
+ * @return list<array<string, mixed>>
+ */
+function lab_shop_blocks_resolve(array $blocks, callable $urlFor, ?callable $valuesFor = null): array
+{
+    $valuesFor ??= static fn (string $param): ?array => store_easy_facet_values($param);
+    $pick = static function (array $configured, array $available): array {
+        if ($configured === []) {
+            return $available;
+        }
+        if ($available === []) {
+            return $configured;
+        }
+
+        return array_values(array_filter($configured, static fn (string $value): bool => in_array($value, $available, true)));
+    };
+    $tile = static fn (string $label, string $href, string $icon, string $image = ''): array => [
+        'label' => $label,
+        'href' => $href,
+        'icon' => $icon,
+        'image' => $image,
+        'initial' => lab_shop_initial($label),
+    ];
+
+    $resolved = [];
+    foreach ($blocks as $block) {
+        $type = (string) ($block['block_type'] ?? 'facet');
+        $primary = (string) ($block['primary_param'] ?? '');
+        $entry = [
+            'key' => 'shop-' . preg_replace('/[^a-z0-9-]+/i', '', (string) ($block['id'] ?? count($resolved))),
+            'title' => (string) ($block['title_ar'] ?? ''),
+            'type' => $type,
+            'style' => (string) ($block['style'] ?? 'icons'),
+            'placement' => (string) ($block['placement'] ?? 'tabs'),
+            'max' => (int) ($block['max_items'] ?? 12),
+            'tiles' => [],
+            'groups' => [],
+        ];
+        if ($entry['title'] === '') {
+            continue;
+        }
+
+        if ($type === 'custom') {
+            foreach ((array) ($block['tiles'] ?? []) as $custom) {
+                $params = [];
+                $hidden = false;
+                $icon = 'category';
+                foreach ((array) ($custom['filters'] ?? []) as $param => $value) {
+                    if ($valuesFor((string) $param) === null) {
+                        $hidden = true;
+                        break;
+                    }
+                    $params[$param] = [(string) $value];
+                    if ($icon === 'category') {
+                        $icon = lab_shop_facet_icon((string) $param, (string) $value);
+                    }
+                }
+                if (!empty($custom['available'])) {
+                    if (!store_easy_client_filter_visible('availability')) {
+                        $hidden = true;
+                    }
+                    $params['isAvailable'] = '1';
+                }
+                if ($hidden || $params === []) {
+                    continue;
+                }
+                $image = trim((string) ($custom['image'] ?? ''));
+                if ($image !== '') {
+                    $image = portal_site_media_display_url($image, 480);
+                }
+                $entry['tiles'][] = $tile((string) $custom['label'], $urlFor($params), $icon, $image);
+            }
+            if ($entry['tiles'] !== []) {
+                $resolved[] = $entry;
+            }
+            continue;
+        }
+
+        $primaryValues = $primary !== '' ? $valuesFor($primary) : null;
+        if ($primaryValues === null) {
+            continue;
+        }
+        $primaryValues = $pick((array) ($block['primary_values'] ?? []), $primaryValues);
+
+        if ($type === 'combo') {
+            $secondary = (string) ($block['secondary_param'] ?? '');
+            $secondaryValues = $secondary !== '' ? $valuesFor($secondary) : null;
+            if ($secondaryValues === null) {
+                continue;
+            }
+            $secondaryValues = $pick((array) ($block['secondary_values'] ?? []), $secondaryValues);
+            if ($secondaryValues === []) {
+                continue;
+            }
+            foreach (array_slice($primaryValues, 0, 24) as $value) {
+                $group = [
+                    'label' => $value,
+                    'initial' => lab_shop_initial($value),
+                    'all' => $tile('كل ' . $value, $urlFor([$primary => [$value]]), 'apps'),
+                    'tiles' => [],
+                ];
+                foreach ($secondaryValues as $second) {
+                    $group['tiles'][] = $tile($second, $urlFor([$primary => [$value], $secondary => [$second]]), lab_shop_facet_icon($secondary, $second));
+                }
+                $entry['groups'][] = $group;
+            }
+            if ($entry['groups'] !== []) {
+                $resolved[] = $entry;
+            }
+            continue;
+        }
+
+        foreach ($primaryValues as $value) {
+            $entry['tiles'][] = $tile($value, $urlFor([$primary => [$value]]), lab_shop_facet_icon($primary, $value));
+        }
+        if (count($entry['tiles']) >= 2) {
+            $resolved[] = $entry;
+        }
+    }
+
+    return $resolved;
+}
+
+/**
+ * Values of one client facet for the trial pages, or null when the policy hides it.
+ *
+ * @param array<string, mixed>|null $catalog
+ * @return list<string>|null
+ */
+function store_easy_facet_values(string $param, ?array $catalog = null): ?array
+{
+    static $globalOptions = null;
+
+    if (!store_easy_client_filter_visible($param, $catalog)) {
+        return null;
+    }
+
+    if ($globalOptions === null) {
+        try {
+            $globalOptions = \Portal\Services\StoreCatalogService::getCachedFilterOptions();
+        } catch (Throwable) {
+            $globalOptions = [];
+        }
+    }
+    $catalogOptions = is_array($catalog['filterOptions'] ?? null) ? $catalog['filterOptions'] : [];
+
+    $values = [];
+    foreach ([$globalOptions[$param] ?? [], $catalogOptions[$param] ?? []] as $source) {
+        if (!is_array($source)) {
+            continue;
+        }
+        foreach ($source as $value) {
+            $value = trim((string) (is_array($value) ? ($value['value'] ?? '') : $value));
+            if ($value !== '' && !in_array($value, $values, true)) {
+                $values[] = $value;
+            }
+        }
+        if ($values !== []) {
+            break;
+        }
+    }
+    if ($param === 'sizeRanges') {
+        natcasesort($values);
+        $values = array_values($values);
+    }
+
+    return $values;
+}
+
+/**
+ * Facet the trial store shows as large tiles: age category first, material type otherwise.
+ *
+ * @param array<string, mixed>|null $catalog
+ * @return array{param: string, title: string, values: list<string>}|null
+ */
+function store_easy_tile_facet(?array $catalog = null): ?array
+{
+    $candidates = [
+        'ageCategories' => 'تسوّق حسب الفئة',
+        'materialTypes' => 'تسوّق حسب النوع',
+    ];
+    foreach ($candidates as $param => $title) {
+        $values = store_easy_facet_values($param, $catalog) ?? [];
+        if (count($values) >= 2) {
+            return ['param' => $param, 'title' => $title, 'values' => array_slice($values, 0, 16)];
+        }
+    }
+
+    return null;
+}
+
+function store_easy_tile_icon(string $label): string
+{
+    $map = [
+        'بنات' => 'girl',
+        'ولاد' => 'boy',
+        'أولاد' => 'boy',
+        'صبيان' => 'boy',
+        'أطفال' => 'child_care',
+        'اطفال' => 'child_care',
+        'بيبي' => 'child_care',
+        'رضع' => 'child_care',
+        'رجال' => 'man',
+        'نسائ' => 'woman',
+        'نساء' => 'woman',
+        'نسوان' => 'woman',
+        'ستات' => 'woman',
+        'شباب' => 'person',
+        'شتوي' => 'ac_unit',
+        'صيفي' => 'sunny',
+        'رياض' => 'sprint',
+        'مدرس' => 'school',
+    ];
+    foreach ($map as $needle => $icon) {
+        if (str_contains($label, $needle)) {
+            return $icon;
+        }
+    }
+
+    return 'category';
+}
+
+/**
+ * @param array{param: string, title: string, values: list<string>} $facet
+ * @param list<string> $selected
+ * @param callable(array<string, mixed>): string $urlFor
+ * @return list<array{label: string, href: string, icon: string, active: bool}>
+ */
+function store_easy_tiles(array $facet, array $selected, callable $urlFor): array
+{
+    $tiles = [[
+        'label' => 'الكل',
+        'href' => $urlFor([]),
+        'icon' => 'apps',
+        'active' => $selected === [],
+    ]];
+    foreach ($facet['values'] as $value) {
+        $tiles[] = [
+            'label' => $value,
+            'href' => $urlFor([$facet['param'] => [$value]]),
+            'icon' => store_easy_tile_icon($value),
+            'active' => count($selected) === 1 && $selected[0] === $value,
+        ];
+    }
+
+    return $tiles;
+}
+
+/**
+ * @param list<array<string, mixed>> $products
+ * @return array<string, list<array<string, mixed>>>
+ */
+function store_lab_group_products(array $products, string $groupBy = 'materialType'): array
+{
+    $fields = [
+        'ageCategory' => 'ageCategory',
+        'sizeRange' => 'sizeRange',
+        'materialType' => 'materialType',
+        'manufacturer' => 'manufacturer',
+        'countryOfOrigin' => 'countryOfOrigin',
+        'group' => 'groupName',
+    ];
+    $field = $fields[$groupBy] ?? 'materialType';
+    $groups = [];
+    foreach ($products as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        $label = trim((string) ($item[$field] ?? ''));
+        if ($label === '') {
+            $label = 'غير مصنّف';
+        }
+        $groups[$label][] = $item;
+    }
+
+    return $groups;
 }
 
 /** @param array<string, mixed> $section */

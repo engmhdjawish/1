@@ -120,6 +120,18 @@
     delete button.dataset.siteWasDisabled;
   }
 
+  // Page scripts (store filters, cart drawer…) may cancel the navigation after this
+  // capture listener and swap content in place; only show the loader for real page loads.
+  function startLoadingUnlessHandled(event, form = null) {
+    window.setTimeout(() => {
+      if (event.defaultPrevented) {
+        if (form) delete form.dataset.siteSubmitting;
+        return;
+      }
+      setLoading(true);
+    }, 0);
+  }
+
   function isBusy() {
     return document.body.classList.contains('site-page-loading')
       || document.body.classList.contains('store-catalog-nav-busy');
@@ -133,7 +145,7 @@
       event.preventDefault();
       return;
     }
-    setLoading(true);
+    startLoadingUnlessHandled(event);
   }, true);
 
   document.addEventListener('submit', (event) => {
@@ -163,7 +175,7 @@
       return;
     }
     form.dataset.siteSubmitting = '1';
-    setLoading(true);
+    startLoadingUnlessHandled(event, form);
   }, true);
 
   function formActionUrl(form) {

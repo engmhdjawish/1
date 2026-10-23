@@ -66,7 +66,8 @@ final class SpecialOfferService
             'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
                     selection_mode::text AS selection_mode, discount_type::text AS discount_type,
                     discount_percent, fixed_price_syp, fixed_price_usd,
-                    min_packages, max_packages, max_products, home_sort_order
+                    min_packages, max_packages, max_products, home_sort_order,
+                    ends_at::text AS ends_at
              FROM special_offers
              WHERE is_active = TRUE
                AND show_on_home = TRUE

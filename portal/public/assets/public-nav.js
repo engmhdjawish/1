@@ -20,28 +20,42 @@
   };
 
   const accountRoot = document.querySelector('[data-site-account-menu]');
-  const accountTrigger = accountRoot?.querySelector('.site-header__account-trigger');
-  const accountMenu = accountRoot?.querySelector('.site-header__account-menu');
+  const accountTrigger = accountRoot?.querySelector('[data-site-account-toggle]');
+  const accountMenu = accountRoot?.querySelector('.site-account__menu');
+  const accountBackdrop = accountRoot?.querySelector('.site-account__backdrop');
+  const sheetMode = () => window.matchMedia('(max-width: 639px)').matches;
+  let accountReturnFocus = null;
 
-  const setAccountOpen = (open) => {
-    if (!accountRoot || !accountTrigger || !accountMenu) return;
+  const setAccountOpen = (open, opener = null) => {
+    if (!accountRoot || !accountTrigger || !accountMenu) return false;
     accountRoot.classList.toggle('is-open', open);
     accountTrigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    document.querySelectorAll('[data-site-account-open]').forEach((btn) => btn.setAttribute('aria-expanded', open ? 'true' : 'false'));
     accountMenu.hidden = !open;
-    if (!open && document.activeElement instanceof HTMLElement && accountMenu.contains(document.activeElement)) {
-      accountTrigger.focus();
+    if (accountBackdrop) accountBackdrop.hidden = !open;
+    document.documentElement.classList.toggle('site-account-sheet-open', open && sheetMode());
+    if (open) {
+      accountReturnFocus = opener || accountTrigger;
+      accountMenu.querySelector('a, button')?.focus({ preventScroll: true });
+    } else if (document.activeElement instanceof HTMLElement && accountMenu.contains(document.activeElement)) {
+      (accountReturnFocus || accountTrigger).focus({ preventScroll: true });
     }
+    return true;
   };
 
-  accountTrigger?.addEventListener('click', (event) => {
-    event.stopPropagation();
-    setAccountOpen(accountMenu.hidden);
-  });
-
   document.addEventListener('click', (event) => {
-    if (accountRoot && !accountRoot.contains(event.target)) {
-      setAccountOpen(false);
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target || !accountRoot) return;
+    const opener = target.closest('[data-site-account-toggle], [data-site-account-open]');
+    if (opener) {
+      if (setAccountOpen(accountMenu.hidden, opener)) event.preventDefault();
+      return;
     }
+    if (target.closest('[data-site-account-close]')) {
+      setAccountOpen(false);
+      return;
+    }
+    if (!accountMenu.hidden && !accountMenu.contains(target)) setAccountOpen(false);
   });
 
   document.addEventListener('keydown', (event) => {
@@ -49,6 +63,44 @@
       setAccountOpen(false);
     }
   });
+
+  const siteHeader = document.querySelector('.site-header');
+  if (siteHeader instanceof HTMLElement) {
+    const root = document.documentElement;
+    const syncHeaderHeight = () => {
+      const height = siteHeader.offsetHeight;
+      root.style.setProperty('--site-header-h', `${height}px`);
+      root.style.setProperty('--hl-nav-top', `${height + 8}px`);
+      root.style.setProperty('--hn-top', `${height}px`);
+    };
+    syncHeaderHeight();
+    window.addEventListener('resize', syncHeaderHeight);
+    if ('ResizeObserver' in window) new ResizeObserver(syncHeaderHeight).observe(siteHeader);
+
+    // Phones: fold the account/currency row away while scrolling down; hysteresis avoids flicker.
+    const compactQuery = window.matchMedia('(max-width: 639px)');
+    let compact = false;
+    let ticking = false;
+    const syncCompact = () => {
+      ticking = false;
+      const y = window.scrollY;
+      const touring = root.classList.contains('site-tour-open');
+      const next = compactQuery.matches && !touring && (compact ? y > 40 : y > 160);
+      if (next === compact) return;
+      if (next && siteHeader.querySelector('.site-account.is-open')) return;
+      compact = next;
+      siteHeader.classList.toggle('site-header--compact', compact);
+    };
+    window.addEventListener('scroll', () => {
+      if (!ticking) {
+        ticking = true;
+        window.requestAnimationFrame(syncCompact);
+      }
+    }, { passive: true });
+    compactQuery.addEventListener?.('change', syncCompact);
+    window.addEventListener('site-tour-toggle', syncCompact);
+    syncCompact();
+  }
 
   window.PublicNav = { setOpen: () => {} };
   window.SiteAccountMenu = { setOpen: setAccountOpen };

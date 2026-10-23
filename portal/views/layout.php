@@ -56,17 +56,33 @@ if (isset($storeCartBootstrap) && is_array($storeCartBootstrap)) {
 $enableQuickView = (bool) ($enableQuickView ?? $isCatalogPage);
 $deferStoreCartJs = (bool) ($deferStoreCartJs ?? false);
 $enableStoreCartJs = (bool) ($enableStoreCartJs ?? ($storeAllowCart && !$isLightPage && !$deferStoreCartJs));
-$enableOnboarding = (bool) ($enableOnboarding ?? !$isLightPage);
+$siteTour = (string) ($siteTour ?? '');
+$enableOnboarding = $siteTour !== '' || (bool) ($enableOnboarding ?? !$isLightPage);
+if ($enableOnboarding && $siteTour === '') {
+    $siteTour = 'site';
+}
+if (!isset($siteTagline)) {
+    try {
+        $siteLayoutGeneral = \Portal\Services\HomeLayoutService::config()['general'] ?? [];
+        $siteTagline = !empty($siteLayoutGeneral['brand']) ? (string) ($siteLayoutGeneral['tagline'] ?? '') : '';
+    } catch (Throwable) {
+        $siteTagline = '';
+    }
+}
+$headerShowCurrency = $storeShowPrice && empty($hideHeaderCurrency);
 $enableSiteAnalytics = (bool) ($enableSiteAnalytics ?? true);
 
-$metaDescription = portal_seo_description($pagePath, $siteName, $metaDescription ?? null);
+$metaDescription = portal_seo_description($pagePath, $siteName, $metaDescription ?? null, $companyContext);
 $canonicalUrl = portal_canonical_url($canonicalUrl ?? null);
 $ogTitle = trim((string) ($ogTitle ?? $title . ' — ' . $siteName));
 $ogImage = trim((string) ($ogImage ?? ''));
-if ($ogImage === '' && !empty($companyLogoUrl)) {
-    $ogImage = str_starts_with((string) $companyLogoUrl, 'http')
-        ? (string) $companyLogoUrl
-        : portal_absolute_url((string) $companyLogoUrl);
+$ogImageAlt = trim((string) ($ogImageAlt ?? $siteName));
+$ogImageIsCard = $ogImage === '' || str_contains($ogImage, '/share-image.php');
+if ($ogImage === '') {
+    $ogImage = \Portal\Services\ShareCardService::siteCardUrl($companyContext);
+}
+if (!str_starts_with($ogImage, 'http')) {
+    $ogImage = portal_absolute_url($ogImage);
 }
 $jsonLdBlocks = [
     portal_json_ld_organization($siteName, $companyLogoUrl ?? null),
@@ -104,21 +120,26 @@ $navLinks = [
     <meta name="description" content="<?= h($metaDescription) ?>">
     <meta name="robots" content="<?= h((string) ($metaRobots ?? 'index, follow')) ?>">
     <link rel="canonical" href="<?= h($canonicalUrl) ?>">
-    <meta property="og:type" content="website">
+    <meta property="og:type" content="<?= h((string) ($ogType ?? 'website')) ?>">
     <meta property="og:locale" content="ar_SY">
     <meta property="og:site_name" content="<?= h($siteName) ?>">
     <meta property="og:title" content="<?= h($ogTitle) ?>">
     <meta property="og:description" content="<?= h($metaDescription) ?>">
     <meta property="og:url" content="<?= h($canonicalUrl) ?>">
-    <?php if ($ogImage !== ''): ?>
-      <meta property="og:image" content="<?= h($ogImage) ?>">
+    <meta property="og:image" content="<?= h($ogImage) ?>">
+    <?php if (str_starts_with($ogImage, 'https://')): ?>
+      <meta property="og:image:secure_url" content="<?= h($ogImage) ?>">
     <?php endif; ?>
-    <meta name="twitter:card" content="<?= h($ogImage !== '' ? 'summary_large_image' : 'summary') ?>">
+    <?php if ($ogImageIsCard): ?>
+      <meta property="og:image:type" content="image/jpeg">
+      <meta property="og:image:width" content="1200">
+      <meta property="og:image:height" content="630">
+    <?php endif; ?>
+    <meta property="og:image:alt" content="<?= h($ogImageAlt) ?>">
+    <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="<?= h($ogTitle) ?>">
     <meta name="twitter:description" content="<?= h($metaDescription) ?>">
-    <?php if ($ogImage !== ''): ?>
-      <meta name="twitter:image" content="<?= h($ogImage) ?>">
-    <?php endif; ?>
+    <meta name="twitter:image" content="<?= h($ogImage) ?>">
     <script type="application/ld+json"><?= json_encode($jsonLdPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -141,7 +162,7 @@ $navLinks = [
       <?= $extraHead ?>
     <?php endif; ?>
 </head>
-<body class="min-h-screen text-text-main bg-surface-bg flex flex-col<?= $staffSiteMode ? ' site-staff-mode' : '' ?>" data-store-price-currency="<?= h($storePriceCurrency) ?>" data-notif-reader="<?= h($notifReader) ?>" data-price-lock-auth="<?= h($priceLockAuth) ?>">
+<body class="min-h-screen text-text-main bg-surface-bg flex flex-col<?= $staffSiteMode ? ' site-staff-mode' : '' ?><?= !empty($appDock) ? ' has-app-dock' : '' ?><?= !empty($pageOwnsCurrency) ? ' has-page-currency' : '' ?>" data-store-price-currency="<?= h($storePriceCurrency) ?>" data-notif-reader="<?= h($notifReader) ?>" data-price-lock-auth="<?= h($priceLockAuth) ?>">
 <script>
 window.portalMaterialImageFrameEmpty=function(img){if(!(img instanceof HTMLImageElement))return;img.onerror=null;img.removeAttribute("src");img.classList.add("is-broken");var frame=img.closest(".material-image-frame"),photo=img.parentElement;if(frame){frame.classList.add("material-image-frame--empty","material-image-frame--broken")}if(photo&&!photo.querySelector(".material-image-frame__empty")){var empty=document.createElement("div");empty.className="material-image-frame__empty";empty.setAttribute("role","img");empty.setAttribute("aria-label","بلا صورة");empty.innerHTML='<span class="material-symbols-outlined material-image-frame__empty-icon" aria-hidden="true">hide_image</span><span class="material-image-frame__empty-label">بلا صورة</span>';photo.appendChild(empty)}};
 </script>
@@ -270,6 +291,7 @@ window.portalMaterialImageFrameEmpty=function(img){if(!(img instanceof HTMLImage
     .then((data) => {
       if (!data || !data.login_required) return;
       const path = window.location.pathname + window.location.search;
+      if (document.body.dataset.notifReader === 'guest' && !path.startsWith('/dashboard')) return;
       if (path.startsWith('/dashboard')) {
         window.location.href = '/staff-login.php?redirect=' + encodeURIComponent(path);
         return;

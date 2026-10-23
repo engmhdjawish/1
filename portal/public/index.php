@@ -30,7 +30,6 @@ try {
         'price_mode' => 'none',
     ];
 }
-$deferHomeProducts = false;
 try {
     $sections = HomePageService::mergedSectionShells();
     $embeddedProductStrips = HomePageService::embeddedProductStrips();
@@ -49,24 +48,29 @@ try {
     $ads = [];
 }
 
-$lcpPreloadUrl = null;
-if (!empty($companyLogoUrl)) {
-    $lcpPreloadUrl = portal_site_logo_url((string) $companyLogoUrl, 'header');
-} elseif ($ads !== []) {
-    $firstAdUrl = trim((string) ($ads[0]['url'] ?? ''));
-    if ($firstAdUrl !== '') {
-        $lcpPreloadUrl = portal_site_media_display_url($firstAdUrl, 1280);
-    }
-}
-
-$homeHasEmbeddedStrips = $embeddedProductStrips !== [];
+$lcpPreloadUrl = !empty($companyLogoUrl)
+    ? portal_site_logo_url((string) $companyLogoUrl, 'header')
+    : null;
 
 ob_start();
-require dirname(__DIR__) . '/views/home.php';
+require dirname(__DIR__) . '/views/home-next.php';
 $content = ob_get_clean();
 $title = 'الرئيسية';
-$extraHead = portal_stylesheet('/css/home-page.css');
-$extraFooter = portal_defer_script('/assets/home-page.js');
+$siteTour = 'home';
+$siteTagline = !empty($general['brand']) ? (string) ($general['tagline'] ?? '') : '';
+$hideHeaderCurrency = empty($general['currency']);
+$extraHead = portal_stylesheet('/css/home-page.css')
+    . portal_stylesheet('/css/store-lab.css')
+    . portal_stylesheet('/css/store-easy.css')
+    . portal_stylesheet('/css/lab-access.css')
+    . portal_stylesheet('/css/hn-search.css')
+    . portal_stylesheet('/css/home-next.css');
+$extraFooter = portal_defer_script('/assets/home-page.js')
+    . portal_defer_script('/assets/lab-access.js')
+    . portal_defer_script('/assets/hn-search.js')
+    . portal_defer_script('/assets/home-next.js')
+    . portal_defer_script('/assets/product-share.js');
+$appDock = !empty($general['dock']);
 $enableQuickView = false;
 $enableStoreCartJs = false;
 $deferStoreCartJs = $storeCatalogDisplay['allow_cart'] ?? false;

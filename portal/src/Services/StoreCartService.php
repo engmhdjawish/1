@@ -75,9 +75,13 @@ final class StoreCartService
         return ShareCartService::add(self::TOKEN, '', $line, $quantity, $warehousePrimary);
     }
 
-    public static function updateQuantity(string $materialGuid, float $quantity, ?float $warehousePrimary = null): array
-    {
-        return ShareCartService::updateQuantity(self::TOKEN, $materialGuid, $quantity, $warehousePrimary);
+    public static function updateQuantity(
+        string $materialGuid,
+        float $quantity,
+        ?float $warehousePrimary = null,
+        bool $enforceStock = true
+    ): array {
+        return ShareCartService::updateQuantity(self::TOKEN, $materialGuid, $quantity, $warehousePrimary, $enforceStock);
     }
 
     public static function remove(string $materialGuid): bool

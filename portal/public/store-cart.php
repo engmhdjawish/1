@@ -18,8 +18,14 @@ $allowOrder = (bool) ($display['allow_order'] ?? false);
 $error = null;
 $notice = null;
 
+$cartLockedFor = null;
 if (!$allowCart) {
-    $error = 'سياسة المتجر الحالية لا تسمح باستخدام السلة.';
+    $cartLockedFor = match (true) {
+        CustomerSession::isPending() => 'pending',
+        CustomerSession::check() => 'customer',
+        \Portal\Auth\WebSession::check() => 'staff',
+        default => 'guest',
+    };
 }
 
 $loggedInCustomer = CustomerSession::check() ? CustomerSession::customer() : null;
@@ -55,5 +61,6 @@ ob_start();
 require dirname(__DIR__) . '/views/store-cart.php';
 $content = ob_get_clean();
 $title = 'سلة المتجر';
+$siteTour = 'cart';
 $extraHead = '';
 require dirname(__DIR__) . '/views/layout.php';

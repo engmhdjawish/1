@@ -2,59 +2,95 @@
 
 declare(strict_types=1);
 
-/** @var array<string, mixed> $customer */
+use Portal\Auth\WebSession;
 
-$customerName = trim((string) ($customer['name_ar'] ?? ''));
-if ($customerName === '') {
-    $customerName = 'عميل';
+/** @var array<string, mixed>|null $customer */
+/** @var bool $staffSiteMode */
+/** @var array<string, mixed>|null $staffUser */
+/** @var string $siteTour */
+
+$accountIsStaff = (bool) ($staffSiteMode ?? false);
+$accountLinks = [];
+$accountNote = '';
+
+if ($accountIsStaff) {
+    $staffRow = is_array($staffUser ?? null) ? $staffUser : [];
+    $accountName = trim((string) ($staffRow['display_name_ar'] ?? '')) ?: trim((string) ($staffRow['user_name'] ?? '')) ?: 'موظف';
+    $accountRole = trim((string) ($staffRow['role_label'] ?? '')) ?: 'موظف';
+    $accountSub = $accountRole !== $accountName && $accountRole !== 'موظف' ? 'موظف · ' . $accountRole : 'حساب موظف';
+    $accountIcon = 'badge';
+    $accountLinks[] = ['href' => '/dashboard/index.php', 'icon' => 'dashboard', 'label' => 'لوحة التحكم'];
+    if (WebSession::hasPermission('orders.view')) {
+        $accountLinks[] = ['href' => '/dashboard/orders.php', 'icon' => 'receipt_long', 'label' => 'الطلبات'];
+    }
+    if (WebSession::hasPermission('web_customers.view')) {
+        $accountLinks[] = ['href' => '/dashboard/customers.php', 'icon' => 'groups', 'label' => 'العملاء'];
+    }
+    $accountLinks[] = ['href' => '/dashboard/profile.php', 'icon' => 'manage_accounts', 'label' => 'ملفي الشخصي'];
+} else {
+    $customerRow = is_array($customer ?? null) ? $customer : [];
+    $accountName = trim((string) ($customerRow['name_ar'] ?? '')) ?: 'عميل';
+    $accountPending = ($customerRow['status'] ?? '') === 'pending';
+    $accountPhone = trim((string) ($customerRow['phone'] ?? ''));
+    $accountSub = $accountPending ? 'بانتظار التفعيل' : 'حساب عميل';
+    $accountIcon = 'storefront';
+    if ($accountPending) {
+        $accountNote = 'حسابك قيد المراجعة. يمكنك التصفح بصلاحيات الزائر حتى التفعيل.';
+    } else {
+        $accountLinks[] = ['href' => '/my-orders.php', 'icon' => 'inventory_2', 'label' => 'طلباتي', 'guide' => 'my-orders'];
+        $accountLinks[] = ['href' => '/my-profile.php', 'icon' => 'person', 'label' => 'الملف الشخصي', 'guide' => 'my-profile'];
+    }
+    $accountLinks[] = ['href' => '/notifications.php', 'icon' => 'notifications', 'label' => 'الإشعارات'];
 }
-$customerInitial = mb_strtoupper(mb_substr($customerName, 0, 1));
-$customerPhone = trim((string) ($customer['phone'] ?? ''));
-$customerPending = ($customer['status'] ?? '') === 'pending';
 ?>
-<div class="site-header__account" data-site-account-menu>
+<div class="site-account<?= $accountIsStaff ? ' site-account--staff' : '' ?>" data-site-account-menu>
   <button
     type="button"
-    class="site-header__account-trigger"
+    class="site-account__trigger"
     aria-haspopup="menu"
     aria-expanded="false"
-    aria-controls="siteHeaderAccountMenu"
-    title="<?= h($customerName) ?>"
+    aria-controls="siteAccountMenu"
+    data-site-account-toggle
   >
-    <span class="site-header__account-avatar" aria-hidden="true"><?= h($customerInitial) ?></span>
-    <span class="site-header__account-meta">
-      <span class="site-header__account-greeting">مرحباً</span>
-      <span class="site-header__account-name"><?= h($customerName) ?></span>
+    <span class="site-account__icon material-symbols-outlined" aria-hidden="true"><?= h($accountIcon) ?></span>
+    <span class="site-account__copy">
+      <span class="site-account__name"><?= h($accountName) ?></span>
+      <span class="site-account__sub<?= !$accountIsStaff && $accountPending ? ' is-pending' : '' ?>"><?= h($accountSub) ?></span>
     </span>
-    <span class="site-header__account-chevron material-symbols-outlined" aria-hidden="true">expand_more</span>
+    <span class="site-account__chevron material-symbols-outlined" aria-hidden="true">expand_more</span>
   </button>
-  <div class="site-header__account-menu" id="siteHeaderAccountMenu" role="menu" hidden>
-    <div class="site-header__account-menu-head">
-      <span class="site-header__account-menu-avatar" aria-hidden="true"><?= h($customerInitial) ?></span>
-      <div class="site-header__account-menu-copy">
-        <strong><?= h($customerName) ?></strong>
-        <?php if ($customerPending): ?>
-          <span class="site-header__account-menu-badge">بانتظار التفعيل</span>
-        <?php elseif ($customerPhone !== ''): ?>
-          <span dir="ltr"><?= h($customerPhone) ?></span>
+  <div class="site-account__backdrop" data-site-account-close hidden></div>
+  <div class="site-account__menu" id="siteAccountMenu" role="menu" aria-label="حسابي" hidden>
+    <div class="site-account__head">
+      <span class="site-account__head-icon material-symbols-outlined" aria-hidden="true"><?= h($accountIcon) ?></span>
+      <div class="site-account__head-copy">
+        <strong><?= h($accountName) ?></strong>
+        <?php if (!$accountIsStaff && $accountPhone !== ''): ?>
+          <span dir="ltr"><?= h($accountPhone) ?></span>
         <?php else: ?>
-          <span>مسجّل الدخول</span>
+          <span><?= h($accountSub) ?></span>
         <?php endif; ?>
       </div>
+      <button type="button" class="site-account__close" data-site-account-close aria-label="إغلاق">
+        <span class="material-symbols-outlined" aria-hidden="true">close</span>
+      </button>
     </div>
-    <?php if (!$customerPending): ?>
-    <a href="/my-profile.php" class="site-header__account-menu-link" role="menuitem" data-guide="my-profile">
-      <span class="material-symbols-outlined" aria-hidden="true">person</span>
-      الملف الشخصي
-    </a>
-    <a href="/my-orders.php" class="site-header__account-menu-link" role="menuitem" data-guide="my-orders">
-      <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>
-      طلباتي
-    </a>
-    <?php else: ?>
-    <p class="site-header__account-menu-note">حسابك قيد المراجعة. يمكنك التصفح بصلاحيات الزائر حتى التفعيل.</p>
+    <?php if ($accountNote !== ''): ?>
+      <p class="site-account__note"><?= h($accountNote) ?></p>
     <?php endif; ?>
-    <a href="/logout.php" class="site-header__account-menu-link site-header__account-menu-link--danger" role="menuitem">
+    <?php foreach ($accountLinks as $accountLink): ?>
+      <a href="<?= h($accountLink['href']) ?>" class="site-account__link" role="menuitem"<?= !empty($accountLink['guide']) ? ' data-guide="' . h($accountLink['guide']) . '"' : '' ?>>
+        <span class="material-symbols-outlined" aria-hidden="true"><?= h($accountLink['icon']) ?></span>
+        <?= h($accountLink['label']) ?>
+      </a>
+    <?php endforeach; ?>
+    <?php if (($siteTour ?? '') !== ''): ?>
+      <button type="button" class="site-account__link" role="menuitem" data-site-guide-replay>
+        <span class="material-symbols-outlined" aria-hidden="true">tour</span>
+        جولة تعريفية بالصفحة
+      </button>
+    <?php endif; ?>
+    <a href="/logout.php" class="site-account__link site-account__link--danger" role="menuitem">
       <span class="material-symbols-outlined" aria-hidden="true">logout</span>
       تسجيل الخروج
     </a>

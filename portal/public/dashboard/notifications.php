@@ -39,6 +39,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($title === '' || $body === '') {
                 throw new \RuntimeException('العنوان والنص مطلوبان.');
             }
+            if (NotificationService::isRecentManualDuplicate($title, $body)) {
+                $_SESSION['notifications_flash'] = 'هذا الإشعار أُرسل قبل لحظات، لم يُرسل مرة ثانية.';
+                $_SESSION['notifications_flash_type'] = 'success';
+                header('Location: /dashboard/notifications.php', true, 303);
+                exit;
+            }
 
             if ($scope === 'private') {
                 $customerId = trim((string) ($_POST['customer_id'] ?? ''));
@@ -105,7 +111,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $_SESSION['notifications_flash'] = 'تم حذف الإشعار.';
             $_SESSION['notifications_flash_type'] = 'success';
-            header('Location: /dashboard/notifications.php', true, 303);
+            $back = (string) ($_POST['back'] ?? '');
+            header('Location: /dashboard/notifications.php' . (str_starts_with($back, '?') ? $back : ''), true, 303);
             exit;
         } catch (\Throwable $exception) {
             $flash = $exception->getMessage();
@@ -114,8 +121,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$historyKind = in_array((string) ($_GET['kind'] ?? ''), ['manual', 'auto', 'all'], true) ? (string) $_GET['kind'] : 'manual';
+$historyScope = in_array((string) ($_GET['scope'] ?? ''), ['public', 'private'], true) ? (string) $_GET['scope'] : '';
+$historyQuery = trim((string) ($_GET['q'] ?? ''));
+$historyPage = max(1, (int) ($_GET['page'] ?? 1));
+$historyPaging = ['total' => 0, 'page' => 1, 'pages' => 1, 'per_page' => 20];
 try {
-    $sentNotifications = NotificationService::listSent(40);
+    $history = NotificationService::listSentPage(['kind' => $historyKind, 'scope' => $historyScope, 'q' => $historyQuery], $historyPage, 20);
+    $sentNotifications = $history['rows'];
+    $historyPaging = $history;
 } catch (\Throwable $exception) {
     $sentNotifications = [];
     if ($flash === null) {

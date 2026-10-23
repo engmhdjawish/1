@@ -1,0 +1,61 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Store page for share-link visitors: keeps the share cart and the share link's own policy.
+ *
+ * @var array<string, mixed> $shareBrowse
+ */
+
+use Portal\Auth\CustomerSession;
+use Portal\Services\StoreCatalogService;
+
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+try {
+    $catalog = StoreCatalogService::catalogFromRequest($_GET);
+} catch (\Throwable $exception) {
+    error_log('store.php catalog error: ' . $exception->getMessage());
+    $catalog = [
+        'products' => [],
+        'totalCount' => 0,
+        'page' => 1,
+        'pageSize' => 24,
+        'totalPages' => 1,
+        'rangeStart' => 0,
+        'rangeEnd' => 0,
+        'resultFilters' => [],
+        'filterOptions' => ['stores' => [], 'groups' => []],
+        'apiError' => \Portal\Services\AmineAvailabilityService::userMessage(),
+        'allow_client_filters' => false,
+        'filters' => ['q' => '', 'sort' => 'number:asc'],
+        'store_options' => [],
+    ];
+}
+$sectionContext = is_array($catalog['section_context'] ?? null) ? $catalog['section_context'] : null;
+$displayOptions = StoreCatalogService::storePageDisplayOptions($sectionContext);
+$isCustomer = CustomerSession::check();
+
+$isStoreAjaxNav = strtolower(trim((string) ($_SERVER['HTTP_X_STORE_NAV'] ?? ''))) === '1';
+if ($isStoreAjaxNav) {
+    header('Content-Type: text/html; charset=utf-8');
+    ob_start();
+    require dirname(__DIR__) . '/store-catalog.php';
+    $html = ob_get_clean();
+    if (preg_match('/<!-- store-catalog-fragment:start -->(.*)<!-- store-catalog-fragment:end -->/s', $html, $matches)) {
+        echo $matches[1];
+    }
+    exit;
+}
+
+$extraHead = '<link href="' . h(portal_asset_url('/css/store-filters.css')) . '" rel="stylesheet">';
+$enableQuickView = true;
+$enableStoreCartJs = true;
+
+ob_start();
+require dirname(__DIR__) . '/store-catalog.php';
+$content = ob_get_clean();
+$title = 'المتجر';
+require dirname(__DIR__) . '/layout.php';

@@ -36,7 +36,36 @@ final class NotificationService
     /** @var array<string, array{0: string, 1: string}> */
     private static array $pushExclusions = [];
 
+    private const SCHEMA_MARKER_KEY = 'notifications_schema_v4';
+
+    private static bool $schemaReady = false;
+
+    /**
+     * Schema upkeep (some statements take table locks) — once per request and then once a day,
+     * not on every bell poll.
+     */
     public static function ensureTable(): void
+    {
+        if (self::$schemaReady) {
+            return;
+        }
+        try {
+            if (\Portal\Support\ResponseCache::get(self::SCHEMA_MARKER_KEY) !== null) {
+                self::$schemaReady = true;
+
+                return;
+            }
+        } catch (\Throwable) {
+        }
+        self::applySchema();
+        self::$schemaReady = true;
+        try {
+            \Portal\Support\ResponseCache::set(self::SCHEMA_MARKER_KEY, ['at' => time()], 86400);
+        } catch (\Throwable) {
+        }
+    }
+
+    private static function applySchema(): void
     {
         Database::pdo()->exec(
             "CREATE TABLE IF NOT EXISTS portal_notifications (
@@ -195,11 +224,19 @@ final class NotificationService
     /**
      * @return list<array<string, mixed>>
      */
-    public static function listForReader(int $limit = 30): array
+    public static function listForReader(int $limit = 30, int $offset = 0, string $category = ''): array
     {
         self::ensureTable();
         $reader = self::currentReader();
         $limit = max(1, min(100, $limit));
+        $offset = max(0, $offset);
+        $categorySql = '';
+        $categorySources = self::CATEGORY_SOURCES[$category] ?? null;
+        if ($category === 'news') {
+            $categorySql = ' AND n.source NOT IN (' . self::quotedSources(array_merge(...array_values(self::CATEGORY_SOURCES))) . ')';
+        } elseif ($categorySources !== null) {
+            $categorySql = ' AND n.source IN (' . self::quotedSources($categorySources) . ')';
+        }
         $conditions = self::visibilitySql($reader);
         $sql = 'SELECT n.id::text AS id,
                        n.scope,
@@ -218,9 +255,9 @@ final class NotificationService
                  AND r.reader_id = :reader_id
                 WHERE (' . implode(' OR ', $conditions['parts']) . ')
                   AND (n.expires_at IS NULL OR n.expires_at > NOW())
-                  AND (r.dismissed_at IS NULL)' . self::staffSinceSql($reader) . '
+                  AND (r.dismissed_at IS NULL)' . self::staffSinceSql($reader) . $categorySql . '
                 ORDER BY n.created_at DESC
-                LIMIT :limit';
+                LIMIT :limit OFFSET :offset';
 
         $stmt = Database::pdo()->prepare($sql);
         foreach ($conditions['params'] as $key => $value) {
@@ -229,12 +266,14 @@ final class NotificationService
         $stmt->bindValue(':reader_type', $reader['reader_type']);
         $stmt->bindValue(':reader_id', $reader['reader_id']);
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         self::bindStaffSince($stmt, $reader);
         $stmt->execute();
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         foreach ($rows as &$row) {
             $row['icon'] = self::sanitizeIcon((string) ($row['icon'] ?? ''), 'notifications');
             $row['is_read'] = (int) ($row['is_read'] ?? 0);
+            $row['category'] = self::category((string) ($row['source'] ?? ''));
         }
         unset($row);
 
@@ -621,6 +660,123 @@ final class NotificationService
         $stmt->execute();
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /** Same manual title+body sent in the last two minutes — a double click on «إرسال». */
+    public static function isRecentManualDuplicate(string $title, string $body): bool
+    {
+        self::ensureTable();
+        $stmt = Database::pdo()->prepare(
+            "SELECT 1 FROM portal_notifications
+             WHERE source = 'manual' AND title_ar = :title AND body_ar = :body
+               AND created_at > NOW() - INTERVAL '2 minutes'
+             LIMIT 1"
+        );
+        $stmt->execute(['title' => trim($title), 'body' => trim($body)]);
+
+        return $stmt->fetchColumn() !== false;
+    }
+
+    /** Reader-facing groups. Anything not listed (manual campaigns, system) is «news». */
+    public const CATEGORY_SOURCES = [
+        'orders' => ['order_status', 'order_received', 'order_adjusted', 'new_order', 'order_handled', 'order_item_cancelled'],
+        'offers' => ['special_offer'],
+        'account' => ['customer_approved', 'customer_pending', 'customer_rejected', 'customer_suspended', 'customer_reactivated', 'customer_created', 'password_changed', 'new_registration', 'registration_handled'],
+    ];
+
+    public const CATEGORY_LABELS = [
+        'orders' => 'الطلبات',
+        'offers' => 'العروض',
+        'account' => 'الحساب',
+        'news' => 'إعلانات',
+    ];
+
+    public static function category(string $source): string
+    {
+        $source = trim($source);
+        foreach (self::CATEGORY_SOURCES as $category => $sources) {
+            if (in_array($source, $sources, true)) {
+                return $category;
+            }
+        }
+
+        return 'news';
+    }
+
+    /** @param list<string> $sources */
+    private static function quotedSources(array $sources): string
+    {
+        return implode(', ', array_map(
+            static fn (string $source): string => "'" . preg_replace('/[^a-z_]/', '', $source) . "'",
+            $sources
+        ));
+    }
+
+    /**
+     * Dashboard history, filtered and paged in SQL so automatic order alerts don't bury campaigns.
+     *
+     * @param array{kind?: string, scope?: string, q?: string} $filters kind: manual|auto|all
+     * @return array{rows: list<array<string, mixed>>, total: int, page: int, pages: int, per_page: int}
+     */
+    public static function listSentPage(array $filters, int $page = 1, int $perPage = 20): array
+    {
+        self::ensureTable();
+        $perPage = max(5, min(100, $perPage));
+        $where = ['TRUE'];
+        $params = [];
+        $kind = (string) ($filters['kind'] ?? 'manual');
+        if ($kind === 'manual') {
+            $where[] = "n.source = 'manual'";
+        } elseif ($kind === 'auto') {
+            $where[] = "n.source <> 'manual'";
+        }
+        $scope = (string) ($filters['scope'] ?? '');
+        if (in_array($scope, [self::SCOPE_PUBLIC, self::SCOPE_PRIVATE], true)) {
+            $where[] = 'n.scope = :scope';
+            $params[':scope'] = $scope;
+        }
+        $q = trim((string) ($filters['q'] ?? ''));
+        if ($q !== '') {
+            $where[] = "(n.title_ar ILIKE :q OR n.body_ar ILIKE :q OR COALESCE(wc.name_ar, '') ILIKE :q OR COALESCE(wc.phone, '') ILIKE :q OR COALESCE(wu.display_name_ar, '') ILIKE :q)";
+            $params[':q'] = '%' . addcslashes(mb_substr($q, 0, 80), '%_\\') . '%';
+        }
+        $from = ' FROM portal_notifications n
+             LEFT JOIN web_customers wc ON wc.id = n.recipient_web_customer_id
+             LEFT JOIN web_users wu ON wu.id = n.recipient_web_user_id
+             WHERE ' . implode(' AND ', $where);
+
+        $countStmt = Database::pdo()->prepare('SELECT COUNT(*)::int' . $from);
+        foreach ($params as $key => $value) {
+            $countStmt->bindValue($key, $value);
+        }
+        $countStmt->execute();
+        $total = (int) $countStmt->fetchColumn();
+        $pages = max(1, (int) ceil($total / $perPage));
+        $page = max(1, min($pages, $page));
+
+        $stmt = Database::pdo()->prepare(
+            'SELECT n.id::text AS id, n.scope, n.audience, n.title_ar, n.body_ar, n.link_url, n.icon, n.source,
+                    n.created_at, n.expires_at, n.reference_type, n.reference_id,
+                    wc.name_ar AS customer_name_ar, wu.display_name_ar AS staff_name_ar,
+                    (SELECT COUNT(*)::int FROM portal_notification_reads r WHERE r.notification_id = n.id) AS read_count'
+            . $from . '
+             ORDER BY n.created_at DESC
+             LIMIT :limit OFFSET :offset'
+        );
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', ($page - 1) * $perPage, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return [
+            'rows' => $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [],
+            'total' => $total,
+            'page' => $page,
+            'pages' => $pages,
+            'per_page' => $perPage,
+        ];
     }
 
     /** @return array{total: int, public_count: int, private_count: int, manual_count: int, expired_count: int, active_count: int} */

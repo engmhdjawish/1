@@ -31,6 +31,14 @@ use Portal\Services\SpecialOfferService;
 $maxPackagesLabel = $maxPackagesPerMaterial !== null
     ? SpecialOfferService::formatQuantityLabel($maxPackagesPerMaterial)
     : null;
+$cartLineCount = count($cartItems);
+$cartPackageTotal = 0.0;
+foreach ($cartItems as $cartLine) {
+    $cartPackageTotal += (float) ($cartLine['quantity'] ?? 0);
+}
+$continueHref = '/store.php';
+$stickySp = (float) ($displayTotals['total_sp'] ?? 0);
+$stickyUsd = (float) ($displayTotals['total_usd'] ?? 0);
 ?>
 <div
   class="store-cart-page max-w-6xl mx-auto"
@@ -43,12 +51,16 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
   <header class="store-cart-header flex flex-wrap items-center justify-between gap-3 mb-6">
     <div>
       <h1 class="text-2xl md:text-3xl font-extrabold">سلة المتجر</h1>
-      <p class="text-sm text-gray-600 mt-1">راجع الأصناف ثم أرسل طلبك — التحديثات فورية بدون إعادة تحميل الصفحة.</p>
+      <p class="store-cart-header__count text-sm text-gray-600 mt-1" data-cart-count-line<?= $cartLineCount > 0 ? '' : ' hidden' ?>>
+        <span data-cart-count-lines><?= (int) $cartLineCount ?></span> <?= $cartLineCount === 1 ? 'صنف' : 'أصناف' ?>
+        ·
+        <span data-cart-count-packages><?= h(format_packages_display($cartPackageTotal)) ?></span> طرد
+      </p>
       <?php if ($maxPackagesLabel !== null): ?>
         <p class="store-limit-banner mt-3 mb-0">الحد الأقصى للطلب: <strong><?= h($maxPackagesLabel) ?></strong> طرد لكل مادة.</p>
       <?php endif; ?>
     </div>
-    <a href="/store.php" class="store-btn store-btn--secondary">
+    <a href="<?= h($continueHref) ?>" class="store-btn store-btn--secondary">
       <span class="material-symbols-outlined text-[20px]" aria-hidden="true">storefront</span>
       متابعة التسوق
     </a>
@@ -69,9 +81,29 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
   <div class="hidden mb-4" data-cart-stock-notices></div>
 
   <?php if (!$allowCart): ?>
-    <section class="store-panel text-center py-10">
-      <p class="text-gray-600"><?= h($error ?? 'سياسة المتجر الحالية لا تسمح باستخدام السلة.') ?></p>
-      <a href="/store.php" class="store-btn store-btn--primary mt-4">العودة للمتجر</a>
+    <?php
+      $lockedFor = (string) ($cartLockedFor ?? 'guest');
+      $lockedCopy = match ($lockedFor) {
+          'pending' => ['hourglass_top', 'حسابك بانتظار التفعيل', 'ستتمكن من استخدام السلة وإرسال الطلبات بعد موافقة الإدارة على حسابك. يمكنك تصفح المتجر حتى ذلك الحين.'],
+          'customer' => ['lock', 'السلة غير متاحة لحسابك', 'سياسة الوصول الخاصة بحسابك لا تتضمن السلة. تواصل معنا إذا كنت تريد الطلب من الموقع.'],
+          'staff' => ['badge', 'السلة للعملاء', 'أنت تتصفح الموقع بحساب موظف، فتظهر لك الصفحات كما يراها الزائر. لمتابعة الطلبات استخدم لوحة التحكم.'],
+          default => ['shopping_cart', 'السلة متاحة للعملاء المسجّلين', 'سجّل دخولك أو أنشئ حساباً لمحلك لتضيف المواد إلى السلة وترسل طلبك.'],
+      };
+      $loginBack = '/customer-login.php?redirect=' . rawurlencode('/store-cart.php');
+    ?>
+    <section class="store-panel store-cart-locked text-center py-10 px-5" data-cart-locked="<?= h($lockedFor) ?>">
+      <span class="material-symbols-outlined text-5xl text-gray-300" aria-hidden="true"><?= h($lockedCopy[0]) ?></span>
+      <h2 class="text-lg font-extrabold mt-2"><?= h($lockedCopy[1]) ?></h2>
+      <p class="text-gray-600 mt-2 max-w-md mx-auto leading-7"><?= h($lockedCopy[2]) ?></p>
+      <div class="flex flex-wrap justify-center gap-3 mt-5">
+        <?php if ($lockedFor === 'guest'): ?>
+          <a href="<?= h($loginBack) ?>" class="store-btn store-btn--primary">دخول العملاء</a>
+          <a href="/register.php" class="store-btn store-btn--secondary">حساب جديد</a>
+        <?php elseif ($lockedFor === 'staff' && \Portal\Auth\WebSession::hasPermission('orders.view')): ?>
+          <a href="/dashboard/orders.php" class="store-btn store-btn--primary">الطلبات في لوحة التحكم</a>
+        <?php endif; ?>
+        <a href="<?= h($continueHref) ?>" class="store-btn <?= in_array($lockedFor, ['guest', 'staff'], true) ? 'store-btn--secondary' : 'store-btn--primary' ?>">تصفح المتجر</a>
+      </div>
     </section>
   <?php else: ?>
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -230,6 +262,21 @@ $maxPackagesLabel = $maxPackagesPerMaterial !== null
         </div>
       </aside>
     </div>
+    <?php if ($allowOrder): ?>
+      <div class="store-cart-sticky" data-cart-sticky<?= $cartItems !== [] ? '' : ' hidden' ?>>
+        <div class="store-cart-sticky__total" data-cart-sticky-total>
+          <?php if ($showPriceSyp && $stickySp > 0): ?>
+            <?= format_money($stickySp, true) ?> ل.س
+          <?php elseif ($showPriceUsd && $stickyUsd > 0): ?>
+            $<?= number_format($stickyUsd, 2, '.', ',') ?>
+          <?php endif; ?>
+        </div>
+        <button type="button" class="store-btn store-btn--primary store-cart-sticky__go" data-cart-sticky-go>
+          <span class="material-symbols-outlined" aria-hidden="true">send</span>
+          إرسال الطلب
+        </button>
+      </div>
+    <?php endif; ?>
   <?php endif; ?>
 </div>
 

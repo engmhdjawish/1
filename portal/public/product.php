@@ -67,4 +67,14 @@ ob_start();
 require dirname(__DIR__) . '/views/product.php';
 $content = ob_get_clean();
 $title = (string) ($product['name'] ?? 'تفاصيل المادة');
+$companyContext = \Portal\Services\PortalSettingsService::companySettings();
+$shareSiteName = trim((string) ($companyContext['company_name'] ?? '')) ?: 'جاويش للتجارة';
+$ogTitle = $title . ' | ' . $shareSiteName;
+$ogType = 'product';
+$ogImageAlt = $title;
+$metaDescription = portal_product_share_description($product, $shareSiteName);
+$productImageGuid = (bool) ($displayOptions['show_images'] ?? true) ? material_image_guid($product) : '';
+if ($productImageGuid !== '' && \Portal\Services\ShareCardService::isImageGuid($productImageGuid)) {
+    $ogImage = \Portal\Services\ShareCardService::productCardUrl($productImageGuid);
+}
 require dirname(__DIR__) . '/views/layout.php';

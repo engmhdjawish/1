@@ -35,6 +35,9 @@ final class DashboardNavigation
     private const SITE_CONTENT_ROUTES = [
         '/dashboard/site-content.php',
         '/dashboard/home-sections.php',
+        '/dashboard/home-shop-blocks.php',
+        '/dashboard/store-seasons.php',
+        '/dashboard/home-layout.php',
         '/dashboard/special-offers.php',
         '/dashboard/price-checker.php',
         '/dashboard/site-media.php',
@@ -325,6 +328,27 @@ final class DashboardNavigation
                     'icon' => 'home_storage',
                     'permission' => 'home_sections.manage',
                     'description' => 'تنظيم أقسام الصفحة الرئيسية والمنتجات المعروضة فيها.',
+                ],
+                [
+                    'route' => '/dashboard/home-layout.php',
+                    'label' => 'تخطيط الرئيسية الجديدة',
+                    'icon' => 'dashboard_customize',
+                    'permission' => 'home_sections.manage',
+                    'description' => 'ترتيب أقسام الرئيسية الجديدة وإظهارها وتعديل عناوينها وخياراتها.',
+                ],
+                [
+                    'route' => '/dashboard/home-shop-blocks.php',
+                    'label' => 'تسوّق حسب',
+                    'icon' => 'category',
+                    'permission' => 'home_sections.manage',
+                    'description' => 'مجموعات الوصول السريع في الرئيسية: الفئة، النوع، الشركة، ودمجها معاً.',
+                ],
+                [
+                    'route' => '/dashboard/store-seasons.php',
+                    'label' => 'مواسم العرض',
+                    'icon' => 'partly_cloudy_day',
+                    'permission' => 'home_sections.manage',
+                    'description' => 'مجموعات الموسم الحالي (صيفي، شتوي، عام) تظهر أولاً في المتجر، مع تبديل تلقائي حسب التاريخ.',
                 ],
                 [
                     'route' => '/dashboard/special-offers.php',

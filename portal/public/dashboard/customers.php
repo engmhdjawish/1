@@ -68,7 +68,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 trim((string) ($_POST['plain_password'] ?? '')),
                 trim((string) ($_POST['notes_ar'] ?? '')),
                 trim((string) ($_POST['rejection_reason_ar'] ?? '')),
-                $adminId
+                $adminId,
+                isset($_POST['shop_address_ar']) ? (string) $_POST['shop_address_ar'] : null
             );
             $flash = $result['message'];
             $flashType = $result['ok'] ? 'success' : 'error';
@@ -111,6 +112,7 @@ if ($editId === 'new') {
         'name_ar' => '',
         'phone' => '',
         'email' => '',
+        'shop_address_ar' => '',
         'access_policy_id' => '',
         'status' => 'pending',
         'rejection_reason_ar' => '',

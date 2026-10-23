@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Portal\Services;
 
+use Portal\Support\SessionGate;
+
 final class ShareCartService
 {
     private const SESSION_KEY = 'share_carts';
@@ -225,7 +227,8 @@ final class ShareCartService
         string $token,
         string $materialGuid,
         float $quantity,
-        ?float $warehousePrimary = null
+        ?float $warehousePrimary = null,
+        bool $enforceStock = true
     ): array
     {
         $token = trim($token);
@@ -243,6 +246,17 @@ final class ShareCartService
             unset($_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]);
 
             return ['ok' => true, 'message' => '', 'quantity' => 0.0];
+        }
+
+        $currentQty = max(0.0, (float) ($items[$materialGuid]['quantity'] ?? 0));
+        // Decreasing never needs a fresh materials lookup. Increasing still checks stock below.
+        if (!$enforceStock || $quantity <= $currentQty + 0.0001) {
+            $_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]['quantity'] = $quantity;
+            $_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid] = self::normalizeLine(
+                $_SESSION[self::SESSION_KEY][$token]['items'][$materialGuid]
+            );
+
+            return ['ok' => true, 'message' => '', 'quantity' => $quantity];
         }
 
         $validation = SpecialOfferService::validatePackageQuantity($materialGuid, $quantity, null);
@@ -353,13 +367,21 @@ final class ShareCartService
             return ['moved' => [], 'restored' => [], 'notices' => []];
         }
 
-        if (!AmineAvailabilityService::isAvailable()) {
+        $amineOnline = SessionGate::withoutLock(
+            static fn (): bool => AmineAvailabilityService::isAvailable()
+        );
+        if (!$amineOnline) {
             return ['moved' => [], 'restored' => [], 'notices' => []];
         }
 
         $moved = [];
         $restored = [];
         $notices = [];
+
+        StockReservationService::prefetchWarehousePrimary(array_map('strval', array_merge(
+            array_keys(self::items($token)),
+            array_keys(self::unavailableItems($token))
+        )));
 
         foreach (array_keys(self::unavailableItems($token)) as $guid) {
             $unavailable = $_SESSION[self::SESSION_KEY][$token][self::UNAVAILABLE_KEY][$guid] ?? null;

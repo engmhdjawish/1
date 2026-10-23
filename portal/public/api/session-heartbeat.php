@@ -45,7 +45,7 @@ try {
     }
 
     $staffLoggedIn = WebSession::check();
-    $customerLoggedIn = CustomerSession::check();
+    $customerLoggedIn = CustomerSession::isLoggedIn();
     $loginRequired = !($staffLoggedIn || $customerLoggedIn);
 
     DashboardHttp::emitJson([

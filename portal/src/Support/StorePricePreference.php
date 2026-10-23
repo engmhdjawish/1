@@ -43,6 +43,26 @@ final class StorePricePreference
         self::persistCookie($currency);
     }
 
+    /**
+     * Ignore an older currency click that arrives after a newer one.
+     * A non-positive seq is accepted so older clients still persist.
+     */
+    public static function claimWrite(int $seq): bool
+    {
+        if ($seq <= 0) {
+            return true;
+        }
+
+        $latest = (int) ($_SESSION[self::SESSION_KEY . '_seq'] ?? 0);
+        if ($latest > 0 && $seq < $latest) {
+            return false;
+        }
+
+        $_SESSION[self::SESSION_KEY . '_seq'] = $seq;
+
+        return true;
+    }
+
     public static function current(): string
     {
         self::bootstrap();

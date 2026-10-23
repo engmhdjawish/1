@@ -1,0 +1,245 @@
+.guide {
+  --guide-red: #d81921;
+  --guide-ink: #0f172a;
+  --guide-muted: #475569;
+  --guide-line: #e5e7eb;
+  width: 100%;
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1rem 0 2.5rem;
+}
+
+.guide__hero {
+  display: grid;
+  justify-items: center;
+  gap: 0.4rem;
+  padding: 1.5rem 1rem 1.25rem;
+  text-align: center;
+}
+
+.guide__hero-icon {
+  width: 3.5rem;
+  height: 3.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  background: rgba(216, 25, 33, 0.1);
+  color: var(--guide-red);
+  font-size: 2rem;
+}
+
+.guide__hero h1 {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: var(--guide-ink);
+}
+
+.guide__hero p {
+  color: var(--guide-muted);
+  font-size: 0.95rem;
+}
+
+.guide__toc {
+  position: sticky;
+  top: var(--site-header-sticky-offset, 4.5rem);
+  z-index: 20;
+  display: flex;
+  gap: 0.4rem;
+  margin: 0 -0.25rem 1rem;
+  padding: 0.5rem 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--color-surface-bg, #f6f6f8);
+}
+
+.guide__toc::-webkit-scrollbar {
+  display: none;
+}
+
+.guide__toc a {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.5rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--guide-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--guide-ink);
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.guide__toc a .material-symbols-outlined {
+  font-size: 1.15rem;
+  color: var(--guide-red);
+}
+
+.guide__chapter {
+  scroll-margin-top: calc(var(--site-header-sticky-offset, 4.5rem) + 4rem);
+  margin-bottom: 1rem;
+  padding: 1.1rem;
+  border: 1px solid var(--guide-line);
+  border-radius: 1.25rem;
+  background: #fff;
+}
+
+.guide__chapter-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.guide__chapter-num {
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background: var(--guide-red);
+  color: #fff;
+  font-weight: 900;
+}
+
+.guide__chapter-head h2 {
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: var(--guide-ink);
+}
+
+.guide__chapter-head p {
+  margin-top: 0.15rem;
+  color: var(--guide-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.guide__steps {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 768px) {
+  .guide__steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.guide__step {
+  display: flex;
+  gap: 0.7rem;
+  padding: 0.8rem;
+  border-radius: 1rem;
+  background: #f8fafc;
+}
+
+.guide__step-icon {
+  flex: none;
+  width: 2.4rem;
+  height: 2.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background: #fff;
+  color: var(--guide-red);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06);
+}
+
+.guide__step h3 {
+  font-size: 0.95rem;
+  font-weight: 900;
+  color: var(--guide-ink);
+}
+
+.guide__step p {
+  margin-top: 0.2rem;
+  color: var(--guide-muted);
+  font-size: 0.88rem;
+  line-height: 1.65;
+}
+
+.guide__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.9rem;
+  margin-top: 0.9rem;
+  padding: 0 1.1rem;
+  border-radius: 0.9rem;
+  background: var(--guide-red);
+  color: #fff;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.guide__cta--green {
+  background: #16a34a;
+}
+
+.guide__faq {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.guide__faq details {
+  border: 1px solid var(--guide-line);
+  border-radius: 0.9rem;
+  background: #fff;
+}
+
+.guide__faq summary {
+  min-height: 3rem;
+  display: flex;
+  align-items: center;
+  padding: 0 0.9rem;
+  font-weight: 800;
+  color: var(--guide-ink);
+  cursor: pointer;
+}
+
+.guide__faq details[open] summary {
+  color: var(--guide-red);
+}
+
+.guide__faq details p {
+  padding: 0 0.9rem 0.9rem;
+  color: var(--guide-muted);
+  line-height: 1.65;
+}
+
+.guide__tour-stops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0.25rem 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.guide__tour-stops li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.guide__tour-stops .material-symbols-outlined {
+  font-size: 1rem;
+  color: #d81921;
+}

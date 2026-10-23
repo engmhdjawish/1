@@ -66,13 +66,17 @@ final class StoreCartRequest
             return ['ok' => false, 'message' => 'يرجى إدخال رقم هاتف صحيح (8 أرقام على الأقل).'];
         }
         if ($cartItems === []) {
-            return ['ok' => false, 'message' => 'السلة فارغة.'];
+            return self::recentSubmitReplay() ?? ['ok' => false, 'message' => 'السلة فارغة.'];
         }
 
         $reconcile = ShareCartService::reconcileStock(StoreCartService::TOKEN);
         StoreCartPricingService::repriceCart(StoreCartService::TOKEN);
         $cartItems = array_values(StoreCartService::items());
         if ($cartItems === []) {
+            $replay = self::recentSubmitReplay();
+            if ($replay !== null) {
+                return $replay;
+            }
             $notices = is_array($reconcile['notices'] ?? null) ? $reconcile['notices'] : [];
             $message = $notices !== []
                 ? implode(' ', $notices)
@@ -115,27 +119,52 @@ final class StoreCartRequest
         $orderNumber = (string) ($order['order_number'] ?? '');
 
         if (CustomerSession::check()) {
-            return [
+            $response = [
                 'ok' => true,
                 'message' => 'تم إرسال الطلب بنجاح.',
                 'redirect' => '/my-orders.php?order=' . rawurlencode((string) ($order['id'] ?? '')),
                 'order_number' => $orderNumber,
                 'tracking_url' => $quoteToken !== '' ? order_tracking_url($quoteToken) : '',
             ];
+        } else {
+            $_SESSION['store_order_success'] = $order;
+            $response = [
+                'ok' => true,
+                'message' => 'تم إرسال الطلب بنجاح.',
+                'redirect' => '/store-order-confirmation.php',
+                'order_number' => $orderNumber,
+                'tracking_url' => $quoteToken !== '' ? order_tracking_url($quoteToken) : '',
+            ];
+        }
+        if (!empty($result['duplicate'])) {
+            $response['duplicate'] = true;
+        }
+        $_SESSION[self::LAST_SUBMIT_KEY] = ['at' => time(), 'order' => $order, 'response' => $response];
+
+        return $response;
+    }
+
+    private const LAST_SUBMIT_KEY = 'store_last_order_submit';
+
+    /**
+     * A second tap that reaches the server after the first order already emptied the cart.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function recentSubmitReplay(): ?array
+    {
+        $last = $_SESSION[self::LAST_SUBMIT_KEY] ?? null;
+        if (!is_array($last) || !is_array($last['response'] ?? null)) {
+            return null;
+        }
+        if (time() - (int) ($last['at'] ?? 0) > OrderService::DUPLICATE_WINDOW_SECONDS) {
+            return null;
+        }
+        if (is_array($last['order'] ?? null) && !CustomerSession::check()) {
+            $_SESSION['store_order_success'] = $last['order'];
         }
 
-        if (!isset($_SESSION['store_order_success']) || !is_array($_SESSION['store_order_success'])) {
-            $_SESSION['store_order_success'] = [];
-        }
-        $_SESSION['store_order_success'] = $order;
-
-        return [
-            'ok' => true,
-            'message' => 'تم إرسال الطلب بنجاح.',
-            'redirect' => '/store-order-confirmation.php',
-            'order_number' => $orderNumber,
-            'tracking_url' => $quoteToken !== '' ? order_tracking_url($quoteToken) : '',
-        ];
+        return $last['response'] + ['duplicate' => true];
     }
 
     /** @param array<string, mixed> $input */

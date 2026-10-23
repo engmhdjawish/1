@@ -17,13 +17,19 @@ if (CustomerSession::isLoggedIn()) {
 
 $error = null;
 $message = null;
+$old = ['name' => '', 'phone' => '', 'shop_address' => ''];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $old = [
+        'name' => trim((string) ($_POST['name'] ?? '')),
+        'phone' => trim((string) ($_POST['phone'] ?? '')),
+        'shop_address' => trim((string) ($_POST['shop_address'] ?? '')),
+    ];
     $result = WebCustomerService::registerSelf(
-        trim($_POST['name'] ?? ''),
-        portal_normalize_phone(trim($_POST['phone'] ?? '')),
-        $_POST['password'] ?? '',
-        trim($_POST['email'] ?? '') ?: null
+        $old['name'],
+        portal_normalize_phone($old['phone']),
+        (string) ($_POST['password'] ?? ''),
+        $old['shop_address']
     );
     if ($result['ok']) {
         if (!empty($result['logged_in'])) {

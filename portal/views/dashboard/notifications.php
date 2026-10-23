@@ -8,6 +8,10 @@ declare(strict_types=1);
 /** @var list<array<string, mixed>> $customers */
 /** @var list<array<string, mixed>> $staffUsers */
 /** @var array{total: int, public_count: int, private_count: int, manual_count: int, expired_count: int, active_count: int} $notificationStats */
+/** @var string $historyKind */
+/** @var string $historyScope */
+/** @var string $historyQuery */
+/** @var array{total: int, page: int, pages: int, per_page: int} $historyPaging */
 
 use Portal\Services\NotificationService;
 
@@ -19,6 +23,16 @@ $notificationStats = $notificationStats ?? [
     'expired_count' => 0,
     'active_count' => 0,
 ];
+$formatWhen = static function (?string $value): string {
+    if ($value === null || trim($value) === '') {
+        return '';
+    }
+    try {
+        return (new DateTimeImmutable($value))->setTimezone(new DateTimeZone(date_default_timezone_get()))->format('Y/m/d H:i');
+    } catch (Throwable) {
+        return (string) $value;
+    }
+};
 $customerStatusLabels = [
     'active' => 'مفعّل',
     'pending' => 'قيد المراجعة',
@@ -39,16 +53,16 @@ $iconOptions = [
 <section class="mb-6">
   <h1 class="text-2xl font-extrabold text-slate-900">الإشعارات</h1>
   <p class="text-sm text-text-muted mt-1 max-w-3xl">
-    أرسل إشعاراً عاماً أو خاصاً، وتصل التنبيهات التلقائية عند الطلبات وتعديلاتها، وتسجيل العملاء وتفعيلهم أو إيقافهم، وتغيير كلمة المرور، ونشر العروض.
+    الحملات هي ما ترسله أنت. التنبيهات التلقائية (الطلبات، الحسابات، العروض) تصل وحدها وتجدها في تبويب «تلقائية».
   </p>
 </section>
 
 <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
   <?php foreach ([
-      ['label' => 'الكل', 'value' => (int) $notificationStats['total']],
-      ['label' => 'سارية', 'value' => (int) $notificationStats['active_count']],
-      ['label' => 'عامة', 'value' => (int) $notificationStats['public_count']],
-      ['label' => 'خاصة', 'value' => (int) $notificationStats['private_count']],
+      ['label' => 'حملات أرسلتها', 'value' => (int) $notificationStats['manual_count']],
+      ['label' => 'تنبيهات تلقائية', 'value' => max(0, (int) $notificationStats['total'] - (int) $notificationStats['manual_count'])],
+      ['label' => 'سارية الآن', 'value' => (int) $notificationStats['active_count']],
+      ['label' => 'منتهية', 'value' => (int) $notificationStats['expired_count']],
   ] as $stat): ?>
     <article class="rounded-2xl border border-border-subtle bg-white px-4 py-3">
       <p class="text-xs text-text-muted"><?= h($stat['label']) ?></p>
@@ -68,7 +82,7 @@ $iconOptions = [
     <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60">
       <h2 class="font-bold">إرسال إشعار جديد</h2>
     </div>
-    <form method="post" class="p-4 space-y-4">
+    <form method="post" class="p-4 space-y-4" data-notification-compose>
       <input type="hidden" name="action" value="send">
 
       <div class="flex flex-wrap gap-2">
@@ -121,6 +135,20 @@ $iconOptions = [
         </label>
       </div>
 
+      <div class="flex flex-wrap items-center gap-2" data-notification-templates>
+        <span class="text-xs text-text-muted">قوالب:</span>
+        <?php foreach ([
+            ['label' => 'بضاعة جديدة', 'icon' => 'storefront', 'title' => 'وصلت بضاعة جديدة', 'body' => 'تشكيلة جديدة متوفرة الآن بأسعار الجملة. تصفّح واطلب قبل نفاد الكمية.', 'link' => '/store.php'],
+            ['label' => 'عرض', 'icon' => 'local_offer', 'title' => 'عرض خاص لفترة محدودة', 'body' => 'خصم على تشكيلة مختارة عند الطلب بالطرد. العرض ساري حتى نفاد الكمية.', 'link' => '/store.php'],
+            ['label' => 'تحديث أسعار', 'icon' => 'info', 'title' => 'تحديث الأسعار', 'body' => 'تم تحديث أسعار بعض الأصناف. راجع الأسعار الحالية قبل إرسال طلبك.', 'link' => '/store.php'],
+            ['label' => 'عطلة', 'icon' => 'celebration', 'title' => 'تنويه بموعد العطلة', 'body' => 'نستقبل الطلبات عبر الموقع، ويبدأ التجهيز بعد انتهاء العطلة.', 'link' => ''],
+        ] as $template): ?>
+          <button type="button" class="h-8 px-3 rounded-full border border-border-subtle text-xs font-bold hover:bg-slate-50"
+            data-template-title="<?= h($template['title']) ?>" data-template-body="<?= h($template['body']) ?>"
+            data-template-icon="<?= h($template['icon']) ?>" data-template-link="<?= h($template['link']) ?>"><?= h($template['label']) ?></button>
+        <?php endforeach; ?>
+      </div>
+
       <label class="block text-sm">
         <span class="font-bold">العنوان</span>
         <input type="text" name="title_ar" required maxlength="200" class="mt-1 h-10 w-full rounded-lg border border-border-subtle px-3 text-sm" placeholder="مثال: عرض خاص هذا الأسبوع">
@@ -151,7 +179,21 @@ $iconOptions = [
         </label>
       </div>
 
-      <button type="submit" class="h-11 px-5 rounded-xl bg-primary text-white text-sm font-bold inline-flex items-center gap-2">
+      <div>
+        <p class="text-xs text-text-muted mb-1">هكذا يظهر عند العميل:</p>
+        <div class="flex items-start gap-3 rounded-xl border border-border-subtle bg-white p-3 max-w-md" data-notification-preview>
+          <span class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined" data-preview-icon>campaign</span>
+          </span>
+          <span class="min-w-0 grid gap-0.5">
+            <strong class="text-sm text-slate-900" data-preview-title>عنوان الإشعار</strong>
+            <span class="text-sm text-text-muted" data-preview-body>نص الإشعار</span>
+            <span class="text-xs text-slate-400">الآن</span>
+          </span>
+        </div>
+      </div>
+
+      <button type="submit" class="h-11 px-5 rounded-xl bg-primary text-white text-sm font-bold inline-flex items-center gap-2" data-notification-send>
         <span class="material-symbols-outlined text-lg">send</span>
         إرسال الإشعار
       </button>
@@ -159,19 +201,36 @@ $iconOptions = [
   </section>
 
   <section class="rounded-2xl border border-border-subtle bg-white overflow-hidden">
+    <?php
+      $historyUrl = static function (array $override) use ($historyKind, $historyScope, $historyQuery): string {
+          $query = array_merge(['kind' => $historyKind, 'scope' => $historyScope, 'q' => $historyQuery, 'page' => ''], $override);
+          $query = array_filter($query, static fn ($v): bool => (string) $v !== '' && !($v === 'manual'));
+
+          return '/dashboard/notifications.php' . ($query !== [] ? '?' . http_build_query($query) : '');
+      };
+      $backQuery = (string) (parse_url($historyUrl(['page' => $historyPaging['page'] > 1 ? (string) $historyPaging['page'] : '']), PHP_URL_QUERY) ?? '');
+      $tabClass = static fn (bool $on): string => 'h-8 px-3 inline-flex items-center rounded-full border text-xs font-bold ' . ($on ? 'border-primary bg-primary/10 text-primary' : 'border-border-subtle');
+    ?>
     <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60 space-y-3">
       <div class="flex items-center justify-between gap-3">
-        <h2 class="font-bold">آخر الإشعارات المرسلة</h2>
-        <span class="text-xs text-text-muted"><?= h((string) count($sentNotifications)) ?> ظاهر</span>
+        <h2 class="font-bold">السجل</h2>
+        <span class="text-xs text-text-muted"><?= (int) $historyPaging['total'] ?> إشعار</span>
       </div>
-      <input type="search" data-notification-search placeholder="بحث في العنوان أو النص" class="h-10 w-full rounded-lg border border-border-subtle px-3 text-sm">
-      <div class="flex flex-wrap gap-2" data-notification-filters>
-        <button type="button" class="h-8 px-3 rounded-full border border-primary bg-primary/10 text-primary text-xs font-bold" data-notification-filter="all">الكل</button>
-        <button type="button" class="h-8 px-3 rounded-full border border-border-subtle text-xs font-bold" data-notification-filter="public">عامة</button>
-        <button type="button" class="h-8 px-3 rounded-full border border-border-subtle text-xs font-bold" data-notification-filter="private">خاصة</button>
-        <button type="button" class="h-8 px-3 rounded-full border border-border-subtle text-xs font-bold" data-notification-filter="manual">يدوية</button>
-        <button type="button" class="h-8 px-3 rounded-full border border-border-subtle text-xs font-bold" data-notification-filter="auto">تلقائية</button>
+      <div class="flex flex-wrap gap-2">
+        <a href="<?= h($historyUrl(['kind' => 'manual', 'page' => ''])) ?>" class="<?= $tabClass($historyKind === 'manual') ?>">حملاتي</a>
+        <a href="<?= h($historyUrl(['kind' => 'auto', 'page' => ''])) ?>" class="<?= $tabClass($historyKind === 'auto') ?>">تلقائية</a>
+        <a href="<?= h($historyUrl(['kind' => 'all', 'page' => ''])) ?>" class="<?= $tabClass($historyKind === 'all') ?>">الكل</a>
+        <span class="w-px bg-border-subtle mx-1"></span>
+        <a href="<?= h($historyUrl(['scope' => '', 'page' => ''])) ?>" class="<?= $tabClass($historyScope === '') ?>">عامة وخاصة</a>
+        <a href="<?= h($historyUrl(['scope' => 'public', 'page' => ''])) ?>" class="<?= $tabClass($historyScope === 'public') ?>">عامة</a>
+        <a href="<?= h($historyUrl(['scope' => 'private', 'page' => ''])) ?>" class="<?= $tabClass($historyScope === 'private') ?>">خاصة</a>
       </div>
+      <form method="get" class="flex gap-2">
+        <input type="hidden" name="kind" value="<?= h($historyKind) ?>">
+        <?php if ($historyScope !== ''): ?><input type="hidden" name="scope" value="<?= h($historyScope) ?>"><?php endif; ?>
+        <input type="search" name="q" value="<?= h($historyQuery) ?>" placeholder="بحث في العنوان أو النص أو اسم العميل" class="h-10 flex-1 rounded-lg border border-border-subtle px-3 text-sm">
+        <button type="submit" class="h-10 px-4 rounded-lg border border-border-subtle bg-white text-sm font-bold">بحث</button>
+      </form>
     </div>
     <div class="divide-y divide-border-subtle max-h-[36rem] overflow-y-auto" data-notification-sent-list>
       <?php if ($sentNotifications === []): ?>
@@ -204,7 +263,7 @@ $iconOptions = [
               </div>
               <p class="text-sm text-text-muted mt-1"><?= h((string) ($row['body_ar'] ?? '')) ?></p>
               <p class="text-xs text-text-muted mt-2">
-                <?= h((string) ($row['created_at'] ?? '')) ?>
+                <?= h($formatWhen((string) ($row['created_at'] ?? ''))) ?>
                 · <?= h(NotificationService::sourceLabel($rowSource)) ?>
                 <?php if (!empty($row['customer_name_ar'])): ?>
                   · عميل: <?= h((string) $row['customer_name_ar']) ?>
@@ -220,12 +279,13 @@ $iconOptions = [
                 <?php endif; ?>
                 · قُرئ <?= h((string) ((int) ($row['read_count'] ?? 0))) ?>
                 <?php if (!empty($row['expires_at'])): ?>
-                  · ينتهي <?= h((string) $row['expires_at']) ?>
+                  · ينتهي <?= h($formatWhen((string) $row['expires_at'])) ?>
                 <?php endif; ?>
               </p>
             </div>
             <form method="post" class="shrink-0" onsubmit="return confirm('حذف هذا الإشعار نهائياً من الجميع؟');">
               <input type="hidden" name="action" value="delete">
+              <input type="hidden" name="back" value="<?= h($backQuery !== '' ? '?' . $backQuery : '') ?>">
               <input type="hidden" name="id" value="<?= h((string) ($row['id'] ?? '')) ?>">
               <button
                 type="submit"
@@ -240,6 +300,17 @@ $iconOptions = [
         </article>
       <?php endforeach; ?>
     </div>
+    <?php if ($historyPaging['pages'] > 1): ?>
+      <nav class="flex items-center justify-between gap-2 px-4 py-3 border-t border-border-subtle text-sm" aria-label="صفحات السجل">
+        <?php if ($historyPaging['page'] > 1): ?>
+          <a class="h-9 px-3 inline-flex items-center rounded-lg border border-border-subtle font-bold" href="<?= h($historyUrl(['page' => (string) ($historyPaging['page'] - 1)])) ?>">الأحدث</a>
+        <?php else: ?><span></span><?php endif; ?>
+        <span class="text-xs text-text-muted">صفحة <?= (int) $historyPaging['page'] ?> من <?= (int) $historyPaging['pages'] ?></span>
+        <?php if ($historyPaging['page'] < $historyPaging['pages']): ?>
+          <a class="h-9 px-3 inline-flex items-center rounded-lg border border-border-subtle font-bold" href="<?= h($historyUrl(['page' => (string) ($historyPaging['page'] + 1)])) ?>">الأقدم</a>
+        <?php else: ?><span></span><?php endif; ?>
+      </nav>
+    <?php endif; ?>
   </section>
 </div>
 
@@ -266,34 +337,42 @@ $iconOptions = [
     if (staffSelect.value && customerSelect) customerSelect.value = '';
   });
 
-  const search = document.querySelector('[data-notification-search]');
-  const rows = Array.from(document.querySelectorAll('[data-notification-row]'));
-  let activeFilter = 'all';
-  const applyListFilter = () => {
-    const query = (search?.value || '').trim().toLowerCase();
-    rows.forEach((row) => {
-      const scope = row.getAttribute('data-scope') || '';
-      const source = row.getAttribute('data-source') || '';
-      const haystack = row.getAttribute('data-search') || '';
-      const filterOk = activeFilter === 'all'
-        || (activeFilter === 'auto' ? source !== 'manual' : (activeFilter === 'manual' ? source === 'manual' : scope === activeFilter));
-      const searchOk = query === '' || haystack.includes(query);
-      row.classList.toggle('hidden', !(filterOk && searchOk));
-    });
+  const form = document.querySelector('[data-notification-compose]');
+  const titleInput = form?.querySelector('[name="title_ar"]');
+  const bodyInput = form?.querySelector('[name="body_ar"]');
+  const iconSelect = form?.querySelector('[name="icon"]');
+  const linkInput = form?.querySelector('[name="link_url"]');
+  const preview = document.querySelector('[data-notification-preview]');
+  const syncPreview = () => {
+    if (!preview) return;
+    preview.querySelector('[data-preview-title]').textContent = titleInput?.value.trim() || 'عنوان الإشعار';
+    preview.querySelector('[data-preview-body]').textContent = bodyInput?.value.trim() || 'نص الإشعار';
+    preview.querySelector('[data-preview-icon]').textContent = iconSelect?.value || 'campaign';
   };
-  document.querySelectorAll('[data-notification-filter]').forEach((button) => {
+  [titleInput, bodyInput, iconSelect].forEach((el) => el?.addEventListener('input', syncPreview));
+  iconSelect?.addEventListener('change', syncPreview);
+  document.querySelectorAll('[data-template-title]').forEach((button) => {
     button.addEventListener('click', () => {
-      activeFilter = button.getAttribute('data-notification-filter') || 'all';
-      document.querySelectorAll('[data-notification-filter]').forEach((other) => {
-        const on = other === button;
-        other.classList.toggle('border-primary', on);
-        other.classList.toggle('bg-primary/10', on);
-        other.classList.toggle('text-primary', on);
-        other.classList.toggle('border-border-subtle', !on);
-      });
-      applyListFilter();
+      if (titleInput) titleInput.value = button.dataset.templateTitle || '';
+      if (bodyInput) bodyInput.value = button.dataset.templateBody || '';
+      if (iconSelect && button.dataset.templateIcon) iconSelect.value = button.dataset.templateIcon;
+      if (linkInput) linkInput.value = button.dataset.templateLink || '';
+      syncPreview();
+      titleInput?.focus();
     });
   });
-  search?.addEventListener('input', applyListFilter);
+  syncPreview();
+  form?.addEventListener('submit', (event) => {
+    if (form.dataset.submitting === '1') {
+      event.preventDefault();
+      return;
+    }
+    form.dataset.submitting = '1';
+    const send = form.querySelector('[data-notification-send]');
+    if (send) {
+      send.setAttribute('aria-busy', 'true');
+      send.classList.add('opacity-60', 'pointer-events-none');
+    }
+  });
 })();
 </script>

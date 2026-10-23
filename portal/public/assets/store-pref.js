@@ -1,5 +1,6 @@
 (() => {
   const API = '/api/store-price-pref.php';
+  let latestSeq = 0;
 
   const syncSypDisclaimer = (currency) => {
     document.querySelectorAll('[data-store-syp-disclaimer]').forEach((el) => {
@@ -25,19 +26,27 @@
     btn.addEventListener('click', async () => {
       const currency = btn.getAttribute('data-store-currency') || '';
       if (!currency || btn.classList.contains('is-active')) return;
-      btn.disabled = true;
+      const previous = document.body.dataset.storePriceCurrency || 'syp';
+      const seq = Date.now();
+      latestSeq = seq;
+      applyCurrency(currency);
       try {
         const res = await fetch(API, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           credentials: 'same-origin',
-          body: JSON.stringify({ currency }),
+          body: JSON.stringify({ currency, seq }),
         });
         const data = await res.json().catch(() => ({}));
-        if (!data.ok) return;
-        applyCurrency(currency);
-      } finally {
-        btn.disabled = false;
+        if (seq < latestSeq) return;
+        if (!data.ok) {
+          applyCurrency(previous);
+          return;
+        }
+        if (data.currency) applyCurrency(data.currency);
+      } catch {
+        if (seq < latestSeq) return;
+        applyCurrency(previous);
       }
     });
   });

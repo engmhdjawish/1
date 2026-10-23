@@ -25,11 +25,23 @@
     || window.matchMedia('(display-mode: fullscreen)').matches
     || window.matchMedia('(display-mode: minimal-ui)').matches
     || window.navigator.standalone === true;
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const ua = navigator.userAgent || '';
+  const isIOS = /iphone|ipad|ipod/i.test(ua)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  // WhatsApp/Facebook/Instagram/Telegram webviews cannot install; Chrome there only offers a shortcut.
+  const isInAppBrowser = /FBAN|FBAV|FB_IAB|Instagram|WhatsApp|Line\/|Telegram|Snapchat|; wv\)/i.test(ua);
+  const isIOSSafari = isIOS && /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA\//i.test(ua) && !isInAppBrowser;
   const isSecure = window.isSecureContext === true;
 
   let deferredPrompt = null;
   let modalEl = null;
+
+  function canInstall() {
+    if (isStandalone || isInAppBrowser || !isSecure) {
+      return false;
+    }
+    return Boolean(deferredPrompt) || isIOSSafari;
+  }
 
   function detectMode() {
     if (isIOS) {
@@ -49,7 +61,6 @@
       return {
         title: 'إضافة الموقع للشاشة الرئيسية',
         steps: [
-          'افتح الموقع من متصفح Safari (ليس Chrome).',
           'اضغط زر المشاركة ↗ أسفل الشاشة.',
           'اختر «إضافة إلى الشاشة الرئيسية».',
           'اضغط «إضافة».',
@@ -210,9 +221,7 @@
         document.getElementById('pwa-install-banner')?.remove();
         return true;
       }
-      // User dismissed — keep install UI available.
-      updateHeaderButtonMode('manual');
-      showInstallTriggers();
+      syncInstallTriggers();
       return false;
     } catch (_) {
       openModal('manual');
@@ -311,12 +320,16 @@
     if (!('serviceWorker' in navigator) || !isSecure) {
       return Promise.resolve(null);
     }
-    return navigator.serviceWorker.getRegistration('/').then((existing) => {
-      if (existing) {
-        return existing;
-      }
-      return navigator.serviceWorker.register('/sw.js?v=7', { scope: '/', updateViaCache: 'none' });
-    }).catch(() => null);
+    const register = () => navigator.serviceWorker
+      .register('/sw.js?v=7', { scope: '/', updateViaCache: 'none' })
+      .catch(() => null);
+    // Registration competes with first paint on slow phones; wait until the page has loaded.
+    if (document.readyState === 'complete') {
+      return register();
+    }
+    return new Promise((resolve) => {
+      window.addEventListener('load', () => resolve(register()), { once: true });
+    });
   }
 
   function markEngagementReady() {
@@ -360,17 +373,25 @@
     markInstalled();
   });
 
+  function syncInstallTriggers() {
+    if (canInstall()) {
+      updateHeaderButtonMode(detectMode());
+      showInstallTriggers();
+    } else {
+      hideInstallTriggers();
+    }
+  }
+
   async function init() {
+    registerServiceWorker();
     const installed = await detectInstalledApp();
     if (installed || isStandalone) {
       hideInstallTriggers();
       return;
     }
 
-    showInstallTriggers();
-    updateHeaderButtonMode(detectMode());
     bindTriggers();
-    registerServiceWorker();
+    syncInstallTriggers();
 
     const params = new URLSearchParams(window.location.search);
     if (params.get('install') === '1' || window.location.pathname.endsWith('/install.php')) {
@@ -388,7 +409,9 @@
     open: openModal,
     close: closeModal,
     install: triggerNativeInstall,
-    shouldPromptInstall: () => !isStandalone && !isMarkedInstalled(),
+    shouldPromptInstall: () => !isStandalone && !isMarkedInstalled() && canInstall(),
+    canInstall,
+    isInAppBrowser: () => isInAppBrowser,
   };
 
   if (document.readyState === 'loading') {
