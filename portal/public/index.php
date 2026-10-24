@@ -74,4 +74,5 @@ $appDock = !empty($general['dock']);
 $enableQuickView = false;
 $enableStoreCartJs = false;
 $deferStoreCartJs = $storeCatalogDisplay['allow_cart'] ?? false;
+$enableProductPreview = true;
 require dirname(__DIR__) . '/views/layout.php';

@@ -79,7 +79,7 @@
 
   const resolveItemScope = (element) => {
     if (!(element instanceof Element)) return null;
-    return element.closest('.home-section');
+    return element.closest('[data-lab-recent-viewed], .hn-rail, .home-section');
   };
 
   const findPreviewCard = (guid, scope = null) => {
@@ -1280,5 +1280,5 @@
     render(state.items[state.index]);
   });
 
-  window.StoreProductPreview = { close };
+  window.StoreProductPreview = { open, close };
 })();

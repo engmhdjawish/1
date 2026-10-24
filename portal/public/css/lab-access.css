@@ -215,10 +215,20 @@
   align-items: center;
   justify-content: center;
   aspect-ratio: 1 / 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
   border-radius: 0.65rem;
   background: #f8fafc;
   color: #cbd5e1;
   overflow: hidden;
+  cursor: pointer;
+  font: inherit;
+}
+
+.lab-viewed__media:focus-visible {
+  outline: 2px solid #d81921;
+  outline-offset: 2px;
 }
 
 .lab-viewed__media img {

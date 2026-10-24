@@ -28,11 +28,27 @@ if ($product === null) {
 }
 
 $display = StoreCatalogService::displayOptions();
-if (StoreCatalogService::materialIsUnavailable($product) && !\Portal\Services\StorePolicyService::showUnavailablePrices()) {
+$unavailable = StoreCatalogService::materialIsUnavailable($product);
+$hideUnavailablePrice = $unavailable && !\Portal\Services\StorePolicyService::showUnavailablePrices();
+if ($hideUnavailablePrice) {
     $display['show_price'] = false;
+    $display['allow_cart'] = false;
+    $display['show_quantity'] = false;
+}
+
+$payload = ProductDisplayService::quickViewPayload($product, $display);
+if ($unavailable) {
+    $payload['unavailable'] = true;
+}
+if ($hideUnavailablePrice) {
+    // مثل بطاقة المتجر: لا سعر ولا حجاب «إظهار السعر» للمادة غير المتوفرة.
+    $payload['priceHidden'] = true;
+    $payload['showPrice'] = false;
+    $payload['showPriceSyp'] = false;
+    $payload['showPriceUsd'] = false;
 }
 
 echo json_encode([
     'ok' => true,
-    'product' => ProductDisplayService::quickViewPayload($product, $display),
+    'product' => $payload,
 ], JSON_UNESCAPED_UNICODE);
