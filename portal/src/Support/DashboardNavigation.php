@@ -183,7 +183,7 @@ final class DashboardNavigation
                 'icon' => 'perm_media',
                 'permission' => ['images.upload', 'images.view'],
                 'description' => self::userCan($user, 'images.upload')
-                    ? 'رفع الصور، مزامنة الأمين، وربطها بالمواد من صفحة واحدة.'
+                    ? 'رفع الصور ومزامنتها مع الأمين وربطها بالمواد.'
                     : 'تصفّح الصور المحلية وتحميلها.',
             ],
         ]);
@@ -334,7 +334,7 @@ final class DashboardNavigation
                     'label' => 'تخطيط الصفحة الرئيسية',
                     'icon' => 'dashboard_customize',
                     'permission' => 'home_sections.manage',
-                    'description' => 'ترتيب أقسام الرئيسية الجديدة وإظهارها وتعديل عناوينها وخياراتها.',
+                    'description' => 'ترتيب أقسام الرئيسية وإظهارها وتعديل عناوينها وخياراتها.',
                 ],
                 [
                     'route' => '/dashboard/home-shop-blocks.php',
@@ -348,7 +348,7 @@ final class DashboardNavigation
                     'label' => 'مواسم العرض',
                     'icon' => 'partly_cloudy_day',
                     'permission' => 'home_sections.manage',
-                    'description' => 'مجموعات الموسم الحالي (صيفي، شتوي، عام) تظهر أولاً في المتجر، مع تبديل تلقائي حسب التاريخ.',
+                    'description' => 'مجموعات الموسم الحالي (صيفي، شتوي، عام) في مقدمة المتجر، مع تبديل تلقائي حسب التاريخ.',
                 ],
                 [
                     'route' => '/dashboard/special-offers.php',

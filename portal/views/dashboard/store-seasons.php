@@ -50,7 +50,7 @@ $daysUntil = $nextSwitch !== null ? (int) ceil(($nextSwitch['at'] - $now) / 8640
   <div>
     <h1 class="text-2xl font-extrabold text-slate-900">مواسم العرض</h1>
     <p class="text-sm text-text-muted mt-1">
-      مجموعات الموسم الحالي تظهر أولاً في المتجر التجريبي، ثم باقي المواد. المتوفر يبقى قبل غير المتوفر دائماً.
+      مجموعات الموسم الحالي تظهر في مقدمة المتجر، ثم باقي المواد. المتوفر يبقى قبل غير المتوفر دائماً.
     </p>
   </div>
   <div class="flex flex-wrap items-center gap-2">
@@ -203,7 +203,7 @@ $daysUntil = $nextSwitch !== null ? (int) ceil(($nextSwitch['at'] - $now) / 8640
           <?php if ($current !== null): ?>
             · <?= count($current['group_guids']) ?> مجموعة
             <?php if ($currentCount !== null): ?>
-              · <strong class="text-slate-900"><?= number_format($currentCount) ?></strong> مادة متوفرة تظهر أولاً
+              · <strong class="text-slate-900"><?= number_format($currentCount) ?></strong> مادة متوفرة في المقدمة
             <?php endif; ?>
             <?php if (!$settings['show_to_customers']): ?>
               · مخفي عن الزبائن

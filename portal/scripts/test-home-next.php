@@ -128,7 +128,7 @@ $assert('result can limit to the season', str_contains($html, 'data-hn-guide-sea
 $assert('sizes sort naturally in the picker', $pos('>18-23<') < $pos('>36-39<') && $pos('>36-39<') < $pos('>40-45<'));
 $seasonHref = h(store_lab_url(['season' => '1']));
 $assert('season card with category shortcuts', str_contains($html, 'class="hn-season hn-season--cool"') && str_contains($html, 'تسوّق التشكيلة') && str_contains($html, h(store_lab_url(['season' => '1', 'ageCategories' => ['نسائي']]))));
-$assert('season story, sheet pill and feed badge', str_contains($html, 'href="' . $seasonHref . '" data-hn-story="season-season-1"') && str_contains($html, 'hn-sheet__pill--season') && str_contains($html, 'تشكيلة الشتاء أولاً'));
+$assert('season story, sheet pill and feed badge', str_contains($html, 'href="' . $seasonHref . '" data-hn-story="season-season-1"') && str_contains($html, 'hn-sheet__pill--season') && (bool) preg_match('/hn-feed__badge[^>]*>[\s\S]*?تشكيلة الشتاء(?!\s*أولاً)/u', $html));
 $assert('season card sits between offers and the picker', $pos('class="hn-offer"') < $pos('class="hn-season') && $pos('class="hn-season') < $pos('data-hn-guide '));
 $assert('shop-by paged tabs, no combo facet', substr_count($html, 'data-hn-shop-tab') === 3 && !str_contains($html, 'الشركة والفئة') && !str_contains($html, 'data-lab-shop-combo') && str_contains($html, 'hn-shop__page'));
 $assert('main sections showcase', str_contains($html, 'class="hn-showcase') && str_contains($html, '>تسوّق الأقسام<') && str_contains($html, 'hn-showcase__tile'));

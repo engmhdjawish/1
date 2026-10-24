@@ -47,7 +47,7 @@ $showWorkerBanner = \Portal\Services\MaterialImageBackgroundWorkerService::dashb
       <h1 class="text-2xl font-extrabold">صور المواد</h1>
       <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
         <?php if ($canUploadImages): ?>
-          رفع الصور ومزامنتها مع الأمين، ثم ربطها بالمواد — كل ذلك من صفحة واحدة.
+          رفع صور المواد ومزامنتها مع الأمين وربطها بالمواد.
         <?php else: ?>
           تصفّح صور المواد المحلية وتحميلها — صلاحية العرض فقط دون رفع أو تعديل.
         <?php endif; ?>

@@ -31,10 +31,8 @@ $statusLabels = [
     <div>
       <h1 class="text-2xl font-extrabold">صور المواد — رفع ومزامنة</h1>
       <p class="text-sm text-text-muted mt-1 max-w-3xl leading-relaxed">
-        <strong>①</strong> رفع على الموقع مع استئناف من المتصفح.
-        <strong class="mr-1">②</strong> مزامنة الأمين صورة تلو الأخرى — يتوقف عند انقطاع الاتصال ويُستأنف لاحقاً.
-        لربط الصور بالمواد استخدم
-        <a href="/dashboard/material-image-links.php" class="text-primary font-bold hover:underline">صفحة الربط المستقلة</a>.
+        رفع الصور على الموقع ومزامنتها مع الأمين.
+        <a href="/dashboard/material-image-links.php" class="text-primary font-bold hover:underline">ربط بالمواد</a>.
       </p>
     </div>
     <div class="flex flex-wrap gap-2 text-xs" id="statsPills">

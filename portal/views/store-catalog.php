@@ -502,14 +502,12 @@ $appliedClientFiltersJson = json_encode(
   </div>
 </section>
 <?php else: ?>
-<section class="store-page-head" aria-label="<?= $storeLabMode ? 'تجربة المتجر' : 'صفحة المتجر' ?>">
+<section class="store-page-head" aria-label="صفحة المتجر">
   <h1 class="store-page-head__title">
     <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
-    <?= $storeLabMode ? 'تجربة المتجر' : 'المتجر' ?>
+    المتجر
   </h1>
-  <?php if ($storeLabMode): ?>
-    <p class="store-page-head__meta"><a href="/store.php">المتجر الحالي</a></p>
-  <?php elseif ($storeAllowCart && $storeMaxPackages !== null): ?>
+  <?php if (!$storeLabMode && $storeAllowCart && $storeMaxPackages !== null): ?>
     <p class="store-page-head__meta">الحد الأقصى للطلب: <strong><?= h(SpecialOfferService::formatQuantityLabel($storeMaxPackages)) ?></strong> طرد لكل مادة</p>
   <?php endif; ?>
 </section>
