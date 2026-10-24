@@ -129,6 +129,18 @@ $assert('store share browse renders store-easy', str_contains($sharePartial, 'st
 $assert('store-easy accepts share context', str_contains($storeEasy, '$shareContext = is_array($shareContext') && str_contains($storeEasy, '$shareOnSharePage'));
 $assert('store-easy uses share cart for dock when share token set', str_contains($storeEasy, 'ShareCartService::packageCount'));
 
+$homePageService = (string) file_get_contents($root . '/src/Services/HomePageService.php');
+$assert(
+    'home product strips follow the viewer display policy, not guest-only',
+    str_contains($homePageService, 'StoreCatalogService::displayOptions()')
+    && !str_contains($homePageService, 'guestDisplayOptions()')
+);
+$assert(
+    'home strip cache key fingerprints the active viewer policy',
+    str_contains($homePageService, "'v' => 3")
+    && str_contains($homePageService, 'StoreCatalogService::activePolicy()')
+);
+
 if ($failures > 0) {
     echo "\n{$failures} failure(s)\n";
     exit(1);
