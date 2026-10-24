@@ -27,7 +27,12 @@ if ($product === null) {
     exit;
 }
 
+$display = StoreCatalogService::displayOptions();
+if (StoreCatalogService::materialIsUnavailable($product) && !\Portal\Services\StorePolicyService::showUnavailablePrices()) {
+    $display['show_price'] = false;
+}
+
 echo json_encode([
     'ok' => true,
-    'product' => ProductDisplayService::quickViewPayload($product, StoreCatalogService::displayOptions()),
+    'product' => ProductDisplayService::quickViewPayload($product, $display),
 ], JSON_UNESCAPED_UNICODE);

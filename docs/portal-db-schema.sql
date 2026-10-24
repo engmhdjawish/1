@@ -140,6 +140,7 @@ CREATE TABLE store_guest_settings (
     id                  SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
     access_policy_id    UUID NOT NULL REFERENCES access_policies (id),
     max_packages_per_material NUMERIC(18, 4),
+    show_unavailable_prices BOOLEAN NOT NULL DEFAULT FALSE,
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_by_user_id  UUID REFERENCES web_users (id)
 );

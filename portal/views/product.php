@@ -68,6 +68,9 @@ $comingSoonProduct = $trialStoreProduct && StoreCatalogService::materialIsUnavai
 $omitTrialBlankPrice = $trialStoreProduct
     && $policyAllowsPrice
     && !catalog_material_has_sale_price($product, $priceMode);
+if ($comingSoonProduct && !\Portal\Services\StorePolicyService::showUnavailablePrices()) {
+    $omitTrialBlankPrice = true;
+}
 if ($comingSoonProduct) {
     $allowCart = false;
     $showQuantity = false;

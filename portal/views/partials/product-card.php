@@ -6,6 +6,7 @@ use Portal\Services\HomeSearchService;
 use Portal\Services\ShareCartService;
 use Portal\Services\SpecialOfferService;
 use Portal\Services\StoreCartService;
+use Portal\Services\StorePolicyService;
 
 /** @var array<string, mixed> $item */
 /** @var array{show_images?: bool, show_price?: bool, show_quantity?: bool, price_mode?: string} $displayOptions */
@@ -68,6 +69,11 @@ if ($omitBlankSalePrice && $showAnyPrice && !catalog_material_has_sale_price($it
     $showAnyPrice = false;
 }
 $pricePolicyHidden = !(bool) ($displayOptions['show_price'] ?? false);
+$hideUnavailablePrice = $comingSoonCard && !StorePolicyService::showUnavailablePrices();
+if ($hideUnavailablePrice) {
+    $showAnyPrice = false;
+    $pricePolicyHidden = false;
+}
 $hasOffer = !empty($item['has_offer']);
 $offerBadge = trim((string) ($item['offer_badge'] ?? ''));
 $cartItems = $allowCart
@@ -77,6 +83,9 @@ $cartQtyForItem = $guid !== '' ? (float) ($cartItems[$guid]['quantity'] ?? 0) : 
 $previewPayload = $useImagePreview
     ? product_preview_payload($item, $displayOptions, $cartQtyForItem, $productReturnUrl, $productOfferSlug)
     : null;
+if ($previewPayload !== null && $hideUnavailablePrice) {
+    $previewPayload = array_merge($previewPayload, ['showPrice' => false, 'showPriceSyp' => false, 'showPriceUsd' => false, 'priceHidden' => true]);
+}
 $previewJson = $previewPayload !== null
     ? json_encode($previewPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)
     : '';
@@ -123,6 +132,7 @@ $previewJson = $previewPayload !== null
     <a
       href="<?= h($detailUrl) ?>"
       class="store-product-card__link"
+      <?php if ($useImagePreview && $guid !== ''): ?>data-store-product-preview<?php endif; ?>
       <?php if ($useQuickView): ?>
         data-quick-view="1"
         data-product-guid="<?= h($guid) ?>"

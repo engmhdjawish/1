@@ -290,6 +290,6 @@ final class HomePageService
             ]
             : null;
 
-        return hash('sha256', json_encode(['home' => $home, 'offers' => $offers, 'policy' => $policyFingerprint], JSON_UNESCAPED_UNICODE));
+        return hash('sha256', json_encode(['v' => 2, 'home' => $home, 'offers' => $offers, 'policy' => $policyFingerprint, 'unavailable_prices' => StorePolicyService::showUnavailablePrices()], JSON_UNESCAPED_UNICODE));
     }
 }

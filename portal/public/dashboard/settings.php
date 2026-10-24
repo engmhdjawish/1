@@ -251,6 +251,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $maxRaw = trim((string) ($_POST['max_packages_per_material'] ?? ''));
                     $maxPackages = $maxRaw !== '' && is_numeric($maxRaw) ? (float) $maxRaw : null;
                     StorePolicyService::setMaxPackagesPerMaterial($maxPackages, isset($user['id']) ? (string) $user['id'] : null);
+                    StorePolicyService::setShowUnavailablePrices(isset($_POST['show_unavailable_prices']));
                     header('Location: /dashboard/settings.php?tab=policies&saved=1');
                     exit;
                 } catch (\InvalidArgumentException $exception) {
@@ -344,6 +345,7 @@ $company = PortalSettingsService::companySettings();
 $policies = AccessPolicyService::list(true);
 $guestPolicyId = PortalSettingsService::guestPolicyId();
 $maxPackagesPerMaterial = StorePolicyService::maxPackagesPerMaterial();
+$showUnavailablePrices = StorePolicyService::showUnavailablePrices();
 $apiHealth = PortalSettingsService::apiHealth();
 $dbHealth = PortalSettingsService::databaseHealth();
 $integration = EnvConfigService::integrationSettings();

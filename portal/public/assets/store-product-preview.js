@@ -484,6 +484,7 @@
     if (p.previewContext === 'order') {
       return '';
     }
+    if (p.priceHidden) return '';
     if (!p.showPrice) {
       return priceLockHtml('preview', p.guid);
     }

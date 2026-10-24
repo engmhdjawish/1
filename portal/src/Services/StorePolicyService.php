@@ -17,6 +17,8 @@ final class StorePolicyService
 
     private static ?float $maxPackagesCache = null;
 
+    private static ?bool $unavailablePricesCache = null;
+
     /** @return array<string, mixed>|null */
     public static function guestPolicy(): ?array
     {
@@ -91,5 +93,36 @@ final class StorePolicyService
         ]);
         self::$maxPackagesResolved = true;
         self::$maxPackagesCache = $max !== null && $max > 0 ? $max : null;
+    }
+
+    /** Out-of-stock materials keep their price hidden unless the store settings say otherwise. */
+    public static function showUnavailablePrices(): bool
+    {
+        if (self::$unavailablePricesCache !== null) {
+            return self::$unavailablePricesCache;
+        }
+
+        try {
+            $value = Database::pdo()->query(
+                'SELECT show_unavailable_prices FROM store_guest_settings WHERE id = 1 LIMIT 1'
+            )->fetchColumn();
+            self::$unavailablePricesCache = $value === true || $value === 't' || $value === 1 || $value === '1';
+        } catch (\Throwable) {
+            self::$unavailablePricesCache = false;
+        }
+
+        return self::$unavailablePricesCache;
+    }
+
+    public static function setShowUnavailablePrices(bool $show): void
+    {
+        try {
+            Database::pdo()->prepare(
+                'UPDATE store_guest_settings SET show_unavailable_prices = :show, updated_at = NOW() WHERE id = 1'
+            )->execute(['show' => $show ? 'true' : 'false']);
+            self::$unavailablePricesCache = $show;
+        } catch (\Throwable $exception) {
+            error_log('setShowUnavailablePrices: ' . $exception->getMessage());
+        }
     }
 }
