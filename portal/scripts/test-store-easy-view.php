@@ -162,8 +162,8 @@ $assert('no hint copy', !str_contains($html, 'جرّب') && !str_contains($html,
 $assert('empty state is short with clear all', str_contains($empty, 'لا توجد مواد مطابقة') && str_contains($empty, 'se-empty') && !str_contains($empty, 'store-product-grid'));
 $assert('results sit in one live region', substr_count($html, 'data-se-live') === 1 && str_contains($html, 'data-se-total="3"') && strpos($html, 'data-hl-search-input') < strpos($html, 'data-se-live'));
 $assert('view switch', str_contains($html, 'data-se-density-set="2"') && !str_contains($html, 'data-se-top'));
-$assert('no load more on a single page', !str_contains($html, 'data-se-more') && str_contains($html, 'data-se-next=""'));
-$assert('load more on paged results', str_contains($paged, 'data-se-more-btn') && str_contains($paged, 'عرض المزيد') && str_contains($paged, 'data-se-next="/store.php?') && str_contains($paged, 'page=2') && str_contains($paged, 'store-pagination'));
+$assert('no load more on a single page', !str_contains($html, 'data-se-more'));
+$assert('paged results use page numbers, not load more', !str_contains($paged, 'data-se-more') && !str_contains($paged, 'عرض المزيد') && str_contains($paged, 'store-pagination') && str_contains($paged, 'page=2'));
 $assert('assets wired', str_contains($html, '/assets/store-easy.js') && str_contains($html, '/assets/hn-search.js') && !str_contains($html, '/assets/home-lab.js'));
 
 $icons = [

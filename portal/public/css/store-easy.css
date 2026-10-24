@@ -702,48 +702,6 @@ html.se-sheet-open .se-bar {
   display: none;
 }
 
-/* Load more */
-.se-more {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.55rem;
-  margin: 1.5rem auto 0.5rem;
-  max-width: 20rem;
-}
-
-.se-more[hidden] {
-  display: none;
-}
-
-/* While more pages exist, keep a screen of room below the grid so the footer stays out of reach. */
-.se-more.is-auto {
-  min-height: 70vh;
-  justify-content: flex-start;
-}
-
-.se-more__meta {
-  margin: 0;
-  color: var(--se-muted);
-  font-size: 0.85rem;
-  font-weight: 700;
-}
-
-.se-more__bar {
-  width: 100%;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--se-line);
-  overflow: hidden;
-}
-
-.se-more__bar span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--se-red);
-}
-
 .se-btn--outline {
   gap: 0.3rem;
   width: 100%;

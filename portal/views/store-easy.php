@@ -510,16 +510,6 @@ $baseDisplayOptions = $displayOptions;
       'prevPageUrl' => $page > 1 ? $buildPreviewPageUrl($page - 1, 'last') : null,
       'nextPageUrl' => $page < $totalPages ? $buildPreviewPageUrl($page + 1, 'first') : null,
   ], JSON_UNESCAPED_UNICODE) ?></script>
-  <?php if ($page < $totalPages): ?>
-    <div class="se-more" data-se-more hidden>
-      <p class="se-more__meta"><span data-se-more-shown><?= $rangeEnd ?></span> من <?= $totalCount ?></p>
-      <div class="se-more__bar" aria-hidden="true"><span style="width: <?= $totalCount > 0 ? (int) round(min(100, $rangeEnd * 100 / $totalCount)) : 0 ?>%" data-se-more-fill></span></div>
-      <button type="button" class="se-btn se-btn--outline" data-se-more-btn>
-        عرض المزيد
-        <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
-      </button>
-    </div>
-  <?php endif; ?>
   </div>
 </div>
 <?php

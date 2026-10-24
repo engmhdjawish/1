@@ -73,31 +73,51 @@
     });
   };
 
-  // Load the next batch well before the end of the list, so a fast scroll keeps meeting
-  // materials instead of the footer.
-  let moreObserver = null;
-  const watchMore = (root) => {
-    moreObserver?.disconnect();
-    const more = root?.querySelector('[data-se-more]');
-    if (!more || !('IntersectionObserver' in window)) return;
-    moreObserver = new IntersectionObserver((entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return;
-      const button = live()?.querySelector('[data-se-more-btn]');
-      if (button instanceof HTMLButtonElement && !more.hidden) loadMore(button);
-    }, { rootMargin: '0px 0px 1600px 0px' });
-    moreObserver.observe(more);
-  };
-
   const prepareLive = (root) => {
     if (!root) return;
-    root.querySelector('.store-pagination')?.setAttribute('hidden', '');
-    const more = root.querySelector('[data-se-more]');
-    if (more) {
-      more.hidden = false;
-      more.classList.add('is-auto');
-    }
     applyDensity();
-    watchMore(root);
+  };
+
+  // A fast fling stops where the materials end; a fresh scroll from there carries on to the footer.
+  const brakeBeforeFooter = () => {
+    const html = document.documentElement;
+    let gestureFrom = null;
+    let lastWheel = 0;
+    let releaseAt = 0;
+    const stopY = () => {
+      const root = live();
+      if (!root) return 0;
+      return Math.round(root.getBoundingClientRect().bottom + window.scrollY - window.innerHeight + 24);
+    };
+    const isFast = (stop) => gestureFrom !== null
+      && gestureFrom < stop - 4
+      && window.scrollY - gestureFrom > window.innerHeight * 0.8;
+    const pin = (stop) => {
+      window.scrollTo({ top: stop, behavior: 'instant' });
+      html.style.overflow = 'hidden';
+      releaseAt = performance.now() + 350;
+      window.setTimeout(() => {
+        if (performance.now() >= releaseAt - 5) html.style.overflow = '';
+      }, 360);
+    };
+    window.addEventListener('wheel', (event) => {
+      const now = performance.now();
+      if (now - lastWheel > 180) gestureFrom = window.scrollY;
+      lastWheel = now;
+      if (event.deltaY <= 0) return;
+      const stop = stopY();
+      if (stop <= 0) return;
+      if (window.scrollY + event.deltaY > stop && isFast(stop)) {
+        event.preventDefault();
+        if (window.scrollY !== stop) window.scrollTo({ top: stop, behavior: 'instant' });
+      }
+    }, { passive: false });
+    window.addEventListener('touchstart', () => { gestureFrom = window.scrollY; }, { passive: true });
+    window.addEventListener('scroll', () => {
+      const stop = stopY();
+      if (stop <= 0 || window.scrollY <= stop) return;
+      if (isFast(stop)) pin(stop);
+    }, { passive: true });
   };
 
   const navigate = async (href, options = {}) => {
@@ -206,55 +226,6 @@
     navigate(`${url.pathname}${url.search}`);
   };
 
-  const loadMore = async (button) => {
-    const root = live();
-    const nextUrl = root?.getAttribute('data-se-next') || '';
-    if (!root || !nextUrl || button.disabled) return;
-    button.disabled = true;
-    button.classList.add('is-loading');
-    try {
-      const response = await fetch(nextUrl, { credentials: 'same-origin', headers: { Accept: 'text/html' } });
-      if (!response.ok) throw new Error(String(response.status));
-      const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
-      const nextLive = doc.querySelector('[data-se-live]');
-      const grid = root.querySelector('.se-grid');
-      const cards = nextLive ? Array.from(nextLive.querySelectorAll('.se-grid > *')) : [];
-      if (!grid || !nextLive || cards.length === 0) throw new Error('empty');
-      const fragment = document.createDocumentFragment();
-      cards.forEach((card) => fragment.appendChild(document.importNode(card, true)));
-      grid.appendChild(fragment);
-      bindCards(grid);
-
-      const following = nextLive.getAttribute('data-se-next') || '';
-      const shown = Number(nextLive.getAttribute('data-se-shown') || '0');
-      const total = Number(root.getAttribute('data-se-total') || '0');
-      root.setAttribute('data-se-next', following);
-      root.setAttribute('data-se-shown', String(shown));
-      const shownLabel = root.querySelector('[data-se-more-shown]');
-      if (shownLabel) shownLabel.textContent = String(shown);
-      const fill = root.querySelector('[data-se-more-fill]');
-      if (fill instanceof HTMLElement && total > 0) fill.style.width = `${Math.min(100, Math.round((shown * 100) / total))}%`;
-      const paging = nextLive.querySelector('[data-store-preview-paging]');
-      const currentPaging = root.querySelector('[data-store-preview-paging]');
-      if (paging && currentPaging) currentPaging.textContent = paging.textContent;
-      if (!following) {
-        root.querySelector('[data-se-more]')?.setAttribute('hidden', '');
-        moreObserver?.disconnect();
-      } else {
-        window.requestAnimationFrame(() => {
-          const more = root.querySelector('[data-se-more]');
-          if (more && more.getBoundingClientRect().top < window.innerHeight + 1600) loadMore(button);
-        });
-      }
-    } catch {
-      window.location.href = nextUrl;
-      return;
-    } finally {
-      button.disabled = false;
-      button.classList.remove('is-loading');
-    }
-  };
-
   document.addEventListener('toggle', (event) => {
     const pill = event.target;
     if (!(pill instanceof HTMLDetailsElement) || !pill.matches('[data-se-pill]')) return;
@@ -281,12 +252,6 @@
     if (densityBtn) {
       window.localStorage?.setItem(DENSITY_KEY, densityBtn.getAttribute('data-se-density-set') || '1');
       applyDensity();
-      return;
-    }
-
-    const moreBtn = target.closest('[data-se-more-btn]');
-    if (moreBtn instanceof HTMLButtonElement) {
-      loadMore(moreBtn);
       return;
     }
 
@@ -373,6 +338,7 @@
     if (!live()) return;
     history.replaceState({ seUrl: window.location.href }, '', window.location.href);
     prepareLive(live());
+    brakeBeforeFooter();
   };
 
   if (document.readyState === 'loading') {
