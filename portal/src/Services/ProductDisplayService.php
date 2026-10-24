@@ -20,10 +20,10 @@ final class ProductDisplayService
         $packaging = ShareCartService::packaging($product);
         $primaryUnit = ShareCartService::primaryUnitLabel($product);
         $packageUnit = ShareCartService::packageUnitLabel($product);
-        $unitSaleSp = ShareCartService::unitSalePriceSp($product);
-        $unitSaleUsd = ShareCartService::unitSalePriceUsd($product);
-        $packageSaleSp = ShareCartService::packageSalePriceSp($product);
-        $packageSaleUsd = ShareCartService::packageSalePriceUsd($product);
+        $unitSaleSp = $showPrice ? ShareCartService::unitSalePriceSp($product) : 0.0;
+        $unitSaleUsd = $showPrice ? ShareCartService::unitSalePriceUsd($product) : 0.0;
+        $packageSaleSp = $showPrice ? ShareCartService::packageSalePriceSp($product) : 0.0;
+        $packageSaleUsd = $showPrice ? ShareCartService::packageSalePriceUsd($product) : 0.0;
 
         $specs = [];
         foreach ([
@@ -61,9 +61,9 @@ final class ProductDisplayService
             'unitSaleUsd' => $unitSaleUsd,
             'packageSaleSp' => $packageSaleSp,
             'packageSaleUsd' => $packageSaleUsd,
-            'originalUnitSp' => $hasOffer ? (float) ($product['original_unit_sale_price_sp'] ?? 0) : 0.0,
-            'originalPackSp' => $hasOffer ? (float) ($product['original_package_sale_price_sp'] ?? 0) : 0.0,
-            'originalPackUsd' => $hasOffer ? (float) ($product['original_package_sale_price_usd'] ?? 0) : 0.0,
+            'originalUnitSp' => $hasOffer && $showPrice ? (float) ($product['original_unit_sale_price_sp'] ?? 0) : 0.0,
+            'originalPackSp' => $hasOffer && $showPrice ? (float) ($product['original_package_sale_price_sp'] ?? 0) : 0.0,
+            'originalPackUsd' => $hasOffer && $showPrice ? (float) ($product['original_package_sale_price_usd'] ?? 0) : 0.0,
             'packagesAvailable' => $showQuantity ? \packages_available_display($product) : 0.0,
             'warehouseQty' => (float) ($product['warehouseQuantity'] ?? 0),
             'specs' => $specs,

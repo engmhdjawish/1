@@ -737,10 +737,12 @@ function product_preview_payload(
     $packaging = \Portal\Services\ShareCartService::packaging($item);
     $primaryUnit = \Portal\Services\ShareCartService::primaryUnitLabel($item);
     $packageUnit = \Portal\Services\ShareCartService::packageUnitLabel($item);
-    $unitSaleSp = \Portal\Services\ShareCartService::unitSalePriceSp($item);
-    $unitSaleUsd = \Portal\Services\ShareCartService::unitSalePriceUsd($item);
-    $packageSaleSp = \Portal\Services\ShareCartService::packageSalePriceSp($item);
-    $packageSaleUsd = \Portal\Services\ShareCartService::packageSalePriceUsd($item);
+    // Prices never leave the server when the policy hides them; the payload is embedded in public HTML.
+    $unitSaleSp = $showPrice ? \Portal\Services\ShareCartService::unitSalePriceSp($item) : 0.0;
+    $unitSaleUsd = $showPrice ? \Portal\Services\ShareCartService::unitSalePriceUsd($item) : 0.0;
+    $packageSaleSp = $showPrice ? \Portal\Services\ShareCartService::packageSalePriceSp($item) : 0.0;
+    $packageSaleUsd = $showPrice ? \Portal\Services\ShareCartService::packageSalePriceUsd($item) : 0.0;
+    $hasOfferPrices = $hasOffer && $showPrice;
 
     $imageGuid = material_image_guid($item);
     $thumbUrl = $imageGuid !== '' ? material_image_api_url($imageGuid, true) : '';
@@ -783,10 +785,10 @@ function product_preview_payload(
         'unitSaleUsd' => $unitSaleUsd,
         'packageSaleSp' => $packageSaleSp,
         'packageSaleUsd' => $packageSaleUsd,
-        'originalUnitSp' => $hasOffer ? (float) ($item['original_unit_sale_price_sp'] ?? 0) : 0.0,
-        'originalUnitUsd' => $hasOffer ? (float) ($item['original_unit_sale_price_usd'] ?? 0) : 0.0,
-        'originalPackSp' => $hasOffer ? (float) ($item['original_package_sale_price_sp'] ?? 0) : 0.0,
-        'originalPackUsd' => $hasOffer ? (float) ($item['original_package_sale_price_usd'] ?? 0) : 0.0,
+        'originalUnitSp' => $hasOfferPrices ? (float) ($item['original_unit_sale_price_sp'] ?? 0) : 0.0,
+        'originalUnitUsd' => $hasOfferPrices ? (float) ($item['original_unit_sale_price_usd'] ?? 0) : 0.0,
+        'originalPackSp' => $hasOfferPrices ? (float) ($item['original_package_sale_price_sp'] ?? 0) : 0.0,
+        'originalPackUsd' => $hasOfferPrices ? (float) ($item['original_package_sale_price_usd'] ?? 0) : 0.0,
         'allowCart' => $allowCart,
         'cartQty' => max(0, $cartQtyForItem),
         'maxPackages' => $maxPackages,

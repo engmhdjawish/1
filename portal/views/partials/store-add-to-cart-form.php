@@ -49,8 +49,10 @@ $packageUnit = ShareCartService::packageUnitLabel($item);
 $primaryUnitsAvailable = ($partialPackage && $stockAvailable !== null && $packaging > 0)
     ? max(0.0, round($stockAvailable * $packaging, 4))
     : null;
-$unitSaleSp = ShareCartService::unitSalePriceSp($item);
-$unitSaleUsd = ShareCartService::unitSalePriceUsd($item);
+// The server reprices lines from the catalog, so hidden prices stay out of the form.
+$formShowsPrice = (bool) (($displayOptions ?? [])['show_price'] ?? false);
+$unitSaleSp = $formShowsPrice ? ShareCartService::unitSalePriceSp($item) : 0.0;
+$unitSaleUsd = $formShowsPrice ? ShareCartService::unitSalePriceUsd($item) : 0.0;
 $imageGuid = material_image_guid($item);
 $imageUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '';
 
