@@ -267,9 +267,12 @@ $daysUntil = $nextSwitch !== null ? (int) ceil(($nextSwitch['at'] - $now) / 8640
         </select>
       </label>
       </div>
-      <label class="flex items-center gap-2 text-sm">
-        <input type="checkbox" name="show_to_customers" class="rounded border-border-subtle text-primary focus:ring-primary" <?= $settings['show_to_customers'] ? 'checked' : '' ?>>
-        <span>إظهار «تشكيلة الموسم» للزبائن في الرئيسية والمتجر</span>
+      <label class="flex items-start gap-2 text-sm">
+        <input type="checkbox" name="show_to_customers" class="rounded border-border-subtle text-primary focus:ring-primary mt-0.5" <?= $settings['show_to_customers'] ? 'checked' : '' ?>>
+        <span>
+          إظهار تشكيلة الموسم للزبائن في الرئيسية والمتجر
+          <span class="block text-xs text-text-muted mt-0.5">يشمل دائرة الموسم في شريط التصفح السريع وبطاقة التشكيلة — بعد تفعيلهما من <a href="/dashboard/home-layout.php" class="font-bold text-primary">تخطيط الصفحة الرئيسية</a>.</span>
+        </span>
       </label>
       <button type="submit" class="dashboard-btn h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">حفظ</button>
     </form>
