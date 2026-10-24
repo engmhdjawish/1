@@ -46,11 +46,12 @@ $layout = $flashType === 'error' && $_SERVER['REQUEST_METHOD'] === 'POST'
     ? HomeLayoutService::fromForm($_POST)
     : HomeLayoutService::normalize(HomeLayoutService::storedConfig());
 $definitions = HomeLayoutService::definitions();
+$editorStatus = HomeLayoutService::editorStatus();
 
 $currentRoute = '/dashboard/home-layout.php';
 
 ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/home-layout.php';
 $content = ob_get_clean();
-$title = 'تخطيط الرئيسية الجديدة';
+$title = 'تخطيط الصفحة الرئيسية';
 require dirname(__DIR__, 2) . '/views/dashboard/layout.php';

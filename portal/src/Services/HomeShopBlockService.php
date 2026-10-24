@@ -22,7 +22,7 @@ final class HomeShopBlockService
 
     public const TYPES = [
         'facet' => 'حسب خاصية واحدة',
-        'combo' => 'دمج خاصيتين',
+        'combo' => 'دمج خاصيتين (غير مدعوم في الرئيسية الحالية)',
         'custom' => 'بطاقات مخصّصة',
     ];
 
@@ -33,8 +33,8 @@ final class HomeShopBlockService
     ];
 
     public const PLACEMENTS = [
-        'tabs' => 'ضمن تبويبات «تسوّق حسب»',
-        'band' => 'شريط مستقل',
+        'tabs' => 'تبويب داخل قسم «تسوّق حسب» المجمّع',
+        'band' => 'شريط مستقل بعنوان المجموعة',
     ];
 
     public const MAX_CUSTOM_TILES = 24;

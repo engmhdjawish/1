@@ -331,7 +331,7 @@ final class DashboardNavigation
                 ],
                 [
                     'route' => '/dashboard/home-layout.php',
-                    'label' => 'تخطيط الرئيسية الجديدة',
+                    'label' => 'تخطيط الصفحة الرئيسية',
                     'icon' => 'dashboard_customize',
                     'permission' => 'home_sections.manage',
                     'description' => 'ترتيب أقسام الرئيسية الجديدة وإظهارها وتعديل عناوينها وخياراتها.',

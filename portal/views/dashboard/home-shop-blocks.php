@@ -61,13 +61,16 @@ $tileRows = min(HomeShopBlockService::MAX_CUSTOM_TILES, count($tiles) + 6);
 <section class="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
   <div>
     <h1 class="text-2xl font-extrabold text-slate-900">تسوّق حسب</h1>
-    <p class="text-sm text-text-muted mt-1">
-      مجموعات الوصول السريع في الصفحة الرئيسية: حسب الفئة أو النوع أو الشركة، أو دمج خاصيتين مثل «الشركة + الفئة»، أو بطاقات مخصّصة بفلاتر متعددة.
+    <p class="text-sm text-text-muted mt-1 max-w-2xl">
+      مجموعات اختصار على الرئيسية (شركة، نوع، فئة…).
+      <strong>الموضع</strong> يحدد أين تظهر: «تبويب» يجمعها في قسم واحد، و«شريط مستقل» يجعل كل مجموعة قسماً لوحدها.
+      بعد الحفظ فعّل القسم المناسب من <a href="/dashboard/home-layout.php" class="font-bold text-primary">تخطيط الصفحة الرئيسية</a>.
     </p>
   </div>
   <div class="flex flex-wrap items-center gap-2">
     <?php if (!$showForm): ?>
       <a href="/index.php" target="_blank" class="<?= $btnLight ?>">معاينة الرئيسية</a>
+      <a href="/dashboard/home-layout.php" class="<?= $btnLight ?>">تخطيط الرئيسية</a>
       <a href="/dashboard/home-sections.php" class="<?= $btnLight ?>">أقسام الرئيسية</a>
       <?php if ($tableReady): ?>
         <a href="/dashboard/home-shop-blocks.php?new=1" class="h-9 px-4 inline-flex items-center rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">مجموعة جديدة</a>
@@ -139,17 +142,19 @@ $tileRows = min(HomeShopBlockService::MAX_CUSTOM_TILES, count($tiles) + 6);
           <?php endforeach; ?>
         </select>
       </label>
-      <label class="text-xs">
-        <span class="text-text-muted block mb-0.5">المكان في الرئيسية</span>
+      <label class="text-xs md:col-span-2">
+        <span class="text-text-muted block mb-0.5">الموضع في الرئيسية</span>
         <select name="placement" class="<?= $selectClass ?>">
           <?php foreach (HomeShopBlockService::PLACEMENTS as $value => $label): ?>
             <option value="<?= h($value) ?>" <?= $editBlock['placement'] === $value ? 'selected' : '' ?>><?= h($label) ?></option>
           <?php endforeach; ?>
         </select>
+        <span class="text-[11px] text-text-muted mt-1 block">التبويب يحتاج تفعيل «تسوّق حسب — تبويبات» في التخطيط. الشريط المستقل يحتاج تفعيل «أشرطة منفصلة».</span>
       </label>
       <label class="text-xs">
-        <span class="text-text-muted block mb-0.5">عدد العناصر قبل «عرض الكل»</span>
+        <span class="text-text-muted block mb-0.5">عدد العناصر (مرجع قديم)</span>
         <input type="number" min="2" max="60" name="max_items" value="<?= (int) $editBlock['max_items'] ?>" class="<?= $inputClass ?>">
+        <span class="text-[11px] text-text-muted mt-1 block">لا يحدّ العرض في الرئيسية الحالية؛ التصفح يتم بأزرار الصفحة داخل القسم.</span>
       </label>
       <label class="text-xs">
         <span class="text-text-muted block mb-0.5">الترتيب</span>

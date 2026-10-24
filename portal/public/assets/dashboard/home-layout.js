@@ -25,11 +25,13 @@
     if (!button) return;
     const row = button.closest('[data-home-layout-row]');
     if (!row) return;
+    const siblings = rows();
+    const index = siblings.indexOf(row);
     if (button.getAttribute('data-home-layout-move') === '-1') {
-      const prev = row.previousElementSibling;
+      const prev = siblings[index - 1];
       if (prev) list.insertBefore(row, prev);
     } else {
-      const next = row.nextElementSibling;
+      const next = siblings[index + 1];
       if (next) list.insertBefore(next, row);
     }
     button.focus();

@@ -51,11 +51,21 @@ final class HomeLayoutService
         'banners' => 'شرائط عريضة',
     ];
 
+    /** Dashboard section headings for the ordered block list. */
+    public const GROUPS = [
+        'discover' => 'اكتشاف في أعلى الصفحة',
+        'shop' => 'تسوّق حسب',
+        'products' => 'منتجات وقوائم',
+        'support' => 'مساعدة',
+    ];
+
     /**
      * label: shown in the dashboard. title: default customer heading ('' = no editable heading).
+     * help: one-line purpose for staff. source_*: where content is edited.
+     * group: GROUPS key for visual clustering.
      * options: name => [type, default, label, extra].
      *
-     * @return array<string, array{label: string, icon: string, title: string, options: array<string, array<string, mixed>>}>
+     * @return array<string, array<string, mixed>>
      */
     public static function definitions(): array
     {
@@ -64,40 +74,65 @@ final class HomeLayoutService
                 'label' => 'شريط التصفح السريع (الدوائر)',
                 'icon' => 'radio_button_checked',
                 'title' => '',
+                'group' => 'discover',
+                'help' => 'دوائر اختصار أعلى الصفحة (موسم، عروض، أقسام، فئات). المحتوى يُجلب تلقائياً من مصادر أخرى.',
+                'source_label' => 'مواسم العرض · العروض · أقسام الرئيسية',
+                'source_href' => '/dashboard/store-seasons.php',
                 'options' => [
-                    'season' => ['type' => 'bool', 'default' => true, 'label' => 'الموسم'],
-                    'offers' => ['type' => 'bool', 'default' => true, 'label' => 'العروض'],
-                    'sections' => ['type' => 'bool', 'default' => true, 'label' => 'الأقسام'],
-                    'ages' => ['type' => 'bool', 'default' => true, 'label' => 'الفئات العمرية'],
-                    'max' => ['type' => 'int', 'default' => 16, 'label' => 'أقصى عدد', 'min' => 4, 'max' => 30],
+                    'season' => [
+                        'type' => 'bool',
+                        'default' => true,
+                        'label' => 'دائرة الموسم الحالي',
+                        'hint' => 'تظهر فقط إذا كان الموسم مفعّلاً للزبائن ومجموعاته محددة في مواسم العرض.',
+                    ],
+                    'offers' => ['type' => 'bool', 'default' => true, 'label' => 'دوائر العروض الخاصة'],
+                    'sections' => ['type' => 'bool', 'default' => true, 'label' => 'دوائر أقسام الرئيسية'],
+                    'ages' => ['type' => 'bool', 'default' => true, 'label' => 'دوائر الفئات العمرية'],
+                    'max' => ['type' => 'int', 'default' => 16, 'label' => 'أقصى عدد دوائر', 'min' => 4, 'max' => 30],
                 ],
             ],
             'ads' => [
                 'label' => 'الإعلانات المتحركة',
                 'icon' => 'view_carousel',
                 'title' => '',
+                'group' => 'discover',
+                'help' => 'شريط صور يمرّ تلقائياً. ارفع صوراً بتصنيف «إعلان» من مكتبة الوسائط (ليس «بانر» — البانر لأقسام الرئيسية).',
+                'source_label' => 'مكتبة الوسائط ← إعلان',
+                'source_href' => '/dashboard/site-media.php',
                 'options' => [],
             ],
             'offers' => [
-                'label' => 'العروض الخاصة',
+                'label' => 'بطاقات العروض الخاصة',
                 'icon' => 'local_offer',
                 'title' => '',
+                'group' => 'discover',
+                'help' => 'بطاقات كبيرة للعروض النشطة. أنشئ العروض من صفحة العروض الخاصة.',
+                'source_label' => 'العروض الخاصة',
+                'source_href' => '/dashboard/special-offers.php',
                 'options' => [
-                    'limit' => ['type' => 'int', 'default' => 2, 'label' => 'عدد العروض', 'min' => 1, 'max' => 4],
+                    'limit' => ['type' => 'int', 'default' => 2, 'label' => 'عدد البطاقات', 'min' => 1, 'max' => 4],
                 ],
             ],
             'season' => [
-                'label' => 'تشكيلة الموسم',
+                'label' => 'بطاقة تشكيلة الموسم',
                 'icon' => 'partly_cloudy_day',
                 'title' => '',
+                'group' => 'discover',
+                'help' => 'بطاقة بارزة لتشكيلة الموسم الحالي (غير دائرة الشريط السريع). تحتاج موسم مفعّلاً للزبائن.',
+                'source_label' => 'مواسم العرض',
+                'source_href' => '/dashboard/store-seasons.php',
                 'options' => [
-                    'chips' => ['type' => 'int', 'default' => 8, 'label' => 'اختصارات الفئات', 'min' => 0, 'max' => 16],
+                    'chips' => ['type' => 'int', 'default' => 8, 'label' => 'اختصارات الفئات داخل البطاقة', 'min' => 0, 'max' => 16],
                 ],
             ],
             'showcase' => [
-                'label' => 'الأقسام الرئيسية',
+                'label' => 'شبكة الأقسام',
                 'icon' => 'dashboard',
                 'title' => 'تسوّق الأقسام',
+                'group' => 'discover',
+                'help' => 'شبكة بصرية لأقسام الرئيسية (بدون المنتجات). المحتوى من أقسام الرئيسية.',
+                'source_label' => 'أقسام الرئيسية',
+                'source_href' => '/dashboard/home-sections.php',
                 'options' => [
                     'style' => ['type' => 'choice', 'default' => 'mosaic', 'label' => 'شكل العرض', 'choices' => self::SHOWCASE_STYLES],
                     'limit' => ['type' => 'int', 'default' => 6, 'label' => 'عدد الأقسام', 'min' => 2, 'max' => 12],
@@ -107,40 +142,64 @@ final class HomeLayoutService
                 'label' => 'تسوّق خطوة بخطوة',
                 'icon' => 'touch_app',
                 'title' => 'تسوّق خطوة بخطوة',
+                'group' => 'discover',
+                'help' => 'معالج يختار الفئة ثم النوع ثم القياس ويفتح المتجر بالنتائج.',
+                'source_label' => '',
+                'source_href' => '',
                 'options' => [
-                    'ages' => ['type' => 'bool', 'default' => true, 'label' => 'خطوة لمن؟'],
+                    'ages' => ['type' => 'bool', 'default' => true, 'label' => 'خطوة الفئة العمرية'],
                     'types' => ['type' => 'bool', 'default' => true, 'label' => 'خطوة النوع'],
                     'sizes' => ['type' => 'bool', 'default' => true, 'label' => 'خطوة القياس'],
                 ],
             ],
             'shop' => [
-                'label' => 'تسوّق حسب (تبويبات)',
+                'label' => 'تسوّق حسب — تبويبات مجمّعة',
                 'icon' => 'category',
                 'title' => 'تسوّق حسب',
-                'options' => [],
-            ],
-            'rails' => [
-                'label' => 'منتجات الأقسام',
-                'icon' => 'view_week',
-                'title' => '',
+                'group' => 'shop',
+                'help' => 'قسم واحد فيه تبويبات (شركة / نوع / …). كل مجموعة موضعها «تبويب» في صفحة تسوّق حسب تظهر هنا.',
+                'source_label' => 'تسوّق حسب (الموضع: تبويب)',
+                'source_href' => '/dashboard/home-shop-blocks.php',
                 'options' => [],
             ],
             'bands' => [
-                'label' => 'أشرطة «تسوّق حسب» المستقلة',
+                'label' => 'تسوّق حسب — أشرطة منفصلة',
                 'icon' => 'view_stream',
                 'title' => '',
+                'group' => 'shop',
+                'help' => 'كل مجموعة موضعها «شريط مستقل» تظهر كقسم منفصل بعنوانها. مفيد لإبراز شركة أو فئة واحدة بلا تبويبات.',
+                'source_label' => 'تسوّق حسب (الموضع: شريط مستقل)',
+                'source_href' => '/dashboard/home-shop-blocks.php',
+                'options' => [],
+            ],
+            'rails' => [
+                'label' => 'أشرطة منتجات الأقسام',
+                'icon' => 'view_week',
+                'title' => '',
+                'group' => 'products',
+                'help' => 'لكل قسم رئيسي شريط منتجات أفقي. المواد تُختار من أقسام الرئيسية.',
+                'source_label' => 'أقسام الرئيسية',
+                'source_href' => '/dashboard/home-sections.php',
                 'options' => [],
             ],
             'viewed' => [
                 'label' => 'شاهدتها مؤخراً',
                 'icon' => 'history',
                 'title' => 'شاهدتها مؤخراً',
+                'group' => 'products',
+                'help' => 'يظهر للزائر بعد تصفّح مواد في المتجر (من جهازه). قد يبدو فارغاً في المعاينة إن لم تتصفّح بعد.',
+                'source_label' => '',
+                'source_href' => '',
                 'options' => [],
             ],
             'feed' => [
                 'label' => 'كل المواد',
                 'icon' => 'grid_view',
                 'title' => 'كل المواد',
+                'group' => 'products',
+                'help' => 'دفعة من مواد المتجر مع رابط لفتح المتجر كاملاً.',
+                'source_label' => '',
+                'source_href' => '',
                 'options' => [
                     'limit' => ['type' => 'int', 'default' => 12, 'label' => 'عدد المواد', 'min' => 4, 'max' => 24],
                 ],
@@ -149,8 +208,84 @@ final class HomeLayoutService
                 'label' => 'المساعدة والتواصل',
                 'icon' => 'support_agent',
                 'title' => 'تحتاج مساعدة؟',
+                'group' => 'support',
+                'help' => 'واتساب، اتصال، تتبّع طلب، وحجم الخط — حسب ما هو مضبوط في إعدادات الشركة.',
+                'source_label' => 'إعدادات الشركة',
+                'source_href' => '/dashboard/settings.php?tab=company',
                 'options' => [],
             ],
+        ];
+    }
+
+    /**
+     * Live readiness notes for the layout editor (season on? ads uploaded? shop counts?).
+     *
+     * @return array{
+     *   season_active: bool,
+     *   season_title: string,
+     *   season_reason: string,
+     *   ads_count: int,
+     *   shop_tabs: int,
+     *   shop_bands: int
+     * }
+     */
+    public static function editorStatus(): array
+    {
+        $seasonActive = false;
+        $seasonTitle = '';
+        $seasonReason = 'الموسم متوقّف أو بلا مجموعات أو مخفي عن الزبائن.';
+        try {
+            $season = StoreSeasonService::customerSeason();
+            if ($season !== null) {
+                $seasonActive = true;
+                $seasonTitle = (string) ($season['title_ar'] ?? $season['name_ar'] ?? '');
+                $seasonReason = '';
+            } else {
+                $settings = StoreSeasonService::settings();
+                $mode = (string) ($settings['mode'] ?? 'off');
+                if ($mode === 'off') {
+                    $seasonReason = 'وضع المواسم = متوقّف. فعّله من مواسم العرض.';
+                } elseif (empty($settings['show_to_customers'])) {
+                    $seasonReason = 'الموسم مخفي عن الزبائن («إظهار تشكيلة الموسم للزبائن» غير مفعّل).';
+                } else {
+                    $seasonReason = 'لا مجموعات مرتبطة بالموسم الحالي، أو لا يوجد موسم مطابق للتاريخ.';
+                }
+            }
+        } catch (Throwable) {
+            // keep defaults
+        }
+
+        $adsCount = 0;
+        try {
+            $adsCount = count(SiteMediaService::listAdsForHome());
+        } catch (Throwable) {
+            $adsCount = 0;
+        }
+
+        $shopTabs = 0;
+        $shopBands = 0;
+        try {
+            foreach (HomeShopBlockService::activeBlocks() as $block) {
+                if (($block['block_type'] ?? '') === 'combo') {
+                    continue;
+                }
+                if (($block['placement'] ?? 'tabs') === 'band') {
+                    $shopBands++;
+                } else {
+                    $shopTabs++;
+                }
+            }
+        } catch (Throwable) {
+            // keep zeros
+        }
+
+        return [
+            'season_active' => $seasonActive,
+            'season_title' => $seasonTitle,
+            'season_reason' => $seasonReason,
+            'ads_count' => $adsCount,
+            'shop_tabs' => $shopTabs,
+            'shop_bands' => $shopBands,
         ];
     }
 
