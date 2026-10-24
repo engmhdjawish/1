@@ -216,7 +216,6 @@
     const steps = Array.from(guide.querySelectorAll('[data-hn-guide-step]'));
     const dots = Array.from(guide.querySelectorAll('[data-hn-guide-dot]'));
     const result = guide.querySelector('[data-hn-guide-result]');
-    const chosenBox = guide.querySelector('[data-hn-guide-chosen]');
     const back = guide.querySelector('[data-hn-guide-back]');
     const next = guide.querySelector('[data-hn-guide-next]');
     const nextLabel = guide.querySelector('[data-hn-guide-next-label]');
@@ -237,7 +236,13 @@
       return params.toString();
     };
 
+    const resultsHref = () => {
+      const qs = query();
+      return qs ? `${action}?${qs}` : action;
+    };
+
     const render = () => {
+      const last = steps.length - 1;
       steps.forEach((step, index) => {
         step.hidden = index !== current;
         const picked = choices.get(step.getAttribute('data-param')) || new Set();
@@ -254,42 +259,28 @@
       });
       dots.forEach((dot, index) => {
         dot.classList.toggle('is-current', index === current);
-        dot.classList.toggle('is-done', index < current || current >= steps.length);
+        dot.classList.toggle('is-done', index < current);
       });
-      const atResult = current >= steps.length;
-      if (result) result.hidden = !atResult;
+      // The last step's button goes straight to the results; its extra options sit right above it.
+      if (result) result.hidden = current !== last;
       if (back) back.hidden = current === 0;
-      if (next) next.hidden = atResult;
-      if (nextLabel && !atResult) {
-        const picked = choices.get(steps[current].getAttribute('data-param'));
-        nextLabel.textContent = picked && picked.size > 0 ? 'التالي' : 'الكل';
+      if (nextLabel) {
+        const picked = choices.get(steps[current]?.getAttribute('data-param'));
+        nextLabel.textContent = current === last ? 'عرض النتائج' : (picked && picked.size > 0 ? 'التالي' : 'الكل');
       }
       if (show) {
-        show.hidden = !atResult;
-        const qs = query();
-        show.href = qs ? `${action}?${qs}` : action;
+        show.hidden = true;
+        show.href = resultsHref();
       }
-      if (chosenBox && atResult) {
-        chosenBox.innerHTML = '';
-        steps.forEach((step, index) => {
-          const picked = Array.from(choices.get(step.getAttribute('data-param')) || []);
-          const chip = document.createElement('button');
-          chip.type = 'button';
-          chip.className = 'hn-guide__chip';
-          const question = step.querySelector('.hn-guide__question')?.textContent || '';
-          chip.textContent = `${question} ${picked.length ? picked.join('، ') : 'الكل'}`;
-          chip.addEventListener('click', () => {
-            current = index;
-            render();
-          });
-          chosenBox.appendChild(chip);
-        });
-      }
-      if (!atResult) window.requestAnimationFrame(() => syncPager(steps[current]));
+      window.requestAnimationFrame(() => syncPager(steps[current]));
     };
 
     const move = (to) => {
-      current = Math.max(0, Math.min(steps.length, to));
+      if (to > steps.length - 1) {
+        window.location.href = resultsHref();
+        return;
+      }
+      current = Math.max(0, to);
       render();
       const top = guide.getBoundingClientRect().top;
       if (top < 0 || top > window.innerHeight * 0.4) {

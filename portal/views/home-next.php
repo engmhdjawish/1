@@ -108,9 +108,9 @@ $stories = array_slice($stories, 0, (int) ($storyOptions['max'] ?? 16));
 
 $guideOptions = $blockOf('guide')['options'];
 $guideTitles = [
-    'ageCategories' => ['title' => 'لمن؟', 'on' => $guideOptions['ages'] ?? true],
-    'materialTypes' => ['title' => 'النوع', 'on' => $guideOptions['types'] ?? true],
-    'sizeRanges' => ['title' => 'القياس', 'on' => $guideOptions['sizes'] ?? true],
+    'ageCategories' => ['title' => 'الفئة العمرية', 'question' => 'اختر الفئة العمرية', 'on' => $guideOptions['ages'] ?? true],
+    'materialTypes' => ['title' => 'النوع', 'question' => 'اختر النوع', 'on' => $guideOptions['types'] ?? true],
+    'sizeRanges' => ['title' => 'القياس', 'question' => 'اختر القياس', 'on' => $guideOptions['sizes'] ?? true],
 ];
 $guideSteps = [];
 foreach ($guideTitles as $param => $meta) {
@@ -122,7 +122,7 @@ foreach ($guideTitles as $param => $meta) {
         usort($values, static fn ($a, $b): int => strnatcasecmp((string) $a, (string) $b));
     }
     $perPage = $param === 'sizeRanges' ? 9 : 6;
-    $guideSteps[] = ['param' => $param, 'title' => $meta['title'], 'pages' => array_chunk(array_slice($values, 0, 60), $perPage)];
+    $guideSteps[] = ['param' => $param, 'title' => $meta['title'], 'question' => $meta['question'], 'pages' => array_chunk(array_slice($values, 0, 60), $perPage)];
 }
 
 $shopBlocks = [];
@@ -448,7 +448,7 @@ $shopPages = static function (array $block) use ($pagerNav): void {
           <?php $pageCount = count($step['pages']); $isSizes = $step['param'] === 'sizeRanges'; ?>
           <div class="hn-guide__step hn-pages" data-hn-pages data-hn-guide-step="<?= (int) $i ?>" data-param="<?= h($step['param']) ?>" <?= $i === 0 ? '' : 'hidden' ?>>
             <div class="hn-guide__ask">
-              <p class="hn-guide__question"><?= h($step['title']) ?></p>
+              <p class="hn-guide__question"><?= h($step['question']) ?></p>
               <span class="hn-guide__picked" data-hn-guide-picked hidden></span>
             </div>
             <div class="hn-pager" data-hn-pager>
@@ -469,8 +469,7 @@ $shopPages = static function (array $block) use ($pagerNav): void {
             <?php $pagerNav($pageCount); ?>
           </div>
         <?php endforeach; ?>
-        <div class="hn-guide__result" data-hn-guide-result hidden>
-          <div class="hn-guide__chosen" data-hn-guide-chosen></div>
+        <div class="hn-guide__result" data-hn-guide-result<?= count($guideSteps) > 1 ? ' hidden' : '' ?>>
           <div class="hn-guide__checks">
             <?php if ($canFilterAvailable): ?>
               <label class="hn-guide__check">

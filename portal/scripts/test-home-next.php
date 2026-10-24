@@ -120,7 +120,7 @@ $assert('stories: all sections, season, offer ring, categories', $pos('hn-story-
 $assert('stories hint that more can be scrolled', str_contains($html, 'data-hn-scroller') && str_contains($html, 'data-hn-scroller-next'));
 $assert('no duplicate brand row: name, tagline and currency live in the site header', !str_contains($html, 'hn-brand') && !str_contains($html, 'data-store-currency='));
 $assert('offer spotlight with badge and countdown', str_contains($html, '>خصم 15%<') && str_contains($html, 'data-hn-countdown="') && str_contains($html, 'ينتهي خلال يوم واحد') && str_contains($html, 'تسوّق العرض'));
-$assert('step picker with three steps and no server count', substr_count($html, 'data-hn-guide-step=') === 3 && str_contains($html, '>لمن؟<') && str_contains($html, 'data-hn-guide-show') && !str_contains($html, 'store-count') && !str_contains($html, 'data-count-url'));
+$assert('step picker with three steps and no server count', substr_count($html, 'data-hn-guide-step=') === 3 && str_contains($html, '>اختر الفئة العمرية<') && str_contains($html, 'data-hn-guide-show') && !str_contains($html, 'store-count') && !str_contains($html, 'data-count-url'));
 $assert('picker options are toggle buttons, not links', substr_count($html, '<button type="button" class="hn-guide__option" aria-pressed="false"') === 8 + 2 + 3 && !preg_match('/<a[^>]+data-hn-guide-value/u', $html));
 $assert('long lists are split into pages of six, swiped like pages', str_contains($html, 'aria-label="صفحة 2 من 2"') && str_contains($html, 'data-hn-pager-next') && str_contains($html, 'data-hn-pager-goto'));
 $assert('short lists have no pager controls', substr_count($html, 'data-hn-pager-prev') === 1);
