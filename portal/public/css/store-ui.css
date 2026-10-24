@@ -2065,3 +2065,47 @@
 .store-price-veil--preview {
   width: 100%;
 }
+
+/* Image preview: the photo is the point, so it takes as much of the screen as possible. */
+@media (max-width: 639px) {
+  .store-product-preview {
+    padding: 0;
+  }
+
+  .store-product-preview__panel {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .store-product-preview__image-wrap {
+    padding: 0;
+    background: #fff;
+  }
+
+  .store-product-preview__image-wrap img {
+    border-radius: 0;
+  }
+}
+
+@media (min-width: 900px) {
+  .store-product-preview__panel {
+    grid-template-columns: minmax(0, 1.85fr) minmax(19rem, 0.75fr);
+    width: min(97vw, 88rem);
+    height: min(95dvh, 95vh);
+    max-height: min(95dvh, 95vh);
+  }
+
+  .store-product-preview__image-wrap {
+    padding: 0.5rem;
+  }
+
+  .store-product-preview__nav--prev {
+    right: max(0.5rem, calc(50% - min(48.5vw, 44rem) - 1.5rem));
+  }
+
+  .store-product-preview__nav--next {
+    left: max(0.5rem, calc(50% - min(48.5vw, 44rem) - 1.5rem));
+  }
+}
