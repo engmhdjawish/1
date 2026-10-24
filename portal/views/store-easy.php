@@ -110,13 +110,8 @@ $tileParam = $tileFacet['param'] ?? null;
 $shopTiles = [];
 $shopTilesTitle = '';
 if ($tileFacet !== null) {
-    $tileKeep = $baseParams;
-    if ($availabilityValue !== '') {
-        $tileKeep['isAvailable'] = $availabilityValue;
-    }
-    if (array_key_exists('sort', $_GET)) {
-        $tileKeep['sort'] = $activeSort;
-    }
+    $tileKeep = $stateParams;
+    unset($tileKeep[$tileFacet['param']]);
     $shopTiles = store_easy_tiles(
         $tileFacet,
         $selectedFacets[$tileFacet['param']] ?? [],
@@ -238,18 +233,18 @@ $showAvailabilityToggle = $isClientFilterVisible('availability');
 
 $chips = [];
 if ($labSeason !== null) {
-    $chips[] = ['text' => $labSeason['title_ar'], 'icon' => $labSeason['icon'], 'url' => $urlWithout('season')];
+    $chips[] = ['text' => $labSeason['title_ar'], 'icon' => $labSeason['icon'], 'url' => $urlWithout('season'), 'param' => 'season', 'value' => null];
 }
 if ($searchQuery !== '') {
-    $chips[] = ['text' => $searchQuery, 'icon' => 'search', 'url' => $urlWithout('q')];
+    $chips[] = ['text' => $searchQuery, 'icon' => 'search', 'url' => $urlWithout('q'), 'param' => 'q', 'value' => null];
 }
 foreach ($selectedFacets as $param => $values) {
     foreach ($values as $value) {
-        $chips[] = ['text' => $value, 'icon' => null, 'url' => $urlWithout($param, $value)];
+        $chips[] = ['text' => $value, 'icon' => null, 'url' => $urlWithout($param, $value), 'param' => $param, 'value' => $value];
     }
 }
 if ($availabilityValue !== '') {
-    $chips[] = ['text' => $availabilityValue === '1' ? 'المتوفر فقط' : 'غير المتوفر', 'icon' => null, 'url' => $urlWithout('isAvailable')];
+    $chips[] = ['text' => $availabilityValue === '1' ? 'المتوفر فقط' : 'غير المتوفر', 'icon' => null, 'url' => $urlWithout('isAvailable'), 'param' => 'isAvailable', 'value' => null];
 }
 
 $hiddenFormParams = $baseParams;
@@ -359,9 +354,6 @@ $baseDisplayOptions = $displayOptions;
                     <input type="checkbox" name="<?= h($param) ?>[]" value="<?= h($value) ?>"<?= $checked ? ' checked' : '' ?>>
                     <span class="se-opt__box" aria-hidden="true"></span>
                     <span class="se-opt__text"><?= h($value) ?></span>
-                    <?php if ($count !== null): ?>
-                      <span class="se-opt__count"><?= (int) $count ?></span>
-                    <?php endif; ?>
                   </label>
                 <?php endforeach; ?>
               </div>
@@ -440,7 +432,7 @@ $baseDisplayOptions = $displayOptions;
     <?php if ($chips !== []): ?>
       <div class="se-chips" aria-label="الاختيارات">
         <?php foreach ($chips as $chip): ?>
-          <a href="<?= h($chip['url']) ?>" class="se-chip" aria-label="إزالة <?= h($chip['text']) ?>">
+          <a href="<?= h($chip['url']) ?>" class="se-chip" data-se-chip="<?= h($chip['param']) ?>"<?= $chip['value'] !== null ? ' data-se-chip-value="' . h($chip['value']) . '"' : '' ?> aria-label="إزالة <?= h($chip['text']) ?>">
             <?php if ($chip['icon'] !== null): ?>
               <span class="material-symbols-outlined se-chip__icon" aria-hidden="true"><?= h($chip['icon']) ?></span>
             <?php endif; ?>

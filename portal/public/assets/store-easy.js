@@ -9,6 +9,7 @@
   let navAbort = null;
   let navGeneration = 0;
   let applyTimer = 0;
+  let pendingHref = '';
 
   const isLabUrl = (href) => {
     try {
@@ -72,12 +73,31 @@
     });
   };
 
+  // Load the next batch well before the end of the list, so a fast scroll keeps meeting
+  // materials instead of the footer.
+  let moreObserver = null;
+  const watchMore = (root) => {
+    moreObserver?.disconnect();
+    const more = root?.querySelector('[data-se-more]');
+    if (!more || !('IntersectionObserver' in window)) return;
+    moreObserver = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      const button = live()?.querySelector('[data-se-more-btn]');
+      if (button instanceof HTMLButtonElement && !more.hidden) loadMore(button);
+    }, { rootMargin: '0px 0px 1600px 0px' });
+    moreObserver.observe(more);
+  };
+
   const prepareLive = (root) => {
     if (!root) return;
     root.querySelector('.store-pagination')?.setAttribute('hidden', '');
     const more = root.querySelector('[data-se-more]');
-    if (more) more.hidden = false;
+    if (more) {
+      more.hidden = false;
+      more.classList.add('is-auto');
+    }
     applyDensity();
+    watchMore(root);
   };
 
   const navigate = async (href, options = {}) => {
@@ -94,6 +114,7 @@
     navAbort?.abort();
     navAbort = new AbortController();
     const generation = ++navGeneration;
+    pendingHref = href;
     current.classList.add('is-loading');
     current.setAttribute('aria-busy', 'true');
 
@@ -146,10 +167,43 @@
       window.location.href = href;
     } finally {
       if (generation === navGeneration) {
+        pendingHref = '';
         live()?.classList.remove('is-loading');
         live()?.removeAttribute('aria-busy');
       }
     }
+  };
+
+  // Chips are removed on the spot and their URL is rebuilt from the latest requested state,
+  // so several filters can be cleared in a row without waiting for each response.
+  const removeChip = (chip) => {
+    const param = chip.getAttribute('data-se-chip') || '';
+    const value = chip.getAttribute('data-se-chip-value');
+    const url = new URL(pendingHref || window.location.href, window.location.origin);
+    url.searchParams.delete('page');
+    const matches = (key) => key === param || key === `${param}[]` || new RegExp(`^${param}\\[\\d+\\]$`).test(key);
+    const kept = Array.from(url.searchParams.entries()).filter(([key, item]) => !matches(key) || (value !== null && item !== value));
+    url.search = '';
+    kept.forEach(([key, item]) => url.searchParams.append(key.replace(/\[\d+\]$/, '[]'), item));
+
+    const bar = document.querySelector('[data-se-bar]');
+    bar?.querySelectorAll('input').forEach((input) => {
+      if (!(input instanceof HTMLInputElement)) return;
+      const name = input.name.replace(/\[\]$/, '');
+      if (name !== param || (value !== null && input.value !== value)) return;
+      if (input.type === 'checkbox') {
+        input.checked = false;
+        input.closest('.se-opt')?.classList.remove('is-checked');
+        input.closest('.se-toggle')?.classList.remove('is-on');
+      } else if (input.type === 'hidden') {
+        input.remove();
+      }
+    });
+
+    const group = chip.closest('.se-chips');
+    chip.remove();
+    if (group && !group.querySelector('[data-se-chip]')) group.querySelector('.se-chip--clear')?.remove();
+    navigate(`${url.pathname}${url.search}`);
   };
 
   const loadMore = async (button) => {
@@ -183,7 +237,15 @@
       const paging = nextLive.querySelector('[data-store-preview-paging]');
       const currentPaging = root.querySelector('[data-store-preview-paging]');
       if (paging && currentPaging) currentPaging.textContent = paging.textContent;
-      if (!following) root.querySelector('[data-se-more]')?.setAttribute('hidden', '');
+      if (!following) {
+        root.querySelector('[data-se-more]')?.setAttribute('hidden', '');
+        moreObserver?.disconnect();
+      } else {
+        window.requestAnimationFrame(() => {
+          const more = root.querySelector('[data-se-more]');
+          if (more && more.getBoundingClientRect().top < window.innerHeight + 1600) loadMore(button);
+        });
+      }
     } catch {
       window.location.href = nextUrl;
       return;
@@ -239,6 +301,10 @@
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     if (!isLabUrl(link.href)) return;
     event.preventDefault();
+    if (link.matches('[data-se-chip]')) {
+      removeChip(link);
+      return;
+    }
     navigate(link.href);
   });
 
