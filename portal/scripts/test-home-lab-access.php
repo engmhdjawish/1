@@ -137,6 +137,18 @@ $assert(
     && str_contains($labAccessJs, '/api/store-product.php')
     && !str_contains($labAccessJs, "link.className = 'lab-viewed__card'")
 );
+$assert(
+    'recently viewed preview hides unavailable prices without a price-lock veil',
+    str_contains($labAccessJs, 'priceHidden')
+    && str_contains($labAccessJs, 'unavailable')
+);
+$storeProductApi = (string) file_get_contents(dirname(__DIR__) . '/public/api/store-product.php');
+$assert(
+    'store-product API marks unavailable prices as priceHidden',
+    str_contains($storeProductApi, "priceHidden")
+    && str_contains($storeProductApi, 'materialIsUnavailable')
+    && str_contains($storeProductApi, 'showUnavailablePrices')
+);
 $previewJs = (string) file_get_contents(dirname(__DIR__) . '/public/assets/store-product-preview.js');
 $assert(
     'product preview scopes recently viewed and exports open',

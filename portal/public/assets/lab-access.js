@@ -101,6 +101,9 @@
       ? `/api/image.php?id=${encodeURIComponent(imageGuid)}&thumb=0`
       : (thumbUrl.includes('thumb=1') ? thumbUrl.replace('thumb=1', 'thumb=0') : thumbUrl);
     const returnUrl = currentReturnUrl();
+    const priceHidden = !!product?.priceHidden;
+    const unavailable = !!product?.unavailable;
+    const showPrice = !priceHidden && !!product?.showPrice;
     return {
       guid,
       name: String(product?.name || fallback.title || ''),
@@ -110,10 +113,10 @@
       thumbUrl,
       zoomUrl,
       detailUrl: detailUrlFor(guid, returnUrl),
-      showPrice: !!product?.showPrice,
-      showPriceSyp: !!product?.showPriceSyp,
-      showPriceUsd: !!product?.showPriceUsd,
-      showQuantity: !!product?.showQuantity,
+      showPrice,
+      showPriceSyp: showPrice && !!product?.showPriceSyp,
+      showPriceUsd: showPrice && !!product?.showPriceUsd,
+      showQuantity: !unavailable && !!product?.showQuantity,
       packagesAvailable: Number(product?.packagesAvailable) || 0,
       packagesAvailableLabel: '',
       packaging: Number(product?.packaging) || 0,
@@ -122,15 +125,17 @@
       packageUnit: String(product?.packageUnit || 'طرد'),
       hasOffer: !!product?.hasOffer,
       offerBadge: String(product?.offerBadge || ''),
-      unitSaleSp: Number(product?.unitSaleSp) || 0,
-      unitSaleUsd: Number(product?.unitSaleUsd) || 0,
-      packageSaleSp: Number(product?.packageSaleSp) || 0,
-      packageSaleUsd: Number(product?.packageSaleUsd) || 0,
-      originalUnitSp: Number(product?.originalUnitSp) || 0,
-      originalUnitUsd: Number(product?.originalUnitUsd) || 0,
-      originalPackSp: Number(product?.originalPackSp) || 0,
-      originalPackUsd: Number(product?.originalPackUsd) || 0,
-      allowCart: cartAllowed(),
+      unitSaleSp: showPrice ? (Number(product?.unitSaleSp) || 0) : 0,
+      unitSaleUsd: showPrice ? (Number(product?.unitSaleUsd) || 0) : 0,
+      packageSaleSp: showPrice ? (Number(product?.packageSaleSp) || 0) : 0,
+      packageSaleUsd: showPrice ? (Number(product?.packageSaleUsd) || 0) : 0,
+      originalUnitSp: showPrice ? (Number(product?.originalUnitSp) || 0) : 0,
+      originalUnitUsd: showPrice ? (Number(product?.originalUnitUsd) || 0) : 0,
+      originalPackSp: showPrice ? (Number(product?.originalPackSp) || 0) : 0,
+      originalPackUsd: showPrice ? (Number(product?.originalPackUsd) || 0) : 0,
+      priceHidden,
+      unavailable,
+      allowCart: !unavailable && !priceHidden && cartAllowed(),
       cartQty: 0,
       maxPackages: null,
       maxLabel: null,
@@ -199,6 +204,9 @@
   const previewPayloadFor = (item) => {
     if (item.preview && typeof item.preview === 'object' && item.preview.guid) {
       const returnUrl = currentReturnUrl();
+      const priceHidden = !!item.preview.priceHidden;
+      const unavailable = !!item.preview.unavailable;
+      const showPrice = !priceHidden && !!item.preview.showPrice;
       return {
         ...item.preview,
         name: item.preview.name || item.title,
@@ -209,7 +217,14 @@
             : (item.img || '')),
         detailUrl: detailUrlFor(item.guid, returnUrl),
         returnUrl,
-        allowCart: item.preview.allowCart == null ? cartAllowed() : !!item.preview.allowCart,
+        priceHidden,
+        unavailable,
+        showPrice,
+        showPriceSyp: showPrice && !!item.preview.showPriceSyp,
+        showPriceUsd: showPrice && !!item.preview.showPriceUsd,
+        allowCart: unavailable || priceHidden
+          ? false
+          : (item.preview.allowCart == null ? cartAllowed() : !!item.preview.allowCart),
       };
     }
     return fallbackPreview(item);
