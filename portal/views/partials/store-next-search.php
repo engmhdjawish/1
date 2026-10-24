@@ -22,7 +22,7 @@ foreach (['q', 'page', 'soon', 'storeGuids', 'minWarehouseQuantity', 'maxWarehou
 }
 ?>
 <section class="se-search" aria-label="البحث" data-guide="store-search">
-  <form class="hn-search" action="/store.php" method="get" role="search" data-hn-search data-hl-search data-store-search>
+  <form class="hn-search" action="<?= h((string) ($storeSearchAction ?? '/store.php')) ?>" method="get" role="search" data-hn-search data-hl-search data-store-search>
     <?php foreach ($carriedQuery as $key => $value): ?>
       <?php if (!is_string($key) || $key === '') continue; ?>
       <?php if (is_array($value)): ?>

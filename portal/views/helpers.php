@@ -758,7 +758,8 @@ function product_preview_payload(
         : null;
     $remaining = $qtyBounds['effectiveMax'];
     $atLimit = $qtyBounds['atLimit'];
-    $packagesAvailable = (float) ($qtyBounds['stockAvailable'] ?? 0.0);
+    // لا تُسرَّب كمية المخزون في HTML عندما تخفيها السياسة (حدود السلة تبقى عبر effectiveMax).
+    $packagesAvailable = $showQuantity ? (float) ($qtyBounds['stockAvailable'] ?? 0.0) : 0.0;
 
     return [
         'guid' => $guid,
@@ -850,10 +851,10 @@ function cart_preview_payload(array $line, array $displayOptions): array
         'zoomUrl' => $zoomUrl,
         'detailUrl' => $guid !== '' ? product_url($guid, '/store-cart.php') : '',
         'showPrice' => $showPrice,
-        'showPriceSyp' => in_array($priceMode, ['both', 'syp'], true),
-        'showPriceUsd' => in_array($priceMode, ['both', 'usd'], true),
+        'showPriceSyp' => $showPrice && in_array($priceMode, ['both', 'syp'], true),
+        'showPriceUsd' => $showPrice && in_array($priceMode, ['both', 'usd'], true),
         'showQuantity' => $showQuantity,
-        'packagesAvailable' => $stockAvailable,
+        'packagesAvailable' => $showQuantity ? $stockAvailable : 0.0,
         'packagesAvailableLabel' => $showQuantity && $stockAvailable > 0
             ? format_packages_display($stockAvailable)
             : '',
@@ -1598,13 +1599,8 @@ function section_price_display_state(
     $sectionShowPrice = array_key_exists('show_price', $displayOptions)
         ? (bool) $displayOptions['show_price']
         : ($sectionPriceMode !== 'none');
-    if ($context === 'store') {
-        // المتجر: سياسة الوصول (زائر/عميل) هي المرجع الوحيد للأسعار.
-        $effectiveSectionShowPrice = $sectionShowPrice && $storeShowPrice;
-    } else {
-        // الرئيسية: الأقسام قد تعرض الأسعار بإعدادها حتى لو المتجر يخفيه للزائر.
-        $effectiveSectionShowPrice = $sectionShowPrice && ($storeShowPrice || $sectionPriceMode !== 'none');
-    }
+    // الرئيسية والمتجر: سياسة الوصول هي المرجع؛ القسم لا يكسر إخفاء الأسعار.
+    $effectiveSectionShowPrice = $sectionShowPrice && $storeShowPrice && $sectionPriceMode !== 'none';
 
     if (!$effectiveSectionShowPrice || $sectionPriceMode === 'none') {
         return [

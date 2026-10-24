@@ -193,14 +193,25 @@ test('share-links save JSON response redirects to list', () => {
   assert.match(controller, /if \(!\$allowSorting\) \{\s*\$clientSortFields = \[\];/);
 });
 
-test('share page keeps all link-configured visible filters in the sidebar', () => {
-  const catalogView = fs.readFileSync(
-    path.resolve(__dirname, '../views/store-catalog.php'),
+test('share browse uses the easy store UI (not legacy catalog)', () => {
+  const sharePage = fs.readFileSync(
+    path.resolve(__dirname, '../views/share-page.php'),
     'utf8',
   );
-  assert.match(catalogView, /if \(\$shareContext !== null\) \{\s*return true;\s*\}/);
-  assert.match(catalogView, /\$renderEmptyFilterGroups = \$filtersDeferred \|\| \$shareContext !== null;/);
-  assert.match(catalogView, /filterOptions\['groups'\]/);
+  const sharePartial = fs.readFileSync(
+    path.resolve(__dirname, '../views/partials/store-share-catalog.php'),
+    'utf8',
+  );
+  const easy = fs.readFileSync(
+    path.resolve(__dirname, '../views/store-easy.php'),
+    'utf8',
+  );
+  assert.match(sharePage, /store-easy\.php/);
+  assert.doesNotMatch(sharePage, /store-catalog\.php/);
+  assert.match(sharePartial, /store-easy\.php/);
+  assert.doesNotMatch(sharePartial, /store-catalog\.php/);
+  assert.match(easy, /\$shareOnSharePage/);
+  assert.match(easy, /ShareCartService::packageCount/);
 });
 
 test('share store options prefer link defaults over policy visible filters', () => {

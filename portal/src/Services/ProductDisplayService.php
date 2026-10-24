@@ -10,11 +10,11 @@ final class ProductDisplayService
     public static function quickViewPayload(array $product, array $displayOptions): array
     {
         $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
-        $showPriceSyp = in_array($priceMode, ['both', 'syp'], true);
-        $showPriceUsd = in_array($priceMode, ['both', 'usd'], true);
         $showQuantity = (bool) ($displayOptions['show_quantity'] ?? false);
         $showImages = (bool) ($displayOptions['show_images'] ?? true);
         $showPrice = (bool) ($displayOptions['show_price'] ?? false);
+        $showPriceSyp = $showPrice && in_array($priceMode, ['both', 'syp'], true);
+        $showPriceUsd = $showPrice && in_array($priceMode, ['both', 'usd'], true);
 
         $hasOffer = !empty($product['has_offer']);
         $packaging = ShareCartService::packaging($product);
@@ -65,7 +65,7 @@ final class ProductDisplayService
             'originalPackSp' => $hasOffer && $showPrice ? (float) ($product['original_package_sale_price_sp'] ?? 0) : 0.0,
             'originalPackUsd' => $hasOffer && $showPrice ? (float) ($product['original_package_sale_price_usd'] ?? 0) : 0.0,
             'packagesAvailable' => $showQuantity ? \packages_available_display($product) : 0.0,
-            'warehouseQty' => (float) ($product['warehouseQuantity'] ?? 0),
+            'warehouseQty' => $showQuantity ? (float) ($product['warehouseQuantity'] ?? 0) : 0.0,
             'specs' => $specs,
             'offerMin' => $offer !== null && is_numeric((string) ($offer['min_packages'] ?? ''))
                 ? (float) $offer['min_packages'] : null,

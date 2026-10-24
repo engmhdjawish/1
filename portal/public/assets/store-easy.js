@@ -11,10 +11,17 @@
   let applyTimer = 0;
   let pendingHref = '';
 
+  const storePath = () => {
+    const path = window.location.pathname;
+    return path === '/share.php' || path === '/share' ? '/share.php' : '/store.php';
+  };
+
   const isLabUrl = (href) => {
     try {
       const url = new URL(href, window.location.origin);
-      return url.origin === window.location.origin && url.pathname === '/store.php';
+      return url.origin === window.location.origin
+        && (url.pathname === '/store.php' || url.pathname === '/store'
+          || url.pathname === '/share.php' || url.pathname === '/share');
     } catch {
       return false;
     }
@@ -27,7 +34,7 @@
       if (text !== '') params.append(key, text);
     });
     const query = params.toString();
-    return '/store.php' + (query ? `?${query}` : '');
+    return storePath() + (query ? `?${query}` : '');
   };
 
   const syncSheetLock = () => {

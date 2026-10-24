@@ -424,8 +424,8 @@ final class DashboardNavigation
                     'route' => '/dashboard/amine-api.php',
                     'label' => 'إدارة API الأمين',
                     'icon' => 'dns',
-                    'permission' => 'company_settings.manage',
-                    'description' => 'حالة الخدمة، مسار صور الأمين، حسابات API، والصلاحيات.',
+                    'permission' => '*',
+                    'description' => 'حالة الخدمة، مسار صور الأمين، حسابات API، والصلاحيات. لمدير النظام فقط.',
                 ],
                 [
                     'route' => '/dashboard/system-diagnostic.php',

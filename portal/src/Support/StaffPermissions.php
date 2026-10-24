@@ -27,7 +27,7 @@ final class StaffPermissions
             ['code' => 'special_offers.manage', 'name_ar' => 'العروض الخاصة', 'category_ar' => 'محتوى', 'description_ar' => 'إدارة العروض والحسومات'],
             ['code' => 'price_checker.manage', 'name_ar' => 'فاحص الأسعار في المحل', 'category_ar' => 'محتوى', 'description_ar' => 'إعداد شاشة مسح الباركود في المحل'],
             ['code' => 'site_media.manage', 'name_ar' => 'مكتبة الوسائط', 'category_ar' => 'محتوى', 'description_ar' => 'بنرات وشعارات وصور الموقع'],
-            ['code' => 'company_settings.manage', 'name_ar' => 'إعدادات الشركة', 'category_ar' => 'محتوى', 'description_ar' => 'بيانات الشركة وصفحة من نحن'],
+            ['code' => 'company_settings.manage', 'name_ar' => 'إعدادات الشركة', 'category_ar' => 'محتوى', 'description_ar' => 'بيانات الشركة وصفحة من نحن (لا تشمل إدارة API الأمين)'],
             ['code' => 'notifications.manage', 'name_ar' => 'الإشعارات', 'category_ar' => 'إدارة', 'description_ar' => 'إشعارات الموقع والعملاء'],
             ['code' => 'store_policy.manage', 'name_ar' => 'سياسة المتجر', 'category_ar' => 'إعدادات', 'description_ar' => 'إعدادات الزائر والمتجر العام'],
             ['code' => 'access_policies.manage', 'name_ar' => 'سياسات الوصول', 'category_ar' => 'إعدادات', 'description_ar' => 'قواعد عرض الأسعار والسلة للعملاء'],

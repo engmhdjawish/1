@@ -55,6 +55,6 @@ $cartCount = ($token !== '' && $allowCart) ? ShareCartService::itemCount($token)
   <?php endif; ?>
 
   <?php if ($hasAccess): ?>
-    <?php require __DIR__ . '/store-catalog.php'; ?>
+    <?php require __DIR__ . '/store-easy.php'; ?>
   <?php endif; ?>
 <?php endif; ?>

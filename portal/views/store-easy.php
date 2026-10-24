@@ -14,8 +14,19 @@ use Portal\Support\StorePricePreference;
 
 $catalog = is_array($catalog ?? null) ? $catalog : [];
 $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
-$shareContext = null;
-$shareToken = '';
+$shareContext = is_array($shareContext ?? null) ? $shareContext : null;
+$shareToken = trim((string) ($shareToken ?? ($shareContext['token'] ?? '')));
+$shareLinkId = trim((string) ($shareLinkId ?? ($shareContext['share_link_id'] ?? '')));
+$shareOnSharePage = $shareContext !== null && $shareToken !== ''
+    && str_starts_with((string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: ''), '/share');
+$seUrl = static function (array $params = []) use ($shareOnSharePage, $shareToken): string {
+    if ($shareOnSharePage) {
+        return share_url(array_merge(['token' => $shareToken], $params));
+    }
+
+    return store_lab_url($params);
+};
+$seAction = $shareOnSharePage ? '/share.php' : '/store.php';
 
 $cartNoticeMessage = '';
 $cartNoticeOk = true;
@@ -72,6 +83,7 @@ foreach (array_keys($facetLabels) as $param) {
 
 $labSeason = ($filters['season'] ?? '') === '1' ? \Portal\Services\StoreSeasonService::current() : null;
 $baseParams = array_filter([
+    'token' => $shareOnSharePage ? $shareToken : '',
     'q' => $searchQuery,
     'section' => $sectionParam,
     'offer' => $offerParam,
@@ -93,7 +105,7 @@ if (array_key_exists('sort', $_GET)) {
     $stateParams['sort'] = $activeSort;
 }
 
-$urlWithout = static function (string $param, ?string $value = null) use ($stateParams): string {
+$urlWithout = static function (string $param, ?string $value = null) use ($stateParams, $seUrl): string {
     $params = $stateParams;
     if ($value === null || !is_array($params[$param] ?? null)) {
         unset($params[$param]);
@@ -101,9 +113,9 @@ $urlWithout = static function (string $param, ?string $value = null) use ($state
         $params[$param] = array_values(array_filter($params[$param], static fn (string $v): bool => $v !== $value));
     }
 
-    return store_lab_url($params);
+    return $seUrl($params);
 };
-$clearAllUrl = store_lab_url(array_diff_key($baseParams, ['q' => true]));
+$clearAllUrl = $seUrl(array_diff_key($baseParams, ['q' => true]));
 
 $tileFacet = store_easy_tile_facet($catalog);
 $tileParam = $tileFacet['param'] ?? null;
@@ -115,7 +127,7 @@ if ($tileFacet !== null) {
     $shopTiles = store_easy_tiles(
         $tileFacet,
         $selectedFacets[$tileFacet['param']] ?? [],
-        static fn (array $extra): string => store_lab_url(array_merge($tileKeep, $extra))
+        static fn (array $extra): string => $seUrl(array_merge($tileKeep, $extra))
     );
     $shopTilesTitle = $tileFacet['title'];
 }
@@ -188,7 +200,7 @@ foreach ($facetLabels as $param => $label) {
                 } else {
                     $next[$param] = $nextValues;
                 }
-                $quickSizes[] = ['value' => $value, 'count' => $count, 'active' => $isOn, 'href' => store_lab_url($next)];
+                $quickSizes[] = ['value' => $value, 'count' => $count, 'active' => $isOn, 'href' => $seUrl($next)];
             }
             continue;
         }
@@ -260,13 +272,13 @@ if ($quickSizes !== [] && $selectedFacets['sizeRanges'] !== []) {
 
 $page = max(1, (int) ($catalog['page'] ?? 1));
 $totalPages = max(1, (int) ($catalog['totalPages'] ?? 1));
-$buildStoreUrl = static function (int $targetPage) use ($stateParams): string {
+$buildStoreUrl = static function (int $targetPage) use ($stateParams, $seUrl): string {
     $params = $stateParams;
     if ($targetPage > 1) {
         $params['page'] = $targetPage;
     }
 
-    return store_lab_url($params);
+    return $seUrl($params);
 };
 
 $productReturnUrl = catalog_current_return_url();
@@ -284,7 +296,7 @@ $storeShowPrice = (bool) ($displayOptions['show_price'] ?? false);
 $baseDisplayOptions = $displayOptions;
 ?>
 <div class="se store-lab" data-product-share-scope>
-  <?php require __DIR__ . '/partials/store-next-search.php'; ?>
+  <?php $storeSearchAction = $seAction; require __DIR__ . '/partials/store-next-search.php'; ?>
 
   <div
     class="se-live"
@@ -294,13 +306,25 @@ $baseDisplayOptions = $displayOptions;
     data-se-next="<?= $page < $totalPages ? h($buildStoreUrl($page + 1)) : '' ?>"
   >
 
+  <?php if ($shareContext !== null): ?>
+    <section class="se-section-banner" aria-label="رابط مشاركة">
+      <div>
+        <p class="se-section-banner__kicker">رابط مشاركة</p>
+        <h2 class="se-section-banner__title"><?= h((string) ($shareContext['name_ar'] ?? 'رابط مشاركة')) ?></h2>
+        <?php if ((string) ($shareContext['access_policy_name_ar'] ?? '') !== ''): ?>
+          <p class="text-sm text-text-muted mt-1">سياسة الوصول: <?= h((string) $shareContext['access_policy_name_ar']) ?></p>
+        <?php endif; ?>
+      </div>
+    </section>
+  <?php endif; ?>
+
   <?php if ($sectionContext !== null): ?>
     <section class="se-section-banner">
       <div>
         <p class="se-section-banner__kicker"><?= !empty($sectionContext['is_offer_section']) ? 'عرض خاص' : 'قسم' ?></p>
         <h2 class="se-section-banner__title"><?= h((string) ($sectionContext['title_ar'] ?? '')) ?></h2>
       </div>
-      <a href="/store.php" class="se-section-banner__exit">
+      <a href="<?= h($seUrl([])) ?>" class="se-section-banner__exit">
         كل المواد
         <span class="material-symbols-outlined" aria-hidden="true">close</span>
       </a>
@@ -523,7 +547,13 @@ $baseDisplayOptions = $displayOptions;
   $dockItems = $storeDockLayout['general']['dock_items'];
   $dockAllowCart = (bool) ($baseDisplayOptions['allow_cart'] ?? false);
   try {
-      $dockCartPackages = $dockAllowCart ? \Portal\Services\StoreCartService::packageCount() : 0.0;
+      if ($dockAllowCart && $shareToken !== '') {
+          $dockCartPackages = \Portal\Services\ShareCartService::packageCount($shareToken);
+      } elseif ($dockAllowCart) {
+          $dockCartPackages = \Portal\Services\StoreCartService::packageCount();
+      } else {
+          $dockCartPackages = 0.0;
+      }
   } catch (Throwable) {
       $dockCartPackages = 0.0;
   }

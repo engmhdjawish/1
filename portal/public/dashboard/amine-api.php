@@ -14,7 +14,8 @@ require dirname(__DIR__, 2) . '/views/helpers.php';
 $user = WebSession::user();
 $permissions = array_map('strval', $user['permissions'] ?? []);
 $isSuper = in_array('*', $permissions, true);
-if (!$isSuper && !in_array('company_settings.manage', $permissions, true)) {
+// مدير النظام فقط — لا تُربط بإعدادات الشركة/محتوى الموقع.
+if (!$isSuper) {
     http_response_code(403);
     echo 'غير مصرح لك بإدارة API الأمين.';
     exit;

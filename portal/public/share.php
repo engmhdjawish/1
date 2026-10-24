@@ -667,8 +667,15 @@ if (is_string($cartNotice) && $cartNotice !== '') {
     $cartNotice = ['ok' => true, 'message' => $cartNotice];
 }
 
-$extraHead = '<link href="' . h(portal_asset_url('/css/store-filters.css')) . '" rel="stylesheet">';
-$enableQuickView = false;
+$extraHead = portal_stylesheet('/css/home-lab.css')
+    . portal_stylesheet('/css/store-lab.css')
+    . portal_stylesheet('/css/store-easy.css')
+    . portal_stylesheet('/css/lab-access.css')
+    . portal_stylesheet('/css/hn-search.css');
+$extraFooter = portal_defer_script('/assets/product-share.js');
+$enableQuickView = true;
+$storeLabMode = true;
+$siteTour = 'store';
 $storeAllowCart = (bool) ($displayOptions['allow_cart'] ?? false);
 $storeCartCount = ($shareToken !== null && $storeAllowCart) ? ShareCartService::itemCount($shareToken) : 0;
 $storeCartPackageCount = ($shareToken !== null && $storeAllowCart) ? ShareCartService::packageCount($shareToken) : 0.0;

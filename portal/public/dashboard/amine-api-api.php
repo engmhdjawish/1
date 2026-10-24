@@ -14,7 +14,7 @@ WebSession::requireLogin();
 $user = WebSession::user();
 $permissions = array_map('strval', $user['permissions'] ?? []);
 $isSuper = in_array('*', $permissions, true);
-if (!$isSuper && !in_array('company_settings.manage', $permissions, true)) {
+if (!$isSuper) {
     http_response_code(403);
     echo json_encode(['ok' => false, 'message' => 'غير مصرح.'], JSON_UNESCAPED_UNICODE);
     exit;

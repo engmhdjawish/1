@@ -58,16 +58,20 @@ final class SharePageAccess
         $shareOptions = is_array($shareLink['options'] ?? null) ? (array) $shareLink['options'] : [];
         $showImages = (bool) (($shareOptions['show_images'] ?? true) ? true : false);
         $priceMode = (string) ($shareOptions['price_mode'] ?? 'both');
+        if (!(bool) ($policy['show_price'] ?? false)) {
+            $priceMode = 'none';
+        }
         $showPriceSyp = in_array($priceMode, ['both', 'syp'], true);
         $showPriceUsd = in_array($priceMode, ['both', 'usd'], true);
+        $showPrice = $showPriceSyp || $showPriceUsd;
 
         return [
             'show_images' => $showImages,
-            'show_price' => $showPriceSyp || $showPriceUsd,
+            'show_price' => $showPrice,
             'show_quantity' => (bool) ($policy['show_quantity'] ?? false),
             'allow_cart' => $hasAccess && (bool) ($policy['allow_cart'] ?? false),
             'allow_order' => $hasAccess && (bool) ($policy['allow_order'] ?? false),
-            'price_mode' => $priceMode,
+            'price_mode' => $showPrice ? $priceMode : 'none',
         ];
     }
 
