@@ -25,9 +25,11 @@
   const accountBackdrop = accountRoot?.querySelector('.site-account__backdrop');
   const sheetMode = () => window.matchMedia('(max-width: 639px)').matches;
   let accountReturnFocus = null;
+  let expandHeader = () => {};
 
   const setAccountOpen = (open, opener = null) => {
     if (!accountRoot || !accountTrigger || !accountMenu) return false;
+    if (open) expandHeader();
     accountRoot.classList.toggle('is-open', open);
     accountTrigger.setAttribute('aria-expanded', open ? 'true' : 'false');
     document.querySelectorAll('[data-site-account-open]').forEach((btn) => btn.setAttribute('aria-expanded', open ? 'true' : 'false'));
@@ -97,6 +99,12 @@
         window.requestAnimationFrame(syncCompact);
       }
     }, { passive: true });
+    // The menu lives in the folded row, so it must unfold before the menu can show.
+    expandHeader = () => {
+      if (!compact) return;
+      compact = false;
+      siteHeader.classList.remove('site-header--compact');
+    };
     compactQuery.addEventListener?.('change', syncCompact);
     window.addEventListener('site-tour-toggle', syncCompact);
     syncCompact();
