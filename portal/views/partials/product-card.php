@@ -84,7 +84,20 @@ $previewPayload = $useImagePreview
     ? product_preview_payload($item, $displayOptions, $cartQtyForItem, $productReturnUrl, $productOfferSlug)
     : null;
 if ($previewPayload !== null && $hideUnavailablePrice) {
-    $previewPayload = array_merge($previewPayload, ['showPrice' => false, 'showPriceSyp' => false, 'showPriceUsd' => false, 'priceHidden' => true]);
+    $previewPayload = array_merge($previewPayload, [
+        'showPrice' => false,
+        'showPriceSyp' => false,
+        'showPriceUsd' => false,
+        'priceHidden' => true,
+        'unitSaleSp' => 0.0,
+        'unitSaleUsd' => 0.0,
+        'packageSaleSp' => 0.0,
+        'packageSaleUsd' => 0.0,
+        'originalUnitSp' => 0.0,
+        'originalUnitUsd' => 0.0,
+        'originalPackSp' => 0.0,
+        'originalPackUsd' => 0.0,
+    ]);
 }
 $previewJson = $previewPayload !== null
     ? json_encode($previewPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)
