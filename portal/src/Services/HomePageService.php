@@ -97,8 +97,8 @@ final class HomePageService
         }
 
         $sections = self::loadFullSectionsBatched();
-        // شرائط الرئيسية عامة ومخبّأة — تُبنى دائماً بسياسة الزائر لا بجلسة عميل مسجّل.
-        $storeCatalogDisplay = StoreCatalogService::guestDisplayOptions();
+        // تُبنى شرائط المنتجات بسياسة المشاهد الحالي (زائر أو عميل) وتُخزَّن بمفتاح يفرّق بينها.
+        $storeCatalogDisplay = StoreCatalogService::displayOptions();
         $strips = [];
 
         foreach ($sections as $section) {
@@ -277,19 +277,25 @@ final class HomePageService
              ORDER BY id'
         )->fetchAll(\PDO::FETCH_ASSOC);
 
-        $guestDisplay = StoreCatalogService::guestDisplayOptions();
-        $policy = StorePolicyService::guestPolicy();
-        $policyFingerprint = is_array($policy)
-            ? [
-                'id' => (string) ($policy['id'] ?? ''),
-                'show_price' => (bool) ($guestDisplay['show_price'] ?? false),
-                'show_quantity' => (bool) ($guestDisplay['show_quantity'] ?? false),
-                'allow_cart' => (bool) ($guestDisplay['allow_cart'] ?? false),
-                'allow_order' => (bool) ($guestDisplay['allow_order'] ?? false),
-                'store_guids' => StoreCatalogService::resolvedPolicyStoreGuids(null),
-            ]
-            : null;
+        // مفتاح الكاش يتبع سياسة المشاهد: زائر بـ «تصفح فقط» لا يُعيد استخدام شرائط عميل يرى الأسعار.
+        $display = StoreCatalogService::displayOptions();
+        $policy = StoreCatalogService::activePolicy();
+        $policyFingerprint = [
+            'id' => is_array($policy) ? (string) ($policy['id'] ?? '') : 'none',
+            'show_price' => (bool) ($display['show_price'] ?? false),
+            'show_quantity' => (bool) ($display['show_quantity'] ?? false),
+            'allow_cart' => (bool) ($display['allow_cart'] ?? false),
+            'allow_order' => (bool) ($display['allow_order'] ?? false),
+            'price_mode' => (string) ($display['price_mode'] ?? 'none'),
+            'store_guids' => StoreCatalogService::resolvedPolicyStoreGuids(null),
+        ];
 
-        return hash('sha256', json_encode(['v' => 2, 'home' => $home, 'offers' => $offers, 'policy' => $policyFingerprint, 'unavailable_prices' => StorePolicyService::showUnavailablePrices()], JSON_UNESCAPED_UNICODE));
+        return hash('sha256', json_encode([
+            'v' => 3,
+            'home' => $home,
+            'offers' => $offers,
+            'policy' => $policyFingerprint,
+            'unavailable_prices' => StorePolicyService::showUnavailablePrices(),
+        ], JSON_UNESCAPED_UNICODE));
     }
 }
