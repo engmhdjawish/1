@@ -16,6 +16,7 @@ use Portal\Support\StorePricePreference;
 /** @var bool|null $enableQuickView */
 /** @var bool|null $enableStoreCartJs */
 /** @var bool|null $deferStoreCartJs */
+/** @var bool|null $enableProductPreview */
 /** @var bool|null $enableOnboarding */
 /** @var string|null $lcpPreloadUrl */
 
@@ -56,6 +57,7 @@ if (isset($storeCartBootstrap) && is_array($storeCartBootstrap)) {
 $enableQuickView = (bool) ($enableQuickView ?? $isCatalogPage);
 $deferStoreCartJs = (bool) ($deferStoreCartJs ?? false);
 $enableStoreCartJs = (bool) ($enableStoreCartJs ?? ($storeAllowCart && !$isLightPage && !$deferStoreCartJs));
+$enableProductPreview = (bool) ($enableProductPreview ?? false);
 $siteTour = (string) ($siteTour ?? '');
 $enableOnboarding = $siteTour !== '' || (bool) ($enableOnboarding ?? !$isLightPage);
 if ($enableOnboarding && $siteTour === '') {
@@ -187,7 +189,7 @@ window.portalMaterialImageFrameEmpty=function(img){if(!(img instanceof HTMLImage
   <?php require __DIR__ . '/partials/store-image-lightbox.php'; ?>
 <?php endif; ?>
 
-<?php if (($enableStoreCartJs || $deferStoreCartJs) && empty($GLOBALS['storeProductPreviewRendered'])): ?>
+<?php if (($enableStoreCartJs || $deferStoreCartJs || $enableProductPreview) && empty($GLOBALS['storeProductPreviewRendered'])): ?>
   <?php $GLOBALS['storeProductPreviewRendered'] = true; ?>
   <?php require __DIR__ . '/partials/store-product-preview.php'; ?>
 <?php endif; ?>
@@ -250,6 +252,9 @@ window.portalMaterialImageFrameEmpty=function(img){if(!(img instanceof HTMLImage
       }, true);
     })();
   </script>
+<?php elseif ($enableProductPreview && empty($GLOBALS['storeProductPreviewScriptLoaded'])): ?>
+  <?php $GLOBALS['storeProductPreviewScriptLoaded'] = true; ?>
+  <?= portal_defer_script('/assets/store-product-preview.js') ?>
 <?php endif; ?>
 <?php if ($enableOnboarding): ?>
   <?= portal_defer_script('/assets/site-onboarding.js') ?>

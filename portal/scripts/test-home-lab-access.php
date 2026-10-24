@@ -128,6 +128,23 @@ $bad = HomeShopBlockService::normalize(['block_type' => 'combo', 'primary_param'
 $assert('normalize rejects same-facet combos and bad options', $bad['secondary_param'] === '' && $bad['style'] === 'icons' && $bad['max_items'] === 60);
 $assert('save validates before touching the database', HomeShopBlockService::save(null, ['title_ar' => ''], null)['ok'] === false && HomeShopBlockService::save(null, ['title_ar' => 'x', 'block_type' => 'custom'], null)['ok'] === false);
 $assert('recently viewed slot is hidden until filled', (bool) preg_match('/class="lab-viewed"[^>]*data-lab-recent-viewed hidden/u', $html));
+$labAccessJs = (string) file_get_contents(dirname(__DIR__) . '/public/assets/lab-access.js');
+$assert(
+    'recently viewed opens store product preview cards',
+    str_contains($labAccessJs, "data-store-product-preview")
+    && str_contains($labAccessJs, "data-store-preview-card")
+    && str_contains($labAccessJs, 'StoreProductPreview')
+    && str_contains($labAccessJs, '/api/store-product.php')
+    && !str_contains($labAccessJs, "link.className = 'lab-viewed__card'")
+);
+$previewJs = (string) file_get_contents(dirname(__DIR__) . '/public/assets/store-product-preview.js');
+$assert(
+    'product preview scopes recently viewed and exports open',
+    str_contains($previewJs, '[data-lab-recent-viewed]')
+    && str_contains($previewJs, 'window.StoreProductPreview = { open, close }')
+);
+$indexPhp = (string) file_get_contents(dirname(__DIR__) . '/public/index.php');
+$assert('home enables store product preview shell', str_contains($indexPhp, '$enableProductPreview = true'));
 $assert('finder with visible facets only', str_contains($html, 'اعثر بسرعة') && str_contains($html, 'name="ageCategories[]"') && str_contains($html, 'name="sizeRanges[]"') && str_contains($html, 'name="manufacturers[]"') && str_contains($html, 'name="isAvailable"'));
 $assert('availability is not preselected', !(bool) preg_match('/name="isAvailable" value="1" checked/u', $html));
 $assert('size shortcuts sort naturally', $pos('>18-23<') < $pos('>36-39<') && $pos('>36-39<') < $pos('>40-45<'));
