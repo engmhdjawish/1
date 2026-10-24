@@ -590,7 +590,7 @@ $shopPages = static function (array $block) use ($pagerNav): void {
             <?php if ($season !== null): ?>
               <span class="hn-feed__badge">
                 <span class="material-symbols-outlined" aria-hidden="true"><?= h($season['icon']) ?></span>
-                <?= h($season['title_ar']) ?> أولاً
+                <?= h($season['title_ar']) ?>
               </span>
             <?php endif; ?>
           </h2>

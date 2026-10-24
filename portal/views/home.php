@@ -47,8 +47,8 @@ $homeShowGuestRegister = portal_show_guest_auth_links();
             مرحباً بكم في <?= h($siteName) ?>
           </p>
           <h1 class="home-hero__title">
-            <span class="home-hero__title-line">تجربة تسوّق جملة</span>
-            <span class="home-hero__title-line">احترافية وسلسة</span>
+            <span class="home-hero__title-line">تسوّق جملة</span>
+            <span class="home-hero__title-line">واضح وسلس</span>
           </h1>
           <p class="home-hero__lead">
             <?= $aboutSnippet !== '' ? h($aboutSnippet) : 'تصفّح أحدث المواد بأسعار واضحة، أضف للسلة، وتابع طلبك خطوة بخطوة.' ?>

@@ -54,12 +54,12 @@ $uploadBootstrap = [
   <section class="rounded-xl border border-border-subtle bg-white overflow-hidden mb-6">
     <div class="px-4 py-3 border-b border-border-subtle bg-surface-low/60">
       <h2 class="font-bold text-sm">رفع ومزامنة</h2>
-      <p class="text-xs text-text-muted mt-0.5">ارفع الصور للموقع ثم أرسلها للأمين — بعدها انتقل إلى «ربط بالمواد».</p>
+      <p class="text-xs text-text-muted mt-0.5">رفع الصور على الموقع ومزامنتها مع الأمين.</p>
     </div>
     <div class="p-4 dash-mi-upload-grid">
       <article class="dash-mi-step-card">
         <h3 class="dash-mi-step-card__title">① رفع على الموقع</h3>
-        <p class="dash-mi-step-card__desc">يمكنك اختيار عدة صور أو سحبها — تُرفع بالتوازي مع إمكانية الاستئناف.</p>
+        <p class="dash-mi-step-card__desc">اختيار عدة صور أو سحبها للرفع.</p>
 
         <div id="uploadPickPanel">
           <div id="uploadDropZone" class="dash-mi-dropzone" tabindex="0" role="button" aria-label="اختر صوراً أو اسحبها هنا">
@@ -97,7 +97,7 @@ $uploadBootstrap = [
 
       <article class="dash-mi-step-card">
         <h3 class="dash-mi-step-card__title">② مزامنة الأمين</h3>
-        <p class="dash-mi-step-card__desc">تُرسل الصور إلى المحاسبة تلقائياً في الخلفية. استخدم «بدء المزامنة» إذا بقي شيء بانتظار الإرسال.</p>
+        <p class="dash-mi-step-card__desc">إرسال الصور للمحاسبة، مع إمكانية البدء أو الإيقاف المؤقت.</p>
 
         <div class="dash-mi-sync-primary mb-3">
           <button type="button" id="startSyncBtn" class="h-9 px-4 rounded-lg bg-primary text-white text-xs font-bold">بدء / استئناف المزامنة</button>

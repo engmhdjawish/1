@@ -60,14 +60,6 @@ $quickAccessItems = lab_quick_access_items(
 );
 ?>
 <div class="home-page hl">
-  <aside class="hl-lab-note" aria-label="ملاحظة النسخة التجريبية">
-    <p><strong>نسخة تجريبية.</strong></p>
-    <div class="hl-lab-note__links">
-      <a href="/store.php">تجربة المتجر</a>
-      <a href="/index.php">الصفحة الحالية</a>
-    </div>
-  </aside>
-
   <section class="hl-search-panel" aria-labelledby="hl-search-title">
     <div class="hl-search-panel__copy">
       <h2 id="hl-search-title" class="hl-search-panel__title">ابحث في المواد</h2>
@@ -286,10 +278,6 @@ $quickAccessItems = lab_quick_access_items(
               <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
               تصفّح المتجر
             </a>
-            <a href="/store.php" class="home-btn home-btn--ghost">
-              <span class="material-symbols-outlined" aria-hidden="true">science</span>
-              تجربة المتجر
-            </a>
             <?php if ($homeShowGuestRegister): ?>
               <a href="/register.php" class="home-btn home-btn--ghost">
                 <span class="material-symbols-outlined" aria-hidden="true">person_add</span>
@@ -334,10 +322,6 @@ $quickAccessItems = lab_quick_access_items(
       <a href="/store.php" class="home-btn home-btn--ghost-dark">
         <span class="material-symbols-outlined" aria-hidden="true">storefront</span>
         فتح المتجر
-      </a>
-      <a href="/store.php" class="home-btn home-btn--ghost-dark">
-        <span class="material-symbols-outlined" aria-hidden="true">science</span>
-        تجربة المتجر
       </a>
       <a href="/about.php" class="home-btn home-btn--ghost-dark">
         <span class="material-symbols-outlined" aria-hidden="true">groups</span>

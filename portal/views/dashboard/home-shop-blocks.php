@@ -152,9 +152,9 @@ $tileRows = min(HomeShopBlockService::MAX_CUSTOM_TILES, count($tiles) + 6);
         <span class="text-[11px] text-text-muted mt-1 block">التبويب يحتاج تفعيل «تسوّق حسب — تبويبات» في التخطيط. الشريط المستقل يحتاج تفعيل «أشرطة منفصلة».</span>
       </label>
       <label class="text-xs">
-        <span class="text-text-muted block mb-0.5">عدد العناصر (مرجع قديم)</span>
+        <span class="text-text-muted block mb-0.5">عدد العناصر</span>
         <input type="number" min="2" max="60" name="max_items" value="<?= (int) $editBlock['max_items'] ?>" class="<?= $inputClass ?>">
-        <span class="text-[11px] text-text-muted mt-1 block">لا يحدّ العرض في الرئيسية الحالية؛ التصفح يتم بأزرار الصفحة داخل القسم.</span>
+        <span class="text-[11px] text-text-muted mt-1 block">للتصفح داخل القسم بأزرار الصفحة.</span>
       </label>
       <label class="text-xs">
         <span class="text-text-muted block mb-0.5">الترتيب</span>

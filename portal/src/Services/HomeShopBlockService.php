@@ -22,7 +22,7 @@ final class HomeShopBlockService
 
     public const TYPES = [
         'facet' => 'حسب خاصية واحدة',
-        'combo' => 'دمج خاصيتين (غير مدعوم في الرئيسية الحالية)',
+        'combo' => 'دمج خاصيتين',
         'custom' => 'بطاقات مخصّصة',
     ];
 
