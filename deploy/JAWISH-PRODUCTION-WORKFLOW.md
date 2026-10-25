@@ -11,6 +11,20 @@
 | PHP | `php8.5-fpm` |
 | الويب | nginx |
 
+### مضيف واحد (www مقابل بدون www)
+
+`www.example.com` و`example.com` أصلان مختلفان للمتصفح: جلسة الدخول، تخزين PWA، وتطبيق الشاشة الرئيسية **لا يُشاركان** بينهما.
+
+في `.env` المنشور عيّن المضيف المفضّل مرة واحدة:
+
+```bash
+PORTAL_APP_URL=https://www.jawishco.sy
+# اختياري أثناء الانتقال: مشاركة كوكي الجلسة على النطاق الأب
+# PORTAL_COOKIE_DOMAIN=.jawishco.sy
+```
+
+البوابة تحوّل 301 من المضيف الآخر إلى `PORTAL_APP_URL`. يُفضَّل أيضاً redirect في nginx للمضيف البديل (انظر تعليق قالب `deploy/templates/portal/nginx-site.conf.template`).
+
 ---
 
 ## A) نشر تحديث Portal (بعد `main` أو فرع قبل الدمج)

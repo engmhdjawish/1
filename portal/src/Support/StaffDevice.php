@@ -31,13 +31,9 @@ final class StaffDevice
 
         $expires = time() + self::MAX_AGE;
         $value = self::sign($userId, $expires);
-        setcookie(self::COOKIE, $value, [
+        setcookie(self::COOKIE, $value, array_merge(CookieOptions::base(true), [
             'expires' => $expires,
-            'path' => '/',
-            'secure' => HttpsGate::isHttpsRequest(),
-            'httponly' => true,
-            'samesite' => 'Lax',
-        ]);
+        ]));
         $_COOKIE[self::COOKIE] = $value;
     }
 

@@ -11,13 +11,22 @@
   const pageLoadedAt = Date.now();
   let engagementReady = false;
 
-  (function redirectHttpToHttps() {
+  (function redirectToCanonicalOrigin() {
     const host = window.location.hostname;
-    if (window.location.protocol === 'http:' && host !== 'localhost' && host !== '127.0.0.1') {
-      window.location.replace(
-        'https://' + host + window.location.pathname + window.location.search + window.location.hash
-      );
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return;
     }
+    const wantHost = (document.body && document.body.dataset.canonicalHost) || '';
+    const needHttps = window.location.protocol === 'http:';
+    const needHost = wantHost !== '' && host.toLowerCase() !== wantHost.toLowerCase();
+    if (!needHttps && !needHost) {
+      return;
+    }
+    const nextHost = needHost ? wantHost : host;
+    const nextProtocol = needHttps || needHost ? 'https:' : window.location.protocol;
+    window.location.replace(
+      nextProtocol + '//' + nextHost + window.location.pathname + window.location.search + window.location.hash
+    );
   })();
 
   const isStandalone =

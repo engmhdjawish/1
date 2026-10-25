@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+use Portal\Config;
 use Portal\Services\PortalSettingsService;
 use Portal\Support\Utf8Text;
 
@@ -20,15 +21,26 @@ $icons = portal_site_icons($logoUrl ?? '');
 header('Content-Type: application/manifest+json; charset=utf-8');
 header('Cache-Control: public, max-age=3600');
 
-$shortcutIcon = [['src' => $icons['manifest_icons'][0]['src'] ?? '/icons/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png']];
+$appUrl = rtrim(Config::appUrl(), '/');
+$useAbsolute = $appUrl !== '' && !preg_match('#^https?://(127\.0\.0\.1|localhost)(:\d+)?$#i', $appUrl);
+$origin = $useAbsolute ? $appUrl : '';
+$url = static function (string $path) use ($origin): string {
+    $path = '/' . ltrim($path, '/');
 
-echo json_encode([
-    'id' => '/?source=pwa',
+    return $origin !== '' ? $origin . $path : $path;
+};
+
+$shortcutIcon = [['src' => $icons['manifest_icons'][0]['src'] ?? '/icons/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png']];
+$manifestUrl = $url('/manifest.php');
+$startUrl = $url('/?source=pwa');
+
+$manifest = [
+    'id' => $startUrl,
     'name' => $siteName,
     'short_name' => $shortName,
     'description' => portal_share_description($company, $siteName),
-    'start_url' => '/?source=pwa',
-    'scope' => '/',
+    'start_url' => $startUrl,
+    'scope' => $url('/'),
     'display' => 'standalone',
     'display_override' => ['standalone', 'browser'],
     'orientation' => 'portrait-primary',
@@ -38,11 +50,19 @@ echo json_encode([
     'background_color' => '#f6f6f8',
     'categories' => ['shopping', 'business'],
     'prefer_related_applications' => false,
+    'related_applications' => [
+        [
+            'platform' => 'webapp',
+            'url' => $manifestUrl,
+        ],
+    ],
     'launch_handler' => ['client_mode' => ['navigate-existing', 'auto']],
     'icons' => $icons['manifest_icons'],
     'shortcuts' => [
-        ['name' => 'المتجر', 'url' => '/store.php?source=pwa', 'icons' => $shortcutIcon],
-        ['name' => 'السلة', 'url' => '/store-cart.php?source=pwa', 'icons' => $shortcutIcon],
-        ['name' => 'طلباتي', 'url' => '/my-orders.php?source=pwa', 'icons' => $shortcutIcon],
+        ['name' => 'المتجر', 'url' => $url('/store.php?source=pwa'), 'icons' => $shortcutIcon],
+        ['name' => 'السلة', 'url' => $url('/store-cart.php?source=pwa'), 'icons' => $shortcutIcon],
+        ['name' => 'طلباتي', 'url' => $url('/my-orders.php?source=pwa'), 'icons' => $shortcutIcon],
     ],
-], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+];
+
+echo json_encode($manifest, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);

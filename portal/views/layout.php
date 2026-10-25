@@ -107,14 +107,24 @@ $navLinks = [
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <?php
+      $earlyCanonicalHost = \Portal\Support\HttpsGate::configuredHost();
+      if ($earlyCanonicalHost === '' || filter_var($earlyCanonicalHost, FILTER_VALIDATE_IP) || in_array($earlyCanonicalHost, ['localhost', '127.0.0.1', '::1'], true)) {
+          $earlyCanonicalHost = '';
+      }
+    ?>
     <script>
       (function () {
         var host = window.location.hostname;
-        if (window.location.protocol === 'http:' && host !== 'localhost' && host !== '127.0.0.1') {
-          window.location.replace(
-            'https://' + host + window.location.pathname + window.location.search + window.location.hash
-          );
-        }
+        if (host === 'localhost' || host === '127.0.0.1') return;
+        var wantHost = <?= json_encode($earlyCanonicalHost, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+        var needHttps = window.location.protocol === 'http:';
+        var needHost = wantHost && host.toLowerCase() !== String(wantHost).toLowerCase();
+        if (!needHttps && !needHost) return;
+        var nextHost = needHost ? wantHost : host;
+        window.location.replace(
+          'https://' + nextHost + window.location.pathname + window.location.search + window.location.hash
+        );
       })();
     </script>
     <?php require __DIR__ . '/partials/head-icons.php'; ?>
@@ -164,7 +174,7 @@ $navLinks = [
       <?= $extraHead ?>
     <?php endif; ?>
 </head>
-<body class="min-h-screen text-text-main bg-surface-bg flex flex-col<?= $staffSiteMode ? ' site-staff-mode' : '' ?><?= !empty($appDock) ? ' has-app-dock' : '' ?><?= !empty($pageOwnsCurrency) ? ' has-page-currency' : '' ?>" data-store-price-currency="<?= h($storePriceCurrency) ?>" data-notif-reader="<?= h($notifReader) ?>" data-price-lock-auth="<?= h($priceLockAuth) ?>">
+<body class="min-h-screen text-text-main bg-surface-bg flex flex-col<?= $staffSiteMode ? ' site-staff-mode' : '' ?><?= !empty($appDock) ? ' has-app-dock' : '' ?><?= !empty($pageOwnsCurrency) ? ' has-page-currency' : '' ?>" data-store-price-currency="<?= h($storePriceCurrency) ?>" data-notif-reader="<?= h($notifReader) ?>" data-price-lock-auth="<?= h($priceLockAuth) ?>"<?= $earlyCanonicalHost !== '' ? ' data-canonical-host="' . h($earlyCanonicalHost) . '"' : '' ?>>
 <script>
 window.portalMaterialImageFrameEmpty=function(img){if(!(img instanceof HTMLImageElement))return;img.onerror=null;img.removeAttribute("src");img.classList.add("is-broken");var frame=img.closest(".material-image-frame"),photo=img.parentElement;if(frame){frame.classList.add("material-image-frame--empty","material-image-frame--broken")}if(photo&&!photo.querySelector(".material-image-frame__empty")){var empty=document.createElement("div");empty.className="material-image-frame__empty";empty.setAttribute("role","img");empty.setAttribute("aria-label","بلا صورة");empty.innerHTML='<span class="material-symbols-outlined material-image-frame__empty-icon" aria-hidden="true">hide_image</span><span class="material-image-frame__empty-label">بلا صورة</span>';photo.appendChild(empty)}};
 </script>
