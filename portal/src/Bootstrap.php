@@ -72,13 +72,18 @@ final class Bootstrap
         // Keep that id so the database row can restore the login. Login rotates the id.
         ini_set('session.use_strict_mode', '0');
 
-        session_set_cookie_params([
+        $cookie = \Portal\Support\CookieOptions::base(true);
+        $params = [
             'lifetime' => $lifetimeSeconds,
-            'path' => '/',
-            'secure' => \Portal\Support\HttpsGate::isHttpsRequest(),
-            'httponly' => true,
-            'samesite' => 'Lax',
-        ]);
+            'path' => $cookie['path'],
+            'secure' => $cookie['secure'],
+            'httponly' => $cookie['httponly'],
+            'samesite' => $cookie['samesite'],
+        ];
+        if (!empty($cookie['domain'])) {
+            $params['domain'] = $cookie['domain'];
+        }
+        session_set_cookie_params($params);
 
         return $lifetimeSeconds;
     }
@@ -95,13 +100,9 @@ final class Bootstrap
             return;
         }
 
-        setcookie($name, $id, [
+        setcookie($name, $id, array_merge(\Portal\Support\CookieOptions::base(true), [
             'expires' => time() + $lifetimeSeconds,
-            'path' => '/',
-            'secure' => \Portal\Support\HttpsGate::isHttpsRequest(),
-            'httponly' => true,
-            'samesite' => 'Lax',
-        ]);
+        ]));
     }
 
     private static function shouldSkipWebRuntime(): bool

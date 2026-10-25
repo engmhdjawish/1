@@ -259,6 +259,11 @@ function portal_absolute_url(string $pathOrUrl = ''): string
         $path = '/';
     }
 
+    $appUrl = rtrim((string) \Portal\Config::appUrl(), '/');
+    if ($appUrl !== '' && !preg_match('#^https?://(127\.0\.0\.1|localhost)(:\d+)?$#i', $appUrl)) {
+        return $appUrl . $path;
+    }
+
     $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
     if ($host === '') {
         return $path;

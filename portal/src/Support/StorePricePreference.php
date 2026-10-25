@@ -96,16 +96,9 @@ final class StorePricePreference
             return;
         }
 
-        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-            || (strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https');
-
-        setcookie(self::COOKIE_NAME, $currency, [
+        setcookie(self::COOKIE_NAME, $currency, array_merge(CookieOptions::base(true), [
             'expires' => time() + self::COOKIE_MAX_AGE,
-            'path' => '/',
-            'secure' => $secure,
-            'httponly' => true,
-            'samesite' => 'Lax',
-        ]);
+        ]));
         $_COOKIE[self::COOKIE_NAME] = $currency;
     }
 }

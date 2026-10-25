@@ -2,8 +2,24 @@
 # Place in /etc/nginx/sites-available/ and symlink to sites-enabled
 #
 # For HTTP/2 (recommended): enable SSL below via certbot, then reload nginx.
-#   certbot --nginx -d {{WEB_DOMAIN}}
+#   certbot --nginx -d {{WEB_DOMAIN}} -d {{WEB_DOMAIN_ALIAS}}
 # Certbot will add listen 443 ssl http2; keep the static cache block below.
+#
+# Prefer ONE public host in PORTAL_APP_URL (with or without www). Portal PHP also
+# 301-redirects the other host so login cookies and the installed PWA stay shared.
+#
+# Optional: redirect the alternate host (www ↔ apex) at nginx:
+# server {
+#     listen 80;
+#     listen [::]:80;
+#     listen 443 ssl;
+#     listen [::]:443 ssl;
+#     http2 on;
+#     server_name {{WEB_DOMAIN_ALIAS}};
+#     ssl_certificate /etc/letsencrypt/live/{{WEB_DOMAIN}}/fullchain.pem;
+#     ssl_certificate_key /etc/letsencrypt/live/{{WEB_DOMAIN}}/privkey.pem;
+#     return 301 https://{{WEB_DOMAIN}}$request_uri;
+# }
 
 server {
     listen 80;
