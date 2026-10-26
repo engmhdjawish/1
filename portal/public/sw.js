@@ -4,7 +4,7 @@
  * Versioned static assets (?v=mtime): cache-first. Unversioned: stale-while-revalidate.
  * Prices and stock are never served from cache.
  */
-const CACHE_VERSION = 'jawish-v18';
+const CACHE_VERSION = 'jawish-v19';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 const FONT_CACHE = 'jawish-fonts-v1';
 const OFFLINE_URL = '/offline.html';

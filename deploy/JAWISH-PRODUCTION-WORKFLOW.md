@@ -24,7 +24,30 @@ PORTAL_APP_URL=https://www.jawishco.sy
 ```
 
 **لا تفعّل redirect إجباري www↔apex في nginx** إن كان العملاء ثبّتوا التطبيق على المضيفين؛ التحويل الصلب يحوّل التطبيق القديم إلى شريط × ويحتاج إعادة تثبيت.  
-PHP لا يعمل 301 بين المضيفين افتراضياً (HTTPS فقط). تبويب المتصفح يُنقل بهدوء عبر JS إلى `PORTAL_APP_URL`. الجلسة مشتركة عبر `PORTAL_COOKIE_DOMAIN=.jawishco.sy`.
+PHP لا يعمل 301 بين المضيفين افتراضياً (HTTPS فقط). **لا تحوّل www↔apex عبر JS أيضاً** — الجلسة مشتركة عبر `PORTAL_COOKIE_DOMAIN=.jawishco.sy`، وSEO عبر `rel=canonical`.
+
+**تحقق على السيرفر (بعد النشر) — يجب أن يكون كلا المضيفين 200 بدون Location للمضيف الآخر:**
+
+```bash
+# 1) لا تحويل بين www وapex على HTTPS
+curl -sI https://www.jawishco.sy/ | head -5
+curl -sI https://jawishco.sy/ | head -5
+# المتوقع: HTTP/2 200 لكل منهما، بدون Location:
+
+# 2) لا تفعّل التحويل الإجباري في .env المنشور
+grep -E 'PORTAL_FORCE_CANONICAL_HOST|PORTAL_APP_URL|PORTAL_COOKIE_DOMAIN' \
+  "${PORTAL_PUBLISH_DIR:-/var/www/jawish-portal}/.env"
+# المتوقع: لا يوجد PORTAL_FORCE_CANONICAL_HOST=1
+#          PORTAL_COOKIE_DOMAIN=.jawishco.sy (مفضّل)
+
+# 3) nginx لا يعمل return 301 بين المضيفين
+sudo grep -RInE 'return 301|server_name' /etc/nginx/sites-enabled/ | head -40
+# إن وجدت return 301 من www إلى apex (أو العكس) احذفها، ثم:
+# sudo nginx -t && sudo systemctl reload nginx
+
+# 4) الصفحة لا تحوّل المضيف عبر JS (ابحث عن needHost — يجب ألا يظهر)
+curl -sS https://jawishco.sy/ | grep -E 'needHost|canonical-host' | head
+```
 
 **روابط / نسخة ثانية / شريط ×:** بعد نشر هذا السلوك، افتح التطبيق القديم مرة — يفترض أن يعود بدون × تلقائياً دون حذف. لا تضع `PORTAL_FORCE_CANONICAL_HOST=1` إلا للضرورة.
 

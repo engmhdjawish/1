@@ -43,24 +43,18 @@
     }
   })();
 
-  (function redirectToCanonicalOrigin() {
+  (function upgradeToHttpsSameHost() {
+    // Never change host here. www↔apex soft redirects reopen a Custom Tab (× bar)
+    // for already-broken installs where display-mode is no longer standalone.
+    if (window.location.protocol !== 'http:') {
+      return;
+    }
     const host = window.location.hostname;
     if (host === 'localhost' || host === '127.0.0.1') {
       return;
     }
-    const wantHost = (document.body && document.body.dataset.canonicalHost) || '';
-    const needHttps = window.location.protocol === 'http:';
-    // Never bounce an installed PWA between www/apex — that opens a Custom Tab (× bar).
-    const needHost = !isStandalone
-      && wantHost !== ''
-      && host.toLowerCase() !== wantHost.toLowerCase();
-    if (!needHttps && !needHost) {
-      return;
-    }
-    const nextHost = needHost ? wantHost : host;
-    const nextProtocol = needHttps || needHost ? 'https:' : window.location.protocol;
     window.location.replace(
-      nextProtocol + '//' + nextHost + window.location.pathname + window.location.search + window.location.hash
+      'https://' + host + window.location.pathname + window.location.search + window.location.hash
     );
   })();
   const ua = navigator.userAgent || '';
@@ -359,7 +353,7 @@
       return Promise.resolve(null);
     }
     const register = () => navigator.serviceWorker
-      .register('/sw.js?v=11', { scope: '/', updateViaCache: 'none' })
+      .register('/sw.js?v=12', { scope: '/', updateViaCache: 'none' })
       .catch(() => null);
     // Registration competes with first paint on slow phones; wait until the page has loaded.
     if (document.readyState === 'complete') {

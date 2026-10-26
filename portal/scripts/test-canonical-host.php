@@ -161,18 +161,23 @@ $assert(
 
 $pwa = (string) file_get_contents(dirname(__DIR__) . '/public/assets/pwa.js');
 $assert(
-    'pwa.js redirects to canonical host',
-    str_contains($pwa, 'canonicalHost') || str_contains($pwa, 'wantHost')
+    'pwa.js upgrades http to https on same host only',
+    str_contains($pwa, 'upgradeToHttpsSameHost')
+    && str_contains($pwa, "'https://' + host")
 );
 $assert(
-    'pwa.js does not bounce installed apps between www/apex',
-    str_contains($pwa, '!isStandalone') && str_contains($pwa, 'portal_pwa_host')
+    'pwa.js never soft-bounces www↔apex (heals Custom Tab × bar)',
+    !str_contains($pwa, 'needHost')
+    && !str_contains($pwa, 'wantHost')
+    && str_contains($pwa, 'portal_pwa_host')
 );
 
 $layout = (string) file_get_contents(dirname(__DIR__) . '/views/layout.php');
 $assert(
-    'layout early redirect skips standalone host bounce',
-    str_contains($layout, '!standalone') && str_contains($layout, 'display-mode: standalone')
+    'layout early script only upgrades http→https same host',
+    str_contains($layout, "protocol === 'http:'")
+    && str_contains($layout, "'https://' + host")
+    && !str_contains($layout, 'needHost')
 );
 
 echo "\n";

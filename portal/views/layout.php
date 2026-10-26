@@ -115,22 +115,17 @@ $navLinks = [
     ?>
     <script>
       (function () {
-        var host = window.location.hostname;
-        if (host === 'localhost' || host === '127.0.0.1') return;
-        var standalone = window.matchMedia('(display-mode: standalone)').matches
-          || window.matchMedia('(display-mode: fullscreen)').matches
-          || window.matchMedia('(display-mode: minimal-ui)').matches
-          || window.navigator.standalone === true;
-        var wantHost = <?= json_encode($earlyCanonicalHost, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-        var needHttps = window.location.protocol === 'http:';
-        // Keep installed PWAs on their install host (www vs apex); bouncing them
-        // out of scope makes Chrome show a Custom Tab bar with × and the title.
-        var needHost = !standalone && wantHost && host.toLowerCase() !== String(wantHost).toLowerCase();
-        if (!needHttps && !needHost) return;
-        var nextHost = needHost ? wantHost : host;
-        window.location.replace(
-          'https://' + nextHost + window.location.pathname + window.location.search + window.location.hash
-        );
+        // HTTPS only — never bounce www↔apex. Soft host redirects break already-
+        // damaged home-screen apps: once Chrome opens a Custom Tab, display-mode
+        // is no longer standalone, so a host bounce keeps the × title bar forever.
+        // Cookies are shared via PORTAL_COOKIE_DOMAIN; SEO uses rel=canonical.
+        if (window.location.protocol === 'http:') {
+          var host = window.location.hostname;
+          if (host === 'localhost' || host === '127.0.0.1') return;
+          window.location.replace(
+            'https://' + host + window.location.pathname + window.location.search + window.location.hash
+          );
+        }
       })();
     </script>
     <?php require __DIR__ . '/partials/head-icons.php'; ?>
