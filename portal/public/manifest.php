@@ -40,7 +40,16 @@ if ($requestOrigin === '' && $canonicalOrigin !== '') {
 $startPath = '/?source=pwa';
 $startUrl = $requestOrigin !== '' ? $requestOrigin . $startPath : $startPath;
 $scopeUrl = $requestOrigin !== '' ? $requestOrigin . '/' : '/';
-$shortcutIcon = [['src' => $icons['manifest_icons'][0]['src'] ?? '/icons/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png']];
+// Bust WebAPK icon hash so Chrome re-fetches the healed start_url/scope.
+$manifestIcons = array_map(static function (array $icon): array {
+    $src = (string) ($icon['src'] ?? '');
+    if ($src !== '') {
+        $icon['src'] = $src . (str_contains($src, '?') ? '&' : '?') . 'webapk=3';
+    }
+
+    return $icon;
+}, $icons['manifest_icons']);
+$shortcutIcon = [['src' => $manifestIcons[0]['src'] ?? '/icons/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png']];
 
 $related = [];
 if ($requestOrigin !== '') {
@@ -76,12 +85,13 @@ $manifest = [
     'dir' => 'rtl',
     'lang' => 'ar',
     'theme_color' => '#D81921',
-    'background_color' => '#f6f6f8',
+    // background_color bump forces Chrome WebAPK content-hash update for stuck CCT icons.
+    'background_color' => '#f6f6f9',
     'categories' => ['shopping', 'business'],
     'prefer_related_applications' => false,
     'related_applications' => $related,
     'launch_handler' => ['client_mode' => ['navigate-existing', 'auto']],
-    'icons' => $icons['manifest_icons'],
+    'icons' => $manifestIcons,
     'shortcuts' => [
         ['name' => 'المتجر', 'url' => ($requestOrigin !== '' ? $requestOrigin : '') . '/store.php?source=pwa', 'icons' => $shortcutIcon],
         ['name' => 'السلة', 'url' => ($requestOrigin !== '' ? $requestOrigin : '') . '/store-cart.php?source=pwa', 'icons' => $shortcutIcon],

@@ -232,6 +232,27 @@
    * www/apex start_url. Refresh SW + manifest so Chrome's WebAPK can heal,
    * then ask the user to close × and reopen the icon (no uninstall).
    */
+  function looksLikeBrokenHomescreenLaunch() {
+    if (isStandalone) {
+      return false;
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('source') === 'pwa') {
+      return true;
+    }
+    const ref = String(document.referrer || '');
+    if (/^android-app:\/\//i.test(ref)) {
+      return true;
+    }
+    // Custom Tab / browser chrome with empty referrer is common for icon launches.
+    try {
+      if (window.matchMedia('(display-mode: browser)').matches && ref === '') {
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
   function healBrokenInstalledChrome() {
     if (isStandalone) {
       return;
@@ -239,9 +260,7 @@
     const tipKey = 'pwa-heal-tip-at';
     try {
       const last = Number(localStorage.getItem(tipKey) || '0');
-      if (last && (Date.now() - last) < 6 * 60 * 60 * 1000) {
-        // Still refresh in the background even if tip was shown recently.
-      } else {
+      if (!(last && (Date.now() - last) < 2 * 60 * 60 * 1000)) {
         localStorage.setItem(tipKey, String(Date.now()));
         showHealTip();
       }
@@ -279,11 +298,18 @@
       'font:600 14px/1.45 Manrope,Tahoma,sans-serif',
       'box-shadow:0 8px 28px rgba(0,0,0,.28)',
     ].join(';');
-    tip.innerHTML = 'جاري تحديث التطبيق… أغلق هذه النافذة من × ثم افتح أيقونة جاويش من الشاشة الرئيسية (بدون حذف).'
-      + ' <button type="button" style="margin-inline-start:8px;background:transparent;border:0;color:#fca5a5;font:inherit;cursor:pointer">حسناً</button>';
+    const host = window.location.hostname;
+    const repairPath = '/pwa-repair.php';
+    const chromeIntent = 'intent://' + host + repairPath
+      + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url='
+      + encodeURIComponent(window.location.origin + repairPath)
+      + ';end';
+    tip.innerHTML = 'شريط × يحتاج تحديثاً من Chrome (بدون حذف). '
+      + '<a href="' + chromeIntent + '" style="color:#fecaca;text-decoration:underline">افتح التحديث</a>'
+      + ' ثم أغلق من × وافتح الأيقونة مجدداً.'
+      + ' <button type="button" style="margin-inline-start:8px;background:transparent;border:0;color:#fca5a5;font:inherit;cursor:pointer">لاحقاً</button>';
     tip.querySelector('button')?.addEventListener('click', () => tip.remove());
     document.body.appendChild(tip);
-    window.setTimeout(() => tip.remove(), 20000);
   }
 
   function updateHeaderButtonMode(mode) {
@@ -412,7 +438,7 @@
       return Promise.resolve(null);
     }
     const register = () => navigator.serviceWorker
-      .register('/sw.js?v=13', { scope: '/', updateViaCache: 'none' })
+      .register('/sw.js?v=14', { scope: '/', updateViaCache: 'none' })
       .catch(() => null);
     // Registration competes with first paint on slow phones; wait until the page has loaded.
     if (document.readyState === 'complete') {
@@ -483,6 +509,10 @@
         healBrokenInstalledChrome();
       }
       return;
+    }
+    // Related-apps API often misses a broken CCT launch — still heal by heuristic.
+    if (looksLikeBrokenHomescreenLaunch()) {
+      healBrokenInstalledChrome();
     }
 
     bindTriggers();

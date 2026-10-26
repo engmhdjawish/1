@@ -251,7 +251,7 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
       }, 3000);
 
       if (window.isSecureContext) {
-        navigator.serviceWorker.register('/sw.js?v=13', { scope: '/', updateViaCache: 'none' }).catch(() => {});
+        navigator.serviceWorker.register('/sw.js?v=14', { scope: '/', updateViaCache: 'none' }).catch(() => {});
       }
     })();
   </script>

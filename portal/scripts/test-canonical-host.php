@@ -184,6 +184,12 @@ $assert(
     'pwa.js heals installed-but-browser chrome (Custom Tab ×)',
     str_contains($pwa, 'healBrokenInstalledChrome')
     && str_contains($pwa, 'manifest.php?heal=1')
+    && str_contains($pwa, 'looksLikeBrokenHomescreenLaunch')
+    && str_contains($pwa, 'pwa-repair.php')
+);
+$assert(
+    'pwa-repair page exists for Chrome WebAPK refresh',
+    is_file(dirname(__DIR__) . '/public/pwa-repair.php')
 );
 
 $layout = (string) file_get_contents(dirname(__DIR__) . '/views/layout.php');
