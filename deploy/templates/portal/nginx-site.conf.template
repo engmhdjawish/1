@@ -5,8 +5,8 @@
 #   certbot --nginx -d {{WEB_DOMAIN}} -d {{WEB_DOMAIN_ALIAS}}
 # Certbot will add listen 443 ssl http2; keep the static cache block below.
 #
-# Prefer ONE public host in PORTAL_APP_URL (with or without www). Portal PHP also
-# 301-redirects the other host so login cookies and the installed PWA stay shared.
+# Prefer ONE public host in PORTAL_APP_URL for links/canonical. Serve BOTH www and
+# apex from nginx (same root). Do not 301 between them — that breaks installed PWAs.
 #
 # Do NOT hard-redirect the alternate host (www ↔ apex) at nginx if customers
 # already installed the PWA on either host — a 301 out of the install origin
