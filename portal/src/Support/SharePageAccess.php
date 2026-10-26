@@ -99,8 +99,14 @@ final class SharePageAccess
             return null;
         }
 
-        $shareLink = ShareLinkService::getByPublicToken($token);
+        $shareLink = ShareLinkService::resolvePublicAccessKey($token);
         if ($shareLink === null) {
+            return null;
+        }
+
+        // Always key cart/session on the stable public_token.
+        $token = trim((string) ($shareLink['public_token'] ?? $token));
+        if ($token === '') {
             return null;
         }
 
@@ -111,6 +117,8 @@ final class SharePageAccess
 
         return [
             'token' => $token,
+            'short_code' => trim((string) ($shareLink['short_code'] ?? '')),
+            'public_path' => ShareLinkService::publicPathForLink($shareLink),
             'share_link' => $shareLink,
             'share_link_id' => (string) ($shareLink['id'] ?? ''),
             'has_access' => true,

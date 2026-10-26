@@ -11,29 +11,57 @@
   const pageLoadedAt = Date.now();
   let engagementReady = false;
 
-  (function redirectToCanonicalOrigin() {
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') {
-      return;
-    }
-    const wantHost = (document.body && document.body.dataset.canonicalHost) || '';
-    const needHttps = window.location.protocol === 'http:';
-    const needHost = wantHost !== '' && host.toLowerCase() !== wantHost.toLowerCase();
-    if (!needHttps && !needHost) {
-      return;
-    }
-    const nextHost = needHost ? wantHost : host;
-    const nextProtocol = needHttps || needHost ? 'https:' : window.location.protocol;
-    window.location.replace(
-      nextProtocol + '//' + nextHost + window.location.pathname + window.location.search + window.location.hash
-    );
-  })();
-
   const isStandalone =
     window.matchMedia('(display-mode: standalone)').matches
     || window.matchMedia('(display-mode: fullscreen)').matches
     || window.matchMedia('(display-mode: minimal-ui)').matches
     || window.navigator.standalone === true;
+
+
+
+
+
+
+  (function rememberStandaloneHost() {
+    if (!isStandalone || !window.isSecureContext) {
+      return;
+    }
+    const host = window.location.hostname;
+    if (!host || host === 'localhost' || host === '127.0.0.1') {
+      return;
+    }
+    const parent = (document.body && document.body.dataset.cookieDomain) || '';
+    const parts = [
+      'portal_pwa_host=' + encodeURIComponent(host),
+      'path=/',
+      'max-age=31536000',
+      'SameSite=Lax',
+      'Secure',
+    ];
+    if (parent && parent.startsWith('.')) {
+      parts.push('domain=' + parent);
+    }
+    try {
+      document.cookie = parts.join(';');
+    } catch {
+      /* ignore */
+    }
+  })();
+
+  (function upgradeToHttpsSameHost() {
+    // Never change host here. www↔apex soft redirects reopen a Custom Tab (× bar)
+    // for already-broken installs where display-mode is no longer standalone.
+    if (window.location.protocol !== 'http:') {
+      return;
+    }
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return;
+    }
+    window.location.replace(
+      'https://' + host + window.location.pathname + window.location.search + window.location.hash
+    );
+  })();
   const ua = navigator.userAgent || '';
   const isIOS = /iphone|ipad|ipod/i.test(ua)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -204,6 +232,94 @@
     return false;
   }
 
+  let waitingWorker = null;
+  let refreshingForUpdate = false;
+
+
+
+
+
+
+
+
+
+
+
+
+  function showUpdateBanner(worker) {
+    waitingWorker = worker || waitingWorker;
+    if (!waitingWorker || document.getElementById('pwa-update-banner')) {
+      return;
+    }
+    const banner = document.createElement('div');
+    banner.id = 'pwa-update-banner';
+    banner.className = 'pwa-update-banner';
+    banner.setAttribute('role', 'status');
+    banner.innerHTML =
+      '<div class="pwa-update-banner__inner">' +
+      '<span class="material-symbols-outlined" aria-hidden="true">system_update</span>' +
+      '<div class="pwa-update-banner__text">' +
+      '<strong>يتوفر تحديث جديد</strong>' +
+      '<span>حدّث الآن لتحصل على آخر تحسينات التطبيق</span>' +
+      '</div>' +
+      '<button type="button" class="pwa-update-banner__btn" data-pwa-apply-update>تحديث</button>' +
+      '<button type="button" class="pwa-update-banner__later" data-pwa-dismiss-update>لاحقاً</button>' +
+      '</div>';
+    banner.querySelector('[data-pwa-apply-update]')?.addEventListener('click', applyWaitingUpdate);
+    banner.querySelector('[data-pwa-dismiss-update]')?.addEventListener('click', () => {
+      banner.remove();
+    });
+    document.body.appendChild(banner);
+    window.requestAnimationFrame(() => banner.classList.add('is-visible'));
+  }
+
+  function applyWaitingUpdate() {
+    if (!waitingWorker) {
+      window.location.reload();
+      return;
+    }
+    const btn = document.querySelector('[data-pwa-apply-update]');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'جاري التحديث…';
+    }
+    waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+  }
+
+  function watchServiceWorkerUpdates(registration) {
+    if (!registration) {
+      return;
+    }
+
+    if (registration.waiting && navigator.serviceWorker.controller) {
+      showUpdateBanner(registration.waiting);
+    }
+
+    registration.addEventListener('updatefound', () => {
+      const installing = registration.installing;
+      if (!installing) {
+        return;
+      }
+      installing.addEventListener('statechange', () => {
+        if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+          showUpdateBanner(installing);
+        }
+      });
+    });
+
+    // On every app open / return to foreground, check for a new SW.
+    const check = () => {
+      registration.update().catch(() => {});
+    };
+    check();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        check();
+      }
+    });
+    window.setInterval(check, 15 * 60 * 1000);
+  }
+
   function updateHeaderButtonMode(mode) {
     document.querySelectorAll('[data-pwa-open]').forEach((btn) => {
       btn.classList.remove('hidden', 'is-pwa-native', 'is-pwa-manual', 'is-pwa-http');
@@ -283,7 +399,11 @@
   }
 
   function openModal(forceMode) {
-    if (isStandalone || isMarkedInstalled()) {
+    if (isStandalone) {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (isMarkedInstalled() && params.get('install') !== '1') {
       return;
     }
     closeModal();
@@ -329,8 +449,23 @@
     if (!('serviceWorker' in navigator) || !isSecure) {
       return Promise.resolve(null);
     }
+
+    if (!refreshingForUpdate) {
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshingForUpdate) {
+          return;
+        }
+        refreshingForUpdate = true;
+        window.location.reload();
+      });
+    }
+
     const register = () => navigator.serviceWorker
-      .register('/sw.js?v=9', { scope: '/', updateViaCache: 'none' })
+      .register('/sw.js?v=17', { scope: '/', updateViaCache: 'none' })
+      .then((registration) => {
+        watchServiceWorkerUpdates(registration);
+        return registration;
+      })
       .catch(() => null);
     // Registration competes with first paint on slow phones; wait until the page has loaded.
     if (document.readyState === 'complete') {
@@ -376,6 +511,12 @@
     if (!autoDismissedRecently()) {
       document.getElementById('pwa-install-banner')?.remove();
     }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('install') === '1') {
+      window.setTimeout(() => {
+        triggerNativeInstall();
+      }, 400);
+    }
   });
 
   window.addEventListener('appinstalled', () => {
@@ -394,7 +535,13 @@
   async function init() {
     registerServiceWorker();
     const installed = await detectInstalledApp();
-    if (installed || isStandalone) {
+    if (isStandalone) {
+      hideInstallTriggers();
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    if (installed) {
       hideInstallTriggers();
       return;
     }
@@ -402,9 +549,14 @@
     bindTriggers();
     syncInstallTriggers();
 
-    const params = new URLSearchParams(window.location.search);
     if (params.get('install') === '1' || window.location.pathname.endsWith('/install.php')) {
-      window.setTimeout(() => openModal(), 600);
+      window.setTimeout(() => {
+        if (deferredPrompt) {
+          triggerNativeInstall();
+        } else {
+          openModal();
+        }
+      }, 600);
     }
 
     ['click', 'scroll', 'keydown', 'touchstart'].forEach((evt) => {
@@ -418,6 +570,7 @@
     open: openModal,
     close: closeModal,
     install: triggerNativeInstall,
+    applyUpdate: applyWaitingUpdate,
     shouldPromptInstall: () => !isStandalone && !isMarkedInstalled() && canInstall(),
     canInstall,
     isInAppBrowser: () => isInAppBrowser,

@@ -6,32 +6,75 @@
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "browser"],
+  "handle_links": "preferred",
   "orientation": "portrait-primary",
   "dir": "rtl",
   "lang": "ar",
   "theme_color": "#D81921",
-  "background_color": "#f6f6f8",
-  "categories": ["shopping", "business"],
-  "prefer_related_applications": false,
+  "background_color": "#f6f6f9",
+  "categories": [
+    "shopping",
+    "business"
+  ],
+  "launch_handler": {
+    "client_mode": [
+      "navigate-existing",
+      "auto"
+    ]
+  },
   "icons": [
     {
-      "src": "/icons/brand-icon.php?size=192",
+      "src": "/icons/brand-icon.php?size=192&webapk=6",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/brand-icon.php?size=512",
+      "src": "/icons/brand-icon.php?size=512&webapk=6",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/brand-icon.php?size=512",
+      "src": "/icons/brand-icon.php?size=512&maskable=1&webapk=6",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "المتجر",
+      "url": "/store.php?source=pwa",
+      "icons": [
+        {
+          "src": "/icons/brand-icon.php?size=192&webapk=6",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "السلة",
+      "url": "/store-cart.php?source=pwa",
+      "icons": [
+        {
+          "src": "/icons/brand-icon.php?size=192&webapk=6",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "طلباتي",
+      "url": "/my-orders.php?source=pwa",
+      "icons": [
+        {
+          "src": "/icons/brand-icon.php?size=192&webapk=6",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
   ]
 }

@@ -29,11 +29,11 @@ $checks[] = [
 ];
 
 $checks[] = [
-    'label' => 'ملف manifest.webmanifest',
-    'ok' => is_file(dirname(__DIR__) . '/public/manifest.webmanifest'),
-    'detail' => is_file(dirname(__DIR__) . '/public/manifest.webmanifest')
-        ? '/manifest.webmanifest موجود (ملف ثابت — الأفضل للتثبيت)'
-        : 'manifest.webmanifest مفقود — انسخه من آخر حزمة نشر',
+    'label' => 'ملف manifest.php (الهوية الموحّدة)',
+    'ok' => is_file(dirname(__DIR__) . '/public/manifest.php'),
+    'detail' => is_file(dirname(__DIR__) . '/public/manifest.php')
+        ? '/manifest.php موجود — standalone على نفس النطاق (www وapex)'
+        : 'manifest.php مفقود — انسخه من آخر حزمة نشر',
 ];
 
 $pwaHttpProbe = static function (string $path) use ($scheme, $host): array {
@@ -65,7 +65,7 @@ $pwaHttpProbe = static function (string $path) use ($scheme, $host): array {
 $iconHttpChecks = [
     $pwaHttpProbe('/icons/icon-192.png'),
     $pwaHttpProbe('/icons/icon-512.png'),
-    $pwaHttpProbe('/manifest.webmanifest'),
+    $pwaHttpProbe('/manifest.php'),
 ];
 $iconsHttpOk = count(array_filter($iconHttpChecks, static fn (array $row): bool => (bool) $row['ok'])) >= 3;
 
@@ -73,8 +73,8 @@ $checks[] = [
     'label' => 'تحميل الأيقونات عبر HTTPS (Chrome يحتاج 200)',
     'ok' => $iconsHttpOk,
     'detail' => $iconsHttpOk
-        ? 'icon-192.png و icon-512.png و manifest يُحمَّلون بنجاح.'
-        : 'فشل تحميل أيقونة أو manifest — هذا يمنع التثبيت. انسخ ملفات icons/*.png من الحزمة.',
+        ? 'icon-192.png و icon-512.png و manifest.php يُحمَّلون بنجاح.'
+        : 'فشل تحميل أيقونة أو manifest.php — هذا يمنع التثبيت. انسخ ملفات icons/*.png من الحزمة.',
 ];
 
 $iconChecks = [];
@@ -216,7 +216,7 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
         document.getElementById('sw-status').textContent = '✗ المتصفح لا يدعم Service Worker';
       }
 
-      fetch('/manifest.webmanifest', { cache: 'no-store' })
+      fetch('/manifest.php', { cache: 'no-store' })
         .then((r) => r.json())
         .then(async (m) => {
           const n = (m.icons || []).length;
@@ -232,11 +232,12 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
             }
           }
           document.getElementById('manifest-status').textContent =
-            (iconOk ? '✓' : '⚠') + ' manifest — ' + n + ' أيقونة، start_url=' + (m.start_url || '')
-            + (iconOk ? '' : ' (تحقق من تحميل icon-192.png و icon-512.png)');
+            (iconOk ? '✓' : '⚠') + ' manifest.php — ' + n + ' أيقونة، display=' + (m.display || '')
+            + ', start_url=' + (m.start_url || '')
+            + (iconOk ? '' : ' (تحقق من تحميل أيقونات brand-icon)');
         })
         .catch((err) => {
-          document.getElementById('manifest-status').textContent = '✗ فشل تحميل manifest: ' + err;
+          document.getElementById('manifest-status').textContent = '✗ فشل تحميل manifest.php: ' + err;
         });
 
       window.addEventListener('beforeinstallprompt', () => {
@@ -251,7 +252,7 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
       }, 3000);
 
       if (window.isSecureContext) {
-        navigator.serviceWorker.register('/sw.js?v=7', { scope: '/', updateViaCache: 'none' }).catch(() => {});
+        navigator.serviceWorker.register('/sw.js?v=17', { scope: '/', updateViaCache: 'none' }).catch(() => {});
       }
     })();
   </script>

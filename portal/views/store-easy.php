@@ -17,16 +17,35 @@ $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
 $shareContext = is_array($shareContext ?? null) ? $shareContext : null;
 $shareToken = trim((string) ($shareToken ?? ($shareContext['token'] ?? '')));
 $shareLinkId = trim((string) ($shareLinkId ?? ($shareContext['share_link_id'] ?? '')));
+$requestPath = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: '');
 $shareOnSharePage = $shareContext !== null && $shareToken !== ''
-    && str_starts_with((string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: ''), '/share');
-$seUrl = static function (array $params = []) use ($shareOnSharePage, $shareToken): string {
+    && (
+        str_starts_with($requestPath, '/share')
+        || str_starts_with($requestPath, '/s/')
+        || $requestPath === '/s.php'
+    );
+$sharePublicPath = trim((string) ($shareContext['public_path'] ?? ''));
+$seUrl = static function (array $params = []) use ($shareOnSharePage, $shareToken, $sharePublicPath): string {
     if ($shareOnSharePage) {
-        return share_url(array_merge(['token' => $shareToken], $params));
+        unset($params['token'], $params['t'], $params['c']);
+        if ($sharePublicPath !== '') {
+            $filtered = share_url_filter_params($params);
+            if ($filtered === []) {
+                return $sharePublicPath;
+            }
+            $separator = str_contains($sharePublicPath, '?') ? '&' : '?';
+
+            return $sharePublicPath . $separator . http_build_query($filtered);
+        }
+
+        return share_compact_url($shareToken, $params);
     }
 
     return store_lab_url($params);
 };
-$seAction = $shareOnSharePage ? '/share.php' : '/store.php';
+$seAction = $shareOnSharePage
+    ? ($sharePublicPath !== '' ? (strtok($sharePublicPath, '?') ?: '/share.php') : '/share.php')
+    : '/store.php';
 
 $cartNoticeMessage = '';
 $cartNoticeOk = true;
@@ -281,7 +300,9 @@ $buildStoreUrl = static function (int $targetPage) use ($stateParams, $seUrl): s
     return $seUrl($params);
 };
 
-$productReturnUrl = catalog_current_return_url();
+$productReturnUrl = $shareContext !== null
+    ? catalog_share_return_url($shareContext)
+    : catalog_current_return_url();
 $productOfferSlug = null;
 if ($sectionContext !== null && !empty($sectionContext['is_offer_section'])) {
     $productOfferSlug = trim((string) ($sectionContext['slug'] ?? '')) ?: null;
@@ -295,12 +316,22 @@ try {
 $storeShowPrice = (bool) ($displayOptions['show_price'] ?? false);
 $baseDisplayOptions = $displayOptions;
 ?>
-<div class="se store-lab" data-product-share-scope>
+<?php
+  $filterShareCompany = trim((string) ($siteName ?? $companyName ?? ''));
+  if ($filterShareCompany === '' && is_array($companyContext ?? null)) {
+      $filterShareCompany = trim((string) ($companyContext['company_name'] ?? ''));
+  }
+  if ($filterShareCompany === '') {
+      $filterShareCompany = 'جاويش للتجارة';
+  }
+?>
+<div class="se store-lab" data-product-share-scope data-product-share-company="<?= h($filterShareCompany) ?>">
   <?php $storeSearchAction = $seAction; require __DIR__ . '/partials/store-next-search.php'; ?>
 
   <div
     class="se-live"
     data-se-live
+    data-filter-working-href="<?= h(catalog_working_filter_url()) ?>"
     data-se-total="<?= $totalCount ?>"
     data-se-shown="<?= (int) ($catalog['rangeEnd'] ?? count($products)) ?>"
     data-se-next="<?= $page < $totalPages ? h($buildStoreUrl($page + 1)) : '' ?>"
@@ -469,16 +500,32 @@ $baseDisplayOptions = $displayOptions;
         <?php endif; ?>
       </div>
     <?php endif; ?>
-    <?php if ($products !== []): ?>
-      <div class="se-density" role="group" aria-label="طريقة العرض" data-se-density hidden>
-        <button type="button" data-se-density-set="1" aria-label="صورة كبيرة">
-          <span class="material-symbols-outlined" aria-hidden="true">view_agenda</span>
-        </button>
-        <button type="button" data-se-density-set="2" aria-label="صورتان">
-          <span class="material-symbols-outlined" aria-hidden="true">grid_view</span>
+    <div class="se-results-actions">
+      <div class="filter-view-share">
+        <button
+          type="button"
+          class="se-share-view"
+          data-share-filter-view
+          data-product-share-company="<?= h($filterShareCompany) ?>"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-label="مشاركة نتائج الصفحة"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">share</span>
+          <span>مشاركة</span>
         </button>
       </div>
-    <?php endif; ?>
+      <?php if ($products !== []): ?>
+        <div class="se-density" role="group" aria-label="طريقة العرض" data-se-density hidden>
+          <button type="button" data-se-density-set="1" aria-label="صورة كبيرة">
+            <span class="material-symbols-outlined" aria-hidden="true">view_agenda</span>
+          </button>
+          <button type="button" data-se-density-set="2" aria-label="صورتان">
+            <span class="material-symbols-outlined" aria-hidden="true">grid_view</span>
+          </button>
+        </div>
+      <?php endif; ?>
+    </div>
   </div>
 
   <?php if ($products === [] && !empty($catalog['apiError'])): ?>
@@ -569,4 +616,5 @@ $baseDisplayOptions = $displayOptions;
 <?php endif; ?>
 <?php $GLOBALS['storeProductPreviewScriptLoaded'] = true; ?>
 <script src="<?= h(portal_asset_url('/assets/store-product-preview.js')) ?>" defer></script>
+<?= portal_defer_script('/assets/store-filter-view.js') ?>
 <?= portal_defer_script('/assets/store-easy.js') ?>

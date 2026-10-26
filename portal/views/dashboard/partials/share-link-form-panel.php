@@ -17,7 +17,7 @@ declare(strict_types=1);
  *  priceRanges: array<string, mixed>
  * } $materialFilterOptions */
 /** @var string|null $materialFilterOptionsError */
-/** @var callable(string): string $shareUrlFor */
+/** @var callable(array): string $shareUrlFor */
 
 require __DIR__ . '/../../partials/store-filter-group.php';
 
@@ -217,6 +217,10 @@ $hasImageValue = $forcedHasImage === null ? '' : ($forcedHasImage ? '1' : '0');
               <input name="keyword" value="<?= h((string) ($editLink['keyword'] ?? '')) ?>" placeholder="new-arrivals">
             </label>
             <label class="store-inline-field mb-0">
+              <span>رمز مختصر (اختياري)</span>
+              <input name="short_code" value="<?= h((string) ($editLink['short_code'] ?? '')) ?>" placeholder="summer24" dir="ltr" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_-]{2,31}" title="3–32 حرفاً: a-z 0-9 _ -">
+            </label>
+            <label class="store-inline-field mb-0">
               <span>ينتهي بتاريخ</span>
               <input name="expires_at" type="datetime-local" value="<?= h(isset($editLink['expires_at']) && $editLink['expires_at'] ? str_replace(' ', 'T', substr((string) $editLink['expires_at'], 0, 16)) : '') ?>">
             </label>
@@ -227,12 +231,17 @@ $hasImageValue = $forcedHasImage === null ? '' : ($forcedHasImage ? '1' : '0');
               </label>
             </div>
           </div>
+          <p class="mt-2 text-[11px] text-text-muted">اترك الرمز المختصر فارغاً ليُولَّد تلقائياً. الرابط العام يصبح مثل <span class="font-mono" dir="ltr">/s/summer24</span>.</p>
           <?php if ($editId !== '' && !empty($editLink['public_token'])): ?>
+            <?php
+              $editSharePath = \Portal\Services\ShareLinkService::publicPathForLink($editLink);
+              $editShareUrl = $shareUrlFor($editLink);
+            ?>
             <div class="mt-3 pt-3 border-t border-border-subtle flex flex-wrap items-center gap-2 text-xs">
               <span class="text-text-muted">رابط المشاركة:</span>
-              <code class="font-mono text-slate-700 bg-surface-low px-2 py-1 rounded"><?= h($shareUrlFor((string) $editLink['public_token'])) ?></code>
-              <button type="button" data-copy-url="<?= h($shareUrlFor((string) $editLink['public_token'])) ?>" class="h-7 px-2 rounded border border-border-subtle bg-white hover:bg-slate-50 font-bold text-slate-700">نسخ</button>
-              <a href="/share.php?token=<?= urlencode((string) $editLink['public_token']) ?>" target="_blank" class="text-primary font-bold hover:underline">فتح</a>
+              <code class="font-mono text-slate-700 bg-surface-low px-2 py-1 rounded" dir="ltr"><?= h($editShareUrl) ?></code>
+              <button type="button" data-copy-url="<?= h($editShareUrl) ?>" class="h-7 px-2 rounded border border-border-subtle bg-white hover:bg-slate-50 font-bold text-slate-700">نسخ</button>
+              <a href="<?= h($editSharePath) ?>" target="_blank" class="text-primary font-bold hover:underline">فتح</a>
             </div>
           <?php endif; ?>
         </div>

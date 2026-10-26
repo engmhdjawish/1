@@ -5,10 +5,14 @@
 #   certbot --nginx -d {{WEB_DOMAIN}} -d {{WEB_DOMAIN_ALIAS}}
 # Certbot will add listen 443 ssl http2; keep the static cache block below.
 #
-# Prefer ONE public host in PORTAL_APP_URL (with or without www). Portal PHP also
-# 301-redirects the other host so login cookies and the installed PWA stay shared.
+# Prefer ONE public host in PORTAL_APP_URL for links/canonical. Serve BOTH www and
+# apex from nginx (same root). Do not 301 between them — that breaks installed PWAs.
 #
-# Optional: redirect the alternate host (www ↔ apex) at nginx:
+# Do NOT hard-redirect the alternate host (www ↔ apex) at nginx if customers
+# already installed the PWA on either host — a 301 out of the install origin
+# turns the home-screen app into a Chrome Custom Tab (× + title bar) and
+# cannot be fixed without reinstall. Serve both hosts; PHP keeps HTTPS only,
+# and the browser soft-redirects non-PWA tabs to PORTAL_APP_URL.
 # server {
 #     listen 80;
 #     listen [::]:80;
@@ -18,7 +22,8 @@
 #     server_name {{WEB_DOMAIN_ALIAS}};
 #     ssl_certificate /etc/letsencrypt/live/{{WEB_DOMAIN}}/fullchain.pem;
 #     ssl_certificate_key /etc/letsencrypt/live/{{WEB_DOMAIN}}/privkey.pem;
-#     return 301 https://{{WEB_DOMAIN}}$request_uri;
+#     # Prefer mirroring the primary site root instead of return 301 …
+#     # return 301 https://{{WEB_DOMAIN}}$request_uri;
 # }
 
 server {
@@ -47,6 +52,15 @@ server {
         application/json
         application/xml
         image/svg+xml;
+
+    # Short share links: /s/{code} → s.php (keep extra query args for filters).
+    location ~ ^/s/(?<share_code>[A-Za-z0-9_-]+)/?$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root/s.php;
+        fastcgi_param QUERY_STRING c=$share_code&$args;
+        include fastcgi_params;
+    }
 
     location / {
         try_files $uri $uri/ /index.php?$query_string;
@@ -111,6 +125,14 @@ server {
 #         application/json
 #         application/xml
 #         image/svg+xml;
+#
+#     location ~ ^/s/(?<share_code>[A-Za-z0-9_-]+)/?$ {
+#         include snippets/fastcgi-php.conf;
+#         fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+#         fastcgi_param SCRIPT_FILENAME $document_root/s.php;
+#         fastcgi_param QUERY_STRING c=$share_code&$args;
+#         include fastcgi_params;
+#     }
 #
 #     location / {
 #         try_files $uri $uri/ /index.php?$query_string;

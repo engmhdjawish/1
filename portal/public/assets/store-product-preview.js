@@ -695,7 +695,11 @@
 
   const currentCatalogReturnUrl = () => {
     const path = window.location.pathname;
-    if (path !== '/store.php' && path !== '/store' && path !== '/share.php' && path !== '/share') {
+    if (
+      path !== '/store.php' && path !== '/store'
+      && path !== '/share.php' && path !== '/share'
+      && path !== '/s.php' && !path.startsWith('/s/')
+    ) {
       return null;
     }
     const params = new URLSearchParams(window.location.search);

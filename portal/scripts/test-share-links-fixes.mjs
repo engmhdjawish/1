@@ -281,10 +281,29 @@ test('legacy share cart page redirects to unified drawer', () => {
   const cartJs = fs.readFileSync(path.resolve(__dirname, '../public/assets/store-cart.js'), 'utf8');
   const helpers = fs.readFileSync(path.resolve(__dirname, '../views/helpers.php'), 'utf8');
   assert.match(helpers, /function share_page_url/);
-  assert.match(orderConfirmation, /open_cart=1/);
+  assert.match(helpers, /function share_compact_url/);
+  assert.match(orderConfirmation, /share_page_url\(\$token,\s*\['open_cart' => '1'\]\)/);
   assert.doesNotMatch(orderConfirmation, /\/cart\.php\?token=/);
   assert.match(cartJs, /maybeOpenCartFromQuery/);
   assert.match(cartJs, /params\.get\('open_cart'\)/);
+});
+
+test('short share links: /s/{code}, helpers, nginx, dashboard', () => {
+  const sPhp = fs.readFileSync(path.resolve(__dirname, '../public/s.php'), 'utf8');
+  const sharePhp = fs.readFileSync(path.resolve(__dirname, '../public/share.php'), 'utf8');
+  const helpers = fs.readFileSync(path.resolve(__dirname, '../views/helpers.php'), 'utf8');
+  const service = fs.readFileSync(path.resolve(__dirname, '../src/Services/ShareLinkService.php'), 'utf8');
+  const nginx = fs.readFileSync(path.resolve(__dirname, '../../deploy/templates/portal/nginx-site.conf.template'), 'utf8');
+  const form = fs.readFileSync(path.resolve(__dirname, '../views/dashboard/partials/share-link-form-panel.php'), 'utf8');
+  assert.match(sPhp, /require __DIR__ \. '\/share\.php'/);
+  assert.match(sharePhp, /resolvePublicAccessKey/);
+  assert.match(sharePhp, /\$_GET\['c'\]/);
+  assert.match(helpers, /function catalog_share_return_url/);
+  assert.match(helpers, /\/s\//);
+  assert.match(service, /function publicPathForLink/);
+  assert.match(service, /short_code/);
+  assert.match(nginx, /share_code/);
+  assert.match(form, /name="short_code"/);
 });
 
 test('share cart drawer prefetches full payload and scopes cross-tab sync', () => {

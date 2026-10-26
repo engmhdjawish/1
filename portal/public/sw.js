@@ -4,7 +4,7 @@
  * Versioned static assets (?v=mtime): cache-first. Unversioned: stale-while-revalidate.
  * Prices and stock are never served from cache.
  */
-const CACHE_VERSION = 'jawish-v16';
+const CACHE_VERSION = 'jawish-v24';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 const FONT_CACHE = 'jawish-fonts-v1';
 const OFFLINE_URL = '/offline.html';
@@ -33,13 +33,25 @@ const NO_CACHE_PREFIXES = [
 const STATIC_EXT = /\.(?:css|js|mjs|png|jpe?g|webp|gif|svg|ico|woff2?|ttf)$/i;
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) =>
-      Promise.all(
-        PRECACHE_URLS.map((url) => cache.add(new Request(url, { cache: 'reload' })).catch(() => undefined))
-      )
-    ).then(() => self.skipWaiting())
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(STATIC_CACHE);
+    await Promise.all(
+      PRECACHE_URLS.map((url) => cache.add(new Request(url, { cache: 'reload' })).catch(() => undefined))
+    );
+    // First install: activate immediately. Later updates wait for the in-app
+    // "تحديث" prompt (SKIP_WAITING) so the user chooses when to reload.
+    if (!self.registration.active) {
+      await self.skipWaiting();
+    }
+  })());
+});
+
+self.addEventListener('message', (event) => {
+  const data = event && event.data;
+  if (!data || data.type !== 'SKIP_WAITING') {
+    return;
+  }
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -139,6 +151,14 @@ self.addEventListener('pushsubscriptionchange', (event) => {
   })());
 });
 
+// www.example.com <-> example.com: same site, different PWA scope.
+function isSiblingHost(a, b) {
+  a = String(a || '').toLowerCase();
+  b = String(b || '').toLowerCase();
+  if (!a || !b || a === b) return false;
+  return a === 'www.' + b || b === 'www.' + a;
+}
+
 function resolveNotificationTargetUrl(rawUrl) {
   const value = String(rawUrl || '').trim();
   if (!value || value === 'null' || value === 'undefined') {
@@ -148,6 +168,9 @@ function resolveNotificationTargetUrl(rawUrl) {
     const url = new URL(value, self.location.origin);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') {
       return new URL('/', self.location.origin).href;
+    }
+    if (isSiblingHost(url.hostname, self.location.hostname)) {
+      return self.location.origin + url.pathname + url.search + url.hash;
     }
     return url.href;
   } catch (_) {

@@ -7,15 +7,28 @@ namespace Portal\Support;
 use Portal\Config;
 
 /**
- * Forces HTTPS and a single public host (www vs apex) from PORTAL_APP_URL.
- * Without this, login cookies, localStorage, and the installed PWA diverge.
+ * Forces HTTPS. Host unification (www vs apex) is soft on the client for
+ * normal browser tabs only — hard 301 between hosts breaks already-installed
+ * PWAs into a Chrome Custom Tab (× + title bar) and cannot be fixed by asking
+ * every customer to delete the app.
+ *
+ * Set PORTAL_FORCE_CANONICAL_HOST=1 only if you knowingly accept that risk;
+ * standalone / PWA requests are still never bounced between www and apex.
  */
 final class HttpsGate
 {
+    public const PWA_HOST_COOKIE = 'portal_pwa_host';
+
     public static function redirectIfNeeded(): void
     {
         if (PHP_SAPI === 'cli' || PHP_SAPI === 'phpdbg') {
             return;
+        }
+
+        if (!headers_sent()) {
+            header('Accept-CH: Sec-CH-UA-Display-Mode', false);
+            header('Critical-CH: Sec-CH-UA-Display-Mode', false);
+            header('Vary: Sec-CH-UA-Display-Mode', false);
         }
 
         $target = self::redirectTarget();
@@ -27,12 +40,14 @@ final class HttpsGate
         exit;
     }
 
-    /** Absolute URL to redirect to, or null when the request is already canonical. */
+    /** Absolute URL to redirect to, or null when the request is already fine. */
     public static function redirectTarget(
         ?string $requestHost = null,
         ?string $requestUri = null,
         ?bool $isHttps = null,
-        ?string $appUrl = null
+        ?string $appUrl = null,
+        ?bool $standalonePwa = null,
+        ?bool $forceCanonicalHost = null
     ): ?string {
         $requestHost = strtolower(self::stripPort(trim((string) ($requestHost ?? ($_SERVER['HTTP_HOST'] ?? '')))));
         $requestUri = (string) ($requestUri ?? ($_SERVER['REQUEST_URI'] ?? '/'));
@@ -49,10 +64,15 @@ final class HttpsGate
         $configuredHost = self::hostFromAppUrl($appUrl);
         $appIsHttps = str_starts_with(strtolower($appUrl), 'https://');
         $forceHttps = self::shouldForceHttps($appUrl);
+        $forceHost = $forceCanonicalHost ?? self::shouldForceCanonicalHost();
+        $isStandalone = $standalonePwa ?? self::isStandalonePwaRequest($requestHost);
 
-        $hostNeedsFix = $configuredHost !== ''
+        $hostNeedsFix = $forceHost
+            && $configuredHost !== ''
             && !self::isLocalHost($configuredHost)
-            && strcasecmp($requestHost, $configuredHost) !== 0;
+            && strcasecmp($requestHost, $configuredHost) !== 0
+            // Never bounce an installed home-screen app off its install host.
+            && !$isStandalone;
 
         $httpsNeedsFix = ($forceHttps || $appIsHttps) && !$isHttps;
 
@@ -66,9 +86,53 @@ final class HttpsGate
         return $scheme . '://' . $host . $requestUri;
     }
 
+    /** True when this request is the installed home-screen app (or marked as such). */
+    public static function isStandalonePwaRequest(?string $requestHost = null): bool
+    {
+        $hint = strtolower(trim((string) ($_SERVER['HTTP_SEC_CH_UA_DISPLAY_MODE'] ?? '')));
+        if (in_array($hint, ['standalone', 'fullscreen', 'minimal-ui'], true)) {
+            return true;
+        }
+
+        $requestHost = strtolower(self::stripPort(trim((string) ($requestHost ?? ($_SERVER['HTTP_HOST'] ?? '')))));
+        $cookieHost = strtolower(self::stripPort(trim((string) ($_COOKIE[self::PWA_HOST_COOKIE] ?? ''))));
+        if ($cookieHost !== '' && $requestHost !== '' && strcasecmp($cookieHost, $requestHost) === 0) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /** Sibling www/apex host for the configured public origin, or empty. */
+    public static function siblingHost(?string $appUrl = null): string
+    {
+        $host = self::hostFromAppUrl(trim((string) ($appUrl ?? Config::appUrl())));
+        if ($host === '' || self::isLocalHost($host)) {
+            return '';
+        }
+        if (str_starts_with($host, 'www.')) {
+            return substr($host, 4);
+        }
+
+        return 'www.' . $host;
+    }
+
     public static function configuredHost(): string
     {
         return self::hostFromAppUrl(Config::appUrl());
+    }
+
+    /**
+     * Hard www↔apex 301 is off by default so existing PWAs self-heal.
+     * Opt in with PORTAL_FORCE_CANONICAL_HOST=1 (still skips standalone).
+     */
+    public static function shouldForceCanonicalHost(): bool
+    {
+        $flag = strtolower(trim((string) (getenv('PORTAL_FORCE_CANONICAL_HOST')
+            ?: Config::get('PORTAL_FORCE_CANONICAL_HOST', '')
+            ?? '')));
+
+        return in_array($flag, ['1', 'true', 'yes', 'on'], true);
     }
 
     private static function shouldForceHttps(?string $appUrl = null): bool

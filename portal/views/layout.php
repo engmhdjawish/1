@@ -115,16 +115,49 @@ $navLinks = [
     ?>
     <script>
       (function () {
-        var host = window.location.hostname;
-        if (host === 'localhost' || host === '127.0.0.1') return;
-        var wantHost = <?= json_encode($earlyCanonicalHost, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-        var needHttps = window.location.protocol === 'http:';
-        var needHost = wantHost && host.toLowerCase() !== String(wantHost).toLowerCase();
-        if (!needHttps && !needHost) return;
-        var nextHost = needHost ? wantHost : host;
-        window.location.replace(
-          'https://' + nextHost + window.location.pathname + window.location.search + window.location.hash
-        );
+        // HTTPS only — never bounce www↔apex. Soft host redirects break already-
+        // damaged home-screen apps: once Chrome opens a Custom Tab, display-mode
+        // is no longer standalone, so a host bounce keeps the × title bar forever.
+        // Cookies are shared via PORTAL_COOKIE_DOMAIN; SEO uses rel=canonical.
+        if (window.location.protocol === 'http:') {
+          var host = window.location.hostname;
+          if (host === 'localhost' || host === '127.0.0.1') return;
+          window.location.replace(
+            'https://' + host + window.location.pathname + window.location.search + window.location.hash
+          );
+        }
+      })();
+      (function () {
+        // Keep navigation inside the installed app's scope: links to the www↔apex
+        // sibling host would open a Custom Tab (× title bar) in a WebAPK.
+        var here = window.location.hostname.toLowerCase();
+        function sibling(h) {
+          h = String(h || '').toLowerCase();
+          return h !== here && (h === 'www.' + here || here === 'www.' + h);
+        }
+        function fix(el) {
+          if (!el || !el.href) return;
+          try {
+            var u = new URL(el.href, window.location.href);
+            if (sibling(u.hostname)) {
+              el.href = window.location.origin + u.pathname + u.search + u.hash;
+            }
+          } catch (e) {}
+        }
+        document.addEventListener('click', function (ev) {
+          var t = ev.target;
+          fix(t && t.closest ? t.closest('a[href]') : null);
+        }, true);
+        document.addEventListener('submit', function (ev) {
+          var f = ev.target;
+          if (!f || !f.getAttribute || !f.getAttribute('action')) return;
+          try {
+            var u = new URL(f.action, window.location.href);
+            if (sibling(u.hostname)) {
+              f.action = window.location.origin + u.pathname + u.search + u.hash;
+            }
+          } catch (e) {}
+        }, true);
       })();
     </script>
     <?php require __DIR__ . '/partials/head-icons.php'; ?>
@@ -174,7 +207,10 @@ $navLinks = [
       <?= $extraHead ?>
     <?php endif; ?>
 </head>
-<body class="min-h-screen text-text-main bg-surface-bg flex flex-col<?= $staffSiteMode ? ' site-staff-mode' : '' ?><?= !empty($appDock) ? ' has-app-dock' : '' ?><?= !empty($pageOwnsCurrency) ? ' has-page-currency' : '' ?>" data-store-price-currency="<?= h($storePriceCurrency) ?>" data-notif-reader="<?= h($notifReader) ?>" data-price-lock-auth="<?= h($priceLockAuth) ?>"<?= $earlyCanonicalHost !== '' ? ' data-canonical-host="' . h($earlyCanonicalHost) . '"' : '' ?>>
+<?php
+  $earlyCookieDomain = \Portal\Support\CookieOptions::domain();
+?>
+<body class="min-h-screen text-text-main bg-surface-bg flex flex-col<?= $staffSiteMode ? ' site-staff-mode' : '' ?><?= !empty($appDock) ? ' has-app-dock' : '' ?><?= !empty($pageOwnsCurrency) ? ' has-page-currency' : '' ?>" data-store-price-currency="<?= h($storePriceCurrency) ?>" data-notif-reader="<?= h($notifReader) ?>" data-price-lock-auth="<?= h($priceLockAuth) ?>"<?= $earlyCanonicalHost !== '' ? ' data-canonical-host="' . h($earlyCanonicalHost) . '"' : '' ?><?= $earlyCookieDomain !== '' ? ' data-cookie-domain="' . h($earlyCookieDomain) . '"' : '' ?>>
 <script>
 window.portalMaterialImageFrameEmpty=function(img){if(!(img instanceof HTMLImageElement))return;img.onerror=null;img.removeAttribute("src");img.classList.add("is-broken");var frame=img.closest(".material-image-frame"),photo=img.parentElement;if(frame){frame.classList.add("material-image-frame--empty","material-image-frame--broken")}if(photo&&!photo.querySelector(".material-image-frame__empty")){var empty=document.createElement("div");empty.className="material-image-frame__empty";empty.setAttribute("role","img");empty.setAttribute("aria-label","بلا صورة");empty.innerHTML='<span class="material-symbols-outlined material-image-frame__empty-icon" aria-hidden="true">hide_image</span><span class="material-image-frame__empty-label">بلا صورة</span>';photo.appendChild(empty)}};
 </script>

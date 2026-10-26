@@ -158,9 +158,13 @@ function portal_preload_image(string $url, bool $highPriority = true): string
         return '';
     }
 
-    $resolved = str_starts_with($url, 'http://') || str_starts_with($url, 'https://')
-        ? $url
-        : portal_absolute_url($url);
+    // Keep root-relative paths on the request host so apex PWAs do not preload
+    // www assets (cross-origin noise for installed apps).
+    if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://') || str_starts_with($url, '/')) {
+        $resolved = $url;
+    } else {
+        $resolved = portal_absolute_url($url);
+    }
 
     $attrs = 'rel="preload" as="image" href="' . h($resolved) . '"';
     if ($highPriority) {
@@ -229,7 +233,11 @@ function portal_defer_script(string $webPath): string
 
 function portal_is_catalog_page(string $path): bool
 {
-    return in_array($path, ['/index.php', '/store.php', '/product.php', '/share.php'], true);
+    if (in_array($path, ['/index.php', '/store.php', '/product.php', '/share.php', '/s.php'], true)) {
+        return true;
+    }
+
+    return str_starts_with($path, '/s/');
 }
 
 /**
@@ -308,6 +316,73 @@ function portal_request_scheme(): string
 function portal_is_https_request(): bool
 {
     return portal_request_scheme() === 'https';
+}
+
+/** Host of the current HTTP request (no port), lowercased. */
+function portal_request_host(): string
+{
+    $host = strtolower(trim((string) ($_SERVER['HTTP_HOST'] ?? '')));
+    if ($host === '') {
+        return '';
+    }
+
+    return (string) preg_replace('/:\d+$/', '', $host);
+}
+
+/**
+ * Origin of the current request (scheme://host).
+ * Prefer this over PORTAL_APP_URL for PWA start_url/scope so an apex-installed
+ * WebAPK refreshes back onto its own host instead of www.
+ */
+function portal_request_origin(): string
+{
+    $host = portal_request_host();
+    if ($host === '' || in_array($host, ['localhost', '127.0.0.1', '::1'], true) || filter_var($host, FILTER_VALIDATE_IP)) {
+        $appUrl = rtrim((string) \Portal\Config::appUrl(), '/');
+
+        return $appUrl !== '' ? $appUrl : '';
+    }
+
+    return portal_request_scheme() . '://' . $host;
+}
+
+/**
+ * Single canonical origin for NEW PWA installs.
+ * Chrome cannot merge www↔apex WebAPKs or unify their launcher icons — prefer www
+ * so install prompts and icons cannot diverge again.
+ */
+function portal_pwa_install_origin(): string
+{
+    $appUrl = rtrim((string) \Portal\Config::appUrl(), '/');
+    $isLocalApp = $appUrl === '' || (bool) preg_match('#^https?://(127\.0\.0\.1|localhost)(:\d+)?$#i', $appUrl);
+    if ($isLocalApp) {
+        return portal_request_origin();
+    }
+
+    $host = strtolower((string) (parse_url($appUrl, PHP_URL_HOST) ?: ''));
+    if ($host === '' || in_array($host, ['localhost', '127.0.0.1', '::1'], true) || filter_var($host, FILTER_VALIDATE_IP)) {
+        return portal_request_origin();
+    }
+
+    $scheme = str_starts_with(strtolower($appUrl), 'http://') ? 'http' : 'https';
+    // Apex + www are separate origins; force www as the only installable identity.
+    if (!str_starts_with($host, 'www.')) {
+        $host = 'www.' . $host;
+    }
+
+    return $scheme . '://' . $host;
+}
+
+/** True when this request is on the canonical PWA install host (www). */
+function portal_pwa_is_install_host(): bool
+{
+    $install = portal_pwa_install_origin();
+    $request = portal_request_origin();
+    if ($install === '' || $request === '') {
+        return true;
+    }
+
+    return strcasecmp($install, $request) === 0;
 }
 
 function portal_absolute_url(string $pathOrUrl = ''): string
@@ -1136,38 +1211,200 @@ function catalog_current_return_url(): string
         unset($query['preview']);
     }
 
+    // Prefer expanded $_GET when a short ?v= view was inflated server-side.
+    if (function_exists('catalog_expanded_query_params')) {
+        $expanded = catalog_expanded_query_params();
+        if ($expanded !== []) {
+            $query = array_merge($query, $expanded);
+            unset($query['preview']);
+        }
+    }
+
+    // Keep product return links short when a view code is present.
+    if (isset($query['v']) && trim((string) $query['v']) !== '') {
+        $slim = ['v' => (string) $query['v']];
+        if (isset($query['page']) && trim((string) $query['page']) !== '' && (string) $query['page'] !== '1') {
+            $slim['page'] = (string) $query['page'];
+        }
+        foreach (['token', 't', 'c'] as $shareKey) {
+            if (!empty($query[$shareKey])) {
+                $slim[$shareKey] = (string) $query[$shareKey];
+            }
+        }
+
+        return $path . '?' . http_build_query($slim);
+    }
+
     return $query === [] ? $path : $path . '?' . http_build_query($query);
+}
+
+/**
+ * Full filter query after ?v= expansion — used as the SPA "working" href.
+ *
+ * @return array<string, mixed>
+ */
+function catalog_expanded_query_params(): array
+{
+    $params = is_array($_GET ?? null) ? $_GET : [];
+    unset($params['preview']);
+
+    return share_url_filter_params($params);
+}
+
+/** Absolute-path URL with every expanded filter (not the short ?v= form). */
+function catalog_working_filter_url(): string
+{
+    $uri = (string) ($_SERVER['REQUEST_URI'] ?? '/store.php');
+    $path = (string) (parse_url($uri, PHP_URL_PATH) ?: '/store.php');
+    $params = catalog_expanded_query_params();
+    unset($params['v']);
+    if ($params === []) {
+        return $path;
+    }
+
+    return $path . '?' . http_build_query($params);
 }
 
 function share_token_from_return_url(?string $returnUrl): string
 {
     $returnUrl = trim((string) $returnUrl);
-    if ($returnUrl === '' || !str_contains($returnUrl, 'share.php')) {
+    if ($returnUrl === '') {
         return '';
     }
 
     $parts = parse_url($returnUrl);
-    if (empty($parts['query'])) {
+    $path = (string) ($parts['path'] ?? '');
+    if (preg_match('#^/s/([A-Za-z0-9_-]+)/?$#', $path, $m) === 1) {
+        return $m[1];
+    }
+
+    $isSharePath = str_contains($path, 'share.php')
+        || $path === '/s.php'
+        || str_ends_with($path, '/s.php');
+    if (!$isSharePath && !str_contains($returnUrl, 'share.php') && !str_contains($returnUrl, '/s/')) {
         return '';
     }
 
     $query = [];
-    parse_str((string) $parts['query'], $query);
+    if (!empty($parts['query'])) {
+        parse_str((string) $parts['query'], $query);
+    }
 
-    return trim((string) ($query['token'] ?? ''));
+    foreach (['token', 't', 'c', 'code'] as $key) {
+        $value = trim((string) ($query[$key] ?? ''));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    return '';
+}
+
+/**
+ * Compact public share URL: /s/{short_code} when available, else /share.php?t=…
+ *
+ * @param array<string, mixed> $extraParams
+ */
+function share_compact_url(string $accessKey, array $extraParams = []): string
+{
+    $accessKey = trim($accessKey);
+    $filtered = share_url_filter_params($extraParams);
+    unset($filtered['token'], $filtered['t'], $filtered['c'], $filtered['code']);
+
+    $path = '';
+    if ($accessKey !== '') {
+        try {
+            $link = \Portal\Services\ShareLinkService::resolvePublicAccessKey($accessKey);
+            if (is_array($link)) {
+                $path = \Portal\Services\ShareLinkService::publicPathForLink($link);
+            }
+        } catch (\Throwable) {
+            $path = '';
+        }
+    }
+
+    if ($path === '') {
+        if ($accessKey === '') {
+            return '/share.php';
+        }
+        $short = \Portal\Services\ShareLinkService::normalizeShortCode($accessKey);
+        if ($short !== null && strlen($accessKey) < 24) {
+            $path = '/s/' . rawurlencode($short);
+        } else {
+            $filtered = array_merge(['t' => $accessKey], $filtered);
+            $path = '/share.php';
+        }
+    }
+
+    if ($filtered === []) {
+        return $path;
+    }
+
+    $separator = str_contains($path, '?') ? '&' : '?';
+
+    return $path . $separator . http_build_query($filtered);
+}
+
+/**
+ * Slim product return= target for share browsing (path only — no nested filters).
+ *
+ * @param array<string, mixed> $shareContext
+ */
+function catalog_share_return_url(array $shareContext): string
+{
+    $publicPath = trim((string) ($shareContext['public_path'] ?? ''));
+    if ($publicPath !== '' && str_starts_with($publicPath, '/')) {
+        return strtok($publicPath, '?') ?: $publicPath;
+    }
+
+    $short = trim((string) ($shareContext['short_code'] ?? ''));
+    if ($short !== '') {
+        $normalized = \Portal\Services\ShareLinkService::normalizeShortCode($short);
+        if ($normalized !== null) {
+            return '/s/' . rawurlencode($normalized);
+        }
+    }
+
+    $token = trim((string) ($shareContext['token'] ?? ''));
+    if ($token === '') {
+        return '/share.php';
+    }
+
+    return share_compact_url($token);
+}
+
+/** @param array<string, mixed> $params @return array<string, mixed> */
+function share_url_filter_params(array $params): array
+{
+    $filtered = [];
+    foreach ($params as $key => $value) {
+        if ($value === null) {
+            continue;
+        }
+        if (is_array($value)) {
+            $items = array_values(array_filter(
+                array_map(static fn ($item): string => trim((string) $item), $value),
+                static fn (string $item): bool => $item !== ''
+            ));
+            if ($items === []) {
+                continue;
+            }
+            $filtered[$key] = $items;
+            continue;
+        }
+        $text = trim((string) $value);
+        if ($text !== '') {
+            $filtered[$key] = $text;
+        }
+    }
+
+    return $filtered;
 }
 
 /** @param array<string, scalar|null> $extraParams */
 function share_page_url(string $token, array $extraParams = []): string
 {
-    $token = trim($token);
-    if ($token === '') {
-        return '/share.php';
-    }
-
-    $params = array_merge(['token' => $token], $extraParams);
-
-    return '/share.php?' . http_build_query($params);
+    return share_compact_url($token, $extraParams);
 }
 
 function return_link_label(string $returnUrl): string
@@ -1175,7 +1412,7 @@ function return_link_label(string $returnUrl): string
     if ($returnUrl === '/' || str_starts_with($returnUrl, '/#') || str_contains($returnUrl, 'index.php')) {
         return 'العودة للرئيسية';
     }
-    if (str_contains($returnUrl, 'share.php')) {
+    if (str_contains($returnUrl, 'share.php') || str_starts_with($returnUrl, '/s/') || str_contains($returnUrl, '/s.php')) {
         return 'العودة لرابط المشاركة';
     }
     if (str_contains($returnUrl, 'store.php') || str_contains($returnUrl, '/store')) {
@@ -1757,23 +1994,10 @@ function store_url(array $params = []): string
 /** @param array<string, mixed> $params */
 function share_url(array $params = []): string
 {
-    $filtered = [];
-    foreach ($params as $key => $value) {
-        if ($value === null) {
-            continue;
-        }
-        if (is_array($value)) {
-            $items = array_values(array_filter(array_map(static fn ($item): string => trim((string) $item), $value), static fn (string $item): bool => $item !== ''));
-            if ($items === []) {
-                continue;
-            }
-            $filtered[$key] = $items;
-            continue;
-        }
-        $text = trim((string) $value);
-        if ($text !== '') {
-            $filtered[$key] = $text;
-        }
+    $filtered = share_url_filter_params($params);
+    $accessKey = trim((string) ($filtered['token'] ?? $filtered['t'] ?? $filtered['c'] ?? ''));
+    if ($accessKey !== '') {
+        return share_compact_url($accessKey, $filtered);
     }
 
     $query = http_build_query($filtered);
@@ -1796,6 +2020,12 @@ function absolute_order_tracking_url(string $token): string
     $path = order_tracking_url($token);
     if ($path === '') {
         return '';
+    }
+    if (class_exists(\Portal\Services\CatalogFilterViewService::class)) {
+        $short = \Portal\Services\CatalogFilterViewService::shortenPath($path);
+        if ($short !== null) {
+            $path = $short;
+        }
     }
 
     return portal_absolute_url($path);
