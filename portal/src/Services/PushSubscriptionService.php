@@ -49,22 +49,8 @@ final class PushSubscriptionService
             $userAgent = substr($userAgent, 0, 500);
         }
 
-        $existingStmt = Database::pdo()->prepare(
-            'SELECT reader_type
-             FROM portal_push_subscriptions
-             WHERE endpoint = :endpoint
-             LIMIT 1'
-        );
-        $existingStmt->execute(['endpoint' => $endpoint]);
-        $existingType = (string) ($existingStmt->fetchColumn() ?: '');
-        $currentType = (string) ($reader['reader_type'] ?? '');
-        if (
-            ($existingType === NotificationService::READER_STAFF || $existingType === NotificationService::READER_CUSTOMER)
-            && $currentType === NotificationService::READER_GUEST
-        ) {
-            return true;
-        }
-
+        // Always re-bind the endpoint to the current session reader (guest/customer/staff).
+        // Blocking guest overwrites left stale staff/customer rows after logout/session end.
         $stmt = Database::pdo()->prepare(
             'INSERT INTO portal_push_subscriptions (
                 reader_type, reader_id, endpoint, p256dh, auth, user_agent, updated_at
@@ -94,24 +80,36 @@ final class PushSubscriptionService
 
     public static function removeForCurrentReader(string $endpoint): void
     {
+        // Unsubscribe is device-scoped: drop the endpoint even if the session
+        // already flipped to guest (logout) or the previous reader row differs.
+        self::deleteByEndpoint($endpoint);
+    }
+
+    /** Remove every stored push endpoint for the current authenticated reader. */
+    public static function removeAllForCurrentReader(): int
+    {
         self::ensureTable();
-        $endpoint = trim($endpoint);
-        if ($endpoint === '') {
-            return;
+        $reader = NotificationService::currentReader();
+        $type = (string) ($reader['reader_type'] ?? '');
+        $id = (string) ($reader['reader_id'] ?? '');
+        if (
+            $id === ''
+            || ($type !== NotificationService::READER_STAFF && $type !== NotificationService::READER_CUSTOMER)
+        ) {
+            return 0;
         }
 
-        $reader = NotificationService::currentReader();
         $stmt = Database::pdo()->prepare(
             'DELETE FROM portal_push_subscriptions
-             WHERE endpoint = :endpoint
-               AND reader_type = :reader_type
+             WHERE reader_type = :reader_type
                AND reader_id = :reader_id'
         );
         $stmt->execute([
-            'endpoint' => $endpoint,
-            'reader_type' => $reader['reader_type'],
-            'reader_id' => $reader['reader_id'],
+            'reader_type' => $type,
+            'reader_id' => $id,
         ]);
+
+        return $stmt->rowCount();
     }
 
     /**

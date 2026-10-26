@@ -51,5 +51,15 @@ $check('dashboard', VisitorLogService::describePath('/dashboard/visitor-analytic
 $guidOnly = VisitorLogService::describePath('/store.php?storeGuids=550e8400-e29b-41d4-a716-446655440000');
 $check('hidden guid query', $guidOnly['label'], 'المتجر');
 
+$share = VisitorLogService::describePath(
+    '/share.php?t=abc',
+    'عرض الجملة الخاص — جاويش للتجارة'
+);
+$check('share link uses page name', $share['title'], 'رابط مشاركة');
+$check('share link keeps share title', $share['detail'], 'عرض الجملة الخاص');
+$check('share link label', $share['label'], 'رابط مشاركة — عرض الجملة الخاص');
+
+$check('notifications page', VisitorLogService::describePath('/notifications.php')['label'], 'الإشعارات');
+
 echo $failed === 0 ? "\npath labels ok\n" : "\n{$failed} failed\n";
 exit($failed === 0 ? 0 : 1);

@@ -9,16 +9,16 @@
   const PUSH_CONFIG_API = '/api/push-config.php';
   const POLL_MS = document.body?.classList.contains('dashboard-app') ? 12_000 : 20_000;
   const ICON_URL = '/icons/brand-icon.php?size=192';
-  const CONSENT_DISMISS_KEY = 'jawish_site_consent_dismissed_at';
-  const CONSENT_DISMISS_MS = 30 * 24 * 60 * 60 * 1000;
-  const CONSENT_VISITS_KEY = 'jawish_site_consent_visits';
-  const CONSENT_MIN_VISITS = 3;
-  const CONSENT_DELAY_MS = 10_000;
+  // Soft prompt once per browser tab-session when permission is missing (not 30 days).
+  const CONSENT_SESSION_DISMISS_KEY = 'jawish_site_consent_dismissed_session';
+  const CONSENT_DELAY_MS = 5_000;
+  const LAST_AUTH_READER_KEY = 'jawish_push_auth_reader';
   // Never interrupt someone who is placing an order or signing in.
   const CONSENT_QUIET_PATHS = [
     '/store-cart.php', '/cart.php', '/checkout.php', '/order-confirmation.php',
     '/login.php', '/customer-login.php', '/staff-login.php', '/register.php',
     '/track-order.php', '/install.php', '/pwa-check.php', '/guide.php',
+    '/logout.php',
   ];
   const announcedAt = new Map();
   let pushSubscribed = false;
@@ -249,7 +249,9 @@
       throw new Error('إشعارات الجهاز غير مفعّلة على الخادم.');
     }
 
-    const permission = await Notification.requestPermission();
+    const permission = Notification.permission === 'granted'
+      ? 'granted'
+      : await Notification.requestPermission();
     if (permission !== 'granted') {
       throw new Error('لم يتم منح إذن الإشعارات.');
     }
@@ -257,6 +259,13 @@
     const registration = await getServiceWorkerRegistration();
     if (!registration) {
       throw new Error('تعذر تجهيز Service Worker.');
+    }
+
+    // Keep SW fresh so push delivery does not wait until the next manual open.
+    try {
+      await registration.update();
+    } catch {
+      /* ignore */
     }
 
     let subscription = await registration.pushManager.getSubscription();
@@ -272,23 +281,91 @@
       body: JSON.stringify(subscription.toJSON()),
     });
     pushSubscribed = true;
+    rememberAuthReader();
     return true;
   }
 
+  /** Drop browser + server subscription for this device (logout / session end). */
   async function unsubscribeFromPush() {
     const registration = await getServiceWorkerRegistration();
     const subscription = registration ? await registration.pushManager.getSubscription() : null;
     const endpoint = subscription?.endpoint || '';
     if (subscription) {
-      await subscription.unsubscribe();
+      try {
+        await subscription.unsubscribe();
+      } catch {
+        /* ignore */
+      }
     }
     if (endpoint) {
-      await fetchJson(PUSH_API, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'unsubscribe', endpoint }),
-      });
+      try {
+        await fetchJson(PUSH_API, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'unsubscribe', endpoint }),
+        });
+      } catch {
+        /* ignore — session may already be gone */
+      }
     }
     pushSubscribed = false;
+    try {
+      window.localStorage.removeItem(LAST_AUTH_READER_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function currentNotifReader() {
+    return String(document.body?.dataset?.notifReader || 'guest').trim() || 'guest';
+  }
+
+  function rememberAuthReader() {
+    const reader = currentNotifReader();
+    if (reader !== 'staff' && reader !== 'customer') {
+      return;
+    }
+    try {
+      window.localStorage.setItem(LAST_AUTH_READER_KEY, reader);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function clearPushAfterSessionEnd() {
+    let previous = '';
+    try {
+      previous = String(window.localStorage.getItem(LAST_AUTH_READER_KEY) || '');
+    } catch {
+      previous = '';
+    }
+    const reader = currentNotifReader();
+    if ((previous === 'staff' || previous === 'customer') && reader === 'guest') {
+      await unsubscribeFromPush();
+      return true;
+    }
+    if (reader === 'staff' || reader === 'customer') {
+      rememberAuthReader();
+    }
+    return false;
+  }
+
+  function bindLogoutPushCleanup() {
+    document.querySelectorAll('a[href="/logout.php"], a[href^="/logout.php?"]').forEach((link) => {
+      if (link.dataset.pushLogoutBound === '1') return;
+      link.dataset.pushLogoutBound = '1';
+      link.addEventListener('click', (event) => {
+        if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+          return;
+        }
+        event.preventDefault();
+        const href = link.getAttribute('href') || '/logout.php';
+        unsubscribeFromPush()
+          .catch(() => {})
+          .finally(() => {
+            window.location.href = href;
+          });
+      });
+    });
   }
 
   function renderItem(item) {
@@ -379,10 +456,18 @@
         return;
       }
       const subscribed = await refreshPushSubscriptionState();
+      // Enable-only: never offer "إيقاف" — subscriptions stay on until logout.
+      if (subscribed || Notification.permission === 'granted') {
+        enablePush.hidden = true;
+        enablePush.classList.remove('is-visible', 'is-enabled');
+        return;
+      }
       enablePush.hidden = false;
       enablePush.classList.add('is-visible');
-      enablePush.classList.toggle('is-enabled', subscribed);
-      enablePush.textContent = subscribed ? 'إيقاف إشعارات الجهاز' : 'تفعيل إشعارات الجهاز';
+      enablePush.classList.remove('is-enabled');
+      enablePush.textContent = Notification.permission === 'denied'
+        ? 'كيف أفعّل إشعارات الجهاز؟'
+        : 'تفعيل إشعارات الجهاز';
       enablePush.disabled = false;
     };
 
@@ -529,17 +614,17 @@
 
     enablePush?.addEventListener('click', async (event) => {
       event.preventDefault();
+      if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+        showNotificationSettingsHelp();
+        return;
+      }
       enablePush.disabled = true;
       try {
-        if (pushSubscribed) {
-          await unsubscribeFromPush();
-        } else {
-          await subscribeToPush();
-        }
+        await subscribeToPush();
         await updatePushButton();
       } catch (error) {
         enablePush.disabled = false;
-        window.alert(error instanceof Error ? error.message : 'تعذر تحديث إشعارات الجهاز.');
+        window.alert(error instanceof Error ? error.message : 'تعذر تفعيل إشعارات الجهاز.');
       }
     });
 
@@ -571,8 +656,6 @@
       window.setTimeout(() => {
         updatePushButton();
       }, 1200);
-    } else if (supportsPush() && Notification.permission === 'granted') {
-      subscribeToPush().catch(() => {});
     }
 
     window.setInterval(() => {
@@ -581,22 +664,15 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         pollUnread(false);
+        if (supportsPush() && Notification.permission === 'granted') {
+          subscribeToPush().catch(() => {});
+        }
       }
     });
   }
 
-  function countConsentVisit() {
-    try {
-      const next = (Number(window.localStorage.getItem(CONSENT_VISITS_KEY)) || 0) + 1;
-      window.localStorage.setItem(CONSENT_VISITS_KEY, String(next));
-      return next;
-    } catch {
-      return 0;
-    }
-  }
-
   function isConsentAudience() {
-    if (!document.body || document.body.classList.contains('dashboard-app')) {
+    if (!document.body) {
       return false;
     }
     if (CONSENT_QUIET_PATHS.includes(window.location.pathname)) {
@@ -605,15 +681,13 @@
     if (window.PortalPwa?.isInAppBrowser?.()) {
       return false;
     }
-    const reader = String(document.body.dataset.notifReader || 'guest').trim();
-    return reader === 'guest' || reader === 'customer';
+    // Soft prompt on storefront + dashboard when device push is not granted.
+    return true;
   }
 
-  function consentDismissedRecently() {
+  function consentDismissedThisSession() {
     try {
-      const raw = window.localStorage.getItem(CONSENT_DISMISS_KEY);
-      if (!raw) return false;
-      return Date.now() - Number(raw) < CONSENT_DISMISS_MS;
+      return window.sessionStorage.getItem(CONSENT_SESSION_DISMISS_KEY) === '1';
     } catch {
       return false;
     }
@@ -621,7 +695,7 @@
 
   function rememberConsentDismiss() {
     try {
-      window.localStorage.setItem(CONSENT_DISMISS_KEY, String(Date.now()));
+      window.sessionStorage.setItem(CONSENT_SESSION_DISMISS_KEY, '1');
     } catch {
       /* ignore */
     }
@@ -688,11 +762,13 @@
 
     titleEl.textContent = denied && pushNeeded
       ? 'الإشعارات معطّلة في المتصفح'
-      : 'فعّل الإشعارات والتطبيق';
+      : (pushNeeded ? 'هل تسمح بإشعارات العروض؟' : 'ثبّت التطبيق للوصول السريع');
     textEl.textContent = denied && pushNeeded
-      ? 'لتلقي العروض والتحديثات، فعّل الإشعارات من إعدادات المتصفح لهذا الموقع.'
-      : 'ابقَ على اطلاع بالعروض والتحديثات — فعّل إشعارات الجهاز'
-        + (pwaNeeded ? ' وثبّت التطبيق على جهازك.' : '.');
+      ? 'يمكنك تفعيلها من إعدادات المتصفح لهذا الموقع متى شئت — بدون ضغط.'
+      : (pushNeeded
+        ? 'نقترح تفعيل إشعارات الجهاز لتصلك التحديثات فور صدورها. يمكنك التجاهل الآن.'
+        : 'ثبّت التطبيق على جهازك لفتح أسرع.')
+        + (pushNeeded && pwaNeeded ? ' ويمكنك أيضاً تثبيت التطبيق.' : '');
 
     let actionsHtml = '';
     if (pushNeeded && !denied) {
@@ -742,7 +818,7 @@
   }
 
   function renderSiteConsentBanner() {
-    if (document.getElementById('site-consent-banner') || consentDismissedRecently()) {
+    if (document.getElementById('site-consent-banner') || consentDismissedThisSession()) {
       return;
     }
 
@@ -754,11 +830,11 @@
       '<div class="site-consent-banner__inner">' +
       '<span class="material-symbols-outlined" aria-hidden="true">notifications_active</span>' +
       '<div class="site-consent-banner__copy">' +
-      '<strong data-site-consent-title>فعّل الإشعارات والتطبيق</strong>' +
-      '<span data-site-consent-text>ابقَ على اطلاع بالعروض والتحديثات.</span>' +
+      '<strong data-site-consent-title>هل تسمح بإشعارات العروض؟</strong>' +
+      '<span data-site-consent-text>نقترح تفعيل إشعارات الجهاز لتصلك التحديثات فور صدورها.</span>' +
       '</div>' +
       '<div class="site-consent-banner__actions" data-site-consent-actions></div>' +
-      '<button type="button" class="site-consent-banner__close" data-site-consent-close aria-label="إغلاق">×</button>' +
+      '<button type="button" class="site-consent-banner__close" data-site-consent-close aria-label="لاحقاً">×</button>' +
       '</div>';
 
     banner.querySelector('[data-site-consent-close]')?.addEventListener('click', () => {
@@ -768,26 +844,31 @@
 
     document.body.appendChild(banner);
     refreshSiteConsentBanner(banner).then(() => {
-      if (document.body.contains(banner)) {
-        requestAnimationFrame(() => banner.classList.add('is-visible'));
+      if (!document.body.contains(banner)) {
+        return;
       }
+      if (!banner.querySelector('[data-site-consent-actions]')?.childElementCount) {
+        banner.remove();
+        return;
+      }
+      requestAnimationFrame(() => banner.classList.add('is-visible'));
     });
   }
 
   async function initSiteConsentPrompt() {
-    if (!isConsentAudience() || consentDismissedRecently()) {
-      return;
-    }
-    if (countConsentVisit() < CONSENT_MIN_VISITS) {
+    if (!isConsentAudience() || consentDismissedThisSession()) {
       return;
     }
     await new Promise((resolve) => window.setTimeout(resolve, CONSENT_DELAY_MS));
     if (document.hidden || document.body.classList.contains('pwa-modal-open')) {
       return;
     }
+    if (consentDismissedThisSession() || document.getElementById('site-consent-banner')) {
+      return;
+    }
 
     const pushNeeded = !(await isPushFullyEnabled()) && (await isPushServerSupported());
-    const pwaNeeded = shouldPromptPwaInstall();
+    const pwaNeeded = shouldPromptPwaInstall() && !document.body.classList.contains('dashboard-app');
     if (!pushNeeded && !pwaNeeded) {
       return;
     }
@@ -795,9 +876,31 @@
     renderSiteConsentBanner();
   }
 
+  async function ensurePushSubscriptionAlive() {
+    if (!supportsPush()) {
+      return;
+    }
+    const cleared = await clearPushAfterSessionEnd();
+    if (cleared) {
+      return;
+    }
+    if (Notification.permission !== 'granted') {
+      return;
+    }
+    try {
+      await subscribeToPush();
+    } catch {
+      /* ignore transient SW/network errors */
+    }
+  }
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.addEventListener('message', (event) => {
       const data = event.data || {};
+      if (data.type === 'portal-push-resubscribe') {
+        ensurePushSubscriptionAlive();
+        return;
+      }
       if (data.type !== 'portal-notification' || !data.payload) return;
       const payload = data.payload;
       announce({
@@ -814,8 +917,11 @@
   }
 
   function init() {
+    bindLogoutPushCleanup();
     document.querySelectorAll('[data-notif-bell]').forEach(initBell);
-    initSiteConsentPrompt();
+    ensurePushSubscriptionAlive().finally(() => {
+      initSiteConsentPrompt();
+    });
   }
 
   if (document.readyState === 'loading') {

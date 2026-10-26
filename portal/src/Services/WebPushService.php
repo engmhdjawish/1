@@ -69,13 +69,20 @@ final class WebPushService
         }
 
         try {
-            $webPush = new \Minishlink\WebPush\WebPush([
-                'VAPID' => [
-                    'subject' => self::subject(),
-                    'publicKey' => self::publicKey(),
-                    'privateKey' => self::privateKey(),
+            $webPush = new \Minishlink\WebPush\WebPush(
+                [
+                    'VAPID' => [
+                        'subject' => self::subject(),
+                        'publicKey' => self::publicKey(),
+                        'privateKey' => self::privateKey(),
+                    ],
                 ],
-            ]);
+                [
+                    // Keep undelivered pushes so a sleeping browser can still receive them.
+                    'TTL' => 86400,
+                    'urgency' => 'high',
+                ]
+            );
 
             foreach ($subscriptions as $row) {
                 $endpoint = trim((string) ($row['endpoint'] ?? ''));
