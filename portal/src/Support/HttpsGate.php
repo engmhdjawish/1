@@ -8,14 +8,24 @@ use Portal\Config;
 
 /**
  * Forces HTTPS and a single public host (www vs apex) from PORTAL_APP_URL.
- * Without this, login cookies, localStorage, and the installed PWA diverge.
+ * Browser tabs are redirected to the preferred host; installed PWAs keep the
+ * host they were installed on (otherwise Chrome shows a Custom Tab × bar).
  */
 final class HttpsGate
 {
+    public const PWA_HOST_COOKIE = 'portal_pwa_host';
+
     public static function redirectIfNeeded(): void
     {
         if (PHP_SAPI === 'cli' || PHP_SAPI === 'phpdbg') {
             return;
+        }
+
+        // Ask Chrome for display-mode so the first standalone navigation is known.
+        if (!headers_sent()) {
+            header('Accept-CH: Sec-CH-UA-Display-Mode', false);
+            header('Critical-CH: Sec-CH-UA-Display-Mode', false);
+            header('Vary: Sec-CH-UA-Display-Mode', false);
         }
 
         $target = self::redirectTarget();
@@ -32,7 +42,8 @@ final class HttpsGate
         ?string $requestHost = null,
         ?string $requestUri = null,
         ?bool $isHttps = null,
-        ?string $appUrl = null
+        ?string $appUrl = null,
+        ?bool $standalonePwa = null
     ): ?string {
         $requestHost = strtolower(self::stripPort(trim((string) ($requestHost ?? ($_SERVER['HTTP_HOST'] ?? '')))));
         $requestUri = (string) ($requestUri ?? ($_SERVER['REQUEST_URI'] ?? '/'));
@@ -54,6 +65,12 @@ final class HttpsGate
             && !self::isLocalHost($configuredHost)
             && strcasecmp($requestHost, $configuredHost) !== 0;
 
+        // Installed PWA on the sibling host (www ↔ apex): stay put so the window
+        // does not fall out of scope into a Custom Tab with × + title.
+        if ($hostNeedsFix && ($standalonePwa ?? self::isStandalonePwaRequest($requestHost))) {
+            $hostNeedsFix = false;
+        }
+
         $httpsNeedsFix = ($forceHttps || $appIsHttps) && !$isHttps;
 
         if (!$hostNeedsFix && !$httpsNeedsFix) {
@@ -64,6 +81,37 @@ final class HttpsGate
         $host = $hostNeedsFix ? $configuredHost : $requestHost;
 
         return $scheme . '://' . $host . $requestUri;
+    }
+
+    /** True when this request is the installed home-screen app (or marked as such). */
+    public static function isStandalonePwaRequest(?string $requestHost = null): bool
+    {
+        $hint = strtolower(trim((string) ($_SERVER['HTTP_SEC_CH_UA_DISPLAY_MODE'] ?? '')));
+        if (in_array($hint, ['standalone', 'fullscreen', 'minimal-ui'], true)) {
+            return true;
+        }
+
+        $requestHost = strtolower(self::stripPort(trim((string) ($requestHost ?? ($_SERVER['HTTP_HOST'] ?? '')))));
+        $cookieHost = strtolower(self::stripPort(trim((string) ($_COOKIE[self::PWA_HOST_COOKIE] ?? ''))));
+        if ($cookieHost !== '' && $requestHost !== '' && strcasecmp($cookieHost, $requestHost) === 0) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /** Sibling www/apex host for the configured public origin, or empty. */
+    public static function siblingHost(?string $appUrl = null): string
+    {
+        $host = self::hostFromAppUrl(trim((string) ($appUrl ?? Config::appUrl())));
+        if ($host === '' || self::isLocalHost($host)) {
+            return '';
+        }
+        if (str_starts_with($host, 'www.')) {
+            return substr($host, 4);
+        }
+
+        return 'www.' . $host;
     }
 
     public static function configuredHost(): string

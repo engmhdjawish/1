@@ -11,6 +11,38 @@
   const pageLoadedAt = Date.now();
   let engagementReady = false;
 
+  const isStandalone =
+    window.matchMedia('(display-mode: standalone)').matches
+    || window.matchMedia('(display-mode: fullscreen)').matches
+    || window.matchMedia('(display-mode: minimal-ui)').matches
+    || window.navigator.standalone === true;
+
+  (function rememberStandaloneHost() {
+    if (!isStandalone || !window.isSecureContext) {
+      return;
+    }
+    const host = window.location.hostname;
+    if (!host || host === 'localhost' || host === '127.0.0.1') {
+      return;
+    }
+    const parent = (document.body && document.body.dataset.cookieDomain) || '';
+    const parts = [
+      'portal_pwa_host=' + encodeURIComponent(host),
+      'path=/',
+      'max-age=31536000',
+      'SameSite=Lax',
+      'Secure',
+    ];
+    if (parent && parent.startsWith('.')) {
+      parts.push('domain=' + parent);
+    }
+    try {
+      document.cookie = parts.join(';');
+    } catch {
+      /* ignore */
+    }
+  })();
+
   (function redirectToCanonicalOrigin() {
     const host = window.location.hostname;
     if (host === 'localhost' || host === '127.0.0.1') {
@@ -18,7 +50,10 @@
     }
     const wantHost = (document.body && document.body.dataset.canonicalHost) || '';
     const needHttps = window.location.protocol === 'http:';
-    const needHost = wantHost !== '' && host.toLowerCase() !== wantHost.toLowerCase();
+    // Never bounce an installed PWA between www/apex — that opens a Custom Tab (× bar).
+    const needHost = !isStandalone
+      && wantHost !== ''
+      && host.toLowerCase() !== wantHost.toLowerCase();
     if (!needHttps && !needHost) {
       return;
     }
@@ -28,12 +63,6 @@
       nextProtocol + '//' + nextHost + window.location.pathname + window.location.search + window.location.hash
     );
   })();
-
-  const isStandalone =
-    window.matchMedia('(display-mode: standalone)').matches
-    || window.matchMedia('(display-mode: fullscreen)').matches
-    || window.matchMedia('(display-mode: minimal-ui)').matches
-    || window.navigator.standalone === true;
   const ua = navigator.userAgent || '';
   const isIOS = /iphone|ipad|ipod/i.test(ua)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);

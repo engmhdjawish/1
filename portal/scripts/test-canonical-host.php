@@ -65,6 +65,28 @@ $assert(
 );
 
 $assert(
+    'standalone PWA on apex is not bounced to www',
+    HttpsGate::redirectTarget(
+        'jawishco.sy',
+        '/index.php',
+        true,
+        'https://www.jawishco.sy',
+        true
+    ) === null
+);
+
+$assert(
+    'browser tab on apex still redirects to www',
+    HttpsGate::redirectTarget(
+        'jawishco.sy',
+        '/index.php',
+        true,
+        'https://www.jawishco.sy',
+        false
+    ) === 'https://www.jawishco.sy/index.php'
+);
+
+$assert(
     'localhost is never redirected',
     HttpsGate::redirectTarget('localhost', '/', false, 'https://www.jawishco.sy') === null
 );
@@ -131,6 +153,16 @@ $pwa = (string) file_get_contents(dirname(__DIR__) . '/public/assets/pwa.js');
 $assert(
     'pwa.js redirects to canonical host',
     str_contains($pwa, 'canonicalHost') || str_contains($pwa, 'wantHost')
+);
+$assert(
+    'pwa.js does not bounce installed apps between www/apex',
+    str_contains($pwa, '!isStandalone') && str_contains($pwa, 'portal_pwa_host')
+);
+
+$layout = (string) file_get_contents(dirname(__DIR__) . '/views/layout.php');
+$assert(
+    'layout early redirect skips standalone host bounce',
+    str_contains($layout, '!standalone') && str_contains($layout, 'display-mode: standalone')
 );
 
 echo "\n";
