@@ -9,8 +9,9 @@ use Portal\Support\SharePageAccess;
 
 require dirname(__DIR__) . '/views/helpers.php';
 
-$token = trim((string) ($_GET['token'] ?? ''));
-$shareLink = $token !== '' ? ShareLinkService::getByPublicToken($token) : null;
+$accessKey = trim((string) ($_GET['token'] ?? $_GET['t'] ?? $_GET['c'] ?? ''));
+$shareLink = $accessKey !== '' ? ShareLinkService::resolvePublicAccessKey($accessKey) : null;
+$token = is_array($shareLink) ? trim((string) ($shareLink['public_token'] ?? $accessKey)) : $accessKey;
 $access = SharePageAccess::state($shareLink, $token);
 $hasAccess = $access['has_access'];
 $requiresPassword = $access['requires_password'];
@@ -39,7 +40,7 @@ ob_start();
     <h1 class="text-xl font-extrabold text-red-700 mb-3">تعذر عرض التأكيد</h1>
     <p class="text-sm text-gray-600 mb-4"><?= h($error) ?></p>
     <?php if ($token !== ''): ?>
-      <a href="/share.php?token=<?= urlencode($token) ?>" class="inline-flex h-11 items-center rounded bg-primary text-white px-6 font-bold">العودة للمشاركة</a>
+      <a href="<?= h(share_page_url($token)) ?>" class="inline-flex h-11 items-center rounded bg-primary text-white px-6 font-bold">العودة للمشاركة</a>
     <?php endif; ?>
   <?php else: ?>
     <div class="text-5xl mb-3" aria-hidden="true">✓</div>
@@ -80,9 +81,9 @@ ob_start();
       </div>
     <?php endif; ?>
     <div class="flex flex-wrap gap-2 justify-center">
-      <a href="/share.php?token=<?= urlencode($token) ?>" class="h-11 inline-flex items-center rounded bg-primary text-white px-6 font-bold">متابعة التصفح</a>
+      <a href="<?= h(share_page_url($token)) ?>" class="h-11 inline-flex items-center rounded bg-primary text-white px-6 font-bold">متابعة التصفح</a>
       <?php if (!empty($order['had_unavailable_items'])): ?>
-        <a href="/share.php?token=<?= urlencode($token) ?>&amp;open_cart=1" class="h-11 inline-flex items-center rounded border border-amber-300 bg-amber-50 text-amber-900 px-6 text-sm font-bold">مراجعة السلة</a>
+        <a href="<?= h(share_page_url($token, ['open_cart' => '1'])) ?>" class="h-11 inline-flex items-center rounded border border-amber-300 bg-amber-50 text-amber-900 px-6 text-sm font-bold">مراجعة السلة</a>
       <?php endif; ?>
       <a href="/index.php" class="h-11 inline-flex items-center rounded border border-gray-300 px-6 text-sm font-bold">الرئيسية</a>
     </div>

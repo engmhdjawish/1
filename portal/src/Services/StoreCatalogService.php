@@ -166,7 +166,10 @@ final class StoreCatalogService
             return false;
         }
 
-        if (!in_array($pagePath, ['/index.php', '/', '/share.php', '/home-next.php', '/home-lab.php'], true)) {
+        $isSharePath = $pagePath === '/share.php'
+            || $pagePath === '/s.php'
+            || str_starts_with((string) $pagePath, '/s/');
+        if (!in_array($pagePath, ['/index.php', '/', '/share.php', '/home-next.php', '/home-lab.php'], true) && !$isSharePath) {
             return false;
         }
 

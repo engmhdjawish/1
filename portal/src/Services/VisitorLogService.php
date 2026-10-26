@@ -36,6 +36,7 @@ final class VisitorLogService
         'price-checker.php' => 'فاحص الأسعار',
         'pc1.php' => 'فاحص الأسعار',
         'share.php' => 'رابط مشاركة',
+        's.php' => 'رابط مشاركة',
         'order-confirmation.php' => 'تأكيد الطلب',
         'store-order-confirmation.php' => 'تأكيد الطلب',
         'notifications.php' => 'الإشعارات',
@@ -787,6 +788,10 @@ final class VisitorLogService
         $route = self::decodeUrlText($route);
         $routePath = (string) (parse_url($route, PHP_URL_PATH) ?: $route);
         $base = strtolower(basename($routePath));
+        $isShortShare = (bool) preg_match('#^/s/[A-Za-z0-9_-]+/?$#', $routePath);
+        if ($isShortShare) {
+            $base = 'share.php';
+        }
         $isDashboard = str_contains($routePath, '/dashboard/');
         $title = $isDashboard
             ? (self::DASHBOARD_PAGE_NAMES[$base] ?? 'لوحة التحكم')

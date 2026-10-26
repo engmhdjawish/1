@@ -215,7 +215,7 @@ ob_start();
     </div>
     <?php if ($token !== '' && $hasAccess): ?>
       <a
-        href="/share.php?token=<?= urlencode($token) ?>"
+        href="<?= h(share_page_url($token)) ?>"
         class="h-11 inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-5 text-sm font-bold hover:border-primary"
       >
         <span class="material-symbols-outlined text-[20px]" aria-hidden="true">storefront</span>
@@ -257,7 +257,7 @@ ob_start();
       <div class="bg-white rounded-xl border p-8 text-center shadow-sm">
         <span class="material-symbols-outlined text-5xl text-gray-300" aria-hidden="true">shopping_cart</span>
         <p class="text-gray-500 mt-3">السلة فارغة.</p>
-        <a href="/share.php?token=<?= urlencode($token) ?>" class="mt-4 inline-flex h-11 items-center rounded-lg bg-primary text-white px-6 font-bold">تصفح المواد</a>
+        <a href="<?= h(share_page_url($token)) ?>" class="mt-4 inline-flex h-11 items-center rounded-lg bg-primary text-white px-6 font-bold">تصفح المواد</a>
       </div>
     <?php else: ?>
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">

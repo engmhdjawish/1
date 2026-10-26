@@ -13,7 +13,10 @@
 
   const storePath = () => {
     const path = window.location.pathname;
-    return path === '/share.php' || path === '/share' ? '/share.php' : '/store.php';
+    if (path === '/share.php' || path === '/share' || path === '/s.php' || path.startsWith('/s/')) {
+      return path.startsWith('/s/') ? path : '/share.php';
+    }
+    return '/store.php';
   };
 
   const isLabUrl = (href) => {
@@ -21,7 +24,8 @@
       const url = new URL(href, window.location.origin);
       return url.origin === window.location.origin
         && (url.pathname === '/store.php' || url.pathname === '/store'
-          || url.pathname === '/share.php' || url.pathname === '/share');
+          || url.pathname === '/share.php' || url.pathname === '/share'
+          || url.pathname === '/s.php' || url.pathname.startsWith('/s/'));
     } catch {
       return false;
     }
@@ -161,7 +165,10 @@
       current.replaceWith(next);
       if (doc.title) document.title = doc.title;
       if (options.push !== false) history.pushState({ seUrl: href }, '', href);
-      syncSearchCarry(href);
+      window.PortalFilterView?.rememberWorkingHref?.(href);
+      window.PortalFilterView?.shortenAddressBar?.(href, { seUrl: href });
+      const working = window.PortalFilterView?.workingHref?.() || href;
+      syncSearchCarry(working);
       prepareLive(next);
       bindCards(next);
 
@@ -206,7 +213,10 @@
   const removeChip = (chip) => {
     const param = chip.getAttribute('data-se-chip') || '';
     const value = chip.getAttribute('data-se-chip-value');
-    const url = new URL(pendingHref || window.location.href, window.location.origin);
+    const url = new URL(
+      pendingHref || window.PortalFilterView?.workingHref?.() || window.location.href,
+      window.location.origin,
+    );
     url.searchParams.delete('page');
     const matches = (key) => key === param || key === `${param}[]` || new RegExp(`^${param}\\[\\d+\\]$`).test(key);
     const kept = Array.from(url.searchParams.entries()).filter(([key, item]) => !matches(key) || (value !== null && item !== value));

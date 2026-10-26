@@ -63,7 +63,12 @@ $offerMax = $offer !== null && is_numeric((string) ($offer['max_packages'] ?? ''
 $warehouseQty = (float) ($product['warehouseQuantity'] ?? 0);
 $packagesAvailable = ($allowCart || $showQuantity) ? packages_available_display($product) : 0.0;
 $outOfStock = $allowCart && $packagesAvailable <= 0;
-$trialStoreProduct = !str_contains((string) ($_GET['return'] ?? ''), 'share.php');
+$returnProbe = (string) ($_GET['return'] ?? '');
+$trialStoreProduct = !(
+    str_contains($returnProbe, 'share.php')
+    || str_contains($returnProbe, '/s/')
+    || str_contains($returnProbe, '/s.php')
+);
 $comingSoonProduct = $trialStoreProduct && StoreCatalogService::materialIsUnavailable($product);
 $omitTrialBlankPrice = $trialStoreProduct
     && $policyAllowsPrice
@@ -95,7 +100,13 @@ $specs = array_filter([
 <nav class="store-breadcrumb" aria-label="مسار التنقل">
   <a href="/index.php">الرئيسية</a>
   <span class="store-breadcrumb__sep" aria-hidden="true">›</span>
-  <a href="<?= h(str_contains($returnUrl, 'store') || str_contains($returnUrl, 'share.php') ? $returnUrl : '/store.php') ?>"><?= h(str_contains($returnUrl, 'share.php') ? 'رابط المشاركة' : 'المتجر') ?></a>
+  <?php
+    $returnIsShare = str_contains($returnUrl, 'share.php')
+      || str_starts_with($returnUrl, '/s/')
+      || str_contains($returnUrl, '/s.php');
+    $returnIsStore = str_contains($returnUrl, 'store') || $returnIsShare;
+  ?>
+  <a href="<?= h($returnIsStore ? $returnUrl : '/store.php') ?>"><?= h($returnIsShare ? 'رابط المشاركة' : 'المتجر') ?></a>
   <span class="store-breadcrumb__sep" aria-hidden="true">›</span>
   <span class="store-breadcrumb__current" title="<?= h($productName) ?>"><?= h($productName) ?></span>
 </nav>

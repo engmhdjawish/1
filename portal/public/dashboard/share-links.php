@@ -113,7 +113,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $visibleClientFilters,
             $clientSortFields,
             $defaultSortValue,
-            trim((string) ($_POST['option_default_group_by'] ?? 'none'))
+            trim((string) ($_POST['option_default_group_by'] ?? 'none')),
+            trim((string) ($_POST['short_code'] ?? '')) !== ''
+                ? trim((string) ($_POST['short_code'] ?? ''))
+                : null
         );
         if ($result['ok']) {
             $flash = $result['message'];

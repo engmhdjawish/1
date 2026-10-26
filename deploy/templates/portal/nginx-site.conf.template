@@ -53,6 +53,15 @@ server {
         application/xml
         image/svg+xml;
 
+    # Short share links: /s/{code} → s.php (keep extra query args for filters).
+    location ~ ^/s/(?<share_code>[A-Za-z0-9_-]+)/?$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root/s.php;
+        fastcgi_param QUERY_STRING c=$share_code&$args;
+        include fastcgi_params;
+    }
+
     location / {
         try_files $uri $uri/ /index.php?$query_string;
     }
@@ -116,6 +125,14 @@ server {
 #         application/json
 #         application/xml
 #         image/svg+xml;
+#
+#     location ~ ^/s/(?<share_code>[A-Za-z0-9_-]+)/?$ {
+#         include snippets/fastcgi-php.conf;
+#         fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+#         fastcgi_param SCRIPT_FILENAME $document_root/s.php;
+#         fastcgi_param QUERY_STRING c=$share_code&$args;
+#         include fastcgi_params;
+#     }
 #
 #     location / {
 #         try_files $uri $uri/ /index.php?$query_string;
