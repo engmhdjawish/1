@@ -10,6 +10,7 @@ declare(strict_types=1);
 define('PORTAL_NO_SESSION', true);
 
 require dirname(__DIR__) . '/bootstrap.php';
+require dirname(__DIR__) . '/views/helpers.php';
 
 use Portal\Support\CookieOptions;
 use Portal\Support\HttpsGate;
@@ -125,6 +126,36 @@ putenv('PORTAL_COOKIE_DOMAIN=.custom.sy');
 $_ENV['PORTAL_COOKIE_DOMAIN'] = '.custom.sy';
 $assert('explicit cookie domain wins', CookieOptions::domain() === '.custom.sy');
 
+$helpers = (string) file_get_contents(dirname(__DIR__) . '/views/helpers.php');
+$assert(
+    'helpers define canonical PWA install origin (www)',
+    str_contains($helpers, 'function portal_pwa_install_origin')
+    && str_contains($helpers, 'function portal_pwa_is_install_host')
+);
+
+putenv('PORTAL_APP_URL=https://www.jawishco.sy');
+$_ENV['PORTAL_APP_URL'] = 'https://www.jawishco.sy';
+$_SERVER['HTTP_HOST'] = 'www.jawishco.sy';
+$_SERVER['HTTPS'] = 'on';
+$assert(
+    'install origin stays www when app url is www',
+    portal_pwa_install_origin() === 'https://www.jawishco.sy'
+);
+$assert('www request is install host', portal_pwa_is_install_host() === true);
+
+$_SERVER['HTTP_HOST'] = 'jawishco.sy';
+$assert(
+    'apex request is NOT the install host',
+    portal_pwa_is_install_host() === false
+);
+
+putenv('PORTAL_APP_URL=https://jawishco.sy');
+$_ENV['PORTAL_APP_URL'] = 'https://jawishco.sy';
+$assert(
+    'apex PORTAL_APP_URL still prefers www install origin',
+    portal_pwa_install_origin() === 'https://www.jawishco.sy'
+);
+
 $manifest = (string) file_get_contents(dirname(__DIR__) . '/public/manifest.php');
 $assert(
     'manifest advertises related_applications webapp',
@@ -139,22 +170,23 @@ $assert(
     !str_contains($manifest, "'id' => \$startUrl")
 );
 $assert(
-    'manifest start_url follows the request host (heals apex WebAPK)',
-    str_contains($manifest, 'portal_request_origin')
-    && str_contains($manifest, "'start_url' => \$startUrl")
+    'manifest uses portal_pwa_install_origin for one icon identity',
+    str_contains($manifest, 'portal_pwa_install_origin')
+    && str_contains($manifest, 'portal_pwa_is_install_host')
+    && str_contains($manifest, 'webapk=5')
 );
 $assert(
-    'manifest related_applications include request host',
-    str_contains($manifest, 'siblingOrigin') || str_contains($manifest, 'related_applications')
+    'manifest is standalone only on install host; apex uses browser (no duplicate BIP)',
+    str_contains($manifest, "\$onInstallHost ? 'standalone' : 'browser'")
+    && str_contains($manifest, "'prefer_related_applications' => !\$onInstallHost")
 );
 $assert(
-    'manifest prefers opening links in the installed app',
-    str_contains($manifest, "'handle_links' => 'preferred'")
+    'manifest prefers opening links in the installed app on www',
+    str_contains($manifest, "'handle_links' => \$onInstallHost ? 'preferred' : 'auto'")
 );
 $assert(
-    'manifest stays standalone without browser chrome override',
-    str_contains($manifest, "'display' => 'standalone'")
-    && !str_contains($manifest, "'display_override'")
+    'manifest has no display_override browser chrome',
+    !str_contains($manifest, "'display_override'")
 );
 
 $staticManifest = (string) file_get_contents(dirname(__DIR__) . '/public/manifest.webmanifest');
@@ -162,6 +194,16 @@ $decodedStatic = json_decode($staticManifest, true);
 $assert(
     'static webmanifest id is relative',
     is_array($decodedStatic) && ($decodedStatic['id'] ?? null) === '/?source=pwa'
+);
+$assert(
+    'static webmanifest points icons at canonical www',
+    is_array($decodedStatic)
+    && str_starts_with((string) (($decodedStatic['icons'][0]['src'] ?? '')), 'https://www.jawishco.sy/')
+);
+$assert(
+    'static webmanifest related_applications prefer www',
+    is_array($decodedStatic)
+    && ($decodedStatic['related_applications'][0]['url'] ?? '') === 'https://www.jawishco.sy/manifest.php'
 );
 $assert(
     'static webmanifest handle_links preferred',
@@ -196,8 +238,16 @@ $assert(
     'pwa.js migrates broken apex shell to www install (SW cannot heal ×)',
     str_contains($pwa, 'shouldMigrateToWwwSibling')
     && str_contains($pwa, 'openHealthyWwwInstall')
+    && str_contains($pwa, 'canonicalInstallOrigin')
     && str_contains($pwa, 'install=1&migrate=1')
-    && str_contains($pwa, 'التطبيق يحتاج إصلاحاً')
+    && str_contains($pwa, 'maybeAutoMigrateBrokenShell')
+    && str_contains($pwa, 'UNIFIED_ICON_COPY')
+    && str_contains($pwa, 'أيقونة-موحّدة-v1')
+);
+$assert(
+    'pwa.js suppresses BIP / install UI off the canonical www host',
+    str_contains($pwa, 'isOnCanonicalInstallHost')
+    && str_contains($pwa, 'Apex must never become a second installable app')
 );
 $assert(
     'pwa.js does not treat empty-referrer browser tabs as broken shells',
@@ -207,7 +257,7 @@ $assert(
     'pwa.js replaces broken old shell (different icon / × bar) instead of SW-only reload',
     str_contains($pwa, 'showShellReplaceBanner')
     && str_contains($pwa, 'replaceBrokenShell')
-    && str_contains($pwa, 'التطبيق يحتاج إصلاحاً')
+    && str_contains($pwa, 'showRemoveOldIconBanner')
 );
 
 $sw = (string) file_get_contents(dirname(__DIR__) . '/public/sw.js');

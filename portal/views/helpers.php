@@ -342,6 +342,45 @@ function portal_request_origin(): string
     return portal_request_scheme() . '://' . $host;
 }
 
+/**
+ * Single canonical origin for NEW PWA installs.
+ * Chrome cannot merge www↔apex WebAPKs or unify their launcher icons — prefer www
+ * so install prompts and icons cannot diverge again.
+ */
+function portal_pwa_install_origin(): string
+{
+    $appUrl = rtrim((string) \Portal\Config::appUrl(), '/');
+    $isLocalApp = $appUrl === '' || (bool) preg_match('#^https?://(127\.0\.0\.1|localhost)(:\d+)?$#i', $appUrl);
+    if ($isLocalApp) {
+        return portal_request_origin();
+    }
+
+    $host = strtolower((string) (parse_url($appUrl, PHP_URL_HOST) ?: ''));
+    if ($host === '' || in_array($host, ['localhost', '127.0.0.1', '::1'], true) || filter_var($host, FILTER_VALIDATE_IP)) {
+        return portal_request_origin();
+    }
+
+    $scheme = str_starts_with(strtolower($appUrl), 'http://') ? 'http' : 'https';
+    // Apex + www are separate origins; force www as the only installable identity.
+    if (!str_starts_with($host, 'www.')) {
+        $host = 'www.' . $host;
+    }
+
+    return $scheme . '://' . $host;
+}
+
+/** True when this request is on the canonical PWA install host (www). */
+function portal_pwa_is_install_host(): bool
+{
+    $install = portal_pwa_install_origin();
+    $request = portal_request_origin();
+    if ($install === '' || $request === '') {
+        return true;
+    }
+
+    return strcasecmp($install, $request) === 0;
+}
+
 function portal_absolute_url(string $pathOrUrl = ''): string
 {
     $value = trim($pathOrUrl);

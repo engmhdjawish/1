@@ -3,35 +3,41 @@
   "name": "جاويش للتجارة",
   "short_name": "جاويش",
   "description": "متجر جاويش للتجارة — تصفح المنتجات واطلب بسهولة",
-  "start_url": "/?source=pwa",
-  "scope": "/",
+  "start_url": "https://www.jawishco.sy/?source=pwa",
+  "scope": "https://www.jawishco.sy/",
   "display": "standalone",
   "handle_links": "preferred",
   "orientation": "portrait-primary",
   "dir": "rtl",
   "lang": "ar",
   "theme_color": "#D81921",
-  "background_color": "#f6f6f8",
+  "background_color": "#f6f6f9",
   "categories": ["shopping", "business"],
   "prefer_related_applications": false,
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://www.jawishco.sy/manifest.php"
+    }
+  ],
   "launch_handler": {
     "client_mode": ["navigate-existing", "auto"]
   },
   "icons": [
     {
-      "src": "/icons/brand-icon.php?size=192",
+      "src": "https://www.jawishco.sy/icons/brand-icon.php?size=192&webapk=5",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/brand-icon.php?size=512",
+      "src": "https://www.jawishco.sy/icons/brand-icon.php?size=512&webapk=5",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/brand-icon.php?size=512",
+      "src": "https://www.jawishco.sy/icons/brand-icon.php?size=512&maskable=1&webapk=5",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -40,18 +46,18 @@
   "shortcuts": [
     {
       "name": "المتجر",
-      "url": "/store.php?source=pwa",
-      "icons": [{ "src": "/icons/brand-icon.php?size=192", "sizes": "192x192", "type": "image/png" }]
+      "url": "https://www.jawishco.sy/store.php?source=pwa",
+      "icons": [{ "src": "https://www.jawishco.sy/icons/brand-icon.php?size=192&webapk=5", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "السلة",
-      "url": "/store-cart.php?source=pwa",
-      "icons": [{ "src": "/icons/brand-icon.php?size=192", "sizes": "192x192", "type": "image/png" }]
+      "url": "https://www.jawishco.sy/store-cart.php?source=pwa",
+      "icons": [{ "src": "https://www.jawishco.sy/icons/brand-icon.php?size=192&webapk=5", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "طلباتي",
-      "url": "/my-orders.php?source=pwa",
-      "icons": [{ "src": "/icons/brand-icon.php?size=192", "sizes": "192x192", "type": "image/png" }]
+      "url": "https://www.jawishco.sy/my-orders.php?source=pwa",
+      "icons": [{ "src": "https://www.jawishco.sy/icons/brand-icon.php?size=192&webapk=5", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }

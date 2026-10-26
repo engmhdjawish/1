@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
-use Portal\Config;
 use Portal\Services\PortalSettingsService;
-use Portal\Support\HttpsGate;
 use Portal\Support\Utf8Text;
 
 require dirname(__DIR__) . '/views/helpers.php';
@@ -20,56 +18,75 @@ $logoUrl = PortalSettingsService::companyLogoUrl($company);
 $icons = portal_site_icons($logoUrl ?? '');
 
 header('Content-Type: application/manifest+json; charset=utf-8');
-// Short cache so damaged WebAPKs pick up a healed start_url quickly.
+// Short cache so damaged WebAPKs / BIP checks pick up install-host policy quickly.
 header('Cache-Control: public, max-age=60, must-revalidate');
 
-$appUrl = rtrim(Config::appUrl(), '/');
-$useAbsolute = $appUrl !== '' && !preg_match('#^https?://(127\.0\.0\.1|localhost)(:\d+)?$#i', $appUrl);
-$canonicalOrigin = $useAbsolute ? $appUrl : '';
 $requestOrigin = portal_request_origin();
-if ($requestOrigin === '' && $canonicalOrigin !== '') {
-    $requestOrigin = $canonicalOrigin;
+$installOrigin = portal_pwa_install_origin();
+if ($installOrigin === '' && $requestOrigin !== '') {
+    $installOrigin = $requestOrigin;
 }
+$onInstallHost = portal_pwa_is_install_host();
 
 /*
- * id stays RELATIVE for stable identity within each origin.
- * start_url + scope are absolute to the REQUEST host so an apex-installed
- * WebAPK that was poisoned with a www start_url can self-heal on update
- * (out-of-origin start_url makes Chrome open a Custom Tab with ×).
+ * ONE installable identity going forward:
+ * - www (PORTAL_APP_URL / www sibling) is the only standalone BIP target.
+ * - apex still serves content + a non-installable shim that points related_applications
+ *   at www, so Chrome cannot advertise a second launcher icon.
+ * - Icons are ALWAYS absolute URLs on the install origin so both hosts share one icon identity.
+ * Chrome cannot merge two already-installed WebAPKs; broken apex CCT shells must migrate once.
  */
 $startPath = '/?source=pwa';
-$startUrl = $requestOrigin !== '' ? $requestOrigin . $startPath : $startPath;
-$scopeUrl = $requestOrigin !== '' ? $requestOrigin . '/' : '/';
-// Bust WebAPK icon hash so Chrome re-fetches the healed start_url/scope.
-$manifestIcons = array_map(static function (array $icon): array {
+// Keep apex start_url/scope same-origin so residual apex WebAPKs are not poisoned further.
+$startUrl = ($requestOrigin !== '' ? $requestOrigin : $installOrigin) . $startPath;
+$scopeUrl = ($requestOrigin !== '' ? $requestOrigin : $installOrigin) . '/';
+if ($onInstallHost && $installOrigin !== '') {
+    $startUrl = $installOrigin . $startPath;
+    $scopeUrl = $installOrigin . '/';
+}
+
+$iconBase = $installOrigin !== '' ? $installOrigin : $requestOrigin;
+$manifestIcons = array_map(static function (array $icon) use ($iconBase): array {
     $src = (string) ($icon['src'] ?? '');
-    if ($src !== '') {
-        $icon['src'] = $src . (str_contains($src, '?') ? '&' : '?') . 'webapk=4';
+    if ($src === '') {
+        return $icon;
     }
+    if (!str_starts_with($src, 'http://') && !str_starts_with($src, 'https://')) {
+        $src = ($iconBase !== '' ? $iconBase : '') . (str_starts_with($src, '/') ? $src : '/' . $src);
+    }
+    // Bust WebAPK icon hash so Chrome re-fetches unified absolute icons.
+    $icon['src'] = $src . (str_contains($src, '?') ? '&' : '?') . 'webapk=5';
 
     return $icon;
 }, $icons['manifest_icons']);
-$shortcutIcon = [['src' => $manifestIcons[0]['src'] ?? '/icons/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png']];
+$shortcutIconSrc = (string) ($manifestIcons[0]['src'] ?? (($iconBase !== '' ? $iconBase : '') . '/icons/icon-192.png'));
+$shortcutIcon = [['src' => $shortcutIconSrc, 'sizes' => '192x192', 'type' => 'image/png']];
 
 $related = [];
-if ($requestOrigin !== '') {
+if ($installOrigin !== '') {
     $related[] = [
         'platform' => 'webapp',
-        'url' => $requestOrigin . '/manifest.php',
+        'url' => $installOrigin . '/manifest.php',
     ];
 }
-$seedForSibling = $canonicalOrigin !== '' ? $canonicalOrigin : $requestOrigin;
-$sibling = $seedForSibling !== '' ? HttpsGate::siblingHost($seedForSibling) : '';
-if ($sibling !== '' && $requestOrigin !== '') {
-    $scheme = str_starts_with(strtolower($requestOrigin), 'http://') ? 'http' : 'https';
-    $siblingOrigin = $scheme . '://' . $sibling;
-    if (strcasecmp($siblingOrigin, $requestOrigin) !== 0) {
-        $related[] = [
-            'platform' => 'webapp',
-            'url' => $siblingOrigin . '/manifest.php',
-        ];
+// On the install host, also advertise the sibling so getInstalledRelatedApps can
+// detect an orphaned apex WebAPK and suppress a second BIP there.
+if ($onInstallHost && $requestOrigin !== '' && $installOrigin !== ''
+    && strcasecmp($requestOrigin, $installOrigin) === 0) {
+    $siblingHost = \Portal\Support\HttpsGate::siblingHost($installOrigin);
+    if ($siblingHost !== '') {
+        $scheme = str_starts_with(strtolower($installOrigin), 'http://') ? 'http' : 'https';
+        $siblingOrigin = $scheme . '://' . $siblingHost;
+        if (strcasecmp($siblingOrigin, $installOrigin) !== 0) {
+            $related[] = [
+                'platform' => 'webapp',
+                'url' => $siblingOrigin . '/manifest.php',
+            ];
+        }
     }
 }
+
+$shortcutBase = $onInstallHost && $installOrigin !== '' ? $installOrigin : ($requestOrigin !== '' ? $requestOrigin : '');
 
 $manifest = [
     'id' => $startPath,
@@ -78,24 +95,24 @@ $manifest = [
     'description' => portal_share_description($company, $siteName),
     'start_url' => $startUrl,
     'scope' => $scopeUrl,
-    // Standalone only — "browser" in display_override showed × + title in some builds.
-    'display' => 'standalone',
-    'handle_links' => 'preferred',
+    // Apex: browser — not installable. www: standalone — the only WebAPK.
+    'display' => $onInstallHost ? 'standalone' : 'browser',
+    'handle_links' => $onInstallHost ? 'preferred' : 'auto',
     'orientation' => 'portrait-primary',
     'dir' => 'rtl',
     'lang' => 'ar',
     'theme_color' => '#D81921',
-    // background_color bump forces Chrome WebAPK content-hash update for stuck CCT icons.
     'background_color' => '#f6f6f9',
     'categories' => ['shopping', 'business'],
-    'prefer_related_applications' => false,
+    // Apex prefers the www webapp so Chrome stops advertising a second install.
+    'prefer_related_applications' => !$onInstallHost,
     'related_applications' => $related,
     'launch_handler' => ['client_mode' => ['navigate-existing', 'auto']],
     'icons' => $manifestIcons,
     'shortcuts' => [
-        ['name' => 'المتجر', 'url' => ($requestOrigin !== '' ? $requestOrigin : '') . '/store.php?source=pwa', 'icons' => $shortcutIcon],
-        ['name' => 'السلة', 'url' => ($requestOrigin !== '' ? $requestOrigin : '') . '/store-cart.php?source=pwa', 'icons' => $shortcutIcon],
-        ['name' => 'طلباتي', 'url' => ($requestOrigin !== '' ? $requestOrigin : '') . '/my-orders.php?source=pwa', 'icons' => $shortcutIcon],
+        ['name' => 'المتجر', 'url' => $shortcutBase . '/store.php?source=pwa', 'icons' => $shortcutIcon],
+        ['name' => 'السلة', 'url' => $shortcutBase . '/store-cart.php?source=pwa', 'icons' => $shortcutIcon],
+        ['name' => 'طلباتي', 'url' => $shortcutBase . '/my-orders.php?source=pwa', 'icons' => $shortcutIcon],
     ],
 ];
 

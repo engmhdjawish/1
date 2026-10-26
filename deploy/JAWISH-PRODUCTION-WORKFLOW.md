@@ -26,6 +26,9 @@ PORTAL_APP_URL=https://www.jawishco.sy
 **لا تفعّل redirect إجباري www↔apex في nginx** إن كان العملاء ثبّتوا التطبيق على المضيفين؛ التحويل الصلب يحوّل التطبيق القديم إلى شريط × ويحتاج إعادة تثبيت.  
 PHP لا يعمل 301 بين المضيفين افتراضياً (HTTPS فقط). **لا تحوّل www↔apex عبر JS أيضاً** — الجلسة مشتركة عبر `PORTAL_COOKIE_DOMAIN=.jawishco.sy`، وSEO عبر `rel=canonical`.
 
+**هوية PWA موحّدة:** التثبيت الجديد من `www` فقط (`manifest.php` على apex يكون `display:browser` + `prefer_related_applications` نحو www).  
+Chrome **لا يدمج** WebAPK قديم على apex مع الجديد على www ولا يغيّر أيقونة المشغّل عبر Service Worker — المجموعة التالفة (`source=pwa` + ليس standalone) تُوجَّه لتثبيت www، ثم حذف الأيقونة القديمة مرة واحدة على ذلك الجهاز فقط.
+
 **تحقق على السيرفر (بعد النشر) — يجب أن يكون كلا المضيفين 200 بدون Location للمضيف الآخر:**
 
 ```bash
