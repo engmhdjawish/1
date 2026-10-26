@@ -86,20 +86,28 @@ final class StoreCatalogService
         }
 
         $policy = self::activePolicy();
+        $staffViewer = !CustomerSession::check() && \Portal\Auth\WebSession::check();
         if ($policy === null) {
+            // Staff still need prices when no guest policy is configured.
+            $showPrice = $staffViewer;
             self::$displayOptionsCache = [
-                'show_price' => false,
+                'show_price' => $showPrice,
                 'show_quantity' => false,
                 'allow_cart' => false,
                 'allow_order' => false,
                 'show_images' => true,
-                'price_mode' => 'none',
+                'price_mode' => StorePricePreference::priceModeForDisplay($showPrice),
             ];
 
             return self::$displayOptionsCache;
         }
 
         $showPrice = self::policyFlag($policy['show_price'] ?? false);
+        // Staff browsing the public store need operational prices; guest policy
+        // must not hide them behind a customer-login «إظهار السعر» CTA.
+        if (!$showPrice && $staffViewer) {
+            $showPrice = true;
+        }
 
         self::$displayOptionsCache = [
             'show_price' => $showPrice,

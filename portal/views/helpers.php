@@ -34,7 +34,7 @@ function portal_show_guest_auth_links(): bool
     return !CustomerSession::isLoggedIn() && !WebSession::check();
 }
 
-/** guest | pending | active */
+/** guest | pending | active | staff */
 function portal_price_lock_auth(): string
 {
     if (CustomerSession::isPending()) {
@@ -42,6 +42,9 @@ function portal_price_lock_auth(): string
     }
     if (CustomerSession::isLoggedIn()) {
         return 'active';
+    }
+    if (WebSession::check()) {
+        return 'staff';
     }
 
     return 'guest';
@@ -80,6 +83,21 @@ function portal_price_lock_hint(?string $redirect = null): array
     if (CustomerSession::isLoggedIn()) {
         return [
             'message' => 'السعر غير متاح لهذا الحساب.',
+            'href' => null,
+        ];
+    }
+
+    // Staff must never be sent to customer-login — that page used to wipe the staff session on GET.
+    if (WebSession::check()) {
+        if (WebSession::hasAnyPermission(['store_policy.manage', 'access_policies.manage'])) {
+            return [
+                'message' => 'السعر مخفي في سياسة الزائر — عدّلها من الإعدادات.',
+                'href' => '/dashboard/settings.php',
+            ];
+        }
+
+        return [
+            'message' => 'السعر مخفي في سياسة الزائر الحالية.',
             'href' => null,
         ];
     }

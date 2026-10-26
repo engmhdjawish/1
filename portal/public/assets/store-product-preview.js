@@ -476,6 +476,9 @@
     if (auth === 'active') {
       return `<div class="store-price-veil store-price-veil--${context}" role="note">${ghost}<span class="store-price-veil__note">السعر غير متاح لهذا الحساب.</span></div>`;
     }
+    if (auth === 'staff') {
+      return `<div class="store-price-veil store-price-veil--${context}" role="note">${ghost}<span class="store-price-veil__note">السعر مخفي في سياسة الزائر الحالية.</span></div>`;
+    }
     const redirect = encodeURIComponent(priceLockReturn(guid));
     return `<a class="store-price-veil store-price-veil--${context}" href="/customer-login.php?redirect=${redirect}">${ghost}<span class="store-price-veil__cta"><span class="material-symbols-outlined" aria-hidden="true">lock_open</span><span>إظهار السعر</span></span></a>`;
   };
