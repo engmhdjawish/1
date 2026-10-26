@@ -17,7 +17,27 @@
     }
   };
   const nameOf = (card) => (card.querySelector('.store-product-card__title, .home-product-card__name')?.textContent || '').trim();
-  const urlOf = (guid) => `${window.location.origin}/product.php?guid=${encodeURIComponent(guid)}`;
+  const shortCache = new Map();
+  const urlOf = async (guid) => {
+    if (shortCache.has(guid)) return shortCache.get(guid);
+    const target = `/product.php?guid=${encodeURIComponent(guid)}`;
+    let url = '';
+    if (window.PortalFilterView?.shortenPath) {
+      url = await window.PortalFilterView.shortenPath(target);
+    } else {
+      const response = await fetch('/api/store-filter-view.php', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'path', target }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error('short link failed');
+      url = data.share_url || `${window.location.origin}${data.short_url}`;
+    }
+    shortCache.set(guid, url);
+    return url;
+  };
 
   let menu = null;
   let menuFor = null;
@@ -129,10 +149,16 @@
     }
     const card = button.closest(CARD);
     const name = card ? nameOf(card) : '';
-    const url = urlOf(button.getAttribute('data-product-share') || '');
+    let url;
+    try {
+      url = await urlOf(button.getAttribute('data-product-share') || '');
+    } catch {
+      flash(button, 'تعذر إنشاء الرابط المختصر، حاول مجددًا');
+      return;
+    }
     if (navigator.share && window.matchMedia('(pointer: coarse)').matches) {
       try {
-        await navigator.share({ title: name, text: `${name} - ${company}`, url });
+        await navigator.share({ title: `${name} - ${company}`, url });
         return;
       } catch (error) {
         if (error && error.name === 'AbortError') return;

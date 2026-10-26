@@ -2021,6 +2021,12 @@ function absolute_order_tracking_url(string $token): string
     if ($path === '') {
         return '';
     }
+    if (class_exists(\Portal\Services\CatalogFilterViewService::class)) {
+        $short = \Portal\Services\CatalogFilterViewService::shortenPath($path);
+        if ($short !== null) {
+            $path = $short;
+        }
+    }
 
     return portal_absolute_url($path);
 }

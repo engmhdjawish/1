@@ -20,6 +20,18 @@ if ($code === '' && !empty($_SERVER['REQUEST_URI'])) {
     }
 }
 
+if ($code !== '' && preg_match('/^[A-Za-z0-9]{4,16}$/', $code) === 1) {
+    require_once dirname(__DIR__) . '/bootstrap.php';
+    if (\Portal\Services\ShareLinkService::resolvePublicAccessKey($code) === null) {
+        $redirect = \Portal\Services\CatalogFilterViewService::resolveRedirect($code);
+        if ($redirect !== null) {
+            header('Cache-Control: no-store');
+            header('Location: ' . $redirect, true, 302);
+            exit;
+        }
+    }
+}
+
 if ($code !== '') {
     $_GET['c'] = $code;
     $_REQUEST['c'] = $code;

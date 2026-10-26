@@ -227,10 +227,57 @@
     return `${site} — نتائج المتجر`;
   }
 
+  function shareOrigin() {
+    const host = global.location.hostname;
+    if (host === 'jawishco.sy' || host === 'www.jawishco.sy') return 'https://www.jawishco.sy';
+    return global.location.origin;
+  }
+
+  async function postShort(body) {
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await fetch(API, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await response.json().catch(() => null);
+        if (response.ok && data?.ok) return data;
+        lastError = new Error(data?.message || 'short link failed');
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError || new Error('short link failed');
+  }
+
+  /** Short /s/{code} for an exact same-site path such as /product.php?guid=… */
+  async function shortenPath(target) {
+    const key = `path:${target}`;
+    if (cache.has(key)) return cache.get(key);
+    const data = await postShort({ kind: 'path', target });
+    const url = data.share_url || (data.short_url ? `${shareOrigin()}${data.short_url}` : '');
+    if (!url) throw new Error('short link failed');
+    cache.set(key, url);
+    return url;
+  }
+
+  /** Never returns a long filter URL: /s/{code}, or the bare page without query. */
   async function resolveShareUrl() {
     const href = getWorkingHref() || `${global.location.pathname}${global.location.search}`;
-    const shortPath = await mint(href);
-    return absoluteUrl(shortPath || href);
+    const url = new URL(href, global.location.origin);
+    const key = `share:${url.pathname}?${url.searchParams.toString()}`;
+    if (cache.has(key)) return cache.get(key);
+    const data = await postShort({ path: url.pathname, params: paramsFromUrl(url), href: `${url.pathname}${url.search}` });
+    let shareUrl = data.share_url || (data.short_url ? `${shareOrigin()}${data.short_url}` : '');
+    if (!shareUrl) {
+      const bare = url.pathname.startsWith('/s/') ? url.pathname : (data.url || url.pathname).split('?')[0];
+      shareUrl = `${shareOrigin()}${bare}`;
+    }
+    cache.set(key, shareUrl);
+    return shareUrl;
   }
 
   let shareMenu = null;
@@ -321,7 +368,7 @@
       const title = shareTitle();
       if (typeof navigator.share === 'function') {
         try {
-          await navigator.share({ title, text: title, url });
+          await navigator.share({ title, url });
           return;
         } catch (error) {
           if (error && error.name === 'AbortError') return;
@@ -369,6 +416,7 @@
     workingHref: getWorkingHref,
     shareCurrentView,
     resolveShareUrl,
+    shortenPath,
     worthShortening: (href) => {
       try {
         return worthShortening(new URL(href, global.location.origin));

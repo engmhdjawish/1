@@ -81,6 +81,9 @@ final class CatalogFilterViewService
                  )'
             );
             Database::pdo()->exec(
+                'ALTER TABLE catalog_filter_views ADD COLUMN IF NOT EXISTS target_path TEXT'
+            );
+            Database::pdo()->exec(
                 'CREATE UNIQUE INDEX IF NOT EXISTS ux_catalog_filter_views_payload_hash
                  ON catalog_filter_views (payload_hash)'
             );
@@ -139,7 +142,93 @@ final class CatalogFilterViewService
             ];
         }
 
-        $hash = hash('sha256', (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        $target = self::targetFor($path, $params);
+        $code = self::store($target, $payload);
+        if ($code === null) {
+            return ['ok' => false, 'message' => 'تعذر إنشاء رابط مختصر.'];
+        }
+
+        return [
+            'ok' => true,
+            'code' => $code,
+            'url' => self::buildUrl($path, ['v' => $code], $params),
+            'short_url' => self::shortPath($code),
+        ];
+    }
+
+    /**
+     * Short /s/{code} for an exact same-site path (product, order tracking…).
+     */
+    public static function shortenPath(string $targetPath): ?string
+    {
+        $targetPath = trim($targetPath);
+        if ($targetPath === '' || !str_starts_with($targetPath, '/') || str_starts_with($targetPath, '//')) {
+            return null;
+        }
+        self::ensureTable();
+        $code = self::store($targetPath, []);
+
+        return $code === null ? null : self::shortPath($code);
+    }
+
+    public static function shortPath(string $code): string
+    {
+        return '/s/' . $code;
+    }
+
+    /**
+     * Where /s/{code} should redirect when the code belongs to this table.
+     */
+    public static function resolveRedirect(string $code): ?string
+    {
+        $code = self::normalizeCode($code);
+        if ($code === null) {
+            return null;
+        }
+        self::ensureTable();
+        try {
+            $stmt = Database::pdo()->prepare(
+                'SELECT target_path, payload_json::text AS payload_json
+                 FROM catalog_filter_views WHERE short_code = :code LIMIT 1'
+            );
+            $stmt->execute(['code' => $code]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (\Throwable) {
+            return null;
+        }
+        if (!is_array($row)) {
+            return null;
+        }
+        $target = trim((string) ($row['target_path'] ?? ''));
+        $payload = json_decode((string) ($row['payload_json'] ?? ''), true);
+        if (is_array($payload) && $payload !== []) {
+            $base = $target !== '' ? $target : '/store.php';
+            return $base . (str_contains($base, '?') ? '&' : '?') . 'v=' . $code;
+        }
+
+        return $target !== '' && str_starts_with($target, '/') && !str_starts_with($target, '//') ? $target : null;
+    }
+
+    /** @param array<string, mixed> $params */
+    private static function targetFor(string $path, array $params): string
+    {
+        if (in_array($path, ['/share.php', '/s.php'], true)) {
+            foreach (['token', 't', 'c', 'code'] as $key) {
+                $value = trim((string) ($params[$key] ?? ''));
+                if ($value !== '' && !is_array($params[$key])) {
+                    return '/share.php?token=' . rawurlencode($value);
+                }
+            }
+        }
+
+        return $path;
+    }
+
+    /** @param array<string, mixed> $payload */
+    private static function store(string $target, array $payload): ?string
+    {
+        $json = (string) json_encode($payload === [] ? new \stdClass() : $payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $hash = hash('sha256', $target . "\n" . $json);
         try {
             $existing = Database::pdo()->prepare(
                 'SELECT short_code FROM catalog_filter_views WHERE payload_hash = :hash LIMIT 1'
@@ -151,52 +240,28 @@ final class CatalogFilterViewService
                     'UPDATE catalog_filter_views SET last_used_at = NOW() WHERE short_code = :code'
                 )->execute(['code' => $code]);
 
-                return [
-                    'ok' => true,
-                    'code' => $code,
-                    'url' => self::buildUrl($path, ['v' => $code], $params),
-                ];
+                return $code;
             }
 
             $code = self::generateCode();
-            $insert = Database::pdo()->prepare(
-                'INSERT INTO catalog_filter_views (short_code, payload_json, payload_hash)
-                 VALUES (:code, CAST(:payload AS jsonb), :hash)'
-            );
-            $insert->execute([
-                'code' => $code,
-                'payload' => (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                'hash' => $hash,
-            ]);
+            Database::pdo()->prepare(
+                'INSERT INTO catalog_filter_views (short_code, payload_json, payload_hash, target_path)
+                 VALUES (:code, CAST(:payload AS jsonb), :hash, :target)'
+            )->execute(['code' => $code, 'payload' => $json, 'hash' => $hash, 'target' => $target]);
 
-            return [
-                'ok' => true,
-                'code' => $code,
-                'url' => self::buildUrl($path, ['v' => $code], $params),
-            ];
-        } catch (\Throwable $exception) {
-            // Unique race on hash — re-read.
+            return $code;
+        } catch (\Throwable) {
             try {
                 $existing = Database::pdo()->prepare(
                     'SELECT short_code FROM catalog_filter_views WHERE payload_hash = :hash LIMIT 1'
                 );
                 $existing->execute(['hash' => $hash]);
                 $code = trim((string) $existing->fetchColumn());
-                if ($code !== '') {
-                    return [
-                        'ok' => true,
-                        'code' => $code,
-                        'url' => self::buildUrl($path, ['v' => $code], $params),
-                    ];
-                }
-            } catch (\Throwable) {
-                /* fall through */
-            }
 
-            return [
-                'ok' => false,
-                'message' => 'تعذر إنشاء رابط مختصر: ' . $exception->getMessage(),
-            ];
+                return $code !== '' ? $code : null;
+            } catch (\Throwable) {
+                return null;
+            }
         }
     }
 
@@ -373,7 +438,7 @@ final class CatalogFilterViewService
         return '/store.php';
     }
 
-    private static function generateCode(int $length = 8): string
+    private static function generateCode(int $length = 6): string
     {
         $alphabet = 'abcdefghijkmnopqrstuvwxyz23456789';
         $max = strlen($alphabet) - 1;

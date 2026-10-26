@@ -83,5 +83,26 @@ $catalogView = file_get_contents(dirname(__DIR__) . '/views/store-catalog.php') 
 $check('easy share button', str_contains($easyView, 'data-share-filter-view'), true);
 $check('catalog share button', str_contains($catalogView, 'data-share-filter-view'), true);
 
+$shortSample = 'https://www.jawishco.sy' . CatalogFilterViewService::shortPath('ab3x9k');
+$check('short url under 40 chars', strlen($shortSample) < 40, true);
+$check('short url has no query', str_contains($shortSample, '?'), false);
+$check('short url format', preg_match('#^https://www\.jawishco\.sy/s/[a-z0-9]{5,7}$#', $shortSample) === 1, true);
+$check('codes are 6 chars', str_contains($service, 'generateCode(int $length = 6)'), true);
+$check('service stores target path', str_contains($service, 'target_path'), true);
+
+$sPhp = file_get_contents(dirname(__DIR__) . '/public/s.php') ?: '';
+$check('/s/ resolves filter + product codes', str_contains($sPhp, 'resolveRedirect'), true);
+
+$shareFn = substr($js, (int) strpos($js, 'async function resolveShareUrl'), 900);
+$check('share never uses ?v= url', str_contains($shareFn, 'data.share_url') && !str_contains($shareFn, 'mint('), true);
+$check('navigator.share url only', str_contains($js, 'navigator.share({ title, url })'), true);
+
+$productJs = file_get_contents(dirname(__DIR__) . '/public/assets/product-share.js') ?: '';
+$check('product share uses short link', str_contains($productJs, 'shortenPath') && str_contains($productJs, "kind: 'path'"), true);
+$check('product share no long fallback', str_contains($productJs, "window.location.origin}/product.php"), false);
+
+$helpers = file_get_contents(dirname(__DIR__) . '/views/helpers.php') ?: '';
+$check('tracking urls shortened', str_contains($helpers, 'shortenPath($path)'), true);
+
 echo $failed === 0 ? "\ncatalog filter views ok\n" : "\n{$failed} failed\n";
 exit($failed === 0 ? 0 : 1);
