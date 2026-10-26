@@ -224,4 +224,29 @@ final class PushSubscriptionService
         $stmt = Database::pdo()->prepare('DELETE FROM portal_push_subscriptions WHERE endpoint = :endpoint');
         $stmt->execute(['endpoint' => $endpoint]);
     }
+
+    /**
+     * Device push reach for the notifications hub.
+     *
+     * @return array{total: int, guest: int, customer: int, staff: int}
+     */
+    public static function countsByReaderType(): array
+    {
+        self::ensureTable();
+        $row = Database::pdo()->query(
+            "SELECT
+                COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE reader_type = 'guest')::int AS guest,
+                COUNT(*) FILTER (WHERE reader_type = 'customer')::int AS customer,
+                COUNT(*) FILTER (WHERE reader_type = 'staff')::int AS staff
+             FROM portal_push_subscriptions"
+        )->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'total' => (int) ($row['total'] ?? 0),
+            'guest' => (int) ($row['guest'] ?? 0),
+            'customer' => (int) ($row['customer'] ?? 0),
+            'staff' => (int) ($row['staff'] ?? 0),
+        ];
+    }
 }

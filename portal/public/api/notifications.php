@@ -58,6 +58,19 @@ try {
             exit;
         }
 
+        if ($action === 'readers') {
+            WebSession::requirePermission('notifications.manage');
+            $id = trim((string) ($_GET['id'] ?? ''));
+            $readers = NotificationService::listReadersForNotification($id, 150);
+            echo json_encode([
+                'ok' => true,
+                'id' => $id,
+                'count' => count($readers),
+                'readers' => $readers,
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
         $limit = max(1, min(50, (int) ($_GET['limit'] ?? 30)));
         $offset = max(0, (int) ($_GET['offset'] ?? 0));
         $category = trim((string) ($_GET['category'] ?? ''));
@@ -92,7 +105,8 @@ try {
 
     if ($action === 'read') {
         $id = trim((string) ($payload['id'] ?? ''));
-        if (!NotificationService::markRead($id)) {
+        $via = trim((string) ($payload['via'] ?? 'web'));
+        if (!NotificationService::markRead($id, $via)) {
             http_response_code(404);
             echo json_encode([
                 'ok' => false,

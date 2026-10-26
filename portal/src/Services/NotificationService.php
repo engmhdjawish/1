@@ -36,7 +36,7 @@ final class NotificationService
     /** @var array<string, array{0: string, 1: string}> */
     private static array $pushExclusions = [];
 
-    private const SCHEMA_MARKER_KEY = 'notifications_schema_v4';
+    private const SCHEMA_MARKER_KEY = 'notifications_schema_v5';
 
     private static bool $schemaReady = false;
 
@@ -135,6 +135,14 @@ final class NotificationService
             );
         } catch (\Throwable) {
             // Older PostgreSQL without IF NOT EXISTS on ADD COLUMN.
+        }
+        try {
+            Database::pdo()->exec(
+                "ALTER TABLE portal_notification_reads
+                 ADD COLUMN IF NOT EXISTS view_via VARCHAR(16) NOT NULL DEFAULT 'web'"
+            );
+        } catch (\Throwable) {
+            // Best-effort on older installs.
         }
     }
 
@@ -337,7 +345,14 @@ final class NotificationService
         return is_string($value) && $value !== '' ? $value : null;
     }
 
-    public static function markRead(string $notificationId): bool
+    public static function normalizeViewVia(string $via): string
+    {
+        $via = strtolower(trim($via));
+
+        return in_array($via, ['web', 'push'], true) ? $via : 'web';
+    }
+
+    public static function markRead(string $notificationId, string $viewVia = 'web'): bool
     {
         self::ensureTable();
         $notificationId = trim($notificationId);
@@ -350,18 +365,108 @@ final class NotificationService
             return false;
         }
 
+        $viewVia = self::normalizeViewVia($viewVia);
         $stmt = Database::pdo()->prepare(
-            'INSERT INTO portal_notification_reads (notification_id, reader_type, reader_id)
-             VALUES (:notification_id, :reader_type, :reader_id)
-             ON CONFLICT (notification_id, reader_type, reader_id) DO NOTHING'
+            'INSERT INTO portal_notification_reads (notification_id, reader_type, reader_id, view_via)
+             VALUES (:notification_id, :reader_type, :reader_id, :view_via)
+             ON CONFLICT (notification_id, reader_type, reader_id)
+             DO UPDATE SET
+                read_at = COALESCE(portal_notification_reads.read_at, NOW()),
+                view_via = CASE
+                    WHEN portal_notification_reads.view_via = \'push\' THEN portal_notification_reads.view_via
+                    ELSE EXCLUDED.view_via
+                END'
         );
         $stmt->execute([
             'notification_id' => $notificationId,
             'reader_type' => $reader['reader_type'],
             'reader_id' => $reader['reader_id'],
+            'view_via' => $viewVia,
         ]);
 
         return true;
+    }
+
+    /**
+     * Who opened/clicked this notification (web bell/toast or mobile push).
+     *
+     * @return list<array{
+     *   reader_type: string,
+     *   reader_id: string,
+     *   name_ar: string,
+     *   detail_ar: string,
+     *   view_via: string,
+     *   view_via_label: string,
+     *   read_at: string|null,
+     *   read_at_fmt: string
+     * }>
+     */
+    public static function listReadersForNotification(string $notificationId, int $limit = 100): array
+    {
+        self::ensureTable();
+        $notificationId = trim($notificationId);
+        if (!self::isUuid($notificationId)) {
+            return [];
+        }
+        $limit = max(1, min(200, $limit));
+
+        $stmt = Database::pdo()->prepare(
+            "SELECT r.reader_type,
+                    r.reader_id,
+                    r.view_via,
+                    r.read_at,
+                    CASE
+                      WHEN r.reader_type = 'customer' THEN COALESCE(wc.name_ar, 'عميل')
+                      WHEN r.reader_type = 'staff' THEN COALESCE(wu.display_name_ar, wu.user_name, 'موظف')
+                      ELSE 'زائر'
+                    END AS name_ar,
+                    CASE
+                      WHEN r.reader_type = 'customer' THEN COALESCE(wc.phone, '')
+                      WHEN r.reader_type = 'staff' THEN COALESCE(wu.user_name, '')
+                      ELSE LEFT(r.reader_id, 8)
+                    END AS detail_ar
+             FROM portal_notification_reads r
+             LEFT JOIN web_customers wc
+               ON r.reader_type = 'customer' AND wc.id::text = r.reader_id
+             LEFT JOIN web_users wu
+               ON r.reader_type = 'staff' AND wu.id::text = r.reader_id
+             WHERE r.notification_id = :notification_id
+               AND r.read_at IS NOT NULL
+             ORDER BY r.read_at DESC
+             LIMIT :limit"
+        );
+        $stmt->bindValue(':notification_id', $notificationId);
+        $stmt->bindValue(':limit', $limit, \PDO::PARAM_INT);
+        $stmt->execute();
+        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+
+        $out = [];
+        foreach ($rows as $row) {
+            $via = self::normalizeViewVia((string) ($row['view_via'] ?? 'web'));
+            $readAt = isset($row['read_at']) ? (string) $row['read_at'] : null;
+            $fmt = '';
+            if ($readAt !== null && $readAt !== '') {
+                try {
+                    $fmt = (new \DateTimeImmutable($readAt))
+                        ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+                        ->format('Y/m/d H:i');
+                } catch (\Throwable) {
+                    $fmt = $readAt;
+                }
+            }
+            $out[] = [
+                'reader_type' => (string) ($row['reader_type'] ?? ''),
+                'reader_id' => (string) ($row['reader_id'] ?? ''),
+                'name_ar' => (string) ($row['name_ar'] ?? 'مستخدم'),
+                'detail_ar' => (string) ($row['detail_ar'] ?? ''),
+                'view_via' => $via,
+                'view_via_label' => $via === 'push' ? 'من إشعار الجهاز' : 'من الموقع',
+                'read_at' => $readAt,
+                'read_at_fmt' => $fmt,
+            ];
+        }
+
+        return $out;
     }
 
     public static function dismissForReader(string $notificationId): bool
@@ -740,12 +845,18 @@ final class NotificationService
             $where[] = "(n.title_ar ILIKE :q OR n.body_ar ILIKE :q OR COALESCE(wc.name_ar, '') ILIKE :q OR COALESCE(wc.phone, '') ILIKE :q OR COALESCE(wu.display_name_ar, '') ILIKE :q)";
             $params[':q'] = '%' . addcslashes(mb_substr($q, 0, 80), '%_\\') . '%';
         }
-        $from = ' FROM portal_notifications n
+        $whereSql = implode(' AND ', $where);
+        $fromCount = ' FROM portal_notifications n
              LEFT JOIN web_customers wc ON wc.id = n.recipient_web_customer_id
              LEFT JOIN web_users wu ON wu.id = n.recipient_web_user_id
-             WHERE ' . implode(' AND ', $where);
+             WHERE ' . $whereSql;
+        $fromList = ' FROM portal_notifications n
+             LEFT JOIN web_customers wc ON wc.id = n.recipient_web_customer_id
+             LEFT JOIN web_users wu ON wu.id = n.recipient_web_user_id
+             LEFT JOIN web_users creator ON creator.id = n.created_by_web_user_id
+             WHERE ' . $whereSql;
 
-        $countStmt = Database::pdo()->prepare('SELECT COUNT(*)::int' . $from);
+        $countStmt = Database::pdo()->prepare('SELECT COUNT(*)::int' . $fromCount);
         foreach ($params as $key => $value) {
             $countStmt->bindValue($key, $value);
         }
@@ -757,9 +868,12 @@ final class NotificationService
         $stmt = Database::pdo()->prepare(
             'SELECT n.id::text AS id, n.scope, n.audience, n.title_ar, n.body_ar, n.link_url, n.icon, n.source,
                     n.created_at, n.expires_at, n.reference_type, n.reference_id,
+                    n.created_by_web_user_id::text AS created_by_web_user_id,
                     wc.name_ar AS customer_name_ar, wu.display_name_ar AS staff_name_ar,
-                    (SELECT COUNT(*)::int FROM portal_notification_reads r WHERE r.notification_id = n.id) AS read_count'
-            . $from . '
+                    creator.display_name_ar AS creator_name_ar,
+                    (SELECT COUNT(*)::int FROM portal_notification_reads r WHERE r.notification_id = n.id) AS read_count,
+                    (SELECT COUNT(*)::int FROM portal_notification_reads r WHERE r.notification_id = n.id AND r.dismissed_at IS NOT NULL) AS dismiss_count'
+            . $fromList . '
              ORDER BY n.created_at DESC
              LIMIT :limit OFFSET :offset'
         );
@@ -779,7 +893,19 @@ final class NotificationService
         ];
     }
 
-    /** @return array{total: int, public_count: int, private_count: int, manual_count: int, expired_count: int, active_count: int} */
+    /**
+     * @return array{
+     *   total: int,
+     *   public_count: int,
+     *   private_count: int,
+     *   manual_count: int,
+     *   auto_count: int,
+     *   expired_count: int,
+     *   active_count: int,
+     *   read_total: int,
+     *   dismiss_total: int
+     * }
+     */
     public static function sentStats(): array
     {
         self::ensureTable();
@@ -789,9 +915,17 @@ final class NotificationService
                 COUNT(*) FILTER (WHERE scope = 'public')::int AS public_count,
                 COUNT(*) FILTER (WHERE scope = 'private')::int AS private_count,
                 COUNT(*) FILTER (WHERE source = 'manual')::int AS manual_count,
+                COUNT(*) FILTER (WHERE source <> 'manual')::int AS auto_count,
                 COUNT(*) FILTER (WHERE expires_at IS NOT NULL AND expires_at <= NOW())::int AS expired_count,
                 COUNT(*) FILTER (WHERE expires_at IS NULL OR expires_at > NOW())::int AS active_count
              FROM portal_notifications"
+        )->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $reads = Database::pdo()->query(
+            "SELECT
+                COUNT(*)::int AS read_total,
+                COUNT(*) FILTER (WHERE dismissed_at IS NOT NULL)::int AS dismiss_total
+             FROM portal_notification_reads"
         )->fetch(PDO::FETCH_ASSOC) ?: [];
 
         return [
@@ -799,8 +933,117 @@ final class NotificationService
             'public_count' => (int) ($row['public_count'] ?? 0),
             'private_count' => (int) ($row['private_count'] ?? 0),
             'manual_count' => (int) ($row['manual_count'] ?? 0),
+            'auto_count' => (int) ($row['auto_count'] ?? 0),
             'expired_count' => (int) ($row['expired_count'] ?? 0),
             'active_count' => (int) ($row['active_count'] ?? 0),
+            'read_total' => (int) ($reads['read_total'] ?? 0),
+            'dismiss_total' => (int) ($reads['dismiss_total'] ?? 0),
+        ];
+    }
+
+    /**
+     * Approximate audience size for compose UI (accounts + device push).
+     *
+     * @return array{
+     *   customers_active: int,
+     *   customers_pending: int,
+     *   staff_active: int,
+     *   push: array{total: int, guest: int, customer: int, staff: int}
+     * }
+     */
+    public static function audienceReach(): array
+    {
+        $customersActive = 0;
+        $customersPending = 0;
+        $staffActive = 0;
+        try {
+            $customersActive = (int) Database::pdo()->query(
+                "SELECT COUNT(*)::int FROM web_customers WHERE status = 'active'"
+            )->fetchColumn();
+        } catch (\Throwable) {
+            $customersActive = 0;
+        }
+        try {
+            $customersPending = (int) Database::pdo()->query(
+                "SELECT COUNT(*)::int FROM web_customers WHERE status = 'pending'"
+            )->fetchColumn();
+        } catch (\Throwable) {
+            $customersPending = 0;
+        }
+        try {
+            $staffActive = (int) Database::pdo()->query(
+                'SELECT COUNT(*)::int FROM web_users WHERE is_active = TRUE'
+            )->fetchColumn();
+        } catch (\Throwable) {
+            $staffActive = 0;
+        }
+
+        $push = [
+            'total' => 0,
+            'guest' => 0,
+            'customer' => 0,
+            'staff' => 0,
+        ];
+        try {
+            $push = PushSubscriptionService::countsByReaderType();
+        } catch (\Throwable) {
+            /* push table may be missing on older installs */
+        }
+
+        return [
+            'customers_active' => $customersActive,
+            'customers_pending' => $customersPending,
+            'staff_active' => $staffActive,
+            'push' => $push,
+        ];
+    }
+
+    /** Built-in compose templates for the dashboard hub. */
+    public static function composeTemplates(): array
+    {
+        return [
+            [
+                'label' => 'بضاعة جديدة',
+                'icon' => 'storefront',
+                'title' => 'وصلت بضاعة جديدة',
+                'body' => 'تشكيلة جديدة متوفرة الآن بأسعار الجملة. تصفّح واطلب قبل نفاد الكمية.',
+                'link' => '/store.php',
+            ],
+            [
+                'label' => 'عرض',
+                'icon' => 'local_offer',
+                'title' => 'عرض خاص لفترة محدودة',
+                'body' => 'خصم على تشكيلة مختارة عند الطلب بالطرد. العرض ساري حتى نفاد الكمية.',
+                'link' => '/store.php',
+            ],
+            [
+                'label' => 'تحديث أسعار',
+                'icon' => 'info',
+                'title' => 'تحديث الأسعار',
+                'body' => 'تم تحديث أسعار بعض الأصناف. راجع الأسعار الحالية قبل إرسال طلبك.',
+                'link' => '/store.php',
+            ],
+            [
+                'label' => 'عطلة',
+                'icon' => 'celebration',
+                'title' => 'تنويه بموعد العطلة',
+                'body' => 'نستقبل الطلبات عبر الموقع، ويبدأ التجهيز بعد انتهاء العطلة.',
+                'link' => '',
+            ],
+            [
+                'label' => 'تذكير طلب',
+                'icon' => 'shopping_bag',
+                'title' => 'هل أكملت طلبك؟',
+                'body' => 'لديك أصناف في السلة. أكمل الطلب الآن لضمان التجهيز بأسرع وقت.',
+                'link' => '/store-cart.php',
+            ],
+            [
+                'label' => 'ترحيب',
+                'icon' => 'verified',
+                'title' => 'مرحباً بك في متجر الجملة',
+                'body' => 'حسابك جاهز. تصفّح التشكيلة وأرسل طلبك مباشرة من الموقع.',
+                'link' => '/store.php',
+            ],
         ];
     }
 

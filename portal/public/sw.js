@@ -158,35 +158,39 @@ function resolveNotificationTargetUrl(rawUrl) {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const notificationId = String(event.notification?.data?.id || '');
-  if (notificationId && notificationId !== 'jawish-notification') {
-    event.waitUntil(
-      fetch('/api/notifications.php', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ action: 'read', id: notificationId }),
-      }).catch(() => undefined)
-    );
-  }
   const absoluteUrl = resolveNotificationTargetUrl(event.notification?.data?.url);
 
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if (!client.url.startsWith(self.location.origin) || !('focus' in client)) {
-          continue;
-        }
-        if ('navigate' in client) {
-          return client.navigate(absoluteUrl).then((navigated) => navigated || client.focus());
-        }
-        return client.focus();
+  event.waitUntil((async () => {
+    // Clicking the OS/mobile notification counts as a view for this device session.
+    if (notificationId && notificationId !== 'jawish-notification') {
+      try {
+        await fetch('/api/notifications.php', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ action: 'read', id: notificationId, via: 'push' }),
+        });
+      } catch (_) {
+        /* ignore offline failures */
       }
-      if (self.clients.openWindow) {
-        return self.clients.openWindow(absoluteUrl);
+    }
+
+    const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clientList) {
+      if (!client.url.startsWith(self.location.origin) || !('focus' in client)) {
+        continue;
       }
-      return undefined;
-    })
-  );
+      if ('navigate' in client) {
+        const navigated = await client.navigate(absoluteUrl);
+        return navigated || client.focus();
+      }
+      return client.focus();
+    }
+    if (self.clients.openWindow) {
+      return self.clients.openWindow(absoluteUrl);
+    }
+    return undefined;
+  })());
 });
 
 async function trimCache(cacheName, maxEntries) {

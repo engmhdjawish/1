@@ -6,7 +6,9 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
 use Portal\Services\NotificationService;
+use Portal\Services\PushSubscriptionService;
 use Portal\Services\WebCustomerService;
+use Portal\Services\WebPushService;
 use Portal\Database;
 
 WebSession::requirePermission('notifications.manage');
@@ -44,6 +46,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['notifications_flash_type'] = 'success';
                 header('Location: /dashboard/notifications.php', true, 303);
                 exit;
+            }
+
+            $pushHint = '';
+            try {
+                $pushCounts = PushSubscriptionService::countsByReaderType();
+                if (WebPushService::isConfigured() && (int) ($pushCounts['total'] ?? 0) > 0) {
+                    $pushHint = ' وسيُرسل أيضاً لإشعارات الجهاز عند توفر اشتراكات.';
+                } elseif (!WebPushService::isConfigured()) {
+                    $pushHint = ' (إشعارات الجهاز غير مفعّلة على الخادم حالياً).';
+                }
+            } catch (\Throwable) {
+                $pushHint = '';
             }
 
             if ($scope === 'private') {
@@ -92,7 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
             }
 
-            $_SESSION['notifications_flash'] = 'تم إرسال الإشعار بنجاح.';
+            $_SESSION['notifications_flash'] = 'تم إرسال الإشعار بنجاح.' . $pushHint;
             $_SESSION['notifications_flash_type'] = 'success';
             header('Location: /dashboard/notifications.php', true, 303);
             exit;
@@ -162,10 +176,27 @@ try {
         'public_count' => 0,
         'private_count' => 0,
         'manual_count' => 0,
+        'auto_count' => 0,
         'expired_count' => 0,
         'active_count' => 0,
+        'read_total' => 0,
+        'dismiss_total' => 0,
     ];
 }
+
+try {
+    $audienceReach = NotificationService::audienceReach();
+} catch (\Throwable) {
+    $audienceReach = [
+        'customers_active' => 0,
+        'customers_pending' => 0,
+        'staff_active' => 0,
+        'push' => ['total' => 0, 'guest' => 0, 'customer' => 0, 'staff' => 0],
+    ];
+}
+
+$pushConfigured = WebPushService::isConfigured();
+$composeTemplates = NotificationService::composeTemplates();
 
 try {
     $staffUsers = Database::pdo()->query(
