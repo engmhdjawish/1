@@ -260,7 +260,7 @@ $assert(
     && str_contains($layout, "closest('a[href]')")
 );
 $helpers = (string) file_get_contents(dirname(__DIR__) . '/views/helpers.php');
-$assert('share_page_url stays relative', str_contains($helpers, "return '/share.php?' . http_build_query(\$params);"));
+$assert('share_page_url stays relative', str_contains($helpers, "return \$path . \$separator . http_build_query(\$filtered);") && str_contains($helpers, "\$path = '/s/' . rawurlencode(\$short);"));
 $assert('HttpsGate never bounces standalone app host', str_contains((string) file_get_contents(dirname(__DIR__) . '/src/Support/HttpsGate.php'), '&& !$isStandalone'));
 
 echo "\n";
