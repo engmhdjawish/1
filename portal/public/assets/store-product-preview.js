@@ -600,6 +600,9 @@
     if (auth === 'active') {
       return `<div class="store-price-veil store-price-veil--${context}" role="note">${ghost}<span class="store-price-veil__note">السعر غير متاح لهذا الحساب.</span></div>`;
     }
+    if (auth === 'staff') {
+      return `<div class="store-price-veil store-price-veil--${context}" role="note">${ghost}<span class="store-price-veil__note">لا تملك صلاحية عرض أسعار المتجر.</span></div>`;
+    }
     const redirect = encodeURIComponent(priceLockReturn(guid));
     return `<a class="store-price-veil store-price-veil--${context}" href="/customer-login.php?redirect=${redirect}">${ghost}<span class="store-price-veil__cta"><span class="material-symbols-outlined" aria-hidden="true">lock_open</span><span>إظهار السعر</span></span></a>`;
   };
@@ -811,7 +814,11 @@
 
   const renderCartFormFallback = (p) => {
     const maxAttr = p.maxPackages != null ? `data-max-qty="${esc(p.maxPackages)}" data-max-qty-label="${esc(p.maxLabel || p.maxPackages)}"` : '';
-    const effectiveMax = p.effectiveMax != null ? Number(p.effectiveMax) : (p.remaining != null ? Number(p.remaining) : null);
+    // packagesAvailable is zeroed when quantity is hidden — never treat that as «مكتمل».
+    let effectiveMax = p.effectiveMax != null ? Number(p.effectiveMax) : (p.remaining != null ? Number(p.remaining) : null);
+    if (!Number.isFinite(effectiveMax)) {
+      effectiveMax = null;
+    }
     const remaining = effectiveMax != null ? Math.max(0, effectiveMax) : null;
     const atLimit = remaining !== null && remaining <= 0;
     const inCartQty = Math.max(0, Number(p.cartQty) || 0);

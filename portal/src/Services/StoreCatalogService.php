@@ -86,24 +86,34 @@ final class StoreCatalogService
         }
 
         $policy = self::activePolicy();
+        $staffViewer = !CustomerSession::check() && \Portal\Auth\WebSession::check();
         if ($policy === null) {
+            $showPrice = $staffViewer && \Portal\Auth\WebSession::hasPermission('store.view_prices');
+            $showQuantity = $staffViewer && \Portal\Auth\WebSession::hasPermission('store.view_stock');
             self::$displayOptionsCache = [
-                'show_price' => false,
-                'show_quantity' => false,
+                'show_price' => $showPrice,
+                'show_quantity' => $showQuantity,
                 'allow_cart' => false,
                 'allow_order' => false,
                 'show_images' => true,
-                'price_mode' => 'none',
+                'price_mode' => StorePricePreference::priceModeForDisplay($showPrice),
             ];
 
             return self::$displayOptionsCache;
         }
 
         $showPrice = self::policyFlag($policy['show_price'] ?? false);
+        $showQuantity = self::policyFlag($policy['show_quantity'] ?? false);
+        // Staff visibility is permission-gated, not guest-policy: prices/stock
+        // only appear when the employee has store.view_prices / store.view_stock.
+        if ($staffViewer) {
+            $showPrice = \Portal\Auth\WebSession::hasPermission('store.view_prices');
+            $showQuantity = \Portal\Auth\WebSession::hasPermission('store.view_stock');
+        }
 
         self::$displayOptionsCache = [
             'show_price' => $showPrice,
-            'show_quantity' => self::policyFlag($policy['show_quantity'] ?? false),
+            'show_quantity' => $showQuantity,
             'allow_cart' => self::policyFlag($policy['allow_cart'] ?? false),
             'allow_order' => self::policyFlag($policy['allow_order'] ?? false),
             'show_images' => true,

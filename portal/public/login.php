@@ -28,10 +28,16 @@ $message = $_GET['message'] ?? null;
 $redirect = PortalUrl::safeRedirectPath($_GET['redirect'] ?? $_POST['redirect'] ?? null);
 $loginPagePath = isset($loginPagePath) ? (string) $loginPagePath : PortalUrl::loginPagePath($type);
 
-if ($type === 'customer' && WebSession::check()) {
-    WebSession::logout();
-} elseif ($type === 'staff' && CustomerSession::isLoggedIn()) {
-    CustomerSession::logout();
+// Switching account types only happens on a successful POST login
+// (WebSession::login / CustomerSession::establishFromRow). Merely opening
+// customer-login while staff must not revoke the staff session — that was
+// wiping staff after «إظهار السعر» and blocking re-login until site data clear.
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if ($type === 'customer' && WebSession::check()) {
+        WebSession::logout();
+    } elseif ($type === 'staff' && CustomerSession::isLoggedIn()) {
+        CustomerSession::logout();
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' && PortalUrl::requestPath() === '/login.php') {
@@ -54,6 +60,15 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     }
     if ($type === 'customer' && CustomerSession::isLoggedIn()) {
         header('Location: ' . PortalUrl::loginRedirectTarget('customer', $redirect));
+        exit;
+    }
+    // Opposite role is already signed in: keep that session and leave the wrong login page.
+    if ($type === 'customer' && WebSession::check()) {
+        header('Location: ' . ($redirect ?? '/store.php'));
+        exit;
+    }
+    if ($type === 'staff' && CustomerSession::isLoggedIn()) {
+        header('Location: ' . ($redirect ?? '/index.php'));
         exit;
     }
 }
