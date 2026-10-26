@@ -180,6 +180,11 @@ $assert(
     && !str_contains($pwa, 'wantHost')
     && str_contains($pwa, 'portal_pwa_host')
 );
+$assert(
+    'pwa.js heals installed-but-browser chrome (Custom Tab ×)',
+    str_contains($pwa, 'healBrokenInstalledChrome')
+    && str_contains($pwa, 'manifest.php?heal=1')
+);
 
 $layout = (string) file_get_contents(dirname(__DIR__) . '/views/layout.php');
 $assert(
