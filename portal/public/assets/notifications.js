@@ -169,7 +169,7 @@
       if (!id) return;
       fetchJson(API, {
         method: 'POST',
-        body: JSON.stringify({ action: 'read', id }),
+        body: JSON.stringify({ action: 'read', id, via: 'web' }),
       }).catch(() => {});
     });
     stack.appendChild(toast);
@@ -209,6 +209,13 @@
     try {
       const notification = new Notification(title, options);
       notification.onclick = () => {
+        const id = String(item?.id || '').trim();
+        if (id) {
+          fetchJson(API, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'read', id, via: 'push' }),
+          }).catch(() => {});
+        }
         window.focus();
         window.location.href = url;
         notification.close();
@@ -519,7 +526,7 @@
       try {
         const data = await fetchJson(API, {
           method: 'POST',
-          body: JSON.stringify({ action: 'read', id }),
+          body: JSON.stringify({ action: 'read', id, via: 'web' }),
         });
         setBadge(data.unread ?? 0);
         lastUnread = Math.max(0, Number(data.unread) || 0);

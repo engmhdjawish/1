@@ -36,7 +36,7 @@ final class NotificationService
     /** @var array<string, array{0: string, 1: string}> */
     private static array $pushExclusions = [];
 
-    private const SCHEMA_MARKER_KEY = 'notifications_schema_v4';
+    private const SCHEMA_MARKER_KEY = 'notifications_schema_v5';
 
     private static bool $schemaReady = false;
 
@@ -135,6 +135,14 @@ final class NotificationService
             );
         } catch (\Throwable) {
             // Older PostgreSQL without IF NOT EXISTS on ADD COLUMN.
+        }
+        try {
+            Database::pdo()->exec(
+                "ALTER TABLE portal_notification_reads
+                 ADD COLUMN IF NOT EXISTS view_via VARCHAR(16) NOT NULL DEFAULT 'web'"
+            );
+        } catch (\Throwable) {
+            // Best-effort on older installs.
         }
     }
 
@@ -337,7 +345,14 @@ final class NotificationService
         return is_string($value) && $value !== '' ? $value : null;
     }
 
-    public static function markRead(string $notificationId): bool
+    public static function normalizeViewVia(string $via): string
+    {
+        $via = strtolower(trim($via));
+
+        return in_array($via, ['web', 'push'], true) ? $via : 'web';
+    }
+
+    public static function markRead(string $notificationId, string $viewVia = 'web'): bool
     {
         self::ensureTable();
         $notificationId = trim($notificationId);
@@ -350,18 +365,108 @@ final class NotificationService
             return false;
         }
 
+        $viewVia = self::normalizeViewVia($viewVia);
         $stmt = Database::pdo()->prepare(
-            'INSERT INTO portal_notification_reads (notification_id, reader_type, reader_id)
-             VALUES (:notification_id, :reader_type, :reader_id)
-             ON CONFLICT (notification_id, reader_type, reader_id) DO NOTHING'
+            'INSERT INTO portal_notification_reads (notification_id, reader_type, reader_id, view_via)
+             VALUES (:notification_id, :reader_type, :reader_id, :view_via)
+             ON CONFLICT (notification_id, reader_type, reader_id)
+             DO UPDATE SET
+                read_at = COALESCE(portal_notification_reads.read_at, NOW()),
+                view_via = CASE
+                    WHEN portal_notification_reads.view_via = \'push\' THEN portal_notification_reads.view_via
+                    ELSE EXCLUDED.view_via
+                END'
         );
         $stmt->execute([
             'notification_id' => $notificationId,
             'reader_type' => $reader['reader_type'],
             'reader_id' => $reader['reader_id'],
+            'view_via' => $viewVia,
         ]);
 
         return true;
+    }
+
+    /**
+     * Who opened/clicked this notification (web bell/toast or mobile push).
+     *
+     * @return list<array{
+     *   reader_type: string,
+     *   reader_id: string,
+     *   name_ar: string,
+     *   detail_ar: string,
+     *   view_via: string,
+     *   view_via_label: string,
+     *   read_at: string|null,
+     *   read_at_fmt: string
+     * }>
+     */
+    public static function listReadersForNotification(string $notificationId, int $limit = 100): array
+    {
+        self::ensureTable();
+        $notificationId = trim($notificationId);
+        if (!self::isUuid($notificationId)) {
+            return [];
+        }
+        $limit = max(1, min(200, $limit));
+
+        $stmt = Database::pdo()->prepare(
+            "SELECT r.reader_type,
+                    r.reader_id,
+                    r.view_via,
+                    r.read_at,
+                    CASE
+                      WHEN r.reader_type = 'customer' THEN COALESCE(wc.name_ar, 'عميل')
+                      WHEN r.reader_type = 'staff' THEN COALESCE(wu.display_name_ar, wu.user_name, 'موظف')
+                      ELSE 'زائر'
+                    END AS name_ar,
+                    CASE
+                      WHEN r.reader_type = 'customer' THEN COALESCE(wc.phone, '')
+                      WHEN r.reader_type = 'staff' THEN COALESCE(wu.user_name, '')
+                      ELSE LEFT(r.reader_id, 8)
+                    END AS detail_ar
+             FROM portal_notification_reads r
+             LEFT JOIN web_customers wc
+               ON r.reader_type = 'customer' AND wc.id::text = r.reader_id
+             LEFT JOIN web_users wu
+               ON r.reader_type = 'staff' AND wu.id::text = r.reader_id
+             WHERE r.notification_id = :notification_id
+               AND r.read_at IS NOT NULL
+             ORDER BY r.read_at DESC
+             LIMIT :limit"
+        );
+        $stmt->bindValue(':notification_id', $notificationId);
+        $stmt->bindValue(':limit', $limit, \PDO::PARAM_INT);
+        $stmt->execute();
+        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+
+        $out = [];
+        foreach ($rows as $row) {
+            $via = self::normalizeViewVia((string) ($row['view_via'] ?? 'web'));
+            $readAt = isset($row['read_at']) ? (string) $row['read_at'] : null;
+            $fmt = '';
+            if ($readAt !== null && $readAt !== '') {
+                try {
+                    $fmt = (new \DateTimeImmutable($readAt))
+                        ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+                        ->format('Y/m/d H:i');
+                } catch (\Throwable) {
+                    $fmt = $readAt;
+                }
+            }
+            $out[] = [
+                'reader_type' => (string) ($row['reader_type'] ?? ''),
+                'reader_id' => (string) ($row['reader_id'] ?? ''),
+                'name_ar' => (string) ($row['name_ar'] ?? 'مستخدم'),
+                'detail_ar' => (string) ($row['detail_ar'] ?? ''),
+                'view_via' => $via,
+                'view_via_label' => $via === 'push' ? 'من إشعار الجهاز' : 'من الموقع',
+                'read_at' => $readAt,
+                'read_at_fmt' => $fmt,
+            ];
+        }
+
+        return $out;
     }
 
     public static function dismissForReader(string $notificationId): bool

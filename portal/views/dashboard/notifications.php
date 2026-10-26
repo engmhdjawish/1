@@ -177,7 +177,7 @@ $audienceLabel = static function (string $audience): string {
         <label class="block text-sm font-bold mb-1">الجمهور</label>
         <select name="audience" class="h-10 w-full rounded-lg border border-border-subtle px-3 text-sm" data-notification-audience>
           <option value="<?= h(NotificationService::AUDIENCE_ALL) ?>" data-reach-accounts="<?= (int) ($audienceReach['customers_active'] + $audienceReach['staff_active']) ?>" data-reach-push="<?= (int) ($push['total'] ?? 0) ?>">الجميع (زوار + عملاء + موظفين)</option>
-          <option value="<?= h(NotificationService::AUDIENCE_GUESTS) ?>" data-reach-accounts="—" data-reach-push="<?= (int) ($push['guest'] ?? 0) ?>">الزوار فقط (غير المسجّلين)</option>
+          <option value="<?= h(NotificationService::AUDIENCE_GUESTS) ?>" data-reach-accounts="0" data-reach-push="<?= (int) ($push['guest'] ?? 0) ?>">الزوار فقط (غير المسجّلين)</option>
           <option value="<?= h(NotificationService::AUDIENCE_CUSTOMERS) ?>" data-reach-accounts="<?= (int) ($audienceReach['customers_active'] ?? 0) ?>" data-reach-push="<?= (int) ($push['customer'] ?? 0) ?>">العملاء المسجّلون فقط</option>
           <option value="<?= h(NotificationService::AUDIENCE_STAFF) ?>" data-reach-accounts="<?= (int) ($audienceReach['staff_active'] ?? 0) ?>" data-reach-push="<?= (int) ($push['staff'] ?? 0) ?>">الموظفون فقط</option>
         </select>
@@ -341,6 +341,7 @@ $audienceLabel = static function (string $audience): string {
         <article
           class="p-4 hover:bg-slate-50/70 transition-colors"
           data-notification-row
+          data-notification-id="<?= h((string) ($row['id'] ?? '')) ?>"
           data-scope="<?= h($rowScope) ?>"
           data-source="<?= h($rowSource) ?>"
           data-search="<?= h($searchText) ?>"
@@ -390,9 +391,19 @@ $audienceLabel = static function (string $audience): string {
                 <p class="text-[11px] mt-1" dir="ltr"><a class="text-primary font-bold hover:underline" href="<?= h((string) $row['link_url']) ?>"><?= h((string) $row['link_url']) ?></a></p>
               <?php endif; ?>
               <div class="mt-3 flex flex-wrap gap-2">
+                <button type="button" class="h-8 px-3 rounded-lg border border-border-subtle text-xs font-bold hover:bg-white inline-flex items-center gap-1" data-view-readers>
+                  <span class="material-symbols-outlined text-base" aria-hidden="true">visibility</span>
+                  من شاهد (<?= (int) ($row['read_count'] ?? 0) ?>)
+                </button>
                 <button type="button" class="h-8 px-3 rounded-lg border border-border-subtle text-xs font-bold hover:bg-white" data-refill-notification>
                   إعادة تعبئة النموذج
                 </button>
+              </div>
+              <div class="mt-3 hidden rounded-xl border border-border-subtle bg-white" data-readers-panel>
+                <div class="px-3 py-2 border-b border-border-subtle text-xs font-bold text-slate-700">المشاهدون — الضغط من الموقع أو إشعار الجهاز</div>
+                <div class="max-h-48 overflow-y-auto divide-y divide-border-subtle text-sm" data-readers-list>
+                  <p class="p-3 text-xs text-text-muted">جاري التحميل...</p>
+                </div>
               </div>
             </div>
             <form method="post" class="shrink-0" onsubmit="return confirm('حذف هذا الإشعار نهائياً من الجميع؟');">
@@ -543,6 +554,72 @@ $audienceLabel = static function (string $audience): string {
       syncPreview();
       form.scrollIntoView({ behavior: 'smooth', block: 'start' });
       titleInput?.focus();
+    });
+  });
+
+  const escapeHtml = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+  const typeLabel = (type) => ({
+    customer: 'عميل',
+    staff: 'موظف',
+    guest: 'زائر',
+  }[type] || 'مستخدم');
+
+  document.querySelectorAll('[data-view-readers]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const row = button.closest('[data-notification-row]');
+      const panel = row?.querySelector('[data-readers-panel]');
+      const list = row?.querySelector('[data-readers-list]');
+      const id = row?.dataset.notificationId || '';
+      if (!panel || !list || !id) return;
+
+      const willOpen = panel.classList.contains('hidden');
+      document.querySelectorAll('[data-readers-panel]').forEach((other) => {
+        if (other !== panel) other.classList.add('hidden');
+      });
+      if (!willOpen) {
+        panel.classList.add('hidden');
+        return;
+      }
+
+      panel.classList.remove('hidden');
+      list.innerHTML = '<p class="p-3 text-xs text-text-muted">جاري التحميل...</p>';
+      try {
+        const res = await fetch('/api/notifications.php?action=readers&id=' + encodeURIComponent(id), {
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        });
+        const data = await res.json();
+        if (!res.ok || data.ok === false) {
+          throw new Error(data.message || 'تعذر تحميل المشاهدين.');
+        }
+        const readers = Array.isArray(data.readers) ? data.readers : [];
+        if (readers.length === 0) {
+          list.innerHTML = '<p class="p-3 text-xs text-text-muted">لم يشاهده أحد بعد. تُحسب المشاهدة عند الضغط على الإشعار من الموقع أو من إشعار الجهاز.</p>';
+          return;
+        }
+        list.innerHTML = readers.map((reader) => {
+          const detail = String(reader.detail_ar || '').trim();
+          return '<div class="px-3 py-2 flex items-start justify-between gap-3">'
+            + '<div class="min-w-0">'
+            + '<p class="font-bold text-slate-900 text-sm">' + escapeHtml(reader.name_ar || 'مستخدم') + '</p>'
+            + '<p class="text-[11px] text-text-muted mt-0.5">'
+            + escapeHtml(typeLabel(reader.reader_type))
+            + (detail ? ' · ' + escapeHtml(detail) : '')
+            + ' · ' + escapeHtml(reader.view_via_label || '')
+            + '</p>'
+            + '</div>'
+            + '<time class="text-[11px] text-slate-500 shrink-0 tabular-nums">' + escapeHtml(reader.read_at_fmt || '') + '</time>'
+            + '</div>';
+        }).join('');
+        button.innerHTML = '<span class="material-symbols-outlined text-base" aria-hidden="true">visibility</span> من شاهد (' + readers.length + ')';
+      } catch (error) {
+        list.innerHTML = '<p class="p-3 text-xs text-red-600">' + escapeHtml(error instanceof Error ? error.message : 'تعذر التحميل') + '</p>';
+      }
     });
   });
 
