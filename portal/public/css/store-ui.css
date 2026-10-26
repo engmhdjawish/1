@@ -586,6 +586,10 @@
 }
 
 .store-results-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
   padding-bottom: 0.75rem;
   border-bottom: 1px solid #f1f5f9;
   margin-bottom: 1rem !important;
@@ -594,6 +598,99 @@
 .store-results-meta {
   font-weight: 600;
   color: #475569 !important;
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.store-results-toolbar .filter-view-share {
+  position: relative;
+  margin-inline-start: auto;
+}
+
+.store-share-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.store-share-view .material-symbols-outlined {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.store-share-view:hover,
+.store-share-view[aria-expanded='true'] {
+  border-color: #d81921;
+  background: #fef2f2;
+  color: #d81921;
+}
+
+.store-share-view.is-loading {
+  opacity: 0.65;
+  cursor: progress;
+}
+
+.filter-view-share__menu {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  inset-inline-end: 0;
+  z-index: 40;
+  display: grid;
+  gap: 0.15rem;
+  min-width: 11.5rem;
+  padding: 0.35rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 24px 40px -20px rgba(15, 23, 42, 0.55);
+}
+
+.filter-view-share__item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.55rem;
+  padding: 0 0.7rem;
+  border: 0;
+  border-radius: 0.7rem;
+  background: none;
+  color: #0f172a;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 800;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.filter-view-share__item:hover,
+.filter-view-share__item:focus-visible {
+  background: #f1f5f9;
+  outline: none;
+}
+
+.filter-view-share__toast {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  inset-inline-end: 0;
+  z-index: 41;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .store-empty-state {
