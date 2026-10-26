@@ -156,58 +156,44 @@ $assert(
     portal_pwa_install_origin() === 'https://www.jawishco.sy'
 );
 
-$manifest = (string) file_get_contents(dirname(__DIR__) . '/public/manifest.php');
-$assert(
-    'manifest advertises related_applications webapp',
-    str_contains($manifest, 'related_applications') && str_contains($manifest, "'platform' => 'webapp'")
-);
-$assert(
-    'manifest id stays relative (stable app identity)',
-    str_contains($manifest, "'id' => \$startPath") || str_contains($manifest, "'id' => '/?source=pwa'")
-);
-$assert(
-    'manifest does not bake absolute start_url into id',
-    !str_contains($manifest, "'id' => \$startUrl")
-);
-$assert(
-    'manifest uses portal_pwa_install_origin for one icon identity',
-    str_contains($manifest, 'portal_pwa_install_origin')
-    && str_contains($manifest, 'portal_pwa_is_install_host')
-    && str_contains($manifest, 'webapk=5')
-);
-$assert(
-    'manifest is standalone only on install host; apex uses browser (no duplicate BIP)',
-    str_contains($manifest, "\$onInstallHost ? 'standalone' : 'browser'")
-    && str_contains($manifest, "'prefer_related_applications' => !\$onInstallHost")
-);
-$assert(
-    'manifest prefers opening links in the installed app on www',
-    str_contains($manifest, "'handle_links' => \$onInstallHost ? 'preferred' : 'auto'")
-);
-$assert(
-    'manifest has no display_override browser chrome',
-    !str_contains($manifest, "'display_override'")
-);
+$renderManifest = static function (string $host): array {
+    $php = escapeshellarg(PHP_BINARY);
+    $code = escapeshellarg(
+        '$_SERVER["HTTP_HOST"]=' . var_export($host, true) . ';$_SERVER["HTTPS"]="on";'
+        . '$_SERVER["REQUEST_URI"]="/manifest.php";include "manifest.php";'
+    );
+    $out = shell_exec('cd ' . escapeshellarg(dirname(__DIR__) . '/public') . " && {$php} -r {$code} 2>/dev/null");
+    $decoded = json_decode((string) $out, true);
+
+    return is_array($decoded) ? $decoded : [];
+};
+foreach (['jawishco.sy', 'www.jawishco.sy'] as $host) {
+    $m = $renderManifest($host);
+    $origin = 'https://' . $host;
+    $assert("{$host} manifest id is relative (matches old WebAPK id {$origin}/?source=pwa)", ($m['id'] ?? null) === '/?source=pwa');
+    $assert("{$host} manifest start_url/scope stay on {$host}", ($m['start_url'] ?? '') === $origin . '/?source=pwa' && ($m['scope'] ?? '') === $origin . '/');
+    $assert("{$host} manifest is installable standalone (WebAPK update can apply)", ($m['display'] ?? '') === 'standalone');
+    $assert("{$host} manifest has no display_override / related-app preference", !isset($m['display_override']) && empty($m['prefer_related_applications']));
+    $sameOrigin = true;
+    foreach ($m['icons'] ?? [] as $icon) {
+        $src = (string) ($icon['src'] ?? '');
+        $sameOrigin = $sameOrigin && str_starts_with($src, $origin . '/') && str_contains($src, 'webapk=6');
+    }
+    foreach ($m['shortcuts'] ?? [] as $shortcut) {
+        $sameOrigin = $sameOrigin && str_starts_with((string) ($shortcut['url'] ?? ''), $origin . '/');
+    }
+    $assert("{$host} manifest icons/shortcuts are same-origin with bumped icon hash", $sameOrigin && !empty($m['icons']));
+}
 
 $staticManifest = (string) file_get_contents(dirname(__DIR__) . '/public/manifest.webmanifest');
 $decodedStatic = json_decode($staticManifest, true);
 $assert(
-    'static webmanifest id is relative',
-    is_array($decodedStatic) && ($decodedStatic['id'] ?? null) === '/?source=pwa'
-);
-$assert(
-    'static webmanifest points icons at canonical www',
+    'static webmanifest is host-relative and standalone',
     is_array($decodedStatic)
-    && str_starts_with((string) (($decodedStatic['icons'][0]['src'] ?? '')), 'https://www.jawishco.sy/')
-);
-$assert(
-    'static webmanifest related_applications prefer www',
-    is_array($decodedStatic)
-    && ($decodedStatic['related_applications'][0]['url'] ?? '') === 'https://www.jawishco.sy/manifest.php'
-);
-$assert(
-    'static webmanifest handle_links preferred',
-    is_array($decodedStatic) && ($decodedStatic['handle_links'] ?? null) === 'preferred'
+    && ($decodedStatic['id'] ?? null) === '/?source=pwa'
+    && ($decodedStatic['start_url'] ?? null) === '/?source=pwa'
+    && ($decodedStatic['display'] ?? null) === 'standalone'
+    && !str_contains($staticManifest, 'https://')
 );
 
 $pwa = (string) file_get_contents(dirname(__DIR__) . '/public/assets/pwa.js');
@@ -229,35 +215,12 @@ $assert(
     && str_contains($pwa, 'يتوفر تحديث جديد')
 );
 $assert(
-    'pwa.js detects broken Custom Tab homescreen (source=pwa, not standalone)',
-    str_contains($pwa, 'looksLikeBrokenHomescreenLaunch')
-    && str_contains($pwa, "params.get('source') === 'pwa'")
-    && str_contains($pwa, 'replaceBrokenShell')
-);
-$assert(
-    'pwa.js migrates broken apex shell to www install (SW cannot heal ×)',
-    str_contains($pwa, 'shouldMigrateToWwwSibling')
-    && str_contains($pwa, 'openHealthyWwwInstall')
-    && str_contains($pwa, 'canonicalInstallOrigin')
-    && str_contains($pwa, 'install=1&migrate=1')
-    && str_contains($pwa, 'maybeAutoMigrateBrokenShell')
-    && str_contains($pwa, 'UNIFIED_ICON_COPY')
-    && str_contains($pwa, 'أيقونة-موحّدة-v1')
-);
-$assert(
-    'pwa.js suppresses BIP / install UI off the canonical www host',
-    str_contains($pwa, 'isOnCanonicalInstallHost')
-    && str_contains($pwa, 'Apex must never become a second installable app')
-);
-$assert(
-    'pwa.js does not treat empty-referrer browser tabs as broken shells',
-    !str_contains($pwa, "(display-mode: browser)').matches && ref === ''")
-);
-$assert(
-    'pwa.js replaces broken old shell (different icon / × bar) instead of SW-only reload',
-    str_contains($pwa, 'showShellReplaceBanner')
-    && str_contains($pwa, 'replaceBrokenShell')
-    && str_contains($pwa, 'showRemoveOldIconBanner')
+    'pwa.js has no reinstall/migrate-to-www flow (would leave WebAPK scope)',
+    !str_contains($pwa, 'openHealthyWwwInstall')
+    && !str_contains($pwa, 'migrate=1')
+    && !str_contains($pwa, 'intent://')
+    && !str_contains($pwa, 'showShellReplaceBanner')
+    && !str_contains($pwa, 'showRemoveOldIconBanner')
 );
 
 $sw = (string) file_get_contents(dirname(__DIR__) . '/public/sw.js');

@@ -6,15 +6,10 @@
 
   const AUTO_DISMISS_KEY = 'pwa-auto-dismissed-at';
   const INSTALLED_KEY = 'pwa-installed-v1';
-  const MIGRATE_DISMISS_KEY = 'pwa-migrate-dismiss-session';
-  const AUTO_MIGRATE_KEY = 'pwa-auto-migrate-session';
   const AUTO_DISMISS_DAYS = 3;
   const ENGAGE_MS = 28000;
   const pageLoadedAt = Date.now();
   let engagementReady = false;
-  /** Canonical install host — only www is installable going forward. */
-  const CANONICAL_INSTALL_HOST = 'www.jawishco.sy';
-  const UNIFIED_ICON_COPY = 'أيقونة-موحّدة-v1';
 
   const isStandalone =
     window.matchMedia('(display-mode: standalone)').matches
@@ -22,77 +17,10 @@
     || window.matchMedia('(display-mode: minimal-ui)').matches
     || window.navigator.standalone === true;
 
-  /*
-   * Chrome WebAPK shell (× Custom Tab) is NOT healed by Service Worker updates.
-   * SKIP_WAITING only reloads page content inside the same broken CCT shell.
-   * Detect homescreen launches that are no longer standalone and migrate the user
-   * to a healthy install (www sibling or fresh install) — without mass-deleting
-   * every customer's icon.
-   */
-  function looksLikeBrokenHomescreenLaunch() {
-    if (isStandalone) {
-      return false;
-    }
-    // start_url of the installed app always carries source=pwa.
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('source') === 'pwa') {
-      return true;
-    }
-    // WebAPK / TWA launches often expose an android-app referrer.
-    const ref = String(document.referrer || '');
-    if (/^android-app:\/\//i.test(ref)) {
-      return true;
-    }
-    // Do NOT treat empty-referrer browser tabs as broken — that false-positives
-    // normal Chrome visits and would nag healthy customers to reinstall.
-    return false;
-  }
 
-  function siblingPublicOrigin() {
-    const host = String(window.location.hostname || '').toLowerCase();
-    if (!host || host === 'localhost' || host === '127.0.0.1') {
-      return '';
-    }
-    const sibling = host.startsWith('www.') ? host.slice(4) : 'www.' + host;
-    if (!sibling || sibling === host) {
-      return '';
-    }
-    return window.location.protocol + '//' + sibling;
-  }
 
-  function canonicalInstallOrigin() {
-    const host = String(window.location.hostname || '').toLowerCase();
-    if (!host || host === 'localhost' || host === '127.0.0.1') {
-      return '';
-    }
-    // Prefer the known production www host; otherwise derive www from apex/www pair.
-    if (host === 'jawishco.sy' || host === 'www.jawishco.sy') {
-      return window.location.protocol + '//' + CANONICAL_INSTALL_HOST;
-    }
-    if (host.startsWith('www.')) {
-      return window.location.protocol + '//' + host;
-    }
-    const sibling = siblingPublicOrigin();
-    return sibling || (window.location.protocol + '//' + host);
-  }
 
-  function isOnCanonicalInstallHost() {
-    const host = String(window.location.hostname || '').toLowerCase();
-    const install = canonicalInstallOrigin();
-    if (!install) {
-      return true;
-    }
-    try {
-      return host === new URL(install).hostname.toLowerCase();
-    } catch (_) {
-      return host.startsWith('www.');
-    }
-  }
 
-  /** Apex (and any non-www host) must not advertise a second installable app. */
-  function shouldMigrateToWwwSibling() {
-    return !isOnCanonicalInstallHost() && canonicalInstallOrigin() !== '';
-  }
 
   (function rememberStandaloneHost() {
     if (!isStandalone || !window.isSecureContext) {
@@ -307,256 +235,20 @@
   let waitingWorker = null;
   let refreshingForUpdate = false;
 
-  function isBrokenAppShell() {
-    return looksLikeBrokenHomescreenLaunch();
-  }
 
-  function migrateDismissedRecently() {
-    try {
-      if (sessionStorage.getItem(MIGRATE_DISMISS_KEY) === '1') {
-        return true;
-      }
-    } catch (_) {}
-    try {
-      const dismissed = Number(localStorage.getItem('pwa-shell-replace-dismissed-at') || '0');
-      return Boolean(dismissed && (Date.now() - dismissed) < 12 * 60 * 60 * 1000);
-    } catch (_) {
-      return false;
-    }
-  }
 
-  function markMigrateDismissed() {
-    try {
-      sessionStorage.setItem(MIGRATE_DISMISS_KEY, '1');
-    } catch (_) {}
-    try {
-      localStorage.setItem('pwa-shell-replace-dismissed-at', String(Date.now()));
-    } catch (_) {}
-  }
 
-  function chromeIntentUrl(absoluteHttpsUrl) {
-    try {
-      const url = new URL(absoluteHttpsUrl);
-      if (url.protocol !== 'https:') {
-        return absoluteHttpsUrl;
-      }
-      return 'intent://' + url.host + url.pathname + url.search + url.hash
-        + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url='
-        + encodeURIComponent(url.href)
-        + ';end';
-    } catch (_) {
-      return absoluteHttpsUrl;
-    }
-  }
 
-  function openHealthyWwwInstall() {
-    const targetOrigin = canonicalInstallOrigin();
-    if (!targetOrigin) {
-      return false;
-    }
-    const target = targetOrigin + '/?install=1&migrate=1&from=apex';
-    window.location.href = /Android/i.test(ua) ? chromeIntentUrl(target) : target;
-    return true;
-  }
 
-  function showRemoveOldIconBanner() {
-    if (document.getElementById('pwa-remove-old-banner')) {
-      return;
-    }
-    const banner = document.createElement('div');
-    banner.id = 'pwa-remove-old-banner';
-    banner.className = 'pwa-update-banner pwa-update-banner--migrate is-visible';
-    banner.setAttribute('role', 'status');
-    banner.innerHTML =
-      '<div class="pwa-update-banner__inner">' +
-      '<span class="material-symbols-outlined" aria-hidden="true">delete</span>' +
-      '<div class="pwa-update-banner__text">' +
-      '<strong>الأيقونة الصحيحة جاهزة</strong>' +
-      '<span>Chrome لا يدمج تطبيقين — اضغط مطولاً على الأيقونة القديمة (×) → إزالة، مرة واحدة على هذا الجهاز فقط</span>' +
-      '</div>' +
-      '<button type="button" class="pwa-update-banner__later" data-pwa-dismiss-old>حسناً</button>' +
-      '</div>';
-    banner.querySelector('[data-pwa-dismiss-old]')?.addEventListener('click', () => banner.remove());
-    document.body.appendChild(banner);
-  }
 
-  /**
-   * Old WebAPK (× Custom Tab) cannot be healed by Service Worker reload —
-   * Android keeps a frozen launcher shell. Only prompt the broken cohort.
-   */
-  function showShellReplaceBanner(options) {
-    const opts = options || {};
-    if (document.getElementById('pwa-update-banner') || document.getElementById('pwa-shell-replace-banner')) {
-      return;
-    }
-    const toWww = shouldMigrateToWwwSibling();
-    const wwwHost = String(canonicalInstallOrigin()).replace(/^https?:\/\//i, '') || 'www';
-    const subtitle = toWww
-      ? 'تحديث الصفحة لا يغيّر الأيقونة ولا يزيل × — ثبّت التطبيق الموحّد من ' + wwwHost + ' ثم احذف القديمة مرة واحدة'
-      : 'تحديث الصفحة لا يغيّر غلاف Chrome — ثبّت التطبيق الصحيح ثم احذف الأيقونة التالفة مرة واحدة';
-    const btnLabel = toWww ? 'تثبيت الأيقونة الصحيحة' : (opts.hasSwUpdate || waitingWorker ? 'تحديث وإصلاح' : 'تثبيت الصحيح');
-    const banner = document.createElement('div');
-    banner.id = 'pwa-shell-replace-banner';
-    banner.className = 'pwa-update-banner pwa-update-banner--migrate';
-    banner.setAttribute('role', 'status');
-    banner.innerHTML =
-      '<div class="pwa-update-banner__inner">' +
-      '<span class="material-symbols-outlined" aria-hidden="true">install_mobile</span>' +
-      '<div class="pwa-update-banner__text">' +
-      '<strong>أيقونة موحّدة</strong>' +
-      '<span>' + subtitle + '</span>' +
-      '</div>' +
-      '<button type="button" class="pwa-update-banner__btn" data-pwa-replace-shell>' + btnLabel + '</button>' +
-      '<button type="button" class="pwa-update-banner__later" data-pwa-dismiss-replace>لاحقاً</button>' +
-      '</div>';
-    banner.querySelector('[data-pwa-replace-shell]')?.addEventListener('click', replaceBrokenShell);
-    banner.querySelector('[data-pwa-dismiss-replace]')?.addEventListener('click', () => {
-      markMigrateDismissed();
-      banner.remove();
-    });
-    document.body.appendChild(banner);
-    window.requestAnimationFrame(() => banner.classList.add('is-visible'));
-  }
 
-  function openMigrateModal() {
-    closeModal();
-    const toWww = shouldMigrateToWwwSibling() || !isOnCanonicalInstallHost();
-    const wwwHost = String(canonicalInstallOrigin()).replace(/^https?:\/\//i, '') || 'www';
-    const steps = toWww
-      ? [
-          'اضغط «تثبيت الأيقونة الصحيحة» لفتح ' + wwwHost + ' في Chrome.',
-          'من Chrome اختر «تثبيت التطبيق» / Install (الأيقونة الموحّدة).',
-          'بعد النجاح: اضغط مطولاً على أيقونة جاويش القديمة (×) → إزالة — مرة واحدة على هذا الجهاز فقط.',
-        ]
-      : [
-          'اضغط «تثبيت الآن» لتثبيت النسخة الموحّدة من www.',
-          'بعد النجاح افتح الأيقونة الجديدة.',
-          'احذف الأيقونة القديمة (إن بقيت) بضغط مطوّل → إزالة — مرة واحدة فقط.',
-        ];
-    const el = document.createElement('div');
-    el.id = 'pwa-install-modal';
-    el.className = 'pwa-install-modal';
-    el.innerHTML =
-      '<div class="pwa-install-modal__backdrop" data-pwa-close></div>' +
-      '<div class="pwa-install-modal__card" role="dialog" aria-modal="true" aria-labelledby="pwa-migrate-title">' +
-      '<button type="button" class="pwa-install-modal__close" data-pwa-close aria-label="إغلاق">×</button>' +
-      '<div class="pwa-install-modal__icon" aria-hidden="true"><span class="material-symbols-outlined">build_circle</span></div>' +
-      '<h2 id="pwa-migrate-title" class="pwa-install-modal__title">توحيد الأيقونة</h2>' +
-      '<p class="pwa-install-modal__lead">Chrome لا يدمج تطبيقي www وapex ولا يغيّر أيقونة WebAPK عبر Service Worker. نثبّت من www فقط لهذه الأيقونة التالفة — بدون حذف جماعي لكل الزبائن.</p>' +
-      '<ol class="pwa-install-modal__steps">' + steps.map((line) => '<li>' + line + '</li>').join('') + '</ol>' +
-      (toWww
-        ? '<button type="button" class="pwa-install-modal__btn" data-pwa-open-www>تثبيت الأيقونة الصحيحة (' + wwwHost + ')</button>'
-        : (deferredPrompt
-          ? '<button type="button" class="pwa-install-modal__btn" data-pwa-native-install>تثبيت الآن</button>'
-          : '')) +
-      '<button type="button" class="pwa-install-modal__ghost" data-pwa-close>لاحقاً</button>' +
-      '</div>';
-    el.querySelectorAll('[data-pwa-close]').forEach((node) => {
-      node.addEventListener('click', () => {
-        markMigrateDismissed();
-        closeModal();
-      });
-    });
-    el.querySelector('[data-pwa-open-www]')?.addEventListener('click', () => {
-      openHealthyWwwInstall();
-    });
-    el.querySelector('[data-pwa-native-install]')?.addEventListener('click', () => {
-      triggerNativeInstall();
-    });
-    modalEl = el;
-    document.body.appendChild(modalEl);
-    document.body.classList.add('pwa-modal-open');
-  }
 
-  async function replaceBrokenShell() {
-    const btn = document.querySelector('[data-pwa-replace-shell], [data-pwa-apply-update]');
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'جاري التثبيت…';
-    }
 
-    clearInstalledMark();
-    fetch('/manifest.php?heal=1', { cache: 'reload', credentials: 'same-origin' }).catch(() => {});
 
-    // Apex / non-www → always open the single canonical www WebAPK install.
-    // Block controllerchange reload so SKIP_WAITING cannot race the navigation.
-    if (shouldMigrateToWwwSibling()) {
-      refreshingForUpdate = true;
-      if (waitingWorker) {
-        try {
-          waitingWorker.postMessage({ type: 'SKIP_WAITING' });
-        } catch (_) {}
-      }
-      if (openHealthyWwwInstall()) {
-        return;
-      }
-      refreshingForUpdate = false;
-    }
-
-    // On www: offer native install. SW reload alone cannot change × / launcher icon.
-    if (waitingWorker) {
-      try {
-        waitingWorker.postMessage({ type: 'SKIP_WAITING' });
-      } catch (_) {}
-    }
-
-    if (deferredPrompt) {
-      const ok = await triggerNativeInstall();
-      if (ok) {
-        document.getElementById('pwa-shell-replace-banner')?.remove();
-        document.getElementById('pwa-update-banner')?.remove();
-        showRemoveOldIconBanner();
-        return;
-      }
-    }
-
-    openMigrateModal();
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'تثبيت الأيقونة الصحيحة';
-    }
-  }
-
-  function maybePromptShellReplace() {
-    if (isStandalone || isInAppBrowser || migrateDismissedRecently()) {
-      return;
-    }
-    // Only the broken homescreen/CCT cohort — never mass-prompt browser tabs.
-    if (isBrokenAppShell()) {
-      showShellReplaceBanner({ hasSwUpdate: Boolean(waitingWorker) });
-      maybeAutoMigrateBrokenShell();
-    }
-  }
-
-  /** One automatic hop to www install for the broken apex CCT cohort only. */
-  function maybeAutoMigrateBrokenShell() {
-    if (!isBrokenAppShell() || !shouldMigrateToWwwSibling() || migrateDismissedRecently()) {
-      return;
-    }
-    try {
-      if (sessionStorage.getItem(AUTO_MIGRATE_KEY) === '1') {
-        return;
-      }
-      sessionStorage.setItem(AUTO_MIGRATE_KEY, '1');
-    } catch (_) {
-      return;
-    }
-    window.setTimeout(() => {
-      if (migrateDismissedRecently() || isStandalone) {
-        return;
-      }
-      openHealthyWwwInstall();
-    }, 1800);
-  }
 
   function showUpdateBanner(worker) {
     waitingWorker = worker || waitingWorker;
-    // Only the broken homescreen shell needs migrate — normal browser tabs keep SW update.
-    if (isBrokenAppShell()) {
-      maybePromptShellReplace();
-      return;
-    }
-    if (!waitingWorker || document.getElementById('pwa-update-banner') || document.getElementById('pwa-shell-replace-banner')) {
+    if (!waitingWorker || document.getElementById('pwa-update-banner')) {
       return;
     }
     const banner = document.createElement('div');
@@ -582,10 +274,6 @@
   }
 
   function applyWaitingUpdate() {
-    if (isBrokenAppShell()) {
-      replaceBrokenShell();
-      return;
-    }
     if (!waitingWorker) {
       window.location.reload();
       return;
@@ -711,13 +399,11 @@
   }
 
   function openModal(forceMode) {
-    // Allow install instructions when replacing a broken old shell or migrate=1.
     if (isStandalone) {
       return;
     }
     const params = new URLSearchParams(window.location.search);
-    const migrating = params.get('migrate') === '1' || params.get('install') === '1';
-    if (isMarkedInstalled() && !isBrokenAppShell() && !migrating && !document.getElementById('pwa-shell-replace-banner')) {
+    if (isMarkedInstalled() && params.get('install') !== '1') {
       return;
     }
     closeModal();
@@ -815,33 +501,18 @@
     if (isStandalone) {
       return;
     }
-    // Apex must never become a second installable app — send BIP traffic to www.
-    if (!isOnCanonicalInstallHost()) {
-      event.preventDefault();
-      deferredPrompt = null;
-      hideInstallTriggers();
-      if (isBrokenAppShell()) {
-        maybePromptShellReplace();
-      }
-      return;
-    }
     // Chrome only fires this when the app is not installed — clear stale flag
     // left from a previous install after the user deleted the PWA.
     clearInstalledMark();
     event.preventDefault();
     deferredPrompt = event;
     updateHeaderButtonMode('native');
-    // Broken shell on www: keep migrate/install primary.
-    if (isBrokenAppShell()) {
-      maybePromptShellReplace();
-      return;
-    }
     showInstallTriggers();
     if (!autoDismissedRecently()) {
       document.getElementById('pwa-install-banner')?.remove();
     }
     const params = new URLSearchParams(window.location.search);
-    if (params.get('migrate') === '1' || params.get('install') === '1') {
+    if (params.get('install') === '1') {
       window.setTimeout(() => {
         triggerNativeInstall();
       }, 400);
@@ -850,12 +521,6 @@
 
   window.addEventListener('appinstalled', () => {
     markInstalled();
-    document.getElementById('pwa-shell-replace-banner')?.remove();
-    document.getElementById('pwa-update-banner')?.remove();
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('migrate') === '1' || params.get('from') === 'apex') {
-      showRemoveOldIconBanner();
-    }
   });
 
   function syncInstallTriggers() {
@@ -876,24 +541,7 @@
     }
 
     const params = new URLSearchParams(window.location.search);
-    const migratingIn = params.get('migrate') === '1';
-
-    // Non-www hosts: never advertise a separate install — only repair broken shells.
-    if (!isOnCanonicalInstallHost()) {
-      hideInstallTriggers();
-      if (isBrokenAppShell()) {
-        maybePromptShellReplace();
-      }
-      return;
-    }
-
-    // Old launcher icon / × bar: SW "update" cannot change Chrome's shell.
-    if (isBrokenAppShell()) {
-      hideInstallTriggers();
-      maybePromptShellReplace();
-      return;
-    }
-    if (installed && !migratingIn) {
+    if (installed) {
       hideInstallTriggers();
       return;
     }
@@ -901,7 +549,7 @@
     bindTriggers();
     syncInstallTriggers();
 
-    if (params.get('install') === '1' || migratingIn || window.location.pathname.endsWith('/install.php')) {
+    if (params.get('install') === '1' || window.location.pathname.endsWith('/install.php')) {
       window.setTimeout(() => {
         if (deferredPrompt) {
           triggerNativeInstall();
@@ -923,12 +571,9 @@
     close: closeModal,
     install: triggerNativeInstall,
     applyUpdate: applyWaitingUpdate,
-    replaceBrokenShell,
-    shouldPromptInstall: () => !isStandalone && isOnCanonicalInstallHost() && !isMarkedInstalled() && canInstall(),
+    shouldPromptInstall: () => !isStandalone && !isMarkedInstalled() && canInstall(),
     canInstall,
     isInAppBrowser: () => isInAppBrowser,
-    isBrokenAppShell: () => isBrokenAppShell(),
-    isCanonicalInstallHost: () => isOnCanonicalInstallHost(),
   };
 
   if (document.readyState === 'loading') {

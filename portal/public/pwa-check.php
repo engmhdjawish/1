@@ -32,7 +32,7 @@ $checks[] = [
     'label' => 'ملف manifest.php (الهوية الموحّدة)',
     'ok' => is_file(dirname(__DIR__) . '/public/manifest.php'),
     'detail' => is_file(dirname(__DIR__) . '/public/manifest.php')
-        ? '/manifest.php موجود — www فقط قابل للتثبيت؛ apex يشير إليه'
+        ? '/manifest.php موجود — standalone على نفس النطاق (www وapex)'
         : 'manifest.php مفقود — انسخه من آخر حزمة نشر',
 ];
 
