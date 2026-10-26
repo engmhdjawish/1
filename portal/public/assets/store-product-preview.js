@@ -29,6 +29,24 @@
   let imageRenderToken = 0;
   let touchStartX = 0;
   let touchStartY = 0;
+  let swipeArmed = false;
+  const zoomState = {
+    scale: 1,
+    x: 0,
+    y: 0,
+    pinching: false,
+    panning: false,
+    startDist: 0,
+    startScale: 1,
+    startX: 0,
+    startY: 0,
+    panOriginX: 0,
+    panOriginY: 0,
+    lastTapAt: 0,
+  };
+  const ZOOM_MIN = 1;
+  const ZOOM_MAX = 4;
+  const ZOOM_DOUBLE_TAP = 2.4;
 
   const paging = () => window.__storePreviewPaging || {};
 
@@ -54,6 +72,112 @@
   };
 
   const imageUrlFor = (item) => item?.zoomUrl || item?.thumbUrl || '';
+
+  const cartAllowed = () => !!document.getElementById('storeCartBootstrap') || !!window.StoreCart;
+
+  const mapApiProductToPreview = (product) => {
+    const guid = String(product?.guid || '').trim();
+    const imageGuid = String(product?.imageGuid || '').trim();
+    const thumbUrl = imageGuid
+      ? `/api/image.php?id=${encodeURIComponent(imageGuid)}&thumb=1`
+      : '';
+    const zoomUrl = imageGuid
+      ? `/api/image.php?id=${encodeURIComponent(imageGuid)}&thumb=0`
+      : '';
+    const priceHidden = !!product?.priceHidden;
+    const unavailable = !!product?.unavailable;
+    const showPrice = !priceHidden && !!product?.showPrice;
+    const packaging = Number(product?.packaging) || 0;
+    const primaryUnit = String(product?.primaryUnit || 'قطعة');
+    const packageUnit = String(product?.packageUnit || 'طرد');
+    const returnUrl = '/index.php';
+    return {
+      guid,
+      name: String(product?.name || ''),
+      code: String(product?.code || ''),
+      manufacturer: String(product?.manufacturer || ''),
+      materialType: String(product?.specs?.['النوع'] || ''),
+      thumbUrl,
+      zoomUrl,
+      detailUrl: guid
+        ? `/product.php?guid=${encodeURIComponent(guid)}&return=${encodeURIComponent(returnUrl)}`
+        : '',
+      showPrice,
+      showPriceSyp: showPrice && !!product?.showPriceSyp,
+      showPriceUsd: showPrice && !!product?.showPriceUsd,
+      showQuantity: !unavailable && !!product?.showQuantity,
+      packagesAvailable: Number(product?.packagesAvailable) || 0,
+      packagesAvailableLabel: '',
+      packaging,
+      packagingLabel: '',
+      primaryUnit,
+      packageUnit,
+      hasOffer: !!product?.hasOffer,
+      offerBadge: String(product?.offerBadge || ''),
+      unitSaleSp: showPrice ? (Number(product?.unitSaleSp) || 0) : 0,
+      unitSaleUsd: showPrice ? (Number(product?.unitSaleUsd) || 0) : 0,
+      packageSaleSp: showPrice ? (Number(product?.packageSaleSp) || 0) : 0,
+      packageSaleUsd: showPrice ? (Number(product?.packageSaleUsd) || 0) : 0,
+      originalUnitSp: showPrice ? (Number(product?.originalUnitSp) || 0) : 0,
+      originalUnitUsd: showPrice ? (Number(product?.originalUnitUsd) || 0) : 0,
+      originalPackSp: showPrice ? (Number(product?.originalPackSp) || 0) : 0,
+      originalPackUsd: showPrice ? (Number(product?.originalPackUsd) || 0) : 0,
+      priceHidden,
+      unavailable,
+      allowCart: !unavailable && !priceHidden && cartAllowed(),
+      cartQty: 0,
+      maxPackages: product?.offerMax != null ? Number(product.offerMax) : null,
+      maxLabel: null,
+      remaining: null,
+      atLimit: false,
+      defaultQty: product?.offerMin != null && Number(product.offerMin) > 0 ? Number(product.offerMin) : 1,
+      qtyStep: 1,
+      qtyMin: product?.offerMin != null && Number(product.offerMin) > 0 ? Number(product.offerMin) : 1,
+      partialPackage: false,
+      effectiveMax: null,
+      returnUrl,
+      storeOffer: '',
+      storeSection: '',
+    };
+  };
+
+  const applyImageZoomTransform = () => {
+    if (!imgEl) return;
+    imgEl.style.transform = zoomState.scale > 1.001
+      ? `translate3d(${zoomState.x}px, ${zoomState.y}px, 0) scale(${zoomState.scale})`
+      : '';
+    modal.classList.toggle('is-image-zoomed', zoomState.scale > 1.001);
+  };
+
+  const resetImageZoom = () => {
+    zoomState.scale = 1;
+    zoomState.x = 0;
+    zoomState.y = 0;
+    zoomState.pinching = false;
+    zoomState.panning = false;
+    zoomState.startDist = 0;
+    zoomState.startScale = 1;
+    applyImageZoomTransform();
+  };
+
+  const clampImagePan = () => {
+    if (!imageStage || zoomState.scale <= 1) {
+      zoomState.x = 0;
+      zoomState.y = 0;
+      return;
+    }
+    const rect = imageStage.getBoundingClientRect();
+    const maxX = Math.max(0, (rect.width * (zoomState.scale - 1)) / 2);
+    const maxY = Math.max(0, (rect.height * (zoomState.scale - 1)) / 2);
+    zoomState.x = Math.max(-maxX, Math.min(maxX, zoomState.x));
+    zoomState.y = Math.max(-maxY, Math.min(maxY, zoomState.y));
+  };
+
+  const pinchDistance = (touches) => {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+  };
 
   const thumbUrlFor = (item) => {
     if (!item || typeof item !== 'object') return '';
@@ -1006,6 +1130,7 @@
       close();
       return;
     }
+    resetImageZoom();
     state.index = Math.max(0, Math.min(index, state.items.length - 1));
     const item = state.items[state.index];
     if (item?.guid) state.currentGuid = item.guid;
@@ -1119,6 +1244,7 @@
     imageRenderToken += 1;
     setImageLoading(false);
     setPageLoading(false);
+    resetImageZoom();
     if (imgEl) {
       imgEl.removeAttribute('src');
       imgEl.classList.remove('is-loading', 'is-placeholder');
@@ -1129,22 +1255,90 @@
     state.itemScope = null;
   };
 
-  const initFromUrl = () => {
+  const clearPreviewQuery = (alsoOffer = false) => {
     const params = new URLSearchParams(window.location.search);
-    const edge = params.get('preview');
-    if (edge !== 'first' && edge !== 'last') return;
-
-    state.items = collectItems();
-    if (state.items.length === 0) return;
-
-    state.index = edge === 'last' ? state.items.length - 1 : 0;
-    openModal();
-    showAt(state.index);
-
+    if (!params.has('preview') && !(alsoOffer && params.has('offer'))) return;
     params.delete('preview');
+    if (alsoOffer) params.delete('offer');
     const query = params.toString();
     const nextUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
     window.history.replaceState({}, '', nextUrl);
+  };
+
+  const openFromPayload = (payload, preferElement = null) => {
+    if (!payload?.guid) return;
+    const card = findPreviewCard(payload.guid);
+    if (card) {
+      const itemScope = resolveItemScope(card);
+      const sourceImg = preferElement
+        || card.querySelector('.material-image-frame__photo img')
+        || card.querySelector('img');
+      open(payload.guid, sourceImg, { itemScope });
+      return;
+    }
+    state.context = 'catalog';
+    state.cartRoot = null;
+    state.orderRoot = null;
+    state.itemScope = null;
+    state.items = [payload];
+    state.index = 0;
+    state.currentGuid = payload.guid;
+    openModal();
+    showAt(0, preferElement ? { preferElement } : {});
+  };
+
+  const openFromGuid = async (guid, options = {}) => {
+    const cleanGuid = String(guid || '').trim();
+    if (!cleanGuid) return false;
+
+    const card = findPreviewCard(cleanGuid, options.itemScope || null);
+    if (card) {
+      const itemScope = options.itemScope || resolveItemScope(card);
+      const sourceImg = options.preferElement
+        || card.querySelector('.material-image-frame__photo img')
+        || card.querySelector('img');
+      open(cleanGuid, sourceImg, { itemScope });
+      return true;
+    }
+
+    try {
+      const params = new URLSearchParams({ guid: cleanGuid });
+      const offer = String(options.offer || '').trim();
+      if (offer) params.set('offer', offer);
+      const response = await fetch(`/api/store-product.php?${params.toString()}`, {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.ok || !data.product) {
+        throw new Error(data?.message || 'load failed');
+      }
+      openFromPayload(mapApiProductToPreview(data.product), options.preferElement || null);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const initFromUrl = async () => {
+    const params = new URLSearchParams(window.location.search);
+    const preview = String(params.get('preview') || '').trim();
+    if (!preview) return;
+
+    if (preview === 'first' || preview === 'last') {
+      state.items = collectItems();
+      if (state.items.length === 0) return;
+
+      state.index = preview === 'last' ? state.items.length - 1 : 0;
+      openModal();
+      showAt(state.index);
+      clearPreviewQuery(false);
+      return;
+    }
+
+    const offer = String(params.get('offer') || '').trim();
+    clearPreviewQuery(true);
+    await openFromGuid(preview, { offer });
   };
 
   document.addEventListener('click', (event) => {
@@ -1181,23 +1375,143 @@
   });
 
   const panel = modal.querySelector('.store-product-preview__panel');
+  const zoomTarget = imageStage || imgEl;
+
   panel?.addEventListener('touchstart', (event) => {
-    if (event.touches.length !== 1) return;
+    if (event.touches.length !== 1 || zoomState.pinching || zoomState.scale > 1.001) {
+      swipeArmed = false;
+      return;
+    }
+    swipeArmed = true;
     touchStartX = event.touches[0].clientX;
     touchStartY = event.touches[0].clientY;
   }, { passive: true });
 
   panel?.addEventListener('touchend', (event) => {
+    if (!swipeArmed || zoomState.pinching || zoomState.scale > 1.001) {
+      swipeArmed = false;
+      return;
+    }
     if (event.changedTouches.length !== 1) return;
     const dx = event.changedTouches[0].clientX - touchStartX;
     const dy = event.changedTouches[0].clientY - touchStartY;
+    swipeArmed = false;
     if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return;
     if (dx > 0) navigate(-1);
     else navigate(1);
   }, { passive: true });
 
+  zoomTarget?.addEventListener('touchstart', (event) => {
+    if (modal.hidden) return;
+    if (event.touches.length >= 2) {
+      event.preventDefault();
+      swipeArmed = false;
+      zoomState.pinching = true;
+      zoomState.panning = false;
+      zoomState.startDist = pinchDistance(event.touches);
+      zoomState.startScale = zoomState.scale;
+      return;
+    }
+    if (event.touches.length === 1 && zoomState.scale > 1.001) {
+      zoomState.panning = true;
+      zoomState.startX = event.touches[0].clientX;
+      zoomState.startY = event.touches[0].clientY;
+      zoomState.panOriginX = zoomState.x;
+      zoomState.panOriginY = zoomState.y;
+      swipeArmed = false;
+    }
+  }, { passive: false });
+
+  zoomTarget?.addEventListener('touchmove', (event) => {
+    if (modal.hidden) return;
+    if (event.touches.length >= 2) {
+      event.preventDefault();
+      swipeArmed = false;
+      zoomState.pinching = true;
+      const dist = pinchDistance(event.touches);
+      if (zoomState.startDist <= 0) {
+        zoomState.startDist = dist;
+        zoomState.startScale = zoomState.scale;
+        return;
+      }
+      const next = zoomState.startScale * (dist / zoomState.startDist);
+      zoomState.scale = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, next));
+      if (zoomState.scale <= 1.001) {
+        zoomState.scale = 1;
+        zoomState.x = 0;
+        zoomState.y = 0;
+      } else {
+        clampImagePan();
+      }
+      applyImageZoomTransform();
+      return;
+    }
+    if (zoomState.panning && event.touches.length === 1 && zoomState.scale > 1.001) {
+      event.preventDefault();
+      zoomState.x = zoomState.panOriginX + (event.touches[0].clientX - zoomState.startX);
+      zoomState.y = zoomState.panOriginY + (event.touches[0].clientY - zoomState.startY);
+      clampImagePan();
+      applyImageZoomTransform();
+    }
+  }, { passive: false });
+
+  const zoomToPoint = (clientX, clientY) => {
+    const rect = (imageStage || imgEl).getBoundingClientRect();
+    const offsetX = clientX - (rect.left + rect.width / 2);
+    const offsetY = clientY - (rect.top + rect.height / 2);
+    zoomState.scale = ZOOM_DOUBLE_TAP;
+    zoomState.x = -offsetX * (ZOOM_DOUBLE_TAP - 1);
+    zoomState.y = -offsetY * (ZOOM_DOUBLE_TAP - 1);
+    clampImagePan();
+    applyImageZoomTransform();
+  };
+
+  zoomTarget?.addEventListener('touchend', (event) => {
+    const wasPinching = zoomState.pinching;
+    if (event.touches.length < 2) {
+      zoomState.pinching = false;
+      zoomState.startDist = 0;
+    }
+    if (event.touches.length === 0) {
+      zoomState.panning = false;
+      if (zoomState.scale < 1.05) {
+        resetImageZoom();
+      } else {
+        clampImagePan();
+        applyImageZoomTransform();
+      }
+    }
+
+    if (modal.hidden || wasPinching || event.touches.length > 0 || event.changedTouches.length !== 1) {
+      return;
+    }
+    if (zoomState.scale > 1.001) {
+      zoomState.lastTapAt = 0;
+      return;
+    }
+    const now = Date.now();
+    if (now - zoomState.lastTapAt < 280) {
+      event.preventDefault();
+      const touch = event.changedTouches[0];
+      zoomToPoint(touch.clientX, touch.clientY);
+      zoomState.lastTapAt = 0;
+      return;
+    }
+    zoomState.lastTapAt = now;
+  }, { passive: false });
+
+  zoomTarget?.addEventListener('dblclick', (event) => {
+    if (modal.hidden || !imgEl) return;
+    event.preventDefault();
+    if (zoomState.scale > 1.001) {
+      resetImageZoom();
+      return;
+    }
+    zoomToPoint(event.clientX, event.clientY);
+  });
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initFromUrl);
+    document.addEventListener('DOMContentLoaded', () => { initFromUrl(); });
   } else {
     initFromUrl();
   }
@@ -1280,5 +1594,5 @@
     render(state.items[state.index]);
   });
 
-  window.StoreProductPreview = { open, close };
+  window.StoreProductPreview = { open, close, openFromGuid, openFromPayload };
 })();

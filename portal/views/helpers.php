@@ -214,6 +214,54 @@ function portal_is_catalog_page(string $path): bool
     return in_array($path, ['/index.php', '/store.php', '/product.php', '/share.php'], true);
 }
 
+/**
+ * True for crawlers / in-app link unfurls that need product.php OG tags.
+ * Humans hitting a shared product URL are redirected to home + in-page preview.
+ */
+function portal_is_link_unfurl_bot(?string $userAgent = null): bool
+{
+    $ua = strtolower(trim((string) ($userAgent ?? ($_SERVER['HTTP_USER_AGENT'] ?? ''))));
+    if ($ua === '') {
+        return false;
+    }
+
+    static $needles = [
+        'facebookexternalhit',
+        'facebot',
+        'meta-externalagent',
+        'meta-externalfetcher',
+        'twitterbot',
+        'linkedinbot',
+        'whatsapp',
+        'telegrambot',
+        'slackbot',
+        'discordbot',
+        'embedly',
+        'quora link preview',
+        'pinterest',
+        'vkshare',
+        'skypeuripreview',
+        'applebot',
+        'googlebot',
+        'bingbot',
+        'yandex',
+        'baiduspider',
+        'duckduckbot',
+        'ia_archiver',
+        'semrushbot',
+        'ahrefsbot',
+        'petalbot',
+    ];
+
+    foreach ($needles as $needle) {
+        if (str_contains($ua, $needle)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function portal_request_scheme(): string
 {
     $https = $_SERVER['HTTPS'] ?? '';
