@@ -594,7 +594,7 @@
     }
 
     const register = () => navigator.serviceWorker
-      .register('/sw.js?v=15', { scope: '/', updateViaCache: 'none' })
+      .register('/sw.js?v=16', { scope: '/', updateViaCache: 'none' })
       .then((registration) => {
         watchServiceWorkerUpdates(registration);
         return registration;
