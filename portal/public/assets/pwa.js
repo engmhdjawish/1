@@ -227,89 +227,81 @@
     return false;
   }
 
-  /**
-   * Old homescreen entries can open as a Custom Tab (× + title) after a bad
-   * www/apex start_url. Refresh SW + manifest so Chrome's WebAPK can heal,
-   * then ask the user to close × and reopen the icon (no uninstall).
-   */
-  function looksLikeBrokenHomescreenLaunch() {
-    if (isStandalone) {
-      return false;
+  let waitingWorker = null;
+  let refreshingForUpdate = false;
+
+  function showUpdateBanner(worker) {
+    waitingWorker = worker || waitingWorker;
+    if (!waitingWorker || document.getElementById('pwa-update-banner')) {
+      return;
     }
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('source') === 'pwa') {
-      return true;
-    }
-    const ref = String(document.referrer || '');
-    if (/^android-app:\/\//i.test(ref)) {
-      return true;
-    }
-    // Custom Tab / browser chrome with empty referrer is common for icon launches.
-    try {
-      if (window.matchMedia('(display-mode: browser)').matches && ref === '') {
-        return true;
-      }
-    } catch (_) {}
-    return false;
+    const banner = document.createElement('div');
+    banner.id = 'pwa-update-banner';
+    banner.className = 'pwa-update-banner';
+    banner.setAttribute('role', 'status');
+    banner.innerHTML =
+      '<div class="pwa-update-banner__inner">' +
+      '<span class="material-symbols-outlined" aria-hidden="true">system_update</span>' +
+      '<div class="pwa-update-banner__text">' +
+      '<strong>يتوفر تحديث جديد</strong>' +
+      '<span>حدّث الآن لتحصل على آخر تحسينات التطبيق</span>' +
+      '</div>' +
+      '<button type="button" class="pwa-update-banner__btn" data-pwa-apply-update>تحديث</button>' +
+      '<button type="button" class="pwa-update-banner__later" data-pwa-dismiss-update>لاحقاً</button>' +
+      '</div>';
+    banner.querySelector('[data-pwa-apply-update]')?.addEventListener('click', applyWaitingUpdate);
+    banner.querySelector('[data-pwa-dismiss-update]')?.addEventListener('click', () => {
+      banner.remove();
+    });
+    document.body.appendChild(banner);
+    window.requestAnimationFrame(() => banner.classList.add('is-visible'));
   }
 
-  function healBrokenInstalledChrome() {
-    if (isStandalone) {
+  function applyWaitingUpdate() {
+    if (!waitingWorker) {
+      window.location.reload();
       return;
     }
-    const tipKey = 'pwa-heal-tip-at';
-    try {
-      const last = Number(localStorage.getItem(tipKey) || '0');
-      if (!(last && (Date.now() - last) < 2 * 60 * 60 * 1000)) {
-        localStorage.setItem(tipKey, String(Date.now()));
-        showHealTip();
-      }
-    } catch (_) {
-      showHealTip();
+    const btn = document.querySelector('[data-pwa-apply-update]');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'جاري التحديث…';
     }
-
-    fetch('/manifest.php?heal=1', { cache: 'reload', credentials: 'same-origin' }).catch(() => {});
-    if (!('serviceWorker' in navigator) || !isSecure) {
-      return;
-    }
-    navigator.serviceWorker.getRegistration().then((reg) => {
-      if (reg) {
-        reg.update().catch(() => {});
-      }
-    }).catch(() => {});
+    waitingWorker.postMessage({ type: 'SKIP_WAITING' });
   }
 
-  function showHealTip() {
-    if (document.getElementById('pwa-heal-tip')) {
+  function watchServiceWorkerUpdates(registration) {
+    if (!registration) {
       return;
     }
-    const tip = document.createElement('div');
-    tip.id = 'pwa-heal-tip';
-    tip.setAttribute('role', 'status');
-    tip.style.cssText = [
-      'position:fixed',
-      'inset-inline:12px',
-      'bottom:calc(12px + env(safe-area-inset-bottom, 0px))',
-      'z-index:99999',
-      'padding:12px 14px',
-      'border-radius:12px',
-      'background:#1c1917',
-      'color:#fff',
-      'font:600 14px/1.45 Manrope,Tahoma,sans-serif',
-      'box-shadow:0 8px 28px rgba(0,0,0,.28)',
-    ].join(';');
-    const host = window.location.hostname;
-    const repairPath = '/pwa-repair.php';
-    const chromeIntent = 'intent://' + host + repairPath
-      + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url='
-      + encodeURIComponent(window.location.origin + repairPath)
-      + ';end';
-    tip.innerHTML = 'شريط × يحتاج تحديثاً من Chrome (بدون حذف). '
-      + '<a href="' + chromeIntent + '" style="color:#fecaca;text-decoration:underline">افتح التحديث</a>'
-      + ' ثم أغلق من × وافتح الأيقونة مجدداً.'
-      + ' <button type="button" style="margin-inline-start:8px;background:transparent;border:0;color:#fca5a5;font:inherit;cursor:pointer">لاحقاً</button>';
-    tip.querySelector('button')?.addEventListener('click', () => tip.remove());
-    document.body.appendChild(tip);
+
+    if (registration.waiting && navigator.serviceWorker.controller) {
+      showUpdateBanner(registration.waiting);
+    }
+
+    registration.addEventListener('updatefound', () => {
+      const installing = registration.installing;
+      if (!installing) {
+        return;
+      }
+      installing.addEventListener('statechange', () => {
+        if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+          showUpdateBanner(installing);
+        }
+      });
+    });
+
+    // On every app open / return to foreground, check for a new SW.
+    const check = () => {
+      registration.update().catch(() => {});
+    };
+    check();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        check();
+      }
+    });
+    window.setInterval(check, 15 * 60 * 1000);
   }
 
   function updateHeaderButtonMode(mode) {
@@ -437,8 +429,23 @@
     if (!('serviceWorker' in navigator) || !isSecure) {
       return Promise.resolve(null);
     }
+
+    if (!refreshingForUpdate) {
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshingForUpdate) {
+          return;
+        }
+        refreshingForUpdate = true;
+        window.location.reload();
+      });
+    }
+
     const register = () => navigator.serviceWorker
-      .register('/sw.js?v=14', { scope: '/', updateViaCache: 'none' })
+      .register('/sw.js?v=15', { scope: '/', updateViaCache: 'none' })
+      .then((registration) => {
+        watchServiceWorkerUpdates(registration);
+        return registration;
+      })
       .catch(() => null);
     // Registration competes with first paint on slow phones; wait until the page has loaded.
     if (document.readyState === 'complete') {
@@ -504,15 +511,7 @@
     const installed = await detectInstalledApp();
     if (installed || isStandalone) {
       hideInstallTriggers();
-      // Installed but not standalone ⇒ Custom Tab × bar; try auto-heal.
-      if (installed && !isStandalone) {
-        healBrokenInstalledChrome();
-      }
       return;
-    }
-    // Related-apps API often misses a broken CCT launch — still heal by heuristic.
-    if (looksLikeBrokenHomescreenLaunch()) {
-      healBrokenInstalledChrome();
     }
 
     bindTriggers();
@@ -534,6 +533,7 @@
     open: openModal,
     close: closeModal,
     install: triggerNativeInstall,
+    applyUpdate: applyWaitingUpdate,
     shouldPromptInstall: () => !isStandalone && !isMarkedInstalled() && canInstall(),
     canInstall,
     isInAppBrowser: () => isInAppBrowser,

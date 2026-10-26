@@ -4,7 +4,7 @@
  * Versioned static assets (?v=mtime): cache-first. Unversioned: stale-while-revalidate.
  * Prices and stock are never served from cache.
  */
-const CACHE_VERSION = 'jawish-v21';
+const CACHE_VERSION = 'jawish-v22';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 const FONT_CACHE = 'jawish-fonts-v1';
 const OFFLINE_URL = '/offline.html';
@@ -33,13 +33,25 @@ const NO_CACHE_PREFIXES = [
 const STATIC_EXT = /\.(?:css|js|mjs|png|jpe?g|webp|gif|svg|ico|woff2?|ttf)$/i;
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) =>
-      Promise.all(
-        PRECACHE_URLS.map((url) => cache.add(new Request(url, { cache: 'reload' })).catch(() => undefined))
-      )
-    ).then(() => self.skipWaiting())
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(STATIC_CACHE);
+    await Promise.all(
+      PRECACHE_URLS.map((url) => cache.add(new Request(url, { cache: 'reload' })).catch(() => undefined))
+    );
+    // First install: activate immediately. Later updates wait for the in-app
+    // "تحديث" prompt (SKIP_WAITING) so the user chooses when to reload.
+    if (!self.registration.active) {
+      await self.skipWaiting();
+    }
+  })());
+});
+
+self.addEventListener('message', (event) => {
+  const data = event && event.data;
+  if (!data || data.type !== 'SKIP_WAITING') {
+    return;
+  }
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {

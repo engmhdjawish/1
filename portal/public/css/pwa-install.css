@@ -92,6 +92,88 @@
   color: #fca5a5;
 }
 
+/* شريط طلب تحديث التطبيق (Service Worker جديد) */
+.pwa-update-banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100000;
+  padding: 0.75rem 0.85rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+  transform: translateY(110%);
+  opacity: 0;
+  transition: transform 0.35s ease, opacity 0.35s ease;
+}
+
+.pwa-update-banner.is-visible {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.pwa-update-banner__inner {
+  pointer-events: auto;
+  max-width: 42rem;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+  background: #1c1917;
+  color: #fff;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.28);
+}
+
+.pwa-update-banner__inner .material-symbols-outlined {
+  flex-shrink: 0;
+  font-size: 1.6rem;
+  color: #fca5a5;
+}
+
+.pwa-update-banner__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.pwa-update-banner__text strong {
+  font-size: 0.92rem;
+  line-height: 1.3;
+}
+
+.pwa-update-banner__text span {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.pwa-update-banner__btn {
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 0.75rem;
+  background: #D81921;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  padding: 0.55rem 0.85rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pwa-update-banner__later {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.35rem 0.4rem;
+  cursor: pointer;
+}
+
 /* زر التثبيت في الهيدر */
 .site-header__icon-btn[data-pwa-open] {
   color: #1d4ed8;

@@ -181,15 +181,17 @@ $assert(
     && str_contains($pwa, 'portal_pwa_host')
 );
 $assert(
-    'pwa.js heals installed-but-browser chrome (Custom Tab ×)',
-    str_contains($pwa, 'healBrokenInstalledChrome')
-    && str_contains($pwa, 'manifest.php?heal=1')
-    && str_contains($pwa, 'looksLikeBrokenHomescreenLaunch')
-    && str_contains($pwa, 'pwa-repair.php')
+    'pwa.js prompts in-app update when a new service worker waits',
+    str_contains($pwa, 'showUpdateBanner')
+    && str_contains($pwa, 'SKIP_WAITING')
+    && str_contains($pwa, 'يتوفر تحديث جديد')
 );
+
+$sw = (string) file_get_contents(dirname(__DIR__) . '/public/sw.js');
 $assert(
-    'pwa-repair page exists for Chrome WebAPK refresh',
-    is_file(dirname(__DIR__) . '/public/pwa-repair.php')
+    'service worker waits for user SKIP_WAITING on updates',
+    str_contains($sw, "data.type !== 'SKIP_WAITING'")
+    && str_contains($sw, '!self.registration.active')
 );
 
 $layout = (string) file_get_contents(dirname(__DIR__) . '/views/layout.php');
