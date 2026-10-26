@@ -186,6 +186,12 @@ $assert(
     && str_contains($pwa, 'SKIP_WAITING')
     && str_contains($pwa, 'يتوفر تحديث جديد')
 );
+$assert(
+    'pwa.js replaces broken old shell (different icon / × bar) instead of SW-only reload',
+    str_contains($pwa, 'showShellReplaceBanner')
+    && str_contains($pwa, 'replaceBrokenShell')
+    && str_contains($pwa, 'نسخة التطبيق قديمة')
+);
 
 $sw = (string) file_get_contents(dirname(__DIR__) . '/public/sw.js');
 $assert(

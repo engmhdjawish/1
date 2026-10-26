@@ -6,6 +6,7 @@
 
   const AUTO_DISMISS_KEY = 'pwa-auto-dismissed-at';
   const INSTALLED_KEY = 'pwa-installed-v1';
+  const MIGRATE_DISMISS_KEY = 'pwa-migrate-dismiss-session';
   const AUTO_DISMISS_DAYS = 3;
   const ENGAGE_MS = 28000;
   const pageLoadedAt = Date.now();
@@ -16,6 +17,51 @@
     || window.matchMedia('(display-mode: fullscreen)').matches
     || window.matchMedia('(display-mode: minimal-ui)').matches
     || window.navigator.standalone === true;
+
+  /*
+   * Chrome WebAPK shell (× Custom Tab) is NOT healed by Service Worker updates.
+   * SKIP_WAITING only reloads page content inside the same broken CCT shell.
+   * Detect homescreen launches that are no longer standalone and migrate the user
+   * to a healthy install (www sibling or fresh install) — without mass-deleting
+   * every customer's icon.
+   */
+  function looksLikeBrokenHomescreenLaunch() {
+    if (isStandalone) {
+      return false;
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('source') === 'pwa') {
+      return true;
+    }
+    const ref = String(document.referrer || '');
+    if (/^android-app:\/\//i.test(ref)) {
+      return true;
+    }
+    try {
+      if (window.matchMedia('(display-mode: browser)').matches && ref === '') {
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  function siblingPublicOrigin() {
+    const host = String(window.location.hostname || '').toLowerCase();
+    if (!host || host === 'localhost' || host === '127.0.0.1') {
+      return '';
+    }
+    const sibling = host.startsWith('www.') ? host.slice(4) : 'www.' + host;
+    if (!sibling || sibling === host) {
+      return '';
+    }
+    return window.location.protocol + '//' + sibling;
+  }
+
+  /** Apex installs are the known-broken CCT cohort; www standalone works. */
+  function shouldMigrateToWwwSibling() {
+    const host = String(window.location.hostname || '').toLowerCase();
+    return !host.startsWith('www.') && siblingPublicOrigin() !== '';
+  }
 
   (function rememberStandaloneHost() {
     if (!isStandalone || !window.isSecureContext) {
@@ -230,9 +276,108 @@
   let waitingWorker = null;
   let refreshingForUpdate = false;
 
+  /** True when this window is the broken old homescreen shell (× bar), not standalone. */
+  function isBrokenAppShell() {
+    if (isStandalone) {
+      return false;
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('source') === 'pwa') {
+      return true;
+    }
+    const ref = String(document.referrer || '');
+    if (/^android-app:\/\//i.test(ref)) {
+      return true;
+    }
+    try {
+      if (window.matchMedia('(display-mode: browser)').matches && ref === '') {
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  /**
+   * Old WebAPK (different launcher icon + × title bar) cannot be healed by a
+   * Service Worker reload — Android keeps a separate frozen app. Offer install
+   * of the current healthy app; only shown on the broken shell, not to everyone.
+   */
+  function showShellReplaceBanner() {
+    if (document.getElementById('pwa-update-banner') || document.getElementById('pwa-shell-replace-banner')) {
+      return;
+    }
+    const banner = document.createElement('div');
+    banner.id = 'pwa-shell-replace-banner';
+    banner.className = 'pwa-update-banner';
+    banner.setAttribute('role', 'status');
+    banner.innerHTML =
+      '<div class="pwa-update-banner__inner">' +
+      '<span class="material-symbols-outlined" aria-hidden="true">install_mobile</span>' +
+      '<div class="pwa-update-banner__text">' +
+      '<strong>نسخة التطبيق قديمة</strong>' +
+      '<span>الأيقونة القديمة منفصلة عن الجديدة — ثبّت التحديث ثم استخدم الأيقونة الجديدة (يمكنك حذف القديمة لاحقاً)</span>' +
+      '</div>' +
+      '<button type="button" class="pwa-update-banner__btn" data-pwa-replace-shell>تحديث</button>' +
+      '<button type="button" class="pwa-update-banner__later" data-pwa-dismiss-replace>لاحقاً</button>' +
+      '</div>';
+    banner.querySelector('[data-pwa-replace-shell]')?.addEventListener('click', replaceBrokenShell);
+    banner.querySelector('[data-pwa-dismiss-replace]')?.addEventListener('click', () => {
+      try {
+        localStorage.setItem('pwa-shell-replace-dismissed-at', String(Date.now()));
+      } catch (_) {}
+      banner.remove();
+    });
+    document.body.appendChild(banner);
+    window.requestAnimationFrame(() => banner.classList.add('is-visible'));
+  }
+
+  async function replaceBrokenShell() {
+    const btn = document.querySelector('[data-pwa-replace-shell]');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'جاري التحديث…';
+    }
+    // Prefer native install of the current healthy manifest.
+    if (deferredPrompt) {
+      const ok = await triggerNativeInstall();
+      if (ok) {
+        document.getElementById('pwa-shell-replace-banner')?.remove();
+        return;
+      }
+    }
+    // Fallback: open install instructions (Chrome menu / iOS share).
+    clearInstalledMark();
+    openModal(detectMode() === 'native' && !deferredPrompt ? 'manual' : detectMode());
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'تحديث';
+    }
+  }
+
+  function maybePromptShellReplace(relatedInstalled) {
+    if (isStandalone || isInAppBrowser) {
+      return;
+    }
+    try {
+      const dismissed = Number(localStorage.getItem('pwa-shell-replace-dismissed-at') || '0');
+      if (dismissed && (Date.now() - dismissed) < 12 * 60 * 60 * 1000) {
+        return;
+      }
+    } catch (_) {}
+    // Broken CCT/old icon launch, or API says installed but we are not standalone.
+    if (isBrokenAppShell() || relatedInstalled) {
+      showShellReplaceBanner();
+    }
+  }
+
   function showUpdateBanner(worker) {
+    // Broken old shell: SW reload cannot change × bar or launcher icon.
+    if (!isStandalone) {
+      maybePromptShellReplace(true);
+      return;
+    }
     waitingWorker = worker || waitingWorker;
-    if (!waitingWorker || document.getElementById('pwa-update-banner')) {
+    if (!waitingWorker || document.getElementById('pwa-update-banner') || document.getElementById('pwa-shell-replace-banner')) {
       return;
     }
     const banner = document.createElement('div');
@@ -258,6 +403,10 @@
   }
 
   function applyWaitingUpdate() {
+    if (!isStandalone) {
+      replaceBrokenShell();
+      return;
+    }
     if (!waitingWorker) {
       window.location.reload();
       return;
@@ -383,7 +532,11 @@
   }
 
   function openModal(forceMode) {
-    if (isStandalone || isMarkedInstalled()) {
+    // Allow install instructions when replacing a broken old shell.
+    if (isStandalone) {
+      return;
+    }
+    if (isMarkedInstalled() && !isBrokenAppShell() && !document.getElementById('pwa-shell-replace-banner')) {
       return;
     }
     closeModal();
@@ -509,8 +662,19 @@
   async function init() {
     registerServiceWorker();
     const installed = await detectInstalledApp();
-    if (installed || isStandalone) {
+    if (isStandalone) {
       hideInstallTriggers();
+      return;
+    }
+
+    // Old launcher icon / × bar: SW "update" is not enough — prompt replace install.
+    if (installed || isBrokenAppShell()) {
+      hideInstallTriggers();
+      maybePromptShellReplace(Boolean(installed));
+      // Still allow native install prompt if Chrome offers a healthy new WebAPK.
+      window.addEventListener('beforeinstallprompt', () => {
+        maybePromptShellReplace(true);
+      });
       return;
     }
 
