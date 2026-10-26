@@ -89,15 +89,15 @@ function portal_price_lock_hint(?string $redirect = null): array
 
     // Staff must never be sent to customer-login — that page used to wipe the staff session on GET.
     if (WebSession::check()) {
-        if (WebSession::hasAnyPermission(['store_policy.manage', 'access_policies.manage'])) {
+        if (WebSession::hasAnyPermission(['web_users.manage', 'store_policy.manage'])) {
             return [
-                'message' => 'السعر مخفي في سياسة الزائر — عدّلها من الإعدادات.',
-                'href' => '/dashboard/settings.php',
+                'message' => 'لا تملك صلاحية عرض الأسعار — اطلب تفعيل «عرض أسعار المتجر».',
+                'href' => '/dashboard/users.php',
             ];
         }
 
         return [
-            'message' => 'السعر مخفي في سياسة الزائر الحالية.',
+            'message' => 'لا تملك صلاحية عرض أسعار المتجر.',
             'href' => null,
         ];
     }
@@ -1900,7 +1900,10 @@ function store_cart_qty_bounds(array $item, float $cartQtyForItem, bool $showQua
     $policyRemaining = $maxPackages !== null
         ? max(0.0, round($maxPackages - $cartQtyForItem, 4))
         : null;
-    $stockAvailable = packages_available_display($item);
+    // Missing warehouseQuantity must not become «مكتمل» — only clamp when stock is known.
+    $hasWarehouseQty = array_key_exists('warehouseQuantity', $item)
+        || array_key_exists('WarehouseQuantity', $item);
+    $stockAvailable = $hasWarehouseQty ? packages_available_display($item) : null;
     $effectiveMax = $policyRemaining;
     if ($stockAvailable !== null) {
         $stockRemaining = max(0.0, round($stockAvailable, 4));
@@ -1909,6 +1912,7 @@ function store_cart_qty_bounds(array $item, float $cartQtyForItem, bool $showQua
             : $stockRemaining;
     }
 
+    // $showQuantity gates visible stock labels in callers; cart limits use known warehouse only.
     $partialPackage = $stockAvailable !== null && $stockAvailable > 0 && $stockAvailable < 1;
     $defaultQty = 1.0;
     $qtyStep = 1.0;

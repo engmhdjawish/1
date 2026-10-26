@@ -30,7 +30,8 @@ $assert(
 $assert(
     'staff price lock hint never points at customer-login',
     str_contains($helpers, 'Staff must never be sent to customer-login')
-    && str_contains($helpers, 'السعر مخفي في سياسة الزائر')
+    && str_contains($helpers, 'لا تملك صلاحية عرض أسعار المتجر')
+    && !str_contains(explode('if (WebSession::check()) {', $helpers, 2)[1] ?? '', 'portal_login_url(\'customer\'')
 );
 
 $loginPhp = (string) file_get_contents(dirname(__DIR__) . '/public/login.php');
@@ -47,9 +48,16 @@ $assert(
 
 $catalog = (string) file_get_contents(dirname(__DIR__) . '/src/Services/StoreCatalogService.php');
 $assert(
-    'staff viewers get show_price even when guest policy hides it',
-    str_contains($catalog, '$staffViewer')
-    && str_contains($catalog, 'customer-login «إظهار السعر» CTA')
+    'staff price/stock visibility is permission-gated',
+    str_contains($catalog, "hasPermission('store.view_prices')")
+    && str_contains($catalog, "hasPermission('store.view_stock')")
+);
+
+$permissions = (string) file_get_contents(dirname(__DIR__) . '/src/Support/StaffPermissions.php');
+$assert(
+    'staff permission catalog includes store price and stock',
+    str_contains($permissions, "'store.view_prices'")
+    && str_contains($permissions, "'store.view_stock'")
 );
 
 $previewJs = (string) file_get_contents(dirname(__DIR__) . '/public/assets/store-product-preview.js');

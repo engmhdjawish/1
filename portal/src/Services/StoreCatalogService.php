@@ -88,11 +88,11 @@ final class StoreCatalogService
         $policy = self::activePolicy();
         $staffViewer = !CustomerSession::check() && \Portal\Auth\WebSession::check();
         if ($policy === null) {
-            // Staff still need prices when no guest policy is configured.
-            $showPrice = $staffViewer;
+            $showPrice = $staffViewer && \Portal\Auth\WebSession::hasPermission('store.view_prices');
+            $showQuantity = $staffViewer && \Portal\Auth\WebSession::hasPermission('store.view_stock');
             self::$displayOptionsCache = [
                 'show_price' => $showPrice,
-                'show_quantity' => false,
+                'show_quantity' => $showQuantity,
                 'allow_cart' => false,
                 'allow_order' => false,
                 'show_images' => true,
@@ -103,15 +103,17 @@ final class StoreCatalogService
         }
 
         $showPrice = self::policyFlag($policy['show_price'] ?? false);
-        // Staff browsing the public store need operational prices; guest policy
-        // must not hide them behind a customer-login «إظهار السعر» CTA.
-        if (!$showPrice && $staffViewer) {
-            $showPrice = true;
+        $showQuantity = self::policyFlag($policy['show_quantity'] ?? false);
+        // Staff visibility is permission-gated, not guest-policy: prices/stock
+        // only appear when the employee has store.view_prices / store.view_stock.
+        if ($staffViewer) {
+            $showPrice = \Portal\Auth\WebSession::hasPermission('store.view_prices');
+            $showQuantity = \Portal\Auth\WebSession::hasPermission('store.view_stock');
         }
 
         self::$displayOptionsCache = [
             'show_price' => $showPrice,
-            'show_quantity' => self::policyFlag($policy['show_quantity'] ?? false),
+            'show_quantity' => $showQuantity,
             'allow_cart' => self::policyFlag($policy['allow_cart'] ?? false),
             'allow_order' => self::policyFlag($policy['allow_order'] ?? false),
             'show_images' => true,

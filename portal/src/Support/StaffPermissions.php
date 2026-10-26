@@ -31,6 +31,8 @@ final class StaffPermissions
             ['code' => 'notifications.manage', 'name_ar' => 'الإشعارات', 'category_ar' => 'إدارة', 'description_ar' => 'إشعارات الموقع والعملاء'],
             ['code' => 'store_policy.manage', 'name_ar' => 'سياسة المتجر', 'category_ar' => 'إعدادات', 'description_ar' => 'إعدادات الزائر والمتجر العام'],
             ['code' => 'access_policies.manage', 'name_ar' => 'سياسات الوصول', 'category_ar' => 'إعدادات', 'description_ar' => 'قواعد عرض الأسعار والسلة للعملاء'],
+            ['code' => 'store.view_prices', 'name_ar' => 'عرض أسعار المتجر', 'category_ar' => 'متجر', 'description_ar' => 'إظهار أسعار المواد للموظف في الرئيسية والمتجر'],
+            ['code' => 'store.view_stock', 'name_ar' => 'عرض رصيد المخزون', 'category_ar' => 'متجر', 'description_ar' => 'إظهار الكميات وتفاصيل المخزون للموظف في الرئيسية والمتجر'],
             ['code' => 'web_users.manage', 'name_ar' => 'موظفو الموقع', 'category_ar' => 'إدارة', 'description_ar' => 'إدارة المستخدمين والأدوار'],
             ['code' => 'sessions.manage', 'name_ar' => 'الجلسات النشطة', 'category_ar' => 'إدارة', 'description_ar' => 'متابعة المتصلين وإنهاء الجلسات'],
             ['code' => 'accounting.view', 'name_ar' => 'لوحة المحاسبة', 'category_ar' => 'محاسبة', 'description_ar' => 'نظرة عامة على أمين'],
@@ -55,14 +57,14 @@ final class StaffPermissions
                 'role_code' => 'order_desk',
                 'name_ar' => 'مكتب الطلبات',
                 'description_ar' => 'متابعة الطلبات، التأكيد، ومزامنة الأمين.',
-                'permissions' => ['dashboard.view', 'orders.view', 'orders.manage', 'accounting.sync.view'],
+                'permissions' => ['dashboard.view', 'orders.view', 'orders.manage', 'accounting.sync.view', 'store.view_prices', 'store.view_stock'],
             ],
             [
                 'code' => 'sales',
                 'role_code' => 'sales',
                 'name_ar' => 'مبيعات ومشاركة',
                 'description_ar' => 'روابط المشاركة، الطلبات، ونشاط الزوار.',
-                'permissions' => ['dashboard.view', 'share_links.manage', 'orders.view', 'orders.manage', 'visitors.view'],
+                'permissions' => ['dashboard.view', 'share_links.manage', 'orders.view', 'orders.manage', 'visitors.view', 'store.view_prices', 'store.view_stock'],
             ],
             [
                 'code' => 'catalog_media',
@@ -97,7 +99,7 @@ final class StaffPermissions
                 'role_code' => 'store_admin',
                 'name_ar' => 'إعداد المتجر',
                 'description_ar' => 'سياسات الزائر والوصول وروابط المشاركة.',
-                'permissions' => ['dashboard.view', 'store_policy.manage', 'access_policies.manage', 'share_links.manage'],
+                'permissions' => ['dashboard.view', 'store_policy.manage', 'access_policies.manage', 'share_links.manage', 'store.view_prices', 'store.view_stock'],
             ],
             [
                 'code' => 'accountant',
@@ -112,6 +114,7 @@ final class StaffPermissions
                     'accounting.statement.view',
                     'accounting.sync.view',
                     'accounting.reports.view',
+                    'store.view_prices',
                 ],
             ],
         ];
