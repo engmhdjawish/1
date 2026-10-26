@@ -227,6 +227,65 @@
     return false;
   }
 
+  /**
+   * Old homescreen entries can open as a Custom Tab (× + title) after a bad
+   * www/apex start_url. Refresh SW + manifest so Chrome's WebAPK can heal,
+   * then ask the user to close × and reopen the icon (no uninstall).
+   */
+  function healBrokenInstalledChrome() {
+    if (isStandalone) {
+      return;
+    }
+    const tipKey = 'pwa-heal-tip-at';
+    try {
+      const last = Number(localStorage.getItem(tipKey) || '0');
+      if (last && (Date.now() - last) < 6 * 60 * 60 * 1000) {
+        // Still refresh in the background even if tip was shown recently.
+      } else {
+        localStorage.setItem(tipKey, String(Date.now()));
+        showHealTip();
+      }
+    } catch (_) {
+      showHealTip();
+    }
+
+    fetch('/manifest.php?heal=1', { cache: 'reload', credentials: 'same-origin' }).catch(() => {});
+    if (!('serviceWorker' in navigator) || !isSecure) {
+      return;
+    }
+    navigator.serviceWorker.getRegistration().then((reg) => {
+      if (reg) {
+        reg.update().catch(() => {});
+      }
+    }).catch(() => {});
+  }
+
+  function showHealTip() {
+    if (document.getElementById('pwa-heal-tip')) {
+      return;
+    }
+    const tip = document.createElement('div');
+    tip.id = 'pwa-heal-tip';
+    tip.setAttribute('role', 'status');
+    tip.style.cssText = [
+      'position:fixed',
+      'inset-inline:12px',
+      'bottom:calc(12px + env(safe-area-inset-bottom, 0px))',
+      'z-index:99999',
+      'padding:12px 14px',
+      'border-radius:12px',
+      'background:#1c1917',
+      'color:#fff',
+      'font:600 14px/1.45 Manrope,Tahoma,sans-serif',
+      'box-shadow:0 8px 28px rgba(0,0,0,.28)',
+    ].join(';');
+    tip.innerHTML = 'جاري تحديث التطبيق… أغلق هذه النافذة من × ثم افتح أيقونة جاويش من الشاشة الرئيسية (بدون حذف).'
+      + ' <button type="button" style="margin-inline-start:8px;background:transparent;border:0;color:#fca5a5;font:inherit;cursor:pointer">حسناً</button>';
+    tip.querySelector('button')?.addEventListener('click', () => tip.remove());
+    document.body.appendChild(tip);
+    window.setTimeout(() => tip.remove(), 20000);
+  }
+
   function updateHeaderButtonMode(mode) {
     document.querySelectorAll('[data-pwa-open]').forEach((btn) => {
       btn.classList.remove('hidden', 'is-pwa-native', 'is-pwa-manual', 'is-pwa-http');
@@ -353,7 +412,7 @@
       return Promise.resolve(null);
     }
     const register = () => navigator.serviceWorker
-      .register('/sw.js?v=12', { scope: '/', updateViaCache: 'none' })
+      .register('/sw.js?v=13', { scope: '/', updateViaCache: 'none' })
       .catch(() => null);
     // Registration competes with first paint on slow phones; wait until the page has loaded.
     if (document.readyState === 'complete') {
@@ -419,6 +478,10 @@
     const installed = await detectInstalledApp();
     if (installed || isStandalone) {
       hideInstallTriggers();
+      // Installed but not standalone ⇒ Custom Tab × bar; try auto-heal.
+      if (installed && !isStandalone) {
+        healBrokenInstalledChrome();
+      }
       return;
     }
 

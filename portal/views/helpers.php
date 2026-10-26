@@ -158,9 +158,13 @@ function portal_preload_image(string $url, bool $highPriority = true): string
         return '';
     }
 
-    $resolved = str_starts_with($url, 'http://') || str_starts_with($url, 'https://')
-        ? $url
-        : portal_absolute_url($url);
+    // Keep root-relative paths on the request host so apex PWAs do not preload
+    // www assets (cross-origin noise for installed apps).
+    if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://') || str_starts_with($url, '/')) {
+        $resolved = $url;
+    } else {
+        $resolved = portal_absolute_url($url);
+    }
 
     $attrs = 'rel="preload" as="image" href="' . h($resolved) . '"';
     if ($highPriority) {
@@ -308,6 +312,34 @@ function portal_request_scheme(): string
 function portal_is_https_request(): bool
 {
     return portal_request_scheme() === 'https';
+}
+
+/** Host of the current HTTP request (no port), lowercased. */
+function portal_request_host(): string
+{
+    $host = strtolower(trim((string) ($_SERVER['HTTP_HOST'] ?? '')));
+    if ($host === '') {
+        return '';
+    }
+
+    return (string) preg_replace('/:\d+$/', '', $host);
+}
+
+/**
+ * Origin of the current request (scheme://host).
+ * Prefer this over PORTAL_APP_URL for PWA start_url/scope so an apex-installed
+ * WebAPK refreshes back onto its own host instead of www.
+ */
+function portal_request_origin(): string
+{
+    $host = portal_request_host();
+    if ($host === '' || in_array($host, ['localhost', '127.0.0.1', '::1'], true) || filter_var($host, FILTER_VALIDATE_IP)) {
+        $appUrl = rtrim((string) \Portal\Config::appUrl(), '/');
+
+        return $appUrl !== '' ? $appUrl : '';
+    }
+
+    return portal_request_scheme() . '://' . $host;
 }
 
 function portal_absolute_url(string $pathOrUrl = ''): string

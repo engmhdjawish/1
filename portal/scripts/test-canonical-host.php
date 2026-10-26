@@ -139,6 +139,15 @@ $assert(
     !str_contains($manifest, "'id' => \$startUrl")
 );
 $assert(
+    'manifest start_url follows the request host (heals apex WebAPK)',
+    str_contains($manifest, 'portal_request_origin')
+    && str_contains($manifest, "'start_url' => \$startUrl")
+);
+$assert(
+    'manifest related_applications include request host',
+    str_contains($manifest, 'siblingOrigin') || str_contains($manifest, 'related_applications')
+);
+$assert(
     'manifest prefers opening links in the installed app',
     str_contains($manifest, "'handle_links' => 'preferred'")
 );
