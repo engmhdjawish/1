@@ -4,7 +4,7 @@
  * Versioned static assets (?v=mtime): cache-first. Unversioned: stale-while-revalidate.
  * Prices and stock are never served from cache.
  */
-const CACHE_VERSION = 'jawish-v15';
+const CACHE_VERSION = 'jawish-v16';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 const FONT_CACHE = 'jawish-fonts-v1';
 const OFFLINE_URL = '/offline.html';
@@ -93,11 +93,21 @@ self.addEventListener('push', (event) => {
   const payload = parsePushPayload(event);
   event.waitUntil((async () => {
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    const visibleClient = clients.find((client) => client.visibilityState === 'visible');
-    if (visibleClient) {
-      clients.forEach((client) => {
+    let hasFocusedClient = false;
+    clients.forEach((client) => {
+      try {
         client.postMessage({ type: 'portal-notification', payload });
-      });
+      } catch (_) {
+        /* ignore closed clients */
+      }
+      if (client.focused || client.visibilityState === 'visible') {
+        hasFocusedClient = true;
+      }
+    });
+
+    // Always show an OS notification when no focused tab — background "visible"
+    // clients otherwise swallow the push and the user only sees it after reopen.
+    if (hasFocusedClient) {
       return;
     }
 
@@ -106,10 +116,25 @@ self.addEventListener('push', (event) => {
       icon: payload.icon,
       badge: '/icons/brand-icon.php?size=96',
       tag: payload.id,
+      renotify: true,
       data: {
         url: payload.url,
         id: payload.id,
       },
+    });
+  })());
+});
+
+// Browser may rotate the push endpoint while the SW is asleep — ask a page to re-save it.
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    clients.forEach((client) => {
+      try {
+        client.postMessage({ type: 'portal-push-resubscribe' });
+      } catch (_) {
+        /* ignore */
+      }
     });
   })());
 });

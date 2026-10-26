@@ -38,6 +38,12 @@ final class VisitorLogService
         'share.php' => 'رابط مشاركة',
         'order-confirmation.php' => 'تأكيد الطلب',
         'store-order-confirmation.php' => 'تأكيد الطلب',
+        'notifications.php' => 'الإشعارات',
+        'guide.php' => 'دليل الاستخدام',
+        'install.php' => 'تثبيت التطبيق',
+        'offline.html' => 'بدون اتصال',
+        'store-easy.php' => 'التسوق السهل',
+        'store-lab.php' => 'المختبر',
     ];
 
     /** @var array<string, string> */
@@ -791,12 +797,25 @@ final class VisitorLogService
         }
 
         $cleanedTitle = self::cleanPageTitle($pageTitle);
-        if ($cleanedTitle !== '' && ($base === 'product.php' || $title === 'صفحة')) {
+        // Prefer the real page/share title when the mapped name is generic.
+        if ($cleanedTitle !== '' && ($base === 'product.php' || $base === 'share.php' || $title === 'صفحة')) {
+            if ($base === 'share.php') {
+                // Keep "رابط مشاركة" as the type; show the share's own name as detail.
+                $detailFromTitle = $cleanedTitle;
+                $detail = self::describeQuery($query);
+                if ($detail === '') {
+                    $detail = $detailFromTitle;
+                } elseif ($detailFromTitle !== '' && !str_contains($detail, $detailFromTitle)) {
+                    $detail = $detailFromTitle . ' · ' . $detail;
+                }
+
+                return self::pathLabel($title, $detail);
+            }
             $title = $cleanedTitle;
         }
 
         $detail = self::describeQuery($query);
-        if ($detail === '' && $cleanedTitle !== '' && $cleanedTitle !== $title && $base === 'store.php') {
+        if ($detail === '' && $cleanedTitle !== '' && $cleanedTitle !== $title && ($base === 'store.php' || $base === 'about.php')) {
             $detail = $cleanedTitle;
         }
 
@@ -934,7 +953,8 @@ final class VisitorLogService
         }
 
         return in_array($key, [
-            'preview', 'guid', 'id', 'product', 'token', 'return', 'redirect',
+            'preview', 'guid', 'id', 'product', 'token', 't', 's', 'share',
+            'return', 'redirect',
             'fbclid', 'gclid', '_ga', 'ref', 'open_cart', 'groupby', 'sort',
             'storeguids', 'groupguids',
         ], true);

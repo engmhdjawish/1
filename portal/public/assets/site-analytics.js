@@ -152,7 +152,7 @@
     }
 
     const filters = [];
-    ['material_type', 'manufacturer', 'target_category'].forEach((key) => {
+    ['materialTypes', 'material_type', 'manufacturers', 'manufacturer', 'ageCategories', 'target_category'].forEach((key) => {
       params.getAll(key).forEach((value) => {
         const text = String(value || '').trim();
         if (text !== '') filters.push(text);
