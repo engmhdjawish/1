@@ -110,6 +110,11 @@ $assert(
     'manifest prefers opening links in the installed app',
     str_contains($manifest, "'handle_links' => 'preferred'")
 );
+$assert(
+    'manifest stays standalone without browser chrome override',
+    str_contains($manifest, "'display' => 'standalone'")
+    && !str_contains($manifest, "'display_override'")
+);
 
 $staticManifest = (string) file_get_contents(dirname(__DIR__) . '/public/manifest.webmanifest');
 $decodedStatic = json_decode($staticManifest, true);

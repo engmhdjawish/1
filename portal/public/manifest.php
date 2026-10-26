@@ -46,8 +46,9 @@ $manifest = [
     'description' => portal_share_description($company, $siteName),
     'start_url' => $startPath,
     'scope' => '/',
+    // Standalone only — including "browser" in display_override made some Chrome
+    // builds show a top bar with × and the page title inside the installed app.
     'display' => 'standalone',
-    'display_override' => ['standalone', 'browser'],
     // Prefer opening in-scope navigations inside the installed app (Android Chrome).
     'handle_links' => 'preferred',
     'orientation' => 'portrait-primary',
