@@ -973,10 +973,23 @@
     if (!card) return;
     try {
       const payload = JSON.parse(card.getAttribute('data-preview') || '{}');
+      const prevCart = Math.max(0, Number(payload.cartQty) || 0);
+      const prevEff = payload.effectiveMax != null && Number.isFinite(Number(payload.effectiveMax))
+        ? Math.max(0, Number(payload.effectiveMax))
+        : null;
       payload.cartQty = inCartQty;
       const maxPackages = Number(payload.maxPackages);
       if (Number.isFinite(maxPackages) && maxPackages > 0) {
-        const remaining = Math.max(0, maxPackages - inCartQty);
+        let remaining = Math.max(0, maxPackages - inCartQty);
+        // packagesAvailable is zeroed when quantity is hidden — keep server stock cap instead.
+        if (payload.showQuantity && payload.packagesAvailable != null) {
+          remaining = Math.min(remaining, Math.max(0, Number(payload.packagesAvailable)));
+        } else if (!payload.showQuantity && prevEff !== null) {
+          const prevPolicy = Math.max(0, maxPackages - prevCart);
+          if (prevEff < prevPolicy) {
+            remaining = Math.min(remaining, prevEff);
+          }
+        }
         payload.remaining = remaining;
         payload.effectiveMax = remaining;
         payload.atLimit = remaining <= 0;
