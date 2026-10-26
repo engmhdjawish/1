@@ -6,6 +6,7 @@ require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Services\ApiClient;
 use Portal\Services\AccessPolicyService;
+use Portal\Services\CatalogFilterViewService;
 use Portal\Services\ShareCartService;
 use Portal\Services\ShareLinkService;
 use Portal\Services\StoreCatalogService;
@@ -13,6 +14,8 @@ use Portal\Support\SharePageAccess;
 use Portal\Support\Text;
 
 require dirname(__DIR__) . '/views/helpers.php';
+
+$_GET = CatalogFilterViewService::expandRequest($_GET);
 
 $accessKey = trim((string) (
     $_GET['token']

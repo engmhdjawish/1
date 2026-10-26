@@ -1140,7 +1140,58 @@ function catalog_current_return_url(): string
         unset($query['preview']);
     }
 
+    // Prefer expanded $_GET when a short ?v= view was inflated server-side.
+    if (function_exists('catalog_expanded_query_params')) {
+        $expanded = catalog_expanded_query_params();
+        if ($expanded !== []) {
+            $query = array_merge($query, $expanded);
+            unset($query['preview']);
+        }
+    }
+
+    // Keep product return links short when a view code is present.
+    if (isset($query['v']) && trim((string) $query['v']) !== '') {
+        $slim = ['v' => (string) $query['v']];
+        if (isset($query['page']) && trim((string) $query['page']) !== '' && (string) $query['page'] !== '1') {
+            $slim['page'] = (string) $query['page'];
+        }
+        foreach (['token', 't', 'c'] as $shareKey) {
+            if (!empty($query[$shareKey])) {
+                $slim[$shareKey] = (string) $query[$shareKey];
+            }
+        }
+
+        return $path . '?' . http_build_query($slim);
+    }
+
     return $query === [] ? $path : $path . '?' . http_build_query($query);
+}
+
+/**
+ * Full filter query after ?v= expansion — used as the SPA "working" href.
+ *
+ * @return array<string, mixed>
+ */
+function catalog_expanded_query_params(): array
+{
+    $params = is_array($_GET ?? null) ? $_GET : [];
+    unset($params['preview']);
+
+    return share_url_filter_params($params);
+}
+
+/** Absolute-path URL with every expanded filter (not the short ?v= form). */
+function catalog_working_filter_url(): string
+{
+    $uri = (string) ($_SERVER['REQUEST_URI'] ?? '/store.php');
+    $path = (string) (parse_url($uri, PHP_URL_PATH) ?: '/store.php');
+    $params = catalog_expanded_query_params();
+    unset($params['v']);
+    if ($params === []) {
+        return $path;
+    }
+
+    return $path . '?' . http_build_query($params);
 }
 
 function share_token_from_return_url(?string $returnUrl): string

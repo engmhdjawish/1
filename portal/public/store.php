@@ -5,11 +5,14 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Auth\CustomerSession;
+use Portal\Services\CatalogFilterViewService;
 use Portal\Services\ShareCartService;
 use Portal\Services\StoreCatalogService;
 use Portal\Support\SharePageAccess;
 
 require dirname(__DIR__) . '/views/helpers.php';
+
+$_GET = CatalogFilterViewService::expandRequest($_GET);
 
 $shareBrowse = SharePageAccess::resolveShareBrowseContext(null, null);
 if ($shareBrowse !== null) {

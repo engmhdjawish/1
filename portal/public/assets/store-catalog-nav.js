@@ -137,6 +137,12 @@
     }
 
     const url = new URL(window.location.href);
+    // Already on a short view code — don't re-inflate the address bar.
+    if (url.searchParams.has('v') && window.PortalFilterView) {
+      window.PortalFilterView.shortenCurrentIfNeeded?.();
+      return;
+    }
+
     let changed = false;
     Object.entries(missingParams).forEach(([key, value]) => {
       if (url.searchParams.has(key)) {
@@ -151,11 +157,13 @@
     });
 
     if (!changed) {
+      window.PortalFilterView?.shortenCurrentIfNeeded?.();
       return;
     }
 
-    const nextUrl = url.toString();
+    const nextUrl = `${url.pathname}${url.search}`;
     history.replaceState({ storeCatalogUrl: nextUrl }, '', nextUrl);
+    window.PortalFilterView?.shortenAddressBar?.(nextUrl, { storeCatalogUrl: nextUrl });
   }
 
   function escapeHtml(text) {
@@ -588,6 +596,7 @@
 
       if (doc.title) document.title = doc.title;
       if (push) history.pushState({ storeCatalogUrl: url }, '', url);
+      window.PortalFilterView?.shortenAddressBar?.(url, { storeCatalogUrl: url });
       bindCatalog(newRoot);
     } catch (error) {
       if (error?.name === 'AbortError') return;

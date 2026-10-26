@@ -60,6 +60,7 @@ $ordered = [
     '025-customer-shop-address.sql',
     '026-unavailable-prices.sql',
     '027-share-link-short-codes.sql',
+    '028-catalog-filter-views.sql',
 ];
 
 $files = [];

@@ -576,7 +576,7 @@ $appliedClientFiltersJson = json_encode(
 <?php endif; ?>
 
 <!-- store-catalog-fragment:start -->
-<div class="store-layout <?= $allowClientFilters ? 'has-sidebar' : '' ?><?= $storeLabMode ? ' store-lab' : '' ?>" id="store-filters-root" data-store-catalog-root<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?><?= $allowClientFilters ? ' data-applied-filters="' . h((string) $appliedClientFiltersJson) . '"' : '' ?>>
+<div class="store-layout <?= $allowClientFilters ? 'has-sidebar' : '' ?><?= $storeLabMode ? ' store-lab' : '' ?>" id="store-filters-root" data-store-catalog-root data-filter-working-href="<?= h(catalog_working_filter_url()) ?>"<?= $filtersDeferred ? ' data-store-filters-deferred="1"' : '' ?><?= $allowClientFilters ? ' data-applied-filters="' . h((string) $appliedClientFiltersJson) . '"' : '' ?>>
   <?php if ($allowClientFilters): ?>
     <div id="store-filters-backdrop" class="store-filters-backdrop" aria-hidden="true">
       <aside class="store-filters-sidebar">
@@ -1002,6 +1002,7 @@ $appliedClientFiltersJson = json_encode(
 <?php endif; ?>
 
 <script src="<?= h(portal_asset_url('/assets/store-filters.js')) ?>" defer></script>
+<script src="<?= h(portal_asset_url('/assets/store-filter-view.js')) ?>" defer></script>
 <script src="<?= h(portal_asset_url('/assets/store-catalog-nav.js')) ?>" defer></script>
 <?php $GLOBALS['storeProductPreviewScriptLoaded'] = true; ?>
 <script src="<?= h(portal_asset_url('/assets/store-product-preview.js')) ?>" defer></script>

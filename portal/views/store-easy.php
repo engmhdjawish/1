@@ -322,6 +322,7 @@ $baseDisplayOptions = $displayOptions;
   <div
     class="se-live"
     data-se-live
+    data-filter-working-href="<?= h(catalog_working_filter_url()) ?>"
     data-se-total="<?= $totalCount ?>"
     data-se-shown="<?= (int) ($catalog['rangeEnd'] ?? count($products)) ?>"
     data-se-next="<?= $page < $totalPages ? h($buildStoreUrl($page + 1)) : '' ?>"
@@ -590,4 +591,5 @@ $baseDisplayOptions = $displayOptions;
 <?php endif; ?>
 <?php $GLOBALS['storeProductPreviewScriptLoaded'] = true; ?>
 <script src="<?= h(portal_asset_url('/assets/store-product-preview.js')) ?>" defer></script>
+<?= portal_defer_script('/assets/store-filter-view.js') ?>
 <?= portal_defer_script('/assets/store-easy.js') ?>
