@@ -195,6 +195,12 @@
         .then(() => trigger.click())
         .catch(() => {});
     }, true);
+
+    // Shared links land on /?preview=<guid> — load cart scripts so preview add-to-cart works.
+    const previewParam = new URLSearchParams(window.location.search).get('preview');
+    if (previewParam && previewParam !== 'first' && previewParam !== 'last') {
+      loadScripts().catch(() => {});
+    }
   };
 
   const init = () => {

@@ -42,6 +42,21 @@ if ($product === null) {
     exit;
 }
 
+// Shared product links keep /product.php for OG unfurls; humans land on home with store preview.
+// Keep the full product page when browsing from catalog (return=…) or a share-cart session (token).
+if (
+    $shareBrowse === null
+    && $returnUrl === ''
+    && !portal_is_link_unfurl_bot()
+) {
+    $previewParams = ['preview' => $guid];
+    if ($offerSlug !== '') {
+        $previewParams['offer'] = $offerSlug;
+    }
+    header('Location: /index.php?' . http_build_query($previewParams), true, 302);
+    exit;
+}
+
 if ($shareBrowse !== null) {
     $displayOptions = $shareBrowse['display_options'];
     $shareToken = $shareBrowse['token'];

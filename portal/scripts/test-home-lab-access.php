@@ -153,7 +153,7 @@ $previewJs = (string) file_get_contents(dirname(__DIR__) . '/public/assets/store
 $assert(
     'product preview scopes recently viewed and exports open',
     str_contains($previewJs, '[data-lab-recent-viewed]')
-    && str_contains($previewJs, 'window.StoreProductPreview = { open, close }')
+    && str_contains($previewJs, 'window.StoreProductPreview = { open, close, openFromGuid, openFromPayload }')
 );
 $indexPhp = (string) file_get_contents(dirname(__DIR__) . '/public/index.php');
 $assert('home enables store product preview shell', str_contains($indexPhp, '$enableProductPreview = true'));

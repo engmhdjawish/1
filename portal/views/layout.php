@@ -262,8 +262,14 @@ window.portalMaterialImageFrameEmpty=function(img){if(!(img instanceof HTMLImage
       }, true);
     })();
   </script>
+  <?php if ($enableProductPreview && empty($GLOBALS['storeProductPreviewScriptLoaded'])): ?>
+    <?php $GLOBALS['storeProductPreviewScriptLoaded'] = true; ?>
+    <?= portal_defer_script('/assets/store-image-zoom.js') ?>
+    <?= portal_defer_script('/assets/store-product-preview.js') ?>
+  <?php endif; ?>
 <?php elseif ($enableProductPreview && empty($GLOBALS['storeProductPreviewScriptLoaded'])): ?>
   <?php $GLOBALS['storeProductPreviewScriptLoaded'] = true; ?>
+  <?= portal_defer_script('/assets/store-image-zoom.js') ?>
   <?= portal_defer_script('/assets/store-product-preview.js') ?>
 <?php endif; ?>
 <?php if ($enableOnboarding): ?>
