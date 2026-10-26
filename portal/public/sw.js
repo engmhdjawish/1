@@ -151,6 +151,14 @@ self.addEventListener('pushsubscriptionchange', (event) => {
   })());
 });
 
+// www.example.com <-> example.com: same site, different PWA scope.
+function isSiblingHost(a, b) {
+  a = String(a || '').toLowerCase();
+  b = String(b || '').toLowerCase();
+  if (!a || !b || a === b) return false;
+  return a === 'www.' + b || b === 'www.' + a;
+}
+
 function resolveNotificationTargetUrl(rawUrl) {
   const value = String(rawUrl || '').trim();
   if (!value || value === 'null' || value === 'undefined') {
@@ -160,6 +168,9 @@ function resolveNotificationTargetUrl(rawUrl) {
     const url = new URL(value, self.location.origin);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') {
       return new URL('/', self.location.origin).href;
+    }
+    if (isSiblingHost(url.hostname, self.location.hostname)) {
+      return self.location.origin + url.pathname + url.search + url.hash;
     }
     return url.href;
   } catch (_) {

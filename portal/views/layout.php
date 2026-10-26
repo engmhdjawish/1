@@ -127,6 +127,38 @@ $navLinks = [
           );
         }
       })();
+      (function () {
+        // Keep navigation inside the installed app's scope: links to the www↔apex
+        // sibling host would open a Custom Tab (× title bar) in a WebAPK.
+        var here = window.location.hostname.toLowerCase();
+        function sibling(h) {
+          h = String(h || '').toLowerCase();
+          return h !== here && (h === 'www.' + here || here === 'www.' + h);
+        }
+        function fix(el) {
+          if (!el || !el.href) return;
+          try {
+            var u = new URL(el.href, window.location.href);
+            if (sibling(u.hostname)) {
+              el.href = window.location.origin + u.pathname + u.search + u.hash;
+            }
+          } catch (e) {}
+        }
+        document.addEventListener('click', function (ev) {
+          var t = ev.target;
+          fix(t && t.closest ? t.closest('a[href]') : null);
+        }, true);
+        document.addEventListener('submit', function (ev) {
+          var f = ev.target;
+          if (!f || !f.getAttribute || !f.getAttribute('action')) return;
+          try {
+            var u = new URL(f.action, window.location.href);
+            if (sibling(u.hostname)) {
+              f.action = window.location.origin + u.pathname + u.search + u.hash;
+            }
+          } catch (e) {}
+        }, true);
+      })();
     </script>
     <?php require __DIR__ . '/partials/head-icons.php'; ?>
     <title><?= h($title) ?> — <?= h($siteName) ?></title>

@@ -249,6 +249,20 @@ $assert(
     && !str_contains($layout, 'needHost')
 );
 
+$assert(
+    'sw.js rewrites www↔apex notification URLs onto its own origin',
+    str_contains($sw, 'function isSiblingHost')
+    && str_contains($sw, 'isSiblingHost(url.hostname, self.location.hostname)')
+);
+$assert(
+    'layout rewrites sibling-host links/forms to current origin',
+    str_contains($layout, "'www.' + here")
+    && str_contains($layout, "closest('a[href]')")
+);
+$helpers = (string) file_get_contents(dirname(__DIR__) . '/views/helpers.php');
+$assert('share_page_url stays relative', str_contains($helpers, "return '/share.php?' . http_build_query(\$params);"));
+$assert('HttpsGate never bounces standalone app host', str_contains((string) file_get_contents(dirname(__DIR__) . '/src/Support/HttpsGate.php'), '&& !$isStandalone'));
+
 echo "\n";
 if ($failures > 0) {
     echo "{$failures} failure(s)\n";
