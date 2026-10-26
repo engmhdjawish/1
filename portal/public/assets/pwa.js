@@ -29,19 +29,18 @@
     if (isStandalone) {
       return false;
     }
+    // start_url of the installed app always carries source=pwa.
     const params = new URLSearchParams(window.location.search);
     if (params.get('source') === 'pwa') {
       return true;
     }
+    // WebAPK / TWA launches often expose an android-app referrer.
     const ref = String(document.referrer || '');
     if (/^android-app:\/\//i.test(ref)) {
       return true;
     }
-    try {
-      if (window.matchMedia('(display-mode: browser)').matches && ref === '') {
-        return true;
-      }
-    } catch (_) {}
+    // Do NOT treat empty-referrer browser tabs as broken — that false-positives
+    // normal Chrome visits and would nag healthy customers to reinstall.
     return false;
   }
 
@@ -276,107 +275,210 @@
   let waitingWorker = null;
   let refreshingForUpdate = false;
 
-  /** True when this window is the broken old homescreen shell (× bar), not standalone. */
   function isBrokenAppShell() {
-    if (isStandalone) {
-      return false;
-    }
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('source') === 'pwa') {
-      return true;
-    }
-    const ref = String(document.referrer || '');
-    if (/^android-app:\/\//i.test(ref)) {
-      return true;
-    }
+    return looksLikeBrokenHomescreenLaunch();
+  }
+
+  function migrateDismissedRecently() {
     try {
-      if (window.matchMedia('(display-mode: browser)').matches && ref === '') {
+      if (sessionStorage.getItem(MIGRATE_DISMISS_KEY) === '1') {
         return true;
       }
     } catch (_) {}
-    return false;
+    try {
+      const dismissed = Number(localStorage.getItem('pwa-shell-replace-dismissed-at') || '0');
+      return Boolean(dismissed && (Date.now() - dismissed) < 12 * 60 * 60 * 1000);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function markMigrateDismissed() {
+    try {
+      sessionStorage.setItem(MIGRATE_DISMISS_KEY, '1');
+    } catch (_) {}
+    try {
+      localStorage.setItem('pwa-shell-replace-dismissed-at', String(Date.now()));
+    } catch (_) {}
+  }
+
+  function chromeIntentUrl(absoluteHttpsUrl) {
+    try {
+      const url = new URL(absoluteHttpsUrl);
+      if (url.protocol !== 'https:') {
+        return absoluteHttpsUrl;
+      }
+      return 'intent://' + url.host + url.pathname + url.search + url.hash
+        + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url='
+        + encodeURIComponent(url.href)
+        + ';end';
+    } catch (_) {
+      return absoluteHttpsUrl;
+    }
+  }
+
+  function openHealthyWwwInstall() {
+    const sibling = siblingPublicOrigin();
+    if (!sibling) {
+      return false;
+    }
+    const target = sibling + '/?install=1&migrate=1';
+    window.location.href = /Android/i.test(ua) ? chromeIntentUrl(target) : target;
+    return true;
   }
 
   /**
-   * Old WebAPK (different launcher icon + × title bar) cannot be healed by a
-   * Service Worker reload — Android keeps a separate frozen app. Offer install
-   * of the current healthy app; only shown on the broken shell, not to everyone.
+   * Old WebAPK (× Custom Tab) cannot be healed by Service Worker reload —
+   * Android keeps a frozen launcher shell. Only prompt the broken cohort.
    */
-  function showShellReplaceBanner() {
+  function showShellReplaceBanner(options) {
+    const opts = options || {};
     if (document.getElementById('pwa-update-banner') || document.getElementById('pwa-shell-replace-banner')) {
       return;
     }
+    const toWww = shouldMigrateToWwwSibling();
+    const subtitle = toWww
+      ? 'تحديث الصفحة لا يزيل × — ثبّت النسخة الصحيحة من www ثم احذف الأيقونة القديمة فقط'
+      : 'تحديث الصفحة لا يزيل × — ثبّت التطبيق من جديد ثم احذف الأيقونة التالفة فقط';
+    const btnLabel = opts.hasSwUpdate || waitingWorker ? 'تحديث وإصلاح' : 'تحديث';
     const banner = document.createElement('div');
     banner.id = 'pwa-shell-replace-banner';
-    banner.className = 'pwa-update-banner';
+    banner.className = 'pwa-update-banner pwa-update-banner--migrate';
     banner.setAttribute('role', 'status');
     banner.innerHTML =
       '<div class="pwa-update-banner__inner">' +
       '<span class="material-symbols-outlined" aria-hidden="true">install_mobile</span>' +
       '<div class="pwa-update-banner__text">' +
-      '<strong>نسخة التطبيق قديمة</strong>' +
-      '<span>الأيقونة القديمة منفصلة عن الجديدة — ثبّت التحديث ثم استخدم الأيقونة الجديدة (يمكنك حذف القديمة لاحقاً)</span>' +
+      '<strong>التطبيق يحتاج إصلاحاً</strong>' +
+      '<span>' + subtitle + '</span>' +
       '</div>' +
-      '<button type="button" class="pwa-update-banner__btn" data-pwa-replace-shell>تحديث</button>' +
+      '<button type="button" class="pwa-update-banner__btn" data-pwa-replace-shell>' + btnLabel + '</button>' +
       '<button type="button" class="pwa-update-banner__later" data-pwa-dismiss-replace>لاحقاً</button>' +
       '</div>';
     banner.querySelector('[data-pwa-replace-shell]')?.addEventListener('click', replaceBrokenShell);
     banner.querySelector('[data-pwa-dismiss-replace]')?.addEventListener('click', () => {
-      try {
-        localStorage.setItem('pwa-shell-replace-dismissed-at', String(Date.now()));
-      } catch (_) {}
+      markMigrateDismissed();
       banner.remove();
     });
     document.body.appendChild(banner);
     window.requestAnimationFrame(() => banner.classList.add('is-visible'));
   }
 
+  function openMigrateModal() {
+    closeModal();
+    const toWww = shouldMigrateToWwwSibling();
+    const wwwHost = toWww ? String(siblingPublicOrigin()).replace(/^https?:\/\//i, '') : '';
+    const steps = toWww
+      ? [
+          'اضغط «فتح التثبيت الصحيح» لفتح www في Chrome.',
+          'من Chrome اختر «تثبيت التطبيق» / Install.',
+          'بعد نجاح التثبيت: اضغط مطولاً على أيقونة جاويش القديمة (التي فيها ×) → إزالة.',
+        ]
+      : [
+          'اضغط مطولاً على أيقونة جاويش في الشاشة الرئيسية → إزالة / Uninstall.',
+          'افتح الموقع في Chrome (وليس من الأيقونة القديمة).',
+          'من قائمة Chrome ⋮ اختر «تثبيت التطبيق» ثم افتح الأيقونة الجديدة.',
+        ];
+    const el = document.createElement('div');
+    el.id = 'pwa-install-modal';
+    el.className = 'pwa-install-modal';
+    el.innerHTML =
+      '<div class="pwa-install-modal__backdrop" data-pwa-close></div>' +
+      '<div class="pwa-install-modal__card" role="dialog" aria-modal="true" aria-labelledby="pwa-migrate-title">' +
+      '<button type="button" class="pwa-install-modal__close" data-pwa-close aria-label="إغلاق">×</button>' +
+      '<div class="pwa-install-modal__icon" aria-hidden="true"><span class="material-symbols-outlined">build_circle</span></div>' +
+      '<h2 id="pwa-migrate-title" class="pwa-install-modal__title">إصلاح شريط ×</h2>' +
+      '<p class="pwa-install-modal__lead">Chrome لا يحوّل غلاف Custom Tab إلى standalone عبر Service Worker. نثبّت نسخة صحيحة فقط لهذه الأيقونة التالفة — بدون حذف تطبيقات كل الزبائن.</p>' +
+      '<ol class="pwa-install-modal__steps">' + steps.map((line) => '<li>' + line + '</li>').join('') + '</ol>' +
+      (toWww
+        ? '<button type="button" class="pwa-install-modal__btn" data-pwa-open-www>فتح التثبيت الصحيح (' + wwwHost + ')</button>'
+        : (deferredPrompt
+          ? '<button type="button" class="pwa-install-modal__btn" data-pwa-native-install>تثبيت الآن</button>'
+          : '')) +
+      '<button type="button" class="pwa-install-modal__ghost" data-pwa-close>لاحقاً</button>' +
+      '</div>';
+    el.querySelectorAll('[data-pwa-close]').forEach((node) => {
+      node.addEventListener('click', () => {
+        markMigrateDismissed();
+        closeModal();
+      });
+    });
+    el.querySelector('[data-pwa-open-www]')?.addEventListener('click', () => {
+      openHealthyWwwInstall();
+    });
+    el.querySelector('[data-pwa-native-install]')?.addEventListener('click', () => {
+      triggerNativeInstall();
+    });
+    modalEl = el;
+    document.body.appendChild(modalEl);
+    document.body.classList.add('pwa-modal-open');
+  }
+
   async function replaceBrokenShell() {
-    const btn = document.querySelector('[data-pwa-replace-shell]');
+    const btn = document.querySelector('[data-pwa-replace-shell], [data-pwa-apply-update]');
     if (btn) {
       btn.disabled = true;
-      btn.textContent = 'جاري التحديث…';
+      btn.textContent = 'جاري الإصلاح…';
     }
-    // Prefer native install of the current healthy manifest.
+
+    clearInstalledMark();
+    fetch('/manifest.php?heal=1', { cache: 'reload', credentials: 'same-origin' }).catch(() => {});
+
+    // Apex CCT → install healthy www WebAPK (known working standalone).
+    // Block controllerchange reload so SKIP_WAITING cannot race the navigation.
+    if (shouldMigrateToWwwSibling()) {
+      refreshingForUpdate = true;
+      if (waitingWorker) {
+        try {
+          waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+        } catch (_) {}
+      }
+      if (openHealthyWwwInstall()) {
+        return;
+      }
+      refreshingForUpdate = false;
+    }
+
+    // Content update still helps on-host; it just cannot change the × shell.
+    if (waitingWorker) {
+      try {
+        waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+      } catch (_) {}
+    }
+
     if (deferredPrompt) {
       const ok = await triggerNativeInstall();
       if (ok) {
         document.getElementById('pwa-shell-replace-banner')?.remove();
+        document.getElementById('pwa-update-banner')?.remove();
         return;
       }
     }
-    // Fallback: open install instructions (Chrome menu / iOS share).
-    clearInstalledMark();
-    openModal(detectMode() === 'native' && !deferredPrompt ? 'manual' : detectMode());
+
+    openMigrateModal();
     if (btn) {
       btn.disabled = false;
       btn.textContent = 'تحديث';
     }
   }
 
-  function maybePromptShellReplace(relatedInstalled) {
-    if (isStandalone || isInAppBrowser) {
+  function maybePromptShellReplace() {
+    if (isStandalone || isInAppBrowser || migrateDismissedRecently()) {
       return;
     }
-    try {
-      const dismissed = Number(localStorage.getItem('pwa-shell-replace-dismissed-at') || '0');
-      if (dismissed && (Date.now() - dismissed) < 12 * 60 * 60 * 1000) {
-        return;
-      }
-    } catch (_) {}
-    // Broken CCT/old icon launch, or API says installed but we are not standalone.
-    if (isBrokenAppShell() || relatedInstalled) {
-      showShellReplaceBanner();
+    // Only the broken homescreen/CCT cohort — never mass-prompt browser tabs.
+    if (isBrokenAppShell()) {
+      showShellReplaceBanner({ hasSwUpdate: Boolean(waitingWorker) });
     }
   }
 
   function showUpdateBanner(worker) {
-    // Broken old shell: SW reload cannot change × bar or launcher icon.
-    if (!isStandalone) {
-      maybePromptShellReplace(true);
+    waitingWorker = worker || waitingWorker;
+    // Only the broken homescreen shell needs migrate — normal browser tabs keep SW update.
+    if (isBrokenAppShell()) {
+      maybePromptShellReplace();
       return;
     }
-    waitingWorker = worker || waitingWorker;
     if (!waitingWorker || document.getElementById('pwa-update-banner') || document.getElementById('pwa-shell-replace-banner')) {
       return;
     }
@@ -403,7 +505,7 @@
   }
 
   function applyWaitingUpdate() {
-    if (!isStandalone) {
+    if (isBrokenAppShell()) {
       replaceBrokenShell();
       return;
     }
@@ -532,11 +634,13 @@
   }
 
   function openModal(forceMode) {
-    // Allow install instructions when replacing a broken old shell.
+    // Allow install instructions when replacing a broken old shell or migrate=1.
     if (isStandalone) {
       return;
     }
-    if (isMarkedInstalled() && !isBrokenAppShell() && !document.getElementById('pwa-shell-replace-banner')) {
+    const params = new URLSearchParams(window.location.search);
+    const migrating = params.get('migrate') === '1' || params.get('install') === '1';
+    if (isMarkedInstalled() && !isBrokenAppShell() && !migrating && !document.getElementById('pwa-shell-replace-banner')) {
       return;
     }
     closeModal();
@@ -640,14 +744,27 @@
     event.preventDefault();
     deferredPrompt = event;
     updateHeaderButtonMode('native');
+    // Broken apex shell: keep migrate banner primary; www migrate=1 uses install UI.
+    if (isBrokenAppShell()) {
+      maybePromptShellReplace();
+      return;
+    }
     showInstallTriggers();
     if (!autoDismissedRecently()) {
       document.getElementById('pwa-install-banner')?.remove();
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('migrate') === '1' || params.get('install') === '1') {
+      window.setTimeout(() => {
+        triggerNativeInstall();
+      }, 400);
     }
   });
 
   window.addEventListener('appinstalled', () => {
     markInstalled();
+    document.getElementById('pwa-shell-replace-banner')?.remove();
+    document.getElementById('pwa-update-banner')?.remove();
   });
 
   function syncInstallTriggers() {
@@ -667,22 +784,24 @@
       return;
     }
 
-    // Old launcher icon / × bar: SW "update" is not enough — prompt replace install.
-    if (installed || isBrokenAppShell()) {
+    const params = new URLSearchParams(window.location.search);
+    const migratingIn = params.get('migrate') === '1';
+
+    // Old launcher icon / × bar: SW "update" cannot change Chrome's shell.
+    if (isBrokenAppShell()) {
       hideInstallTriggers();
-      maybePromptShellReplace(Boolean(installed));
-      // Still allow native install prompt if Chrome offers a healthy new WebAPK.
-      window.addEventListener('beforeinstallprompt', () => {
-        maybePromptShellReplace(true);
-      });
+      maybePromptShellReplace();
+      return;
+    }
+    if (installed && !migratingIn) {
+      hideInstallTriggers();
       return;
     }
 
     bindTriggers();
     syncInstallTriggers();
 
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('install') === '1' || window.location.pathname.endsWith('/install.php')) {
+    if (params.get('install') === '1' || migratingIn || window.location.pathname.endsWith('/install.php')) {
       window.setTimeout(() => openModal(), 600);
     }
 
@@ -698,9 +817,11 @@
     close: closeModal,
     install: triggerNativeInstall,
     applyUpdate: applyWaitingUpdate,
+    replaceBrokenShell,
     shouldPromptInstall: () => !isStandalone && !isMarkedInstalled() && canInstall(),
     canInstall,
     isInAppBrowser: () => isInAppBrowser,
+    isBrokenAppShell: () => isBrokenAppShell(),
   };
 
   if (document.readyState === 'loading') {

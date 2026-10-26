@@ -187,10 +187,27 @@ $assert(
     && str_contains($pwa, 'يتوفر تحديث جديد')
 );
 $assert(
+    'pwa.js detects broken Custom Tab homescreen (source=pwa, not standalone)',
+    str_contains($pwa, 'looksLikeBrokenHomescreenLaunch')
+    && str_contains($pwa, "params.get('source') === 'pwa'")
+    && str_contains($pwa, 'replaceBrokenShell')
+);
+$assert(
+    'pwa.js migrates broken apex shell to www install (SW cannot heal ×)',
+    str_contains($pwa, 'shouldMigrateToWwwSibling')
+    && str_contains($pwa, 'openHealthyWwwInstall')
+    && str_contains($pwa, 'install=1&migrate=1')
+    && str_contains($pwa, 'التطبيق يحتاج إصلاحاً')
+);
+$assert(
+    'pwa.js does not treat empty-referrer browser tabs as broken shells',
+    !str_contains($pwa, "(display-mode: browser)').matches && ref === ''")
+);
+$assert(
     'pwa.js replaces broken old shell (different icon / × bar) instead of SW-only reload',
     str_contains($pwa, 'showShellReplaceBanner')
     && str_contains($pwa, 'replaceBrokenShell')
-    && str_contains($pwa, 'نسخة التطبيق قديمة')
+    && str_contains($pwa, 'التطبيق يحتاج إصلاحاً')
 );
 
 $sw = (string) file_get_contents(dirname(__DIR__) . '/public/sw.js');

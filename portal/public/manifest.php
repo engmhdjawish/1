@@ -44,7 +44,7 @@ $scopeUrl = $requestOrigin !== '' ? $requestOrigin . '/' : '/';
 $manifestIcons = array_map(static function (array $icon): array {
     $src = (string) ($icon['src'] ?? '');
     if ($src !== '') {
-        $icon['src'] = $src . (str_contains($src, '?') ? '&' : '?') . 'webapk=3';
+        $icon['src'] = $src . (str_contains($src, '?') ? '&' : '?') . 'webapk=4';
     }
 
     return $icon;
