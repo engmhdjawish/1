@@ -25,65 +25,75 @@ $assert = static function (string $label, bool $ok) use (&$failures): void {
 };
 
 $assert(
-    'www visitor redirects to apex when PORTAL_APP_URL is apex',
+    'by default www is NOT hard-redirected to apex (PWA-safe)',
     HttpsGate::redirectTarget(
         'www.jawishco.sy',
         '/store.php?q=1',
         true,
-        'https://jawishco.sy'
-    ) === 'https://jawishco.sy/store.php?q=1'
-);
-
-$assert(
-    'apex visitor redirects to www when PORTAL_APP_URL is www',
-    HttpsGate::redirectTarget(
-        'jawishco.sy',
-        '/index.php',
-        true,
-        'https://www.jawishco.sy'
-    ) === 'https://www.jawishco.sy/index.php'
-);
-
-$assert(
-    'http redirects to https on preferred host',
-    HttpsGate::redirectTarget(
-        'www.jawishco.sy',
-        '/',
+        'https://jawishco.sy',
         false,
-        'https://www.jawishco.sy'
-    ) === 'https://www.jawishco.sy/'
-);
-
-$assert(
-    'already canonical https stays put',
-    HttpsGate::redirectTarget(
-        'www.jawishco.sy',
-        '/about.php',
-        true,
-        'https://www.jawishco.sy'
+        false
     ) === null
 );
 
 $assert(
-    'standalone PWA on apex is not bounced to www',
+    'by default apex is NOT hard-redirected to www (PWA-safe)',
     HttpsGate::redirectTarget(
         'jawishco.sy',
         '/index.php',
         true,
         'https://www.jawishco.sy',
+        false,
+        false
+    ) === null
+);
+
+$assert(
+    'optional FORCE_CANONICAL_HOST still redirects browser tabs',
+    HttpsGate::redirectTarget(
+        'jawishco.sy',
+        '/index.php',
+        true,
+        'https://www.jawishco.sy',
+        false,
+        true
+    ) === 'https://www.jawishco.sy/index.php'
+);
+
+$assert(
+    'FORCE_CANONICAL_HOST never bounces standalone PWA',
+    HttpsGate::redirectTarget(
+        'jawishco.sy',
+        '/index.php',
+        true,
+        'https://www.jawishco.sy',
+        true,
         true
     ) === null
 );
 
 $assert(
-    'browser tab on apex still redirects to www',
+    'http redirects to https on same host',
     HttpsGate::redirectTarget(
-        'jawishco.sy',
-        '/index.php',
+        'www.jawishco.sy',
+        '/',
+        false,
+        'https://www.jawishco.sy',
+        false,
+        false
+    ) === 'https://www.jawishco.sy/'
+);
+
+$assert(
+    'already https stays put',
+    HttpsGate::redirectTarget(
+        'www.jawishco.sy',
+        '/about.php',
         true,
         'https://www.jawishco.sy',
+        false,
         false
-    ) === 'https://www.jawishco.sy/index.php'
+    ) === null
 );
 
 $assert(

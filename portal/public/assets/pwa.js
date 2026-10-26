@@ -359,7 +359,7 @@
       return Promise.resolve(null);
     }
     const register = () => navigator.serviceWorker
-      .register('/sw.js?v=10', { scope: '/', updateViaCache: 'none' })
+      .register('/sw.js?v=11', { scope: '/', updateViaCache: 'none' })
       .catch(() => null);
     // Registration competes with first paint on slow phones; wait until the page has loaded.
     if (document.readyState === 'complete') {

@@ -8,7 +8,11 @@
 # Prefer ONE public host in PORTAL_APP_URL (with or without www). Portal PHP also
 # 301-redirects the other host so login cookies and the installed PWA stay shared.
 #
-# Optional: redirect the alternate host (www ↔ apex) at nginx:
+# Do NOT hard-redirect the alternate host (www ↔ apex) at nginx if customers
+# already installed the PWA on either host — a 301 out of the install origin
+# turns the home-screen app into a Chrome Custom Tab (× + title bar) and
+# cannot be fixed without reinstall. Serve both hosts; PHP keeps HTTPS only,
+# and the browser soft-redirects non-PWA tabs to PORTAL_APP_URL.
 # server {
 #     listen 80;
 #     listen [::]:80;
@@ -18,7 +22,8 @@
 #     server_name {{WEB_DOMAIN_ALIAS}};
 #     ssl_certificate /etc/letsencrypt/live/{{WEB_DOMAIN}}/fullchain.pem;
 #     ssl_certificate_key /etc/letsencrypt/live/{{WEB_DOMAIN}}/privkey.pem;
-#     return 301 https://{{WEB_DOMAIN}}$request_uri;
+#     # Prefer mirroring the primary site root instead of return 301 …
+#     # return 301 https://{{WEB_DOMAIN}}$request_uri;
 # }
 
 server {
