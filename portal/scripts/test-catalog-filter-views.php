@@ -74,8 +74,14 @@ $check('store expands v', str_contains($store, 'expandRequest'), true);
 $check('share expands v', str_contains($share, 'expandRequest'), true);
 $check('js shortens bar', str_contains($js, 'shortenAddressBar'), true);
 $check('js keeps working href', str_contains($js, 'workingHref'), true);
+$check('js in-app share', str_contains($js, 'shareCurrentView') && str_contains($js, 'navigator.share'), true);
 $check('easy uses shorten', str_contains($easy, 'shortenAddressBar'), true);
 $check('service content hash', str_contains($service, 'payload_hash'), true);
+
+$easyView = file_get_contents(dirname(__DIR__) . '/views/store-easy.php') ?: '';
+$catalogView = file_get_contents(dirname(__DIR__) . '/views/store-catalog.php') ?: '';
+$check('easy share button', str_contains($easyView, 'data-share-filter-view'), true);
+$check('catalog share button', str_contains($catalogView, 'data-share-filter-view'), true);
 
 echo $failed === 0 ? "\ncatalog filter views ok\n" : "\n{$failed} failed\n";
 exit($failed === 0 ? 0 : 1);

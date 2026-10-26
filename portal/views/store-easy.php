@@ -316,7 +316,16 @@ try {
 $storeShowPrice = (bool) ($displayOptions['show_price'] ?? false);
 $baseDisplayOptions = $displayOptions;
 ?>
-<div class="se store-lab" data-product-share-scope>
+<?php
+  $filterShareCompany = trim((string) ($siteName ?? $companyName ?? ''));
+  if ($filterShareCompany === '' && is_array($companyContext ?? null)) {
+      $filterShareCompany = trim((string) ($companyContext['company_name'] ?? ''));
+  }
+  if ($filterShareCompany === '') {
+      $filterShareCompany = 'جاويش للتجارة';
+  }
+?>
+<div class="se store-lab" data-product-share-scope data-product-share-company="<?= h($filterShareCompany) ?>">
   <?php $storeSearchAction = $seAction; require __DIR__ . '/partials/store-next-search.php'; ?>
 
   <div
@@ -491,16 +500,32 @@ $baseDisplayOptions = $displayOptions;
         <?php endif; ?>
       </div>
     <?php endif; ?>
-    <?php if ($products !== []): ?>
-      <div class="se-density" role="group" aria-label="طريقة العرض" data-se-density hidden>
-        <button type="button" data-se-density-set="1" aria-label="صورة كبيرة">
-          <span class="material-symbols-outlined" aria-hidden="true">view_agenda</span>
-        </button>
-        <button type="button" data-se-density-set="2" aria-label="صورتان">
-          <span class="material-symbols-outlined" aria-hidden="true">grid_view</span>
+    <div class="se-results-actions">
+      <div class="filter-view-share">
+        <button
+          type="button"
+          class="se-share-view"
+          data-share-filter-view
+          data-product-share-company="<?= h($filterShareCompany) ?>"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-label="مشاركة نتائج الصفحة"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">share</span>
+          <span>مشاركة</span>
         </button>
       </div>
-    <?php endif; ?>
+      <?php if ($products !== []): ?>
+        <div class="se-density" role="group" aria-label="طريقة العرض" data-se-density hidden>
+          <button type="button" data-se-density-set="1" aria-label="صورة كبيرة">
+            <span class="material-symbols-outlined" aria-hidden="true">view_agenda</span>
+          </button>
+          <button type="button" data-se-density-set="2" aria-label="صورتان">
+            <span class="material-symbols-outlined" aria-hidden="true">grid_view</span>
+          </button>
+        </div>
+      <?php endif; ?>
+    </div>
   </div>
 
   <?php if ($products === [] && !empty($catalog['apiError'])): ?>

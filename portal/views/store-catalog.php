@@ -901,6 +901,19 @@ $appliedClientFiltersJson = json_encode(
       <?php else: ?>
         <p class="store-results-meta">لا توجد نتائج مطابقة</p>
       <?php endif; ?>
+      <div class="filter-view-share">
+        <button
+          type="button"
+          class="store-share-view"
+          data-share-filter-view
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-label="مشاركة نتائج الصفحة"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">share</span>
+          <span>مشاركة</span>
+        </button>
+      </div>
 
       <?php if ($allowSorting && $isClientFilterVisible('sort') && $clientSortFields !== []): ?>
         <form method="get" class="store-sort-bar"<?= $storeLabMode ? ' action="/store.php"' : '' ?>>

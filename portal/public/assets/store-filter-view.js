@@ -191,12 +191,184 @@
     rememberWorkingHref(`${global.location.pathname}${global.location.search}`);
   });
 
+  function absoluteUrl(pathOrUrl) {
+    try {
+      return new URL(pathOrUrl, global.location.origin).toString();
+    } catch {
+      return String(pathOrUrl || global.location.href);
+    }
+  }
+
+  function siteLabel() {
+    const scope = document.querySelector('[data-product-share-company], [data-share-filter-view]');
+    const fromAttr = scope?.getAttribute('data-product-share-company')
+      || document.querySelector('[data-product-share-company]')?.getAttribute('data-product-share-company')
+      || '';
+    if (fromAttr.trim()) return fromAttr.trim();
+    const title = (document.title || '').split('—')[0].trim();
+    return title || 'المتجر';
+  }
+
+  function shareTitle() {
+    const count = document.querySelector('[data-se-total]')?.getAttribute('data-se-total')
+      || document.querySelector('.store-results-meta')?.textContent?.match(/\d[\d,]*/)?.[0]
+      || '';
+    const chips = Array.from(document.querySelectorAll('.se-chip:not(.se-chip--clear) span:not(.material-symbols-outlined), .store-active-chip__text'))
+      .map((node) => (node.textContent || '').trim())
+      .filter(Boolean)
+      .slice(0, 3);
+    const site = siteLabel();
+    if (chips.length > 0) {
+      return `${site} — ${chips.join(' · ')}`;
+    }
+    if (count) {
+      return `${site} — ${count} مادة`;
+    }
+    return `${site} — نتائج المتجر`;
+  }
+
+  async function resolveShareUrl() {
+    const href = getWorkingHref() || `${global.location.pathname}${global.location.search}`;
+    const shortPath = await mint(href);
+    return absoluteUrl(shortPath || href);
+  }
+
+  let shareMenu = null;
+  let shareMenuFor = null;
+
+  function closeShareMenu() {
+    shareMenu?.remove();
+    shareMenu = null;
+    shareMenuFor?.setAttribute('aria-expanded', 'false');
+    shareMenuFor = null;
+  }
+
+  function flashNear(button, text) {
+    const tip = document.createElement('span');
+    tip.className = 'filter-view-share__toast';
+    tip.setAttribute('role', 'status');
+    tip.textContent = text;
+    const host = button.closest('.filter-view-share') || button.parentElement || document.body;
+    host.appendChild(tip);
+    global.setTimeout(() => tip.remove(), 1800);
+  }
+
+  async function copyUrl(button, url) {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const field = document.createElement('textarea');
+      field.value = url;
+      field.setAttribute('readonly', '');
+      field.style.position = 'fixed';
+      field.style.opacity = '0';
+      document.body.appendChild(field);
+      field.select();
+      document.execCommand('copy');
+      field.remove();
+    }
+    flashNear(button, 'تم نسخ الرابط');
+  }
+
+  function openShareMenu(button, title, url) {
+    closeShareMenu();
+    const wrap = button.closest('.filter-view-share') || button.parentElement || button;
+    shareMenu = document.createElement('div');
+    shareMenu.className = 'filter-view-share__menu';
+    shareMenu.setAttribute('role', 'menu');
+    const items = [
+      { label: 'واتساب', icon: 'chat', href: `https://wa.me/?text=${encodeURIComponent(`${title}\n${url}`)}`, tone: 'green' },
+      { label: 'تيليغرام', icon: 'send', href: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}`, tone: 'blue' },
+      { label: 'نسخ الرابط', icon: 'link', copy: true, tone: 'ink' },
+    ];
+    items.forEach((item) => {
+      const node = document.createElement(item.copy ? 'button' : 'a');
+      node.className = `filter-view-share__item filter-view-share__item--${item.tone}`;
+      node.setAttribute('role', 'menuitem');
+      if (item.copy) {
+        node.type = 'button';
+        node.addEventListener('click', () => {
+          copyUrl(button, url);
+          closeShareMenu();
+        });
+      } else {
+        node.href = item.href;
+        node.target = '_blank';
+        node.rel = 'noopener';
+        node.addEventListener('click', closeShareMenu);
+      }
+      const icon = document.createElement('span');
+      icon.className = 'material-symbols-outlined';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = item.icon;
+      node.append(icon, item.label);
+      shareMenu.appendChild(node);
+    });
+    wrap.appendChild(shareMenu);
+    button.setAttribute('aria-expanded', 'true');
+    shareMenuFor = button;
+    shareMenu.querySelector('.filter-view-share__item')?.focus();
+  }
+
+  async function shareCurrentView(button) {
+    if (!(button instanceof HTMLElement)) return;
+    if (button.dataset.sharing === '1') return;
+    button.dataset.sharing = '1';
+    button.classList.add('is-loading');
+    button.setAttribute('aria-busy', 'true');
+    try {
+      const url = await resolveShareUrl();
+      const title = shareTitle();
+      if (typeof navigator.share === 'function') {
+        try {
+          await navigator.share({ title, text: title, url });
+          return;
+        } catch (error) {
+          if (error && error.name === 'AbortError') return;
+        }
+      }
+      openShareMenu(button, title, url);
+    } catch {
+      flashNear(button, 'تعذر إنشاء الرابط');
+    } finally {
+      button.dataset.sharing = '0';
+      button.classList.remove('is-loading');
+      button.removeAttribute('aria-busy');
+    }
+  }
+
+  document.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const button = target?.closest('[data-share-filter-view]');
+    if (!button) {
+      if (shareMenu && !(target && shareMenu.contains(target))) closeShareMenu();
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (shareMenuFor === button) {
+      closeShareMenu();
+      return;
+    }
+    shareCurrentView(button);
+  }, true);
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && shareMenu) {
+      const owner = shareMenuFor;
+      closeShareMenu();
+      owner?.focus();
+    }
+  });
+
   global.PortalFilterView = {
     mint,
     shortenAddressBar,
     shortenCurrentIfNeeded,
     rememberWorkingHref,
     workingHref: getWorkingHref,
+    shareCurrentView,
+    resolveShareUrl,
     worthShortening: (href) => {
       try {
         return worthShortening(new URL(href, global.location.origin));
