@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>اختبار زر إضافة في معاينة الرئيسية</title>
+</head>
+<body>
+  <!--
+    Mimics homepage strips: no card cart form, quantity hidden (packagesAvailable forced to 0),
+    but server effectiveMax is still sellable. Preview must show «إضافة», not «مكتمل».
+  -->
+  <section class="home-section" id="section-home">
+    <div class="home-strip">
+      <article
+        class="home-product-card"
+        data-store-preview-card
+        data-preview-guid="guid-sellable"
+        data-preview='{"guid":"guid-sellable","name":"مادة متوفرة","code":"S1","thumbUrl":"","zoomUrl":"","detailUrl":"/product.php?guid=guid-sellable","showPrice":true,"showPriceSyp":true,"showPriceUsd":false,"showQuantity":false,"packagesAvailable":0,"packagesAvailableLabel":"","packaging":12,"packagingLabel":"12 حبة / طرد","primaryUnit":"حبة","packageUnit":"طرد","hasOffer":false,"offerBadge":"","unitSaleSp":1000,"unitSaleUsd":0,"packageSaleSp":12000,"packageSaleUsd":0,"originalUnitSp":0,"originalUnitUsd":0,"originalPackSp":0,"originalPackUsd":0,"allowCart":true,"cartQty":0,"maxPackages":null,"maxLabel":null,"remaining":2,"atLimit":false,"defaultQty":1,"qtyStep":1,"qtyMin":1,"partialPackage":false,"effectiveMax":2,"returnUrl":"/","storeOffer":"","storeSection":"featured"}'
+      >
+        <button type="button" data-store-product-preview>معاينة</button>
+      </article>
+      <article
+        class="home-product-card"
+        data-store-preview-card
+        data-preview-guid="guid-exhausted"
+        data-preview='{"guid":"guid-exhausted","name":"مادة نافدة","code":"E1","thumbUrl":"","zoomUrl":"","detailUrl":"/product.php?guid=guid-exhausted","showPrice":true,"showPriceSyp":true,"showPriceUsd":false,"showQuantity":false,"packagesAvailable":0,"packagesAvailableLabel":"","packaging":12,"packagingLabel":"12 حبة / طرد","primaryUnit":"حبة","packageUnit":"طرد","hasOffer":false,"offerBadge":"","unitSaleSp":1000,"unitSaleUsd":0,"packageSaleSp":12000,"packageSaleUsd":0,"originalUnitSp":0,"originalUnitUsd":0,"originalPackSp":0,"originalPackUsd":0,"allowCart":true,"cartQty":0,"maxPackages":null,"maxLabel":null,"remaining":0,"atLimit":true,"defaultQty":1,"qtyStep":1,"qtyMin":1,"partialPackage":false,"effectiveMax":0,"returnUrl":"/","storeOffer":"","storeSection":"featured"}'
+      >
+        <button type="button" data-store-product-preview>معاينة نافدة</button>
+      </article>
+    </div>
+  </section>
+
+  <div id="storeProductPreview" class="store-product-preview" hidden aria-hidden="true">
+    <button type="button" data-preview-close>إغلاق</button>
+    <button type="button" data-preview-prev>السابق</button>
+    <button type="button" data-preview-next>التالي</button>
+    <div class="store-product-preview__panel">
+      <div class="store-product-preview__image-wrap">
+        <div id="storeProductPreviewImageStage">
+          <div id="storeProductPreviewImageLoader" hidden></div>
+          <img id="storeProductPreviewImg" src="" alt="">
+        </div>
+      </div>
+      <div class="store-product-preview__meta">
+        <div id="storeProductPreviewCounter"></div>
+        <h2 id="storeProductPreviewTitle"></h2>
+        <p id="storeProductPreviewSubtitle"></p>
+        <div id="storeProductPreviewPackaging" hidden></div>
+        <div id="storeProductPreviewPrices"></div>
+        <div id="storeProductPreviewCart"></div>
+        <a id="storeProductPreviewDetail" href="#">تفاصيل</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Minimal StoreCart stubs so mountCartForm can finish without the full cart bundle.
+    window.StoreCart = {
+      setFormCartMode() {},
+      bindAddForms() {},
+      bindQtySteppers() {},
+    };
+  </script>
+  <script src="/assets/store-product-preview.js"></script>
+</body>
+</html>

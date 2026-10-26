@@ -958,22 +958,39 @@
 
   const applyCartQtyToPayload = (p, inCart) => {
     const next = { ...p, cartQty: inCart };
-    if (next.effectiveMax != null || next.maxPackages != null) {
-      const policyRemaining = next.maxPackages != null
-        ? Math.max(0, Number(next.maxPackages) - inCart)
+    if (next.effectiveMax == null && next.maxPackages == null) {
+      return next;
+    }
+
+    const policyRemaining = next.maxPackages != null
+      ? Math.max(0, Number(next.maxPackages) - inCart)
+      : null;
+    // packagesAvailable is intentionally 0 when quantity is hidden — never treat that as stock=0.
+    const stockRemaining = next.showQuantity && next.packagesAvailable != null
+      ? Math.max(0, Number(next.packagesAvailable))
+      : null;
+
+    let effective = policyRemaining;
+    if (stockRemaining !== null) {
+      effective = effective !== null ? Math.min(effective, stockRemaining) : stockRemaining;
+    } else if (policyRemaining !== null && !next.showQuantity) {
+      // Keep any stricter stock cap baked into the server effectiveMax without leaking qty.
+      const prevCart = Math.max(0, Number(p.cartQty) || 0);
+      const prevEff = p.effectiveMax != null && Number.isFinite(Number(p.effectiveMax))
+        ? Math.max(0, Number(p.effectiveMax))
         : null;
-      const stockRemaining = next.packagesAvailable != null
-        ? Math.max(0, Number(next.packagesAvailable))
-        : null;
-      let effective = policyRemaining;
-      if (stockRemaining !== null) {
-        effective = effective !== null ? Math.min(effective, stockRemaining) : stockRemaining;
+      if (prevEff !== null) {
+        const prevPolicy = Math.max(0, Number(next.maxPackages) - prevCart);
+        if (prevEff < prevPolicy) {
+          effective = Math.min(policyRemaining, prevEff);
+        }
       }
-      if (effective !== null) {
-        next.effectiveMax = effective;
-        next.remaining = effective;
-        next.atLimit = effective <= 0;
-      }
+    }
+
+    if (effective !== null) {
+      next.effectiveMax = effective;
+      next.remaining = effective;
+      next.atLimit = effective <= 0;
     }
     return next;
   };
