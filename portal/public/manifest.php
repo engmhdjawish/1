@@ -67,6 +67,8 @@ $manifest = [
     'categories' => ['shopping', 'business'],
     'launch_handler' => ['client_mode' => ['navigate-existing', 'auto']],
     'icons' => $manifestIcons,
+    // Lets /pwa-id.php detect (navigator.getInstalledRelatedApps) whether a WebAPK with this identity exists.
+    'related_applications' => [['platform' => 'webapp', 'url' => $requestOrigin . '/manifest.php']],
     'shortcuts' => [
         ['name' => 'المتجر', 'url' => $requestOrigin . '/store.php?source=pwa', 'icons' => $shortcutIcon],
         ['name' => 'السلة', 'url' => $requestOrigin . '/store-cart.php?source=pwa', 'icons' => $shortcutIcon],

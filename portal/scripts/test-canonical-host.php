@@ -183,7 +183,18 @@ foreach (['jawishco.sy', 'www.jawishco.sy'] as $host) {
         $sameOrigin = $sameOrigin && str_starts_with((string) ($shortcut['url'] ?? ''), $origin . '/');
     }
     $assert("{$host} manifest icons/shortcuts are same-origin with bumped icon hash", $sameOrigin && !empty($m['icons']));
+    $assert(
+        "{$host} manifest declares same-origin webapp related app (for getInstalledRelatedApps)",
+        ($m['related_applications'][0]['platform'] ?? '') === 'webapp'
+        && ($m['related_applications'][0]['url'] ?? '') === $origin . '/manifest.php'
+    );
 }
+
+$pwaId = (string) file_get_contents(dirname(__DIR__) . '/public/pwa-id.php');
+$assert(
+    'pwa-id.php diagnostic is noindex, links /manifest.php and mentions chrome://webapks',
+    str_contains($pwaId, 'noindex') && str_contains($pwaId, 'href="/manifest.php"') && str_contains($pwaId, 'chrome://webapks')
+);
 
 $staticManifest = (string) file_get_contents(dirname(__DIR__) . '/public/manifest.webmanifest');
 $decodedStatic = json_decode($staticManifest, true);
