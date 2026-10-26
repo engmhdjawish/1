@@ -59,6 +59,7 @@ $ordered = [
     '024-order-duplicate-guard.sql',
     '025-customer-shop-address.sql',
     '026-unavailable-prices.sql',
+    '027-share-link-short-codes.sql',
 ];
 
 $files = [];

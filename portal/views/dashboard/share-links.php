@@ -20,8 +20,9 @@ $editLink = is_array($editLink ?? null) ? $editLink : [];
 $showForm = $showForm ?? false;
 $isNew = $isNew ?? false;
 
-$shareUrlFor = static function (string $token) use ($publicBaseUrl): string {
-    return $publicBaseUrl . '/share.php?token=' . rawurlencode($token);
+$shareUrlFor = static function (array $row) use ($publicBaseUrl): string {
+    $path = \Portal\Services\ShareLinkService::publicPathForLink($row);
+    return rtrim($publicBaseUrl, '/') . $path;
 };
 
 $buildShareLinksUrl = static function (array $params = []) use ($filters): string {
@@ -79,7 +80,7 @@ $statusTabs = [
     <?php endif; ?>
     <label class="text-sm">
       <span class="text-text-muted block mb-1 text-xs">بحث</span>
-      <input type="search" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" class="h-10 w-full rounded-xl border border-border-subtle px-4 text-sm" placeholder="اسم الرابط أو التوكن">
+      <input type="search" name="q" value="<?= h((string) ($filters['q'] ?? '')) ?>" class="h-10 w-full rounded-xl border border-border-subtle px-4 text-sm" placeholder="اسم الرابط أو الرمز المختصر">
     </label>
     <label class="text-sm">
       <span class="text-text-muted block mb-1 text-xs">عدد النتائج</span>
@@ -120,11 +121,15 @@ $statusTabs = [
         </thead>
         <tbody class="divide-y divide-border-subtle">
           <?php foreach ($links as $row): ?>
-            <?php $rowShareUrl = $shareUrlFor((string) ($row['public_token'] ?? '')); ?>
+            <?php
+              $rowSharePath = \Portal\Services\ShareLinkService::publicPathForLink($row);
+              $rowShareUrl = $shareUrlFor($row);
+              $rowShort = trim((string) ($row['short_code'] ?? ''));
+            ?>
             <tr class="hover:bg-slate-50">
               <td class="px-4 py-3">
                 <div class="font-bold"><?= h((string) ($row['name_ar'] ?? '')) ?></div>
-                <div class="text-xs font-mono text-text-muted mt-0.5"><?= h((string) ($row['public_token'] ?? '')) ?></div>
+                <div class="text-xs font-mono text-text-muted mt-0.5" dir="ltr"><?= h($rowShort !== '' ? '/s/' . $rowShort : $rowSharePath) ?></div>
                 <?php if (!empty($row['require_password'])): ?>
                   <span class="inline-flex mt-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">محمي</span>
                 <?php endif; ?>
@@ -142,7 +147,7 @@ $statusTabs = [
               </td>
               <td class="px-4 py-3">
                 <div class="flex flex-wrap items-center gap-1">
-                  <a href="/share.php?token=<?= urlencode((string) ($row['public_token'] ?? '')) ?>" target="_blank" class="h-7 px-2 inline-flex items-center rounded border border-border-subtle text-[11px] font-bold text-primary hover:bg-slate-50">فتح</a>
+                  <a href="<?= h($rowSharePath) ?>" target="_blank" class="h-7 px-2 inline-flex items-center rounded border border-border-subtle text-[11px] font-bold text-primary hover:bg-slate-50">فتح</a>
                   <button type="button" data-copy-url="<?= h($rowShareUrl) ?>" class="h-7 px-2 rounded border border-border-subtle bg-white text-[11px] font-bold text-slate-700 hover:bg-slate-50">نسخ</button>
                 </div>
               </td>

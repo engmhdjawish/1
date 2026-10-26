@@ -59,6 +59,13 @@ $check('share link uses page name', $share['title'], 'رابط مشاركة');
 $check('share link keeps share title', $share['detail'], 'عرض الجملة الخاص');
 $check('share link label', $share['label'], 'رابط مشاركة — عرض الجملة الخاص');
 
+$shortShare = VisitorLogService::describePath(
+    '/s/summer24',
+    'عرض الجملة الخاص — جاويش للتجارة'
+);
+$check('short share path title', $shortShare['title'], 'رابط مشاركة');
+$check('short share path detail', $shortShare['detail'], 'عرض الجملة الخاص');
+
 $check('notifications page', VisitorLogService::describePath('/notifications.php')['label'], 'الإشعارات');
 
 echo $failed === 0 ? "\npath labels ok\n" : "\n{$failed} failed\n";

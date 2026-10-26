@@ -23,8 +23,20 @@ $shareToken = trim((string) ($shareToken ?? ($shareContext['token'] ?? '')));
 $shareLinkId = trim((string) ($shareLinkId ?? ($shareContext['share_link_id'] ?? '')));
 $catalogUrl = static function (array $params = []) use ($shareContext, $storeLabMode): string {
     if ($shareContext !== null) {
-        $params['token'] = (string) ($shareContext['token'] ?? '');
-        return share_url($params);
+        $publicPath = trim((string) ($shareContext['public_path'] ?? ''));
+        $accessKey = trim((string) ($shareContext['token'] ?? ''));
+        unset($params['token'], $params['t'], $params['c']);
+        if ($publicPath !== '') {
+            $filtered = share_url_filter_params($params);
+            if ($filtered === []) {
+                return $publicPath;
+            }
+            $separator = str_contains($publicPath, '?') ? '&' : '?';
+
+            return $publicPath . $separator . http_build_query($filtered);
+        }
+
+        return share_compact_url($accessKey, $params);
     }
 
     return $storeLabMode ? store_lab_url($params) : store_url($params);
@@ -422,14 +434,12 @@ $buildStoreUrl = static function (int $targetPage) use ($filters, $isSectionBrow
             'offer' => (string) ($filters['offer'] ?? ''),
         ], static fn (string $value): bool => trim($value) !== ''));
     }
-    if ($shareContext !== null) {
-        $params['token'] = (string) ($shareContext['token'] ?? '');
-    }
-
     return $catalogUrl($params);
 };
 
-$productReturnUrl = catalog_current_return_url();
+$productReturnUrl = $shareContext !== null
+    ? catalog_share_return_url($shareContext)
+    : catalog_current_return_url();
 $productOfferSlug = null;
 if ($sectionContext !== null) {
     if (!empty($sectionContext['is_offer_section'])) {

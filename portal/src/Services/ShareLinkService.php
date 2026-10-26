@@ -72,9 +72,74 @@ final class ShareLinkService
         'unitSalePriceUsd',
     ];
 
+    public static function ensureShortCodeColumn(): void
+    {
+        static $ready = false;
+        if ($ready) {
+            return;
+        }
+        try {
+            Database::pdo()->exec(
+                'ALTER TABLE share_links ADD COLUMN IF NOT EXISTS short_code VARCHAR(32)'
+            );
+            Database::pdo()->exec(
+                'CREATE UNIQUE INDEX IF NOT EXISTS ux_share_links_short_code
+                 ON share_links (short_code)
+                 WHERE short_code IS NOT NULL AND btrim(short_code) <> \'\''
+            );
+            self::backfillMissingShortCodes();
+            $ready = true;
+        } catch (\Throwable) {
+            // Older installs may lack privileges; queries still work without the column until migrate.
+        }
+    }
+
+    private static function backfillMissingShortCodes(): void
+    {
+        try {
+            $rows = Database::pdo()->query(
+                "SELECT id::text AS id
+                 FROM share_links
+                 WHERE short_code IS NULL OR btrim(short_code) = ''
+                 LIMIT 200"
+            )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable) {
+            return;
+        }
+        foreach ($rows as $row) {
+            $id = trim((string) ($row['id'] ?? ''));
+            if ($id === '') {
+                continue;
+            }
+            try {
+                $stmt = Database::pdo()->prepare(
+                    'UPDATE share_links SET short_code = :code, updated_at = NOW() WHERE id = :id'
+                );
+                $stmt->execute([
+                    'id' => $id,
+                    'code' => self::generateShortCode(),
+                ]);
+            } catch (\Throwable) {
+                // Unique collision — try once more.
+                try {
+                    $stmt = Database::pdo()->prepare(
+                        'UPDATE share_links SET short_code = :code, updated_at = NOW() WHERE id = :id'
+                    );
+                    $stmt->execute([
+                        'id' => $id,
+                        'code' => self::generateShortCode(),
+                    ]);
+                } catch (\Throwable) {
+                    /* leave for next request */
+                }
+            }
+        }
+    }
+
     /** @param array{active?: string, q?: string, limit?: int} $filters */
     public static function list(array $filters = []): array
     {
+        self::ensureShortCodeColumn();
         $isActive = trim((string) ($filters['active'] ?? ''));
         $search = trim((string) ($filters['q'] ?? ''));
         $limit = max(1, min(200, (int) ($filters['limit'] ?? 100)));
@@ -82,6 +147,7 @@ final class ShareLinkService
         $sql = 'SELECT
                     sl.id,
                     sl.public_token,
+                    sl.short_code,
                     sl.name_ar,
                     sl.keyword,
                     sl.min_quantity,
@@ -108,7 +174,7 @@ final class ShareLinkService
         }
 
         if ($search !== '') {
-            $sql .= ' AND (sl.name_ar ILIKE :search OR sl.public_token ILIKE :search)';
+            $sql .= ' AND (sl.name_ar ILIKE :search OR sl.public_token ILIKE :search OR COALESCE(sl.short_code, \'\') ILIKE :search)';
             $params['search'] = '%' . $search . '%';
         }
 
@@ -126,10 +192,12 @@ final class ShareLinkService
 
     public static function getById(string $id): ?array
     {
+        self::ensureShortCodeColumn();
         $stmt = Database::pdo()->prepare(
             'SELECT
                 sl.id,
                 sl.public_token,
+                sl.short_code,
                 sl.name_ar,
                 sl.access_policy_id::text AS access_policy_id,
                 CASE WHEN sl.require_password THEN 1 ELSE 0 END AS require_password,
@@ -158,8 +226,19 @@ final class ShareLinkService
     /** @return array<string, mixed>|null */
     public static function getByPublicToken(string $token): ?array
     {
-        $token = trim($token);
-        if ($token === '') {
+        return self::resolvePublicAccessKey($token);
+    }
+
+    /**
+     * Resolve a full public_token or a short_code into an active share link.
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function resolvePublicAccessKey(string $key): ?array
+    {
+        self::ensureShortCodeColumn();
+        $key = trim($key);
+        if ($key === '') {
             return null;
         }
 
@@ -167,6 +246,7 @@ final class ShareLinkService
             'SELECT
                 sl.id::text AS id,
                 sl.public_token,
+                sl.short_code,
                 sl.name_ar,
                 sl.access_policy_id::text AS access_policy_id,
                 CASE WHEN sl.require_password THEN 1 ELSE 0 END AS require_password,
@@ -185,10 +265,11 @@ final class ShareLinkService
                 CASE WHEN ap.allow_order THEN 1 ELSE 0 END AS allow_order
              FROM share_links sl
              INNER JOIN access_policies ap ON ap.id = sl.access_policy_id
-             WHERE sl.public_token = :token
+             WHERE sl.public_token = :key
+                OR lower(COALESCE(sl.short_code, \'\')) = lower(:key)
              LIMIT 1'
         );
-        $stmt->execute(['token' => $token]);
+        $stmt->execute(['key' => $key]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($row === false) {
             return null;
@@ -202,6 +283,34 @@ final class ShareLinkService
         }
 
         return self::hydrateLink($row);
+    }
+
+    /** Preferred public URL path for copying/sharing (short when available). */
+    public static function publicPathForLink(array $link): string
+    {
+        $short = self::normalizeShortCode((string) ($link['short_code'] ?? ''));
+        if ($short !== null) {
+            return '/s/' . rawurlencode($short);
+        }
+        $token = trim((string) ($link['public_token'] ?? ''));
+        if ($token === '') {
+            return '/share.php';
+        }
+
+        return '/share.php?token=' . rawurlencode($token);
+    }
+
+    public static function normalizeShortCode(string $code): ?string
+    {
+        $code = strtolower(trim($code));
+        if ($code === '') {
+            return null;
+        }
+        if (preg_match('/^[a-z0-9][a-z0-9_-]{2,31}$/', $code) !== 1) {
+            return null;
+        }
+
+        return $code;
     }
 
     public static function verifyProtectedAccess(string $token, string $username, string $plainPassword): bool
@@ -345,11 +454,18 @@ final class ShareLinkService
         array $visibleClientFilters = [],
         array $clientSortFields = [],
         ?string $defaultSort = null,
-        ?string $defaultGroupBy = null
+        ?string $defaultGroupBy = null,
+        ?string $shortCode = null
     ): array {
+        self::ensureShortCodeColumn();
         $name = trim($name);
         if ($name === '') {
             return ['ok' => false, 'message' => 'اسم الرابط مطلوب.'];
+        }
+
+        $requestedShortCode = self::normalizeShortCode((string) $shortCode);
+        if ($shortCode !== null && trim((string) $shortCode) !== '' && $requestedShortCode === null) {
+            return ['ok' => false, 'message' => 'الرمز المختصر غير صالح (3–32 حرفاً: a-z 0-9 _ -).'];
         }
 
         $accessPolicyId = trim($accessPolicyId);
@@ -418,9 +534,15 @@ final class ShareLinkService
                 return ['ok' => false, 'message' => 'كلمة المرور مطلوبة عند إنشاء رابط محمي.'];
             }
 
+            $newShortCode = $requestedShortCode ?? self::generateShortCode();
+            if (!self::isShortCodeAvailable($newShortCode, null)) {
+                $pdo->rollBack();
+                return ['ok' => false, 'message' => 'الرمز المختصر مستخدم مسبقاً، اختر رمزاً آخر.'];
+            }
             $stmt = $pdo->prepare(
                 'INSERT INTO share_links (
                     public_token,
+                    short_code,
                     name_ar,
                     access_policy_id,
                     require_password,
@@ -433,6 +555,7 @@ final class ShareLinkService
                     created_by_web_user_id
                  ) VALUES (
                     :token,
+                    :short_code,
                     :name,
                     :policy_id,
                     CASE WHEN :require_password = 1 THEN TRUE ELSE FALSE END,
@@ -448,6 +571,7 @@ final class ShareLinkService
             );
             $stmt->execute([
                 'token' => self::generateToken(),
+                'short_code' => $newShortCode,
                 'name' => $name,
                 'policy_id' => $accessPolicyId,
                 'require_password' => $requirePassword ? 1 : 0,
@@ -518,9 +642,16 @@ final class ShareLinkService
                 $accessUsername = '';
             }
 
+            $existingShort = self::normalizeShortCode((string) ($existing['short_code'] ?? ''));
+            $nextShort = $requestedShortCode ?? $existingShort ?? self::generateShortCode();
+            if (!self::isShortCodeAvailable($nextShort, $id)) {
+                $pdo->rollBack();
+                return ['ok' => false, 'message' => 'الرمز المختصر مستخدم مسبقاً، اختر رمزاً آخر.'];
+            }
             $update = $pdo->prepare(
                 'UPDATE share_links SET
                     name_ar = :name,
+                    short_code = :short_code,
                     access_policy_id = :policy_id,
                     require_password = CASE WHEN :require_password = 1 THEN TRUE ELSE FALSE END,
                     access_username = :access_username,
@@ -535,6 +666,7 @@ final class ShareLinkService
             $update->execute([
                 'id' => $id,
                 'name' => $name,
+                'short_code' => $nextShort,
                 'policy_id' => $accessPolicyId,
                 'require_password' => $requirePassword ? 1 : 0,
                 'access_username' => $requirePassword ? ($accessUsername !== '' ? $accessUsername : null) : null,
@@ -642,6 +774,46 @@ final class ShareLinkService
     private static function generateToken(): string
     {
         return bin2hex(random_bytes(16));
+    }
+
+    private static function generateShortCode(int $length = 8): string
+    {
+        $alphabet = 'abcdefghijkmnopqrstuvwxyz23456789';
+        $max = strlen($alphabet) - 1;
+        for ($attempt = 0; $attempt < 12; $attempt++) {
+            $code = '';
+            for ($i = 0; $i < $length; $i++) {
+                $code .= $alphabet[random_int(0, $max)];
+            }
+            if (self::isShortCodeAvailable($code, null)) {
+                return $code;
+            }
+        }
+
+        return strtolower(bin2hex(random_bytes(5)));
+    }
+
+    private static function isShortCodeAvailable(string $code, ?string $exceptId): bool
+    {
+        $code = self::normalizeShortCode($code);
+        if ($code === null) {
+            return false;
+        }
+        try {
+            $sql = 'SELECT 1 FROM share_links WHERE lower(short_code) = :code';
+            $params = ['code' => $code];
+            if ($exceptId !== null && trim($exceptId) !== '') {
+                $sql .= ' AND id::text <> :id';
+                $params['id'] = trim($exceptId);
+            }
+            $sql .= ' LIMIT 1';
+            $stmt = Database::pdo()->prepare($sql);
+            $stmt->execute($params);
+
+            return $stmt->fetchColumn() === false;
+        } catch (\Throwable) {
+            return true;
+        }
     }
 
     /** @return array<string, mixed> */

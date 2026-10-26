@@ -14,17 +14,30 @@ use Portal\Support\Text;
 
 require dirname(__DIR__) . '/views/helpers.php';
 
-$token = trim((string) ($_GET['token'] ?? $_POST['token'] ?? ''));
-$shareLink = $token !== '' ? ShareLinkService::getByPublicToken($token) : null;
+$accessKey = trim((string) (
+    $_GET['token']
+        ?? $_GET['t']
+        ?? $_GET['c']
+        ?? $_POST['token']
+        ?? $_POST['t']
+        ?? $_POST['c']
+        ?? ''
+));
+$shareLink = $accessKey !== '' ? ShareLinkService::resolvePublicAccessKey($accessKey) : null;
+// Cart + password session keys stay on the stable public_token.
+$token = is_array($shareLink) ? trim((string) ($shareLink['public_token'] ?? '')) : '';
+if ($token === '' && $accessKey !== '') {
+    $token = $accessKey;
+}
 $error = null;
 $apiError = null;
 $cartNotice = null;
 
-if ($token === '') {
-    $error = 'يرجى فتح الصفحة باستخدام رابط مشاركة صحيح يحتوي على token.';
+if ($accessKey === '') {
+    $error = 'يرجى فتح الصفحة باستخدام رابط مشاركة صحيح.';
 }
 
-if ($token !== '' && $shareLink === null) {
+if ($accessKey !== '' && $shareLink === null) {
     $error = 'الرابط غير صالح أو غير نشط أو منتهي الصلاحية.';
 }
 
@@ -639,8 +652,11 @@ $displayOptions = [
     'price_mode' => $priceMode,
 ];
 
+$sharePublicPath = is_array($shareLink) ? ShareLinkService::publicPathForLink($shareLink) : '/share.php';
 $shareContext = [
     'token' => $token,
+    'short_code' => is_array($shareLink) ? trim((string) ($shareLink['short_code'] ?? '')) : '',
+    'public_path' => $sharePublicPath,
     'name_ar' => (string) (is_array($shareLink) ? ($shareLink['name_ar'] ?? 'رابط مشاركة') : 'رابط مشاركة'),
     'access_policy_name_ar' => (string) (is_array($shareLink) ? ($shareLink['access_policy_name_ar'] ?? '') : ''),
     'share_link_id' => (string) (is_array($shareLink) ? ($shareLink['id'] ?? '') : ''),

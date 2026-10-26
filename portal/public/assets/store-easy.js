@@ -13,7 +13,10 @@
 
   const storePath = () => {
     const path = window.location.pathname;
-    return path === '/share.php' || path === '/share' ? '/share.php' : '/store.php';
+    if (path === '/share.php' || path === '/share' || path === '/s.php' || path.startsWith('/s/')) {
+      return path.startsWith('/s/') ? path : '/share.php';
+    }
+    return '/store.php';
   };
 
   const isLabUrl = (href) => {
@@ -21,7 +24,8 @@
       const url = new URL(href, window.location.origin);
       return url.origin === window.location.origin
         && (url.pathname === '/store.php' || url.pathname === '/store'
-          || url.pathname === '/share.php' || url.pathname === '/share');
+          || url.pathname === '/share.php' || url.pathname === '/share'
+          || url.pathname === '/s.php' || url.pathname.startsWith('/s/'));
     } catch {
       return false;
     }

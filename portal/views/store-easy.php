@@ -17,16 +17,35 @@ $displayOptions = is_array($displayOptions ?? null) ? $displayOptions : [];
 $shareContext = is_array($shareContext ?? null) ? $shareContext : null;
 $shareToken = trim((string) ($shareToken ?? ($shareContext['token'] ?? '')));
 $shareLinkId = trim((string) ($shareLinkId ?? ($shareContext['share_link_id'] ?? '')));
+$requestPath = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: '');
 $shareOnSharePage = $shareContext !== null && $shareToken !== ''
-    && str_starts_with((string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: ''), '/share');
-$seUrl = static function (array $params = []) use ($shareOnSharePage, $shareToken): string {
+    && (
+        str_starts_with($requestPath, '/share')
+        || str_starts_with($requestPath, '/s/')
+        || $requestPath === '/s.php'
+    );
+$sharePublicPath = trim((string) ($shareContext['public_path'] ?? ''));
+$seUrl = static function (array $params = []) use ($shareOnSharePage, $shareToken, $sharePublicPath): string {
     if ($shareOnSharePage) {
-        return share_url(array_merge(['token' => $shareToken], $params));
+        unset($params['token'], $params['t'], $params['c']);
+        if ($sharePublicPath !== '') {
+            $filtered = share_url_filter_params($params);
+            if ($filtered === []) {
+                return $sharePublicPath;
+            }
+            $separator = str_contains($sharePublicPath, '?') ? '&' : '?';
+
+            return $sharePublicPath . $separator . http_build_query($filtered);
+        }
+
+        return share_compact_url($shareToken, $params);
     }
 
     return store_lab_url($params);
 };
-$seAction = $shareOnSharePage ? '/share.php' : '/store.php';
+$seAction = $shareOnSharePage
+    ? ($sharePublicPath !== '' ? (strtok($sharePublicPath, '?') ?: '/share.php') : '/share.php')
+    : '/store.php';
 
 $cartNoticeMessage = '';
 $cartNoticeOk = true;
@@ -281,7 +300,9 @@ $buildStoreUrl = static function (int $targetPage) use ($stateParams, $seUrl): s
     return $seUrl($params);
 };
 
-$productReturnUrl = catalog_current_return_url();
+$productReturnUrl = $shareContext !== null
+    ? catalog_share_return_url($shareContext)
+    : catalog_current_return_url();
 $productOfferSlug = null;
 if ($sectionContext !== null && !empty($sectionContext['is_offer_section'])) {
     $productOfferSlug = trim((string) ($sectionContext['slug'] ?? '')) ?: null;
