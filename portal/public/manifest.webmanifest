@@ -7,6 +7,7 @@
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "browser"],
+  "handle_links": "preferred",
   "orientation": "portrait-primary",
   "dir": "rtl",
   "lang": "ar",
@@ -14,6 +15,9 @@
   "background_color": "#f6f6f8",
   "categories": ["shopping", "business"],
   "prefer_related_applications": false,
+  "launch_handler": {
+    "client_mode": ["navigate-existing", "auto"]
+  },
   "icons": [
     {
       "src": "/icons/brand-icon.php?size=192",
@@ -32,6 +36,23 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "المتجر",
+      "url": "/store.php?source=pwa",
+      "icons": [{ "src": "/icons/brand-icon.php?size=192", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "السلة",
+      "url": "/store-cart.php?source=pwa",
+      "icons": [{ "src": "/icons/brand-icon.php?size=192", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "طلباتي",
+      "url": "/my-orders.php?source=pwa",
+      "icons": [{ "src": "/icons/brand-icon.php?size=192", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }

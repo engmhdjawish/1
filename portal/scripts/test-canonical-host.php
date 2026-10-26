@@ -98,6 +98,29 @@ $assert(
     'manifest advertises related_applications webapp',
     str_contains($manifest, 'related_applications') && str_contains($manifest, "'platform' => 'webapp'")
 );
+$assert(
+    'manifest id stays relative (stable app identity)',
+    str_contains($manifest, "'id' => \$startPath") || str_contains($manifest, "'id' => '/?source=pwa'")
+);
+$assert(
+    'manifest does not bake absolute start_url into id',
+    !str_contains($manifest, "'id' => \$startUrl")
+);
+$assert(
+    'manifest prefers opening links in the installed app',
+    str_contains($manifest, "'handle_links' => 'preferred'")
+);
+
+$staticManifest = (string) file_get_contents(dirname(__DIR__) . '/public/manifest.webmanifest');
+$decodedStatic = json_decode($staticManifest, true);
+$assert(
+    'static webmanifest id is relative',
+    is_array($decodedStatic) && ($decodedStatic['id'] ?? null) === '/?source=pwa'
+);
+$assert(
+    'static webmanifest handle_links preferred',
+    is_array($decodedStatic) && ($decodedStatic['handle_links'] ?? null) === 'preferred'
+);
 
 $pwa = (string) file_get_contents(dirname(__DIR__) . '/public/assets/pwa.js');
 $assert(
