@@ -9,7 +9,9 @@ require_once __DIR__ . '/../helpers.php';
 
 $siteName = trim((string) ($siteName ?? '')) !== '' ? (string) $siteName : 'جاويش للتجارة';
 $icons = portal_site_icons($companyLogoUrl ?? null);
+$pwaBuild = \Portal\Support\PwaBuild::id();
 ?>
+<meta name="portal-build" content="<?= h($pwaBuild) ?>">
 <link rel="manifest" href="/manifest.php">
 <script>
   if ('serviceWorker' in navigator && window.isSecureContext) {

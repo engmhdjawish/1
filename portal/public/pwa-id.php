@@ -16,6 +16,7 @@ $origin = portal_request_origin();
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<meta name="portal-build" content="<?= h(\Portal\Support\PwaBuild::id()) ?>">
 <link rel="manifest" href="/manifest.php">
 <title>هوية التطبيق</title>
 <style>

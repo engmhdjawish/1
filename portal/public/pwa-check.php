@@ -122,6 +122,7 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="portal-build" content="<?= h(\Portal\Support\PwaBuild::id()) ?>">
   <title>تشخيص PWA — جاويش</title>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; background: #f6f6f8; color: #111; }
