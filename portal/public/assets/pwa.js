@@ -232,94 +232,6 @@
     return false;
   }
 
-  let waitingWorker = null;
-  let refreshingForUpdate = false;
-
-
-
-
-
-
-
-
-
-
-
-
-  function showUpdateBanner(worker) {
-    waitingWorker = worker || waitingWorker;
-    if (!waitingWorker || document.getElementById('pwa-update-banner')) {
-      return;
-    }
-    const banner = document.createElement('div');
-    banner.id = 'pwa-update-banner';
-    banner.className = 'pwa-update-banner';
-    banner.setAttribute('role', 'status');
-    banner.innerHTML =
-      '<div class="pwa-update-banner__inner">' +
-      '<span class="material-symbols-outlined" aria-hidden="true">system_update</span>' +
-      '<div class="pwa-update-banner__text">' +
-      '<strong>يتوفر تحديث جديد</strong>' +
-      '<span>حدّث الآن لتحصل على آخر تحسينات التطبيق</span>' +
-      '</div>' +
-      '<button type="button" class="pwa-update-banner__btn" data-pwa-apply-update>تحديث</button>' +
-      '<button type="button" class="pwa-update-banner__later" data-pwa-dismiss-update>لاحقاً</button>' +
-      '</div>';
-    banner.querySelector('[data-pwa-apply-update]')?.addEventListener('click', applyWaitingUpdate);
-    banner.querySelector('[data-pwa-dismiss-update]')?.addEventListener('click', () => {
-      banner.remove();
-    });
-    document.body.appendChild(banner);
-    window.requestAnimationFrame(() => banner.classList.add('is-visible'));
-  }
-
-  function applyWaitingUpdate() {
-    if (!waitingWorker) {
-      window.location.reload();
-      return;
-    }
-    const btn = document.querySelector('[data-pwa-apply-update]');
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'جاري التحديث…';
-    }
-    waitingWorker.postMessage({ type: 'SKIP_WAITING' });
-  }
-
-  function watchServiceWorkerUpdates(registration) {
-    if (!registration) {
-      return;
-    }
-
-    if (registration.waiting && navigator.serviceWorker.controller) {
-      showUpdateBanner(registration.waiting);
-    }
-
-    registration.addEventListener('updatefound', () => {
-      const installing = registration.installing;
-      if (!installing) {
-        return;
-      }
-      installing.addEventListener('statechange', () => {
-        if (installing.state === 'installed' && navigator.serviceWorker.controller) {
-          showUpdateBanner(installing);
-        }
-      });
-    });
-
-    // On every app open / return to foreground, check for a new SW.
-    const check = () => {
-      registration.update().catch(() => {});
-    };
-    check();
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        check();
-      }
-    });
-    window.setInterval(check, 15 * 60 * 1000);
-  }
-
   function updateHeaderButtonMode(mode) {
     document.querySelectorAll('[data-pwa-open]').forEach((btn) => {
       btn.classList.remove('hidden', 'is-pwa-native', 'is-pwa-manual', 'is-pwa-http');
@@ -445,37 +357,6 @@
     });
   }
 
-  function registerServiceWorker() {
-    if (!('serviceWorker' in navigator) || !isSecure) {
-      return Promise.resolve(null);
-    }
-
-    if (!refreshingForUpdate) {
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (refreshingForUpdate) {
-          return;
-        }
-        refreshingForUpdate = true;
-        window.location.reload();
-      });
-    }
-
-    const register = () => navigator.serviceWorker
-      .register('/sw.js?v=17', { scope: '/', updateViaCache: 'none' })
-      .then((registration) => {
-        watchServiceWorkerUpdates(registration);
-        return registration;
-      })
-      .catch(() => null);
-    // Registration competes with first paint on slow phones; wait until the page has loaded.
-    if (document.readyState === 'complete') {
-      return register();
-    }
-    return new Promise((resolve) => {
-      window.addEventListener('load', () => resolve(register()), { once: true });
-    });
-  }
-
   function markEngagementReady() {
     if (engagementReady) {
       return;
@@ -533,7 +414,6 @@
   }
 
   async function init() {
-    registerServiceWorker();
     const installed = await detectInstalledApp();
     if (isStandalone) {
       hideInstallTriggers();
@@ -570,7 +450,6 @@
     open: openModal,
     close: closeModal,
     install: triggerNativeInstall,
-    applyUpdate: applyWaitingUpdate,
     shouldPromptInstall: () => !isStandalone && !isMarkedInstalled() && canInstall(),
     canInstall,
     isInAppBrowser: () => isInAppBrowser,

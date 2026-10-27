@@ -42,7 +42,7 @@ $address = trim((string) ($companyContext['company_address'] ?? ''));
               require __DIR__ . '/site-logo.php';
             ?>
           <?php endif; ?>
-          <h2 class="text-lg font-extrabold text-white"><?= h($siteName) ?></h2>
+          <h2 class="text-lg font-extrabold text-white" data-pwa-status-trigger><?= h($siteName) ?></h2>
         </div>
         <p class="text-sm leading-7 text-gray-300">
           <?= $aboutSnippet !== '' ? h($aboutSnippet) : 'متجر إلكتروني لتصفح المواد والطلب بسهولة حسب سياسة حسابك.' ?>
@@ -136,7 +136,7 @@ $address = trim((string) ($companyContext['company_address'] ?? ''));
   </div>
   <div class="site-footer-bottom py-4 text-center text-xs">
     <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-      <span>© <?= date('Y') ?> <?= h($siteName) ?>. جميع الحقوق محفوظة.</span>
+      <span data-pwa-status-trigger>© <?= date('Y') ?> <?= h($siteName) ?>. جميع الحقوق محفوظة.</span>
       <a href="/about.php" class="text-gray-400 hover:text-white">من نحن</a>
     </div>
   </div>

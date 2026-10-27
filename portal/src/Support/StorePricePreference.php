@@ -11,7 +11,7 @@ final class StorePricePreference
     public const USD = 'usd';
 
     private const SESSION_KEY = 'store_price_currency';
-    private const COOKIE_NAME = 'store_price_currency';
+    public const COOKIE_NAME = 'store_price_currency';
     private const COOKIE_MAX_AGE = 31536000;
 
     /** استرجاع التفضيل المحفوظ من cookie عند بداية الجلسة. */

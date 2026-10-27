@@ -16,7 +16,10 @@ $origin = portal_request_origin();
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<meta name="portal-build" content="<?= h(\Portal\Support\PwaBuild::id()) ?>">
 <link rel="manifest" href="/manifest.php">
+<?= portal_defer_script('/assets/pwa-update.js') ?>
+<?= portal_defer_script('/assets/pwa-status.js') ?>
 <title>هوية التطبيق</title>
 <style>
 body{font-family:system-ui,sans-serif;margin:16px;line-height:1.7;background:#f6f6f9;color:#222}
@@ -28,7 +31,16 @@ pre{background:#fff;border:1px solid #ddd;border-radius:8px;padding:10px;white-s
 <h1>هوية التطبيق (تشخيص)</h1>
 <p class="box">للحقيقة الكاملة: افتح Chrome واكتب في شريط العنوان <b dir="ltr">chrome://webapks</b> ثم صوّر الشاشة وأرسلها.
 إن لم يظهر «جاويش» هناك فالأيقونة القديمة اختصار عادي (ليس تطبيقاً) — احذفها وثبّت من جديد.</p>
+<p><button id="open-status" type="button" style="font:inherit;font-weight:700;border:0;border-radius:10px;padding:.55rem .9rem;background:#111827;color:#fff">افتح لوحة حالة التحديث</button></p>
 <pre id="out">جارٍ الفحص…</pre>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var open = function () { if (window.PortalPwaStatus) { window.PortalPwaStatus.open(); } };
+  var button = document.getElementById('open-status');
+  if (button) { button.addEventListener('click', open); }
+  open();
+});
+</script>
 <script>
 (async function () {
   var lines = [];

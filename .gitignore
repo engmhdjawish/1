@@ -15,3 +15,5 @@ deploy/deploy.env
 deploy/output/
 uploads/
 amine-api-token.json
+portal/storage/cache/pwa-build.json
+portal/storage/cache/pwa-build.json.*.tmp

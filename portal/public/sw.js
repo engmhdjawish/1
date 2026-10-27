@@ -1,14 +1,37 @@
 /**
- * Jawish store PWA.
- * Pages: network-first with navigation preload, offline page when the network is gone.
- * Versioned static assets (?v=mtime): cache-first. Unversioned: stale-while-revalidate.
- * Prices and stock are never served from cache.
+ * Jawish store PWA service worker.
+ *
+ * Zero-touch updates: pages register /sw.js?b=<build> (build = content hash of the shipped
+ * client code, see Portal\Support\PwaBuild). A new build is a new script URL, so the browser
+ * always installs a new worker; that worker skips waiting, purges older caches, claims every
+ * open page and announces itself (PORTAL_SW_ACTIVATED) so each page can reload when it is safe.
+ * There is no "tap to update" step. Without ?b= (legacy registrations such as /sw.js?v=17) the
+ * build is "legacy"; the page controller then replaces that registration with /sw.js?b=<build>.
+ *
+ * Caching:
+ *  - HTML navigations: network (navigation preload), /offline.html when the network is gone. Never cached.
+ *  - Versioned static files (?v=mtime): cache-first.
+ *  - Other static files (JS/CSS/images): network-first with a short timeout, cache as fallback.
+ *    They are fetched with cache:'no-cache' because nginx marks static files immutable for 30 days.
+ *  - API, auth, dashboard, manifest, media, share images, short links and this script are never intercepted.
  */
-const CACHE_VERSION = 'jawish-v24';
-const STATIC_CACHE = CACHE_VERSION + '-static';
+const BUILD = (function resolveBuild() {
+  try {
+    const raw = new URL(self.location.href).searchParams.get('b');
+    return raw && /^[A-Za-z0-9._-]{1,32}$/.test(raw) ? raw : 'legacy';
+  } catch (_) {
+    return 'legacy';
+  }
+})();
+const CACHE_PREFIX = 'jawish-';
+const STATIC_CACHE = CACHE_PREFIX + 'b-' + BUILD + '-static';
 const FONT_CACHE = 'jawish-fonts-v1';
 const OFFLINE_URL = '/offline.html';
 const STATIC_MAX_ENTRIES = 120;
+const PRECACHE_TIMEOUT_MS = 4000;
+const INSTALL_BUDGET_MS = 6000;
+const NETWORK_FIRST_TIMEOUT_MS = 3500;
+const TIMED_OUT = {};
 
 const PRECACHE_URLS = [
   OFFLINE_URL,
@@ -28,46 +51,138 @@ const NO_CACHE_PREFIXES = [
   '/manifest.php',
   '/media/',
   '/share-image.php',
+  '/s/',
+  '/sw.js',
 ];
 
 const STATIC_EXT = /\.(?:css|js|mjs|png|jpe?g|webp|gif|svg|ico|woff2?|ttf)$/i;
 
-self.addEventListener('install', (event) => {
-  event.waitUntil((async () => {
-    const cache = await caches.open(STATIC_CACHE);
-    await Promise.all(
-      PRECACHE_URLS.map((url) => cache.add(new Request(url, { cache: 'reload' })).catch(() => undefined))
+function withTimeout(promise, ms) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(undefined), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(undefined);
+      }
     );
-    // First install: activate immediately. Later updates wait for the in-app
-    // "تحديث" prompt (SKIP_WAITING) so the user chooses when to reload.
-    if (!self.registration.active) {
-      await self.skipWaiting();
+  });
+}
+
+async function safely(step) {
+  try {
+    await step();
+  } catch (_) {
+    /* one failing step must never block activation */
+  }
+}
+
+async function precacheOne(cache, url) {
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), PRECACHE_TIMEOUT_MS) : null;
+  try {
+    const response = await fetch(url, {
+      cache: 'reload',
+      signal: controller ? controller.signal : undefined,
+    });
+    if (response && response.ok) {
+      await cache.put(url, response);
     }
-  })());
+  } catch (_) {
+    /* precache is best effort */
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+async function precache() {
+  const cache = await caches.open(STATIC_CACHE);
+  await Promise.all(PRECACHE_URLS.map((url) => precacheOne(cache, url)));
+}
+
+self.addEventListener('install', (event) => {
+  // Always take over right away; a worker that waits for a tap is how installed apps got stuck.
+  self.skipWaiting();
+  event.waitUntil(withTimeout(precache(), INSTALL_BUDGET_MS));
 });
 
 self.addEventListener('message', (event) => {
   const data = event && event.data;
-  if (!data || data.type !== 'SKIP_WAITING') {
+  if (!data || typeof data !== 'object') {
     return;
   }
-  self.skipWaiting();
+  if (data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
+  if (data.type === 'GET_BUILD') {
+    const reply = { type: 'PORTAL_SW_BUILD', build: BUILD };
+    const port = event.ports && event.ports[0];
+    try {
+      if (port) {
+        port.postMessage(reply);
+      } else if (event.source && typeof event.source.postMessage === 'function') {
+        event.source.postMessage(reply);
+      }
+    } catch (_) {
+      /* the asking page may already be gone */
+    }
+  }
 });
+
+async function carryOverOfflinePage(staleKeys) {
+  const current = await caches.open(STATIC_CACHE);
+  if (await current.match(OFFLINE_URL)) {
+    return;
+  }
+  for (const key of staleKeys) {
+    const previous = await caches.open(key);
+    const page = await previous.match(OFFLINE_URL);
+    if (page) {
+      await current.put(OFFLINE_URL, page);
+      return;
+    }
+  }
+}
+
+async function purgeOldCaches() {
+  const keys = await caches.keys();
+  const stale = keys.filter(
+    (key) => key.startsWith(CACHE_PREFIX) && key !== STATIC_CACHE && key !== FONT_CACHE
+  );
+  await safely(() => carryOverOfflinePage(stale));
+  await Promise.all(stale.map((key) => caches.delete(key)));
+}
+
+async function enableNavigationPreload() {
+  if (self.registration && self.registration.navigationPreload) {
+    await self.registration.navigationPreload.enable();
+  }
+}
+
+async function notifyActivated() {
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  windows.forEach((client) => {
+    try {
+      client.postMessage({ type: 'PORTAL_SW_ACTIVATED', build: BUILD });
+    } catch (_) {
+      /* ignore closed clients */
+    }
+  });
+}
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
-    const keys = await caches.keys();
-    await Promise.all(
-      keys
-        .filter((key) => key.startsWith('jawish-') && key !== STATIC_CACHE && key !== FONT_CACHE)
-        .map((key) => caches.delete(key))
-    );
-    if (self.registration.navigationPreload) {
-      try {
-        await self.registration.navigationPreload.enable();
-      } catch (_) {}
-    }
-    await self.clients.claim();
+    await safely(purgeOldCaches);
+    await safely(enableNavigationPreload);
+    await safely(() => self.clients.claim());
+    await safely(notifyActivated);
   })());
 });
 
@@ -240,6 +355,11 @@ async function putInCache(cacheName, request, response) {
   }
 }
 
+async function matchIn(cacheName, request) {
+  const cache = await caches.open(cacheName);
+  return cache.match(request);
+}
+
 async function handleNavigation(event) {
   try {
     const preloaded = await event.preloadResponse;
@@ -248,13 +368,13 @@ async function handleNavigation(event) {
     }
     return await fetch(event.request);
   } catch (_) {
-    const offline = await caches.match(OFFLINE_URL);
+    const offline = (await matchIn(STATIC_CACHE, OFFLINE_URL)) || (await caches.match(OFFLINE_URL));
     return offline || Response.error();
   }
 }
 
 async function cacheFirst(event, cacheName) {
-  const cached = await caches.match(event.request);
+  const cached = await matchIn(cacheName, event.request);
   if (cached) {
     return cached;
   }
@@ -264,7 +384,7 @@ async function cacheFirst(event, cacheName) {
 }
 
 async function staleWhileRevalidate(event, cacheName) {
-  const cached = await caches.match(event.request);
+  const cached = await matchIn(cacheName, event.request);
   const network = fetch(event.request).then((response) => {
     event.waitUntil(putInCache(cacheName, event.request, response.clone()));
     return response;
@@ -274,6 +394,42 @@ async function staleWhileRevalidate(event, cacheName) {
     return cached;
   }
   return network;
+}
+
+// Network first so a fresh deploy is picked up at once; the cache only answers when the
+// network fails or is slower than the timeout. A slow answer still refreshes the cache.
+async function networkFirst(event, cacheName) {
+  const { request } = event;
+  const network = fetch(request, { cache: 'no-cache' }).then((response) => {
+    event.waitUntil(putInCache(cacheName, request, response.clone()));
+    return response;
+  });
+  event.waitUntil(network.catch(() => undefined));
+
+  let timer;
+  const timedOut = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), NETWORK_FIRST_TIMEOUT_MS);
+  });
+  try {
+    const first = await Promise.race([network, timedOut]);
+    if (first !== TIMED_OUT) {
+      return first;
+    }
+  } catch (_) {
+    /* network failed: fall back to the cache below */
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const cached = await matchIn(cacheName, request);
+  if (cached) {
+    return cached;
+  }
+  return network;
+}
+
+function isNeverCachedPath(pathname) {
+  return NO_CACHE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
 self.addEventListener('fetch', (event) => {
@@ -300,7 +456,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (NO_CACHE_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) {
+  if (isNeverCachedPath(url.pathname)) {
     return;
   }
   if (url.pathname.endsWith('.php') || !STATIC_EXT.test(url.pathname)) {
@@ -310,6 +466,6 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     url.searchParams.has('v')
       ? cacheFirst(event, STATIC_CACHE)
-      : staleWhileRevalidate(event, STATIC_CACHE)
+      : networkFirst(event, STATIC_CACHE)
   );
 });
