@@ -122,6 +122,7 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="portal-build" content="<?= h(\Portal\Support\PwaBuild::id()) ?>">
   <title>تشخيص PWA — جاويش</title>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; background: #f6f6f8; color: #111; }
@@ -135,6 +136,7 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
     a { color: #2563eb; }
   </style>
   <link rel="manifest" href="/manifest.php">
+  <?= portal_defer_script('/assets/pwa-update.js') ?>
 </head>
 <body>
   <h1>تشخيص تثبيت التطبيق (PWA)</h1>
@@ -250,10 +252,6 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
           el.textContent = '— لم يظهر beforeinstallprompt بعد (استخدم التثبيت اليدوي من قائمة المتصفح)';
         }
       }, 3000);
-
-      if (window.isSecureContext) {
-        navigator.serviceWorker.register('/sw.js?v=17', { scope: '/', updateViaCache: 'none' }).catch(() => {});
-      }
     })();
   </script>
 </body>

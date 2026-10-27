@@ -54,6 +54,36 @@ curl -sS https://jawishco.sy/ | grep -E 'needHost|canonical-host' | head
 
 **روابط / نسخة ثانية / شريط ×:** بعد نشر هذا السلوك، افتح التطبيق القديم مرة — يفترض أن يعود بدون × تلقائياً دون حذف. لا تضع `PORTAL_FORCE_CANONICAL_HOST=1` إلا للضرورة.
 
+### تحديث PWA تلقائياً (بدون حذف أو إعادة تثبيت)
+
+كل نشر يغيّر ملفات `sw.js` أو `assets/**` أو `css/**` يغيّر «رقم البناء» (hash للمحتوى، 12 خانة) تلقائياً — لا حاجة لرفع رقم يدوياً:
+
+- الصفحات تحمل `<meta name="portal-build">` وتسجّل العامل الخلفي على `/sw.js?b=<البناء>`؛ رابط جديد = عامل جديد يتفعّل فوراً (`skipWaiting` + `clients.claim`) ويمسح الكاش القديم.
+- `/api/app-version.php` يعيد `{"ok":true,"build":"…","sw":"/sw.js?b=…"}` (بدون كاش). `assets/pwa-update.js` يسأله عند فتح التطبيق وكل 10 دقائق وعند عودة الاتصال، وإن اختلفت النسخة يحدّث العامل ثم يعيد تحميل الصفحة مرة واحدة في وقت آمن (لا إعادة تحميل أثناء الكتابة أو الإرسال أو في صفحات الدخول/السلة/اللوحة).
+- العاملون القدامى (`/sw.js?v=17` وما قبله) يُستبدلون تلقائياً عند أول فتح بعد النشر. المدة بين النشر وظهور الرقم الجديد في الصفحات حتى 45 ثانية (مهلة كاش رقم البناء).
+- اختياري: `PORTAL_BUILD_ID=<نص>` في `.env` يفرض رقماً محدداً بدل الـhash.
+
+**النشر (سلسلة واحدة تتوقف عند أول فشل):**
+
+```bash
+cd /opt/jawish && git fetch origin && git checkout cursor/pwa-auto-update-d99f && git pull origin cursor/pwa-auto-update-d99f && PORTAL_DB_SETUP=migrate bash deploy/portal/publish.sh && sudo systemctl reload php8.5-fpm && sudo nginx -t && sudo systemctl reload nginx
+```
+
+لا تلصق هذه الأوامر كأسطر منفصلة: السطر التالي يُنفَّذ حتى لو فشل السابق، فيُنشَر الفرع القديم الموجود على الخادم بدل الجديد. وإن رفض `git checkout` برسالة `Your local changes to the following files would be overwritten` (مثلاً `.gitignore` معدّل على الخادم): اقرأ `git diff -- <الملف>` ثم احفظه جانباً بـ `git stash push -m server-local -- <الملف>` وأعد السلسلة.
+
+**تحقق بعد النشر (قراءة فقط):**
+
+```bash
+curl -s https://www.jawishco.sy/api/app-version.php ; echo
+curl -s https://jawishco.sy/api/app-version.php ; echo        # نفس الرقم
+curl -s https://www.jawishco.sy/ | grep -o 'name="portal-build" content="[^"]*"'   # نفس الرقم
+curl -s https://www.jawishco.sy/sw.js | head -3                # "Zero-touch updates"
+curl -s https://www.jawishco.sy/manifest.php | grep -E '"(id|start_url|scope|short_name)"|webapk=7'
+curl -s https://jawishco.sy/manifest.php | grep -E '"(id|start_url|scope)"'       # يبقى same-origin على apex
+```
+
+**على الجهاز:** افتح التطبيق، اضغط 5 ضغطات سريعة على نص الحقوق في أسفل الصفحة (أو افتح أي صفحة مع `?pwa-status=1`) فتظهر لوحة «حالة تحديث التطبيق»: المتوقع «محدَّث» وتطابق نسخة الصفحة والخادم والعامل. لا تحذف التطبيق قبل إرسال لقطة هذه اللوحة. وضع العرض في اللوحة يوضّح هل ما يُفتح تطبيق مثبّت (`standalone`) أم نافذة متصفح؛ وكروم نفسه هو من يحدّث غلاف التطبيق (الاسم والأيقونة) في الخلفية بعد فتح التطبيق، وعادةً خلال بضعة أيام؛ حالته ظاهرة في `chrome://webapks`.
+
 ---
 
 ## A) نشر تحديث Portal (بعد `main` أو فرع قبل الدمج)

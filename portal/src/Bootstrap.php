@@ -40,10 +40,15 @@ final class Bootstrap
         if (!self::shouldSkipWebRuntime() && session_status() !== PHP_SESSION_ACTIVE) {
             $lifetimeSeconds = self::configureSessionCookie();
             $sessionName = Config::get('PORTAL_SESSION_NAME', 'portal_session');
+            // Legacy host-only cookies sit next to the Domain cookie and PHP reads the first one; see CookieDeduper.
+            $shadowedCookies = \Portal\Support\CookieDeduper::normalizeRequest(
+                \Portal\Support\CookieDeduper::appCookieNames($sessionName)
+            );
             $presentedSessionId = (string) ($_COOKIE[$sessionName] ?? '');
             session_name($sessionName);
             session_start();
             self::refreshSessionCookie($lifetimeSeconds);
+            \Portal\Support\CookieDeduper::expireHostOnly($shadowedCookies);
             \Portal\Services\PortalSessionService::bootstrap($presentedSessionId);
             if (\Portal\Auth\WebSession::check()) {
                 $staffId = trim((string) (\Portal\Auth\WebSession::user()['id'] ?? ''));
@@ -98,6 +103,13 @@ final class Bootstrap
         $id = session_id();
         if ($name === '' || $id === '') {
             return;
+        }
+
+        // A brand-new session already got its Set-Cookie from session_start(); only existing ones need the refresh.
+        foreach (headers_list() as $header) {
+            if (stripos($header, 'Set-Cookie: ' . $name . '=') === 0) {
+                return;
+            }
         }
 
         setcookie($name, $id, array_merge(\Portal\Support\CookieOptions::base(true), [

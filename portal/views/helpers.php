@@ -385,6 +385,55 @@ function portal_pwa_is_install_host(): bool
     return strcasecmp($install, $request) === 0;
 }
 
+/**
+ * Origin that /manifest.php must use for start_url, scope, icons and shortcuts.
+ *
+ * On the canonical host (www) it is pinned to the configured canonical origin. On the sibling (apex)
+ * host it MUST stay the request origin: the manifest spec ignores a start_url that is not same-origin
+ * with the document, and an apex-installed WebAPK is bound to https://<apex>/ so pointing it at www
+ * would break its update instead of moving it.
+ */
+function portal_manifest_origin(): string
+{
+    return portal_pwa_is_install_host() ? portal_pwa_install_origin() : portal_request_origin();
+}
+
+/**
+ * Cache-buster for manifest icon URLs. Bump it (and only it) when the icon artwork changes so Chrome's
+ * WebAPK update check refreshes launcher icons. Never derive it from the per-deploy build id.
+ */
+function portal_pwa_icon_revision(): int
+{
+    return 7;
+}
+
+/**
+ * Launcher label for the installed app: the whole name when it fits, otherwise the longest run of whole
+ * leading words that fits. Never cuts a word in half ("جاويش للتجارة" must not become "جاويش للتجار").
+ */
+function portal_pwa_short_name(string $name, int $maxLength = 12): string
+{
+    $name = trim((string) preg_replace('/\s+/u', ' ', $name));
+    if ($name === '') {
+        return '';
+    }
+    $maxLength = max(1, $maxLength);
+    if (\Portal\Support\Utf8Text::length($name) <= $maxLength) {
+        return $name;
+    }
+
+    $short = '';
+    foreach (explode(' ', $name) as $word) {
+        $candidate = $short === '' ? $word : $short . ' ' . $word;
+        if (\Portal\Support\Utf8Text::length($candidate) > $maxLength) {
+            break;
+        }
+        $short = $candidate;
+    }
+
+    return $short !== '' ? $short : \Portal\Support\Utf8Text::substr($name, 0, $maxLength);
+}
+
 function portal_absolute_url(string $pathOrUrl = ''): string
 {
     $value = trim($pathOrUrl);

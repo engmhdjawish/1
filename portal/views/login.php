@@ -90,6 +90,25 @@ $labelClass = 'block text-sm font-medium text-gray-700';
               دخول
             </button>
           </noscript>
+          <script>
+            /* login-page.js normally builds the fields. If it is blocked, stale or throws, show the same
+               markup that <noscript> carries so a customer can always sign in with a plain form POST. */
+            (function () {
+              function reveal() {
+                var form = document.getElementById('login-form-customer');
+                var mount = form && form.querySelector('[data-customer-login-mount]');
+                var fallback = form && form.querySelector('noscript');
+                if (!form || !mount || !fallback || mount.getAttribute('data-ready') === '1' || mount.children.length > 0) { return; }
+                mount.setAttribute('data-ready', '1');
+                mount.className = 'space-y-4';
+                mount.innerHTML = fallback.textContent || '';
+                var placeholder = document.querySelector('[data-customer-login-placeholder]');
+                if (placeholder && placeholder.parentNode) { placeholder.parentNode.removeChild(placeholder); }
+              }
+              function arm() { window.setTimeout(reveal, 1200); }
+              if (document.readyState === 'complete') { arm(); } else { window.addEventListener('load', arm); }
+            })();
+          </script>
         </form>
       <?php else: ?>
         <form method="post" action="<?= h($loginPagePath) ?>" class="space-y-4" id="login-form-staff" data-login-kind="staff">

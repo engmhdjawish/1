@@ -177,7 +177,7 @@ foreach (['jawishco.sy', 'www.jawishco.sy'] as $host) {
     $sameOrigin = true;
     foreach ($m['icons'] ?? [] as $icon) {
         $src = (string) ($icon['src'] ?? '');
-        $sameOrigin = $sameOrigin && str_starts_with($src, $origin . '/') && str_contains($src, 'webapk=6');
+        $sameOrigin = $sameOrigin && str_starts_with($src, $origin . '/') && str_contains($src, 'webapk=' . portal_pwa_icon_revision());
     }
     foreach ($m['shortcuts'] ?? [] as $shortcut) {
         $sameOrigin = $sameOrigin && str_starts_with((string) ($shortcut['url'] ?? ''), $origin . '/');
@@ -220,10 +220,21 @@ $assert(
     && str_contains($pwa, 'portal_pwa_host')
 );
 $assert(
-    'pwa.js prompts in-app update when a new service worker waits',
-    str_contains($pwa, 'showUpdateBanner')
-    && str_contains($pwa, 'SKIP_WAITING')
-    && str_contains($pwa, 'يتوفر تحديث جديد')
+    'pwa.js no longer owns service worker registration, reload-on-controllerchange or a tap-to-update banner',
+    !str_contains($pwa, 'showUpdateBanner')
+    && !str_contains($pwa, 'SKIP_WAITING')
+    && !str_contains($pwa, 'controllerchange')
+    && !str_contains($pwa, 'serviceWorker')
+    && !str_contains($pwa, 'يتوفر تحديث جديد')
+);
+$pwaUpdate = (string) file_get_contents(dirname(__DIR__) . '/public/assets/pwa-update.js');
+$assert(
+    'pwa-update.js is the single registration point: /sw.js?b=<build>, updateViaCache none, zero-touch reload',
+    str_contains($pwaUpdate, "'/sw.js?b='")
+    && str_contains($pwaUpdate, "updateViaCache: 'none'")
+    && str_contains($pwaUpdate, 'PORTAL_SW_ACTIVATED')
+    && str_contains($pwaUpdate, '/api/app-version.php')
+    && !str_contains($pwaUpdate, 'يتوفر تحديث جديد')
 );
 $assert(
     'pwa.js has no reinstall/migrate-to-www flow (would leave WebAPK scope)',
@@ -236,9 +247,16 @@ $assert(
 
 $sw = (string) file_get_contents(dirname(__DIR__) . '/public/sw.js');
 $assert(
-    'service worker waits for user SKIP_WAITING on updates',
-    str_contains($sw, "data.type !== 'SKIP_WAITING'")
-    && str_contains($sw, '!self.registration.active')
+    'service worker skips waiting on every install (zero-touch updates, no tap)',
+    preg_match("/addEventListener\\('install'.*?self\\.skipWaiting\\(\\)/s", $sw) === 1
+    && !str_contains($sw, '!self.registration.active')
+    && str_contains($sw, "data.type === 'SKIP_WAITING'")
+);
+$assert(
+    'service worker announces activation and answers GET_BUILD',
+    str_contains($sw, 'PORTAL_SW_ACTIVATED')
+    && str_contains($sw, "data.type === 'GET_BUILD'")
+    && str_contains($sw, 'includeUncontrolled: true')
 );
 
 $layout = (string) file_get_contents(dirname(__DIR__) . '/views/layout.php');
