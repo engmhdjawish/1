@@ -16,7 +16,7 @@ use PDO;
  */
 final class StaffDevice
 {
-    private const COOKIE = 'jawish_staff';
+    public const COOKIE = 'jawish_staff';
     private const MAX_AGE = 15552000;
 
     /** @var array<string, array{id: string, name: string}|null> */
