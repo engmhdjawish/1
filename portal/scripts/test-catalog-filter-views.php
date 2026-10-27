@@ -92,6 +92,30 @@ $check('service stores target path', str_contains($service, 'target_path'), true
 
 $sPhp = file_get_contents(dirname(__DIR__) . '/public/s.php') ?: '';
 $check('/s/ resolves filter + product codes', str_contains($sPhp, 'resolveRedirect'), true);
+$check('/s/ uses landing url', str_contains($sPhp, 'landingUrl'), true);
+
+$productLanding = CatalogFilterViewService::landingUrl('/product.php?guid=abc-def');
+parse_str((string) parse_url($productLanding, PHP_URL_QUERY), $productQuery);
+$check(
+    'product short link opens the product page',
+    str_starts_with($productLanding, '/product.php?') && ($productQuery['guid'] ?? '') === 'abc-def' && ($productQuery['return'] ?? '') === '/store.php',
+    true
+);
+$keptLanding = CatalogFilterViewService::landingUrl('/product.php?guid=abc-def&return=%2Fshare.php%3Ftoken%3Dzzzz');
+parse_str((string) parse_url($keptLanding, PHP_URL_QUERY), $keptQuery);
+$check('product short link keeps an existing return', $keptQuery['return'] ?? null, '/share.php?token=zzzz');
+$check('kept product link is still the product page', str_starts_with($keptLanding, '/product.php?'), true);
+$check(
+    'store short link is not sent home',
+    CatalogFilterViewService::landingUrl('/store.php?v=ab12cd'),
+    '/store.php?v=ab12cd'
+);
+
+$indexPhp = file_get_contents(dirname(__DIR__) . '/public/index.php') ?: '';
+$check('homepage dispatches /s/ before rendering', str_contains($indexPhp, "require __DIR__ . '/s.php'"), true);
+$bootstrapPos = strpos($indexPhp, "require dirname(__DIR__) . '/bootstrap.php'");
+$dispatchPos = strpos($indexPhp, "require __DIR__ . '/s.php'");
+$check('short-link dispatch runs before homepage bootstrap', $dispatchPos !== false && $bootstrapPos !== false && $dispatchPos < $bootstrapPos, true);
 
 $shareFn = substr($js, (int) strpos($js, 'async function resolveShareUrl'), 900);
 $check('share never uses ?v= url', str_contains($shareFn, 'data.share_url') && !str_contains($shareFn, 'mint('), true);

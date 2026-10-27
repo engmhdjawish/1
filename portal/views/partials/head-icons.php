@@ -35,6 +35,7 @@ $pwaBuild = \Portal\Support\PwaBuild::id();
 <link rel="icon" href="<?= h($icons['favicon_png_32']) ?>" type="image/png"<?= $icons['uses_company_logo'] ? '' : ' sizes="32x32"' ?>>
 <link rel="apple-touch-icon" href="<?= h($icons['apple_touch']) ?>" sizes="180x180">
 <meta name="theme-color" content="#D81921">
+<meta http-equiv="Permissions-Policy" content="geolocation=(self)">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">

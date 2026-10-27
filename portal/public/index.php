@@ -2,6 +2,15 @@
 
 declare(strict_types=1);
 
+// Short links live at /s/{code}. When that path is not a dedicated nginx
+// location, try_files serves this file while REQUEST_URI stays /s/{code}.
+// Rendering the homepage here drops the shared product or filter.
+$shortLinkPath = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: '');
+if (preg_match('#^/s/[A-Za-z0-9_-]+/?$#', $shortLinkPath) === 1) {
+    require __DIR__ . '/s.php';
+    exit;
+}
+
 require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Services\HomePageService;

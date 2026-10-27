@@ -53,16 +53,21 @@ server {
         application/xml
         image/svg+xml;
 
-    # Short share links: /s/{code} → s.php (keep extra query args for filters).
+    # Short share links: /s/{code} → s.php.
+    # Do not include snippets/fastcgi-php.conf here: its try_files looks for
+    # the /s/{code} file, misses, and returns 404 before PHP runs. fastcgi_params
+    # must come first so QUERY_STRING / SCRIPT_FILENAME below are not overwritten.
     location ~ ^/s/(?<share_code>[A-Za-z0-9_-]+)/?$ {
-        include snippets/fastcgi-php.conf;
+        include fastcgi_params;
         fastcgi_pass unix:/run/php/php8.2-fpm.sock;
         fastcgi_param SCRIPT_FILENAME $document_root/s.php;
-        fastcgi_param QUERY_STRING c=$share_code&$args;
-        include fastcgi_params;
+        fastcgi_param SCRIPT_NAME /s.php;
+        fastcgi_param QUERY_STRING $args&c=$share_code;
     }
 
     location / {
+        # Backup when the regex location above is missing from a copied server block.
+        rewrite ^/s/([A-Za-z0-9_-]+)/?$ /s.php?$args&c=$1 last;
         try_files $uri $uri/ /index.php?$query_string;
     }
 
@@ -127,14 +132,15 @@ server {
 #         image/svg+xml;
 #
 #     location ~ ^/s/(?<share_code>[A-Za-z0-9_-]+)/?$ {
-#         include snippets/fastcgi-php.conf;
+#         include fastcgi_params;
 #         fastcgi_pass unix:/run/php/php8.2-fpm.sock;
 #         fastcgi_param SCRIPT_FILENAME $document_root/s.php;
-#         fastcgi_param QUERY_STRING c=$share_code&$args;
-#         include fastcgi_params;
+#         fastcgi_param SCRIPT_NAME /s.php;
+#         fastcgi_param QUERY_STRING $args&c=$share_code;
 #     }
 #
 #     location / {
+#         rewrite ^/s/([A-Za-z0-9_-]+)/?$ /s.php?$args&c=$1 last;
 #         try_files $uri $uri/ /index.php?$query_string;
 #     }
 #

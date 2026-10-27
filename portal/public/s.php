@@ -25,6 +25,7 @@ if ($code !== '' && preg_match('/^[A-Za-z0-9]{4,16}$/', $code) === 1) {
     if (\Portal\Services\ShareLinkService::resolvePublicAccessKey($code) === null) {
         $redirect = \Portal\Services\CatalogFilterViewService::resolveRedirect($code);
         if ($redirect !== null) {
+            $redirect = \Portal\Services\CatalogFilterViewService::landingUrl($redirect);
             header('Cache-Control: no-store');
             header('Location: ' . $redirect, true, 302);
             exit;

@@ -209,6 +209,32 @@ final class CatalogFilterViewService
         return $target !== '' && str_starts_with($target, '/') && !str_starts_with($target, '//') ? $target : null;
     }
 
+    /**
+     * Final URL a visitor should open. Product targets stay on the product page;
+     * a bare /product.php?guid= visit is otherwise bounced to the homepage.
+     */
+    public static function landingUrl(string $redirect): string
+    {
+        $redirect = trim($redirect);
+        $parts = parse_url($redirect);
+        $path = (string) ($parts['path'] ?? '');
+        if ($path !== '/product.php') {
+            return $redirect;
+        }
+
+        $query = [];
+        if (!empty($parts['query'])) {
+            parse_str((string) $parts['query'], $query);
+        }
+        $return = trim((string) ($query['return'] ?? ''));
+        $token = trim((string) ($query['token'] ?? $query['t'] ?? ''));
+        if ($return === '' && $token === '') {
+            $query['return'] = '/store.php';
+        }
+
+        return '/product.php?' . http_build_query($query);
+    }
+
     /** @param array<string, mixed> $params */
     private static function targetFor(string $path, array $params): string
     {
