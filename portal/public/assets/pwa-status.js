@@ -300,7 +300,7 @@
     add('crossHostLinks', 'روابط تخرج من نطاق التطبيق', links.count ? links.count + '\n' + links.samples.join('\n') : 'لا يوجد', links.count ? 'bad' : 'ok', links.count ? 'هذه الروابط تفتح نطاقاً آخر للموقع نفسه، وفي التطبيق المثبّت يظهر عندها شريط المتصفح.' : '', true);
 
     if (manifest) {
-      add('manifest', 'الـmanifest الحالي', ['id: ' + manifest.id, 'start_url: ' + manifest.start_url, 'scope: ' + manifest.scope, 'display: ' + manifest.display, 'short_name: ' + manifest.short_name, 'icon revision: ' + manifest.iconRevision].join('\n'), '', 'هذه نسخة الخادم الآن. الـmanifest الذي بُني عليه التطبيق المثبّت يظهر في chrome://webapks ويُحدِّثه كروم وحده خلال يوم إلى ثلاثة.', true);
+      add('manifest', 'الـmanifest الحالي', ['id: ' + manifest.id, 'start_url: ' + manifest.start_url, 'scope: ' + manifest.scope, 'display: ' + manifest.display, 'short_name: ' + manifest.short_name, 'icon revision: ' + manifest.iconRevision].join('\n'), '', 'هذه نسخة الخادم الآن. الـmanifest الذي بُني عليه التطبيق المثبّت يظهر في chrome://webapks ويُحدِّثه كروم وحده في الخلفية بعد فتح التطبيق.', true);
     }
     add('userAgent', 'المتصفح', report.userAgent, '', '', true);
 
