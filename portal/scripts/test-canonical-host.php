@@ -177,7 +177,7 @@ foreach (['jawishco.sy', 'www.jawishco.sy'] as $host) {
     $sameOrigin = true;
     foreach ($m['icons'] ?? [] as $icon) {
         $src = (string) ($icon['src'] ?? '');
-        $sameOrigin = $sameOrigin && str_starts_with($src, $origin . '/') && str_contains($src, 'webapk=6');
+        $sameOrigin = $sameOrigin && str_starts_with($src, $origin . '/') && str_contains($src, 'webapk=' . portal_pwa_icon_revision());
     }
     foreach ($m['shortcuts'] ?? [] as $shortcut) {
         $sameOrigin = $sameOrigin && str_starts_with((string) ($shortcut['url'] ?? ''), $origin . '/');

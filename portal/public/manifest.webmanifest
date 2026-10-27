@@ -24,19 +24,19 @@
   },
   "icons": [
     {
-      "src": "/icons/brand-icon.php?size=192&webapk=6",
+      "src": "/icons/brand-icon.php?size=192&webapk=7",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/brand-icon.php?size=512&webapk=6",
+      "src": "/icons/brand-icon.php?size=512&webapk=7",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/brand-icon.php?size=512&maskable=1&webapk=6",
+      "src": "/icons/brand-icon.php?size=512&maskable=1&webapk=7",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -48,7 +48,7 @@
       "url": "/store.php?source=pwa",
       "icons": [
         {
-          "src": "/icons/brand-icon.php?size=192&webapk=6",
+          "src": "/icons/brand-icon.php?size=192&webapk=7",
           "sizes": "192x192",
           "type": "image/png"
         }
@@ -59,7 +59,7 @@
       "url": "/store-cart.php?source=pwa",
       "icons": [
         {
-          "src": "/icons/brand-icon.php?size=192&webapk=6",
+          "src": "/icons/brand-icon.php?size=192&webapk=7",
           "sizes": "192x192",
           "type": "image/png"
         }
@@ -70,7 +70,7 @@
       "url": "/my-orders.php?source=pwa",
       "icons": [
         {
-          "src": "/icons/brand-icon.php?size=192&webapk=6",
+          "src": "/icons/brand-icon.php?size=192&webapk=7",
           "sizes": "192x192",
           "type": "image/png"
         }
