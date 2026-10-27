@@ -78,6 +78,25 @@ if (VisitorLogService::mapExternalUrl(0.0, 0.0) === null) {
     $bad('mapExternalUrl should reject 0,0');
 }
 
+$gpsLoc = VisitorLogService::resolveProfileLocation(
+    [
+        ['city_ar' => 'حمص', 'country_ar' => 'سوريا', 'location_source' => 'ip', 'location_source_label' => 'IP', 'map_url' => 'https://maps.test/ip', 'visitor_ip' => '1.2.3.4'],
+        ['city_ar' => 'دمشق', 'country_ar' => 'سوريا', 'location_source' => 'gps', 'location_source_label' => 'GPS', 'map_url' => 'https://maps.test/gps', 'visitor_ip' => '1.2.3.4'],
+    ],
+    []
+);
+if (($gpsLoc['location_label'] ?? '') === 'دمشق، سوريا' && ($gpsLoc['map_url'] ?? '') === 'https://maps.test/gps' && ($gpsLoc['location_source_label'] ?? '') === 'GPS') {
+    $ok('resolveProfileLocation prefers GPS over an earlier IP hit');
+} else {
+    $bad('resolveProfileLocation GPS preference failed');
+}
+
+if (VisitorLogService::actionLabel('gps_fix') === 'موقع GPS') {
+    $ok('actionLabel(gps_fix) = موقع GPS');
+} else {
+    $bad('actionLabel(gps_fix) missing Arabic label');
+}
+
 $section('Analytics labels');
 $labels = ['page_view', 'order_placed', 'add_to_cart'];
 foreach ($labels as $action) {

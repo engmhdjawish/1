@@ -58,6 +58,11 @@ mustContain('portal/src/Services/PortalSessionService.php', 'noteDeviceLogin', '
 mustContain('portal/src/Services/PortalPresenceService.php', 'forgetSameDeviceGuests', 'same-device guest rows are cleared');
 mustContain('portal/public/dashboard/visitor-analytics.php', "$row['display_name'] = 'زائر'", 'live guests display as زائر');
 mustContain('portal/public/api/session-heartbeat.php', 'noteDeviceLogin', 'heartbeat notes the device login');
+mustContain('portal/public/assets/site-analytics.js', 'enableHighAccuracy: highAccuracy', 'GPS asks for a precise fix');
+mustContain('portal/public/assets/site-analytics.js', "const gestureEvents = ['pointerup', 'click', 'touchend', 'keydown']", 'GPS permission waits for a user gesture on touch devices');
+mustContain('portal/public/assets/site-analytics.js', "send('gps_fix'", 'a late GPS fix is recorded after the page view');
+mustContain('portal/src/Services/VisitorLogService.php', "'gps_fix' => 'موقع GPS'", 'GPS fix has an Arabic label');
+mustContain('portal/views/layout.php', 'geolocation=(self)', 'pages allow the geolocation permission');
 
 console.log('\n== Test scripts ==');
 mustExist('portal/scripts/test-visitor-log.php');

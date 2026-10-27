@@ -97,6 +97,7 @@ final class VisitorLogService
         'order_start' => 'بدء طلب',
         'order_placed' => 'إرسال طلب',
         'login' => 'تسجيل دخول',
+        'gps_fix' => 'موقع GPS',
     ];
 
     public static function hasSchema(): bool
@@ -1332,10 +1333,44 @@ final class VisitorLogService
                     LIMIT 1
                 ) AS web_customer_id,
                 MAX(visitor_ip) AS visitor_ip,
-                MAX(country_ar) AS country_ar,
-                MAX(city_ar) AS city_ar,
-                MAX(latitude) AS latitude,
-                MAX(longitude) AS longitude,
+                (
+                    SELECT vl_geo.country_ar
+                    FROM visitor_logs vl_geo
+                    WHERE vl_geo.session_id = visitor_logs.session_id
+                      AND COALESCE(vl_geo.country_ar, '') <> ''
+                    ORDER BY (COALESCE(vl_geo.details_ar::jsonb->>'location_source', 'ip') = 'gps') DESC,
+                             vl_geo.created_at DESC
+                    LIMIT 1
+                ) AS country_ar,
+                (
+                    SELECT vl_geo.city_ar
+                    FROM visitor_logs vl_geo
+                    WHERE vl_geo.session_id = visitor_logs.session_id
+                      AND COALESCE(vl_geo.city_ar, '') <> ''
+                    ORDER BY (COALESCE(vl_geo.details_ar::jsonb->>'location_source', 'ip') = 'gps') DESC,
+                             vl_geo.created_at DESC
+                    LIMIT 1
+                ) AS city_ar,
+                (
+                    SELECT vl_geo.latitude
+                    FROM visitor_logs vl_geo
+                    WHERE vl_geo.session_id = visitor_logs.session_id
+                      AND vl_geo.latitude IS NOT NULL
+                      AND vl_geo.longitude IS NOT NULL
+                    ORDER BY (COALESCE(vl_geo.details_ar::jsonb->>'location_source', 'ip') = 'gps') DESC,
+                             vl_geo.created_at DESC
+                    LIMIT 1
+                ) AS latitude,
+                (
+                    SELECT vl_geo.longitude
+                    FROM visitor_logs vl_geo
+                    WHERE vl_geo.session_id = visitor_logs.session_id
+                      AND vl_geo.latitude IS NOT NULL
+                      AND vl_geo.longitude IS NOT NULL
+                    ORDER BY (COALESCE(vl_geo.details_ar::jsonb->>'location_source', 'ip') = 'gps') DESC,
+                             vl_geo.created_at DESC
+                    LIMIT 1
+                ) AS longitude,
                 MIN(created_at) AS first_seen,
                 MAX(created_at) AS last_seen
              FROM visitor_logs
@@ -1544,6 +1579,14 @@ final class VisitorLogService
             'visitor_ip' => '',
         ];
 
+        $preferred = self::preferredLocationRow($events);
+        if ($preferred !== null) {
+            self::applyLocationRow($result, $preferred);
+            if ($result['location_label'] !== '—') {
+                return $result;
+            }
+        }
+
         foreach ($events as $row) {
             $city = trim((string) ($row['city_ar'] ?? ''));
             $country = trim((string) ($row['country_ar'] ?? ''));
@@ -1551,9 +1594,15 @@ final class VisitorLogService
                 $result['location_label'] = $city !== '' && $country !== ''
                     ? ($city . '، ' . $country)
                     : ($city !== '' ? $city : $country);
-                $result['location_source_label'] = (string) ($row['location_source_label'] ?? '');
-                $result['map_url'] = $row['map_url'] ?? null;
-                $result['visitor_ip'] = trim((string) ($row['visitor_ip'] ?? ''));
+                if ($result['location_source_label'] === '') {
+                    $result['location_source_label'] = (string) ($row['location_source_label'] ?? '');
+                }
+                if ($result['map_url'] === null && !empty($row['map_url'])) {
+                    $result['map_url'] = $row['map_url'];
+                }
+                if ($result['visitor_ip'] === '') {
+                    $result['visitor_ip'] = trim((string) ($row['visitor_ip'] ?? ''));
+                }
 
                 return $result;
             }
@@ -1588,6 +1637,63 @@ final class VisitorLogService
         }
 
         return $result;
+    }
+
+    /**
+     * GPS fix wins over an earlier IP lookup so the profile map is the device location.
+     *
+     * @param list<array<string, mixed>> $rows
+     * @return array<string, mixed>|null
+     */
+    private static function preferredLocationRow(array $rows): ?array
+    {
+        $fallback = null;
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $isGps = (string) ($row['location_source'] ?? '') === 'gps'
+                || (string) ($row['location_source_label'] ?? '') === 'GPS';
+            $city = trim((string) ($row['city_ar'] ?? ''));
+            $country = trim((string) ($row['country_ar'] ?? ''));
+            $hasPlace = $city !== '' || $country !== '';
+            $hasPoint = !empty($row['map_url'])
+                || (isset($row['latitude'], $row['longitude']) && $row['latitude'] !== null && $row['longitude'] !== null);
+            if (!$hasPlace && !$hasPoint) {
+                continue;
+            }
+            if ($isGps) {
+                return $row;
+            }
+            if ($fallback === null && $hasPlace) {
+                $fallback = $row;
+            }
+        }
+
+        return $fallback;
+    }
+
+    /** @param array{location_label: string, location_source_label: string, map_url: ?string, visitor_ip: string} $result */
+    private static function applyLocationRow(array &$result, array $row): void
+    {
+        $city = trim((string) ($row['city_ar'] ?? ''));
+        $country = trim((string) ($row['country_ar'] ?? ''));
+        if ($city !== '' || $country !== '') {
+            $result['location_label'] = $city !== '' && $country !== ''
+                ? ($city . '، ' . $country)
+                : ($city !== '' ? $city : $country);
+        }
+        $source = trim((string) ($row['location_source_label'] ?? ''));
+        if ($source !== '') {
+            $result['location_source_label'] = $source;
+        }
+        if (!empty($row['map_url'])) {
+            $result['map_url'] = $row['map_url'];
+        }
+        $ip = trim((string) ($row['visitor_ip'] ?? ''));
+        if ($ip !== '') {
+            $result['visitor_ip'] = $ip;
+        }
     }
 
     /**
@@ -2091,6 +2197,21 @@ final class VisitorLogService
         $highlights = [];
         $locationShown = false;
         $seenOrders = [];
+        $preferredLocation = self::preferredLocationRow($events);
+        if ($preferredLocation !== null) {
+            $city = trim((string) ($preferredLocation['city_ar'] ?? ''));
+            $country = trim((string) ($preferredLocation['country_ar'] ?? ''));
+            if ($city !== '' || $country !== '') {
+                $stats['location_label'] = $city !== '' && $country !== ''
+                    ? ($city . '، ' . $country)
+                    : ($city !== '' ? $city : $country);
+                $stats['location_source_label'] = (string) ($preferredLocation['location_source_label'] ?? '');
+                $locationShown = true;
+            }
+            if (!empty($preferredLocation['map_url'])) {
+                $stats['map_url'] = $preferredLocation['map_url'];
+            }
+        }
 
         foreach ($events as $row) {
             $action = (string) ($row['action'] ?? '');

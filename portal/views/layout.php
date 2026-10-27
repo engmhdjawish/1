@@ -24,6 +24,10 @@ use Portal\Support\StorePricePreference;
 
 require_once __DIR__ . '/helpers.php';
 
+if (!headers_sent()) {
+    header('Permissions-Policy: geolocation=(self)');
+}
+
 $companyContext ??= PortalSettingsService::companySettings();
 $companyLogoUrl ??= PortalSettingsService::companyLogoUrl($companyContext);
 $siteName = trim((string) ($companyContext['company_name'] ?? '')) !== ''

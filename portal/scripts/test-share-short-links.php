@@ -93,6 +93,14 @@ $check('s.php exists', str_contains($sPhp, 'share.php'), true);
 $check('share.php accepts c/t', str_contains($sharePhp, "\$_GET['c']"), true);
 $check('share.php resolves access key', str_contains($sharePhp, 'resolvePublicAccessKey'), true);
 $check('nginx /s/ location', str_contains($nginx, 'share_code'), true);
+$check('nginx /s/ executes s.php', str_contains($nginx, 'fastcgi_param SCRIPT_FILENAME $document_root/s.php;'), true);
+$check('nginx /s/ keeps the code when args are overwritten', str_contains($nginx, 'QUERY_STRING $args&c=$share_code;'), true);
+$shortLocation = '';
+if (preg_match('/location ~ \^\/s\/\(\?<share_code>.*?\\n    \\}/s', $nginx, $locationMatch) === 1) {
+    $shortLocation = $locationMatch[0];
+}
+$check('nginx short location parsed', $shortLocation !== '', true);
+$check('nginx /s/ does not try_files the missing path', $shortLocation !== '' && str_contains($shortLocation, 'fastcgi-php.conf'), false);
 $check('migration short_code', str_contains($migration, 'short_code'), true);
 
 $helpers = file_get_contents(dirname(__DIR__) . '/views/helpers.php') ?: '';

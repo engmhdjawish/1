@@ -6,7 +6,7 @@
   const STORAGE_KEY = 'jawish_vid';
   const GPS_STORAGE_KEY = 'jawish_gps';
   const GPS_MAX_AGE_MS = 300000;
-  const GPS_WAIT_MS = 2500;
+  const GPS_WAIT_MS = 600;
 
   const getSessionId = () => {
     try {
@@ -55,27 +55,95 @@
     }
   };
 
+  // Mobile browsers ignore getCurrentPosition during page load and do not
+  // show the permission prompt. Ask from the first tap, or immediately when
+  // permission is already granted / the device is a desktop pointer.
   const requestGps = () => new Promise((resolve) => {
     if (!window.isSecureContext || !navigator.geolocation) {
       resolve(null);
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-        });
-      },
-      () => resolve(null),
-      {
-        enableHighAccuracy: false,
-        timeout: 8000,
-        maximumAge: GPS_MAX_AGE_MS,
-      },
-    );
+    let settled = false;
+    const finish = (coords) => {
+      if (settled) return;
+      settled = true;
+      resolve(coords);
+    };
+
+    const readPosition = (highAccuracy) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const latitude = position.coords.latitude;
+          const longitude = position.coords.longitude;
+          if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+            finish(null);
+            return;
+          }
+          finish({
+            latitude,
+            longitude,
+            accuracy: position.coords.accuracy,
+          });
+        },
+        (error) => {
+          const denied = error && error.code === 1;
+          if (denied || !highAccuracy) {
+            finish(null);
+            return;
+          }
+          readPosition(false);
+        },
+        {
+          enableHighAccuracy: highAccuracy,
+          timeout: highAccuracy ? 20000 : 10000,
+          maximumAge: highAccuracy ? 0 : 60000,
+        },
+      );
+    };
+
+    let started = false;
+    const gestureEvents = ['pointerup', 'click', 'touchend', 'keydown'];
+    const stopGesture = () => {
+      gestureEvents.forEach((name) => window.removeEventListener(name, onGesture, true));
+    };
+    const start = () => {
+      if (started || settled) return;
+      started = true;
+      stopGesture();
+      readPosition(true);
+    };
+    const onGesture = () => start();
+
+    const needsGesture = window.matchMedia('(pointer: coarse)').matches
+      || /iphone|ipad|ipod|android/i.test(navigator.userAgent || '');
+
+    const queryPermission = () => {
+      if (!navigator.permissions || typeof navigator.permissions.query !== 'function') {
+        return Promise.resolve('unknown');
+      }
+      return navigator.permissions.query({ name: 'geolocation' })
+        .then((status) => (status && status.state) || 'unknown')
+        .catch(() => 'unknown');
+    };
+
+    if (!needsGesture) {
+      start();
+      return;
+    }
+
+    gestureEvents.forEach((name) => window.addEventListener(name, onGesture, true));
+    void queryPermission().then((state) => {
+      if (settled) return;
+      if (state === 'denied') {
+        stopGesture();
+        finish(null);
+        return;
+      }
+      if (state === 'granted') {
+        start();
+      }
+    });
   });
 
   let gpsPromise = null;
@@ -94,7 +162,7 @@
   const waitForGps = () => Promise.race([
     resolveGps(),
     new Promise((resolve) => {
-      window.setTimeout(() => resolve(null), GPS_WAIT_MS);
+      window.setTimeout(() => resolve(readCachedGps()), GPS_WAIT_MS);
     }),
   ]);
 
@@ -102,17 +170,22 @@
     void resolveGps();
   }
 
+  let pageViewPosted = false;
+  let pageViewHadGps = false;
+
   const send = (action, meta = {}) => {
     void (async () => {
       const payloadMeta = meta && typeof meta === 'object' ? { ...meta } : {};
-      const gps = await waitForGps();
+      const gps = action === 'gps_fix' ? readCachedGps() : await waitForGps();
       if (gps) {
         payloadMeta.gps_latitude = gps.latitude;
         payloadMeta.gps_longitude = gps.longitude;
         if (gps.accuracy != null) {
           payloadMeta.gps_accuracy = gps.accuracy;
         }
+        if (action === 'page_view') pageViewHadGps = true;
       }
+      if (action === 'page_view') pageViewPosted = true;
 
       const payload = {
         action,
@@ -192,6 +265,17 @@
   };
 
   window.SiteAnalytics = { track: send };
+
+  // The first page view must not wait on the permission prompt. When a fix
+  // arrives afterwards, record it so the visitor map uses GPS instead of IP.
+  void resolveGps().then((coords) => {
+    if (!coords) return;
+    window.setTimeout(() => {
+      if (!pageViewPosted || pageViewHadGps) return;
+      pageViewHadGps = true;
+      send('gps_fix', { label_ar: 'موقع GPS' });
+    }, 50);
+  });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', trackPageView, { once: true });
