@@ -319,6 +319,7 @@ window.portalMaterialImageFrameEmpty=function(img){if(!(img instanceof HTMLImage
   <?= portal_defer_script('/assets/login-page.js') ?>
 <?php endif; ?>
 <?= portal_defer_script('/assets/pwa.js') ?>
+<?= portal_defer_script('/assets/pwa-status.js') ?>
 <?= portal_defer_script('/assets/site-page-loading.js') ?>
 <?= portal_defer_script('/assets/notifications.js') ?>
 <?php if ($enableSiteAnalytics): ?>
