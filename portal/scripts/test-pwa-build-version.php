@@ -153,7 +153,12 @@ $realPublic = dirname(__DIR__) . '/public';
 $realBuild = PwaBuild::compute($realPublic);
 $assert('real tree hashes to a 12-hex id', preg_match('/^[0-9a-f]{12}$/', $realBuild) === 1);
 $realFiles = array_keys(PwaBuild::assetFiles($realPublic));
-$assert('real tree includes sw.js and assets/pwa.js', in_array('sw.js', $realFiles, true) && in_array('assets/pwa.js', $realFiles, true));
+$assert(
+    'real tree includes sw.js, assets/pwa.js and assets/pwa-update.js (editing the controller changes the build id)',
+    in_array('sw.js', $realFiles, true)
+    && in_array('assets/pwa.js', $realFiles, true)
+    && in_array('assets/pwa-update.js', $realFiles, true)
+);
 $assert('real tree excludes media and storage uploads', array_filter($realFiles, static fn (string $f): bool => str_starts_with($f, 'media/')) === []);
 
 echo "== HTML heads carry the build meta ==\n";
@@ -179,6 +184,17 @@ $headHtml = (string) ob_get_clean();
 $assert(
     'head-icons.php output contains the current build id',
     preg_match('/<meta name="portal-build" content="([0-9a-f]{12})">/', $headHtml, $m) === 1 && $m[1] === PwaBuild::id()
+);
+$assert(
+    'head-icons.php loads the versioned controller script and links the manifest',
+    preg_match('#<script src="/assets/pwa-update\.js\?v=\d+" defer></script>#', $headHtml) === 1
+    && str_contains($headHtml, '<link rel="manifest" href="/manifest.php">')
+);
+$assert(
+    'head-icons.php fallback registers /sw.js?b=<same build> and no longer the legacy /sw.js?v=N',
+    str_contains($headHtml, "'/sw.js?b=' + encodeURIComponent(build)")
+    && str_contains($headHtml, 'var build = "' . PwaBuild::id() . '";')
+    && !str_contains($headHtml, 'sw.js?v=')
 );
 
 echo "== /api/app-version.php over HTTP ==\n";

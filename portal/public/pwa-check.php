@@ -136,6 +136,7 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
     a { color: #2563eb; }
   </style>
   <link rel="manifest" href="/manifest.php">
+  <?= portal_defer_script('/assets/pwa-update.js') ?>
 </head>
 <body>
   <h1>تشخيص تثبيت التطبيق (PWA)</h1>
@@ -251,10 +252,6 @@ $allOk = count(array_filter($checks, static fn (array $row): bool => (bool) $row
           el.textContent = '— لم يظهر beforeinstallprompt بعد (استخدم التثبيت اليدوي من قائمة المتصفح)';
         }
       }, 3000);
-
-      if (window.isSecureContext) {
-        navigator.serviceWorker.register('/sw.js?v=17', { scope: '/', updateViaCache: 'none' }).catch(() => {});
-      }
     })();
   </script>
 </body>

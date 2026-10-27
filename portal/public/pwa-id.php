@@ -18,6 +18,7 @@ $origin = portal_request_origin();
 <meta name="robots" content="noindex, nofollow">
 <meta name="portal-build" content="<?= h(\Portal\Support\PwaBuild::id()) ?>">
 <link rel="manifest" href="/manifest.php">
+<?= portal_defer_script('/assets/pwa-update.js') ?>
 <title>هوية التطبيق</title>
 <style>
 body{font-family:system-ui,sans-serif;margin:16px;line-height:1.7;background:#f6f6f9;color:#222}

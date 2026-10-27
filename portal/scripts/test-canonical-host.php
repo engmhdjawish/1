@@ -220,10 +220,21 @@ $assert(
     && str_contains($pwa, 'portal_pwa_host')
 );
 $assert(
-    'pwa.js prompts in-app update when a new service worker waits',
-    str_contains($pwa, 'showUpdateBanner')
-    && str_contains($pwa, 'SKIP_WAITING')
-    && str_contains($pwa, 'يتوفر تحديث جديد')
+    'pwa.js no longer owns service worker registration, reload-on-controllerchange or a tap-to-update banner',
+    !str_contains($pwa, 'showUpdateBanner')
+    && !str_contains($pwa, 'SKIP_WAITING')
+    && !str_contains($pwa, 'controllerchange')
+    && !str_contains($pwa, 'serviceWorker')
+    && !str_contains($pwa, 'يتوفر تحديث جديد')
+);
+$pwaUpdate = (string) file_get_contents(dirname(__DIR__) . '/public/assets/pwa-update.js');
+$assert(
+    'pwa-update.js is the single registration point: /sw.js?b=<build>, updateViaCache none, zero-touch reload',
+    str_contains($pwaUpdate, "'/sw.js?b='")
+    && str_contains($pwaUpdate, "updateViaCache: 'none'")
+    && str_contains($pwaUpdate, 'PORTAL_SW_ACTIVATED')
+    && str_contains($pwaUpdate, '/api/app-version.php')
+    && !str_contains($pwaUpdate, 'يتوفر تحديث جديد')
 );
 $assert(
     'pwa.js has no reinstall/migrate-to-www flow (would leave WebAPK scope)',
