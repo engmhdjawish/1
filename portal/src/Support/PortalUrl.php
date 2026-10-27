@@ -28,6 +28,11 @@ final class PortalUrl
         if (str_starts_with($path, '//') || str_contains($path, '://')) {
             return null;
         }
+        // Browsers read a backslash as a slash and drop tabs/newlines inside a URL, so '/\evil.com' or
+        // "/\t/evil.com" would turn this same-origin path into a redirect off the site (and out of the installed app).
+        if (str_contains($path, '\\') || preg_match('/[\x00-\x1F\x7F]/', $path) === 1) {
+            return null;
+        }
         if (preg_match('#^/(?:login|staff-login|customer-login)\.php(?:\?|$)#', $path) === 1) {
             return null;
         }
