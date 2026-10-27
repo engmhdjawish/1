@@ -55,9 +55,11 @@
     }
   };
 
-  // Mobile browsers ignore getCurrentPosition during page load and do not
-  // show the permission prompt. Ask from the first tap, or immediately when
-  // permission is already granted / the device is a desktop pointer.
+  const GPS_LATER_KEY = 'jawish_gps_later';
+
+  // Phones do not show the system location prompt for a call made on page load
+  // or on touchend. iOS treats that call as a denial and then ignores the real
+  // click. Ask only from the Allow button, or immediately when already granted.
   const requestGps = () => new Promise((resolve) => {
     if (!window.isSecureContext || !navigator.geolocation) {
       resolve(null);
@@ -65,9 +67,13 @@
     }
 
     let settled = false;
+    let asked = false;
+    let bar = null;
     const finish = (coords) => {
       if (settled) return;
       settled = true;
+      bar?.remove();
+      bar = null;
       resolve(coords);
     };
 
@@ -88,11 +94,21 @@
         },
         (error) => {
           const denied = error && error.code === 1;
-          if (denied || !highAccuracy) {
-            finish(null);
+          if (!denied && highAccuracy) {
+            readPosition(false);
             return;
           }
-          readPosition(false);
+          if (denied && bar) {
+            const text = bar.querySelector('[data-gps-text]');
+            const allow = bar.querySelector('[data-gps-allow]');
+            if (text) {
+              text.textContent = 'الموقع مرفوض. فعّله من إعدادات المتصفح لهذا الموقع ثم أعد المحاولة.';
+            }
+            if (allow) allow.textContent = 'إعادة المحاولة';
+            asked = false;
+            return;
+          }
+          finish(null);
         },
         {
           enableHighAccuracy: highAccuracy,
@@ -102,21 +118,8 @@
       );
     };
 
-    let started = false;
-    const gestureEvents = ['pointerup', 'click', 'touchend', 'keydown'];
-    const stopGesture = () => {
-      gestureEvents.forEach((name) => window.removeEventListener(name, onGesture, true));
-    };
-    const start = () => {
-      if (started || settled) return;
-      started = true;
-      stopGesture();
-      readPosition(true);
-    };
-    const onGesture = () => start();
-
-    const needsGesture = window.matchMedia('(pointer: coarse)').matches
-      || /iphone|ipad|ipod|android/i.test(navigator.userAgent || '');
+    const needsTap = window.matchMedia('(pointer: coarse), (any-pointer: coarse)').matches
+      || /iphone|ipad|ipod|android|mobile/i.test(navigator.userAgent || '');
 
     const queryPermission = () => {
       if (!navigator.permissions || typeof navigator.permissions.query !== 'function') {
@@ -127,22 +130,88 @@
         .catch(() => 'unknown');
     };
 
-    if (!needsGesture) {
-      start();
-      return;
-    }
+    const showAskBar = () => {
+      if (bar || settled) return;
+      try {
+        if (sessionStorage.getItem(GPS_LATER_KEY) === '1') {
+          finish(null);
+          return;
+        }
+      } catch {
+        /* ignore */
+      }
 
-    gestureEvents.forEach((name) => window.addEventListener(name, onGesture, true));
+      const styleId = 'gps-ask-style';
+      if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = [
+          '.gps-ask{position:fixed;z-index:60;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:16px;background:#111827;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.28);font:600 13px/1.45 Manrope,system-ui,sans-serif}',
+          'body.has-app-dock .gps-ask,body:has(.hn-dock) .gps-ask,body:has(.lab-dock) .gps-ask{bottom:calc(76px + env(safe-area-inset-bottom))}',
+          '.gps-ask [data-gps-text]{flex:1;margin:0}',
+          '.gps-ask button{border:0;border-radius:999px;padding:8px 14px;font:700 13px/1 inherit;cursor:pointer}',
+          '.gps-ask [data-gps-allow]{background:#D81921;color:#fff}',
+          '.gps-ask [data-gps-later]{background:transparent;color:#e5e7eb}',
+        ].join('');
+        document.head.appendChild(style);
+      }
+
+      bar = document.createElement('div');
+      bar.className = 'gps-ask';
+      bar.setAttribute('role', 'dialog');
+      bar.setAttribute('aria-label', 'السماح بالموقع');
+      const text = document.createElement('p');
+      text.dataset.gpsText = '';
+      text.textContent = 'اسمح بالموقع ليظهر موقعك على الخريطة.';
+      const allow = document.createElement('button');
+      allow.type = 'button';
+      allow.dataset.gpsAllow = '';
+      allow.textContent = 'سماح بالموقع';
+      const later = document.createElement('button');
+      later.type = 'button';
+      later.dataset.gpsLater = '';
+      later.textContent = 'لاحقاً';
+      allow.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (asked || settled) return;
+        asked = true;
+        readPosition(true);
+      });
+      later.addEventListener('click', (event) => {
+        event.preventDefault();
+        try {
+          sessionStorage.setItem(GPS_LATER_KEY, '1');
+        } catch {
+          /* ignore */
+        }
+        finish(null);
+      });
+      bar.append(text, allow, later);
+      document.body.appendChild(bar);
+    };
+
     void queryPermission().then((state) => {
       if (settled) return;
-      if (state === 'denied') {
-        stopGesture();
+      if (state === 'granted' || (state !== 'denied' && !needsTap)) {
+        readPosition(true);
+        return;
+      }
+      if (state === 'denied' && !needsTap) {
         finish(null);
         return;
       }
-      if (state === 'granted') {
-        start();
-      }
+      const mount = () => {
+        showAskBar();
+        if (state !== 'denied' || !bar) return;
+        const text = bar.querySelector('[data-gps-text]');
+        const allow = bar.querySelector('[data-gps-allow]');
+        if (text) {
+          text.textContent = 'الموقع مرفوض. فعّله من إعدادات المتصفح لهذا الموقع ثم أعد المحاولة.';
+        }
+        if (allow) allow.textContent = 'إعادة المحاولة';
+      };
+      if (document.body) mount();
+      else document.addEventListener('DOMContentLoaded', mount, { once: true });
     });
   });
 
