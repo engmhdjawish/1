@@ -78,6 +78,16 @@ generate_secret() {
   fi
 }
 
+# Derive PHP-FPM unix socket from CLI binary (e.g. /usr/bin/php8.5 → php8.5-fpm.sock).
+default_php_fpm_sock() {
+  local bin="${PORTAL_PHP_CLI_BIN:-/usr/bin/php8.5}"
+  if [[ "$bin" =~ php([0-9]+\.[0-9]+)$ ]]; then
+    echo "/run/php/php${BASH_REMATCH[1]}-fpm.sock"
+  else
+    echo "/run/php/php8.5-fpm.sock"
+  fi
+}
+
 render_template() {
   local template="$1"
   local output="$2"
