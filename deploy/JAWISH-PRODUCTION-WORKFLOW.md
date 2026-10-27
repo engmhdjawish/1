@@ -63,6 +63,14 @@ curl -sS https://jawishco.sy/ | grep -E 'needHost|canonical-host' | head
 - العاملون القدامى (`/sw.js?v=17` وما قبله) يُستبدلون تلقائياً عند أول فتح بعد النشر. المدة بين النشر وظهور الرقم الجديد في الصفحات حتى 45 ثانية (مهلة كاش رقم البناء).
 - اختياري: `PORTAL_BUILD_ID=<نص>` في `.env` يفرض رقماً محدداً بدل الـhash.
 
+**النشر (سلسلة واحدة تتوقف عند أول فشل):**
+
+```bash
+cd /opt/jawish && git fetch origin && git checkout cursor/pwa-auto-update-d99f && git pull origin cursor/pwa-auto-update-d99f && PORTAL_DB_SETUP=migrate bash deploy/portal/publish.sh && sudo systemctl reload php8.5-fpm && sudo nginx -t && sudo systemctl reload nginx
+```
+
+لا تلصق هذه الأوامر كأسطر منفصلة: السطر التالي يُنفَّذ حتى لو فشل السابق، فيُنشَر الفرع القديم الموجود على الخادم بدل الجديد. وإن رفض `git checkout` برسالة `Your local changes to the following files would be overwritten` (مثلاً `.gitignore` معدّل على الخادم): اقرأ `git diff -- <الملف>` ثم احفظه جانباً بـ `git stash push -m server-local -- <الملف>` وأعد السلسلة.
+
 **تحقق بعد النشر (قراءة فقط):**
 
 ```bash
