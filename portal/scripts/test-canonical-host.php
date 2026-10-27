@@ -236,9 +236,16 @@ $assert(
 
 $sw = (string) file_get_contents(dirname(__DIR__) . '/public/sw.js');
 $assert(
-    'service worker waits for user SKIP_WAITING on updates',
-    str_contains($sw, "data.type !== 'SKIP_WAITING'")
-    && str_contains($sw, '!self.registration.active')
+    'service worker skips waiting on every install (zero-touch updates, no tap)',
+    preg_match("/addEventListener\\('install'.*?self\\.skipWaiting\\(\\)/s", $sw) === 1
+    && !str_contains($sw, '!self.registration.active')
+    && str_contains($sw, "data.type === 'SKIP_WAITING'")
+);
+$assert(
+    'service worker announces activation and answers GET_BUILD',
+    str_contains($sw, 'PORTAL_SW_ACTIVATED')
+    && str_contains($sw, "data.type === 'GET_BUILD'")
+    && str_contains($sw, 'includeUncontrolled: true')
 );
 
 $layout = (string) file_get_contents(dirname(__DIR__) . '/views/layout.php');

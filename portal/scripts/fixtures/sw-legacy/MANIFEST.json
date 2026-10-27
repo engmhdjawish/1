@@ -1,0 +1,53 @@
+{
+  "description": "Real historical portal/public/sw.js generations (git show <commit>:portal/public/sw.js), used by test-pwa-auto-update.mjs as the previously active worker. Do not edit.",
+  "fixtures": [
+    {
+      "file": "v01-unconditional-skipwaiting.js",
+      "commit": "2e51914",
+      "cacheVersion": "jawish-v1",
+      "sha256": "094c02b5cb2450e8619b77def0bf86482456f797b6b471cbe3788a358973c259",
+      "bytes": 2348,
+      "notes": "Early generation: precache with addAll, unconditional skipWaiting after precache, cache-first for all static assets (unversioned URLs stay cached until the cache name changes)."
+    },
+    {
+      "file": "v05-precache-cache-first.js",
+      "commit": "37e4d0a",
+      "cacheVersion": "jawish-v5",
+      "sha256": "0b038421c566dffa7d9518ce68a92ca87f0e4cbd69cbbfd9d898fcc2b70811a2",
+      "bytes": 2540,
+      "notes": "Early generation: best-effort precache of CSS/JS, unconditional skipWaiting, cache-first static assets."
+    },
+    {
+      "file": "v14-push-notifications.js",
+      "commit": "d0fefb8",
+      "cacheVersion": "jawish-v14",
+      "sha256": "461a0b5bf2ddb7c7125ea3ad54a69ea00fe563515bf03710208fef8511022530",
+      "bytes": 5633,
+      "notes": "Push notifications era: unconditional skipWaiting after precache."
+    },
+    {
+      "file": "v16-pre-226-unconditional-skipwaiting.js",
+      "commit": "0dc2e8c",
+      "cacheVersion": "jawish-v16",
+      "sha256": "0714df1fa7c1dd353e263e4840814567a69d264f79baa5a0954f660bf0cfdf8b",
+      "bytes": 8315,
+      "notes": "Last generation before PR #226 (identical to 1cf0d9d^1:portal/public/sw.js): unconditional skipWaiting, versioned cache-first / unversioned stale-while-revalidate."
+    },
+    {
+      "file": "v22-226-gated-waiting.js",
+      "commit": "975628f",
+      "cacheVersion": "jawish-v22",
+      "sha256": "463cc707eddfa111d3e5720f712466ef5ae132ffb1d524b32cacb2e208eb39ef",
+      "bytes": 8705,
+      "notes": "First PR #226 generation: skipWaiting only on first install; updates wait for a SKIP_WAITING message from the in-app banner."
+    },
+    {
+      "file": "v24-226-gated-final.js",
+      "commit": "b35f81d",
+      "cacheVersion": "jawish-v24",
+      "sha256": "13ab9cc16b8302e853b86a4cfd5f816d458a6094f3a05ef0ce7e1c716c0e0cf4",
+      "bytes": 9112,
+      "notes": "Final PR #226 generation (identical to main before this change): gated skipWaiting + SKIP_WAITING message."
+    }
+  ]
+}
