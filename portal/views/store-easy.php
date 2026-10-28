@@ -7,6 +7,8 @@ use Portal\Services\StoreCatalogService;
 use Portal\Services\StorePolicyService;
 use Portal\Support\StorePricePreference;
 
+$canStaffDownloadMaterialZip = (bool) ($canStaffDownloadMaterialZip ?? false);
+
 /** @var array<string, mixed> $catalog */
 /** @var array<string, mixed> $displayOptions */
 /** @var bool $isCustomer */
@@ -501,6 +503,18 @@ $baseDisplayOptions = $displayOptions;
       </div>
     <?php endif; ?>
     <div class="se-results-actions">
+      <?php if ($canStaffDownloadMaterialZip): ?>
+        <button
+          type="button"
+          class="se-share-view se-staff-zip-open"
+          data-store-staff-zip-open
+          aria-haspopup="dialog"
+          aria-label="تحميل صور المواد حسب الفلاتر"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">folder_zip</span>
+          <span>تحميل صور</span>
+        </button>
+      <?php endif; ?>
       <div class="filter-view-share">
         <button
           type="button"
@@ -616,5 +630,8 @@ $baseDisplayOptions = $displayOptions;
 <?php endif; ?>
 <?php $GLOBALS['storeProductPreviewScriptLoaded'] = true; ?>
 <script src="<?= h(portal_asset_url('/assets/store-product-preview.js')) ?>" defer></script>
+<?php if ($canStaffDownloadMaterialZip): ?>
+  <?php require __DIR__ . '/partials/store-staff-zip-dialog.php'; ?>
+<?php endif; ?>
 <?= portal_defer_script('/assets/store-filter-view.js') ?>
 <?= portal_defer_script('/assets/store-easy.js') ?>
