@@ -171,6 +171,9 @@
       syncSearchCarry(working);
       prepareLive(next);
       bindCards(next);
+      if (typeof window.portalStoreStaffZipDownloadInit === 'function') {
+        window.portalStoreStaffZipDownloadInit();
+      }
 
       if (keepParam) {
         const pill = next.querySelector(`[data-se-pill][data-se-param="${keepParam}"]`);
