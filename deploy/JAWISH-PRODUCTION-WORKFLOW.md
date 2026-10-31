@@ -155,6 +155,7 @@ sudo tail -n 30 /var/log/nginx/error.log
 | `curl` سريع لكن الزوار لا يرون الموقع | DNS، firewall، SSL، أو شبكة خارجية |
 | CLI diagnostic `critical` على API | سيرفر الأمين `82.137.204.70:9090` — ليس إصلاح Portal وحده |
 | **HTTP 500** (ليس 502) | خطأ PHP — `sudo bash deploy/scripts/diagnose-http-500.sh` ثم **`grep 'PHP Fatal' /var/log/php8.5-fpm.log \| tail -5`** |
+| **500** + **`No space left on device`** (PostgreSQL/PHP) | **القرص ممتلئ** — `bash deploy/scripts/diagnose-disk-full.sh`؛ نظّف `/var/log`، `storage/zip-jobs`، صور قديمة؛ `journalctl --vacuum-size=200M`؛ أعد تشغيل `postgresql` و`php8.5-fpm` |
 
 (اختياري) cron كل 5 دقائق يحفظ آخر JSON للمراجعة بعد انقطاع:
 
