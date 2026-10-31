@@ -154,6 +154,7 @@ sudo tail -n 30 /var/log/nginx/error.log
 | `curl` localhost بطيء/timeout | PHP-FPM مشبع أو طلبات عالقة — `systemctl restart php8.5-fpm` |
 | `curl` سريع لكن الزوار لا يرون الموقع | DNS، firewall، SSL، أو شبكة خارجية |
 | CLI diagnostic `critical` على API | سيرفر الأمين `82.137.204.70:9090` — ليس إصلاح Portal وحده |
+| **HTTP 500** (ليس 502) | خطأ PHP — `sudo bash deploy/scripts/diagnose-http-500.sh` ثم **`grep 'PHP Fatal' /var/log/php8.5-fpm.log \| tail -5`** |
 
 (اختياري) cron كل 5 دقائق يحفظ آخر JSON للمراجعة بعد انقطاع:
 
