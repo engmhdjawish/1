@@ -48,6 +48,8 @@ popd >/dev/null
 
 templates="$DEPLOY_ROOT/templates/portal"
 mkdir -p "$DEPLOY_ROOT/output"
+PHP_FPM_SOCK="${PHP_FPM_SOCK:-$(default_php_fpm_sock)}"
+export PHP_FPM_SOCK
 render_template "$templates/nginx-site.conf.template" \
   "$DEPLOY_ROOT/output/nginx-jawish-portal.conf"
 cp "$templates/iis-web.config.template" \
