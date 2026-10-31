@@ -985,3 +985,206 @@ html.se-sheet-open .se-bar {
 .se-search .lab-recent-q {
   margin: 0;
 }
+
+/* Staff ZIP download (same panel as dashboard material images) */
+body.se-zip-dialog-open {
+  overflow: hidden;
+}
+
+.se-zip-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+}
+
+.se-zip-dialog[hidden] {
+  display: none !important;
+}
+
+.se-zip-dialog__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.se-zip-dialog__panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 42rem);
+  max-height: min(92vh, 52rem);
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 1.1rem 1.1rem 0 0;
+  box-shadow: 0 -8px 40px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+
+@media (min-width: 640px) {
+  .se-zip-dialog {
+    align-items: center;
+    padding: 1rem;
+  }
+
+  .se-zip-dialog__panel {
+    border-radius: 1rem;
+    max-height: min(88vh, 52rem);
+  }
+}
+
+.se-zip-dialog__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.75rem;
+  border-bottom: 1px solid var(--se-line);
+}
+
+.se-zip-dialog__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--se-ink);
+}
+
+.se-zip-dialog__subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  color: var(--se-muted);
+  line-height: 1.45;
+}
+
+.se-zip-dialog__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: var(--se-ink);
+  cursor: pointer;
+}
+
+.se-zip-dialog__body {
+  overflow: auto;
+  padding: 0.75rem 0.75rem 1rem;
+}
+
+.se-zip-dialog .dash-mi-download-accordions {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.se-zip-dialog .dash-mi-download-accordion {
+  border: none;
+  border-radius: 0;
+  background: #fff;
+}
+
+.se-zip-dialog .dash-mi-download-accordion__summary {
+  display: none;
+}
+
+.se-zip-dialog .dash-mi-download-accordion__body {
+  display: block !important;
+}
+
+.se-zip-dialog .dash-mi-zip-download-btn {
+  width: 100%;
+}
+
+.se-zip-dialog .dash-mi-zip-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.se-zip-dialog .dash-mi-zip-form__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.se-zip-dialog .dash-mi-zip-filters-shell .store-inline-field label {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  color: #64748b;
+}
+
+.se-zip-dialog .dash-mi-zip-filters-shell .store-inline-field input,
+.se-zip-dialog .dash-mi-zip-filters-shell .store-inline-field select {
+  width: 100%;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--se-line);
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  background: #fff;
+}
+
+.se-zip-dialog .dash-mi-zip-form__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem 1rem;
+  border-top: 1px solid var(--se-line);
+  background: #f8fafc;
+}
+
+.se-zip-dialog .dash-mi-zip-download-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.75rem;
+  padding: 0 1.25rem;
+  border: none;
+  border-radius: 0.75rem;
+  background: var(--se-red);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.se-zip-dialog .dash-mi-zip-download-btn.is-loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.se-zip-dialog .dash-mi-zip-jobs-panel__download {
+  border: none;
+  border-radius: 0.5rem;
+  background: #047857;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+
+.se-zip-dialog .dash-mi-zip-status--preparing::before {
+  content: '';
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: se-zip-spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes se-zip-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
