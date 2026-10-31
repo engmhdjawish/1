@@ -77,6 +77,57 @@ final class ResponseCache
         }
 
         file_put_contents(self::pathForKey($key), $payload, LOCK_EX);
+        if (random_int(1, 100) === 1) {
+            self::pruneExpired(400);
+        }
+    }
+
+    /** Remove expired *.json cache entries (unread keys otherwise never delete). */
+    public static function pruneExpired(int $maxDeletes = 2000): int
+    {
+        $maxDeletes = max(1, $maxDeletes);
+        $dir = self::cacheDir();
+        if (!is_dir($dir)) {
+            return 0;
+        }
+
+        $now = time();
+        $removed = 0;
+        $handle = @opendir($dir);
+        if ($handle === false) {
+            return 0;
+        }
+
+        while (($entry = readdir($handle)) !== false) {
+            if ($entry === '.' || $entry === '..' || $entry === 'pwa-build.json') {
+                continue;
+            }
+            if (!str_ends_with($entry, '.json')) {
+                continue;
+            }
+            $path = $dir . '/' . $entry;
+            if (!is_file($path)) {
+                continue;
+            }
+            $raw = @file_get_contents($path);
+            if ($raw === false || $raw === '') {
+                @unlink($path);
+                ++$removed;
+            } else {
+                $payload = json_decode($raw, true);
+                $expiresAt = is_array($payload) ? (int) ($payload['expires_at'] ?? 0) : 0;
+                if ($expiresAt > 0 && $expiresAt < $now) {
+                    @unlink($path);
+                    ++$removed;
+                }
+            }
+            if ($removed >= $maxDeletes) {
+                break;
+            }
+        }
+        closedir($handle);
+
+        return $removed;
     }
 
     /** @return mixed */
