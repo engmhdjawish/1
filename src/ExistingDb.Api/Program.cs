@@ -5,6 +5,7 @@ using ExistingDb.Api.Data;
 using ExistingDb.Api.Images;
 using ExistingDb.Api.Middleware;
 using ExistingDb.Api.Options;
+using ExistingDb.Api.Services.Bills;
 using ExistingDb.Api.Services.Materials;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -97,6 +98,9 @@ builder.Services.AddScoped<IImageSettingsService, ImageSettingsService>();
 builder.Services.AddScoped<IServiceSettingsService, ServiceSettingsService>();
 builder.Services.AddScoped<IImageStorageService, ImageStorageService>();
 builder.Services.AddScoped<MaterialQueryBuilder>();
+builder.Services.AddScoped<IReservationBillSettingsService, ReservationBillSettingsService>();
+builder.Services.AddScoped<IReservationBillPatternReader, ReservationBillPatternReader>();
+builder.Services.AddScoped<IReservationBillService, ReservationBillService>();
 builder.Services.AddScoped<MaterialResultFiltersService>();
 builder.Services.AddHostedService<ApiManagementDbInitializer>();
 

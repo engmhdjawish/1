@@ -77,9 +77,9 @@ final class ApiClient
         return true;
     }
 
-    public static function delete(string $path): array
+    public static function delete(string $path, int $timeoutSeconds = 60): array
     {
-        return self::request('DELETE', $path);
+        return self::request('DELETE', $path, null, [], $timeoutSeconds);
     }
 
     public static function get(string $path, array $query = [], int $timeoutSeconds = 60): array
@@ -188,9 +188,9 @@ final class ApiClient
         return self::request('POST', $path, json_encode($body, JSON_UNESCAPED_UNICODE), [], $timeoutSeconds);
     }
 
-    public static function putJson(string $path, array $body = []): array
+    public static function putJson(string $path, array $body = [], int $timeoutSeconds = 60): array
     {
-        return self::request('PUT', $path, json_encode($body, JSON_UNESCAPED_UNICODE));
+        return self::request('PUT', $path, json_encode($body, JSON_UNESCAPED_UNICODE), [], $timeoutSeconds);
     }
 
     /**

@@ -137,6 +137,9 @@ $tabs = [];
 if ($canManageCompany) {
     $tabs['company'] = 'الشركة ومن نحن';
 }
+if ($canManageCompany) {
+    $tabs['reservations'] = 'فاتورة الحجز';
+}
 if ($canManageIntegration) {
     $tabs['integration'] = 'الاتصال';
 }
@@ -174,6 +177,137 @@ $tabUrl = static function (string $key) use ($tab): string {
     </a>
   <?php endforeach; ?>
 </nav>
+
+<?php if ($tab === 'reservations' && $canManageCompany): ?>
+<?php
+$reservationTypes = is_array($reservationTypes ?? null) ? $reservationTypes : [];
+$reservationSettings = is_array($reservationSettings ?? null) ? $reservationSettings : [];
+$reservationPattern = is_array($reservationPattern ?? null) ? $reservationPattern : null;
+$selectedReservationType = trim((string) ($_GET['type'] ?? ''));
+if ($selectedReservationType === '') {
+    $selectedReservationType = trim((string) ($reservationSettings['billTypeGuid'] ?? $reservationSettings['BillTypeGuid'] ?? ''));
+}
+$ownerNameSource = trim((string) ($reservationSettings['ownerNameSource'] ?? $reservationSettings['OwnerNameSource'] ?? 'orderCustomerName'));
+$reservationSyncMode = trim((string) ($reservationSettings['syncMode'] ?? $reservationSettings['SyncMode'] ?? 'manual'));
+if (!in_array($reservationSyncMode, ['automatic', 'manual'], true)) {
+    $reservationSyncMode = 'manual';
+}
+$lockedProperties = [];
+$changeableProperties = [];
+$unresolvedPattern = [];
+$syncAllowed = false;
+$syncBlockedReason = '';
+if (is_array($reservationPattern)) {
+    $lockedProperties = is_array($reservationPattern['locked'] ?? $reservationPattern['Locked'] ?? null)
+        ? ($reservationPattern['locked'] ?? $reservationPattern['Locked'])
+        : [];
+    $changeableProperties = is_array($reservationPattern['changeable'] ?? $reservationPattern['Changeable'] ?? null)
+        ? ($reservationPattern['changeable'] ?? $reservationPattern['Changeable'])
+        : [];
+    $unresolvedPattern = is_array($reservationPattern['unresolved'] ?? $reservationPattern['Unresolved'] ?? null)
+        ? ($reservationPattern['unresolved'] ?? $reservationPattern['Unresolved'])
+        : [];
+    $syncAllowed = (bool) ($reservationPattern['syncAllowed'] ?? $reservationPattern['SyncAllowed'] ?? false);
+    $syncBlockedReason = trim((string) ($reservationPattern['syncBlockedReason'] ?? $reservationPattern['SyncBlockedReason'] ?? ''));
+}
+?>
+<form method="post" id="settings-reservation-form" class="space-y-3">
+  <input type="hidden" name="action" value="save_reservation_bill">
+  <div class="dashboard-sticky-toolbar sticky z-20 -mx-1 px-1 py-2 bg-surface-low/95 backdrop-blur border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-2">
+    <h2 class="font-bold text-base">نمط فاتورة الحجز</h2>
+    <button type="submit" class="h-9 px-5 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110">حفظ</button>
+  </div>
+
+  <?php if (!empty($reservationError)): ?>
+    <p class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"><?= h((string) $reservationError) ?></p>
+  <?php endif; ?>
+
+  <article class="bg-white border border-border-subtle rounded-xl p-3 space-y-3">
+    <label class="text-xs block">
+      <span class="text-text-muted block mb-0.5">نوع الفاتورة في الأمين</span>
+      <select name="bill_type_guid" required class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm" onchange="if (this.value) location.href='/dashboard/settings.php?tab=reservations&amp;type=' + encodeURIComponent(this.value);">
+        <option value="">اختر نمط الفاتورة</option>
+        <?php foreach ($reservationTypes as $type): ?>
+          <?php if (!is_array($type)) { continue; } ?>
+          <?php $typeGuid = trim((string) ($type['billTypeGuid'] ?? $type['BillTypeGuid'] ?? '')); ?>
+          <?php $typeName = trim((string) ($type['name'] ?? $type['Name'] ?? '')) ?: $typeGuid; ?>
+          <option value="<?= h($typeGuid) ?>" <?= $typeGuid === $selectedReservationType ? 'selected' : '' ?>><?= h($typeName) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <p class="text-xs text-text-muted">المستودع، عملة الفاتورة، مصدر السعر، وقفل القيود تُقرأ من أعمدة النمط في الأمين ولا تُحفظ من هنا.</p>
+    <label class="text-xs block max-w-xl">
+      <span class="text-text-muted block mb-0.5">طريقة مزامنة الطلبات مع فاتورة الحجز</span>
+      <select name="sync_mode" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
+        <option value="manual" <?= $reservationSyncMode === 'manual' ? 'selected' : '' ?>>يدوي — لا يُرسل الطلب تلقائياً، والموظف يزامن من صفحة الطلبات</option>
+        <option value="automatic" <?= $reservationSyncMode === 'automatic' ? 'selected' : '' ?>>تلقائي — بعد إنشاء الطلب أو تعديل الكمية أو السعر أو الإلغاء</option>
+      </select>
+    </label>
+    <p class="text-xs text-text-muted">الوضع الافتراضي يدوي حتى لا تُنشأ فواتير حجز في الأمين قبل أن يختار المسؤول المزامنة التلقائية. كمية المتجر تبقى محجوزة إلى أن تنجح المزامنة، ثم تنتقل الكمية إلى فاتورة الأمين دون خصم مزدوج.</p>
+  </article>
+
+  <?php if ($reservationPattern): ?>
+    <article class="bg-white border border-border-subtle rounded-xl p-3 space-y-2">
+      <h3 class="font-bold text-sm">خصائص مقفلة من الأمين</h3>
+      <?php if (!$syncAllowed && $syncBlockedReason !== ''): ?>
+        <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"><?= h($syncBlockedReason) ?></p>
+      <?php endif; ?>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <?php foreach ($lockedProperties as $property): ?>
+          <?php if (!is_array($property)) { continue; } ?>
+          <?php $label = trim((string) ($property['label'] ?? $property['Label'] ?? '')); ?>
+          <?php $display = trim((string) ($property['display'] ?? $property['Display'] ?? '')); ?>
+          <?php $column = trim((string) ($property['sourceColumn'] ?? $property['SourceColumn'] ?? '')); ?>
+          <label class="text-xs">
+            <span class="text-text-muted block mb-0.5"><?= h($label) ?><?= $column !== '' ? ' (' . h($column) . ')' : '' ?></span>
+            <input value="<?= h($display !== '' ? $display : 'غير موجود') ?>" disabled class="h-9 w-full rounded-lg border border-border-subtle bg-slate-100 px-3 text-sm text-slate-600">
+          </label>
+        <?php endforeach; ?>
+      </div>
+      <?php if ($unresolvedPattern !== []): ?>
+        <p class="text-xs text-text-muted">أعمدة لم تُعثر عليها في bt000 بعد: <?= h(implode('، ', array_map('strval', $unresolvedPattern))) ?>.</p>
+      <?php endif; ?>
+    </article>
+
+    <article class="bg-white border border-border-subtle rounded-xl p-3 space-y-2">
+      <h3 class="font-bold text-sm">ما يمكن تغييره</h3>
+      <?php
+      $ownerChoice = null;
+      foreach ($changeableProperties as $choice) {
+          if (!is_array($choice)) {
+              continue;
+          }
+          $choiceKey = (string) ($choice['key'] ?? $choice['Key'] ?? '');
+          if ($choiceKey === 'ownerNameSource') {
+              $ownerChoice = $choice;
+              break;
+          }
+      }
+      $ownerOptions = [['value' => 'orderCustomerName', 'label' => 'اسم عميل الطلب في ملاحظات الفاتورة']];
+      if (is_array($ownerChoice)) {
+          $choiceOptions = $ownerChoice['options'] ?? $ownerChoice['Options'] ?? null;
+          if (is_array($choiceOptions) && $choiceOptions !== []) {
+              $ownerOptions = $choiceOptions;
+          }
+      }
+      ?>
+      <label class="text-xs block max-w-xl">
+        <span class="text-text-muted block mb-0.5">مصدر اسم صاحب الحجز</span>
+        <select name="owner_name_source" class="h-9 w-full rounded-lg border border-border-subtle px-3 text-sm">
+          <?php foreach ($ownerOptions as $option): ?>
+            <?php if (!is_array($option)) { continue; } ?>
+            <?php $optionValue = trim((string) ($option['value'] ?? $option['Value'] ?? '')); ?>
+            <?php $optionLabel = trim((string) ($option['label'] ?? $option['Label'] ?? $optionValue)); ?>
+            <option value="<?= h($optionValue) ?>" <?= $optionValue === $ownerNameSource ? 'selected' : '' ?>><?= h($optionLabel) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+    </article>
+  <?php else: ?>
+    <input type="hidden" name="owner_name_source" value="<?= h($ownerNameSource) ?>">
+  <?php endif; ?>
+</form>
+<?php endif; ?>
 
 <?php if ($tab === 'company' && $canManageCompany): ?>
 <form method="post" id="settings-company-form" class="space-y-3">

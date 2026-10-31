@@ -34,7 +34,10 @@ if (!$canManageCompany && !$canManageGuestPolicy && !$canManageIntegration && !$
 }
 
 $tab = trim((string) ($_GET['tab'] ?? 'company'));
-if (!in_array($tab, ['company', 'integration', 'policies'], true)) {
+if (!in_array($tab, ['company', 'integration', 'policies', 'reservations'], true)) {
+    $tab = 'company';
+}
+if ($tab === 'reservations' && !$canManageCompany) {
     $tab = 'company';
 }
 if ($tab === 'integration' && !$canManageIntegration) {
@@ -236,6 +239,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $tab = 'integration';
         }
+    } elseif ($action === 'save_reservation_bill') {
+        if (!$canManageCompany) {
+            $flash = 'لا تملك صلاحية تعديل نمط فاتورة الحجز.';
+            $flashType = 'error';
+        } else {
+            $billTypeGuid = trim((string) ($_POST['bill_type_guid'] ?? ''));
+            $ownerNameSource = trim((string) ($_POST['owner_name_source'] ?? ''));
+            $syncMode = trim((string) ($_POST['sync_mode'] ?? ''));
+            if ($billTypeGuid === '' || $ownerNameSource === '') {
+                $flash = 'اختر نمط الفاتورة ومصدر اسم صاحب الحجز.';
+                $flashType = 'error';
+                $tab = 'reservations';
+            } elseif (!in_array($syncMode, ['automatic', 'manual'], true)) {
+                $flash = 'طريقة المزامنة يجب أن تكون تلقائية أو يدوية.';
+                $flashType = 'error';
+                $tab = 'reservations';
+            } else {
+                try {
+                    $saved = ApiClient::putJson('/api/bills/reservation-settings', [
+                        'billTypeGuid' => $billTypeGuid,
+                        'ownerNameSource' => $ownerNameSource,
+                        'syncMode' => $syncMode,
+                    ]);
+                    if (!($saved['ok'] ?? false)) {
+                        $message = trim((string) ($saved['error'] ?? ''));
+                        $flash = $message !== '' ? $message : 'تعذر حفظ نمط فاتورة الحجز.';
+                        $flashType = 'error';
+                        $tab = 'reservations';
+                    } else {
+                        header('Location: /dashboard/settings.php?tab=reservations&saved=1');
+                        exit;
+                    }
+                } catch (\Throwable $exception) {
+                    $flash = 'تعذر حفظ نمط فاتورة الحجز: ' . $exception->getMessage();
+                    $flashType = 'error';
+                    $tab = 'reservations';
+                }
+            }
+        }
     } elseif ($action === 'save_guest_policy') {
         if (!$canManageGuestPolicy) {
             $flash = 'لا تملك صلاحية تعديل سياسة المتجر العام.';
@@ -413,6 +455,41 @@ if ($policyShowForm) {
 $policyUsage = [];
 foreach ($policies as $policy) {
     $policyUsage[(string) ($policy['id'] ?? '')] = AccessPolicyService::usageSummary((string) ($policy['id'] ?? ''));
+}
+
+$reservationTypes = [];
+$reservationSettings = ['billTypeGuid' => '', 'ownerNameSource' => 'orderCustomerName', 'syncMode' => 'manual'];
+$reservationPattern = null;
+$reservationError = null;
+if ($tab === 'reservations' && $canManageCompany) {
+    try {
+        $typesResponse = ApiClient::get('/api/bills/reservation-patterns');
+        if ($typesResponse['ok'] ?? false) {
+            $reservationTypes = is_array($typesResponse['data'] ?? null) ? $typesResponse['data'] : [];
+        } else {
+            $reservationError = trim((string) ($typesResponse['error'] ?? '')) ?: 'تعذر جلب أنماط الفواتير من API.';
+        }
+
+        $settingsResponse = ApiClient::get('/api/bills/reservation-settings');
+        if ($settingsResponse['ok'] ?? false && is_array($settingsResponse['data'] ?? null)) {
+            $reservationSettings = $settingsResponse['data'];
+        }
+
+        $previewType = trim((string) ($_GET['type'] ?? ''));
+        if ($previewType === '') {
+            $previewType = trim((string) ($reservationSettings['billTypeGuid'] ?? $reservationSettings['BillTypeGuid'] ?? ''));
+        }
+        if ($previewType !== '') {
+            $patternResponse = ApiClient::get('/api/bills/reservation-patterns/' . rawurlencode($previewType));
+            if ($patternResponse['ok'] ?? false && is_array($patternResponse['data'] ?? null)) {
+                $reservationPattern = $patternResponse['data'];
+            } elseif ($reservationError === null) {
+                $reservationError = trim((string) ($patternResponse['error'] ?? '')) ?: 'تعذر قراءة خصائص نمط الفاتورة.';
+            }
+        }
+    } catch (\Throwable $exception) {
+        $reservationError = $exception->getMessage();
+    }
 }
 
 $currentRoute = '/dashboard/settings.php?tab=' . rawurlencode($tab);

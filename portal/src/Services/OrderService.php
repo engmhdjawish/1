@@ -245,6 +245,7 @@ final class OrderService
                 'guest_name_ar',
                 'guest_phone',
                 'status',
+                'amine_sync_status',
                 'total_sp',
                 'total_usd',
                 'notes_ar',
@@ -257,6 +258,7 @@ final class OrderService
                 ':guest_name_ar',
                 ':guest_phone',
                 ':status',
+                ':amine_sync_status',
                 ':total_sp',
                 ':total_usd',
                 ':notes_ar',
@@ -279,6 +281,7 @@ final class OrderService
                 'guest_name_ar' => $guestNameAr,
                 'guest_phone' => $guestPhone,
                 'status' => 'pending',
+                'amine_sync_status' => 'pending',
                 'total_sp' => $totalSp,
                 'total_usd' => $totalUsd,
                 'notes_ar' => $notesAr !== '' ? $notesAr : null,
@@ -378,6 +381,8 @@ final class OrderService
                 $customerPayload
             );
         }
+
+        self::dispatchReservationSync($orderId, false);
 
         return [
             'ok' => true,
@@ -623,17 +628,32 @@ final class OrderService
             return true;
         }
 
-        $stmt = Database::pdo()->prepare(
-            'UPDATE orders
-             SET status = :status, updated_at = NOW()
-             WHERE id = :id'
-        );
-        $stmt->execute([
-            'id' => $orderId,
-            'status' => $nextStatus,
-        ]);
+        $pdo = Database::pdo();
+        try {
+            $pdo->beginTransaction();
+            $stmt = $pdo->prepare(
+                'UPDATE orders
+                 SET status = :status, updated_at = NOW()
+                 WHERE id = :id'
+            );
+            $stmt->execute([
+                'id' => $orderId,
+                'status' => $nextStatus,
+            ]);
+            $updated = $stmt->rowCount() > 0;
+            if ($updated && $nextStatus === 'cancelled') {
+                AmineReservationSyncService::markLocalChange($pdo, $orderId);
+            }
+            $pdo->commit();
+        } catch (\Throwable) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
 
-        if ($stmt->rowCount() > 0) {
+            return false;
+        }
+
+        if ($updated) {
             try {
                 if ($previousStatus === 'pending' && $nextStatus !== 'pending') {
                     NotificationService::resolveStaffOrderAlert($orderId);
@@ -649,9 +669,12 @@ final class OrderService
             } catch (\Throwable) {
                 // Notification failure must not block order updates.
             }
+            if ($nextStatus === 'cancelled') {
+                self::dispatchReservationSync($orderId, false);
+            }
         }
 
-        return $stmt->rowCount() > 0;
+        return $updated;
     }
 
     private static function staffOrderStatusLabel(string $status): string
@@ -857,6 +880,10 @@ final class OrderService
             return null;
         }
 
+        $billNumberSql = AmineReservationSyncService::ensureBillNumberColumn()
+            ? 'o.amine_bill_number,'
+            : 'NULL::integer AS amine_bill_number,';
+
         $stmt = Database::pdo()->prepare(
             'SELECT
                 o.id::text AS id,
@@ -864,6 +891,8 @@ final class OrderService
                 o.web_customer_id::text AS web_customer_id,
                 o.status::text AS status,
                 o.amine_sync_status::text AS amine_sync_status,
+                o.amine_bill_guid::text AS amine_bill_guid,
+                ' . $billNumberSql . '
                 o.total_sp,
                 o.total_usd,
                 o.notes_ar,
@@ -1023,14 +1052,6 @@ final class OrderService
             return 'لا يمكن الإلغاء بعد أن راجع فريقنا الطلب أو غيّرت حالته.';
         }
 
-        $syncStatus = (string) ($order['amine_sync_status'] ?? 'none');
-        if ($syncStatus !== 'none') {
-            return 'لا يمكن الإلغاء لأن الطلب قيد المزامنة مع النظام المحاسبي.';
-        }
-        if (trim((string) ($order['amine_synced_at'] ?? '')) !== '') {
-            return 'لا يمكن الإلغاء بعد مزامنة الطلب.';
-        }
-
         if (self::hasStaffItemChanges((string) ($order['id'] ?? ''))) {
             return 'لا يمكن الإلغاء بعد أن عدّل فريقنا الطلب.';
         }
@@ -1095,6 +1116,7 @@ final class OrderService
             $pdo->prepare(
                 'UPDATE orders SET status = \'cancelled\', updated_at = NOW() WHERE id = :id'
             )->execute(['id' => $orderId]);
+            AmineReservationSyncService::markLocalChange($pdo, $orderId);
             $pdo->commit();
         } catch (\Throwable) {
             if ($pdo->inTransaction()) {
@@ -1114,6 +1136,8 @@ final class OrderService
         } catch (\Throwable) {
             // Notification failure must not block customer cancellation.
         }
+
+        self::dispatchReservationSync($orderId, false);
 
         return ['ok' => true, 'message' => 'تم إلغاء الطلب بالكامل.'];
     }
@@ -1184,6 +1208,7 @@ final class OrderService
                 null
             );
             self::recalculateOrderTotals($pdo, $orderId);
+            AmineReservationSyncService::markLocalChange($pdo, $orderId);
             $pdo->commit();
         } catch (\Throwable) {
             if ($pdo->inTransaction()) {
@@ -1192,6 +1217,8 @@ final class OrderService
 
             return ['ok' => false, 'message' => 'تعذر إلغاء الصنف.'];
         }
+
+        self::dispatchReservationSync($orderId, false);
 
         NotificationService::notifyStaffCustomerCancelledItem(
             $orderId,
@@ -1290,6 +1317,57 @@ final class OrderService
     }
 
     /**
+     * Staff action: sync or retry now, including when the saved mode is manual.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public static function syncReservationNow(string $orderId): array
+    {
+        return AmineReservationSyncService::syncOrder($orderId);
+    }
+
+    /** @param array{ok: bool, message: string} $result @return array{ok: bool, message: string} */
+    private static function withReservationSync(array $result, string $orderId): array
+    {
+        if (!($result['ok'] ?? false)) {
+            return $result;
+        }
+
+        $sync = self::dispatchReservationSync($orderId, true);
+        if ($sync['message'] !== '') {
+            $result['message'] = rtrim((string) ($result['message'] ?? '')) . ' ' . $sync['message'];
+        }
+        if (!($sync['skipped'] ?? false) && !($sync['ok'] ?? false)) {
+            $result['sync_failed'] = true;
+        }
+
+        return $result;
+    }
+
+    /** @return array{ok: bool, skipped: bool, message: string} */
+    private static function dispatchReservationSync(string $orderId, bool $surfaceFailure): array
+    {
+        $sync = AmineReservationSyncService::dispatchAfterCommit($orderId);
+        if (!$surfaceFailure || ($sync['skipped'] ?? false) || ($sync['ok'] ?? false)) {
+            if (!$surfaceFailure) {
+                $sync['message'] = '';
+            }
+
+            return [
+                'ok' => (bool) ($sync['ok'] ?? false),
+                'skipped' => (bool) ($sync['skipped'] ?? false),
+                'message' => (string) ($sync['message'] ?? ''),
+            ];
+        }
+
+        return [
+            'ok' => false,
+            'skipped' => false,
+            'message' => trim((string) ($sync['message'] ?? '')),
+        ];
+    }
+
+    /**
      * سعر الطرد بالدولار المُرسل لمزامنة الأمين (دائماً USD).
      *
      * @param array<string, mixed> $item
@@ -1367,6 +1445,9 @@ final class OrderService
             $packaging = max(1, (int) ($item['pcs_per_box'] ?? 1));
             $warehouse = StockReservationService::fetchWarehousePrimary($materialGuid);
             if ($warehouse !== null) {
+                // Portal reservations omit orders Ameen already holds, and Ameen qty is
+                // already reduced by that hold. Adding this line back lets the new total
+                // reuse the quantity that already belongs to the order.
                 $reserved = StockReservationService::reservedPrimaryFor($materialGuid);
                 $currentHold = $oldQty * $packaging;
                 $available = max(0.0, $warehouse - $reserved + $currentHold);
@@ -1401,6 +1482,7 @@ final class OrderService
                 $staffUserId
             );
             self::recalculateOrderTotals($pdo, $orderId);
+            AmineReservationSyncService::markLocalChange($pdo, $orderId);
             $pdo->commit();
         } catch (\Throwable) {
             if ($pdo->inTransaction()) {
@@ -1415,7 +1497,7 @@ final class OrderService
             'تم تعديل كمية «' . (string) ($item['material_name_ar'] ?? 'الصنف') . '» إلى ' . self::formatNoticeQuantity($quantity)
         );
 
-        return ['ok' => true, 'message' => 'تم تحديث كمية الصنف.'];
+        return self::withReservationSync(['ok' => true, 'message' => 'تم تحديث كمية الصنف.'], $orderId);
     }
 
     /**
@@ -1480,6 +1562,7 @@ final class OrderService
                 self::logItemChange($pdo, $orderId, $itemId, 'price_usd', (string) $oldUsd, (string) $newUsd, $reasonAr, $staffUserId);
             }
             self::recalculateOrderTotals($pdo, $orderId);
+            AmineReservationSyncService::markLocalChange($pdo, $orderId);
             $pdo->commit();
         } catch (\Throwable) {
             if ($pdo->inTransaction()) {
@@ -1494,7 +1577,7 @@ final class OrderService
             'تم تعديل سعر «' . (string) ($item['material_name_ar'] ?? 'الصنف') . '»'
         );
 
-        return ['ok' => true, 'message' => 'تم تحديث سعر الصنف.'];
+        return self::withReservationSync(['ok' => true, 'message' => 'تم تحديث سعر الصنف.'], $orderId);
     }
 
     /**
@@ -1558,6 +1641,7 @@ final class OrderService
                 $staffUserId
             );
             self::recalculateOrderTotals($pdo, $orderId);
+            AmineReservationSyncService::markLocalChange($pdo, $orderId);
             $pdo->commit();
         } catch (\Throwable) {
             if ($pdo->inTransaction()) {
@@ -1572,7 +1656,7 @@ final class OrderService
             'تم إلغاء الصنف «' . (string) ($item['material_name_ar'] ?? '') . '» من الطلب'
         );
 
-        return ['ok' => true, 'message' => 'تم إلغاء الصنف من الطلب.'];
+        return self::withReservationSync(['ok' => true, 'message' => 'تم إلغاء الصنف من الطلب.'], $orderId);
     }
 
     /** @return list<array<string, mixed>> */
