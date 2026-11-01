@@ -57,14 +57,14 @@ final class StaffPermissions
                 'role_code' => 'order_desk',
                 'name_ar' => 'مكتب الطلبات',
                 'description_ar' => 'متابعة الطلبات، التأكيد، ومزامنة الأمين.',
-                'permissions' => ['dashboard.view', 'orders.view', 'orders.manage', 'accounting.sync.view', 'store.view_prices', 'store.view_stock'],
+                'permissions' => ['dashboard.view', 'orders.view', 'orders.manage', 'accounting.sync.view', 'images.view', 'store.view_prices', 'store.view_stock'],
             ],
             [
                 'code' => 'sales',
                 'role_code' => 'sales',
                 'name_ar' => 'مبيعات ومشاركة',
                 'description_ar' => 'روابط المشاركة، الطلبات، ونشاط الزوار.',
-                'permissions' => ['dashboard.view', 'share_links.manage', 'orders.view', 'orders.manage', 'visitors.view', 'store.view_prices', 'store.view_stock'],
+                'permissions' => ['dashboard.view', 'share_links.manage', 'orders.view', 'orders.manage', 'visitors.view', 'images.view', 'store.view_prices', 'store.view_stock'],
             ],
             [
                 'code' => 'catalog_media',

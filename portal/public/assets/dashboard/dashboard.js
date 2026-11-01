@@ -268,7 +268,10 @@
     },
     'material-images-zip': {
       styles: ['/css/store-filters.css'],
-      scripts: ['/assets/store-filters.js'],
+      scripts: [
+        '/assets/store-filters.js',
+        '/assets/dashboard/material-image-zip-download.js',
+      ],
     },
     'visitor-log': {
       styles: ['/css/visitor-log.css'],
@@ -282,14 +285,26 @@
       return current === normalized || current.endsWith(normalized);
     });
     if (existing) {
-      return Promise.resolve();
+      if (existing.dataset.portalScriptLoaded === '1') {
+        return Promise.resolve();
+      }
+      return new Promise((resolve, reject) => {
+        existing.addEventListener('load', () => {
+          existing.dataset.portalScriptLoaded = '1';
+          resolve();
+        }, { once: true });
+        existing.addEventListener('error', () => reject(new Error(src)), { once: true });
+      });
     }
 
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
       script.src = src;
       script.defer = true;
-      script.onload = () => resolve();
+      script.onload = () => {
+        script.dataset.portalScriptLoaded = '1';
+        resolve();
+      };
       script.onerror = () => reject(new Error(src));
       document.body.appendChild(script);
     });
