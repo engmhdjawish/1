@@ -186,6 +186,13 @@ final class DashboardNavigation
                     ? 'رفع الصور ومزامنتها مع الأمين وربطها بالمواد.'
                     : 'تصفّح الصور المحلية وتحميلها.',
             ],
+            [
+                'route' => '/dashboard/procurement.php',
+                'label' => 'المشتريات',
+                'icon' => 'inventory_2',
+                'permission' => 'procurement.manage',
+                'description' => 'نواقص المخزون حسب الشركة ومسودات طلبات المصانع.',
+            ],
         ]);
     }
 

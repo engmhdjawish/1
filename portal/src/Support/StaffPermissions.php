@@ -41,6 +41,7 @@ final class StaffPermissions
             ['code' => 'accounting.statement.view', 'name_ar' => 'كشف حساب', 'category_ar' => 'محاسبة', 'description_ar' => 'كشف حساب عميل في الأمين'],
             ['code' => 'accounting.sync.view', 'name_ar' => 'مزامنة الطلبات', 'category_ar' => 'محاسبة', 'description_ar' => 'طابور إرسال طلبات الموقع للأمين'],
             ['code' => 'accounting.reports.view', 'name_ar' => 'تقارير الطلبات', 'category_ar' => 'محاسبة', 'description_ar' => 'ملخص مالي لطلبات البوابة'],
+            ['code' => 'procurement.manage', 'name_ar' => 'المشتريات', 'category_ar' => 'مشتريات', 'description_ar' => 'نواقص المخزون وطلبات المصانع'],
         ];
     }
 
@@ -116,6 +117,13 @@ final class StaffPermissions
                     'accounting.reports.view',
                     'store.view_prices',
                 ],
+            ],
+            [
+                'code' => 'procurement',
+                'role_code' => 'procurement',
+                'name_ar' => 'المشتريات',
+                'description_ar' => 'اكتشاف مواد الأمين، النواقص، ومسودات طلبات المصانع.',
+                'permissions' => ['dashboard.view', 'procurement.manage', 'store.view_stock'],
             ],
         ];
     }
