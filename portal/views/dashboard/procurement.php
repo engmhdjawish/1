@@ -164,136 +164,140 @@ $orderStatusLabels = [
   </nav>
 
   <?php if ($materialView === 'invoice'): ?>
-  <section class="bg-white border border-border-subtle rounded-xl p-5 mb-4">
-    <p class="text-sm text-text-muted mb-4">
-      ابحث في الأمين، أضف الأصناف للفاتورة، ثم اضبط النوع والحدود بالطرد — مثل فاتورة شراء للإعدادات.
-      القائمة محفوظة في جلستك حتى «تفريغ الفاتورة».
-    </p>
-    <form method="get" class="grid md:grid-cols-5 gap-3 mb-4 items-end">
-      <input type="hidden" name="tab" value="materials">
-      <input type="hidden" name="material_view" value="invoice">
-      <input type="hidden" name="inv_search" value="1">
-      <label class="md:col-span-2 text-sm">
-        <span class="font-bold block mb-1">بحث في الأمين</span>
-        <input type="search" name="inv_q" value="<?= h($invQ) ?>" placeholder="كود أو اسم…" class="h-10 w-full rounded-lg border border-border-subtle px-3">
-      </label>
-      <label class="text-sm">
-        <span class="font-bold block mb-1">الشركة (اختياري)</span>
-        <select name="inv_manufacturer" class="h-10 w-full rounded-lg border border-border-subtle px-2">
-          <option value="">— الكل —</option>
+  <?php $invoiceFormId = 'procurement-invoice-save-all'; ?>
+  <section id="procurement-invoice-root" class="bg-white border border-border-subtle rounded-xl p-5 mb-4"
+           data-manufacturer="<?= h($invManufacturer) ?>">
+    <form id="proc-invoice-batch-add" method="post" class="hidden">
+      <input type="hidden" name="action" value="invoice_add_materials">
+    </form>
+    <form id="<?= h($invoiceFormId) ?>" method="post" class="hidden">
+      <input type="hidden" name="action" value="invoice_save_all">
+    </form>
+
+    <div class="flex flex-wrap gap-3 mb-4 items-end">
+      <label class="text-sm min-w-[10rem]">
+        <span class="font-bold block mb-1">تقييد الشركة (اختياري)</span>
+        <select id="proc-invoice-manufacturer" class="h-10 w-full rounded-lg border border-border-subtle px-2 text-sm">
+          <option value="">— كل الشركات —</option>
           <?php foreach ($manufacturerOptions as $mfr): ?>
             <option value="<?= h($mfr) ?>" <?= $invManufacturer === $mfr ? 'selected' : '' ?>><?= h($mfr) ?></option>
           <?php endforeach; ?>
         </select>
       </label>
-      <label class="flex items-center gap-2 text-xs h-10">
-        <input type="checkbox" name="inv_season" value="1" <?= $invSeasonOnly ? 'checked' : '' ?>>
-        موسم حالي
-      </label>
-      <button type="submit" class="<?= h($btnPrimary) ?> w-full">بحث</button>
-    </form>
-    <?php if ($invQ !== '' || isset($_GET['inv_search'])): ?>
-      <?php if (($invPickerResults['items'] ?? []) === []): ?>
-        <p class="text-sm text-text-muted mb-4">لا نتائج.</p>
-      <?php else: ?>
-        <div class="border border-border-subtle rounded-lg divide-y max-h-56 overflow-y-auto mb-4">
-          <?php foreach ($invPickerResults['items'] as $pick): ?>
-            <form method="post" class="flex flex-wrap gap-2 items-center p-2 text-sm">
-              <input type="hidden" name="action" value="invoice_add_material">
-              <input type="hidden" name="material_guid" value="<?= h((string) ($pick['material_guid'] ?? '')) ?>">
-              <input type="hidden" name="inv_q" value="<?= h($invQ) ?>">
-              <input type="hidden" name="inv_manufacturer" value="<?= h($invManufacturer) ?>">
-              <input type="hidden" name="inv_page" value="<?= h((string) $invPage) ?>">
-              <?php if ($invSeasonOnly): ?><input type="hidden" name="inv_season" value="1"><?php endif; ?>
-              <div class="flex-1 min-w-[10rem]">
-                <span class="font-bold"><?= h((string) ($pick['material_name_ar'] ?? '')) ?></span>
-                <span class="text-xs text-text-muted font-mono mr-2"><?= h((string) ($pick['material_code'] ?? '')) ?></span>
-                <span class="text-xs text-text-muted"><?= h((string) ($pick['manufacturer'] ?? '')) ?></span>
-              </div>
-              <button type="submit" class="<?= h($btnLight) ?> h-9 px-3 text-xs">+ للفاتورة</button>
-            </form>
-          <?php endforeach; ?>
-        </div>
-      <?php endif; ?>
-    <?php endif; ?>
-
-    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-      <h2 class="text-lg font-bold">بنود الفاتورة (<?= h((string) count($invoiceRows)) ?>)</h2>
-      <?php if ($invoiceRows !== []): ?>
-        <form method="post" onsubmit="return confirm('تفريغ كل البنود؟');">
-          <input type="hidden" name="action" value="invoice_clear">
-          <button type="submit" class="text-xs font-bold text-red-700">تفريغ الفاتورة</button>
-        </form>
-      <?php endif; ?>
+      <div class="text-sm flex-1 min-w-[220px] relative" id="proc-invoice-search-wrap">
+        <span class="font-bold block mb-1">بحث وإضافة للشبكة</span>
+        <input
+          type="search"
+          id="proc-invoice-search"
+          autocomplete="off"
+          enterkeyhint="search"
+          role="combobox"
+          aria-expanded="false"
+          aria-controls="proc-invoice-search-results"
+          class="h-10 w-full rounded-xl border border-border-subtle px-3 text-sm focus:border-primary focus:ring-primary"
+          placeholder="اكتب كود أو اسم المادة…"
+        >
+        <ul
+          id="proc-invoice-search-results"
+          class="hidden absolute z-40 mt-1 w-full max-h-72 overflow-y-auto rounded-xl border border-border-subtle bg-white shadow-lg text-sm"
+          role="listbox"
+        ></ul>
+      </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-3 mb-4">
+      <p id="proc-invoice-search-status" class="text-xs text-text-muted flex-1 min-h-[1.25rem]"></p>
+      <button type="button" id="proc-invoice-add-selected" class="<?= h($btnPrimary) ?> h-9 px-4 text-xs hidden" disabled>
+        إضافة المحدّد (<span id="proc-invoice-selected-count">0</span>)
+      </button>
     </div>
 
-    <?php if ($invoiceRows === []): ?>
-      <p class="text-sm text-text-muted">ابحث أعلاه وأضف أصنافاً.</p>
-    <?php else: ?>
-      <?php $invoiceFormId = 'procurement-invoice-save-all'; ?>
-      <form id="<?= h($invoiceFormId) ?>" method="post" class="hidden">
-        <input type="hidden" name="action" value="invoice_save_all">
-        <input type="hidden" name="inv_q" value="<?= h($invQ) ?>">
-        <input type="hidden" name="inv_manufacturer" value="<?= h($invManufacturer) ?>">
-        <?php if ($invSeasonOnly): ?><input type="hidden" name="inv_season" value="1"><?php endif; ?>
-      </form>
-        <div class="overflow-x-auto border border-border-subtle rounded-lg mb-4">
-          <table class="w-full text-sm">
+    <div class="so-invoice">
+      <div class="so-invoice__head">
+        <div>
+          <p class="so-invoice__kicker">ضبط سياسة الشراء</p>
+          <h2 class="so-invoice__title">فاتورة المواد</h2>
+          <p class="so-invoice__hint">اختر مادة أو أكثر من قائمة البحث — تُضاف دفعة واحدة للشبكة. ↑↓ Enter للاختيار السريع.</p>
+        </div>
+        <div class="flex flex-col items-end gap-2">
+          <p class="so-invoice__count" id="proc-invoice-grid-count"><?= count($invoiceRows) ?> <?= count($invoiceRows) === 1 ? 'مادة' : 'مواد' ?></p>
+          <?php if ($invoiceRows !== []): ?>
+            <form method="post" onsubmit="return confirm('تفريغ كل البنود؟');">
+              <input type="hidden" name="action" value="invoice_clear">
+              <button type="submit" class="text-xs font-bold text-red-700">تفريغ الفاتورة</button>
+            </form>
+          <?php endif; ?>
+        </div>
+      </div>
+      <div class="so-invoice__sheet">
+        <?php if ($invoiceRows === []): ?>
+          <p class="so-invoice__empty text-sm text-text-muted p-4">الشبكة فارغة — ابحث أعلاه وأضف مواداً.</p>
+        <?php else: ?>
+          <table class="so-invoice__table">
             <thead>
-              <tr class="text-right text-text-muted bg-surface-low">
-                <th class="p-2">كود</th>
-                <th class="p-2">الصنف</th>
-                <th class="p-2">متاح (طرد)</th>
-                <th class="p-2">نوع</th>
-                <th class="p-2">حد طلب</th>
-                <th class="p-2">سقف</th>
-                <th class="p-2">ملاحظة</th>
-                <th class="p-2"></th>
+              <tr>
+                <th class="so-invoice__num">#</th>
+                <th>المادة</th>
+                <th>متاح (طرد)</th>
+                <th class="so-invoice__type-col">النوع</th>
+                <th>حد طلب</th>
+                <th>سقف</th>
+                <th>ملاحظة</th>
+                <th class="so-invoice__action-col"></th>
               </tr>
             </thead>
-            <tbody>
-              <?php foreach ($invoiceRows as $row): ?>
+            <tbody id="proc-invoice-grid-body">
+              <?php foreach ($invoiceRows as $index => $row): ?>
                 <?php $guid = (string) ($row['material_guid'] ?? ''); ?>
-                <tr class="border-t border-border-subtle/60 align-top">
-                  <td class="p-2 font-mono text-xs"><?= h((string) ($row['material_code'] ?? '')) ?></td>
-                  <td class="p-2"><?= h((string) ($row['material_name_ar'] ?? '')) ?></td>
-                  <td class="p-2 text-xs"><?= h($row['available_cartons'] !== null ? (string) $row['available_cartons'] : '—') ?></td>
-                  <td class="p-2">
-                    <select form="<?= h($invoiceFormId) ?>" name="lifecycle[<?= h($guid) ?>]" class="h-9 w-full min-w-[7rem] rounded border border-border-subtle px-1 text-xs">
+                <tr class="so-invoice__row" data-material-guid="<?= h($guid) ?>">
+                  <td class="so-invoice__num"><?= h((string) ($index + 1)) ?></td>
+                  <td class="so-invoice__material">
+                    <div class="so-invoice__material-inner">
+                      <div class="so-invoice__material-text">
+                        <span class="so-invoice__name"><?= h((string) ($row['material_name_ar'] ?? '')) ?></span>
+                        <span class="so-invoice__code"><?= h((string) ($row['material_code'] ?? '')) ?></span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="text-xs"><?= h($row['available_cartons'] !== null ? (string) $row['available_cartons'] : '—') ?></td>
+                  <td class="so-invoice__type">
+                    <select form="<?= h($invoiceFormId) ?>" name="lifecycle[<?= h($guid) ?>]" class="so-invoice__select">
                       <?php foreach (ProcurementService::LIFECYCLE_LABELS as $code => $label): ?>
                         <option value="<?= h($code) ?>" <?= ($row['lifecycle'] ?? '') === $code ? 'selected' : '' ?>><?= h($label) ?></option>
                       <?php endforeach; ?>
                     </select>
                   </td>
-                  <td class="p-2">
+                  <td>
                     <input form="<?= h($invoiceFormId) ?>" type="number" step="0.001" min="0" name="min_cartons[<?= h($guid) ?>]" value="<?= h((string) ($row['min_cartons'] ?? '')) ?>"
-                           class="h-9 w-20 rounded border border-border-subtle px-1 text-xs">
+                           class="so-invoice__input w-20">
                   </td>
-                  <td class="p-2">
+                  <td>
                     <input form="<?= h($invoiceFormId) ?>" type="number" step="0.001" min="0" name="max_cartons[<?= h($guid) ?>]" value="<?= h((string) ($row['max_cartons'] ?? '')) ?>"
-                           class="h-9 w-20 rounded border border-border-subtle px-1 text-xs">
+                           class="so-invoice__input w-20">
                   </td>
-                  <td class="p-2">
+                  <td>
                     <input form="<?= h($invoiceFormId) ?>" type="text" name="notes_ar[<?= h($guid) ?>]" value="<?= h((string) ($row['notes_ar'] ?? '')) ?>"
-                           class="h-9 w-28 rounded border border-border-subtle px-1 text-xs">
+                           class="so-invoice__input min-w-[6rem]">
                   </td>
-                  <td class="p-2">
-                    <form method="post" class="inline">
+                  <td class="so-invoice__action">
+                    <form method="post">
                       <input type="hidden" name="action" value="invoice_remove_material">
                       <input type="hidden" name="material_guid" value="<?= h($guid) ?>">
-                      <input type="hidden" name="inv_q" value="<?= h($invQ) ?>">
-                      <input type="hidden" name="inv_manufacturer" value="<?= h($invManufacturer) ?>">
-                      <?php if ($invSeasonOnly): ?><input type="hidden" name="inv_season" value="1"><?php endif; ?>
-                      <button type="submit" class="text-xs text-text-muted" title="حذف من الفاتورة">×</button>
+                      <button type="submit" class="so-invoice__remove" title="حذف من الفاتورة">×</button>
                     </form>
                   </td>
                 </tr>
               <?php endforeach; ?>
             </tbody>
           </table>
+        <?php endif; ?>
+      </div>
+      <?php if ($invoiceRows !== []): ?>
+        <div class="mt-4">
+          <button type="submit" form="<?= h($invoiceFormId) ?>" class="<?= h($btnPrimary) ?>">حفظ كل البنود</button>
         </div>
-        <button type="submit" form="<?= h($invoiceFormId) ?>" class="<?= h($btnPrimary) ?>">حفظ كل البنود</button>
-    <?php endif; ?>
+      <?php endif; ?>
+    </div>
+    <script type="application/json" id="proc-invoice-grid-guids"><?= json_encode($invoiceGridGuids, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?></script>
   </section>
 
   <?php else: /* list */ ?>

@@ -115,6 +115,28 @@ if ($tableReady && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $tab = 'materials';
         $redirectMaterialsQuery = $buildMaterialsRedirect($_POST, 'invoice');
+    } elseif ($action === 'invoice_add_materials') {
+        $guids = array_values(array_unique(array_filter(array_map(
+            static fn ($g): string => trim((string) $g),
+            (array) ($_POST['material_guids'] ?? [])
+        ))));
+        $added = 0;
+        foreach ($guids as $guid) {
+            if ($guid === '') {
+                continue;
+            }
+            if (!ProcurementService::ensureMaterialRegistered($guid)['ok']) {
+                continue;
+            }
+            ProcurementMaterialInvoiceSession::add($guid);
+            $added++;
+        }
+        $flash = $added > 0
+            ? sprintf('تمت إضافة %d مادة للفاتورة.', $added)
+            : 'لم تُضف مواد — تحقق من الاختيار.';
+        $flashType = $added > 0 ? 'success' : 'error';
+        $tab = 'materials';
+        $redirectMaterialsQuery = $buildMaterialsRedirect($_POST, 'invoice');
     } elseif ($action === 'invoice_remove_material') {
         ProcurementMaterialInvoiceSession::remove(trim((string) ($_POST['material_guid'] ?? '')));
         $flash = 'تم حذف السطر من الفاتورة.';
@@ -292,25 +314,11 @@ $materials = $materialSearch['items'];
 $materialTotal = (int) $materialSearch['total'];
 $materialManufacturers = $tableReady ? ProcurementService::distinctManufacturers() : [];
 
-$invQ = trim((string) ($_GET['inv_q'] ?? ''));
 $invManufacturer = trim((string) ($_GET['inv_manufacturer'] ?? ''));
-$invPage = max(1, (int) ($_GET['inv_page'] ?? 1));
-$invSeasonOnly = isset($_GET['inv_season'])
-    ? (string) $_GET['inv_season'] === '1'
-    : (bool) $settings['limit_to_current_season'];
-$invPickerResults = ['items' => [], 'total' => 0, 'page' => 1, 'page_size' => 25];
 $invoiceRows = [];
 $invoiceCount = ProcurementMaterialInvoiceSession::count();
 if ($tableReady && $materialView === 'invoice') {
     $invoiceRows = ProcurementService::materialInvoiceRows(ProcurementMaterialInvoiceSession::guids());
-    if ($invQ !== '' || isset($_GET['inv_search'])) {
-        $invPickerResults = ProcurementService::searchMaterialsForPicker($invManufacturer, [
-            'q' => $invQ,
-            'page' => $invPage,
-            'page_size' => 25,
-            'current_season_only' => $invSeasonOnly,
-        ]);
-    }
 }
 
 $orders = $tableReady ? ProcurementService::listOrders('open') : [];
@@ -363,6 +371,8 @@ if ($manufacturerOptions === [] && $materialManufacturers !== []) {
 }
 
 $selectedStoreGuids = $settings['store_guids'];
+$loadProcurementInvoiceJs = $tab === 'materials' && $materialView === 'invoice';
+$invoiceGridGuids = $loadProcurementInvoiceJs ? ProcurementMaterialInvoiceSession::guids() : [];
 $currentRoute = '/dashboard/procurement.php?tab=' . rawurlencode($tab);
 
 ob_start();
