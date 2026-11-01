@@ -296,6 +296,116 @@ final class ProcurementService
         ];
     }
 
+    /**
+     * Ensures a procurement_materials row exists (trial) with API cache fields.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public static function ensureMaterialRegistered(string $materialGuid): array
+    {
+        if (!self::tableReady()) {
+            return ['ok' => false, 'message' => 'جداول المشتريات غير جاهزة.'];
+        }
+
+        $materialGuid = trim($materialGuid);
+        if ($materialGuid === '') {
+            return ['ok' => false, 'message' => 'معرف المادة غير صالح.'];
+        }
+
+        if (self::policyRow($materialGuid) !== null) {
+            return ['ok' => true, 'message' => 'مسجّلة مسبقاً.'];
+        }
+
+        $settings = self::settings();
+        $storeGuids = $settings['store_guids'] !== [] ? $settings['store_guids'] : [];
+        $material = null;
+        if ($storeGuids !== []) {
+            $material = self::fetchMaterialsByGuids([$materialGuid], $storeGuids)[strtolower($materialGuid)] ?? null;
+        }
+        if (!is_array($material)) {
+            $response = SessionGate::withoutLock(static function () use ($materialGuid): array {
+                return ApiClient::get('/api/materials/' . rawurlencode($materialGuid), [], 60);
+            });
+            if (($response['ok'] ?? false) && is_array($response['data'] ?? null)) {
+                $material = $response['data'];
+            }
+        }
+
+        if (!is_array($material)) {
+            return ['ok' => false, 'message' => 'المادة غير موجودة في الأمين.'];
+        }
+
+        $fields = self::cacheFieldsFromApi($material);
+        Database::pdo()->prepare(
+            'INSERT INTO procurement_materials (
+                material_guid, material_code, material_name_ar, manufacturer, group_guid, lifecycle, first_seen_at
+             ) VALUES (
+                :guid, :code, :name, :manufacturer, :group_guid, :lifecycle, NOW()
+             )
+             ON CONFLICT (material_guid) DO NOTHING'
+        )->execute([
+            'guid' => $materialGuid,
+            'code' => $fields['code'],
+            'name' => $fields['name'],
+            'manufacturer' => $fields['manufacturer'],
+            'group_guid' => $fields['group_guid'],
+            'lifecycle' => self::LIFECYCLE_TRIAL,
+        ]);
+
+        return ['ok' => true, 'message' => 'تمت إضافة المادة للسجل.'];
+    }
+
+    /**
+     * @param list<string> $guids
+     * @return list<array<string, mixed>>
+     */
+    public static function materialInvoiceRows(array $guids): array
+    {
+        $guids = array_values(array_unique(array_filter(array_map('trim', $guids))));
+        if ($guids === [] || !self::tableReady()) {
+            return [];
+        }
+
+        foreach ($guids as $guid) {
+            self::ensureMaterialRegistered($guid);
+        }
+
+        $policies = self::policyRowsForGuids($guids);
+        $settings = self::settings();
+        $byGuid = $settings['store_guids'] !== []
+            ? self::fetchMaterialsByGuids($guids, $settings['store_guids'])
+            : [];
+
+        StockReservationService::forgetWarehouseMemo();
+        $reserved = $settings['store_guids'] !== []
+            ? StockReservationService::reservedPrimaryByMaterial($guids)
+            : [];
+
+        $rows = [];
+        foreach ($guids as $guid) {
+            $key = strtolower($guid);
+            $policy = $policies[$key] ?? null;
+            $material = $byGuid[$key] ?? null;
+            $snapshot = is_array($material)
+                ? self::buildLineSnapshot($guid, $material, $policy, $reserved)
+                : null;
+
+            $rows[] = [
+                'material_guid' => $guid,
+                'material_code' => (string) ($policy['material_code'] ?? $snapshot['material_code'] ?? ''),
+                'material_name_ar' => (string) ($policy['material_name_ar'] ?? $snapshot['material_name_ar'] ?? ''),
+                'manufacturer' => (string) ($policy['manufacturer'] ?? $snapshot['manufacturer'] ?? ''),
+                'lifecycle' => (string) ($policy['lifecycle'] ?? self::LIFECYCLE_TRIAL),
+                'min_cartons' => $policy['min_cartons'] ?? null,
+                'max_cartons' => $policy['max_cartons'] ?? null,
+                'notes_ar' => (string) ($policy['notes_ar'] ?? ''),
+                'available_cartons' => $snapshot['available_cartons'] ?? null,
+            ];
+        }
+
+        return $rows;
+    }
+
     /** @return list<string> */
     public static function distinctManufacturers(int $limit = 300): array
     {

@@ -17,7 +17,15 @@ use Portal\Services\ProcurementService;
 /** @var string $materialManufacturer */
 /** @var int $materialPage */
 /** @var int $materialTotal */
+/** @var string $materialView */
 /** @var list<string> $materialManufacturers */
+/** @var string $invQ */
+/** @var string $invManufacturer */
+/** @var int $invPage */
+/** @var bool $invSeasonOnly */
+/** @var array{items: list<array<string, mixed>>, total: int, page: int, page_size: int} $invPickerResults */
+/** @var list<array<string, mixed>> $invoiceRows */
+/** @var int $invoiceCount */
 /** @var list<array<string, mixed>> $orders */
 /** @var string $viewOrderId */
 /** @var array<string, mixed>|null $viewOrder */
@@ -127,9 +135,172 @@ $orderStatusLabels = [
   </section>
 
 <?php elseif ($tab === 'materials'): ?>
+  <nav class="mb-4 flex flex-wrap gap-2" aria-label="عرض المواد">
+    <?php
+      $listModeHref = '/dashboard/procurement.php?' . http_build_query([
+          'tab' => 'materials',
+          'material_view' => 'list',
+          'material_filter' => $materialFilter,
+          'material_q' => $materialQ,
+          'material_manufacturer' => $materialManufacturer,
+          'material_page' => $materialPage > 1 ? $materialPage : null,
+      ]);
+      $invoiceModeHref = '/dashboard/procurement.php?' . http_build_query([
+          'tab' => 'materials',
+          'material_view' => 'invoice',
+      ]);
+    ?>
+    <a href="<?= h($listModeHref) ?>"
+       class="px-4 py-2 rounded-lg text-sm font-bold <?= $materialView === 'list' ? 'bg-primary text-white' : 'border border-border-subtle text-text-muted' ?>">
+      قائمة وبحث
+    </a>
+    <a href="<?= h($invoiceModeHref) ?>"
+       class="px-4 py-2 rounded-lg text-sm font-bold inline-flex items-center gap-1 <?= $materialView === 'invoice' ? 'bg-primary text-white' : 'border border-border-subtle text-text-muted' ?>">
+      فاتورة ضبط
+      <?php if ($invoiceCount > 0): ?>
+        <span class="text-xs px-1.5 py-0.5 rounded-full bg-white/20"><?= h((string) $invoiceCount) ?></span>
+      <?php endif; ?>
+    </a>
+  </nav>
+
+  <?php if ($materialView === 'invoice'): ?>
+  <section class="bg-white border border-border-subtle rounded-xl p-5 mb-4">
+    <p class="text-sm text-text-muted mb-4">
+      ابحث في الأمين، أضف الأصناف للفاتورة، ثم اضبط النوع والحدود بالطرد — مثل فاتورة شراء للإعدادات.
+      القائمة محفوظة في جلستك حتى «تفريغ الفاتورة».
+    </p>
+    <form method="get" class="grid md:grid-cols-5 gap-3 mb-4 items-end">
+      <input type="hidden" name="tab" value="materials">
+      <input type="hidden" name="material_view" value="invoice">
+      <input type="hidden" name="inv_search" value="1">
+      <label class="md:col-span-2 text-sm">
+        <span class="font-bold block mb-1">بحث في الأمين</span>
+        <input type="search" name="inv_q" value="<?= h($invQ) ?>" placeholder="كود أو اسم…" class="h-10 w-full rounded-lg border border-border-subtle px-3">
+      </label>
+      <label class="text-sm">
+        <span class="font-bold block mb-1">الشركة (اختياري)</span>
+        <select name="inv_manufacturer" class="h-10 w-full rounded-lg border border-border-subtle px-2">
+          <option value="">— الكل —</option>
+          <?php foreach ($manufacturerOptions as $mfr): ?>
+            <option value="<?= h($mfr) ?>" <?= $invManufacturer === $mfr ? 'selected' : '' ?>><?= h($mfr) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label class="flex items-center gap-2 text-xs h-10">
+        <input type="checkbox" name="inv_season" value="1" <?= $invSeasonOnly ? 'checked' : '' ?>>
+        موسم حالي
+      </label>
+      <button type="submit" class="<?= h($btnPrimary) ?> w-full">بحث</button>
+    </form>
+    <?php if ($invQ !== '' || isset($_GET['inv_search'])): ?>
+      <?php if (($invPickerResults['items'] ?? []) === []): ?>
+        <p class="text-sm text-text-muted mb-4">لا نتائج.</p>
+      <?php else: ?>
+        <div class="border border-border-subtle rounded-lg divide-y max-h-56 overflow-y-auto mb-4">
+          <?php foreach ($invPickerResults['items'] as $pick): ?>
+            <form method="post" class="flex flex-wrap gap-2 items-center p-2 text-sm">
+              <input type="hidden" name="action" value="invoice_add_material">
+              <input type="hidden" name="material_guid" value="<?= h((string) ($pick['material_guid'] ?? '')) ?>">
+              <input type="hidden" name="inv_q" value="<?= h($invQ) ?>">
+              <input type="hidden" name="inv_manufacturer" value="<?= h($invManufacturer) ?>">
+              <input type="hidden" name="inv_page" value="<?= h((string) $invPage) ?>">
+              <?php if ($invSeasonOnly): ?><input type="hidden" name="inv_season" value="1"><?php endif; ?>
+              <div class="flex-1 min-w-[10rem]">
+                <span class="font-bold"><?= h((string) ($pick['material_name_ar'] ?? '')) ?></span>
+                <span class="text-xs text-text-muted font-mono mr-2"><?= h((string) ($pick['material_code'] ?? '')) ?></span>
+                <span class="text-xs text-text-muted"><?= h((string) ($pick['manufacturer'] ?? '')) ?></span>
+              </div>
+              <button type="submit" class="<?= h($btnLight) ?> h-9 px-3 text-xs">+ للفاتورة</button>
+            </form>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+    <?php endif; ?>
+
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <h2 class="text-lg font-bold">بنود الفاتورة (<?= h((string) count($invoiceRows)) ?>)</h2>
+      <?php if ($invoiceRows !== []): ?>
+        <form method="post" onsubmit="return confirm('تفريغ كل البنود؟');">
+          <input type="hidden" name="action" value="invoice_clear">
+          <button type="submit" class="text-xs font-bold text-red-700">تفريغ الفاتورة</button>
+        </form>
+      <?php endif; ?>
+    </div>
+
+    <?php if ($invoiceRows === []): ?>
+      <p class="text-sm text-text-muted">ابحث أعلاه وأضف أصنافاً.</p>
+    <?php else: ?>
+      <?php $invoiceFormId = 'procurement-invoice-save-all'; ?>
+      <form id="<?= h($invoiceFormId) ?>" method="post" class="hidden">
+        <input type="hidden" name="action" value="invoice_save_all">
+        <input type="hidden" name="inv_q" value="<?= h($invQ) ?>">
+        <input type="hidden" name="inv_manufacturer" value="<?= h($invManufacturer) ?>">
+        <?php if ($invSeasonOnly): ?><input type="hidden" name="inv_season" value="1"><?php endif; ?>
+      </form>
+        <div class="overflow-x-auto border border-border-subtle rounded-lg mb-4">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-right text-text-muted bg-surface-low">
+                <th class="p-2">كود</th>
+                <th class="p-2">الصنف</th>
+                <th class="p-2">متاح (طرد)</th>
+                <th class="p-2">نوع</th>
+                <th class="p-2">حد طلب</th>
+                <th class="p-2">سقف</th>
+                <th class="p-2">ملاحظة</th>
+                <th class="p-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($invoiceRows as $row): ?>
+                <?php $guid = (string) ($row['material_guid'] ?? ''); ?>
+                <tr class="border-t border-border-subtle/60 align-top">
+                  <td class="p-2 font-mono text-xs"><?= h((string) ($row['material_code'] ?? '')) ?></td>
+                  <td class="p-2"><?= h((string) ($row['material_name_ar'] ?? '')) ?></td>
+                  <td class="p-2 text-xs"><?= h($row['available_cartons'] !== null ? (string) $row['available_cartons'] : '—') ?></td>
+                  <td class="p-2">
+                    <select form="<?= h($invoiceFormId) ?>" name="lifecycle[<?= h($guid) ?>]" class="h-9 w-full min-w-[7rem] rounded border border-border-subtle px-1 text-xs">
+                      <?php foreach (ProcurementService::LIFECYCLE_LABELS as $code => $label): ?>
+                        <option value="<?= h($code) ?>" <?= ($row['lifecycle'] ?? '') === $code ? 'selected' : '' ?>><?= h($label) ?></option>
+                      <?php endforeach; ?>
+                    </select>
+                  </td>
+                  <td class="p-2">
+                    <input form="<?= h($invoiceFormId) ?>" type="number" step="0.001" min="0" name="min_cartons[<?= h($guid) ?>]" value="<?= h((string) ($row['min_cartons'] ?? '')) ?>"
+                           class="h-9 w-20 rounded border border-border-subtle px-1 text-xs">
+                  </td>
+                  <td class="p-2">
+                    <input form="<?= h($invoiceFormId) ?>" type="number" step="0.001" min="0" name="max_cartons[<?= h($guid) ?>]" value="<?= h((string) ($row['max_cartons'] ?? '')) ?>"
+                           class="h-9 w-20 rounded border border-border-subtle px-1 text-xs">
+                  </td>
+                  <td class="p-2">
+                    <input form="<?= h($invoiceFormId) ?>" type="text" name="notes_ar[<?= h($guid) ?>]" value="<?= h((string) ($row['notes_ar'] ?? '')) ?>"
+                           class="h-9 w-28 rounded border border-border-subtle px-1 text-xs">
+                  </td>
+                  <td class="p-2">
+                    <form method="post" class="inline">
+                      <input type="hidden" name="action" value="invoice_remove_material">
+                      <input type="hidden" name="material_guid" value="<?= h($guid) ?>">
+                      <input type="hidden" name="inv_q" value="<?= h($invQ) ?>">
+                      <input type="hidden" name="inv_manufacturer" value="<?= h($invManufacturer) ?>">
+                      <?php if ($invSeasonOnly): ?><input type="hidden" name="inv_season" value="1"><?php endif; ?>
+                      <button type="submit" class="text-xs text-text-muted" title="حذف من الفاتورة">×</button>
+                    </form>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+        <button type="submit" form="<?= h($invoiceFormId) ?>" class="<?= h($btnPrimary) ?>">حفظ كل البنود</button>
+    <?php endif; ?>
+  </section>
+
+  <?php else: /* list */ ?>
   <section class="bg-white border border-border-subtle rounded-xl p-5 mb-4">
     <form method="get" class="grid md:grid-cols-4 gap-3 mb-4 items-end">
       <input type="hidden" name="tab" value="materials">
+      <input type="hidden" name="material_view" value="list">
       <input type="hidden" name="material_filter" value="<?= h($materialFilter) ?>">
       <label class="md:col-span-2 text-sm">
         <span class="font-bold block mb-1">بحث (كود / اسم / شركة)</span>
@@ -158,6 +329,7 @@ $orderStatusLabels = [
         foreach ($filters as $key => $label):
           $href = '/dashboard/procurement.php?' . http_build_query([
               'tab' => 'materials',
+              'material_view' => 'list',
               'material_filter' => $key,
               'material_q' => $materialQ,
               'material_manufacturer' => $materialManufacturer,
@@ -202,6 +374,11 @@ $orderStatusLabels = [
                 <td class="py-3">
                   <form method="post" class="space-y-2 min-w-[14rem]">
                     <input type="hidden" name="action" value="save_material">
+                    <input type="hidden" name="material_view" value="list">
+                    <input type="hidden" name="material_filter" value="<?= h($materialFilter) ?>">
+                    <input type="hidden" name="material_q" value="<?= h($materialQ) ?>">
+                    <input type="hidden" name="material_manufacturer" value="<?= h($materialManufacturer) ?>">
+                    <input type="hidden" name="material_page" value="<?= h((string) $materialPage) ?>">
                     <input type="hidden" name="material_guid" value="<?= h($guid) ?>">
                     <select name="lifecycle" class="w-full h-9 rounded-lg border border-border-subtle px-2 text-sm">
                       <?php foreach (ProcurementService::LIFECYCLE_LABELS as $code => $label): ?>
@@ -231,6 +408,7 @@ $orderStatusLabels = [
             for ($p = max(1, $materialPage - 2); $p <= min($totalPages, $materialPage + 2); $p++):
               $pageHref = '/dashboard/procurement.php?' . http_build_query([
                   'tab' => 'materials',
+                  'material_view' => 'list',
                   'material_filter' => $materialFilter,
                   'material_q' => $materialQ,
                   'material_manufacturer' => $materialManufacturer,
@@ -243,6 +421,7 @@ $orderStatusLabels = [
       <?php endif; ?>
     <?php endif; ?>
   </section>
+  <?php endif; ?>
 
 <?php elseif ($tab === 'orders'): ?>
   <section class="bg-white border border-border-subtle rounded-xl p-4 mb-4">
