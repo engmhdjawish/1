@@ -226,32 +226,95 @@ final class ProcurementService
      */
     public static function listMaterials(string $filter = 'needs_config', int $limit = 200): array
     {
+        $result = self::searchMaterialsCatalog([
+            'preset' => $filter,
+            'page' => 1,
+            'page_size' => $limit,
+        ]);
+
+        return $result['items'];
+    }
+
+    /**
+     * @param array{q?: string, manufacturer?: string, preset?: string, page?: int, page_size?: int} $criteria
+     * @return array{items: list<array<string, mixed>>, total: int, page: int, page_size: int}
+     */
+    public static function searchMaterialsCatalog(array $criteria): array
+    {
+        if (!self::tableReady()) {
+            return ['items' => [], 'total' => 0, 'page' => 1, 'page_size' => 50];
+        }
+
+        $page = max(1, (int) ($criteria['page'] ?? 1));
+        $pageSize = max(10, min(100, (int) ($criteria['page_size'] ?? 50)));
+        $offset = ($page - 1) * $pageSize;
+
+        $where = ['TRUE'];
+        $params = [];
+        $preset = trim((string) ($criteria['preset'] ?? 'needs_config'));
+        if ($preset === 'needs_config') {
+            $where[] = 'configured_at IS NULL';
+            $where[] = "lifecycle <> 'discontinued'";
+        } elseif ($preset === 'season_active') {
+            $where[] = "lifecycle = 'season_active'";
+        } elseif ($preset === 'trial') {
+            $where[] = "lifecycle = 'trial'";
+        } elseif ($preset === 'discontinued') {
+            $where[] = "lifecycle = 'discontinued'";
+        }
+
+        $q = trim((string) ($criteria['q'] ?? ''));
+        if ($q !== '') {
+            $where[] = '(material_code ILIKE :q OR material_name_ar ILIKE :q OR manufacturer ILIKE :q)';
+            $params['q'] = '%' . $q . '%';
+        }
+
+        $manufacturer = trim((string) ($criteria['manufacturer'] ?? ''));
+        if ($manufacturer !== '') {
+            $where[] = 'manufacturer = :manufacturer';
+            $params['manufacturer'] = $manufacturer;
+        }
+
+        $whereSql = implode(' AND ', $where);
+        $pdo = Database::pdo();
+
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM procurement_materials WHERE {$whereSql}");
+        $countStmt->execute($params);
+        $total = (int) ($countStmt->fetchColumn() ?: 0);
+
+        $sql = "SELECT * FROM procurement_materials WHERE {$whereSql}
+                ORDER BY first_seen_at DESC NULLS LAST
+                LIMIT {$pageSize} OFFSET {$offset}";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return [
+            'items' => $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [],
+            'total' => $total,
+            'page' => $page,
+            'page_size' => $pageSize,
+        ];
+    }
+
+    /** @return list<string> */
+    public static function distinctManufacturers(int $limit = 300): array
+    {
         if (!self::tableReady()) {
             return [];
         }
 
-        $sql = 'SELECT * FROM procurement_materials';
-        $params = [];
-        if ($filter === 'needs_config') {
-            $sql .= ' WHERE configured_at IS NULL AND lifecycle <> :discontinued';
-            $params['discontinued'] = self::LIFECYCLE_DISCONTINUED;
-        } elseif ($filter === 'season_active') {
-            $sql .= ' WHERE lifecycle = :active';
-            $params['active'] = self::LIFECYCLE_SEASON_ACTIVE;
-        } elseif ($filter === 'trial') {
-            $sql .= ' WHERE lifecycle = :trial';
-            $params['trial'] = self::LIFECYCLE_TRIAL;
-        } elseif ($filter === 'discontinued') {
-            $sql .= ' WHERE lifecycle = :discontinued';
-            $params['discontinued'] = self::LIFECYCLE_DISCONTINUED;
+        try {
+            $rows = Database::pdo()->query(
+                'SELECT DISTINCT manufacturer FROM procurement_materials
+                 WHERE manufacturer <> \'\'
+                 ORDER BY manufacturer
+                 LIMIT ' . max(1, min(1000, $limit))
+            )->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        } catch (Throwable) {
+            return [];
         }
 
-        $sql .= ' ORDER BY first_seen_at DESC NULLS LAST LIMIT ' . max(1, min(500, $limit));
-
-        $stmt = Database::pdo()->prepare($sql);
-        $stmt->execute($params);
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        return array_values(array_map('strval', $rows));
     }
 
     /**
@@ -638,7 +701,6 @@ final class ProcurementService
             return ['ok' => false, 'message' => 'حالة غير معروفة.'];
         }
 
-        $sentAt = $status === 'sent' ? 'NOW()' : 'sent_at';
         $stmt = Database::pdo()->prepare(
             "UPDATE procurement_orders SET
                 status = :status,
@@ -697,6 +759,375 @@ final class ProcurementService
         return $stmt->rowCount() > 0
             ? ['ok' => true, 'message' => 'تم إغلاق سطر المادة (يمكن اقتراح طلب جديد لاحقاً).']
             : ['ok' => false, 'message' => 'السطر غير موجود.'];
+    }
+
+    /** @return array<string, mixed>|null */
+    public static function getOrder(string $orderId): ?array
+    {
+        if (!self::tableReady()) {
+            return null;
+        }
+
+        $orderId = trim($orderId);
+        if ($orderId === '') {
+            return null;
+        }
+
+        $stmt = Database::pdo()->prepare('SELECT * FROM procurement_orders WHERE id = :id');
+        $stmt->execute(['id' => $orderId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return is_array($row) ? $row : null;
+    }
+
+    /**
+     * @return array{ok: bool, message: string, order_id?: string}
+     */
+    public static function createEmptyDraftOrder(string $manufacturer, ?string $userId): array
+    {
+        if (!self::tableReady()) {
+            return ['ok' => false, 'message' => 'جداول المشتريات غير جاهزة.'];
+        }
+
+        $manufacturer = trim($manufacturer);
+        if ($manufacturer === '') {
+            return ['ok' => false, 'message' => 'اختر الشركة المصنّعة.'];
+        }
+
+        $season = StoreSeasonService::current();
+        $seasonId = is_array($season) ? ($season['id'] ?? null) : null;
+
+        $stmt = Database::pdo()->prepare(
+            'INSERT INTO procurement_orders (manufacturer, status, season_id, created_by_user_id)
+             VALUES (:manufacturer, \'draft\', :season_id, :user_id)
+             RETURNING id::text'
+        );
+        $stmt->execute([
+            'manufacturer' => $manufacturer,
+            'season_id' => $seasonId,
+            'user_id' => $userId,
+        ]);
+        $orderId = (string) ($stmt->fetchColumn() ?: '');
+
+        return $orderId !== ''
+            ? ['ok' => true, 'message' => 'تم إنشاء مسودة طلب.', 'order_id' => $orderId]
+            : ['ok' => false, 'message' => 'تعذر إنشاء الطلب.'];
+    }
+
+    /**
+     * @return array{ok: bool, message: string, snapshot?: array<string, mixed>}|null
+     */
+    public static function materialLineSnapshot(string $materialGuid): ?array
+    {
+        $materialGuid = trim($materialGuid);
+        if ($materialGuid === '') {
+            return null;
+        }
+
+        $settings = self::settings();
+        if ($settings['store_guids'] === []) {
+            return null;
+        }
+
+        $materials = self::fetchMaterialsByGuids([$materialGuid], $settings['store_guids']);
+        $material = $materials[strtolower($materialGuid)] ?? null;
+        if (!is_array($material)) {
+            return null;
+        }
+
+        $policy = self::policyRow($materialGuid);
+        $reserved = StockReservationService::reservedPrimaryByMaterial([$materialGuid]);
+
+        return self::buildLineSnapshot($materialGuid, $material, $policy, $reserved);
+    }
+
+    /**
+     * @return array{ok: bool, message: string}
+     */
+    public static function addLineToOrder(string $orderId, string $materialGuid, ?float $approvedCartons = null): array
+    {
+        if (!self::tableReady()) {
+            return ['ok' => false, 'message' => 'جداول المشتريات غير جاهزة.'];
+        }
+
+        $order = self::getOrder($orderId);
+        if ($order === null) {
+            return ['ok' => false, 'message' => 'الطلب غير موجود.'];
+        }
+
+        if (!in_array((string) ($order['status'] ?? ''), ['draft', 'sent', 'partially_received'], true)) {
+            return ['ok' => false, 'message' => 'لا يمكن إضافة بنود لطلب مغلق.'];
+        }
+
+        $snapshot = self::materialLineSnapshot($materialGuid);
+        if ($snapshot === null) {
+            return ['ok' => false, 'message' => 'تعذر قراءة المادة أو المخزون — راجع مستودعات الإعدادات.'];
+        }
+
+        $orderManufacturer = trim((string) ($order['manufacturer'] ?? ''));
+        $lineManufacturer = trim((string) ($snapshot['manufacturer'] ?? ''));
+        if ($orderManufacturer !== '' && $lineManufacturer !== '' && $orderManufacturer !== $lineManufacturer) {
+            return ['ok' => false, 'message' => 'الصنف تابع لشركة أخرى — أنشئ طلباً لتلك الشركة.'];
+        }
+
+        $qty = $approvedCartons ?? (float) ($snapshot['suggested_cartons'] ?? 0);
+        if ($qty <= 0) {
+            $qty = 1.0;
+        }
+
+        try {
+            Database::pdo()->prepare(
+                'INSERT INTO procurement_order_lines (
+                    order_id, material_guid, material_code, material_name_ar,
+                    suggested_cartons, approved_cartons, available_cartons
+                 ) VALUES (
+                    :order_id, :material_guid, :code, :name,
+                    :suggested, :approved, :available
+                 )'
+            )->execute([
+                'order_id' => $orderId,
+                'material_guid' => $materialGuid,
+                'code' => $snapshot['material_code'],
+                'name' => $snapshot['material_name_ar'],
+                'suggested' => $snapshot['suggested_cartons'],
+                'approved' => $qty,
+                'available' => $snapshot['available_cartons'],
+            ]);
+        } catch (Throwable) {
+            return ['ok' => false, 'message' => 'الصنف موجود في طلب مفتوح آخر أو في هذا الطلب.'];
+        }
+
+        return ['ok' => true, 'message' => 'تمت إضافة الصنف للطلب.'];
+    }
+
+    /**
+     * @param array{only_season_active?: bool, only_below_min?: bool, respect_current_season?: bool} $criteria
+     * @return array{ok: bool, message: string, added?: int}
+     */
+    public static function fillOrderFromCriteria(string $orderId, array $criteria, ?string $userId = null): array
+    {
+        if (!self::tableReady()) {
+            return ['ok' => false, 'message' => 'جداول المشتريات غير جاهزة.'];
+        }
+
+        $order = self::getOrder($orderId);
+        if ($order === null) {
+            return ['ok' => false, 'message' => 'الطلب غير موجود.'];
+        }
+
+        $manufacturer = trim((string) ($order['manufacturer'] ?? ''));
+        $onlySeasonActive = (bool) ($criteria['only_season_active'] ?? true);
+        $onlyBelowMin = (bool) ($criteria['only_below_min'] ?? true);
+
+        $added = 0;
+        foreach (self::computeShortageLines() as $line) {
+            if ($manufacturer !== '' && (string) ($line['manufacturer'] ?? '') !== $manufacturer) {
+                continue;
+            }
+
+            $guid = (string) ($line['material_guid'] ?? '');
+            if ($guid === '') {
+                continue;
+            }
+
+            if ($onlyBelowMin && ((float) ($line['suggested_cartons'] ?? 0)) <= 0) {
+                continue;
+            }
+
+            if ($onlySeasonActive) {
+                $policy = self::policyRow($guid);
+                if (!is_array($policy) || ($policy['lifecycle'] ?? '') !== self::LIFECYCLE_SEASON_ACTIVE) {
+                    continue;
+                }
+            }
+
+            $result = self::addLineToOrder(
+                $orderId,
+                $guid,
+                (float) ($line['suggested_cartons'] ?? 1)
+            );
+            if ($result['ok']) {
+                $added++;
+            }
+        }
+
+        return [
+            'ok' => true,
+            'message' => $added > 0
+                ? sprintf('تمت إضافة %d صنفاً حسب المعايير.', $added)
+                : 'لم يُضف أي صنف — راجع النواقص أو المعايير.',
+            'added' => $added,
+        ];
+    }
+
+    /**
+     * @param array{q?: string, keyword?: string, page?: int, page_size?: int, group_guids?: list<string>} $params
+     * @return array{items: list<array<string, mixed>>, total: int, page: int, page_size: int}
+     */
+    public static function searchMaterialsForPicker(string $manufacturer, array $params): array
+    {
+        $settings = self::settings();
+        $storeGuids = $settings['store_guids'];
+        if ($storeGuids === []) {
+            return ['items' => [], 'total' => 0, 'page' => 1, 'page_size' => 25];
+        }
+
+        $page = max(1, (int) ($params['page'] ?? 1));
+        $pageSize = max(5, min(50, (int) ($params['page_size'] ?? 25)));
+        $keyword = trim((string) ($params['q'] ?? $params['keyword'] ?? ''));
+
+        $query = [
+            'page' => $page,
+            'pageSize' => $pageSize,
+            'storeGuids' => implode(',', $storeGuids),
+        ];
+        if ($keyword !== '') {
+            $query['keyword'] = $keyword;
+        }
+        $manufacturer = trim($manufacturer);
+        if ($manufacturer !== '') {
+            $query['manufacturers'] = $manufacturer;
+        }
+
+        $groupGuids = $params['group_guids'] ?? [];
+        if (is_array($groupGuids) && $groupGuids !== []) {
+            $query['groupGuids'] = implode(',', array_map('strval', $groupGuids));
+        } elseif (!empty($params['current_season_only']) && $settings['limit_to_current_season']) {
+            $season = StoreSeasonService::current();
+            $groups = is_array($season) ? ($season['group_guids'] ?? []) : [];
+            if ($groups !== []) {
+                $query['groupGuids'] = implode(',', array_map('strval', $groups));
+            }
+        }
+
+        $response = SessionGate::withoutLock(static function () use ($query): array {
+            return ApiClient::get('/api/materials', $query, 90);
+        });
+
+        if (!($response['ok'] ?? false)) {
+            return ['items' => [], 'total' => 0, 'page' => $page, 'page_size' => $pageSize];
+        }
+
+        $data = $response['data'] ?? [];
+        $apiItems = is_array($data['items'] ?? null) ? $data['items'] : [];
+        $total = (int) ($data['totalCount'] ?? 0);
+
+        $guids = [];
+        foreach ($apiItems as $apiItem) {
+            if (!is_array($apiItem)) {
+                continue;
+            }
+            $guid = self::materialGuidFromApi($apiItem);
+            if ($guid !== '') {
+                $guids[] = $guid;
+            }
+        }
+
+        $byGuid = self::fetchMaterialsByGuids($guids, $storeGuids);
+        StockReservationService::forgetWarehouseMemo();
+        $reserved = StockReservationService::reservedPrimaryByMaterial($guids);
+        $policies = self::policyRowsForGuids($guids);
+
+        $items = [];
+        foreach ($guids as $guid) {
+            $key = strtolower($guid);
+            $material = $byGuid[$key] ?? null;
+            if (!is_array($material)) {
+                continue;
+            }
+            $snapshot = self::buildLineSnapshot($guid, $material, $policies[$key] ?? null, $reserved);
+            if ($snapshot !== null) {
+                $items[] = $snapshot;
+            }
+        }
+
+        return [
+            'items' => $items,
+            'total' => $total,
+            'page' => $page,
+            'page_size' => $pageSize,
+        ];
+    }
+
+    /** @param array<string, mixed> $material @param array<string, mixed>|null $policy */
+    private static function buildLineSnapshot(string $materialGuid, array $material, ?array $policy, array $reservedByGuid): ?array
+    {
+        $pcs = max(1.0, ShareCartService::packaging($material));
+        $warehousePrimary = max(0.0, (float) ($material['warehouseQuantity'] ?? 0));
+        $key = strtolower(trim($materialGuid));
+        $reserved = (float) ($reservedByGuid[$materialGuid] ?? $reservedByGuid[$key] ?? 0.0);
+        $availablePrimary = max(0.0, $warehousePrimary - $reserved);
+        $availableCartons = round($availablePrimary / $pcs, 3);
+
+        $suggested = 0.0;
+        if (is_array($policy)
+            && ($policy['lifecycle'] ?? '') === self::LIFECYCLE_SEASON_ACTIVE
+            && $policy['min_cartons'] !== null
+            && $policy['max_cartons'] !== null
+            && $availableCartons <= (float) $policy['min_cartons']) {
+            $needPrimary = max(0.0, ((float) $policy['max_cartons']) * $pcs - $availablePrimary);
+            $suggested = (float) (int) ceil($needPrimary / $pcs);
+        }
+
+        $fields = self::cacheFieldsFromApi($material);
+
+        return [
+            'material_guid' => $materialGuid,
+            'material_code' => $fields['code'],
+            'material_name_ar' => $fields['name'],
+            'manufacturer' => $fields['manufacturer'],
+            'available_cartons' => $availableCartons,
+            'suggested_cartons' => $suggested,
+            'lifecycle' => is_array($policy) ? (string) ($policy['lifecycle'] ?? '') : '',
+            'min_cartons' => is_array($policy) ? $policy['min_cartons'] : null,
+            'max_cartons' => is_array($policy) ? $policy['max_cartons'] : null,
+        ];
+    }
+
+    /** @param list<string> $guids @return array<string, array<string, mixed>> keyed by lower guid */
+    private static function policyRowsForGuids(array $guids): array
+    {
+        $guids = array_values(array_unique(array_filter(array_map('trim', $guids))));
+        if ($guids === [] || !self::tableReady()) {
+            return [];
+        }
+
+        $placeholders = [];
+        $params = [];
+        foreach ($guids as $index => $guid) {
+            $key = 'g' . $index;
+            $placeholders[] = ':' . $key;
+            $params[$key] = $guid;
+        }
+
+        $sql = 'SELECT * FROM procurement_materials WHERE material_guid::text IN (' . implode(', ', $placeholders) . ')';
+        $stmt = Database::pdo()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $map = [];
+        foreach ($rows as $row) {
+            $guid = strtolower(trim((string) ($row['material_guid'] ?? '')));
+            if ($guid !== '') {
+                $map[$guid] = $row;
+            }
+        }
+
+        return $map;
+    }
+
+    /** @return array<string, mixed>|null */
+    private static function policyRow(string $materialGuid): ?array
+    {
+        if (!self::tableReady()) {
+            return null;
+        }
+
+        $stmt = Database::pdo()->prepare('SELECT * FROM procurement_materials WHERE material_guid = :guid');
+        $stmt->execute(['guid' => $materialGuid]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return is_array($row) ? $row : null;
     }
 
     /** @return array<string, array<string, mixed>> */

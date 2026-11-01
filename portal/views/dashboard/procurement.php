@@ -13,10 +13,21 @@ use Portal\Services\ProcurementService;
 /** @var array<string, list<array<string, mixed>>> $shortagesByManufacturer */
 /** @var list<array<string, mixed>> $materials */
 /** @var string $materialFilter */
+/** @var string $materialQ */
+/** @var string $materialManufacturer */
+/** @var int $materialPage */
+/** @var int $materialTotal */
+/** @var list<string> $materialManufacturers */
 /** @var list<array<string, mixed>> $orders */
 /** @var string $viewOrderId */
+/** @var array<string, mixed>|null $viewOrder */
 /** @var list<array<string, mixed>> $orderLines */
+/** @var string $pickQ */
+/** @var int $pickPage */
+/** @var bool $pickSeasonOnly */
+/** @var array{items: list<array<string, mixed>>, total: int, page: int, page_size: int} $pickerResults */
 /** @var list<array<string, mixed>> $storeOptions */
+/** @var list<string> $manufacturerOptions */
 /** @var string|null $filterError */
 /** @var list<string> $selectedStoreGuids */
 
@@ -117,6 +128,24 @@ $orderStatusLabels = [
 
 <?php elseif ($tab === 'materials'): ?>
   <section class="bg-white border border-border-subtle rounded-xl p-5 mb-4">
+    <form method="get" class="grid md:grid-cols-4 gap-3 mb-4 items-end">
+      <input type="hidden" name="tab" value="materials">
+      <input type="hidden" name="material_filter" value="<?= h($materialFilter) ?>">
+      <label class="md:col-span-2 text-sm">
+        <span class="font-bold block mb-1">بحث (كود / اسم / شركة)</span>
+        <input type="search" name="material_q" value="<?= h($materialQ) ?>" class="h-10 w-full rounded-lg border border-border-subtle px-3">
+      </label>
+      <label class="text-sm">
+        <span class="font-bold block mb-1">الشركة</span>
+        <select name="material_manufacturer" class="h-10 w-full rounded-lg border border-border-subtle px-2">
+          <option value="">— الكل —</option>
+          <?php foreach ($materialManufacturers as $mfr): ?>
+            <option value="<?= h($mfr) ?>" <?= $materialManufacturer === $mfr ? 'selected' : '' ?>><?= h($mfr) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <button type="submit" class="<?= h($btnPrimary) ?> w-full">بحث</button>
+    </form>
     <div class="flex flex-wrap gap-2 mb-4">
       <?php
         $filters = [
@@ -124,15 +153,26 @@ $orderStatusLabels = [
             'trial' => 'تجربة',
             'season_active' => 'موسمي مستمر',
             'discontinued' => 'متوقف',
+            'all' => 'الكل',
         ];
         foreach ($filters as $key => $label):
+          $href = '/dashboard/procurement.php?' . http_build_query([
+              'tab' => 'materials',
+              'material_filter' => $key,
+              'material_q' => $materialQ,
+              'material_manufacturer' => $materialManufacturer,
+          ]);
       ?>
-        <a href="/dashboard/procurement.php?tab=materials&amp;material_filter=<?= h(rawurlencode($key)) ?>"
+        <a href="<?= h($href) ?>"
            class="text-xs font-bold px-3 py-1.5 rounded-full border <?= $materialFilter === $key ? 'bg-primary/10 border-primary text-primary' : 'border-border-subtle text-text-muted' ?>">
           <?= h($label) ?>
         </a>
       <?php endforeach; ?>
     </div>
+    <p class="text-sm text-text-muted mb-2">
+      <?= h((string) $materialTotal) ?> نتيجة — صفحة <?= h((string) $materialPage) ?>
+      <?= (int) ceil(max(1, $materialTotal) / 50) > 1 ? ' من ' . (int) ceil($materialTotal / 50) : '' ?>
+    </p>
     <p class="text-sm text-text-muted mb-4">كل مادة جديدة من الأمين تُسجَّل تلقائياً كـ «تجربة» حتى تضبطها هنا.</p>
     <?php if ($materials === []): ?>
       <p class="text-sm text-text-muted">لا مواد في هذا الفلتر. جرّب «مزامنة مواد الأمين».</p>
@@ -184,15 +224,48 @@ $orderStatusLabels = [
           </tbody>
         </table>
       </div>
+      <?php if ($materialTotal > 50): ?>
+        <nav class="mt-4 flex flex-wrap gap-2">
+          <?php
+            $totalPages = (int) ceil($materialTotal / 50);
+            for ($p = max(1, $materialPage - 2); $p <= min($totalPages, $materialPage + 2); $p++):
+              $pageHref = '/dashboard/procurement.php?' . http_build_query([
+                  'tab' => 'materials',
+                  'material_filter' => $materialFilter,
+                  'material_q' => $materialQ,
+                  'material_manufacturer' => $materialManufacturer,
+                  'material_page' => $p,
+              ]);
+          ?>
+            <a href="<?= h($pageHref) ?>" class="px-3 py-1 rounded-lg text-sm font-bold <?= $p === $materialPage ? 'bg-primary text-white' : 'border border-border-subtle' ?>"><?= h((string) $p) ?></a>
+          <?php endfor; ?>
+        </nav>
+      <?php endif; ?>
     <?php endif; ?>
   </section>
 
 <?php elseif ($tab === 'orders'): ?>
+  <section class="bg-white border border-border-subtle rounded-xl p-4 mb-4">
+    <h2 class="text-sm font-bold mb-2">مسودة جديدة (فاتورة شراء)</h2>
+    <form method="post" class="flex flex-wrap gap-2 items-end">
+      <input type="hidden" name="action" value="create_empty_order">
+      <label class="text-sm flex-1 min-w-[12rem]">
+        <span class="text-text-muted block mb-1">الشركة المصنّعة</span>
+        <select name="manufacturer" required class="h-10 w-full rounded-lg border border-border-subtle px-2">
+          <option value="">— اختر —</option>
+          <?php foreach ($manufacturerOptions as $mfr): ?>
+            <option value="<?= h($mfr) ?>"><?= h($mfr) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <button type="submit" class="<?= h($btnPrimary) ?>">إنشاء مسودة</button>
+    </form>
+  </section>
   <section class="grid lg:grid-cols-2 gap-4">
     <div class="bg-white border border-border-subtle rounded-xl p-5">
       <h2 class="text-lg font-bold mb-3">طلبات مفتوحة</h2>
       <?php if ($orders === []): ?>
-        <p class="text-sm text-text-muted">لا مسودات أو طلبات مرسلة. أنشئ من تبويب النواقص.</p>
+        <p class="text-sm text-text-muted">لا مسودات — أنشئ من النواقص أو «مسودة جديدة» أعلاه.</p>
       <?php else: ?>
         <ul class="space-y-2">
           <?php foreach ($orders as $order): ?>
@@ -213,41 +286,154 @@ $orderStatusLabels = [
         </ul>
       <?php endif; ?>
     </div>
-    <div class="bg-white border border-border-subtle rounded-xl p-5">
-      <?php if ($viewOrderId === ''): ?>
-        <p class="text-sm text-text-muted">اختر طلباً من القائمة لعرض البنود.</p>
+    <div class="bg-white border border-border-subtle rounded-xl p-5 space-y-5">
+      <?php if ($viewOrderId === '' || $viewOrder === null): ?>
+        <p class="text-sm text-text-muted">اختر طلباً من القائمة — ثم أضف الأصناف كفاتورة.</p>
       <?php else: ?>
-        <h2 class="text-lg font-bold mb-3">بنود الطلب</h2>
-        <?php if ($orderLines === []): ?>
-          <p class="text-sm text-text-muted">لا بنود.</p>
-        <?php else: ?>
-          <div class="space-y-3 mb-4">
-            <?php foreach ($orderLines as $line): ?>
-              <div class="border border-border-subtle rounded-lg p-3 text-sm">
-                <div class="font-bold"><?= h((string) ($line['material_name_ar'] ?? '')) ?></div>
-                <div class="text-xs text-text-muted font-mono"><?= h((string) ($line['material_code'] ?? '')) ?></div>
-                <div class="mt-2 text-xs">متاح عند الإنشاء: <?= h((string) ($line['available_cartons'] ?? '')) ?> طرد</div>
-                <form method="post" class="mt-2 flex flex-wrap items-end gap-2">
-                  <input type="hidden" name="action" value="update_line_qty">
-                  <input type="hidden" name="line_id" value="<?= h((string) ($line['id'] ?? '')) ?>">
-                  <label class="text-xs">طرد معتمد
-                    <input type="number" step="0.001" min="0" name="approved_cartons" value="<?= h((string) ($line['approved_cartons'] ?? '')) ?>"
-                           class="block h-9 w-24 rounded-lg border border-border-subtle px-2 mt-1">
-                  </label>
-                  <button type="submit" class="<?= h($btnLight) ?> h-9 text-xs">تحديث</button>
-                </form>
-                <?php if (($line['line_status'] ?? '') === 'open'): ?>
-                  <form method="post" class="mt-2">
-                    <input type="hidden" name="action" value="close_line">
-                    <input type="hidden" name="line_id" value="<?= h((string) ($line['id'] ?? '')) ?>">
-                    <button type="submit" class="text-xs font-bold text-primary">إغلاق السطر (وصل / لا حاجة)</button>
+        <div>
+          <h2 class="text-lg font-bold"><?= h((string) ($viewOrder['manufacturer'] ?? '')) ?></h2>
+          <p class="text-xs text-text-muted">مسودة طلب شراء — <?= h($orderStatusLabels[(string) ($viewOrder['status'] ?? 'draft')] ?? '') ?></p>
+        </div>
+
+        <div>
+          <h3 class="text-sm font-bold mb-2">بنود الفاتورة (<?= h((string) count($orderLines)) ?>)</h3>
+          <?php if ($orderLines === []): ?>
+            <p class="text-sm text-text-muted">لا بنود بعد — ابحث أدناه أو «ملء من المعايير».</p>
+          <?php else: ?>
+            <div class="overflow-x-auto border border-border-subtle rounded-lg">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-right text-text-muted bg-surface-low">
+                    <th class="p-2">كود</th>
+                    <th class="p-2">الصنف</th>
+                    <th class="p-2">متاح</th>
+                    <th class="p-2">طرد</th>
+                    <th class="p-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php foreach ($orderLines as $line): ?>
+                    <tr class="border-t border-border-subtle/60">
+                      <td class="p-2 font-mono text-xs"><?= h((string) ($line['material_code'] ?? '')) ?></td>
+                      <td class="p-2"><?= h((string) ($line['material_name_ar'] ?? '')) ?></td>
+                      <td class="p-2 text-xs"><?= h((string) ($line['available_cartons'] ?? '')) ?></td>
+                      <td class="p-2">
+                        <form method="post" class="flex gap-1 items-center">
+                          <input type="hidden" name="action" value="update_line_qty">
+                          <input type="hidden" name="order_id" value="<?= h($viewOrderId) ?>">
+                          <input type="hidden" name="line_id" value="<?= h((string) ($line['id'] ?? '')) ?>">
+                          <input type="number" step="0.001" min="0" name="approved_cartons" value="<?= h((string) ($line['approved_cartons'] ?? '')) ?>"
+                                 class="h-8 w-20 rounded border border-border-subtle px-1 text-xs">
+                          <button type="submit" class="text-xs font-bold text-primary">✓</button>
+                        </form>
+                      </td>
+                      <td class="p-2">
+                        <?php if (($line['line_status'] ?? '') === 'open'): ?>
+                          <form method="post">
+                            <input type="hidden" name="action" value="close_line">
+                            <input type="hidden" name="order_id" value="<?= h($viewOrderId) ?>">
+                            <input type="hidden" name="line_id" value="<?= h((string) ($line['id'] ?? '')) ?>">
+                            <button type="submit" class="text-xs text-text-muted">إغلاق</button>
+                          </form>
+                        <?php endif; ?>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          <?php endif; ?>
+        </div>
+
+        <div class="border-t border-border-subtle pt-4">
+          <h3 class="text-sm font-bold mb-2">ملء تلقائي (معايير الطلب)</h3>
+          <form method="post" class="space-y-2">
+            <input type="hidden" name="action" value="fill_order_criteria">
+            <input type="hidden" name="order_id" value="<?= h($viewOrderId) ?>">
+            <label class="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="only_below_min" checked>
+              <span>فقط تحت حد تفعيل الطلب (نواقص)</span>
+            </label>
+            <label class="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="only_season_active" checked>
+              <span>فقط «موسمي مستمر»</span>
+            </label>
+            <button type="submit" class="<?= h($btnLight) ?> text-xs">إضافة الأصناف المطابقة</button>
+          </form>
+        </div>
+
+        <div class="border-t border-border-subtle pt-4">
+          <h3 class="text-sm font-bold mb-2">بحث وإضافة أصناف</h3>
+          <form method="get" class="flex flex-wrap gap-2 items-end mb-3">
+            <input type="hidden" name="tab" value="orders">
+            <input type="hidden" name="order" value="<?= h($viewOrderId) ?>">
+            <input type="hidden" name="pick_search" value="1">
+            <label class="flex-1 min-w-[10rem] text-sm">
+              <input type="search" name="pick_q" value="<?= h($pickQ) ?>" placeholder="كود أو اسم…" class="h-10 w-full rounded-lg border border-border-subtle px-3">
+            </label>
+            <label class="flex items-center gap-2 text-xs whitespace-nowrap">
+              <input type="checkbox" name="pick_season" value="1" <?= $pickSeasonOnly ? 'checked' : '' ?>>
+              موسم حالي
+            </label>
+            <button type="submit" class="<?= h($btnPrimary) ?> h-10">بحث</button>
+          </form>
+          <?php if ($pickQ !== '' || isset($_GET['pick_search'])): ?>
+            <p class="text-xs text-text-muted mb-2"><?= h((string) ($pickerResults['total'] ?? 0)) ?> في الأمين — شركة: <?= h((string) ($viewOrder['manufacturer'] ?? '')) ?></p>
+            <?php if (($pickerResults['items'] ?? []) === []): ?>
+              <p class="text-sm text-text-muted">لا نتائج.</p>
+            <?php else: ?>
+              <div class="space-y-2 max-h-80 overflow-y-auto">
+                <?php foreach ($pickerResults['items'] as $pick): ?>
+                  <form method="post" class="flex flex-wrap gap-2 items-center border border-border-subtle rounded-lg p-2 text-sm">
+                    <input type="hidden" name="action" value="add_order_line">
+                    <input type="hidden" name="order_id" value="<?= h($viewOrderId) ?>">
+                    <input type="hidden" name="material_guid" value="<?= h((string) ($pick['material_guid'] ?? '')) ?>">
+                    <input type="hidden" name="pick_q" value="<?= h($pickQ) ?>">
+                    <input type="hidden" name="pick_page" value="<?= h((string) $pickPage) ?>">
+                    <?php if ($pickSeasonOnly): ?><input type="hidden" name="pick_season" value="1"><?php endif; ?>
+                    <div class="flex-1 min-w-[8rem]">
+                      <div class="font-bold"><?= h((string) ($pick['material_name_ar'] ?? '')) ?></div>
+                      <div class="text-xs font-mono text-text-muted"><?= h((string) ($pick['material_code'] ?? '')) ?>
+                        — متاح <?= h((string) ($pick['available_cartons'] ?? '')) ?> طرد
+                        <?php if (($pick['lifecycle'] ?? '') !== ''): ?>
+                          · <?= h(ProcurementService::LIFECYCLE_LABELS[$pick['lifecycle']] ?? (string) $pick['lifecycle']) ?>
+                        <?php endif; ?>
+                      </div>
+                    </div>
+                    <input type="number" step="0.001" min="0.001" name="approved_cartons"
+                           value="<?= h((string) (($pick['suggested_cartons'] ?? 0) > 0 ? $pick['suggested_cartons'] : 1)) ?>"
+                           class="h-9 w-20 rounded-lg border border-border-subtle px-2 text-xs" title="طرد">
+                    <button type="submit" class="<?= h($btnPrimary) ?> h-9 px-3 text-xs">+ إضافة</button>
                   </form>
-                <?php endif; ?>
+                <?php endforeach; ?>
               </div>
-            <?php endforeach; ?>
-          </div>
-        <?php endif; ?>
-        <div class="flex flex-wrap gap-2">
+              <?php
+                $pickTotalPages = (int) ceil(max(1, (int) ($pickerResults['total'] ?? 0)) / max(1, (int) ($pickerResults['page_size'] ?? 25)));
+                if ($pickTotalPages > 1):
+              ?>
+                <nav class="mt-2 flex gap-1">
+                  <?php for ($pp = max(1, $pickPage - 2); $pp <= min($pickTotalPages, $pickPage + 2); $pp++): ?>
+                    <?php
+                      $pickHref = '/dashboard/procurement.php?' . http_build_query([
+                          'tab' => 'orders',
+                          'order' => $viewOrderId,
+                          'pick_q' => $pickQ,
+                          'pick_page' => $pp,
+                          'pick_season' => $pickSeasonOnly ? '1' : '0',
+                          'pick_search' => '1',
+                      ]);
+                    ?>
+                    <a href="<?= h($pickHref) ?>" class="px-2 py-1 text-xs rounded border <?= $pp === $pickPage ? 'bg-primary text-white' : '' ?>"><?= h((string) $pp) ?></a>
+                  <?php endfor; ?>
+                </nav>
+              <?php endif; ?>
+            <?php endif; ?>
+          <?php else: ?>
+            <p class="text-xs text-text-muted">اكتب كلمة بحث ثم «بحث» لعرض أصناف الشركة من الأمين.</p>
+          <?php endif; ?>
+        </div>
+
+        <div class="flex flex-wrap gap-2 border-t border-border-subtle pt-4">
           <form method="post">
             <input type="hidden" name="action" value="update_order_status">
             <input type="hidden" name="order_id" value="<?= h($viewOrderId) ?>">
