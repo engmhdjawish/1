@@ -11,15 +11,44 @@ use Throwable;
 
 final class ProcurementService
 {
-    public const LIFECYCLE_TRIAL = 'trial';
-    public const LIFECYCLE_SEASON_ACTIVE = 'season_active';
-    public const LIFECYCLE_DISCONTINUED = 'discontinued';
+    public const LIFECYCLE_NEW = 'new';
+    public const LIFECYCLE_ACTIVE = 'active';
+    public const LIFECYCLE_CANCELLED = 'cancelled';
+
+    /** @deprecated use LIFECYCLE_NEW */
+    public const LIFECYCLE_TRIAL = self::LIFECYCLE_NEW;
+    /** @deprecated use LIFECYCLE_ACTIVE */
+    public const LIFECYCLE_SEASON_ACTIVE = self::LIFECYCLE_ACTIVE;
+    /** @deprecated use LIFECYCLE_CANCELLED */
+    public const LIFECYCLE_DISCONTINUED = self::LIFECYCLE_CANCELLED;
 
     public const LIFECYCLE_LABELS = [
-        self::LIFECYCLE_TRIAL => 'تجربة',
-        self::LIFECYCLE_SEASON_ACTIVE => 'موسمي مستمر',
-        self::LIFECYCLE_DISCONTINUED => 'متوقف',
+        self::LIFECYCLE_NEW => 'جديد',
+        self::LIFECYCLE_ACTIVE => 'فعال',
+        self::LIFECYCLE_CANCELLED => 'ملغي',
     ];
+
+    public static function normalizeLifecycle(string $value): string
+    {
+        $value = trim($value);
+
+        return match ($value) {
+            'trial', self::LIFECYCLE_NEW => self::LIFECYCLE_NEW,
+            'season_active', self::LIFECYCLE_ACTIVE => self::LIFECYCLE_ACTIVE,
+            'discontinued', self::LIFECYCLE_CANCELLED => self::LIFECYCLE_CANCELLED,
+            default => isset(self::LIFECYCLE_LABELS[$value]) ? $value : self::LIFECYCLE_NEW,
+        };
+    }
+
+    public static function normalizeFilterPreset(string $preset): string
+    {
+        return match (trim($preset)) {
+            'trial' => 'new',
+            'season_active' => 'active',
+            'discontinued' => 'cancelled',
+            default => trim($preset),
+        };
+    }
 
     /** @var list<string> */
     public const OPEN_ORDER_STATUSES = ['draft', 'sent', 'partially_received'];
@@ -181,7 +210,7 @@ final class ProcurementService
                         'name' => $fields['name'],
                         'manufacturer' => $fields['manufacturer'],
                         'group_guid' => $fields['group_guid'],
-                        'lifecycle' => self::LIFECYCLE_TRIAL,
+                        'lifecycle' => self::LIFECYCLE_NEW,
                     ]);
                     if ($insert->rowCount() > 0) {
                         $newCount++;
@@ -251,16 +280,16 @@ final class ProcurementService
 
         $where = ['TRUE'];
         $params = [];
-        $preset = trim((string) ($criteria['preset'] ?? 'needs_config'));
+        $preset = self::normalizeFilterPreset((string) ($criteria['preset'] ?? 'needs_config'));
         if ($preset === 'needs_config') {
             $where[] = 'configured_at IS NULL';
-            $where[] = "lifecycle <> 'discontinued'";
-        } elseif ($preset === 'season_active') {
-            $where[] = "lifecycle = 'season_active'";
-        } elseif ($preset === 'trial') {
-            $where[] = "lifecycle = 'trial'";
-        } elseif ($preset === 'discontinued') {
-            $where[] = "lifecycle = 'discontinued'";
+            $where[] = "lifecycle <> 'cancelled'";
+        } elseif ($preset === 'active') {
+            $where[] = "lifecycle = 'active'";
+        } elseif ($preset === 'new') {
+            $where[] = "lifecycle = 'new'";
+        } elseif ($preset === 'cancelled') {
+            $where[] = "lifecycle = 'cancelled'";
         }
 
         $q = trim((string) ($criteria['q'] ?? ''));
@@ -297,7 +326,7 @@ final class ProcurementService
     }
 
     /**
-     * Ensures a procurement_materials row exists (trial) with API cache fields.
+     * Ensures a procurement_materials row exists (جديد) with API cache fields.
      *
      * @return array{ok: bool, message: string}
      */
@@ -349,7 +378,7 @@ final class ProcurementService
             'name' => $fields['name'],
             'manufacturer' => $fields['manufacturer'],
             'group_guid' => $fields['group_guid'],
-            'lifecycle' => self::LIFECYCLE_TRIAL,
+            'lifecycle' => self::LIFECYCLE_NEW,
         ]);
 
         return ['ok' => true, 'message' => 'تمت إضافة المادة للسجل.'];
@@ -395,7 +424,7 @@ final class ProcurementService
                 'material_code' => (string) ($policy['material_code'] ?? $snapshot['material_code'] ?? ''),
                 'material_name_ar' => (string) ($policy['material_name_ar'] ?? $snapshot['material_name_ar'] ?? ''),
                 'manufacturer' => (string) ($policy['manufacturer'] ?? $snapshot['manufacturer'] ?? ''),
-                'lifecycle' => (string) ($policy['lifecycle'] ?? self::LIFECYCLE_TRIAL),
+                'lifecycle' => self::normalizeLifecycle((string) ($policy['lifecycle'] ?? self::LIFECYCLE_NEW)),
                 'min_cartons' => $policy['min_cartons'] ?? null,
                 'max_cartons' => $policy['max_cartons'] ?? null,
                 'notes_ar' => (string) ($policy['notes_ar'] ?? ''),
@@ -442,16 +471,16 @@ final class ProcurementService
             return ['ok' => false, 'message' => 'معرف المادة غير صالح.'];
         }
 
-        $lifecycle = trim((string) ($input['lifecycle'] ?? self::LIFECYCLE_TRIAL));
+        $lifecycle = self::normalizeLifecycle(trim((string) ($input['lifecycle'] ?? self::LIFECYCLE_NEW)));
         if (!isset(self::LIFECYCLE_LABELS[$lifecycle])) {
-            return ['ok' => false, 'message' => 'نوع المادة غير معروف.'];
+            return ['ok' => false, 'message' => 'حالة المادة غير معروفة.'];
         }
 
         $minCartons = self::parseNullableCartons($input['min_cartons'] ?? null);
         $maxCartons = self::parseNullableCartons($input['max_cartons'] ?? null);
-        if ($lifecycle === self::LIFECYCLE_SEASON_ACTIVE) {
+        if ($lifecycle === self::LIFECYCLE_ACTIVE) {
             if ($minCartons === null || $maxCartons === null) {
-                return ['ok' => false, 'message' => 'للموسمي المستمر أدخل حدّ الطلب (أدنى) وسقف المخزون (أقصى) بالطرد.'];
+                return ['ok' => false, 'message' => 'للمواد الفعّالة أدخل حدّ الطلب (أدنى) وسقف المخزون (أقصى) بالطرد.'];
             }
             if ($maxCartons < $minCartons) {
                 return ['ok' => false, 'message' => 'سقف المخزون يجب أن يكون ≥ حد تفعيل الطلب.'];
@@ -476,11 +505,11 @@ final class ProcurementService
                 max_cartons = :max_cartons,
                 notes_ar = :notes,
                 configured_at = CASE
-                    WHEN :lifecycle2 IN ('season_active', 'discontinued') THEN NOW()
+                    WHEN :lifecycle2 IN ('active', 'cancelled') THEN NOW()
                     ELSE configured_at
                 END,
                 configured_by_user_id = CASE
-                    WHEN :lifecycle3 IN ('season_active', 'discontinued') THEN :user_id::uuid
+                    WHEN :lifecycle3 IN ('active', 'cancelled') THEN :user_id::uuid
                     ELSE configured_by_user_id
                 END,
                 updated_at = NOW()
@@ -560,7 +589,7 @@ final class ProcurementService
 
         $stmt = Database::pdo()->query(
             "SELECT * FROM procurement_materials
-             WHERE lifecycle = 'season_active'
+             WHERE lifecycle = 'active'
                AND min_cartons IS NOT NULL
                AND max_cartons IS NOT NULL"
         );
@@ -797,6 +826,44 @@ final class ProcurementService
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
+    /** @return list<array<string, mixed>> */
+    public static function orderLinesEnriched(string $orderId): array
+    {
+        $lines = self::orderLines($orderId);
+        if ($lines === []) {
+            return [];
+        }
+
+        $guids = [];
+        foreach ($lines as $line) {
+            $guid = trim((string) ($line['material_guid'] ?? ''));
+            if ($guid !== '') {
+                $guids[] = $guid;
+            }
+        }
+
+        $policies = self::policyRowsForGuids($guids);
+        foreach ($lines as &$line) {
+            $key = strtolower(trim((string) ($line['material_guid'] ?? '')));
+            $policy = $policies[$key] ?? null;
+            $lifecycle = is_array($policy)
+                ? self::normalizeLifecycle((string) ($policy['lifecycle'] ?? ''))
+                : '';
+            $line['lifecycle'] = $lifecycle;
+            $line['lifecycle_label'] = $lifecycle !== '' ? (self::LIFECYCLE_LABELS[$lifecycle] ?? $lifecycle) : '—';
+            $line['min_cartons'] = is_array($policy) ? $policy['min_cartons'] : null;
+            $line['max_cartons'] = is_array($policy) ? $policy['max_cartons'] : null;
+            $line['notes_ar'] = is_array($policy) ? (string) ($policy['notes_ar'] ?? '') : '';
+            $line['manufacturer'] = is_array($policy) ? (string) ($policy['manufacturer'] ?? '') : '';
+            $min = $line['min_cartons'] !== null ? (float) $line['min_cartons'] : null;
+            $available = (float) ($line['available_cartons'] ?? 0);
+            $line['below_min'] = $min !== null && $available <= $min;
+        }
+        unset($line);
+
+        return $lines;
+    }
+
     /**
      * @return array{ok: bool, message: string}
      */
@@ -1011,7 +1078,7 @@ final class ProcurementService
     }
 
     /**
-     * @param array{only_season_active?: bool, only_below_min?: bool, respect_current_season?: bool} $criteria
+     * @param array{only_active?: bool, only_season_active?: bool, only_below_min?: bool, respect_current_season?: bool} $criteria
      * @return array{ok: bool, message: string, added?: int}
      */
     public static function fillOrderFromCriteria(string $orderId, array $criteria, ?string $userId = null): array
@@ -1026,7 +1093,7 @@ final class ProcurementService
         }
 
         $manufacturer = trim((string) ($order['manufacturer'] ?? ''));
-        $onlySeasonActive = (bool) ($criteria['only_season_active'] ?? true);
+        $onlyActive = (bool) ($criteria['only_active'] ?? $criteria['only_season_active'] ?? true);
         $onlyBelowMin = (bool) ($criteria['only_below_min'] ?? true);
 
         $added = 0;
@@ -1044,9 +1111,10 @@ final class ProcurementService
                 continue;
             }
 
-            if ($onlySeasonActive) {
+            if ($onlyActive) {
                 $policy = self::policyRow($guid);
-                if (!is_array($policy) || ($policy['lifecycle'] ?? '') !== self::LIFECYCLE_SEASON_ACTIVE) {
+                $lc = is_array($policy) ? self::normalizeLifecycle((string) ($policy['lifecycle'] ?? '')) : '';
+                if ($lc !== self::LIFECYCLE_ACTIVE) {
                     continue;
                 }
             }
@@ -1171,7 +1239,7 @@ final class ProcurementService
 
         $suggested = 0.0;
         if (is_array($policy)
-            && ($policy['lifecycle'] ?? '') === self::LIFECYCLE_SEASON_ACTIVE
+            && self::normalizeLifecycle((string) ($policy['lifecycle'] ?? '')) === self::LIFECYCLE_ACTIVE
             && $policy['min_cartons'] !== null
             && $policy['max_cartons'] !== null
             && $availableCartons <= (float) $policy['min_cartons']) {
@@ -1188,7 +1256,9 @@ final class ProcurementService
             'manufacturer' => $fields['manufacturer'],
             'available_cartons' => $availableCartons,
             'suggested_cartons' => $suggested,
-            'lifecycle' => is_array($policy) ? (string) ($policy['lifecycle'] ?? '') : '',
+            'lifecycle' => is_array($policy)
+                ? self::normalizeLifecycle((string) ($policy['lifecycle'] ?? ''))
+                : '',
             'min_cartons' => is_array($policy) ? $policy['min_cartons'] : null,
             'max_cartons' => is_array($policy) ? $policy['max_cartons'] : null,
         ];

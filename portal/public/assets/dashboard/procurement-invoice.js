@@ -1,5 +1,5 @@
 /**
- * Procurement — invoice grid: live material search with multi-select (like store / special offers).
+ * Procurement — invoice grid: inline material search (Excel-style) with multi-select.
  */
 (function () {
   'use strict';
@@ -7,9 +7,9 @@
   const root = document.getElementById('procurement-invoice-root');
   if (!root) return;
 
-  const searchInput = document.getElementById('proc-invoice-search');
-  const resultsEl = document.getElementById('proc-invoice-search-results');
-  const searchWrap = document.getElementById('proc-invoice-search-wrap');
+  const searchInput = document.getElementById('proc-invoice-grid-input');
+  const resultsEl = document.getElementById('proc-invoice-grid-dropdown');
+  const materialCell = searchInput?.closest('.proc-invoice-material-cell');
   const statusEl = document.getElementById('proc-invoice-search-status');
   const manufacturerSelect = document.getElementById('proc-invoice-manufacturer');
   const addSelectedBtn = document.getElementById('proc-invoice-add-selected');
@@ -179,7 +179,7 @@
       const shown = searchItems.length;
       const totalText = searchTotal > 0 ? ' من ' + searchTotal : '';
       statusEl.textContent =
-        shown + totalText + ' — حدّد أكثر من مادة ثم «إضافة المحدّد» — Enter يبدّل تحديد السطر';
+        shown + totalText + ' — حدّد عدة مواد ثم «إضافة المحدّد» — Enter يبدّل السطر — Enter مرتين يضيف السطر النشط';
     }
 
     const sentinel = resultsEl.querySelector('[data-role="load-sentinel"]');
@@ -197,7 +197,7 @@
     const q = (searchInput.value || '').trim();
     if (q.length < 2) {
       hideResults();
-      if (statusEl) statusEl.textContent = 'اكتب حرفين على الأقل.';
+      if (statusEl) statusEl.textContent = q.length === 0 ? '' : 'اكتب حرفين على الأقل.';
       return;
     }
     if (searchLoading) return;
@@ -252,16 +252,23 @@
     fetchMaterialPage(1, false);
   };
 
+  let lastEnterAt = 0;
+
   searchInput.addEventListener('input', () => {
     const q = (searchInput.value || '').trim();
     if (q.length < 2) {
       if (searchTimer) clearTimeout(searchTimer);
       hideResults();
-      if (statusEl) statusEl.textContent = '';
+      if (statusEl) statusEl.textContent = q.length === 0 ? '' : 'اكتب حرفين على الأقل.';
       return;
     }
     if (searchTimer) clearTimeout(searchTimer);
     searchTimer = setTimeout(() => runSearch(false), 280);
+  });
+
+  searchInput.addEventListener('focus', () => {
+    const q = (searchInput.value || '').trim();
+    if (q.length >= 2 && searchItems.length === 0) runSearch(false);
   });
 
   manufacturerSelect?.addEventListener('change', () => {
@@ -296,6 +303,13 @@
       if (searchTimer) clearTimeout(searchTimer);
       if (hasList && activeResultIndex >= 0 && searchItems[activeResultIndex]) {
         const item = searchItems[activeResultIndex];
+        const now = Date.now();
+        if (now - lastEnterAt < 450 && selectedInList.size <= 1) {
+          submitBatchAdd([item.value]);
+          lastEnterAt = 0;
+          return;
+        }
+        lastEnterAt = now;
         const next = !selectedInList.has(item.value);
         toggleSelected(item.value, next);
         const row = resultsEl.querySelector('[data-pick-value="' + CSS.escape(item.value) + '"]');
@@ -314,6 +328,8 @@
   });
 
   document.addEventListener('click', (event) => {
-    if (searchWrap && !searchWrap.contains(event.target)) hideResults();
+    if (materialCell && !materialCell.contains(event.target) && event.target !== addSelectedBtn) {
+      hideResults();
+    }
   });
 })();

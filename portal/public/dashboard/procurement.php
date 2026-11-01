@@ -100,8 +100,14 @@ if ($tableReady && $_SERVER['REQUEST_METHOD'] === 'POST') {
         ], $userId);
         $flash = $result['message'];
         $flashType = $result['ok'] ? 'success' : 'error';
-        $tab = 'materials';
-        $redirectMaterialsQuery = $buildMaterialsRedirect($_POST, (string) ($_POST['material_view'] ?? 'list'));
+        $returnOrder = trim((string) ($_POST['return_order_id'] ?? ''));
+        if ($returnOrder !== '') {
+            $tab = 'orders';
+            $redirectOrderId = $returnOrder;
+        } else {
+            $tab = 'materials';
+            $redirectMaterialsQuery = $buildMaterialsRedirect($_POST, (string) ($_POST['material_view'] ?? 'list'));
+        }
     } elseif ($action === 'invoice_add_material') {
         $guid = trim((string) ($_POST['material_guid'] ?? ''));
         $ensure = ProcurementService::ensureMaterialRegistered($guid);
@@ -215,7 +221,7 @@ if ($tableReady && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'fill_order_criteria') {
         $orderId = trim((string) ($_POST['order_id'] ?? ''));
         $result = ProcurementService::fillOrderFromCriteria($orderId, [
-            'only_season_active' => isset($_POST['only_season_active']),
+            'only_active' => isset($_POST['only_active']) || isset($_POST['only_season_active']),
             'only_below_min' => isset($_POST['only_below_min']),
         ], $userId);
         $flash = $result['message'];
@@ -297,7 +303,7 @@ if (!in_array($materialView, ['list', 'invoice'], true)) {
     $materialView = 'list';
 }
 
-$materialFilter = trim((string) ($_GET['material_filter'] ?? 'needs_config'));
+$materialFilter = ProcurementService::normalizeFilterPreset(trim((string) ($_GET['material_filter'] ?? 'needs_config')));
 $materialQ = trim((string) ($_GET['material_q'] ?? ''));
 $materialManufacturer = trim((string) ($_GET['material_manufacturer'] ?? ''));
 $materialPage = max(1, (int) ($_GET['material_page'] ?? 1));
@@ -324,7 +330,7 @@ if ($tableReady && $materialView === 'invoice') {
 $orders = $tableReady ? ProcurementService::listOrders('open') : [];
 $viewOrderId = trim((string) ($_GET['order'] ?? ''));
 $viewOrder = ($tableReady && $viewOrderId !== '') ? ProcurementService::getOrder($viewOrderId) : null;
-$orderLines = ($tableReady && $viewOrderId !== '') ? ProcurementService::orderLines($viewOrderId) : [];
+$orderLines = ($tableReady && $viewOrderId !== '') ? ProcurementService::orderLinesEnriched($viewOrderId) : [];
 
 $pickQ = trim((string) ($_GET['pick_q'] ?? ''));
 $pickPage = max(1, (int) ($_GET['pick_page'] ?? 1));
@@ -372,6 +378,7 @@ if ($manufacturerOptions === [] && $materialManufacturers !== []) {
 
 $selectedStoreGuids = $settings['store_guids'];
 $loadProcurementInvoiceJs = $tab === 'materials' && $materialView === 'invoice';
+$loadProcurementOrdersJs = $tab === 'orders' && $viewOrderId !== '';
 $invoiceGridGuids = $loadProcurementInvoiceJs ? ProcurementMaterialInvoiceSession::guids() : [];
 $currentRoute = '/dashboard/procurement.php?tab=' . rawurlencode($tab);
 

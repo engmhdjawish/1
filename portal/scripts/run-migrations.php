@@ -63,6 +63,7 @@ $ordered = [
     '028-catalog-filter-views.sql',
     '029-short-link-targets.sql',
     '030-procurement.sql',
+    '031-procurement-lifecycle-v2.sql',
 ];
 
 $files = [];

@@ -354,6 +354,9 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <?php if (!empty($loadProcurementInvoiceJs)): ?>
     <script src="<?= h(portal_asset_url('/assets/dashboard/procurement-invoice.js')) ?>" defer></script>
   <?php endif; ?>
+  <?php if (!empty($loadProcurementOrdersJs)): ?>
+    <script src="<?= h(portal_asset_url('/assets/dashboard/procurement-orders.js')) ?>" defer></script>
+  <?php endif; ?>
   <script src="<?= h(portal_asset_url('/assets/dashboard/about-editor.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/dashboard/accounting-statement.js')) ?>" defer></script>
   <?php if (!empty($materialImagesWorkspace ?? false) || !empty($materialImagesZipTab ?? false) || !empty($shareLinksFormTab ?? false)): ?>

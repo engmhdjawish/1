@@ -19,13 +19,12 @@ use Portal\Services\ProcurementService;
 /** @var int $materialTotal */
 /** @var string $materialView */
 /** @var list<string> $materialManufacturers */
-/** @var string $invQ */
 /** @var string $invManufacturer */
-/** @var int $invPage */
-/** @var bool $invSeasonOnly */
-/** @var array{items: list<array<string, mixed>>, total: int, page: int, page_size: int} $invPickerResults */
 /** @var list<array<string, mixed>> $invoiceRows */
 /** @var int $invoiceCount */
+/** @var list<string> $invoiceGridGuids */
+/** @var bool $loadProcurementInvoiceJs */
+/** @var bool $loadProcurementOrdersJs */
 /** @var list<array<string, mixed>> $orders */
 /** @var string $viewOrderId */
 /** @var array<string, mixed>|null $viewOrder */
@@ -184,28 +183,7 @@ $orderStatusLabels = [
           <?php endforeach; ?>
         </select>
       </label>
-      <div class="text-sm flex-1 min-w-[220px] relative" id="proc-invoice-search-wrap">
-        <span class="font-bold block mb-1">بحث وإضافة للشبكة</span>
-        <input
-          type="search"
-          id="proc-invoice-search"
-          autocomplete="off"
-          enterkeyhint="search"
-          role="combobox"
-          aria-expanded="false"
-          aria-controls="proc-invoice-search-results"
-          class="h-10 w-full rounded-xl border border-border-subtle px-3 text-sm focus:border-primary focus:ring-primary"
-          placeholder="اكتب كود أو اسم المادة…"
-        >
-        <ul
-          id="proc-invoice-search-results"
-          class="hidden absolute z-40 mt-1 w-full max-h-72 overflow-y-auto rounded-xl border border-border-subtle bg-white shadow-lg text-sm"
-          role="listbox"
-        ></ul>
-      </div>
-    </div>
-    <div class="flex flex-wrap items-center gap-3 mb-4">
-      <p id="proc-invoice-search-status" class="text-xs text-text-muted flex-1 min-h-[1.25rem]"></p>
+      <p id="proc-invoice-search-status" class="text-xs text-text-muted flex-1 min-h-[1.25rem] pb-2"></p>
       <button type="button" id="proc-invoice-add-selected" class="<?= h($btnPrimary) ?> h-9 px-4 text-xs hidden" disabled>
         إضافة المحدّد (<span id="proc-invoice-selected-count">0</span>)
       </button>
@@ -216,7 +194,7 @@ $orderStatusLabels = [
         <div>
           <p class="so-invoice__kicker">ضبط سياسة الشراء</p>
           <h2 class="so-invoice__title">فاتورة المواد</h2>
-          <p class="so-invoice__hint">اختر مادة أو أكثر من قائمة البحث — تُضاف دفعة واحدة للشبكة. ↑↓ Enter للاختيار السريع.</p>
+          <p class="so-invoice__hint">اكتب في سطر الشبكة السفلي (مثل Excel) — حدّد عدة مواد ثم «إضافة المحدّد»، أو Enter لإضافة سطر واحد.</p>
         </div>
         <div class="flex flex-col items-end gap-2">
           <p class="so-invoice__count" id="proc-invoice-grid-count"><?= count($invoiceRows) ?> <?= count($invoiceRows) === 1 ? 'مادة' : 'مواد' ?></p>
@@ -229,73 +207,96 @@ $orderStatusLabels = [
         </div>
       </div>
       <div class="so-invoice__sheet">
-        <?php if ($invoiceRows === []): ?>
-          <p class="so-invoice__empty text-sm text-text-muted p-4">الشبكة فارغة — ابحث أعلاه وأضف مواداً.</p>
-        <?php else: ?>
-          <table class="so-invoice__table">
-            <thead>
-              <tr>
-                <th class="so-invoice__num">#</th>
-                <th>المادة</th>
-                <th>متاح (طرد)</th>
-                <th class="so-invoice__type-col">النوع</th>
-                <th>حد طلب</th>
-                <th>سقف</th>
-                <th>ملاحظة</th>
-                <th class="so-invoice__action-col"></th>
-              </tr>
-            </thead>
-            <tbody id="proc-invoice-grid-body">
-              <?php foreach ($invoiceRows as $index => $row): ?>
-                <?php $guid = (string) ($row['material_guid'] ?? ''); ?>
-                <tr class="so-invoice__row" data-material-guid="<?= h($guid) ?>">
-                  <td class="so-invoice__num"><?= h((string) ($index + 1)) ?></td>
-                  <td class="so-invoice__material">
-                    <div class="so-invoice__material-inner">
-                      <div class="so-invoice__material-text">
-                        <span class="so-invoice__name"><?= h((string) ($row['material_name_ar'] ?? '')) ?></span>
-                        <span class="so-invoice__code"><?= h((string) ($row['material_code'] ?? '')) ?></span>
-                      </div>
+        <table class="so-invoice__table">
+          <thead>
+            <tr>
+              <th class="so-invoice__num">#</th>
+              <th>المادة</th>
+              <th>متاح (طرد)</th>
+              <th class="so-invoice__type-col">الحالة</th>
+              <th>حد طلب</th>
+              <th>سقف</th>
+              <th>ملاحظة</th>
+              <th class="so-invoice__action-col"></th>
+            </tr>
+          </thead>
+          <tbody id="proc-invoice-grid-body">
+            <?php foreach ($invoiceRows as $index => $row): ?>
+              <?php
+                $guid = (string) ($row['material_guid'] ?? '');
+                $lc = ProcurementService::normalizeLifecycle((string) ($row['lifecycle'] ?? 'new'));
+              ?>
+              <tr class="so-invoice__row" data-material-guid="<?= h($guid) ?>">
+                <td class="so-invoice__num"><?= h((string) ($index + 1)) ?></td>
+                <td class="so-invoice__material">
+                  <div class="so-invoice__material-inner">
+                    <div class="so-invoice__material-text">
+                      <span class="so-invoice__name"><?= h((string) ($row['material_name_ar'] ?? '')) ?></span>
+                      <span class="so-invoice__code"><?= h((string) ($row['material_code'] ?? '')) ?></span>
                     </div>
-                  </td>
-                  <td class="text-xs"><?= h($row['available_cartons'] !== null ? (string) $row['available_cartons'] : '—') ?></td>
-                  <td class="so-invoice__type">
-                    <select form="<?= h($invoiceFormId) ?>" name="lifecycle[<?= h($guid) ?>]" class="so-invoice__select">
-                      <?php foreach (ProcurementService::LIFECYCLE_LABELS as $code => $label): ?>
-                        <option value="<?= h($code) ?>" <?= ($row['lifecycle'] ?? '') === $code ? 'selected' : '' ?>><?= h($label) ?></option>
-                      <?php endforeach; ?>
-                    </select>
-                  </td>
-                  <td>
-                    <input form="<?= h($invoiceFormId) ?>" type="number" step="0.001" min="0" name="min_cartons[<?= h($guid) ?>]" value="<?= h((string) ($row['min_cartons'] ?? '')) ?>"
-                           class="so-invoice__input w-20">
-                  </td>
-                  <td>
-                    <input form="<?= h($invoiceFormId) ?>" type="number" step="0.001" min="0" name="max_cartons[<?= h($guid) ?>]" value="<?= h((string) ($row['max_cartons'] ?? '')) ?>"
-                           class="so-invoice__input w-20">
-                  </td>
-                  <td>
-                    <input form="<?= h($invoiceFormId) ?>" type="text" name="notes_ar[<?= h($guid) ?>]" value="<?= h((string) ($row['notes_ar'] ?? '')) ?>"
-                           class="so-invoice__input min-w-[6rem]">
-                  </td>
-                  <td class="so-invoice__action">
-                    <form method="post">
-                      <input type="hidden" name="action" value="invoice_remove_material">
-                      <input type="hidden" name="material_guid" value="<?= h($guid) ?>">
-                      <button type="submit" class="so-invoice__remove" title="حذف من الفاتورة">×</button>
-                    </form>
-                  </td>
-                </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
+                  </div>
+                </td>
+                <td class="text-xs"><?= h($row['available_cartons'] !== null ? (string) $row['available_cartons'] : '—') ?></td>
+                <td class="so-invoice__type">
+                  <select form="<?= h($invoiceFormId) ?>" name="lifecycle[<?= h($guid) ?>]" class="so-invoice__select">
+                    <?php foreach (ProcurementService::LIFECYCLE_LABELS as $code => $label): ?>
+                      <option value="<?= h($code) ?>" <?= $lc === $code ? 'selected' : '' ?>><?= h($label) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </td>
+                <td>
+                  <input form="<?= h($invoiceFormId) ?>" type="number" step="0.001" min="0" name="min_cartons[<?= h($guid) ?>]" value="<?= h((string) ($row['min_cartons'] ?? '')) ?>"
+                         class="so-invoice__input w-20">
+                </td>
+                <td>
+                  <input form="<?= h($invoiceFormId) ?>" type="number" step="0.001" min="0" name="max_cartons[<?= h($guid) ?>]" value="<?= h((string) ($row['max_cartons'] ?? '')) ?>"
+                         class="so-invoice__input w-20">
+                </td>
+                <td>
+                  <input form="<?= h($invoiceFormId) ?>" type="text" name="notes_ar[<?= h($guid) ?>]" value="<?= h((string) ($row['notes_ar'] ?? '')) ?>"
+                         class="so-invoice__input min-w-[6rem]">
+                </td>
+                <td class="so-invoice__action">
+                  <form method="post">
+                    <input type="hidden" name="action" value="invoice_remove_material">
+                    <input type="hidden" name="material_guid" value="<?= h($guid) ?>">
+                    <button type="submit" class="so-invoice__remove" title="حذف من الفاتورة">×</button>
+                  </form>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+            <tr class="so-invoice__row proc-invoice-composer" data-role="composer">
+              <td class="so-invoice__num">+</td>
+              <td class="so-invoice__material proc-invoice-material-cell relative" colspan="1">
+                <input
+                  type="search"
+                  id="proc-invoice-grid-input"
+                  class="proc-invoice-material-input so-invoice__input w-full min-w-[12rem]"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                  role="combobox"
+                  aria-expanded="false"
+                  aria-controls="proc-invoice-grid-dropdown"
+                  placeholder="اكتب كود أو اسم المادة…"
+                >
+                <ul
+                  id="proc-invoice-grid-dropdown"
+                  class="proc-invoice-dropdown hidden absolute z-50 mt-1 min-w-[16rem] max-w-[28rem] max-h-72 overflow-y-auto rounded-xl border border-border-subtle bg-white shadow-lg text-sm"
+                  role="listbox"
+                ></ul>
+              </td>
+              <td colspan="6" class="text-xs text-text-muted">↑↓ للتنقل · Enter يبدّل التحديد · Enter مرتين أو الزر أعلاه للإضافة</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="mt-4 flex flex-wrap gap-2 items-center">
+        <?php if ($invoiceRows !== []): ?>
+          <button type="submit" form="<?= h($invoiceFormId) ?>" class="<?= h($btnPrimary) ?>">حفظ كل البنود</button>
+        <?php else: ?>
+          <p class="text-xs text-text-muted">أضف مواداً من السطر السفلي ثم احفظ الضبط.</p>
         <?php endif; ?>
       </div>
-      <?php if ($invoiceRows !== []): ?>
-        <div class="mt-4">
-          <button type="submit" form="<?= h($invoiceFormId) ?>" class="<?= h($btnPrimary) ?>">حفظ كل البنود</button>
-        </div>
-      <?php endif; ?>
     </div>
     <script type="application/json" id="proc-invoice-grid-guids"><?= json_encode($invoiceGridGuids, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?></script>
   </section>
@@ -325,9 +326,9 @@ $orderStatusLabels = [
       <?php
         $filters = [
             'needs_config' => 'تحتاج ضبط',
-            'trial' => 'تجربة',
-            'season_active' => 'موسمي مستمر',
-            'discontinued' => 'متوقف',
+            'new' => 'جديد',
+            'active' => 'فعال',
+            'cancelled' => 'ملغي',
             'all' => 'الكل',
         ];
         foreach ($filters as $key => $label):
@@ -349,7 +350,7 @@ $orderStatusLabels = [
       <?= h((string) $materialTotal) ?> نتيجة — صفحة <?= h((string) $materialPage) ?>
       <?= (int) ceil(max(1, $materialTotal) / 50) > 1 ? ' من ' . (int) ceil($materialTotal / 50) : '' ?>
     </p>
-    <p class="text-sm text-text-muted mb-4">كل مادة جديدة من الأمين تُسجَّل تلقائياً كـ «تجربة» حتى تضبطها هنا.</p>
+    <p class="text-sm text-text-muted mb-4">كل مادة جديدة من الأمين تُسجَّل تلقائياً «جديد» حتى تضبط حالتها وحدود الطلب.</p>
     <?php if ($materials === []): ?>
       <p class="text-sm text-text-muted">لا مواد في هذا الفلتر. جرّب «مزامنة مواد الأمين».</p>
     <?php else: ?>
@@ -368,7 +369,7 @@ $orderStatusLabels = [
             <?php foreach ($materials as $row): ?>
               <?php
                 $guid = (string) ($row['material_guid'] ?? '');
-                $lifecycle = (string) ($row['lifecycle'] ?? 'trial');
+                $lifecycle = ProcurementService::normalizeLifecycle((string) ($row['lifecycle'] ?? 'new'));
               ?>
               <tr class="border-b border-border-subtle/60 align-top">
                 <td class="py-3 pl-2 font-mono text-xs"><?= h((string) ($row['material_code'] ?? '')) ?></td>
@@ -478,45 +479,99 @@ $orderStatusLabels = [
           <p class="text-xs text-text-muted">مسودة طلب شراء — <?= h($orderStatusLabels[(string) ($viewOrder['status'] ?? 'draft')] ?? '') ?></p>
         </div>
 
-        <div>
-          <h3 class="text-sm font-bold mb-2">بنود الفاتورة (<?= h((string) count($orderLines)) ?>)</h3>
+        <div id="proc-order-lines-root" data-order-id="<?= h($viewOrderId) ?>">
+          <h3 class="text-sm font-bold mb-2">بنود الطلب (<span id="proc-order-lines-visible-count"><?= h((string) count($orderLines)) ?></span> / <?= h((string) count($orderLines)) ?>)</h3>
           <?php if ($orderLines === []): ?>
-            <p class="text-sm text-text-muted">لا بنود بعد — ابحث أدناه أو «ملء من المعايير».</p>
+            <p class="text-sm text-text-muted">لا بنود بعد — استخدم «ملء من المعايير» أو البحث أدناه.</p>
           <?php else: ?>
+            <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-3 p-3 rounded-lg bg-surface-low border border-border-subtle">
+              <label class="text-xs sm:col-span-2">
+                <span class="font-bold block mb-1">بحث في البنود</span>
+                <input type="search" id="proc-order-filter-q" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm" placeholder="كود أو اسم…">
+              </label>
+              <label class="text-xs">
+                <span class="font-bold block mb-1">الحالة</span>
+                <select id="proc-order-filter-lifecycle" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm">
+                  <option value="">— الكل —</option>
+                  <?php foreach (ProcurementService::LIFECYCLE_LABELS as $code => $label): ?>
+                    <option value="<?= h($code) ?>"><?= h($label) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </label>
+              <label class="text-xs flex items-end gap-2 pb-1">
+                <input type="checkbox" id="proc-order-filter-below-min" class="shrink-0">
+                <span>تحت حد الطلب فقط</span>
+              </label>
+              <label class="text-xs flex items-center gap-2">
+                <input type="checkbox" id="proc-order-filter-open-only" class="shrink-0">
+                <span>بنود مفتوحة فقط</span>
+              </label>
+              <button type="button" id="proc-order-filter-reset" class="<?= h($btnLight) ?> h-9 text-xs px-3">إعادة ضبط الفلاتر</button>
+            </div>
             <div class="overflow-x-auto border border-border-subtle rounded-lg">
-              <table class="w-full text-sm">
+              <table class="w-full text-sm" id="proc-order-lines-table">
                 <thead>
                   <tr class="text-right text-text-muted bg-surface-low">
                     <th class="p-2">كود</th>
                     <th class="p-2">الصنف</th>
+                    <th class="p-2">حالة</th>
                     <th class="p-2">متاح</th>
+                    <th class="p-2">حد / سقف</th>
                     <th class="p-2">طرد</th>
                     <th class="p-2"></th>
                   </tr>
                 </thead>
                 <tbody>
                   <?php foreach ($orderLines as $line): ?>
-                    <tr class="border-t border-border-subtle/60">
+                    <?php
+                      $lc = (string) ($line['lifecycle'] ?? '');
+                      $lineId = (string) ($line['id'] ?? '');
+                      $guid = (string) ($line['material_guid'] ?? '');
+                    ?>
+                    <tr class="border-t border-border-subtle/60 proc-order-line"
+                        data-line-id="<?= h($lineId) ?>"
+                        data-material-guid="<?= h($guid) ?>"
+                        data-lifecycle="<?= h($lc) ?>"
+                        data-below-min="<?= !empty($line['below_min']) ? '1' : '0' ?>"
+                        data-line-open="<?= ($line['line_status'] ?? '') === 'open' ? '1' : '0' ?>"
+                        data-search="<?= h(mb_strtolower(trim((string) ($line['material_code'] ?? '') . ' ' . (string) ($line['material_name_ar'] ?? '')))) ?>">
                       <td class="p-2 font-mono text-xs"><?= h((string) ($line['material_code'] ?? '')) ?></td>
                       <td class="p-2"><?= h((string) ($line['material_name_ar'] ?? '')) ?></td>
+                      <td class="p-2 text-xs">
+                        <span class="inline-flex px-2 py-0.5 rounded-full bg-slate-100"><?= h((string) ($line['lifecycle_label'] ?? '—')) ?></span>
+                      </td>
                       <td class="p-2 text-xs"><?= h((string) ($line['available_cartons'] ?? '')) ?></td>
+                      <td class="p-2 text-xs text-text-muted">
+                        <?= h((string) ($line['min_cartons'] ?? '—')) ?> / <?= h((string) ($line['max_cartons'] ?? '—')) ?>
+                      </td>
                       <td class="p-2">
                         <form method="post" class="flex gap-1 items-center">
                           <input type="hidden" name="action" value="update_line_qty">
                           <input type="hidden" name="order_id" value="<?= h($viewOrderId) ?>">
-                          <input type="hidden" name="line_id" value="<?= h((string) ($line['id'] ?? '')) ?>">
+                          <input type="hidden" name="line_id" value="<?= h($lineId) ?>">
                           <input type="number" step="0.001" min="0" name="approved_cartons" value="<?= h((string) ($line['approved_cartons'] ?? '')) ?>"
                                  class="h-8 w-20 rounded border border-border-subtle px-1 text-xs">
                           <button type="submit" class="text-xs font-bold text-primary">✓</button>
                         </form>
                       </td>
-                      <td class="p-2">
+                      <td class="p-2 whitespace-nowrap">
+                        <button type="button"
+                                class="text-xs font-bold text-primary proc-order-edit-material"
+                                data-material-guid="<?= h($guid) ?>"
+                                data-material-code="<?= h((string) ($line['material_code'] ?? '')) ?>"
+                                data-material-name="<?= h((string) ($line['material_name_ar'] ?? '')) ?>"
+                                data-lifecycle="<?= h($lc) ?>"
+                                data-min="<?= h((string) ($line['min_cartons'] ?? '')) ?>"
+                                data-max="<?= h((string) ($line['max_cartons'] ?? '')) ?>"
+                                data-notes="<?= h((string) ($line['notes_ar'] ?? '')) ?>">
+                          ضبط
+                        </button>
                         <?php if (($line['line_status'] ?? '') === 'open'): ?>
-                          <form method="post">
+                          <form method="post" class="inline">
                             <input type="hidden" name="action" value="close_line">
                             <input type="hidden" name="order_id" value="<?= h($viewOrderId) ?>">
-                            <input type="hidden" name="line_id" value="<?= h((string) ($line['id'] ?? '')) ?>">
-                            <button type="submit" class="text-xs text-text-muted">إغلاق</button>
+                            <input type="hidden" name="line_id" value="<?= h($lineId) ?>">
+                            <button type="submit" class="text-xs text-text-muted mr-1">إغلاق</button>
                           </form>
                         <?php endif; ?>
                       </td>
@@ -525,6 +580,41 @@ $orderStatusLabels = [
                 </tbody>
               </table>
             </div>
+            <dialog id="proc-order-material-dialog" class="proc-order-dialog rounded-xl border border-border-subtle p-0 max-w-md w-[calc(100%-2rem)] shadow-xl backdrop:bg-black/40">
+              <form method="post" class="p-5 space-y-3">
+                <input type="hidden" name="action" value="save_material">
+                <input type="hidden" name="return_order_id" value="<?= h($viewOrderId) ?>">
+                <input type="hidden" name="material_guid" id="proc-order-dialog-guid" value="">
+                <h3 class="text-lg font-bold" id="proc-order-dialog-title">ضبط المادة</h3>
+                <p class="text-xs text-text-muted" id="proc-order-dialog-subtitle"></p>
+                <label class="text-sm block">
+                  <span class="font-bold">الحالة</span>
+                  <select name="lifecycle" id="proc-order-dialog-lifecycle" class="mt-1 h-10 w-full rounded-lg border border-border-subtle px-2">
+                    <?php foreach (ProcurementService::LIFECYCLE_LABELS as $code => $label): ?>
+                      <option value="<?= h($code) ?>"><?= h($label) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </label>
+                <div class="grid grid-cols-2 gap-2">
+                  <label class="text-sm">
+                    <span class="font-bold">حد الطلب (طرد)</span>
+                    <input type="number" step="0.001" min="0" name="min_cartons" id="proc-order-dialog-min" class="mt-1 h-10 w-full rounded-lg border border-border-subtle px-2">
+                  </label>
+                  <label class="text-sm">
+                    <span class="font-bold">سقف (طرد)</span>
+                    <input type="number" step="0.001" min="0" name="max_cartons" id="proc-order-dialog-max" class="mt-1 h-10 w-full rounded-lg border border-border-subtle px-2">
+                  </label>
+                </div>
+                <label class="text-sm block">
+                  <span class="font-bold">ملاحظة</span>
+                  <input type="text" name="notes_ar" id="proc-order-dialog-notes" class="mt-1 h-10 w-full rounded-lg border border-border-subtle px-2">
+                </label>
+                <div class="flex flex-wrap gap-2 pt-2">
+                  <button type="submit" class="<?= h($btnPrimary) ?>">حفظ</button>
+                  <button type="button" class="<?= h($btnLight) ?>" id="proc-order-dialog-cancel">إلغاء</button>
+                </div>
+              </form>
+            </dialog>
           <?php endif; ?>
         </div>
 
@@ -538,8 +628,8 @@ $orderStatusLabels = [
               <span>فقط تحت حد تفعيل الطلب (نواقص)</span>
             </label>
             <label class="flex items-center gap-2 text-sm">
-              <input type="checkbox" name="only_season_active" checked>
-              <span>فقط «موسمي مستمر»</span>
+              <input type="checkbox" name="only_active" checked>
+              <span>فقط مواد «فعال»</span>
             </label>
             <button type="submit" class="<?= h($btnLight) ?> text-xs">إضافة الأصناف المطابقة</button>
           </form>
@@ -657,7 +747,7 @@ $orderStatusLabels = [
       <?php endif; ?>
     </div>
     <?php if ($shortagesByManufacturer === []): ?>
-      <p class="text-sm text-text-muted">لا نواقص حالياً — أو لا مواد «موسمي مستمر» مضبوطة ضمن الموسم.</p>
+      <p class="text-sm text-text-muted">لا نواقص حالياً — أو لا مواد «فعال» مضبوطة ضمن الموسم.</p>
     <?php else: ?>
       <?php foreach ($shortagesByManufacturer as $manufacturer => $lines): ?>
         <div class="mb-6 last:mb-0">

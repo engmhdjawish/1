@@ -2480,6 +2480,26 @@ button.is-loading::after,
   font-size: 0.75rem;
 }
 
+.proc-invoice-composer td {
+  background: #f8fafc;
+}
+
+.proc-invoice-material-input {
+  min-width: 12rem;
+}
+
+.proc-invoice-dropdown {
+  right: 0;
+  left: auto;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.proc-order-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
 .so-search-option__label {
   min-width: 0;
 }
