@@ -219,7 +219,7 @@ $orderStatusLabels = [
         <div>
           <p class="so-invoice__kicker">ضبط سياسة الشراء</p>
           <h2 class="so-invoice__title">فاتورة المواد</h2>
-          <p class="so-invoice__hint">في السطر + ابحث كالمتجر (أي جزء من الاسم أو الكود) — حدّد مواد ثم «إضافة المحدّد».</p>
+          <p class="so-invoice__hint">في السطر + ابحث كالمتجر (كلمات بأي ترتيب، أي جزء من الاسم أو الكود) — حدّد مواد ثم «إضافة المحدّد».</p>
         </div>
         <div class="flex flex-col items-end gap-2">
           <p class="so-invoice__count" id="proc-invoice-grid-count"><?= count($invoiceRows) ?> <?= count($invoiceRows) === 1 ? 'مادة' : 'مواد' ?></p>
