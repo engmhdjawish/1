@@ -772,7 +772,8 @@ $orderStatusLabels = [
               <li>لها بند في طلب شراء مفتوح: <?= h((string) $shortagesDiagnostics['skipped_open_line']) ?></li>
             <?php endif; ?>
             <?php if ((int) ($shortagesDiagnostics['skipped_not_in_api'] ?? 0) > 0): ?>
-              <li>لم تُجلب من الأمين للمستودعات المختارة: <?= h((string) $shortagesDiagnostics['skipped_not_in_api']) ?></li>
+              <li>لم تُجلب من الأمين للمستودعات المختارة: <?= h((string) $shortagesDiagnostics['skipped_not_in_api']) ?>
+                <span class="text-text-muted">— غالباً لأن الرصيد 0 فلا تظهر في بحث «المتاح فقط»؛ يُعالَج بعد آخر تحديث للنشر.</span></li>
             <?php endif; ?>
           </ul>
           <?php if (($shortagesDiagnostics['samples_above_min'] ?? []) !== []): ?>

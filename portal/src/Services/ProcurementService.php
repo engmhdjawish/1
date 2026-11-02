@@ -1463,38 +1463,107 @@ final class ProcurementService
     /** @return array<string, array<string, mixed>> */
     private static function fetchMaterialsByGuids(array $guids, array $storeGuids): array
     {
+        $guids = array_values(array_unique(array_filter(array_map('trim', $guids))));
+        if ($guids === []) {
+            return [];
+        }
+
         $result = [];
-        $chunks = array_chunk($guids, 40);
-        $storeCsv = implode(',', $storeGuids);
-
-        foreach ($chunks as $chunk) {
-            $response = SessionGate::withoutLock(static function () use ($chunk, $storeCsv): array {
-                return ApiClient::get('/api/materials', [
-                    'page' => 1,
-                    'pageSize' => count($chunk),
-                    'materialGuids' => implode(',', $chunk),
-                    'storeGuids' => $storeCsv,
-                ], 90);
-            });
-
-            if (!($response['ok'] ?? false)) {
-                continue;
+        if ($storeGuids === []) {
+            foreach (array_chunk($guids, 20) as $chunk) {
+                $requests = [];
+                foreach ($chunk as $guid) {
+                    $requests[] = [
+                        'key' => strtolower($guid),
+                        'path' => '/api/materials/' . rawurlencode($guid),
+                    ];
+                }
+                foreach (ApiClient::getMany($requests, 20) as $key => $response) {
+                    if (($response['ok'] ?? false) && is_array($response['data'] ?? null)) {
+                        $result[(string) $key] = $response['data'];
+                    }
+                }
             }
 
-            $data = $response['data'] ?? [];
-            $items = is_array($data['items'] ?? null) ? $data['items'] : [];
-            foreach ($items as $item) {
-                if (!is_array($item)) {
+            return $result;
+        }
+
+        $storeCsv = implode(',', $storeGuids);
+        foreach (array_chunk($guids, 40) as $chunk) {
+            foreach (['true', 'false'] as $availability) {
+                $pending = array_values(array_filter(
+                    $chunk,
+                    static fn (string $guid): bool => !isset($result[strtolower($guid)])
+                ));
+                if ($pending === []) {
+                    break;
+                }
+
+                $response = SessionGate::withoutLock(static function () use ($pending, $storeCsv, $availability): array {
+                    return ApiClient::get('/api/materials', [
+                        'page' => 1,
+                        'pageSize' => count($pending),
+                        'materialGuids' => implode(',', $pending),
+                        'storeGuids' => $storeCsv,
+                        'isAvailable' => $availability,
+                        'includeTotalCount' => 'false',
+                    ], 90);
+                });
+
+                if (!($response['ok'] ?? false)) {
                     continue;
                 }
-                $guid = strtolower(self::materialGuidFromApi($item));
-                if ($guid !== '') {
-                    $result[$guid] = $item;
+
+                $data = $response['data'] ?? [];
+                $items = is_array($data['items'] ?? null) ? $data['items'] : [];
+                foreach ($items as $item) {
+                    if (!is_array($item)) {
+                        continue;
+                    }
+                    $guid = strtolower(self::materialGuidFromApi($item));
+                    if ($guid !== '') {
+                        $result[$guid] = $item;
+                    }
                 }
             }
         }
 
+        foreach ($guids as $guid) {
+            $key = strtolower($guid);
+            if (isset($result[$key])) {
+                continue;
+            }
+            $single = self::fetchSingleMaterialFromApi($guid, $storeGuids);
+            if ($single !== null) {
+                $result[$key] = $single;
+            }
+        }
+
         return $result;
+    }
+
+    /** @return array<string, mixed>|null */
+    private static function fetchSingleMaterialFromApi(string $materialGuid, array $storeGuids): ?array
+    {
+        $materialGuid = trim($materialGuid);
+        if ($materialGuid === '') {
+            return null;
+        }
+
+        $query = [];
+        if ($storeGuids !== []) {
+            $query['storeGuids'] = implode(',', $storeGuids);
+        }
+
+        $response = SessionGate::withoutLock(static function () use ($materialGuid, $query): array {
+            return ApiClient::get('/api/materials/' . rawurlencode($materialGuid), $query, 60);
+        });
+
+        if (($response['ok'] ?? false) && is_array($response['data'] ?? null)) {
+            return $response['data'];
+        }
+
+        return null;
     }
 
     /** @param array<string, mixed> $item */
@@ -1619,18 +1688,11 @@ final class ProcurementService
             }
         }
 
-        $response = SessionGate::withoutLock(static function () use ($materialGuid, $storeGuids): array {
-            $query = [];
-            if ($storeGuids !== []) {
-                $query['storeGuids'] = implode(',', $storeGuids);
-            }
+        $single = self::fetchSingleMaterialFromApi($materialGuid, $storeGuids);
+        if ($single !== null) {
+            $cache[$key] = $single;
 
-            return ApiClient::get('/api/materials/' . rawurlencode($materialGuid), $query, 60);
-        });
-        if (($response['ok'] ?? false) && is_array($response['data'] ?? null)) {
-            $cache[$key] = $response['data'];
-
-            return $response['data'];
+            return $single;
         }
 
         return null;
