@@ -485,9 +485,14 @@ final class ProcurementService
             if ($maxCartons < $minCartons) {
                 return ['ok' => false, 'message' => 'سقف المخزون يجب أن يكون ≥ حد تفعيل الطلب.'];
             }
+            if ($maxCartons <= 0) {
+                return ['ok' => false, 'message' => 'السقف يجب أن يكون أكبر من صفر (استخدم أرقام 5 و 10 وليس فارغاً).'];
+            }
         }
 
         $notes = trim((string) ($input['notes_ar'] ?? ''));
+
+        self::refreshMaterialCacheFromApi($materialGuid);
 
         $pdo = Database::pdo();
         $exists = $pdo->prepare('SELECT 1 FROM procurement_materials WHERE material_guid = :guid');
@@ -605,12 +610,6 @@ final class ProcurementService
             if ($guid === '' || isset($openLines[$guid])) {
                 continue;
             }
-            if ($seasonGroups !== []) {
-                $groupGuid = strtolower(trim((string) ($policy['group_guid'] ?? '')));
-                if ($groupGuid === '' || !isset($seasonGroups[$groupGuid])) {
-                    continue;
-                }
-            }
             $guids[] = (string) $policy['material_guid'];
         }
 
@@ -629,16 +628,16 @@ final class ProcurementService
             if ($guid === '' || isset($openLines[$guidKey])) {
                 continue;
             }
+            $material = self::fetchMaterialWithStores($guid, $storeGuids, $materialsByGuid);
+            if (!is_array($material)) {
+                continue;
+            }
+
             if ($seasonGroups !== []) {
-                $groupGuid = strtolower(trim((string) ($policy['group_guid'] ?? '')));
+                $groupGuid = self::materialGroupGuidForSeason($policy, $material, $guid);
                 if ($groupGuid === '' || !isset($seasonGroups[$groupGuid])) {
                     continue;
                 }
-            }
-
-            $material = $materialsByGuid[$guidKey] ?? null;
-            if (!is_array($material)) {
-                continue;
             }
 
             $pcs = max(1.0, ShareCartService::packaging($material));
@@ -778,12 +777,6 @@ final class ProcurementService
             if ($guid === '' || isset($openLines[$guid])) {
                 continue;
             }
-            if ($seasonGroups !== []) {
-                $groupGuid = strtolower(trim((string) ($policy['group_guid'] ?? '')));
-                if ($groupGuid === '' || !isset($seasonGroups[$groupGuid])) {
-                    continue;
-                }
-            }
             $guids[] = (string) $policy['material_guid'];
         }
 
@@ -801,18 +794,18 @@ final class ProcurementService
                 $empty['skipped_open_line']++;
                 continue;
             }
+            $material = self::fetchMaterialWithStores($guid, $storeGuids, $materialsByGuid);
+            if (!is_array($material)) {
+                $empty['skipped_not_in_api']++;
+                continue;
+            }
+
             if ($seasonGroups !== []) {
-                $groupGuid = strtolower(trim((string) ($policy['group_guid'] ?? '')));
+                $groupGuid = self::materialGroupGuidForSeason($policy, $material, $guid);
                 if ($groupGuid === '' || !isset($seasonGroups[$groupGuid])) {
                     $empty['skipped_season']++;
                     continue;
                 }
-            }
-
-            $material = $materialsByGuid[$guidKey] ?? null;
-            if (!is_array($material)) {
-                $empty['skipped_not_in_api']++;
-                continue;
             }
 
             $pcs = max(1.0, ShareCartService::packaging($material));
@@ -1530,15 +1523,136 @@ final class ProcurementService
         ];
     }
 
+    private static function normalizeDecimalString(string $value): string
+    {
+        $value = str_replace(',', '.', trim($value));
+        $map = [
+            '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4',
+            '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
+            '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4',
+            '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9',
+        ];
+
+        return strtr($value, $map);
+    }
+
     private static function parseNullableCartons(mixed $value): ?float
     {
         if ($value === null || $value === '') {
             return null;
         }
 
-        $parsed = (float) str_replace(',', '.', (string) $value);
+        $parsed = (float) self::normalizeDecimalString((string) $value);
 
         return $parsed >= 0 ? $parsed : null;
+    }
+
+    private static function refreshMaterialCacheFromApi(string $materialGuid): void
+    {
+        if (!self::tableReady()) {
+            return;
+        }
+
+        $materialGuid = trim($materialGuid);
+        if ($materialGuid === '') {
+            return;
+        }
+
+        $settings = self::settings();
+        $storeGuids = $settings['store_guids'];
+        $material = null;
+        if ($storeGuids !== []) {
+            $material = self::fetchMaterialsByGuids([$materialGuid], $storeGuids)[strtolower($materialGuid)] ?? null;
+        }
+        if (!is_array($material)) {
+            $response = SessionGate::withoutLock(static function () use ($materialGuid): array {
+                return ApiClient::get('/api/materials/' . rawurlencode($materialGuid), [], 60);
+            });
+            if (($response['ok'] ?? false) && is_array($response['data'] ?? null)) {
+                $material = $response['data'];
+            }
+        }
+
+        if (!is_array($material)) {
+            return;
+        }
+
+        $fields = self::cacheFieldsFromApi($material);
+        Database::pdo()->prepare(
+            'UPDATE procurement_materials SET
+                material_code = :code,
+                material_name_ar = :name,
+                manufacturer = :manufacturer,
+                group_guid = :group_guid,
+                updated_at = NOW()
+             WHERE material_guid = :guid'
+        )->execute([
+            'code' => $fields['code'],
+            'name' => $fields['name'],
+            'manufacturer' => $fields['manufacturer'],
+            'group_guid' => $fields['group_guid'],
+            'guid' => $materialGuid,
+        ]);
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $cache
+     * @return array<string, mixed>|null
+     */
+    private static function fetchMaterialWithStores(string $materialGuid, array $storeGuids, array &$cache): ?array
+    {
+        $key = strtolower(trim($materialGuid));
+        if ($key === '') {
+            return null;
+        }
+
+        if (isset($cache[$key]) && is_array($cache[$key])) {
+            return $cache[$key];
+        }
+
+        if ($storeGuids !== []) {
+            $fetched = self::fetchMaterialsByGuids([$materialGuid], $storeGuids);
+            if (isset($fetched[$key]) && is_array($fetched[$key])) {
+                $cache[$key] = $fetched[$key];
+
+                return $fetched[$key];
+            }
+        }
+
+        $response = SessionGate::withoutLock(static function () use ($materialGuid, $storeGuids): array {
+            $query = [];
+            if ($storeGuids !== []) {
+                $query['storeGuids'] = implode(',', $storeGuids);
+            }
+
+            return ApiClient::get('/api/materials/' . rawurlencode($materialGuid), $query, 60);
+        });
+        if (($response['ok'] ?? false) && is_array($response['data'] ?? null)) {
+            $cache[$key] = $response['data'];
+
+            return $response['data'];
+        }
+
+        return null;
+    }
+
+    /** @param array<string, mixed> $policy @param array<string, mixed> $material */
+    private static function materialGroupGuidForSeason(array $policy, array $material, string $materialGuid): string
+    {
+        $groupGuid = strtolower(trim((string) ($policy['group_guid'] ?? '')));
+        if ($groupGuid !== '') {
+            return $groupGuid;
+        }
+
+        $fields = self::cacheFieldsFromApi($material);
+        $fromApi = strtolower(trim((string) ($fields['group_guid'] ?? '')));
+        if ($fromApi !== '' && self::tableReady()) {
+            Database::pdo()->prepare(
+                'UPDATE procurement_materials SET group_guid = :group_guid, updated_at = NOW() WHERE material_guid = :guid'
+            )->execute(['group_guid' => $fields['group_guid'], 'guid' => $materialGuid]);
+        }
+
+        return $fromApi;
     }
 
     private static function startSyncRun(PDO $pdo): string
