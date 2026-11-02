@@ -589,7 +589,7 @@ final class ProcurementService
 
         $stmt = Database::pdo()->query(
             "SELECT * FROM procurement_materials
-             WHERE lifecycle = 'active'
+             WHERE lifecycle IN ('active', 'season_active')
                AND min_cartons IS NOT NULL
                AND max_cartons IS NOT NULL"
         );
@@ -688,6 +688,163 @@ final class ProcurementService
         });
 
         return $lines;
+    }
+
+    /**
+     * Why the shortages tab may be empty (for staff UI hints).
+     *
+     * @return array{
+     *   stores_ok: bool,
+     *   active_with_limits: int,
+     *   season_filter_on: bool,
+     *   season_name: string,
+     *   shortage_count: int,
+     *   skipped_season: int,
+     *   skipped_stock_above_min: int,
+     *   skipped_open_line: int,
+     *   skipped_not_in_api: int,
+     *   samples_above_min: list<array{code: string, name: string, available_cartons: float, min_cartons: float}>
+     * }
+     */
+    public static function shortagesDiagnostics(): array
+    {
+        $empty = [
+            'stores_ok' => false,
+            'active_with_limits' => 0,
+            'season_filter_on' => false,
+            'season_name' => '',
+            'shortage_count' => 0,
+            'skipped_season' => 0,
+            'skipped_stock_above_min' => 0,
+            'skipped_open_line' => 0,
+            'skipped_not_in_api' => 0,
+            'samples_above_min' => [],
+        ];
+
+        if (!self::tableReady()) {
+            return $empty;
+        }
+
+        $settings = self::settings();
+        $storeGuids = $settings['store_guids'];
+        if ($storeGuids === []) {
+            return $empty;
+        }
+
+        $empty['stores_ok'] = true;
+
+        $seasonGroups = [];
+        if ($settings['limit_to_current_season']) {
+            $season = StoreSeasonService::current();
+            $empty['season_filter_on'] = true;
+            $empty['season_name'] = is_array($season) ? (string) ($season['name_ar'] ?? '') : '';
+            if ($season !== null && ($season['group_guids'] ?? []) !== []) {
+                foreach ($season['group_guids'] as $guid) {
+                    $seasonGroups[strtolower(trim((string) $guid))] = true;
+                }
+            }
+        }
+
+        $stmt = Database::pdo()->query(
+            "SELECT * FROM procurement_materials
+             WHERE lifecycle IN ('active', 'season_active', 'new', 'trial')
+               AND min_cartons IS NOT NULL
+               AND max_cartons IS NOT NULL"
+        );
+        $policies = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        foreach ($policies as $policy) {
+            $lc = self::normalizeLifecycle((string) ($policy['lifecycle'] ?? ''));
+            if ($lc !== self::LIFECYCLE_ACTIVE) {
+                continue;
+            }
+            $empty['active_with_limits']++;
+        }
+
+        $stmtActive = Database::pdo()->query(
+            "SELECT * FROM procurement_materials
+             WHERE lifecycle IN ('active', 'season_active')
+               AND min_cartons IS NOT NULL
+               AND max_cartons IS NOT NULL"
+        );
+        $activePolicies = $stmtActive->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        if ($activePolicies === []) {
+            return $empty;
+        }
+
+        $openLines = self::materialGuidsWithOpenLines();
+        $guids = [];
+        foreach ($activePolicies as $policy) {
+            $guid = strtolower(trim((string) ($policy['material_guid'] ?? '')));
+            if ($guid === '' || isset($openLines[$guid])) {
+                continue;
+            }
+            if ($seasonGroups !== []) {
+                $groupGuid = strtolower(trim((string) ($policy['group_guid'] ?? '')));
+                if ($groupGuid === '' || !isset($seasonGroups[$groupGuid])) {
+                    continue;
+                }
+            }
+            $guids[] = (string) $policy['material_guid'];
+        }
+
+        $materialsByGuid = $guids !== [] ? self::fetchMaterialsByGuids($guids, $storeGuids) : [];
+        StockReservationService::forgetWarehouseMemo();
+        $reserved = $guids !== [] ? StockReservationService::reservedPrimaryByMaterial($guids) : [];
+
+        foreach ($activePolicies as $policy) {
+            $guid = trim((string) ($policy['material_guid'] ?? ''));
+            $guidKey = strtolower($guid);
+            if ($guid === '') {
+                continue;
+            }
+            if (isset($openLines[$guidKey])) {
+                $empty['skipped_open_line']++;
+                continue;
+            }
+            if ($seasonGroups !== []) {
+                $groupGuid = strtolower(trim((string) ($policy['group_guid'] ?? '')));
+                if ($groupGuid === '' || !isset($seasonGroups[$groupGuid])) {
+                    $empty['skipped_season']++;
+                    continue;
+                }
+            }
+
+            $material = $materialsByGuid[$guidKey] ?? null;
+            if (!is_array($material)) {
+                $empty['skipped_not_in_api']++;
+                continue;
+            }
+
+            $pcs = max(1.0, ShareCartService::packaging($material));
+            $warehousePrimary = max(0.0, (float) ($material['warehouseQuantity'] ?? $material['WarehouseQuantity'] ?? 0));
+            $reservedPrimary = (float) ($reserved[$guid] ?? $reserved[$guidKey] ?? 0.0);
+            $availablePrimary = max(0.0, $warehousePrimary - $reservedPrimary);
+            $availableCartons = $availablePrimary / $pcs;
+            $minCartons = (float) $policy['min_cartons'];
+
+            if ($availableCartons > $minCartons) {
+                $empty['skipped_stock_above_min']++;
+                if (count($empty['samples_above_min']) < 5) {
+                    $empty['samples_above_min'][] = [
+                        'code' => (string) ($policy['material_code'] ?? ''),
+                        'name' => (string) ($policy['material_name_ar'] ?? ''),
+                        'available_cartons' => round($availableCartons, 3),
+                        'min_cartons' => $minCartons,
+                    ];
+                }
+                continue;
+            }
+
+            $maxCartons = (float) $policy['max_cartons'];
+            $targetPrimary = $maxCartons * $pcs;
+            $needPrimary = max(0.0, $targetPrimary - $availablePrimary);
+            $orderCartons = (int) ceil($needPrimary / $pcs);
+            if ($orderCartons > 0) {
+                $empty['shortage_count']++;
+            }
+        }
+
+        return $empty;
     }
 
     /**

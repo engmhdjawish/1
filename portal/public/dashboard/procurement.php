@@ -297,6 +297,7 @@ if ($flash === null && trim((string) ($_GET['flash'] ?? '')) !== '') {
 $settings = ProcurementService::settings();
 $season = StoreSeasonService::current();
 $shortagesByManufacturer = $tableReady ? ProcurementService::shortagesByManufacturer() : [];
+$shortagesDiagnostics = $tableReady ? ProcurementService::shortagesDiagnostics() : null;
 
 $materialView = trim((string) ($_GET['material_view'] ?? 'list'));
 if (!in_array($materialView, ['list', 'invoice'], true)) {

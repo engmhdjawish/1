@@ -11,6 +11,7 @@ use Portal\Services\ProcurementService;
 /** @var array{store_guids: list<string>, limit_to_current_season: bool} $settings */
 /** @var array<string, mixed>|null $season */
 /** @var array<string, list<array<string, mixed>>> $shortagesByManufacturer */
+/** @var array<string, mixed>|null $shortagesDiagnostics */
 /** @var list<array<string, mixed>> $materials */
 /** @var string $materialFilter */
 /** @var string $materialQ */
@@ -522,11 +523,13 @@ $orderStatusLabels = [
                   </tr>
                 </thead>
                 <tbody>
-                  <?php foreach ($orderLines as $line): ?>
+                    <?php foreach ($orderLines as $line): ?>
                     <?php
                       $lc = (string) ($line['lifecycle'] ?? '');
                       $lineId = (string) ($line['id'] ?? '');
                       $guid = (string) ($line['material_guid'] ?? '');
+                      $searchRaw = trim((string) ($line['material_code'] ?? '') . ' ' . (string) ($line['material_name_ar'] ?? ''));
+                      $searchHay = function_exists('mb_strtolower') ? mb_strtolower($searchRaw, 'UTF-8') : strtolower($searchRaw);
                     ?>
                     <tr class="border-t border-border-subtle/60 proc-order-line"
                         data-line-id="<?= h($lineId) ?>"
@@ -534,7 +537,7 @@ $orderStatusLabels = [
                         data-lifecycle="<?= h($lc) ?>"
                         data-below-min="<?= !empty($line['below_min']) ? '1' : '0' ?>"
                         data-line-open="<?= ($line['line_status'] ?? '') === 'open' ? '1' : '0' ?>"
-                        data-search="<?= h(mb_strtolower(trim((string) ($line['material_code'] ?? '') . ' ' . (string) ($line['material_name_ar'] ?? '')))) ?>">
+                        data-search="<?= h($searchHay) ?>">
                       <td class="p-2 font-mono text-xs"><?= h((string) ($line['material_code'] ?? '')) ?></td>
                       <td class="p-2"><?= h((string) ($line['material_name_ar'] ?? '')) ?></td>
                       <td class="p-2 text-xs">
@@ -747,7 +750,51 @@ $orderStatusLabels = [
       <?php endif; ?>
     </div>
     <?php if ($shortagesByManufacturer === []): ?>
-      <p class="text-sm text-text-muted">لا نواقص حالياً — أو لا مواد «فعال» مضبوطة ضمن الموسم.</p>
+      <div class="text-sm text-text-muted space-y-3 max-w-2xl">
+        <p class="font-bold text-slate-800">لا توجد نواقص معروضة الآن</p>
+        <p>
+          تبويب النواقص لا يعرض كل المواد «الفعّالة»، بل فقط التي
+          <strong>المتاح بالطرد ≤ حد الطلب (الأدنى)</strong>.
+          إذا المخزون أعلى من 5 طرود (مثلاً 6 أو أكثر) لن تظهر — وهذا سلوك مقصود.
+        </p>
+        <?php if (is_array($shortagesDiagnostics)): ?>
+          <ul class="list-disc mr-5 space-y-1 text-xs">
+            <li>مستودعات للحساب: <?= $shortagesDiagnostics['stores_ok'] ? 'مضبوطة ✓' : 'غير محددة — راجع الإعدادات' ?></li>
+            <li>مواد «فعال» بحدّ وسقف: <?= h((string) ($shortagesDiagnostics['active_with_limits'] ?? 0)) ?></li>
+            <?php if (!empty($shortagesDiagnostics['season_filter_on'])): ?>
+              <li>فلتر الموسم: مفعّل<?= ($shortagesDiagnostics['season_name'] ?? '') !== '' ? ' (' . h((string) $shortagesDiagnostics['season_name']) . ')' : '' ?>
+                — مستبعدة خارج مجموعات الموسم: <?= h((string) ($shortagesDiagnostics['skipped_season'] ?? 0)) ?></li>
+            <?php endif; ?>
+            <?php if ((int) ($shortagesDiagnostics['skipped_stock_above_min'] ?? 0) > 0): ?>
+              <li>مخزون فوق حد الطلب (لا تُعدّ نقصاً): <?= h((string) $shortagesDiagnostics['skipped_stock_above_min']) ?></li>
+            <?php endif; ?>
+            <?php if ((int) ($shortagesDiagnostics['skipped_open_line'] ?? 0) > 0): ?>
+              <li>لها بند في طلب شراء مفتوح: <?= h((string) $shortagesDiagnostics['skipped_open_line']) ?></li>
+            <?php endif; ?>
+            <?php if ((int) ($shortagesDiagnostics['skipped_not_in_api'] ?? 0) > 0): ?>
+              <li>لم تُجلب من الأمين للمستودعات المختارة: <?= h((string) $shortagesDiagnostics['skipped_not_in_api']) ?></li>
+            <?php endif; ?>
+          </ul>
+          <?php if (($shortagesDiagnostics['samples_above_min'] ?? []) !== []): ?>
+            <p class="text-xs font-bold text-slate-700">أمثلة (متاح &gt; حد الطلب):</p>
+            <ul class="text-xs space-y-1">
+              <?php foreach ($shortagesDiagnostics['samples_above_min'] as $sample): ?>
+                <li>
+                  <?= h((string) ($sample['code'] ?? '')) ?>
+                  <?= h((string) ($sample['name'] ?? '')) ?>
+                  — متاح <?= h((string) ($sample['available_cartons'] ?? '')) ?> طرد،
+                  حد الطلب <?= h((string) ($sample['min_cartons'] ?? '')) ?>
+                </li>
+              <?php endforeach; ?>
+            </ul>
+          <?php endif; ?>
+        <?php endif; ?>
+        <p class="text-xs">
+          للتجربة: اختر مادة متاحها ≤ 5 طرود، أو ارفع «حد الطلب» فوق المتاح الحالي، ثم حدّث الصفحة.
+          تأكد أيضاً من <a class="text-primary font-bold" href="/dashboard/procurement.php?tab=settings">اختيار المستودعات</a>
+          وإلغاء فلتر الموسم مؤقتاً إن كانت المادة خارج مجموعة الموسم.
+        </p>
+      </div>
     <?php else: ?>
       <?php foreach ($shortagesByManufacturer as $manufacturer => $lines): ?>
         <div class="mb-6 last:mb-0">
