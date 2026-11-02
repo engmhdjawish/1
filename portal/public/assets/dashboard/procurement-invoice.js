@@ -1,11 +1,19 @@
 /**
- * Procurement — invoice grid: inline material search (Excel-style) with multi-select.
+ * Procurement — invoice grid: inline material search (Excel-style) with multi-select + AJAX mutations.
  */
 (function () {
   'use strict';
 
   const boundRoots = new WeakSet();
   const MIN_QUERY_LEN = 1;
+  const API_URL = '/dashboard/procurement-api.php';
+  const AJAX_HEADER = 'X-Dashboard-Ajax';
+
+  const toast = (message, type = 'success') => {
+    if (typeof window.showToast === 'function') {
+      window.showToast(message, type);
+    }
+  };
 
   window.portalProcurementInvoiceInit = (root = document) => {
     const invoiceRoot = root.querySelector('#procurement-invoice-root');
@@ -21,17 +29,36 @@
     const manufacturerSelect = invoiceRoot.querySelector('#proc-invoice-manufacturer');
     const addSelectedBtn = invoiceRoot.querySelector('#proc-invoice-add-selected');
     const selectedCountEl = invoiceRoot.querySelector('#proc-invoice-selected-count');
-    const batchForm = invoiceRoot.querySelector('#proc-invoice-batch-add');
+    const gridBody = invoiceRoot.querySelector('#proc-invoice-grid-body');
+    const composerRow = gridBody?.querySelector('[data-role="composer"]');
+    const saveBtn = invoiceRoot.querySelector('#proc-invoice-save-btn');
+    const clearBtn = invoiceRoot.querySelector('#proc-invoice-clear-btn');
+    const emptyHint = invoiceRoot.querySelector('#proc-invoice-empty-hint');
+    const countEl = invoiceRoot.querySelector('#proc-invoice-grid-count');
+    const guidsNode = invoiceRoot.querySelector('#proc-invoice-grid-guids');
+    const subtabBadge = document.querySelector('#proc-invoice-subtab-badge');
 
-    if (!searchInput || !resultsEl || !batchForm) {
+    if (!searchInput || !resultsEl || !gridBody || !composerRow) {
       return;
     }
 
-    const readGridGuids = () => {
-      const node = invoiceRoot.querySelector('#proc-invoice-grid-guids');
-      if (!node) return new Set();
+    const readLifecycleLabels = () => {
+      const node = invoiceRoot.querySelector('#proc-invoice-lifecycle-labels');
+      if (!node) return { new: 'جديد', active: 'فعال', cancelled: 'ملغي' };
       try {
-        const parsed = JSON.parse(node.textContent || '[]');
+        const parsed = JSON.parse(node.textContent || '{}');
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch (_) {
+        return {};
+      }
+    };
+
+    const lifecycleLabels = readLifecycleLabels();
+
+    const readGridGuids = () => {
+      if (!guidsNode) return new Set();
+      try {
+        const parsed = JSON.parse(guidsNode.textContent || '[]');
         return new Set(Array.isArray(parsed) ? parsed.map(String) : []);
       } catch (_) {
         return new Set();
@@ -48,10 +75,19 @@
     let searchLoading = false;
     let searchTimer = null;
     let searchRequestId = 0;
+    let selectAllCheckbox = null;
+    let invoiceBusy = false;
     const PAGE_SIZE = 24;
 
     const manufacturerFilter = () =>
       (manufacturerSelect?.value || invoiceRoot.dataset.manufacturer || '').trim();
+
+    const setBusy = (busy) => {
+      invoiceBusy = busy;
+      if (addSelectedBtn) addSelectedBtn.disabled = busy || selectedInList.size === 0;
+      if (saveBtn) saveBtn.disabled = busy;
+      if (clearBtn) clearBtn.disabled = busy;
+    };
 
     const positionDropdown = () => {
       if (resultsEl.classList.contains('hidden')) return;
@@ -70,12 +106,31 @@
       resultsEl.style.zIndex = '2000';
     };
 
+    const selectableSearchValues = () =>
+      searchItems.map((item) => item.value).filter((value) => value && !gridGuids.has(value));
+
+    const updateSelectAllCheckbox = () => {
+      if (!selectAllCheckbox) return;
+      const selectable = selectableSearchValues();
+      if (selectable.length === 0) {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = false;
+        selectAllCheckbox.disabled = true;
+        return;
+      }
+      selectAllCheckbox.disabled = false;
+      const selectedCount = selectable.filter((v) => selectedInList.has(v)).length;
+      selectAllCheckbox.checked = selectedCount === selectable.length;
+      selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < selectable.length;
+    };
+
     const updateAddSelectedButton = () => {
       const count = selectedInList.size;
       if (!addSelectedBtn || !selectedCountEl) return;
       selectedCountEl.textContent = String(count);
       addSelectedBtn.classList.toggle('hidden', count === 0);
-      addSelectedBtn.disabled = count === 0;
+      addSelectedBtn.disabled = invoiceBusy || count === 0;
+      updateSelectAllCheckbox();
     };
 
     const hideResults = () => {
@@ -89,6 +144,7 @@
       searchHasMore = false;
       searchLoading = false;
       selectedInList.clear();
+      selectAllCheckbox = null;
       updateAddSelectedButton();
     };
 
@@ -104,18 +160,260 @@
       });
     };
 
+    const toggleSelectAll = (checked) => {
+      selectableSearchValues().forEach((value) => {
+        if (checked) selectedInList.add(value);
+        else selectedInList.delete(value);
+      });
+      updateAddSelectedButton();
+      resultsEl.querySelectorAll('[data-pick-value]').forEach((row) => {
+        const guid = row.getAttribute('data-pick-value');
+        const cb = row.querySelector('input[type="checkbox"]');
+        if (cb && guid) cb.checked = selectedInList.has(guid);
+      });
+    };
+
+    const ensureSelectAllHeader = () => {
+      if (resultsEl.querySelector('[data-role="select-all-header"]')) {
+        selectAllCheckbox = resultsEl.querySelector('[data-role="select-all-cb"]');
+        updateSelectAllCheckbox();
+        return;
+      }
+      const header = document.createElement('li');
+      header.setAttribute('data-role', 'select-all-header');
+      header.className =
+        'sticky top-0 z-10 flex items-center gap-2 px-3 py-2 bg-surface-low border-b border-border-subtle list-none text-right';
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'shrink-0';
+      cb.setAttribute('data-role', 'select-all-cb');
+      cb.addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleSelectAll(cb.checked);
+      });
+
+      const label = document.createElement('span');
+      label.className = 'flex-1 text-xs font-bold text-text-muted';
+      label.textContent = 'تحديد الكل (النتائج المعروضة)';
+
+      header.append(cb, label);
+      resultsEl.prepend(header);
+      selectAllCheckbox = cb;
+      updateSelectAllCheckbox();
+    };
+
+    async function invoicePost(action, fields) {
+      const body = new FormData();
+      body.set('action', action);
+      Object.entries(fields || {}).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+          value.forEach((entry) => body.append(key, entry));
+        } else if (value !== undefined && value !== null) {
+          body.set(key, value);
+        }
+      });
+
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        body,
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json',
+          [AJAX_HEADER]: '1',
+        },
+      });
+      const data = await response.json();
+      if (!response.ok && data?.ok !== false) {
+        throw new Error('تعذر تنفيذ العملية.');
+      }
+      return data;
+    }
+
+    const formatCountLabel = (count) => (count === 1 ? '1 مادة' : `${count} مواد`);
+
+    const buildDataRow = (row, index) => {
+      const guid = String(row.material_guid || '');
+      const tr = document.createElement('tr');
+      tr.className = 'so-invoice__row';
+      tr.setAttribute('data-material-guid', guid);
+
+      const numTd = document.createElement('td');
+      numTd.className = 'so-invoice__num';
+      numTd.textContent = String(index + 1);
+
+      const matTd = document.createElement('td');
+      matTd.className = 'so-invoice__material';
+      const inner = document.createElement('div');
+      inner.className = 'so-invoice__material-inner';
+      const text = document.createElement('div');
+      text.className = 'so-invoice__material-text';
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'so-invoice__name';
+      nameSpan.textContent = String(row.material_name_ar || '');
+      const codeSpan = document.createElement('span');
+      codeSpan.className = 'so-invoice__code';
+      codeSpan.textContent = String(row.material_code || '');
+      text.append(nameSpan, codeSpan);
+      inner.append(text);
+      matTd.append(inner);
+
+      const availTd = document.createElement('td');
+      availTd.className = 'text-xs';
+      availTd.textContent =
+        row.available_cartons !== null && row.available_cartons !== undefined
+          ? String(row.available_cartons)
+          : '—';
+
+      const lcTd = document.createElement('td');
+      lcTd.className = 'so-invoice__type';
+      const lcSelect = document.createElement('select');
+      lcSelect.className = 'so-invoice__select';
+      lcSelect.name = `lifecycle[${guid}]`;
+      const lc = String(row.lifecycle || 'new');
+      Object.entries(lifecycleLabels).forEach(([code, label]) => {
+        const opt = document.createElement('option');
+        opt.value = code;
+        opt.textContent = String(label);
+        if (code === lc) opt.selected = true;
+        lcSelect.append(opt);
+      });
+      lcTd.append(lcSelect);
+
+      const minTd = document.createElement('td');
+      const minInput = document.createElement('input');
+      minInput.type = 'number';
+      minInput.step = '0.001';
+      minInput.min = '0';
+      minInput.name = `min_cartons[${guid}]`;
+      minInput.className = 'so-invoice__input w-20';
+      minInput.value = row.min_cartons !== null && row.min_cartons !== undefined ? String(row.min_cartons) : '';
+      minTd.append(minInput);
+
+      const maxTd = document.createElement('td');
+      const maxInput = document.createElement('input');
+      maxInput.type = 'number';
+      maxInput.step = '0.001';
+      maxInput.min = '0';
+      maxInput.name = `max_cartons[${guid}]`;
+      maxInput.className = 'so-invoice__input w-20';
+      maxInput.value = row.max_cartons !== null && row.max_cartons !== undefined ? String(row.max_cartons) : '';
+      maxTd.append(maxInput);
+
+      const notesTd = document.createElement('td');
+      const notesInput = document.createElement('input');
+      notesInput.type = 'text';
+      notesInput.name = `notes_ar[${guid}]`;
+      notesInput.className = 'so-invoice__input min-w-[6rem]';
+      notesInput.value = String(row.notes_ar || '');
+      notesTd.append(notesInput);
+
+      const actionTd = document.createElement('td');
+      actionTd.className = 'so-invoice__action';
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'so-invoice__remove proc-invoice-remove';
+      removeBtn.setAttribute('data-material-guid', guid);
+      removeBtn.title = 'حذف من الفاتورة';
+      removeBtn.textContent = '×';
+      actionTd.append(removeBtn);
+
+      tr.append(numTd, matTd, availTd, lcTd, minTd, maxTd, notesTd, actionTd);
+      return tr;
+    };
+
+    const bindRemoveButtons = () => {
+      gridBody.querySelectorAll('.proc-invoice-remove').forEach((btn) => {
+        if (btn.dataset.bound === '1') return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => {
+          const guid = btn.getAttribute('data-material-guid');
+          if (!guid || invoiceBusy) return;
+          void removeMaterial(guid);
+        });
+      });
+    };
+
+    const applyInvoiceState = (invoice) => {
+      if (!invoice || typeof invoice !== 'object') return;
+      const rows = Array.isArray(invoice.rows) ? invoice.rows : [];
+      const guids = Array.isArray(invoice.gridGuids) ? invoice.gridGuids.map(String) : [];
+
+      if (guidsNode) {
+        guidsNode.textContent = JSON.stringify(guids);
+      }
+      gridGuids = new Set(guids);
+
+      gridBody.querySelectorAll('tr.so-invoice__row:not([data-role="composer"])').forEach((tr) => tr.remove());
+      rows.forEach((row, index) => {
+        gridBody.insertBefore(buildDataRow(row, index), composerRow);
+      });
+      bindRemoveButtons();
+
+      const count = rows.length;
+      if (countEl) countEl.textContent = formatCountLabel(count);
+      clearBtn?.classList.toggle('hidden', count === 0);
+      saveBtn?.classList.toggle('hidden', count === 0);
+      emptyHint?.classList.toggle('hidden', count > 0);
+
+      if (subtabBadge) {
+        subtabBadge.textContent = String(count);
+        subtabBadge.classList.toggle('hidden', count === 0);
+      }
+
+      selectedInList.clear();
+      updateAddSelectedButton();
+    };
+
+    async function runInvoiceMutation(action, fields, successMessage) {
+      if (invoiceBusy) return null;
+      setBusy(true);
+      try {
+        const data = await invoicePost(action, fields);
+        toast(data.message || successMessage || 'تم.', data.ok === false ? 'error' : 'success');
+        if (data.ok && data.invoice) {
+          applyInvoiceState(data.invoice);
+        }
+        return data;
+      } catch (_) {
+        toast('تعذر الاتصال بالخادم.', 'error');
+        return null;
+      } finally {
+        setBusy(false);
+      }
+    }
+
     const submitBatchAdd = (guids) => {
       const unique = Array.from(new Set(guids.filter(Boolean)));
       if (unique.length === 0) return;
-      batchForm.querySelectorAll('input[name="material_guids[]"]').forEach((n) => n.remove());
-      unique.forEach((guid) => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'material_guids[]';
-        input.value = guid;
-        batchForm.appendChild(input);
+      void runInvoiceMutation('invoice_add_materials', { 'material_guids[]': unique }).then((data) => {
+        if (data?.ok) {
+          searchInput.value = '';
+          hideResults();
+          if (statusEl) statusEl.textContent = '';
+          searchInput.focus();
+        }
       });
-      batchForm.submit();
+    };
+
+    const removeMaterial = (guid) =>
+      runInvoiceMutation('invoice_remove_material', { material_guid: guid });
+
+    const collectSaveFields = () => {
+      const fields = {};
+      gridBody.querySelectorAll('tr.so-invoice__row:not([data-role="composer"])').forEach((tr) => {
+        const guid = tr.getAttribute('data-material-guid');
+        if (!guid) return;
+        const lc = tr.querySelector(`select[name="lifecycle[${CSS.escape(guid)}]"]`);
+        const min = tr.querySelector(`input[name="min_cartons[${CSS.escape(guid)}]"]`);
+        const max = tr.querySelector(`input[name="max_cartons[${CSS.escape(guid)}]"]`);
+        const notes = tr.querySelector(`input[name="notes_ar[${CSS.escape(guid)}]"]`);
+        if (lc) fields[`lifecycle[${guid}]`] = lc.value;
+        if (min) fields[`min_cartons[${guid}]`] = min.value;
+        if (max) fields[`max_cartons[${guid}]`] = max.value;
+        if (notes) fields[`notes_ar[${guid}]`] = notes.value;
+      });
+      return fields;
     };
 
     const appendResultRow = (item, index) => {
@@ -183,6 +481,7 @@
       if (!append) {
         resultsEl.innerHTML = '';
         searchItems = [];
+        selectAllCheckbox = null;
       }
       items.forEach((item) => {
         if (!item?.value || gridGuids.has(item.value)) return;
@@ -197,11 +496,13 @@
         return;
       }
 
+      ensureSelectAllHeader();
       resultsEl.classList.remove('hidden');
       searchInput.setAttribute('aria-expanded', 'true');
       positionDropdown();
       if (activeResultIndex < 0 && searchItems.length > 0) activeResultIndex = 0;
       highlightResult();
+      updateSelectAllCheckbox();
 
       if (statusEl) {
         const shown = searchItems.length;
@@ -209,7 +510,7 @@
         statusEl.textContent =
           shown +
           totalText +
-          ' — بحث كالمتجر (أجزاء من الاسم) — حدّد ثم «إضافة المحدّد»';
+          ' — حدّد أو «تحديد الكل» ثم «إضافة المحدّد»';
       }
 
       const sentinel = resultsEl.querySelector('[data-role="load-sentinel"]');
@@ -245,7 +546,7 @@
         const mfr = manufacturerFilter();
         if (mfr !== '') params.set('manufacturer', mfr);
 
-        const response = await fetch('/dashboard/procurement-api.php?' + params.toString(), {
+        const response = await fetch(API_URL + '?' + params.toString(), {
           headers: { Accept: 'application/json' },
           credentials: 'same-origin',
         });
@@ -357,6 +658,17 @@
     addSelectedBtn?.addEventListener('click', () => {
       submitBatchAdd(Array.from(selectedInList));
     });
+
+    saveBtn?.addEventListener('click', () => {
+      void runInvoiceMutation('invoice_save_all', collectSaveFields());
+    });
+
+    clearBtn?.addEventListener('click', () => {
+      if (!window.confirm('تفريغ كل البنود؟')) return;
+      void runInvoiceMutation('invoice_clear', {});
+    });
+
+    bindRemoveButtons();
 
     const onDocumentPointer = (event) => {
       const target = event.target;

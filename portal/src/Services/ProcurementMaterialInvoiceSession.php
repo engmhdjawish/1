@@ -30,17 +30,30 @@ final class ProcurementMaterialInvoiceSession
 
     public static function add(string $materialGuid): void
     {
-        $materialGuid = trim($materialGuid);
-        if ($materialGuid === '') {
-            return;
-        }
+        self::addMany([$materialGuid]);
+    }
 
+    /**
+     * @param list<string> $materialGuids
+     */
+    public static function addMany(array $materialGuids): int
+    {
         $guids = self::guids();
-        if (!in_array($materialGuid, $guids, true)) {
+        $before = count($guids);
+        $seen = array_fill_keys($guids, true);
+
+        foreach ($materialGuids as $materialGuid) {
+            $materialGuid = trim($materialGuid);
+            if ($materialGuid === '' || isset($seen[$materialGuid])) {
+                continue;
+            }
             $guids[] = $materialGuid;
+            $seen[$materialGuid] = true;
         }
 
         $_SESSION[self::KEY] = $guids;
+
+        return count($guids) - $before;
     }
 
     public static function remove(string $materialGuid): void

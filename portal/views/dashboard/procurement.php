@@ -173,11 +173,10 @@ $orderStatusLabels = [
       قائمة وبحث
     </a>
     <a href="<?= h($invoiceModeHref) ?>"
-       class="proc-subtabs__link<?= $materialView === 'invoice' ? ' is-active' : '' ?>">
+       class="proc-subtabs__link<?= $materialView === 'invoice' ? ' is-active' : '' ?>"
+       id="proc-invoice-subtab-link">
       فاتورة ضبط
-      <?php if ($invoiceCount > 0): ?>
-        <span class="proc-subtabs__badge"><?= h((string) $invoiceCount) ?></span>
-      <?php endif; ?>
+      <span class="proc-subtabs__badge<?= $invoiceCount > 0 ? '' : ' hidden' ?>" id="proc-invoice-subtab-badge"><?= h((string) max(0, $invoiceCount)) ?></span>
     </a>
   </nav>
 
@@ -224,12 +223,11 @@ $orderStatusLabels = [
         </div>
         <div class="flex flex-col items-end gap-2">
           <p class="so-invoice__count" id="proc-invoice-grid-count"><?= count($invoiceRows) ?> <?= count($invoiceRows) === 1 ? 'مادة' : 'مواد' ?></p>
-          <?php if ($invoiceRows !== []): ?>
-            <form method="post" onsubmit="return confirm('تفريغ كل البنود؟');">
-              <input type="hidden" name="action" value="invoice_clear">
-              <button type="submit" class="text-xs font-bold text-red-700">تفريغ الفاتورة</button>
-            </form>
-          <?php endif; ?>
+          <button
+            type="button"
+            id="proc-invoice-clear-btn"
+            class="text-xs font-bold text-red-700<?= $invoiceRows === [] ? ' hidden' : '' ?>"
+          >تفريغ الفاتورة</button>
         </div>
       </div>
       <div class="so-invoice__sheet">
@@ -283,11 +281,12 @@ $orderStatusLabels = [
                          class="so-invoice__input min-w-[6rem]">
                 </td>
                 <td class="so-invoice__action">
-                  <form method="post">
-                    <input type="hidden" name="action" value="invoice_remove_material">
-                    <input type="hidden" name="material_guid" value="<?= h($guid) ?>">
-                    <button type="submit" class="so-invoice__remove" title="حذف من الفاتورة">×</button>
-                  </form>
+                  <button
+                    type="button"
+                    class="so-invoice__remove proc-invoice-remove"
+                    data-material-guid="<?= h($guid) ?>"
+                    title="حذف من الفاتورة"
+                  >×</button>
                 </td>
               </tr>
             <?php endforeach; ?>
@@ -311,15 +310,17 @@ $orderStatusLabels = [
           </tbody>
         </table>
       </div>
-      <div class="mt-4 flex flex-wrap gap-2 items-center">
-        <?php if ($invoiceRows !== []): ?>
-          <button type="submit" form="<?= h($invoiceFormId) ?>" class="<?= h($btnPrimary) ?>">حفظ كل البنود</button>
-        <?php else: ?>
-          <p class="text-xs text-text-muted">أضف مواداً من السطر السفلي ثم احفظ الضبط.</p>
-        <?php endif; ?>
+      <div class="mt-4 flex flex-wrap gap-2 items-center" id="proc-invoice-footer">
+        <button
+          type="button"
+          id="proc-invoice-save-btn"
+          class="<?= h($btnPrimary) ?><?= $invoiceRows === [] ? ' hidden' : '' ?>"
+        >حفظ كل البنود</button>
+        <p id="proc-invoice-empty-hint" class="text-xs text-text-muted<?= $invoiceRows !== [] ? ' hidden' : '' ?>">أضف مواداً من السطر السفلي ثم احفظ الضبط.</p>
       </div>
     </div>
     <script type="application/json" id="proc-invoice-grid-guids"><?= json_encode($invoiceGridGuids, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?></script>
+    <script type="application/json" id="proc-invoice-lifecycle-labels"><?= json_encode(ProcurementService::LIFECYCLE_LABELS, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?></script>
   </section>
 
   <?php else: /* list */ ?>

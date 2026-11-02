@@ -385,6 +385,107 @@ final class ProcurementService
     }
 
     /**
+     * Registers many materials in one batch (fewer API round-trips than repeated ensureMaterialRegistered).
+     *
+     * @param list<string> $materialGuids
+     * @return array{ok: bool, message: string, registered: list<string>, missing: list<string>}
+     */
+    public static function ensureMaterialsRegistered(array $materialGuids): array
+    {
+        if (!self::tableReady()) {
+            return ['ok' => false, 'message' => 'جداول المشتريات غير جاهزة.', 'registered' => [], 'missing' => []];
+        }
+
+        $guids = array_values(array_unique(array_filter(array_map('trim', $materialGuids))));
+        if ($guids === []) {
+            return ['ok' => true, 'message' => '', 'registered' => [], 'missing' => []];
+        }
+
+        $existing = self::policyRowsForGuids($guids);
+        $missing = [];
+        foreach ($guids as $guid) {
+            if (!isset($existing[strtolower($guid)])) {
+                $missing[] = $guid;
+            }
+        }
+
+        $settings = self::settings();
+        $storeGuids = $settings['store_guids'] !== [] ? $settings['store_guids'] : [];
+        $fetched = $missing !== [] ? self::fetchMaterialsByGuids($missing, $storeGuids) : [];
+
+        $insert = Database::pdo()->prepare(
+            'INSERT INTO procurement_materials (
+                material_guid, material_code, material_name_ar, manufacturer, group_guid, lifecycle, first_seen_at
+             ) VALUES (
+                :guid, :code, :name, :manufacturer, :group_guid, :lifecycle, NOW()
+             )
+             ON CONFLICT (material_guid) DO NOTHING'
+        );
+
+        $stillMissing = [];
+        foreach ($missing as $guid) {
+            $key = strtolower($guid);
+            $material = $fetched[$key] ?? null;
+            if (!is_array($material)) {
+                $response = SessionGate::withoutLock(static function () use ($guid): array {
+                    return ApiClient::get('/api/materials/' . rawurlencode($guid), [], 60);
+                });
+                if (($response['ok'] ?? false) && is_array($response['data'] ?? null)) {
+                    $material = $response['data'];
+                }
+            }
+            if (!is_array($material)) {
+                $stillMissing[] = $guid;
+                continue;
+            }
+            $fields = self::cacheFieldsFromApi($material);
+            $insert->execute([
+                'guid' => $guid,
+                'code' => $fields['code'],
+                'name' => $fields['name'],
+                'manufacturer' => $fields['manufacturer'],
+                'group_guid' => $fields['group_guid'],
+                'lifecycle' => self::LIFECYCLE_NEW,
+            ]);
+        }
+
+        $registered = [];
+        foreach ($guids as $guid) {
+            if (isset($existing[strtolower($guid)])) {
+                $registered[] = $guid;
+                continue;
+            }
+            if (!in_array($guid, $stillMissing, true)) {
+                $registered[] = $guid;
+            }
+        }
+
+        return [
+            'ok' => true,
+            'message' => '',
+            'registered' => $registered,
+            'missing' => $stillMissing,
+        ];
+    }
+
+    /**
+     * Invoice grid state for dashboard AJAX (session working list).
+     *
+     * @return array{count: int, gridGuids: list<string>, rows: list<array<string, mixed>>}
+     */
+    public static function invoiceAjaxState(): array
+    {
+        $guids = ProcurementMaterialInvoiceSession::guids();
+        $rows = self::materialInvoiceRows($guids);
+
+        return [
+            'count' => count($rows),
+            'gridGuids' => $guids,
+            'rows' => $rows,
+        ];
+    }
+
+    /**
      * @param list<string> $guids
      * @return list<array<string, mixed>>
      */
@@ -395,9 +496,7 @@ final class ProcurementService
             return [];
         }
 
-        foreach ($guids as $guid) {
-            self::ensureMaterialRegistered($guid);
-        }
+        self::ensureMaterialsRegistered($guids);
 
         $policies = self::policyRowsForGuids($guids);
         $settings = self::settings();

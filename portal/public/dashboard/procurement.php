@@ -126,17 +126,8 @@ if ($tableReady && $_SERVER['REQUEST_METHOD'] === 'POST') {
             static fn ($g): string => trim((string) $g),
             (array) ($_POST['material_guids'] ?? [])
         ))));
-        $added = 0;
-        foreach ($guids as $guid) {
-            if ($guid === '') {
-                continue;
-            }
-            if (!ProcurementService::ensureMaterialRegistered($guid)['ok']) {
-                continue;
-            }
-            ProcurementMaterialInvoiceSession::add($guid);
-            $added++;
-        }
+        $ensure = ProcurementService::ensureMaterialsRegistered($guids);
+        $added = ProcurementMaterialInvoiceSession::addMany($ensure['registered'] ?? []);
         $flash = $added > 0
             ? sprintf('تمت إضافة %d مادة للفاتورة.', $added)
             : 'لم تُضف مواد — تحقق من الاختيار.';
