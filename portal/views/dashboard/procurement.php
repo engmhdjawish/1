@@ -39,16 +39,19 @@ use Portal\Services\ProcurementService;
 /** @var string|null $filterError */
 /** @var list<string> $selectedStoreGuids */
 
-$btnPrimary = 'h-10 px-4 inline-flex items-center justify-center rounded-xl bg-primary text-white text-sm font-bold hover:brightness-110';
-$btnLight = 'h-10 px-4 inline-flex items-center justify-center rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-700 hover:bg-slate-50';
-$tabClass = static function (string $key) use ($tab): string {
-    $base = 'px-3 py-2 rounded-lg text-sm font-bold ';
-    if ($tab === $key) {
-        return $base . 'bg-primary/10 text-primary';
-    }
-
-    return $base . 'text-text-muted hover:bg-surface-low';
-};
+$btnPrimary = 'proc-btn proc-btn--primary h-10 px-4 inline-flex items-center justify-center rounded-xl bg-primary text-white text-sm font-bold hover:brightness-110 w-full sm:w-auto';
+$btnLight = 'proc-btn h-10 px-4 inline-flex items-center justify-center rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 w-full sm:w-auto';
+$procPanel = 'proc-panel bg-white border border-border-subtle rounded-xl p-4 sm:p-5 mb-4';
+$shortageLineCount = 0;
+foreach ($shortagesByManufacturer as $manLines) {
+    $shortageLineCount += count($manLines);
+}
+$procMainTabs = [
+    'shortages' => ['label' => 'النواقص', 'icon' => 'production_quantity_limits', 'badge' => $shortageLineCount > 0 ? $shortageLineCount : null],
+    'materials' => ['label' => 'المواد', 'icon' => 'inventory_2', 'badge' => $invoiceCount > 0 ? $invoiceCount : null],
+    'orders' => ['label' => 'الطلبات', 'icon' => 'receipt_long', 'badge' => count($orders) > 0 ? count($orders) : null],
+    'settings' => ['label' => 'إعدادات', 'icon' => 'tune', 'badge' => null],
+];
 $orderStatusLabels = [
     'draft' => 'مسودة',
     'sent' => 'مرسل للمصنع',
@@ -57,44 +60,59 @@ $orderStatusLabels = [
     'cancelled' => 'ملغى',
 ];
 ?>
-<section class="bg-white border border-border-subtle rounded-xl p-5 mb-4">
-  <div class="flex flex-wrap items-start justify-between gap-3">
-    <div>
-      <h1 class="text-xl font-bold mb-1">المشتريات — نواقص وطلبات المصانع</h1>
-      <p class="text-sm text-text-muted max-w-2xl">
-        اكتشاف مواد الأمين، ضبط الحدود بالطرد، وحساب النواقص حسب الشركة المصنّعة.
-        المخزون يُحسب من المستودعات المحددة فقط (استبعد التوالف).
+<div class="proc-page">
+  <header class="proc-hero <?= h($procPanel) ?>">
+    <div class="proc-hero__main">
+      <div class="proc-hero__title-row">
+        <span class="material-symbols-outlined proc-hero__icon" aria-hidden="true">local_shipping</span>
+        <h1 class="proc-hero__title">المشتريات</h1>
+      </div>
+      <p class="proc-hero__desc text-sm text-text-muted">
+        نواقص المخزون بالطرد، ضبط المواد، ومسودات طلبات المصانع.
+        <span class="hidden sm:inline">المتاح من المستودعات المختارة فقط.</span>
       </p>
     </div>
     <?php if ($tableReady): ?>
-      <form method="post" class="shrink-0">
+      <form method="post" class="proc-hero__action">
         <input type="hidden" name="action" value="sync_materials">
         <button type="submit" class="<?= h($btnPrimary) ?>">
           <span class="material-symbols-outlined text-base ml-1">sync</span>
-          مزامنة مواد الأمين
+          مزامنة الأمين
         </button>
       </form>
     <?php endif; ?>
-  </div>
-  <?php if ($flash !== null && $flash !== ''): ?>
-    <p class="mt-3 text-sm <?= $flashType === 'error' ? 'text-red-700' : 'text-emerald-700' ?>"><?= h($flash) ?></p>
-  <?php endif; ?>
-  <?php if (!$tableReady): ?>
-    <p class="mt-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-      جداول المشتريات غير موجودة. نفّذ ترحيل <code class="text-xs">030-procurement.sql</code> على PostgreSQL.
-    </p>
-  <?php endif; ?>
-</section>
+    <?php if ($flash !== null && $flash !== ''): ?>
+      <p class="proc-flash <?= $flashType === 'error' ? 'proc-flash--error' : 'proc-flash--ok' ?>" role="status"><?= h($flash) ?></p>
+    <?php endif; ?>
+    <?php if (!$tableReady): ?>
+      <p class="proc-alert">
+        جداول المشتريات غير موجودة. نفّذ ترحيل <code class="text-xs">030-procurement.sql</code> على PostgreSQL.
+      </p>
+    <?php endif; ?>
+  </header>
 
-<nav class="mb-4 flex flex-wrap gap-2" aria-label="أقسام المشتريات">
-  <a class="<?= h($tabClass('shortages')) ?>" href="/dashboard/procurement.php?tab=shortages">النواقص</a>
-  <a class="<?= h($tabClass('materials')) ?>" href="/dashboard/procurement.php?tab=materials">المواد</a>
-  <a class="<?= h($tabClass('orders')) ?>" href="/dashboard/procurement.php?tab=orders">طلبات الشراء</a>
-  <a class="<?= h($tabClass('settings')) ?>" href="/dashboard/procurement.php?tab=settings">الإعدادات</a>
-</nav>
+  <nav class="proc-tabs" aria-label="أقسام المشتريات">
+    <?php foreach ($procMainTabs as $tabKey => $tabMeta): ?>
+      <?php
+        $tabHref = '/dashboard/procurement.php?' . http_build_query(['tab' => $tabKey]);
+        $isActive = $tab === $tabKey;
+      ?>
+      <a
+        class="proc-tabs__link<?= $isActive ? ' is-active' : '' ?>"
+        href="<?= h($tabHref) ?>"
+        <?= $isActive ? 'aria-current="page"' : '' ?>
+      >
+        <span class="material-symbols-outlined proc-tabs__icon" aria-hidden="true"><?= h($tabMeta['icon']) ?></span>
+        <span class="proc-tabs__label"><?= h($tabMeta['label']) ?></span>
+        <?php if ($tabMeta['badge'] !== null): ?>
+          <span class="proc-tabs__badge"><?= h((string) $tabMeta['badge']) ?></span>
+        <?php endif; ?>
+      </a>
+    <?php endforeach; ?>
+  </nav>
 
 <?php if ($tab === 'settings'): ?>
-  <section class="bg-white border border-border-subtle rounded-xl p-5">
+  <section class="<?= h($procPanel) ?>">
     <h2 class="text-lg font-bold mb-3">إعدادات حساب المخزون</h2>
     <?php if ($filterError !== null): ?>
       <p class="text-sm text-red-700 mb-3"><?= h($filterError) ?></p>
@@ -135,37 +153,37 @@ $orderStatusLabels = [
   </section>
 
 <?php elseif ($tab === 'materials'): ?>
-  <nav class="mb-4 flex flex-wrap gap-2" aria-label="عرض المواد">
-    <?php
-      $listModeHref = '/dashboard/procurement.php?' . http_build_query([
-          'tab' => 'materials',
-          'material_view' => 'list',
-          'material_filter' => $materialFilter,
-          'material_q' => $materialQ,
-          'material_manufacturer' => $materialManufacturer,
-          'material_page' => $materialPage > 1 ? $materialPage : null,
-      ]);
-      $invoiceModeHref = '/dashboard/procurement.php?' . http_build_query([
-          'tab' => 'materials',
-          'material_view' => 'invoice',
-      ]);
-    ?>
+  <?php
+    $listModeHref = '/dashboard/procurement.php?' . http_build_query([
+        'tab' => 'materials',
+        'material_view' => 'list',
+        'material_filter' => $materialFilter,
+        'material_q' => $materialQ,
+        'material_manufacturer' => $materialManufacturer,
+        'material_page' => $materialPage > 1 ? $materialPage : null,
+    ]);
+    $invoiceModeHref = '/dashboard/procurement.php?' . http_build_query([
+        'tab' => 'materials',
+        'material_view' => 'invoice',
+    ]);
+  ?>
+  <nav class="proc-subtabs" aria-label="عرض المواد">
     <a href="<?= h($listModeHref) ?>"
-       class="px-4 py-2 rounded-lg text-sm font-bold <?= $materialView === 'list' ? 'bg-primary text-white' : 'border border-border-subtle text-text-muted' ?>">
+       class="proc-subtabs__link<?= $materialView === 'list' ? ' is-active' : '' ?>">
       قائمة وبحث
     </a>
     <a href="<?= h($invoiceModeHref) ?>"
-       class="px-4 py-2 rounded-lg text-sm font-bold inline-flex items-center gap-1 <?= $materialView === 'invoice' ? 'bg-primary text-white' : 'border border-border-subtle text-text-muted' ?>">
+       class="proc-subtabs__link<?= $materialView === 'invoice' ? ' is-active' : '' ?>">
       فاتورة ضبط
       <?php if ($invoiceCount > 0): ?>
-        <span class="text-xs px-1.5 py-0.5 rounded-full bg-white/20"><?= h((string) $invoiceCount) ?></span>
+        <span class="proc-subtabs__badge"><?= h((string) $invoiceCount) ?></span>
       <?php endif; ?>
     </a>
   </nav>
 
   <?php if ($materialView === 'invoice'): ?>
   <?php $invoiceFormId = 'procurement-invoice-save-all'; ?>
-  <section id="procurement-invoice-root" class="bg-white border border-border-subtle rounded-xl p-5 mb-4"
+  <section id="procurement-invoice-root" class="<?= h($procPanel) ?> proc-invoice-shell"
            data-manufacturer="<?= h($invManufacturer) ?>">
     <form id="proc-invoice-batch-add" method="post" class="hidden">
       <input type="hidden" name="action" value="invoice_add_materials">
@@ -174,8 +192,8 @@ $orderStatusLabels = [
       <input type="hidden" name="action" value="invoice_save_all">
     </form>
 
-    <div class="flex flex-wrap gap-3 mb-4 items-end">
-      <label class="text-sm min-w-[10rem]">
+    <div class="proc-toolbar flex flex-col sm:flex-row flex-wrap gap-3 mb-4 sm:items-end">
+      <label class="text-sm w-full sm:min-w-[10rem] sm:flex-1 sm:max-w-xs">
         <span class="font-bold block mb-1">تقييد الشركة (اختياري)</span>
         <select id="proc-invoice-manufacturer" class="h-10 w-full rounded-lg border border-border-subtle px-2 text-sm">
           <option value="">— كل الشركات —</option>
@@ -303,8 +321,8 @@ $orderStatusLabels = [
   </section>
 
   <?php else: /* list */ ?>
-  <section class="bg-white border border-border-subtle rounded-xl p-5 mb-4">
-    <form method="get" class="grid md:grid-cols-4 gap-3 mb-4 items-end">
+  <section class="<?= h($procPanel) ?>">
+    <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4 items-end">
       <input type="hidden" name="tab" value="materials">
       <input type="hidden" name="material_view" value="list">
       <input type="hidden" name="material_filter" value="<?= h($materialFilter) ?>">
@@ -323,7 +341,7 @@ $orderStatusLabels = [
       </label>
       <button type="submit" class="<?= h($btnPrimary) ?> w-full">بحث</button>
     </form>
-    <div class="flex flex-wrap gap-2 mb-4">
+    <div class="proc-chip-scroll mb-4">
       <?php
         $filters = [
             'needs_config' => 'تحتاج ضبط',
@@ -342,7 +360,7 @@ $orderStatusLabels = [
           ]);
       ?>
         <a href="<?= h($href) ?>"
-           class="text-xs font-bold px-3 py-1.5 rounded-full border <?= $materialFilter === $key ? 'bg-primary/10 border-primary text-primary' : 'border-border-subtle text-text-muted' ?>">
+           class="proc-chip<?= $materialFilter === $key ? ' is-active' : '' ?>">
           <?= h($label) ?>
         </a>
       <?php endforeach; ?>
@@ -355,8 +373,9 @@ $orderStatusLabels = [
     <?php if ($materials === []): ?>
       <p class="text-sm text-text-muted">لا مواد في هذا الفلتر. جرّب «مزامنة مواد الأمين».</p>
     <?php else: ?>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+      <p class="proc-scroll-hint sm:hidden text-xs text-text-muted mb-2">مرّر الجدول أفقياً لعرض ضبط المواد</p>
+      <div class="proc-table-scroll overflow-x-auto -mx-1 px-1">
+        <table class="w-full text-sm min-w-[640px]">
           <thead>
             <tr class="text-right text-text-muted border-b">
               <th class="py-2 pl-2">الكود</th>
@@ -430,11 +449,11 @@ $orderStatusLabels = [
   <?php endif; ?>
 
 <?php elseif ($tab === 'orders'): ?>
-  <section class="bg-white border border-border-subtle rounded-xl p-4 mb-4">
-    <h2 class="text-sm font-bold mb-2">مسودة جديدة (فاتورة شراء)</h2>
-    <form method="post" class="flex flex-wrap gap-2 items-end">
+  <section class="<?= h($procPanel) ?>">
+    <h2 class="text-sm font-bold mb-2">مسودة طلب جديد</h2>
+    <form method="post" class="flex flex-col sm:flex-row flex-wrap gap-2 sm:items-end">
       <input type="hidden" name="action" value="create_empty_order">
-      <label class="text-sm flex-1 min-w-[12rem]">
+      <label class="text-sm flex-1 min-w-0 w-full sm:min-w-[12rem]">
         <span class="text-text-muted block mb-1">الشركة المصنّعة</span>
         <select name="manufacturer" required class="h-10 w-full rounded-lg border border-border-subtle px-2">
           <option value="">— اختر —</option>
@@ -446,13 +465,13 @@ $orderStatusLabels = [
       <button type="submit" class="<?= h($btnPrimary) ?>">إنشاء مسودة</button>
     </form>
   </section>
-  <section class="grid lg:grid-cols-2 gap-4">
-    <div class="bg-white border border-border-subtle rounded-xl p-5">
-      <h2 class="text-lg font-bold mb-3">طلبات مفتوحة</h2>
+  <div class="proc-orders-layout">
+    <aside class="proc-orders-list <?= h($procPanel) ?>">
+      <h2 class="text-base sm:text-lg font-bold mb-3">طلبات مفتوحة</h2>
       <?php if ($orders === []): ?>
-        <p class="text-sm text-text-muted">لا مسودات — أنشئ من النواقص أو «مسودة جديدة» أعلاه.</p>
+        <p class="text-sm text-text-muted">لا مسودات — أنشئ من النواقص أو «مسودة جديد» أعلاه.</p>
       <?php else: ?>
-        <ul class="space-y-2">
+        <ul class="proc-orders-pills" role="list">
           <?php foreach ($orders as $order): ?>
             <?php
               $oid = (string) ($order['id'] ?? '');
@@ -461,17 +480,19 @@ $orderStatusLabels = [
             ?>
             <li>
               <a href="/dashboard/procurement.php?tab=orders&amp;order=<?= h(rawurlencode($oid)) ?>"
-                 class="block rounded-lg border px-3 py-2 <?= $active ? 'border-primary bg-primary/5' : 'border-border-subtle hover:bg-surface-low' ?>">
-                <span class="font-bold"><?= h((string) ($order['manufacturer'] ?? '')) ?></span>
-                <span class="text-xs text-text-muted mr-2"><?= h($orderStatusLabels[$status] ?? $status) ?></span>
-                <span class="text-xs text-text-muted"> — <?= h(substr((string) ($order['created_at'] ?? ''), 0, 10)) ?></span>
+                 class="proc-order-pill<?= $active ? ' is-active' : '' ?>">
+                <span class="proc-order-pill__name"><?= h((string) ($order['manufacturer'] ?? '')) ?></span>
+                <span class="proc-order-pill__meta">
+                  <?= h($orderStatusLabels[$status] ?? $status) ?>
+                  · <?= h(substr((string) ($order['created_at'] ?? ''), 0, 10)) ?>
+                </span>
               </a>
             </li>
           <?php endforeach; ?>
         </ul>
       <?php endif; ?>
-    </div>
-    <div class="bg-white border border-border-subtle rounded-xl p-5 space-y-5">
+    </aside>
+    <div class="proc-orders-detail <?= h($procPanel) ?> space-y-5 min-w-0">
       <?php if ($viewOrderId === '' || $viewOrder === null): ?>
         <p class="text-sm text-text-muted">اختر طلباً من القائمة — ثم أضف الأصناف كفاتورة.</p>
       <?php else: ?>
@@ -485,8 +506,8 @@ $orderStatusLabels = [
           <?php if ($orderLines === []): ?>
             <p class="text-sm text-text-muted">لا بنود بعد — استخدم «ملء من المعايير» أو البحث أدناه.</p>
           <?php else: ?>
-            <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-3 p-3 rounded-lg bg-surface-low border border-border-subtle">
-              <label class="text-xs sm:col-span-2">
+            <div class="proc-order-filters grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-3 p-3 rounded-lg bg-surface-low border border-border-subtle">
+              <label class="text-xs lg:col-span-2">
                 <span class="font-bold block mb-1">بحث في البنود</span>
                 <input type="search" id="proc-order-filter-q" class="h-9 w-full rounded-lg border border-border-subtle px-2 text-sm" placeholder="كود أو اسم…">
               </label>
@@ -499,18 +520,19 @@ $orderStatusLabels = [
                   <?php endforeach; ?>
                 </select>
               </label>
-              <label class="text-xs flex items-end gap-2 pb-1">
+              <label class="text-xs flex items-end gap-2 pb-1 min-h-[2.25rem]">
                 <input type="checkbox" id="proc-order-filter-below-min" class="shrink-0">
                 <span>تحت حد الطلب فقط</span>
               </label>
-              <label class="text-xs flex items-center gap-2">
+              <label class="text-xs flex items-center gap-2 min-h-[2.25rem]">
                 <input type="checkbox" id="proc-order-filter-open-only" class="shrink-0">
                 <span>بنود مفتوحة فقط</span>
               </label>
-              <button type="button" id="proc-order-filter-reset" class="<?= h($btnLight) ?> h-9 text-xs px-3">إعادة ضبط الفلاتر</button>
+              <button type="button" id="proc-order-filter-reset" class="<?= h($btnLight) ?> h-9 text-xs px-3 lg:col-span-2">إعادة ضبط الفلاتر</button>
             </div>
-            <div class="overflow-x-auto border border-border-subtle rounded-lg">
-              <table class="w-full text-sm" id="proc-order-lines-table">
+            <p class="proc-scroll-hint lg:hidden text-xs text-text-muted mb-2">بطاقات البنود على الشاشة الصغيرة — أو مرّر الجدول على الأجهزة اللوحية</p>
+            <div class="proc-table-scroll overflow-x-auto border border-border-subtle rounded-lg lg:overflow-visible">
+              <table class="proc-table proc-table--cards w-full text-sm min-w-[720px] lg:min-w-0" id="proc-order-lines-table">
                 <thead>
                   <tr class="text-right text-text-muted bg-surface-low">
                     <th class="p-2">كود</th>
@@ -538,16 +560,16 @@ $orderStatusLabels = [
                         data-below-min="<?= !empty($line['below_min']) ? '1' : '0' ?>"
                         data-line-open="<?= ($line['line_status'] ?? '') === 'open' ? '1' : '0' ?>"
                         data-search="<?= h($searchHay) ?>">
-                      <td class="p-2 font-mono text-xs"><?= h((string) ($line['material_code'] ?? '')) ?></td>
-                      <td class="p-2"><?= h((string) ($line['material_name_ar'] ?? '')) ?></td>
-                      <td class="p-2 text-xs">
+                      <td class="p-2 font-mono text-xs" data-label="كود"><?= h((string) ($line['material_code'] ?? '')) ?></td>
+                      <td class="p-2" data-label="الصنف"><?= h((string) ($line['material_name_ar'] ?? '')) ?></td>
+                      <td class="p-2 text-xs" data-label="حالة">
                         <span class="inline-flex px-2 py-0.5 rounded-full bg-slate-100"><?= h((string) ($line['lifecycle_label'] ?? '—')) ?></span>
                       </td>
-                      <td class="p-2 text-xs"><?= h((string) ($line['available_cartons'] ?? '')) ?></td>
-                      <td class="p-2 text-xs text-text-muted">
+                      <td class="p-2 text-xs" data-label="متاح"><?= h((string) ($line['available_cartons'] ?? '')) ?></td>
+                      <td class="p-2 text-xs text-text-muted" data-label="حد / سقف">
                         <?= h((string) ($line['min_cartons'] ?? '—')) ?> / <?= h((string) ($line['max_cartons'] ?? '—')) ?>
                       </td>
-                      <td class="p-2">
+                      <td class="p-2" data-label="طرد">
                         <form method="post" class="flex gap-1 items-center">
                           <input type="hidden" name="action" value="update_line_qty">
                           <input type="hidden" name="order_id" value="<?= h($viewOrderId) ?>">
@@ -557,7 +579,7 @@ $orderStatusLabels = [
                           <button type="submit" class="text-xs font-bold text-primary">✓</button>
                         </form>
                       </td>
-                      <td class="p-2 whitespace-nowrap">
+                      <td class="p-2 whitespace-nowrap" data-label="إجراء">
                         <button type="button"
                                 class="text-xs font-bold text-primary proc-order-edit-material"
                                 data-material-guid="<?= h($guid) ?>"
@@ -709,35 +731,35 @@ $orderStatusLabels = [
           <?php endif; ?>
         </div>
 
-        <div class="flex flex-wrap gap-2 border-t border-border-subtle pt-4">
-          <form method="post">
+        <div class="proc-action-bar flex flex-col sm:flex-row flex-wrap gap-2 border-t border-border-subtle pt-4">
+          <form method="post" class="w-full sm:w-auto">
             <input type="hidden" name="action" value="update_order_status">
             <input type="hidden" name="order_id" value="<?= h($viewOrderId) ?>">
             <input type="hidden" name="status" value="sent">
-            <button type="submit" class="<?= h($btnPrimary) ?> text-xs">تعليم «مرسل»</button>
+            <button type="submit" class="<?= h($btnPrimary) ?> text-xs w-full sm:w-auto">تعليم «مرسل»</button>
           </form>
-          <form method="post">
+          <form method="post" class="w-full sm:w-auto">
             <input type="hidden" name="action" value="update_order_status">
             <input type="hidden" name="order_id" value="<?= h($viewOrderId) ?>">
             <input type="hidden" name="status" value="closed">
-            <button type="submit" class="<?= h($btnLight) ?> text-xs">إغلاق الطلب</button>
+            <button type="submit" class="<?= h($btnLight) ?> text-xs w-full sm:w-auto">إغلاق الطلب</button>
           </form>
-          <form method="post" onsubmit="return confirm('إلغاء الطلب؟');">
+          <form method="post" class="w-full sm:w-auto" onsubmit="return confirm('إلغاء الطلب؟');">
             <input type="hidden" name="action" value="update_order_status">
             <input type="hidden" name="order_id" value="<?= h($viewOrderId) ?>">
             <input type="hidden" name="status" value="cancelled">
-            <button type="submit" class="h-10 px-3 rounded-xl border border-red-200 text-red-700 text-xs font-bold">إلغاء</button>
+            <button type="submit" class="h-10 px-3 rounded-xl border border-red-200 text-red-700 text-xs font-bold w-full sm:w-auto">إلغاء</button>
           </form>
         </div>
       <?php endif; ?>
     </div>
-  </section>
+  </div>
 
 <?php else: /* shortages */ ?>
-  <section class="bg-white border border-border-subtle rounded-xl p-5 mb-4">
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <section class="<?= h($procPanel) ?>">
+    <div class="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-3 mb-4">
       <div>
-        <h2 class="text-lg font-bold">نواقص الموسم (بالطرد)</h2>
+        <h2 class="text-lg font-bold">نواقص (بالطرد)</h2>
         <?php if ($settings['store_guids'] === []): ?>
           <p class="text-sm text-amber-800">اختر مستودعات في تبويب الإعدادات أولاً.</p>
         <?php endif; ?>
@@ -803,8 +825,8 @@ $orderStatusLabels = [
             <span class="material-symbols-outlined text-base">factory</span>
             <?= h($manufacturer) ?>
           </h3>
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+          <div class="proc-table-scroll overflow-x-auto -mx-1 px-1">
+            <table class="proc-table proc-table--cards w-full text-sm min-w-[520px] lg:min-w-0">
               <thead>
                 <tr class="text-right text-text-muted border-b">
                   <th class="py-2">كود</th>
@@ -818,12 +840,12 @@ $orderStatusLabels = [
               <tbody>
                 <?php foreach ($lines as $line): ?>
                   <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 font-mono text-xs"><?= h((string) ($line['material_code'] ?? '')) ?></td>
-                    <td class="py-2"><?= h((string) ($line['material_name_ar'] ?? '')) ?></td>
-                    <td class="py-2"><?= h((string) ($line['available_cartons'] ?? '')) ?></td>
-                    <td class="py-2"><?= h((string) ($line['min_cartons'] ?? '')) ?></td>
-                    <td class="py-2"><?= h((string) ($line['max_cartons'] ?? '')) ?></td>
-                    <td class="py-2 font-bold"><?= h((string) ($line['suggested_cartons'] ?? '')) ?></td>
+                    <td class="py-2 font-mono text-xs" data-label="كود"><?= h((string) ($line['material_code'] ?? '')) ?></td>
+                    <td class="py-2" data-label="الصنف"><?= h((string) ($line['material_name_ar'] ?? '')) ?></td>
+                    <td class="py-2" data-label="متاح"><?= h((string) ($line['available_cartons'] ?? '')) ?></td>
+                    <td class="py-2" data-label="حد"><?= h((string) ($line['min_cartons'] ?? '')) ?></td>
+                    <td class="py-2" data-label="سقف"><?= h((string) ($line['max_cartons'] ?? '')) ?></td>
+                    <td class="py-2 font-bold" data-label="مقترح"><?= h((string) ($line['suggested_cartons'] ?? '')) ?></td>
                   </tr>
                 <?php endforeach; ?>
               </tbody>
@@ -834,3 +856,4 @@ $orderStatusLabels = [
     <?php endif; ?>
   </section>
 <?php endif; ?>
+</div>
