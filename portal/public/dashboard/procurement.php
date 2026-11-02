@@ -381,6 +381,9 @@ $selectedStoreGuids = $settings['store_guids'];
 $loadProcurementInvoiceJs = $tab === 'materials' && $materialView === 'invoice';
 $loadProcurementOrdersJs = $tab === 'orders' && $viewOrderId !== '';
 $invoiceGridGuids = $loadProcurementInvoiceJs ? ProcurementMaterialInvoiceSession::guids() : [];
+$dashboardPageAssets = $loadProcurementInvoiceJs
+    ? 'procurement-invoice'
+    : ($loadProcurementOrdersJs ? 'procurement-orders' : '');
 $currentRoute = '/dashboard/procurement.php?tab=' . rawurlencode($tab);
 
 ob_start();

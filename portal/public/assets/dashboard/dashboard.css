@@ -2488,12 +2488,21 @@ button.is-loading::after,
   min-width: 12rem;
 }
 
+.proc-invoice-dropdown-layer {
+  position: relative;
+  z-index: 30;
+  min-height: 0;
+}
+
 .proc-invoice-dropdown {
-  right: 0;
-  left: auto;
   list-style: none;
   margin: 0;
   padding: 0;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.14);
+}
+
+.proc-invoice-dropdown:not(.hidden) {
+  display: block;
 }
 
 .proc-order-dialog::backdrop {

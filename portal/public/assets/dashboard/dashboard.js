@@ -273,6 +273,12 @@
     'visitor-log': {
       styles: ['/css/visitor-log.css'],
     },
+    'procurement-invoice': {
+      scripts: ['/assets/dashboard/procurement-invoice.js'],
+    },
+    'procurement-orders': {
+      scripts: ['/assets/dashboard/procurement-orders.js'],
+    },
   };
 
   function loadScript(src) {
@@ -750,6 +756,12 @@
     }
     if (typeof window.portalSpecialOffersInit === 'function') {
       window.portalSpecialOffersInit(root);
+    }
+    if (typeof window.portalProcurementInvoiceInit === 'function') {
+      window.portalProcurementInvoiceInit(root);
+    }
+    if (typeof window.portalProcurementOrdersInit === 'function') {
+      window.portalProcurementOrdersInit(root);
     }
     if (typeof window.portalMediaPickerInit === 'function') {
       window.portalMediaPickerInit();

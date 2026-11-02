@@ -207,13 +207,20 @@ $orderStatusLabels = [
         إضافة المحدّد (<span id="proc-invoice-selected-count">0</span>)
       </button>
     </div>
+    <div id="proc-invoice-dropdown-layer" class="proc-invoice-dropdown-layer">
+      <ul
+        id="proc-invoice-grid-dropdown"
+        class="proc-invoice-dropdown hidden rounded-xl border border-border-subtle bg-white shadow-lg text-sm overflow-y-auto"
+        role="listbox"
+      ></ul>
+    </div>
 
     <div class="so-invoice">
       <div class="so-invoice__head">
         <div>
           <p class="so-invoice__kicker">ضبط سياسة الشراء</p>
           <h2 class="so-invoice__title">فاتورة المواد</h2>
-          <p class="so-invoice__hint">اكتب في سطر الشبكة السفلي (مثل Excel) — حدّد عدة مواد ثم «إضافة المحدّد»، أو Enter لإضافة سطر واحد.</p>
+          <p class="so-invoice__hint">في السطر + ابحث كالمتجر (أي جزء من الاسم أو الكود) — حدّد مواد ثم «إضافة المحدّد».</p>
         </div>
         <div class="flex flex-col items-end gap-2">
           <p class="so-invoice__count" id="proc-invoice-grid-count"><?= count($invoiceRows) ?> <?= count($invoiceRows) === 1 ? 'مادة' : 'مواد' ?></p>
@@ -286,7 +293,7 @@ $orderStatusLabels = [
             <?php endforeach; ?>
             <tr class="so-invoice__row proc-invoice-composer" data-role="composer">
               <td class="so-invoice__num">+</td>
-              <td class="so-invoice__material proc-invoice-material-cell relative" colspan="1">
+              <td class="so-invoice__material proc-invoice-material-cell" colspan="1">
                 <input
                   type="search"
                   id="proc-invoice-grid-input"
@@ -296,13 +303,8 @@ $orderStatusLabels = [
                   role="combobox"
                   aria-expanded="false"
                   aria-controls="proc-invoice-grid-dropdown"
-                  placeholder="اكتب كود أو اسم المادة…"
+                  placeholder="ابحث — جزء من الاسم أو الكود…"
                 >
-                <ul
-                  id="proc-invoice-grid-dropdown"
-                  class="proc-invoice-dropdown hidden absolute z-50 mt-1 min-w-[16rem] max-w-[28rem] max-h-72 overflow-y-auto rounded-xl border border-border-subtle bg-white shadow-lg text-sm"
-                  role="listbox"
-                ></ul>
               </td>
               <td colspan="6" class="text-xs text-text-muted">↑↓ للتنقل · Enter يبدّل التحديد · Enter مرتين أو الزر أعلاه للإضافة</td>
             </tr>
