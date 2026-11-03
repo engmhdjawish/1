@@ -992,6 +992,11 @@ body.se-zip-dialog-open {
 }
 
 .se-zip-dialog {
+  --se-red: #d81921;
+  --se-red-soft: #fef2f2;
+  --se-ink: #0f172a;
+  --se-muted: #64748b;
+  --se-line: #e2e8f0;
   position: fixed;
   inset: 0;
   z-index: 80;
@@ -1159,11 +1164,14 @@ body.se-zip-dialog-open {
   padding: 0 1.25rem;
   border: none;
   border-radius: 0.75rem;
-  background: var(--se-red);
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: var(--se-red, #d81921);
   color: #fff;
   font-size: 0.875rem;
   font-weight: 800;
   cursor: pointer;
+  box-shadow: 0 2px 8px rgba(216, 25, 33, 0.35);
 }
 
 .se-zip-dialog .dash-mi-zip-download-btn.is-loading {
