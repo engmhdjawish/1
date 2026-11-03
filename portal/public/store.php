@@ -16,7 +16,10 @@ require dirname(__DIR__) . '/views/helpers.php';
 
 $_GET = CatalogFilterViewService::expandRequest($_GET);
 
-$shareBrowse = SharePageAccess::resolveShareBrowseContext(null, null);
+// Sticky share-cart tokens must not replace the staff store (ZIP download lives on the full catalog).
+$shareBrowse = portal_staff_can_download_material_zip()
+    ? null
+    : SharePageAccess::resolveShareBrowseContext(null, null);
 if ($shareBrowse !== null) {
     ShareCartService::rememberActiveToken($shareBrowse['token']);
     $shareStoreAllowCart = (bool) ($shareBrowse['display_options']['allow_cart'] ?? false);
@@ -47,7 +50,7 @@ $materialFilterOptions = [
 ];
 $materialFilterOptionsError = null;
 
-if (WebSession::check() && WebSession::hasAnyPermission(['images.view', 'images.upload', 'orders.view'])) {
+if (portal_staff_can_download_material_zip()) {
     $canStaffDownloadMaterialZip = true;
     $filterFetch = MaterialFilterOptionsService::fetchFromApi();
     $materialFilterOptions = $filterFetch['options'];
