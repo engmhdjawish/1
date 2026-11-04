@@ -161,7 +161,7 @@ test('material images download tab registers dashboard page assets', () => {
     path.resolve(__dirname, '../public/dashboard/material-images.php'),
     'utf8',
   );
-  assert.match(controller, /\$dashboardPageAssets = 'material-images-zip';/);
+  assert.match(controller, /\$dashboardPageAssets = \$workspaceTab === 'download' \? 'material-images-zip' : '';/);
   assert.match(controller, /\$materialImagesWorkspace = true;/);
 });
 

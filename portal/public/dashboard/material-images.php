@@ -67,13 +67,22 @@ $settingsForm = [
     'material_thumbnails_dir' => (string) ($company['material_thumbnails_dir'] ?? ''),
 ];
 
-$filterFetch = MaterialFilterOptionsService::fetchFromApi();
-$materialFilterOptions = $filterFetch['options'];
-$materialFilterOptionsError = $filterFetch['error'];
-
+$materialFilterOptions = [
+    'materialTypes' => [],
+    'ageCategories' => [],
+    'manufacturers' => [],
+    'sizeRanges' => [],
+    'countryOfOrigins' => [],
+    'stores' => [],
+    'groups' => [],
+];
+$materialFilterOptionsError = null;
 $invoiceTypes = [];
 $invoiceTypesError = null;
 if ($workspaceTab === 'download') {
+    $filterFetch = MaterialFilterOptionsService::fetchFromApi();
+    $materialFilterOptions = $filterFetch['options'];
+    $materialFilterOptionsError = $filterFetch['error'];
     try {
         $invoiceTypes = AccountingApiService::invoiceTypes();
     } catch (\Throwable $exception) {
@@ -85,7 +94,7 @@ $currentRoute = '/dashboard/material-images.php';
 $materialImagesWorkspace = true;
 $materialImagesZipTab = ($workspaceTab === 'download');
 $materialImagesUploadTab = ($workspaceTab === 'upload');
-$dashboardPageAssets = 'material-images-zip';
+$dashboardPageAssets = $workspaceTab === 'download' ? 'material-images-zip' : '';
 
 ob_start();
 require dirname(__DIR__, 2) . '/views/dashboard/material-images-workspace.php';
