@@ -150,6 +150,12 @@ test('dashboard ensurePageAssets loads share-links scripts sequentially', () => 
   assert.doesNotMatch(source, /Promise\.all\([\s\S]*bundle\.scripts/);
 });
 
+test('dashboard loadScript treats layout defer scripts as already settled', () => {
+  const source = loadScript('assets/dashboard/dashboard.js');
+  assert.match(source, /function isScriptLoadSettled/);
+  assert.match(source, /node\.complete \|\| readyState === 'complete'/);
+});
+
 test('material images download tab registers dashboard page assets', () => {
   const controller = fs.readFileSync(
     path.resolve(__dirname, '../public/dashboard/material-images.php'),

@@ -278,6 +278,27 @@
     },
   };
 
+  function markScriptLoaded(node) {
+    node.dataset.portalScriptLoaded = '1';
+  }
+
+  /** Layout may load defer scripts before dashboard.js runs; load will not fire again. */
+  function isScriptLoadSettled(node) {
+    if (node.dataset.portalScriptLoaded === '1') {
+      return true;
+    }
+    if (!node.src) {
+      markScriptLoaded(node);
+      return true;
+    }
+    const readyState = node.readyState;
+    if (node.complete || readyState === 'complete' || readyState === 'loaded') {
+      markScriptLoaded(node);
+      return true;
+    }
+    return false;
+  }
+
   function loadScript(src) {
     const normalized = src.split('?')[0];
     const existing = Array.from(document.querySelectorAll('script[src]')).find((node) => {
@@ -285,12 +306,12 @@
       return current === normalized || current.endsWith(normalized);
     });
     if (existing) {
-      if (existing.dataset.portalScriptLoaded === '1') {
+      if (isScriptLoadSettled(existing)) {
         return Promise.resolve();
       }
       return new Promise((resolve, reject) => {
         existing.addEventListener('load', () => {
-          existing.dataset.portalScriptLoaded = '1';
+          markScriptLoaded(existing);
           resolve();
         }, { once: true });
         existing.addEventListener('error', () => reject(new Error(src)), { once: true });
@@ -302,7 +323,7 @@
       script.src = src;
       script.defer = true;
       script.onload = () => {
-        script.dataset.portalScriptLoaded = '1';
+        markScriptLoaded(script);
         resolve();
       };
       script.onerror = () => reject(new Error(src));
@@ -325,10 +346,26 @@
     }) || null;
   }
 
+  function isStylesheetLoadSettled(link) {
+    if (link.sheet) {
+      return true;
+    }
+    try {
+      for (let i = 0; i < document.styleSheets.length; i += 1) {
+        if (document.styleSheets[i].ownerNode === link) {
+          return true;
+        }
+      }
+    } catch (_) {
+      /* cross-origin stylesheets may throw */
+    }
+    return false;
+  }
+
   function loadStylesheet(href) {
     const existing = findStylesheetLink(href);
     if (existing) {
-      if (existing.sheet) {
+      if (isStylesheetLoadSettled(existing)) {
         return Promise.resolve();
       }
       return new Promise((resolve, reject) => {
