@@ -268,15 +268,67 @@
     },
     'material-images-zip': {
       styles: ['/css/store-filters.css'],
-      scripts: [
-        '/assets/store-filters.js',
-        '/assets/dashboard/material-image-zip-download.js',
-      ],
+      scripts: ['/assets/store-filters.js'],
     },
     'visitor-log': {
       styles: ['/css/visitor-log.css'],
     },
   };
+
+  const SCRIPT_READY_CHECKS = {
+    '/assets/store-filters.js': () => typeof window.portalStoreFiltersInit === 'function',
+    '/assets/dashboard/material-image-zip-download.js': () => typeof window.portalMaterialZipDownloadInit === 'function',
+    '/assets/dashboard/share-links-form.js': () => typeof window.portalShareLinksFormInit === 'function',
+  };
+
+  const ASSET_LOAD_TIMEOUT_MS = 12000;
+
+  function markScriptLoaded(node) {
+    node.dataset.portalScriptLoaded = '1';
+  }
+
+  function waitWithTimeout(promise, label) {
+    return Promise.race([
+      promise,
+      new Promise((resolve) => {
+        window.setTimeout(() => {
+          console.warn('[dashboard] asset load timeout:', label);
+          resolve(undefined);
+        }, ASSET_LOAD_TIMEOUT_MS);
+      }),
+    ]);
+  }
+
+  /** Layout may load defer scripts before dashboard.js runs; load will not fire again. */
+  function isScriptLoadSettled(node) {
+    if (node.dataset.portalScriptLoaded === '1') {
+      return true;
+    }
+    if (!node.src) {
+      markScriptLoaded(node);
+      return true;
+    }
+    const path = assetPathname(node.getAttribute('src') || '');
+    const readyCheck = SCRIPT_READY_CHECKS[path];
+    if (readyCheck && readyCheck()) {
+      markScriptLoaded(node);
+      return true;
+    }
+    const readyState = node.readyState;
+    if (node.complete || readyState === 'complete' || readyState === 'loaded') {
+      markScriptLoaded(node);
+      return true;
+    }
+    return false;
+  }
+
+  function markLayoutAssetsReady() {
+    document.querySelectorAll('script[src]').forEach((node) => {
+      if (isScriptLoadSettled(node)) {
+        markScriptLoaded(node);
+      }
+    });
+  }
 
   function loadScript(src) {
     const normalized = src.split('?')[0];
@@ -285,29 +337,29 @@
       return current === normalized || current.endsWith(normalized);
     });
     if (existing) {
-      if (existing.dataset.portalScriptLoaded === '1') {
+      if (isScriptLoadSettled(existing)) {
         return Promise.resolve();
       }
-      return new Promise((resolve, reject) => {
+      return waitWithTimeout(new Promise((resolve, reject) => {
         existing.addEventListener('load', () => {
-          existing.dataset.portalScriptLoaded = '1';
+          markScriptLoaded(existing);
           resolve();
         }, { once: true });
         existing.addEventListener('error', () => reject(new Error(src)), { once: true });
-      });
+      }), src);
     }
 
-    return new Promise((resolve, reject) => {
+    return waitWithTimeout(new Promise((resolve, reject) => {
       const script = document.createElement('script');
       script.src = src;
       script.defer = true;
       script.onload = () => {
-        script.dataset.portalScriptLoaded = '1';
+        markScriptLoaded(script);
         resolve();
       };
       script.onerror = () => reject(new Error(src));
       document.body.appendChild(script);
-    });
+    }), src);
   }
 
   function assetPathname(href) {
@@ -325,26 +377,42 @@
     }) || null;
   }
 
+  function isStylesheetLoadSettled(link) {
+    if (link.sheet) {
+      return true;
+    }
+    try {
+      for (let i = 0; i < document.styleSheets.length; i += 1) {
+        if (document.styleSheets[i].ownerNode === link) {
+          return true;
+        }
+      }
+    } catch (_) {
+      /* cross-origin stylesheets may throw */
+    }
+    return false;
+  }
+
   function loadStylesheet(href) {
     const existing = findStylesheetLink(href);
     if (existing) {
-      if (existing.sheet) {
+      if (isStylesheetLoadSettled(existing)) {
         return Promise.resolve();
       }
-      return new Promise((resolve, reject) => {
+      return waitWithTimeout(new Promise((resolve, reject) => {
         existing.addEventListener('load', () => resolve(), { once: true });
         existing.addEventListener('error', () => reject(new Error(href)), { once: true });
-      });
+      }), href);
     }
 
-    return new Promise((resolve, reject) => {
+    return waitWithTimeout(new Promise((resolve, reject) => {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
       link.href = href;
       link.onload = () => resolve();
       link.onerror = () => reject(new Error(href));
       document.head.appendChild(link);
-    });
+    }), href);
   }
 
   function ensureStylesheet(href) {
@@ -354,12 +422,26 @@
   async function ensurePageAssets(key) {
     const bundle = PAGE_ASSETS[key];
     if (!bundle) return;
+    markLayoutAssetsReady();
     for (const href of bundle.styles || []) {
       await loadStylesheet(href);
     }
     for (const src of bundle.scripts || []) {
       await loadScript(src);
     }
+  }
+
+  function loadPageAssetsInBackground(key, generation) {
+    if (!key) return;
+    void ensurePageAssets(key)
+      .then(() => {
+        if (generation !== undefined && generation !== navGeneration) return;
+        bindPage(document);
+      })
+      .catch((err) => {
+        console.error('[dashboard] page assets failed', key, err);
+        showToast('تعذّر تحميل بعض مكوّنات الصفحة — حدّث الصفحة إن لزم.', 'error');
+      });
   }
 
   function bindOrderImageZoom(root) {
@@ -509,8 +591,6 @@
         return;
       }
       const pageAssetsKey = newMain.getAttribute('data-dashboard-page-assets') || '';
-      await ensurePageAssets(pageAssetsKey);
-      if (generation !== navGeneration) return;
       main.innerHTML = newMain.innerHTML;
       main.classList.remove('is-nav-loading');
       main.removeAttribute('aria-busy');
@@ -530,10 +610,14 @@
       if (doc.title) document.title = doc.title;
       if (push) history.pushState({ dashboardUrl: url }, '', url);
       bindPage(document);
+      loadPageAssetsInBackground(pageAssetsKey, generation);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       if (err?.name === 'AbortError') return;
       showToast(err.message || 'تعذر التنقل.', 'error');
+      if (main?.classList.contains('is-nav-loading')) {
+        window.location.assign(url);
+      }
     } finally {
       if (generation === navGeneration) {
         showPageLoader(false);
@@ -843,7 +927,7 @@
 
   async function init() {
     document.body.classList.add('dashboard-app');
-    await ensurePageAssets(qs('[data-dashboard-main]')?.getAttribute('data-dashboard-page-assets') || '');
+    markLayoutAssetsReady();
     if (window.matchMedia('(max-width: 1023px)').matches && qs('#dashboard-bottom-nav')) {
       document.body.classList.add('has-bottom-nav');
     }
@@ -852,6 +936,7 @@
     closeDrawer();
     bindHistory();
     bindPage(document);
+    loadPageAssetsInBackground(qs('[data-dashboard-main]')?.getAttribute('data-dashboard-page-assets') || '');
     history.replaceState({ dashboardUrl: window.location.href }, '', window.location.href);
     updateActiveNav(currentDashboardRoute());
     const flash = qs('[data-dashboard-flash]');
