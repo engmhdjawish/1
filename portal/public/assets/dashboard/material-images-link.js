@@ -635,36 +635,25 @@ const API_URL = '/dashboard/material-images-api.php';
     if (linkStatus) linkStatus.textContent = 'تم. لا توجد صور أخرى غير مرتبطة في هذه القائمة.';
   }
 
-  async function assignFromLightbox() {
+  function assignFromLightbox() {
     if (!lightboxItem) return;
     if (!lightboxSelected.length) {
       if (lightboxStatus) lightboxStatus.textContent = 'اختر المادة المطابقة لرقم الموديل في الصورة.';
       return;
     }
     const item = lightboxItem;
+    const materials = lightboxSelected.map((row) => ({ ...row }));
     const card = findCardForItem(item);
-    if (lightboxAssignBtn) lightboxAssignBtn.disabled = true;
-    if (lightboxStatus) lightboxStatus.textContent = 'جاري الربط…';
-    try {
-      const payload = await postAssignForm('assign-materials', item, lightboxSelected, card);
-      const outcome = showAssignOutcome(payload, null, 'تم الربط.');
-      if (outcome === 'success') {
-        if (card) handleCardAfterAssign(card, item, payload);
-        else rememberLinkedItem(item);
-        lightboxSelected = [];
-        await openNextUnlinked(item);
-        return;
-      }
-      if (lightboxStatus) {
-        lightboxStatus.textContent = formatAssignFailureDetail(payload) || 'تعذر الربط.';
-      }
-    } catch (error) {
-      if (lightboxStatus) {
-        lightboxStatus.textContent = error instanceof Error ? error.message : 'تعذر الربط.';
-      }
-    } finally {
-      if (lightboxAssignBtn) lightboxAssignBtn.disabled = false;
-    }
+    const assignBtn = card?.querySelector('.assign-btn') || lightboxAssignBtn;
+    const cardStatus = card?.querySelector('.card-status');
+
+    lightboxSelected = [];
+    renderLightboxChips();
+    if (lightboxMaterialInput) lightboxMaterialInput.value = '';
+    if (lightboxStatus) lightboxStatus.textContent = '';
+
+    void openNextUnlinked(item);
+    void assign(item, materials, card, assignBtn, cardStatus);
   }
 
   function closeLightbox() {
