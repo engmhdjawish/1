@@ -560,6 +560,37 @@ const API_URL = '/dashboard/material-images-api.php';
     return false;
   }
 
+  let lightboxSearchFocusToken = 0;
+
+  function scheduleLightboxSearchFocus() {
+    if (!lightboxMaterialInput || !imageLightbox || imageLightbox.hidden) return;
+    const token = ++lightboxSearchFocusToken;
+    const focusInput = () => {
+      if (token !== lightboxSearchFocusToken) return;
+      if (!lightboxMaterialInput || imageLightbox?.hidden) return;
+      try {
+        lightboxMaterialInput.focus({ preventScroll: false });
+      } catch {
+        lightboxMaterialInput.focus();
+      }
+    };
+    focusInput();
+    window.setTimeout(focusInput, 0);
+    window.setTimeout(focusInput, 80);
+    window.setTimeout(focusInput, 220);
+  }
+
+  function focusFirstUnlinkedCardInput() {
+    if (imageLightbox && !imageLightbox.hidden) {
+      scheduleLightboxSearchFocus();
+      return;
+    }
+    const input = sourceCards?.querySelector('article[data-linked="0"] .material-input');
+    if (input instanceof HTMLInputElement) {
+      input.focus();
+    }
+  }
+
   function renderLightboxChips() {
     if (!lightboxChips) return;
     if (!lightboxSelected.length) {
@@ -613,7 +644,14 @@ const API_URL = '/dashboard/material-images-api.php';
     imageLightbox.hidden = false;
     imageLightbox.classList.add('is-open');
     document.body.style.overflow = 'hidden';
-    window.setTimeout(() => lightboxMaterialInput?.focus(), 30);
+    scheduleLightboxSearchFocus();
+    if (lightboxImg) {
+      const onReady = () => {
+        lightboxImg.removeEventListener('load', onReady);
+        scheduleLightboxSearchFocus();
+      };
+      lightboxImg.addEventListener('load', onReady);
+    }
   }
 
   async function openNextUnlinked(current) {
@@ -654,6 +692,7 @@ const API_URL = '/dashboard/material-images-api.php';
 
     void openNextUnlinked(item);
     void assign(item, materials, card, assignBtn, cardStatus);
+    scheduleLightboxSearchFocus();
   }
 
   function closeLightbox() {
@@ -763,6 +802,7 @@ const API_URL = '/dashboard/material-images-api.php';
     syncSelectAllUnlinked();
     updateDeleteUnlinkedControls();
     ensureCardsPlaceholder();
+    window.setTimeout(() => focusFirstUnlinkedCardInput(), 0);
   }
 
   async function assign(item, items, card, button, statusEl = null) {
@@ -1138,6 +1178,7 @@ const API_URL = '/dashboard/material-images-api.php';
       closeSuggestions(card);
       input.value = '';
       activeSuggestionIndex = -1;
+      input.focus();
     };
 
     const renderSuggestionRows = (rows) => {
@@ -1466,6 +1507,7 @@ const API_URL = '/dashboard/material-images-api.php';
     lightboxSuggestions?.classList.add('hidden');
     if (lightboxMaterialInput) lightboxMaterialInput.value = '';
     lightboxActiveResultIndex = -1;
+    scheduleLightboxSearchFocus();
   };
 
   lightboxMaterialInput?.addEventListener('keydown', (event) => {
