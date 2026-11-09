@@ -227,7 +227,14 @@ const API_URL = '/dashboard/material-images-api.php';
         ? `جاري الربط: ${labels.join('، ')}${items.length > labels.length ? '…' : ''}`
         : 'جاري الربط وحفظ النسخ…';
     }
+    const cardInput = card.querySelector('.material-input');
+    if (cardInput instanceof HTMLElement) {
+      cardInput.blur();
+    }
     assignInProgressList.appendChild(card);
+    if (imageLightbox && !imageLightbox.hidden) {
+      window.requestAnimationFrame(() => scheduleLightboxSearchFocus());
+    }
     const last = card.getBoundingClientRect();
     const dx = first.left - last.left;
     const dy = first.top - last.top;
@@ -561,6 +568,8 @@ const API_URL = '/dashboard/material-images-api.php';
   }
 
   let lightboxSearchFocusToken = 0;
+  let lightboxFocusGuardTimer = null;
+  let lightboxFocusGuardDepth = 0;
 
   function scheduleLightboxSearchFocus() {
     if (!lightboxMaterialInput || !imageLightbox || imageLightbox.hidden) return;
@@ -588,6 +597,39 @@ const API_URL = '/dashboard/material-images-api.php';
     const input = sourceCards?.querySelector('article[data-linked="0"] .material-input');
     if (input instanceof HTMLInputElement) {
       input.focus();
+    }
+  }
+
+  function activeInLightboxSearchUi() {
+    const active = document.activeElement;
+    if (!(active instanceof Node) || !lightboxMaterialInput) return false;
+    if (active === lightboxMaterialInput) return true;
+    if (lightboxSuggestions && lightboxSuggestions.contains(active)) return true;
+    return !!(lightboxLinkCard?.contains(active)
+      && active.closest('#lightboxChips, #lightboxAssignBtn, #lightboxSkipBtn'));
+  }
+
+  function tickLightboxFocusGuard() {
+    if (!imageLightbox || imageLightbox.hidden || !lightboxMaterialInput) return;
+    const busy = (assignInProgressList?.querySelectorAll('article').length ?? 0) > 0;
+    if (!busy) return;
+    if (activeInLightboxSearchUi()) return;
+    scheduleLightboxSearchFocus();
+  }
+
+  function startLightboxFocusGuard() {
+    if (!imageLightbox || imageLightbox.hidden) return;
+    lightboxFocusGuardDepth += 1;
+    if (lightboxFocusGuardTimer) return;
+    lightboxFocusGuardTimer = window.setInterval(tickLightboxFocusGuard, 120);
+  }
+
+  function stopLightboxFocusGuard() {
+    lightboxFocusGuardDepth = Math.max(0, lightboxFocusGuardDepth - 1);
+    if (lightboxFocusGuardDepth > 0) return;
+    if (lightboxFocusGuardTimer) {
+      window.clearInterval(lightboxFocusGuardTimer);
+      lightboxFocusGuardTimer = null;
     }
   }
 
@@ -812,8 +854,17 @@ const API_URL = '/dashboard/material-images-api.php';
       if (statusEl) statusEl.textContent = message;
       return;
     }
-    button.disabled = true;
+    const lightboxOpen = !!(imageLightbox && !imageLightbox.hidden);
+    if (lightboxOpen) {
+      startLightboxFocusGuard();
+    }
+    if (button && button !== lightboxAssignBtn) {
+      button.disabled = true;
+    }
     flyCardToAssignZone(card, items);
+    if (lightboxOpen) {
+      scheduleLightboxSearchFocus();
+    }
     const progressStart = assignProgressMessage(items.length);
     linkStatus.textContent = progressStart;
     if (statusEl) statusEl.textContent = progressStart;
@@ -824,6 +875,9 @@ const API_URL = '/dashboard/material-images-api.php';
       linkStatus.textContent = msg;
       const liveStatus = card?.querySelector('.card-status');
       if (liveStatus) liveStatus.textContent = msg;
+      if (lightboxOpen) {
+        tickLightboxFocusGuard();
+      }
     }, 1000);
     try {
       const payload = await postAssignForm('assign-materials', item, items, card);
@@ -848,7 +902,13 @@ const API_URL = '/dashboard/material-images-api.php';
       returnCardFromAssignZone(card);
     } finally {
       window.clearInterval(progressTimer);
-      button.disabled = false;
+      if (button && button.disabled) {
+        button.disabled = false;
+      }
+      if (lightboxOpen) {
+        stopLightboxFocusGuard();
+        scheduleLightboxSearchFocus();
+      }
       syncAssignInProgressZone();
     }
   }

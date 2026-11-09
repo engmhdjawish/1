@@ -13,6 +13,7 @@ use Portal\Services\MaterialImageStorageService;
 use Portal\Services\MaterialImageSyncService;
 use Portal\Services\PortalSettingsService;
 use Portal\Support\DashboardHttp;
+use Portal\Support\SessionGate;
 use Throwable;
 
 /** @param array<string, mixed> $payload */
@@ -70,6 +71,8 @@ try {
 
     $user = WebSession::user();
     $userId = isset($user['id']) ? (string) $user['id'] : null;
+
+    SessionGate::release();
 
     MaterialImageSyncService::ensureTable();
     $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
