@@ -99,6 +99,7 @@ const API_URL = '/dashboard/material-images-api.php';
   let lightboxSelected = [];
   let lightboxSearchTimer = null;
   let lightboxSearchRequest = 0;
+  let lightboxActiveResultIndex = -1;
   let openNextUnlinkedAfterLoad = false;
   let page = 1;
   let hasMore = false;
@@ -165,14 +166,35 @@ const API_URL = '/dashboard/material-images-api.php';
     if (linkStatus) linkStatus.textContent = '';
   }
 
+  function visibleSourceCardCount() {
+    return sourceCards?.querySelectorAll('article').length ?? 0;
+  }
+
+  function syncPaginationAfterCountChange() {
+    hasMore = page * pageSize < totalCount;
+    updatePageLabel();
+    if (sourceNextBtn) sourceNextBtn.disabled = !hasMore;
+    if (sourcePrevBtn) sourcePrevBtn.disabled = page <= 1;
+  }
+
+  function maybeRefillSourcePageAfterLink() {
+    if (currentLinkFilter() !== 'unlinked') return;
+    if (totalCount <= 0) return;
+    const inGrid = visibleSourceCardCount();
+    const inAssign = assignInProgressList?.querySelectorAll('article').length ?? 0;
+    if (inGrid > 0 || inAssign > 0) return;
+    loadSources(1);
+  }
+
   function removeCard(card, item) {
     if (!card) return;
     sourceMaterialMap.delete(cardKey(item));
     card.remove();
     totalCount = Math.max(0, totalCount - 1);
-    updatePageLabel();
+    syncPaginationAfterCountChange();
     syncAssignInProgressZone();
     ensureCardsPlaceholder();
+    maybeRefillSourcePageAfterLink();
   }
 
   function syncAssignInProgressZone() {
@@ -493,6 +515,49 @@ const API_URL = '/dashboard/material-images-api.php';
     if (!sug) return;
     sug.classList.add('hidden');
     sug.innerHTML = '';
+    if (card?.dataset) card.dataset.suggestionIndex = '';
+  }
+
+  function highlightSuggestionButtons(container, activeIndex) {
+    if (!container) return;
+    const buttons = container.querySelectorAll('button[data-guid]');
+    buttons.forEach((button, index) => {
+      button.classList.toggle('bg-primary/10', index === activeIndex);
+      button.classList.toggle('font-bold', index === activeIndex);
+    });
+    const active = buttons[activeIndex];
+    if (active instanceof HTMLElement) {
+      active.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function suggestionListOpen(container) {
+    return !!(container && !container.classList.contains('hidden')
+      && container.querySelector('button[data-guid]'));
+  }
+
+  function materialFromSuggestionButton(button) {
+    if (!(button instanceof HTMLButtonElement)) return null;
+    const guid = button.getAttribute('data-guid') || '';
+    if (!guid) return null;
+    const label = button.getAttribute('data-label') || '';
+    const code = button.getAttribute('data-code') || '';
+    const name = button.getAttribute('data-name') || label;
+    return { guid, label, code, name };
+  }
+
+  async function loadNextUnlinkedSources() {
+    if (currentLinkFilter() === 'unlinked' && totalCount > 0) {
+      openNextUnlinkedAfterLoad = true;
+      await loadSources(1);
+      return true;
+    }
+    if (hasMore) {
+      openNextUnlinkedAfterLoad = true;
+      await loadSources(page + 1);
+      return true;
+    }
+    return false;
   }
 
   function renderLightboxChips() {
@@ -563,9 +628,7 @@ const API_URL = '/dashboard/material-images-api.php';
       openLinkDesk(candidate);
       return;
     }
-    if (hasMore) {
-      openNextUnlinkedAfterLoad = true;
-      await loadSources(page + 1);
+    if (await loadNextUnlinkedSources()) {
       return;
     }
     closeLightbox();
@@ -1073,20 +1136,38 @@ const API_URL = '/dashboard/material-images-api.php';
     let searchTimer = null;
     let searchRequestId = 0;
 
+    let activeSuggestionIndex = -1;
+
+    const addMaterialFromSuggestion = (material) => {
+      if (!material?.guid) return;
+      const selected = sourceMaterialMap.get(key) || [];
+      if (!selected.some((row) => row.guid === material.guid)) {
+        selected.push(material);
+      }
+      sourceMaterialMap.set(key, selected);
+      chips.innerHTML = chipsHtml(key);
+      closeSuggestions(card);
+      input.value = '';
+      activeSuggestionIndex = -1;
+    };
+
     const renderSuggestionRows = (rows) => {
+      activeSuggestionIndex = -1;
       if (!rows.length) {
         sug.innerHTML = '<div class="p-2 text-xs text-text-muted">لا نتائج</div>';
         sug.classList.remove('hidden');
         return;
       }
-      sug.innerHTML = rows.map((row) => {
+      sug.innerHTML = rows.map((row, index) => {
         const guid = row.material_guid || '';
         const code = row.material_code || '';
         const name = row.name || '';
         const label = `${code} ${name}`.trim();
-        return `<button type="button" class="block w-full text-right px-3 py-2 text-xs hover:bg-surface-low add-mat" data-guid="${escapeHtml(guid)}" data-label="${escapeHtml(label)}" data-code="${escapeHtml(code)}" data-name="${escapeHtml(name)}">${escapeHtml(label)}</button>`;
+        return `<button type="button" class="block w-full text-right px-3 py-2 text-xs hover:bg-surface-low add-mat" data-result-index="${index}" data-guid="${escapeHtml(guid)}" data-label="${escapeHtml(label)}" data-code="${escapeHtml(code)}" data-name="${escapeHtml(name)}">${escapeHtml(label)}</button>`;
       }).join('');
       sug.classList.remove('hidden');
+      activeSuggestionIndex = 0;
+      highlightSuggestionButtons(sug, activeSuggestionIndex);
     };
 
     const runMaterialLookup = async (query) => {
@@ -1130,9 +1211,33 @@ const API_URL = '/dashboard/material-images-api.php';
     input.addEventListener('input', scheduleMaterialLookup);
 
     input.addEventListener('keydown', (event) => {
+      const listOpen = suggestionListOpen(sug);
+      const buttons = listOpen ? sug.querySelectorAll('button[data-guid]') : [];
+      if (event.key === 'ArrowDown' && listOpen && buttons.length) {
+        event.preventDefault();
+        activeSuggestionIndex = Math.min(activeSuggestionIndex + 1, buttons.length - 1);
+        highlightSuggestionButtons(sug, activeSuggestionIndex);
+        return;
+      }
+      if (event.key === 'ArrowUp' && listOpen && buttons.length) {
+        event.preventDefault();
+        activeSuggestionIndex = Math.max(activeSuggestionIndex - 1, 0);
+        highlightSuggestionButtons(sug, activeSuggestionIndex);
+        return;
+      }
       if (event.key === 'Enter') {
         event.preventDefault();
         if (searchTimer) clearTimeout(searchTimer);
+        if (listOpen && activeSuggestionIndex >= 0 && buttons[activeSuggestionIndex]) {
+          const material = materialFromSuggestionButton(buttons[activeSuggestionIndex]);
+          if (material) addMaterialFromSuggestion(material);
+          return;
+        }
+        const selected = sourceMaterialMap.get(key) || [];
+        if (selected.length) {
+          assign(item, selected, card, assignBtn, cardStatus);
+          return;
+        }
         const q = input.value.trim();
         if (q.length >= MIN_MATERIAL_SEARCH_LEN) {
           runMaterialLookup(q);
@@ -1144,6 +1249,20 @@ const API_URL = '/dashboard/material-images-api.php';
       }
       if (event.key === 'Escape') {
         if (searchTimer) clearTimeout(searchTimer);
+        if (listOpen) {
+          event.preventDefault();
+          searchRequestId += 1;
+          closeSuggestions(card);
+          activeSuggestionIndex = -1;
+          return;
+        }
+        const selected = sourceMaterialMap.get(key) || [];
+        if (selected.length) {
+          event.preventDefault();
+          sourceMaterialMap.set(key, []);
+          chips.innerHTML = chipsHtml(key);
+          return;
+        }
         searchRequestId += 1;
         closeSuggestions(card);
       }
@@ -1155,20 +1274,8 @@ const API_URL = '/dashboard/material-images-api.php';
       if (!(btn instanceof HTMLButtonElement)) return;
       event.preventDefault();
       event.stopPropagation();
-      const guid = btn.getAttribute('data-guid') || '';
-      const label = btn.getAttribute('data-label') || '';
-      const code = btn.getAttribute('data-code') || '';
-      const name = btn.getAttribute('data-name') || '';
-      if (!guid) return;
-      const selected = sourceMaterialMap.get(key) || [];
-      if (!selected.some((row) => row.guid === guid)) {
-        selected.push({ guid, label, code, name });
-      }
-      sourceMaterialMap.set(key, selected);
-      chips.innerHTML = chipsHtml(key);
-      closeSuggestions(card);
-      input.value = '';
-      input.blur();
+      const material = materialFromSuggestionButton(btn);
+      if (material) addMaterialFromSuggestion(material);
     });
 
     chips.addEventListener('click', (event) => {
@@ -1298,6 +1405,9 @@ const API_URL = '/dashboard/material-images-api.php';
       const next = items.find((row) => !row.is_linked_to_material && !isRecentlyLinkedItem(row));
       if (next) {
         openLinkDesk(next);
+      } else if (totalCount > 0 && currentLinkFilter() === 'unlinked') {
+        openNextUnlinkedAfterLoad = true;
+        window.setTimeout(() => loadSources(1), 0);
       } else if (hasMore) {
         openNextUnlinkedAfterLoad = true;
         window.setTimeout(() => loadSources(page + 1), 0);
@@ -1357,21 +1467,72 @@ const API_URL = '/dashboard/material-images-api.php';
   lightboxSkipBtn?.addEventListener('click', () => {
     if (lightboxItem) openNextUnlinked(lightboxItem);
   }, { signal });
+  const addLightboxMaterialFromButton = (button) => {
+    const material = materialFromSuggestionButton(button);
+    if (!material?.guid) return;
+    if (!lightboxSelected.some((row) => row.guid === material.guid)) {
+      lightboxSelected = [material];
+    }
+    renderLightboxChips();
+    lightboxSuggestions?.classList.add('hidden');
+    if (lightboxMaterialInput) lightboxMaterialInput.value = '';
+    lightboxActiveResultIndex = -1;
+  };
+
   lightboxMaterialInput?.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
-    const first = lightboxSuggestions?.querySelector('button[data-guid]');
-    if (first instanceof HTMLButtonElement && !lightboxSuggestions.classList.contains('hidden')) {
-      first.click();
+    const listOpen = suggestionListOpen(lightboxSuggestions);
+    const buttons = listOpen ? lightboxSuggestions.querySelectorAll('button[data-guid]') : [];
+    if (event.key === 'ArrowDown' && listOpen && buttons.length) {
+      event.preventDefault();
+      lightboxActiveResultIndex = Math.min(lightboxActiveResultIndex + 1, buttons.length - 1);
+      highlightSuggestionButtons(lightboxSuggestions, lightboxActiveResultIndex);
       return;
     }
-    if (lightboxSelected.length) assignFromLightbox();
+    if (event.key === 'ArrowUp' && listOpen && buttons.length) {
+      event.preventDefault();
+      lightboxActiveResultIndex = Math.max(lightboxActiveResultIndex - 1, 0);
+      highlightSuggestionButtons(lightboxSuggestions, lightboxActiveResultIndex);
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (listOpen && lightboxActiveResultIndex >= 0 && buttons[lightboxActiveResultIndex]) {
+        addLightboxMaterialFromButton(buttons[lightboxActiveResultIndex]);
+        return;
+      }
+      if (lightboxSelected.length) {
+        assignFromLightbox();
+        return;
+      }
+      const query = lightboxMaterialInput?.value.trim() || '';
+      if (query.length >= MIN_MATERIAL_SEARCH_LEN && lightboxSearchTimer) {
+        clearTimeout(lightboxSearchTimer);
+      }
+    }
+    if (event.key === 'Escape') {
+      if (listOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        lightboxSearchRequest += 1;
+        lightboxSuggestions?.classList.add('hidden');
+        if (lightboxSuggestions) lightboxSuggestions.innerHTML = '';
+        lightboxActiveResultIndex = -1;
+        return;
+      }
+      if (lightboxSelected.length) {
+        event.preventDefault();
+        event.stopPropagation();
+        lightboxSelected = [];
+        renderLightboxChips();
+      }
+    }
   }, { signal });
   lightboxMaterialInput?.addEventListener('input', () => {
     if (lightboxSearchTimer) clearTimeout(lightboxSearchTimer);
     const query = lightboxMaterialInput.value.trim();
     if (query.length < MIN_MATERIAL_SEARCH_LEN) {
       lightboxSearchRequest += 1;
+      lightboxActiveResultIndex = -1;
       lightboxSuggestions?.classList.add('hidden');
       return;
     }
@@ -1385,17 +1546,20 @@ const API_URL = '/dashboard/material-images-api.php';
         const rows = await searchMaterials(query);
         if (requestId !== lightboxSearchRequest || !lightboxSuggestions) return;
         if (!rows.length) {
+          lightboxActiveResultIndex = -1;
           lightboxSuggestions.innerHTML = '<div class="p-2 text-xs text-text-muted">لا نتائج</div>';
           return;
         }
-        lightboxSuggestions.innerHTML = rows.map((row) => {
+        lightboxSuggestions.innerHTML = rows.map((row, index) => {
           const guid = row.material_guid || '';
           const code = row.material_code || '';
           const name = row.name || '';
           const label = `${code} ${name}`.trim();
-          return `<button type="button" class="block w-full text-right px-3 py-2 text-xs hover:bg-surface-low" data-guid="${escapeHtml(guid)}" data-label="${escapeHtml(label)}" data-code="${escapeHtml(code)}">${escapeHtml(label)}</button>`;
+          return `<button type="button" class="block w-full text-right px-3 py-2 text-xs hover:bg-surface-low" data-result-index="${index}" data-guid="${escapeHtml(guid)}" data-label="${escapeHtml(label)}" data-code="${escapeHtml(code)}" data-name="${escapeHtml(name)}">${escapeHtml(label)}</button>`;
         }).join('');
         lightboxSuggestions.classList.remove('hidden');
+        lightboxActiveResultIndex = 0;
+        highlightSuggestionButtons(lightboxSuggestions, lightboxActiveResultIndex);
       } catch (error) {
         if (requestId !== lightboxSearchRequest || !lightboxSuggestions) return;
         const message = error instanceof Error ? error.message : 'تعذر البحث.';
@@ -1407,16 +1571,7 @@ const API_URL = '/dashboard/material-images-api.php';
     const target = event.target;
     const button = target instanceof HTMLElement ? target.closest('button[data-guid]') : null;
     if (!(button instanceof HTMLButtonElement)) return;
-    const guid = button.getAttribute('data-guid') || '';
-    if (!guid) return;
-    const label = button.getAttribute('data-label') || '';
-    const code = button.getAttribute('data-code') || '';
-    if (!lightboxSelected.some((row) => row.guid === guid)) {
-      lightboxSelected = [{ guid, label, code, name: label }];
-    }
-    renderLightboxChips();
-    lightboxSuggestions.classList.add('hidden');
-    if (lightboxMaterialInput) lightboxMaterialInput.value = '';
+    addLightboxMaterialFromButton(button);
   }, { signal });
   lightboxChips?.addEventListener('click', (event) => {
     const target = event.target;
@@ -1433,7 +1588,23 @@ const API_URL = '/dashboard/material-images-api.php';
     if (event.target === imageLightbox) closeLightbox();
   }, { signal });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeLightbox();
+    if (event.key !== 'Escape') return;
+    if (!imageLightbox || imageLightbox.hidden) return;
+    if (suggestionListOpen(lightboxSuggestions)) {
+      event.preventDefault();
+      lightboxSearchRequest += 1;
+      lightboxSuggestions?.classList.add('hidden');
+      if (lightboxSuggestions) lightboxSuggestions.innerHTML = '';
+      lightboxActiveResultIndex = -1;
+      return;
+    }
+    if (lightboxSelected.length) {
+      event.preventDefault();
+      lightboxSelected = [];
+      renderLightboxChips();
+      return;
+    }
+    closeLightbox();
   }, { signal });
 
   sourcePrevBtn?.addEventListener('click', () => { if (page > 1) loadSources(page - 1); }, { signal });
