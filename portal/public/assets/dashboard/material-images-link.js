@@ -80,6 +80,13 @@ const API_URL = '/dashboard/material-images-api.php';
   const deleteUnlinkedProgressLabel = panel.querySelector('#deleteUnlinkedProgressLabel');
   const deleteUnlinkedStatusLabel = panel.querySelector('#deleteUnlinkedStatusLabel');
   const deleteUnlinkedProgressBar = panel.querySelector('#deleteUnlinkedProgressBar');
+  const orphanGhostScanBtn = panel.querySelector('#orphanGhostScanBtn');
+  const orphanGhostDryRunBtn = panel.querySelector('#orphanGhostDryRunBtn');
+  const orphanGhostPurgeBtn = panel.querySelector('#orphanGhostPurgeBtn');
+  const orphanGhostProgressWrap = panel.querySelector('#orphanGhostProgressWrap');
+  const orphanGhostProgressLabel = panel.querySelector('#orphanGhostProgressLabel');
+  const orphanGhostProgressBar = panel.querySelector('#orphanGhostProgressBar');
+  const orphanGhostReport = panel.querySelector('#orphanGhostReport');
   const linkFilterButtons = panel.querySelectorAll('.link-filter-btn');
   const linkStatus = panel.querySelector('#linkStatus');
   
@@ -119,6 +126,8 @@ const API_URL = '/dashboard/material-images-api.php';
   const SOURCE_FILTER_DEBOUNCE_MS = 500;
   const MATERIAL_SEARCH_DEBOUNCE_MS = 400;
   let sourceSearchTimer = null;
+  let orphanGhostScanId = '';
+  let orphanGhostScanning = false;
 
   function clearSourceMaterialSearch() {
     if (sourceMaterialSearch) {
@@ -1209,6 +1218,181 @@ const API_URL = '/dashboard/material-images-api.php';
     await processDeleteSelectedUnlinked();
   }
 
+  async function postOrphanCleanupAction(action, fields = {}) {
+    const form = new FormData();
+    form.append('action', action);
+    Object.entries(fields).forEach(([key, value]) => {
+      form.append(key, value === undefined || value === null ? '' : String(value));
+    });
+    return fetchJson(API_URL, { method: 'POST', body: form });
+  }
+
+  function setOrphanGhostProgress(percent, label) {
+    if (orphanGhostProgressWrap) orphanGhostProgressWrap.hidden = false;
+    if (orphanGhostProgressLabel && label) orphanGhostProgressLabel.textContent = label;
+    if (orphanGhostProgressBar) {
+      orphanGhostProgressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    }
+  }
+
+  function renderOrphanGhostReport(report) {
+    if (!orphanGhostReport) return;
+    const portal = Number(report.portal_orphan_count ?? 0);
+    const amine = Number(report.amine_orphan_count ?? 0);
+    const queue = Number(report.stale_queue_count ?? 0);
+    const lines = [
+      `موقع (ملف بلا bm000): ${portal}`,
+      `أمين (قرص بلا bm000): ${amine}`,
+      `طابور (سجل بلا صورة مسجّلة): ${queue}`,
+      '',
+      'عيّنة موقع:',
+      ...(report.samples?.portal || []).slice(0, 8).map((row) => `  - ${row.file_name} (${row.reason || ''})`),
+      '',
+      'عيّنة أمين:',
+      ...(report.samples?.amine || []).slice(0, 8).map((row) => `  - ${row.file_name}`),
+    ];
+    orphanGhostReport.textContent = lines.join('\n');
+    orphanGhostReport.classList.remove('hidden');
+  }
+
+  async function runOrphanGhostScan() {
+    if (orphanGhostScanning) return;
+    orphanGhostScanning = true;
+    orphanGhostScanId = '';
+    orphanGhostDryRunBtn?.classList.add('hidden');
+    orphanGhostPurgeBtn?.classList.add('hidden');
+    if (orphanGhostReport) {
+      orphanGhostReport.classList.add('hidden');
+      orphanGhostReport.textContent = '';
+    }
+    if (linkStatus) linkStatus.textContent = 'جاري الفحص الآمن للصور اليتيمة (معاينة فقط)...';
+    setOrphanGhostProgress(2, 'تهيئة الفحص...');
+    try {
+      const init = await postOrphanCleanupAction('orphan-cleanup-init');
+      if (!init.ok) {
+        if (linkStatus) linkStatus.textContent = init.message || 'تعذر بدء الفحص.';
+        return;
+      }
+      orphanGhostScanId = String(init.scan_id || '');
+      if (!orphanGhostScanId) {
+        if (linkStatus) linkStatus.textContent = 'تعذر بدء الفحص.';
+        return;
+      }
+
+      let portalDone = false;
+      while (!portalDone) {
+        const chunk = await postOrphanCleanupAction('orphan-cleanup-scan-portal', { scan_id: orphanGhostScanId });
+        if (!chunk.ok) {
+          if (linkStatus) linkStatus.textContent = chunk.message || 'توقّف فحص الموقع.';
+          return;
+        }
+        portalDone = !!chunk.done;
+        const total = Number(chunk.total || 1);
+        const offset = Number(chunk.offset || 0);
+        setOrphanGhostProgress(
+          10 + Math.min(35, (offset / total) * 35),
+          chunk.message || 'فحص الموقع...'
+        );
+      }
+
+      let amineDone = false;
+      while (!amineDone) {
+        const chunk = await postOrphanCleanupAction('orphan-cleanup-scan-amine', { scan_id: orphanGhostScanId });
+        if (!chunk.ok) {
+          if (linkStatus) linkStatus.textContent = chunk.message || 'توقّف فحص الأمين.';
+          return;
+        }
+        amineDone = !!chunk.done;
+        const total = Math.max(1, Number(chunk.total || 1));
+        const offset = Number(chunk.offset || 0);
+        setOrphanGhostProgress(
+          45 + Math.min(40, (offset / total) * 40),
+          chunk.message || 'فحص قرص الأمين...'
+        );
+      }
+
+      const queueScan = await postOrphanCleanupAction('orphan-cleanup-scan-queue', { scan_id: orphanGhostScanId });
+      if (!queueScan.ok) {
+        if (linkStatus) linkStatus.textContent = queueScan.message || 'توقّف فحص الطابور.';
+        return;
+      }
+      setOrphanGhostProgress(92, queueScan.message || 'فحص الطابور...');
+
+      const report = await postOrphanCleanupAction('orphan-cleanup-report', { scan_id: orphanGhostScanId });
+      if (!report.ok) {
+        if (linkStatus) linkStatus.textContent = report.message || 'تعذر عرض التقرير.';
+        return;
+      }
+
+      renderOrphanGhostReport(report);
+      setOrphanGhostProgress(100, 'اكتمل الفحص — راجع المعاينة قبل الحذف.');
+      const totalOrphans = Number(report.portal_orphan_count ?? 0)
+        + Number(report.amine_orphan_count ?? 0)
+        + Number(report.stale_queue_count ?? 0);
+      if (linkStatus) {
+        linkStatus.textContent = totalOrphans > 0
+          ? `معاينة: ${totalOrphans} عنصر يتيم — يمكن «تجربة حذف» ثم «تنفيذ الحذف».`
+          : 'لا وُجدت صور يتيمة في هذا الفحص.';
+      }
+      if (totalOrphans > 0) {
+        orphanGhostDryRunBtn?.classList.remove('hidden');
+        orphanGhostPurgeBtn?.classList.remove('hidden');
+      }
+    } catch (error) {
+      if (linkStatus) {
+        linkStatus.textContent = error instanceof Error ? error.message : 'تعذر إكمال الفحص.';
+      }
+    } finally {
+      orphanGhostScanning = false;
+    }
+  }
+
+  async function runOrphanGhostPurge(dryRun) {
+    if (!orphanGhostScanId) {
+      if (linkStatus) linkStatus.textContent = 'نفّذ «فحص آمن» أولاً.';
+      return;
+    }
+    if (!dryRun) {
+      const confirmFn = window.dashboardApp?.confirmDestructive;
+      const promptText = 'حذف الملفات اليتيمة من الموقع وقرص الأمين والطابور؟ لا يمكن التراجع.';
+      if (typeof confirmFn === 'function') {
+        if (!confirmFn(promptText, 'حذف')) return;
+      } else if (!window.confirm(promptText)) {
+        return;
+      }
+    }
+    if (linkStatus) {
+      linkStatus.textContent = dryRun ? 'تجربة حذف (بدون تنفيذ)...' : 'جاري حذف اليتيمات...';
+    }
+    try {
+      const result = await postOrphanCleanupAction('orphan-cleanup-purge', {
+        scan_id: orphanGhostScanId,
+        purge_portal: '1',
+        purge_amine: '1',
+        purge_queue: '1',
+        dry_run: dryRun ? '1' : '0',
+      });
+      if (!result.ok) {
+        if (linkStatus) linkStatus.textContent = result.message || 'تعذر الحذف.';
+        return;
+      }
+      if (linkStatus) linkStatus.textContent = result.message || 'تم.';
+      if (window.dashboardApp?.showToast) {
+        window.dashboardApp.showToast(result.message || 'تم.', dryRun ? 'info' : 'success');
+      }
+      if (!dryRun) {
+        orphanGhostDryRunBtn?.classList.add('hidden');
+        orphanGhostPurgeBtn?.classList.add('hidden');
+        orphanGhostScanId = '';
+        await loadSources(page || 1);
+      }
+    } catch (error) {
+      if (linkStatus) {
+        linkStatus.textContent = error instanceof Error ? error.message : 'تعذر الحذف.';
+      }
+    }
+  }
+
   function bindCard(card, item) {
     const key = cardKey(item);
     const input = card.querySelector('.material-input');
@@ -1704,6 +1888,9 @@ const API_URL = '/dashboard/material-images-api.php';
   applySourceFiltersBtn?.addEventListener('click', applySourceMaterialSearch, { signal });
   deleteAllUnlinkedBtn?.addEventListener('click', deleteAllUnlinked, { signal });
   deleteSelectedUnlinkedBtn?.addEventListener('click', deleteSelectedUnlinked, { signal });
+  orphanGhostScanBtn?.addEventListener('click', () => { void runOrphanGhostScan(); }, { signal });
+  orphanGhostDryRunBtn?.addEventListener('click', () => { void runOrphanGhostPurge(true); }, { signal });
+  orphanGhostPurgeBtn?.addEventListener('click', () => { void runOrphanGhostPurge(false); }, { signal });
   cancelDeleteUnlinkedBtn?.addEventListener('click', cancelDeleteUnlinked, { signal });
   selectAllUnlinked?.addEventListener('change', () => {
     const checked = !!selectAllUnlinked.checked;
