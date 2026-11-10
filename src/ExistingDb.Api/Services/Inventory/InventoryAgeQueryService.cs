@@ -256,30 +256,40 @@ FROM dbo.[bt000] AS bt;";
             var numOfPeriods = Math.Clamp((int)Math.Ceiling(daysInYear / (double)periodLength) + 1, 3, 40);
 
             await using var proc = sqlConnection.CreateCommand();
-            proc.CommandText = "repGetAges_bi";
+            proc.CommandText = "dbo.repGetAges_bi";
             proc.CommandType = CommandType.StoredProcedure;
             proc.CommandTimeout = 180;
-            SqlCommandBuilder.DeriveParameters(proc);
+            try
+            {
+                SqlCommandBuilder.DeriveParameters(proc);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    "تعذّر قراءة معاملات dbo.repGetAges_bi — هل الإجراء موجود على MainDb؟ " + ex.Message,
+                    ex);
+            }
 
+            // Match Amine UI / SSMS template: bits as 0/1 (not bool) for SqlDbType compatibility.
             var parameterValues = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
             {
                 ["@MatPtr"] = Guid.Empty,
                 ["@MatGroup"] = Guid.Empty,
                 ["@StorePtr"] = Guid.Empty,
                 ["@UntilDate"] = untilDate,
-                ["@Detailed"] = true,
+                ["@Detailed"] = 1,
                 ["@NumOfPeriods"] = numOfPeriods,
                 ["@PeriodLength"] = periodLength,
-                ["@ShowBonus"] = false,
+                ["@ShowBonus"] = 0,
                 ["@UseUnit"] = 4,
                 ["@CurrencyPtr"] = currency.Guid,
                 ["@CurrencyVal"] = currency.Val,
                 ["@Billtypes"] = billTypesGuid,
-                ["@ShowEmpty"] = false,
+                ["@ShowEmpty"] = 0,
                 ["@MatCondGuid"] = Guid.Empty,
-                ["@ProcessInBlill"] = false,
-                ["@DetailByClass"] = false,
-                ["@DetailByStore"] = true,
+                ["@ProcessInBlill"] = 0,
+                ["@DetailByClass"] = 0,
+                ["@DetailByStore"] = 1,
             };
 
             foreach (SqlParameter parameter in proc.Parameters)
@@ -299,25 +309,34 @@ FROM dbo.[bt000] AS bt;";
                 }
             }
 
-            var rows = new List<IReadOnlyDictionary<string, object?>>();
-            await using var reader = await proc.ExecuteReaderAsync(cancellationToken);
-            do
+            try
             {
-                while (await reader.ReadAsync(cancellationToken))
+                var rows = new List<IReadOnlyDictionary<string, object?>>();
+                await using var reader = await proc.ExecuteReaderAsync(cancellationToken);
+                do
                 {
-                    var row = new Dictionary<string, object?>(reader.FieldCount, StringComparer.OrdinalIgnoreCase);
-                    for (var i = 0; i < reader.FieldCount; i++)
+                    while (await reader.ReadAsync(cancellationToken))
                     {
-                        row[reader.GetName(i)] = await reader.IsDBNullAsync(i, cancellationToken)
-                            ? null
-                            : NormalizeSqlValue(reader.GetValue(i));
+                        var row = new Dictionary<string, object?>(reader.FieldCount, StringComparer.OrdinalIgnoreCase);
+                        for (var i = 0; i < reader.FieldCount; i++)
+                        {
+                            row[reader.GetName(i)] = await reader.IsDBNullAsync(i, cancellationToken)
+                                ? null
+                                : NormalizeSqlValue(reader.GetValue(i));
+                        }
+
+                        rows.Add(row);
                     }
+                } while (await reader.NextResultAsync(cancellationToken));
 
-                    rows.Add(row);
-                }
-            } while (await reader.NextResultAsync(cancellationToken));
-
-            return rows;
+                return rows;
+            }
+            catch (SqlException ex)
+            {
+                throw new InvalidOperationException(
+                    "فشل dbo.repGetAges_bi: " + ex.Message,
+                    ex);
+            }
         }
         finally
         {

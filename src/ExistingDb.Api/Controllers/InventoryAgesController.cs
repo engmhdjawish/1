@@ -46,6 +46,15 @@ public sealed class InventoryAgesController(InventoryAgeQueryService inventoryAg
         {
             return BadRequest(new { message = ex.Message });
         }
+        catch (Exception ex)
+        {
+            // Surface SQL/Amine failures to the portal so operators can diagnose without server logs.
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                message = ex.GetBaseException().Message,
+                errorType = ex.GetBaseException().GetType().Name
+            });
+        }
     }
 
     private static List<Guid> ParseGuids(string? csv)
