@@ -75,25 +75,52 @@ WHERE o.type IN ('P', 'PC')
 ORDER BY o.name;
 
 PRINT '=== 4) Report source registry (same family as prcGeneralLedger / RepSrcs) ===';
-IF OBJECT_ID(N'dbo.RepSrcs', N'U') IS NOT NULL
+DECLARE @RepSrcObjectId int = OBJECT_ID(N'dbo.RepSrcs', N'U');
+IF @RepSrcObjectId IS NULL
+    SET @RepSrcObjectId = OBJECT_ID(N'dbo.RepSrc', N'U');
+
+IF @RepSrcObjectId IS NOT NULL
 BEGIN
-    SELECT *
-    FROM dbo.RepSrcs
-  WHERE CAST(Name AS nvarchar(max)) LIKE N'%مخز%'
-     OR CAST(Name AS nvarchar(max)) LIKE N'%مستود%'
-     OR CAST(Name AS nvarchar(max)) LIKE N'%مادة%'
-     OR CAST(Name AS nvarchar(max)) LIKE N'%جرد%'
-     OR CAST(Name AS nvarchar(max)) LIKE N'%حرك%'
-     OR CAST(Name AS nvarchar(max)) LIKE N'%Mat%'
-     OR CAST(Name AS nvarchar(max)) LIKE N'%Stock%'
-     OR CAST(Name AS nvarchar(max)) LIKE N'%Invent%'
-     OR CAST(Name AS nvarchar(max)) LIKE N'%Age%'
-     OR CAST(LatinName AS nvarchar(max)) LIKE N'%Mat%'
-     OR CAST(LatinName AS nvarchar(max)) LIKE N'%Stock%'
-    ORDER BY Name;
+    PRINT 'RepSrcs columns (Amine builds vary — do not assume Name/LatinName):';
+    SELECT c.name AS ColumnName, t.name AS TypeName, c.max_length
+    FROM sys.columns c
+    INNER JOIN sys.types t ON t.user_type_id = c.user_type_id
+    WHERE c.object_id = @RepSrcObjectId
+    ORDER BY c.column_id;
+
+    DECLARE @RepSrcSchema sysname = OBJECT_SCHEMA_NAME(@RepSrcObjectId);
+    DECLARE @RepSrcTable sysname = OBJECT_NAME(@RepSrcObjectId);
+    DECLARE @RepSrcFilter nvarchar(max) = N'';
+    DECLARE @RepSrcKeywords TABLE (kw nvarchar(50) NOT NULL PRIMARY KEY);
+    INSERT INTO @RepSrcKeywords (kw) VALUES
+        (N'%مخز%'), (N'%مستود%'), (N'%مادة%'), (N'%جرد%'), (N'%حرك%'),
+        (N'%Mat%'), (N'%Stock%'), (N'%Invent%'), (N'%Age%');
+
+    SELECT @RepSrcFilter = STUFF((
+        SELECT N' OR ' + CONVERT(nvarchar(max),
+            N'(TRY_CAST(' + QUOTENAME(c.name) + N' AS nvarchar(max)) LIKE ''' + REPLACE(k.kw, '''', '''''') + N''')'
+        )
+        FROM sys.columns c
+        INNER JOIN sys.types t ON t.user_type_id = c.user_type_id
+        CROSS JOIN @RepSrcKeywords k
+        WHERE c.object_id = @RepSrcObjectId
+          AND t.name IN (N'nvarchar', N'varchar', N'nchar', N'char', N'ntext', N'text')
+        FOR XML PATH(''), TYPE
+    ).value(N'.[1]', N'nvarchar(max)'), 1, 4, N'');
+
+    IF @RepSrcFilter IS NOT NULL AND LEN(@RepSrcFilter) > 0
+    BEGIN
+        DECLARE @RepSrcSql nvarchar(max) =
+            N'SELECT TOP 200 * FROM ' + QUOTENAME(@RepSrcSchema) + N'.' + QUOTENAME(@RepSrcTable) +
+            N' WHERE ' + @RepSrcFilter + N';';
+        PRINT @RepSrcSql;
+        EXEC sys.sp_executesql @RepSrcSql;
+    END
+    ELSE
+        PRINT 'No string columns on RepSrcs for keyword filter — review column list above and SELECT TOP 50 manually.';
 END
 ELSE
-    PRINT 'Table RepSrcs not found — skip or check schema name.';
+    PRINT 'Table RepSrcs / RepSrc not found — skip or list tables: SELECT name FROM sys.tables WHERE name LIKE ''%Rep%'';';
 
 PRINT '=== 5) Views already used by Jawish + inventory-related views ===';
 SELECT s.name AS SchemaName, v.name AS ViewName
