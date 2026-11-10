@@ -344,6 +344,40 @@ final class MaterialImageStorageService
     }
 
     /**
+     * Lightweight listing for orphan scan (no thumbnails/URLs).
+     *
+     * @return list<array{file_name: string, local_path: string}>
+     */
+    public static function listLocalImageEntriesForScan(): array
+    {
+        $settings = self::settings();
+        $dir = $settings['images_dir'];
+        if (!is_dir($dir)) {
+            return [];
+        }
+
+        $rows = [];
+        foreach (scandir($dir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $dir . DIRECTORY_SEPARATOR . $entry;
+            if (!is_file($path)) {
+                continue;
+            }
+            if (!self::isListableFileName($entry)) {
+                continue;
+            }
+            $rows[] = [
+                'file_name' => $entry,
+                'local_path' => $path,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
      * @return array{ok: bool, message: string, file_name?: string}
      */
     public static function saveProcessedUpload(string $tmpPath, string $originalName = 'linked.jpg'): ?string
