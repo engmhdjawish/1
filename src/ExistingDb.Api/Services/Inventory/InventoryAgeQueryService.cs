@@ -238,56 +238,12 @@ public sealed class InventoryAgeQueryService(MainDbContext mainDbContext, IPermi
                     "تعذّر اكتشاف أعمدة RepSrcs (IdSrc/IdType). الأعمدة الموجودة: " + found);
             }
 
-            object? idTblValue = null;
-            SqlDbType? idTblSqlType = null;
-            if (!string.IsNullOrEmpty(tblCol))
-            {
-                var resolved = await ResolveBillIdTblAsync(sqlConnection, typeCol, tblCol, cancellationToken);
-                idTblValue = resolved.Value;
-                idTblSqlType = resolved.SqlType;
-                if (idTblValue is null)
-                {
-                    throw new InvalidOperationException(
-                        "عمود RepSrcs.IdTbl إلزامي ولم يُعثر على قيمة مستخدمة مع bt000. من SSMS: افتح «أعمار المواد» مع كل مصادر الفواتير مرة، أو نفّذ: "
-                        + $"SELECT TOP 5 {tblCol}, COUNT(*) FROM dbo.RepSrcs r INNER JOIN dbo.bt000 bt ON bt.GUID = r.{typeCol} GROUP BY r.{tblCol} ORDER BY 2 DESC");
-                }
-            }
-
-            await using (var insertCmd = sqlConnection.CreateCommand())
-            {
-                if (!string.IsNullOrEmpty(tblCol) && idTblValue is not null && idTblSqlType.HasValue)
-                {
-                    insertCmd.CommandText = $@"
-INSERT INTO dbo.RepSrcs ({QuoteIdent(srcCol)}, {QuoteIdent(typeCol)}, {QuoteIdent(tblCol)})
-SELECT @pSrc, bt.[GUID], @pTbl
-FROM dbo.[bt000] AS bt;";
-                    insertCmd.Parameters.Add(new SqlParameter("@pSrc", SqlDbType.UniqueIdentifier) { Value = billTypesGuid });
-                    insertCmd.Parameters.Add(new SqlParameter("@pTbl", idTblSqlType.Value) { Value = idTblValue });
-                }
-                else
-                {
-                    insertCmd.CommandText = $@"
-INSERT INTO dbo.RepSrcs ({QuoteIdent(srcCol)}, {QuoteIdent(typeCol)})
-SELECT @pSrc, bt.[GUID]
-FROM dbo.[bt000] AS bt;";
-                    insertCmd.Parameters.Add(new SqlParameter("@pSrc", SqlDbType.UniqueIdentifier) { Value = billTypesGuid });
-                }
-
-                try
-                {
-                    var inserted = await insertCmd.ExecuteNonQueryAsync(cancellationToken);
-                    if (inserted <= 0)
-                    {
-                        throw new InvalidOperationException("bt000 فارغ — لا مصادر تقرير لإدراجها في RepSrcs.");
-                    }
-                }
-                catch (SqlException ex)
-                {
-                    throw new InvalidOperationException(
-                        "فشل إدراج مصادر التقرير في RepSrcs: " + ex.Message,
-                        ex);
-                }
-            }
+            // AmnDb2026 RepSrcs: GUID, SPID, IdTbl, IdType, IdSubType, HostId, HostName (+ optional dates/nums)
+            await InsertBillTypeRepSrcsAsync(
+                sqlConnection,
+                schema,
+                billTypesGuid,
+                cancellationToken);
 
             await EnsureAmineConnectionAsync(sqlConnection, cancellationToken);
 
@@ -412,6 +368,136 @@ FROM dbo.[bt000] AS bt;";
         IReadOnlyList<RepSrcsColumn> AllColumns);
 
     private sealed record ResolvedIdTbl(object? Value, SqlDbType SqlType);
+
+    private static async Task InsertBillTypeRepSrcsAsync(
+        SqlConnection sqlConnection,
+        RepSrcsSchema schema,
+        Guid billTypesGuid,
+        CancellationToken cancellationToken)
+    {
+        var srcCol = schema.SrcCol!;
+        var typeCol = schema.TypeCol!;
+        var tblCol = schema.TblCol;
+        var colSet = new HashSet<string>(schema.AllColumns.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
+
+        object? idTblValue = null;
+        SqlDbType idTblSqlType = SqlDbType.UniqueIdentifier;
+        if (!string.IsNullOrEmpty(tblCol))
+        {
+            var resolved = await ResolveBillIdTblAsync(sqlConnection, typeCol, tblCol, cancellationToken);
+            idTblValue = resolved.Value;
+            idTblSqlType = resolved.SqlType;
+            if (idTblValue is null)
+            {
+                throw new InvalidOperationException(
+                    "عمود RepSrcs.IdTbl إلزامي ولم يُعثر على قيمة مستخدمة مع bt000. افتح «أعمار المواد» في الأمين مع كل مصادر الفواتير مرة ثم أعد المحاولة. أو: "
+                    + $"SELECT TOP 5 {tblCol}, COUNT(*) Cnt FROM dbo.RepSrcs r INNER JOIN dbo.bt000 bt ON bt.GUID = r.[{typeCol}] GROUP BY r.[{tblCol}] ORDER BY Cnt DESC");
+            }
+        }
+
+        var idSubType = 0;
+        if (colSet.Contains("IdSubType"))
+        {
+            idSubType = await ResolveBillIdSubTypeAsync(sqlConnection, typeCol, cancellationToken) ?? 0;
+        }
+
+        var insertCols = new List<string> { srcCol, typeCol };
+        var selectExprs = new List<string> { "@pSrc", "bt.[GUID]" };
+        if (!string.IsNullOrEmpty(tblCol))
+        {
+            insertCols.Add(tblCol);
+            selectExprs.Add("@pTbl");
+        }
+
+        if (colSet.Contains("SPID"))
+        {
+            insertCols.Add("SPID");
+            selectExprs.Add("@@SPID");
+        }
+
+        if (colSet.Contains("IdSubType"))
+        {
+            insertCols.Add("IdSubType");
+            selectExprs.Add("@pSubType");
+        }
+
+        if (colSet.Contains("HostId"))
+        {
+            insertCols.Add("HostId");
+            selectExprs.Add("CONVERT(nvarchar(128), ISNULL(HOST_ID(), N'portal'))");
+        }
+
+        if (colSet.Contains("HostName"))
+        {
+            insertCols.Add("HostName");
+            selectExprs.Add("CONVERT(nvarchar(128), ISNULL(HOST_NAME(), N'portal-api'))");
+        }
+
+        if (colSet.Contains("CreateDate"))
+        {
+            insertCols.Add("CreateDate");
+            selectExprs.Add("GETDATE()");
+        }
+
+        await using var insertCmd = sqlConnection.CreateCommand();
+        insertCmd.CommandText = $@"
+INSERT INTO dbo.RepSrcs ({string.Join(", ", insertCols.Select(QuoteIdent))})
+SELECT {string.Join(", ", selectExprs)}
+FROM dbo.[bt000] AS bt;";
+        insertCmd.Parameters.Add(new SqlParameter("@pSrc", SqlDbType.UniqueIdentifier) { Value = billTypesGuid });
+        if (!string.IsNullOrEmpty(tblCol))
+        {
+            insertCmd.Parameters.Add(new SqlParameter("@pTbl", idTblSqlType) { Value = idTblValue });
+        }
+
+        if (colSet.Contains("IdSubType"))
+        {
+            insertCmd.Parameters.Add(new SqlParameter("@pSubType", SqlDbType.Int) { Value = idSubType });
+        }
+
+        try
+        {
+            var inserted = await insertCmd.ExecuteNonQueryAsync(cancellationToken);
+            if (inserted <= 0)
+            {
+                throw new InvalidOperationException("bt000 فارغ — لا مصادر تقرير لإدراجها في RepSrcs.");
+            }
+        }
+        catch (SqlException ex)
+        {
+            throw new InvalidOperationException(
+                "فشل إدراج مصادر التقرير في RepSrcs: " + ex.Message,
+                ex);
+        }
+    }
+
+    private static async Task<int?> ResolveBillIdSubTypeAsync(
+        SqlConnection sqlConnection,
+        string typeCol,
+        CancellationToken cancellationToken)
+    {
+        await using var cmd = sqlConnection.CreateCommand();
+        cmd.CommandText = $@"
+SELECT TOP (1) r.[IdSubType]
+FROM dbo.RepSrcs AS r
+INNER JOIN dbo.[bt000] AS bt ON bt.[GUID] = r.{QuoteIdent(typeCol)}
+GROUP BY r.[IdSubType]
+ORDER BY COUNT(*) DESC;";
+        var sampled = await cmd.ExecuteScalarAsync(cancellationToken);
+        if (sampled is null or DBNull)
+        {
+            return 0;
+        }
+
+        try
+        {
+            return Convert.ToInt32(sampled, CultureInfo.InvariantCulture);
+        }
+        catch
+        {
+            return 0;
+        }
+    }
 
     private static async Task<RepSrcsSchema> DiscoverRepSrcsSchemaAsync(
         SqlConnection sqlConnection,

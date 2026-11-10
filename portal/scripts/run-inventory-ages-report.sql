@@ -173,10 +173,45 @@ ORDER BY COUNT(*) DESC;';
     END
 END;
 
+DECLARE @IdSubType INT = 0;
+IF COL_LENGTH(N'dbo.RepSrcs', N'IdSubType') IS NOT NULL
+BEGIN
+    SET @Sql = N'
+SELECT TOP (1) @pSub = r.[IdSubType]
+FROM dbo.RepSrcs AS r
+INNER JOIN dbo.[bt000] AS bt ON bt.[GUID] = r.' + QUOTENAME(@TypeCol) + N'
+GROUP BY r.[IdSubType]
+ORDER BY COUNT(*) DESC;';
+    EXEC sys.sp_executesql @Sql, N'@pSub INT OUTPUT', @pSub = @IdSubType OUTPUT;
+    IF @IdSubType IS NULL SET @IdSubType = 0;
+END;
+
 BEGIN TRY
     BEGIN TRAN;
 
+    -- AmnDb2026: GUID + IdType + IdTbl + SPID + IdSubType + HostId + HostName
     IF @TblCol IS NOT NULL AND @TblType = N'uniqueidentifier'
+       AND COL_LENGTH(N'dbo.RepSrcs', N'SPID') IS NOT NULL
+       AND COL_LENGTH(N'dbo.RepSrcs', N'HostId') IS NOT NULL
+    BEGIN
+        SET @Sql = N'
+INSERT INTO dbo.RepSrcs (
+    ' + QUOTENAME(@SrcCol) + N', ' + QUOTENAME(@TypeCol) + N', ' + QUOTENAME(@TblCol) + N',
+    [SPID], [IdSubType], [HostId], [HostName], [CreateDate]
+)
+SELECT
+    @pSrc, bt.[GUID], @pTbl,
+    @@SPID, @pSub,
+    CONVERT(nvarchar(128), ISNULL(HOST_ID(), N''ssms'')),
+    CONVERT(nvarchar(128), ISNULL(HOST_NAME(), N''ssms'')),
+    GETDATE()
+FROM dbo.[bt000] AS bt;';
+        EXEC sys.sp_executesql
+            @Sql,
+            N'@pSrc uniqueidentifier, @pTbl uniqueidentifier, @pSub int',
+            @pSrc = @Billtypes, @pTbl = @IdTblGuid, @pSub = @IdSubType;
+    END
+    ELSE IF @TblCol IS NOT NULL AND @TblType = N'uniqueidentifier'
     BEGIN
         SET @Sql = N'
 INSERT INTO dbo.RepSrcs (' + QUOTENAME(@SrcCol) + N', ' + QUOTENAME(@TypeCol) + N', ' + QUOTENAME(@TblCol) + N')
