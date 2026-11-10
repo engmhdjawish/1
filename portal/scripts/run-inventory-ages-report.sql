@@ -80,6 +80,8 @@ END;
 DECLARE @Billtypes UNIQUEIDENTIFIER = NEWID();
 DECLARE @SrcCol SYSNAME;
 DECLARE @TypeCol SYSNAME;
+DECLARE @TblCol SYSNAME;
+DECLARE @IdTbl INT;
 DECLARE @Sql NVARCHAR(MAX);
 DECLARE @Inserted INT = 0;
 
@@ -107,8 +109,17 @@ ORDER BY CASE c.name
     ELSE 9
 END;
 
+SELECT @TblCol = c.name
+FROM sys.columns c
+WHERE c.object_id = OBJECT_ID(N'dbo.RepSrcs')
+  AND c.name IN (N'IdTbl', N'Tbl', N'TableId', N'TblId')
+ORDER BY CASE c.name
+    WHEN N'IdTbl' THEN 1
+    ELSE 9
+END;
+
 PRINT N'RepSrcs columns:';
-SELECT c.name AS ColumnName, t.name AS TypeName
+SELECT c.name AS ColumnName, t.name AS TypeName, c.is_nullable
 FROM sys.columns c
 INNER JOIN sys.types t ON t.user_type_id = c.user_type_id
 WHERE c.object_id = OBJECT_ID(N'dbo.RepSrcs')
@@ -122,14 +133,39 @@ BEGIN
     RETURN;
 END;
 
+-- IdTbl إلزامي في AmnDb2026: خذ القيمة الأكثر استخداماً مع bt000، وإلا 2 (BILL).
+IF @TblCol IS NOT NULL
+BEGIN
+    SET @Sql = N'
+SELECT TOP (1) @pIdTbl = r.' + QUOTENAME(@TblCol) + N'
+FROM dbo.RepSrcs AS r
+INNER JOIN dbo.[bt000] AS bt ON bt.[GUID] = r.' + QUOTENAME(@TypeCol) + N'
+GROUP BY r.' + QUOTENAME(@TblCol) + N'
+ORDER BY COUNT(*) DESC;';
+    EXEC sys.sp_executesql @Sql, N'@pIdTbl INT OUTPUT', @pIdTbl = @IdTbl OUTPUT;
+    IF @IdTbl IS NULL SET @IdTbl = 2;
+    PRINT N'RepSrcs.IdTbl للفواتير = ' + CONVERT(NVARCHAR(12), @IdTbl);
+END;
+
 BEGIN TRY
     BEGIN TRAN;
 
-    SET @Sql = N'
+    IF @TblCol IS NOT NULL
+    BEGIN
+        SET @Sql = N'
+INSERT INTO dbo.RepSrcs (' + QUOTENAME(@SrcCol) + N', ' + QUOTENAME(@TypeCol) + N', ' + QUOTENAME(@TblCol) + N')
+SELECT @pSrc, bt.[GUID], @pTbl
+FROM dbo.[bt000] AS bt;';
+        EXEC sys.sp_executesql @Sql, N'@pSrc uniqueidentifier, @pTbl int', @pSrc = @Billtypes, @pTbl = @IdTbl;
+    END
+    ELSE
+    BEGIN
+        SET @Sql = N'
 INSERT INTO dbo.RepSrcs (' + QUOTENAME(@SrcCol) + N', ' + QUOTENAME(@TypeCol) + N')
 SELECT @pSrc, bt.[GUID]
 FROM dbo.[bt000] AS bt;';
-    EXEC sys.sp_executesql @Sql, N'@pSrc uniqueidentifier', @pSrc = @Billtypes;
+        EXEC sys.sp_executesql @Sql, N'@pSrc uniqueidentifier', @pSrc = @Billtypes;
+    END
     SET @Inserted = @@ROWCOUNT;
 
     IF @Inserted = 0

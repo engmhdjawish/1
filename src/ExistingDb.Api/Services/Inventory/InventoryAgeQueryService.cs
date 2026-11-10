@@ -225,26 +225,60 @@ public sealed class InventoryAgeQueryService(MainDbContext mainDbContext, IPermi
 
         try
         {
-            var (discoveredSrc, discoveredType) = await DiscoverRepSrcsColumnsAsync(sqlConnection, cancellationToken);
-            srcCol = discoveredSrc;
-            var typeCol = discoveredType;
+            var schema = await DiscoverRepSrcsSchemaAsync(sqlConnection, cancellationToken);
+            srcCol = schema.SrcCol;
+            var typeCol = schema.TypeCol;
+            var tblCol = schema.TblCol;
             if (string.IsNullOrEmpty(srcCol) || string.IsNullOrEmpty(typeCol) || srcCol == typeCol)
             {
                 throw new InvalidOperationException(
                     "تعذّر اكتشاف أعمدة RepSrcs (IdSrc/IdType). شغّل portal/scripts/run-inventory-ages-report.sql للتشخيص.");
             }
 
+            int? idTbl = null;
+            if (!string.IsNullOrEmpty(tblCol))
+            {
+                idTbl = await ResolveBillIdTblAsync(sqlConnection, srcCol, typeCol, tblCol, cancellationToken);
+                if (!idTbl.HasValue)
+                {
+                    throw new InvalidOperationException(
+                        "عمود RepSrcs.IdTbl إلزامي ولم يُعثر على قيمة مستخدمة لأنواع bt000. افتح أعمار المواد في الأمين مرة مع كل مصادر الفواتير ثم أعد المحاولة.");
+                }
+            }
+
             await using (var insertCmd = sqlConnection.CreateCommand())
             {
-                insertCmd.CommandText = $@"
+                if (!string.IsNullOrEmpty(tblCol) && idTbl.HasValue)
+                {
+                    insertCmd.CommandText = $@"
+INSERT INTO dbo.RepSrcs ({QuoteIdent(srcCol)}, {QuoteIdent(typeCol)}, {QuoteIdent(tblCol)})
+SELECT @pSrc, bt.[GUID], @pTbl
+FROM dbo.[bt000] AS bt;";
+                    insertCmd.Parameters.Add(new SqlParameter("@pSrc", SqlDbType.UniqueIdentifier) { Value = billTypesGuid });
+                    insertCmd.Parameters.Add(new SqlParameter("@pTbl", SqlDbType.Int) { Value = idTbl.Value });
+                }
+                else
+                {
+                    insertCmd.CommandText = $@"
 INSERT INTO dbo.RepSrcs ({QuoteIdent(srcCol)}, {QuoteIdent(typeCol)})
 SELECT @pSrc, bt.[GUID]
 FROM dbo.[bt000] AS bt;";
-                insertCmd.Parameters.Add(new SqlParameter("@pSrc", SqlDbType.UniqueIdentifier) { Value = billTypesGuid });
-                var inserted = await insertCmd.ExecuteNonQueryAsync(cancellationToken);
-                if (inserted <= 0)
+                    insertCmd.Parameters.Add(new SqlParameter("@pSrc", SqlDbType.UniqueIdentifier) { Value = billTypesGuid });
+                }
+
+                try
                 {
-                    throw new InvalidOperationException("bt000 فارغ — لا مصادر تقرير لإدراجها في RepSrcs.");
+                    var inserted = await insertCmd.ExecuteNonQueryAsync(cancellationToken);
+                    if (inserted <= 0)
+                    {
+                        throw new InvalidOperationException("bt000 فارغ — لا مصادر تقرير لإدراجها في RepSrcs.");
+                    }
+                }
+                catch (SqlException ex)
+                {
+                    throw new InvalidOperationException(
+                        "فشل إدراج مصادر التقرير في RepSrcs: " + ex.Message,
+                        ex);
                 }
             }
 
@@ -362,7 +396,9 @@ FROM dbo.[bt000] AS bt;";
         }
     }
 
-    private static async Task<(string? SrcCol, string? TypeCol)> DiscoverRepSrcsColumnsAsync(
+    private sealed record RepSrcsSchema(string? SrcCol, string? TypeCol, string? TblCol);
+
+    private static async Task<RepSrcsSchema> DiscoverRepSrcsSchemaAsync(
         SqlConnection sqlConnection,
         CancellationToken cancellationToken)
     {
@@ -387,7 +423,39 @@ ORDER BY c.column_id;";
 
         var src = Pick("IdSrc", "GUID", "Guid", "SrcGuid", "SourceGuid", "IdParent", "ParentGUID");
         var type = Pick("IdType", "TypeGuid", "TypeGUID", "BillTypeGuid", "BtGuid", "GUIDType");
-        return (src, type);
+        var tbl = Pick("IdTbl", "Tbl", "TableId", "TblId");
+        return new RepSrcsSchema(src, type, tbl);
+    }
+
+    /// <summary>
+    /// Amine RepSrcs.IdTbl distinguishes source kind (bills vs entries…).
+    /// Prefer the IdTbl already used for bt000 bill-type rows.
+    /// SoftTech bill-type report sources commonly use IdTbl = 2 (BILL).
+    /// </summary>
+    private static async Task<int?> ResolveBillIdTblAsync(
+        SqlConnection sqlConnection,
+        string srcCol,
+        string typeCol,
+        string tblCol,
+        CancellationToken cancellationToken)
+    {
+        _ = srcCol;
+
+        await using var sampleCmd = sqlConnection.CreateCommand();
+        sampleCmd.CommandText = $@"
+SELECT TOP (1) r.{QuoteIdent(tblCol)} AS IdTbl
+FROM dbo.RepSrcs AS r
+INNER JOIN dbo.[bt000] AS bt ON bt.[GUID] = r.{QuoteIdent(typeCol)}
+GROUP BY r.{QuoteIdent(tblCol)}
+ORDER BY COUNT(*) DESC;";
+        var sampled = await sampleCmd.ExecuteScalarAsync(cancellationToken);
+        if (sampled is not null and not DBNull)
+        {
+            return Convert.ToInt32(sampled, CultureInfo.InvariantCulture);
+        }
+
+        // SoftTech AmnTables.BILL is typically 2 for report-source rows under «الفواتير».
+        return 2;
     }
 
     private static async Task EnsureAmineConnectionAsync(SqlConnection sqlConnection, CancellationToken cancellationToken)
