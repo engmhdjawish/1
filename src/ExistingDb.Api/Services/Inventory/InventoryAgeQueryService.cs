@@ -231,8 +231,11 @@ public sealed class InventoryAgeQueryService(MainDbContext mainDbContext, IPermi
             var tblCol = schema.TblCol;
             if (string.IsNullOrEmpty(srcCol) || string.IsNullOrEmpty(typeCol) || srcCol == typeCol)
             {
+                var found = schema.AllColumns.Count == 0
+                    ? "(لا أعمدة — هل الاتصال على MainDb الصحيحة؟)"
+                    : string.Join(", ", schema.AllColumns.Select(c => c.Name + ":" + c.TypeName));
                 throw new InvalidOperationException(
-                    "تعذّر اكتشاف أعمدة RepSrcs (IdSrc/IdType). شغّل portal/scripts/run-inventory-ages-report.sql للتشخيص.");
+                    "تعذّر اكتشاف أعمدة RepSrcs (IdSrc/IdType). الأعمدة الموجودة: " + found);
             }
 
             object? idTblValue = null;
@@ -400,7 +403,13 @@ FROM dbo.[bt000] AS bt;";
         }
     }
 
-    private sealed record RepSrcsSchema(string? SrcCol, string? TypeCol, string? TblCol);
+    private sealed record RepSrcsColumn(string Name, string TypeName);
+
+    private sealed record RepSrcsSchema(
+        string? SrcCol,
+        string? TypeCol,
+        string? TblCol,
+        IReadOnlyList<RepSrcsColumn> AllColumns);
 
     private sealed record ResolvedIdTbl(object? Value, SqlDbType SqlType);
 
@@ -410,28 +419,62 @@ FROM dbo.[bt000] AS bt;";
     {
         await using var cmd = sqlConnection.CreateCommand();
         cmd.CommandText = @"
-SELECT c.name
+SELECT c.name, t.name
 FROM sys.columns c
+INNER JOIN sys.types t ON t.user_type_id = c.user_type_id
 WHERE c.object_id = OBJECT_ID(N'dbo.RepSrcs')
 ORDER BY c.column_id;";
-        var names = new List<string>();
+        var columns = new List<RepSrcsColumn>();
         await using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
         {
             while (await reader.ReadAsync(cancellationToken))
             {
-                names.Add(reader.GetString(0));
+                columns.Add(new RepSrcsColumn(reader.GetString(0), reader.GetString(1)));
             }
         }
 
-        string? Pick(params string[] candidates) =>
-            candidates.FirstOrDefault(candidate =>
-                names.Any(name => string.Equals(name, candidate, StringComparison.OrdinalIgnoreCase)));
+        string? PickExact(params string[] candidates)
+        {
+            foreach (var candidate in candidates)
+            {
+                var match = columns.FirstOrDefault(c =>
+                    string.Equals(c.Name, candidate, StringComparison.OrdinalIgnoreCase));
+                if (match is not null)
+                {
+                    return match.Name;
+                }
+            }
 
-        var src = Pick("IdSrc", "SrcGuid", "SourceGuid", "IdParent", "ParentGUID");
-        // Prefer IdType over GUID — GUID on RepSrcs is often IdSrc-like and must not collide with IdTbl discovery.
-        var type = Pick("IdType", "TypeGuid", "TypeGUID", "BillTypeGuid", "BtGuid", "GUIDType");
-        var tbl = Pick("IdTbl", "TableId", "TblId");
-        return new RepSrcsSchema(src, type, tbl);
+            return null;
+        }
+
+        // SoftTech classic: IdSrc + IdType + IdTbl. Some builds rename GUID-like columns.
+        var src = PickExact("IdSrc", "SrcGuid", "SourceGuid", "IdParent", "ParentGUID", "GUID", "Guid");
+        var type = PickExact("IdType", "TypeGuid", "TypeGUID", "BillTypeGuid", "BtGuid", "GUIDType");
+        var tbl = PickExact("IdTbl", "TableId", "TblId");
+
+        // If IdType missing, take another uniqueidentifier column that is not src/tbl.
+        if (type is null)
+        {
+            type = columns
+                .Where(c => string.Equals(c.TypeName, "uniqueidentifier", StringComparison.OrdinalIgnoreCase))
+                .Select(c => c.Name)
+                .FirstOrDefault(name =>
+                    !string.Equals(name, src, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(name, tbl, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (src is null)
+        {
+            src = columns
+                .Where(c => string.Equals(c.TypeName, "uniqueidentifier", StringComparison.OrdinalIgnoreCase))
+                .Select(c => c.Name)
+                .FirstOrDefault(name =>
+                    !string.Equals(name, type, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(name, tbl, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return new RepSrcsSchema(src, type, tbl, columns);
     }
 
     /// <summary>
