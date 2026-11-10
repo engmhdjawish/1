@@ -39,28 +39,16 @@ final class MaterialImageOrphanCleanupService
             ];
         }
 
-        try {
-            $registry = self::buildRegistryIndex();
-        } catch (Throwable $exception) {
-            return [
-                'ok' => false,
-                'message' => 'تعذر قراءة سجل الأمين: ' . $exception->getMessage(),
-            ];
-        }
-
-        $localFiles = MaterialImageStorageService::listLocalFiles();
         $scanId = bin2hex(random_bytes(8));
         $payload = [
             'scan_id' => $scanId,
             'created_at' => time(),
-            'registry' => $registry,
-            'local_files' => array_values(array_map(
-                static fn (array $file): array => [
-                    'file_name' => (string) ($file['file_name'] ?? ''),
-                    'local_path' => (string) ($file['local_path'] ?? ''),
-                ],
-                $localFiles
-            )),
+            'registry' => self::emptyRegistry(),
+            'registry_page' => 1,
+            'registry_done' => false,
+            'registry_total' => 0,
+            'local_files' => [],
+            'local_index_done' => false,
             'portal_orphans' => [],
             'amine_orphans' => [],
             'stale_queue' => [],
@@ -74,9 +62,129 @@ final class MaterialImageOrphanCleanupService
         return [
             'ok' => true,
             'scan_id' => $scanId,
-            'registry_count' => (int) ($registry['registered_count'] ?? 0),
+            'message' => 'بدء الفحص — سيتم تحميل سجل الأمين على دفعات (لتجنب انتهاء المهلة).',
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function scanRegistryChunk(string $scanId): array
+    {
+        $cache = self::readCache($scanId);
+        if ($cache === null) {
+            return ['ok' => false, 'message' => 'انتهت جلسة الفحص — أعد «فحص آمن».'];
+        }
+
+        if ($cache['registry_done'] ?? false) {
+            $registry = is_array($cache['registry'] ?? null) ? $cache['registry'] : self::emptyRegistry();
+
+            return [
+                'ok' => true,
+                'done' => true,
+                'registered_count' => (int) ($registry['registered_count'] ?? 0),
+                'registry_total' => (int) ($cache['registry_total'] ?? 0),
+                'message' => 'اكتمل تحميل سجل الأمين.',
+            ];
+        }
+
+        $page = max(1, (int) ($cache['registry_page'] ?? 1));
+        try {
+            $chunk = MaterialImageLinkService::listSourcesPage($page, 60, 'all', '');
+        } catch (Throwable $exception) {
+            return [
+                'ok' => false,
+                'message' => 'تعذر قراءة سجل الأمين: ' . $exception->getMessage(),
+            ];
+        }
+
+        $registry = is_array($cache['registry'] ?? null) ? $cache['registry'] : self::emptyRegistry();
+        $fileNames = is_array($registry['file_names'] ?? null) ? $registry['file_names'] : [];
+        $guids = is_array($registry['guids'] ?? null) ? $registry['guids'] : [];
+
+        foreach ($chunk['items'] ?? [] as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $name = strtolower(basename(str_replace('\\', '/', (string) ($item['file_name'] ?? ''))));
+            if ($name !== '') {
+                $fileNames[$name] = true;
+            }
+            $guid = strtolower(trim((string) ($item['amine_image_guid'] ?? '')));
+            if ($guid !== '') {
+                $guids[$guid] = true;
+            }
+        }
+
+        $registry['file_names'] = $fileNames;
+        $registry['guids'] = $guids;
+        $registry['registered_count'] = count($fileNames);
+
+        $totalCount = max((int) ($cache['registry_total'] ?? 0), (int) ($chunk['total_count'] ?? 0));
+        $done = !($chunk['has_more'] ?? false);
+
+        $cache['registry'] = $registry;
+        $cache['registry_page'] = $page + 1;
+        $cache['registry_total'] = $totalCount;
+        $cache['registry_done'] = $done;
+        self::writeCache($scanId, $cache);
+
+        $loaded = count($fileNames);
+        $message = $done
+            ? ('اكتمل سجل الأمين — ' . $loaded . ' صورة مسجّلة.')
+            : ('تحميل سجل الأمين: ' . $loaded . ' / ' . max($totalCount, $loaded));
+
+        return [
+            'ok' => true,
+            'done' => $done,
+            'page' => $page,
+            'registered_count' => $loaded,
+            'registry_total' => $totalCount,
+            'message' => $message,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function indexLocalFiles(string $scanId): array
+    {
+        $cache = self::readCache($scanId);
+        if ($cache === null) {
+            return ['ok' => false, 'message' => 'انتهت جلسة الفحص — أعد «فحص آمن».'];
+        }
+
+        if (!($cache['registry_done'] ?? false)) {
+            return ['ok' => false, 'message' => 'أكمل تحميل سجل الأمين أولاً.'];
+        }
+
+        if ($cache['local_index_done'] ?? false) {
+            return [
+                'ok' => true,
+                'done' => true,
+                'local_file_count' => count($cache['local_files'] ?? []),
+                'message' => 'فهرس الموقع جاهز.',
+            ];
+        }
+
+        $localFiles = MaterialImageStorageService::listLocalFiles();
+        $cache['local_files'] = array_values(array_map(
+            static fn (array $file): array => [
+                'file_name' => (string) ($file['file_name'] ?? ''),
+                'local_path' => (string) ($file['local_path'] ?? ''),
+            ],
+            $localFiles
+        ));
+        $cache['local_index_done'] = true;
+        $cache['portal_offset'] = 0;
+        $cache['portal_orphans'] = [];
+        self::writeCache($scanId, $cache);
+
+        return [
+            'ok' => true,
+            'done' => true,
             'local_file_count' => count($localFiles),
-            'message' => 'جاهز لفحص الموقع وقرص الأمين — لن يُحذف شيء حتى تؤكد الحذف.',
+            'message' => 'فُهرست ' . count($localFiles) . ' ملفاً على الموقع.',
         ];
     }
 
@@ -88,6 +196,10 @@ final class MaterialImageOrphanCleanupService
         $cache = self::readCache($scanId);
         if ($cache === null) {
             return ['ok' => false, 'message' => 'انتهت جلسة الفحص — أعد «فحص آمن».'];
+        }
+
+        if (!($cache['registry_done'] ?? false) || !($cache['local_index_done'] ?? false)) {
+            return ['ok' => false, 'message' => 'أكمل تحميل السجل وفهرسة الموقع قبل فحص الملفات.'];
         }
 
         $registry = is_array($cache['registry'] ?? null) ? $cache['registry'] : [];
@@ -222,6 +334,10 @@ final class MaterialImageOrphanCleanupService
             return ['ok' => false, 'message' => 'انتهت جلسة الفحص — أعد «فحص آمن».'];
         }
 
+        if (!($cache['registry_done'] ?? false)) {
+            return ['ok' => false, 'message' => 'أكمل تحميل سجل الأمين أولاً.'];
+        }
+
         $registry = is_array($cache['registry'] ?? null) ? $cache['registry'] : [];
         $stale = self::findStaleQueueRows($registry);
         $cache['stale_queue'] = $stale;
@@ -261,7 +377,9 @@ final class MaterialImageOrphanCleanupService
                 'amine' => array_slice($amineOrphans, 0, 15),
                 'queue' => array_slice($staleQueue, 0, 15),
             ],
-            'ready' => ($cache['portal_offset'] ?? 0) >= count($cache['local_files'] ?? [])
+            'ready' => ($cache['registry_done'] ?? false)
+                && ($cache['local_index_done'] ?? false)
+                && ($cache['portal_offset'] ?? 0) >= count($cache['local_files'] ?? [])
                 && ($cache['amine_done'] ?? false)
                 && ($cache['queue_scanned'] ?? false),
             'message' => 'معاينة فقط — الحذف يتطلب تأكيداً.',
@@ -287,11 +405,11 @@ final class MaterialImageOrphanCleanupService
             return ['ok' => false, 'message' => 'الأمين غير متصل.'];
         }
 
-        try {
-            $registry = self::buildRegistryIndex();
-        } catch (Throwable $exception) {
-            return ['ok' => false, 'message' => 'تعذر التحقق من سجل الأمين: ' . $exception->getMessage()];
+        if (!($cache['registry_done'] ?? false)) {
+            return ['ok' => false, 'message' => 'أكمل الفحص أولاً قبل الحذف.'];
         }
+
+        $registry = is_array($cache['registry'] ?? null) ? $cache['registry'] : self::emptyRegistry();
 
         $portalDeleted = 0;
         $portalSkipped = 0;
@@ -411,34 +529,12 @@ final class MaterialImageOrphanCleanupService
      *   registered_count: int
      * }
      */
-    private static function buildRegistryIndex(): array
+    private static function emptyRegistry(): array
     {
-        $fileNames = [];
-        $guids = [];
-        $page = 1;
-
-        do {
-            $chunk = MaterialImageLinkService::listSourcesPage($page, 60, 'all', '');
-            foreach ($chunk['items'] ?? [] as $item) {
-                if (!is_array($item)) {
-                    continue;
-                }
-                $name = strtolower(basename(str_replace('\\', '/', (string) ($item['file_name'] ?? ''))));
-                if ($name !== '') {
-                    $fileNames[$name] = true;
-                }
-                $guid = strtolower(trim((string) ($item['amine_image_guid'] ?? '')));
-                if ($guid !== '') {
-                    $guids[$guid] = true;
-                }
-            }
-            $page++;
-        } while ($chunk['has_more'] ?? false);
-
         return [
-            'file_names' => $fileNames,
-            'guids' => $guids,
-            'registered_count' => count($fileNames),
+            'file_names' => [],
+            'guids' => [],
+            'registered_count' => 0,
         ];
     }
 

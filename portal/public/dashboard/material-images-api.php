@@ -595,19 +595,34 @@ if ($method === 'POST') {
         materialImagesApiJson(MaterialImageOrphanCleanupService::initScan());
     }
 
+    if ($action === 'orphan-cleanup-registry-chunk') {
+        @set_time_limit(90);
+        $scanId = trim((string) ($_POST['scan_id'] ?? ''));
+        materialImagesApiJson(MaterialImageOrphanCleanupService::scanRegistryChunk($scanId));
+    }
+
+    if ($action === 'orphan-cleanup-index-local') {
+        @set_time_limit(300);
+        $scanId = trim((string) ($_POST['scan_id'] ?? ''));
+        materialImagesApiJson(MaterialImageOrphanCleanupService::indexLocalFiles($scanId));
+    }
+
     if ($action === 'orphan-cleanup-scan-portal') {
+        @set_time_limit(120);
         $scanId = trim((string) ($_POST['scan_id'] ?? ''));
         $chunkSize = max(5, min(80, (int) ($_POST['chunk_size'] ?? 40)));
         materialImagesApiJson(MaterialImageOrphanCleanupService::scanPortalChunk($scanId, $chunkSize));
     }
 
     if ($action === 'orphan-cleanup-scan-amine') {
+        @set_time_limit(180);
         $scanId = trim((string) ($_POST['scan_id'] ?? ''));
         $limit = max(10, min(100, (int) ($_POST['limit'] ?? 80)));
         materialImagesApiJson(MaterialImageOrphanCleanupService::scanAmineChunk($scanId, $limit));
     }
 
     if ($action === 'orphan-cleanup-scan-queue') {
+        @set_time_limit(120);
         $scanId = trim((string) ($_POST['scan_id'] ?? ''));
         materialImagesApiJson(MaterialImageOrphanCleanupService::scanStaleQueue($scanId));
     }

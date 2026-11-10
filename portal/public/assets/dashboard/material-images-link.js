@@ -1228,11 +1228,23 @@ const API_URL = '/dashboard/material-images-api.php';
   }
 
   function setOrphanGhostProgress(percent, label) {
-    if (orphanGhostProgressWrap) orphanGhostProgressWrap.hidden = false;
+    if (orphanGhostProgressWrap) {
+      orphanGhostProgressWrap.hidden = false;
+      orphanGhostProgressWrap.classList.remove('hidden');
+    }
     if (orphanGhostProgressLabel && label) orphanGhostProgressLabel.textContent = label;
     if (orphanGhostProgressBar) {
       orphanGhostProgressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
     }
+    if (linkStatus && label) linkStatus.textContent = label;
+  }
+
+  function orphanCleanupTimeoutHint(error) {
+    const text = error instanceof Error ? error.message : String(error || '');
+    if (/504|Gateway Time-out|timeout/i.test(text)) {
+      return 'انتهت مهلة nginx — أعد الفحص (تم تقسيمه لدفعات أصغر). إن استمر الخطأ زِد proxy_read_timeout في nginx.';
+    }
+    return text;
   }
 
   function renderOrphanGhostReport(report) {
@@ -1261,12 +1273,12 @@ const API_URL = '/dashboard/material-images-api.php';
     orphanGhostScanId = '';
     orphanGhostDryRunBtn?.classList.add('hidden');
     orphanGhostPurgeBtn?.classList.add('hidden');
+    if (orphanGhostScanBtn) orphanGhostScanBtn.disabled = true;
     if (orphanGhostReport) {
       orphanGhostReport.classList.add('hidden');
       orphanGhostReport.textContent = '';
     }
-    if (linkStatus) linkStatus.textContent = 'جاري الفحص الآمن للصور اليتيمة (معاينة فقط)...';
-    setOrphanGhostProgress(2, 'تهيئة الفحص...');
+    setOrphanGhostProgress(1, 'جاري الفحص الآمن (معاينة فقط) — لا حذف بعد...');
     try {
       const init = await postOrphanCleanupAction('orphan-cleanup-init');
       if (!init.ok) {
@@ -1278,6 +1290,30 @@ const API_URL = '/dashboard/material-images-api.php';
         if (linkStatus) linkStatus.textContent = 'تعذر بدء الفحص.';
         return;
       }
+      setOrphanGhostProgress(3, init.message || 'تهيئة الفحص...');
+
+      let registryDone = false;
+      while (!registryDone) {
+        const reg = await postOrphanCleanupAction('orphan-cleanup-registry-chunk', { scan_id: orphanGhostScanId });
+        if (!reg.ok) {
+          if (linkStatus) linkStatus.textContent = reg.message || 'توقّف تحميل سجل الأمين.';
+          return;
+        }
+        registryDone = !!reg.done;
+        const total = Math.max(1, Number(reg.registry_total || reg.registered_count || 1));
+        const loaded = Number(reg.registered_count || 0);
+        setOrphanGhostProgress(
+          5 + Math.min(28, (loaded / total) * 28),
+          reg.message || 'تحميل سجل الأمين...'
+        );
+      }
+
+      const indexLocal = await postOrphanCleanupAction('orphan-cleanup-index-local', { scan_id: orphanGhostScanId });
+      if (!indexLocal.ok) {
+        if (linkStatus) linkStatus.textContent = indexLocal.message || 'تعذر فهرسة ملفات الموقع.';
+        return;
+      }
+      setOrphanGhostProgress(36, indexLocal.message || 'فهرسة الموقع...');
 
       let portalDone = false;
       while (!portalDone) {
@@ -1290,7 +1326,7 @@ const API_URL = '/dashboard/material-images-api.php';
         const total = Number(chunk.total || 1);
         const offset = Number(chunk.offset || 0);
         setOrphanGhostProgress(
-          10 + Math.min(35, (offset / total) * 35),
+          38 + Math.min(24, (offset / total) * 24),
           chunk.message || 'فحص الموقع...'
         );
       }
@@ -1306,7 +1342,7 @@ const API_URL = '/dashboard/material-images-api.php';
         const total = Math.max(1, Number(chunk.total || 1));
         const offset = Number(chunk.offset || 0);
         setOrphanGhostProgress(
-          45 + Math.min(40, (offset / total) * 40),
+          64 + Math.min(26, (offset / total) * 26),
           chunk.message || 'فحص قرص الأمين...'
         );
       }
@@ -1340,10 +1376,11 @@ const API_URL = '/dashboard/material-images-api.php';
       }
     } catch (error) {
       if (linkStatus) {
-        linkStatus.textContent = error instanceof Error ? error.message : 'تعذر إكمال الفحص.';
+        linkStatus.textContent = orphanCleanupTimeoutHint(error) || 'تعذر إكمال الفحص.';
       }
     } finally {
       orphanGhostScanning = false;
+      if (orphanGhostScanBtn) orphanGhostScanBtn.disabled = false;
     }
   }
 
