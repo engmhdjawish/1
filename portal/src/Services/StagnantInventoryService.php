@@ -60,13 +60,29 @@ final class StagnantInventoryService
         }
 
         if (!($response['ok'] ?? false)) {
-            $message = '';
+            $status = (int) ($response['status'] ?? 0);
             $data = $response['data'] ?? null;
+            $message = '';
             if (is_array($data)) {
-                $message = (string) ($data['message'] ?? $data['title'] ?? '');
+                $message = trim((string) ($data['message'] ?? $data['title'] ?? $data['detail'] ?? ''));
+                if ($message === '' && isset($data['errors']) && is_array($data['errors'])) {
+                    $message = json_encode($data['errors'], JSON_UNESCAPED_UNICODE) ?: '';
+                }
             }
             if ($message === '') {
-                $message = (string) ($response['error'] ?? 'فشل جلب تقرير أعمار المواد.');
+                $message = trim((string) ($response['error'] ?? ''));
+            }
+            if ($message === '') {
+                $message = match (true) {
+                    $status === 404 => 'المسار /api/inventory/ages غير موجود — أعد نشر API من فرع الأداة ثم أعد تشغيل الخدمة.',
+                    $status === 401, $status === 403 => 'حساب API الموقع بلا صلاحية materials.read لتقرير الأعمار.',
+                    $status === 0 => 'تعذر الاتصال بخادم API الأمين (تحقق من AMINE_API_BASE_URL والخدمة).',
+                    $status >= 500 => 'خطأ داخل API الأمين أثناء تشغيل dbo.repGetAges_bi (راجع سجل الخدمة).',
+                    default => 'فشل جلب تقرير أعمار المواد.',
+                };
+            }
+            if ($status > 0) {
+                $message .= ' [HTTP ' . $status . ']';
             }
 
             return ['ok' => false, 'error' => $message];
