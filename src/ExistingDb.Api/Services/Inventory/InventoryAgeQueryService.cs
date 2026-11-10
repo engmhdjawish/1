@@ -235,27 +235,31 @@ public sealed class InventoryAgeQueryService(MainDbContext mainDbContext, IPermi
                     "تعذّر اكتشاف أعمدة RepSrcs (IdSrc/IdType). شغّل portal/scripts/run-inventory-ages-report.sql للتشخيص.");
             }
 
-            int? idTbl = null;
+            object? idTblValue = null;
+            SqlDbType? idTblSqlType = null;
             if (!string.IsNullOrEmpty(tblCol))
             {
-                idTbl = await ResolveBillIdTblAsync(sqlConnection, srcCol, typeCol, tblCol, cancellationToken);
-                if (!idTbl.HasValue)
+                var resolved = await ResolveBillIdTblAsync(sqlConnection, typeCol, tblCol, cancellationToken);
+                idTblValue = resolved.Value;
+                idTblSqlType = resolved.SqlType;
+                if (idTblValue is null)
                 {
                     throw new InvalidOperationException(
-                        "عمود RepSrcs.IdTbl إلزامي ولم يُعثر على قيمة مستخدمة لأنواع bt000. افتح أعمار المواد في الأمين مرة مع كل مصادر الفواتير ثم أعد المحاولة.");
+                        "عمود RepSrcs.IdTbl إلزامي ولم يُعثر على قيمة مستخدمة مع bt000. من SSMS: افتح «أعمار المواد» مع كل مصادر الفواتير مرة، أو نفّذ: "
+                        + $"SELECT TOP 5 {tblCol}, COUNT(*) FROM dbo.RepSrcs r INNER JOIN dbo.bt000 bt ON bt.GUID = r.{typeCol} GROUP BY r.{tblCol} ORDER BY 2 DESC");
                 }
             }
 
             await using (var insertCmd = sqlConnection.CreateCommand())
             {
-                if (!string.IsNullOrEmpty(tblCol) && idTbl.HasValue)
+                if (!string.IsNullOrEmpty(tblCol) && idTblValue is not null && idTblSqlType.HasValue)
                 {
                     insertCmd.CommandText = $@"
 INSERT INTO dbo.RepSrcs ({QuoteIdent(srcCol)}, {QuoteIdent(typeCol)}, {QuoteIdent(tblCol)})
 SELECT @pSrc, bt.[GUID], @pTbl
 FROM dbo.[bt000] AS bt;";
                     insertCmd.Parameters.Add(new SqlParameter("@pSrc", SqlDbType.UniqueIdentifier) { Value = billTypesGuid });
-                    insertCmd.Parameters.Add(new SqlParameter("@pTbl", SqlDbType.Int) { Value = idTbl.Value });
+                    insertCmd.Parameters.Add(new SqlParameter("@pTbl", idTblSqlType.Value) { Value = idTblValue });
                 }
                 else
                 {
@@ -398,6 +402,8 @@ FROM dbo.[bt000] AS bt;";
 
     private sealed record RepSrcsSchema(string? SrcCol, string? TypeCol, string? TblCol);
 
+    private sealed record ResolvedIdTbl(object? Value, SqlDbType SqlType);
+
     private static async Task<RepSrcsSchema> DiscoverRepSrcsSchemaAsync(
         SqlConnection sqlConnection,
         CancellationToken cancellationToken)
@@ -421,25 +427,25 @@ ORDER BY c.column_id;";
             candidates.FirstOrDefault(candidate =>
                 names.Any(name => string.Equals(name, candidate, StringComparison.OrdinalIgnoreCase)));
 
-        var src = Pick("IdSrc", "GUID", "Guid", "SrcGuid", "SourceGuid", "IdParent", "ParentGUID");
+        var src = Pick("IdSrc", "SrcGuid", "SourceGuid", "IdParent", "ParentGUID");
+        // Prefer IdType over GUID — GUID on RepSrcs is often IdSrc-like and must not collide with IdTbl discovery.
         var type = Pick("IdType", "TypeGuid", "TypeGUID", "BillTypeGuid", "BtGuid", "GUIDType");
-        var tbl = Pick("IdTbl", "Tbl", "TableId", "TblId");
+        var tbl = Pick("IdTbl", "TableId", "TblId");
         return new RepSrcsSchema(src, type, tbl);
     }
 
     /// <summary>
     /// Amine RepSrcs.IdTbl distinguishes source kind (bills vs entries…).
-    /// Prefer the IdTbl already used for bt000 bill-type rows.
-    /// SoftTech bill-type report sources commonly use IdTbl = 2 (BILL).
+    /// AmnDb builds vary: IdTbl may be INT (classic SoftTech AmnTables) or UNIQUEIDENTIFIER.
     /// </summary>
-    private static async Task<int?> ResolveBillIdTblAsync(
+    private static async Task<ResolvedIdTbl> ResolveBillIdTblAsync(
         SqlConnection sqlConnection,
-        string srcCol,
         string typeCol,
         string tblCol,
         CancellationToken cancellationToken)
     {
-        _ = srcCol;
+        var sqlType = await GetRepSrcsColumnSqlDbTypeAsync(sqlConnection, tblCol, cancellationToken)
+            ?? SqlDbType.Int;
 
         await using var sampleCmd = sqlConnection.CreateCommand();
         sampleCmd.CommandText = $@"
@@ -451,11 +457,60 @@ ORDER BY COUNT(*) DESC;";
         var sampled = await sampleCmd.ExecuteScalarAsync(cancellationToken);
         if (sampled is not null and not DBNull)
         {
-            return Convert.ToInt32(sampled, CultureInfo.InvariantCulture);
+            if (sqlType == SqlDbType.UniqueIdentifier || sampled is Guid)
+            {
+                return sampled switch
+                {
+                    Guid g => new ResolvedIdTbl(g, SqlDbType.UniqueIdentifier),
+                    string s when Guid.TryParse(s, out var parsed) => new ResolvedIdTbl(parsed, SqlDbType.UniqueIdentifier),
+                    byte[] bytes when bytes.Length == 16 => new ResolvedIdTbl(new Guid(bytes), SqlDbType.UniqueIdentifier),
+                    _ => new ResolvedIdTbl(null, SqlDbType.UniqueIdentifier)
+                };
+            }
+
+            try
+            {
+                return new ResolvedIdTbl(Convert.ToInt32(sampled, CultureInfo.InvariantCulture), SqlDbType.Int);
+            }
+            catch (InvalidCastException)
+            {
+                // Fall through to defaults / null
+            }
+        }
+
+        if (sqlType == SqlDbType.UniqueIdentifier)
+        {
+            // No prior bill-type rows to copy from — caller must seed via Amine UI once.
+            return new ResolvedIdTbl(null, SqlDbType.UniqueIdentifier);
         }
 
         // SoftTech AmnTables.BILL is typically 2 for report-source rows under «الفواتير».
-        return 2;
+        return new ResolvedIdTbl(2, SqlDbType.Int);
+    }
+
+    private static async Task<SqlDbType?> GetRepSrcsColumnSqlDbTypeAsync(
+        SqlConnection sqlConnection,
+        string columnName,
+        CancellationToken cancellationToken)
+    {
+        await using var cmd = sqlConnection.CreateCommand();
+        cmd.CommandText = @"
+SELECT t.name
+FROM sys.columns c
+INNER JOIN sys.types t ON t.user_type_id = c.user_type_id
+WHERE c.object_id = OBJECT_ID(N'dbo.RepSrcs')
+  AND c.name = @name;";
+        cmd.Parameters.Add(new SqlParameter("@name", SqlDbType.NVarChar, 128) { Value = columnName });
+        var typeName = await cmd.ExecuteScalarAsync(cancellationToken) as string;
+        return typeName?.ToLowerInvariant() switch
+        {
+            "uniqueidentifier" => SqlDbType.UniqueIdentifier,
+            "int" => SqlDbType.Int,
+            "smallint" => SqlDbType.SmallInt,
+            "tinyint" => SqlDbType.TinyInt,
+            "bigint" => SqlDbType.BigInt,
+            _ => null
+        };
     }
 
     private static async Task EnsureAmineConnectionAsync(SqlConnection sqlConnection, CancellationToken cancellationToken)

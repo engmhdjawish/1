@@ -81,7 +81,9 @@ DECLARE @Billtypes UNIQUEIDENTIFIER = NEWID();
 DECLARE @SrcCol SYSNAME;
 DECLARE @TypeCol SYSNAME;
 DECLARE @TblCol SYSNAME;
-DECLARE @IdTbl INT;
+DECLARE @IdTblInt INT;
+DECLARE @IdTblGuid UNIQUEIDENTIFIER;
+DECLARE @TblType SYSNAME;
 DECLARE @Sql NVARCHAR(MAX);
 DECLARE @Inserted INT = 0;
 
@@ -133,30 +135,62 @@ BEGIN
     RETURN;
 END;
 
--- IdTbl إلزامي في AmnDb2026: خذ القيمة الأكثر استخداماً مع bt000، وإلا 2 (BILL).
+-- IdTbl إلزامي في AmnDb2026: قد يكون INT أو UNIQUEIDENTIFIER حسب إصدار الأمين.
 IF @TblCol IS NOT NULL
 BEGIN
-    SET @Sql = N'
+    SELECT @TblType = t.name
+    FROM sys.columns c
+    INNER JOIN sys.types t ON t.user_type_id = c.user_type_id
+    WHERE c.object_id = OBJECT_ID(N'dbo.RepSrcs') AND c.name = @TblCol;
+
+    IF @TblType = N'uniqueidentifier'
+    BEGIN
+        SET @Sql = N'
 SELECT TOP (1) @pIdTbl = r.' + QUOTENAME(@TblCol) + N'
 FROM dbo.RepSrcs AS r
 INNER JOIN dbo.[bt000] AS bt ON bt.[GUID] = r.' + QUOTENAME(@TypeCol) + N'
 GROUP BY r.' + QUOTENAME(@TblCol) + N'
 ORDER BY COUNT(*) DESC;';
-    EXEC sys.sp_executesql @Sql, N'@pIdTbl INT OUTPUT', @pIdTbl = @IdTbl OUTPUT;
-    IF @IdTbl IS NULL SET @IdTbl = 2;
-    PRINT N'RepSrcs.IdTbl للفواتير = ' + CONVERT(NVARCHAR(12), @IdTbl);
+        EXEC sys.sp_executesql @Sql, N'@pIdTbl uniqueidentifier OUTPUT', @pIdTbl = @IdTblGuid OUTPUT;
+        IF @IdTblGuid IS NULL
+        BEGIN
+            RAISERROR(N'RepSrcs.IdTbl من نوع uniqueidentifier ولا توجد عيّنة مع bt000. افتح أعمار المواد في الأمين مع كل مصادر الفواتير مرة ثم أعد السكربت.', 16, 1);
+            RETURN;
+        END;
+        PRINT N'RepSrcs.IdTbl (GUID) للفواتير = ' + CONVERT(NVARCHAR(36), @IdTblGuid);
+    END
+    ELSE
+    BEGIN
+        SET @Sql = N'
+SELECT TOP (1) @pIdTbl = r.' + QUOTENAME(@TblCol) + N'
+FROM dbo.RepSrcs AS r
+INNER JOIN dbo.[bt000] AS bt ON bt.[GUID] = r.' + QUOTENAME(@TypeCol) + N'
+GROUP BY r.' + QUOTENAME(@TblCol) + N'
+ORDER BY COUNT(*) DESC;';
+        EXEC sys.sp_executesql @Sql, N'@pIdTbl INT OUTPUT', @pIdTbl = @IdTblInt OUTPUT;
+        IF @IdTblInt IS NULL SET @IdTblInt = 2;
+        PRINT N'RepSrcs.IdTbl (INT) للفواتير = ' + CONVERT(NVARCHAR(12), @IdTblInt);
+    END
 END;
 
 BEGIN TRY
     BEGIN TRAN;
 
-    IF @TblCol IS NOT NULL
+    IF @TblCol IS NOT NULL AND @TblType = N'uniqueidentifier'
     BEGIN
         SET @Sql = N'
 INSERT INTO dbo.RepSrcs (' + QUOTENAME(@SrcCol) + N', ' + QUOTENAME(@TypeCol) + N', ' + QUOTENAME(@TblCol) + N')
 SELECT @pSrc, bt.[GUID], @pTbl
 FROM dbo.[bt000] AS bt;';
-        EXEC sys.sp_executesql @Sql, N'@pSrc uniqueidentifier, @pTbl int', @pSrc = @Billtypes, @pTbl = @IdTbl;
+        EXEC sys.sp_executesql @Sql, N'@pSrc uniqueidentifier, @pTbl uniqueidentifier', @pSrc = @Billtypes, @pTbl = @IdTblGuid;
+    END
+    ELSE IF @TblCol IS NOT NULL
+    BEGIN
+        SET @Sql = N'
+INSERT INTO dbo.RepSrcs (' + QUOTENAME(@SrcCol) + N', ' + QUOTENAME(@TypeCol) + N', ' + QUOTENAME(@TblCol) + N')
+SELECT @pSrc, bt.[GUID], @pTbl
+FROM dbo.[bt000] AS bt;';
+        EXEC sys.sp_executesql @Sql, N'@pSrc uniqueidentifier, @pTbl int', @pSrc = @Billtypes, @pTbl = @IdTblInt;
     END
     ELSE
     BEGIN
