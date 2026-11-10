@@ -30,7 +30,7 @@
           <p class="dash-mi-danger-zone__hint">يحذف الصورة من المحاسبة والموقع نهائياً. لا يمكن التراجع.</p>
           <div class="dash-mi-orphan-cleanup mt-3 pt-3 border-t border-border-subtle space-y-2">
             <p class="text-[11px] text-text-muted leading-relaxed">
-              صور بلا سجل في <span dir="ltr" class="font-mono">bm000</span> (بعد إلغاء مواد مثلاً): فحص معاينة أولاً، ثم حذف بعد التأكيد. لا يستخدم بحث lookup الذي يُنشئ سجلاتاً جديدة.
+              صور بلا سجل في <span dir="ltr" class="font-mono">bm000</span>: فحص معاينة ثم حذف بعد التأكيد. يبقى التبويب مفتوحاً؛ كل خطوة قصيرة لتجنب 504. <strong>حدّث API الأمين</strong> مع الموقع لتسريع السجل.
             </p>
             <div class="flex flex-wrap gap-2">
               <button type="button" id="orphanGhostScanBtn" class="h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-xs font-bold">فحص آمن (معاينة)</button>

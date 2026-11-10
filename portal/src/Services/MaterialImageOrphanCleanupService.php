@@ -17,8 +17,9 @@ final class MaterialImageOrphanCleanupService
     private const SCAN_TTL_SECONDS = 3600;
     private const PORTAL_CHUNK = 80;
     private const PURGE_CHUNK = 25;
-    private const REGISTRY_PAGES_PER_CHUNK = 30;
-    private const PORTAL_BATCHES_PER_REQUEST = 10;
+    private const REGISTRY_PAGES_PER_CHUNK = 4;
+    private const PORTAL_BATCHES_PER_REQUEST = 8;
+    private const REGISTRY_INDEX_TIMEOUT_SEC = 25;
 
     /**
      * @return array{
@@ -91,7 +92,19 @@ final class MaterialImageOrphanCleanupService
         }
 
         try {
-            $apiResponse = ApiClient::get('/api/material-images/registry-index', [], 300);
+            $apiResponse = ApiClient::get(
+                '/api/material-images/registry-index',
+                [],
+                self::REGISTRY_INDEX_TIMEOUT_SEC
+            );
+            if (!($apiResponse['ok'] ?? false)) {
+                return [
+                    'ok' => true,
+                    'done' => false,
+                    'use_chunked' => true,
+                    'message' => 'تعذر التحميل السريع للسجل — متابعة على دفعات صغيرة.',
+                ];
+            }
             $payload = self::apiPayload($apiResponse);
             if (($payload['ok'] ?? false) && is_array($payload['fileNames'] ?? null)) {
                 $fileNames = [];
@@ -248,14 +261,8 @@ final class MaterialImageOrphanCleanupService
             ];
         }
 
-        $localFiles = MaterialImageStorageService::listLocalFiles();
-        $cache['local_files'] = array_values(array_map(
-            static fn (array $file): array => [
-                'file_name' => (string) ($file['file_name'] ?? ''),
-                'local_path' => (string) ($file['local_path'] ?? ''),
-            ],
-            $localFiles
-        ));
+        $localFiles = MaterialImageStorageService::listLocalImageEntriesForScan();
+        $cache['local_files'] = $localFiles;
         $cache['local_index_done'] = true;
         $cache['portal_offset'] = 0;
         $cache['portal_orphans'] = [];

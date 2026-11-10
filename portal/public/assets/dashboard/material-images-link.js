@@ -1279,6 +1279,7 @@ const API_URL = '/dashboard/material-images-api.php';
       orphanGhostReport.textContent = '';
     }
     setOrphanGhostProgress(1, 'جاري الفحص الآمن (معاينة فقط) — لا حذف بعد...');
+    orphanGhostProgressWrap?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     try {
       const init = await postOrphanCleanupAction('orphan-cleanup-init');
       if (!init.ok) {
