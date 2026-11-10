@@ -5,6 +5,7 @@ using ExistingDb.Api.Data;
 using ExistingDb.Api.Images;
 using ExistingDb.Api.Middleware;
 using ExistingDb.Api.Options;
+using ExistingDb.Api.Services.Inventory;
 using ExistingDb.Api.Services.Materials;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -98,6 +99,7 @@ builder.Services.AddScoped<IServiceSettingsService, ServiceSettingsService>();
 builder.Services.AddScoped<IImageStorageService, ImageStorageService>();
 builder.Services.AddScoped<MaterialQueryBuilder>();
 builder.Services.AddScoped<MaterialResultFiltersService>();
+builder.Services.AddScoped<InventoryAgeQueryService>();
 builder.Services.AddHostedService<ApiManagementDbInitializer>();
 
 builder.Services.AddControllers();

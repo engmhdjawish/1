@@ -39,6 +39,7 @@ final class DashboardNavigation
         '/dashboard/store-seasons.php',
         '/dashboard/home-layout.php',
         '/dashboard/special-offers.php',
+        '/dashboard/stagnant-inventory.php',
         '/dashboard/price-checker.php',
         '/dashboard/site-media.php',
     ];
@@ -356,6 +357,13 @@ final class DashboardNavigation
                     'icon' => 'sell',
                     'permission' => 'special_offers.manage',
                     'description' => 'إنشاء عروض مخفّضة وعرضها في الرئيسية والمتجر.',
+                ],
+                [
+                    'route' => '/dashboard/stagnant-inventory.php',
+                    'label' => 'المخزون الراكد',
+                    'icon' => 'inventory_2',
+                    'permission' => 'special_offers.manage',
+                    'description' => 'أعمار المواد الراكدة مع الصور والأسعار، وتحديد أصناف لتوليد عروض تصريف.',
                 ],
                 [
                     'route' => '/dashboard/price-checker.php',

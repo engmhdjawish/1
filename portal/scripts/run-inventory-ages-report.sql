@@ -1,6 +1,9 @@
 -- تقرير جاهز: أعمار المواد (dbo.repGetAges_bi)
 -- شغّله على MainDb في SSMS (نفس قاعدة ConnectionStrings:MainDb).
 --
+-- أداة الموقع (قرار تصريف الراكد + صور + توليد عرض):
+--   /dashboard/stagnant-inventory.php  → API GET /api/inventory/ages
+--
 -- من وين الأسماء؟
 --   العملات          → جدول my000  (Code / Name / LatinName)
 --   مصادر التقرير    → جدول bt000  (نفس قائمة «الفواتير» في شاشة أعمار المواد)

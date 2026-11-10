@@ -124,6 +124,7 @@ php -S 127.0.0.1:8080
 | `/dashboard/accounting-statement-api.php` | بروكسي JSON لكشف الحساب والعملاء والحسابات والفواتير/السندات |
 | `/dashboard/accounting-customers.php` | عملاء الأمين |
 | `/dashboard/accounting-documents.php` | الفواتير والسندات |
+| `/dashboard/stagnant-inventory.php` | المخزون الراكد: أعمار FIFO + صور/أسعار + توليد عرض تصريف |
 | `/dashboard/material-images.php` | مخزون صور الموقع + رفع متسلسل مع استئناف (IndexedDB) |
 | `/dashboard/material-images-api.php` | API رفع صورة واحدة + قائمة الملفات المحلية |
 | `/api/image.php?id=...` | عرض صورة مادة من القرص المحلي؛ إن وُجد GUID في الأمين ولا نسخة محلية تُسحَب مرة واحدة (قابل للتعطيل عبر `PORTAL_IMAGE_ON_DEMAND_PULL=0`) |
