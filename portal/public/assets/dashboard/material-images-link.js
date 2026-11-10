@@ -86,7 +86,11 @@ const API_URL = '/dashboard/material-images-api.php';
   const orphanGhostProgressWrap = panel.querySelector('#orphanGhostProgressWrap');
   const orphanGhostProgressLabel = panel.querySelector('#orphanGhostProgressLabel');
   const orphanGhostProgressBar = panel.querySelector('#orphanGhostProgressBar');
+  const orphanGhostProgressPct = panel.querySelector('#orphanGhostProgressPct');
+  const orphanGhostProgressLive = panel.querySelector('#orphanGhostProgressLive');
   const orphanGhostReport = panel.querySelector('#orphanGhostReport');
+  let orphanGhostHeartbeatTimer = 0;
+  let orphanGhostLastPercent = 0;
   const linkFilterButtons = panel.querySelectorAll('.link-filter-btn');
   const linkStatus = panel.querySelector('#linkStatus');
   
@@ -1218,23 +1222,66 @@ const API_URL = '/dashboard/material-images-api.php';
     await processDeleteSelectedUnlinked();
   }
 
-  async function postOrphanCleanupAction(action, fields = {}) {
+  function stopOrphanGhostHeartbeat() {
+    if (orphanGhostHeartbeatTimer) {
+      window.clearInterval(orphanGhostHeartbeatTimer);
+      orphanGhostHeartbeatTimer = 0;
+    }
+    if (orphanGhostProgressLive) orphanGhostProgressLive.textContent = '';
+  }
+
+  function startOrphanGhostHeartbeat(waitingLabel) {
+    stopOrphanGhostHeartbeat();
+    const started = Date.now();
+    const tick = () => {
+      const sec = Math.max(0, Math.round((Date.now() - started) / 1000));
+      const text = `${waitingLabel || 'انتظار الخادم'}… ${sec}ث`;
+      if (orphanGhostProgressLive) orphanGhostProgressLive.textContent = text;
+      if (linkStatus) linkStatus.textContent = text;
+    };
+    tick();
+    orphanGhostHeartbeatTimer = window.setInterval(tick, 1000);
+  }
+
+  async function postOrphanCleanupAction(action, fields = {}, waitingLabel = '') {
     const form = new FormData();
     form.append('action', action);
     Object.entries(fields).forEach(([key, value]) => {
       form.append(key, value === undefined || value === null ? '' : String(value));
     });
-    return fetchJson(API_URL, { method: 'POST', body: form });
+    const timeoutMs = 55000;
+    const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    signal.addEventListener('abort', onAbort, { once: true });
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    startOrphanGhostHeartbeat(waitingLabel || action);
+    try {
+      // Let the browser paint progress before the next long request.
+      await new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+      return await fetchJson(API_URL, { method: 'POST', body: form, signal: controller.signal });
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw new Error('انتهت مهلة الطلب (55ث) — أعد الفحص. إن تكرر: انشر API الأمين مع registry-index.');
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      stopOrphanGhostHeartbeat();
+    }
   }
 
   function setOrphanGhostProgress(percent, label) {
+    const safe = Math.max(0, Math.min(100, Number(percent) || 0));
+    orphanGhostLastPercent = safe;
     if (orphanGhostProgressWrap) {
       orphanGhostProgressWrap.hidden = false;
       orphanGhostProgressWrap.classList.remove('hidden');
     }
     if (orphanGhostProgressLabel && label) orphanGhostProgressLabel.textContent = label;
+    if (orphanGhostProgressPct) orphanGhostProgressPct.textContent = `${Math.round(safe)}%`;
     if (orphanGhostProgressBar) {
-      orphanGhostProgressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+      orphanGhostProgressBar.style.width = `${Math.max(safe < 2 ? 2 : safe, safe)}%`;
     }
     if (linkStatus && label) linkStatus.textContent = label;
   }
@@ -1281,7 +1328,7 @@ const API_URL = '/dashboard/material-images-api.php';
     setOrphanGhostProgress(1, 'جاري الفحص الآمن (معاينة فقط) — لا حذف بعد...');
     orphanGhostProgressWrap?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     try {
-      const init = await postOrphanCleanupAction('orphan-cleanup-init');
+      const init = await postOrphanCleanupAction('orphan-cleanup-init', {}, 'تهيئة الفحص');
       if (!init.ok) {
         if (linkStatus) linkStatus.textContent = init.message || 'تعذر بدء الفحص.';
         return;
@@ -1294,7 +1341,11 @@ const API_URL = '/dashboard/material-images-api.php';
       setOrphanGhostProgress(3, init.message || 'تهيئة الفحص...');
 
       let registryDone = false;
-      const regLoad = await postOrphanCleanupAction('orphan-cleanup-load-registry', { scan_id: orphanGhostScanId });
+      const regLoad = await postOrphanCleanupAction(
+        'orphan-cleanup-load-registry',
+        { scan_id: orphanGhostScanId },
+        'محاولة التحميل السريع لسجل الأمين'
+      );
       if (!regLoad.ok) {
         if (linkStatus) linkStatus.textContent = regLoad.message || 'توقّف تحميل سجل الأمين.';
         return;
@@ -1311,8 +1362,14 @@ const API_URL = '/dashboard/material-images-api.php';
           regLoad.message || 'تحميل سجل الأمين (دفعات صغيرة)...'
         );
       }
+      let registryRound = 0;
       while (!registryDone) {
-        const reg = await postOrphanCleanupAction('orphan-cleanup-registry-chunk', { scan_id: orphanGhostScanId });
+        registryRound += 1;
+        const reg = await postOrphanCleanupAction(
+          'orphan-cleanup-registry-chunk',
+          { scan_id: orphanGhostScanId },
+          `دفعة سجل الأمين #${registryRound}`
+        );
         if (!reg.ok) {
           if (linkStatus) linkStatus.textContent = reg.message || 'توقّف تحميل سجل الأمين.';
           return;
@@ -1326,7 +1383,11 @@ const API_URL = '/dashboard/material-images-api.php';
         );
       }
 
-      const indexLocal = await postOrphanCleanupAction('orphan-cleanup-index-local', { scan_id: orphanGhostScanId });
+      const indexLocal = await postOrphanCleanupAction(
+        'orphan-cleanup-index-local',
+        { scan_id: orphanGhostScanId },
+        'فهرسة ملفات الموقع'
+      );
       if (!indexLocal.ok) {
         if (linkStatus) linkStatus.textContent = indexLocal.message || 'تعذر فهرسة ملفات الموقع.';
         return;
@@ -1334,12 +1395,18 @@ const API_URL = '/dashboard/material-images-api.php';
       setOrphanGhostProgress(36, indexLocal.message || 'فهرسة الموقع...');
 
       let portalDone = false;
+      let portalRound = 0;
       while (!portalDone) {
-        const chunk = await postOrphanCleanupAction('orphan-cleanup-scan-portal', {
-          scan_id: orphanGhostScanId,
-          chunk_size: '80',
-          batches: '8',
-        });
+        portalRound += 1;
+        const chunk = await postOrphanCleanupAction(
+          'orphan-cleanup-scan-portal',
+          {
+            scan_id: orphanGhostScanId,
+            chunk_size: '80',
+            batches: '8',
+          },
+          `فحص ملفات الموقع #${portalRound}`
+        );
         if (!chunk.ok) {
           if (linkStatus) linkStatus.textContent = chunk.message || 'توقّف فحص الموقع.';
           return;
@@ -1354,11 +1421,17 @@ const API_URL = '/dashboard/material-images-api.php';
       }
 
       let amineDone = false;
+      let amineRound = 0;
       while (!amineDone) {
-        const chunk = await postOrphanCleanupAction('orphan-cleanup-scan-amine', {
-          scan_id: orphanGhostScanId,
-          limit: '100',
-        });
+        amineRound += 1;
+        const chunk = await postOrphanCleanupAction(
+          'orphan-cleanup-scan-amine',
+          {
+            scan_id: orphanGhostScanId,
+            limit: '100',
+          },
+          `فحص قرص الأمين #${amineRound}`
+        );
         if (!chunk.ok) {
           if (linkStatus) linkStatus.textContent = chunk.message || 'توقّف فحص الأمين.';
           return;
@@ -1372,14 +1445,22 @@ const API_URL = '/dashboard/material-images-api.php';
         );
       }
 
-      const queueScan = await postOrphanCleanupAction('orphan-cleanup-scan-queue', { scan_id: orphanGhostScanId });
+      const queueScan = await postOrphanCleanupAction(
+        'orphan-cleanup-scan-queue',
+        { scan_id: orphanGhostScanId },
+        'فحص الطابور'
+      );
       if (!queueScan.ok) {
         if (linkStatus) linkStatus.textContent = queueScan.message || 'توقّف فحص الطابور.';
         return;
       }
       setOrphanGhostProgress(92, queueScan.message || 'فحص الطابور...');
 
-      const report = await postOrphanCleanupAction('orphan-cleanup-report', { scan_id: orphanGhostScanId });
+      const report = await postOrphanCleanupAction(
+        'orphan-cleanup-report',
+        { scan_id: orphanGhostScanId },
+        'إعداد تقرير المعاينة'
+      );
       if (!report.ok) {
         if (linkStatus) linkStatus.textContent = report.message || 'تعذر عرض التقرير.';
         return;
@@ -1400,10 +1481,15 @@ const API_URL = '/dashboard/material-images-api.php';
         orphanGhostPurgeBtn?.classList.remove('hidden');
       }
     } catch (error) {
+      stopOrphanGhostHeartbeat();
       if (linkStatus) {
         linkStatus.textContent = orphanCleanupTimeoutHint(error) || 'تعذر إكمال الفحص.';
       }
+      if (orphanGhostProgressLive) {
+        orphanGhostProgressLive.textContent = orphanCleanupTimeoutHint(error) || '';
+      }
     } finally {
+      stopOrphanGhostHeartbeat();
       orphanGhostScanning = false;
       if (orphanGhostScanBtn) orphanGhostScanBtn.disabled = false;
     }

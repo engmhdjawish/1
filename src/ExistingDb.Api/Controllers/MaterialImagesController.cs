@@ -225,7 +225,7 @@ public sealed class MaterialImagesController(
         CancellationToken cancellationToken = default)
     {
         page = Math.Max(1, page);
-        pageSize = Math.Clamp(pageSize, 6, 60);
+        pageSize = Math.Clamp(pageSize, 6, 200);
 
         var query = BuildImageQuery(linked, null);
         var searchTokens = SplitSearchTokens(materialSearch);

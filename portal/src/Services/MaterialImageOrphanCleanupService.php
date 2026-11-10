@@ -17,9 +17,10 @@ final class MaterialImageOrphanCleanupService
     private const SCAN_TTL_SECONDS = 3600;
     private const PORTAL_CHUNK = 80;
     private const PURGE_CHUNK = 25;
-    private const REGISTRY_PAGES_PER_CHUNK = 4;
+    private const REGISTRY_PAGE_SIZE = 100;
     private const PORTAL_BATCHES_PER_REQUEST = 8;
-    private const REGISTRY_INDEX_TIMEOUT_SEC = 25;
+    private const REGISTRY_INDEX_TIMEOUT_SEC = 8;
+    private const REGISTRY_PAGE_TIMEOUT_SEC = 25;
 
     /**
      * @return array{
@@ -179,46 +180,81 @@ final class MaterialImageOrphanCleanupService
         $guids = is_array($registry['guids'] ?? null) ? $registry['guids'] : [];
         $page = max(1, (int) ($cache['registry_page'] ?? 1));
         $totalCount = (int) ($cache['registry_total'] ?? 0);
-        $done = false;
 
-        for ($step = 0; $step < self::REGISTRY_PAGES_PER_CHUNK; $step++) {
-            try {
-                $chunk = MaterialImageLinkService::listSourcesPage($page, 60, 'all', '');
-            } catch (Throwable $exception) {
-                return [
-                    'ok' => false,
-                    'message' => 'تعذر قراءة سجل الأمين: ' . $exception->getMessage(),
-                ];
+        // Lightweight page read — never use listSourcesPage/mapLinkFileRow (lookups + previews freeze for minutes).
+        try {
+            $apiResponse = ApiClient::get(
+                '/api/material-images/link-files',
+                [
+                    'page' => $page,
+                    'pageSize' => self::REGISTRY_PAGE_SIZE,
+                ],
+                self::REGISTRY_PAGE_TIMEOUT_SEC
+            );
+        } catch (Throwable $exception) {
+            return [
+                'ok' => false,
+                'message' => 'تعذر قراءة سجل الأمين: ' . $exception->getMessage(),
+            ];
+        }
+
+        if (!($apiResponse['ok'] ?? false)) {
+            $status = (int) ($apiResponse['status'] ?? 0);
+            $error = (string) ($apiResponse['error'] ?? '');
+
+            return [
+                'ok' => false,
+                'message' => 'تعذر قراءة صفحة سجل الأمين'
+                    . ($status > 0 ? " (HTTP {$status})" : '')
+                    . ($error !== '' ? ': ' . $error : '.')
+                    . ' أعد المحاولة أو انشر API الأمين (registry-index).',
+            ];
+        }
+
+        $data = self::apiPayload($apiResponse);
+        $rows = is_array($data['items'] ?? null)
+            ? $data['items']
+            : (is_array($data['Items'] ?? null) ? $data['Items'] : []);
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
             }
-
-            foreach ($chunk['items'] ?? [] as $item) {
-                if (!is_array($item)) {
-                    continue;
-                }
-                $name = strtolower(basename(str_replace('\\', '/', (string) ($item['file_name'] ?? ''))));
-                if ($name !== '') {
-                    $fileNames[$name] = true;
-                }
-                $guid = strtolower(trim((string) ($item['amine_image_guid'] ?? '')));
-                if ($guid !== '') {
-                    $guids[$guid] = true;
-                }
+            $rawName = (string) ($row['fileName'] ?? $row['FileName'] ?? $row['name'] ?? $row['Name'] ?? '');
+            $name = strtolower(basename(str_replace('\\', '/', $rawName)));
+            if ($name !== '') {
+                $fileNames[$name] = true;
             }
-
-            $totalCount = max($totalCount, (int) ($chunk['total_count'] ?? 0));
-            $page++;
-            if (!($chunk['has_more'] ?? false)) {
-                $done = true;
-                break;
+            $rawGuid = (string) (
+                $row['imageGuid']
+                ?? $row['ImageGuid']
+                ?? $row['id']
+                ?? $row['Id']
+                ?? $row['guid']
+                ?? $row['Guid']
+                ?? ''
+            );
+            $guid = strtolower(trim($rawGuid));
+            if ($guid !== '' && $guid !== '00000000-0000-0000-0000-000000000000') {
+                $guids[$guid] = true;
             }
         }
+
+        $totalCount = max(
+            $totalCount,
+            (int) ($data['totalCount'] ?? $data['TotalCount'] ?? 0)
+        );
+        $responsePage = max(1, (int) ($data['page'] ?? $data['Page'] ?? $page));
+        $responsePageSize = max(1, (int) ($data['pageSize'] ?? $data['PageSize'] ?? self::REGISTRY_PAGE_SIZE));
+        $nextPage = $responsePage + 1;
+        $done = ($responsePage * $responsePageSize) >= $totalCount || $rows === [];
 
         $registry['file_names'] = $fileNames;
         $registry['guids'] = $guids;
         $registry['registered_count'] = count($fileNames);
 
         $cache['registry'] = $registry;
-        $cache['registry_page'] = $page;
+        $cache['registry_page'] = $nextPage;
         $cache['registry_total'] = $totalCount;
         $cache['registry_done'] = $done;
         self::writeCache($scanId, $cache);
@@ -226,12 +262,12 @@ final class MaterialImageOrphanCleanupService
         $loaded = count($fileNames);
         $message = $done
             ? ('اكتمل سجل الأمين — ' . $loaded . ' صورة مسجّلة.')
-            : ('تحميل سجل الأمين: ' . $loaded . ' / ' . max($totalCount, $loaded));
+            : ('تحميل سجل الأمين: صفحة ' . $responsePage . ' — ' . $loaded . ' / ' . max($totalCount, $loaded));
 
         return [
             'ok' => true,
             'done' => $done,
-            'page' => $page,
+            'page' => $nextPage,
             'registered_count' => $loaded,
             'registry_total' => $totalCount,
             'message' => $message,
