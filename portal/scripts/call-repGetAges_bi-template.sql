@@ -1,48 +1,66 @@
 -- Confirmed Amine inventory-age report: dbo.repGetAges_bi
--- Probe of MainDb showed #ResultMatAge columns:
+-- UI: تقارير المخزون → أعمار المواد (matches this procedure).
+--
+-- Result columns (from probe):
 --   MatPtr, Price, Total, Qty, Date, Remaining, Age, MatClass, MatStore,
 --   MatUnitName, BillGUID, BillType, BillNotes, BiGuid, BiNumber, Direction, ExpireDate
--- Age is stock age from bill-item receipt date (FIFO remaining qty), not expiry and not AR aging.
 --
--- NOT this report:
---   prcTransMatAge / prcTransMatAccAges  -> year-file AGE transfer into AGES000 (maintenance)
---   repGetAges_ce / repAgesOfCustomerReceivables -> accounting / receivables ages
---   repFirstInFirstOut -> FIFO costing/pricing
---   FnStoresMaterialsExpireDates / repMatExpireDate -> product expiry
--- Companion for stagnant offers: dbo.repMatNoMove (FirstPurchase / LastSale / moveCnt)
+-- === مصادر التقرير (@Billtypes) — REQUIRED ===
+-- Amine shows: «يجب اختيار مصادر التقرير» if none are selected.
+-- Prefer selecting ALL invoice types in the left «الفواتير» list
+-- (مبيعات، مرتجع مبيعات، مشتريات، مرتجع مشتريات، بضاعة أول المدة،
+--  تسويات جردية إدخال/إخراج، حجز، طلبيات، …).
+-- FIFO Remaining/Age needs both IN and OUT bill types; partial selection skews age.
 --
--- Filters useful for the offer tool:
---   @StorePtr     -> pass empty GUID for all stores, or a store tree root; exclude scrap by omitting those stores
---   @Billtypes    -> bill-type list GUID (Amine report source); restrict to purchase / opening in types
---   @UntilDate    -> as-of date for Age
---   @NumOfPeriods / @PeriodLength -> aging buckets (e.g. 4 periods × 30 days)
---   @DetailByStore / @DetailByClass -> break Remaining by store / class
+-- How to get @Billtypes GUID (same idea as sourceGuid for prcGeneralLedger):
+--   1) In أعمار المواد: check ALL sources under الفواتير, then Preview once.
+--   2) Capture the GUID Amine passes as @Billtypes (SQL Profiler / Extended Events), OR
+--   3) Look up the saved report-source row in RepSrcs after that run.
+-- Do NOT leave @Billtypes = 0x0 for a real call.
 --
--- GUIDs below are placeholders (0x0 = all / empty in Amine style). Replace before run.
--- Requires an Amine connection context (same session patterns as other reports).
+-- UI defaults observed (أعمار المواد):
+--   إلى تاريخ = as-of date | عدد الفترات = 3 | طول الفترة = 30 يوم
+--   عرض تقرير تفصيلي = on | الوحدة الافتراضية | العملة = ملف الشركة
+--
+-- Other filters:
+--   @StorePtr -> exclude scrap warehouses by selecting only sellable stores (or 0x0 = all)
+--   @MatPtr / @MatGroup / @MatCondGuid -> optional material scope
+--
+-- NOT this report: prcTransMatAge (year AGES000 transfer), repGetAges_ce (AR),
+--   repFirstInFirstOut (costing), repMatExpireDate (expiry).
+-- Companion: dbo.repMatNoMove (FirstPurchase / LastSale / moveCnt).
 
 SET NOCOUNT ON;
 
-DECLARE
-    @MatPtr        UNIQUEIDENTIFIER = 0x0,          -- one material, or 0x0 = all (via group/cond)
-    @MatGroup      UNIQUEIDENTIFIER = 0x0,          -- material group tree
-    @StorePtr      UNIQUEIDENTIFIER = 0x0,          -- store tree; set to sellable stores only later
-    @UntilDate     DATETIME         = GETDATE(),
-    @Detailed      BIT              = 1,            -- line-level remaining lots
-    @NumOfPeriods  INT              = 4,
-    @PeriodLength  INT              = 30,           -- days per bucket
-    @ShowBonus     BIT              = 0,
-    @UseUnit       INT              = 4,            -- 1/2/3 = unit1..3, 4 = default unit
-    @CurrencyPtr   UNIQUEIDENTIFIER = 0x0,          -- usually default currency GUID from my000
-    @CurrencyVal   FLOAT            = 1,
-    @Billtypes     UNIQUEIDENTIFIER = 0x0,          -- report bill-type source GUID (purchase/opening)
-    @ShowEmpty     BIT              = 0,
-    @MatCondGuid   UNIQUEIDENTIFIER = 0x0,
-    @ProcessInBlill BIT             = 0,
-    @DetailByClass BIT              = 0,
-    @DetailByStore BIT              = 1;
+-- Optional: inspect report-source registry (column names vary by Amine build)
+-- SELECT TOP 50 * FROM dbo.RepSrcs ORDER BY 1 DESC;
+-- SELECT GUID, Name, LatinName FROM dbo.bt000 ORDER BY Number;  -- bill type cards
 
--- Smoke call — expect result sets with Age / Remaining / MatPtr / MatStore
+DECLARE
+    @MatPtr         UNIQUEIDENTIFIER = 0x0,
+    @MatGroup       UNIQUEIDENTIFIER = 0x0,
+    @StorePtr       UNIQUEIDENTIFIER = 0x0,
+    @UntilDate      DATETIME         = CAST(GETDATE() AS DATE),
+    @Detailed       BIT              = 1,            -- عرض تقرير تفصيلي
+    @NumOfPeriods   INT              = 3,            -- عدد الفترات (UI default)
+    @PeriodLength   INT              = 30,           -- طول الفترة بالأيام
+    @ShowBonus      BIT              = 0,            -- معالجة الهدايا
+    @UseUnit        INT              = 4,            -- 4 = الوحدة الافتراضية
+    @CurrencyPtr    UNIQUEIDENTIFIER = 0x0,          -- REPLACE: my000 GUID for company currency
+    @CurrencyVal    FLOAT            = 1,
+    @Billtypes      UNIQUEIDENTIFIER = 0x0,          -- REPLACE: REQUIRED — all-sources RepSrcs GUID
+    @ShowEmpty      BIT              = 0,            -- عرض المواد الفارغة
+    @MatCondGuid    UNIQUEIDENTIFIER = 0x0,
+    @ProcessInBlill BIT              = 0,
+    @DetailByClass  BIT              = 0,
+    @DetailByStore  BIT              = 1;
+
+IF @Billtypes = 0x0
+BEGIN
+    RAISERROR(N'@Billtypes is required. In أعمار المواد select ALL sources under الفواتير, capture the report-source GUID, then set @Billtypes.', 16, 1);
+    RETURN;
+END;
+
 EXEC dbo.repGetAges_bi
     @MatPtr         = @MatPtr,
     @MatGroup       = @MatGroup,
@@ -61,16 +79,3 @@ EXEC dbo.repGetAges_bi
     @ProcessInBlill = @ProcessInBlill,
     @DetailByClass  = @DetailByClass,
     @DetailByStore  = @DetailByStore;
-
--- Optional companion: materials with little/no movement in a window
--- EXEC dbo.repMatNoMove
---     @MinMove = 0,
---     @StartDate = DATEADD(DAY, -90, GETDATE()),
---     @EndDate = GETDATE(),
---     @Src = 0x0,
---     @Store = 0x0,
---     @Gr = 0x0,
---     @Cost = 0x0,
---     @CurPtr = 0x0,
---     @ShowEmpty = 0,
---     @ShwBalanced = 1;

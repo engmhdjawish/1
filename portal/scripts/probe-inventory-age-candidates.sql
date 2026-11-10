@@ -61,7 +61,7 @@ WHERE o.name IN (
 ORDER BY o.name;
 
 PRINT '=== C) Confirmed meanings (from MainDb probe) ===';
-PRINT 'repGetAges_bi          -> STOCK AGE report on bi000; Remaining + Age; StorePtr/Billtypes filters';
+PRINT 'repGetAges_bi          -> STOCK AGE (أعمار المواد); @Billtypes REQUIRED — select ALL الفواتير sources';
 PRINT 'prcTransMatAge         -> year transfer into AGES000 (NOT a report)';
 PRINT 'prcTransMatAccAges     -> wrapper: AccAge and/or MatAge transfer';
 PRINT 'repGetAges_ce          -> accounting entry ages (NOT inventory)';
