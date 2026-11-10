@@ -60,14 +60,14 @@ WHERE o.name IN (
     )
 ORDER BY o.name;
 
-PRINT '=== C) Quick meaning hints ===';
-PRINT 'repGetAges_bi          -> likely AGES from bill items (bi000) — top inventory-age candidate';
-PRINT 'prcTransMatAge         -> material AGE transfer (period/year tools)';
-PRINT 'repFirstInFirstOut     -> often FIFO COSTING, not calendar age — verify columns';
-PRINT 'repMatNoMove           -> materials with NO movement (stagnant sales helper)';
+PRINT '=== C) Confirmed meanings (from MainDb probe) ===';
+PRINT 'repGetAges_bi          -> STOCK AGE report on bi000; Remaining + Age; StorePtr/Billtypes filters';
+PRINT 'prcTransMatAge         -> year transfer into AGES000 (NOT a report)';
+PRINT 'prcTransMatAccAges     -> wrapper: AccAge and/or MatAge transfer';
+PRINT 'repGetAges_ce          -> accounting entry ages (NOT inventory)';
+PRINT 'repFirstInFirstOut     -> FIFO COSTING/pricing';
+PRINT 'repMatNoMove           -> stagnant stock: FirstPurchase / LastSale / moveCnt';
 PRINT 'FnStoresMaterialsExpireDates / repMatExpireDate -> EXPIRY date, not stock age';
 
-PRINT '=== D) Optional: show create script for the top candidate ===';
--- SSMS: right-click dbo.repGetAges_bi → Script Stored Procedure as → CREATE
--- Or:
--- EXEC sp_helptext N'dbo.repGetAges_bi';
+PRINT '=== D) Next: smoke-call template ===';
+PRINT 'See portal/scripts/call-repGetAges_bi-template.sql';

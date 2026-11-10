@@ -1,6 +1,7 @@
 -- Discover Amine (MainDb) routines/views that may expose material STOCK AGE (not product "age category").
 -- Run in SSMS on the same database ExistingDb.Api uses (ConnectionStrings:MainDb).
 -- Jawish codebase today only calls prcGeneralLedger (accounts); inventory age is not wired in the API yet.
+-- Confirmed primary report: dbo.repGetAges_bi (see call-repGetAges_bi-template.sql).
 
 SET NOCOUNT ON;
 
