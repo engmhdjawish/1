@@ -1301,15 +1301,20 @@ const API_URL = '/dashboard/material-images-api.php';
     const queue = Number(report.stale_queue_count ?? 0);
     const lines = [
       `موقع (ملف بلا bm000): ${portal}`,
-      `أمين (قرص بلا bm000): ${amine}`,
+      `أمين (قرص بلا bm000): ${amine}${report.amine_skipped ? ' — تُخطّي' : ''}`,
       `طابور (سجل بلا صورة مسجّلة): ${queue}`,
+    ];
+    if (report.amine_skipped && report.amine_skip_reason) {
+      lines.push('', `ملاحظة قرص الأمين: ${report.amine_skip_reason}`);
+    }
+    lines.push(
       '',
       'عيّنة موقع:',
       ...(report.samples?.portal || []).slice(0, 8).map((row) => `  - ${row.file_name} (${row.reason || ''})`),
       '',
       'عيّنة أمين:',
       ...(report.samples?.amine || []).slice(0, 8).map((row) => `  - ${row.file_name}`),
-    ];
+    );
     orphanGhostReport.textContent = lines.join('\n');
     orphanGhostReport.classList.remove('hidden');
   }
@@ -1437,6 +1442,10 @@ const API_URL = '/dashboard/material-images-api.php';
           return;
         }
         amineDone = !!chunk.done;
+        if (chunk.skipped) {
+          setOrphanGhostProgress(90, chunk.message || 'تُخطّي فحص قرص الأمين — متابعة بنتائج الموقع.');
+          break;
+        }
         const total = Math.max(1, Number(chunk.total || 1));
         const offset = Number(chunk.offset || 0);
         setOrphanGhostProgress(

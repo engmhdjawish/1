@@ -59,6 +59,8 @@ final class MaterialImageOrphanCleanupService
             'portal_offset' => 0,
             'amine_offset' => 0,
             'amine_done' => false,
+            'amine_skipped' => false,
+            'amine_skip_reason' => '',
             'queue_scanned' => false,
         ];
         self::writeCache($scanId, $payload);
@@ -405,23 +407,40 @@ final class MaterialImageOrphanCleanupService
         $limit = max(10, min(100, $limit));
 
         try {
-            $response = ApiClient::get('/api/material-images/orphan-disk-files', [
-                'offset' => $offset,
-                'limit' => $limit,
-            ]);
-            $response = self::apiPayload($response);
+            $apiResponse = ApiClient::get(
+                '/api/material-images/orphan-disk-files',
+                [
+                    'offset' => $offset,
+                    'limit' => $limit,
+                ],
+                45
+            );
         } catch (Throwable $exception) {
-            return [
-                'ok' => false,
-                'message' => 'تعذر فحص قرص الأمين: ' . $exception->getMessage(),
-            ];
+            return self::skipAmineDiskScan(
+                $scanId,
+                $cache,
+                'تعذر فحص قرص الأمين: ' . $exception->getMessage()
+            );
         }
 
+        if (!($apiResponse['ok'] ?? false)) {
+            return self::skipAmineDiskScan(
+                $scanId,
+                $cache,
+                self::formatApiFailureMessage(
+                    $apiResponse,
+                    'تعذر فحص قرص الأمين — غالباً API الأمين بدون مسار orphan-disk-files أو انتهت المهلة. انشر ExistingDb.Api.'
+                )
+            );
+        }
+
+        $response = self::apiPayload($apiResponse);
         if (!($response['ok'] ?? false)) {
-            return [
-                'ok' => false,
-                'message' => (string) ($response['message'] ?? 'تعذر فحص قرص الأمين.'),
-            ];
+            return self::skipAmineDiskScan(
+                $scanId,
+                $cache,
+                (string) ($response['message'] ?? 'تعذر فحص قرص الأمين (استجابة API غير ناجحة).')
+            );
         }
 
         $items = is_array($response['items'] ?? null) ? $response['items'] : [];
@@ -445,6 +464,8 @@ final class MaterialImageOrphanCleanupService
         $cache['amine_offset'] = (int) ($response['offset'] ?? ($offset + count($items)));
         $done = (bool) ($response['done'] ?? (count($items) === 0));
         $cache['amine_done'] = $done;
+        $cache['amine_skipped'] = false;
+        $cache['amine_skip_reason'] = '';
         self::writeCache($scanId, $cache);
 
         $total = (int) ($response['total'] ?? count($cache['amine_orphans']));
@@ -452,6 +473,7 @@ final class MaterialImageOrphanCleanupService
         return [
             'ok' => true,
             'done' => $done,
+            'skipped' => false,
             'offset' => $cache['amine_offset'],
             'total' => $total,
             'amine_orphan_count' => count($cache['amine_orphans']),
@@ -503,12 +525,16 @@ final class MaterialImageOrphanCleanupService
         $portalOrphans = is_array($cache['portal_orphans'] ?? null) ? $cache['portal_orphans'] : [];
         $amineOrphans = is_array($cache['amine_orphans'] ?? null) ? $cache['amine_orphans'] : [];
         $staleQueue = is_array($cache['stale_queue'] ?? null) ? $cache['stale_queue'] : [];
+        $amineSkipped = (bool) ($cache['amine_skipped'] ?? false);
+        $amineSkipReason = trim((string) ($cache['amine_skip_reason'] ?? ''));
 
         return [
             'ok' => true,
             'portal_orphan_count' => count($portalOrphans),
             'amine_orphan_count' => count($amineOrphans),
             'stale_queue_count' => count($staleQueue),
+            'amine_skipped' => $amineSkipped,
+            'amine_skip_reason' => $amineSkipReason,
             'samples' => [
                 'portal' => array_slice($portalOrphans, 0, 15),
                 'amine' => array_slice($amineOrphans, 0, 15),
@@ -519,7 +545,9 @@ final class MaterialImageOrphanCleanupService
                 && ($cache['portal_offset'] ?? 0) >= count($cache['local_files'] ?? [])
                 && ($cache['amine_done'] ?? false)
                 && ($cache['queue_scanned'] ?? false),
-            'message' => 'معاينة فقط — الحذف يتطلب تأكيداً.',
+            'message' => $amineSkipped
+                ? ('معاينة موقع/طابور جاهزة. قرص الأمين تُخطّي: ' . ($amineSkipReason !== '' ? $amineSkipReason : 'API غير محدّث.'))
+                : 'معاينة فقط — الحذف يتطلب تأكيداً.',
         ];
     }
 
@@ -795,5 +823,68 @@ final class MaterialImageOrphanCleanupService
     private static function apiPayload(array $response): array
     {
         return is_array($response['data'] ?? null) ? $response['data'] : $response;
+    }
+
+    /**
+     * Soft-fail Amine disk so portal orphan results are not discarded.
+     *
+     * @param array<string, mixed> $cache
+     * @return array<string, mixed>
+     */
+    private static function skipAmineDiskScan(string $scanId, array $cache, string $reason): array
+    {
+        $cache['amine_orphans'] = is_array($cache['amine_orphans'] ?? null) ? $cache['amine_orphans'] : [];
+        $cache['amine_done'] = true;
+        $cache['amine_skipped'] = true;
+        $cache['amine_skip_reason'] = $reason;
+        self::writeCache($scanId, $cache);
+
+        return [
+            'ok' => true,
+            'done' => true,
+            'skipped' => true,
+            'offset' => (int) ($cache['amine_offset'] ?? 0),
+            'total' => count($cache['amine_orphans']),
+            'amine_orphan_count' => count($cache['amine_orphans']),
+            'message' => $reason . ' — متابعة بنتائج الموقع فقط.',
+        ];
+    }
+
+    /** @param array<string, mixed> $apiResponse */
+    private static function formatApiFailureMessage(array $apiResponse, string $fallback): string
+    {
+        $status = (int) ($apiResponse['status'] ?? 0);
+        $error = trim((string) ($apiResponse['error'] ?? ''));
+        $data = is_array($apiResponse['data'] ?? null) ? $apiResponse['data'] : [];
+        $detail = trim((string) (
+            $data['message']
+            ?? $data['Message']
+            ?? $data['title']
+            ?? $data['Title']
+            ?? $data['detail']
+            ?? $data['Detail']
+            ?? ''
+        ));
+
+        if ($status === 404) {
+            return 'مسار orphan-disk-files غير موجود على API الأمين (HTTP 404) — انشر ExistingDb.Api المحدَّث.';
+        }
+        if ($status > 0 && $detail !== '') {
+            return "تعذر فحص قرص الأمين (HTTP {$status}): {$detail}";
+        }
+        if ($status > 0 && $error !== '') {
+            return "تعذر فحص قرص الأمين (HTTP {$status}): {$error}";
+        }
+        if ($status > 0) {
+            return "تعذر فحص قرص الأمين (HTTP {$status}).";
+        }
+        if ($error !== '') {
+            return 'تعذر فحص قرص الأمين: ' . $error;
+        }
+        if ($detail !== '') {
+            return 'تعذر فحص قرص الأمين: ' . $detail;
+        }
+
+        return $fallback;
     }
 }
