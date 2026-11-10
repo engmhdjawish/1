@@ -268,7 +268,41 @@ public sealed class MaterialImagesController(
         return Ok(new PagedResponse<MaterialImageLinkFileResponse>(items, page, pageSize, totalCount));
     }
 
-  [HttpGet("orphan-disk-files")]
+    [HttpGet("registry-index")]
+    [RequirePermission("materials.read")]
+    public async Task<ActionResult> GetRegistryIndex(CancellationToken cancellationToken)
+    {
+        var rows = await mainDbContext.MaterialImages
+            .AsNoTracking()
+            .Select(image => new { image.Guid, image.Name })
+            .ToListAsync(cancellationToken);
+
+        var fileNames = new List<string>(rows.Count);
+        var guids = new List<Guid>(rows.Count);
+        foreach (var row in rows)
+        {
+            var fileName = ExtractFileName(row.Name);
+            if (!string.IsNullOrWhiteSpace(fileName))
+            {
+                fileNames.Add(fileName);
+            }
+
+            if (row.Guid != Guid.Empty)
+            {
+                guids.Add(row.Guid);
+            }
+        }
+
+        return Ok(new
+        {
+            ok = true,
+            count = fileNames.Count,
+            fileNames,
+            guids = guids.Select(guid => guid.ToString()).ToArray(),
+        });
+    }
+
+    [HttpGet("orphan-disk-files")]
     [RequirePermission("materials.read")]
     public async Task<ActionResult> GetOrphanDiskFiles(
         [FromQuery] int offset = 0,

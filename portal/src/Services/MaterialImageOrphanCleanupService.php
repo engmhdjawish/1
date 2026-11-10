@@ -15,8 +15,10 @@ use Throwable;
 final class MaterialImageOrphanCleanupService
 {
     private const SCAN_TTL_SECONDS = 3600;
-    private const PORTAL_CHUNK = 40;
+    private const PORTAL_CHUNK = 80;
     private const PURGE_CHUNK = 25;
+    private const REGISTRY_PAGES_PER_CHUNK = 30;
+    private const PORTAL_BATCHES_PER_REQUEST = 10;
 
     /**
      * @return array{
@@ -69,6 +71,77 @@ final class MaterialImageOrphanCleanupService
     /**
      * @return array<string, mixed>
      */
+    public static function loadRegistry(string $scanId): array
+    {
+        $cache = self::readCache($scanId);
+        if ($cache === null) {
+            return ['ok' => false, 'message' => 'انتهت جلسة الفحص — أعد «فحص آمن».'];
+        }
+
+        if ($cache['registry_done'] ?? false) {
+            $registry = is_array($cache['registry'] ?? null) ? $cache['registry'] : self::emptyRegistry();
+
+            return [
+                'ok' => true,
+                'done' => true,
+                'use_chunked' => false,
+                'registered_count' => (int) ($registry['registered_count'] ?? 0),
+                'message' => 'سجل الأمين جاهز.',
+            ];
+        }
+
+        try {
+            $apiResponse = ApiClient::get('/api/material-images/registry-index', [], 300);
+            $payload = self::apiPayload($apiResponse);
+            if (($payload['ok'] ?? false) && is_array($payload['fileNames'] ?? null)) {
+                $fileNames = [];
+                foreach ($payload['fileNames'] as $name) {
+                    $base = strtolower(basename(str_replace('\\', '/', (string) $name)));
+                    if ($base !== '') {
+                        $fileNames[$base] = true;
+                    }
+                }
+                $guids = [];
+                foreach ($payload['guids'] ?? [] as $guid) {
+                    $key = strtolower(trim((string) $guid));
+                    if ($key !== '') {
+                        $guids[$key] = true;
+                    }
+                }
+                $registry = [
+                    'file_names' => $fileNames,
+                    'guids' => $guids,
+                    'registered_count' => count($fileNames),
+                ];
+                $cache['registry'] = $registry;
+                $cache['registry_done'] = true;
+                $cache['registry_total'] = (int) ($payload['count'] ?? count($fileNames));
+                self::writeCache($scanId, $cache);
+
+                return [
+                    'ok' => true,
+                    'done' => true,
+                    'use_chunked' => false,
+                    'registered_count' => count($fileNames),
+                    'registry_total' => (int) ($payload['count'] ?? count($fileNames)),
+                    'message' => 'تحميل سجل الأمين دفعة واحدة — ' . count($fileNames) . ' صورة مسجّلة.',
+                ];
+            }
+        } catch (Throwable) {
+            // API قديم بدون registry-index — نكمل بالدفعات
+        }
+
+        return [
+            'ok' => true,
+            'done' => false,
+            'use_chunked' => true,
+            'message' => 'تحميل السجل على دفعات (حدّث API الأمين لتسريع أكبر).',
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     public static function scanRegistryChunk(string $scanId): array
     {
         $cache = self::readCache($scanId);
@@ -88,31 +161,42 @@ final class MaterialImageOrphanCleanupService
             ];
         }
 
-        $page = max(1, (int) ($cache['registry_page'] ?? 1));
-        try {
-            $chunk = MaterialImageLinkService::listSourcesPage($page, 60, 'all', '');
-        } catch (Throwable $exception) {
-            return [
-                'ok' => false,
-                'message' => 'تعذر قراءة سجل الأمين: ' . $exception->getMessage(),
-            ];
-        }
-
         $registry = is_array($cache['registry'] ?? null) ? $cache['registry'] : self::emptyRegistry();
         $fileNames = is_array($registry['file_names'] ?? null) ? $registry['file_names'] : [];
         $guids = is_array($registry['guids'] ?? null) ? $registry['guids'] : [];
+        $page = max(1, (int) ($cache['registry_page'] ?? 1));
+        $totalCount = (int) ($cache['registry_total'] ?? 0);
+        $done = false;
 
-        foreach ($chunk['items'] ?? [] as $item) {
-            if (!is_array($item)) {
-                continue;
+        for ($step = 0; $step < self::REGISTRY_PAGES_PER_CHUNK; $step++) {
+            try {
+                $chunk = MaterialImageLinkService::listSourcesPage($page, 60, 'all', '');
+            } catch (Throwable $exception) {
+                return [
+                    'ok' => false,
+                    'message' => 'تعذر قراءة سجل الأمين: ' . $exception->getMessage(),
+                ];
             }
-            $name = strtolower(basename(str_replace('\\', '/', (string) ($item['file_name'] ?? ''))));
-            if ($name !== '') {
-                $fileNames[$name] = true;
+
+            foreach ($chunk['items'] ?? [] as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $name = strtolower(basename(str_replace('\\', '/', (string) ($item['file_name'] ?? ''))));
+                if ($name !== '') {
+                    $fileNames[$name] = true;
+                }
+                $guid = strtolower(trim((string) ($item['amine_image_guid'] ?? '')));
+                if ($guid !== '') {
+                    $guids[$guid] = true;
+                }
             }
-            $guid = strtolower(trim((string) ($item['amine_image_guid'] ?? '')));
-            if ($guid !== '') {
-                $guids[$guid] = true;
+
+            $totalCount = max($totalCount, (int) ($chunk['total_count'] ?? 0));
+            $page++;
+            if (!($chunk['has_more'] ?? false)) {
+                $done = true;
+                break;
             }
         }
 
@@ -120,11 +204,8 @@ final class MaterialImageOrphanCleanupService
         $registry['guids'] = $guids;
         $registry['registered_count'] = count($fileNames);
 
-        $totalCount = max((int) ($cache['registry_total'] ?? 0), (int) ($chunk['total_count'] ?? 0));
-        $done = !($chunk['has_more'] ?? false);
-
         $cache['registry'] = $registry;
-        $cache['registry_page'] = $page + 1;
+        $cache['registry_page'] = $page;
         $cache['registry_total'] = $totalCount;
         $cache['registry_done'] = $done;
         self::writeCache($scanId, $cache);
@@ -191,8 +272,11 @@ final class MaterialImageOrphanCleanupService
     /**
      * @return array<string, mixed>
      */
-    public static function scanPortalChunk(string $scanId, int $chunkSize = self::PORTAL_CHUNK): array
-    {
+    public static function scanPortalChunk(
+        string $scanId,
+        int $chunkSize = self::PORTAL_CHUNK,
+        int $batches = self::PORTAL_BATCHES_PER_REQUEST
+    ): array {
         $cache = self::readCache($scanId);
         if ($cache === null) {
             return ['ok' => false, 'message' => 'انتهت جلسة الفحص — أعد «فحص آمن».'];
@@ -205,27 +289,37 @@ final class MaterialImageOrphanCleanupService
         $registry = is_array($cache['registry'] ?? null) ? $cache['registry'] : [];
         $files = is_array($cache['local_files'] ?? null) ? $cache['local_files'] : [];
         $offset = max(0, (int) ($cache['portal_offset'] ?? 0));
-        $chunkSize = max(5, min(80, $chunkSize));
-        $slice = array_slice($files, $offset, $chunkSize);
+        $chunkSize = max(20, min(120, $chunkSize));
+        $batches = max(1, min(15, $batches));
 
         $orphans = is_array($cache['portal_orphans'] ?? null) ? $cache['portal_orphans'] : [];
-        foreach ($slice as $file) {
-            $fileName = (string) ($file['file_name'] ?? '');
-            if ($fileName === '') {
-                continue;
+        for ($batch = 0; $batch < $batches; $batch++) {
+            $slice = array_slice($files, $offset, $chunkSize);
+            if ($slice === []) {
+                break;
             }
-            $reason = self::classifyPortalFile($fileName, $registry);
-            if ($reason !== null) {
-                $orphans[] = [
-                    'file_name' => $fileName,
-                    'reason' => $reason,
-                    'scope' => 'portal',
-                ];
+            foreach ($slice as $file) {
+                $fileName = (string) ($file['file_name'] ?? '');
+                if ($fileName === '') {
+                    continue;
+                }
+                $reason = self::classifyPortalFile($fileName, $registry);
+                if ($reason !== null) {
+                    $orphans[] = [
+                        'file_name' => $fileName,
+                        'reason' => $reason,
+                        'scope' => 'portal',
+                    ];
+                }
+            }
+            $offset += count($slice);
+            if ($offset >= count($files)) {
+                break;
             }
         }
 
         $cache['portal_orphans'] = $orphans;
-        $cache['portal_offset'] = $offset + count($slice);
+        $cache['portal_offset'] = $offset;
         self::writeCache($scanId, $cache);
 
         $total = count($files);

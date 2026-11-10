@@ -1293,6 +1293,18 @@ const API_URL = '/dashboard/material-images-api.php';
       setOrphanGhostProgress(3, init.message || 'تهيئة الفحص...');
 
       let registryDone = false;
+      const regLoad = await postOrphanCleanupAction('orphan-cleanup-load-registry', { scan_id: orphanGhostScanId });
+      if (!regLoad.ok) {
+        if (linkStatus) linkStatus.textContent = regLoad.message || 'توقّف تحميل سجل الأمين.';
+        return;
+      }
+      if (regLoad.done) {
+        registryDone = true;
+        setOrphanGhostProgress(
+          32,
+          regLoad.message || `سجل الأمين: ${regLoad.registered_count || 0} صورة`
+        );
+      }
       while (!registryDone) {
         const reg = await postOrphanCleanupAction('orphan-cleanup-registry-chunk', { scan_id: orphanGhostScanId });
         if (!reg.ok) {
@@ -1304,7 +1316,7 @@ const API_URL = '/dashboard/material-images-api.php';
         const loaded = Number(reg.registered_count || 0);
         setOrphanGhostProgress(
           5 + Math.min(28, (loaded / total) * 28),
-          reg.message || 'تحميل سجل الأمين...'
+          reg.message || 'تحميل سجل الأمين (دفعات)...'
         );
       }
 
@@ -1317,7 +1329,11 @@ const API_URL = '/dashboard/material-images-api.php';
 
       let portalDone = false;
       while (!portalDone) {
-        const chunk = await postOrphanCleanupAction('orphan-cleanup-scan-portal', { scan_id: orphanGhostScanId });
+        const chunk = await postOrphanCleanupAction('orphan-cleanup-scan-portal', {
+          scan_id: orphanGhostScanId,
+          chunk_size: '80',
+          batches: '10',
+        });
         if (!chunk.ok) {
           if (linkStatus) linkStatus.textContent = chunk.message || 'توقّف فحص الموقع.';
           return;
@@ -1333,7 +1349,10 @@ const API_URL = '/dashboard/material-images-api.php';
 
       let amineDone = false;
       while (!amineDone) {
-        const chunk = await postOrphanCleanupAction('orphan-cleanup-scan-amine', { scan_id: orphanGhostScanId });
+        const chunk = await postOrphanCleanupAction('orphan-cleanup-scan-amine', {
+          scan_id: orphanGhostScanId,
+          limit: '100',
+        });
         if (!chunk.ok) {
           if (linkStatus) linkStatus.textContent = chunk.message || 'توقّف فحص الأمين.';
           return;
