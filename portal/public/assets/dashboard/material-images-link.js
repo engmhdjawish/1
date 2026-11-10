@@ -1305,6 +1305,11 @@ const API_URL = '/dashboard/material-images-api.php';
           32,
           regLoad.message || `سجل الأمين: ${regLoad.registered_count || 0} صورة`
         );
+      } else {
+        setOrphanGhostProgress(
+          6,
+          regLoad.message || 'تحميل سجل الأمين (دفعات صغيرة)...'
+        );
       }
       while (!registryDone) {
         const reg = await postOrphanCleanupAction('orphan-cleanup-registry-chunk', { scan_id: orphanGhostScanId });
@@ -1333,7 +1338,7 @@ const API_URL = '/dashboard/material-images-api.php';
         const chunk = await postOrphanCleanupAction('orphan-cleanup-scan-portal', {
           scan_id: orphanGhostScanId,
           chunk_size: '80',
-          batches: '10',
+          batches: '8',
         });
         if (!chunk.ok) {
           if (linkStatus) linkStatus.textContent = chunk.message || 'توقّف فحص الموقع.';
