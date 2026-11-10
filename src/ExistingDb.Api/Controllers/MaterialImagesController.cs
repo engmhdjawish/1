@@ -387,14 +387,14 @@ public sealed class MaterialImagesController(
             }
 
             var imagePath = Path.GetFullPath(Path.Combine(settings.ImagesDirectory, fileName));
-            if (File.Exists(imagePath))
+            if (System.IO.File.Exists(imagePath))
             {
                 imageStorageService.DeleteFile(imagePath);
             }
 
             var thumbDir = Path.Combine(settings.ImagesDirectory, "thumbnails");
             var thumbPath = Path.GetFullPath(Path.Combine(thumbDir, fileName));
-            if (File.Exists(thumbPath))
+            if (System.IO.File.Exists(thumbPath))
             {
                 imageStorageService.DeleteFile(thumbPath);
             }
@@ -1633,7 +1633,7 @@ public sealed class MaterialImagesController(
         return set;
     }
 
-    private async Task<(List<OrphanDiskFileRow> orphans, DateTimeOffset scannedAt)> GetOrphanDiskScanCacheAsync(
+    private Task<(List<OrphanDiskFileRow> orphans, DateTimeOffset scannedAt)> GetOrphanDiskScanCacheAsync(
         string imagesDir,
         HashSet<string> registered,
         CancellationToken cancellationToken)
@@ -1643,13 +1643,14 @@ public sealed class MaterialImagesController(
             && string.Equals(_orphanScanImagesDir, imagesDir, StringComparison.OrdinalIgnoreCase)
             && now - _orphanScanCachedAt < OrphanDiskScanTtl)
         {
-            return (_orphanScanRows, _orphanScanCachedAt);
+            return Task.FromResult((_orphanScanRows, _orphanScanCachedAt));
         }
 
-        _ = cancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         var orphans = new List<OrphanDiskFileRow>();
         foreach (var path in Directory.EnumerateFiles(imagesDir))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var fileName = Path.GetFileName(path);
             if (!IsMaterialImageDiskFile(fileName))
             {
@@ -1671,7 +1672,7 @@ public sealed class MaterialImagesController(
         _orphanScanCachedAt = now;
         _orphanScanRows = orphans;
 
-        return (orphans, _orphanScanCachedAt);
+        return Task.FromResult((orphans, _orphanScanCachedAt));
     }
 
     private static void InvalidateOrphanDiskScanCache()
