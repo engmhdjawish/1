@@ -1,6 +1,9 @@
 -- تقرير جاهز: أعمار المواد (dbo.repGetAges_bi)
 -- شغّله على MainDb في SSMS (نفس قاعدة ConnectionStrings:MainDb).
 --
+-- أداة الموقع (قرار تصريف الراكد + صور + توليد عرض):
+--   /dashboard/stagnant-inventory.php  → API GET /api/inventory/ages
+--
 -- من وين الأسماء؟
 --   العملات          → جدول my000  (Code / Name / LatinName)
 --   مصادر التقرير    → جدول bt000  (نفس قائمة «الفواتير» في شاشة أعمار المواد)
@@ -77,6 +80,10 @@ END;
 DECLARE @Billtypes UNIQUEIDENTIFIER = NEWID();
 DECLARE @SrcCol SYSNAME;
 DECLARE @TypeCol SYSNAME;
+DECLARE @TblCol SYSNAME;
+DECLARE @IdTblInt INT;
+DECLARE @IdTblGuid UNIQUEIDENTIFIER;
+DECLARE @TblType SYSNAME;
 DECLARE @Sql NVARCHAR(MAX);
 DECLARE @Inserted INT = 0;
 
@@ -104,8 +111,17 @@ ORDER BY CASE c.name
     ELSE 9
 END;
 
+SELECT @TblCol = c.name
+FROM sys.columns c
+WHERE c.object_id = OBJECT_ID(N'dbo.RepSrcs')
+  AND c.name IN (N'IdTbl', N'Tbl', N'TableId', N'TblId')
+ORDER BY CASE c.name
+    WHEN N'IdTbl' THEN 1
+    ELSE 9
+END;
+
 PRINT N'RepSrcs columns:';
-SELECT c.name AS ColumnName, t.name AS TypeName
+SELECT c.name AS ColumnName, t.name AS TypeName, c.is_nullable
 FROM sys.columns c
 INNER JOIN sys.types t ON t.user_type_id = c.user_type_id
 WHERE c.object_id = OBJECT_ID(N'dbo.RepSrcs')
@@ -119,14 +135,106 @@ BEGIN
     RETURN;
 END;
 
+-- IdTbl إلزامي في AmnDb2026: قد يكون INT أو UNIQUEIDENTIFIER حسب إصدار الأمين.
+IF @TblCol IS NOT NULL
+BEGIN
+    SELECT @TblType = t.name
+    FROM sys.columns c
+    INNER JOIN sys.types t ON t.user_type_id = c.user_type_id
+    WHERE c.object_id = OBJECT_ID(N'dbo.RepSrcs') AND c.name = @TblCol;
+
+    IF @TblType = N'uniqueidentifier'
+    BEGIN
+        SET @Sql = N'
+SELECT TOP (1) @pIdTbl = r.' + QUOTENAME(@TblCol) + N'
+FROM dbo.RepSrcs AS r
+INNER JOIN dbo.[bt000] AS bt ON bt.[GUID] = r.' + QUOTENAME(@TypeCol) + N'
+GROUP BY r.' + QUOTENAME(@TblCol) + N'
+ORDER BY COUNT(*) DESC;';
+        EXEC sys.sp_executesql @Sql, N'@pIdTbl uniqueidentifier OUTPUT', @pIdTbl = @IdTblGuid OUTPUT;
+        IF @IdTblGuid IS NULL
+        BEGIN
+            RAISERROR(N'RepSrcs.IdTbl من نوع uniqueidentifier ولا توجد عيّنة مع bt000. افتح أعمار المواد في الأمين مع كل مصادر الفواتير مرة ثم أعد السكربت.', 16, 1);
+            RETURN;
+        END;
+        PRINT N'RepSrcs.IdTbl (GUID) للفواتير = ' + CONVERT(NVARCHAR(36), @IdTblGuid);
+    END
+    ELSE
+    BEGIN
+        SET @Sql = N'
+SELECT TOP (1) @pIdTbl = r.' + QUOTENAME(@TblCol) + N'
+FROM dbo.RepSrcs AS r
+INNER JOIN dbo.[bt000] AS bt ON bt.[GUID] = r.' + QUOTENAME(@TypeCol) + N'
+GROUP BY r.' + QUOTENAME(@TblCol) + N'
+ORDER BY COUNT(*) DESC;';
+        EXEC sys.sp_executesql @Sql, N'@pIdTbl INT OUTPUT', @pIdTbl = @IdTblInt OUTPUT;
+        IF @IdTblInt IS NULL SET @IdTblInt = 2;
+        PRINT N'RepSrcs.IdTbl (INT) للفواتير = ' + CONVERT(NVARCHAR(12), @IdTblInt);
+    END
+END;
+
+DECLARE @IdSubType INT = 0;
+IF COL_LENGTH(N'dbo.RepSrcs', N'IdSubType') IS NOT NULL
+BEGIN
+    SET @Sql = N'
+SELECT TOP (1) @pSub = r.[IdSubType]
+FROM dbo.RepSrcs AS r
+INNER JOIN dbo.[bt000] AS bt ON bt.[GUID] = r.' + QUOTENAME(@TypeCol) + N'
+GROUP BY r.[IdSubType]
+ORDER BY COUNT(*) DESC;';
+    EXEC sys.sp_executesql @Sql, N'@pSub INT OUTPUT', @pSub = @IdSubType OUTPUT;
+    IF @IdSubType IS NULL SET @IdSubType = 0;
+END;
+
 BEGIN TRY
     BEGIN TRAN;
 
-    SET @Sql = N'
+    -- AmnDb2026: GUID + IdType + IdTbl + SPID + IdSubType + HostId + HostName
+    IF @TblCol IS NOT NULL AND @TblType = N'uniqueidentifier'
+       AND COL_LENGTH(N'dbo.RepSrcs', N'SPID') IS NOT NULL
+       AND COL_LENGTH(N'dbo.RepSrcs', N'HostId') IS NOT NULL
+    BEGIN
+        SET @Sql = N'
+INSERT INTO dbo.RepSrcs (
+    ' + QUOTENAME(@SrcCol) + N', ' + QUOTENAME(@TypeCol) + N', ' + QUOTENAME(@TblCol) + N',
+    [SPID], [IdSubType], [HostId], [HostName], [CreateDate]
+)
+SELECT
+    @pSrc, bt.[GUID], @pTbl,
+    @@SPID, @pSub,
+    CONVERT(nvarchar(128), ISNULL(HOST_ID(), N''ssms'')),
+    CONVERT(nvarchar(128), ISNULL(HOST_NAME(), N''ssms'')),
+    GETDATE()
+FROM dbo.[bt000] AS bt;';
+        EXEC sys.sp_executesql
+            @Sql,
+            N'@pSrc uniqueidentifier, @pTbl uniqueidentifier, @pSub int',
+            @pSrc = @Billtypes, @pTbl = @IdTblGuid, @pSub = @IdSubType;
+    END
+    ELSE IF @TblCol IS NOT NULL AND @TblType = N'uniqueidentifier'
+    BEGIN
+        SET @Sql = N'
+INSERT INTO dbo.RepSrcs (' + QUOTENAME(@SrcCol) + N', ' + QUOTENAME(@TypeCol) + N', ' + QUOTENAME(@TblCol) + N')
+SELECT @pSrc, bt.[GUID], @pTbl
+FROM dbo.[bt000] AS bt;';
+        EXEC sys.sp_executesql @Sql, N'@pSrc uniqueidentifier, @pTbl uniqueidentifier', @pSrc = @Billtypes, @pTbl = @IdTblGuid;
+    END
+    ELSE IF @TblCol IS NOT NULL
+    BEGIN
+        SET @Sql = N'
+INSERT INTO dbo.RepSrcs (' + QUOTENAME(@SrcCol) + N', ' + QUOTENAME(@TypeCol) + N', ' + QUOTENAME(@TblCol) + N')
+SELECT @pSrc, bt.[GUID], @pTbl
+FROM dbo.[bt000] AS bt;';
+        EXEC sys.sp_executesql @Sql, N'@pSrc uniqueidentifier, @pTbl int', @pSrc = @Billtypes, @pTbl = @IdTblInt;
+    END
+    ELSE
+    BEGIN
+        SET @Sql = N'
 INSERT INTO dbo.RepSrcs (' + QUOTENAME(@SrcCol) + N', ' + QUOTENAME(@TypeCol) + N')
 SELECT @pSrc, bt.[GUID]
 FROM dbo.[bt000] AS bt;';
-    EXEC sys.sp_executesql @Sql, N'@pSrc uniqueidentifier', @pSrc = @Billtypes;
+        EXEC sys.sp_executesql @Sql, N'@pSrc uniqueidentifier', @pSrc = @Billtypes;
+    END
     SET @Inserted = @@ROWCOUNT;
 
     IF @Inserted = 0

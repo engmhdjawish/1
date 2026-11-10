@@ -850,6 +850,9 @@
     if (typeof window.portalSpecialOffersInit === 'function') {
       window.portalSpecialOffersInit(root);
     }
+    if (typeof window.portalStagnantInventoryInit === 'function') {
+      window.portalStagnantInventoryInit(root);
+    }
     if (typeof window.portalMediaPickerInit === 'function') {
       window.portalMediaPickerInit();
     }
