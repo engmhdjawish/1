@@ -1694,13 +1694,6 @@ public sealed class MaterialImagesController(
 
     private sealed record OrphanDiskFileRow(string FileName, long SizeBytes);
 
-    private sealed class PurgeOrphanDiskFilesRequest
-    {
-        public List<string>? FileNames { get; set; }
-
-        public bool DryRun { get; set; }
-    }
-
     private static string? ExtractFileName(string? pathLikeValue)
     {
         if (string.IsNullOrWhiteSpace(pathLikeValue))
