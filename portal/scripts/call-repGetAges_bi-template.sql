@@ -1,5 +1,7 @@
 -- Confirmed Amine inventory-age report: dbo.repGetAges_bi
 -- UI: تقارير المخزون → أعمار المواد (matches this procedure).
+-- Prefer ready script (lists currency + bill-type names, builds all sources):
+--   portal/scripts/run-inventory-ages-report.sql
 --
 -- Result columns (from probe):
 --   MatPtr, Price, Total, Qty, Date, Remaining, Age, MatClass, MatStore,
