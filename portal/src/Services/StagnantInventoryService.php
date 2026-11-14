@@ -203,8 +203,9 @@ final class StagnantInventoryService
                 'stagnantRemainingQty' => (float) ($row['remainingQuantity'] ?? $row['RemainingQuantity'] ?? 0),
                 'maxAgeDays' => (float) ($row['oldestAgeDays'] ?? $row['OldestAgeDays'] ?? 0),
                 'oldestPurchaseDate' => $oldestDate,
-                'unitSalePriceUsd' => self::nullableNumber($row['endUser'] ?? $row['EndUser'] ?? null),
-                'unitPurchasePriceUsd' => self::nullableNumber($row['lastPrice'] ?? $row['LastPrice'] ?? null),
+                // Jawish card mapping: Half = sale, EndUser = purchase.
+                'unitSalePriceUsd' => self::nullableNumber($row['half'] ?? $row['Half'] ?? null),
+                'unitPurchasePriceUsd' => self::nullableNumber($row['endUser'] ?? $row['EndUser'] ?? null),
                 'unitSalePriceSyp' => self::nullableNumber($row['whole'] ?? $row['Whole'] ?? null),
                 'storeBalances' => is_array($row['storeBalances'] ?? null) ? $row['storeBalances'] : [],
             ];

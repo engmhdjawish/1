@@ -287,7 +287,7 @@ $buildUrl = static function (array $overrides) use ($queryBase, $selectedStoreGu
       مثال: حد أدنى 60 وحد أقصى 120 → مواد راكدة بين شهرين وأربعة أشهر فقط.
       <br>
       <span class="font-bold text-slate-700">الأسعار:</span>
-      البيع من بطاقة المادة <code class="font-mono">EndUser</code>، والشراء من <code class="font-mono">LastPrice</code> في جدول الأمين <code class="font-mono">mt000</code> (ليست أسعار طبقة FIFO).
+      المبيع من <code class="font-mono">Half</code>، والشراء من <code class="font-mono">EndUser</code> في بطاقة المادة <code class="font-mono">mt000</code> (ليست أسعار طبقة FIFO).
     </p>
   </div>
 
@@ -377,8 +377,8 @@ $buildUrl = static function (array $overrides) use ($queryBase, $selectedStoreGu
             <th class="px-3 py-3 text-right font-bold">الكمية</th>
             <th class="px-3 py-3 text-right font-bold">العمر (يوم)</th>
             <th class="px-3 py-3 text-right font-bold">أقدم شراء</th>
-            <th class="px-3 py-3 text-right font-bold" title="mt000.EndUser">بيع (EndUser)</th>
-            <th class="px-3 py-3 text-right font-bold" title="mt000.LastPrice">شراء (LastPrice)</th>
+            <th class="px-3 py-3 text-right font-bold" title="mt000.Half">المبيع (Half)</th>
+            <th class="px-3 py-3 text-right font-bold" title="mt000.EndUser">الشراء (EndUser)</th>
           </tr>
         </thead>
         <tbody>

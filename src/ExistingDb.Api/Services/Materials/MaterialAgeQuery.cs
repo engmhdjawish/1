@@ -307,6 +307,7 @@ public sealed class MaterialAgeQuery(MainDbContext mainDbContext)
                         layerPayload,
                         catalog.PictureGuid,
                         catalog.EndUser,
+                        catalog.Half,
                         catalog.Whole,
                         catalog.LastPrice,
                         catalog.AvgPrice,
@@ -456,17 +457,18 @@ public sealed class MaterialAgeQuery(MainDbContext mainDbContext)
                 .OrderByDescending(r => r.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase),
             "code:asc" => rows
                 .OrderBy(r => r.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            // Jawish card: Half = sale, EndUser = purchase.
             "price:desc" => rows
-                .OrderByDescending(r => r.EndUser ?? double.MinValue)
+                .OrderByDescending(r => r.Half ?? double.MinValue)
                 .ThenBy(r => r.Number ?? int.MaxValue),
             "price:asc" => rows
-                .OrderBy(r => r.EndUser ?? double.MaxValue)
+                .OrderBy(r => r.Half ?? double.MaxValue)
                 .ThenBy(r => r.Number ?? int.MaxValue),
             "purchase:desc" => rows
-                .OrderByDescending(r => r.LastPrice ?? double.MinValue)
+                .OrderByDescending(r => r.EndUser ?? double.MinValue)
                 .ThenBy(r => r.Number ?? int.MaxValue),
             "purchase:asc" => rows
-                .OrderBy(r => r.LastPrice ?? double.MaxValue)
+                .OrderBy(r => r.EndUser ?? double.MaxValue)
                 .ThenBy(r => r.Number ?? int.MaxValue),
             _ => rows
                 .OrderBy(r => r.Number ?? int.MaxValue)
@@ -785,6 +787,7 @@ WHERE ISNULL(bu.[IsPosted], 0) <> 0
         string? Unit,
         Guid? PictureGuid,
         double? EndUser,
+        double? Half,
         double? Whole,
         double? LastPrice,
         double? AvgPrice,
@@ -817,6 +820,7 @@ SELECT
     mt.[Unity],
     mt.[PictureGUID],
     mt.[EndUser],
+    mt.[Half],
     mt.[Whole],
     mt.[LastPrice],
     mt.[AvgPrice],
@@ -901,7 +905,8 @@ WHERE 1 = 1
                 reader.IsDBNull(13) ? null : Convert.ToDouble(reader.GetValue(13), CultureInfo.InvariantCulture),
                 reader.IsDBNull(14) ? null : Convert.ToDouble(reader.GetValue(14), CultureInfo.InvariantCulture),
                 reader.IsDBNull(15) ? null : Convert.ToDouble(reader.GetValue(15), CultureInfo.InvariantCulture),
-                reader.IsDBNull(16) ? null : Convert.ToDouble(reader.GetValue(16), CultureInfo.InvariantCulture)));
+                reader.IsDBNull(16) ? null : Convert.ToDouble(reader.GetValue(16), CultureInfo.InvariantCulture),
+                reader.IsDBNull(17) ? null : Convert.ToDouble(reader.GetValue(17), CultureInfo.InvariantCulture)));
         }
 
         return rows;

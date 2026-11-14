@@ -33,6 +33,7 @@ public sealed record MaterialAgeRowResponse(
     IReadOnlyList<MaterialAgeLayerResponse>? Layers,
     Guid? PictureGuid = null,
     double? EndUser = null,
+    double? Half = null,
     double? Whole = null,
     double? LastPrice = null,
     double? AvgPrice = null,
