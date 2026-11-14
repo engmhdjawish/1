@@ -954,6 +954,8 @@ final class OrderService
         }
         unset($item);
 
+        $items = OrderLineImageService::applyCurrentMaterialImages($items);
+
         $order['summary'] = [
             'items_count' => $activeCount,
             'packages_count' => $totalPackages,
