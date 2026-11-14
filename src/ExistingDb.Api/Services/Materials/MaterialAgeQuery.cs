@@ -11,6 +11,9 @@ namespace ExistingDb.Api.Services.Materials;
 
 public sealed class MaterialAgeQuery(MainDbContext mainDbContext)
 {
+    private const int CommandTimeoutSeconds = 180;
+    private const int MaterialBatchSize = 200;
+
     public sealed class Request
     {
         /// <summary>Null means use CAST(GETDATE() AS date) on the MainDb connection.</summary>
@@ -61,32 +64,6 @@ public sealed class MaterialAgeQuery(MainDbContext mainDbContext)
             return (null, storeCheck);
         }
 
-        var billTypes = await LoadBillTypesAsync(cancellationToken);
-        var stockMoving = billTypes.Where(t => t.MovesStock).Select(t => t.BillTypeGuid).ToHashSet();
-        IReadOnlyList<Guid> effectiveBillTypes;
-        if (request.BillTypeGuids.Count == 0)
-        {
-            effectiveBillTypes = stockMoving.ToArray();
-        }
-        else
-        {
-            foreach (var guid in request.BillTypeGuids)
-            {
-                var row = billTypes.FirstOrDefault(t => t.BillTypeGuid == guid);
-                if (row is null)
-                {
-                    return (null, new ValidationError("Unknown bill type.", BillTypeGuid: guid));
-                }
-
-                if (!row.MovesStock)
-                {
-                    return (null, new ValidationError("Bill type does not move stock.", BillTypeGuid: guid));
-                }
-            }
-
-            effectiveBillTypes = request.BillTypeGuids;
-        }
-
         var connection = mainDbContext.Database.GetDbConnection();
         var sqlConnection = connection as SqlConnection
             ?? throw new InvalidOperationException("MainDb provider must be SQL Server.");
@@ -99,140 +76,234 @@ public sealed class MaterialAgeQuery(MainDbContext mainDbContext)
 
         try
         {
+            var schemaError = await ValidateRequiredColumnsAsync(sqlConnection, cancellationToken);
+            if (schemaError is not null)
+            {
+                return (null, new ValidationError(schemaError));
+            }
+
+            var billTypes = await LoadBillTypesAsync(sqlConnection, cancellationToken);
+            var stockMoving = billTypes.Where(t => t.MovesStock).Select(t => t.BillTypeGuid).ToHashSet();
+            IReadOnlyList<Guid> effectiveBillTypes;
+            if (request.BillTypeGuids.Count == 0)
+            {
+                effectiveBillTypes = stockMoving.ToArray();
+            }
+            else
+            {
+                foreach (var guid in request.BillTypeGuids)
+                {
+                    var row = billTypes.FirstOrDefault(t => t.BillTypeGuid == guid);
+                    if (row is null)
+                    {
+                        return (null, new ValidationError("Unknown bill type.", BillTypeGuid: guid));
+                    }
+
+                    if (!row.MovesStock)
+                    {
+                        return (null, new ValidationError("Bill type does not move stock.", BillTypeGuid: guid));
+                    }
+                }
+
+                effectiveBillTypes = request.BillTypeGuids;
+            }
+
+            if (effectiveBillTypes.Count == 0)
+            {
+                return (BuildEmptyResponse(request, ageMode, DateOnly.FromDateTime(DateTime.Today), effectiveBillTypes), null);
+            }
+
             var asOf = request.AsOf ?? await ReadSqlCalendarDateAsync(sqlConnection, cancellationToken);
+            var storeMeta = await LoadStoreMetaAsync(sqlConnection, cancellationToken);
 
-            var lines = await LoadMovementLinesAsync(
-                sqlConnection,
-                request,
-                asOf,
-                effectiveBillTypes,
-                cancellationToken);
+            // Prefer ms000 candidates so we never pull the entire bi000 history into memory.
+            Guid[] candidateMaterialGuids;
+            Dictionary<(Guid Mat, Guid Store), double> ms000;
+            if (request.SkipEmpty)
+            {
+                ms000 = await LoadMs000Async(
+                    sqlConnection,
+                    request.StoreGuids,
+                    materialGuids: null,
+                    skipZeroQty: request.SkipZeroBalance,
+                    cancellationToken);
+                candidateMaterialGuids = ms000.Keys.Select(k => k.Mat).Distinct().ToArray();
+            }
+            else
+            {
+                var catalogAll = await LoadCatalogMaterialsAsync(
+                    sqlConnection,
+                    request,
+                    restrictToMaterialGuids: null,
+                    cancellationToken);
+                candidateMaterialGuids = catalogAll.Select(m => m.MaterialGuid).ToArray();
+                ms000 = await LoadMs000Async(
+                    sqlConnection,
+                    request.StoreGuids,
+                    candidateMaterialGuids,
+                    skipZeroQty: false,
+                    cancellationToken);
+            }
 
-            var lineMaterialGuids = lines.Select(l => l.MaterialGuid).Distinct().ToArray();
+            if (candidateMaterialGuids.Length == 0)
+            {
+                return (BuildEmptyResponse(request, ageMode, asOf, effectiveBillTypes), null);
+            }
+
+            // Apply catalog filters to candidates (keyword/type/group/company).
             var catalogMaterials = await LoadCatalogMaterialsAsync(
                 sqlConnection,
                 request,
-                request.SkipEmpty ? lineMaterialGuids : null,
+                candidateMaterialGuids,
                 cancellationToken);
-
-            var catalogByGuid = catalogMaterials.ToDictionary(m => m.MaterialGuid);
-            var candidateMaterials = request.SkipEmpty
-                ? lineMaterialGuids.Where(catalogByGuid.ContainsKey).ToHashSet()
-                : catalogByGuid.Keys.ToHashSet();
-
-            var ms000 = await LoadMs000Async(
-                sqlConnection,
-                request.StoreGuids,
-                candidateMaterials.ToArray(),
-                cancellationToken);
-
-            var storeMeta = await LoadStoreMetaAsync(sqlConnection, cancellationToken);
-
-            var fifo = MaterialAgeCalculator.Compute(lines, asOf);
-            var fifoByMaterial = fifo.GroupBy(r => r.MaterialGuid)
-                .ToDictionary(g => g.Key, g => g.ToList());
+            var catalogByGuid = catalogMaterials
+                .GroupBy(m => m.MaterialGuid)
+                .ToDictionary(g => g.Key, g => g.First());
+            candidateMaterialGuids = candidateMaterialGuids.Where(catalogByGuid.ContainsKey).ToArray();
+            if (candidateMaterialGuids.Length == 0)
+            {
+                return (BuildEmptyResponse(request, ageMode, asOf, effectiveBillTypes), null);
+            }
 
             var rows = new List<MaterialAgeRowResponse>();
-            foreach (var materialGuid in candidateMaterials)
+            for (var offset = 0; offset < candidateMaterialGuids.Length; offset += MaterialBatchSize)
             {
-                var catalog = catalogByGuid[materialGuid];
-                var storeResults = fifoByMaterial.GetValueOrDefault(materialGuid) ?? [];
-                var allLayers = storeResults.SelectMany(s => s.Layers).ToList();
-                var net = storeResults.Sum(s => s.NetQuantity);
-
-                if (request.SkipZeroBalance && MaterialAgeCalculator.IsZero(net))
-                {
-                    continue;
-                }
-
-                var modeLayers = allLayers;
-                if (ageMode == "layers" && (request.MinAgeDays is not null || request.MaxAgeDays is not null))
-                {
-                    modeLayers = allLayers
-                        .Where(layer => InAgeBand(layer.AgeDays, request.MinAgeDays, request.MaxAgeDays))
-                        .ToList();
-                    if (modeLayers.Count == 0)
-                    {
-                        continue;
-                    }
-                }
-
-                int? oldestAge = MaterialAgeCalculator.OldestAgeDays(modeLayers, asOf);
-                double? weighted = MaterialAgeCalculator.WeightedAgeDays(modeLayers);
-                DateOnly? oldestDate = MaterialAgeCalculator.OldestDate(modeLayers);
-
-                if (ageMode is "oldest" or "weightedAverage"
-                    && (request.MinAgeDays is not null || request.MaxAgeDays is not null))
-                {
-                    double? bandValue = ageMode == "oldest" ? oldestAge : weighted;
-                    if (bandValue is null || !InAgeBand(bandValue.Value, request.MinAgeDays, request.MaxAgeDays))
-                    {
-                        continue;
-                    }
-                }
-
-                var storeBalances = BuildStoreBalances(
-                    materialGuid,
-                    storeResults,
-                    modeLayers,
-                    ageMode,
-                    asOf,
+                var batch = candidateMaterialGuids.Skip(offset).Take(MaterialBatchSize).ToArray();
+                var lines = await LoadMovementLinesAsync(
+                    sqlConnection,
                     request,
-                    ms000,
-                    storeMeta);
+                    asOf,
+                    effectiveBillTypes,
+                    batch,
+                    cancellationToken);
 
-                double remainingQuantity;
-                if (ageMode == "layers" && (request.MinAgeDays is not null || request.MaxAgeDays is not null))
-                {
-                    remainingQuantity = modeLayers.Sum(l => l.RemainingQuantity);
-                }
-                else
-                {
-                    remainingQuantity = net;
-                }
+                var fifo = MaterialAgeCalculator.Compute(lines, asOf);
+                var fifoByMaterial = fifo.GroupBy(r => r.MaterialGuid)
+                    .ToDictionary(g => g.Key, g => g.ToList());
 
-                IReadOnlyList<MaterialAgeLayerResponse>? layerPayload = null;
-                if (ageMode == "layers")
+                foreach (var materialGuid in batch)
                 {
-                    layerPayload = modeLayers
-                        .OrderBy(l => storeMeta.GetValueOrDefault(l.StoreGuid)?.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-                        .ThenBy(l => l.BillDate)
-                        .ThenBy(l => l.BillNumber ?? int.MaxValue)
-                        .ThenBy(l => l.LineNumber ?? int.MaxValue)
-                        .ThenBy(l => l.LineGuid)
-                        .Select(l => new MaterialAgeLayerResponse(
-                            l.StoreGuid,
-                            l.LineGuid,
-                            l.BillGuid,
-                            l.BillNumber,
-                            l.BillDate,
-                            l.LineNumber,
-                            l.BillTypeGuid,
-                            l.BillTypeName,
-                            l.InboundQuantity,
-                            l.RemainingQuantity,
-                            l.AgeDays))
-                        .ToArray();
-                }
+                    if (!catalogByGuid.TryGetValue(materialGuid, out var catalog))
+                    {
+                        continue;
+                    }
 
-                rows.Add(new MaterialAgeRowResponse(
-                    catalog.MaterialGuid,
-                    catalog.Number,
-                    catalog.Code,
-                    catalog.Name,
-                    catalog.LatinName,
-                    catalog.Company,
-                    catalog.GroupGuid,
-                    catalog.GroupCode,
-                    catalog.GroupName,
-                    catalog.MaterialType,
-                    catalog.Unit,
-                    remainingQuantity,
-                    ageMode == "oldest" ? oldestDate : null,
-                    ageMode == "oldest" ? oldestAge : null,
-                    ageMode == "weightedAverage" ? weighted : null,
-                    storeBalances,
-                    layerPayload));
+                    var storeResults = fifoByMaterial.GetValueOrDefault(materialGuid) ?? [];
+                    var allLayers = storeResults.SelectMany(s => s.Layers).ToList();
+                    var net = storeResults.Sum(s => s.NetQuantity);
+
+                    // Materials with ms000 but no posted history still appear when skipEmpty.
+                    if (storeResults.Count == 0 && request.SkipEmpty)
+                    {
+                        var msStores = ms000.Keys.Where(k => k.Mat == materialGuid).Select(k => k.Store).ToList();
+                        if (msStores.Count == 0)
+                        {
+                            continue;
+                        }
+                    }
+
+                    if (request.SkipZeroBalance && MaterialAgeCalculator.IsZero(net))
+                    {
+                        var msNet = ms000.Where(kv => kv.Key.Mat == materialGuid).Sum(kv => kv.Value);
+                        if (MaterialAgeCalculator.IsZero(msNet) && MaterialAgeCalculator.IsZero(net))
+                        {
+                            continue;
+                        }
+                    }
+
+                    var modeLayers = allLayers;
+                    if (ageMode == "layers" && (request.MinAgeDays is not null || request.MaxAgeDays is not null))
+                    {
+                        modeLayers = allLayers
+                            .Where(layer => InAgeBand(layer.AgeDays, request.MinAgeDays, request.MaxAgeDays))
+                            .ToList();
+                        if (modeLayers.Count == 0)
+                        {
+                            continue;
+                        }
+                    }
+
+                    int? oldestAge = MaterialAgeCalculator.OldestAgeDays(modeLayers, asOf);
+                    double? weighted = MaterialAgeCalculator.WeightedAgeDays(modeLayers);
+                    DateOnly? oldestDate = MaterialAgeCalculator.OldestDate(modeLayers);
+
+                    if (ageMode is "oldest" or "weightedAverage"
+                        && (request.MinAgeDays is not null || request.MaxAgeDays is not null))
+                    {
+                        double? bandValue = ageMode == "oldest" ? oldestAge : weighted;
+                        if (bandValue is null || !InAgeBand(bandValue.Value, request.MinAgeDays, request.MaxAgeDays))
+                        {
+                            continue;
+                        }
+                    }
+
+                    var storeBalances = BuildStoreBalances(
+                        materialGuid,
+                        storeResults,
+                        modeLayers,
+                        ageMode,
+                        asOf,
+                        request,
+                        ms000,
+                        storeMeta);
+
+                    double remainingQuantity;
+                    if (ageMode == "layers" && (request.MinAgeDays is not null || request.MaxAgeDays is not null))
+                    {
+                        remainingQuantity = modeLayers.Sum(l => l.RemainingQuantity);
+                    }
+                    else if (storeResults.Count > 0)
+                    {
+                        remainingQuantity = net;
+                    }
+                    else
+                    {
+                        remainingQuantity = ms000.Where(kv => kv.Key.Mat == materialGuid).Sum(kv => kv.Value);
+                    }
+
+                    IReadOnlyList<MaterialAgeLayerResponse>? layerPayload = null;
+                    if (ageMode == "layers")
+                    {
+                        layerPayload = modeLayers
+                            .OrderBy(l => storeMeta.GetValueOrDefault(l.StoreGuid)?.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                            .ThenBy(l => l.BillDate)
+                            .ThenBy(l => l.BillNumber ?? int.MaxValue)
+                            .ThenBy(l => l.LineNumber ?? int.MaxValue)
+                            .ThenBy(l => l.LineGuid)
+                            .Select(l => new MaterialAgeLayerResponse(
+                                l.StoreGuid,
+                                l.LineGuid,
+                                l.BillGuid,
+                                l.BillNumber,
+                                l.BillDate,
+                                l.LineNumber,
+                                l.BillTypeGuid,
+                                l.BillTypeName,
+                                l.InboundQuantity,
+                                l.RemainingQuantity,
+                                l.AgeDays))
+                            .ToArray();
+                    }
+
+                    rows.Add(new MaterialAgeRowResponse(
+                        catalog.MaterialGuid,
+                        catalog.Number,
+                        catalog.Code,
+                        catalog.Name,
+                        catalog.LatinName,
+                        catalog.Company,
+                        catalog.GroupGuid,
+                        catalog.GroupCode,
+                        catalog.GroupName,
+                        catalog.MaterialType,
+                        catalog.Unit,
+                        remainingQuantity,
+                        ageMode == "oldest" ? oldestDate : null,
+                        ageMode == "oldest" ? oldestAge : null,
+                        ageMode == "weightedAverage" ? weighted : null,
+                        storeBalances,
+                        layerPayload));
+                }
             }
 
             var ordered = rows
@@ -253,7 +324,7 @@ public sealed class MaterialAgeQuery(MainDbContext mainDbContext)
                 _ => "several"
             };
 
-            var response = new MaterialAgeResponse(
+            return (new MaterialAgeResponse(
                 asOf.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 ageMode,
                 storeScope,
@@ -264,9 +335,7 @@ public sealed class MaterialAgeQuery(MainDbContext mainDbContext)
                 page,
                 pageSize,
                 totalCount,
-                pageItems);
-
-            return (response, null);
+                pageItems), null);
         }
         finally
         {
@@ -279,8 +348,61 @@ public sealed class MaterialAgeQuery(MainDbContext mainDbContext)
 
     public async Task<MaterialAgeBillTypeListResponse> ListBillTypesAsync(CancellationToken cancellationToken)
     {
-        var types = await LoadBillTypesAsync(cancellationToken);
-        return new MaterialAgeBillTypeListResponse(types);
+        var connection = mainDbContext.Database.GetDbConnection();
+        var sqlConnection = connection as SqlConnection
+            ?? throw new InvalidOperationException("MainDb provider must be SQL Server.");
+        var shouldClose = sqlConnection.State != ConnectionState.Open;
+        if (shouldClose)
+        {
+            await sqlConnection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            var schemaError = await ValidateRequiredColumnsAsync(sqlConnection, cancellationToken);
+            if (schemaError is not null)
+            {
+                throw new InvalidOperationException(schemaError);
+            }
+
+            var types = await LoadBillTypesAsync(sqlConnection, cancellationToken);
+            return new MaterialAgeBillTypeListResponse(types);
+        }
+        finally
+        {
+            if (shouldClose)
+            {
+                await sqlConnection.CloseAsync();
+            }
+        }
+    }
+
+    private static MaterialAgeResponse BuildEmptyResponse(
+        Request request,
+        string ageMode,
+        DateOnly asOf,
+        IReadOnlyList<Guid> effectiveBillTypes)
+    {
+        var page = Math.Max(1, request.Page);
+        var pageSize = Math.Clamp(request.PageSize, 1, 500);
+        var storeScope = request.StoreGuids.Count switch
+        {
+            0 => "all",
+            1 => "one",
+            _ => "several"
+        };
+        return new MaterialAgeResponse(
+            asOf.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            ageMode,
+            storeScope,
+            request.SkipEmpty,
+            request.SkipZeroBalance,
+            request.StoreGuids,
+            effectiveBillTypes,
+            page,
+            pageSize,
+            0,
+            []);
     }
 
     private static bool InAgeBand(double ageDays, int? minAgeDays, int? maxAgeDays)
@@ -314,14 +436,11 @@ public sealed class MaterialAgeQuery(MainDbContext mainDbContext)
             storeIds.Add(result.StoreGuid);
         }
 
-        if (!request.SkipEmpty)
+        foreach (var key in ms000.Keys.Where(k => k.Mat == materialGuid))
         {
-            foreach (var key in ms000.Keys.Where(k => k.Mat == materialGuid))
+            if (request.StoreGuids.Count == 0 || request.StoreGuids.Contains(key.Store))
             {
-                if (request.StoreGuids.Count == 0 || request.StoreGuids.Contains(key.Store))
-                {
-                    storeIds.Add(key.Store);
-                }
+                storeIds.Add(key.Store);
             }
         }
 
@@ -340,9 +459,13 @@ public sealed class MaterialAgeQuery(MainDbContext mainDbContext)
             {
                 remaining = layersForStore.Sum(l => l.RemainingQuantity);
             }
+            else if (result is not null)
+            {
+                remaining = result.NetQuantity;
+            }
             else
             {
-                remaining = result?.NetQuantity ?? 0;
+                ms000.TryGetValue((materialGuid, storeGuid), out remaining);
             }
 
             var layersForAges = ageMode == "layers" ? layersForStore : (result?.Layers.ToList() ?? []);
@@ -393,21 +516,89 @@ public sealed class MaterialAgeQuery(MainDbContext mainDbContext)
         return null;
     }
 
-    private async Task<List<MaterialAgeBillTypeResponse>> LoadBillTypesAsync(CancellationToken cancellationToken)
+    private static async Task<string?> ValidateRequiredColumnsAsync(
+        SqlConnection sqlConnection,
+        CancellationToken cancellationToken)
     {
-        var connection = mainDbContext.Database.GetDbConnection();
-        var sqlConnection = (SqlConnection)connection;
-        var shouldClose = sqlConnection.State != ConnectionState.Open;
-        if (shouldClose)
+        var required = new (string Table, string Column)[]
         {
-            await sqlConnection.OpenAsync(cancellationToken);
+            ("bi000", "GUID"),
+            ("bi000", "Number"),
+            ("bi000", "ParentGUID"),
+            ("bi000", "MatGUID"),
+            ("bi000", "StoreGUID"),
+            ("bi000", "Qty"),
+            ("bi000", "BonusQnt"),
+            ("bu000", "GUID"),
+            ("bu000", "Number"),
+            ("bu000", "Date"),
+            ("bu000", "TypeGUID"),
+            ("bu000", "IsPosted"),
+            ("bt000", "GUID"),
+            ("bt000", "Name"),
+            ("bt000", "LatinName"),
+            ("bt000", "bIsInput"),
+            ("bt000", "bNoPost"),
+            ("ms000", "MatGUID"),
+            ("ms000", "StoreGUID"),
+            ("ms000", "Qty"),
+            ("st000", "GUID"),
+            ("st000", "Code"),
+            ("st000", "Name"),
+            ("mt000", "GUID"),
+            ("mt000", "Code"),
+            ("mt000", "Name"),
+            ("mt000", "Color"),
+            ("mt000", "Unity"),
+        };
+
+        await using var cmd = sqlConnection.CreateCommand();
+        cmd.CommandTimeout = CommandTimeoutSeconds;
+        cmd.CommandText = """
+SELECT OBJECT_NAME(c.object_id) AS TableName, c.name AS ColumnName
+FROM sys.columns AS c
+WHERE c.object_id IN (
+    OBJECT_ID(N'dbo.bi000'), OBJECT_ID(N'dbo.bu000'), OBJECT_ID(N'dbo.bt000'),
+    OBJECT_ID(N'dbo.ms000'), OBJECT_ID(N'dbo.st000'), OBJECT_ID(N'dbo.mt000'))
+""";
+        var existing = new HashSet<(string Table, string Column)>(StringTupleComparer.Instance);
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            existing.Add((reader.GetString(0), reader.GetString(1)));
         }
 
-        try
+        var missing = required
+            .Where(r => !existing.Contains(r))
+            .Select(r => $"{r.Table}.{r.Column}")
+            .ToArray();
+        if (missing.Length == 0)
         {
-            await using var cmd = sqlConnection.CreateCommand();
-            cmd.CommandTimeout = 60;
-            cmd.CommandText = @"
+            return null;
+        }
+
+        return "MainDb is missing columns required for material ages: " + string.Join(", ", missing);
+    }
+
+    private sealed class StringTupleComparer : IEqualityComparer<(string Table, string Column)>
+    {
+        public static readonly StringTupleComparer Instance = new();
+        public bool Equals((string Table, string Column) x, (string Table, string Column) y) =>
+            StringComparer.OrdinalIgnoreCase.Equals(x.Table, y.Table)
+            && StringComparer.OrdinalIgnoreCase.Equals(x.Column, y.Column);
+        public int GetHashCode((string Table, string Column) obj) =>
+            HashCode.Combine(
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Table),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Column));
+    }
+
+    private static async Task<List<MaterialAgeBillTypeResponse>> LoadBillTypesAsync(
+        SqlConnection sqlConnection,
+        CancellationToken cancellationToken)
+    {
+        await using var cmd = sqlConnection.CreateCommand();
+        cmd.CommandTimeout = CommandTimeoutSeconds;
+        cmd.CommandText = @"
 SELECT
     bt.[GUID],
     bt.[Name],
@@ -422,28 +613,20 @@ SELECT
     ) AS PostedBillCount
 FROM dbo.[bt000] AS bt
 ORDER BY bt.[Name], bt.[GUID];";
-            var rows = new List<MaterialAgeBillTypeResponse>();
-            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                rows.Add(new MaterialAgeBillTypeResponse(
-                    reader.GetGuid(0),
-                    reader.IsDBNull(1) ? null : reader.GetString(1),
-                    reader.IsDBNull(2) ? null : reader.GetString(2),
-                    reader.GetInt32(3) == 1,
-                    reader.GetInt32(4) == 1,
-                    reader.GetInt32(5)));
-            }
-
-            return rows;
-        }
-        finally
+        var rows = new List<MaterialAgeBillTypeResponse>();
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
         {
-            if (shouldClose)
-            {
-                await sqlConnection.CloseAsync();
-            }
+            rows.Add(new MaterialAgeBillTypeResponse(
+                reader.GetGuid(0),
+                reader.IsDBNull(1) ? null : reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                Convert.ToInt32(reader.GetValue(3), CultureInfo.InvariantCulture) == 1,
+                Convert.ToInt32(reader.GetValue(4), CultureInfo.InvariantCulture) == 1,
+                Convert.ToInt32(reader.GetValue(5), CultureInfo.InvariantCulture)));
         }
+
+        return rows;
     }
 
     private static async Task<DateOnly> ReadSqlCalendarDateAsync(
@@ -451,7 +634,7 @@ ORDER BY bt.[Name], bt.[GUID];";
         CancellationToken cancellationToken)
     {
         await using var cmd = sqlConnection.CreateCommand();
-        cmd.CommandTimeout = 60;
+        cmd.CommandTimeout = CommandTimeoutSeconds;
         cmd.CommandText = "SELECT CAST(GETDATE() AS date);";
         var value = await cmd.ExecuteScalarAsync(cancellationToken);
         return DateOnly.FromDateTime(Convert.ToDateTime(value, CultureInfo.InvariantCulture));
@@ -462,8 +645,14 @@ ORDER BY bt.[Name], bt.[GUID];";
         Request request,
         DateOnly asOf,
         IReadOnlyList<Guid> billTypeGuids,
+        IReadOnlyList<Guid> materialGuids,
         CancellationToken cancellationToken)
     {
+        if (materialGuids.Count == 0 || billTypeGuids.Count == 0)
+        {
+            return [];
+        }
+
         var sql = new StringBuilder();
         sql.Append("""
 SELECT
@@ -483,7 +672,6 @@ SELECT
 FROM dbo.[bi000] AS bi
 INNER JOIN dbo.[bu000] AS bu ON bu.[GUID] = bi.[ParentGUID]
 INNER JOIN dbo.[bt000] AS bt ON bt.[GUID] = bu.[TypeGUID]
-INNER JOIN dbo.[mt000] AS mt ON mt.[GUID] = bi.[MatGUID]
 WHERE ISNULL(bu.[IsPosted], 0) <> 0
   AND bu.[Date] < DATEADD(day, 1, @asOf)
   AND bi.[MatGUID] IS NOT NULL
@@ -492,12 +680,12 @@ WHERE ISNULL(bu.[IsPosted], 0) <> 0
 """);
 
         await using var cmd = sqlConnection.CreateCommand();
-        cmd.CommandTimeout = 60;
+        cmd.CommandTimeout = CommandTimeoutSeconds;
         cmd.Parameters.Add(new SqlParameter("@asOf", SqlDbType.Date) { Value = asOf.ToDateTime(TimeOnly.MinValue) });
 
         AppendGuidIn(sql, cmd, "bi.[StoreGUID]", request.StoreGuids, "s");
         AppendGuidIn(sql, cmd, "bt.[GUID]", billTypeGuids, "t");
-        AppendCatalogPredicates(sql, cmd, request);
+        AppendGuidIn(sql, cmd, "bi.[MatGUID]", materialGuids, "m");
 
         cmd.CommandText = sql.ToString();
         var lines = new List<MaterialAgeCalculator.MovementLine>();
@@ -566,15 +754,50 @@ LEFT JOIN dbo.[gr000] AS gr ON gr.[GUID] = mt.[GroupGUID]
 WHERE 1 = 1
 """);
         await using var cmd = sqlConnection.CreateCommand();
-        cmd.CommandTimeout = 60;
+        cmd.CommandTimeout = CommandTimeoutSeconds;
         AppendCatalogPredicates(sql, cmd, request);
         if (restrictToMaterialGuids is not null)
         {
-            AppendGuidIn(sql, cmd, "mt.[GUID]", restrictToMaterialGuids, "cm");
+            // Batch GUID filters when the list is large.
+            if (restrictToMaterialGuids.Count <= MaterialBatchSize)
+            {
+                AppendGuidIn(sql, cmd, "mt.[GUID]", restrictToMaterialGuids, "cm");
+                cmd.CommandText = sql.ToString();
+                return await ReadCatalogAsync(cmd, cancellationToken);
+            }
+
+            var all = new List<CatalogMaterial>();
+            for (var offset = 0; offset < restrictToMaterialGuids.Count; offset += MaterialBatchSize)
+            {
+                var batch = restrictToMaterialGuids.Skip(offset).Take(MaterialBatchSize).ToArray();
+                var batchSql = new StringBuilder(sql.ToString());
+                await using var batchCmd = sqlConnection.CreateCommand();
+                batchCmd.CommandTimeout = CommandTimeoutSeconds;
+                foreach (SqlParameter parameter in cmd.Parameters)
+                {
+                    batchCmd.Parameters.Add(new SqlParameter(parameter.ParameterName, parameter.SqlDbType)
+                    {
+                        Size = parameter.Size,
+                        Value = parameter.Value
+                    });
+                }
+
+                AppendGuidIn(batchSql, batchCmd, "mt.[GUID]", batch, "cm");
+                batchCmd.CommandText = batchSql.ToString();
+                all.AddRange(await ReadCatalogAsync(batchCmd, cancellationToken));
+            }
+
+            return all;
         }
 
         cmd.CommandText = sql.ToString();
+        return await ReadCatalogAsync(cmd, cancellationToken);
+    }
 
+    private static async Task<List<CatalogMaterial>> ReadCatalogAsync(
+        SqlCommand cmd,
+        CancellationToken cancellationToken)
+    {
         var rows = new List<CatalogMaterial>();
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -599,20 +822,18 @@ WHERE 1 = 1
     private static async Task<Dictionary<(Guid Mat, Guid Store), double>> LoadMs000Async(
         SqlConnection sqlConnection,
         IReadOnlyList<Guid> storeGuids,
-        IReadOnlyList<Guid> materialGuids,
+        IReadOnlyList<Guid>? materialGuids,
+        bool skipZeroQty,
         CancellationToken cancellationToken)
     {
         var result = new Dictionary<(Guid, Guid), double>();
-        if (materialGuids.Count == 0)
+        if (materialGuids is { Count: 0 })
         {
             return result;
         }
 
-        // Batch material GUIDs to keep parameter count bounded.
-        const int batchSize = 400;
-        for (var offset = 0; offset < materialGuids.Count; offset += batchSize)
+        async Task ReadBatchAsync(IReadOnlyList<Guid>? batch)
         {
-            var batch = materialGuids.Skip(offset).Take(batchSize).ToArray();
             var sql = new StringBuilder();
             sql.Append("""
 SELECT ms.[MatGUID], ms.[StoreGUID], ISNULL(ms.[Qty], 0)
@@ -620,10 +841,19 @@ FROM dbo.[ms000] AS ms
 WHERE ms.[MatGUID] IS NOT NULL
   AND ms.[StoreGUID] IS NOT NULL
 """);
+            if (skipZeroQty)
+            {
+                sql.Append(" AND ABS(ISNULL(ms.[Qty], 0)) > 0.000001");
+            }
+
             await using var cmd = sqlConnection.CreateCommand();
-            cmd.CommandTimeout = 60;
+            cmd.CommandTimeout = CommandTimeoutSeconds;
             AppendGuidIn(sql, cmd, "ms.[StoreGUID]", storeGuids, "ms");
-            AppendGuidIn(sql, cmd, "ms.[MatGUID]", batch, "mm");
+            if (batch is not null)
+            {
+                AppendGuidIn(sql, cmd, "ms.[MatGUID]", batch, "mm");
+            }
+
             cmd.CommandText = sql.ToString();
             await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
@@ -631,6 +861,18 @@ WHERE ms.[MatGUID] IS NOT NULL
                 result[(reader.GetGuid(0), reader.GetGuid(1))] =
                     Convert.ToDouble(reader.GetValue(2), CultureInfo.InvariantCulture);
             }
+        }
+
+        if (materialGuids is null)
+        {
+            await ReadBatchAsync(null);
+            return result;
+        }
+
+        for (var offset = 0; offset < materialGuids.Count; offset += MaterialBatchSize)
+        {
+            var batch = materialGuids.Skip(offset).Take(MaterialBatchSize).ToArray();
+            await ReadBatchAsync(batch);
         }
 
         return result;
@@ -643,7 +885,7 @@ WHERE ms.[MatGUID] IS NOT NULL
         CancellationToken cancellationToken)
     {
         await using var cmd = sqlConnection.CreateCommand();
-        cmd.CommandTimeout = 60;
+        cmd.CommandTimeout = CommandTimeoutSeconds;
         cmd.CommandText = "SELECT [GUID], [Code], [Name] FROM dbo.[st000];";
         var map = new Dictionary<Guid, StoreMeta>();
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -709,10 +951,6 @@ WHERE ms.[MatGUID] IS NOT NULL
         var terms = KeywordSearchTerms.Parse(request.Keyword, request.Search);
         if (terms.Count == 1)
         {
-            // Exact code short-circuit is applied when that code exists; done via OR of exact + contains
-            // matching materials-list: if exact code exists, materials list uses Code = only.
-            // Here we approximate with: Code = term OR (contains on six fields) — exact preference
-            // requires a prior exists check. Match plan: one term equal to some Code → Code = term only.
             var term = terms[0];
             var pExact = "@kwExact";
             sql.Append(" AND (mt.[Code] = ").Append(pExact);

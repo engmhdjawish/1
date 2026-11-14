@@ -103,18 +103,29 @@ public sealed class MaterialAgesController(MaterialAgeQuery materialAgeQuery) : 
             PageSize = pageSize
         };
 
-        var (response, error) = await materialAgeQuery.ExecuteAsync(request, cancellationToken);
-        if (error is not null)
+        try
         {
-            return BadRequest(new
+            var (response, error) = await materialAgeQuery.ExecuteAsync(request, cancellationToken);
+            if (error is not null)
             {
-                message = error.Message,
-                storeGuid = error.StoreGuid,
-                billTypeGuid = error.BillTypeGuid
+                return BadRequest(new
+                {
+                    message = error.Message,
+                    storeGuid = error.StoreGuid,
+                    billTypeGuid = error.BillTypeGuid
+                });
+            }
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                message = "Material ages query failed.",
+                detail = ex.GetBaseException().Message
             });
         }
-
-        return Ok(response);
     }
 
     private static bool TryParseGuidList(
