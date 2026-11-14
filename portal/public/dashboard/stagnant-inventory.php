@@ -94,14 +94,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     $selectedGuids = array_map('strval', (array) ($_POST['material_guids'] ?? []));
     $discountPercent = (float) ($_POST['discount_percent'] ?? 15);
     $titleAr = trim((string) ($_POST['offer_title'] ?? ''));
+    $saveMode = trim((string) ($_POST['save_mode'] ?? 'draft'));
+    $asDraft = $saveMode !== 'activate';
+    $rawDiscounts = is_array($_POST['material_discount'] ?? null) ? $_POST['material_discount'] : [];
+    $perMaterialPercents = [];
+    foreach ($rawDiscounts as $guid => $pct) {
+        $guid = strtolower(trim((string) $guid));
+        if ($guid === '' || !is_numeric($pct)) {
+            continue;
+        }
+        $perMaterialPercents[$guid] = (float) $pct;
+    }
     $result = StagnantInventoryService::createOfferFromSelection(
         $selectedGuids,
+        $perMaterialPercents,
         $discountPercent,
         $titleAr,
-        $userId
+        $userId,
+        $asDraft
     );
     if ($result['ok'] && !empty($result['id'])) {
-        header('Location: /dashboard/special-offers.php?edit=' . rawurlencode((string) $result['id']) . '&created=1');
+        $editUrl = '/dashboard/special-offers.php?edit=' . rawurlencode((string) $result['id']) . '&created=1';
+        if ($asDraft) {
+            $editUrl .= '&draft=1';
+        }
+        header('Location: ' . $editUrl);
         exit;
     }
     $flash = $result['message'] ?? 'تعذر إنشاء العرض.';

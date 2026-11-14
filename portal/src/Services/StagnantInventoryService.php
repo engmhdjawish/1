@@ -93,10 +93,10 @@ final class StagnantInventoryService
             }
             if ($message === '') {
                 $message = match (true) {
-                    $status === 404 => 'المسار /api/materials/ages غير موجود — أعد نشر API من فرع الأعمار ثم أعد تشغيل الخدمة.',
-                    $status === 401, $status === 403 => 'حساب API الموقع بلا صلاحية materials.read لتقرير الأعمار.',
-                    $status === 0 => 'تعذر الاتصال بخادم API الأمين (تحقق من AMINE_API_BASE_URL والخدمة).',
-                    $status >= 500 => 'خطأ داخل API الأمين أثناء حساب أعمار FIFO (راجع سجل الخدمة).',
+                    $status === 404 => 'مسار أعمار المواد غير متاح على API الأمين.',
+                    $status === 401, $status === 403 => 'حساب API الموقع بلا صلاحية قراءة المواد.',
+                    $status === 0 => 'تعذر الاتصال بخادم API الأمين.',
+                    $status >= 500 => 'خطأ داخل API الأمين أثناء حساب الأعمار.',
                     default => 'فشل جلب تقرير أعمار المواد.',
                 };
             }
@@ -119,13 +119,16 @@ final class StagnantInventoryService
      * Create a manual special offer from selected stagnant materials.
      *
      * @param list<string> $materialGuids
+     * @param array<string, float|int|string> $perMaterialPercents guid => percent
      * @return array{ok: bool, message: string, id?: string|null}
      */
     public static function createOfferFromSelection(
         array $materialGuids,
-        float $discountPercent,
+        array $perMaterialPercents,
+        float $defaultPercent,
         string $titleAr,
-        ?string $userId
+        ?string $userId,
+        bool $asDraft = true
     ): array {
         $guids = [];
         foreach ($materialGuids as $guid) {
@@ -138,26 +141,39 @@ final class StagnantInventoryService
             return ['ok' => false, 'message' => 'اختر مادة واحدة على الأقل.', 'id' => null];
         }
 
-        $discountPercent = max(0.01, min(95.0, $discountPercent));
+        $defaultPercent = max(0.01, min(95.0, $defaultPercent));
         $title = trim($titleAr);
         if ($title === '') {
             $title = 'عرض تصريف راكد ' . date('Y-m-d');
         }
 
+        $overrides = [];
+        foreach ($guids as $guid) {
+            $raw = $perMaterialPercents[$guid]
+                ?? $perMaterialPercents[strtolower($guid)]
+                ?? $defaultPercent;
+            $pct = is_numeric($raw) ? (float) $raw : $defaultPercent;
+            $pct = max(0.01, min(95.0, $pct));
+            $overrides[$guid] = [
+                'discount_type' => 'percent',
+                'discount_percent' => $pct,
+            ];
+        }
+
         return SpecialOfferService::save([
             'title_ar' => $title,
-            'subtitle_ar' => 'مولَّد من أداة المخزون الراكد',
+            'subtitle_ar' => $asDraft ? 'مسودة من المخزون الراكد' : 'مولَّد من المخزون الراكد',
             'badge_text_ar' => 'تصريف',
             'selection_mode' => 'manual',
-            'pricing_scope' => 'offer',
+            'pricing_scope' => 'per_material',
             'discount_type' => 'percent',
-            'discount_percent' => $discountPercent,
+            'discount_percent' => $defaultPercent,
             'starts_at' => date('Y-m-d\TH:i'),
             'ends_at' => '',
-            'is_active' => 1,
+            'is_active' => $asDraft ? 0 : 1,
             'priority' => 10,
             'max_products' => max(1, min(48, count($guids))),
-            'show_on_home' => 1,
+            'show_on_home' => $asDraft ? 0 : 1,
             'home_sort_order' => 0,
             'material_guids' => $guids,
             'display_options' => [
@@ -165,7 +181,7 @@ final class StagnantInventoryService
                 'price_mode' => 'both',
             ],
             'filter_rules' => [],
-            'product_overrides' => [],
+            'product_overrides' => $overrides,
         ], $userId);
     }
 
@@ -203,7 +219,6 @@ final class StagnantInventoryService
                 'stagnantRemainingQty' => (float) ($row['remainingQuantity'] ?? $row['RemainingQuantity'] ?? 0),
                 'maxAgeDays' => (float) ($row['oldestAgeDays'] ?? $row['OldestAgeDays'] ?? 0),
                 'oldestPurchaseDate' => $oldestDate,
-                // Jawish card mapping: Half = sale, EndUser = purchase.
                 'unitSalePriceUsd' => self::nullableNumber($row['half'] ?? $row['Half'] ?? null),
                 'unitPurchasePriceUsd' => self::nullableNumber($row['endUser'] ?? $row['EndUser'] ?? null),
                 'unitSalePriceSyp' => self::nullableNumber($row['whole'] ?? $row['Whole'] ?? null),
