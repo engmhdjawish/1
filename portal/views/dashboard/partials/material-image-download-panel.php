@@ -57,11 +57,32 @@ foreach ($materialFilterOptions['groups'] ?? [] as $group) {
     ];
 }
 
-$defaultAvailability = '1';
+$materialZipSeed = is_array($materialZipSeed ?? null) ? $materialZipSeed : [];
+$includeInvoiceZipDownload = (bool) ($includeInvoiceZipDownload ?? true);
+$zipMaterialsAccordionOpen = (bool) ($zipMaterialsAccordionOpen ?? false);
+
+$seedList = static function (string $key) use ($materialZipSeed): array {
+    if (!isset($materialZipSeed[$key])) {
+        return [];
+    }
+    $raw = $materialZipSeed[$key];
+    if (!is_array($raw)) {
+        $text = trim((string) $raw);
+
+        return $text === '' ? [] : [$text];
+    }
+
+    return array_values(array_filter(array_map(static fn ($v): string => trim((string) $v), $raw), static fn (string $v): bool => $v !== ''));
+};
+
+$defaultAvailability = array_key_exists('isAvailable', $materialZipSeed)
+    ? (string) $materialZipSeed['isAvailable']
+    : '1';
+$zipSearchValue = trim((string) ($materialZipSeed['search'] ?? ''));
 ?>
 <div data-material-images-download-panel>
   <div class="dash-mi-download-accordions">
-    <details class="dash-mi-download-accordion" data-download-accordion="materials">
+    <details class="dash-mi-download-accordion" data-download-accordion="materials"<?= $zipMaterialsAccordionOpen ? ' open' : '' ?>>
       <summary class="dash-mi-download-accordion__summary">
         <span class="dash-mi-download-accordion__heading">
           <span class="material-symbols-outlined dash-mi-download-accordion__icon" aria-hidden="true">folder_zip</span>
@@ -101,6 +122,7 @@ $defaultAvailability = '1';
                 name="search"
                 placeholder="رمز أو اسم المادة"
                 autocomplete="off"
+                value="<?= h($zipSearchValue) ?>"
               >
             </div>
 
@@ -135,13 +157,13 @@ $defaultAvailability = '1';
 
               <?php
                 $chipFiltersExpanded = true;
-                $renderStoreFilterGroup('materialTypes', 'نوع المادة', $materialTypeOptions, [], 'materialTypes', 5, 8, true, $chipFiltersExpanded);
-                $renderStoreFilterGroup('ageCategories', 'الفئة العمرية', $ageCategoryOptions, [], 'ageCategories', 5, 8, true, $chipFiltersExpanded);
-                $renderStoreFilterGroup('manufacturers', 'الشركة المصنعة', $manufacturerOptions, [], 'manufacturers', 5, 8, true, $chipFiltersExpanded);
-                $renderStoreFilterGroup('sizeRanges', 'القياس', $sizeRangeOptions, [], 'sizeRanges', 5, 8, true, $chipFiltersExpanded);
-                $renderStoreFilterGroup('countryOfOrigins', 'بلد المنشأ', $countryOriginOptions, [], 'countryOfOrigins', 5, 8, true, $chipFiltersExpanded);
-                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, [], 'stores', 5, 8, true, $chipFiltersExpanded);
-                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, [], 'groups', 5, 8, true, $chipFiltersExpanded);
+                $renderStoreFilterGroup('materialTypes', 'نوع المادة', $materialTypeOptions, $seedList('materialTypes'), 'materialTypes', 5, 8, true, $chipFiltersExpanded);
+                $renderStoreFilterGroup('ageCategories', 'الفئة العمرية', $ageCategoryOptions, $seedList('ageCategories'), 'ageCategories', 5, 8, true, $chipFiltersExpanded);
+                $renderStoreFilterGroup('manufacturers', 'الشركة المصنعة', $manufacturerOptions, $seedList('manufacturers'), 'manufacturers', 5, 8, true, $chipFiltersExpanded);
+                $renderStoreFilterGroup('sizeRanges', 'القياس', $sizeRangeOptions, $seedList('sizeRanges'), 'sizeRanges', 5, 8, true, $chipFiltersExpanded);
+                $renderStoreFilterGroup('countryOfOrigins', 'بلد المنشأ', $countryOriginOptions, $seedList('countryOfOrigins'), 'countryOfOrigins', 5, 8, true, $chipFiltersExpanded);
+                $renderStoreFilterGroup('storeGuids', 'المخازن', $storeGroupOptions, $seedList('storeGuids'), 'stores', 5, 8, true, $chipFiltersExpanded);
+                $renderStoreFilterGroup('groupGuids', 'المجموعات', $groupGroupOptions, $seedList('groupGuids'), 'groups', 5, 8, true, $chipFiltersExpanded);
               ?>
 
               <section class="store-filter-chip-section" data-filter-group="warehouse">
@@ -214,6 +236,7 @@ $defaultAvailability = '1';
       </div>
     </details>
 
+    <?php if ($includeInvoiceZipDownload): ?>
     <details class="dash-mi-download-accordion" data-download-accordion="invoice">
       <summary class="dash-mi-download-accordion__summary">
         <span class="dash-mi-download-accordion__heading">
@@ -261,5 +284,6 @@ $defaultAvailability = '1';
       </form>
       </div>
     </details>
+    <?php endif; ?>
   </div>
 </div>

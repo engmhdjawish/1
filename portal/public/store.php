@@ -5,7 +5,9 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/bootstrap.php';
 
 use Portal\Auth\CustomerSession;
+use Portal\Auth\WebSession;
 use Portal\Services\CatalogFilterViewService;
+use Portal\Services\MaterialFilterOptionsService;
 use Portal\Services\ShareCartService;
 use Portal\Services\StoreCatalogService;
 use Portal\Support\SharePageAccess;
@@ -14,7 +16,10 @@ require dirname(__DIR__) . '/views/helpers.php';
 
 $_GET = CatalogFilterViewService::expandRequest($_GET);
 
-$shareBrowse = SharePageAccess::resolveShareBrowseContext(null, null);
+// Sticky share-cart tokens must not replace the staff store (ZIP download lives on the full catalog).
+$shareBrowse = portal_staff_can_download_material_zip()
+    ? null
+    : SharePageAccess::resolveShareBrowseContext(null, null);
 if ($shareBrowse !== null) {
     ShareCartService::rememberActiveToken($shareBrowse['token']);
     $shareStoreAllowCart = (bool) ($shareBrowse['display_options']['allow_cart'] ?? false);
@@ -31,6 +36,26 @@ if ($shareBrowse !== null) {
 }
 
 ShareCartService::clearActiveToken();
+
+$canStaffDownloadMaterialZip = false;
+$storeMaterialZipSeed = [];
+$materialFilterOptions = [
+    'materialTypes' => [],
+    'ageCategories' => [],
+    'manufacturers' => [],
+    'sizeRanges' => [],
+    'countryOfOrigins' => [],
+    'stores' => [],
+    'groups' => [],
+];
+$materialFilterOptionsError = null;
+
+if (portal_staff_can_download_material_zip()) {
+    $canStaffDownloadMaterialZip = true;
+    $filterFetch = MaterialFilterOptionsService::fetchFromApi();
+    $materialFilterOptions = $filterFetch['options'];
+    $materialFilterOptionsError = $filterFetch['error'];
+}
 
 if (session_status() === PHP_SESSION_ACTIVE) {
     session_write_close();
@@ -94,6 +119,26 @@ try {
     $isCustomer = false;
 }
 
+if ($canStaffDownloadMaterialZip) {
+    $catalogFilters = is_array($catalog['filters'] ?? null) ? $catalog['filters'] : [];
+    $storeMaterialZipSeed = [
+        'search' => trim((string) ($catalogFilters['q'] ?? '')),
+    ];
+    if (($catalogFilters['isAvailable'] ?? null) === true) {
+        $storeMaterialZipSeed['isAvailable'] = '1';
+    } elseif (($catalogFilters['isAvailable'] ?? null) === false) {
+        $storeMaterialZipSeed['isAvailable'] = '0';
+    } else {
+        $storeMaterialZipSeed['isAvailable'] = '';
+    }
+    foreach (['materialTypes', 'ageCategories', 'manufacturers', 'sizeRanges', 'countryOfOrigins'] as $facetKey) {
+        $values = $catalogFilters[$facetKey] ?? [];
+        if (is_array($values) && $values !== []) {
+            $storeMaterialZipSeed[$facetKey] = array_values(array_map('strval', $values));
+        }
+    }
+}
+
 $storeLabMode = true;
 $siteTour = 'store';
 $extraHead = portal_stylesheet('/css/home-lab.css')
@@ -101,7 +146,15 @@ $extraHead = portal_stylesheet('/css/home-lab.css')
     . portal_stylesheet('/css/store-easy.css')
     . portal_stylesheet('/css/lab-access.css')
     . portal_stylesheet('/css/hn-search.css');
+if ($canStaffDownloadMaterialZip) {
+    $extraHead .= portal_stylesheet('/css/store-filters.css');
+}
 $extraFooter = portal_defer_script('/assets/product-share.js');
+if ($canStaffDownloadMaterialZip) {
+    $extraFooter .= portal_defer_script('/assets/store-filters.js')
+        . portal_defer_script('/assets/dashboard/material-image-zip-download.js')
+        . portal_defer_script('/assets/store-staff-zip-download.js');
+}
 $enableQuickView = true;
 $enableStoreCartJs = true;
 

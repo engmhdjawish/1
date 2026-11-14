@@ -684,6 +684,13 @@ function web_can_any(array $permissions): bool
     return WebSession::hasAnyPermission($permissions);
 }
 
+/** Staff ZIP download from the store catalog (same permissions as dashboard material images). */
+function portal_staff_can_download_material_zip(): bool
+{
+    return WebSession::check()
+        && WebSession::hasAnyPermission(['images.view', 'images.upload', 'orders.view']);
+}
+
 function format_money(?float $amount, bool $show): string
 {
     if (!$show || $amount === null) {

@@ -80,6 +80,17 @@ const API_URL = '/dashboard/material-images-api.php';
   const deleteUnlinkedProgressLabel = panel.querySelector('#deleteUnlinkedProgressLabel');
   const deleteUnlinkedStatusLabel = panel.querySelector('#deleteUnlinkedStatusLabel');
   const deleteUnlinkedProgressBar = panel.querySelector('#deleteUnlinkedProgressBar');
+  const orphanGhostScanBtn = panel.querySelector('#orphanGhostScanBtn');
+  const orphanGhostDryRunBtn = panel.querySelector('#orphanGhostDryRunBtn');
+  const orphanGhostPurgeBtn = panel.querySelector('#orphanGhostPurgeBtn');
+  const orphanGhostProgressWrap = panel.querySelector('#orphanGhostProgressWrap');
+  const orphanGhostProgressLabel = panel.querySelector('#orphanGhostProgressLabel');
+  const orphanGhostProgressBar = panel.querySelector('#orphanGhostProgressBar');
+  const orphanGhostProgressPct = panel.querySelector('#orphanGhostProgressPct');
+  const orphanGhostProgressLive = panel.querySelector('#orphanGhostProgressLive');
+  const orphanGhostReport = panel.querySelector('#orphanGhostReport');
+  let orphanGhostHeartbeatTimer = 0;
+  let orphanGhostLastPercent = 0;
   const linkFilterButtons = panel.querySelectorAll('.link-filter-btn');
   const linkStatus = panel.querySelector('#linkStatus');
   
@@ -99,6 +110,7 @@ const API_URL = '/dashboard/material-images-api.php';
   let lightboxSelected = [];
   let lightboxSearchTimer = null;
   let lightboxSearchRequest = 0;
+  let lightboxActiveResultIndex = -1;
   let openNextUnlinkedAfterLoad = false;
   let page = 1;
   let hasMore = false;
@@ -118,6 +130,8 @@ const API_URL = '/dashboard/material-images-api.php';
   const SOURCE_FILTER_DEBOUNCE_MS = 500;
   const MATERIAL_SEARCH_DEBOUNCE_MS = 400;
   let sourceSearchTimer = null;
+  let orphanGhostScanId = '';
+  let orphanGhostScanning = false;
 
   function clearSourceMaterialSearch() {
     if (sourceMaterialSearch) {
@@ -165,14 +179,35 @@ const API_URL = '/dashboard/material-images-api.php';
     if (linkStatus) linkStatus.textContent = '';
   }
 
+  function visibleSourceCardCount() {
+    return sourceCards?.querySelectorAll('article').length ?? 0;
+  }
+
+  function syncPaginationAfterCountChange() {
+    hasMore = page * pageSize < totalCount;
+    updatePageLabel();
+    if (sourceNextBtn) sourceNextBtn.disabled = !hasMore;
+    if (sourcePrevBtn) sourcePrevBtn.disabled = page <= 1;
+  }
+
+  function maybeRefillSourcePageAfterLink() {
+    if (currentLinkFilter() !== 'unlinked') return;
+    if (totalCount <= 0) return;
+    const inGrid = visibleSourceCardCount();
+    const inAssign = assignInProgressList?.querySelectorAll('article').length ?? 0;
+    if (inGrid > 0 || inAssign > 0) return;
+    loadSources(1);
+  }
+
   function removeCard(card, item) {
     if (!card) return;
     sourceMaterialMap.delete(cardKey(item));
     card.remove();
     totalCount = Math.max(0, totalCount - 1);
-    updatePageLabel();
+    syncPaginationAfterCountChange();
     syncAssignInProgressZone();
     ensureCardsPlaceholder();
+    maybeRefillSourcePageAfterLink();
   }
 
   function syncAssignInProgressZone() {
@@ -205,7 +240,14 @@ const API_URL = '/dashboard/material-images-api.php';
         ? `جاري الربط: ${labels.join('، ')}${items.length > labels.length ? '…' : ''}`
         : 'جاري الربط وحفظ النسخ…';
     }
+    const cardInput = card.querySelector('.material-input');
+    if (cardInput instanceof HTMLElement) {
+      cardInput.blur();
+    }
     assignInProgressList.appendChild(card);
+    if (imageLightbox && !imageLightbox.hidden) {
+      window.requestAnimationFrame(() => scheduleLightboxSearchFocus());
+    }
     const last = card.getBoundingClientRect();
     const dx = first.left - last.left;
     const dy = first.top - last.top;
@@ -493,6 +535,115 @@ const API_URL = '/dashboard/material-images-api.php';
     if (!sug) return;
     sug.classList.add('hidden');
     sug.innerHTML = '';
+    if (card?.dataset) card.dataset.suggestionIndex = '';
+  }
+
+  function highlightSuggestionButtons(container, activeIndex) {
+    if (!container) return;
+    const buttons = container.querySelectorAll('button[data-guid]');
+    buttons.forEach((button, index) => {
+      button.classList.toggle('bg-primary/10', index === activeIndex);
+      button.classList.toggle('font-bold', index === activeIndex);
+    });
+    const active = buttons[activeIndex];
+    if (active instanceof HTMLElement) {
+      active.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function suggestionListOpen(container) {
+    return !!(container && !container.classList.contains('hidden')
+      && container.querySelector('button[data-guid]'));
+  }
+
+  function materialFromSuggestionButton(button) {
+    if (!(button instanceof HTMLButtonElement)) return null;
+    const guid = button.getAttribute('data-guid') || '';
+    if (!guid) return null;
+    const label = button.getAttribute('data-label') || '';
+    const code = button.getAttribute('data-code') || '';
+    const name = button.getAttribute('data-name') || label;
+    return { guid, label, code, name };
+  }
+
+  async function loadNextUnlinkedSources() {
+    if (currentLinkFilter() === 'unlinked' && totalCount > 0) {
+      openNextUnlinkedAfterLoad = true;
+      await loadSources(1);
+      return true;
+    }
+    if (hasMore) {
+      openNextUnlinkedAfterLoad = true;
+      await loadSources(page + 1);
+      return true;
+    }
+    return false;
+  }
+
+  let lightboxSearchFocusToken = 0;
+  let lightboxFocusGuardTimer = null;
+  let lightboxFocusGuardDepth = 0;
+
+  function scheduleLightboxSearchFocus() {
+    if (!lightboxMaterialInput || !imageLightbox || imageLightbox.hidden) return;
+    const token = ++lightboxSearchFocusToken;
+    const focusInput = () => {
+      if (token !== lightboxSearchFocusToken) return;
+      if (!lightboxMaterialInput || imageLightbox?.hidden) return;
+      try {
+        lightboxMaterialInput.focus({ preventScroll: false });
+      } catch {
+        lightboxMaterialInput.focus();
+      }
+    };
+    focusInput();
+    window.setTimeout(focusInput, 0);
+    window.setTimeout(focusInput, 80);
+    window.setTimeout(focusInput, 220);
+  }
+
+  function focusFirstUnlinkedCardInput() {
+    if (imageLightbox && !imageLightbox.hidden) {
+      scheduleLightboxSearchFocus();
+      return;
+    }
+    const input = sourceCards?.querySelector('article[data-linked="0"] .material-input');
+    if (input instanceof HTMLInputElement) {
+      input.focus();
+    }
+  }
+
+  function activeInLightboxSearchUi() {
+    const active = document.activeElement;
+    if (!(active instanceof Node) || !lightboxMaterialInput) return false;
+    if (active === lightboxMaterialInput) return true;
+    if (lightboxSuggestions && lightboxSuggestions.contains(active)) return true;
+    return !!(lightboxLinkCard?.contains(active)
+      && active.closest('#lightboxChips, #lightboxAssignBtn, #lightboxSkipBtn'));
+  }
+
+  function tickLightboxFocusGuard() {
+    if (!imageLightbox || imageLightbox.hidden || !lightboxMaterialInput) return;
+    const busy = (assignInProgressList?.querySelectorAll('article').length ?? 0) > 0;
+    if (!busy) return;
+    if (activeInLightboxSearchUi()) return;
+    scheduleLightboxSearchFocus();
+  }
+
+  function startLightboxFocusGuard() {
+    if (!imageLightbox || imageLightbox.hidden) return;
+    lightboxFocusGuardDepth += 1;
+    if (lightboxFocusGuardTimer) return;
+    lightboxFocusGuardTimer = window.setInterval(tickLightboxFocusGuard, 120);
+  }
+
+  function stopLightboxFocusGuard() {
+    lightboxFocusGuardDepth = Math.max(0, lightboxFocusGuardDepth - 1);
+    if (lightboxFocusGuardDepth > 0) return;
+    if (lightboxFocusGuardTimer) {
+      window.clearInterval(lightboxFocusGuardTimer);
+      lightboxFocusGuardTimer = null;
+    }
   }
 
   function renderLightboxChips() {
@@ -548,7 +699,14 @@ const API_URL = '/dashboard/material-images-api.php';
     imageLightbox.hidden = false;
     imageLightbox.classList.add('is-open');
     document.body.style.overflow = 'hidden';
-    window.setTimeout(() => lightboxMaterialInput?.focus(), 30);
+    scheduleLightboxSearchFocus();
+    if (lightboxImg) {
+      const onReady = () => {
+        lightboxImg.removeEventListener('load', onReady);
+        scheduleLightboxSearchFocus();
+      };
+      lightboxImg.addEventListener('load', onReady);
+    }
   }
 
   async function openNextUnlinked(current) {
@@ -563,45 +721,33 @@ const API_URL = '/dashboard/material-images-api.php';
       openLinkDesk(candidate);
       return;
     }
-    if (hasMore) {
-      openNextUnlinkedAfterLoad = true;
-      await loadSources(page + 1);
+    if (await loadNextUnlinkedSources()) {
       return;
     }
     closeLightbox();
     if (linkStatus) linkStatus.textContent = 'تم. لا توجد صور أخرى غير مرتبطة في هذه القائمة.';
   }
 
-  async function assignFromLightbox() {
+  function assignFromLightbox() {
     if (!lightboxItem) return;
     if (!lightboxSelected.length) {
       if (lightboxStatus) lightboxStatus.textContent = 'اختر المادة المطابقة لرقم الموديل في الصورة.';
       return;
     }
     const item = lightboxItem;
+    const materials = lightboxSelected.map((row) => ({ ...row }));
     const card = findCardForItem(item);
-    if (lightboxAssignBtn) lightboxAssignBtn.disabled = true;
-    if (lightboxStatus) lightboxStatus.textContent = 'جاري الربط…';
-    try {
-      const payload = await postAssignForm('assign-materials', item, lightboxSelected, card);
-      const outcome = showAssignOutcome(payload, null, 'تم الربط.');
-      if (outcome === 'success') {
-        if (card) handleCardAfterAssign(card, item, payload);
-        else rememberLinkedItem(item);
-        lightboxSelected = [];
-        await openNextUnlinked(item);
-        return;
-      }
-      if (lightboxStatus) {
-        lightboxStatus.textContent = formatAssignFailureDetail(payload) || 'تعذر الربط.';
-      }
-    } catch (error) {
-      if (lightboxStatus) {
-        lightboxStatus.textContent = error instanceof Error ? error.message : 'تعذر الربط.';
-      }
-    } finally {
-      if (lightboxAssignBtn) lightboxAssignBtn.disabled = false;
-    }
+    const assignBtn = card?.querySelector('.assign-btn') || lightboxAssignBtn;
+    const cardStatus = card?.querySelector('.card-status');
+
+    lightboxSelected = [];
+    renderLightboxChips();
+    if (lightboxMaterialInput) lightboxMaterialInput.value = '';
+    if (lightboxStatus) lightboxStatus.textContent = '';
+
+    void openNextUnlinked(item);
+    void assign(item, materials, card, assignBtn, cardStatus);
+    scheduleLightboxSearchFocus();
   }
 
   function closeLightbox() {
@@ -711,6 +857,7 @@ const API_URL = '/dashboard/material-images-api.php';
     syncSelectAllUnlinked();
     updateDeleteUnlinkedControls();
     ensureCardsPlaceholder();
+    window.setTimeout(() => focusFirstUnlinkedCardInput(), 0);
   }
 
   async function assign(item, items, card, button, statusEl = null) {
@@ -720,8 +867,17 @@ const API_URL = '/dashboard/material-images-api.php';
       if (statusEl) statusEl.textContent = message;
       return;
     }
-    button.disabled = true;
+    const lightboxOpen = !!(imageLightbox && !imageLightbox.hidden);
+    if (lightboxOpen) {
+      startLightboxFocusGuard();
+    }
+    if (button && button !== lightboxAssignBtn) {
+      button.disabled = true;
+    }
     flyCardToAssignZone(card, items);
+    if (lightboxOpen) {
+      scheduleLightboxSearchFocus();
+    }
     const progressStart = assignProgressMessage(items.length);
     linkStatus.textContent = progressStart;
     if (statusEl) statusEl.textContent = progressStart;
@@ -732,6 +888,9 @@ const API_URL = '/dashboard/material-images-api.php';
       linkStatus.textContent = msg;
       const liveStatus = card?.querySelector('.card-status');
       if (liveStatus) liveStatus.textContent = msg;
+      if (lightboxOpen) {
+        tickLightboxFocusGuard();
+      }
     }, 1000);
     try {
       const payload = await postAssignForm('assign-materials', item, items, card);
@@ -756,7 +915,13 @@ const API_URL = '/dashboard/material-images-api.php';
       returnCardFromAssignZone(card);
     } finally {
       window.clearInterval(progressTimer);
-      button.disabled = false;
+      if (button && button.disabled) {
+        button.disabled = false;
+      }
+      if (lightboxOpen) {
+        stopLightboxFocusGuard();
+        scheduleLightboxSearchFocus();
+      }
       syncAssignInProgressZone();
     }
   }
@@ -1057,6 +1222,334 @@ const API_URL = '/dashboard/material-images-api.php';
     await processDeleteSelectedUnlinked();
   }
 
+  function stopOrphanGhostHeartbeat() {
+    if (orphanGhostHeartbeatTimer) {
+      window.clearInterval(orphanGhostHeartbeatTimer);
+      orphanGhostHeartbeatTimer = 0;
+    }
+    if (orphanGhostProgressLive) orphanGhostProgressLive.textContent = '';
+  }
+
+  function startOrphanGhostHeartbeat(waitingLabel) {
+    stopOrphanGhostHeartbeat();
+    const started = Date.now();
+    const tick = () => {
+      const sec = Math.max(0, Math.round((Date.now() - started) / 1000));
+      const text = `${waitingLabel || 'انتظار الخادم'}… ${sec}ث`;
+      if (orphanGhostProgressLive) orphanGhostProgressLive.textContent = text;
+      if (linkStatus) linkStatus.textContent = text;
+    };
+    tick();
+    orphanGhostHeartbeatTimer = window.setInterval(tick, 1000);
+  }
+
+  async function postOrphanCleanupAction(action, fields = {}, waitingLabel = '') {
+    const form = new FormData();
+    form.append('action', action);
+    Object.entries(fields).forEach(([key, value]) => {
+      form.append(key, value === undefined || value === null ? '' : String(value));
+    });
+    const timeoutMs = 55000;
+    const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    signal.addEventListener('abort', onAbort, { once: true });
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    startOrphanGhostHeartbeat(waitingLabel || action);
+    try {
+      // Let the browser paint progress before the next long request.
+      await new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+      return await fetchJson(API_URL, { method: 'POST', body: form, signal: controller.signal });
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw new Error('انتهت مهلة الطلب (55ث) — أعد الفحص. إن تكرر: انشر API الأمين مع registry-index.');
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      stopOrphanGhostHeartbeat();
+    }
+  }
+
+  function setOrphanGhostProgress(percent, label) {
+    const safe = Math.max(0, Math.min(100, Number(percent) || 0));
+    orphanGhostLastPercent = safe;
+    if (orphanGhostProgressWrap) {
+      orphanGhostProgressWrap.hidden = false;
+      orphanGhostProgressWrap.classList.remove('hidden');
+    }
+    if (orphanGhostProgressLabel && label) orphanGhostProgressLabel.textContent = label;
+    if (orphanGhostProgressPct) orphanGhostProgressPct.textContent = `${Math.round(safe)}%`;
+    if (orphanGhostProgressBar) {
+      orphanGhostProgressBar.style.width = `${Math.max(safe < 2 ? 2 : safe, safe)}%`;
+    }
+    if (linkStatus && label) linkStatus.textContent = label;
+  }
+
+  function orphanCleanupTimeoutHint(error) {
+    const text = error instanceof Error ? error.message : String(error || '');
+    if (/504|Gateway Time-out|timeout/i.test(text)) {
+      return 'انتهت مهلة nginx — أعد الفحص (تم تقسيمه لدفعات أصغر). إن استمر الخطأ زِد proxy_read_timeout في nginx.';
+    }
+    return text;
+  }
+
+  function renderOrphanGhostReport(report) {
+    if (!orphanGhostReport) return;
+    const portal = Number(report.portal_orphan_count ?? 0);
+    const amine = Number(report.amine_orphan_count ?? 0);
+    const queue = Number(report.stale_queue_count ?? 0);
+    const lines = [
+      `موقع (ملف بلا bm000): ${portal}`,
+      `أمين (قرص بلا bm000): ${amine}${report.amine_skipped ? ' — تُخطّي' : ''}`,
+      `طابور (سجل بلا صورة مسجّلة): ${queue}`,
+    ];
+    if (report.amine_skipped && report.amine_skip_reason) {
+      lines.push('', `ملاحظة قرص الأمين: ${report.amine_skip_reason}`);
+    }
+    lines.push(
+      '',
+      'عيّنة موقع:',
+      ...(report.samples?.portal || []).slice(0, 8).map((row) => `  - ${row.file_name} (${row.reason || ''})`),
+      '',
+      'عيّنة أمين:',
+      ...(report.samples?.amine || []).slice(0, 8).map((row) => `  - ${row.file_name}`),
+    );
+    orphanGhostReport.textContent = lines.join('\n');
+    orphanGhostReport.classList.remove('hidden');
+  }
+
+  async function runOrphanGhostScan() {
+    if (orphanGhostScanning) return;
+    orphanGhostScanning = true;
+    orphanGhostScanId = '';
+    orphanGhostDryRunBtn?.classList.add('hidden');
+    orphanGhostPurgeBtn?.classList.add('hidden');
+    if (orphanGhostScanBtn) orphanGhostScanBtn.disabled = true;
+    if (orphanGhostReport) {
+      orphanGhostReport.classList.add('hidden');
+      orphanGhostReport.textContent = '';
+    }
+    setOrphanGhostProgress(1, 'جاري الفحص الآمن (معاينة فقط) — لا حذف بعد...');
+    orphanGhostProgressWrap?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    try {
+      const init = await postOrphanCleanupAction('orphan-cleanup-init', {}, 'تهيئة الفحص');
+      if (!init.ok) {
+        if (linkStatus) linkStatus.textContent = init.message || 'تعذر بدء الفحص.';
+        return;
+      }
+      orphanGhostScanId = String(init.scan_id || '');
+      if (!orphanGhostScanId) {
+        if (linkStatus) linkStatus.textContent = 'تعذر بدء الفحص.';
+        return;
+      }
+      setOrphanGhostProgress(3, init.message || 'تهيئة الفحص...');
+
+      let registryDone = false;
+      const regLoad = await postOrphanCleanupAction(
+        'orphan-cleanup-load-registry',
+        { scan_id: orphanGhostScanId },
+        'محاولة التحميل السريع لسجل الأمين'
+      );
+      if (!regLoad.ok) {
+        if (linkStatus) linkStatus.textContent = regLoad.message || 'توقّف تحميل سجل الأمين.';
+        return;
+      }
+      if (regLoad.done) {
+        registryDone = true;
+        setOrphanGhostProgress(
+          32,
+          regLoad.message || `سجل الأمين: ${regLoad.registered_count || 0} صورة`
+        );
+      } else {
+        setOrphanGhostProgress(
+          6,
+          regLoad.message || 'تحميل سجل الأمين (دفعات صغيرة)...'
+        );
+      }
+      let registryRound = 0;
+      while (!registryDone) {
+        registryRound += 1;
+        const reg = await postOrphanCleanupAction(
+          'orphan-cleanup-registry-chunk',
+          { scan_id: orphanGhostScanId },
+          `دفعة سجل الأمين #${registryRound}`
+        );
+        if (!reg.ok) {
+          if (linkStatus) linkStatus.textContent = reg.message || 'توقّف تحميل سجل الأمين.';
+          return;
+        }
+        registryDone = !!reg.done;
+        const total = Math.max(1, Number(reg.registry_total || reg.registered_count || 1));
+        const loaded = Number(reg.registered_count || 0);
+        setOrphanGhostProgress(
+          5 + Math.min(28, (loaded / total) * 28),
+          reg.message || 'تحميل سجل الأمين (دفعات)...'
+        );
+      }
+
+      const indexLocal = await postOrphanCleanupAction(
+        'orphan-cleanup-index-local',
+        { scan_id: orphanGhostScanId },
+        'فهرسة ملفات الموقع'
+      );
+      if (!indexLocal.ok) {
+        if (linkStatus) linkStatus.textContent = indexLocal.message || 'تعذر فهرسة ملفات الموقع.';
+        return;
+      }
+      setOrphanGhostProgress(36, indexLocal.message || 'فهرسة الموقع...');
+
+      let portalDone = false;
+      let portalRound = 0;
+      while (!portalDone) {
+        portalRound += 1;
+        const chunk = await postOrphanCleanupAction(
+          'orphan-cleanup-scan-portal',
+          {
+            scan_id: orphanGhostScanId,
+            chunk_size: '80',
+            batches: '8',
+          },
+          `فحص ملفات الموقع #${portalRound}`
+        );
+        if (!chunk.ok) {
+          if (linkStatus) linkStatus.textContent = chunk.message || 'توقّف فحص الموقع.';
+          return;
+        }
+        portalDone = !!chunk.done;
+        const total = Number(chunk.total || 1);
+        const offset = Number(chunk.offset || 0);
+        setOrphanGhostProgress(
+          38 + Math.min(24, (offset / total) * 24),
+          chunk.message || 'فحص الموقع...'
+        );
+      }
+
+      let amineDone = false;
+      let amineRound = 0;
+      while (!amineDone) {
+        amineRound += 1;
+        const chunk = await postOrphanCleanupAction(
+          'orphan-cleanup-scan-amine',
+          {
+            scan_id: orphanGhostScanId,
+            limit: '100',
+          },
+          `فحص قرص الأمين #${amineRound}`
+        );
+        if (!chunk.ok) {
+          if (linkStatus) linkStatus.textContent = chunk.message || 'توقّف فحص الأمين.';
+          return;
+        }
+        amineDone = !!chunk.done;
+        if (chunk.skipped) {
+          setOrphanGhostProgress(90, chunk.message || 'تُخطّي فحص قرص الأمين — متابعة بنتائج الموقع.');
+          break;
+        }
+        const total = Math.max(1, Number(chunk.total || 1));
+        const offset = Number(chunk.offset || 0);
+        setOrphanGhostProgress(
+          64 + Math.min(26, (offset / total) * 26),
+          chunk.message || 'فحص قرص الأمين...'
+        );
+      }
+
+      const queueScan = await postOrphanCleanupAction(
+        'orphan-cleanup-scan-queue',
+        { scan_id: orphanGhostScanId },
+        'فحص الطابور'
+      );
+      if (!queueScan.ok) {
+        if (linkStatus) linkStatus.textContent = queueScan.message || 'توقّف فحص الطابور.';
+        return;
+      }
+      setOrphanGhostProgress(92, queueScan.message || 'فحص الطابور...');
+
+      const report = await postOrphanCleanupAction(
+        'orphan-cleanup-report',
+        { scan_id: orphanGhostScanId },
+        'إعداد تقرير المعاينة'
+      );
+      if (!report.ok) {
+        if (linkStatus) linkStatus.textContent = report.message || 'تعذر عرض التقرير.';
+        return;
+      }
+
+      renderOrphanGhostReport(report);
+      setOrphanGhostProgress(100, 'اكتمل الفحص — راجع المعاينة قبل الحذف.');
+      const totalOrphans = Number(report.portal_orphan_count ?? 0)
+        + Number(report.amine_orphan_count ?? 0)
+        + Number(report.stale_queue_count ?? 0);
+      if (linkStatus) {
+        linkStatus.textContent = totalOrphans > 0
+          ? `معاينة: ${totalOrphans} عنصر يتيم — يمكن «تجربة حذف» ثم «تنفيذ الحذف».`
+          : 'لا وُجدت صور يتيمة في هذا الفحص.';
+      }
+      if (totalOrphans > 0) {
+        orphanGhostDryRunBtn?.classList.remove('hidden');
+        orphanGhostPurgeBtn?.classList.remove('hidden');
+      }
+    } catch (error) {
+      stopOrphanGhostHeartbeat();
+      if (linkStatus) {
+        linkStatus.textContent = orphanCleanupTimeoutHint(error) || 'تعذر إكمال الفحص.';
+      }
+      if (orphanGhostProgressLive) {
+        orphanGhostProgressLive.textContent = orphanCleanupTimeoutHint(error) || '';
+      }
+    } finally {
+      stopOrphanGhostHeartbeat();
+      orphanGhostScanning = false;
+      if (orphanGhostScanBtn) orphanGhostScanBtn.disabled = false;
+    }
+  }
+
+  async function runOrphanGhostPurge(dryRun) {
+    if (!orphanGhostScanId) {
+      if (linkStatus) linkStatus.textContent = 'نفّذ «فحص آمن» أولاً.';
+      return;
+    }
+    if (!dryRun) {
+      const confirmFn = window.dashboardApp?.confirmDestructive;
+      const promptText = 'حذف الملفات اليتيمة من الموقع وقرص الأمين والطابور؟ لا يمكن التراجع.';
+      if (typeof confirmFn === 'function') {
+        if (!confirmFn(promptText, 'حذف')) return;
+      } else if (!window.confirm(promptText)) {
+        return;
+      }
+    }
+    if (linkStatus) {
+      linkStatus.textContent = dryRun ? 'تجربة حذف (بدون تنفيذ)...' : 'جاري حذف اليتيمات...';
+    }
+    try {
+      const result = await postOrphanCleanupAction('orphan-cleanup-purge', {
+        scan_id: orphanGhostScanId,
+        purge_portal: '1',
+        purge_amine: '1',
+        purge_queue: '1',
+        dry_run: dryRun ? '1' : '0',
+      });
+      if (!result.ok) {
+        if (linkStatus) linkStatus.textContent = result.message || 'تعذر الحذف.';
+        return;
+      }
+      if (linkStatus) linkStatus.textContent = result.message || 'تم.';
+      if (window.dashboardApp?.showToast) {
+        window.dashboardApp.showToast(result.message || 'تم.', dryRun ? 'info' : 'success');
+      }
+      if (!dryRun) {
+        orphanGhostDryRunBtn?.classList.add('hidden');
+        orphanGhostPurgeBtn?.classList.add('hidden');
+        orphanGhostScanId = '';
+        await loadSources(page || 1);
+      }
+    } catch (error) {
+      if (linkStatus) {
+        linkStatus.textContent = error instanceof Error ? error.message : 'تعذر الحذف.';
+      }
+    }
+  }
+
   function bindCard(card, item) {
     const key = cardKey(item);
     const input = card.querySelector('.material-input');
@@ -1073,20 +1566,39 @@ const API_URL = '/dashboard/material-images-api.php';
     let searchTimer = null;
     let searchRequestId = 0;
 
+    let activeSuggestionIndex = -1;
+
+    const addMaterialFromSuggestion = (material) => {
+      if (!material?.guid) return;
+      const selected = sourceMaterialMap.get(key) || [];
+      if (!selected.some((row) => row.guid === material.guid)) {
+        selected.push(material);
+      }
+      sourceMaterialMap.set(key, selected);
+      chips.innerHTML = chipsHtml(key);
+      closeSuggestions(card);
+      input.value = '';
+      activeSuggestionIndex = -1;
+      input.focus();
+    };
+
     const renderSuggestionRows = (rows) => {
+      activeSuggestionIndex = -1;
       if (!rows.length) {
         sug.innerHTML = '<div class="p-2 text-xs text-text-muted">لا نتائج</div>';
         sug.classList.remove('hidden');
         return;
       }
-      sug.innerHTML = rows.map((row) => {
+      sug.innerHTML = rows.map((row, index) => {
         const guid = row.material_guid || '';
         const code = row.material_code || '';
         const name = row.name || '';
         const label = `${code} ${name}`.trim();
-        return `<button type="button" class="block w-full text-right px-3 py-2 text-xs hover:bg-surface-low add-mat" data-guid="${escapeHtml(guid)}" data-label="${escapeHtml(label)}" data-code="${escapeHtml(code)}" data-name="${escapeHtml(name)}">${escapeHtml(label)}</button>`;
+        return `<button type="button" class="block w-full text-right px-3 py-2 text-xs hover:bg-surface-low add-mat" data-result-index="${index}" data-guid="${escapeHtml(guid)}" data-label="${escapeHtml(label)}" data-code="${escapeHtml(code)}" data-name="${escapeHtml(name)}">${escapeHtml(label)}</button>`;
       }).join('');
       sug.classList.remove('hidden');
+      activeSuggestionIndex = 0;
+      highlightSuggestionButtons(sug, activeSuggestionIndex);
     };
 
     const runMaterialLookup = async (query) => {
@@ -1130,9 +1642,33 @@ const API_URL = '/dashboard/material-images-api.php';
     input.addEventListener('input', scheduleMaterialLookup);
 
     input.addEventListener('keydown', (event) => {
+      const listOpen = suggestionListOpen(sug);
+      const buttons = listOpen ? sug.querySelectorAll('button[data-guid]') : [];
+      if (event.key === 'ArrowDown' && listOpen && buttons.length) {
+        event.preventDefault();
+        activeSuggestionIndex = Math.min(activeSuggestionIndex + 1, buttons.length - 1);
+        highlightSuggestionButtons(sug, activeSuggestionIndex);
+        return;
+      }
+      if (event.key === 'ArrowUp' && listOpen && buttons.length) {
+        event.preventDefault();
+        activeSuggestionIndex = Math.max(activeSuggestionIndex - 1, 0);
+        highlightSuggestionButtons(sug, activeSuggestionIndex);
+        return;
+      }
       if (event.key === 'Enter') {
         event.preventDefault();
         if (searchTimer) clearTimeout(searchTimer);
+        if (listOpen && activeSuggestionIndex >= 0 && buttons[activeSuggestionIndex]) {
+          const material = materialFromSuggestionButton(buttons[activeSuggestionIndex]);
+          if (material) addMaterialFromSuggestion(material);
+          return;
+        }
+        const selected = sourceMaterialMap.get(key) || [];
+        if (selected.length) {
+          assign(item, selected, card, assignBtn, cardStatus);
+          return;
+        }
         const q = input.value.trim();
         if (q.length >= MIN_MATERIAL_SEARCH_LEN) {
           runMaterialLookup(q);
@@ -1144,6 +1680,20 @@ const API_URL = '/dashboard/material-images-api.php';
       }
       if (event.key === 'Escape') {
         if (searchTimer) clearTimeout(searchTimer);
+        if (listOpen) {
+          event.preventDefault();
+          searchRequestId += 1;
+          closeSuggestions(card);
+          activeSuggestionIndex = -1;
+          return;
+        }
+        const selected = sourceMaterialMap.get(key) || [];
+        if (selected.length) {
+          event.preventDefault();
+          sourceMaterialMap.set(key, []);
+          chips.innerHTML = chipsHtml(key);
+          return;
+        }
         searchRequestId += 1;
         closeSuggestions(card);
       }
@@ -1155,20 +1705,8 @@ const API_URL = '/dashboard/material-images-api.php';
       if (!(btn instanceof HTMLButtonElement)) return;
       event.preventDefault();
       event.stopPropagation();
-      const guid = btn.getAttribute('data-guid') || '';
-      const label = btn.getAttribute('data-label') || '';
-      const code = btn.getAttribute('data-code') || '';
-      const name = btn.getAttribute('data-name') || '';
-      if (!guid) return;
-      const selected = sourceMaterialMap.get(key) || [];
-      if (!selected.some((row) => row.guid === guid)) {
-        selected.push({ guid, label, code, name });
-      }
-      sourceMaterialMap.set(key, selected);
-      chips.innerHTML = chipsHtml(key);
-      closeSuggestions(card);
-      input.value = '';
-      input.blur();
+      const material = materialFromSuggestionButton(btn);
+      if (material) addMaterialFromSuggestion(material);
     });
 
     chips.addEventListener('click', (event) => {
@@ -1298,6 +1836,9 @@ const API_URL = '/dashboard/material-images-api.php';
       const next = items.find((row) => !row.is_linked_to_material && !isRecentlyLinkedItem(row));
       if (next) {
         openLinkDesk(next);
+      } else if (totalCount > 0 && currentLinkFilter() === 'unlinked') {
+        openNextUnlinkedAfterLoad = true;
+        window.setTimeout(() => loadSources(1), 0);
       } else if (hasMore) {
         openNextUnlinkedAfterLoad = true;
         window.setTimeout(() => loadSources(page + 1), 0);
@@ -1357,21 +1898,73 @@ const API_URL = '/dashboard/material-images-api.php';
   lightboxSkipBtn?.addEventListener('click', () => {
     if (lightboxItem) openNextUnlinked(lightboxItem);
   }, { signal });
+  const addLightboxMaterialFromButton = (button) => {
+    const material = materialFromSuggestionButton(button);
+    if (!material?.guid) return;
+    if (!lightboxSelected.some((row) => row.guid === material.guid)) {
+      lightboxSelected = [material];
+    }
+    renderLightboxChips();
+    lightboxSuggestions?.classList.add('hidden');
+    if (lightboxMaterialInput) lightboxMaterialInput.value = '';
+    lightboxActiveResultIndex = -1;
+    scheduleLightboxSearchFocus();
+  };
+
   lightboxMaterialInput?.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
-    const first = lightboxSuggestions?.querySelector('button[data-guid]');
-    if (first instanceof HTMLButtonElement && !lightboxSuggestions.classList.contains('hidden')) {
-      first.click();
+    const listOpen = suggestionListOpen(lightboxSuggestions);
+    const buttons = listOpen ? lightboxSuggestions.querySelectorAll('button[data-guid]') : [];
+    if (event.key === 'ArrowDown' && listOpen && buttons.length) {
+      event.preventDefault();
+      lightboxActiveResultIndex = Math.min(lightboxActiveResultIndex + 1, buttons.length - 1);
+      highlightSuggestionButtons(lightboxSuggestions, lightboxActiveResultIndex);
       return;
     }
-    if (lightboxSelected.length) assignFromLightbox();
+    if (event.key === 'ArrowUp' && listOpen && buttons.length) {
+      event.preventDefault();
+      lightboxActiveResultIndex = Math.max(lightboxActiveResultIndex - 1, 0);
+      highlightSuggestionButtons(lightboxSuggestions, lightboxActiveResultIndex);
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (listOpen && lightboxActiveResultIndex >= 0 && buttons[lightboxActiveResultIndex]) {
+        addLightboxMaterialFromButton(buttons[lightboxActiveResultIndex]);
+        return;
+      }
+      if (lightboxSelected.length) {
+        assignFromLightbox();
+        return;
+      }
+      const query = lightboxMaterialInput?.value.trim() || '';
+      if (query.length >= MIN_MATERIAL_SEARCH_LEN && lightboxSearchTimer) {
+        clearTimeout(lightboxSearchTimer);
+      }
+    }
+    if (event.key === 'Escape') {
+      if (listOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        lightboxSearchRequest += 1;
+        lightboxSuggestions?.classList.add('hidden');
+        if (lightboxSuggestions) lightboxSuggestions.innerHTML = '';
+        lightboxActiveResultIndex = -1;
+        return;
+      }
+      if (lightboxSelected.length) {
+        event.preventDefault();
+        event.stopPropagation();
+        lightboxSelected = [];
+        renderLightboxChips();
+      }
+    }
   }, { signal });
   lightboxMaterialInput?.addEventListener('input', () => {
     if (lightboxSearchTimer) clearTimeout(lightboxSearchTimer);
     const query = lightboxMaterialInput.value.trim();
     if (query.length < MIN_MATERIAL_SEARCH_LEN) {
       lightboxSearchRequest += 1;
+      lightboxActiveResultIndex = -1;
       lightboxSuggestions?.classList.add('hidden');
       return;
     }
@@ -1385,17 +1978,20 @@ const API_URL = '/dashboard/material-images-api.php';
         const rows = await searchMaterials(query);
         if (requestId !== lightboxSearchRequest || !lightboxSuggestions) return;
         if (!rows.length) {
+          lightboxActiveResultIndex = -1;
           lightboxSuggestions.innerHTML = '<div class="p-2 text-xs text-text-muted">لا نتائج</div>';
           return;
         }
-        lightboxSuggestions.innerHTML = rows.map((row) => {
+        lightboxSuggestions.innerHTML = rows.map((row, index) => {
           const guid = row.material_guid || '';
           const code = row.material_code || '';
           const name = row.name || '';
           const label = `${code} ${name}`.trim();
-          return `<button type="button" class="block w-full text-right px-3 py-2 text-xs hover:bg-surface-low" data-guid="${escapeHtml(guid)}" data-label="${escapeHtml(label)}" data-code="${escapeHtml(code)}">${escapeHtml(label)}</button>`;
+          return `<button type="button" class="block w-full text-right px-3 py-2 text-xs hover:bg-surface-low" data-result-index="${index}" data-guid="${escapeHtml(guid)}" data-label="${escapeHtml(label)}" data-code="${escapeHtml(code)}" data-name="${escapeHtml(name)}">${escapeHtml(label)}</button>`;
         }).join('');
         lightboxSuggestions.classList.remove('hidden');
+        lightboxActiveResultIndex = 0;
+        highlightSuggestionButtons(lightboxSuggestions, lightboxActiveResultIndex);
       } catch (error) {
         if (requestId !== lightboxSearchRequest || !lightboxSuggestions) return;
         const message = error instanceof Error ? error.message : 'تعذر البحث.';
@@ -1407,16 +2003,7 @@ const API_URL = '/dashboard/material-images-api.php';
     const target = event.target;
     const button = target instanceof HTMLElement ? target.closest('button[data-guid]') : null;
     if (!(button instanceof HTMLButtonElement)) return;
-    const guid = button.getAttribute('data-guid') || '';
-    if (!guid) return;
-    const label = button.getAttribute('data-label') || '';
-    const code = button.getAttribute('data-code') || '';
-    if (!lightboxSelected.some((row) => row.guid === guid)) {
-      lightboxSelected = [{ guid, label, code, name: label }];
-    }
-    renderLightboxChips();
-    lightboxSuggestions.classList.add('hidden');
-    if (lightboxMaterialInput) lightboxMaterialInput.value = '';
+    addLightboxMaterialFromButton(button);
   }, { signal });
   lightboxChips?.addEventListener('click', (event) => {
     const target = event.target;
@@ -1433,7 +2020,23 @@ const API_URL = '/dashboard/material-images-api.php';
     if (event.target === imageLightbox) closeLightbox();
   }, { signal });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeLightbox();
+    if (event.key !== 'Escape') return;
+    if (!imageLightbox || imageLightbox.hidden) return;
+    if (suggestionListOpen(lightboxSuggestions)) {
+      event.preventDefault();
+      lightboxSearchRequest += 1;
+      lightboxSuggestions?.classList.add('hidden');
+      if (lightboxSuggestions) lightboxSuggestions.innerHTML = '';
+      lightboxActiveResultIndex = -1;
+      return;
+    }
+    if (lightboxSelected.length) {
+      event.preventDefault();
+      lightboxSelected = [];
+      renderLightboxChips();
+      return;
+    }
+    closeLightbox();
   }, { signal });
 
   sourcePrevBtn?.addEventListener('click', () => { if (page > 1) loadSources(page - 1); }, { signal });
@@ -1442,6 +2045,9 @@ const API_URL = '/dashboard/material-images-api.php';
   applySourceFiltersBtn?.addEventListener('click', applySourceMaterialSearch, { signal });
   deleteAllUnlinkedBtn?.addEventListener('click', deleteAllUnlinked, { signal });
   deleteSelectedUnlinkedBtn?.addEventListener('click', deleteSelectedUnlinked, { signal });
+  orphanGhostScanBtn?.addEventListener('click', () => { void runOrphanGhostScan(); }, { signal });
+  orphanGhostDryRunBtn?.addEventListener('click', () => { void runOrphanGhostPurge(true); }, { signal });
+  orphanGhostPurgeBtn?.addEventListener('click', () => { void runOrphanGhostPurge(false); }, { signal });
   cancelDeleteUnlinkedBtn?.addEventListener('click', cancelDeleteUnlinked, { signal });
   selectAllUnlinked?.addEventListener('change', () => {
     const checked = !!selectAllUnlinked.checked;

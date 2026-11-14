@@ -336,6 +336,28 @@
     return 'جاري تحضير الملف...';
   }
 
+  function initZipFilterShell(filtersShell) {
+    if (!filtersShell || filtersShell.dataset.zipFilterShellInit === '1') {
+      return;
+    }
+    if (typeof window.portalStoreFiltersInit !== 'function') {
+      return;
+    }
+    window.portalStoreFiltersInit(filtersShell);
+    filtersShell.dataset.zipFilterShellInit = '1';
+  }
+
+  function ensureZipFilterShell(filtersShell) {
+    if (!filtersShell) {
+      return;
+    }
+    initZipFilterShell(filtersShell);
+    if (filtersShell.dataset.zipFilterShellInit === '1') {
+      return;
+    }
+    window.addEventListener('load', () => initZipFilterShell(filtersShell), { once: true });
+  }
+
   const initMaterialForm = (form) => {
     if (!form || form.dataset.zipDownloadInit === '1') {
       return;
@@ -347,9 +369,7 @@
     const submitButton = form.querySelector('[type="submit"]');
     const filtersShell = form.closest('[data-store-filters-root]');
 
-    if (filtersShell && typeof window.portalStoreFiltersInit === 'function') {
-      window.portalStoreFiltersInit(filtersShell);
-    }
+    ensureZipFilterShell(filtersShell);
 
     bindAvailabilityPersistence(form);
     refreshZipJobsPanel(jobsPanel, statusHost);

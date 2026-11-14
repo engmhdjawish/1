@@ -62,6 +62,7 @@ $ordered = [
     '027-share-link-short-codes.sql',
     '028-catalog-filter-views.sql',
     '029-short-link-targets.sql',
+    '030-store-staff-images-view.sql',
     '030-procurement.sql',
     '031-procurement-lifecycle-v2.sql',
 ];

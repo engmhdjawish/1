@@ -150,12 +150,18 @@ test('dashboard ensurePageAssets loads share-links scripts sequentially', () => 
   assert.doesNotMatch(source, /Promise\.all\([\s\S]*bundle\.scripts/);
 });
 
+test('dashboard loadScript treats layout defer scripts as already settled', () => {
+  const source = loadScript('assets/dashboard/dashboard.js');
+  assert.match(source, /function isScriptLoadSettled/);
+  assert.match(source, /node\.complete \|\| readyState === 'complete'/);
+});
+
 test('material images download tab registers dashboard page assets', () => {
   const controller = fs.readFileSync(
     path.resolve(__dirname, '../public/dashboard/material-images.php'),
     'utf8',
   );
-  assert.match(controller, /\$dashboardPageAssets = 'material-images-zip';/);
+  assert.match(controller, /\$dashboardPageAssets = \$workspaceTab === 'download' \? 'material-images-zip' : '';/);
   assert.match(controller, /\$materialImagesWorkspace = true;/);
 });
 
@@ -272,6 +278,7 @@ test('share page remembers active token and store keeps share cart in session', 
   const cartPage = fs.readFileSync(path.resolve(__dirname, '../public/cart.php'), 'utf8');
   assert.match(sharePage, /ShareCartService::rememberActiveToken\(\$shareToken\)/);
   assert.match(storePage, /SharePageAccess::resolveShareBrowseContext/);
+  assert.match(storePage, /portal_staff_can_download_material_zip/);
   assert.match(storePage, /ShareCartService::clearActiveToken\(\)/);
   assert.match(cartPage, /share_page_url\(\$token, \['open_cart' => '1'\]\)/);
 });

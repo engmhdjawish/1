@@ -30,19 +30,18 @@ var mainDbConnection = builder.Configuration.GetConnectionString("MainDb")
 builder.Services.AddDbContext<ApiManagementDbContext>(options =>
     options.UseSqlServer(apiManagementConnection, sqlServerOptions =>
         sqlServerOptions.EnableRetryOnFailure()));
-builder.Services.AddDbContext<MainDbContext>(options =>
+// AddDbContext and AddDbContextFactory both register DbContextOptions. Registering
+// both makes the singleton factory depend on scoped options and the host fails
+// validation in Development. Share one factory and resolve a scoped context from it.
+builder.Services.AddDbContextFactory<MainDbContext>(options =>
     options.UseSqlServer(mainDbConnection, sqlServerOptions =>
     {
         sqlServerOptions.EnableRetryOnFailure();
         // MainDb may run on legacy compatibility levels that do not support OPENJSON ('$').
         sqlServerOptions.UseCompatibilityLevel(120);
     }));
-builder.Services.AddDbContextFactory<MainDbContext>(options =>
-    options.UseSqlServer(mainDbConnection, sqlServerOptions =>
-    {
-        sqlServerOptions.EnableRetryOnFailure();
-        sqlServerOptions.UseCompatibilityLevel(120);
-    }));
+builder.Services.AddScoped(sp =>
+    sp.GetRequiredService<IDbContextFactory<MainDbContext>>().CreateDbContext());
 
 var authenticationBuilder = builder.Services
     .AddAuthentication(options =>
