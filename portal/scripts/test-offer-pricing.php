@@ -49,6 +49,37 @@ $assert(
     'computePricing uses original price when offer already applied',
     abs($second['original_unit_sale_price_sp'] - 1000.0) < 0.001
         && abs($second['effective_unit_sale_price_sp'] - 800.0) < 0.001
+        && abs($second['effective_unit_sale_price_usd'] - 8.0) < 0.001
+);
+
+// Odd SYP/USD ratio: after % discount, SYP must come from USD × rate, rounded UP to 5.
+$oddMaterial = [
+    'materialGuid' => 'mat-odd',
+    'unitSalePriceSyp' => 125.0,
+    'unitSalePriceUsd' => 1.25,
+    'packageConversionFactor' => 1,
+];
+$oddPricing = SpecialOfferService::computePricing($oddMaterial, [
+    'id' => 'offer-odd',
+    'discount_type' => 'percent',
+    'discount_percent' => 15,
+]);
+// USD after 15% = 1.0625; rate = 100; raw SYP = 106.25 → round up to 110
+$assert(
+    'percent discount recomputes SYP from USD with round-up-to-5',
+    abs($oddPricing['effective_unit_sale_price_usd'] - 1.0625) < 0.0001
+        && abs($oddPricing['effective_unit_sale_price_sp'] - 110.0) < 0.001
+);
+
+$usdOnlyFixed = SpecialOfferService::computePricing($oddMaterial, [
+    'id' => 'offer-usd-fixed',
+    'discount_type' => 'fixed_price',
+    'fixed_price_usd' => 1.0,
+]);
+$assert(
+    'fixed_price USD-only derives SYP with round-up-to-5',
+    abs($usdOnlyFixed['effective_unit_sale_price_usd'] - 1.0) < 0.001
+        && abs($usdOnlyFixed['effective_unit_sale_price_sp'] - 100.0) < 0.001
 );
 
 $overlay = SpecialOfferService::pricingOverlay($alreadyPriced, $offer);

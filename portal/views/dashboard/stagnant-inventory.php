@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Portal\Support\PriceFx;
+
 /** @var array<string, mixed> $report */
 /** @var list<array<string, mixed>> $seasons */
 /** @var array<string, mixed>|null $selectedSeason */
@@ -39,12 +41,12 @@ $keyword = (string) ($keyword ?? '');
 $maxAgeDays = $maxAgeDays ?? null;
 $hasExtraFilters = $selectedStoreGuids !== [] || $selectedCompanies !== [] || $selectedMaterialTypes !== [] || $selectedGroupGuids !== [];
 
-$fmtMoney = static function (?float $value): string {
+$fmtMoney = static function (?float $value, int $decimals = 2): string {
     if ($value === null) {
         return '—';
     }
 
-    return number_format($value, 2);
+    return number_format($value, $decimals);
 };
 $fmtDate = static function (string $value): string {
     $value = trim($value);
@@ -123,12 +125,14 @@ $buildUrl = static function (array $overrides) use ($queryBase, $selectedStoreGu
 
     return $url;
 };
+
+$defaultDiscount = 15.0;
 ?>
 <section class="mb-5" data-stagnant-inventory-root>
   <div class="flex flex-wrap items-end justify-between gap-3">
     <div>
       <h1 class="text-2xl font-extrabold text-slate-900">المخزون الراكد</h1>
-      <p class="text-sm text-text-muted mt-1">راجع المواد ذات الرصيد القديم وولّد عرض تصريف.</p>
+      <p class="text-sm text-text-muted mt-1">الدولار ثابت · الليرة تُحسب من سعر الصرف مع التقريب لأعلى 5 · عدّل النسبة أو السعر.</p>
     </div>
     <a href="/dashboard/special-offers.php" class="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-white text-sm font-bold text-slate-700 hover:bg-slate-50" data-dashboard-nav-link>
       العروض الخاصة
@@ -314,7 +318,7 @@ $buildUrl = static function (array $overrides) use ($queryBase, $selectedStoreGu
       </label>
       <label class="text-sm">
         <span class="text-text-muted">خصم افتراضي %</span>
-        <input type="number" name="discount_percent" min="1" max="95" step="0.5" value="15" data-stagnant-default-discount class="mt-1 block w-28 h-10 rounded-xl border border-border-subtle px-3 text-sm">
+        <input type="number" name="discount_percent" min="1" max="95" step="0.5" value="<?= h((string) $defaultDiscount) ?>" data-stagnant-default-discount class="mt-1 block w-28 h-10 rounded-xl border border-border-subtle px-3 text-sm">
       </label>
       <input type="hidden" name="save_mode" value="draft" data-stagnant-save-mode>
       <button type="submit" class="h-10 px-4 rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50" data-stagnant-submit data-stagnant-mode="draft" disabled>
@@ -331,49 +335,67 @@ $buildUrl = static function (array $overrides) use ($queryBase, $selectedStoreGu
   <?php if ($items === []): ?>
     <div class="rounded-xl border border-border-subtle bg-white px-4 py-12 text-center text-text-muted">لا توجد نتائج.</div>
   <?php else: ?>
-    <div class="rounded-xl border border-border-subtle bg-white overflow-hidden shadow-sm">
-      <div class="hidden md:grid grid-cols-[40px_64px_minmax(0,1.4fr)_88px_88px_110px_88px_88px_110px] gap-2 px-3 py-2.5 bg-slate-50 text-xs font-bold text-slate-600 border-b border-border-subtle">
-        <div></div>
-        <div>صورة</div>
-        <div>المادة</div>
-        <div>الكمية</div>
-        <div>العمر</div>
-        <div>أقدم شراء</div>
-        <div>المبيع</div>
-        <div>الشراء</div>
-        <div>خصم %</div>
-      </div>
-      <div class="divide-y divide-border-subtle" data-stagnant-cards>
-        <?php foreach ($items as $item): ?>
-          <?php
-            $guid = strtolower((string) ($item['materialGuid'] ?? ''));
-            $imageGuid = (string) ($item['productImageGuid'] ?? '');
-            $name = (string) ($item['name'] ?? '');
-            $code = (string) ($item['materialCode'] ?? '');
-            $meta = trim(implode(' · ', array_filter([
-                (string) ($item['company'] ?? ''),
-                (string) ($item['materialType'] ?? ''),
-                (string) ($item['groupName'] ?? ''),
-            ], static fn ($v) => $v !== '')));
-            $qty = (float) ($item['stagnantRemainingQty'] ?? 0);
-            $ageRaw = $item['maxAgeDays'] ?? null;
-            $ageLabel = $ageRaw === null || $ageRaw === '' ? '—' : number_format((float) $ageRaw, 0);
-            $sale = isset($item['unitSalePriceUsd']) ? (float) $item['unitSalePriceUsd'] : null;
-            $purchase = isset($item['unitPurchasePriceUsd']) ? (float) $item['unitPurchasePriceUsd'] : null;
-            $thumbUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '';
-            $fullUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=0' : '';
-          ?>
-          <article class="stagnant-card px-3 py-2.5 hover:bg-slate-50/80 transition" data-stagnant-card>
-            <div class="grid grid-cols-[40px_64px_minmax(0,1fr)] md:grid-cols-[40px_64px_minmax(0,1.4fr)_88px_88px_110px_88px_88px_110px] gap-2 items-center">
-              <label class="inline-flex items-center justify-center">
+    <div class="rounded-xl border border-border-subtle bg-white overflow-x-auto shadow-sm">
+      <table class="w-full min-w-[1100px] text-sm border-collapse">
+        <thead>
+          <tr class="bg-slate-50 text-xs font-bold text-slate-600 border-b border-border-subtle">
+            <th class="px-2 py-2.5 w-10"></th>
+            <th class="px-2 py-2.5 w-16 text-start">صورة</th>
+            <th class="px-2 py-2.5 text-start min-w-[200px]">المادة</th>
+            <th class="px-2 py-2.5 text-start w-20">كمية</th>
+            <th class="px-2 py-2.5 text-start w-20">عمر</th>
+            <th class="px-2 py-2.5 text-start w-24">مبيع $</th>
+            <th class="px-2 py-2.5 text-start w-24">مبيع ل.س</th>
+            <th class="px-2 py-2.5 text-start w-20">شراء $</th>
+            <th class="px-2 py-2.5 text-start w-24">خصم %</th>
+            <th class="px-2 py-2.5 text-start w-28">بعد الخصم $</th>
+            <th class="px-2 py-2.5 text-start w-28">بعد الخصم ل.س</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border-subtle" data-stagnant-cards>
+          <?php foreach ($items as $item): ?>
+            <?php
+              $guid = strtolower((string) ($item['materialGuid'] ?? ''));
+              $imageGuid = (string) ($item['productImageGuid'] ?? '');
+              $name = (string) ($item['name'] ?? '');
+              $code = (string) ($item['materialCode'] ?? '');
+              $meta = trim(implode(' · ', array_filter([
+                  (string) ($item['company'] ?? ''),
+                  (string) ($item['materialType'] ?? ''),
+                  (string) ($item['groupName'] ?? ''),
+              ], static fn ($v) => $v !== '')));
+              $qty = (float) ($item['stagnantRemainingQty'] ?? 0);
+              $ageRaw = $item['maxAgeDays'] ?? null;
+              $ageLabel = $ageRaw === null || $ageRaw === '' ? '—' : number_format((float) $ageRaw, 0);
+              $saleUsd = isset($item['unitSalePriceUsd']) ? (float) $item['unitSalePriceUsd'] : null;
+              $saleSyp = isset($item['unitSalePriceSyp']) ? (float) $item['unitSalePriceSyp'] : null;
+              $purchase = isset($item['unitPurchasePriceUsd']) ? (float) $item['unitPurchasePriceUsd'] : null;
+              $currencyVal = isset($item['currencyVal']) ? (float) $item['currencyVal'] : null;
+              $rate = PriceFx::inferRate($saleSyp, $saleUsd, $currencyVal);
+              $saleAfterUsd = $saleUsd !== null
+                  ? PriceFx::applyPercentToUsd($saleUsd, $defaultDiscount)
+                  : null;
+              $saleAfterSyp = ($saleAfterUsd !== null && $rate > 0.0)
+                  ? PriceFx::sypFromUsd($saleAfterUsd, $rate)
+                  : null;
+              $thumbUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '';
+              $fullUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=0' : '';
+            ?>
+            <tr
+              class="stagnant-card hover:bg-slate-50/80 transition align-middle"
+              data-stagnant-card
+              data-sale-usd="<?= $saleUsd !== null ? h((string) $saleUsd) : '' ?>"
+              data-sale-syp="<?= $saleSyp !== null ? h((string) $saleSyp) : '' ?>"
+              data-rate="<?= $rate > 0 ? h((string) $rate) : '' ?>"
+            >
+              <td class="px-2 py-2 text-center">
                 <input type="checkbox" name="material_guids[]" value="<?= h($guid) ?>" class="w-4 h-4 rounded border-slate-300" data-stagnant-check>
-              </label>
-
-              <div>
+              </td>
+              <td class="px-2 py-2">
                 <?php if ($fullUrl !== ''): ?>
                   <button
                     type="button"
-                    class="block w-14 h-14 rounded-lg overflow-hidden bg-slate-100 border border-border-subtle cursor-zoom-in"
+                    class="block w-12 h-12 rounded-md overflow-hidden bg-slate-100 border border-border-subtle cursor-zoom-in"
                     data-cart-image-zoom="<?= h($fullUrl) ?>"
                     aria-label="عرض الصورة"
                   >
@@ -387,50 +409,57 @@ $buildUrl = static function (array $overrides) use ($queryBase, $selectedStoreGu
                     >
                   </button>
                 <?php else: ?>
-                  <div class="w-14 h-14 rounded-lg bg-slate-100 border border-dashed border-slate-300"></div>
+                  <div class="w-12 h-12 rounded-md bg-slate-100 border border-dashed border-slate-300"></div>
                 <?php endif; ?>
-              </div>
-
-              <div class="min-w-0">
-                <div class="font-bold text-sm text-slate-900 leading-snug"><?= h($name !== '' ? $name : $guid) ?></div>
+              </td>
+              <td class="px-2 py-2 min-w-0">
+                <div class="font-bold text-slate-900 leading-snug"><?= h($name !== '' ? $name : $guid) ?></div>
                 <?php if ($code !== ''): ?>
                   <div class="text-xs text-text-muted font-mono mt-0.5" dir="ltr"><?= h($code) ?></div>
                 <?php endif; ?>
                 <?php if ($meta !== ''): ?>
-                  <div class="text-[11px] text-text-muted mt-0.5 truncate"><?= h($meta) ?></div>
+                  <div class="text-[11px] text-text-muted mt-0.5 truncate max-w-[280px]"><?= h($meta) ?></div>
                 <?php endif; ?>
-                <div class="mt-1 flex flex-wrap gap-2 md:hidden text-[11px] text-text-muted">
-                  <span>كمية <?= h(number_format($qty, 0)) ?></span>
-                  <span class="font-bold text-slate-800">عمر <?= h($ageLabel) ?> يوم</span>
-                  <span>مبيع <?= h($fmtMoney($sale)) ?></span>
-                  <span>شراء <?= h($fmtMoney($purchase)) ?></span>
-                </div>
-              </div>
-
-              <div class="hidden md:block text-sm font-bold tabular-nums"><?= h(number_format($qty, 0)) ?></div>
-              <div class="hidden md:block text-sm font-extrabold tabular-nums text-amber-700"><?= h($ageLabel) ?></div>
-              <div class="hidden md:block text-sm tabular-nums text-slate-600" dir="ltr"><?= h($fmtDate((string) ($item['oldestPurchaseDate'] ?? ''))) ?></div>
-              <div class="hidden md:block text-sm tabular-nums" dir="ltr"><?= h($fmtMoney($sale)) ?></div>
-              <div class="hidden md:block text-sm tabular-nums" dir="ltr"><?= h($fmtMoney($purchase)) ?></div>
-
-              <label class="flex items-center gap-1 text-xs font-bold text-slate-700 md:justify-start">
-                <span class="md:hidden">خصم</span>
+              </td>
+              <td class="px-2 py-2 font-bold tabular-nums"><?= h(number_format($qty, 0)) ?></td>
+              <td class="px-2 py-2 font-extrabold tabular-nums text-amber-700"><?= h($ageLabel) ?></td>
+              <td class="px-2 py-2 tabular-nums font-bold text-slate-900" dir="ltr"><?= h($fmtMoney($saleUsd)) ?></td>
+              <td class="px-2 py-2 tabular-nums text-slate-700" dir="ltr"><?= h($fmtMoney($saleSyp, 0)) ?></td>
+              <td class="px-2 py-2 tabular-nums text-slate-600" dir="ltr"><?= h($fmtMoney($purchase)) ?></td>
+              <td class="px-2 py-2">
                 <input
                   type="number"
                   name="material_discount[<?= h($guid) ?>]"
                   min="1"
                   max="95"
                   step="0.5"
-                  value="15"
+                  value="<?= h((string) $defaultDiscount) ?>"
                   data-stagnant-item-discount
-                  class="w-16 h-8 rounded-lg border border-border-subtle px-2 text-sm tabular-nums"
+                  class="w-20 h-9 rounded-lg border border-border-subtle px-2 text-sm tabular-nums"
+                  title="نسبة الخصم"
                 >
-                <span>%</span>
-              </label>
-            </div>
-          </article>
-        <?php endforeach; ?>
-      </div>
+              </td>
+              <td class="px-2 py-2">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value="<?= $saleAfterUsd !== null ? h(number_format($saleAfterUsd, 2, '.', '')) : '' ?>"
+                  data-stagnant-item-price
+                  class="w-24 h-9 rounded-lg border border-border-subtle px-2 text-sm tabular-nums"
+                  title="سعر البيع بالدولار بعد الخصم"
+                  <?= $saleUsd === null || $saleUsd <= 0 ? 'disabled' : '' ?>
+                >
+              </td>
+              <td class="px-2 py-2">
+                <span class="inline-block min-w-[4.5rem] tabular-nums font-bold text-emerald-800" dir="ltr" data-stagnant-item-syp>
+                  <?= h($saleAfterSyp !== null ? number_format($saleAfterSyp, 0) : '—') ?>
+                </span>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
     </div>
   <?php endif; ?>
 </form>

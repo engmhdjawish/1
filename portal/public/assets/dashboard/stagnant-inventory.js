@@ -1,8 +1,27 @@
 /**
- * Stagnant inventory — cards, per-item discount, draft/activate, image zoom.
+ * Stagnant inventory — table rows, bidirectional % ↔ USD price,
+ * SYP preview from discounted USD (round up to 5), draft/activate, image zoom.
  */
 (function () {
   const BOUND = 'data-stagnant-bound';
+
+  function roundUpTo5(amount) {
+    if (!(amount > 0)) return 0;
+    return Math.ceil(amount / 5) * 5;
+  }
+
+  function parseNum(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function formatUsd(n) {
+    return (Math.round(n * 100) / 100).toFixed(2);
+  }
+
+  function formatSyp(n) {
+    return Math.round(n).toLocaleString('en-US');
+  }
 
   function selectedChecks(root = document) {
     return root.querySelectorAll('[data-stagnant-check]:checked');
@@ -24,22 +43,80 @@
     root.querySelectorAll('[data-stagnant-card]').forEach((card) => {
       const check = card.querySelector('[data-stagnant-check]');
       const on = check instanceof HTMLInputElement && check.checked;
-      card.classList.toggle('ring-2', on);
-      card.classList.toggle('ring-primary/40', on);
-      card.classList.toggle('border-primary/50', on);
-      card.classList.toggle('bg-primary/[0.03]', on);
+      card.classList.toggle('bg-primary/[0.04]', on);
+      card.classList.toggle('ring-1', on);
+      card.classList.toggle('ring-inset', on);
+      card.classList.toggle('ring-primary/30', on);
     });
+  }
+
+  function rowSaleUsd(row) {
+    return parseNum(row.getAttribute('data-sale-usd'));
+  }
+
+  function rowRate(row) {
+    return parseNum(row.getAttribute('data-rate')) || 0;
+  }
+
+  function updateSypPreview(row, saleUsdAfter) {
+    const sypEl = row.querySelector('[data-stagnant-item-syp]');
+    if (!(sypEl instanceof HTMLElement)) return;
+    const rate = rowRate(row);
+    if (!(saleUsdAfter > 0) || !(rate > 0)) {
+      sypEl.textContent = '—';
+      return;
+    }
+    sypEl.textContent = formatSyp(roundUpTo5(saleUsdAfter * rate));
+  }
+
+  function syncRowFromPercent(row, percent, markTouched) {
+    const pctInput = row.querySelector('[data-stagnant-item-discount]');
+    const priceInput = row.querySelector('[data-stagnant-item-price]');
+    if (!(pctInput instanceof HTMLInputElement)) return;
+
+    const pct = Math.max(0, Math.min(95, Number(percent) || 0));
+    pctInput.value = String(pct);
+    if (markTouched) pctInput.dataset.touched = '1';
+
+    const saleUsd = rowSaleUsd(row);
+    if (!(priceInput instanceof HTMLInputElement) || !(saleUsd > 0)) {
+      updateSypPreview(row, null);
+      return;
+    }
+
+    const after = Math.max(0, saleUsd * (1 - pct / 100));
+    priceInput.value = formatUsd(after);
+    updateSypPreview(row, after);
+  }
+
+  function syncRowFromPrice(row, priceValue) {
+    const pctInput = row.querySelector('[data-stagnant-item-discount]');
+    const priceInput = row.querySelector('[data-stagnant-item-price]');
+    if (!(pctInput instanceof HTMLInputElement) || !(priceInput instanceof HTMLInputElement)) return;
+
+    const saleUsd = rowSaleUsd(row);
+    if (!(saleUsd > 0)) return;
+
+    let after = parseNum(priceValue);
+    if (after === null) return;
+    after = Math.max(0, Math.min(saleUsd, after));
+    priceInput.value = formatUsd(after);
+
+    const pct = Math.max(0, Math.min(95, Math.round((1 - after / saleUsd) * 10000) / 100));
+    pctInput.value = String(pct);
+    pctInput.dataset.touched = '1';
+    updateSypPreview(row, after);
   }
 
   function applyDefaultDiscount(root = document) {
     const defaultInput = root.querySelector('[data-stagnant-default-discount]');
     if (!(defaultInput instanceof HTMLInputElement)) return;
     const value = defaultInput.value;
-    root.querySelectorAll('[data-stagnant-item-discount]').forEach((input) => {
-      if (!(input instanceof HTMLInputElement)) return;
-      if (!input.dataset.touched) {
-        input.value = value;
-      }
+    root.querySelectorAll('[data-stagnant-card]').forEach((row) => {
+      const pctInput = row.querySelector('[data-stagnant-item-discount]');
+      if (!(pctInput instanceof HTMLInputElement)) return;
+      if (pctInput.dataset.touched) return;
+      syncRowFromPercent(row, value, false);
     });
   }
 
@@ -87,11 +164,20 @@
       defaultDiscount.addEventListener('change', () => applyDefaultDiscount(form));
     }
 
-    form.querySelectorAll('[data-stagnant-item-discount]').forEach((input) => {
-      if (!(input instanceof HTMLInputElement)) return;
-      input.addEventListener('input', () => {
-        input.dataset.touched = '1';
-      });
+    form.querySelectorAll('[data-stagnant-card]').forEach((row) => {
+      const pctInput = row.querySelector('[data-stagnant-item-discount]');
+      const priceInput = row.querySelector('[data-stagnant-item-price]');
+
+      if (pctInput instanceof HTMLInputElement) {
+        pctInput.addEventListener('input', () => {
+          syncRowFromPercent(row, pctInput.value, true);
+        });
+      }
+      if (priceInput instanceof HTMLInputElement) {
+        priceInput.addEventListener('input', () => {
+          syncRowFromPrice(row, priceInput.value);
+        });
+      }
     });
 
     document.querySelectorAll('[data-stagnant-select-all]').forEach((btn) => {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Portal\Services;
 
 use Portal\Database;
+use Portal\Support\PriceFx;
 use Portal\Support\ResponseCache;
 use PDO;
 
@@ -753,38 +754,71 @@ final class SpecialOfferService
         $spec = self::resolveDiscountSpec($offer, $materialGuid);
         $discountType = (string) ($spec['discount_type'] ?? 'percent');
 
+        // USD is the fixed sale price. SYP after discount is always derived from
+        // discounted USD × exchange rate, rounded UP to the nearest 5 (Jawish rule).
+        $rate = PriceFx::inferRate(
+            $basePackSp,
+            $basePackUsd,
+            isset($material['currencyVal']) && is_numeric((string) $material['currencyVal'])
+                ? (float) $material['currencyVal']
+                : (isset($material['CurrencyVal']) && is_numeric((string) $material['CurrencyVal'])
+                    ? (float) $material['CurrencyVal']
+                    : null)
+        );
+
         if ($discountType === 'fixed_price') {
-            $effPackSp = is_numeric((string) ($spec['fixed_price_syp'] ?? ''))
-                ? (float) $spec['fixed_price_syp'] : $basePackSp;
-            $effPackUsd = is_numeric((string) ($spec['fixed_price_usd'] ?? ''))
-                ? (float) $spec['fixed_price_usd'] : $basePackUsd;
-            if ($spec['fixed_price_syp'] === null || $spec['fixed_price_syp'] === '') {
+            $hasUsd = $spec['fixed_price_usd'] !== null && $spec['fixed_price_usd'] !== ''
+                && is_numeric((string) $spec['fixed_price_usd']);
+            $hasSyp = $spec['fixed_price_syp'] !== null && $spec['fixed_price_syp'] !== ''
+                && is_numeric((string) $spec['fixed_price_syp']);
+            $effPackUsd = $hasUsd ? max(0.0, (float) $spec['fixed_price_usd']) : $basePackUsd;
+            if ($hasSyp) {
+                $effPackSp = max(0.0, (float) $spec['fixed_price_syp']);
+            } elseif ($hasUsd && $rate > 0.0) {
+                // Fixed offer prices are package-level; still round the implied unit SYP to 5.
+                $unitUsd = $packaging > 0 ? $effPackUsd / $packaging : $effPackUsd;
+                $effUnitSp = PriceFx::sypFromUsd($unitUsd, $rate);
+                $effPackSp = $effUnitSp * ($packaging > 0 ? $packaging : 1.0);
+            } else {
                 $effPackSp = $basePackSp;
-            }
-            if ($spec['fixed_price_usd'] === null || $spec['fixed_price_usd'] === '') {
-                $effPackUsd = $basePackUsd;
             }
         } elseif ($discountType === 'fixed_amount') {
-            $amountSp = is_numeric((string) ($spec['fixed_amount_syp'] ?? ''))
-                ? max(0.0, (float) $spec['fixed_amount_syp']) : 0.0;
             $amountUsd = is_numeric((string) ($spec['fixed_amount_usd'] ?? ''))
                 ? max(0.0, (float) $spec['fixed_amount_usd']) : 0.0;
-            $effPackSp = max(0.0, $basePackSp - $amountSp);
-            $effPackUsd = max(0.0, $basePackUsd - $amountUsd);
-            if (($spec['fixed_amount_syp'] === null || $spec['fixed_amount_syp'] === '') && $amountSp <= 0) {
-                $effPackSp = $basePackSp;
-            }
-            if (($spec['fixed_amount_usd'] === null || $spec['fixed_amount_usd'] === '') && $amountUsd <= 0) {
+            $hasUsdAmount = $spec['fixed_amount_usd'] !== null && $spec['fixed_amount_usd'] !== ''
+                && $amountUsd > 0;
+            if ($hasUsdAmount) {
+                $effPackUsd = max(0.0, $basePackUsd - $amountUsd);
+                if ($rate > 0.0) {
+                    $unitUsd = $packaging > 0 ? $effPackUsd / $packaging : $effPackUsd;
+                    $effUnitSp = PriceFx::sypFromUsd($unitUsd, $rate);
+                    $effPackSp = $effUnitSp * ($packaging > 0 ? $packaging : 1.0);
+                } else {
+                    $effPackSp = max(0.0, $basePackSp - (is_numeric((string) ($spec['fixed_amount_syp'] ?? ''))
+                        ? max(0.0, (float) $spec['fixed_amount_syp']) : 0.0));
+                }
+            } else {
+                $amountSp = is_numeric((string) ($spec['fixed_amount_syp'] ?? ''))
+                    ? max(0.0, (float) $spec['fixed_amount_syp']) : 0.0;
+                $effPackSp = max(0.0, $basePackSp - $amountSp);
                 $effPackUsd = $basePackUsd;
             }
         } else {
             $pct = min(100.0, max(0.0, (float) ($spec['discount_percent'] ?? 0)));
             $factor = 1.0 - ($pct / 100.0);
-            $effPackSp = $basePackSp * $factor;
-            $effPackUsd = $basePackUsd * $factor;
+            $effPackUsd = max(0.0, $basePackUsd * $factor);
+            if ($rate > 0.0) {
+                $unitUsd = $packaging > 0 ? $effPackUsd / $packaging : $effPackUsd;
+                $effUnitSp = PriceFx::sypFromUsd($unitUsd, $rate);
+                $effPackSp = $effUnitSp * ($packaging > 0 ? $packaging : 1.0);
+            } else {
+                $effPackSp = max(0.0, $basePackSp * $factor);
+            }
         }
 
-        $effUnitSp = $packaging > 0 ? $effPackSp / $packaging : $effPackSp;
+        $effUnitSp = isset($effUnitSp)
+            ? $effUnitSp
+            : ($packaging > 0 ? $effPackSp / $packaging : $effPackSp);
         $effUnitUsd = $packaging > 0 ? $effPackUsd / $packaging : $effPackUsd;
 
         return [

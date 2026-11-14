@@ -222,6 +222,7 @@ final class StagnantInventoryService
                 'unitSalePriceUsd' => self::nullableNumber($row['half'] ?? $row['Half'] ?? null),
                 'unitPurchasePriceUsd' => self::nullableNumber($row['endUser'] ?? $row['EndUser'] ?? null),
                 'unitSalePriceSyp' => self::nullableNumber($row['whole'] ?? $row['Whole'] ?? null),
+                'currencyVal' => self::nullableNumber($row['currencyVal'] ?? $row['CurrencyVal'] ?? null),
                 'storeBalances' => is_array($row['storeBalances'] ?? null) ? $row['storeBalances'] : [],
             ];
         }
