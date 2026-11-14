@@ -113,6 +113,18 @@ $assert('countdown in hours', hn_offer_countdown(date('c', $now + 5 * 3600 + 7 *
 $assert('no countdown when ended or open-ended', hn_offer_countdown(date('c', $now - 10), $now) === '' && hn_offer_countdown(null, $now) === '' && hn_offer_countdown('x', $now) === '');
 $assert('day labels', hn_days_label(1) === 'يوم واحد' && hn_days_label(2) === 'يومين' && hn_days_label(11) === '11 يوماً');
 $assert('offer badge', hn_offer_badge(['badge_text_ar' => 'جديد']) === 'جديد' && hn_offer_badge(['discount_type' => 'percent', 'discount_percent' => '12.50']) === 'خصم 12.5%' && hn_offer_badge([]) === 'عرض خاص');
+$assert(
+    'offer badge up-to for per-material',
+    hn_offer_badge([
+        'pricing_scope' => 'per_material',
+        'discount_type' => 'percent',
+        'discount_percent' => '10',
+        'product_overrides' => [
+            'a' => ['discount_type' => 'percent', 'discount_percent' => 10],
+            'b' => ['discount_type' => 'percent', 'discount_percent' => 15],
+        ],
+    ]) === 'خصم حتى 15%'
+);
 
 $assert('single search to the trial store', substr_count($html, 'name="q"') === 1 && str_contains($html, 'action="/store.php"') && str_contains($html, 'data-hn-search-input'));
 $assert('voice button hidden until supported', (bool) preg_match('/data-hn-voice[^>]*hidden/u', $html));

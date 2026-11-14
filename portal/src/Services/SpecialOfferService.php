@@ -63,10 +63,18 @@ final class SpecialOfferService
     /** @return list<array<string, mixed>> */
     private static function buildActiveHomeSectionShells(): array
     {
+        $pricingCols = self::hasExtendedOfferPricingColumns()
+            ? 'selection_mode::text AS selection_mode, pricing_scope,
+                    discount_type::text AS discount_type,
+                    discount_percent, fixed_price_syp, fixed_price_usd,
+                    fixed_amount_syp, fixed_amount_usd,'
+            : 'selection_mode::text AS selection_mode,
+                    discount_type::text AS discount_type,
+                    discount_percent, fixed_price_syp, fixed_price_usd,';
+
         $stmt = Database::pdo()->query(
             'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
-                    selection_mode::text AS selection_mode, discount_type::text AS discount_type,
-                    discount_percent, fixed_price_syp, fixed_price_usd,
+                    ' . $pricingCols . '
                     min_packages, max_packages, max_products, home_sort_order,
                     ends_at::text AS ends_at
              FROM special_offers
@@ -84,13 +92,16 @@ final class SpecialOfferService
 
         $offerIds = array_map(static fn (array $section): string => (string) $section['id'], $sections);
         $filtersByOffer = self::batchFiltersForOffers($offerIds);
-        $manualByOffer = self::batchManualProductsForOffers($offerIds);
+        $manualByOffer = self::batchManualProductRowsForOffers($offerIds);
 
         foreach ($sections as &$section) {
             $offerId = (string) $section['id'];
             $parsed = self::parseFilterRows($filtersByOffer[$offerId] ?? []);
+            $manual = $manualByOffer[$offerId] ?? ['guids' => [], 'overrides' => []];
             $section['filter_rules'] = $parsed['rules'];
-            $section['material_guids'] = $manualByOffer[$offerId] ?? [];
+            $section['material_guids'] = $manual['guids'];
+            $section['product_overrides'] = $manual['overrides'];
+            $section['pricing_scope'] = (string) ($section['pricing_scope'] ?? 'offer');
             $section['is_offer_section'] = true;
             $section['products'] = [];
             $section['display_options'] = $parsed['display_options'];
@@ -102,30 +113,12 @@ final class SpecialOfferService
     /** @return list<array<string, mixed>> */
     private static function buildActiveHomeSections(): array
     {
-        $stmt = Database::pdo()->query(
-            'SELECT id::text AS id, slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
-                    selection_mode::text AS selection_mode, discount_type::text AS discount_type,
-                    discount_percent, fixed_price_syp, fixed_price_usd,
-                    min_packages, max_packages, max_products, home_sort_order
-             FROM special_offers
-             WHERE is_active = TRUE
-               AND show_on_home = TRUE
-               AND starts_at <= NOW()
-               AND (ends_at IS NULL OR ends_at > NOW())
-             ORDER BY home_sort_order ASC, created_at ASC'
-        );
-        $sections = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-
+        $sections = self::buildActiveHomeSectionShells();
         foreach ($sections as &$section) {
-            $offerId = (string) $section['id'];
-            $parsed = self::parseFilterRows(self::filtersForOffer($offerId));
-            $section['filter_rules'] = $parsed['rules'];
-            $section['material_guids'] = self::manualProducts($offerId);
-            $section['is_offer_section'] = true;
             $products = self::loadOfferProducts($section);
             $section['products'] = self::attachOfferPricing($products, $section);
-            $section['display_options'] = $parsed['display_options'];
         }
+        unset($section);
 
         return $sections;
     }
@@ -143,7 +136,75 @@ final class SpecialOfferService
              ORDER BY id'
         )->fetchAll(PDO::FETCH_ASSOC);
 
-        return 'home_offers_v1:' . hash('sha256', json_encode($rows, JSON_UNESCAPED_UNICODE));
+        // v2: shells include pricing_scope + per-material overrides for correct home prices.
+        return 'home_offers_v2:' . hash('sha256', json_encode($rows, JSON_UNESCAPED_UNICODE));
+    }
+
+    /**
+     * Highest percent discount in an offer (header or per-material overrides).
+     *
+     * @param array<string, mixed> $offer
+     */
+    public static function maxPercentDiscount(array $offer): float
+    {
+        $max = 0.0;
+        $headerType = (string) ($offer['discount_type'] ?? 'percent');
+        if ($headerType === 'percent') {
+            $max = max($max, (float) ($offer['discount_percent'] ?? 0));
+        }
+
+        if ((string) ($offer['pricing_scope'] ?? 'offer') !== 'per_material') {
+            return min(100.0, max(0.0, $max));
+        }
+
+        $overrides = is_array($offer['product_overrides'] ?? null) ? $offer['product_overrides'] : [];
+        foreach ($overrides as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $type = trim((string) ($row['discount_type'] ?? ''));
+            if ($type !== '' && $type !== 'percent') {
+                continue;
+            }
+            if ($type === '' && $headerType !== 'percent') {
+                continue;
+            }
+            $pct = (float) ($row['discount_percent'] ?? 0);
+            if ($pct > $max) {
+                $max = $pct;
+            }
+        }
+
+        return min(100.0, max(0.0, $max));
+    }
+
+    /**
+     * Whether per-material percent discounts differ (so the header should say "حتى").
+     *
+     * @param array<string, mixed> $offer
+     */
+    public static function hasVariedPercentDiscounts(array $offer): bool
+    {
+        if ((string) ($offer['pricing_scope'] ?? 'offer') !== 'per_material') {
+            return false;
+        }
+        $overrides = is_array($offer['product_overrides'] ?? null) ? $offer['product_overrides'] : [];
+        $percents = [];
+        foreach ($overrides as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $type = trim((string) ($row['discount_type'] ?? 'percent'));
+            if ($type !== 'percent') {
+                continue;
+            }
+            $pct = round((float) ($row['discount_percent'] ?? 0), 2);
+            if ($pct > 0) {
+                $percents[$pct] = true;
+            }
+        }
+
+        return count($percents) > 1;
     }
 
     /** @return list<array{show_images: bool, price_mode: string}> */

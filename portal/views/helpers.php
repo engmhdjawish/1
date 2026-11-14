@@ -1616,9 +1616,22 @@ function hn_offer_badge(array $section): string
     if ($badge !== '') {
         return $badge;
     }
-    $percent = (float) ($section['discount_percent'] ?? 0);
-    if (($section['discount_type'] ?? '') === 'percent' && $percent > 0) {
-        return 'خصم ' . rtrim(rtrim(number_format($percent, 1, '.', ''), '0'), '.') . '%';
+
+    $percent = \Portal\Services\SpecialOfferService::maxPercentDiscount($section);
+    if ($percent <= 0 && ($section['discount_type'] ?? '') === 'percent') {
+        $percent = (float) ($section['discount_percent'] ?? 0);
+    }
+    if ($percent > 0) {
+        $formatted = rtrim(rtrim(number_format($percent, 1, '.', ''), '0'), '.');
+        // Per-material offers (especially mixed %) → "خصم حتى X%" using the highest rate.
+        if (
+            (string) ($section['pricing_scope'] ?? 'offer') === 'per_material'
+            || \Portal\Services\SpecialOfferService::hasVariedPercentDiscounts($section)
+        ) {
+            return 'خصم حتى ' . $formatted . '%';
+        }
+
+        return 'خصم ' . $formatted . '%';
     }
 
     return 'عرض خاص';

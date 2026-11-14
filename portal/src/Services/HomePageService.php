@@ -247,7 +247,8 @@ final class HomePageService
 
     private static function productStripsCacheKey(): string
     {
-        return 'home_product_strips_v4:' . self::cacheKey();
+        // v5: offer shells carry per-material overrides so strip prices match the store.
+        return 'home_product_strips_v5:' . self::cacheKey();
     }
 
     /** @param array<string, mixed> $rules */
