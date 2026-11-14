@@ -331,84 +331,90 @@ $buildUrl = static function (array $overrides) use ($queryBase, $selectedStoreGu
   <?php if ($items === []): ?>
     <div class="rounded-xl border border-border-subtle bg-white px-4 py-12 text-center text-text-muted">لا توجد نتائج.</div>
   <?php else: ?>
-    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3" data-stagnant-cards>
-      <?php foreach ($items as $item): ?>
-        <?php
-          $guid = strtolower((string) ($item['materialGuid'] ?? ''));
-          $imageGuid = (string) ($item['productImageGuid'] ?? '');
-          $name = (string) ($item['name'] ?? '');
-          $code = (string) ($item['materialCode'] ?? '');
-          $meta = trim(implode(' · ', array_filter([
-              (string) ($item['company'] ?? ''),
-              (string) ($item['materialType'] ?? ''),
-              (string) ($item['groupName'] ?? ''),
-          ], static fn ($v) => $v !== '')));
-          $qty = (float) ($item['stagnantRemainingQty'] ?? 0);
-          $age = (float) ($item['maxAgeDays'] ?? 0);
-          $sale = isset($item['unitSalePriceUsd']) ? (float) $item['unitSalePriceUsd'] : null;
-          $purchase = isset($item['unitPurchasePriceUsd']) ? (float) $item['unitPurchasePriceUsd'] : null;
-          $thumbUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '';
-          $fullUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=0' : '';
-        ?>
-        <article class="stagnant-card group relative rounded-2xl border border-border-subtle bg-white shadow-sm overflow-hidden transition hover:border-primary/40 hover:shadow-md" data-stagnant-card>
-          <div class="relative">
-            <?php if ($fullUrl !== ''): ?>
-              <button
-                type="button"
-                class="block w-full aspect-[4/3] bg-slate-100 overflow-hidden cursor-zoom-in"
-                data-cart-image-zoom="<?= h($fullUrl) ?>"
-                aria-label="عرض الصورة"
-              >
-                <img
-                  src="<?= h($thumbUrl) ?>"
-                  alt="<?= h($name) ?>"
-                  loading="lazy"
-                  decoding="async"
-                  class="w-full h-full object-cover transition duration-300 group-hover:scale-[1.03]"
-                  onerror="this.closest('button')?.classList.add('opacity-50'); this.remove()"
-                >
-              </button>
-            <?php else: ?>
-              <div class="w-full aspect-[4/3] bg-slate-100 flex items-center justify-center text-slate-400 text-xs">بلا صورة</div>
-            <?php endif; ?>
-            <label class="absolute top-2 right-2 inline-flex items-center justify-center w-9 h-9 rounded-full bg-white/95 border border-border-subtle shadow-sm cursor-pointer">
-              <input type="checkbox" name="material_guids[]" value="<?= h($guid) ?>" class="w-4 h-4 rounded border-slate-300" data-stagnant-check>
-            </label>
-            <div class="absolute bottom-2 left-2 rounded-full bg-black/70 text-white text-[11px] font-bold px-2.5 py-1 tabular-nums">
-              <?= h(number_format($age, 0)) ?> يوم
-            </div>
-          </div>
+    <div class="rounded-xl border border-border-subtle bg-white overflow-hidden shadow-sm">
+      <div class="hidden md:grid grid-cols-[40px_64px_minmax(0,1.4fr)_88px_88px_110px_88px_88px_110px] gap-2 px-3 py-2.5 bg-slate-50 text-xs font-bold text-slate-600 border-b border-border-subtle">
+        <div></div>
+        <div>صورة</div>
+        <div>المادة</div>
+        <div>الكمية</div>
+        <div>العمر</div>
+        <div>أقدم شراء</div>
+        <div>المبيع</div>
+        <div>الشراء</div>
+        <div>خصم %</div>
+      </div>
+      <div class="divide-y divide-border-subtle" data-stagnant-cards>
+        <?php foreach ($items as $item): ?>
+          <?php
+            $guid = strtolower((string) ($item['materialGuid'] ?? ''));
+            $imageGuid = (string) ($item['productImageGuid'] ?? '');
+            $name = (string) ($item['name'] ?? '');
+            $code = (string) ($item['materialCode'] ?? '');
+            $meta = trim(implode(' · ', array_filter([
+                (string) ($item['company'] ?? ''),
+                (string) ($item['materialType'] ?? ''),
+                (string) ($item['groupName'] ?? ''),
+            ], static fn ($v) => $v !== '')));
+            $qty = (float) ($item['stagnantRemainingQty'] ?? 0);
+            $ageRaw = $item['maxAgeDays'] ?? null;
+            $ageLabel = $ageRaw === null || $ageRaw === '' ? '—' : number_format((float) $ageRaw, 0);
+            $sale = isset($item['unitSalePriceUsd']) ? (float) $item['unitSalePriceUsd'] : null;
+            $purchase = isset($item['unitPurchasePriceUsd']) ? (float) $item['unitPurchasePriceUsd'] : null;
+            $thumbUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '';
+            $fullUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=0' : '';
+          ?>
+          <article class="stagnant-card px-3 py-2.5 hover:bg-slate-50/80 transition" data-stagnant-card>
+            <div class="grid grid-cols-[40px_64px_minmax(0,1fr)] md:grid-cols-[40px_64px_minmax(0,1.4fr)_88px_88px_110px_88px_88px_110px] gap-2 items-center">
+              <label class="inline-flex items-center justify-center">
+                <input type="checkbox" name="material_guids[]" value="<?= h($guid) ?>" class="w-4 h-4 rounded border-slate-300" data-stagnant-check>
+              </label>
 
-          <div class="p-3 space-y-2">
-            <div>
-              <h3 class="text-sm font-extrabold text-slate-900 leading-snug line-clamp-2"><?= h($name !== '' ? $name : $guid) ?></h3>
-              <?php if ($code !== ''): ?>
-                <p class="text-xs text-text-muted font-mono mt-0.5" dir="ltr"><?= h($code) ?></p>
-              <?php endif; ?>
-              <?php if ($meta !== ''): ?>
-                <p class="text-[11px] text-text-muted mt-0.5 line-clamp-1"><?= h($meta) ?></p>
-              <?php endif; ?>
-            </div>
+              <div>
+                <?php if ($fullUrl !== ''): ?>
+                  <button
+                    type="button"
+                    class="block w-14 h-14 rounded-lg overflow-hidden bg-slate-100 border border-border-subtle cursor-zoom-in"
+                    data-cart-image-zoom="<?= h($fullUrl) ?>"
+                    aria-label="عرض الصورة"
+                  >
+                    <img
+                      src="<?= h($thumbUrl) ?>"
+                      alt="<?= h($name) ?>"
+                      loading="lazy"
+                      decoding="async"
+                      class="w-full h-full object-cover"
+                      onerror="this.closest('button')?.classList.add('opacity-40'); this.remove()"
+                    >
+                  </button>
+                <?php else: ?>
+                  <div class="w-14 h-14 rounded-lg bg-slate-100 border border-dashed border-slate-300"></div>
+                <?php endif; ?>
+              </div>
 
-            <div class="grid grid-cols-3 gap-2 text-center">
-              <div class="rounded-lg bg-slate-50 px-1.5 py-1.5">
-                <div class="text-[10px] text-text-muted">الكمية</div>
-                <div class="text-xs font-bold tabular-nums text-slate-900"><?= h(number_format($qty, 0)) ?></div>
+              <div class="min-w-0">
+                <div class="font-bold text-sm text-slate-900 leading-snug"><?= h($name !== '' ? $name : $guid) ?></div>
+                <?php if ($code !== ''): ?>
+                  <div class="text-xs text-text-muted font-mono mt-0.5" dir="ltr"><?= h($code) ?></div>
+                <?php endif; ?>
+                <?php if ($meta !== ''): ?>
+                  <div class="text-[11px] text-text-muted mt-0.5 truncate"><?= h($meta) ?></div>
+                <?php endif; ?>
+                <div class="mt-1 flex flex-wrap gap-2 md:hidden text-[11px] text-text-muted">
+                  <span>كمية <?= h(number_format($qty, 0)) ?></span>
+                  <span class="font-bold text-slate-800">عمر <?= h($ageLabel) ?> يوم</span>
+                  <span>مبيع <?= h($fmtMoney($sale)) ?></span>
+                  <span>شراء <?= h($fmtMoney($purchase)) ?></span>
+                </div>
               </div>
-              <div class="rounded-lg bg-slate-50 px-1.5 py-1.5">
-                <div class="text-[10px] text-text-muted">المبيع</div>
-                <div class="text-xs font-bold tabular-nums text-slate-900" dir="ltr"><?= h($fmtMoney($sale)) ?></div>
-              </div>
-              <div class="rounded-lg bg-slate-50 px-1.5 py-1.5">
-                <div class="text-[10px] text-text-muted">الشراء</div>
-                <div class="text-xs font-bold tabular-nums text-slate-900" dir="ltr"><?= h($fmtMoney($purchase)) ?></div>
-              </div>
-            </div>
 
-            <div class="flex items-center justify-between gap-2 pt-1 border-t border-border-subtle">
-              <span class="text-xs text-text-muted"><?= h($fmtDate((string) ($item['oldestPurchaseDate'] ?? ''))) ?></span>
-              <label class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700">
-                خصم
+              <div class="hidden md:block text-sm font-bold tabular-nums"><?= h(number_format($qty, 0)) ?></div>
+              <div class="hidden md:block text-sm font-extrabold tabular-nums text-amber-700"><?= h($ageLabel) ?></div>
+              <div class="hidden md:block text-sm tabular-nums text-slate-600" dir="ltr"><?= h($fmtDate((string) ($item['oldestPurchaseDate'] ?? ''))) ?></div>
+              <div class="hidden md:block text-sm tabular-nums" dir="ltr"><?= h($fmtMoney($sale)) ?></div>
+              <div class="hidden md:block text-sm tabular-nums" dir="ltr"><?= h($fmtMoney($purchase)) ?></div>
+
+              <label class="flex items-center gap-1 text-xs font-bold text-slate-700 md:justify-start">
+                <span class="md:hidden">خصم</span>
                 <input
                   type="number"
                   name="material_discount[<?= h($guid) ?>]"
@@ -419,12 +425,12 @@ $buildUrl = static function (array $overrides) use ($queryBase, $selectedStoreGu
                   data-stagnant-item-discount
                   class="w-16 h-8 rounded-lg border border-border-subtle px-2 text-sm tabular-nums"
                 >
-                %
+                <span>%</span>
               </label>
             </div>
-          </div>
-        </article>
-      <?php endforeach; ?>
+          </article>
+        <?php endforeach; ?>
+      </div>
     </div>
   <?php endif; ?>
 </form>
