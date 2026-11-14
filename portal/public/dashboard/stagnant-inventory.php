@@ -105,14 +105,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         }
         $perMaterialPercents[$guid] = (float) $pct;
     }
-    $result = StagnantInventoryService::createOfferFromSelection(
-        $selectedGuids,
-        $perMaterialPercents,
-        $discountPercent,
-        $titleAr,
-        $userId,
-        $asDraft
-    );
+    try {
+        $result = StagnantInventoryService::createOfferFromSelection(
+            $selectedGuids,
+            $perMaterialPercents,
+            $discountPercent,
+            $titleAr,
+            $userId,
+            $asDraft
+        );
+    } catch (\Throwable $e) {
+        $result = [
+            'ok' => false,
+            'message' => 'تعذر إنشاء العرض: ' . $e->getMessage(),
+            'id' => null,
+        ];
+    }
     if ($result['ok'] && !empty($result['id'])) {
         $tab = $asDraft ? 'paused' : 'active';
         $editUrl = '/dashboard/special-offers.php?edit=' . rawurlencode((string) $result['id'])

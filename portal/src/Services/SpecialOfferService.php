@@ -308,82 +308,142 @@ final class SpecialOfferService
             $pricingScope = 'offer';
         }
 
-        $pdo = Database::pdo();
-        $params = [
-            'slug' => $slug,
-            'title_ar' => $title,
-            'subtitle_ar' => trim((string) ($payload['subtitle_ar'] ?? '')) ?: null,
-            'badge_text_ar' => trim((string) ($payload['badge_text_ar'] ?? '')) ?: null,
-            'banner_image_url' => trim((string) ($payload['banner_image_url'] ?? '')) ?: null,
-            'selection_mode' => $selectionMode,
-            'pricing_scope' => $pricingScope,
-            'discount_type' => $discountType,
-            'discount_percent' => $discountType === 'percent' ? self::toNullableFloat((string) ($payload['discount_percent'] ?? '')) : null,
-            'fixed_price_syp' => $discountType === 'fixed_price' ? self::toNullableFloat((string) ($payload['fixed_price_syp'] ?? '')) : null,
-            'fixed_price_usd' => $discountType === 'fixed_price' ? self::toNullableFloat((string) ($payload['fixed_price_usd'] ?? '')) : null,
-            'fixed_amount_syp' => $discountType === 'fixed_amount' ? self::toNullableFloat((string) ($payload['fixed_amount_syp'] ?? '')) : null,
-            'fixed_amount_usd' => $discountType === 'fixed_amount' ? self::toNullableFloat((string) ($payload['fixed_amount_usd'] ?? '')) : null,
-            'starts_at' => trim((string) ($payload['starts_at'] ?? '')) ?: date('Y-m-d H:i:s'),
-            'ends_at' => trim((string) ($payload['ends_at'] ?? '')) ?: null,
-            'is_active' => !empty($payload['is_active']) ? 'true' : 'false',
-            'priority' => (int) ($payload['priority'] ?? 0),
-            'min_packages' => self::toNullableFloat((string) ($payload['min_packages'] ?? '')),
-            'max_packages' => self::toNullableFloat((string) ($payload['max_packages'] ?? '')),
-            'max_products' => max(1, min(48, (int) ($payload['max_products'] ?? 12))),
-            'show_on_home' => !empty($payload['show_on_home']) ? 'true' : 'false',
-            'home_sort_order' => (int) ($payload['home_sort_order'] ?? 0),
-            'updated_by_web_user_id' => $userId ?: null,
-        ];
+        $startsAt = self::normalizeDateTime((string) ($payload['starts_at'] ?? '')) ?? date('Y-m-d H:i:s');
+        $endsAt = self::normalizeDateTime((string) ($payload['ends_at'] ?? ''));
 
-        if ($id === '') {
-            $stmt = $pdo->prepare(
-                'INSERT INTO special_offers (
-                    slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
-                    selection_mode, pricing_scope, discount_type, discount_percent,
-                    fixed_price_syp, fixed_price_usd, fixed_amount_syp, fixed_amount_usd,
-                    starts_at, ends_at, is_active, priority, min_packages, max_packages,
-                    max_products, show_on_home, home_sort_order, updated_by_web_user_id
-                 ) VALUES (
-                    :slug, :title_ar, :subtitle_ar, :badge_text_ar, :banner_image_url,
-                    :selection_mode, :pricing_scope, :discount_type, :discount_percent,
-                    :fixed_price_syp, :fixed_price_usd, :fixed_amount_syp, :fixed_amount_usd,
-                    :starts_at, :ends_at, :is_active, :priority, :min_packages, :max_packages,
-                    :max_products, :show_on_home, :home_sort_order, :updated_by_web_user_id
-                 ) RETURNING id::text'
+        try {
+            $pdo = Database::pdo();
+            $slug = self::ensureUniqueSlug($slug, $id !== '' ? $id : null);
+            $hasExtended = self::hasExtendedOfferPricingColumns();
+            if (!$hasExtended && $discountType === 'fixed_amount') {
+                $discountType = 'percent';
+            }
+            if (!$hasExtended) {
+                $pricingScope = 'offer';
+            }
+
+            $params = [
+                'slug' => $slug,
+                'title_ar' => $title,
+                'subtitle_ar' => trim((string) ($payload['subtitle_ar'] ?? '')) ?: null,
+                'badge_text_ar' => trim((string) ($payload['badge_text_ar'] ?? '')) ?: null,
+                'banner_image_url' => trim((string) ($payload['banner_image_url'] ?? '')) ?: null,
+                'selection_mode' => $selectionMode,
+                'discount_type' => $discountType,
+                'discount_percent' => $discountType === 'percent' ? self::toNullableFloat((string) ($payload['discount_percent'] ?? '')) : null,
+                'fixed_price_syp' => $discountType === 'fixed_price' ? self::toNullableFloat((string) ($payload['fixed_price_syp'] ?? '')) : null,
+                'fixed_price_usd' => $discountType === 'fixed_price' ? self::toNullableFloat((string) ($payload['fixed_price_usd'] ?? '')) : null,
+                'starts_at' => $startsAt,
+                'ends_at' => $endsAt,
+                'is_active' => !empty($payload['is_active']) ? 'true' : 'false',
+                'priority' => (int) ($payload['priority'] ?? 0),
+                'min_packages' => self::toNullableFloat((string) ($payload['min_packages'] ?? '')),
+                'max_packages' => self::toNullableFloat((string) ($payload['max_packages'] ?? '')),
+                'max_products' => max(1, min(48, (int) ($payload['max_products'] ?? 12))),
+                'show_on_home' => !empty($payload['show_on_home']) ? 'true' : 'false',
+                'home_sort_order' => (int) ($payload['home_sort_order'] ?? 0),
+                'updated_by_web_user_id' => $userId ?: null,
+            ];
+            if ($hasExtended) {
+                $params['pricing_scope'] = $pricingScope;
+                $params['fixed_amount_syp'] = $discountType === 'fixed_amount'
+                    ? self::toNullableFloat((string) ($payload['fixed_amount_syp'] ?? ''))
+                    : null;
+                $params['fixed_amount_usd'] = $discountType === 'fixed_amount'
+                    ? self::toNullableFloat((string) ($payload['fixed_amount_usd'] ?? ''))
+                    : null;
+            }
+
+            if ($id === '') {
+                if ($hasExtended) {
+                    $stmt = $pdo->prepare(
+                        'INSERT INTO special_offers (
+                            slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
+                            selection_mode, pricing_scope, discount_type, discount_percent,
+                            fixed_price_syp, fixed_price_usd, fixed_amount_syp, fixed_amount_usd,
+                            starts_at, ends_at, is_active, priority, min_packages, max_packages,
+                            max_products, show_on_home, home_sort_order, updated_by_web_user_id
+                         ) VALUES (
+                            :slug, :title_ar, :subtitle_ar, :badge_text_ar, :banner_image_url,
+                            :selection_mode, :pricing_scope, :discount_type, :discount_percent,
+                            :fixed_price_syp, :fixed_price_usd, :fixed_amount_syp, :fixed_amount_usd,
+                            :starts_at, :ends_at, :is_active, :priority, :min_packages, :max_packages,
+                            :max_products, :show_on_home, :home_sort_order, :updated_by_web_user_id
+                         ) RETURNING id::text'
+                    );
+                } else {
+                    $stmt = $pdo->prepare(
+                        'INSERT INTO special_offers (
+                            slug, title_ar, subtitle_ar, badge_text_ar, banner_image_url,
+                            selection_mode, discount_type, discount_percent,
+                            fixed_price_syp, fixed_price_usd,
+                            starts_at, ends_at, is_active, priority, min_packages, max_packages,
+                            max_products, show_on_home, home_sort_order, updated_by_web_user_id
+                         ) VALUES (
+                            :slug, :title_ar, :subtitle_ar, :badge_text_ar, :banner_image_url,
+                            :selection_mode, :discount_type, :discount_percent,
+                            :fixed_price_syp, :fixed_price_usd,
+                            :starts_at, :ends_at, :is_active, :priority, :min_packages, :max_packages,
+                            :max_products, :show_on_home, :home_sort_order, :updated_by_web_user_id
+                         ) RETURNING id::text'
+                    );
+                }
+                $stmt->execute($params);
+                $id = (string) $stmt->fetchColumn();
+            } else {
+                $params['id'] = $id;
+                if ($hasExtended) {
+                    $stmt = $pdo->prepare(
+                        'UPDATE special_offers SET
+                            slug = :slug, title_ar = :title_ar, subtitle_ar = :subtitle_ar,
+                            badge_text_ar = :badge_text_ar, banner_image_url = :banner_image_url,
+                            selection_mode = :selection_mode, pricing_scope = :pricing_scope,
+                            discount_type = :discount_type, discount_percent = :discount_percent,
+                            fixed_price_syp = :fixed_price_syp, fixed_price_usd = :fixed_price_usd,
+                            fixed_amount_syp = :fixed_amount_syp, fixed_amount_usd = :fixed_amount_usd,
+                            starts_at = :starts_at, ends_at = :ends_at, is_active = :is_active,
+                            priority = :priority, min_packages = :min_packages, max_packages = :max_packages,
+                            max_products = :max_products, show_on_home = :show_on_home,
+                            home_sort_order = :home_sort_order, updated_by_web_user_id = :updated_by_web_user_id
+                         WHERE id = :id'
+                    );
+                } else {
+                    $stmt = $pdo->prepare(
+                        'UPDATE special_offers SET
+                            slug = :slug, title_ar = :title_ar, subtitle_ar = :subtitle_ar,
+                            badge_text_ar = :badge_text_ar, banner_image_url = :banner_image_url,
+                            selection_mode = :selection_mode,
+                            discount_type = :discount_type, discount_percent = :discount_percent,
+                            fixed_price_syp = :fixed_price_syp, fixed_price_usd = :fixed_price_usd,
+                            starts_at = :starts_at, ends_at = :ends_at, is_active = :is_active,
+                            priority = :priority, min_packages = :min_packages, max_packages = :max_packages,
+                            max_products = :max_products, show_on_home = :show_on_home,
+                            home_sort_order = :home_sort_order, updated_by_web_user_id = :updated_by_web_user_id
+                         WHERE id = :id'
+                    );
+                }
+                $stmt->execute($params);
+            }
+
+            $displayOptions = is_array($payload['display_options'] ?? null)
+                ? $payload['display_options']
+                : self::defaultDisplayOptions();
+            self::syncFilters(
+                $id,
+                is_array($payload['filter_rules'] ?? null) ? $payload['filter_rules'] : [],
+                $displayOptions
             );
-            $stmt->execute($params);
-            $id = (string) $stmt->fetchColumn();
-        } else {
-            $params['id'] = $id;
-            $stmt = $pdo->prepare(
-                'UPDATE special_offers SET
-                    slug = :slug, title_ar = :title_ar, subtitle_ar = :subtitle_ar,
-                    badge_text_ar = :badge_text_ar, banner_image_url = :banner_image_url,
-                    selection_mode = :selection_mode, pricing_scope = :pricing_scope,
-                    discount_type = :discount_type, discount_percent = :discount_percent,
-                    fixed_price_syp = :fixed_price_syp, fixed_price_usd = :fixed_price_usd,
-                    fixed_amount_syp = :fixed_amount_syp, fixed_amount_usd = :fixed_amount_usd,
-                    starts_at = :starts_at, ends_at = :ends_at, is_active = :is_active,
-                    priority = :priority, min_packages = :min_packages, max_packages = :max_packages,
-                    max_products = :max_products, show_on_home = :show_on_home,
-                    home_sort_order = :home_sort_order, updated_by_web_user_id = :updated_by_web_user_id
-                 WHERE id = :id'
-            );
-            $stmt->execute($params);
+            $materialGuids = is_array($payload['material_guids'] ?? null) ? $payload['material_guids'] : [];
+            $productOverrides = is_array($payload['product_overrides'] ?? null) ? $payload['product_overrides'] : [];
+            self::syncManualProducts($id, $materialGuids, $pricingScope === 'per_material' ? $productOverrides : []);
+            self::syncOfferNotification($id);
+        } catch (\Throwable $e) {
+            return [
+                'ok' => false,
+                'message' => 'تعذر حفظ العرض: ' . $e->getMessage(),
+                'id' => null,
+            ];
         }
-
-        $displayOptions = is_array($payload['display_options'] ?? null)
-            ? $payload['display_options']
-            : self::defaultDisplayOptions();
-        self::syncFilters(
-            $id,
-            is_array($payload['filter_rules'] ?? null) ? $payload['filter_rules'] : [],
-            $displayOptions
-        );
-        $materialGuids = is_array($payload['material_guids'] ?? null) ? $payload['material_guids'] : [];
-        $productOverrides = is_array($payload['product_overrides'] ?? null) ? $payload['product_overrides'] : [];
-        self::syncManualProducts($id, $materialGuids, $pricingScope === 'per_material' ? $productOverrides : []);
-        self::syncOfferNotification($id);
 
         return ['ok' => true, 'message' => 'تم حفظ العرض.', 'id' => $id];
     }
@@ -1296,17 +1356,30 @@ final class SpecialOfferService
     {
         $pdo = Database::pdo();
         $pdo->prepare('DELETE FROM special_offer_products WHERE offer_id = :id')->execute(['id' => $offerId]);
-        $stmt = $pdo->prepare(
-            'INSERT INTO special_offer_products (
-                offer_id, material_guid, sort_order,
-                discount_type, discount_percent, fixed_price_syp, fixed_price_usd,
-                fixed_amount_syp, fixed_amount_usd
-             ) VALUES (
-                :offer_id, :guid, :sort,
-                :discount_type, :discount_percent, :fixed_price_syp, :fixed_price_usd,
-                :fixed_amount_syp, :fixed_amount_usd
-             )'
-        );
+        $hasExtended = self::hasExtendedOfferPricingColumns();
+        if ($hasExtended) {
+            $stmt = $pdo->prepare(
+                'INSERT INTO special_offer_products (
+                    offer_id, material_guid, sort_order,
+                    discount_type, discount_percent, fixed_price_syp, fixed_price_usd,
+                    fixed_amount_syp, fixed_amount_usd
+                 ) VALUES (
+                    :offer_id, :guid, :sort,
+                    :discount_type, :discount_percent, :fixed_price_syp, :fixed_price_usd,
+                    :fixed_amount_syp, :fixed_amount_usd
+                 )'
+            );
+        } else {
+            $stmt = $pdo->prepare(
+                'INSERT INTO special_offer_products (
+                    offer_id, material_guid, sort_order,
+                    discount_type, discount_percent, fixed_price_syp, fixed_price_usd
+                 ) VALUES (
+                    :offer_id, :guid, :sort,
+                    :discount_type, :discount_percent, :fixed_price_syp, :fixed_price_usd
+                 )'
+            );
+        }
         $sort = 0;
         $normalizedOverrides = [];
         foreach ($overrides as $key => $value) {
@@ -1319,11 +1392,14 @@ final class SpecialOfferService
             }
             $override = $normalizedOverrides[$guid] ?? [];
             $type = trim((string) ($override['discount_type'] ?? ''));
-            if (!in_array($type, ['percent', 'fixed_price', 'fixed_amount'], true)) {
+            $allowedTypes = $hasExtended
+                ? ['percent', 'fixed_price', 'fixed_amount']
+                : ['percent', 'fixed_price'];
+            if (!in_array($type, $allowedTypes, true)) {
                 $type = '';
             }
 
-            $stmt->execute([
+            $row = [
                 'offer_id' => $offerId,
                 'guid' => $guid,
                 'sort' => $sort++,
@@ -1337,13 +1413,16 @@ final class SpecialOfferService
                 'fixed_price_usd' => $type === 'fixed_price'
                     ? self::toNullableFloat((string) ($override['fixed_price_usd'] ?? ''))
                     : null,
-                'fixed_amount_syp' => $type === 'fixed_amount'
+            ];
+            if ($hasExtended) {
+                $row['fixed_amount_syp'] = $type === 'fixed_amount'
                     ? self::toNullableFloat((string) ($override['fixed_amount_syp'] ?? ''))
-                    : null,
-                'fixed_amount_usd' => $type === 'fixed_amount'
+                    : null;
+                $row['fixed_amount_usd'] = $type === 'fixed_amount'
                     ? self::toNullableFloat((string) ($override['fixed_amount_usd'] ?? ''))
-                    : null,
-            ]);
+                    : null;
+            }
+            $stmt->execute($row);
         }
     }
 
@@ -1645,9 +1724,49 @@ final class SpecialOfferService
     {
         $value = trim(function_exists('mb_strtolower') ? mb_strtolower($value, 'UTF-8') : strtolower($value));
         $value = preg_replace('/[\s_]+/u', '-', $value) ?? '';
-        $value = preg_replace('/[^a-z0-9\-]/u', '', $value) ?? '';
+        $value = preg_replace('/[^a-z0-9\-]+/u', '', $value) ?? '';
 
         return trim($value, '-');
+    }
+
+    private static function ensureUniqueSlug(string $slug, ?string $exceptId = null): string
+    {
+        $base = substr($slug !== '' ? $slug : 'offer', 0, 64);
+        $candidate = $base;
+        $attempt = 0;
+        while ($attempt < 12) {
+            $sql = 'SELECT 1 FROM special_offers WHERE slug = :slug';
+            $params = ['slug' => $candidate];
+            if ($exceptId !== null && $exceptId !== '') {
+                $sql .= ' AND id::text <> :id';
+                $params['id'] = $exceptId;
+            }
+            $sql .= ' LIMIT 1';
+            $stmt = Database::pdo()->prepare($sql);
+            $stmt->execute($params);
+            if ($stmt->fetchColumn() === false) {
+                return $candidate;
+            }
+            $attempt++;
+            $candidate = $base . '-' . substr(bin2hex(random_bytes(3)), 0, 6);
+        }
+
+        return $base . '-' . substr(bin2hex(random_bytes(4)), 0, 8);
+    }
+
+    private static function normalizeDateTime(string $value): ?string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+        $value = str_replace('T', ' ', $value);
+        if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $value)) {
+            $value .= ':00';
+        }
+        $ts = strtotime($value);
+
+        return $ts ? date('Y-m-d H:i:s', $ts) : null;
     }
 
     private static function formatQty(float $qty): string
