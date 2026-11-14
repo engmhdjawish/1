@@ -363,7 +363,7 @@ final class DashboardNavigation
                     'label' => 'المخزون الراكد',
                     'icon' => 'inventory_2',
                     'permission' => 'special_offers.manage',
-                    'description' => 'أعمار المواد الراكدة (FIFO) مع الصور والأسعار، وتحديد أصناف لتوليد عروض تصريف.',
+                    'description' => 'مراجعة المواد ذات الرصيد القديم وتوليد عروض تصريف.',
                 ],
                 [
                     'route' => '/dashboard/price-checker.php',
