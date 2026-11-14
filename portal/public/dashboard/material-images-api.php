@@ -9,10 +9,12 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use Portal\Auth\WebSession;
 use Portal\Services\MaterialImageBackgroundWorkerService;
 use Portal\Services\MaterialImageLinkService;
+use Portal\Services\MaterialImageOrphanCleanupService;
 use Portal\Services\MaterialImageStorageService;
 use Portal\Services\MaterialImageSyncService;
 use Portal\Services\PortalSettingsService;
 use Portal\Support\DashboardHttp;
+use Portal\Support\SessionGate;
 use Throwable;
 
 /** @param array<string, mixed> $payload */
@@ -70,6 +72,8 @@ try {
 
     $user = WebSession::user();
     $userId = isset($user['id']) ? (string) $user['id'] : null;
+
+    SessionGate::release();
 
     MaterialImageSyncService::ensureTable();
     $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
@@ -585,6 +589,69 @@ if ($method === 'POST') {
             'queue' => MaterialImageSyncService::listQueuePage($queuePage, $queuePageSize),
         ]), JSON_UNESCAPED_UNICODE);
         exit;
+    }
+
+    if ($action === 'orphan-cleanup-init') {
+        materialImagesApiJson(MaterialImageOrphanCleanupService::initScan());
+    }
+
+    if ($action === 'orphan-cleanup-load-registry') {
+        @set_time_limit(300);
+        $scanId = trim((string) ($_POST['scan_id'] ?? ''));
+        materialImagesApiJson(MaterialImageOrphanCleanupService::loadRegistry($scanId));
+    }
+
+    if ($action === 'orphan-cleanup-registry-chunk') {
+        @set_time_limit(180);
+        $scanId = trim((string) ($_POST['scan_id'] ?? ''));
+        materialImagesApiJson(MaterialImageOrphanCleanupService::scanRegistryChunk($scanId));
+    }
+
+    if ($action === 'orphan-cleanup-index-local') {
+        @set_time_limit(300);
+        $scanId = trim((string) ($_POST['scan_id'] ?? ''));
+        materialImagesApiJson(MaterialImageOrphanCleanupService::indexLocalFiles($scanId));
+    }
+
+    if ($action === 'orphan-cleanup-scan-portal') {
+        @set_time_limit(180);
+        $scanId = trim((string) ($_POST['scan_id'] ?? ''));
+        $chunkSize = max(20, min(120, (int) ($_POST['chunk_size'] ?? 80)));
+        $batches = max(1, min(15, (int) ($_POST['batches'] ?? 10)));
+        materialImagesApiJson(MaterialImageOrphanCleanupService::scanPortalChunk($scanId, $chunkSize, $batches));
+    }
+
+    if ($action === 'orphan-cleanup-scan-amine') {
+        @set_time_limit(180);
+        $scanId = trim((string) ($_POST['scan_id'] ?? ''));
+        $limit = max(10, min(100, (int) ($_POST['limit'] ?? 80)));
+        materialImagesApiJson(MaterialImageOrphanCleanupService::scanAmineChunk($scanId, $limit));
+    }
+
+    if ($action === 'orphan-cleanup-scan-queue') {
+        @set_time_limit(120);
+        $scanId = trim((string) ($_POST['scan_id'] ?? ''));
+        materialImagesApiJson(MaterialImageOrphanCleanupService::scanStaleQueue($scanId));
+    }
+
+    if ($action === 'orphan-cleanup-report') {
+        $scanId = trim((string) ($_POST['scan_id'] ?? ($_GET['scan_id'] ?? '')));
+        materialImagesApiJson(MaterialImageOrphanCleanupService::report($scanId));
+    }
+
+    if ($action === 'orphan-cleanup-purge') {
+        $scanId = trim((string) ($_POST['scan_id'] ?? ''));
+        $purgePortal = filter_var($_POST['purge_portal'] ?? true, FILTER_VALIDATE_BOOLEAN);
+        $purgeAmine = filter_var($_POST['purge_amine'] ?? true, FILTER_VALIDATE_BOOLEAN);
+        $purgeQueue = filter_var($_POST['purge_queue'] ?? true, FILTER_VALIDATE_BOOLEAN);
+        $dryRun = filter_var($_POST['dry_run'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        materialImagesApiJson(MaterialImageOrphanCleanupService::purge(
+            $scanId,
+            $purgePortal,
+            $purgeAmine,
+            $purgeQueue,
+            $dryRun
+        ));
     }
 
     materialImagesApiJson(['ok' => false, 'message' => 'إجراء غير معروف.'], 400);

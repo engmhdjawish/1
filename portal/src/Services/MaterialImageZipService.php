@@ -817,31 +817,20 @@ final class MaterialImageZipService
     /** @param array<string, mixed> $item */
     private static function resolveImageGuid(array $item): string
     {
+        $materialGuid = trim((string) ($item['material_guid'] ?? ''));
+        if ($materialGuid !== '') {
+            $currentUrl = OrderLineImageService::currentThumbUrlForMaterial($materialGuid);
+            if ($currentUrl !== '' && preg_match('/[?&]id=([0-9a-fA-F-]{36})/', $currentUrl, $matches) === 1) {
+                return strtolower($matches[1]);
+            }
+        }
+
         $imageUrl = trim((string) ($item['image_url'] ?? ''));
         if ($imageUrl !== '' && preg_match('/[?&]id=([0-9a-fA-F-]{36})/', $imageUrl, $matches) === 1) {
             return strtolower($matches[1]);
         }
 
-        $materialGuid = trim((string) ($item['material_guid'] ?? ''));
-        if ($materialGuid === '') {
-            return '';
-        }
-
-        try {
-            $response = ApiClient::get('/api/materials/' . rawurlencode($materialGuid) . '/images');
-            if (!($response['ok'] ?? false)) {
-                return '';
-            }
-            $images = is_array($response['data']) ? $response['data'] : [];
-            $first = $images[0] ?? null;
-            if (!is_array($first)) {
-                return '';
-            }
-
-            return strtolower(trim((string) ($first['id'] ?? $first['guid'] ?? '')));
-        } catch (\Throwable) {
-            return '';
-        }
+        return '';
     }
 
     private static function downloadImageToTemp(string $imageGuid): ?string

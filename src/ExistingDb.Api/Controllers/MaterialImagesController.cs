@@ -21,6 +21,11 @@ public sealed class MaterialImagesController(
     IImageSettingsService imageSettingsService,
     IImageStorageService imageStorageService) : ControllerBase
 {
+    private static readonly TimeSpan OrphanDiskScanTtl = TimeSpan.FromMinutes(4);
+    private static string? _orphanScanImagesDir;
+    private static DateTimeOffset _orphanScanCachedAt = DateTimeOffset.MinValue;
+    private static List<OrphanDiskFileRow> _orphanScanRows = [];
+
     [HttpGet("settings")]
     [RequirePermission("materials.update")]
     public async Task<ActionResult<ImageSettingsResponse>> GetSettings(CancellationToken cancellationToken)
@@ -220,7 +225,7 @@ public sealed class MaterialImagesController(
         CancellationToken cancellationToken = default)
     {
         page = Math.Max(1, page);
-        pageSize = Math.Clamp(pageSize, 6, 60);
+        pageSize = Math.Clamp(pageSize, 6, 200);
 
         var query = BuildImageQuery(linked, null);
         var searchTokens = SplitSearchTokens(materialSearch);
@@ -261,6 +266,151 @@ public sealed class MaterialImagesController(
             .ToArray();
 
         return Ok(new PagedResponse<MaterialImageLinkFileResponse>(items, page, pageSize, totalCount));
+    }
+
+    [HttpGet("registry-index")]
+    [RequirePermission("materials.read")]
+    public async Task<ActionResult> GetRegistryIndex(CancellationToken cancellationToken)
+    {
+        var rows = await mainDbContext.MaterialImages
+            .AsNoTracking()
+            .Select(image => new { image.Guid, image.Name })
+            .ToListAsync(cancellationToken);
+
+        var fileNames = new List<string>(rows.Count);
+        var guids = new List<Guid>(rows.Count);
+        foreach (var row in rows)
+        {
+            var fileName = ExtractFileName(row.Name);
+            if (!string.IsNullOrWhiteSpace(fileName))
+            {
+                fileNames.Add(fileName);
+            }
+
+            if (row.Guid != Guid.Empty)
+            {
+                guids.Add(row.Guid);
+            }
+        }
+
+        return Ok(new
+        {
+            ok = true,
+            count = fileNames.Count,
+            fileNames,
+            guids = guids.Select(guid => guid.ToString()).ToArray(),
+        });
+    }
+
+    [HttpGet("orphan-disk-files")]
+    [RequirePermission("materials.read")]
+    public async Task<ActionResult> GetOrphanDiskFiles(
+        [FromQuery] int offset = 0,
+        [FromQuery] int limit = 80,
+        CancellationToken cancellationToken = default)
+    {
+        offset = Math.Max(0, offset);
+        limit = Math.Clamp(limit, 1, 100);
+
+        var settings = await imageSettingsService.GetAsync(cancellationToken);
+        var imagesDir = settings.ImagesDirectory;
+        if (string.IsNullOrWhiteSpace(imagesDir) || !Directory.Exists(imagesDir))
+        {
+            return Ok(new
+            {
+                ok = true,
+                items = Array.Empty<object>(),
+                total = 0,
+                offset,
+                done = true,
+                message = "Images directory is missing or empty.",
+            });
+        }
+
+        var registered = await LoadRegisteredFileNamesSetAsync(cancellationToken);
+        var (orphans, scannedAt) = await GetOrphanDiskScanCacheAsync(imagesDir, registered, cancellationToken);
+
+        var slice = orphans.Skip(offset).Take(limit).ToList();
+        var nextOffset = offset + slice.Count;
+        var items = slice.Select(row => new
+        {
+            fileName = row.FileName,
+            sizeBytes = row.SizeBytes,
+        }).ToList();
+
+        return Ok(new
+        {
+            ok = true,
+            items,
+            total = orphans.Count,
+            offset = nextOffset,
+            done = nextOffset >= orphans.Count,
+            scannedAt,
+        });
+    }
+
+    [HttpPost("purge-orphan-disk-files")]
+    [RequirePermission("materials.update")]
+    public async Task<IActionResult> PurgeOrphanDiskFiles(
+        [FromBody] PurgeOrphanDiskFilesRequest request,
+        CancellationToken cancellationToken)
+    {
+        var fileNames = (request.FileNames ?? [])
+            .Select(name => Path.GetFileName(name?.Trim() ?? string.Empty))
+            .Where(name => name is not "" && !name.Contains("..", StringComparison.Ordinal))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (fileNames.Count == 0)
+        {
+            return BadRequest(new { ok = false, message = "fileNames is required." });
+        }
+
+        var registered = await LoadRegisteredFileNamesSetAsync(cancellationToken);
+        var settings = await imageSettingsService.GetAsync(cancellationToken);
+
+        var deleted = new List<string>();
+        var skipped = new List<string>();
+
+        foreach (var fileName in fileNames)
+        {
+            if (registered.Contains(fileName))
+            {
+                skipped.Add(fileName);
+                continue;
+            }
+
+            if (request.DryRun)
+            {
+                deleted.Add(fileName);
+                continue;
+            }
+
+            var imagePath = Path.GetFullPath(Path.Combine(settings.ImagesDirectory, fileName));
+            if (System.IO.File.Exists(imagePath))
+            {
+                imageStorageService.DeleteFile(imagePath);
+            }
+
+            var thumbDir = Path.Combine(settings.ImagesDirectory, "thumbnails");
+            var thumbPath = Path.GetFullPath(Path.Combine(thumbDir, fileName));
+            if (System.IO.File.Exists(thumbPath))
+            {
+                imageStorageService.DeleteFile(thumbPath);
+            }
+
+            deleted.Add(fileName);
+        }
+
+        InvalidateOrphanDiskScanCache();
+
+        return Ok(new
+        {
+            ok = true,
+            dryRun = request.DryRun,
+            deleted,
+            skipped,
+        });
     }
 
     [HttpPost("{sourceImageGuid:guid}/assign-to-materials")]
@@ -1462,6 +1612,88 @@ public sealed class MaterialImagesController(
 
         return candidates.ToArray();
     }
+
+    private async Task<HashSet<string>> LoadRegisteredFileNamesSetAsync(CancellationToken cancellationToken)
+    {
+        var names = await mainDbContext.MaterialImages
+            .AsNoTracking()
+            .Select(image => image.Name)
+            .ToListAsync(cancellationToken);
+
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in names)
+        {
+            var fileName = ExtractFileName(name);
+            if (!string.IsNullOrWhiteSpace(fileName))
+            {
+                set.Add(fileName);
+            }
+        }
+
+        return set;
+    }
+
+    private Task<(List<OrphanDiskFileRow> orphans, DateTimeOffset scannedAt)> GetOrphanDiskScanCacheAsync(
+        string imagesDir,
+        HashSet<string> registered,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (_orphanScanImagesDir is not null
+            && string.Equals(_orphanScanImagesDir, imagesDir, StringComparison.OrdinalIgnoreCase)
+            && now - _orphanScanCachedAt < OrphanDiskScanTtl)
+        {
+            return Task.FromResult((_orphanScanRows, _orphanScanCachedAt));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var orphans = new List<OrphanDiskFileRow>();
+        foreach (var path in Directory.EnumerateFiles(imagesDir))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var fileName = Path.GetFileName(path);
+            if (!IsMaterialImageDiskFile(fileName))
+            {
+                continue;
+            }
+
+            if (registered.Contains(fileName))
+            {
+                continue;
+            }
+
+            var fileInfo = new FileInfo(path);
+            orphans.Add(new OrphanDiskFileRow(fileName, fileInfo.Length));
+        }
+
+        orphans.Sort((left, right) => string.Compare(left.FileName, right.FileName, StringComparison.OrdinalIgnoreCase));
+
+        _orphanScanImagesDir = imagesDir;
+        _orphanScanCachedAt = now;
+        _orphanScanRows = orphans;
+
+        return Task.FromResult((orphans, _orphanScanCachedAt));
+    }
+
+    private static void InvalidateOrphanDiskScanCache()
+    {
+        _orphanScanImagesDir = null;
+        _orphanScanCachedAt = DateTimeOffset.MinValue;
+        _orphanScanRows = [];
+    }
+
+    private static bool IsMaterialImageDiskFile(string fileName)
+    {
+        var extension = Path.GetExtension(fileName);
+        return extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".gif", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".webp", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed record OrphanDiskFileRow(string FileName, long SizeBytes);
 
     private static string? ExtractFileName(string? pathLikeValue)
     {

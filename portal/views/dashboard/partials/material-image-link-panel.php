@@ -28,6 +28,27 @@
         <summary class="dash-mi-danger-zone__toggle">حذف جماعي (خطير)</summary>
         <div class="dash-mi-danger-zone__body">
           <p class="dash-mi-danger-zone__hint">يحذف الصورة من المحاسبة والموقع نهائياً. لا يمكن التراجع.</p>
+          <div class="dash-mi-orphan-cleanup mt-3 pt-3 border-t border-border-subtle space-y-2">
+            <p class="text-[11px] text-text-muted leading-relaxed">
+              صور بلا سجل في <span dir="ltr" class="font-mono">bm000</span>: فحص معاينة ثم حذف بعد التأكيد. يبقى التبويب مفتوحاً؛ كل خطوة قصيرة لتجنب 504. <strong>حدّث API الأمين</strong> مع الموقع لتسريع السجل.
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" id="orphanGhostScanBtn" class="h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-xs font-bold">فحص آمن (معاينة)</button>
+              <button type="button" id="orphanGhostDryRunBtn" class="h-8 px-3 rounded-lg border border-border-subtle bg-white text-xs font-bold hidden">تجربة حذف (بدون تنفيذ)</button>
+              <button type="button" id="orphanGhostPurgeBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hidden">تنفيذ الحذف</button>
+            </div>
+            <div id="orphanGhostProgressWrap" class="hidden mt-2 rounded-lg border border-amber-200 bg-amber-50/80 p-2" hidden>
+              <div class="flex items-start justify-between gap-2 mb-1">
+                <p id="orphanGhostProgressLabel" class="text-[11px] font-medium text-amber-900 leading-snug">جاري الفحص...</p>
+                <span id="orphanGhostProgressPct" class="text-[11px] font-bold text-amber-800 tabular-nums shrink-0">0%</span>
+              </div>
+              <div class="h-2.5 rounded-full bg-white/80 overflow-hidden border border-amber-100">
+                <div id="orphanGhostProgressBar" class="h-full bg-amber-500 transition-all duration-300" style="width:0%"></div>
+              </div>
+              <p id="orphanGhostProgressLive" class="mt-1 text-[10px] text-amber-800/80" aria-live="polite"></p>
+            </div>
+            <pre id="orphanGhostReport" class="hidden text-[10px] text-text-muted whitespace-pre-wrap font-mono bg-surface-low rounded-lg p-2 max-h-40 overflow-auto" dir="ltr"></pre>
+          </div>
           <div class="dash-mi-toolbar__actions">
             <button type="button" id="deleteAllUnlinkedBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hidden">حذف كل غير المرتبطة</button>
             <button type="button" id="deleteSelectedUnlinkedBtn" class="h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hidden">حذف المحدد</button>
