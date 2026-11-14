@@ -2845,3 +2845,24 @@ button.is-loading::after,
 .stagnant-card [data-stagnant-item-syp].is-below-cost {
   color: #b91c1c;
 }
+
+.so-invoice__table--priced {
+  min-width: 980px;
+}
+
+.so-invoice__table--priced td.is-below-cost,
+.so-invoice__table--priced .is-below-cost {
+  color: #b91c1c !important;
+}
+
+.so-invoice__input.is-below-cost {
+  border-color: #f87171;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+[data-stagnant-tray-list] .is-below-cost {
+  color: #b91c1c !important;
+  border-color: #f87171;
+  background: #fef2f2;
+}

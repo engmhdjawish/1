@@ -114,7 +114,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         $asDraft
     );
     if ($result['ok'] && !empty($result['id'])) {
-        $editUrl = '/dashboard/special-offers.php?edit=' . rawurlencode((string) $result['id']) . '&created=1';
+        $tab = $asDraft ? 'paused' : 'active';
+        $editUrl = '/dashboard/special-offers.php?edit=' . rawurlencode((string) $result['id'])
+            . '&created=1&tab=' . rawurlencode($tab);
         if ($asDraft) {
             $editUrl .= '&draft=1';
         }

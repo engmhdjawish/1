@@ -310,7 +310,7 @@ $defaultDiscount = 15.0;
     <input type="hidden" name="group_guids[]" value="<?= h($guid) ?>">
   <?php endforeach; ?>
 
-  <div class="sticky top-2 z-10 mb-4 rounded-xl border border-border-subtle bg-white/95 backdrop-blur p-3 shadow-sm">
+  <div class="sticky top-2 z-10 mb-4 rounded-xl border border-border-subtle bg-white/95 backdrop-blur p-3 shadow-sm space-y-3" data-stagnant-tray>
     <div class="flex flex-wrap items-end gap-3">
       <label class="text-sm">
         <span class="text-text-muted">عنوان العرض</span>
@@ -318,7 +318,7 @@ $defaultDiscount = 15.0;
       </label>
       <label class="text-sm">
         <span class="text-text-muted">خصم افتراضي %</span>
-        <input type="number" name="discount_percent" min="1" max="95" step="0.5" value="<?= h((string) $defaultDiscount) ?>" data-stagnant-default-discount class="mt-1 block w-28 h-10 rounded-xl border border-border-subtle px-3 text-sm">
+        <input type="text" inputmode="decimal" name="discount_percent" value="<?= h((string) $defaultDiscount) ?>" data-stagnant-default-discount class="mt-1 block w-28 h-10 rounded-xl border border-border-subtle px-3 text-sm" autocomplete="off">
       </label>
       <input type="hidden" name="save_mode" value="draft" data-stagnant-save-mode>
       <button type="submit" class="h-10 px-4 rounded-xl border border-border-subtle bg-white text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50" data-stagnant-submit data-stagnant-mode="draft" disabled>
@@ -327,8 +327,17 @@ $defaultDiscount = 15.0;
       <button type="submit" class="h-10 px-4 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:brightness-110 disabled:opacity-50" data-stagnant-submit data-stagnant-mode="activate" disabled>
         تفعيل العرض
       </button>
-      <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-select-all>تحديد الكل</button>
-      <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-clear>إلغاء التحديد</button>
+      <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-add-visible>إضافة الظاهرة</button>
+      <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-clear-tray>تفريغ المرشّحين</button>
+    </div>
+    <div>
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <p class="text-sm font-extrabold text-slate-800">المواد المرشّحة للعروض</p>
+        <p class="text-xs text-text-muted">أضف من الجدول أو المعاينة، عدّل الخصم هنا، ثم احفظ المسودة</p>
+      </div>
+      <div class="rounded-xl border border-dashed border-border-subtle bg-slate-50/70 min-h-[4.5rem] max-h-56 overflow-y-auto" data-stagnant-tray-list>
+        <p class="text-xs text-text-muted px-3 py-4 text-center" data-stagnant-tray-empty>لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.</p>
+      </div>
     </div>
   </div>
 
@@ -339,7 +348,6 @@ $defaultDiscount = 15.0;
       <table class="w-full min-w-[1100px] text-sm border-collapse">
         <thead>
           <tr class="bg-slate-50 text-xs font-bold text-slate-600 border-b border-border-subtle">
-            <th class="px-2 py-2.5 w-10"></th>
             <th class="px-2 py-2.5 w-20 text-start">صورة</th>
             <th class="px-2 py-2.5 text-start min-w-[200px]">المادة</th>
             <th class="px-2 py-2.5 text-start w-20">كمية</th>
@@ -350,6 +358,7 @@ $defaultDiscount = 15.0;
             <th class="px-2 py-2.5 text-start w-24">خصم %</th>
             <th class="px-2 py-2.5 text-start w-28">بعد الخصم $</th>
             <th class="px-2 py-2.5 text-start w-28">بعد الخصم ل.س</th>
+            <th class="px-2 py-2.5 text-start w-24">للعرض</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border-subtle" data-stagnant-cards>
@@ -397,9 +406,6 @@ $defaultDiscount = 15.0;
               data-image-full="<?= h($fullUrl) ?>"
               data-image-thumb="<?= h($thumbUrl) ?>"
             >
-              <td class="px-2 py-2 text-center">
-                <input type="checkbox" name="material_guids[]" value="<?= h($guid) ?>" class="w-4 h-4 rounded border-slate-300" data-stagnant-check>
-              </td>
               <td class="px-2 py-2">
                 <?php if ($fullUrl !== ''): ?>
                   <button
@@ -447,7 +453,6 @@ $defaultDiscount = 15.0;
                 <input
                   type="text"
                   inputmode="decimal"
-                  name="material_discount[<?= h($guid) ?>]"
                   value="<?= h((string) $defaultDiscount) ?>"
                   data-stagnant-item-discount
                   class="w-20 h-9 rounded-lg border border-border-subtle px-2 text-sm tabular-nums"
@@ -471,6 +476,13 @@ $defaultDiscount = 15.0;
                 <span class="inline-block min-w-[4.5rem] tabular-nums font-bold text-emerald-800" dir="ltr" data-stagnant-item-syp>
                   <?= h($saleAfterSyp !== null ? number_format($saleAfterSyp, 0) : '—') ?>
                 </span>
+              </td>
+              <td class="px-2 py-2">
+                <button
+                  type="button"
+                  class="h-9 px-3 rounded-lg bg-primary text-white text-xs font-extrabold hover:brightness-110 disabled:opacity-50"
+                  data-stagnant-add
+                >إضافة</button>
               </td>
             </tr>
           <?php endforeach; ?>
@@ -539,10 +551,9 @@ $defaultDiscount = 15.0;
           </div>
         </div>
 
-        <label class="stagnant-preview-modal__select">
-          <input type="checkbox" class="w-4 h-4 rounded border-slate-300" data-stagnant-preview-select>
-          <span>إدراج المادة في العرض</span>
-        </label>
+        <button type="button" class="stagnant-preview-modal__done" style="background:#D81921" data-stagnant-preview-add>
+          إضافة إلى المرشّحين
+        </button>
 
         <div class="stagnant-preview-modal__pricing">
           <div class="stagnant-preview-modal__field">

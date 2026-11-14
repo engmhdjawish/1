@@ -81,6 +81,12 @@ $flashType = 'success';
 $editId = trim((string) ($_GET['edit'] ?? ''));
 $isNew = ($_GET['new'] ?? '') === '1';
 $showForm = $editId !== '' || $isNew;
+if (($_GET['created'] ?? '') === '1') {
+    $flash = (($_GET['draft'] ?? '') === '1')
+        ? 'تم حفظ مسودة العرض مع المواد والخصومات. راجع جدول الفاتورة أدناه.'
+        : 'تم تفعيل العرض مع المواد والخصومات.';
+    $flashType = 'success';
+}
 $allowedOfferTabs = ['active', 'scheduled', 'paused', 'ended', 'all'];
 $offerTab = trim((string) ($_GET['tab'] ?? 'active'));
 if (!in_array($offerTab, $allowedOfferTabs, true)) {

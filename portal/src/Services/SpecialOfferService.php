@@ -1188,22 +1188,46 @@ final class SpecialOfferService
     {
         $items = [];
         foreach ($guids as $guid) {
+            $guid = strtolower(trim((string) $guid));
+            if ($guid === '') {
+                continue;
+            }
             try {
                 $r = ApiClient::get('/api/materials/' . rawurlencode($guid));
                 if ($r['ok'] && is_array($r['data'])) {
                     $d = $r['data'];
+                    $saleUsd = self::toNullableFloat((string) ($d['unitSalePriceUsd'] ?? $d['UnitSalePriceUsd'] ?? $d['half'] ?? $d['Half'] ?? ''));
+                    $saleSyp = self::toNullableFloat((string) ($d['unitSalePriceSyp'] ?? $d['UnitSalePriceSyp'] ?? $d['whole'] ?? $d['Whole'] ?? ''));
+                    $purchaseUsd = self::toNullableFloat((string) ($d['unitPurchasePriceUsd'] ?? $d['UnitPurchasePriceUsd'] ?? $d['endUser'] ?? $d['EndUser'] ?? ''));
+                    $currencyVal = self::toNullableFloat((string) ($d['currencyVal'] ?? $d['CurrencyVal'] ?? ''));
                     $items[] = [
                         'guid' => $guid,
-                        'name' => trim((string) ($d['name'] ?? '')),
-                        'code' => trim((string) ($d['materialCode'] ?? '')),
-                        'image' => ($imageGuid = trim((string) ($d['productImageGuid'] ?? $d['ProductImageGuid'] ?? ''))) !== ''
+                        'name' => trim((string) ($d['name'] ?? $d['Name'] ?? '')),
+                        'code' => trim((string) ($d['materialCode'] ?? $d['MaterialCode'] ?? $d['code'] ?? $d['Code'] ?? '')),
+                        'image' => ($imageGuid = trim((string) ($d['productImageGuid'] ?? $d['ProductImageGuid'] ?? $d['pictureGuid'] ?? $d['PictureGuid'] ?? ''))) !== ''
+                            && $imageGuid !== '00000000-0000-0000-0000-000000000000'
                             ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1'
                             : '',
+                        'unitSalePriceUsd' => $saleUsd,
+                        'unitSalePriceSyp' => $saleSyp,
+                        'unitPurchasePriceUsd' => $purchaseUsd,
+                        'currencyVal' => $currencyVal,
                     ];
+                    continue;
                 }
             } catch (\Throwable) {
-                continue;
+                // Fall through to a stub row so the invoice still lists the GUID.
             }
+            $items[] = [
+                'guid' => $guid,
+                'name' => $guid,
+                'code' => '',
+                'image' => '',
+                'unitSalePriceUsd' => null,
+                'unitSalePriceSyp' => null,
+                'unitPurchasePriceUsd' => null,
+                'currencyVal' => null,
+            ];
         }
 
         return $items;
@@ -1284,8 +1308,16 @@ final class SpecialOfferService
              )'
         );
         $sort = 0;
+        $normalizedOverrides = [];
+        foreach ($overrides as $key => $value) {
+            $normalizedOverrides[strtolower(trim((string) $key))] = is_array($value) ? $value : [];
+        }
         foreach (self::stringList($guids) as $guid) {
-            $override = is_array($overrides[$guid] ?? null) ? $overrides[$guid] : [];
+            $guid = strtolower(trim($guid));
+            if ($guid === '') {
+                continue;
+            }
+            $override = $normalizedOverrides[$guid] ?? [];
             $type = trim((string) ($override['discount_type'] ?? ''));
             if (!in_array($type, ['percent', 'fixed_price', 'fixed_amount'], true)) {
                 $type = '';
@@ -1434,7 +1466,7 @@ final class SpecialOfferService
 
         foreach ($rows as $row) {
             $offerId = (string) ($row['offer_id'] ?? '');
-            $guid = trim((string) ($row['material_guid'] ?? ''));
+            $guid = strtolower(trim((string) ($row['material_guid'] ?? '')));
             if ($offerId === '' || $guid === '' || !isset($grouped[$offerId])) {
                 continue;
             }

@@ -37,19 +37,41 @@ $displayOptions = is_array($editOffer['display_options'] ?? null)
 $selectionMode = (string) ($editOffer['selection_mode'] ?? 'filter');
 $discountType = (string) ($editOffer['discount_type'] ?? 'percent');
 $pricingScope = (string) ($editOffer['pricing_scope'] ?? 'offer');
-$productOverrides = is_array($editOffer['product_overrides'] ?? null) ? $editOffer['product_overrides'] : [];
 $showImages = array_key_exists('show_images', $displayOptions) ? (bool) $displayOptions['show_images'] : true;
 $priceMode = (string) ($displayOptions['price_mode'] ?? 'both');
-$selectedMaterialGuids = array_map('strval', $editOffer['material_guids'] ?? []);
+$selectedMaterialGuids = array_values(array_unique(array_filter(array_map(
+    static fn ($g) => strtolower(trim((string) $g)),
+    $editOffer['material_guids'] ?? []
+), static fn ($g) => $g !== '')));
 $manualProductsByGuid = [];
 foreach (($editOffer['manual_products'] ?? []) as $mp) {
     if (!is_array($mp)) {
         continue;
     }
-    $g = trim((string) ($mp['guid'] ?? ''));
+    $g = strtolower(trim((string) ($mp['guid'] ?? '')));
     if ($g !== '') {
+        $mp['guid'] = $g;
         $manualProductsByGuid[$g] = $mp;
     }
+}
+// Ensure every selected GUID has at least a stub label for the invoice table.
+foreach ($selectedMaterialGuids as $guid) {
+    if (!isset($manualProductsByGuid[$guid])) {
+        $manualProductsByGuid[$guid] = [
+            'guid' => $guid,
+            'name' => $guid,
+            'code' => '',
+            'image' => '',
+        ];
+    }
+}
+$productOverrides = [];
+foreach ((is_array($editOffer['product_overrides'] ?? null) ? $editOffer['product_overrides'] : []) as $overrideGuid => $override) {
+    $overrideGuid = strtolower(trim((string) $overrideGuid));
+    if ($overrideGuid === '' || !is_array($override)) {
+        continue;
+    }
+    $productOverrides[$overrideGuid] = $override;
 }
 
 $selectedMaterialTypes = array_map('strval', $rules['material_types'] ?? []);
@@ -415,18 +437,21 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
         <div>
           <p class="so-invoice__kicker">فاتورة العرض</p>
           <h4 class="so-invoice__title">مواد العرض وأسعارها</h4>
-          <p class="so-invoice__hint">أضف مادة من البحث. الصورة للاستئناس فقط، والحسم يُحدَّد بجانب كل سطر.</p>
+          <p class="so-invoice__hint">الدولار ثابت · الليرة بعد الخصم = دولار × سعر الصرف مع التقريب لأعلى 5. عدّل النسبة أو السعر.</p>
         </div>
         <p class="so-invoice__count" id="so-invoice-count">لا مواد</p>
       </div>
       <div class="so-invoice__sheet">
-        <table class="so-invoice__table">
+        <table class="so-invoice__table so-invoice__table--priced">
           <thead>
             <tr>
               <th class="so-invoice__num">#</th>
               <th>المادة</th>
+              <th>مبيع $</th>
+              <th>شراء $</th>
               <th class="so-invoice__type-col">نوع الحسم</th>
-              <th>القيمة</th>
+              <th>خصم % / سعر $</th>
+              <th>بعد الخصم ل.س</th>
               <th class="so-invoice__action-col"></th>
             </tr>
           </thead>
@@ -435,6 +460,7 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
       </div>
       <script type="application/json" id="so-product-overrides-json"><?= json_encode($productOverrides, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?></script>
       <script type="application/json" id="so-manual-product-labels-json"><?= json_encode($manualProductsByGuid, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?></script>
+      <script type="application/json" id="so-manual-material-guids-json"><?= json_encode(array_values(array_map('strval', $selectedMaterialGuids)), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?></script>
     </div>
   </article>
 

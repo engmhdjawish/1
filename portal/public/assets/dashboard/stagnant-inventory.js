@@ -1,11 +1,11 @@
 /**
- * Stagnant inventory — table + large preview with nav,
- * bidirectional % ↔ USD (type freely; format on blur),
- * SYP from discounted USD (round up to 5),
- * red warning when sale-after-discount < purchase.
+ * Stagnant inventory — add-to-candidate tray, bidirectional % ↔ USD,
+ * large preview with nav, SYP round-up-to-5, below-cost warning.
  */
 (function () {
   const BOUND = 'data-stagnant-bound';
+  /** @type {Map<string, {guid:string, name:string, code:string, saleUsd:number|null, purchaseUsd:number|null, rate:number, percent:number, priceUsd:number|null}>} */
+  const candidates = new Map();
   let activeRow = null;
   let syncingPreview = false;
 
@@ -26,8 +26,7 @@
   }
 
   function formatPct(n) {
-    const rounded = Math.round(n * 100) / 100;
-    return String(rounded);
+    return String(Math.round(n * 100) / 100);
   }
 
   function formatSyp(n) {
@@ -41,10 +40,6 @@
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     });
-  }
-
-  function selectedChecks(root = document) {
-    return root.querySelectorAll('[data-stagnant-check]:checked');
   }
 
   function previewModal() {
@@ -72,29 +67,20 @@
     return parseLoose(row.getAttribute('data-rate')) || 0;
   }
 
-  function sync(root = document) {
-    const selected = selectedChecks(root);
-    const count = selected.length;
+  function defaultDiscountValue(root = document) {
+    const input = root.querySelector('[data-stagnant-default-discount]');
+    const n = input instanceof HTMLInputElement ? parseLoose(input.value) : null;
+    return n === null ? 15 : Math.max(0, Math.min(95, n));
+  }
 
+  function syncSubmitState(root = document) {
+    const count = candidates.size;
     root.querySelectorAll('[data-stagnant-selected-count]').forEach((el) => {
       el.textContent = String(count);
     });
     root.querySelectorAll('[data-stagnant-submit]').forEach((btn) => {
-      if (btn instanceof HTMLButtonElement) {
-        btn.disabled = count === 0;
-      }
+      if (btn instanceof HTMLButtonElement) btn.disabled = count === 0;
     });
-
-    root.querySelectorAll('[data-stagnant-card]').forEach((card) => {
-      const check = card.querySelector('[data-stagnant-check]');
-      const on = check instanceof HTMLInputElement && check.checked;
-      card.classList.toggle('bg-primary/[0.04]', on);
-      card.classList.toggle('ring-1', on);
-      card.classList.toggle('ring-inset', on);
-      card.classList.toggle('ring-primary/30', on);
-    });
-
-    syncPreviewSelectFromRow();
   }
 
   function applyBelowCost(row, saleAfterUsd) {
@@ -108,17 +94,10 @@
     const sypEl = row.querySelector('[data-stagnant-item-syp]');
     if (priceInput instanceof HTMLElement) {
       priceInput.classList.toggle('is-below-cost', below);
-      priceInput.title = below
-        ? 'السعر بعد الخصم أقل من سعر الشراء'
-        : 'سعر البيع بالدولار بعد الخصم';
     }
     if (sypEl instanceof HTMLElement) {
       sypEl.classList.toggle('is-below-cost', below);
-      if (!below) {
-        sypEl.classList.add('text-emerald-800');
-      } else {
-        sypEl.classList.remove('text-emerald-800');
-      }
+      sypEl.classList.toggle('text-emerald-800', !below);
     }
 
     if (isPreviewOpen() && activeRow === row) {
@@ -130,14 +109,9 @@
         warn.hidden = !below;
         warn.classList.toggle('is-visible', below);
       }
-      if (previewPrice instanceof HTMLElement) {
-        previewPrice.classList.toggle('is-below-cost', below);
-      }
-      if (sypBox instanceof HTMLElement) {
-        sypBox.classList.toggle('is-below-cost', below);
-      }
+      if (previewPrice instanceof HTMLElement) previewPrice.classList.toggle('is-below-cost', below);
+      if (sypBox instanceof HTMLElement) sypBox.classList.toggle('is-below-cost', below);
     }
-
     return below;
   }
 
@@ -154,11 +128,6 @@
     applyBelowCost(row, saleUsdAfter);
   }
 
-  /**
-   * @param {HTMLElement} row
-   * @param {string|number} percent
-   * @param {{ markTouched?: boolean, source?: HTMLElement|null, commit?: boolean }} options
-   */
   function syncRowFromPercent(row, percent, options = {}) {
     const { markTouched = false, source = null, commit = false } = options;
     const pctInput = row.querySelector('[data-stagnant-item-discount]');
@@ -168,20 +137,12 @@
     const raw = String(percent ?? '').trim();
     const parsed = parseLoose(raw);
     if (parsed === null && !commit) {
-      // Allow intermediate typing in % without wiping the price yet.
-      if (source !== pctInput) pctInput.value = raw;
       syncPreviewPricingFromRow({ skipSource: source });
       return;
     }
 
     const pct = Math.max(0, Math.min(95, parsed ?? 0));
-    if (commit || source !== pctInput) {
-      pctInput.value = formatPct(pct);
-    } else if (raw === '') {
-      // keep empty while typing
-    } else if (source !== pctInput) {
-      pctInput.value = formatPct(pct);
-    }
+    if (commit || source !== pctInput) pctInput.value = formatPct(pct);
     if (markTouched) pctInput.dataset.touched = '1';
 
     const saleUsd = rowSaleUsd(row);
@@ -192,18 +153,19 @@
     }
 
     const after = Math.max(0, saleUsd * (1 - pct / 100));
-    if (source !== priceInput) {
-      priceInput.value = formatUsd(after);
-    }
+    if (source !== priceInput) priceInput.value = formatUsd(after);
     updateSypPreview(row, after);
     syncPreviewPricingFromRow({ skipSource: source });
+
+    const guid = row.getAttribute('data-material-guid') || '';
+    if (guid && candidates.has(guid)) {
+      const item = candidates.get(guid);
+      item.percent = pct;
+      item.priceUsd = after;
+      renderTray();
+    }
   }
 
-  /**
-   * @param {HTMLElement} row
-   * @param {string|number} priceValue
-   * @param {{ source?: HTMLElement|null, commit?: boolean }} options
-   */
   function syncRowFromPrice(row, priceValue, options = {}) {
     const { source = null, commit = false } = options;
     const pctInput = row.querySelector('[data-stagnant-item-discount]');
@@ -213,8 +175,7 @@
     const saleUsd = rowSaleUsd(row);
     if (!(saleUsd > 0)) return;
 
-    const raw = String(priceValue ?? '').trim();
-    const parsed = parseLoose(raw);
+    const parsed = parseLoose(priceValue);
     if (parsed === null && !commit) {
       syncPreviewPricingFromRow({ skipSource: source });
       return;
@@ -222,39 +183,229 @@
 
     let after = parsed === null ? 0 : parsed;
     after = Math.max(0, Math.min(saleUsd, after));
-
-    if (commit || source !== priceInput) {
-      priceInput.value = formatUsd(after);
-    }
+    if (commit || source !== priceInput) priceInput.value = formatUsd(after);
 
     const pct = Math.max(0, Math.min(95, Math.round((1 - after / saleUsd) * 10000) / 100));
-    if (source !== pctInput) {
-      pctInput.value = formatPct(pct);
-    }
+    if (source !== pctInput) pctInput.value = formatPct(pct);
     pctInput.dataset.touched = '1';
     updateSypPreview(row, after);
     syncPreviewPricingFromRow({ skipSource: source });
+
+    const guid = row.getAttribute('data-material-guid') || '';
+    if (guid && candidates.has(guid)) {
+      const item = candidates.get(guid);
+      item.percent = pct;
+      item.priceUsd = after;
+      renderTray();
+    }
   }
 
   function applyDefaultDiscount(root = document) {
-    const defaultInput = root.querySelector('[data-stagnant-default-discount]');
-    if (!(defaultInput instanceof HTMLInputElement)) return;
-    const value = defaultInput.value;
+    const value = defaultDiscountValue(root);
     root.querySelectorAll('[data-stagnant-card]').forEach((row) => {
       const pctInput = row.querySelector('[data-stagnant-item-discount]');
-      if (!(pctInput instanceof HTMLInputElement)) return;
-      if (pctInput.dataset.touched) return;
-      syncRowFromPercent(row, value, { markTouched: false, commit: true });
+      if (!(pctInput instanceof HTMLInputElement) || pctInput.dataset.touched) return;
+      syncRowFromPercent(row, value, { commit: true });
     });
   }
 
+  function readRowPricing(row) {
+    const pctInput = row.querySelector('[data-stagnant-item-discount]');
+    const priceInput = row.querySelector('[data-stagnant-item-price]');
+    const saleUsd = rowSaleUsd(row);
+    let percent = pctInput instanceof HTMLInputElement ? parseLoose(pctInput.value) : null;
+    if (percent === null) percent = defaultDiscountValue();
+    percent = Math.max(0.01, Math.min(95, percent));
+    let priceUsd = priceInput instanceof HTMLInputElement ? parseLoose(priceInput.value) : null;
+    if (priceUsd === null && saleUsd !== null) {
+      priceUsd = Math.max(0, saleUsd * (1 - percent / 100));
+    }
+    return { percent, priceUsd };
+  }
+
+  function addCandidateFromRow(row) {
+    if (!(row instanceof HTMLElement)) return false;
+    const guid = (row.getAttribute('data-material-guid') || '').toLowerCase();
+    if (!guid) return false;
+    const pricing = readRowPricing(row);
+    candidates.set(guid, {
+      guid,
+      name: row.getAttribute('data-name') || guid,
+      code: row.getAttribute('data-code') || '',
+      saleUsd: rowSaleUsd(row),
+      purchaseUsd: rowPurchaseUsd(row),
+      rate: rowRate(row),
+      percent: pricing.percent,
+      priceUsd: pricing.priceUsd,
+    });
+    const addBtn = row.querySelector('[data-stagnant-add]');
+    if (addBtn instanceof HTMLButtonElement) {
+      addBtn.textContent = 'مُضافة';
+      addBtn.disabled = true;
+    }
+    row.classList.add('ring-1', 'ring-inset', 'ring-primary/30', 'bg-primary/[0.04]');
+    renderTray();
+    syncSubmitState();
+    return true;
+  }
+
+  function removeCandidate(guid) {
+    candidates.delete(guid);
+    const row = document.querySelector('[data-stagnant-card][data-material-guid="' + guid + '"]');
+    if (row instanceof HTMLElement) {
+      row.classList.remove('ring-1', 'ring-inset', 'ring-primary/30', 'bg-primary/[0.04]');
+      const addBtn = row.querySelector('[data-stagnant-add]');
+      if (addBtn instanceof HTMLButtonElement) {
+        addBtn.textContent = 'إضافة';
+        addBtn.disabled = false;
+      }
+    }
+    renderTray();
+    syncSubmitState();
+  }
+
+  function renderTray() {
+    const list = document.querySelector('[data-stagnant-tray-list]');
+    if (!(list instanceof HTMLElement)) return;
+    list.innerHTML = '';
+
+    if (candidates.size === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'text-xs text-text-muted px-3 py-4 text-center';
+      empty.setAttribute('data-stagnant-tray-empty', '');
+      empty.textContent = 'لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.';
+      list.appendChild(empty);
+      return;
+    }
+
+    candidates.forEach((item) => {
+      const row = document.createElement('div');
+      row.className = 'flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border-subtle last:border-b-0 bg-white/80';
+      row.setAttribute('data-tray-guid', item.guid);
+
+      const title = document.createElement('div');
+      title.className = 'min-w-[10rem] flex-1';
+      title.innerHTML = '<div class="text-sm font-bold text-slate-900 leading-snug"></div>'
+        + '<div class="text-[11px] font-mono text-text-muted" dir="ltr"></div>';
+      title.querySelector('div').textContent = item.name;
+      title.querySelectorAll('div')[1].textContent = item.code;
+
+      const pctLabel = document.createElement('label');
+      pctLabel.className = 'text-[11px] font-bold text-slate-600';
+      pctLabel.textContent = 'خصم % ';
+      const pctInput = document.createElement('input');
+      pctInput.type = 'text';
+      pctInput.inputMode = 'decimal';
+      pctInput.autocomplete = 'off';
+      pctInput.className = 'w-16 h-8 rounded-lg border border-border-subtle px-2 text-sm tabular-nums ms-1';
+      pctInput.name = 'material_discount[' + item.guid + ']';
+      pctInput.value = formatPct(item.percent);
+      pctInput.addEventListener('input', () => {
+        const pct = parseLoose(pctInput.value);
+        if (pct === null) return;
+        item.percent = Math.max(0, Math.min(95, pct));
+        if (item.saleUsd && item.saleUsd > 0) {
+          item.priceUsd = Math.max(0, item.saleUsd * (1 - item.percent / 100));
+          priceInput.value = formatUsd(item.priceUsd);
+          sypEl.textContent = item.rate > 0
+            ? formatSyp(roundUpTo5(item.priceUsd * item.rate))
+            : '—';
+          sypEl.classList.toggle('is-below-cost', !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd));
+          priceInput.classList.toggle('is-below-cost', !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd));
+        }
+        syncSourceRow(item);
+      });
+      pctInput.addEventListener('blur', () => {
+        item.percent = Math.max(0.01, Math.min(95, parseLoose(pctInput.value) ?? item.percent));
+        pctInput.value = formatPct(item.percent);
+        if (item.saleUsd && item.saleUsd > 0) {
+          item.priceUsd = Math.max(0, item.saleUsd * (1 - item.percent / 100));
+          priceInput.value = formatUsd(item.priceUsd);
+        }
+        syncSourceRow(item);
+      });
+      pctLabel.appendChild(pctInput);
+
+      const priceLabel = document.createElement('label');
+      priceLabel.className = 'text-[11px] font-bold text-slate-600';
+      priceLabel.textContent = 'بعد $ ';
+      const priceInput = document.createElement('input');
+      priceInput.type = 'text';
+      priceInput.inputMode = 'decimal';
+      priceInput.autocomplete = 'off';
+      priceInput.className = 'w-20 h-8 rounded-lg border border-border-subtle px-2 text-sm tabular-nums ms-1';
+      priceInput.value = item.priceUsd !== null ? formatUsd(item.priceUsd) : '';
+      priceInput.disabled = !(item.saleUsd > 0);
+      priceInput.addEventListener('input', () => {
+        const after = parseLoose(priceInput.value);
+        if (after === null || !(item.saleUsd > 0)) return;
+        item.priceUsd = Math.max(0, Math.min(item.saleUsd, after));
+        item.percent = Math.max(0, Math.min(95, Math.round((1 - item.priceUsd / item.saleUsd) * 10000) / 100));
+        pctInput.value = formatPct(item.percent);
+        sypEl.textContent = item.rate > 0
+          ? formatSyp(roundUpTo5(item.priceUsd * item.rate))
+          : '—';
+        const below = !!(item.purchaseUsd && item.priceUsd < item.purchaseUsd);
+        sypEl.classList.toggle('is-below-cost', below);
+        priceInput.classList.toggle('is-below-cost', below);
+        syncSourceRow(item);
+      });
+      priceInput.addEventListener('blur', () => {
+        if (!(item.saleUsd > 0)) return;
+        item.priceUsd = Math.max(0, Math.min(item.saleUsd, parseLoose(priceInput.value) ?? item.priceUsd ?? 0));
+        priceInput.value = formatUsd(item.priceUsd);
+        item.percent = Math.max(0, Math.min(95, Math.round((1 - item.priceUsd / item.saleUsd) * 10000) / 100));
+        pctInput.value = formatPct(item.percent);
+        syncSourceRow(item);
+      });
+      priceLabel.appendChild(priceInput);
+
+      const sypEl = document.createElement('span');
+      sypEl.className = 'text-xs font-extrabold tabular-nums text-emerald-800 min-w-[4rem]';
+      sypEl.dir = 'ltr';
+      if (item.priceUsd !== null && item.rate > 0) {
+        sypEl.textContent = formatSyp(roundUpTo5(item.priceUsd * item.rate)) + ' ل.س';
+        if (item.purchaseUsd && item.priceUsd < item.purchaseUsd) {
+          sypEl.classList.add('is-below-cost');
+          priceInput.classList.add('is-below-cost');
+        }
+      } else {
+        sypEl.textContent = '—';
+      }
+
+      const guidHidden = document.createElement('input');
+      guidHidden.type = 'hidden';
+      guidHidden.name = 'material_guids[]';
+      guidHidden.value = item.guid;
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'h-8 px-2 rounded-lg border border-border-subtle text-xs font-bold text-slate-600 hover:bg-slate-50';
+      removeBtn.textContent = 'إزالة';
+      removeBtn.addEventListener('click', () => removeCandidate(item.guid));
+
+      row.append(title, pctLabel, priceLabel, sypEl, guidHidden, removeBtn);
+      list.appendChild(row);
+    });
+  }
+
+  function syncSourceRow(item) {
+    const row = document.querySelector('[data-stagnant-card][data-material-guid="' + item.guid + '"]');
+    if (!(row instanceof HTMLElement)) return;
+    const pctInput = row.querySelector('[data-stagnant-item-discount]');
+    const priceInput = row.querySelector('[data-stagnant-item-price]');
+    if (pctInput instanceof HTMLInputElement) {
+      pctInput.value = formatPct(item.percent);
+      pctInput.dataset.touched = '1';
+    }
+    if (priceInput instanceof HTMLInputElement && item.priceUsd !== null) {
+      priceInput.value = formatUsd(item.priceUsd);
+    }
+    updateSypPreview(row, item.priceUsd);
+  }
+
   function syncPreviewSelectFromRow() {
-    const modal = previewModal();
-    if (!modal || !isPreviewOpen() || !activeRow) return;
-    const select = modal.querySelector('[data-stagnant-preview-select]');
-    const check = activeRow.querySelector('[data-stagnant-check]');
-    if (!(select instanceof HTMLInputElement) || !(check instanceof HTMLInputElement)) return;
-    select.checked = check.checked;
+    // Preview uses Add button now; no checkbox sync.
   }
 
   function syncPreviewPricingFromRow(options = {}) {
@@ -262,7 +413,6 @@
     const { skipSource = null } = options;
     const modal = previewModal();
     if (!modal || !isPreviewOpen() || !activeRow) return;
-
     syncingPreview = true;
     try {
       const pctInput = activeRow.querySelector('[data-stagnant-item-discount]');
@@ -271,16 +421,13 @@
       const previewPct = modal.querySelector('[data-stagnant-preview-discount]');
       const previewPrice = modal.querySelector('[data-stagnant-preview-price]');
       const previewSyp = modal.querySelector('[data-stagnant-preview-syp]');
-
       if (previewPct instanceof HTMLInputElement && pctInput instanceof HTMLInputElement && skipSource !== previewPct) {
         previewPct.value = pctInput.value;
       }
       if (previewPrice instanceof HTMLInputElement) {
         if (priceInput instanceof HTMLInputElement && !priceInput.disabled) {
           previewPrice.disabled = false;
-          if (skipSource !== previewPrice) {
-            previewPrice.value = priceInput.value;
-          }
+          if (skipSource !== previewPrice) previewPrice.value = priceInput.value;
         } else {
           previewPrice.disabled = true;
           previewPrice.value = '';
@@ -289,9 +436,14 @@
       if (previewSyp instanceof HTMLElement) {
         previewSyp.textContent = sypEl instanceof HTMLElement ? sypEl.textContent || '—' : '—';
       }
-
-      const after = priceInput instanceof HTMLInputElement ? parseLoose(priceInput.value) : null;
-      applyBelowCost(activeRow, after);
+      applyBelowCost(activeRow, priceInput instanceof HTMLInputElement ? parseLoose(priceInput.value) : null);
+      const addBtn = modal.querySelector('[data-stagnant-preview-add]');
+      if (addBtn instanceof HTMLButtonElement) {
+        const guid = activeRow.getAttribute('data-material-guid') || '';
+        const already = guid !== '' && candidates.has(guid);
+        addBtn.textContent = already ? 'مُضافة للمرشّحين' : 'إضافة إلى المرشّحين';
+        addBtn.disabled = already;
+      }
     } finally {
       syncingPreview = false;
     }
@@ -305,16 +457,9 @@
     const prevBtn = modal.querySelector('[data-stagnant-preview-prev]');
     const nextBtn = modal.querySelector('[data-stagnant-preview-next]');
     const pos = modal.querySelector('[data-stagnant-preview-position]');
-
-    if (pos instanceof HTMLElement) {
-      pos.textContent = index >= 0 ? `${index + 1} / ${rows.length}` : '';
-    }
-    if (prevBtn instanceof HTMLButtonElement) {
-      prevBtn.disabled = index <= 0;
-    }
-    if (nextBtn instanceof HTMLButtonElement) {
-      nextBtn.disabled = index < 0 || index >= rows.length - 1;
-    }
+    if (pos instanceof HTMLElement) pos.textContent = index >= 0 ? `${index + 1} / ${rows.length}` : '';
+    if (prevBtn instanceof HTMLButtonElement) prevBtn.disabled = index <= 0;
+    if (nextBtn instanceof HTMLButtonElement) nextBtn.disabled = index < 0 || index >= rows.length - 1;
   }
 
   function closePreview() {
@@ -332,31 +477,22 @@
     if (!modal || !(row instanceof HTMLElement)) return;
     activeRow = row;
 
-    const name = row.getAttribute('data-name') || '';
-    const code = row.getAttribute('data-code') || '';
-    const meta = row.getAttribute('data-meta') || '';
-    const qty = row.getAttribute('data-qty') || '';
-    const age = row.getAttribute('data-age') || '';
-    const saleUsd = row.getAttribute('data-sale-usd') || '';
-    const saleSyp = row.getAttribute('data-sale-syp') || '';
-    const purchase = row.getAttribute('data-purchase-usd') || '';
-    const fullUrl = row.getAttribute('data-image-full') || '';
-    const thumbUrl = row.getAttribute('data-image-thumb') || '';
-
     const setText = (sel, text) => {
       const el = modal.querySelector(sel);
       if (el instanceof HTMLElement) el.textContent = text;
     };
-
-    setText('[data-stagnant-preview-name]', name);
-    setText('[data-stagnant-preview-code]', code);
-    setText('[data-stagnant-preview-meta]', meta);
+    setText('[data-stagnant-preview-name]', row.getAttribute('data-name') || '');
+    setText('[data-stagnant-preview-code]', row.getAttribute('data-code') || '');
+    setText('[data-stagnant-preview-meta]', row.getAttribute('data-meta') || '');
+    const qty = row.getAttribute('data-qty') || '';
     setText('[data-stagnant-preview-qty]', qty !== '' ? Number(qty).toLocaleString('en-US') : '—');
-    setText('[data-stagnant-preview-age]', age || '—');
-    setText('[data-stagnant-preview-sale-usd]', formatMoney(saleUsd));
-    setText('[data-stagnant-preview-sale-syp]', formatMoney(saleSyp, 0));
-    setText('[data-stagnant-preview-purchase]', formatMoney(purchase));
+    setText('[data-stagnant-preview-age]', row.getAttribute('data-age') || '—');
+    setText('[data-stagnant-preview-sale-usd]', formatMoney(row.getAttribute('data-sale-usd')));
+    setText('[data-stagnant-preview-sale-syp]', formatMoney(row.getAttribute('data-sale-syp'), 0));
+    setText('[data-stagnant-preview-purchase]', formatMoney(row.getAttribute('data-purchase-usd')));
 
+    const fullUrl = row.getAttribute('data-image-full') || '';
+    const thumbUrl = row.getAttribute('data-image-thumb') || '';
     const img = modal.querySelector('[data-stagnant-preview-image]');
     const empty = modal.querySelector('[data-stagnant-preview-image-empty]');
     if (img instanceof HTMLImageElement) {
@@ -371,7 +507,7 @@
         } else {
           img.src = fullUrl;
         }
-        img.alt = name;
+        img.alt = row.getAttribute('data-name') || '';
       } else {
         img.removeAttribute('src');
         img.classList.add('hidden');
@@ -383,8 +519,6 @@
     modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
-
-    syncPreviewSelectFromRow();
     syncPreviewPricingFromRow();
     updateNavControls();
   }
@@ -393,7 +527,6 @@
     const rows = allRows();
     if (!activeRow || rows.length === 0) return;
     const index = rows.indexOf(activeRow);
-    if (index < 0) return;
     const next = rows[index + delta];
     if (next) openPreview(next);
   }
@@ -401,17 +534,14 @@
   function bindPreview(form) {
     const modal = previewModal();
     if (!modal) return;
-
-    if (modal.parentElement !== document.body) {
-      document.body.appendChild(modal);
-    }
-
+    if (modal.parentElement !== document.body) document.body.appendChild(modal);
     if (modal.getAttribute(BOUND) === '1') return;
     modal.setAttribute(BOUND, '1');
 
     form.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
+      if (target.closest('[data-stagnant-add]')) return;
       const trigger = target.closest('[data-stagnant-preview]');
       if (!(trigger instanceof HTMLElement)) return;
       const row = trigger.closest('[data-stagnant-card]');
@@ -423,28 +553,23 @@
     modal.querySelectorAll('[data-stagnant-preview-close]').forEach((el) => {
       el.addEventListener('click', closePreview);
     });
-
-    const prevBtn = modal.querySelector('[data-stagnant-preview-prev]');
-    const nextBtn = modal.querySelector('[data-stagnant-preview-next]');
-    if (prevBtn instanceof HTMLButtonElement) {
-      prevBtn.addEventListener('click', () => stepPreview(-1));
-    }
-    if (nextBtn instanceof HTMLButtonElement) {
-      nextBtn.addEventListener('click', () => stepPreview(1));
-    }
+    modal.querySelector('[data-stagnant-preview-prev]')?.addEventListener('click', () => stepPreview(-1));
+    modal.querySelector('[data-stagnant-preview-next]')?.addEventListener('click', () => stepPreview(1));
+    modal.querySelector('[data-stagnant-preview-add]')?.addEventListener('click', () => {
+      if (!activeRow) return;
+      addCandidateFromRow(activeRow);
+      syncPreviewPricingFromRow();
+    });
 
     document.addEventListener('keydown', (event) => {
       if (!isPreviewOpen()) return;
       const tag = event.target instanceof HTMLElement ? event.target.tagName : '';
-      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
-        || (event.target instanceof HTMLElement && event.target.isContentEditable);
-
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
       if (event.key === 'Escape') {
         closePreview();
         return;
       }
       if (typing) return;
-
       if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
         event.preventDefault();
         stepPreview(-1);
@@ -454,36 +579,17 @@
       }
     });
 
-    const select = modal.querySelector('[data-stagnant-preview-select]');
-    if (select instanceof HTMLInputElement) {
-      select.addEventListener('change', () => {
-        if (!activeRow) return;
-        const check = activeRow.querySelector('[data-stagnant-check]');
-        if (!(check instanceof HTMLInputElement)) return;
-        check.checked = select.checked;
-        sync(document);
-      });
-    }
-
     const previewPct = modal.querySelector('[data-stagnant-preview-discount]');
     if (previewPct instanceof HTMLInputElement) {
       previewPct.addEventListener('input', () => {
         if (!activeRow || syncingPreview) return;
-        syncRowFromPercent(activeRow, previewPct.value, {
-          markTouched: true,
-          source: previewPct,
-        });
+        syncRowFromPercent(activeRow, previewPct.value, { markTouched: true, source: previewPct });
       });
       previewPct.addEventListener('blur', () => {
         if (!activeRow) return;
-        syncRowFromPercent(activeRow, previewPct.value, {
-          markTouched: true,
-          source: previewPct,
-          commit: true,
-        });
+        syncRowFromPercent(activeRow, previewPct.value, { markTouched: true, source: previewPct, commit: true });
       });
     }
-
     const previewPrice = modal.querySelector('[data-stagnant-preview-price]');
     if (previewPrice instanceof HTMLInputElement) {
       previewPrice.addEventListener('input', () => {
@@ -492,10 +598,7 @@
       });
       previewPrice.addEventListener('blur', () => {
         if (!activeRow) return;
-        syncRowFromPrice(activeRow, previewPrice.value, {
-          source: previewPrice,
-          commit: true,
-        });
+        syncRowFromPrice(activeRow, previewPrice.value, { source: previewPrice, commit: true });
       });
     }
   }
@@ -503,31 +606,26 @@
   function init(root = document) {
     const form = root.querySelector?.('#stagnant-offer-form') || document.getElementById('stagnant-offer-form');
     if (!form) return;
-
     if (form.getAttribute(BOUND) === '1') {
-      sync(document);
+      syncSubmitState(document);
       return;
     }
     form.setAttribute(BOUND, '1');
 
-    form.addEventListener('change', (event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) return;
-      if (target.matches('[data-stagnant-check]')) {
-        sync(document);
-      }
-    });
-
     form.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
-
       const modeBtn = target.closest('[data-stagnant-mode]');
       if (modeBtn instanceof HTMLButtonElement) {
         const modeInput = form.querySelector('[data-stagnant-save-mode]');
         if (modeInput instanceof HTMLInputElement) {
           modeInput.value = modeBtn.getAttribute('data-stagnant-mode') || 'draft';
         }
+      }
+      const addBtn = target.closest('[data-stagnant-add]');
+      if (addBtn instanceof HTMLButtonElement) {
+        const row = addBtn.closest('[data-stagnant-card]');
+        if (row instanceof HTMLElement) addCandidateFromRow(row);
       }
     });
 
@@ -540,20 +638,12 @@
     form.querySelectorAll('[data-stagnant-card]').forEach((row) => {
       const pctInput = row.querySelector('[data-stagnant-item-discount]');
       const priceInput = row.querySelector('[data-stagnant-item-price]');
-
       if (pctInput instanceof HTMLInputElement) {
         pctInput.addEventListener('input', () => {
-          syncRowFromPercent(row, pctInput.value, {
-            markTouched: true,
-            source: pctInput,
-          });
+          syncRowFromPercent(row, pctInput.value, { markTouched: true, source: pctInput });
         });
         pctInput.addEventListener('blur', () => {
-          syncRowFromPercent(row, pctInput.value, {
-            markTouched: true,
-            source: pctInput,
-            commit: true,
-          });
+          syncRowFromPercent(row, pctInput.value, { markTouched: true, source: pctInput, commit: true });
         });
       }
       if (priceInput instanceof HTMLInputElement) {
@@ -561,39 +651,22 @@
           syncRowFromPrice(row, priceInput.value, { source: priceInput });
         });
         priceInput.addEventListener('blur', () => {
-          syncRowFromPrice(row, priceInput.value, {
-            source: priceInput,
-            commit: true,
-          });
+          syncRowFromPrice(row, priceInput.value, { source: priceInput, commit: true });
         });
       }
     });
 
-    document.querySelectorAll('[data-stagnant-select-all]').forEach((btn) => {
-      if (btn.getAttribute(BOUND) === '1') return;
-      btn.setAttribute(BOUND, '1');
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('[data-stagnant-check]').forEach((el) => {
-          if (el instanceof HTMLInputElement) el.checked = true;
-        });
-        sync(document);
-      });
+    document.querySelector('[data-stagnant-add-visible]')?.addEventListener('click', () => {
+      allRows().forEach((row) => addCandidateFromRow(row));
     });
-
-    document.querySelectorAll('[data-stagnant-clear]').forEach((btn) => {
-      if (btn.getAttribute(BOUND) === '1') return;
-      btn.setAttribute(BOUND, '1');
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('[data-stagnant-check]').forEach((el) => {
-          if (el instanceof HTMLInputElement) el.checked = false;
-        });
-        sync(document);
-      });
+    document.querySelector('[data-stagnant-clear-tray]')?.addEventListener('click', () => {
+      Array.from(candidates.keys()).forEach((guid) => removeCandidate(guid));
     });
 
     bindPreview(form);
     applyDefaultDiscount(form);
-    sync(document);
+    renderTray();
+    syncSubmitState(document);
   }
 
   window.portalStagnantInventoryInit = (root = document) => {
@@ -603,7 +676,7 @@
       init(root);
       return;
     }
-    sync(document);
+    syncSubmitState(document);
   };
 
   if (document.readyState === 'loading') {

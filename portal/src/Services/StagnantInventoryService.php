@@ -138,7 +138,7 @@ final class StagnantInventoryService
             }
         }
         if ($guids === []) {
-            return ['ok' => false, 'message' => 'اختر مادة واحدة على الأقل.', 'id' => null];
+            return ['ok' => false, 'message' => 'أضف مادة واحدة على الأقل إلى المرشّحين.', 'id' => null];
         }
 
         $defaultPercent = max(0.01, min(95.0, $defaultPercent));
