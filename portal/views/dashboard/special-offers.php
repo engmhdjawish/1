@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Portal\Support\PriceFx;
+
 /** @var array{total: int, active: int, manual: int, filter: int, on_home: int} $stats */
 /** @var list<array<string, mixed>> $offers */
 /** @var array<string, mixed> $editOffer */
@@ -439,7 +441,9 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
           <h4 class="so-invoice__title">مواد العرض وأسعارها</h4>
           <p class="so-invoice__hint">الدولار ثابت · الليرة بعد الخصم = دولار × سعر الصرف مع التقريب لأعلى 5. عدّل النسبة أو السعر.</p>
         </div>
-        <p class="so-invoice__count" id="so-invoice-count">لا مواد</p>
+        <p class="so-invoice__count" id="so-invoice-count">
+          <?= $selectedMaterialGuids === [] ? 'لا مواد' : (count($selectedMaterialGuids) === 1 ? 'مادة واحدة' : count($selectedMaterialGuids) . ' مواد') ?>
+        </p>
       </div>
       <div class="so-invoice__sheet">
         <table class="so-invoice__table so-invoice__table--priced">
@@ -455,7 +459,110 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
               <th class="so-invoice__action-col"></th>
             </tr>
           </thead>
-          <tbody id="per-material-pricing-rows"></tbody>
+          <tbody id="per-material-pricing-rows">
+            <?php if ($pricingScope === 'per_material' && $selectedMaterialGuids !== []): ?>
+              <?php foreach ($selectedMaterialGuids as $idx => $guid): ?>
+                <?php
+                  $meta = $manualProductsByGuid[$guid] ?? ['guid' => $guid, 'name' => $guid];
+                  $override = $productOverrides[$guid] ?? [];
+                  $dtype = (string) ($override['discount_type'] ?? 'percent');
+                  if (!in_array($dtype, ['percent', 'fixed_amount', 'fixed_price'], true)) {
+                      $dtype = 'percent';
+                  }
+                  $pct = isset($override['discount_percent']) && is_numeric((string) $override['discount_percent'])
+                      ? (float) $override['discount_percent']
+                      : 15.0;
+                  $saleUsd = isset($meta['unitSalePriceUsd']) && is_numeric((string) $meta['unitSalePriceUsd'])
+                      ? (float) $meta['unitSalePriceUsd'] : null;
+                  $saleSyp = isset($meta['unitSalePriceSyp']) && is_numeric((string) $meta['unitSalePriceSyp'])
+                      ? (float) $meta['unitSalePriceSyp'] : null;
+                  $purchaseUsd = isset($meta['unitPurchasePriceUsd']) && is_numeric((string) $meta['unitPurchasePriceUsd'])
+                      ? (float) $meta['unitPurchasePriceUsd'] : null;
+                  $currencyVal = isset($meta['currencyVal']) && is_numeric((string) $meta['currencyVal'])
+                      ? (float) $meta['currencyVal'] : null;
+                  $rate = PriceFx::inferRate($saleSyp, $saleUsd, $currencyVal);
+                  $afterUsd = $saleUsd !== null ? PriceFx::applyPercentToUsd($saleUsd, $pct) : null;
+                  if ($dtype === 'fixed_price' && isset($override['fixed_price_usd']) && is_numeric((string) $override['fixed_price_usd'])) {
+                      $afterUsd = (float) $override['fixed_price_usd'];
+                  }
+                  $afterSyp = ($afterUsd !== null && $rate > 0.0) ? PriceFx::sypFromUsd($afterUsd, $rate) : null;
+                  $belowCost = $afterUsd !== null && $purchaseUsd !== null && $purchaseUsd > 0 && $afterUsd < $purchaseUsd;
+                  $name = (string) ($meta['name'] ?? $guid);
+                  $code = (string) ($meta['code'] ?? '');
+                  $image = (string) ($meta['image'] ?? '');
+                ?>
+                <tr
+                  class="so-invoice__row"
+                  data-override-guid="<?= h($guid) ?>"
+                  data-sale-usd="<?= $saleUsd !== null ? h((string) $saleUsd) : '' ?>"
+                  data-purchase-usd="<?= $purchaseUsd !== null ? h((string) $purchaseUsd) : '' ?>"
+                  data-rate="<?= $rate > 0 ? h((string) $rate) : '' ?>"
+                >
+                  <td class="so-invoice__num"><?= (int) $idx + 1 ?></td>
+                  <td class="so-invoice__material">
+                    <div class="so-invoice__material-inner">
+                      <span class="so-invoice__thumb<?= $image === '' ? ' is-empty' : '' ?>">
+                        <?php if ($image !== ''): ?>
+                          <img src="<?= h($image) ?>" alt="" loading="lazy">
+                        <?php else: ?>
+                          صورة
+                        <?php endif; ?>
+                      </span>
+                      <span class="so-invoice__material-text">
+                        <span class="so-invoice__name"><?= h($name) ?></span>
+                        <?php if ($code !== ''): ?>
+                          <span class="so-invoice__code"><?= h($code) ?></span>
+                        <?php endif; ?>
+                      </span>
+                    </div>
+                  </td>
+                  <td class="tabular-nums font-bold" dir="ltr"><?= $saleUsd !== null ? h(number_format($saleUsd, 2, '.', '')) : '—' ?></td>
+                  <td class="tabular-nums text-slate-600" dir="ltr"><?= $purchaseUsd !== null ? h(number_format($purchaseUsd, 2, '.', '')) : '—' ?></td>
+                  <td class="so-invoice__type">
+                    <select name="material_override[<?= h($guid) ?>][discount_type]" data-field="discount_type" class="so-invoice__select">
+                      <option value="percent" <?= $dtype === 'percent' ? 'selected' : '' ?>>نسبة %</option>
+                      <option value="fixed_amount" <?= $dtype === 'fixed_amount' ? 'selected' : '' ?>>مبلغ مقطوع</option>
+                      <option value="fixed_price" <?= $dtype === 'fixed_price' ? 'selected' : '' ?>>سعر طرد جديد</option>
+                    </select>
+                  </td>
+                  <td class="so-invoice__value">
+                    <div class="so-invoice__values">
+                      <label class="so-invoice__value-field<?= $dtype === 'percent' ? '' : ' hidden' ?>" data-show-for="percent">
+                        <span class="text-text-muted whitespace-nowrap">%</span>
+                        <input type="text" inputmode="decimal" autocomplete="off" required class="so-invoice__input" name="material_override[<?= h($guid) ?>][discount_percent]" data-field="discount_percent" value="<?= h(rtrim(rtrim(number_format($pct, 2, '.', ''), '0'), '.') ?: '0') ?>">
+                      </label>
+                      <label class="so-invoice__value-field<?= $dtype === 'percent' ? '' : ' hidden' ?>" data-show-for="percent">
+                        <span class="text-text-muted whitespace-nowrap">بعد $</span>
+                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input<?= $belowCost ? ' is-below-cost' : '' ?>" data-field="sale_after_usd" value="<?= $afterUsd !== null ? h(number_format($afterUsd, 2, '.', '')) : '' ?>">
+                      </label>
+                      <label class="so-invoice__value-field<?= $dtype === 'fixed_amount' ? '' : ' hidden' ?>" data-show-for="fixed_amount">
+                        <span class="text-text-muted whitespace-nowrap">ل.س</span>
+                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input" name="material_override[<?= h($guid) ?>][fixed_amount_syp]" data-field="fixed_amount_syp" value="<?= h((string) ($override['fixed_amount_syp'] ?? '')) ?>">
+                      </label>
+                      <label class="so-invoice__value-field<?= $dtype === 'fixed_amount' ? '' : ' hidden' ?>" data-show-for="fixed_amount">
+                        <span class="text-text-muted whitespace-nowrap">$</span>
+                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input" name="material_override[<?= h($guid) ?>][fixed_amount_usd]" data-field="fixed_amount_usd" value="<?= h((string) ($override['fixed_amount_usd'] ?? '')) ?>">
+                      </label>
+                      <label class="so-invoice__value-field<?= $dtype === 'fixed_price' ? '' : ' hidden' ?>" data-show-for="fixed_price">
+                        <span class="text-text-muted whitespace-nowrap">سعر ل.س</span>
+                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input" name="material_override[<?= h($guid) ?>][fixed_price_syp]" data-field="fixed_price_syp" value="<?= h((string) ($override['fixed_price_syp'] ?? ($afterSyp !== null ? (string) $afterSyp : ''))) ?>">
+                      </label>
+                      <label class="so-invoice__value-field<?= $dtype === 'fixed_price' ? '' : ' hidden' ?>" data-show-for="fixed_price">
+                        <span class="text-text-muted whitespace-nowrap">سعر $</span>
+                        <input type="text" inputmode="decimal" autocomplete="off" class="so-invoice__input" name="material_override[<?= h($guid) ?>][fixed_price_usd]" data-field="fixed_price_usd" value="<?= h((string) ($override['fixed_price_usd'] ?? ($afterUsd !== null ? number_format($afterUsd, 2, '.', '') : ''))) ?>">
+                      </label>
+                    </div>
+                  </td>
+                  <td class="tabular-nums font-extrabold<?= $belowCost ? ' is-below-cost' : ' text-emerald-800' ?>" dir="ltr" data-after-syp>
+                    <?= $afterSyp !== null ? h(number_format($afterSyp, 0)) : '—' ?>
+                  </td>
+                  <td class="so-invoice__action">
+                    <button type="button" class="so-invoice__remove" data-so-remove-row>حذف</button>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </tbody>
         </table>
       </div>
       <script type="application/json" id="so-product-overrides-json"><?= json_encode($productOverrides, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?></script>

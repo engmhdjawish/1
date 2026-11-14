@@ -51,8 +51,9 @@
     return !!(modal && !modal.hidden && modal.classList.contains('is-open'));
   }
 
-  function allRows() {
-    return Array.from(document.querySelectorAll('[data-stagnant-card]'));
+  function allRows(includeHidden = false) {
+    return Array.from(document.querySelectorAll('[data-stagnant-card]'))
+      .filter((row) => includeHidden || !row.hidden);
   }
 
   function rowSaleUsd(row) {
@@ -232,18 +233,15 @@
       guid,
       name: row.getAttribute('data-name') || guid,
       code: row.getAttribute('data-code') || '',
+      image: row.getAttribute('data-image-thumb') || row.getAttribute('data-image-full') || '',
       saleUsd: rowSaleUsd(row),
       purchaseUsd: rowPurchaseUsd(row),
       rate: rowRate(row),
       percent: pricing.percent,
       priceUsd: pricing.priceUsd,
     });
-    const addBtn = row.querySelector('[data-stagnant-add]');
-    if (addBtn instanceof HTMLButtonElement) {
-      addBtn.textContent = 'مُضافة';
-      addBtn.disabled = true;
-    }
-    row.classList.add('ring-1', 'ring-inset', 'ring-primary/30', 'bg-primary/[0.04]');
+    row.hidden = true;
+    row.setAttribute('data-stagnant-in-tray', '1');
     renderTray();
     syncSubmitState();
     return true;
@@ -253,7 +251,8 @@
     candidates.delete(guid);
     const row = document.querySelector('[data-stagnant-card][data-material-guid="' + guid + '"]');
     if (row instanceof HTMLElement) {
-      row.classList.remove('ring-1', 'ring-inset', 'ring-primary/30', 'bg-primary/[0.04]');
+      row.hidden = false;
+      row.removeAttribute('data-stagnant-in-tray');
       const addBtn = row.querySelector('[data-stagnant-add]');
       if (addBtn instanceof HTMLButtonElement) {
         addBtn.textContent = 'إضافة';
@@ -282,6 +281,17 @@
       const row = document.createElement('div');
       row.className = 'flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border-subtle last:border-b-0 bg-white/80';
       row.setAttribute('data-tray-guid', item.guid);
+
+      const thumb = document.createElement('div');
+      thumb.className = 'w-14 h-14 rounded-lg overflow-hidden bg-slate-100 border border-border-subtle flex-shrink-0';
+      if (item.image) {
+        const img = document.createElement('img');
+        img.src = item.image;
+        img.alt = item.name;
+        img.loading = 'lazy';
+        img.className = 'w-full h-full object-cover';
+        thumb.appendChild(img);
+      }
 
       const title = document.createElement('div');
       title.className = 'min-w-[10rem] flex-1';
@@ -384,7 +394,7 @@
       removeBtn.textContent = 'إزالة';
       removeBtn.addEventListener('click', () => removeCandidate(item.guid));
 
-      row.append(title, pctLabel, priceLabel, sypEl, guidHidden, removeBtn);
+      row.append(thumb, title, pctLabel, priceLabel, sypEl, guidHidden, removeBtn);
       list.appendChild(row);
     });
   }
@@ -452,8 +462,8 @@
   function updateNavControls() {
     const modal = previewModal();
     if (!modal) return;
-    const rows = allRows();
-    const index = activeRow ? rows.indexOf(activeRow) : -1;
+    const rows = allRows(false);
+    const index = activeRow && !activeRow.hidden ? rows.indexOf(activeRow) : -1;
     const prevBtn = modal.querySelector('[data-stagnant-preview-prev]');
     const nextBtn = modal.querySelector('[data-stagnant-preview-next]');
     const pos = modal.querySelector('[data-stagnant-preview-position]');
@@ -524,11 +534,16 @@
   }
 
   function stepPreview(delta) {
-    const rows = allRows();
-    if (!activeRow || rows.length === 0) return;
-    const index = rows.indexOf(activeRow);
+    const rows = allRows(false);
+    if (rows.length === 0) {
+      closePreview();
+      return;
+    }
+    let index = activeRow ? rows.indexOf(activeRow) : -1;
+    if (index < 0) index = delta > 0 ? -1 : 0;
     const next = rows[index + delta];
     if (next) openPreview(next);
+    else if (activeRow?.hidden) openPreview(rows[0]);
   }
 
   function bindPreview(form) {
@@ -557,8 +572,11 @@
     modal.querySelector('[data-stagnant-preview-next]')?.addEventListener('click', () => stepPreview(1));
     modal.querySelector('[data-stagnant-preview-add]')?.addEventListener('click', () => {
       if (!activeRow) return;
-      addCandidateFromRow(activeRow);
-      syncPreviewPricingFromRow();
+      const current = activeRow;
+      addCandidateFromRow(current);
+      const remaining = allRows(false);
+      if (remaining.length > 0) openPreview(remaining[0]);
+      else closePreview();
     });
 
     document.addEventListener('keydown', (event) => {
@@ -657,7 +675,9 @@
     });
 
     document.querySelector('[data-stagnant-add-visible]')?.addEventListener('click', () => {
-      allRows().forEach((row) => addCandidateFromRow(row));
+      allRows().forEach((row) => {
+        if (!row.hidden) addCandidateFromRow(row);
+      });
     });
     document.querySelector('[data-stagnant-clear-tray]')?.addEventListener('click', () => {
       Array.from(candidates.keys()).forEach((guid) => removeCandidate(guid));

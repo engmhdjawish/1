@@ -127,34 +127,43 @@
       });
     };
 
-    const ensureSeededSelection = () => {
+    const collectGuidSources = () => {
       const fromPicker = typeof window.portalTokenPickerGetSelected === 'function'
         ? window.portalTokenPickerGetSelected('so-manual-materials').map((g) => String(g).toLowerCase())
         : [];
-      let selected = fromPicker.filter(Boolean);
-      if (selected.length === 0) {
-        selected = seedGuids.slice();
-        if (selected.length === 0) {
-          selected = Object.keys(overridesState);
-        }
-        if (selected.length > 0 && typeof window.portalTokenPickerAdd === 'function') {
-          const items = selected.map((guid) => {
-            const meta = labelMap[guid] || {};
-            return {
-              value: guid,
-              label: meta.name || meta.label || guid,
-              name: meta.name || meta.label || guid,
-              code: meta.code || '',
-              image: meta.image || '',
-            };
-          });
-          window.portalTokenPickerAdd('so-manual-materials', items);
-          selected = typeof window.portalTokenPickerGetSelected === 'function'
-            ? window.portalTokenPickerGetSelected('so-manual-materials').map((g) => String(g).toLowerCase())
-            : selected;
+      const fromDom = Array.from(root.querySelectorAll('input[name="manual_material_guids[]"]'))
+        .map((input) => String(input.value || '').toLowerCase());
+      const fromRows = Array.from(perMaterialRows?.querySelectorAll('[data-override-guid]') || [])
+        .map((row) => String(row.getAttribute('data-override-guid') || '').toLowerCase());
+      return Array.from(new Set(
+        [...fromPicker, ...fromDom, ...fromRows, ...seedGuids, ...Object.keys(overridesState)]
+          .map((g) => String(g || '').toLowerCase())
+          .filter(Boolean)
+      ));
+    };
+
+    const ensureSeededSelection = () => {
+      let selected = collectGuidSources();
+      if (selected.length > 0 && typeof window.portalTokenPickerAdd === 'function') {
+        const items = selected.map((guid) => {
+          const meta = labelMap[guid] || {};
+          return {
+            value: guid,
+            label: meta.name || meta.label || guid,
+            name: meta.name || meta.label || guid,
+            code: meta.code || '',
+            image: meta.image || '',
+          };
+        });
+        window.portalTokenPickerAdd('so-manual-materials', items);
+        const fromPicker = typeof window.portalTokenPickerGetSelected === 'function'
+          ? window.portalTokenPickerGetSelected('so-manual-materials').map((g) => String(g).toLowerCase())
+          : [];
+        if (fromPicker.length > 0) {
+          selected = Array.from(new Set(fromPicker.filter(Boolean)));
         }
       }
-      return Array.from(new Set(selected.filter(Boolean)));
+      return selected;
     };
 
     const renderOverrideRow = (guid, meta, index) => {
@@ -400,13 +409,37 @@
     const syncPerMaterialRows = () => {
       if (!perMaterialRows || !perMaterialPanel) return;
       captureOverrideInputs();
-      const selected = ensureSeededSelection();
-      perMaterialRows.innerHTML = '';
+      let selected = ensureSeededSelection();
+      const existing = Array.from(perMaterialRows.querySelectorAll('[data-override-guid]'))
+        .map((row) => String(row.getAttribute('data-override-guid') || '').toLowerCase())
+        .filter(Boolean);
+
+      // Never wipe server-rendered invoice rows if seeding still looks empty.
+      if (selected.length === 0 && existing.length > 0) {
+        selected = existing.slice();
+        ensureSeededSelection();
+      }
+
+      const selectedSet = new Set(selected);
+      const existingSet = new Set(existing);
+      const same = selected.length > 0
+        && selected.length === existing.length
+        && selected.every((guid) => existingSet.has(guid))
+        && existing.every((guid) => selectedSet.has(guid));
+
       const countEl = root.querySelector('#so-invoice-count');
       const countLabel = selected.length === 0
         ? 'لا مواد'
         : (selected.length === 1 ? 'مادة واحدة' : selected.length + ' مواد');
       if (countEl) countEl.textContent = countLabel;
+
+      // Keep server-rendered rows when GUID sets already match.
+      if (same) {
+        bindInvoiceRowBehaviors(perMaterialRows);
+        return;
+      }
+
+      perMaterialRows.innerHTML = '';
       if (!selected.length) {
         const empty = document.createElement('tr');
         const cell = document.createElement('td');
@@ -421,6 +454,84 @@
         const key = String(guid).toLowerCase();
         const meta = labelMap[key] || { name: key };
         perMaterialRows.appendChild(renderOverrideRow(key, meta, index));
+      });
+    };
+
+    const bindInvoiceRowBehaviors = (rowsRoot) => {
+      if (!(rowsRoot instanceof HTMLElement) || rowsRoot.getAttribute('data-so-bound') === '1') return;
+      rowsRoot.setAttribute('data-so-bound', '1');
+      rowsRoot.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const removeBtn = target.closest('[data-so-remove-row], .so-invoice__remove');
+        if (!(removeBtn instanceof HTMLElement)) return;
+        const row = removeBtn.closest('[data-override-guid]');
+        if (!(row instanceof HTMLElement)) return;
+        const guid = String(row.getAttribute('data-override-guid') || '').toLowerCase();
+        row.remove();
+        if (guid) delete overridesState[guid];
+        if (guid && typeof window.portalTokenPickerRemove === 'function') {
+          window.portalTokenPickerRemove('so-manual-materials', guid);
+        }
+        syncPerMaterialRows();
+      });
+      rowsRoot.addEventListener('change', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.getAttribute('data-field') !== 'discount_type') return;
+        const row = target.closest('[data-override-guid]');
+        if (!(row instanceof HTMLElement)) return;
+        const selected = target instanceof HTMLSelectElement ? target.value : 'percent';
+        row.querySelectorAll('[data-show-for]').forEach((el) => {
+          const visible = el.getAttribute('data-show-for') === selected;
+          el.classList.toggle('hidden', !visible);
+        });
+      });
+      rowsRoot.addEventListener('input', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) return;
+        const row = target.closest('[data-override-guid]');
+        if (!(row instanceof HTMLElement)) return;
+        const saleUsd = parseLoose(row.getAttribute('data-sale-usd'));
+        const purchaseUsd = parseLoose(row.getAttribute('data-purchase-usd'));
+        const rate = parseLoose(row.getAttribute('data-rate')) || 0;
+        const type = row.querySelector('[data-field="discount_type"]')?.value || 'percent';
+        const pctInput = row.querySelector('[data-field="discount_percent"]');
+        const afterInput = row.querySelector('[data-field="sale_after_usd"]');
+        const sypCell = row.querySelector('[data-after-syp]');
+        let afterUsd = null;
+        if (type === 'percent' && saleUsd !== null && saleUsd > 0 && pctInput instanceof HTMLInputElement) {
+          if (target === pctInput && afterInput instanceof HTMLInputElement) {
+            const pct = Math.max(0, Math.min(95, parseLoose(pctInput.value) ?? 0));
+            afterUsd = Math.max(0, saleUsd * (1 - pct / 100));
+            afterInput.value = formatUsd(afterUsd);
+          } else if (target === afterInput) {
+            afterUsd = parseLoose(afterInput.value);
+            if (afterUsd !== null && pctInput instanceof HTMLInputElement) {
+              afterUsd = Math.max(0, Math.min(saleUsd, afterUsd));
+              pctInput.value = String(Math.max(0, Math.min(95, Math.round((1 - afterUsd / saleUsd) * 10000) / 100)));
+            }
+          } else {
+            afterUsd = afterInput instanceof HTMLInputElement ? parseLoose(afterInput.value) : null;
+          }
+        } else if (type === 'fixed_price') {
+          afterUsd = parseLoose(row.querySelector('[data-field="fixed_price_usd"]')?.value);
+          if (afterUsd !== null && rate > 0) {
+            const sypInput = row.querySelector('[data-field="fixed_price_syp"]');
+            if (sypInput instanceof HTMLInputElement && document.activeElement !== sypInput) {
+              sypInput.value = String(roundUpTo5(afterUsd * rate));
+            }
+          }
+        }
+        if (sypCell instanceof HTMLElement) {
+          if (afterUsd !== null && rate > 0) {
+            sypCell.textContent = formatSyp(roundUpTo5(afterUsd * rate));
+            const below = purchaseUsd !== null && purchaseUsd > 0 && afterUsd < purchaseUsd;
+            sypCell.classList.toggle('is-below-cost', below);
+            sypCell.classList.toggle('text-emerald-800', !below);
+            afterInput?.classList.toggle('is-below-cost', below);
+          }
+        }
       });
     };
 
@@ -452,6 +563,18 @@
 
     syncPanels();
     syncPricingScope();
+    bindInvoiceRowBehaviors(perMaterialRows);
+    // Late pass: token picker may finish painting chips after first sync.
+    window.setTimeout(() => {
+      if (pricingScope?.value === 'per_material') {
+        syncPerMaterialRows();
+      }
+    }, 0);
+    window.setTimeout(() => {
+      if (pricingScope?.value === 'per_material') {
+        syncPerMaterialRows();
+      }
+    }, 150);
 
     form.addEventListener('submit', (event) => {
       if (pricingScope?.value !== 'per_material') return;
