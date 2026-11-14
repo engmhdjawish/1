@@ -435,9 +435,25 @@
 
         const selectedSet = new Set(selected);
         const existingSet = new Set(existing);
-        const same = selected.length === existing.length
+        const sameGuids = selected.length === existing.length
           && selected.every((guid) => existingSet.has(guid))
           && existing.every((guid) => selectedSet.has(guid));
+
+        // Rebuild if GUID set changed OR labelMap gained sale/purchase prices after enrich.
+        let pricesStale = false;
+        if (sameGuids) {
+          perMaterialRows.querySelectorAll('[data-override-guid]').forEach((row) => {
+            const guid = String(row.getAttribute('data-override-guid') || '').toLowerCase();
+            const meta = labelMap[guid] || {};
+            const saleAttr = row.getAttribute('data-sale-usd') || '';
+            const purchaseAttr = row.getAttribute('data-purchase-usd') || '';
+            const saleMeta = meta.unitSalePriceUsd != null ? String(meta.unitSalePriceUsd) : '';
+            const purchaseMeta = meta.unitPurchasePriceUsd != null ? String(meta.unitPurchasePriceUsd) : '';
+            if (saleAttr !== saleMeta || purchaseAttr !== purchaseMeta) {
+              pricesStale = true;
+            }
+          });
+        }
 
         const countEl = root.querySelector('#so-invoice-count');
         const countLabel = selected.length === 0
@@ -445,8 +461,8 @@
           : (selected.length === 1 ? 'مادة واحدة' : selected.length + ' مواد');
         if (countEl) countEl.textContent = countLabel;
 
-        // Keep server-rendered rows when GUID sets already match.
-        if (same) {
+        // Keep server-rendered rows when GUID sets and prices already match.
+        if (sameGuids && !pricesStale) {
           bindInvoiceRowBehaviors(perMaterialRows);
           return;
         }
@@ -700,6 +716,51 @@
       resultsEl.appendChild(li);
     };
 
+    const pricesFromItem = (item) => ({
+      unitSalePriceUsd: item.unitSalePriceUsd ?? item.half ?? item.Half ?? null,
+      unitSalePriceSyp: item.unitSalePriceSyp ?? item.whole ?? item.Whole ?? null,
+      unitPurchasePriceUsd: item.unitPurchasePriceUsd ?? item.endUser ?? item.EndUser ?? null,
+      currencyVal: item.currencyVal ?? item.CurrencyVal ?? null,
+    });
+
+    const applyLabelMeta = (guid, item) => {
+      const prices = pricesFromItem(item || {});
+      const prev = labelMap[guid] || {};
+      labelMap[guid] = {
+        guid,
+        name: item?.name || item?.label || prev.name || guid,
+        code: item?.code || prev.code || '',
+        image: item?.image || prev.image || '',
+        unitSalePriceUsd: prices.unitSalePriceUsd ?? prev.unitSalePriceUsd ?? null,
+        unitSalePriceSyp: prices.unitSalePriceSyp ?? prev.unitSalePriceSyp ?? null,
+        unitPurchasePriceUsd: prices.unitPurchasePriceUsd ?? prev.unitPurchasePriceUsd ?? null,
+        currencyVal: prices.currencyVal ?? prev.currencyVal ?? null,
+      };
+      return labelMap[guid];
+    };
+
+    const needsPriceEnrich = (meta) => {
+      if (!meta) return true;
+      return meta.unitSalePriceUsd == null
+        && meta.unitSalePriceSyp == null
+        && meta.unitPurchasePriceUsd == null;
+    };
+
+    const enrichMaterialPrices = async (guid) => {
+      try {
+        const response = await fetch(
+          '/dashboard/home-sections-api.php?guid=' + encodeURIComponent(guid),
+          { headers: { Accept: 'application/json' }, credentials: 'same-origin' }
+        );
+        const data = await response.json();
+        if (!data?.ok || !data.item) return false;
+        applyLabelMeta(guid, data.item);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    };
+
     const addMaterialItem = (item) => {
       if (!item || typeof window.portalTokenPickerAdd !== 'function') return;
       const guid = String(item.value || '').toLowerCase();
@@ -712,22 +773,21 @@
       if (added > 0 && statusEl) {
         statusEl.textContent = 'تمت إضافة: ' + (item.label || item.value);
       }
-      labelMap[guid] = {
-        guid,
-        name: item.name || item.label || guid,
-        code: item.code || '',
-        image: item.image || '',
-        unitSalePriceUsd: item.unitSalePriceUsd ?? item.half ?? item.Half ?? null,
-        unitSalePriceSyp: item.unitSalePriceSyp ?? item.whole ?? item.Whole ?? null,
-        unitPurchasePriceUsd: item.unitPurchasePriceUsd ?? item.endUser ?? item.EndUser ?? null,
-        currencyVal: item.currencyVal ?? item.CurrencyVal ?? null,
-      };
+      const meta = applyLabelMeta(guid, item);
       if (!overridesState[guid]) {
         overridesState[guid] = { discount_type: 'percent', discount_percent: '10' };
       }
-      if (pricingScope?.value === 'per_material') {
-        syncPerMaterialRows();
-        perMaterialRows?.lastElementChild?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      const refreshInvoice = () => {
+        if (pricingScope?.value === 'per_material') {
+          syncPerMaterialRows();
+          perMaterialRows?.lastElementChild?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      };
+      refreshInvoice();
+      if (needsPriceEnrich(meta)) {
+        enrichMaterialPrices(guid).then((ok) => {
+          if (ok) refreshInvoice();
+        });
       }
       searchInput.value = '';
       hideResults();
