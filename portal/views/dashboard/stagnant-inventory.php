@@ -340,7 +340,7 @@ $defaultDiscount = 15.0;
         <thead>
           <tr class="bg-slate-50 text-xs font-bold text-slate-600 border-b border-border-subtle">
             <th class="px-2 py-2.5 w-10"></th>
-            <th class="px-2 py-2.5 w-16 text-start">صورة</th>
+            <th class="px-2 py-2.5 w-20 text-start">صورة</th>
             <th class="px-2 py-2.5 text-start min-w-[200px]">المادة</th>
             <th class="px-2 py-2.5 text-start w-20">كمية</th>
             <th class="px-2 py-2.5 text-start w-20">عمر</th>
@@ -395,7 +395,7 @@ $defaultDiscount = 15.0;
                 <?php if ($fullUrl !== ''): ?>
                   <button
                     type="button"
-                    class="block w-12 h-12 rounded-md overflow-hidden bg-slate-100 border border-border-subtle cursor-zoom-in"
+                    class="block w-16 h-16 rounded-lg overflow-hidden bg-slate-100 border border-border-subtle cursor-zoom-in"
                     data-cart-image-zoom="<?= h($fullUrl) ?>"
                     aria-label="عرض الصورة"
                   >
@@ -409,7 +409,7 @@ $defaultDiscount = 15.0;
                     >
                   </button>
                 <?php else: ?>
-                  <div class="w-12 h-12 rounded-md bg-slate-100 border border-dashed border-slate-300"></div>
+                  <div class="w-16 h-16 rounded-lg bg-slate-100 border border-dashed border-slate-300"></div>
                 <?php endif; ?>
               </td>
               <td class="px-2 py-2 min-w-0">
