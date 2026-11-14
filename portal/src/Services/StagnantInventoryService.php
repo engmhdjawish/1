@@ -12,9 +12,13 @@ final class StagnantInventoryService
     /**
      * @param array{
      *   minAgeDays?: int,
+     *   maxAgeDays?: int|null,
      *   asOf?: string,
+     *   keyword?: string,
      *   groupGuids?: list<string>,
      *   storeGuids?: list<string>,
+     *   companies?: list<string>,
+     *   materialTypes?: list<string>,
      *   sort?: string,
      *   page?: int,
      *   pageSize?: int
@@ -24,12 +28,18 @@ final class StagnantInventoryService
     public static function fetch(array $query): array
     {
         $minAgeDays = max(1, min(3650, (int) ($query['minAgeDays'] ?? 50)));
+        $maxAgeDays = isset($query['maxAgeDays']) && $query['maxAgeDays'] !== null && $query['maxAgeDays'] !== ''
+            ? max($minAgeDays, min(3650, (int) $query['maxAgeDays']))
+            : null;
         $page = max(1, (int) ($query['page'] ?? 1));
         $pageSize = max(1, min(200, (int) ($query['pageSize'] ?? 50)));
         $sort = trim((string) ($query['sort'] ?? 'age:desc'));
         $asOf = trim((string) ($query['asOf'] ?? ''));
+        $keyword = trim((string) ($query['keyword'] ?? ''));
         $groupGuids = self::normalizeGuids($query['groupGuids'] ?? []);
         $storeGuids = self::normalizeGuids($query['storeGuids'] ?? []);
+        $companies = self::normalizeTexts($query['companies'] ?? []);
+        $materialTypes = self::normalizeTexts($query['materialTypes'] ?? []);
 
         $apiQuery = [
             'ageMode' => 'oldest',
@@ -40,14 +50,26 @@ final class StagnantInventoryService
             'page' => $page,
             'pageSize' => $pageSize,
         ];
+        if ($maxAgeDays !== null) {
+            $apiQuery['maxAgeDays'] = $maxAgeDays;
+        }
         if ($asOf !== '') {
             $apiQuery['asOf'] = $asOf;
+        }
+        if ($keyword !== '') {
+            $apiQuery['keyword'] = $keyword;
         }
         if ($groupGuids !== []) {
             $apiQuery['groupGuids'] = implode(',', $groupGuids);
         }
         if ($storeGuids !== []) {
             $apiQuery['storeGuids'] = implode(',', $storeGuids);
+        }
+        if ($companies !== []) {
+            $apiQuery['companies'] = implode(',', $companies);
+        }
+        if ($materialTypes !== []) {
+            $apiQuery['materialTypes'] = implode(',', $materialTypes);
         }
 
         try {
@@ -213,6 +235,23 @@ final class StagnantInventoryService
         }
 
         return $guids;
+    }
+
+    /**
+     * @param mixed $values
+     * @return list<string>
+     */
+    private static function normalizeTexts(mixed $values): array
+    {
+        $out = [];
+        foreach (is_array($values) ? $values : [] as $value) {
+            $value = trim((string) $value);
+            if ($value !== '' && !in_array($value, $out, true)) {
+                $out[] = $value;
+            }
+        }
+
+        return $out;
     }
 
     private static function nullableNumber(mixed $value): ?float

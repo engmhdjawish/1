@@ -8,17 +8,34 @@ declare(strict_types=1);
 /** @var array<string, mixed>|null $currentSeason */
 /** @var string $seasonId */
 /** @var int $minAgeDays */
+/** @var int|null $maxAgeDays */
 /** @var string $sort */
 /** @var int $page */
 /** @var int $pageSize */
 /** @var int $totalPages */
 /** @var int $totalCount */
 /** @var string $asOf */
+/** @var string $keyword */
+/** @var list<string> $selectedStoreGuids */
+/** @var list<string> $selectedCompanies */
+/** @var list<string> $selectedMaterialTypes */
+/** @var list<string> $selectedGroupGuids */
+/** @var array<string, mixed> $materialFilterOptions */
+/** @var string|null $materialFilterOptionsError */
 /** @var string|null $error */
 /** @var string|null $flash */
 /** @var string $flashType */
 
+require __DIR__ . '/partials/token-picker.php';
+
 $items = is_array($report['items'] ?? null) ? $report['items'] : [];
+$selectedStoreGuids = array_map('strval', $selectedStoreGuids ?? []);
+$selectedCompanies = array_map('strval', $selectedCompanies ?? []);
+$selectedMaterialTypes = array_map('strval', $selectedMaterialTypes ?? []);
+$selectedGroupGuids = array_map('strval', $selectedGroupGuids ?? []);
+$keyword = (string) ($keyword ?? '');
+$maxAgeDays = $maxAgeDays ?? null;
+
 $fmtMoney = static function (?float $value, string $suffix = ''): string {
     if ($value === null) {
         return '—';
@@ -35,22 +52,79 @@ $fmtDate = static function (string $value): string {
 
     return $ts ? date('Y-m-d', $ts) : $value;
 };
+
+$storeOptions = [];
+foreach (($materialFilterOptions['stores'] ?? []) as $store) {
+    if (!is_array($store)) {
+        continue;
+    }
+    $guid = trim((string) ($store['guid'] ?? $store['Guid'] ?? ''));
+    if ($guid === '') {
+        continue;
+    }
+    $label = trim((string) ($store['name'] ?? $store['Name'] ?? $guid));
+    $code = trim((string) ($store['code'] ?? $store['Code'] ?? ''));
+    $storeOptions[] = [
+        'value' => $guid,
+        'label' => $code !== '' ? ($code . ' — ' . $label) : $label,
+    ];
+}
+$companyOptions = array_map(
+    static fn (string $v): array => ['value' => $v, 'label' => $v],
+    array_values(array_unique(array_merge($materialFilterOptions['manufacturers'] ?? [], $selectedCompanies)))
+);
+$typeOptions = array_map(
+    static fn (string $v): array => ['value' => $v, 'label' => $v],
+    array_values(array_unique(array_merge($materialFilterOptions['materialTypes'] ?? [], $selectedMaterialTypes)))
+);
+$groupOptions = [];
+foreach (($materialFilterOptions['groups'] ?? []) as $group) {
+    if (!is_array($group)) {
+        continue;
+    }
+    $guid = trim((string) ($group['guid'] ?? $group['Guid'] ?? ''));
+    if ($guid === '') {
+        continue;
+    }
+    $label = trim((string) ($group['name'] ?? $group['Name'] ?? $guid));
+    $code = trim((string) ($group['code'] ?? $group['Code'] ?? ''));
+    $groupOptions[] = [
+        'value' => $guid,
+        'label' => $code !== '' ? ($code . ' — ' . $label) : $label,
+    ];
+}
+
 $queryBase = [
     'minAgeDays' => $minAgeDays,
+    'maxAgeDays' => $maxAgeDays,
     'sort' => $sort,
     'pageSize' => $pageSize,
     'seasonId' => $seasonId !== '' ? $seasonId : 'all',
     'asOf' => $asOf,
+    'keyword' => $keyword,
 ];
-$buildUrl = static function (array $overrides) use ($queryBase): string {
+$buildUrl = static function (array $overrides) use ($queryBase, $selectedStoreGuids, $selectedCompanies, $selectedMaterialTypes, $selectedGroupGuids): string {
     $q = array_merge($queryBase, $overrides);
     foreach ($q as $key => $value) {
         if ($value === '' || $value === null) {
             unset($q[$key]);
         }
     }
+    $url = '/dashboard/stagnant-inventory.php?' . http_build_query($q);
+    foreach ($selectedStoreGuids as $guid) {
+        $url .= '&store_guids[]=' . rawurlencode($guid);
+    }
+    foreach ($selectedCompanies as $company) {
+        $url .= '&companies[]=' . rawurlencode($company);
+    }
+    foreach ($selectedMaterialTypes as $type) {
+        $url .= '&material_types[]=' . rawurlencode($type);
+    }
+    foreach ($selectedGroupGuids as $guid) {
+        $url .= '&group_guids[]=' . rawurlencode($guid);
+    }
 
-    return '/dashboard/stagnant-inventory.php?' . http_build_query($q);
+    return $url;
 };
 ?>
 <section class="mb-6" data-stagnant-inventory-root>
@@ -78,61 +152,95 @@ $buildUrl = static function (array $overrides) use ($queryBase): string {
 <?php if ($error): ?>
   <p class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
     <?= h($error) ?>
-    <span class="block mt-1 text-xs text-amber-800">تأكد أن API الأمين منشور بمسار GET /api/materials/ages وأن حساب البوابة يملك materials.read.</span>
+    <span class="block mt-1 text-xs text-amber-800">تأكد أن API الأمين منشور من فرع المخزون الراكد (يدعم sort والصور والأسعار) وأن حساب البوابة يملك materials.read.</span>
   </p>
 <?php endif; ?>
 
-<form method="get" action="/dashboard/stagnant-inventory.php" class="mb-5 bg-white border border-border-subtle rounded-2xl p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 items-end" data-dashboard-filter>
-  <label class="block text-sm">
-    <span class="font-bold text-slate-700">مدة الركود (يوم)</span>
-    <input type="number" name="minAgeDays" min="1" max="3650" value="<?= (int) $minAgeDays ?>" class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
-  </label>
-  <label class="block text-sm">
-    <span class="font-bold text-slate-700">حتى تاريخ (asOf)</span>
-    <input type="date" name="asOf" value="<?= h($asOf) ?>" class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
-  </label>
-  <label class="block text-sm">
-    <span class="font-bold text-slate-700">الموسم</span>
-    <select name="seasonId" class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
-      <option value="all" <?= $seasonId === '' || $seasonId === 'all' ? 'selected' : '' ?>>كل المواسم / كل المجموعات</option>
-      <?php if ($currentSeason): ?>
-        <option value="current" <?= $seasonId === 'current' || ($selectedSeason['id'] ?? '') === ($currentSeason['id'] ?? '') ? 'selected' : '' ?>>
-          الموسم الحالي — <?= h((string) ($currentSeason['title_ar'] ?? $currentSeason['name_ar'] ?? '')) ?>
-        </option>
-      <?php endif; ?>
-      <?php foreach ($seasons as $season): ?>
-        <?php
-          $sid = (string) ($season['id'] ?? '');
-          if ($sid === '') {
-              continue;
-          }
-        ?>
-        <option value="<?= h($sid) ?>" <?= $seasonId === $sid ? 'selected' : '' ?>>
-          <?= h((string) ($season['name_ar'] ?? $sid)) ?>
-          (<?= count($season['group_guids'] ?? []) ?> مجموعة)
-        </option>
-      <?php endforeach; ?>
-    </select>
-  </label>
-  <label class="block text-sm">
-    <span class="font-bold text-slate-700">الترتيب</span>
-    <select name="sort" class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
-      <option value="age:desc" <?= $sort === 'age:desc' ? 'selected' : '' ?>>العمر ↓</option>
-      <option value="age:asc" <?= $sort === 'age:asc' ? 'selected' : '' ?>>العمر ↑</option>
-      <option value="name:asc" <?= $sort === 'name:asc' ? 'selected' : '' ?>>الاسم ↑</option>
-      <option value="name:desc" <?= $sort === 'name:desc' ? 'selected' : '' ?>>الاسم ↓</option>
-      <option value="price:desc" <?= $sort === 'price:desc' ? 'selected' : '' ?>>سعر البيع ↓</option>
-      <option value="price:asc" <?= $sort === 'price:asc' ? 'selected' : '' ?>>سعر البيع ↑</option>
-      <option value="purchase:desc" <?= $sort === 'purchase:desc' ? 'selected' : '' ?>>سعر الشراء ↓</option>
-      <option value="purchase:asc" <?= $sort === 'purchase:asc' ? 'selected' : '' ?>>سعر الشراء ↑</option>
-      <option value="qty:desc" <?= $sort === 'qty:desc' ? 'selected' : '' ?>>الكمية ↓</option>
-      <option value="qty:asc" <?= $sort === 'qty:asc' ? 'selected' : '' ?>>الكمية ↑</option>
-    </select>
-  </label>
-  <div class="flex gap-2">
+<?php if ($materialFilterOptionsError): ?>
+  <p class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    <?= h($materialFilterOptionsError) ?>
+  </p>
+<?php endif; ?>
+
+<form method="get" action="/dashboard/stagnant-inventory.php" class="mb-5 bg-white border border-border-subtle rounded-2xl p-4 space-y-4" data-dashboard-filter>
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 items-end">
+    <label class="block text-sm md:col-span-2">
+      <span class="font-bold text-slate-700">بحث (كود / اسم)</span>
+      <input type="search" name="keyword" value="<?= h($keyword) ?>" placeholder="مثال: 37700 أو شحاطة" data-dashboard-filter-search class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
+    </label>
+    <label class="block text-sm">
+      <span class="font-bold text-slate-700">مدة الركود من (يوم)</span>
+      <input type="number" name="minAgeDays" min="1" max="3650" value="<?= (int) $minAgeDays ?>" class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
+    </label>
+    <label class="block text-sm">
+      <span class="font-bold text-slate-700">مدة الركود إلى (يوم)</span>
+      <input type="number" name="maxAgeDays" min="1" max="3650" value="<?= $maxAgeDays !== null ? (int) $maxAgeDays : '' ?>" placeholder="اختياري" class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
+    </label>
+    <label class="block text-sm">
+      <span class="font-bold text-slate-700">حتى تاريخ (asOf)</span>
+      <input type="date" name="asOf" value="<?= h($asOf) ?>" class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
+    </label>
+    <label class="block text-sm">
+      <span class="font-bold text-slate-700">الموسم</span>
+      <select name="seasonId" class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
+        <option value="all" <?= $seasonId === '' || $seasonId === 'all' ? 'selected' : '' ?>>كل المواسم / كل المجموعات</option>
+        <?php if ($currentSeason): ?>
+          <option value="current" <?= $seasonId === 'current' || ($selectedSeason['id'] ?? '') === ($currentSeason['id'] ?? '') ? 'selected' : '' ?>>
+            الموسم الحالي — <?= h((string) ($currentSeason['title_ar'] ?? $currentSeason['name_ar'] ?? '')) ?>
+          </option>
+        <?php endif; ?>
+        <?php foreach ($seasons as $season): ?>
+          <?php
+            $sid = (string) ($season['id'] ?? '');
+            if ($sid === '') {
+                continue;
+            }
+          ?>
+          <option value="<?= h($sid) ?>" <?= $seasonId === $sid ? 'selected' : '' ?>>
+            <?= h((string) ($season['name_ar'] ?? $sid)) ?>
+            (<?= count($season['group_guids'] ?? []) ?> مجموعة)
+          </option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <label class="block text-sm">
+      <span class="font-bold text-slate-700">الترتيب</span>
+      <select name="sort" class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
+        <option value="age:desc" <?= $sort === 'age:desc' ? 'selected' : '' ?>>العمر ↓</option>
+        <option value="age:asc" <?= $sort === 'age:asc' ? 'selected' : '' ?>>العمر ↑</option>
+        <option value="name:asc" <?= $sort === 'name:asc' ? 'selected' : '' ?>>الاسم ↑</option>
+        <option value="name:desc" <?= $sort === 'name:desc' ? 'selected' : '' ?>>الاسم ↓</option>
+        <option value="price:desc" <?= $sort === 'price:desc' ? 'selected' : '' ?>>سعر البيع ↓</option>
+        <option value="price:asc" <?= $sort === 'price:asc' ? 'selected' : '' ?>>سعر البيع ↑</option>
+        <option value="purchase:desc" <?= $sort === 'purchase:desc' ? 'selected' : '' ?>>سعر الشراء ↓</option>
+        <option value="purchase:asc" <?= $sort === 'purchase:asc' ? 'selected' : '' ?>>سعر الشراء ↑</option>
+        <option value="qty:desc" <?= $sort === 'qty:desc' ? 'selected' : '' ?>>الكمية ↓</option>
+        <option value="qty:asc" <?= $sort === 'qty:asc' ? 'selected' : '' ?>>الكمية ↑</option>
+      </select>
+    </label>
+    <label class="block text-sm">
+      <span class="font-bold text-slate-700">حجم الصفحة</span>
+      <select name="pageSize" class="mt-1 w-full h-10 rounded-xl border border-border-subtle px-3 text-sm">
+        <?php foreach ([20, 50, 100] as $size): ?>
+          <option value="<?= $size ?>" <?= (int) $pageSize === $size ? 'selected' : '' ?>><?= $size ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <?php
+      $renderTokenPicker('المستودعات', 'store_guids[]', $storeOptions, $selectedStoreGuids, 'stagnant-stores', true, false, false, 6);
+      $renderTokenPicker('المجموعات', 'group_guids[]', $groupOptions, $selectedGroupGuids, 'stagnant-groups', true, false, false, 6);
+      $renderTokenPicker('الشركة / المصنّع', 'companies[]', $companyOptions, $selectedCompanies, 'stagnant-companies', true, false, false, 6);
+      $renderTokenPicker('نوع المادة', 'material_types[]', $typeOptions, $selectedMaterialTypes, 'stagnant-types', true, false, false, 6);
+    ?>
+  </div>
+
+  <div class="flex flex-wrap gap-2">
     <input type="hidden" name="page" value="1">
-    <input type="hidden" name="pageSize" value="<?= (int) $pageSize ?>">
-    <button type="submit" class="h-10 flex-1 rounded-xl bg-primary text-white text-sm font-bold hover:brightness-110">تطبيق</button>
+    <button type="submit" class="h-10 px-5 rounded-xl bg-primary text-white text-sm font-bold hover:brightness-110">تطبيق الفلاتر</button>
+    <a href="/dashboard/stagnant-inventory.php" class="h-10 px-4 inline-flex items-center rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-dashboard-nav-link>إعادة ضبط</a>
   </div>
 </form>
 
@@ -143,9 +251,13 @@ $buildUrl = static function (array $overrides) use ($queryBase): string {
       · موسم: <span class="font-bold text-slate-700"><?= h((string) ($selectedSeason['name_ar'] ?? $selectedSeason['title_ar'] ?? '')) ?></span>
     <?php endif; ?>
     · ركود ≥ <?= (int) $minAgeDays ?> يوم
+    <?php if ($maxAgeDays !== null): ?>
+      و ≤ <?= (int) $maxAgeDays ?>
+    <?php endif; ?>
     <?php if (!empty($report['asOf'])): ?>
       · حتى <?= h((string) $report['asOf']) ?>
     <?php endif; ?>
+    · ترتيب: <span class="font-bold text-slate-700"><?= h($sort) ?></span>
   </p>
   <?php if ($totalPages > 1): ?>
     <div class="flex items-center gap-2">
@@ -163,11 +275,25 @@ $buildUrl = static function (array $overrides) use ($queryBase): string {
 <form method="post" action="/dashboard/stagnant-inventory.php" id="stagnant-offer-form">
   <input type="hidden" name="action" value="create_offer">
   <input type="hidden" name="minAgeDays" value="<?= (int) $minAgeDays ?>">
+  <input type="hidden" name="maxAgeDays" value="<?= $maxAgeDays !== null ? (int) $maxAgeDays : '' ?>">
   <input type="hidden" name="sort" value="<?= h($sort) ?>">
   <input type="hidden" name="page" value="<?= (int) $page ?>">
   <input type="hidden" name="pageSize" value="<?= (int) $pageSize ?>">
   <input type="hidden" name="seasonId" value="<?= h($seasonId !== '' ? $seasonId : 'all') ?>">
   <input type="hidden" name="asOf" value="<?= h($asOf) ?>">
+  <input type="hidden" name="keyword" value="<?= h($keyword) ?>">
+  <?php foreach ($selectedStoreGuids as $guid): ?>
+    <input type="hidden" name="store_guids[]" value="<?= h($guid) ?>">
+  <?php endforeach; ?>
+  <?php foreach ($selectedCompanies as $company): ?>
+    <input type="hidden" name="companies[]" value="<?= h($company) ?>">
+  <?php endforeach; ?>
+  <?php foreach ($selectedMaterialTypes as $type): ?>
+    <input type="hidden" name="material_types[]" value="<?= h($type) ?>">
+  <?php endforeach; ?>
+  <?php foreach ($selectedGroupGuids as $guid): ?>
+    <input type="hidden" name="group_guids[]" value="<?= h($guid) ?>">
+  <?php endforeach; ?>
 
   <div class="sticky top-0 z-10 mb-3 bg-white/95 backdrop-blur border border-border-subtle rounded-2xl p-3 flex flex-wrap items-end gap-3 shadow-sm">
     <label class="text-sm">
