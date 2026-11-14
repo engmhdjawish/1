@@ -30,7 +30,13 @@ public sealed record MaterialAgeRowResponse(
     int? OldestAgeDays,
     double? WeightedAgeDays,
     IReadOnlyList<MaterialAgeStoreBalanceResponse> StoreBalances,
-    IReadOnlyList<MaterialAgeLayerResponse>? Layers);
+    IReadOnlyList<MaterialAgeLayerResponse>? Layers,
+    Guid? PictureGuid = null,
+    double? EndUser = null,
+    double? Whole = null,
+    double? LastPrice = null,
+    double? AvgPrice = null,
+    double? CurrencyVal = null);
 
 public sealed record MaterialAgeStoreBalanceResponse(
     Guid StoreGuid,

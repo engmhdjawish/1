@@ -30,6 +30,8 @@ public sealed class MaterialAgeQuery(MainDbContext mainDbContext)
         public string? Search { get; init; }
         public int? MinAgeDays { get; init; }
         public int? MaxAgeDays { get; init; }
+        /// <summary>number:asc (default), age:asc|desc, qty:asc|desc, name:asc|desc, code:asc|desc, price:asc|desc, purchase:asc|desc</summary>
+        public string Sort { get; init; } = "number:asc";
         public int Page { get; init; } = 1;
         public int PageSize { get; init; } = 100;
     }
@@ -302,15 +304,17 @@ public sealed class MaterialAgeQuery(MainDbContext mainDbContext)
                         ageMode == "oldest" ? oldestAge : null,
                         ageMode == "weightedAverage" ? weighted : null,
                         storeBalances,
-                        layerPayload));
+                        layerPayload,
+                        catalog.PictureGuid,
+                        catalog.EndUser,
+                        catalog.Whole,
+                        catalog.LastPrice,
+                        catalog.AvgPrice,
+                        catalog.CurrencyVal));
                 }
             }
 
-            var ordered = rows
-                .OrderBy(r => r.Number ?? int.MaxValue)
-                .ThenBy(r => r.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(r => r.MaterialGuid)
-                .ToList();
+            var ordered = SortRows(rows, request.Sort, ageMode);
 
             var page = Math.Max(1, request.Page);
             var pageSize = Math.Clamp(request.PageSize, 1, 500);
@@ -419,6 +423,62 @@ public sealed class MaterialAgeQuery(MainDbContext mainDbContext)
 
         return true;
     }
+
+    private static List<MaterialAgeRowResponse> SortRows(
+        List<MaterialAgeRowResponse> rows,
+        string sort,
+        string ageMode)
+    {
+        var key = string.IsNullOrWhiteSpace(sort) ? "number:asc" : sort.Trim().ToLowerInvariant();
+        IEnumerable<MaterialAgeRowResponse> ordered = key switch
+        {
+            "age:desc" => rows
+                .OrderByDescending(r => AgeSortValue(r, ageMode) ?? double.MinValue)
+                .ThenBy(r => r.Number ?? int.MaxValue)
+                .ThenBy(r => r.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            "age:asc" => rows
+                .OrderBy(r => AgeSortValue(r, ageMode) ?? double.MaxValue)
+                .ThenBy(r => r.Number ?? int.MaxValue)
+                .ThenBy(r => r.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            "qty:desc" => rows
+                .OrderByDescending(r => r.RemainingQuantity)
+                .ThenBy(r => r.Number ?? int.MaxValue),
+            "qty:asc" => rows
+                .OrderBy(r => r.RemainingQuantity)
+                .ThenBy(r => r.Number ?? int.MaxValue),
+            "name:desc" => rows
+                .OrderByDescending(r => r.Name ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(r => r.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            "name:asc" => rows
+                .OrderBy(r => r.Name ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(r => r.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            "code:desc" => rows
+                .OrderByDescending(r => r.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            "code:asc" => rows
+                .OrderBy(r => r.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            "price:desc" => rows
+                .OrderByDescending(r => r.EndUser ?? double.MinValue)
+                .ThenBy(r => r.Number ?? int.MaxValue),
+            "price:asc" => rows
+                .OrderBy(r => r.EndUser ?? double.MaxValue)
+                .ThenBy(r => r.Number ?? int.MaxValue),
+            "purchase:desc" => rows
+                .OrderByDescending(r => r.LastPrice ?? double.MinValue)
+                .ThenBy(r => r.Number ?? int.MaxValue),
+            "purchase:asc" => rows
+                .OrderBy(r => r.LastPrice ?? double.MaxValue)
+                .ThenBy(r => r.Number ?? int.MaxValue),
+            _ => rows
+                .OrderBy(r => r.Number ?? int.MaxValue)
+                .ThenBy(r => r.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(r => r.MaterialGuid)
+        };
+
+        return ordered.ToList();
+    }
+
+    private static double? AgeSortValue(MaterialAgeRowResponse row, string ageMode) =>
+        ageMode == "weightedAverage" ? row.WeightedAgeDays : row.OldestAgeDays;
 
     private static IReadOnlyList<MaterialAgeStoreBalanceResponse> BuildStoreBalances(
         Guid materialGuid,
@@ -722,7 +782,13 @@ WHERE ISNULL(bu.[IsPosted], 0) <> 0
         string? GroupCode,
         string? GroupName,
         string? MaterialType,
-        string? Unit);
+        string? Unit,
+        Guid? PictureGuid,
+        double? EndUser,
+        double? Whole,
+        double? LastPrice,
+        double? AvgPrice,
+        double? CurrencyVal);
 
     private static async Task<List<CatalogMaterial>> LoadCatalogMaterialsAsync(
         SqlConnection sqlConnection,
@@ -748,7 +814,13 @@ SELECT
     gr.[Code],
     gr.[Name],
     mt.[Color],
-    mt.[Unity]
+    mt.[Unity],
+    mt.[PictureGUID],
+    mt.[EndUser],
+    mt.[Whole],
+    mt.[LastPrice],
+    mt.[AvgPrice],
+    mt.[CurrencyVal]
 FROM dbo.[mt000] AS mt
 LEFT JOIN dbo.[gr000] AS gr ON gr.[GUID] = mt.[GroupGUID]
 WHERE 1 = 1
@@ -802,6 +874,16 @@ WHERE 1 = 1
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
+            Guid? pictureGuid = null;
+            if (!reader.IsDBNull(11))
+            {
+                var rawPicture = reader.GetGuid(11);
+                if (rawPicture != Guid.Empty)
+                {
+                    pictureGuid = rawPicture;
+                }
+            }
+
             rows.Add(new CatalogMaterial(
                 reader.GetGuid(0),
                 reader.IsDBNull(1) ? null : Convert.ToInt32(reader.GetValue(1), CultureInfo.InvariantCulture),
@@ -813,7 +895,13 @@ WHERE 1 = 1
                 reader.IsDBNull(7) ? null : reader.GetString(7),
                 reader.IsDBNull(8) ? null : reader.GetString(8),
                 reader.IsDBNull(9) ? null : reader.GetString(9),
-                reader.IsDBNull(10) ? null : reader.GetString(10)));
+                reader.IsDBNull(10) ? null : reader.GetString(10),
+                pictureGuid,
+                reader.IsDBNull(12) ? null : Convert.ToDouble(reader.GetValue(12), CultureInfo.InvariantCulture),
+                reader.IsDBNull(13) ? null : Convert.ToDouble(reader.GetValue(13), CultureInfo.InvariantCulture),
+                reader.IsDBNull(14) ? null : Convert.ToDouble(reader.GetValue(14), CultureInfo.InvariantCulture),
+                reader.IsDBNull(15) ? null : Convert.ToDouble(reader.GetValue(15), CultureInfo.InvariantCulture),
+                reader.IsDBNull(16) ? null : Convert.ToDouble(reader.GetValue(16), CultureInfo.InvariantCulture)));
         }
 
         return rows;

@@ -39,6 +39,7 @@ public sealed class MaterialAgesController(MaterialAgeQuery materialAgeQuery) : 
         [FromQuery] string? search = null,
         [FromQuery] int? minAgeDays = null,
         [FromQuery] int? maxAgeDays = null,
+        [FromQuery] string? sort = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 100,
         CancellationToken cancellationToken = default)
@@ -99,6 +100,7 @@ public sealed class MaterialAgesController(MaterialAgeQuery materialAgeQuery) : 
             Search = search,
             MinAgeDays = minAgeDays,
             MaxAgeDays = maxAgeDays,
+            Sort = string.IsNullOrWhiteSpace(sort) ? "number:asc" : sort.Trim(),
             Page = page,
             PageSize = pageSize
         };

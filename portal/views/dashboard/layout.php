@@ -354,6 +354,7 @@ $renderNavLink = static function (array $item, string $currentRoute, bool $compa
   <script src="<?= h(portal_asset_url('/assets/dashboard/store-seasons.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/dashboard/home-layout.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/dashboard/special-offers.js')) ?>" defer></script>
+  <script src="<?= h(portal_asset_url('/assets/dashboard/stagnant-inventory.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/dashboard/about-editor.js')) ?>" defer></script>
   <script src="<?= h(portal_asset_url('/assets/dashboard/accounting-statement.js')) ?>" defer></script>
   <?php if (!empty($materialImagesWorkspace ?? false)): ?>
