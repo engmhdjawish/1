@@ -445,26 +445,25 @@ $defaultDiscount = 15.0;
               <td class="px-2 py-2 tabular-nums text-slate-600" dir="ltr"><?= h($fmtMoney($purchase)) ?></td>
               <td class="px-2 py-2">
                 <input
-                  type="number"
+                  type="text"
+                  inputmode="decimal"
                   name="material_discount[<?= h($guid) ?>]"
-                  min="1"
-                  max="95"
-                  step="0.5"
                   value="<?= h((string) $defaultDiscount) ?>"
                   data-stagnant-item-discount
                   class="w-20 h-9 rounded-lg border border-border-subtle px-2 text-sm tabular-nums"
                   title="نسبة الخصم"
+                  autocomplete="off"
                 >
               </td>
               <td class="px-2 py-2">
                 <input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="text"
+                  inputmode="decimal"
                   value="<?= $saleAfterUsd !== null ? h(number_format($saleAfterUsd, 2, '.', '')) : '' ?>"
                   data-stagnant-item-price
                   class="w-24 h-9 rounded-lg border border-border-subtle px-2 text-sm tabular-nums"
                   title="سعر البيع بالدولار بعد الخصم"
+                  autocomplete="off"
                   <?= $saleUsd === null || $saleUsd <= 0 ? 'disabled' : '' ?>
                 >
               </td>
@@ -483,112 +482,101 @@ $defaultDiscount = 15.0;
 
 <div
   id="stagnant-preview-modal"
-  class="fixed inset-0 z-[100100] hidden items-center justify-center p-3 sm:p-6"
+  class="stagnant-preview-modal"
   hidden
   aria-hidden="true"
   data-stagnant-preview-modal
 >
-  <div class="absolute inset-0 bg-slate-950/80" data-stagnant-preview-close></div>
+  <div class="stagnant-preview-modal__backdrop" data-stagnant-preview-close></div>
   <div
-    class="relative z-10 w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white shadow-2xl"
+    class="stagnant-preview-modal__panel"
     role="dialog"
     aria-modal="true"
     aria-labelledby="stagnant-preview-title"
   >
-    <button
-      type="button"
-      class="absolute top-3 start-3 z-20 w-10 h-10 rounded-full bg-slate-900/80 text-white text-xl font-bold hover:bg-slate-900"
-      data-stagnant-preview-close
-      aria-label="إغلاق"
-    >×</button>
+    <div class="stagnant-preview-modal__header">
+      <div class="stagnant-preview-modal__nav">
+        <button type="button" class="stagnant-preview-modal__nav-btn" data-stagnant-preview-prev title="المادة السابقة">السابق</button>
+        <span class="text-xs font-bold text-slate-500 tabular-nums" data-stagnant-preview-position></span>
+        <button type="button" class="stagnant-preview-modal__nav-btn" data-stagnant-preview-next title="المادة التالية">التالي</button>
+      </div>
+      <button type="button" class="stagnant-preview-modal__close" data-stagnant-preview-close aria-label="إغلاق">×</button>
+    </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-0">
-      <div class="bg-slate-100 min-h-[240px] md:min-h-[420px] flex items-center justify-center p-4 border-b md:border-b-0 md:border-e border-border-subtle">
-        <img
-          src=""
-          alt=""
-          data-stagnant-preview-image
-          class="max-w-full max-h-[55vh] md:max-h-[70vh] object-contain rounded-xl bg-white shadow-sm hidden"
-        >
-        <div
-          data-stagnant-preview-image-empty
-          class="text-slate-400 text-sm font-bold py-16"
-        >لا توجد صورة</div>
+    <div class="stagnant-preview-modal__body">
+      <div class="stagnant-preview-modal__media">
+        <img src="" alt="" data-stagnant-preview-image class="hidden">
+        <div data-stagnant-preview-image-empty class="text-slate-400 text-sm font-bold py-16">لا توجد صورة</div>
       </div>
 
-      <div class="p-4 sm:p-5 space-y-4">
+      <div class="stagnant-preview-modal__side">
         <div>
           <h2 id="stagnant-preview-title" class="text-lg font-extrabold text-slate-900 leading-snug" data-stagnant-preview-name></h2>
           <p class="text-xs font-mono text-text-muted mt-1" dir="ltr" data-stagnant-preview-code></p>
-          <p class="text-xs text-text-muted mt-1" data-stagnant-preview-meta></p>
+          <p class="text-xs text-text-muted mt-1 leading-snug" data-stagnant-preview-meta></p>
         </div>
 
-        <div class="grid grid-cols-2 gap-2 text-sm">
-          <div class="rounded-xl bg-slate-50 border border-border-subtle px-3 py-2">
-            <div class="text-[11px] text-text-muted">الكمية</div>
-            <div class="font-bold tabular-nums" data-stagnant-preview-qty>—</div>
+        <div class="stagnant-preview-modal__stats">
+          <div class="stagnant-preview-modal__stat">
+            <div class="stagnant-preview-modal__stat-label">الكمية</div>
+            <div class="stagnant-preview-modal__stat-value" data-stagnant-preview-qty>—</div>
           </div>
-          <div class="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2">
-            <div class="text-[11px] text-amber-800/80">العمر (يوم)</div>
-            <div class="font-extrabold tabular-nums text-amber-800" data-stagnant-preview-age>—</div>
+          <div class="stagnant-preview-modal__stat stagnant-preview-modal__stat--age">
+            <div class="stagnant-preview-modal__stat-label">العمر (يوم)</div>
+            <div class="stagnant-preview-modal__stat-value" data-stagnant-preview-age>—</div>
           </div>
-          <div class="rounded-xl bg-slate-50 border border-border-subtle px-3 py-2">
-            <div class="text-[11px] text-text-muted">مبيع $</div>
-            <div class="font-bold tabular-nums" dir="ltr" data-stagnant-preview-sale-usd>—</div>
+          <div class="stagnant-preview-modal__stat">
+            <div class="stagnant-preview-modal__stat-label">مبيع $</div>
+            <div class="stagnant-preview-modal__stat-value" dir="ltr" data-stagnant-preview-sale-usd>—</div>
           </div>
-          <div class="rounded-xl bg-slate-50 border border-border-subtle px-3 py-2">
-            <div class="text-[11px] text-text-muted">مبيع ل.س</div>
-            <div class="font-bold tabular-nums" dir="ltr" data-stagnant-preview-sale-syp>—</div>
+          <div class="stagnant-preview-modal__stat">
+            <div class="stagnant-preview-modal__stat-label">مبيع ل.س</div>
+            <div class="stagnant-preview-modal__stat-value" dir="ltr" data-stagnant-preview-sale-syp>—</div>
           </div>
-          <div class="rounded-xl bg-slate-50 border border-border-subtle px-3 py-2 col-span-2">
-            <div class="text-[11px] text-text-muted">شراء $</div>
-            <div class="font-bold tabular-nums" dir="ltr" data-stagnant-preview-purchase>—</div>
+          <div class="stagnant-preview-modal__stat" style="grid-column: 1 / -1">
+            <div class="stagnant-preview-modal__stat-label">شراء $</div>
+            <div class="stagnant-preview-modal__stat-value" dir="ltr" data-stagnant-preview-purchase>—</div>
           </div>
         </div>
 
-        <label class="flex items-center gap-2 rounded-xl border border-border-subtle bg-primary/[0.04] px-3 py-2.5 cursor-pointer">
+        <label class="stagnant-preview-modal__select">
           <input type="checkbox" class="w-4 h-4 rounded border-slate-300" data-stagnant-preview-select>
-          <span class="text-sm font-bold text-slate-800">إدراج المادة في العرض</span>
+          <span>إدراج المادة في العرض</span>
         </label>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label class="text-sm">
-            <span class="text-text-muted font-bold">خصم %</span>
+        <div class="stagnant-preview-modal__pricing">
+          <div class="stagnant-preview-modal__field">
+            <label for="stagnant-preview-discount">خصم %</label>
             <input
-              type="number"
-              min="1"
-              max="95"
-              step="0.5"
-              class="mt-1 w-full h-11 rounded-xl border border-border-subtle px-3 text-sm tabular-nums"
+              id="stagnant-preview-discount"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
               data-stagnant-preview-discount
             >
-          </label>
-          <label class="text-sm">
-            <span class="text-text-muted font-bold">بعد الخصم $</span>
+          </div>
+          <div class="stagnant-preview-modal__field">
+            <label for="stagnant-preview-price">بعد الخصم $</label>
             <input
-              type="number"
-              min="0"
-              step="0.01"
-              class="mt-1 w-full h-11 rounded-xl border border-border-subtle px-3 text-sm tabular-nums"
+              id="stagnant-preview-price"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
               data-stagnant-preview-price
             >
-          </label>
+          </div>
         </div>
 
-        <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 flex items-center justify-between gap-2">
-          <span class="text-sm font-bold text-emerald-900">بعد الخصم ل.س</span>
-          <span class="text-base font-extrabold tabular-nums text-emerald-800" dir="ltr" data-stagnant-preview-syp>—</span>
+        <div class="stagnant-preview-modal__syp" data-stagnant-preview-syp-box>
+          <span>بعد الخصم ل.س</span>
+          <span dir="ltr" data-stagnant-preview-syp>—</span>
         </div>
 
-        <p class="text-[11px] text-text-muted leading-relaxed">
-          غيّر النسبة فيتغير السعر، أو غيّر السعر فتُحسب النسبة. الليرة تُشتق من الدولار بعد الخصم مع التقريب لأعلى 5.
-        </p>
+        <div class="stagnant-preview-modal__warn" data-stagnant-preview-below-cost hidden>
+          تحذير: السعر بعد الخصم أقل من سعر الشراء
+        </div>
 
-        <button
-          type="button"
-          class="w-full h-11 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800"
-          data-stagnant-preview-close
-        >تم</button>
+        <button type="button" class="stagnant-preview-modal__done" data-stagnant-preview-close>تم</button>
       </div>
     </div>
   </div>
