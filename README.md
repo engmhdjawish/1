@@ -170,6 +170,8 @@ GET  /api/bills/voucher-types
 
 GET  /api/materials
 GET  /api/materials/{guid}
+GET  /api/materials/ages
+GET  /api/materials/ages/bill-types
 GET  /api/materials/filter-options
 GET  /api/materials/stores
 
@@ -737,6 +739,13 @@ GET /api/materials/filter-options
 ```text
 GET /api/materials?storeGuids=STORE_GUID_1,STORE_GUID_2
 GET /api/materials/{guid}?storeGuids=STORE_GUID_1,STORE_GUID_2
+```
+
+عمر المواد (FIFO من أسطر الفواتير المرحّلة، قراءة فقط — لا `Ages000` ولا إجراءات أمين):
+
+```text
+GET /api/materials/ages?ageMode=oldest&skipEmpty=true
+GET /api/materials/ages/bill-types
 ```
 
 ويتوفر الآن نمط عرض الكميات:
