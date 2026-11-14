@@ -145,17 +145,27 @@
     const ensureSeededSelection = () => {
       let selected = collectGuidSources();
       if (selected.length > 0 && typeof window.portalTokenPickerAdd === 'function') {
-        const items = selected.map((guid) => {
-          const meta = labelMap[guid] || {};
-          return {
-            value: guid,
-            label: meta.name || meta.label || guid,
-            name: meta.name || meta.label || guid,
-            code: meta.code || '',
-            image: meta.image || '',
-          };
-        });
-        window.portalTokenPickerAdd('so-manual-materials', items);
+        const already = new Set(
+          (typeof window.portalTokenPickerGetSelected === 'function'
+            ? window.portalTokenPickerGetSelected('so-manual-materials')
+            : []
+          ).map((g) => String(g).toLowerCase()).filter(Boolean)
+        );
+        // Only push missing GUIDs — calling Add with a full rebuild triggers MutationObserver loops.
+        const missing = selected.filter((guid) => !already.has(guid));
+        if (missing.length > 0) {
+          const items = missing.map((guid) => {
+            const meta = labelMap[guid] || {};
+            return {
+              value: guid,
+              label: meta.name || meta.label || guid,
+              name: meta.name || meta.label || guid,
+              code: meta.code || '',
+              image: meta.image || '',
+            };
+          });
+          window.portalTokenPickerAdd('so-manual-materials', items);
+        }
         const fromPicker = typeof window.portalTokenPickerGetSelected === 'function'
           ? window.portalTokenPickerGetSelected('so-manual-materials').map((g) => String(g).toLowerCase())
           : [];
@@ -406,55 +416,60 @@
       return tr;
     };
 
+    let syncRowsBusy = false;
     const syncPerMaterialRows = () => {
-      if (!perMaterialRows || !perMaterialPanel) return;
-      captureOverrideInputs();
-      let selected = ensureSeededSelection();
-      const existing = Array.from(perMaterialRows.querySelectorAll('[data-override-guid]'))
-        .map((row) => String(row.getAttribute('data-override-guid') || '').toLowerCase())
-        .filter(Boolean);
+      if (!perMaterialRows || !perMaterialPanel || syncRowsBusy) return;
+      syncRowsBusy = true;
+      try {
+        captureOverrideInputs();
+        let selected = ensureSeededSelection();
+        const existing = Array.from(perMaterialRows.querySelectorAll('[data-override-guid]'))
+          .map((row) => String(row.getAttribute('data-override-guid') || '').toLowerCase())
+          .filter(Boolean);
 
-      // Never wipe server-rendered invoice rows if seeding still looks empty.
-      if (selected.length === 0 && existing.length > 0) {
-        selected = existing.slice();
-        ensureSeededSelection();
+        // Never wipe server-rendered invoice rows if seeding still looks empty.
+        if (selected.length === 0 && existing.length > 0) {
+          selected = existing.slice();
+          ensureSeededSelection();
+        }
+
+        const selectedSet = new Set(selected);
+        const existingSet = new Set(existing);
+        const same = selected.length === existing.length
+          && selected.every((guid) => existingSet.has(guid))
+          && existing.every((guid) => selectedSet.has(guid));
+
+        const countEl = root.querySelector('#so-invoice-count');
+        const countLabel = selected.length === 0
+          ? 'لا مواد'
+          : (selected.length === 1 ? 'مادة واحدة' : selected.length + ' مواد');
+        if (countEl) countEl.textContent = countLabel;
+
+        // Keep server-rendered rows when GUID sets already match.
+        if (same) {
+          bindInvoiceRowBehaviors(perMaterialRows);
+          return;
+        }
+
+        perMaterialRows.innerHTML = '';
+        if (!selected.length) {
+          const empty = document.createElement('tr');
+          const cell = document.createElement('td');
+          cell.colSpan = 8;
+          cell.className = 'so-invoice__empty';
+          cell.textContent = 'أضف مادة واحدة على الأقل من البحث أعلاه.';
+          empty.appendChild(cell);
+          perMaterialRows.appendChild(empty);
+          return;
+        }
+        selected.forEach((guid, index) => {
+          const key = String(guid).toLowerCase();
+          const meta = labelMap[key] || { name: key };
+          perMaterialRows.appendChild(renderOverrideRow(key, meta, index));
+        });
+      } finally {
+        syncRowsBusy = false;
       }
-
-      const selectedSet = new Set(selected);
-      const existingSet = new Set(existing);
-      const same = selected.length > 0
-        && selected.length === existing.length
-        && selected.every((guid) => existingSet.has(guid))
-        && existing.every((guid) => selectedSet.has(guid));
-
-      const countEl = root.querySelector('#so-invoice-count');
-      const countLabel = selected.length === 0
-        ? 'لا مواد'
-        : (selected.length === 1 ? 'مادة واحدة' : selected.length + ' مواد');
-      if (countEl) countEl.textContent = countLabel;
-
-      // Keep server-rendered rows when GUID sets already match.
-      if (same) {
-        bindInvoiceRowBehaviors(perMaterialRows);
-        return;
-      }
-
-      perMaterialRows.innerHTML = '';
-      if (!selected.length) {
-        const empty = document.createElement('tr');
-        const cell = document.createElement('td');
-        cell.colSpan = 8;
-        cell.className = 'so-invoice__empty';
-        cell.textContent = 'أضف مادة واحدة على الأقل من البحث أعلاه.';
-        empty.appendChild(cell);
-        perMaterialRows.appendChild(empty);
-        return;
-      }
-      selected.forEach((guid, index) => {
-        const key = String(guid).toLowerCase();
-        const meta = labelMap[key] || { name: key };
-        perMaterialRows.appendChild(renderOverrideRow(key, meta, index));
-      });
     };
 
     const bindInvoiceRowBehaviors = (rowsRoot) => {
@@ -549,14 +564,20 @@
       syncPanels();
     });
 
-    // Keep per-material rows in sync when token chips change.
+    // Keep per-material rows in sync when token chips change (debounced; ignore self-writes).
     const picker = root.querySelector('[data-picker-id="so-manual-materials"]');
     const hiddenHost = picker?.querySelector('[data-role="hidden-inputs"]');
     if (hiddenHost && typeof MutationObserver !== 'undefined') {
+      let observerTimer = null;
       const observer = new MutationObserver(() => {
-        if (pricingScope?.value === 'per_material') {
-          syncPerMaterialRows();
-        }
+        if (syncRowsBusy || pricingScope?.value !== 'per_material') return;
+        if (observerTimer) clearTimeout(observerTimer);
+        observerTimer = setTimeout(() => {
+          observerTimer = null;
+          if (!syncRowsBusy && pricingScope?.value === 'per_material') {
+            syncPerMaterialRows();
+          }
+        }, 0);
       });
       observer.observe(hiddenHost, { childList: true });
     }
@@ -609,7 +630,9 @@
 
     const getSelectedMaterialIds = () => {
       if (typeof window.portalTokenPickerGetSelected === 'function') {
-        return new Set(window.portalTokenPickerGetSelected(MANUAL_PICKER_ID));
+        return new Set(
+          window.portalTokenPickerGetSelected(MANUAL_PICKER_ID).map((g) => String(g).toLowerCase())
+        );
       }
       return new Set();
     };
@@ -718,8 +741,11 @@
       }
       const selected = getSelectedMaterialIds();
       items.forEach((item) => {
-        if (!item || !item.value || selected.has(item.value)) return;
-        if (searchItems.some((row) => row.value === item.value)) return;
+        if (!item || !item.value) return;
+        const value = String(item.value).toLowerCase();
+        item.value = value;
+        if (selected.has(value)) return;
+        if (searchItems.some((row) => String(row.value).toLowerCase() === value)) return;
         searchItems.push(item);
         appendResultRow(item, searchItems.length - 1);
       });
@@ -831,7 +857,13 @@
       if (!searchHasMore || searchLoading) return;
       const nearBottom = resultsEl.scrollTop + resultsEl.clientHeight >= resultsEl.scrollHeight - 48;
       if (nearBottom) {
-        runMaterialSearch(true);
+        // Defer so scrollIntoView from highlight does not chain-load every page on the main thread.
+        window.setTimeout(() => {
+          if (!searchHasMore || searchLoading) return;
+          const stillNearBottom =
+            resultsEl.scrollTop + resultsEl.clientHeight >= resultsEl.scrollHeight - 48;
+          if (stillNearBottom) runMaterialSearch(true);
+        }, 50);
       }
     });
 

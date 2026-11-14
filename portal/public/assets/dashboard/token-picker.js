@@ -234,13 +234,20 @@
       if (value === '') continue;
       const label = normalize(item?.label ?? item?.name ?? value);
       ensureOption(state, value, label);
-      if (!state.selectedValues.includes(value)) {
+      // Case-insensitive match so GUID casing does not create duplicates.
+      const exists = state.selectedValues.some(
+        (entry) => entry === value || entry.toLowerCase() === value.toLowerCase()
+      );
+      if (!exists) {
         state.selectedValues.push(value);
         added += 1;
       }
     }
-    state.renderSelected?.();
-    state.renderOptions?.();
+    // Skip DOM rewrite when nothing changed — avoids MutationObserver feedback loops.
+    if (added > 0) {
+      state.renderSelected?.();
+      state.renderOptions?.();
+    }
     return added;
   };
 
