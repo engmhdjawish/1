@@ -505,10 +505,9 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
     </div>
   <?php endif; ?>
 
-  <div class="stagnant-candidates-dock-spacer" data-stagnant-tray-spacer aria-hidden="true"></div>
-
-  <div class="stagnant-candidates-dock is-tray-empty" data-stagnant-tray>
-    <div class="stagnant-candidates-dock__toolbar flex flex-wrap items-end gap-2.5">
+  <section class="stagnant-candidates-section is-tray-empty" data-stagnant-tray aria-labelledby="stagnant-candidates-heading">
+    <h2 id="stagnant-candidates-heading" class="sr-only">مرشّحو العرض الخاص</h2>
+    <div class="stagnant-candidates-section__toolbar flex flex-wrap items-end gap-3">
       <label class="text-sm">
         <span class="text-text-muted">عنوان العرض</span>
         <input type="text" name="offer_title" value="عرض تصريف راكد <?= h(date('Y-m-d')) ?>" class="mt-1 block w-56 h-10 rounded-xl border border-border-subtle px-3 text-sm">
@@ -528,15 +527,15 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
       <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-add-visible>إضافة الظاهرة</button>
       <button type="button" class="h-10 px-3 rounded-xl border border-border-subtle text-sm font-bold text-slate-700 hover:bg-slate-50" data-stagnant-clear-tray>تفريغ المرشّحين</button>
     </div>
-    <div class="stagnant-candidates-dock__list-wrap">
-      <div class="stagnant-candidates-dock__head">
-        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 min-w-0">
-          <p class="text-sm font-extrabold text-slate-800">ملخّص المرشّحين</p>
-          <p class="text-xs text-text-muted hidden sm:block">تُزال من الجدول عند الإضافة — تظهر هنا فقط</p>
+    <div class="stagnant-candidates-section__list-wrap">
+      <div class="stagnant-candidates-section__head">
+        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0">
+          <p class="text-base font-extrabold text-slate-800">ملخّص المرشّحين</p>
+          <p class="text-sm text-text-muted">تُزال من الجدول عند الإضافة — تظهر هنا فقط</p>
         </div>
         <button
           type="button"
-          class="stagnant-candidates-dock__toggle"
+          class="stagnant-candidates-section__toggle"
           data-stagnant-tray-toggle
           aria-expanded="true"
           aria-controls="stagnant-tray-list-region"
@@ -545,11 +544,11 @@ $offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMember
           <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
         </button>
       </div>
-      <div class="stagnant-candidates-dock__list" data-stagnant-tray-list id="stagnant-tray-list-region">
-        <p class="text-xs text-text-muted px-3 py-3 text-center" data-stagnant-tray-empty>لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.</p>
+      <div class="stagnant-candidates-section__list" data-stagnant-tray-list id="stagnant-tray-list-region">
+        <p class="text-sm text-text-muted px-4 py-8 text-center" data-stagnant-tray-empty>لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.</p>
       </div>
     </div>
-  </div>
+  </section>
 </form>
 
 <div

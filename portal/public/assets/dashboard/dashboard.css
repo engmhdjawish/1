@@ -2604,96 +2604,53 @@ button.is-loading[data-loading-label],
   color: #9a3412;
 }
 
-/* Stagnant inventory — compact fixed bottom candidates dock (table stays scrollable above) */
-:root {
-  --stagnant-dock-max-height: min(40vh, 22rem);
-  --stagnant-dock-list-max-height: min(28vh, 14rem);
-  --stagnant-dock-spacer-height: 12.5rem;
-}
-
-.stagnant-candidates-dock-spacer {
-  height: var(--stagnant-dock-spacer-height);
-  flex-shrink: 0;
-  pointer-events: none;
-}
-
-#stagnant-offer-form {
-  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
-}
-
-.stagnant-candidates-dock {
-  position: fixed;
-  z-index: 100090;
-  inset-inline-start: 0;
-  inset-inline-end: 0;
-  bottom: 0;
+/* Stagnant inventory — in-page candidates section (after table, not a fixed overlay) */
+.stagnant-candidates-section {
+  margin-top: 1.5rem;
+  margin-bottom: 2rem;
   display: flex;
   flex-direction: column;
+  gap: 0;
   width: 100%;
-  height: auto;
-  max-height: var(--stagnant-dock-max-height);
-  border-top: 1px solid var(--dash-border, #e5e7eb);
-  border-radius: 1rem 1rem 0 0;
-  background: rgba(255, 255, 255, 0.97);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 -10px 36px rgba(15, 23, 42, 0.14);
-  padding:
-    0.55rem 0.85rem
-    max(0.55rem, env(safe-area-inset-bottom, 0px));
+  border: 1px solid var(--dash-border, #e5e7eb);
+  border-radius: 0.75rem;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
   overflow: hidden;
 }
 
-@media (min-width: 1024px) {
-  .stagnant-candidates-dock {
-    inset-inline-end: var(--dash-sidebar, 16rem);
-  }
-}
-
-body.dashboard-app.has-bottom-nav .stagnant-candidates-dock {
-  bottom: calc(var(--dash-bottom-nav, 5rem) + env(safe-area-inset-bottom, 0px));
-}
-
-.stagnant-candidates-dock__toolbar {
+.stagnant-candidates-section__toolbar {
   flex-shrink: 0;
-  padding-bottom: 0.35rem;
+  padding: 1rem 1.15rem 0.85rem;
   border-bottom: 1px solid color-mix(in srgb, var(--dash-border, #e5e7eb) 65%, transparent);
+  background: color-mix(in srgb, #f8fafc 50%, #fff);
 }
 
-.stagnant-candidates-dock__list-wrap {
-  flex: 0 1 auto;
-  min-height: 0;
+.stagnant-candidates-section__list-wrap {
   display: flex;
   flex-direction: column;
-  padding-top: 0.45rem;
-  overflow: hidden;
+  padding: 1rem 1.15rem 1.15rem;
+  gap: 0.65rem;
 }
 
-.stagnant-candidates-dock.is-tray-collapsed .stagnant-candidates-dock__list-wrap {
+.stagnant-candidates-section.is-tray-collapsed .stagnant-candidates-section__list-wrap {
   display: none;
 }
 
-.stagnant-candidates-dock.is-tray-empty .stagnant-candidates-dock__list,
-[data-stagnant-tray-list].stagnant-candidates-dock__list:has([data-stagnant-tray-empty]) {
-  min-height: 0;
-  max-height: 3.25rem;
-}
-
-.stagnant-candidates-dock__head {
+.stagnant-candidates-section__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.35rem;
+  gap: 0.75rem;
   flex-shrink: 0;
 }
 
-.stagnant-candidates-dock__toggle {
+.stagnant-candidates-section__toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
+  width: 2.25rem;
+  height: 2.25rem;
   border-radius: 0.65rem;
   border: 1px solid var(--dash-border, #e5e7eb);
   background: #fff;
@@ -2702,37 +2659,98 @@ body.dashboard-app.has-bottom-nav .stagnant-candidates-dock {
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.stagnant-candidates-dock__toggle:hover {
+.stagnant-candidates-section__toggle:hover {
   background: #f8fafc;
   border-color: color-mix(in srgb, var(--dash-border, #e5e7eb) 55%, #94a3b8);
 }
 
-.stagnant-candidates-dock__toggle .material-symbols-outlined {
-  font-size: 1.25rem;
+.stagnant-candidates-section__toggle .material-symbols-outlined {
+  font-size: 1.35rem;
   transition: transform 0.2s ease;
 }
 
-.stagnant-candidates-dock.is-tray-collapsed .stagnant-candidates-dock__toggle .material-symbols-outlined {
+.stagnant-candidates-section.is-tray-collapsed .stagnant-candidates-section__toggle .material-symbols-outlined {
   transform: rotate(180deg);
 }
 
-.stagnant-candidates-dock__list,
-[data-stagnant-tray-list].stagnant-candidates-dock__list {
-  flex: 0 1 auto;
-  min-height: 2.5rem;
-  max-height: var(--stagnant-dock-list-max-height);
-  overflow-x: hidden;
-  overflow-y: auto;
+.stagnant-candidates-section__list,
+[data-stagnant-tray-list].stagnant-candidates-section__list {
   border-radius: 0.75rem;
   border: 1px dashed var(--dash-border, #e5e7eb);
   background: color-mix(in srgb, #f8fafc 85%, #fff);
-  scroll-padding-block: 0.5rem;
-  -webkit-overflow-scrolling: touch;
+  min-height: 4.5rem;
 }
 
-.stagnant-candidates-dock__list > [data-tray-guid],
+.stagnant-candidates-section__list > [data-tray-guid],
 [data-stagnant-tray-list] > [data-tray-guid] {
-  scroll-margin-block: 0.25rem;
+  scroll-margin-block: 0.75rem;
+}
+
+[data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row {
+  display: grid;
+  grid-template-columns: auto minmax(10rem, 1fr) auto auto auto auto;
+  gap: 0.75rem 1.25rem;
+  align-items: center;
+  padding: 0.9rem 1.1rem;
+  border-bottom: 1px solid var(--dash-border, #e5e7eb);
+  background: #fff;
+}
+
+[data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row:last-child {
+  border-bottom: none;
+}
+
+[data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #475569;
+  white-space: nowrap;
+}
+
+[data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row input[type="text"] {
+  height: 2.25rem;
+}
+
+@media (max-width: 900px) {
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row {
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      "thumb title"
+      "pct pct"
+      "price price"
+      "syp syp"
+      "remove remove";
+    padding: 1rem;
+    gap: 0.65rem 1rem;
+  }
+
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row > :nth-child(1) {
+    grid-area: thumb;
+  }
+
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row > :nth-child(2) {
+    grid-area: title;
+  }
+
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row > :nth-child(3) {
+    grid-area: pct;
+  }
+
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row > :nth-child(4) {
+    grid-area: price;
+  }
+
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row > :nth-child(5) {
+    grid-area: syp;
+  }
+
+  [data-stagnant-tray-list] > [data-tray-guid].stagnant-candidates-section__row > :nth-child(8) {
+    grid-area: remove;
+    justify-self: start;
+  }
 }
 
 /* Stagnant inventory — large preview modal */

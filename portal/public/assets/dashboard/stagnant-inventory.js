@@ -159,50 +159,19 @@
     return n === null ? 15 : Math.max(0, Math.min(95, n));
   }
 
-  function trayDock() {
+  function traySection() {
     return document.querySelector('[data-stagnant-tray]');
   }
 
-  function traySpacer() {
-    return document.querySelector('[data-stagnant-tray-spacer]');
-  }
-
-  function syncTrayDockSpacer() {
-    const dock = trayDock();
-    const spacer = traySpacer();
-    if (!(dock instanceof HTMLElement)) return;
-    const height = Math.ceil(dock.getBoundingClientRect().height);
-    document.documentElement.style.setProperty('--stagnant-dock-spacer-height', height + 'px');
-    if (spacer instanceof HTMLElement) {
-      spacer.style.height = height + 'px';
-    }
-  }
-
-  let trayResizeObserver = null;
-
-  function bindTrayDockLayout() {
-    const dock = trayDock();
-    if (!(dock instanceof HTMLElement)) return;
-    if (typeof ResizeObserver !== 'undefined') {
-      trayResizeObserver?.disconnect();
-      trayResizeObserver = new ResizeObserver(() => syncTrayDockSpacer());
-      trayResizeObserver.observe(dock);
-    } else {
-      window.addEventListener('resize', syncTrayDockSpacer);
-    }
-    syncTrayDockSpacer();
-  }
-
-  function syncTrayDockChrome() {
-    const dock = trayDock();
-    if (!(dock instanceof HTMLElement)) return;
-    dock.classList.toggle('is-tray-empty', candidates.size === 0);
-    const toggle = dock.querySelector('[data-stagnant-tray-toggle]');
+  function syncTraySectionChrome() {
+    const section = traySection();
+    if (!(section instanceof HTMLElement)) return;
+    section.classList.toggle('is-tray-empty', candidates.size === 0);
+    const toggle = section.querySelector('[data-stagnant-tray-toggle]');
     if (toggle instanceof HTMLButtonElement) {
-      const collapsed = dock.classList.contains('is-tray-collapsed');
+      const collapsed = section.classList.contains('is-tray-collapsed');
       toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     }
-    syncTrayDockSpacer();
   }
 
   function syncSubmitState(root = document) {
@@ -423,6 +392,7 @@
     markRowInTray(row, true);
     appendTrayItem(candidates.get(guid), true);
     syncSubmitState();
+    syncTraySectionChrome();
     syncPreviewPricingFromRow();
     updateNavControls();
     return true;
@@ -442,12 +412,13 @@
     if (list instanceof HTMLElement && candidates.size === 0) {
       list.innerHTML = '';
       const empty = document.createElement('p');
-      empty.className = 'text-xs text-text-muted px-3 py-4 text-center';
+      empty.className = 'text-sm text-text-muted px-4 py-8 text-center';
       empty.setAttribute('data-stagnant-tray-empty', '');
       empty.textContent = 'لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.';
       list.appendChild(empty);
     }
     syncSubmitState();
+    syncTraySectionChrome();
     if (isPreviewOpen() && activeRow === row) syncPreviewPricingFromRow();
     updateNavControls();
   }
@@ -490,11 +461,11 @@
     }
 
     const row = document.createElement('div');
-    row.className = 'flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border-subtle last:border-b-0 bg-white/80';
+    row.className = 'stagnant-candidates-section__row';
     row.setAttribute('data-tray-guid', item.guid);
 
     const thumb = document.createElement('div');
-    thumb.className = 'w-14 h-14 rounded-lg overflow-hidden bg-slate-100 border border-border-subtle flex-shrink-0';
+    thumb.className = 'w-16 h-16 rounded-lg overflow-hidden bg-slate-100 border border-border-subtle flex-shrink-0';
     if (item.image) {
       const img = document.createElement('img');
       img.src = item.image;
@@ -518,7 +489,7 @@
     pctInput.type = 'text';
     pctInput.inputMode = 'decimal';
     pctInput.autocomplete = 'off';
-    pctInput.className = 'w-16 h-8 rounded-lg border border-border-subtle px-2 text-sm tabular-nums ms-1';
+    pctInput.className = 'w-[4.5rem] rounded-lg border border-border-subtle px-2 text-sm tabular-nums';
     pctInput.name = 'material_discount[' + item.guid + ']';
     pctInput.value = formatPct(item.percent);
     pctInput.addEventListener('input', () => {
@@ -554,7 +525,7 @@
     priceInput.type = 'text';
     priceInput.inputMode = 'decimal';
     priceInput.autocomplete = 'off';
-    priceInput.className = 'w-20 h-8 rounded-lg border border-border-subtle px-2 text-sm tabular-nums ms-1';
+    priceInput.className = 'w-24 rounded-lg border border-border-subtle px-2 text-sm tabular-nums';
     priceInput.setAttribute('data-tray-price', '');
     priceInput.value = item.priceUsd !== null ? formatUsd(item.priceUsd) : '';
     priceInput.disabled = !(item.saleUsd > 0);
@@ -583,7 +554,7 @@
     priceLabel.appendChild(priceInput);
 
     const sypEl = document.createElement('span');
-    sypEl.className = 'text-xs font-extrabold tabular-nums text-emerald-800 min-w-[4rem]';
+    sypEl.className = 'text-sm font-extrabold tabular-nums text-emerald-800 min-w-[5rem]';
     sypEl.dir = 'ltr';
     sypEl.setAttribute('data-tray-syp', '');
     if (item.priceUsd !== null && item.rate > 0) {
@@ -611,14 +582,19 @@
 
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
-    removeBtn.className = 'h-8 px-2 rounded-lg border border-border-subtle text-xs font-bold text-slate-600 hover:bg-slate-50';
+    removeBtn.className = 'h-9 px-3 rounded-lg border border-border-subtle text-sm font-bold text-slate-600 hover:bg-slate-50';
     removeBtn.textContent = 'إزالة';
     removeBtn.addEventListener('click', () => removeCandidate(item.guid));
 
     row.append(thumb, title, pctLabel, priceLabel, sypEl, guidHidden, qtyHidden, removeBtn);
     list.appendChild(row);
     if (scrollIntoView) {
-      row.scrollIntoView({ block: 'end', behavior: 'smooth' });
+      const section = traySection();
+      if (section instanceof HTMLElement) {
+        section.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } else {
+        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
     }
   }
 
@@ -629,11 +605,11 @@
 
     if (candidateOrder.length === 0) {
       const empty = document.createElement('p');
-      empty.className = 'text-xs text-text-muted px-3 py-2 text-center';
+      empty.className = 'text-sm text-text-muted px-4 py-8 text-center';
       empty.setAttribute('data-stagnant-tray-empty', '');
       empty.textContent = 'لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.';
       list.appendChild(empty);
-      syncTrayDockChrome();
+      syncTraySectionChrome();
       return;
     }
 
@@ -641,7 +617,7 @@
       const item = candidates.get(guid);
       if (item) appendTrayItem(item, false);
     });
-    syncTrayDockChrome();
+    syncTraySectionChrome();
   }
 
   function syncSourceRow(item) {
@@ -884,8 +860,7 @@
       }
       resetSavingUi(form);
       syncSubmitState(root);
-      bindTrayDockLayout();
-      syncTrayDockChrome();
+      syncTraySectionChrome();
       return;
     }
     form.setAttribute(BOUND, '1');
@@ -967,17 +942,14 @@
     });
 
     document.querySelector('[data-stagnant-tray-toggle]')?.addEventListener('click', () => {
-      const dock = trayDock();
-      if (!(dock instanceof HTMLElement)) return;
-      const collapsed = dock.classList.toggle('is-tray-collapsed');
-      const toggle = dock.querySelector('[data-stagnant-tray-toggle]');
+      const section = traySection();
+      if (!(section instanceof HTMLElement)) return;
+      const collapsed = section.classList.toggle('is-tray-collapsed');
+      const toggle = section.querySelector('[data-stagnant-tray-toggle]');
       if (toggle instanceof HTMLButtonElement) {
         toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       }
-      syncTrayDockSpacer();
     });
-
-    bindTrayDockLayout();
     bindPreview(form);
     applyDefaultDiscount(form);
     renderTray();
