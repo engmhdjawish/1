@@ -196,14 +196,53 @@
     return !!(modal && !modal.hidden && modal.classList.contains('is-open'));
   }
 
-  /** Visible materials only (candidates are hidden from the table). */
+  /** Visible materials only (candidates / leaving rows are excluded). */
   function allRows(includeHidden = false) {
-    return Array.from(document.querySelectorAll('[data-stagnant-card]'))
-      .filter((row) => includeHidden || !(row instanceof HTMLElement && row.hidden));
+    return Array.from(document.querySelectorAll('[data-stagnant-card]')).filter((row) => {
+      if (!(row instanceof HTMLElement)) return false;
+      if (includeHidden) return true;
+      if (row.hidden || row.classList.contains('is-in-tray') || row.classList.contains('is-tray-leaving')) {
+        return false;
+      }
+      const guid = (row.getAttribute('data-material-guid') || '').toLowerCase();
+      if (guid && candidates.has(guid)) return false;
+      return true;
+    });
+  }
+
+  const TRAY_ANIM_MS = 240;
+
+  function prefersReducedMotion() {
+    try {
+      return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function afterAnim(el, ms, cb) {
+    if (!(el instanceof HTMLElement) || prefersReducedMotion()) {
+      cb();
+      return;
+    }
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      el.removeEventListener('animationend', onEnd);
+      clearTimeout(tid);
+      cb();
+    };
+    const onEnd = (event) => {
+      if (event.target === el) finish();
+    };
+    el.addEventListener('animationend', onEnd);
+    const tid = setTimeout(finish, ms + 80);
   }
 
   function markRowInTray(row, inTray) {
     if (!(row instanceof HTMLElement)) return;
+    row.classList.remove('is-tray-leaving', 'is-tray-entering');
     // Priority: remove from materials table while it lives in the candidates tray.
     row.hidden = !!inTray;
     row.classList.toggle('is-in-tray', inTray);
@@ -449,8 +488,9 @@
     return Math.round(raw * 10000) / 10000;
   }
 
-  function addCandidateFromRow(row) {
+  function addCandidateFromRow(row, options = {}) {
     if (!(row instanceof HTMLElement)) return false;
+    const animate = options.animate !== false && !prefersReducedMotion();
     const guid = (row.getAttribute('data-material-guid') || '').toLowerCase();
     if (!guid) return false;
     if (candidates.has(guid)) {
@@ -471,8 +511,20 @@
       packages: rowPackages(row),
     });
     candidateOrder.push(guid);
-    markRowInTray(row, true);
-    appendTrayItem(candidates.get(guid), true);
+
+    const hideMaterialRow = () => {
+      markRowInTray(row, true);
+    };
+    if (animate) {
+      row.classList.remove('is-tray-entering');
+      row.classList.add('is-tray-leaving');
+      afterAnim(row, TRAY_ANIM_MS, hideMaterialRow);
+    } else {
+      hideMaterialRow();
+    }
+
+    // Animate into candidates list — never scroll/jump the viewport here.
+    appendTrayItem(candidates.get(guid), { animate });
     persistCandidates();
     syncSubmitState();
     syncTraySectionChrome();
@@ -481,37 +533,65 @@
     return true;
   }
 
-  function removeCandidate(guid) {
+  function showEmptyTrayMessage(list) {
+    if (!(list instanceof HTMLElement) || candidates.size > 0) return;
+    // Wait until leaving rows finish — do not wipe siblings mid-animation.
+    if (list.querySelector('[data-tray-guid]')) return;
+    if (list.querySelector('[data-stagnant-tray-empty]')) return;
+    list.innerHTML = '';
+    const empty = document.createElement('p');
+    empty.className = 'text-sm text-text-muted px-4 py-8 text-center';
+    empty.setAttribute('data-stagnant-tray-empty', '');
+    empty.textContent = 'لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.';
+    list.appendChild(empty);
+  }
+
+  function restoreMaterialRow(row, animate) {
+    if (!(row instanceof HTMLElement)) return;
+    markRowInTray(row, false);
+    if (!animate) return;
+    row.classList.remove('is-tray-leaving');
+    row.classList.add('is-tray-entering');
+    afterAnim(row, TRAY_ANIM_MS, () => {
+      row.classList.remove('is-tray-entering');
+    });
+  }
+
+  function removeCandidate(guid, options = {}) {
+    const animate = options.animate !== false && !prefersReducedMotion();
     candidates.delete(guid);
     const orderIdx = candidateOrder.indexOf(guid);
     if (orderIdx >= 0) candidateOrder.splice(orderIdx, 1);
     const row = document.querySelector('[data-stagnant-card][data-material-guid="' + guid + '"]');
-    if (row instanceof HTMLElement) {
-      markRowInTray(row, false);
-    }
     const trayRow = document.querySelector('[data-tray-guid="' + guid + '"]');
-    trayRow?.remove();
     const list = document.querySelector('[data-stagnant-tray-list]');
-    if (list instanceof HTMLElement && candidates.size === 0) {
-      list.innerHTML = '';
-      const empty = document.createElement('p');
-      empty.className = 'text-sm text-text-muted px-4 py-8 text-center';
-      empty.setAttribute('data-stagnant-tray-empty', '');
-      empty.textContent = 'لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.';
-      list.appendChild(empty);
-    }
+
+    const finishRemove = () => {
+      trayRow?.remove();
+      showEmptyTrayMessage(list);
+      restoreMaterialRow(row, animate);
+      if (isPreviewOpen() && activeRow === row) syncPreviewPricingFromRow();
+      updateNavControls();
+    };
+
     persistCandidates();
     syncSubmitState();
     syncTraySectionChrome();
-    if (isPreviewOpen() && activeRow === row) syncPreviewPricingFromRow();
-    updateNavControls();
+
+    if (animate && trayRow instanceof HTMLElement) {
+      trayRow.classList.remove('is-tray-item-enter');
+      trayRow.classList.add('is-tray-item-leave');
+      afterAnim(trayRow, TRAY_ANIM_MS, finishRemove);
+    } else {
+      finishRemove();
+    }
   }
 
   function updateTrayItemPricing(item) {
     if (!item) return;
     const trayRow = document.querySelector('[data-tray-guid="' + item.guid + '"]');
     if (!(trayRow instanceof HTMLElement)) {
-      appendTrayItem(item, false);
+      appendTrayItem(item, { animate: false });
       return;
     }
     const pctInput = trayRow.querySelector('input[name^="material_discount"]');
@@ -535,7 +615,8 @@
     }
   }
 
-  function appendTrayItem(item, scrollIntoView) {
+  function appendTrayItem(item, options = {}) {
+    const animate = !!options.animate && !prefersReducedMotion();
     const list = document.querySelector('[data-stagnant-tray-list]');
     if (!(list instanceof HTMLElement) || !item) return;
     list.querySelector('[data-stagnant-tray-empty]')?.remove();
@@ -676,13 +757,11 @@
 
     row.append(thumb, title, pctLabel, priceLabel, sypEl, guidHidden, qtyHidden, removeBtn);
     list.appendChild(row);
-    if (scrollIntoView) {
-      const section = traySection();
-      if (section instanceof HTMLElement) {
-        section.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      } else {
-        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }
+    if (animate) {
+      row.classList.add('is-tray-item-enter');
+      afterAnim(row, TRAY_ANIM_MS, () => {
+        row.classList.remove('is-tray-item-enter');
+      });
     }
   }
 
@@ -703,7 +782,7 @@
 
     candidateOrder.forEach((guid) => {
       const item = candidates.get(guid);
-      if (item) appendTrayItem(item, false);
+      if (item) appendTrayItem(item, { animate: false });
     });
     syncTraySectionChrome();
   }
@@ -1040,7 +1119,28 @@
       });
     });
     form.querySelector('[data-stagnant-clear-tray]')?.addEventListener('click', () => {
-      Array.from(candidates.keys()).forEach((guid) => removeCandidate(guid));
+      const list = form.querySelector('[data-stagnant-tray-list]');
+      const trayRows = list
+        ? Array.from(list.querySelectorAll('[data-tray-guid]'))
+        : [];
+      if (trayRows.length === 0 || prefersReducedMotion()) {
+        clearAllCandidates(form);
+        return;
+      }
+      // Animate all candidate rows out together, then clear state once.
+      let remaining = trayRows.length;
+      trayRows.forEach((trayRow) => {
+        if (!(trayRow instanceof HTMLElement)) {
+          remaining -= 1;
+          return;
+        }
+        trayRow.classList.remove('is-tray-item-enter');
+        trayRow.classList.add('is-tray-item-leave');
+        afterAnim(trayRow, TRAY_ANIM_MS, () => {
+          remaining -= 1;
+          if (remaining <= 0) clearAllCandidates(form);
+        });
+      });
     });
 
     form.querySelector('[data-stagnant-tray-toggle]')?.addEventListener('click', () => {
