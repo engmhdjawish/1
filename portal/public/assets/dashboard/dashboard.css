@@ -2866,3 +2866,98 @@ button.is-loading::after,
   border-color: #f87171;
   background: #fef2f2;
 }
+
+.stagnant-card.is-in-tray {
+  background: #f0fdf4;
+  box-shadow: inset 3px 0 0 #059669;
+}
+
+.stagnant-card.is-in-tray:hover {
+  background: #ecfdf5;
+}
+
+.stagnant-tray-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 1.25rem;
+  padding: 0 0.45rem;
+  border-radius: 9999px;
+  background: #059669;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+
+.stagnant-tray-badge[hidden] {
+  display: none !important;
+}
+
+[data-stagnant-add].is-added {
+  background: #047857 !important;
+  cursor: default;
+}
+
+.stagnant-offer-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  max-width: 11rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.55rem;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.stagnant-offer-chip:hover {
+  border-color: #cbd5e1;
+  background: #fff;
+}
+
+.stagnant-offer-chip__title {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stagnant-offer-chip__meta {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #64748b;
+  line-height: 1.2;
+}
+
+.stagnant-offer-chip--active {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+}
+
+.stagnant-offer-chip--active .stagnant-offer-chip__meta {
+  color: #047857;
+}
+
+.stagnant-offer-chip--paused {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.stagnant-offer-chip--paused .stagnant-offer-chip__meta {
+  color: #b45309;
+}
+
+.stagnant-offer-chip--ended {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  opacity: 0.85;
+}
+
+.stagnant-offer-chip--ended .stagnant-offer-chip__meta {
+  color: #9a3412;
+}

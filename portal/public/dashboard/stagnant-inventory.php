@@ -6,6 +6,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Portal\Auth\WebSession;
 use Portal\Services\ApiClient;
+use Portal\Services\SpecialOfferService;
 use Portal\Services\StagnantInventoryService;
 use Portal\Services\StoreSeasonService;
 
@@ -193,6 +194,23 @@ $totalCount = (int) ($report['totalCount'] ?? 0);
 $totalPages = max(1, (int) ceil($totalCount / max(1, $pageSize)));
 $page = (int) ($report['page'] ?? $page);
 $pageSize = (int) ($report['pageSize'] ?? $pageSize);
+
+$offerMembershipByGuid = [];
+try {
+    $pageGuids = [];
+    foreach (is_array($report['items'] ?? null) ? $report['items'] : [] as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $guid = strtolower(trim((string) ($row['materialGuid'] ?? '')));
+        if ($guid !== '') {
+            $pageGuids[] = $guid;
+        }
+    }
+    $offerMembershipByGuid = SpecialOfferService::membershipForMaterials($pageGuids);
+} catch (\Throwable) {
+    $offerMembershipByGuid = [];
+}
 
 $currentRoute = '/dashboard/stagnant-inventory.php';
 ob_start();

@@ -127,6 +127,8 @@ $buildUrl = static function (array $overrides) use ($queryBase, $selectedStoreGu
 };
 
 $defaultDiscount = 15.0;
+/** @var array<string, list<array<string, mixed>>> $offerMembershipByGuid */
+$offerMembershipByGuid = is_array($offerMembershipByGuid ?? null) ? $offerMembershipByGuid : [];
 ?>
 <section class="mb-5" data-stagnant-inventory-root>
   <div class="flex flex-wrap items-end justify-between gap-3">
@@ -332,8 +334,8 @@ $defaultDiscount = 15.0;
     </div>
     <div>
       <div class="flex items-center justify-between gap-2 mb-2">
-        <p class="text-sm font-extrabold text-slate-800">المواد المرشّحة للعروض</p>
-        <p class="text-xs text-text-muted">أضف من الجدول أو المعاينة، عدّل الخصم هنا، ثم احفظ المسودة</p>
+        <p class="text-sm font-extrabold text-slate-800">ملخّص المرشّحين</p>
+        <p class="text-xs text-text-muted">الجدول يبقى كاملاً — المضاف يُعلَّم مكانه، والتعديل التفصيلي هنا</p>
       </div>
       <div class="rounded-xl border border-dashed border-border-subtle bg-slate-50/70 min-h-[4.5rem] max-h-56 overflow-y-auto" data-stagnant-tray-list>
         <p class="text-xs text-text-muted px-3 py-4 text-center" data-stagnant-tray-empty>لا مواد مرشّحة بعد — اضغط «إضافة» بجانب المادة.</p>
@@ -345,7 +347,7 @@ $defaultDiscount = 15.0;
     <div class="rounded-xl border border-border-subtle bg-white px-4 py-12 text-center text-text-muted">لا توجد نتائج.</div>
   <?php else: ?>
     <div class="rounded-xl border border-border-subtle bg-white overflow-x-auto shadow-sm">
-      <table class="w-full min-w-[1100px] text-sm border-collapse">
+      <table class="w-full min-w-[1240px] text-sm border-collapse">
         <thead>
           <tr class="bg-slate-50 text-xs font-bold text-slate-600 border-b border-border-subtle">
             <th class="px-2 py-2.5 w-20 text-start">صورة</th>
@@ -358,7 +360,8 @@ $defaultDiscount = 15.0;
             <th class="px-2 py-2.5 text-start w-24">خصم %</th>
             <th class="px-2 py-2.5 text-start w-28">بعد الخصم $</th>
             <th class="px-2 py-2.5 text-start w-28">بعد الخصم ل.س</th>
-            <th class="px-2 py-2.5 text-start w-24">للعرض</th>
+            <th class="px-2 py-2.5 text-start min-w-[9rem]">عرض قائم</th>
+            <th class="px-2 py-2.5 text-start w-28">للعرض</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border-subtle" data-stagnant-cards>
@@ -389,6 +392,7 @@ $defaultDiscount = 15.0;
                   : null;
               $thumbUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=1' : '';
               $fullUrl = $imageGuid !== '' ? '/api/image.php?id=' . rawurlencode($imageGuid) . '&thumb=0' : '';
+              $memberships = is_array($offerMembershipByGuid[$guid] ?? null) ? $offerMembershipByGuid[$guid] : [];
             ?>
             <tr
               class="stagnant-card hover:bg-slate-50/80 transition align-middle"
@@ -435,7 +439,10 @@ $defaultDiscount = 15.0;
               </td>
               <td class="px-2 py-2 min-w-0">
                 <button type="button" class="text-start w-full" data-stagnant-preview>
-                  <div class="font-bold text-slate-900 leading-snug hover:text-primary"><?= h($name !== '' ? $name : $guid) ?></div>
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="font-bold text-slate-900 leading-snug hover:text-primary"><?= h($name !== '' ? $name : $guid) ?></span>
+                    <span class="stagnant-tray-badge" data-stagnant-tray-badge hidden>مرشّح</span>
+                  </div>
                   <?php if ($code !== ''): ?>
                     <div class="text-xs text-text-muted font-mono mt-0.5" dir="ltr"><?= h($code) ?></div>
                   <?php endif; ?>
@@ -476,6 +483,37 @@ $defaultDiscount = 15.0;
                 <span class="inline-block min-w-[4.5rem] tabular-nums font-bold text-emerald-800" dir="ltr" data-stagnant-item-syp>
                   <?= h($saleAfterSyp !== null ? number_format($saleAfterSyp, 0) : '—') ?>
                 </span>
+              </td>
+              <td class="px-2 py-2">
+                <?php if ($memberships === []): ?>
+                  <span class="text-[11px] text-text-muted">—</span>
+                <?php else: ?>
+                  <div class="flex flex-col gap-1">
+                    <?php foreach ($memberships as $offerRow): ?>
+                      <?php
+                        if (!is_array($offerRow)) {
+                            continue;
+                        }
+                        $offerStatus = (string) ($offerRow['status'] ?? 'paused');
+                        $offerTitle = (string) ($offerRow['title_ar'] ?? '');
+                        $discountLabel = (string) ($offerRow['discount_label'] ?? '');
+                        $offerId = (string) ($offerRow['id'] ?? '');
+                      ?>
+                      <a
+                        href="/dashboard/special-offers.php?edit=<?= urlencode($offerId) ?>&amp;tab=<?= $offerStatus === 'active' ? 'active' : 'paused' ?>"
+                        class="stagnant-offer-chip stagnant-offer-chip--<?= h($offerStatus) ?>"
+                        title="<?= h($offerTitle) ?>"
+                        data-dashboard-nav-link
+                      >
+                        <span class="stagnant-offer-chip__title"><?= h($offerTitle) ?></span>
+                        <span class="stagnant-offer-chip__meta">
+                          <?= $offerStatus === 'active' ? 'نشط' : 'مسودة' ?>
+                          <?php if ($discountLabel !== ''): ?> · <?= h($discountLabel) ?><?php endif; ?>
+                        </span>
+                      </a>
+                    <?php endforeach; ?>
+                  </div>
+                <?php endif; ?>
               </td>
               <td class="px-2 py-2">
                 <button

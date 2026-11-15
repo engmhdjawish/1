@@ -572,10 +572,24 @@ $previewProducts = is_array($editOffer['preview_products'] ?? null) ? $editOffer
   </article>
 
   <?php if ($editId !== ''): ?>
-    <details class="bg-white border border-border-subtle rounded-xl p-3">
-      <summary class="font-bold text-sm cursor-pointer">معاينة (<?= count($previewProducts) ?>)</summary>
+    <?php
+      $previewLoaded = $includeOfferPreview ?? (($_GET['preview'] ?? '') === '1');
+      $previewQuery = $offerTabQuery($offerTab ?? 'active');
+      $previewQuery .= (str_contains($previewQuery, '?') ? '&' : '?') . 'preview=1';
+      // When editing, offerTabQuery already keeps edit=; ensure preview flag is present.
+      if (!str_contains($previewQuery, 'edit=')) {
+          $previewQuery = '/dashboard/special-offers.php?edit=' . rawurlencode($editId)
+              . '&tab=' . rawurlencode((string) ($offerTab ?? 'active'))
+              . '&preview=1';
+      }
+    ?>
+    <details class="bg-white border border-border-subtle rounded-xl p-3"<?= $previewLoaded ? ' open' : '' ?>>
+      <summary class="font-bold text-sm cursor-pointer">معاينة المتجر<?= $previewLoaded ? ' (' . count($previewProducts) . ')' : '' ?></summary>
       <div class="mt-2">
-        <?php if ($previewProducts === []): ?>
+        <?php if (!$previewLoaded): ?>
+          <p class="text-xs text-text-muted mb-2">المعاينة الثقيلة تُحمَّل عند الطلب لتسريع فتح العروض ذات القوائم الكبيرة.</p>
+          <a href="<?= h($previewQuery) ?>" class="inline-flex h-8 px-3 items-center rounded-lg border border-border-subtle bg-white text-xs font-bold text-slate-700 hover:bg-slate-50">تحميل المعاينة</a>
+        <?php elseif ($previewProducts === []): ?>
           <p class="text-xs text-text-muted">لا توجد مواد — تحقق من الفلاتر أو اتصال API.</p>
         <?php else: ?>
           <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">

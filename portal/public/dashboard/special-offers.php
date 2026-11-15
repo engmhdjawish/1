@@ -208,8 +208,11 @@ try {
 }
 
 $editOffer = null;
+$includeOfferPreview = (($_GET['preview'] ?? '') === '1');
+$materialFilterOptions = ['materialTypes' => [], 'ageCategories' => [], 'manufacturers' => [], 'sizeRanges' => [], 'countryOfOrigins' => [], 'stores' => [], 'groups' => []];
+$materialFilterOptionsError = null;
 if ($editId !== '') {
-    $editOffer = SpecialOfferService::getById($editId);
+    $editOffer = SpecialOfferService::getById($editId, ['include_preview' => $includeOfferPreview]);
     if ($editOffer === null) {
         $editId = '';
         $showForm = $isNew;
@@ -245,26 +248,27 @@ if ($showForm && $editOffer === null) {
     ];
 }
 
-$materialFilterOptions = ['materialTypes' => [], 'ageCategories' => [], 'manufacturers' => [], 'sizeRanges' => [], 'countryOfOrigins' => [], 'stores' => [], 'groups' => []];
-$materialFilterOptionsError = null;
-try {
-    $filtersResponse = ApiClient::get('/api/materials/filter-options');
-    if ($filtersResponse['ok']) {
-        $data = is_array($filtersResponse['data']) ? $filtersResponse['data'] : [];
-        $materialFilterOptions = [
-            'materialTypes' => array_values(array_map('strval', is_array($data['materialTypes'] ?? null) ? $data['materialTypes'] : ($data['MaterialTypes'] ?? []))),
-            'ageCategories' => array_values(array_map('strval', is_array($data['ageCategories'] ?? null) ? $data['ageCategories'] : ($data['AgeCategories'] ?? []))),
-            'manufacturers' => array_values(array_map('strval', is_array($data['manufacturers'] ?? null) ? $data['manufacturers'] : ($data['Manufacturers'] ?? []))),
-            'sizeRanges' => array_values(array_map('strval', is_array($data['sizeRanges'] ?? null) ? $data['sizeRanges'] : ($data['SizeRanges'] ?? []))),
-            'countryOfOrigins' => array_values(array_map('strval', is_array($data['countryOfOrigins'] ?? null) ? $data['countryOfOrigins'] : ($data['CountryOfOrigins'] ?? []))),
-            'stores' => array_values(array_filter(is_array($data['stores'] ?? null) ? $data['stores'] : ($data['Stores'] ?? []), static fn ($r) => is_array($r))),
-            'groups' => array_values(array_filter(is_array($data['groups'] ?? null) ? $data['groups'] : ($data['Groups'] ?? []), static fn ($r) => is_array($r))),
-        ];
-    } else {
-        $materialFilterOptionsError = 'تعذر جلب فلاتر المواد من API.';
+// Filter-options API is only needed when the edit/create form is open.
+if ($showForm) {
+    try {
+        $filtersResponse = ApiClient::get('/api/materials/filter-options');
+        if ($filtersResponse['ok']) {
+            $data = is_array($filtersResponse['data']) ? $filtersResponse['data'] : [];
+            $materialFilterOptions = [
+                'materialTypes' => array_values(array_map('strval', is_array($data['materialTypes'] ?? null) ? $data['materialTypes'] : ($data['MaterialTypes'] ?? []))),
+                'ageCategories' => array_values(array_map('strval', is_array($data['ageCategories'] ?? null) ? $data['ageCategories'] : ($data['AgeCategories'] ?? []))),
+                'manufacturers' => array_values(array_map('strval', is_array($data['manufacturers'] ?? null) ? $data['manufacturers'] : ($data['Manufacturers'] ?? []))),
+                'sizeRanges' => array_values(array_map('strval', is_array($data['sizeRanges'] ?? null) ? $data['sizeRanges'] : ($data['SizeRanges'] ?? []))),
+                'countryOfOrigins' => array_values(array_map('strval', is_array($data['countryOfOrigins'] ?? null) ? $data['countryOfOrigins'] : ($data['CountryOfOrigins'] ?? []))),
+                'stores' => array_values(array_filter(is_array($data['stores'] ?? null) ? $data['stores'] : ($data['Stores'] ?? []), static fn ($r) => is_array($r))),
+                'groups' => array_values(array_filter(is_array($data['groups'] ?? null) ? $data['groups'] : ($data['Groups'] ?? []), static fn ($r) => is_array($r))),
+            ];
+        } else {
+            $materialFilterOptionsError = 'تعذر جلب فلاتر المواد من API.';
+        }
+    } catch (\Throwable $e) {
+        $materialFilterOptionsError = $e->getMessage();
     }
-} catch (\Throwable $e) {
-    $materialFilterOptionsError = $e->getMessage();
 }
 
 $currentRoute = '/dashboard/special-offers.php';

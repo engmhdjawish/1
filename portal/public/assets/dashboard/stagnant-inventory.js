@@ -51,9 +51,25 @@
     return !!(modal && !modal.hidden && modal.classList.contains('is-open'));
   }
 
-  function allRows(includeHidden = false) {
-    return Array.from(document.querySelectorAll('[data-stagnant-card]'))
-      .filter((row) => includeHidden || !row.hidden);
+  function allRows() {
+    return Array.from(document.querySelectorAll('[data-stagnant-card]'));
+  }
+
+  function markRowInTray(row, inTray) {
+    if (!(row instanceof HTMLElement)) return;
+    row.classList.toggle('is-in-tray', inTray);
+    if (inTray) row.setAttribute('data-stagnant-in-tray', '1');
+    else row.removeAttribute('data-stagnant-in-tray');
+    const addBtn = row.querySelector('[data-stagnant-add]');
+    if (addBtn instanceof HTMLButtonElement) {
+      addBtn.textContent = inTray ? 'مُضافة' : 'إضافة';
+      addBtn.disabled = inTray;
+      addBtn.classList.toggle('is-added', inTray);
+    }
+    const badge = row.querySelector('[data-stagnant-tray-badge]');
+    if (badge instanceof HTMLElement) {
+      badge.hidden = !inTray;
+    }
   }
 
   function rowSaleUsd(row) {
@@ -240,10 +256,11 @@
       percent: pricing.percent,
       priceUsd: pricing.priceUsd,
     });
-    row.hidden = true;
-    row.setAttribute('data-stagnant-in-tray', '1');
+    markRowInTray(row, true);
     renderTray();
     syncSubmitState();
+    syncPreviewPricingFromRow();
+    updateNavControls();
     return true;
   }
 
@@ -251,16 +268,12 @@
     candidates.delete(guid);
     const row = document.querySelector('[data-stagnant-card][data-material-guid="' + guid + '"]');
     if (row instanceof HTMLElement) {
-      row.hidden = false;
-      row.removeAttribute('data-stagnant-in-tray');
-      const addBtn = row.querySelector('[data-stagnant-add]');
-      if (addBtn instanceof HTMLButtonElement) {
-        addBtn.textContent = 'إضافة';
-        addBtn.disabled = false;
-      }
+      markRowInTray(row, false);
     }
     renderTray();
     syncSubmitState();
+    if (isPreviewOpen() && activeRow === row) syncPreviewPricingFromRow();
+    updateNavControls();
   }
 
   function renderTray() {
@@ -462,8 +475,8 @@
   function updateNavControls() {
     const modal = previewModal();
     if (!modal) return;
-    const rows = allRows(false);
-    const index = activeRow && !activeRow.hidden ? rows.indexOf(activeRow) : -1;
+    const rows = allRows();
+    const index = activeRow ? rows.indexOf(activeRow) : -1;
     const prevBtn = modal.querySelector('[data-stagnant-preview-prev]');
     const nextBtn = modal.querySelector('[data-stagnant-preview-next]');
     const pos = modal.querySelector('[data-stagnant-preview-position]');
@@ -534,7 +547,7 @@
   }
 
   function stepPreview(delta) {
-    const rows = allRows(false);
+    const rows = allRows();
     if (rows.length === 0) {
       closePreview();
       return;
@@ -543,7 +556,6 @@
     if (index < 0) index = delta > 0 ? -1 : 0;
     const next = rows[index + delta];
     if (next) openPreview(next);
-    else if (activeRow?.hidden) openPreview(rows[0]);
   }
 
   function bindPreview(form) {
@@ -573,9 +585,11 @@
     modal.querySelector('[data-stagnant-preview-add]')?.addEventListener('click', () => {
       if (!activeRow) return;
       const current = activeRow;
+      const rows = allRows();
+      const index = rows.indexOf(current);
       addCandidateFromRow(current);
-      const remaining = allRows(false);
-      if (remaining.length > 0) openPreview(remaining[0]);
+      const next = index >= 0 ? rows[index + 1] : null;
+      if (next) openPreview(next);
       else closePreview();
     });
 
@@ -676,7 +690,9 @@
 
     document.querySelector('[data-stagnant-add-visible]')?.addEventListener('click', () => {
       allRows().forEach((row) => {
-        if (!row.hidden) addCandidateFromRow(row);
+        const guid = (row.getAttribute('data-material-guid') || '').toLowerCase();
+        if (!guid || candidates.has(guid)) return;
+        addCandidateFromRow(row);
       });
     });
     document.querySelector('[data-stagnant-clear-tray]')?.addEventListener('click', () => {
